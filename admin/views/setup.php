@@ -8,7 +8,7 @@
  * escaped and every user-facing string is translatable.
  *
  * Steps: 1 law · 2 language · 3 banner options · 4 consent signals (GCM /
- * Microsoft) · 5 IAB TCF · 6 geo targeting · 7 cookie scan + payment fixes ·
+ * Microsoft) · 5 IAB TCF · 6 jurisdiction routing · 7 cookie scan + payment fixes ·
  * 8 review & finish. Every step beyond the law is optional and defaults to the
  * current stored value, so skipping straight to Finish reproduces the previous
  * 3-step wizard behaviour exactly.
@@ -64,6 +64,8 @@ if ( class_exists( '\\FazCookie\\Admin\\Modules\\Languages\\Includes\\Controller
 // indistinguishable from an intentional choice unless onboarding is still in
 // its pristine incomplete state. In that one state, prefer the SITE language.
 $faz_wiz_onboarding = isset( $faz_wiz_settings['onboarding'] ) && is_array( $faz_wiz_settings['onboarding'] ) ? $faz_wiz_settings['onboarding'] : array();
+$faz_wiz_recommend_bootstrap = empty( $faz_wiz_onboarding['completed'] )
+	&& empty( $faz_wiz_geo['cache_geo_bootstrap'] );
 $faz_wiz_selected   = isset( $faz_wiz_settings['languages']['selected'] ) && is_array( $faz_wiz_settings['languages']['selected'] ) ? array_values( $faz_wiz_settings['languages']['selected'] ) : array();
 $faz_wiz_pristine   = empty( $faz_wiz_onboarding['completed'] )
 	&& empty( $faz_wiz_onboarding['law'] )
@@ -128,6 +130,15 @@ $faz_setup_laws = array(
  * The banner-control switches offered on step 3. `data-recommend` marks the row
  * that receives the cache-plugin detection badge (filled by setup.js).
  */
+// Cache Compatibility Mode cannot take effect while jurisdiction routing is on:
+// is_cache_compatibility_enabled() is `! $geo_enabled && …`, and the runtime
+// follows the saved Geo-Targeting toggle. Offering a tickable switch that
+// silently does nothing —
+// under help text that says "turn on if you use a page cache" — sends an
+// administrator away believing their cache is now supported.
+$faz_geo_runtime_on = class_exists( '\FazCookie\Frontend\Includes\Geo_Runtime' )
+	&& \FazCookie\Frontend\Includes\Geo_Runtime::is_enabled();
+
 $faz_setup_bc_rows = array(
 	'per_service_consent' => array(
 		'label' => __( 'Per-service consent toggles', 'faz-cookie-manager' ),
@@ -143,7 +154,7 @@ $faz_setup_bc_rows = array(
 	),
 	'cache_compatibility' => array(
 		'label' => __( 'Cache Compatibility Mode', 'faz-cookie-manager' ),
-		'help'  => __( 'Keeps every rendered page identical for all visitors so full-page caches (WP Rocket, LiteSpeed, …) can never serve one visitor\'s consent state to another. Turn on if you use a page-cache plugin or a caching CDN.', 'faz-cookie-manager' ),
+		'help'  => __( 'Keeps one visitor-invariant page when jurisdiction enforcement is off and the active banner law applies to everyone. For compliant per-country enforcement with a page cache, use the cache-safe jurisdiction bootstrap in step 6.', 'faz-cookie-manager' ),
 	),
 	'adblock_resilience'  => array(
 		'label' => __( 'Ad-blocker banner resilience', 'faz-cookie-manager' ),
@@ -172,7 +183,7 @@ $faz_setup_step_titles = array(
 	3 => __( 'Banner options', 'faz-cookie-manager' ),
 	4 => __( 'Consent Mode', 'faz-cookie-manager' ),
 	5 => __( 'IAB TCF', 'faz-cookie-manager' ),
-	6 => __( 'Geo targeting', 'faz-cookie-manager' ),
+	6 => __( 'Jurisdiction routing', 'faz-cookie-manager' ),
 	7 => __( 'Find cookies', 'faz-cookie-manager' ),
 	8 => __( 'Review & finish', 'faz-cookie-manager' ),
 );
@@ -247,14 +258,15 @@ $faz_setup_step_titles = array(
 				<div class="faz-setup-toggle-list">
 					<?php foreach ( $faz_setup_bc_rows as $faz_bc_key => $faz_bc_row ) : ?>
 						<label class="faz-setup-toggle-row">
-							<input type="checkbox" id="faz-setup-bc-<?php echo esc_attr( $faz_bc_key ); ?>" data-bc-key="<?php echo esc_attr( $faz_bc_key ); ?>"<?php checked( ! empty( $faz_wiz_bc[ $faz_bc_key ] ) ); ?>>
+							<?php $faz_bc_inert = ( 'cache_compatibility' === $faz_bc_key && $faz_geo_runtime_on ); ?>
+							<input type="checkbox" id="faz-setup-bc-<?php echo esc_attr( $faz_bc_key ); ?>" data-bc-key="<?php echo esc_attr( $faz_bc_key ); ?>"<?php checked( ! empty( $faz_wiz_bc[ $faz_bc_key ] ) ); ?><?php disabled( $faz_bc_inert ); ?><?php echo $faz_bc_inert ? ' aria-describedby="faz-setup-cache-inert"' : ''; ?>>
 							<span class="faz-setup-toggle-body">
 								<span class="faz-setup-toggle-label"><?php echo esc_html( $faz_bc_row['label'] ); ?>
-									<?php if ( 'cache_compatibility' === $faz_bc_key ) : ?>
-										<span class="faz-setup-badge" id="faz-setup-cache-badge" hidden></span>
-									<?php endif; ?>
-								</span>
+							</span>
 								<span class="faz-setup-toggle-help"><?php echo esc_html( $faz_bc_row['help'] ); ?></span>
+								<?php if ( $faz_bc_inert ) : ?>
+									<span class="faz-setup-toggle-help faz-setup-toggle-help-inert" id="faz-setup-cache-inert"><?php esc_html_e( 'Unavailable while jurisdiction enforcement is active. Use the cache-safe jurisdiction bootstrap in step 6 to keep compatible pages cacheable without applying one country\'s consent model to another.', 'faz-cookie-manager' ); ?></span>
+								<?php endif; ?>
 							</span>
 						</label>
 					<?php endforeach; ?>
@@ -329,17 +341,24 @@ $faz_setup_step_titles = array(
 				<p class="faz-setup-inline-error" id="faz-setup-tcf-cc-error" role="alert" hidden><?php esc_html_e( 'The publisher country must be a 2-letter code (e.g. IT, DE), or leave it empty.', 'faz-cookie-manager' ); ?></p>
 			</section>
 
-			<!-- Step 6 — Geo targeting -->
+			<!-- Step 6 — Jurisdiction enforcement and geo routing -->
 			<section class="faz-wizard-step" data-step="6" hidden aria-labelledby="faz-setup-step6-title">
-				<h2 id="faz-setup-step6-title" class="faz-setup-step-title" tabindex="-1"><?php esc_html_e( 'Geo targeting', 'faz-cookie-manager' ); ?> <span class="faz-setup-optional"><?php esc_html_e( '(optional)', 'faz-cookie-manager' ); ?></span></h2>
-				<p class="faz-setup-step-lead"><?php esc_html_e( 'Show the cookie banner only to visitors from the regions where a consent law applies. The safest choice — showing it to everyone — is the default.', 'faz-cookie-manager' ); ?></p>
+				<h2 id="faz-setup-step6-title" class="faz-setup-step-title" tabindex="-1"><?php esc_html_e( 'Jurisdiction rules and geo-routing', 'faz-cookie-manager' ); ?></h2>
+				<p class="faz-setup-step-lead"><?php esc_html_e( 'Apply the correct consent defaults and mandatory controls for each visitor\'s country. Enforcement is enabled by default; banner visibility outside selected regions is a separate choice below.', 'faz-cookie-manager' ); ?></p>
 
 				<div class="faz-setup-toggle-list">
 					<label class="faz-setup-toggle-row">
 						<input type="checkbox" id="faz-setup-geo"<?php checked( ! empty( $faz_wiz_geo['geo_targeting'] ) ); ?>>
 						<span class="faz-setup-toggle-body">
-							<span class="faz-setup-toggle-label"><?php esc_html_e( 'Limit the banner to selected regions', 'faz-cookie-manager' ); ?></span>
-							<span class="faz-setup-toggle-help"><?php esc_html_e( 'Requires a way to know the visitor\'s country: a MaxMind GeoLite2 database (Settings → GeoIP Database), or the Cloudflare country header (only if your developer enables the faz_trust_cf_ipcountry_header filter). Without one, every visitor is treated as in-region and sees the banner.', 'faz-cookie-manager' ); ?></span>
+							<span class="faz-setup-toggle-label"><?php esc_html_e( 'Apply jurisdiction rules by visitor location (recommended)', 'faz-cookie-manager' ); ?></span>
+							<span class="faz-setup-toggle-help"><?php esc_html_e( 'Turning this off makes the law saved on the active banner apply to every visitor. For example, a CCPA banner will no longer gain GDPR blocking for an EEA visitor.', 'faz-cookie-manager' ); ?></span>
+						</span>
+					</label>
+					<label class="faz-setup-toggle-row">
+						<input type="checkbox" id="faz-setup-cache-geo-bootstrap"<?php checked( ! empty( $faz_wiz_geo['cache_geo_bootstrap'] ) ); ?> data-recommend-cache="<?php echo esc_attr( $faz_wiz_recommend_bootstrap ? '1' : '0' ); ?>">
+						<span class="faz-setup-toggle-body">
+							<span class="faz-setup-toggle-label"><?php esc_html_e( 'Cache-safe jurisdiction bootstrap', 'faz-cookie-manager' ); ?> <span class="faz-setup-badge" id="faz-setup-cache-bootstrap-badge" hidden></span></span>
+							<span class="faz-setup-toggle-help"><?php esc_html_e( 'Recommended when a page cache or CDN is present. Compatible pages share one strict GDPR shell and resolve the live jurisdiction before the banner mounts or optional scripts run. Unsupported configurations remain protected and bypass the page cache.', 'faz-cookie-manager' ); ?></span>
 						</span>
 					</label>
 				</div>
@@ -409,13 +428,15 @@ $faz_setup_step_titles = array(
 					data-label-language="<?php esc_attr_e( 'Banner language', 'faz-cookie-manager' ); ?>"
 					data-label-options="<?php esc_attr_e( 'Enabled options', 'faz-cookie-manager' ); ?>"
 					data-label-disabled="<?php esc_attr_e( 'Being turned off', 'faz-cookie-manager' ); ?>"
-					data-label-geo="<?php esc_attr_e( 'Geo targeting', 'faz-cookie-manager' ); ?>"
+					data-label-geo="<?php esc_attr_e( 'Jurisdiction enforcement', 'faz-cookie-manager' ); ?>"
 					data-label-payments="<?php esc_attr_e( 'Payment compatibility', 'faz-cookie-manager' ); ?>"
 					data-geo-others-shown="<?php esc_attr_e( 'other regions: banner still shown', 'faz-cookie-manager' ); ?>"
 					data-geo-others-hidden="<?php esc_attr_e( 'other regions: banner hidden, cookies allowed', 'faz-cookie-manager' ); ?>"
 					data-geo-default-regions="<?php esc_attr_e( 'EU / EEA, United Kingdom (default)', 'faz-cookie-manager' ); ?>"
-					data-warn-cache-geo="<?php esc_attr_e( 'Note: Cache Compatibility Mode is also on, so server-side geo gating is bypassed — the same cached page is served to every region.', 'faz-cookie-manager' ); ?>"
+					data-warn-cache-geo="<?php esc_attr_e( 'Note: jurisdiction enforcement keeps Cache Compatibility Mode itself inactive. Use the cache-safe jurisdiction bootstrap for compatible cached pages.', 'faz-cookie-manager' ); ?>"
 					data-warn-cache-tcf="<?php esc_attr_e( 'Note: Cache Compatibility Mode with IAB TCF serves the same cached page to every region (e.g. an EU gdprApplies=true page to a US visitor) — consider keeping one of the two off, or vary the cache by country at the CDN.', 'faz-cookie-manager' ); ?>"
+					data-warn-enforcement-off="<?php esc_attr_e( 'Warning: jurisdiction enforcement will be off. The law saved on the active banner will apply to every visitor, so a CCPA banner will not gain GDPR blocking for EEA visitors.', 'faz-cookie-manager' ); ?>"
+					data-note-bootstrap-fallback="<?php esc_attr_e( 'Cache-safe bootstrap will activate only when the saved configuration passes its safety checks. Otherwise FAZ keeps jurisdiction enforcement on and bypasses the full-page cache.', 'faz-cookie-manager' ); ?>"
 					data-logging="<?php esc_attr_e( 'Consent logging stays on for accountability.', 'faz-cookie-manager' ); ?>"></ul>
 
 				<p class="faz-setup-review-note"><?php esc_html_e( 'Consent logging is kept on for accountability, and your cookie banner will be shown to visitors. You can adjust anything afterwards on the Cookie Banner and Settings pages.', 'faz-cookie-manager' ); ?></p>

@@ -14,6 +14,13 @@ final class Faz_E2E_Scan_Lab {
 	const HOME_OPTION  = 'faz_e2e_scan_lab_home_enabled';
 
 	public function __construct() {
+		// Cache-compatibility tests exercise the explicit emergency stand-down
+		// path. The production runtime is default-on and intentionally takes
+		// precedence over that legacy mode, so the AJAX request under test needs
+		// a request-scoped way to disable it without changing global site state.
+		if ( isset( $_GET['faz_e2e_disable_geo_runtime'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			add_filter( 'faz_geo_ruleset_runtime', '__return_false', PHP_INT_MAX );
+		}
 		add_action( 'send_headers', array( $this, 'send_header_cookie' ) );
 		add_action( 'wp_head', array( $this, 'render_page_signals' ), 1 );
 		add_action( 'wp_footer', array( $this, 'render_page_signals' ), 100 );

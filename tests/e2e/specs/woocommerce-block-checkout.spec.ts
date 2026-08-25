@@ -2,10 +2,21 @@ import { expect, test } from '../fixtures/wp-fixture';
 import {
   activatePlugins,
   deactivatePluginsExcept,
+  ensureFixturePlugin,
   listActivePluginFiles,
   restoreActivePluginFiles,
   wpEval,
 } from '../utils/wp-env';
+
+/**
+ * Extract the opening `<script>` tag carrying a given id from raw page source.
+ */
+function tagWithAttribute(source: string, attribute: string, value: string): string {
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return (
+    source.match(new RegExp(`<script\\b[^>]*\\b${attribute}=["']${escaped}["'][^>]*>`, 'i'))?.[0] ?? ''
+  );
+}
 
 test.describe('WooCommerce block checkout strictly-necessary configuration', () => {
   test.describe.configure({ mode: 'serial', timeout: 180_000 });
@@ -20,6 +31,8 @@ test.describe('WooCommerce block checkout strictly-necessary configuration', () 
     initialActivePluginFiles = listActivePluginFiles();
     deactivatePluginsExcept(['faz-cookie-manager', 'woocommerce']);
     activatePlugins(['woocommerce']);
+    // Emits the strictly-necessary look-alikes the negative assertion needs.
+    ensureFixturePlugin('faz-e2e-woo-lab');
     checkoutSlug = `faz-e2e-block-checkout-${process.pid}-${Date.now()}`;
 
     optionSnapshot = wpEval(`
@@ -47,6 +60,7 @@ test.describe('WooCommerce block checkout strictly-necessary configuration', () 
       }
 
       update_option( 'woocommerce_enable_guest_checkout', 'yes', false );
+      update_option( 'faz_e2e_woo_lab_lookalike', 'yes', false );
 
       $settings = get_option( 'faz_settings', array() );
       if ( ! is_array( $settings ) ) {
@@ -91,6 +105,7 @@ test.describe('WooCommerce block checkout strictly-necessary configuration', () 
             update_option( 'woocommerce_enable_guest_checkout', $snapshot['guestCheckout'], false );
           }
         }
+        delete_option( 'faz_e2e_woo_lab_lookalike' );
         $fixture = get_page_by_path( '${checkoutSlug}', OBJECT, 'page' );
         if ( $fixture instanceof WP_Post ) {
           wp_delete_post( (int) $fixture->ID, true );
@@ -174,6 +189,116 @@ test.describe('WooCommerce block checkout strictly-necessary configuration', () 
       expect(state.guestCheckout).toBe(true);
       expect(state.middlewarePresent).toBe(true);
       expect(state.renderedText).not.toMatch(/you must be logged in to checkout/i);
+    } finally {
+      await context.close();
+    }
+  });
+
+  // The exemption above must stay an EXACT-identity exemption. A look-alike is
+  // not a WordPress-generated identity for one of the three real handles, so it
+  // carries no strictly-necessary guarantee and must still be gated by consent.
+  // Without this assertion the exemption can be silently widened into a
+  // token-prefix whitelist entry (matched against id and class, not just src)
+  // while the positive assertion above stays green.
+  //
+  // WHY THE ID VECTOR IS BLOCKED (its src carries no `wc-settings` fragment, on
+  // purpose — only an id-based exemption could rescue it, which is the whole
+  // point of the vector). Two different code paths, one per vector:
+  //
+  //   ID vector    — enqueued with handle `wc-settings-tracker`, so it travels
+  //                  through `script_loader_tag` → Frontend::filter_script_loader_tag().
+  //                  That matcher tests each provider pattern against BOTH the
+  //                  handle and the src:
+  //                      stripos( $handle, $pattern ) || stripos( $tag_src, $pattern )
+  //                  beforeAll above installs the custom rule `wc-settings` →
+  //                  marketing, which enters the provider map, and
+  //                  stripos('wc-settings-tracker', 'wc-settings') === 0. Marketing
+  //                  is denied pre-consent → type="text/plain". The src is never
+  //                  consulted; a reading that only considers src concludes,
+  //                  wrongly, that this vector can never be blocked.
+  //
+  //   Class vector — printed directly in wp_footer (no handle), so it is caught
+  //                  by the output-buffer path → match_script_to_provider(), which
+  //                  DOES go by src and applies a token-boundary check. Hence its
+  //                  src spells `/wc-settings/` slash-delimited.
+  //
+  // What makes the assertion discriminating in both cases is that
+  // is_strictly_necessary_script() and is_whitelisted() run BEFORE the provider
+  // loop in every path: widening the exemption to prefix/id matching short-
+  // circuits ahead of the block and the tag ships executable. Verified by
+  // mutation — reinstating the whitelist merge in class-frontend.php turns this
+  // test red with "wc-settings-tracker-js was served executable before consent".
+  //
+  // Nothing here depends on scanner-detected state: the custom rule is
+  // self-provisioned in beforeAll, so the test behaves identically on a clean
+  // install.
+  test('wc-settings look-alike scripts stay blocked before consent', async ({ browser }) => {
+    test.setTimeout(180_000);
+    const context = await browser.newContext();
+    try {
+      const page = await context.newPage();
+      await context.clearCookies();
+
+      let source = '';
+      await page.route(checkoutUrl, async (route) => {
+        const upstream = await route.fetch();
+        source = await upstream.text();
+        await route.fulfill({ response: upstream, body: source });
+      });
+      const response = await page.goto(checkoutUrl, { waitUntil: 'domcontentloaded' });
+      expect(response).not.toBeNull();
+      expect(response!.status()).toBe(200);
+      expect(source, 'checkout navigation was not captured').not.toBe('');
+
+      // Guard the fixture itself: an absent look-alike would make the
+      // assertions below pass vacuously.
+      const idVectorTag = tagWithAttribute(source, 'id', 'wc-settings-tracker-js');
+      expect(idVectorTag, 'the wc-settings-tracker-js look-alike was not rendered').not.toBe('');
+
+      // ID vector: id="wc-settings-tracker-js" is NOT one of the WordPress
+      // suffixed identities of the real `wc-settings` handle.
+      expect(idVectorTag, 'wc-settings-tracker-js was served executable before consent').toMatch(
+        /\btype=["']text\/plain["']/i
+      );
+      expect(idVectorTag, 'wc-settings-tracker-js carried no consent category').toMatch(
+        /\bdata-faz-category=/i
+      );
+
+      // Class vector: class="wc-settings-tracker" must not exempt either.
+      const classVectorTag = tagWithAttribute(source, 'class', 'wc-settings-tracker');
+      expect(classVectorTag, 'the class="wc-settings-tracker" look-alike was not rendered').not.toBe('');
+      expect(classVectorTag, 'the wc-settings-tracker class was served executable before consent').toMatch(
+        /\btype=["']text\/plain["']/i
+      );
+      expect(classVectorTag, 'the wc-settings-tracker class carried no consent category').toMatch(
+        /\bdata-faz-category=/i
+      );
+
+      // Neither look-alike may be live in the browser. "Live" — rather than
+      // "type is text/plain" — is the right shape here: the client-side
+      // mutation observer lifts an already-neutralised script out of the
+      // document into _fazStore._backupNodes, so a correctly blocked tag is
+      // usually absent from the DOM by the time this runs. An exempted tag,
+      // by contrast, is always present and executable.
+      const live = await page.evaluate(() => {
+        const isLive = (element: Element | null): boolean => {
+          if (element === null) {
+            return false; // Lifted out of the document by the observer.
+          }
+          const type = (element.getAttribute('type') ?? '').toLowerCase();
+          return type !== 'text/plain' && type !== 'javascript/blocked';
+        };
+        return {
+          idVector: isLive(document.querySelector('#wc-settings-tracker-js')),
+          classVector: isLive(document.querySelector('script.wc-settings-tracker')),
+        };
+      });
+      expect(live.idVector, 'the wc-settings-tracker-js look-alike stayed executable in the DOM').toBe(
+        false
+      );
+      expect(live.classVector, 'the wc-settings-tracker class look-alike stayed executable in the DOM').toBe(
+        false
+      );
     } finally {
       await context.close();
     }

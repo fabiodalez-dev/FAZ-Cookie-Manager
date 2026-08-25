@@ -10,11 +10,62 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Faz_E2E_Woo_Lab {
-	const ENABLE_OPTION = 'faz_e2e_woo_lab_enabled';
-	const TOKEN_OPTION  = 'faz_e2e_woo_lab_token';
+	const ENABLE_OPTION    = 'faz_e2e_woo_lab_enabled';
+	const TOKEN_OPTION     = 'faz_e2e_woo_lab_token';
+	const LOOKALIKE_OPTION = 'faz_e2e_woo_lab_lookalike';
 
 	public function __construct() {
 		add_action( 'wp_footer', array( $this, 'render_woo_signals' ), 100 );
+		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_lookalike_id_script' ) );
+		add_action( 'wp_footer', array( $this, 'render_lookalike_class_script' ), 99 );
+	}
+
+	/**
+	 * Whether the strictly-necessary look-alike emitters are armed.
+	 *
+	 * Gated by its own option so the look-alikes only exist for the spec that
+	 * asserts on them and never perturb the other suites.
+	 */
+	private function lookalikes_enabled() {
+		return 'yes' === get_option( self::LOOKALIKE_OPTION, 'no' );
+	}
+
+	/**
+	 * ID vector: handle `wc-settings-tracker` renders id="wc-settings-tracker-js".
+	 *
+	 * The src deliberately carries no `wc-settings` fragment, so the only thing
+	 * that can exempt this tag from consent is a whitelist entry matching the
+	 * rendered ID by token prefix. It is NOT one of the three real strictly
+	 * necessary handles, so it must stay blockable.
+	 */
+	public function enqueue_lookalike_id_script() {
+		if ( ! $this->lookalikes_enabled() ) {
+			return;
+		}
+		wp_enqueue_script(
+			'wc-settings-tracker',
+			home_url( '/faz-e2e/lookalike/id-vector.js' ),
+			array(),
+			'1.0.0',
+			true
+		);
+	}
+
+	/**
+	 * Class vector: class="wc-settings-tracker" on an otherwise blockable tag.
+	 *
+	 * Here the src carries the `wc-settings` fragment (slash-delimited so the
+	 * provider matcher's boundary check accepts it), so the tag is provider
+	 * matchable; only a whitelist hit on the CLASS attribute can exempt it.
+	 */
+	public function render_lookalike_class_script() {
+		if ( ! $this->lookalikes_enabled() ) {
+			return;
+		}
+		printf(
+			'<script class="wc-settings-tracker" src="%s"></script>' . "\n",
+			esc_url( home_url( '/faz-e2e/lookalike/wc-settings/class-vector.js' ) )
+		);
 	}
 
 	private function enabled() {

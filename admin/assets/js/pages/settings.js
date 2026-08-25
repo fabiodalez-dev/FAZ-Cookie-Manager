@@ -21,6 +21,16 @@
 	// mutated the form. Each loadSettings() captures the current token and
 	// only applies its payload if the token still matches at resolution time.
 	var settingsRequestId = 0;
+	// Same pattern, separate token, for the bootstrap readiness line. Three
+	// writers share that one element: the page-load fetch, the toggle's change
+	// listener (synchronous), and the post-save refetch. Without a token the
+	// load-time request can resolve AFTER the admin has flipped the toggle and
+	// overwrite "Save settings to check…" with the readiness of the setting
+	// they just changed — a status line asserting the opposite of the truth,
+	// on the control whose entire job is to say whether caching is really on.
+	// The toggle listener bumps it too, so an in-flight answer to the old
+	// question is discarded rather than raced.
+	var geoBootstrapStatusId = 0;
 	// True only once renderAbVariants()'s FAZ.get('banners') has resolved
 	// successfully and the checkbox list (or the "need more banners" hint)
 	// has been rendered into the DOM. False while that request is still in
@@ -37,6 +47,7 @@
 		if (!form) return;
 		loadSettings();
 		loadGeoDbStatus();
+		loadGeoBootstrapStatus();
 		loadGvlStatus();
 		document.getElementById('faz-settings-save').addEventListener('click', saveSettings);
 		var geoBtn = document.getElementById('faz-geodb-update');
@@ -45,6 +56,18 @@
 		if (gvlBtn) gvlBtn.addEventListener('click', updateGvl);
 		var invalidateBtn = document.getElementById('faz-invalidate-consents');
 		if (invalidateBtn) invalidateBtn.addEventListener('click', invalidateConsents);
+		var bootstrapToggle = form.querySelector('input[data-path="geolocation.cache_geo_bootstrap"]');
+		if (bootstrapToggle) {
+			bootstrapToggle.addEventListener('change', function () {
+				var status = document.getElementById('faz-geo-bootstrap-status');
+				if (!status) return;
+				// Invalidate any readiness request still in flight: it answers
+				// the question the admin has just stopped asking.
+				geoBootstrapStatusId++;
+				status.textContent = __('settings.bootstrapSaveToCheck', 'Save settings to check whether the bootstrap can activate.');
+				status.setAttribute('data-level', 'info');
+			});
+		}
 	});
 
 	/**
@@ -441,12 +464,30 @@
 		}).then(function (saveWarnings) {
 			FAZ.btnLoading(btn, false);
 			FAZ.notify(__('settings.saved', 'Settings saved successfully.'));
+			loadGeoBootstrapStatus();
 			(saveWarnings || []).forEach(function (message) {
 				FAZ.notify(message, 'warning');
 			});
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
 			FAZ.notify(__('settings.saveFailed', 'Failed to save settings.'), 'error');
+		});
+	}
+
+	function loadGeoBootstrapStatus() {
+		var el = document.getElementById('faz-geo-bootstrap-status');
+		if (!el) return;
+		var requestId = ++geoBootstrapStatusId;
+		FAZ.get('settings/geo-bootstrap/status').then(function (data) {
+			if (requestId !== geoBootstrapStatusId) return;
+			el.textContent = data && data.message
+				? data.message
+				: __('settings.bootstrapStatusFailed', 'Bootstrap readiness could not be determined. Pages keep the safe no-cache fallback.');
+			el.setAttribute('data-level', data && data.level ? data.level : 'warning');
+		}).catch(function () {
+			if (requestId !== geoBootstrapStatusId) return;
+			el.textContent = __('settings.bootstrapStatusFailed', 'Bootstrap readiness could not be determined. Pages keep the safe no-cache fallback.');
+			el.setAttribute('data-level', 'warning');
 		});
 	}
 
@@ -501,21 +542,19 @@
 
 		abTestWarnings.forEach(function (w) { saveWarnings.push(w); });
 
-		// Cache Compatibility Mode is compatible with geo-targeting and IAB TCF
-		// — the frontend deliberately resolves both conservatively so the
-		// rendered output stays identical for every visitor — but the result is
-		// not what the settings screen alone suggests. Say so rather than
-		// silently overriding the choice, or letting the success toast imply
-		// per-country routing is still happening.
+		// Cache Compatibility Mode may be stored alongside Geo-Targeting, but it
+		// is inert while that UI toggle keeps the jurisdiction runtime enabled.
+		// Say so rather than letting the success toast imply both run together.
 		if (current.banner_control && current.banner_control.cache_compatibility) {
-			if (current.geolocation && current.geolocation.geo_targeting) {
-				saveWarnings.push(__(
-					'settings.cacheCompatWarnGeo',
-					'Cache Compatibility Mode serves one banner to every visitor, so geo-targeting rules are not applied while it is on.'
-				));
+			var geoOn = !!(current.geolocation && current.geolocation.geo_targeting);
+			if (geoOn) {
+					saveWarnings.push(__(
+						'settings.cacheCompatWarnGeo',
+						'Jurisdiction enforcement keeps Cache Compatibility Mode itself inactive. Enable the cache-safe jurisdiction bootstrap to cache compatible pages without weakening enforcement.'
+					));
 			}
 			var cmpId = current.iab ? parseInt(current.iab.cmp_id, 10) : 0;
-			if (current.iab && current.iab.enabled && !isNaN(cmpId) && cmpId >= 2) {
+			if (!geoOn && current.iab && current.iab.enabled && !isNaN(cmpId) && cmpId >= 2) {
 				saveWarnings.push(__(
 					'settings.cacheCompatWarnIab',
 					'Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country.'

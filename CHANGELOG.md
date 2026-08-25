@@ -2,14 +2,27 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
-## [Unreleased]
+## [1.28.0] — 2026-08-25
 
 ### Changed
-- **Jurisdiction rulesets are enforced at runtime by default.** The 47-law catalogue now drives pre-consent category defaults, blocking, banner-law selection, mandatory Do-Not-Sell/GPC/revisit controls, independent sensitive-processing opt-in and Consent Mode defaults. The `faz_geo_ruleset_runtime` filter remains an emergency kill switch. Cache Compatibility Mode is ignored while enforcement is active so one country's consent model cannot be cached for another.
+- **Jurisdiction enforcement is protected by default without sacrificing compatible page caches.** Fresh installs now enable the 47-law runtime, while the new cache-safe jurisdiction bootstrap can serve one strict GDPR shell and resolve the live law before the banner mounts or optional scripts run. Its admin status names every unsupported configuration and fails closed to the existing no-cache path; the `faz_geo_ruleset_runtime` and bootstrap filters remain developer overrides.
 - **GPC is a controlling sale/share opt-out.** `Sec-GPC: 1` and `navigator.globalPrivacyControl` are honoured without a publisher toggle and override conflicting prior or same-page consent. Unrelated category choices remain intact; targeted granular overrides are cleared and the audit marker is retained on classic and AMP flows.
 - **AMP now uses a server-reconciled granular consent bridge.** Purpose decisions, banner scope, revision and expiry are synchronized with the canonical consent cookie through strict AMP CORS endpoints; known AMP components are purpose-gated, endpoint timeouts fail closed, and global/excluded-page/bot/revisit settings are mirrored.
 - **Ad-blocker compatibility mode covers every frontend consent bundle**, including GCM, TCF, WP Consent API and Microsoft UET/Clarity, rather than only the main and accessibility scripts.
 - **The server-side scanner's optional static IP is now a complete setting.** Sitemap discovery and page fetches use cURL hostname pinning while preserving Host, TLS certificate validation and SNI; only public IPs are accepted and unsafe targets fail closed.
+
+- **Upgrading sites keep the jurisdiction enforcement they already had.** Until now the runtime was unconditional, so an install that never ticked Geo-Targeting was still applying per-country rules; making the toggle authoritative would have switched that off silently. A one-time migration turns the toggle on for anything upgrading from before this release, normalises a dormant `no_banner` default so banner visibility is unchanged, and explains the change in a dismissible notice. The one-click "disable Geo-routing" notice now states both of its consequences instead of presenting itself as a CDN optimisation.
+
+### Fixed
+- **Dark and custom preference-center colours now reach every rendered element.** The Dark Professional preset gives the audit table an explicit high-contrast palette, the three detail text colour properties are consumed by frontend and admin-preview CSS, and the “Always Active” label now participates in the normal tag/theme pipeline (including an AAA-safe High Contrast value).
+- **Disabling Geo-Targeting now restores full-page caching without a PHP snippet.** The jurisdiction runtime follows the saved Geo-Targeting toggle, so Cache Compatibility Mode no longer emits FAZ's `no-store`/page-cache veto when the toggle is off. FlyingPress 5.5.0 is covered by a real MISS/HIT and purge integration test.
+- **LiteSpeed CSS optimisation no longer causes an unstyled banner first paint.** Bundled and generated banner styles are registered through LiteSpeed's CSS exclusion API and carry tag-level no-optimize markers while preserving existing site exclusions.
+
+- **WooCommerce look-alike scripts are blockable again.** The three strictly-necessary WooCommerce handles were also being merged into the general whitelist, which matches by token prefix against `id` and `class` as well as `src` — so `wc-settings-tracker-js`, `wc-settings-analytics-js` and any tag claiming a `wc-settings-*` class were exempted from consent blocking, along with iframes, `noscript` pixels, link and style tags the narrow gate never covered. The exemption is exact-match only again, as documented, and a regression test now asserts a look-alike stays neutralised.
+- **Croatian translations load.** The catalogue shipped as `hr_HR`, a locale WordPress does not have, so it was never loaded and the admin fell back to English. Renamed to `hr`; ten further country-to-locale entries that pointed at non-existent WordPress locales were corrected at the same time.
+- **`Cache compatibility mode` was labelled as the ad-blocker one** in the German, French, Dutch and Croatian catalogues — two different settings that sit near each other on the same screen.
+- **Admin controls that the runtime overrides now say so.** Show Accept, Show Reject and the revisit widget are disabled with the reason when every rule set forces them; the Settings button, GPC and the Reject colour fields carry a note explaining which visitors they still apply to. The counts in that copy are read from the rule-set catalogue rather than written into the strings.
+- **The cache-bootstrap readiness line cannot be overwritten by a stale answer** from a request that resolves after the toggle has moved.
 
 ### Removed
 - Removed unused `site.url` and `site.installed` settings and their public schema/getters. An idempotent migration deletes the legacy group; WordPress remains authoritative for the site URL and plugin version state.

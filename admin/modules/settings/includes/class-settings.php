@@ -188,7 +188,16 @@ class Settings extends Store {
 			),
 			'geolocation'  => array(
 				'maxmind_license_key' => '',
-				'geo_targeting'       => false,
+				// Jurisdiction enforcement is a compliance baseline, not an
+				// optimisation. Fresh installs start protected; sites that need a
+				// shared full-page cache can keep it through the strict-shell
+				// bootstrap below instead of disabling per-country rules.
+				'geo_targeting'       => true,
+				// Off unless the first-run wizard detects a page-cache plugin (or
+				// the administrator enables it later). When requested, the frontend
+				// still runs a fail-closed readiness gate and falls back to no-cache
+				// for unsupported output dimensions.
+				'cache_geo_bootstrap' => false,
 				'target_regions'      => array( 'eu', 'uk' ),
 				'default_behavior'    => 'show_banner',
 				// Which GeoLite2 edition the downloader fetches and the lookup
@@ -490,6 +499,7 @@ class Settings extends Store {
 			case 'remove_data_on_uninstall':
 			case 'debug_mode':
 			case 'geo_targeting':
+			case 'cache_geo_bootstrap':
 			case 'hide_from_bots':
 			case 'gtm_datalayer':
 			case 'alternative_asset_path':

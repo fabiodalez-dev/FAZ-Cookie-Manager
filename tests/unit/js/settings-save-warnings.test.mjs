@@ -75,8 +75,8 @@ assert.deepEqual(
     geolocation: { geo_targeting: true },
     iab: { enabled: true, cmp_id: 300 },
   }))),
-  ['LOCALIZED_AB_CACHE', 'LOCALIZED_CACHE_GEO', 'LOCALIZED_CACHE_IAB'],
-  'all independent warnings are retained and ordered when configurations overlap',
+  ['LOCALIZED_AB_CACHE', 'LOCALIZED_CACHE_GEO'],
+  'geo targeting suppresses the contradictory IAB cache warning while preserving independent warnings',
 );
 
 const adminSource = readFileSync(new URL('../../../admin/class-admin.php', import.meta.url), 'utf8');

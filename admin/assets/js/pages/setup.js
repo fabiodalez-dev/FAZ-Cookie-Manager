@@ -56,6 +56,7 @@
 		bindTcfFields();
 		bindLanguageNote();
 		bindCacheInteractionNote();
+		bindCacheBootstrapRecommendation();
 		loadRecommendations();
 
 		// Initial render: no heading focus — the focus ring on load reads as a
@@ -64,7 +65,7 @@
 	});
 
 	function trackedToggleIds() {
-		var ids = ['faz-setup-gcm', 'faz-setup-ms-uet', 'faz-setup-ms-clarity', 'faz-setup-tcf', 'faz-setup-geo'];
+		var ids = ['faz-setup-gcm', 'faz-setup-ms-uet', 'faz-setup-ms-clarity', 'faz-setup-tcf', 'faz-setup-geo', 'faz-setup-cache-geo-bootstrap'];
 		root.querySelectorAll('input[data-bc-key]').forEach(function (input) { ids.push(input.id); });
 		return ids;
 	}
@@ -102,6 +103,18 @@
 		cache.addEventListener('change', sync);
 		bots.addEventListener('change', sync);
 		sync();
+	}
+
+	// The environment probe is asynchronous. Remember an explicit click so a
+	// late cache-plugin result can never re-check a box the administrator just
+	// turned off. Only a pristine first-run checkbox carries
+	// data-recommend-cache="1" from the server.
+	function bindCacheBootstrapRecommendation() {
+		var bootstrap = document.getElementById('faz-setup-cache-geo-bootstrap');
+		if (!bootstrap) { return; }
+		bootstrap.addEventListener('change', function () {
+			bootstrap.setAttribute('data-user-touched', '1');
+		});
 	}
 
 	/* ── Law selection ── */
@@ -276,14 +289,24 @@
 	function applyRecommendations() {
 		if (!recommendations) { return; }
 
-		// Cache Compatibility badge (step 3).
-		var cacheBadge = document.getElementById('faz-setup-cache-badge');
-		if (cacheBadge && recommendations.cache_plugin) {
-			cacheBadge.textContent = interpolateStr(
+		// A detected page cache recommends the strict-shell bootstrap, not the
+		// single-jurisdiction Cache Compatibility Mode. The latter is inert while
+		// enforcement is on and would solve the performance problem by removing
+		// the very protection this recommendation must preserve.
+		var bootstrap = document.getElementById('faz-setup-cache-geo-bootstrap');
+		var cacheBadge = document.getElementById('faz-setup-cache-bootstrap-badge');
+		if (recommendations.cache_plugin && bootstrap) {
+			if (cacheBadge) {
+				cacheBadge.textContent = interpolateStr(
 				__('setup.detected_named', 'Detected: %s'),
 				recommendations.cache_plugin
-			);
-			cacheBadge.hidden = false;
+				);
+				cacheBadge.hidden = false;
+			}
+			if (bootstrap.getAttribute('data-recommend-cache') === '1'
+				&& !bootstrap.getAttribute('data-user-touched')) {
+				bootstrap.checked = true;
+			}
 		}
 
 		// Google tags badge (step 4).
@@ -643,6 +666,7 @@
 		});
 		options.geolocation = {
 			geo_targeting: isChecked('faz-setup-geo'),
+			cache_geo_bootstrap: isChecked('faz-setup-cache-geo-bootstrap'),
 			target_regions: regions,
 			default_behavior: (document.getElementById('faz-setup-geo-behavior') || {}).value || 'show_banner'
 		};
@@ -689,7 +713,7 @@
 
 		// Enabled optional switches, by their visible labels (badges stripped).
 		var enabledLabels = [];
-		['faz-setup-gcm', 'faz-setup-ms-uet', 'faz-setup-ms-clarity', 'faz-setup-tcf'].forEach(function (id) {
+		['faz-setup-gcm', 'faz-setup-ms-uet', 'faz-setup-ms-clarity', 'faz-setup-tcf', 'faz-setup-cache-geo-bootstrap'].forEach(function (id) {
 			collectToggleLabel(id, enabledLabels);
 		});
 		root.querySelectorAll('input[data-bc-key]:checked').forEach(function (input) {
@@ -730,6 +754,11 @@
 				? list.getAttribute('data-geo-others-hidden')
 				: list.getAttribute('data-geo-others-shown');
 			addReviewItem(list, list.getAttribute('data-label-geo'), regionText + ' — ' + behavior);
+		} else {
+			addReviewWarning(list, list.getAttribute('data-warn-enforcement-off'));
+		}
+		if (isChecked('faz-setup-cache-geo-bootstrap')) {
+			addReviewWarning(list, list.getAttribute('data-note-bootstrap-fallback'));
 		}
 
 		// Payment gateways opted in.

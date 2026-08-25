@@ -12,9 +12,26 @@
 
 import { test, expect } from '../fixtures/wp-fixture';
 import type { Page } from '@playwright/test';
-import { wpEval } from '../utils/wp-env';
+import {
+  ensureFixturePlugin,
+  listActivePluginFiles,
+  restoreActivePluginFiles,
+  wpEval,
+  WP_PATH,
+} from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
+let initialActivePluginFiles: string[] | null = null;
+
+test.beforeAll(() => {
+  if (!WP_PATH) return;
+  initialActivePluginFiles = listActivePluginFiles();
+  ensureFixturePlugin('faz-e2e-audit-lab');
+});
+
+test.afterAll(() => {
+  if (initialActivePluginFiles) restoreActivePluginFiles(initialActivePluginFiles);
+});
 
 /** Force the default banner to a saved CCPA layout that uses the Classic
  *  template and return the original settings JSON for restore. */
@@ -211,7 +228,15 @@ test.describe('CCPA + Classic layout guard', () => {
     try {
       expect(meta.error, 'install has a default banner').toBeUndefined();
 
-      await page.goto(WP_BASE, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      // This regression is about the legacy layout repair itself. Disable the
+      // otherwise default-on jurisdiction overlay for this request; on a local
+      // loopback visitor it may legitimately select a stricter law and suppress
+      // a CCPA-only banner, which would make the DOM assertion test geo routing
+      // instead of the Classic-to-Box compatibility guard.
+      await page.goto(`${WP_BASE}/?faz_e2e_disable_geo_runtime=1`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 45_000,
+      });
       await page.waitForFunction(
         () => !!(window as unknown as { _fazConfig?: { _bannerConfig?: unknown } })._fazConfig?._bannerConfig,
         { timeout: 10_000 },

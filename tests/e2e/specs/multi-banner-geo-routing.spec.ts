@@ -800,7 +800,7 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
   test('GEO-24: live legislative runtime keeps single-banner output country-dependent', () => {
     // Even with a match-all banner, the enforced ruleset and UI overlay vary by
     // visitor jurisdiction. The page must therefore remain uncacheable while
-    // the default-on runtime is active. The explicit emergency-off legacy path
+    // the Geo-Targeting runtime is active. The explicit emergency-off legacy path
     // is covered separately by cache-compatibility-mode.spec.ts.
     const result = wpEval(`
       global $wpdb;

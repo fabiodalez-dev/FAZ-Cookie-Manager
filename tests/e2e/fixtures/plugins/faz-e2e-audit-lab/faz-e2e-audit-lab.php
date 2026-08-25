@@ -44,8 +44,8 @@ final class Faz_E2E_Audit_Lab {
 	 * @return void
 	 */
 	public function bootstrap() {
-		// Mirror production's default-on runtime. Tests that need the legacy/cache
-		// branch opt out explicitly, while faz_e2e_geo still scopes deterministic
+		// Keep jurisdiction enforcement active for geo/compliance fixtures. Cache
+		// suites opt out explicitly, while faz_e2e_geo still scopes deterministic
 		// country probes. The dedicated geo-runtime MU-plugin registers the same
 		// hook at the same priority; this normal plugin runs later, and both resolve
 		// cookie-bearing requests to true so load order cannot change the result.
@@ -53,7 +53,41 @@ final class Faz_E2E_Audit_Lab {
 		if ( isset( $_GET['faz_e2e_disable_geo_runtime'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$faz_e2e_runtime = false;
 		}
-		add_filter( 'faz_geo_ruleset_runtime', $faz_e2e_runtime ? '__return_true' : '__return_false', PHP_INT_MAX );
+		// Option form of the same switch. The query-string lever cannot serve the
+		// page-cache specs: a full-page cache does not store URLs with unknown
+		// query args, so a request carrying ?faz_e2e_disable_geo_runtime never
+		// becomes a HIT no matter what the runtime does. Those specs need the
+		// runtime off on the CLEAN url, which only a persisted flag can do.
+		if ( get_option( 'faz_e2e_geo_runtime_off' ) ) {
+			$faz_e2e_runtime = false;
+		}
+		// Third mode: DEFER. Both switches above still end in a forced filter, so
+		// with this fixture active the plugin's own answer to "is the jurisdiction
+		// runtime on?" is never observable — the suite could only ever prove how
+		// caching behaves GIVEN a forced state, never that the admin toggle
+		// produces that state. That is the exact gap behind the LiteSpeed and
+		// FlyingPress reports: Geo-Targeting off did not stop the no-store headers,
+		// and no test could see it.
+		//
+		// When faz_e2e_geo_runtime_defer is set, register NO filter at all, so
+		// Geo_Runtime::is_enabled() falls through to Settings > Geolocation >
+		// Geo-Targeting. It gates only this one add_filter() — the probes below
+		// stay available, and with the option absent the forced behaviour above is
+		// untouched, which the existing cache and geo suites depend on.
+		if ( ! get_option( 'faz_e2e_geo_runtime_defer' ) ) {
+			add_filter( 'faz_geo_ruleset_runtime', $faz_e2e_runtime ? '__return_true' : '__return_false', PHP_INT_MAX );
+		}
+
+		// Force the unwritable-uploads branch of the banner CSS enqueue for one
+		// request. Without this the inline-<style> fallback is unreachable from a
+		// test: the only other way in is to make wp-content/uploads unwritable,
+		// which is not something a suite may do to a shared install. The filter
+		// is the plugin's own documented seam (frontend/class-frontend.php,
+		// `apply_filters( 'faz_external_static_assets', true )`), so forcing it
+		// exercises the real fallback code path rather than a simulation of it.
+		if ( isset( $_GET['faz_e2e_inline_banner_css'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			add_filter( 'faz_external_static_assets', '__return_false', PHP_INT_MAX );
+		}
 
 		if ( isset( $_GET['faz_e2e_cf_country'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$_SERVER['HTTP_CF_IPCOUNTRY'] = strtoupper( sanitize_text_field( wp_unslash( $_GET['faz_e2e_cf_country'] ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized

@@ -3,9 +3,9 @@
  * Runtime geo-routing helpers.
  *
  * Shared, mostly-pure helpers that apply a resolved geo-routing ruleset to the
- * live banner. The catalogue is enforced by default; the
- * `faz_geo_ruleset_runtime` filter remains available as an emergency kill
- * switch for integrators.
+ * live banner. The catalogue is enforced when the administrator enables
+ * Geo-Targeting; the `faz_geo_ruleset_runtime` filter remains available as an
+ * explicit override for integrators.
  *
  * Consumed by both the server render (FazCookie\Frontend\Frontend) and the REST
  * language-swap endpoint (FazCookie\Frontend\Modules\Banner_Rest\Banner_Rest) so
@@ -42,7 +42,19 @@ class Geo_Runtime {
 	 * @return bool
 	 */
 	public static function is_enabled() {
-		return (bool) apply_filters( 'faz_geo_ruleset_runtime', true );
+		$settings = get_option( 'faz_settings', array() );
+		$enabled  = is_array( $settings )
+			&& isset( $settings['geolocation'] )
+			&& is_array( $settings['geolocation'] )
+			&& ! empty( $settings['geolocation']['geo_targeting'] );
+
+		/**
+		 * Override jurisdiction ruleset enforcement independently of the UI.
+		 *
+		 * @param bool  $enabled  Whether Settings > Geolocation > Geo-Targeting is enabled.
+		 * @param array $settings Complete FAZ settings option.
+		 */
+		return (bool) apply_filters( 'faz_geo_ruleset_runtime', $enabled, $settings );
 	}
 
 	/**
@@ -253,18 +265,32 @@ class Geo_Runtime {
 	 * Map a ruleset `model` to the binary law the frontend JS enforces.
 	 *
 	 * The JS collapses every law to `gdpr` (opt-in: deny non-necessary until
-	 * action) or `ccpa` (opt-out: allow until the visitor opts out). Only the
-	 * pure opt-out model maps to `ccpa`; opt-in, hybrid and
-	 * opt-out-with-sensitive-opt-in all enforce as `gdpr` because their
-	 * per-category `default_categories` already encode which categories are
-	 * granted vs denied — the granularity lives in the defaults, not the law.
+	 * action) or `ccpa` (opt-out: allow until the visitor opts out). Every model
+	 * whose name starts with `opt-out` maps to `ccpa`; its per-category defaults
+	 * still carry the sensitive-data opt-in granularity. Opt-in and hybrid stay
+	 * on the more-protective `gdpr` side.
 	 *
 	 * @param array $ruleset Ruleset array.
 	 * @return string 'gdpr' or 'ccpa'.
 	 */
 	public static function model_to_law( $ruleset ) {
 		$model = isset( $ruleset['model'] ) ? (string) $ruleset['model'] : '';
-		return ( 'opt-out' === $model ) ? 'ccpa' : 'gdpr';
+
+		// Prefix match, not equality. NOT ONE ruleset in the shipped catalogue
+		// declares the bare string 'opt-out': all 19 US state laws use
+		// 'opt-out-with-sensitive-opt-in', which is the accurate description of
+		// CPRA and its siblings (opt out of sale/sharing, opt IN for sensitive
+		// data). With an exact comparison this method could never return 'ccpa'
+		// for any input the plugin actually ships, so every US visitor was
+		// classified as opt-in, load_banner() saw a gdpr/ccpa law mismatch, and
+		// the fail-closed branch suppressed the banner: a CCPA banner rendered
+		// for nobody, in any state, with nothing logged.
+		//
+		// 'hybrid' (PIPEDA and friends) deliberately stays on the 'gdpr' side:
+		// it is the more protective reading, and demoting it to an opt-out
+		// notice on a guess is exactly the misrepresentation the fail-closed
+		// branch exists to prevent.
+		return ( 0 === strpos( $model, 'opt-out' ) ) ? 'ccpa' : 'gdpr';
 	}
 
 	/**

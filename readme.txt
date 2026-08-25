@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.27.1
+Stable tag: 1.28.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -274,33 +274,7 @@ Yes. The banner supports full keyboard navigation (Tab, Enter, Escape), proper A
 
 = Does it work with caching plugins? =
 
-When multi-banner geo-routing is active, the rendered HTML can legitimately vary by visitor country. This plugin asks the page-cache layer to bypass caching on those requests by emitting:
-
-* `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`
-* `Pragma: no-cache`
-* `X-LiteSpeed-Cache-Control: no-cache`
-* `Vary: CF-IPCountry` (when the trust filter `faz_trust_cf_ipcountry_header` is enabled)
-* `DONOTCACHEPAGE`, `DONOTCACHEOBJECT`, `DONOTCACHEDB` PHP constants (industry-standard bypass hints)
-* `do_action( 'litespeed_control_set_nocache', ... )` when LiteSpeed Cache is installed
-
-**Verified compatible (no extra configuration needed)**
-
-* **LiteSpeed Cache** — uses the explicit `litespeed_control_set_nocache` action + `X-LiteSpeed-Cache-Control` header.
-* **WP Rocket** — honors `DONOTCACHEPAGE` natively.
-* **W3 Total Cache** — honors `DONOTCACHEPAGE` / `DONOTCACHEOBJECT` natively.
-* **WP Super Cache** — honors `DONOTCACHEPAGE` natively.
-* **Hummingbird (WPMU DEV)** — honors `DONOTCACHEPAGE` natively.
-* **FlyingPress** — the plugin purges FlyingPress's cached HTML pages automatically whenever a banner, cookie, category or setting is saved, so a change never keeps serving stale banner markup. Only the rendered HTML is purged (that is all a consent change alters); FlyingPress's site-wide preload crawl is not triggered, matching the purge-only behaviour of the other supported caches. FlyingPress does not honor `DONOTCACHEPAGE`, so the plugin also hooks its documented `flying_press_is_cacheable` filter to skip caching on country-dependent pages, matching the bypass every other supported cache gets. The consent scripts are excluded automatically from minification and from "Delay all JavaScript": recent FlyingPress 4.x exposes delay/defer exclusion filters (added around 4.16), while FlyingPress 5 receives the same keywords in its in-memory delay-exclusion config without changing your saved FlyingPress settings. You normally do not need to touch anything. If FlyingPress 5 changes those internals the v5 bridge degrades quietly and leaves a note in the debug log when `WP_DEBUG` is on; on older FlyingPress builds that predate the delay/defer filters the automatic exclusion simply does not apply (the plugin cannot detect this). Either way, if you ever notice the banner appearing only after the first click, add `faz-cookie-manager` to FlyingPress's "Delay JavaScript" exclusion keywords as a fallback.
-* **Redis Object Cache / Memcached (persistent object caches)** — the plugin's internal banner/cookie caches are epoch-invalidated on save, which works on external object-cache backends too (fixed: previously a stale copy could survive in Redis and a banner save appeared not to stick).
-* **Cloudflare APO** — honors the `Cache-Control: no-store` header. With CF in front, also enable the trust filter so the `Vary: CF-IPCountry` header is emitted and CF caches per-country variants instead of bypassing entirely.
-* **Multilingual plugins under a full-page cache (WPML, Polylang, TranslatePress, Weglot)** — with Cache Compatibility Mode on, the banner still renders in the visitor's language. WPML directory/domain modes, Polylang, TranslatePress and Weglot all encode the language in the URL, so a URL-keyed page cache already stores one entry per language; the plugin resolves the per-URL language for each and stays cache-friendly. Only WPML's "language as a URL parameter" mode falls back to the site default (a query string is not a reliable cache key).
-
-**Known limitations**
-
-* **CDNs without origin Cache-Control honoring** (e.g. some legacy CloudFront configurations) — verify the response Cache-Control header reaches the edge. If not, add a CF-IPCountry or country-based cache key rule at the CDN level.
-* **Minor / regional cache plugins** (Comet Cache, Cachify, Swift Performance Lite) — not formally tested. Most still honor `DONOTCACHEPAGE`; verify by inspecting the response Cache-Control on a country-targeted page.
-
-Override the bypass logic per request via the `faz_country_dependent_banner_output` filter (return false to force the cache to ignore the country dimension on a specific URL).
+Yes. See the **Cache Plugin Compatibility** section below for the verified plugins, emitted cache-control signals, automatic FlyingPress handling and known CDN limitations.
 
 = Short answer =
 
@@ -373,12 +347,63 @@ Categories are the right granularity on most sites, and while **Per-service cons
 9. **Languages** -- Manage active languages and the default banner language. Works alongside WPML / Polylang; Italian, Dutch, German, French and Czech translations ship out of the box.
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
+== Cache Plugin Compatibility ==
+
+<!-- Placed between Screenshots and Changelog on purpose. wp.org's parser
+     recognises only description/installation/faq/screenshots/changelog and
+     folds any other section into the one ABOVE it. Above Description this
+     block pushed it past the truncation cap (that is why it went missing in
+     e341be7); below Changelog it pushed that past the 5,000-word cap. Here it
+     folds into Screenshots, which has no cap. -->
+
+When multi-banner geo-routing is active, the rendered HTML can legitimately vary by visitor country. This plugin asks the page-cache layer to bypass caching on those requests by emitting:
+
+* `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`
+* `Pragma: no-cache`
+* `X-LiteSpeed-Cache-Control: no-cache`
+* `CDN-Cache-Control: no-store` and `Cloudflare-CDN-Cache-Control: no-store` (banner REST endpoint only, so an edge that overrides the browser directive still refuses to store the country-dependent payload)
+* `Vary: CF-IPCountry` (when the trust filter `faz_trust_cf_ipcountry_header` is enabled). It is emitted for symmetry but is inert on these responses: nothing is stored, so there is no cache key to vary. `Vary` only does work on the storable responses — the banner REST endpoint's *non*-country-dependent answers, which are served `public, max-age=300` and carry the same header.
+* `DONOTCACHEPAGE`, `DONOTCACHEOBJECT`, `DONOTCACHEDB` PHP constants (industry-standard bypass hints)
+* `do_action( 'litespeed_control_set_nocache', ... )` when LiteSpeed Cache is installed
+
+The jurisdiction runtime follows **Settings → Geolocation → Jurisdiction & Geo-routing** and is enabled by default on new installations. Turning it off makes the law saved on the active banner apply to every visitor; for example, a CCPA banner no longer gains GDPR blocking for an EEA visitor.
+
+For sites that need per-country enforcement and a shared page cache, enable **Cache-safe jurisdiction bootstrap** on the same screen. Compatible normal pages use one visitor-invariant, strict GDPR shell and fetch the live no-store jurisdiction payload before the banner mounts or optional scripts can run. The settings screen reports whether it is actually active. AMP, IAB TCF, country-derived language fallback, country-targeted banner rows, `no_banner` regional visibility and custom country-dependent output currently retain the normal page-cache bypass. If the live request fails, the strict shell and blocked optional resources remain in place.
+
+When jurisdiction enforcement is off, Cache Compatibility Mode can still keep normal pages cacheable without a PHP snippet. LiteSpeed CSS/JS optimisation and FlyingPress delay/minify receive automatic exclusions for the banner assets.
+
+= Verified compatible (no extra configuration needed) =
+* **LiteSpeed Cache** — uses the explicit `litespeed_control_set_nocache` action + `X-LiteSpeed-Cache-Control` header.
+* **WP Rocket** — honors `DONOTCACHEPAGE` natively.
+* **W3 Total Cache** — honors `DONOTCACHEPAGE` / `DONOTCACHEOBJECT` natively.
+* **WP Super Cache** — honors `DONOTCACHEPAGE` natively.
+* **Hummingbird (WPMU DEV)** — honors `DONOTCACHEPAGE` natively.
+* **FlyingPress** — the plugin purges FlyingPress's cached HTML pages automatically whenever a banner, cookie, category or setting is saved, so a change never keeps serving stale banner markup. Only the rendered HTML is purged (that is all a consent change alters); FlyingPress's site-wide preload crawl is not triggered, matching the purge-only behaviour of the other supported caches. FlyingPress does not honor `DONOTCACHEPAGE`, so the plugin also hooks its documented `flying_press_is_cacheable` filter to skip caching on country-dependent pages, matching the bypass every other supported cache gets. The consent scripts are excluded automatically from minification and from "Delay all JavaScript": recent FlyingPress 4.x exposes delay/defer exclusion filters (added around 4.16), while FlyingPress 5 receives the same keywords in its in-memory delay-exclusion config without changing your saved FlyingPress settings. You normally do not need to touch anything. If FlyingPress 5 changes those internals the v5 bridge degrades quietly and leaves a note in the debug log when `WP_DEBUG` is on; on older FlyingPress builds that predate the delay/defer filters the automatic exclusion simply does not apply (the plugin cannot detect this). Either way, if you ever notice the banner appearing only after the first click, add `faz-cookie-manager` to FlyingPress's "Delay JavaScript" exclusion keywords as a fallback.
+* **Redis Object Cache / Memcached (persistent object caches)** — the plugin's internal banner/cookie caches are epoch-invalidated on save, which works on external object-cache backends too (fixed: previously a stale copy could survive in Redis and a banner save appeared not to stick).
+* **Cloudflare APO** — honors the `Cache-Control: no-store` header, and the banner REST endpoint backs it with `CDN-Cache-Control: no-store` / `Cloudflare-CDN-Cache-Control: no-store` so country-dependent output is not stored at the edge even where the edge is configured to override browser cache directives. With CF in front, also enable the trust filter: it adds `Vary: CF-IPCountry` to the banner REST endpoint's *non*-country-dependent responses (`public, max-age=300`), so CF keys those short-lived entries per country instead of sharing one entry across countries.
+* **Multilingual plugins under a full-page cache (WPML, Polylang, TranslatePress, Weglot)** — with Cache Compatibility Mode on, the banner still renders in the visitor's language. WPML directory/domain modes, Polylang, TranslatePress and Weglot all encode the language in the URL, so a URL-keyed page cache already stores one entry per language; the plugin resolves the per-URL language for each and stays cache-friendly. Only WPML's "language as a URL parameter" mode falls back to the site default (a query string is not a reliable cache key).
+
+= Known limitations =
+
+* **CDNs without origin Cache-Control honoring** (e.g. some legacy CloudFront configurations) — verify the response Cache-Control header reaches the edge. If not, add a CF-IPCountry or country-based cache key rule at the CDN level.
+* **Minor / regional cache plugins** (Comet Cache, Cachify, Swift Performance Lite) — not formally tested. Most still honor `DONOTCACHEPAGE`; verify by inspecting the response Cache-Control on a country-targeted page.
+
+Override the bypass logic per request via the `faz_country_dependent_banner_output` filter (return false to force the cache to ignore the country dimension on a specific URL).
+
 == Changelog ==
 
 The full changelog (every release back to 1.0.0) lives at:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
+
+= 1.28.0 =
+* Changed: fresh installs now enable the 47-law jurisdiction runtime, and a new cache-safe bootstrap can serve one strict GDPR shell and resolve the live law before the banner mounts, so a compatible page cache no longer has to be given up for correct per-country rules. Every unsupported configuration is named in the admin and falls back to the existing no-cache path.
+* Changed: sites upgrading from 1.27.x keep the enforcement they already had. The Geo-Targeting toggle is now authoritative, so a one-time migration turns it on and normalises a dormant "no banner" default, leaving banner visibility unchanged. A dismissible notice explains the change.
+* Fixed: turning Geo-Targeting off restores full-page caching without a PHP snippet, and LiteSpeed CSS optimisation no longer produces an unstyled banner first paint.
+* Fixed: WooCommerce look-alike scripts are blockable again. The three strictly-necessary handles were also reaching the general whitelist, which matches by token prefix against id and class, so names like `wc-settings-tracker-js` were being exempted from consent blocking.
+* Fixed: Croatian translations load again — the catalogue shipped under a locale WordPress does not have — and ten further invalid country-to-locale mappings are corrected.
+* Fixed: admin controls that the jurisdiction runtime overrides now say so instead of silently doing nothing, and preference-centre colours reach every rendered element including the audit table and the "Always Active" label.
 
 = 1.27.1 =
 * Fixed: WooCommerce block checkout could show "You must be logged in to checkout" to guests. The plugin was holding back WooCommerce's own `wc-settings` script, which publishes the `wcSettings` object the block checkout reads to learn whether guest checkout is allowed. With it inert the block fell back to its most restrictive default. `wc-settings`, `wc-blocks-middleware` and `wc-mini-cart-block-frontend` are now treated as strictly necessary and are never held back — they carry configuration only, set no cookies and are not a tracking surface. Reported on the support forum; reproduced and fixed with a regression test that fails if the handle is ever neutralised again.
@@ -401,7 +426,7 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Updated: translation catalogues resynchronized with the current source strings.
 
 = 1.26.0 =
-* Changed: all bundled jurisdiction rule-sets are now enforced by default across pre-consent defaults, blocking, mandatory banner controls and Consent Mode. The faz_geo_ruleset_runtime filter remains an emergency kill switch, and Cache Compatibility Mode is ignored while the response varies by jurisdiction.
+* Changed: all bundled jurisdiction rule-sets are now enforced by default across pre-consent defaults, blocking, mandatory banner controls and Consent Mode. A cache-safe jurisdiction bootstrap can serve one strict shared shell and resolve the live law before mount; unsupported configurations fail closed to the existing page-cache bypass. The faz_geo_ruleset_runtime filter remains an emergency kill switch.
 * Compliance: GPC now overrides conflicting prior and same-page sale/share grants without erasing unrelated choices. The classic and AMP paths retain an audit marker and remove granular overrides that could bypass the opt-out.
 * Changed: AMP consent now reconciles purpose choices, scope, revision and expiry through strict same-site/AMP-cache endpoints, gates known AMP components by purpose and mirrors the classic runtime's banner, bot, exclusion and revisit settings.
 * Changed: Ad-blocker compatibility mode covers the banner, accessibility, GCM, TCF, WP Consent API and Microsoft bundles; Scanner Static IP is now configurable and preserves hostname/TLS/SNI across discovery and fetches; unused duplicate site settings are removed on upgrade.
@@ -489,24 +514,6 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Fix: legacy "Both" (GDPR + US) banners no longer silently lose their Do-Not-Sell opt-out. Very old banners stored it only in a legacy key that the settings sanitiser drops; the runtime now back-fills the opt-out from the raw stored settings so the US control still renders.
 * Fix: the Google Consent Mode non-personalized-ads fallback now signals `npa` on the FIRST visit too (legacy non-Consent-Mode ad tags previously only got it after a reject), and the signal is two-sided — it clears within the session once marketing is granted.
 * Hardening: the consent-log `status` column is constrained to the known set (unknown values fold to `partial`) so a crafted REST payload can't pollute the dashboard statistics; the client-side cookie cleanup gained a longer-tail pass to catch trackers that write a cookie well after page load; and an admin's explicit custom block rule is no longer silently exempted when it is a substring of an always-allowed payment-gateway pattern.
-
-= 1.19.0 =
-* Feature: per-service consent is reintroduced and now actually enforced. Granular per-service sub-toggles return under each category in the preference center (opt-in, sourced from the cookies actually detected on the site). A denied service is enforced server-side (pre-consent script block + cookie shredder) and client-side, an explicit allow overrides a denied category, and the choice persists across reloads and is written to the consent log. Enable it in Settings > Per-service consent. Extension filters: `faz_per_service_services`, `faz_store_data`.
-* Feature: Czech (cs_CZ) cookie-policy templates for the GDPR, CCPA and LGPD generators, with correct legal terminology and date grammar.
-* Feature: opt-out success message for US state-law / CCPA "Do Not Sell or Share" — an accessible confirmation (`role="status"` + `aria-live`, focus moved, countdown, auto-close) instead of a silent disappear. Headline/subtext editable via `[faz_optout_success_text]` / `[faz_optout_success_subtext]`.
-* Compliance: Quebec / Law 25 sub-national routing, Do-Not-Sell-My-Personal-Information enforcement, DSAR export/erase wiring, scanner TLS verify-by-default (loopback-exempt), and new geo rulesets (Minnesota, Maryland, New Hampshire, New Jersey, Texas, Canada / PIPEDA).
-* Fix: changing the banner's applicable law now reloads the law-appropriate notice copy — a CCPA description could survive on a GDPR banner and tell visitors to click a Do-Not-Sell link no longer rendered — without overwriting a customised description.
-* Fix: the "Do Not Sell or Share" link on a Classic-layout CCPA (or "Both") banner is no longer a dead click; such banners are migrated to a popup-capable layout in the editor and at runtime, with a re-show fallback.
-* Fix: the banner template cache signature now includes the plugin version and the per-service / per-cookie flags, so a plugin update can no longer serve a stale cached template to the updated script.
-* Fix: blocked-embed placeholder keeps its branded styling; a service-level placeholder accept records the choice; toggling a service no longer collapses its category accordion.
-* Fix: the geo "source not configured" admin notice no longer fires when a GeoLite2 database (or `FAZ_MAXMIND_DB_PATH`) is actually configured.
-* Change: per-cookie consent remains hard-off pending its correctness rework, and is now also rejected on the settings REST / import path.
-
-= 1.18.2 =
-* Change: the experimental opt-in features added in 1.18.0 (per-service / per-cookie consent toggles and the `faz_geo_ruleset_runtime` runtime geo-routing) are temporarily disabled pending a correctness rework — they did not, when enabled, deliver the granular guarantees their UI implied. They are now hard-off at their entry points. The default category-level consent flow (the path covered by the compliance suite) is byte-for-byte unchanged.
-* Change: per-service / per-cookie toggles are hidden in Settings and forced off. As shipped a denied cookie was not enforced server-side or on reload, the granular decisions were not written to the consent log, a large override set could exceed the browser's ~4 KB cookie limit, and the list showed catalogue wildcards rather than detected cookies.
-* Change: runtime geo-routing no longer applies a resolved ruleset to the live banner (a CCPA-style jurisdiction was mapped to a GDPR banner without rendering its Do-Not-Sell / GPC / sensitive-opt-in obligations). Catalogue-based multi-banner geo-routing — choosing which saved banner to show per country — is unaffected.
-* Fix: corrected an overstated per-cookie help text that claimed a denied cookie "is deleted whenever it appears." That enforcement only ran client-side at save time and did not persist, so the claim was inaccurate.
 
 
 = Older versions =

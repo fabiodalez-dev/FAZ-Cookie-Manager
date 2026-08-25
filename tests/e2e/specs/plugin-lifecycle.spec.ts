@@ -505,12 +505,20 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
       expect(categories, `default category ${expected} must be seeded`).toContain(expected);
     }
 
-    // Verify settings exist with a default banner_control.status.
-    const settingsShape = wpEval(`
+    // Verify settings exist and the fresh-install compliance/cache defaults are
+    // explicit: jurisdiction enforcement on, optional bootstrap off until the
+    // wizard detects a page-cache plugin or the administrator opts in.
+    const settingsShape = JSON.parse(wpEval(`
       $s = get_option( 'faz_settings', null );
-      echo is_array( $s ) && isset( $s['banner_control'] ) ? 'ok' : 'fail';
-    `).trim();
-    expect(settingsShape, 'faz_settings must be seeded with a banner_control section').toBe('ok');
+      echo wp_json_encode( array(
+		'valid' => is_array( $s ) && isset( $s['banner_control'] ),
+		'geo' => ! empty( $s['geolocation']['geo_targeting'] ),
+		'bootstrap' => ! empty( $s['geolocation']['cache_geo_bootstrap'] ),
+	  ) );
+    `).trim()) as { valid: boolean; geo: boolean; bootstrap: boolean };
+    expect(settingsShape.valid, 'faz_settings must be seeded with a banner_control section').toBe(true);
+    expect(settingsShape.geo, 'fresh installs must enforce jurisdiction rules by default').toBe(true);
+    expect(settingsShape.bootstrap, 'bootstrap stays off until cache detection or explicit opt-in').toBe(false);
   });
 
   // ───────────────────────────────────────────────────────────────────────────

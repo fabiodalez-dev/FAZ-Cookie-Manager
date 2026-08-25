@@ -39,7 +39,6 @@ import { fazApiGet, fazApiPost, findCategoryId, openSettingsPage } from '../util
 import { ensureFixturePlugin, listActivePluginFiles, restoreActivePluginFiles, wpEval, WP_PATH } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
-const AJAX_ENDPOINT = `${WP_BASE}/wp-admin/admin-ajax.php?action=faz_e2e_scan_ajax_cookie`;
 
 type FazSettings = Record<string, any>;
 
@@ -98,7 +97,7 @@ type AjaxProbe = { setCookie: string; emittedCookieName: string };
  */
 async function probeAjaxCookie(
   browser: Browser,
-  opts: { necessary?: boolean; consentCookie?: string } = {},
+  opts: { necessary?: boolean; consentCookie?: string; disableGeoRuntime?: boolean } = {},
 ): Promise<AjaxProbe> {
   const ctx = await browser.newContext();
   try {
@@ -113,7 +112,10 @@ async function probeAjaxCookie(
         },
       ]);
     }
-    const res = await ctx.request.get(`${AJAX_ENDPOINT}${opts.necessary ? '&necessary=1' : ''}`);
+    const query = new URLSearchParams({ action: 'faz_e2e_scan_ajax_cookie' });
+    if (opts.necessary) query.set('necessary', '1');
+    if (opts.disableGeoRuntime) query.set('faz_e2e_disable_geo_runtime', '1');
+    const res = await ctx.request.get(`${WP_BASE}/wp-admin/admin-ajax.php?${query.toString()}`);
     expect(res.status(), 'admin-ajax fixture endpoint must answer 200 — anything else means faz-e2e-scan-lab is not active').toBe(200);
     const body = await res.json();
     expect(body?.success, 'fixture AJAX handler must report success').toBe(true);
@@ -272,7 +274,10 @@ test.describe('Release verify — Set-Cookie guard standdown (one gate, no orpha
         banner_control: { ...(original.banner_control ?? {}), status: true, cache_compatibility: true },
       });
 
-      const probe = await probeAjaxCookie(browser, { consentCookie: acceptAllConsentValue(original) });
+      const probe = await probeAjaxCookie(browser, {
+        consentCookie: acceptAllConsentValue(original),
+        disableGeoRuntime: true,
+      });
       expect(probe.emittedCookieName).toBe('brikpanel_vid');
       expect(probe.setCookie, 'guard destroyed a CONSENTED visitor\'s cookie under cache-compat — get_blocked_categories() ignores the consent cookie there, so the guard must not run at all').toContain('brikpanel_vid=private-visitor-id');
     } finally {
@@ -294,7 +299,7 @@ test.describe('Release verify — Set-Cookie guard standdown (one gate, no orpha
         banner_control: { ...(original.banner_control ?? {}), status: true, cache_compatibility: true },
       });
 
-      const probe = await probeAjaxCookie(browser); // no consent cookie at all
+      const probe = await probeAjaxCookie(browser, { disableGeoRuntime: true }); // no consent cookie at all
       expect(probe.emittedCookieName).toBe('brikpanel_vid');
       expect(probe.setCookie, 'guard ran under cache-compat — the one gate is not consulting is_cache_compatibility_enabled()').toContain('brikpanel_vid=private-visitor-id');
     } finally {

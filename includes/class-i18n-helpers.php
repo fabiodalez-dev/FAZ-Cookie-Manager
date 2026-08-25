@@ -367,7 +367,22 @@ if ( ! function_exists( 'faz_country_to_language' ) ) {
 			'SE' => 'sv', 'NO' => 'no', 'DK' => 'da', 'FI' => 'fi', 'IS' => 'is',
 			// Baltic
 			'EE' => 'et', 'LV' => 'lv', 'LT' => 'lt',
-			// Slovenian / Croatian / Bulgarian / Maltese
+			// Slovenian / Croatian / Bulgarian / Maltese.
+			//
+			// MT stays 'mt' even though faz_country_to_locale('MT') returns
+			// 'en_GB'. The two maps answer different questions and are NOT
+			// required to agree:
+			//   - this map returns a plugin BANNER-CONTENT language key, one of
+			//     the codes the Languages screen offers (it lists 'Maltese' =>
+			//     'mt'), so an admin who wrote Maltese banner copy gets it used;
+			//   - faz_country_to_locale() returns a WordPress/multilingual-plugin
+			//     LOCALE, and WordPress has no Maltese locale to return.
+			// faz_current_language() tries the locale form first and this one
+			// second, so the divergence is inert in practice: 'en_GB' normalises
+			// to 'en-gb', which the Languages screen never offers (it has plain
+			// 'en'), so the locale branch cannot match for MT and Maltese copy
+			// still wins. Do not "align" them — mapping MT to 'en' here would
+			// silently switch Maltese visitors to English banner content.
 			'SI' => 'sl', 'HR' => 'hr', 'BG' => 'bg', 'MT' => 'mt',
 			// Irish (English is also official)
 			'IE' => 'en',
@@ -464,17 +479,23 @@ if ( ! function_exists( 'faz_country_to_locale' ) ) {
 			// Chinese — Mainland / Taiwan / Hong Kong
 			'CN' => 'zh_CN', 'TW' => 'zh_TW', 'HK' => 'zh_HK',
 			// East Asia + others — most have a single canonical locale.
-			'JP' => 'ja_JP', 'KR' => 'ko_KR',
-			'RU' => 'ru_RU', 'UA' => 'uk_UA', 'TR' => 'tr_TR',
+			'JP' => 'ja', 'KR' => 'ko_KR',
+			'RU' => 'ru_RU', 'UA' => 'uk', 'TR' => 'tr_TR',
 			'PL' => 'pl_PL', 'CZ' => 'cs_CZ', 'SK' => 'sk_SK',
 			'HU' => 'hu_HU', 'RO' => 'ro_RO',
-			'GR' => 'el_GR', 'CY' => 'el_GR',
+			'GR' => 'el', 'CY' => 'el',
 			'SE' => 'sv_SE', 'NO' => 'nb_NO', 'DK' => 'da_DK',
-			'FI' => 'fi_FI', 'IS' => 'is_IS',
-			'EE' => 'et_EE', 'LV' => 'lv_LV', 'LT' => 'lt_LT',
-			'SI' => 'sl_SI', 'HR' => 'hr_HR', 'BG' => 'bg_BG', 'MT' => 'mt_MT',
+			'FI' => 'fi', 'IS' => 'is_IS',
+			'EE' => 'et', 'LV' => 'lv', 'LT' => 'lt_LT',
+			// MT is NOT a typo and NOT part of the code-shortening above:
+			// WordPress ships no Maltese locale at all (the translate.w.org
+			// locale list has no `mt*` entry), so `mt_MT` would be a locale
+			// nothing can ever resolve. English is co-official in Malta, hence
+			// en_GB. Note this deliberately DIVERGES from
+			// faz_country_to_language('MT') === 'mt' — see the comment there.
+			'SI' => 'sl_SI', 'HR' => 'hr', 'BG' => 'bg_BG', 'MT' => 'en_GB',
 			// Arabic — most-deployed locale per country.
-			'SA' => 'ar_SA', 'AE' => 'ar_AE', 'EG' => 'ar_EG',
+			'SA' => 'ar', 'AE' => 'ar', 'EG' => 'ar',
 		);
 		/**
 		 * Filter the country→locale map (full table override).
@@ -810,7 +831,7 @@ if ( ! function_exists( 'faz_wp_locale' ) ) {
 			'hu'    => 'hu_HU',
 			'ro'    => 'ro_RO',
 			'bg'    => 'bg_BG',
-			'hr'    => 'hr_HR',
+			'hr'    => 'hr',
 			'el'    => 'el',
 			'tr'    => 'tr_TR',
 			'sv'    => 'sv_SE',

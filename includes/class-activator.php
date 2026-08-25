@@ -117,7 +117,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.08.21.1';
+	const MIGRATIONS_VERSION = '2026.08.25.1';
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -149,6 +149,7 @@ class Activator {
 			self::demote_bulky_autoloaded_options();
 			self::refresh_cookie_translation_caches();
 			self::remove_dead_site_settings();
+			self::preserve_geo_enforcement_on_upgrade();
 		} catch ( \Throwable $e ) {
 			// Do not mark migrations complete — retry on next admin load.
 			return;
@@ -850,6 +851,13 @@ class Activator {
 	 * @return void
 	 */
 	public static function install() {
+		// FIRST, before anything can touch `faz_version`: record the version we
+		// are upgrading FROM. Migrations run on admin_init, by which point
+		// check_version() has already called install() and bumped `faz_version`
+		// to FAZ_VERSION on the `init` hook of the same request — so a migration
+		// reading `faz_version` can never tell an upgrade from a fresh install.
+		// This is the discriminator; see capture_previous_version().
+		self::capture_previous_version();
 		self::check_for_upgrade();
 		// Rotate the cookie/policy caches on the FRONTEND upgrade path too.
 		//
@@ -918,6 +926,19 @@ class Activator {
 		// closing the window where a rarely-admined site would re-activate
 		// per-cookie consent on the frontend before an admin ever loads wp-admin.
 		self::reset_stale_per_cookie_consent();
+		// Keep jurisdiction enforcement switched on for installs that predate the
+		// Geo-Targeting UI gate. Same reasoning as the call above: the migration
+		// runner is admin_init-only, and until an administrator happens to load
+		// wp-admin every single visitor of a rarely-admined site would be served
+		// with the 47-ruleset enforcement silently off. The method is idempotent
+		// and returns early on anything unexpected, but a cache-purge failure
+		// inside Settings::update() must never be able to abort an upgrade — the
+		// admin_init runner retries it either way.
+		try {
+			self::preserve_geo_enforcement_on_upgrade();
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
 		// Always clear the banner template cache on version upgrades so new
 		// CSS rules, shortcodes, and template HTML take effect immediately.
 		// Without this, users upgrading across multiple versions (e.g. 1.8 →
@@ -939,6 +960,183 @@ class Activator {
 		// silently skipping the migration forever.
 		update_option( 'faz_version', FAZ_VERSION );
 		self::update_db_version();
+	}
+
+	/**
+	 * Value stored in `faz_previous_version` when install() ran with no
+	 * `faz_version` to preserve — i.e. on a genuine first install.
+	 *
+	 * A deliberate non-version sentinel rather than '' or '0.0.0': the option
+	 * being ABSENT and the option saying "this was a fresh install" are
+	 * different facts, and both are load-bearing (see
+	 * upgraded_from_pre_geo_gate()). An empty string cannot express the
+	 * difference — get_option() returns the default for a missing row — and
+	 * '0.0.0' would compare as "very old upgrade", the exact opposite meaning.
+	 */
+	const FRESH_INSTALL_MARKER = 'fresh-install';
+
+	/**
+	 * Record the version this request is upgrading FROM.
+	 *
+	 * Called at the very top of install(), before any step can write
+	 * `faz_version` — that option is bumped on the LAST line of install(), so
+	 * reading it here always yields the pre-upgrade value. Re-entrant by
+	 * construction: if install() fatals midway, `faz_version` was never bumped,
+	 * so the retry reads the same value and writes the same result.
+	 *
+	 * Not autoloaded: it is read by the upgrade path and by admin_init
+	 * migrations, never on a front-end hot path.
+	 *
+	 * @return void
+	 */
+	private static function capture_previous_version() {
+		$prior = get_option( 'faz_version', '' );
+		update_option(
+			'faz_previous_version',
+			( is_string( $prior ) && '' !== $prior ) ? $prior : self::FRESH_INSTALL_MARKER,
+			false
+		);
+	}
+
+	/**
+	 * First plugin version whose Geo-Targeting toggle also gates jurisdiction
+	 * ruleset enforcement (Geo_Runtime::is_enabled()).
+	 *
+	 * 1.27.1 and everything before it enforced unconditionally, so any install
+	 * arriving from a version BELOW this one had enforcement whether or not it
+	 * had ever ticked Geo-Targeting. The constant only has to sit strictly above
+	 * 1.27.1 and at or below the release that carries the gate, so it stays
+	 * correct however the release is finally numbered (1.27.2, 1.28.0, …).
+	 */
+	const GEO_ENFORCEMENT_GATE_VERSION = '1.27.2';
+
+	/**
+	 * Whether this install arrived from a plugin version that enforced the
+	 * jurisdiction rulesets unconditionally.
+	 *
+	 * Three cases, and the third is the one that matters:
+	 *
+	 *  - FRESH_INSTALL_MARKER — install() ran with no `faz_version` to preserve.
+	 *    This is a first install of a gated build; there is no prior behaviour
+	 *    to preserve, so it is left alone. (Whether a FRESH install should
+	 *    default to enforcement on is a separate product decision.)
+	 *  - a version string — compare it against the gate.
+	 *  - ABSENT — the option is written by capture_previous_version(), which
+	 *    ships WITH the gate. An install that has never run a build carrying it
+	 *    is therefore, necessarily, an install that predates the gate. Absence
+	 *    means "upgrade", and it cannot mean anything else: every fresh install
+	 *    of a gated build runs install() from the activation hook, which writes
+	 *    the marker before any admin_init can fire.
+	 *
+	 * @return bool
+	 */
+	private static function upgraded_from_pre_geo_gate() {
+		$previous = get_option( 'faz_previous_version', '' );
+		if ( ! is_string( $previous ) ) {
+			$previous = '';
+		}
+		if ( self::FRESH_INSTALL_MARKER === $previous ) {
+			return false;
+		}
+		if ( '' === $previous ) {
+			return true;
+		}
+		return version_compare( $previous, self::GEO_ENFORCEMENT_GATE_VERSION, '<' );
+	}
+
+	/**
+	 * Keep jurisdiction enforcement on for installs that predate the UI gate.
+	 *
+	 * Geo_Runtime::is_enabled() used to be `return true` — enforcement was
+	 * unconditional, so EVERY install had it, including the (default) majority
+	 * that never ticked Settings → Geolocation → Geo-Targeting. From the gate
+	 * release onward that toggle also governs enforcement, so those installs
+	 * would silently lose it on upgrade: with no ruleset resolved,
+	 * Frontend::apply_blocked_categories() falls through to the banner's own
+	 * `applicableLaw`, and a banner stored as `ccpa` (which is also how the
+	 * combined "GDPR + US" banner is stored) blocks NOTHING before consent — for
+	 * every visitor, EEA included. Under 1.27.1 an EEA visitor resolved a
+	 * denied-until-action GDPR ruleset AND had the GDPR banner swapped in by
+	 * load_banner(). Both disappear together.
+	 *
+	 * The fix is to promote the flag, which is display-neutral EXCEPT on installs
+	 * that also stored `default_behavior = no_banner`: is_geo_banner_disabled()
+	 * hides the banner only when geo_targeting is on AND the visitor is outside
+	 * target_regions AND the behaviour is no_banner. While geo_targeting is off
+	 * that stored behaviour is DORMANT — the method returns false at its first
+	 * check without ever reading it — so normalising a dormant `no_banner` back
+	 * to `show_banner` in the same write preserves observable behaviour exactly
+	 * on both axes: enforcement stays on, and nobody starts losing the banner.
+	 *
+	 * A stored `false` carries no intent about enforcement either: under 1.27.x
+	 * an administrator switching Geo-Targeting off was switching off geo-targeted
+	 * banner DISPLAY, the only thing it controlled. They could not have been
+	 * switching off enforcement, because enforcement was not switchable.
+	 *
+	 * Writes through Settings::update() rather than a bare update_option(), for
+	 * the reason spelled out on Admin::ajax_disable_redundant_geo_routing():
+	 * geo-targeting decides who sees the banner, so the write must fire
+	 * faz_after_update_settings — the hook that purges the page caches and the
+	 * banner template.
+	 *
+	 * @return void
+	 */
+	public static function preserve_geo_enforcement_on_upgrade() {
+		// Own completion flag, deliberately independent of MIGRATIONS_VERSION.
+		// A later batch bump must not re-promote the flag on a site whose
+		// administrator has since read the notice and turned Geo-Targeting off
+		// on purpose — by then the toggle DOES mean "no enforcement", and that
+		// is a decision a migration has no business overriding.
+		if ( get_option( 'faz_geo_enforcement_preserved' ) ) {
+			return;
+		}
+		if ( ! self::upgraded_from_pre_geo_gate() ) {
+			return;
+		}
+
+		// Read the RAW option, not Settings::get(): get() falls back to the
+		// defaults when the option is missing, so a missing or corrupted
+		// faz_settings would be silently materialised here — a migration
+		// creating a settings row it was only supposed to amend.
+		$stored = get_option( 'faz_settings', null );
+		if ( ! is_array( $stored ) ) {
+			return;
+		}
+		$geolocation = ( isset( $stored['geolocation'] ) && is_array( $stored['geolocation'] ) )
+			? $stored['geolocation']
+			: array();
+		if ( ! empty( $geolocation['geo_targeting'] ) ) {
+			// Already on: enforcement never went anywhere, and default_behavior
+			// is live rather than dormant — normalising it here would be a real
+			// display change, not a preservation.
+			return;
+		}
+		if ( ! class_exists( '\FazCookie\Admin\Modules\Settings\Includes\Settings' ) ) {
+			// Leave the flag unset so the admin_init runner retries once the
+			// admin module is loadable.
+			return;
+		}
+
+		$settings_obj = new \FazCookie\Admin\Modules\Settings\Includes\Settings();
+		$settings     = $settings_obj->get();
+		if ( ! is_array( $settings ) ) {
+			return;
+		}
+		if ( ! isset( $settings['geolocation'] ) || ! is_array( $settings['geolocation'] ) ) {
+			$settings['geolocation'] = array();
+		}
+		$settings['geolocation']['geo_targeting'] = true;
+		if ( isset( $settings['geolocation']['default_behavior'] )
+			&& 'no_banner' === $settings['geolocation']['default_behavior'] ) {
+			$settings['geolocation']['default_behavior'] = 'show_banner';
+		}
+		$settings_obj->update( $settings );
+
+		update_option( 'faz_geo_enforcement_preserved', '1', false );
+		// Arms Admin::geo_enforcement_migration_notice(). Separate from the
+		// completion flag above so dismissing the notice cannot re-arm the
+		// migration.
+		update_option( 'faz_geo_enforcement_notice', '1', false );
 	}
 
 	/**

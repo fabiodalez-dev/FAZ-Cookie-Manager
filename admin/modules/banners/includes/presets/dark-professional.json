@@ -26,11 +26,7 @@
                             }
                         },
                         "reject": {
-                            "styles": {
-                                "background-color": "transparent",
-                                "color": "#d1d5db",
-                                "border-color": "#4b5563"
-                            }
+                            "styles": { "background-color": "#3b82f6", "color": "#ffffff", "border-color": "#3b82f6" }
                         },
                         "settings": {
                             "styles": {
@@ -75,11 +71,7 @@
                             }
                         },
                         "reject": {
-                            "styles": {
-                                "color": "#e5e7eb",
-                                "background-color": "transparent",
-                                "border-color": "#4b5563"
-                            }
+                            "styles": { "color": "#ffffff", "background-color": "#3b82f6", "border-color": "#3b82f6" }
                         },
                         "save": {
                             "styles": {
@@ -87,6 +79,24 @@
                                 "background-color": "transparent",
                                 "border-color": "#4b5563"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "auditTable": {
+            "styles": {
+                "color": "#e5e7eb",
+                "background-color": "#111827",
+                "border-color": "#374151"
+            }
+        },
+        "accessibilityOverrides": {
+            "elements": {
+                "preferenceCenter": {
+                    "elements": {
+                        "alwaysActive": {
+                            "styles": { "color": "#bfdbfe" }
                         }
                     }
                 }

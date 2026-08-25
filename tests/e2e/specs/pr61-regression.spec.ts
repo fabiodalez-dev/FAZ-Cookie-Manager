@@ -36,6 +36,7 @@ type PresetConfig = {
 				description: { styles: Record<string, string> };
 				categories: {
 					elements: {
+						description: { styles: Record<string, string> };
 						toggle: {
 							states: {
 								active: { styles: Record<string, string> };
@@ -49,6 +50,18 @@ type PresetConfig = {
 						accept: { styles: Record<string, string> };
 						reject: { styles: Record<string, string> };
 						save: { styles: Record<string, string> };
+					};
+				};
+			};
+		};
+		auditTable?: {
+			styles: Record<string, string>;
+		};
+		accessibilityOverrides: {
+			elements: {
+				preferenceCenter: {
+					elements: {
+						alwaysActive: { styles: Record<string, string> };
 					};
 				};
 			};
@@ -214,7 +227,12 @@ async function readPreferenceCenterPalette(page: Page) {
 		return {
 			modal: read('.faz-modal'),
 			content: read('.faz-preference-center'),
+			detailTitle: read('[data-faz-tag="detail-title"]'),
+			detailDescription: read('[data-faz-tag="detail-description"]'),
 			categoryTitle: read('.faz-accordion-btn'),
+			categoryDescription: read('[data-faz-tag="detail-category-description"]'),
+			auditTable: read('[data-faz-tag="audit-table"]'),
+			alwaysActive: read('[data-faz-tag="always-active"]'),
 			accept: read('[data-faz-tag="detail-accept-button"]'),
 			reject: read('[data-faz-tag="detail-reject-button"]'),
 		};
@@ -307,6 +325,12 @@ test.describe.serial('PR #61 regressions', () => {
 				expect(savedConfig.preferenceCenter?.elements?.categories?.elements?.toggle?.states?.active?.styles?.['background-color']).toBe(
 					preset.config.preferenceCenter.elements.categories.elements.toggle.states.active.styles['background-color'],
 				);
+				expect(savedConfig.accessibilityOverrides?.elements?.preferenceCenter?.elements?.alwaysActive?.styles?.color).toBe(
+					preset.config.accessibilityOverrides.elements.preferenceCenter.elements.alwaysActive.styles.color,
+				);
+				if (preset.config.auditTable) {
+					expect(savedConfig.auditTable?.styles).toMatchObject(preset.config.auditTable.styles);
+				}
 				expect(savedConfig.preferenceCenter?.elements?.closeButton).toBeTruthy();
 				expect(savedConfig.preferenceCenter?.elements?.poweredBy).toBeTruthy();
 				expect(savedConfig.optoutPopup?.elements?.gpcOption).toBeTruthy();
@@ -326,7 +350,16 @@ test.describe.serial('PR #61 regressions', () => {
 
 					expect(palette.modal?.backgroundColor ?? palette.content?.backgroundColor).toBe(cssColor(preset.config.preferenceCenter.styles['background-color']));
 					expect(palette.content?.color).toBe(cssColor(preset.config.preferenceCenter.styles.color));
+					expect(palette.detailTitle?.color).toBe(cssColor(preset.config.preferenceCenter.elements.title.styles.color));
+					expect(palette.detailDescription?.color).toBe(cssColor(preset.config.preferenceCenter.elements.description.styles.color));
 					expect(palette.categoryTitle?.color).toBe(cssColor(preset.config.categoryPreview.elements.title.styles.color));
+					expect(palette.categoryDescription?.color).toBe(cssColor(preset.config.preferenceCenter.elements.categories.elements.description.styles.color));
+					expect(palette.alwaysActive?.color).toBe(cssColor(preset.config.accessibilityOverrides.elements.preferenceCenter.elements.alwaysActive.styles.color));
+					if (preset.config.auditTable) {
+						expect(palette.auditTable?.backgroundColor).toBe(cssColor(preset.config.auditTable.styles['background-color']));
+						expect(palette.auditTable?.color).toBe(cssColor(preset.config.auditTable.styles.color));
+						expect(palette.auditTable?.borderColor).toBe(cssColor(preset.config.auditTable.styles['border-color']));
+					}
 					expect(palette.accept?.backgroundColor).toBe(cssColor(preset.config.notice.elements.buttons.elements.accept.styles['background-color']));
 					expect(palette.accept?.color).toBe(cssColor(preset.config.notice.elements.buttons.elements.accept.styles.color));
 					expect(palette.reject?.backgroundColor).toBe(cssColor(preset.config.notice.elements.buttons.elements.reject.styles['background-color']));

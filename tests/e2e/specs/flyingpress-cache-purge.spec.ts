@@ -10,7 +10,8 @@
  * behaviour the PR #186 review (grounded in the real FlyingPress 5.5.0 source)
  * settled on:
  *
- *   1  [precondition]  FlyingPress actually caches an anonymous page.
+ *   1  [support]       FlyingPress caches an anonymous page without FAZ's
+ *                      former no-store / LiteSpeed-bypass response headers.
  *   2  [#125]          a FAZ banner save invalidates the cached page (HIT→MISS).
  *   3  [#125]          stale markup is no longer served after a save (content proof).
  *   4  [F2]            the purge is HTML-only — FlyingPress's minified CSS/JS
@@ -31,6 +32,23 @@
  * fixture plugin tests/e2e/fixtures/plugins/faz-e2e-fp-probe, which exposes
  * FlyingPress's per-request in-memory config (invisible to a separate wp-cli
  * process) as response headers.
+ *
+ * HOW TO RUN THIS FILE
+ * --------------------
+ *     npm run test:e2e:flyingpress
+ *
+ * These tests need the WordPress install to themselves (they activate
+ * FlyingPress globally, and its page cache would then serve stale HTML to
+ * whatever spec runs beside them), so they gate on
+ * `testInfo.config.workers === 1` and SKIP otherwise. Both `npm run test:e2e`
+ * and the file-only command above pass `--workers=1`, so the documented full
+ * gate executes all 11 FlyingPress tests under CI=1 instead of silently
+ * skipping them. The dedicated command remains the faster targeted check.
+ *
+ * `test.describe.configure({ mode: 'serial' })` does NOT help here: it orders
+ * the tests inside this file, it does not stop another FILE running next to it.
+ * Playwright has no per-project/per-file worker cap either, so a second
+ * invocation is the mechanism.
  */
 import { test, expect } from '../fixtures/wp-fixture';
 import { type APIRequestContext } from '@playwright/test';
@@ -46,9 +64,13 @@ const MARKER_ALPHA = 'FAZ-FP-MARKER-ALPHA';
 const MARKER_BETA = 'FAZ-FP-MARKER-BETA';
 
 let flyingPressActive = false;
+let fpExclusiveRun = false;
+let fpConfiguredWorkers = 0;
 let weActivatedFlyingPress = false;
 let probeWasActive = false;
+let auditLabWasActive = false;
 let lockHeld = false;
+let settingsSnapshot = '';
 let testPageId = 0;
 let testPageUrl = '';
 
@@ -171,6 +193,31 @@ test.beforeAll(async ({}, testInfo) => {
   await acquireSharedWordPressLock();
   lockHeld = true;
   probeWasActive = isPluginActive('faz-e2e-fp-probe');
+  auditLabWasActive = isPluginActive('faz-e2e-audit-lab');
+  settingsSnapshot = wpEval(`echo base64_encode( serialize( get_option( 'faz_settings', array() ) ) );`).trim();
+
+  // This suite must exercise the production UI path, not the historical
+  // faz_geo_ruleset_runtime test escape hatch. The baseline audit-lab fixture
+  // pins that filter true for unrelated geo specs, so remove only that fixture
+  // while this exclusive suite runs, then set exactly the reporter's UI state:
+  // Geo-Targeting OFF + Cache Compatibility Mode ON. A real FlyingPress HIT
+  // below now proves the UI state alone removes the cache veto.
+  fpConfiguredWorkers = testInfo.config.workers;
+  fpExclusiveRun = fpConfiguredWorkers === 1;
+  if (fpExclusiveRun && auditLabWasActive) {
+    wp(['plugin', 'deactivate', 'faz-e2e-audit-lab']);
+  }
+  if (fpExclusiveRun) {
+    wpEval(`
+      $settings = get_option( 'faz_settings', array() );
+      if ( ! is_array( $settings ) ) { $settings = array(); }
+      if ( ! isset( $settings['geolocation'] ) || ! is_array( $settings['geolocation'] ) ) { $settings['geolocation'] = array(); }
+      if ( ! isset( $settings['banner_control'] ) || ! is_array( $settings['banner_control'] ) ) { $settings['banner_control'] = array(); }
+      $settings['geolocation']['geo_targeting'] = false;
+      $settings['banner_control']['cache_compatibility'] = true;
+      update_option( 'faz_settings', $settings );
+    `);
+  }
 
   // Self-provision FlyingPress for the duration of THIS spec file only. When
   // the plugin is installed (dev box) the tests run as part of the suite;
@@ -202,29 +249,54 @@ test.beforeAll(async ({}, testInfo) => {
 });
 
 test.afterAll(() => {
+  const cleanupErrors: Error[] = [];
+  const cleanup = (label: string, action: () => void): void => {
+    try {
+      action();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      cleanupErrors.push(new Error(`${label}: ${detail}`));
+    }
+  };
   try {
+    if (fpExclusiveRun && settingsSnapshot) {
+      const restoreSettings = `
+        $settings = unserialize( base64_decode( '${settingsSnapshot}' ) );
+        update_option( 'faz_settings', is_array( $settings ) ? $settings : array() );
+      `;
+      cleanup('restore FAZ settings', () => {
+        try {
+          wpEval(restoreSettings);
+        } catch (primaryError) {
+          try {
+            wp(['eval', restoreSettings]);
+          } catch (fallbackError) {
+            throw new Error(`primary=${String(primaryError)}; fallback=${String(fallbackError)}`);
+          }
+        }
+      });
+    }
     // Restore only the plugin state this spec changed. A developer who started
     // with FlyingPress or the probe active must get the same state back.
     if (flyingPressActive) {
-      try {
+      cleanup('purge FlyingPress cache', () => {
         wpEval(`if ( class_exists( '\\\\FlyingPress\\\\Purge' ) ) { \\FlyingPress\\Purge::purge_everything(); }`);
-      } catch {
-        /* best-effort */
-      }
+      });
     }
     if (!probeWasActive && isPluginActive('faz-e2e-fp-probe')) {
-      try {
+      cleanup('deactivate the FlyingPress probe', () => {
         wp(['plugin', 'deactivate', 'faz-e2e-fp-probe']);
-      } catch {
-        /* best-effort */
-      }
+      });
+    }
+    if (auditLabWasActive && !isPluginActive('faz-e2e-audit-lab')) {
+      cleanup('restore audit-lab activation state', () => {
+        wp(['plugin', 'activate', 'faz-e2e-audit-lab']);
+      });
     }
     if (weActivatedFlyingPress && isPluginActive('flying-press')) {
-      try {
+      cleanup('restore FlyingPress activation state', () => {
         wp(['plugin', 'deactivate', 'flying-press']);
-      } catch {
-        /* best-effort */
-      }
+      });
     }
   } finally {
     if (lockHeld) {
@@ -232,16 +304,39 @@ test.afterAll(() => {
       lockHeld = false;
     }
   }
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(cleanupErrors, 'FlyingPress E2E cleanup failed');
+  }
 });
 
 test.beforeEach(() => {
   test.skip(!flyingPressActive, 'FlyingPress is not installed on this environment');
+  // Skipped rather than failed when the run is parallel: the jurisdiction
+  // runtime cannot be switched off without affecting the file running beside
+  // this one, so a HIT is unreachable. A red here would be reporting the
+  // harness's own constraint as a product fault.
+  //
+  // The message names the exact command on purpose. A skip that only says
+  // "needs an exclusive run" reads as a machine limitation and gets ignored;
+  // this one is an instruction, and following it works in every environment
+  // including CI=1 (a CLI --workers=1 overrides the config's isCI ? 2 : 1).
+  test.skip(
+    !fpExclusiveRun,
+    `this file was run with workers=${String(fpConfiguredWorkers)} — the FlyingPress suite needs the ` +
+      'install to itself. Run `npm run test:e2e:flyingpress` (adds --workers=1) to execute it.'
+  );
 });
 
 test.describe('FlyingPress cache purge (#125 / PR #186)', () => {
   test('01 FlyingPress caches an anonymous page (HIT + .html.gz on disk)', async ({ request }) => {
     await primeCache(request, testPageUrl);
-    expect(await cacheState(request, testPageUrl)).toBe('HIT');
+    const hit = await request.get(testPageUrl, { headers: UA });
+    expect((hit.headers()['x-flying-press-cache'] ?? '').toUpperCase()).toBe('HIT');
+    // WordPress core may retain `no-cache, must-revalidate` on this local stack
+    // even on a FlyingPress HIT. FAZ's harmful contribution was `no-store` plus
+    // the explicit LiteSpeed bypass header; both must be absent.
+    expect(hit.headers()['cache-control'] ?? '').not.toMatch(/no-store/i);
+    expect(hit.headers()['x-litespeed-cache-control'] ?? '').not.toMatch(/no-cache/i);
     expect(htmlGzCount()).toBeGreaterThan(0);
   });
 
@@ -373,7 +468,12 @@ test.describe('FlyingPress cache purge (#125 / PR #186)', () => {
     const registered = wpEval(`echo has_filter( 'flying_press_is_cacheable' ) !== false ? '1' : '0';`).trim();
     expect(registered).toBe('1');
 
-    // Default (invariant output) — normal caching is preserved.
+    // The reporter's UI state alone disables jurisdiction routing; no custom
+    // faz_geo_ruleset_runtime snippet is installed in this suite.
+    const runtimeFromUi = wpEval(`echo \\FazCookie\\Frontend\\Includes\\Geo_Runtime::is_enabled() ? '1' : '0';`).trim();
+    expect(runtimeFromUi).toBe('0');
+
+    // Invariant output — normal caching is preserved.
     const whenInvariant = wpEval(`echo apply_filters( 'flying_press_is_cacheable', true ) ? '1' : '0';`).trim();
     expect(whenInvariant).toBe('1');
 

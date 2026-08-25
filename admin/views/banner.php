@@ -6,6 +6,66 @@
  */
 
 defined( 'ABSPATH' ) || exit;
+
+/*
+ * Controls the jurisdiction runtime overrides.
+ *
+ * `Geo_Runtime::apply_ui_requirements()` rewrites parts of the saved banner
+ * before it renders, so several switches on this page can be moved, saved,
+ * and have no effect. Until this was addressed an administrator got no hint
+ * of that anywhere — they turned Reject off, reloaded, saw it still there,
+ * and went to the support forum. Three separate reports were the same defect.
+ *
+ * The treatment is NOT uniform, and the distinction matters:
+ *
+ *   - When every shipped rule set asserts the requirement, the control can
+ *     never take effect for any visitor. Disable it and say why: leaving it
+ *     clickable is a plain untruth.
+ *   - When only some rule sets assert it, the control still governs every
+ *     visitor outside those jurisdictions. Disabling it would be an untruth
+ *     in the other direction — it would remove a working setting to make a
+ *     partial case look tidy. Those get a sentence, and stay usable.
+ *
+ * Which case applies is read from the catalogue rather than asserted here,
+ * so the copy cannot drift as rule sets are added. See
+ * Ruleset_Loader::requirement_coverage().
+ */
+$faz_geo_on = class_exists( '\FazCookie\Frontend\Includes\Geo_Runtime' )
+	&& \FazCookie\Frontend\Includes\Geo_Runtime::is_enabled();
+
+/**
+ * Resolve how much of the catalogue asserts a requirement.
+ *
+ * @param string|array $paths Dotted rule-set path(s); truthy in ANY counts.
+ * @return array{all:bool,some:bool,required:int,total:int}
+ */
+$faz_requirement = function ( $paths ) use ( $faz_geo_on ) {
+	$none = array(
+		'all'      => false,
+		'some'     => false,
+		'required' => 0,
+		'total'    => 0,
+	);
+	if ( ! $faz_geo_on || ! class_exists( '\FazCookie\Admin\Modules\Geo_Routing\Includes\Ruleset_Loader' ) ) {
+		return $none;
+	}
+	$coverage = \FazCookie\Admin\Modules\Geo_Routing\Includes\Ruleset_Loader::get_instance()
+		->requirement_coverage( $paths );
+	if ( empty( $coverage['total'] ) ) {
+		return $none;
+	}
+	return array(
+		'all'      => ( $coverage['required'] === $coverage['total'] ),
+		'some'     => ( $coverage['required'] > 0 ),
+		'required' => (int) $coverage['required'],
+		'total'    => (int) $coverage['total'],
+	);
+};
+
+$faz_equal_weight = $faz_requirement( 'ui.equal_weight_buttons' );
+$faz_revisit_req  = $faz_requirement( 'ui.revisit_widget_required' );
+$faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
+$faz_gpc_req      = $faz_requirement( array( 'signals.gpc_honored', 'signals.gpc_required' ) );
 ?>
 
 <div id="faz-banner">
@@ -416,24 +476,39 @@ defined( 'ABSPATH' ) || exit;
 						</div>
 					</div>
 
+					<?php
+					// Not a switch, and the reason it needs saying here: when a
+					// rule set demands equal prominence the runtime copies the
+					// ACCEPT button's styles onto Reject, so these three fields
+					// save correctly and then render as something else. Nothing
+					// told the administrator that. Disabling them would be wrong
+					// — the colours are real, they simply come from Accept — so
+					// this is the one case that takes a sentence and no lock.
+					if ( $faz_equal_weight['all'] ) :
+						?>
+							<?php // Wrapped in a .faz-form-group for two reasons: the help typography is descendant-scoped (`.faz-form-group .faz-help`), and this note is a direct child of a 3-column .faz-grid — without the full-row span it would be squeezed into a single colour-picker cell. ?>
+						<div class="faz-form-group" style="grid-column:1/-1;margin-bottom:0;">
+							<p class="faz-help" id="faz-b-reject-colours-note" style="margin-bottom:.75rem;"><?php esc_html_e( 'While jurisdiction routing is active these three fields are overridden: equal prominence means Reject is painted with the Accept button\'s colours, so set the pair you want on Accept above. They apply again if you disable the routing runtime.', 'faz-cookie-manager' ); ?></p>
+						</div>
+					<?php endif; ?>
 					<div class="faz-form-group">
 						<label><?php esc_html_e( 'Reject — Background', 'faz-cookie-manager' ); ?></label>
 						<div class="faz-input-color-wrap">
-							<input type="color" id="faz-b-reject-bg">
+							<input type="color" id="faz-b-reject-bg"<?php echo $faz_equal_weight['all'] ? ' aria-describedby="faz-b-reject-colours-note"' : ''; ?>>
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-reject-bg-hex" style="width:90px;">
 						</div>
 					</div>
 					<div class="faz-form-group">
 						<label><?php esc_html_e( 'Reject — Text', 'faz-cookie-manager' ); ?></label>
 						<div class="faz-input-color-wrap">
-							<input type="color" id="faz-b-reject-text">
+							<input type="color" id="faz-b-reject-text"<?php echo $faz_equal_weight['all'] ? ' aria-describedby="faz-b-reject-colours-note"' : ''; ?>>
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-reject-text-hex" style="width:90px;">
 						</div>
 					</div>
 					<div class="faz-form-group">
 						<label><?php esc_html_e( 'Reject — Border', 'faz-cookie-manager' ); ?></label>
 						<div class="faz-input-color-wrap">
-							<input type="color" id="faz-b-reject-border">
+							<input type="color" id="faz-b-reject-border"<?php echo $faz_equal_weight['all'] ? ' aria-describedby="faz-b-reject-colours-note"' : ''; ?>>
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-reject-border-hex" style="width:90px;">
 						</div>
 					</div>
@@ -595,26 +670,51 @@ defined( 'ABSPATH' ) || exit;
 		<div class="faz-card">
 			<div class="faz-card-header"><h3><?php esc_html_e( 'Button Visibility', 'faz-cookie-manager' ); ?></h3></div>
 			<div class="faz-card-body">
+				<?php
+				// Equal prominence forces Accept AND Reject on together, so the
+				// Accept switch is as inert as the Reject one was. It was left
+				// out of the first fix by looking only at the control that had
+				// been reported, rather than at what the runtime rewrites.
+				$faz_buttons_locked = $faz_equal_weight['all'];
+				?>
 				<div class="faz-form-group">
 					<label class="faz-toggle" id="faz-b-accept-toggle">
-						<input type="checkbox">
+						<input type="checkbox"<?php checked( $faz_buttons_locked ); ?><?php disabled( $faz_buttons_locked ); ?><?php echo $faz_buttons_locked ? ' data-faz-runtime-locked="1" aria-describedby="faz-b-accept-locked"' : ''; ?>>
 						<span class="faz-toggle-track"></span>
 						<span><?php esc_html_e( 'Show Accept Button', 'faz-cookie-manager' ); ?></span>
 					</label>
+					<?php if ( $faz_buttons_locked ) : ?>
+						<p class="faz-help" id="faz-b-accept-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Equal prominence works both ways: the runtime keeps Accept and Reject on together, so neither can be hidden while the other stays. Their wording and colours are still yours.', 'faz-cookie-manager' ); ?></p>
+					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
 					<label class="faz-toggle" id="faz-b-reject-toggle">
-						<input type="checkbox">
+						<input type="checkbox"<?php checked( $faz_buttons_locked ); ?><?php disabled( $faz_buttons_locked ); ?><?php echo $faz_buttons_locked ? ' data-faz-runtime-locked="1" aria-describedby="faz-b-reject-locked"' : ''; ?>>
 						<span class="faz-toggle-track"></span>
 						<span><?php esc_html_e( 'Show Reject Button', 'faz-cookie-manager' ); ?></span>
 					</label>
+					<?php if ( $faz_buttons_locked ) : ?>
+						<p class="faz-help" id="faz-b-reject-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Rule sets for the EU, UK, Switzerland and most other opt-in regimes require Reject to sit beside Accept with equal prominence, so the runtime keeps it visible for those visitors whatever this switch says. Styling both buttons more quietly is fine; hiding the refusal is not.', 'faz-cookie-manager' ); ?></p>
+					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
 					<label class="faz-toggle" id="faz-b-settings-toggle">
-						<input type="checkbox">
+						<input type="checkbox"<?php echo $faz_settings_req['some'] ? ' aria-describedby="faz-b-settings-note"' : ''; ?>>
 						<span class="faz-toggle-track"></span>
 						<span><?php esc_html_e( 'Show Settings Button', 'faz-cookie-manager' ); ?></span>
 					</label>
+					<?php if ( $faz_settings_req['some'] ) : ?>
+						<p class="faz-help" id="faz-b-settings-note">
+							<?php
+							printf(
+								/* translators: 1: number of rule sets requiring a separate sensitive-data choice, 2: total number of shipped rule sets. */
+								esc_html__( 'This switch still applies, but not everywhere: %1$d of the %2$d shipped rule sets require a separate opt-in for sensitive data, which needs a reachable preference centre. For visitors under those laws the runtime shows this button and the Save control regardless. Everyone else sees your choice.', 'faz-cookie-manager' ),
+								(int) $faz_settings_req['required'],
+								(int) $faz_settings_req['total']
+							);
+							?>
+						</p>
+					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
 					<label class="faz-toggle" id="faz-b-readmore-toggle">
@@ -775,10 +875,13 @@ defined( 'ABSPATH' ) || exit;
 			<div class="faz-card-body">
 				<div class="faz-form-group">
 					<label class="faz-toggle" id="faz-b-revisit-toggle">
-						<input type="checkbox">
+						<input type="checkbox"<?php checked( $faz_revisit_req['all'] ); ?><?php disabled( $faz_revisit_req['all'] ); ?><?php echo $faz_revisit_req['all'] ? ' data-faz-runtime-locked="1" aria-describedby="faz-b-revisit-locked"' : ''; ?>>
 						<span class="faz-toggle-track"></span>
 						<span><?php esc_html_e( 'Show revisit consent widget', 'faz-cookie-manager' ); ?></span>
 					</label>
+					<?php if ( $faz_revisit_req['all'] ) : ?>
+						<p class="faz-help" id="faz-b-revisit-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Every shipped rule set requires a standing way to reopen and withdraw consent, so the runtime keeps this widget visible whatever this switch says — withdrawing has to stay as easy as giving. Its position, colours and icon below remain yours to change.', 'faz-cookie-manager' ); ?></p>
+					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
 					<label><?php esc_html_e( 'Widget Position', 'faz-cookie-manager' ); ?></label>
@@ -813,10 +916,22 @@ defined( 'ABSPATH' ) || exit;
 				</div>
 				<div class="faz-form-group">
 					<label class="faz-toggle" id="faz-b-gpc-toggle">
-						<input type="checkbox">
+						<input type="checkbox"<?php echo $faz_gpc_req['some'] ? ' aria-describedby="faz-b-gpc-note"' : ''; ?>>
 						<span class="faz-toggle-track"></span>
 						<span><?php esc_html_e( 'Respect Global Privacy Control (GPC)', 'faz-cookie-manager' ); ?></span>
 					</label>
+					<?php if ( $faz_gpc_req['some'] ) : ?>
+						<p class="faz-help" id="faz-b-gpc-note">
+							<?php
+							printf(
+								/* translators: 1: number of rule sets that honour or mandate GPC, 2: total number of shipped rule sets. */
+								esc_html__( 'Switching this off does not reach everyone: %1$d of the %2$d shipped rule sets treat a GPC signal as a binding opt-out, and the runtime honours it for those visitors regardless. In several US states ignoring the signal is itself the violation. Outside them, this switch decides.', 'faz-cookie-manager' ),
+								(int) $faz_gpc_req['required'],
+								(int) $faz_gpc_req['total']
+							);
+							?>
+						</p>
+					<?php endif; ?>
 				</div>
 			</div>
 		</div>

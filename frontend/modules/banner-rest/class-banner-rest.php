@@ -24,6 +24,7 @@ use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories;
 use FazCookie\Includes\Geolocation;
 use FazCookie\Includes\Ab_Test;
 use FazCookie\Frontend\Includes\Geo_Runtime;
+use FazCookie\Frontend\Frontend;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
@@ -279,16 +280,25 @@ class Banner_Rest {
 		// be reported so the served HTML and the JS regime stay coherent (a
 		// ruleset-model law on a mismatched banner would desync the two).
 		$active_law = $banner->get_law();
+		$banner_settings = $banner->get_settings();
+		$configured_expiry = isset( $banner_settings['settings']['consentExpiry']['value'] )
+			? absint( $banner_settings['settings']['consentExpiry']['value'] )
+			: ( 'ccpa' === $active_law ? 365 : 180 );
 
 		$payload = array(
-			'language'   => $lang,
-			'bannerSlug' => $banner->get_slug(),
-			'activeLaw'  => $active_law,
-			'html'       => $html,
-			'styles'     => $styles,
-			'shortCodes' => $short_codes,
-			'categories' => $categories,
-			'i18n'       => $i18n,
+			'language'         => $lang,
+			'bannerSlug'       => $banner->get_slug(),
+			'activeLaw'        => $active_law,
+			'bannerConfig'     => Frontend::prepare_banner_config( $banner ),
+			'tags'             => Frontend::prepare_banner_tags( $banner ),
+			'scopeFingerprint' => substr( wp_hash( $banner->get_slug() . '|' . $active_law, 'auth' ), 0, 32 ),
+			'consentExpiry'    => Frontend::normalize_consent_expiry( $active_law, $configured_expiry ),
+			'runtimeGeo'       => ( null !== $runtime_ruleset ),
+			'html'             => $html,
+			'styles'           => Frontend::prepare_banner_styles( $styles ),
+			'shortCodes'       => $short_codes,
+			'categories'       => $categories,
+			'i18n'             => $i18n,
 		);
 
 		$response = new WP_REST_Response( $payload, 200 );
@@ -299,6 +309,9 @@ class Banner_Rest {
 			$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
 			$response->header( 'Pragma', 'no-cache' );
 			$response->header( 'X-LiteSpeed-Cache-Control', 'no-cache' );
+			$response->header( 'CDN-Cache-Control', 'no-store' );
+			$response->header( 'Cloudflare-CDN-Cache-Control', 'no-store' );
+			$response->header( 'X-FAZ-Jurisdiction', 'live' );
 			if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
 				$response->header( 'Vary', 'CF-IPCountry' );
 			}
@@ -525,6 +538,7 @@ class Banner_Rest {
 					(bool) $category->get_share_personal_data()
 				),
 				'defaultFromRuleset' => Geo_Runtime::is_ruleset_default( $ruleset, $slug ),
+				'requiresSeparateOptIn' => Geo_Runtime::requires_separate_optin( $ruleset, $slug ),
 			);
 		}
 		/**

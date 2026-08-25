@@ -251,7 +251,7 @@ test.describe('Audit-fix regression suite (1.13.12)', () => {
     await putSettings(page, nonce, { banner_control: { excluded_pages: beforeExcl } });
   });
 
-  test('H10: hr language maps to hr_HR locale (REST returns Croatian when hr is active)', async ({ page, loginAsAdmin }) => {
+  test('H10: hr language resolves to the hr locale (REST returns Croatian when hr is active)', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getNonce(page);

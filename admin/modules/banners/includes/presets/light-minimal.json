@@ -26,11 +26,7 @@
                             }
                         },
                         "reject": {
-                            "styles": {
-                                "background-color": "transparent",
-                                "color": "#374151",
-                                "border-color": "#d1d5db"
-                            }
+                            "styles": { "background-color": "#111827", "color": "#ffffff", "border-color": "#111827" }
                         },
                         "settings": {
                             "styles": {
@@ -75,11 +71,7 @@
                             }
                         },
                         "reject": {
-                            "styles": {
-                                "color": "#374151",
-                                "background-color": "transparent",
-                                "border-color": "#d1d5db"
-                            }
+                            "styles": { "color": "#ffffff", "background-color": "#111827", "border-color": "#111827" }
                         },
                         "save": {
                             "styles": {
@@ -87,6 +79,17 @@
                                 "background-color": "transparent",
                                 "border-color": "#d1d5db"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "accessibilityOverrides": {
+            "elements": {
+                "preferenceCenter": {
+                    "elements": {
+                        "alwaysActive": {
+                            "styles": { "color": "#166534" }
                         }
                     }
                 }

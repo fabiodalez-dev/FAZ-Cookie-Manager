@@ -322,6 +322,7 @@ const settings: SettingCase[] = [
   },
   booleanSetting('iab.purpose_one_treatment'),
   booleanSetting('geolocation.geo_targeting'),
+  booleanSetting('geolocation.cache_geo_bootstrap'),
   {
     path: 'geolocation.target_regions',
     validValue: ['eu', 'us', 'jp'],

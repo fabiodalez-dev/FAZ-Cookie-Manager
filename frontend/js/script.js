@@ -37,7 +37,7 @@ ref._fazConsentStore = new Map();
 // Build marker — bump when shipping behavioural changes to this file. Lets
 // `fazcookie._diag().build` reveal at a glance whether a cache (CDN / optimizer)
 // is serving a stale bundle after a plugin update. #auto-show-hardening
-const _FAZ_BUILD = '1.20.0+per-service-reveal';
+const _FAZ_BUILD = '1.27.0+geo-bootstrap';
 
 /**
  * One-call frontend self-diagnosis for support: paste
@@ -61,6 +61,8 @@ ref._diag = function () {
         action: ref._fazGetFromStore('action') || '',
         hasConsentCookie: hasConsentCookie,
         swapResolved: !!store._swapResolved,
+        geoBootstrap: !!store._geoBootstrap,
+        geoBootstrapResolved: store._geoBootstrapResolved || '',
         perServiceConsent: !!store._perServiceConsent,
         perCookieConsent: !!store._perCookieConsent,
         services: Array.isArray(store._services) ? store._services.map(function (s) { return s && s.id; }) : null,
@@ -357,6 +359,13 @@ function _fazCurrentLaw() {
     }
     return "";
 }
+function _fazGeoBootstrapPending() {
+    return !!(
+        _fazStore &&
+        _fazStore._geoBootstrap &&
+        !_fazStore._geoBootstrapResolved
+    );
+}
 // Scope-tracking keys live under a `__scope.` prefix to avoid colliding
 // with category slugs (which the admin can rename freely, e.g. a category
 // literally called "banner" or "law"). Without the prefix, the
@@ -489,7 +498,13 @@ const _fazConsentRevisionInvalidated =
     _fazHasConsentCookie &&
     _fazServerRevision > 1 &&
     (isNaN(_fazStoredRevision) || _fazStoredRevision < _fazServerRevision);
-const _fazConsentInvalidated = _fazConsentRevisionInvalidated || _fazConsentScopeChanged();
+// A cached jurisdiction shell deliberately advertises the strict GDPR scope,
+// not the returning visitor's final scope. Comparing a stored CCPA consent to
+// that placeholder here would delete a perfectly valid consent on every page
+// load. Defer only the scope check until the no-store payload has installed the
+// real banner/law; revision invalidation remains immediate.
+const _fazConsentInvalidated = _fazConsentRevisionInvalidated ||
+    (!_fazGeoBootstrapPending() && _fazConsentScopeChanged());
 if (_fazConsentInvalidated) {
     _fazInvalidateStoredConsent();
 }
@@ -1329,6 +1344,7 @@ function _fazFetchBannerForLanguage(endpoint, lang, timeoutMs) {
     return fetch(url, {
         method: 'GET',
         credentials: 'same-origin',
+        cache: 'no-store',
         headers: { 'Accept': 'application/json' },
         signal: controller ? controller.signal : undefined
     }).then(function (res) {
@@ -1378,10 +1394,114 @@ function _fazApplyBannerPayload(payload) {
     if (payload.activeLaw) {
         _fazStore._activeLaw = String(payload.activeLaw);
     }
+    if (payload.bannerConfig && typeof payload.bannerConfig === 'object') {
+        _fazStore._bannerConfig = payload.bannerConfig;
+    }
+    if (Array.isArray(payload.tags)) {
+        _fazStore._tags = payload.tags;
+    }
+    if (payload.scopeFingerprint) {
+        _fazStore._scopeFingerprint = String(payload.scopeFingerprint);
+    }
+    if (payload.consentExpiry) {
+        var expiry = parseInt(payload.consentExpiry, 10);
+        if (!isNaN(expiry) && expiry > 0) _fazStore._expiry = expiry;
+    }
+    if (typeof payload.runtimeGeo !== 'undefined') {
+        _fazStore._runtimeGeo = !!payload.runtimeGeo;
+    }
     if (typeof payload.html === 'string' && payload.html !== '') {
         var tpl = document.getElementById('fazBannerTemplate');
         if (tpl) tpl.textContent = payload.html;
     }
+    if (typeof payload.styles === 'string' && payload.styles !== '') {
+        var style = document.getElementById('faz-jurisdiction-bootstrap-styles');
+        if (!style) {
+            style = document.createElement('style');
+            style.id = 'faz-jurisdiction-bootstrap-styles';
+            style.setAttribute('data-no-optimize', '1');
+            style.setAttribute('data-noptimize', '1');
+            (document.head || document.documentElement).appendChild(style);
+        }
+        style.textContent = payload.styles;
+    }
+}
+
+/**
+ * Resolve the live jurisdiction before mounting a cached strict shell.
+ *
+ * The page-cache response is deliberately visitor-invariant and contains only
+ * the most-protective GDPR ruleset with every optional resource inert. This
+ * no-store request is the first operation allowed to replace that state. A
+ * timeout, network error or malformed payload leaves the strict shell intact.
+ *
+ * @returns {Promise<boolean>} true when a live payload was applied.
+ */
+async function _fazBootstrapJurisdiction() {
+    // Order matters: _fazStore may be null, and the endpoint branch below WRITES
+    // to it, so the existence check has to come first and on its own.
+    if (!_fazStore || !_fazStore._geoBootstrap) return false;
+    if (!_fazStore._bannerEndpoint) {
+        // There is no endpoint to ask — a "disable REST API" plugin filtered
+        // `rest_url()` to empty, or a `faz_store_data` filter dropped the key.
+        // Returning without a verdict would be the worst outcome available:
+        // _fazGeoBootstrapPending() only ever clears through the two writes in
+        // this function, so the gate would stay pending for the life of the
+        // page and keep EVERY non-necessary category blocked — the visitor
+        // clicks Accept, the consent is recorded, and nothing is ever
+        // unblocked. Resolve to the same defined fail-closed state the network
+        // failure path uses: the cached strict shell stays authoritative, but
+        // consent can actually flow. Invalidate a cookie issued for another
+        // banner/law first, for the same reason as the fallback below.
+        if (_fazHasConsentCookie && _fazConsentScopeChanged()) {
+            _fazInvalidateStoredConsent();
+        }
+        _fazStore._geoBootstrapResolved = 'strict-fallback';
+        try { window._fazGeoBootstrapResolved = 'strict-fallback'; } catch (e) { /* noop */ }
+        return false;
+    }
+
+    var lang = _fazStore._language || _fazStore._defaultLanguage || 'en';
+    if (_fazStore._browserDetect) {
+        var available = Array.isArray(_fazStore._availableLanguages) ? _fazStore._availableLanguages : [];
+        var langMap = (_fazStore._languageMap && typeof _fazStore._languageMap === 'object')
+            ? _fazStore._languageMap
+            : {};
+        var detected = _fazResolveBrowserLanguage(available, langMap);
+        if (detected) lang = detected;
+    }
+
+    var timeout = parseInt(_fazStore._geoBootstrapTimeout, 10);
+    if (isNaN(timeout) || timeout < 250) timeout = 1500;
+    try {
+        var payload = await _fazFetchBannerForLanguage(_fazStore._bannerEndpoint, lang, timeout);
+        if (payload && payload.bannerConfig && payload.activeLaw && Array.isArray(payload.categories)) {
+            _fazApplyBannerPayload(payload);
+            // Scope validation is intentionally deferred from module startup:
+            // it must compare the cookie with this live banner/law, never with
+            // the cached strict placeholder. Keep the pending gate active until
+            // reconciliation completes so a stale grant cannot release a
+            // tracker in the middle of this synchronous transition.
+            if (_fazHasConsentCookie && _fazConsentScopeChanged()) {
+                _fazInvalidateStoredConsent();
+            }
+            _fazStore._geoBootstrapResolved = 'live';
+            try { window._fazGeoBootstrapResolved = 'live'; } catch (e) { /* noop */ }
+            return true;
+        }
+    } catch (err) {
+        // Fail closed below.
+    }
+    // The live lookup failed, so the strict shell becomes authoritative. A
+    // consent issued for another banner/law must be invalidated before the
+    // pending gate drops; otherwise a stale opt-out grant could survive the
+    // fallback and unblock under a GDPR page.
+    if (_fazHasConsentCookie && _fazConsentScopeChanged()) {
+        _fazInvalidateStoredConsent();
+    }
+    _fazStore._geoBootstrapResolved = 'strict-fallback';
+    try { window._fazGeoBootstrapResolved = 'strict-fallback'; } catch (e) { /* noop */ }
+    return false;
 }
 
 /**
@@ -1429,13 +1549,16 @@ async function _fazInit() {
         // timer exists even for a partially-failed init. #134/#146.
         _fazScheduleBannerWatchdog();
         _fazRunDeadCookieCleanup();
-        // Render and show the banner FIRST, from the server-rendered default-
-        // language template — first paint must never wait on a network round-
-        // trip. (Previously _fazInit awaited the language swap before rendering,
-        // so on multilingual sites with browser-detect on, any visitor whose
-        // browser language differed from the site language saw the banner only
-        // after a /faz/v1/banner/{lang} fetch settled — "appears late / not at
-        // all".)
+        // A cacheable runtime page is a strict shell, not the visitor's final
+        // banner. Resolve the live no-store payload BEFORE mounting UI or
+        // calling _fazSetInitialState()/_fazUnblock(). On failure the await is
+        // bounded and the existing strict shell becomes the visible fallback.
+        if (_fazStore && _fazStore._geoBootstrap) {
+            await _fazBootstrapJurisdiction();
+        }
+        // Non-bootstrap pages still render immediately from their normal
+        // server-selected template. Bootstrap pages render only after the
+        // bounded decision above, preventing a GDPR→CCPA UI flash.
         _fazInitOperations();
         // Second pass, intentionally not redundant with the pre-paint one at the
         // top: _fazInitOperations() restores server-allowed services (svc.*:yes)
@@ -1455,7 +1578,7 @@ async function _fazInit() {
         // entirely.
         try {
             var _fazBannerEl = _fazGetBanner();
-            if (_fazBannerEl && !_fazBannerEl.classList.contains('faz-hide')) {
+            if (!_fazStore._geoBootstrap && _fazBannerEl && !_fazBannerEl.classList.contains('faz-hide')) {
                 var _fazSwapped = await _fazMaybeSwapLanguage();
                 // Re-validate AFTER the await: the banner is fully interactive
                 // while the swap fetch is in flight, so the visitor may have
@@ -1504,6 +1627,22 @@ function _fazRunDeadCookieCleanup() {
  * throws. #auto-show-hardening
  */
 function _fazScheduleBannerWatchdog() {
+    // The net has to outlive the await it is protecting. _fazInit() arms this
+    // timer BEFORE awaiting _fazBootstrapJurisdiction(), whose budget is
+    // publisher-tunable up to 5000ms via `faz_geo_bootstrap_timeout_ms` (PHP
+    // clamp in class-frontend.php). A bare 2500ms constant fires while that
+    // await is still pending on any install that raised the timeout, spending
+    // the watchdog before _fazInitOperations() has even started — exactly the
+    // step it exists to guard. Derive the delay from the same budget instead.
+    // Non-bootstrap pages keep the original 2500ms unchanged.
+    var _fazWatchdogDelay = 2500;
+    if (_fazStore && _fazStore._geoBootstrap) {
+        // Mirror the parse/clamp _fazBootstrapJurisdiction() applies, so the
+        // two never disagree about how long the await can actually run.
+        var _fazBootstrapBudget = parseInt(_fazStore._geoBootstrapTimeout, 10);
+        if (isNaN(_fazBootstrapBudget) || _fazBootstrapBudget < 250) _fazBootstrapBudget = 1500;
+        _fazWatchdogDelay = Math.max(2500, _fazBootstrapBudget + 1000);
+    }
     window.setTimeout(function () {
         try {
             // Always lift the anti-FOUC gate — purely reveals, never hides.
@@ -1520,7 +1659,7 @@ function _fazScheduleBannerWatchdog() {
         } catch (e) {
             /* a watchdog must never break the page */
         }
-    }, 2500);
+    }, _fazWatchdogDelay);
 }
 
 // Belt-and-suspenders against a Rocket-Loader double-init (already guarded by
@@ -4642,6 +4781,7 @@ function _fazMutationObserver(mutations) {
                         blockingTarget = nodeSrc;
                     }
                 }
+                if (_fazIsStrictlyNecessaryScript(node)) continue;
                 if (_fazIsUserWhitelisted(nodeSrc, node)) continue;
                 if (node.classList && node.classList.contains('faz-skip')) continue;
                 // Optimiser-deferred placeholders (LiteSpeed/WP Rocket "Delay JS")
@@ -5255,6 +5395,14 @@ function _fazHasProviderBoundary(target, index, length) {
 }
 
 function _fazIsCategoryToBeBlocked(category) {
+    if (_fazGeoBootstrapPending()) {
+        var pendingCategory = _fazStore._categories.find(function (cat) {
+            return cat && cat.slug === category;
+        });
+        // Unknown tagged categories fail closed during the short bootstrap
+        // window; the only category that may pass is explicitly necessary.
+        return !pendingCategory || !pendingCategory.isNecessary;
+    }
     const cookieValue = ref._fazGetFromStore(category);
     return (
         cookieValue === "no" ||
@@ -5327,6 +5475,10 @@ function _fazGetServiceConsentForTarget(formattedRE) {
 }
 
 function _fazShouldBlockResource(category, target, serviceId) {
+    if (_fazGeoBootstrapPending()) {
+        if (category) return _fazIsCategoryToBeBlocked(category);
+        if (_fazMatchingProviders(target).length) return true;
+    }
     if (_fazStore._perServiceConsent) {
         if (serviceId && _fazIsRecognizedService(serviceId)) {
             // Honour an explicit per-service choice even when the service is not
@@ -5359,6 +5511,7 @@ function _fazShouldBlockResource(category, target, serviceId) {
 function _fazShouldBlockProvider(formattedRE) {
     var providers = _fazMatchingProviders(formattedRE);
     if (!providers.length) return false;
+    if (_fazGeoBootstrapPending()) return true;
 
     var serviceConsent = _fazGetServiceConsentForTarget(formattedRE);
     if (serviceConsent === "yes") return false;
@@ -5391,6 +5544,33 @@ function _fazWhitelistElementMatches(element, pattern) {
             if (explicitPrefix && token.indexOf(needle) === 0) return true;
             if (!explicitPrefix && (token.indexOf(needle + '-') === 0 || token.indexOf(needle + '_') === 0)) return true;
         }
+    }
+    return false;
+}
+
+/**
+ * Commerce configuration that must execute independently of consent.
+ *
+ * PHP supplies exact WordPress handles. Match only the IDs WordPress derives
+ * from those handles; substring matching would also exempt a look-alike such
+ * as `wc-settings-tracker-js`.
+ */
+function _fazIsStrictlyNecessaryScript(element) {
+    if (!element || typeof element.getAttribute !== "function") return false;
+    var handles = _fazStore._strictlyNecessaryScripts;
+    if (!Array.isArray(handles) || !handles.length) return false;
+
+    var id = String(element.getAttribute("id") || "").toLowerCase();
+    if (!id) return false;
+    for (var i = 0; i < handles.length; i++) {
+        var handle = typeof handles[i] === "string" ? handles[i].toLowerCase() : "";
+        if (!handle) continue;
+        if (
+            id === handle ||
+            id === handle + "-js" ||
+            id === handle + "-js-before" ||
+            id === handle + "-js-after"
+        ) return true;
     }
     return false;
 }
@@ -5463,6 +5643,7 @@ function _fazIsGcmManaged(u) {
 }
 function _fazShouldChangeType(element, src, typeOverride) {
     if (element.classList && element.classList.contains('faz-skip')) return false;
+    if (_fazIsStrictlyNecessaryScript(element)) return false;
     var url = src ? src : element.src;
     if (_fazIsUserWhitelisted(url, element)) return false;
     // Resolve the effective type: the value being ASSIGNED (typeOverride, passed
@@ -5504,6 +5685,14 @@ function _fazShouldChangeType(element, src, typeOverride) {
     // semantics — instead of letting an empty category short-circuit the check.
     if (!serviceCategory && serviceId) {
         serviceCategory = _fazKnownServiceCategory(serviceId);
+    }
+    // Until the live jurisdiction has resolved, the cache shell is a security
+    // boundary: a stored grant belongs to an as-yet-unverified scope and cannot
+    // override it. Keep every recognised optional category/provider inert; the
+    // normal consent decision takes over immediately after reconciliation.
+    if (_fazGeoBootstrapPending()) {
+        if (serviceCategory && _fazIsCategoryToBeBlocked(serviceCategory)) return true;
+        if (_fazMatchingProviders(url).length) return true;
     }
     // Gate the explicit per-service override on _fazIsRecognizedService (the
     // recognized-service allowlist), mirroring _fazShouldBlockResource — so an

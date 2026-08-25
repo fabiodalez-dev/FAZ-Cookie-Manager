@@ -1,5 +1,5 @@
 /**
- * Guided setup wizard (jsdom) — 46 behavioural regression checks.
+ * Guided setup wizard (jsdom) — 50 behavioural regression checks.
  *
  * Loads the real admin/assets/js/pages/setup.js and exercises navigation,
  * review rendering, the exact onboarding payload, duplicate-submit protection,
@@ -80,7 +80,8 @@ function markup() {
         <p id="faz-setup-tcf-error" hidden>CMP ID required</p>
       </section>
       <section class="faz-wizard-step" data-step="6" hidden>
-        <input type="checkbox" id="faz-setup-geo">
+		<label class="faz-setup-toggle-row"><input type="checkbox" id="faz-setup-geo" checked><span class="faz-setup-toggle-label">Jurisdiction rules</span></label>
+		<label class="faz-setup-toggle-row"><input type="checkbox" id="faz-setup-cache-geo-bootstrap" data-recommend-cache="1"><span class="faz-setup-toggle-label">Cache-safe jurisdiction bootstrap <span class="faz-setup-badge" id="faz-setup-cache-bootstrap-badge" hidden></span></span></label>
         <label class="faz-setup-region-chip"><input type="checkbox" name="faz-setup-geo-region" value="eu" checked>EU</label>
         <label class="faz-setup-region-chip"><input type="checkbox" name="faz-setup-geo-region" value="uk" checked>UK</label>
         <label class="faz-setup-region-chip"><input type="checkbox" name="faz-setup-geo-region" value="us">US</label>
@@ -102,6 +103,10 @@ function markup() {
           data-label-options="Options"
           data-label-geo="Geo"
           data-label-payments="Payments"
+		  data-geo-others-shown="other regions shown"
+		  data-geo-others-hidden="other regions hidden"
+		  data-warn-enforcement-off="Enforcement off warning"
+		  data-note-bootstrap-fallback="Bootstrap fail-closed note"
           data-logging="Logging on"></ul>
       </section>
       <button type="button" id="faz-setup-back" hidden>Back</button>
@@ -176,7 +181,7 @@ async function flush() {
   await Promise.resolve();
 }
 
-console.log('guided setup wizard (46 checks)');
+console.log('guided setup wizard (50 checks)');
 
 // Navigation, selection, and review rendering (14 checks).
 {
@@ -208,7 +213,7 @@ console.log('guided setup wizard (46 checks)');
   check('09 seven Next clicks reach the review step (8-step wizard)', !step(8).hidden);
   check('10 Next is hidden on the final step', document.getElementById('faz-setup-next').hidden);
   check('11 Finish is visible on the final step', !document.getElementById('faz-setup-finish').hidden);
-  check('12 review contains the six promised configuration rows', review.children.length === 6);
+  check('12 review contains the seven promised configuration rows', review.children.length === 7);
   check('13 review reflects the selected law, expiry, and exact controls', review.textContent.includes('Both') && review.textContent.includes('180 days') && review.textContent.includes('Equal buttons plus US opt-out'));
   check('14 review text is never reinterpreted as HTML', review.querySelector('img') === null && review.textContent.includes('<img'));
 }
@@ -238,7 +243,8 @@ console.log('guided setup wizard (46 checks)');
     && sent.banner_control && sent.banner_control.per_service_consent === false
     && sent.gcm && sent.gcm.enabled === false
     && sent.microsoft && sent.iab && sent.iab.enabled === false
-    && sent.geolocation && sent.geolocation.geo_targeting === false
+	&& sent.geolocation && sent.geolocation.geo_targeting === true
+	&& sent.geolocation.cache_geo_bootstrap === false
     && !('payment_gateways' in sent));
   check('17 Finish disables navigation while saving', finish.disabled && document.getElementById('faz-setup-back').disabled);
   finish.click();
@@ -446,5 +452,42 @@ console.log('guided setup wizard (46 checks)');
     && document.getElementById('faz-setup-scan-status').textContent.includes('failed to save'));
 }
 
+// A detected page cache recommends the bootstrap on a pristine first run, but
+// a user choice made before the asynchronous detector resolves always wins.
+{
+	const app = boot({
+		get(endpoint) {
+			return endpoint === 'settings/onboarding/recommendations'
+				? Promise.resolve({ cache_plugin: 'FlyingPress' })
+				: Promise.resolve({});
+		},
+	});
+	await flush();
+	const bootstrap = app.document.getElementById('faz-setup-cache-geo-bootstrap');
+	check('47 detected page cache recommends the strict-shell bootstrap', bootstrap.checked);
+	check('48 detected cache plugin is named beside the bootstrap control', app.document.getElementById('faz-setup-cache-bootstrap-badge').textContent.includes('FlyingPress'));
+	clickNext(app.document, 7);
+	app.document.getElementById('faz-setup-finish').click();
+	check('49 recommended bootstrap is persisted in the onboarding payload', app.calls.post[0]?.payload?.geolocation?.cache_geo_bootstrap === true);
+}
+
+{
+	let resolveRecommendations;
+	const app = boot({
+		get(endpoint) {
+			if (endpoint === 'settings/onboarding/recommendations') {
+				return new Promise((resolvePromise) => { resolveRecommendations = resolvePromise; });
+			}
+			return Promise.resolve({});
+		},
+	});
+	const bootstrap = app.document.getElementById('faz-setup-cache-geo-bootstrap');
+	bootstrap.checked = false;
+	bootstrap.dispatchEvent(new app.window.Event('change', { bubbles: true }));
+	resolveRecommendations({ cache_plugin: 'LiteSpeed Cache' });
+	await flush();
+	check('50 a late cache detection never overrides an explicit administrator choice', bootstrap.checked === false);
+}
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
-process.exit(failed === 0 && passed === 46 ? 0 : 1);
+process.exit(failed === 0 && passed === 50 ? 0 : 1);

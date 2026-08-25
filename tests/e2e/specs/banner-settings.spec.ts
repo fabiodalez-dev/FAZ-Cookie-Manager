@@ -45,7 +45,16 @@ async function updateBanner(page: Page, nonce: string, id: number, payload: Reco
 async function openVisitorPage(browser: any, baseURL: string, path = '/', locale = 'en-US') {
   const ctx = await browser.newContext({ baseURL, locale, extraHTTPHeaders: { 'Accept-Language': locale } });
   const page = await ctx.newPage();
-  await page.goto(path, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  const separator = path.includes('?') ? '&' : '?';
+  // These tests verify the exact banner row edited above, independently of
+  // jurisdiction selection. With the production geo runtime default-on, a
+  // loopback visitor may resolve to a different law and legitimately suppress
+  // that row; use the audit fixture's request-scoped emergency switch so the
+  // assertions remain about persistence/rendering rather than geo routing.
+  await page.goto(`${path}${separator}faz_e2e_disable_geo_runtime=1`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 45_000,
+  });
   return { page, ctx };
 }
 
@@ -68,9 +77,13 @@ async function selectLangIfPresent(page: Page, selectId: string, lang: string): 
 
 /** Navigate to the Cookie Banner admin page and wait for banner data to fully load.
  *  With REST preloading, the banner API response comes from the middleware cache
- *  (no network request). We wait for populateSettings to fill the form. */
-async function goToBannerPage(page: Page) {
-  await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, {
+ *  (no network request). We wait for populateSettings to fill the form.
+ *  Most settings tests exercise the stored baseline independently of the
+ *  jurisdiction runtime, so they use the audit fixture's request-scoped off
+ *  switch. The dedicated runtime-lock test opts back into production behaviour. */
+async function goToBannerPage(page: Page, disableGeoRuntime = true) {
+  const runtimeQuery = disableGeoRuntime ? '&faz_e2e_disable_geo_runtime=1' : '';
+  await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner${runtimeQuery}`, {
     waitUntil: 'domcontentloaded',
     timeout: 45_000,
   });
@@ -458,6 +471,25 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
 
   // ─── General Tab ───────────────────────────────────────
 
+  test('Runtime: mandatory controls display their effective ON state as locked', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await goToBannerPage(page, false);
+    await clickTab(page, 'buttons');
+
+    for (const toggleId of ['faz-b-accept-toggle', 'faz-b-reject-toggle']) {
+      const checkbox = page.locator(`#${toggleId} input[type="checkbox"]`);
+      await expect(checkbox).toBeChecked();
+      await expect(checkbox).toBeDisabled();
+      await expect(checkbox).toHaveAttribute('data-faz-runtime-locked', '1');
+    }
+
+    await clickTab(page, 'advanced');
+    const revisit = page.locator('#faz-b-revisit-toggle input[type="checkbox"]');
+    await expect(revisit).toBeChecked();
+    await expect(revisit).toBeDisabled();
+    await expect(revisit).toHaveAttribute('data-faz-runtime-locked', '1');
+  });
+
   test('General: banner type persists and reflects on frontend', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
     await loginAsAdmin(page);
     await goToBannerPage(page);
@@ -574,7 +606,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await expect.poll(async () => getInputValue(page, 'faz-b-notice-bg-hex')).toBe('#ffffff');
     await expect.poll(async () => getInputValue(page, 'faz-b-title-color-hex')).toBe('#111827');
     await expect.poll(async () => getInputValue(page, 'faz-b-accept-bg-hex')).toBe('#111827');
-    await expect.poll(async () => getInputValue(page, 'faz-b-reject-border-hex')).toBe('#d1d5db');
+    await expect.poll(async () => getInputValue(page, 'faz-b-reject-border-hex')).toBe('#111827');
     await expect.poll(async () => (await getPreviewMetrics(page)).extraHeight).toBeLessThan(24);
     await expect.poll(async () => (await getPreviewStructureState(page)).rootChildCount).toBe(1);
     await expect.poll(async () => (await getPreviewStructureState(page)).hasOverlay).toBe(false);

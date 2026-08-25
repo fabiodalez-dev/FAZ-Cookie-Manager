@@ -1981,6 +1981,26 @@
 			]);
 		}
 
+		if (c.auditTable && bannerData && bannerData.properties) {
+			applyPresetSection('auditTable', c.auditTable);
+		}
+
+		// Accessibility overrides are a shared config section. Overlay only the
+		// Always Active styles supplied by a preset so unrelated user choices
+		// (manual links and Show More/Less) are not replaced.
+		var alwaysActiveStyles = getPathValue(
+			c,
+			'accessibilityOverrides.elements.preferenceCenter.elements.alwaysActive.styles'
+		);
+		if (isPlainObject(alwaysActiveStyles) && bannerData && bannerData.properties) {
+			var alwaysActivePath = 'config.accessibilityOverrides.elements.preferenceCenter.elements.alwaysActive.styles';
+			ensureObj(bannerData.properties, alwaysActivePath);
+			var currentAlwaysActiveStyles = getPathValue(bannerData.properties, alwaysActivePath);
+			Object.keys(alwaysActiveStyles).forEach(function (property) {
+				currentAlwaysActiveStyles[property] = alwaysActiveStyles[property];
+			});
+		}
+
 		if (c.optoutPopup && bannerData && bannerData.properties) {
 			applyPresetSection('optoutPopup', c.optoutPopup, [
 				'elements.closeButton',
@@ -2335,16 +2355,18 @@
 			contents: bannerData.contents || {},
 		};
 
-		// Collect which tags should be hidden based on toggle states
+		// Preview the effective UI state. isChecked() deliberately returns the
+		// stored baseline for serialization, which differs from the visible ON
+		// state of controls that jurisdiction routing locks at runtime.
 		var hiddenTags = [];
-		if (!isChecked('faz-b-accept-toggle')) hiddenTags.push('accept-button');
-		if (!isChecked('faz-b-reject-toggle')) hiddenTags.push('reject-button');
-		if (!isChecked('faz-b-settings-toggle')) hiddenTags.push('settings-button');
-		if (!isChecked('faz-b-close-toggle')) hiddenTags.push('close-button');
-		if (!isChecked('faz-b-readmore-toggle')) hiddenTags.push('readmore-button');
-		if (!isChecked('faz-b-revisit-toggle')) hiddenTags.push('revisit-consent');
-		if (!isChecked('faz-b-audit-toggle')) hiddenTags.push('audit-table');
-		if (!isChecked('faz-b-brandlogo-toggle')) hiddenTags.push('brand-logo');
+		if (!isVisuallyChecked('faz-b-accept-toggle')) hiddenTags.push('accept-button');
+		if (!isVisuallyChecked('faz-b-reject-toggle')) hiddenTags.push('reject-button');
+		if (!isVisuallyChecked('faz-b-settings-toggle')) hiddenTags.push('settings-button');
+		if (!isVisuallyChecked('faz-b-close-toggle')) hiddenTags.push('close-button');
+		if (!isVisuallyChecked('faz-b-readmore-toggle')) hiddenTags.push('readmore-button');
+		if (!isVisuallyChecked('faz-b-revisit-toggle')) hiddenTags.push('revisit-consent');
+		if (!isVisuallyChecked('faz-b-audit-toggle')) hiddenTags.push('audit-table');
+		if (!isVisuallyChecked('faz-b-brandlogo-toggle')) hiddenTags.push('brand-logo');
 
 		// Legislation: hide "do not sell" button for GDPR-only
 		var law = getVal('faz-b-law') || 'gdpr';
@@ -3052,13 +3074,33 @@
 		var el = document.getElementById(id);
 		if (!el) return false;
 		var cb = el.querySelector('input[type="checkbox"]');
+		// Runtime-locked controls display the effective ON state, while their
+		// stored baseline must survive unchanged for the day jurisdiction routing
+		// is disabled. setChecked() records that baseline during hydration; every
+		// serialization path already comes through isChecked(), so return it here
+		// instead of persisting the forced visual state.
+		if (cb && cb.dataset.fazRuntimeLocked === '1' && cb.dataset.fazStoredChecked !== undefined) {
+			return cb.dataset.fazStoredChecked === '1';
+		}
+		return cb ? cb.checked : false;
+	}
+	function isVisuallyChecked(id) {
+		var el = document.getElementById(id);
+		if (!el) return false;
+		var cb = el.querySelector('input[type="checkbox"]');
 		return cb ? cb.checked : false;
 	}
 	function setChecked(id, val) {
 		var el = document.getElementById(id);
 		if (!el) return;
 		var cb = el.querySelector('input[type="checkbox"]');
-		if (cb) cb.checked = !!val;
+		if (!cb) return;
+		if (cb.dataset.fazRuntimeLocked === '1') {
+			cb.dataset.fazStoredChecked = val ? '1' : '0';
+			cb.checked = true;
+			return;
+		}
+		cb.checked = !!val;
 	}
 	function getStatus(obj) {
 		if (!obj) return false;

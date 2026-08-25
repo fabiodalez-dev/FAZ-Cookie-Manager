@@ -111,7 +111,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Cache compatibility mode', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<div class="faz-help"><?php echo wp_kses_post( __( 'Keep a visitor-invariant page fully cacheable only when jurisdiction runtime is explicitly disabled with the <code>faz_geo_ruleset_runtime</code> filter. Geo rule-sets are enforced by default, so this optimisation is automatically ignored: caching one country\'s consent model for another country is a compliance risk. It also pauses server-side A/B splitting and bot-specific output when it is actually active.', 'faz-cookie-manager' ) ); ?></div>
+				<div class="faz-help"><?php echo wp_kses_post( __( 'Keep a visitor-invariant page fully cacheable when jurisdiction enforcement is off and one banner law applies to everyone. When per-country enforcement is on, use the Cache-safe jurisdiction bootstrap under Jurisdiction &amp; Geo-routing instead. Developers can override the runtime with the <code>faz_geo_ruleset_runtime</code> filter. When this compatibility mode is active, it also pauses server-side A/B splitting and bot-specific output.', 'faz-cookie-manager' ) ); ?></div>
 			</div>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
@@ -396,16 +396,28 @@ defined( 'ABSPATH' ) || exit;
 
 	<div class="faz-card">
 		<div class="faz-card-header">
-			<h3><?php esc_html_e( 'Geo-Targeting', 'faz-cookie-manager' ); ?></h3>
+			<h3><?php esc_html_e( 'Jurisdiction & Geo-routing', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
 			<div class="faz-form-group">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="geolocation.geo_targeting">
 					<span class="faz-toggle-track"></span>
-					<span class="faz-toggle-label"><?php esc_html_e( 'Enable geo-targeted banner display', 'faz-cookie-manager' ); ?></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Apply jurisdiction rules by visitor location', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<div class="faz-help"><?php esc_html_e( 'Show the cookie banner only to visitors from specific regions. Requires a MaxMind GeoLite2 database (configured below), or the Cloudflare CF-IPCountry header (trusted only when the faz_trust_cf_ipcountry_header filter is enabled by your developer). When the country cannot be resolved, the banner is shown to everyone (fail-open).', 'faz-cookie-manager' ); ?></div>
+				<div class="faz-help"><?php esc_html_e( 'Recommended and enabled by default. Detect each visitor\'s location to enforce the matching jurisdiction rules and mandatory controls, and optionally limit banner display to selected regions. Turning this off means the law saved on the active banner applies to every visitor; for example, a CCPA banner will no longer gain GDPR blocking for an EEA visitor. Location requires a MaxMind GeoLite2 database (configured below), or a trusted country signal such as Cloudflare CF-IPCountry.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="geolocation.cache_geo_bootstrap">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Cache-safe jurisdiction bootstrap', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'Allows compatible full-page caches and CDNs to share one strict GDPR shell. The browser resolves the live jurisdiction through a no-store endpoint before mounting the banner or releasing optional scripts. If the configuration is unsupported or the endpoint fails, FAZ keeps the stricter shell and preserves the normal page-cache bypass.', 'faz-cookie-manager' ); ?></div>
+				<div id="faz-geo-bootstrap-status" role="status" aria-live="polite" aria-atomic="true" style="margin-top:8px;padding:10px;border-radius:6px;background:var(--faz-bg-secondary);">
+					<span style="color:var(--faz-text-secondary);"><?php esc_html_e( 'Checking cache-safe bootstrap readiness...', 'faz-cookie-manager' ); ?></span>
+				</div>
+				<div class="faz-help"><?php esc_html_e( 'Currently excluded: AMP, IAB TCF, country-based language fallback, country-targeted banner rows, hiding the banner outside selected regions, and custom country-dependent output. Excluded configurations remain protected but bypass full-page caching.', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
 				<label><?php esc_html_e( 'Target Regions', 'faz-cookie-manager' ); ?></label>

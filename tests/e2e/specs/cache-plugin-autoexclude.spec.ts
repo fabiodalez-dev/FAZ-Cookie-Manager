@@ -18,15 +18,91 @@
  */
 import { test, expect } from '../fixtures/wp-fixture';
 import { resetDefaultBannerState } from '../utils/seed-defaults';
-import { wpEval } from '../utils/wp-env';
+import { ensureFixturePlugin, isPluginActive, wp, wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
+
+// The compiled banner stylesheet reaches the page in one of two shapes, and
+// they are protected from CSS combine/minify by two different mechanisms.
+const INLINE_CSS_EXCLUSION_PATTERN = 'faz-cookie-manager/assets/';
+const INLINE_CSS_EXCLUSION_MARKER = `/* ${INLINE_CSS_EXCLUSION_PATTERN} */`;
+
+/** `<link rel=stylesheet>` tags for the compiled banner stylesheet. */
+function collectLinkBannerCss(html: string): string[] {
+  return html.match(/<link\b[^>]*faz-cookie-manager-css[^>]*>/gi) ?? [];
+}
+
+/**
+ * Inline `<style>` blocks for the compiled banner stylesheet, tag AND body:
+ * the protection to assert on this shape lives in the CSS text, not the tag.
+ */
+function collectInlineBannerCss(html: string): string[] {
+  return html.match(/<style\b[^>]*faz-cookie-manager-css[^>]*>[\s\S]*?<\/style>/gi) ?? [];
+}
+
+function litespeedCssExcludes(): string[] {
+  const raw = wpEval(`
+    $out = apply_filters( 'litespeed_optimize_css_excludes', array( 'theme.css' ) );
+    echo wp_json_encode( $out );
+  `).trim();
+  return JSON.parse(raw) as string[];
+}
+
+/**
+ * Assert the banner stylesheet is protected in whichever shape it was served,
+ * and that the shape is the one the caller expected.
+ *
+ * Branching is not a loosening: each shape gets the assertion that is the only
+ * possible protection FOR that shape, and an unprotected tag of either kind
+ * still fails.
+ */
+function assertBannerCssProtected(html: string, expectedShape: 'link' | 'style'): void {
+  const links = collectLinkBannerCss(html);
+  const inlines = collectInlineBannerCss(html);
+
+  expect(
+    links.length + inlines.length,
+    'the compiled FAZ banner stylesheet must be present'
+  ).toBeGreaterThan(0);
+  expect(
+    expectedShape === 'link' ? links.length : inlines.length,
+    `expected the ${expectedShape} shape of the banner stylesheet on this request`
+  ).toBeGreaterThan(0);
+
+  for (const tag of links) {
+    // LiteSpeed reads data-no-optimize off the <link> before combining.
+    expect(tag, `missing LiteSpeed no-optimize on: ${tag.slice(0, 160)}`).toContain(
+      'data-no-optimize="1"'
+    );
+  }
+  for (const block of inlines) {
+    // WordPress exposes no filter for inline-style attributes, so this tag
+    // cannot carry data-no-optimize. The in-CSS marker is its protection.
+    expect(
+      block,
+      `missing the ${INLINE_CSS_EXCLUSION_MARKER} exclusion marker on the inline banner CSS fallback: ${block.slice(0, 160)}`
+    ).toContain(INLINE_CSS_EXCLUSION_MARKER);
+  }
+}
+
+let auditLabWasActive = false;
 
 test.beforeAll(() => {
   // Self-provision the default box+popup GDPR banner so this spec is immune
   // to a prior full-suite spec leaving the shared banner in classic/pushdown
   // or CCPA mode (see utils/seed-defaults.ts).
   resetDefaultBannerState();
+  // Supplies ?faz_e2e_inline_banner_css=1, the only way to reach the
+  // unwritable-uploads fallback without making uploads unwritable for the
+  // whole install.
+  auditLabWasActive = isPluginActive('faz-e2e-audit-lab');
+  ensureFixturePlugin('faz-e2e-audit-lab');
+});
+
+test.afterAll(() => {
+  if (!auditLabWasActive && isPluginActive('faz-e2e-audit-lab')) {
+    wp(['plugin', 'deactivate', 'faz-e2e-audit-lab']);
+  }
 });
 
 test.describe('Cache-plugin auto-exclude (#83 + 1.13.2 post-review)', () => {
@@ -94,6 +170,50 @@ test.describe('Cache-plugin auto-exclude (#83 + 1.13.2 post-review)', () => {
       expect(tag, `missing data-cfasync on: ${tag.slice(0, 120)}`).toContain('data-cfasync="false"');
       expect(tag, `missing data-ao-skip on: ${tag.slice(0, 120)}`).toContain('data-ao-skip="1"');
     }
+  });
+
+  test('frontend banner CSS is excluded from LiteSpeed combine/minify', async ({ page }) => {
+    const resp = await page.request.get(`${WP_BASE}/?cssdiag=${Date.now()}`);
+    expect(resp.ok()).toBe(true);
+    assertBannerCssProtected(await resp.text(), 'link');
+
+    const excludes = litespeedCssExcludes();
+    expect(excludes).toContain('theme.css');
+    expect(excludes).toContain('plugins/faz-cookie-manager/');
+    expect(excludes).toContain('faz-cookie-manager/assets/');
+  });
+
+  // The <link> above is only one of the two shapes this stylesheet ships in.
+  // When wp-content/uploads is not writable, class-frontend.php falls back to
+  // wp_add_inline_style() and WordPress prints a <style> — and WordPress has no
+  // filter for inline-style attributes, so that tag CANNOT carry
+  // data-no-optimize. Its protection is the `/* faz-cookie-manager/assets/ */`
+  // comment at the head of the CSS instead: LiteSpeed applies its CSS exclusion
+  // patterns to the whole tag, and `faz-cookie-manager/assets/` is registered
+  // as one (asserted above and again here).
+  //
+  // Asserting the attribute on that shape would have failed a site whose
+  // production behaviour is correct. Asserting nothing would let the marker be
+  // deleted unnoticed. Hence one assertion per shape.
+  test('inline-fallback banner CSS carries the exclusion marker instead', async ({ page }) => {
+    const resp = await page.request.get(
+      `${WP_BASE}/?cssdiag=${Date.now()}&faz_e2e_inline_banner_css=1`
+    );
+    expect(resp.ok()).toBe(true);
+    const html = await resp.text();
+
+    // Guard the fixture: if the flag stopped forcing the fallback the shape
+    // check below would pass vacuously on the ordinary <link>.
+    expect(
+      collectInlineBannerCss(html).length,
+      'the audit-lab faz_e2e_inline_banner_css flag did not force the inline-style fallback'
+    ).toBeGreaterThan(0);
+
+    assertBannerCssProtected(html, 'style');
+
+    // The marker only protects anything because that exact string is a
+    // registered LiteSpeed CSS exclusion. Pin the pair, not the comment alone.
+    expect(litespeedCssExcludes()).toContain(INLINE_CSS_EXCLUSION_PATTERN);
   });
 
   test('is_own_script_handle() recognises alt-asset family via reflection', async () => {

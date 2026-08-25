@@ -519,7 +519,7 @@ test.describe('Guided setup wizard', () => {
             gcm: { enabled: 'false' },
             microsoft: { uet_consent_mode: 'false', clarity_consent: '0' },
             iab: { enabled: 'false', cmp_id: 300, publisher_cc: 'IT' },
-            geolocation: { geo_targeting: 'false', target_regions: ['us'], default_behavior: 'show_banner' },
+            geolocation: { geo_targeting: 'false', cache_geo_bootstrap: 'false', target_regions: ['us'], default_behavior: 'show_banner' },
             payment_gateways: { stripe: 'false' },
           }),
         });
@@ -537,10 +537,11 @@ test.describe('Guided setup wizard', () => {
           'clarity' => ! empty( $s['microsoft']['clarity_consent'] ),
           'iab'     => ! empty( $s['iab']['enabled'] ),
           'geo'     => ! empty( $s['geolocation']['geo_targeting'] ),
+		  'bootstrap' => ! empty( $s['geolocation']['cache_geo_bootstrap'] ),
           'stripe'  => ! empty( $s['script_blocking']['payment_gateways']['stripe'] ),
         ) );
       `).trim();
-      expect(JSON.parse(raw)).toEqual({ cache: false, gcm: false, uet: false, clarity: false, iab: false, geo: false, stripe: false });
+      expect(JSON.parse(raw)).toEqual({ cache: false, gcm: false, uet: false, clarity: false, iab: false, geo: false, bootstrap: false, stripe: false });
     } finally {
       restore(snap);
     }
