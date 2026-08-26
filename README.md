@@ -610,6 +610,10 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.28.1 — 2026-08-26
+- **Fixed**: a cached page could serve one visitor's jurisdiction to another when Cloudflare's country header was trusted. The country-source check required `CF-IPCountry` on the current request, so a cache warmer — or any request reaching the origin without passing through Cloudflare — was told no source existed and its response was cached without the country veto. The trust filter alone now decides it.
+- **Fixed**: release tooling — `--dry-run` no longer writes to the live blog, the remote temporary directory is no longer predictable, and a failed SVN asset refresh stops the release instead of being silenced.
+
 ### 1.28.0 — 2026-08-25
 - **Compliance runtime**: all bundled jurisdiction rulesets are enforced by default across category defaults, server/client blocking, mandatory UI controls and Consent Mode. Compatible cached sites can use one strict shared shell and resolve the live law before mount; unsupported configurations retain the safe page-cache bypass. `faz_geo_ruleset_runtime` remains an emergency disable filter.
 - **GPC**: an asserted browser/header signal always controls sale/share purposes, including over a prior consent or a later same-page Accept All action, while preserving unrelated choices. Classic and AMP consent paths retain the audit marker and remove granular overrides that could bypass the opt-out.

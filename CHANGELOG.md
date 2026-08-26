@@ -2,6 +2,13 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.28.1] — 2026-08-26
+
+### Fixed
+- **A cached page could serve one visitor's jurisdiction to another when Cloudflare's country header was trusted.** The predicate that decides whether output varies by country required `CF-IPCountry` on the *current* request before counting Cloudflare as a source. A cache warmer — or anything reaching the origin without passing through Cloudflare — carries no such header, was told no country source existed, and its response was cached without the country veto. A later visitor whose header *did* identify their country could then be served that cached page, with the fallback ruleset and banner instead of their own jurisdiction's. The trust filter alone now decides it, which is what "a source is configured" was always meant to mean; `faz_has_country_signal_source` remains the explicit override. Narrow to reach — the trust filter is opt-in and off by default — but the failure mode is an EEA visitor served an opt-out banner from cache.
+- `--dry-run` on the release write-up tool created the blog category on the live site before reaching its own dry-run check, so it wrote to production while reporting that nothing had been published.
+- The release tooling no longer builds its remote temporary directory from a predictable name, and no longer silences failures of the SVN asset refresh — a masked error there let a release proceed with an incomplete `assets/` and fail at commit instead.
+
 ## [1.28.0] — 2026-08-25
 
 ### Changed

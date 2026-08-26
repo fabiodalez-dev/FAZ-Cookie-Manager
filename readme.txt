@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.28.0
+Stable tag: 1.28.1
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -383,6 +383,9 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
+= 1.28.1 =
+* Fixed: a cached page could serve one visitor's jurisdiction to another when Cloudflare's country header was trusted. The check deciding whether output varies by country required the `CF-IPCountry` header on the current request, so a cache warmer — or anything reaching the origin without passing through Cloudflare — was told no country source existed, and its response was cached without the country cache-bust. A later visitor whose header did identify their country could then be served that cached page with the fallback rule set and banner instead of their own. Narrow to reach, since trusting the header is opt-in and off by default, but the failure is an EEA visitor served an opt-out banner from cache.
+
 = 1.28.0 =
 * Changed: fresh installs now enable the 47-law jurisdiction runtime, and a new cache-safe bootstrap can serve one strict GDPR shell and resolve the live law before the banner mounts, so a compatible page cache no longer has to be given up for correct per-country rules. Every unsupported configuration is named in the admin and falls back to the existing no-cache path.
 * Changed: sites upgrading from 1.27.x keep the enforcement they already had. The Geo-Targeting toggle is now authoritative, so a one-time migration turns it on and normalises a dormant "no banner" default, leaving banner visibility unchanged. A dismissible notice explains the change.
@@ -495,11 +498,6 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 = 1.19.2 =
 * Fix: the consent-log user-agent migration no longer errors on SQLite-backed WordPress (e.g. WordPress Playground). It previously used MySQL's SHA2()/REGEXP, which do not exist on SQLite, so the migration failed and emitted a database error on every request; it now runs in PHP with the identical hash.
 * Fix: the Google Consent Mode non-personalized-ads `npa` signal is now most-restrictive across regions. Because `npa` is a global signal that cannot be region-scoped, the pre-consent default emits a single value (non-personalized whenever any configured region denies ads) instead of letting the last-evaluated region win; the region-scoped Consent Mode v2 states are unaffected.
-
-= 1.19.1 =
-* Fix: legacy "Both" (GDPR + US) banners no longer silently lose their Do-Not-Sell opt-out. Very old banners stored it only in a legacy key that the settings sanitiser drops; the runtime now back-fills the opt-out from the raw stored settings so the US control still renders.
-* Fix: the Google Consent Mode non-personalized-ads fallback now signals `npa` on the FIRST visit too (legacy non-Consent-Mode ad tags previously only got it after a reject), and the signal is two-sided — it clears within the session once marketing is granted.
-* Hardening: the consent-log `status` column is constrained to the known set (unknown values fold to `partial`) so a crafted REST payload can't pollute the dashboard statistics; the client-side cookie cleanup gained a longer-tail pass to catch trackers that write a cookie well after page load; and an admin's explicit custom block rule is no longer silently exempted when it is a substring of an always-allowed payment-gateway pattern.
 
 
 = Older versions =
