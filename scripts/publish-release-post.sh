@@ -62,6 +62,9 @@ die()   { red "FAIL: $*"; exit 1; }
 SLUG="faz-cookie-manager-${VERSION//./-}"
 [[ -n "${TITLE}" ]] || TITLE="FAZ Cookie Manager ${VERSION}"
 
+# shellcheck disable=SC2029 # WP_PATH must expand HERE: it names the remote
+# directory and is ours, not user input. Expanding it on the far side would
+# send the literal string and break every call.
 wp_remote() { ssh "${SSH_HOST}" "cd ${WP_PATH} && wp $*"; }
 
 cyan "═══ Preflight ═══"
@@ -114,6 +117,8 @@ fi
 
 # ── Upload the image and create the post ─────────────────────────────────
 REMOTE_TMP="/tmp/faz-release-${VERSION}-$$"
+# shellcheck disable=SC2029 # REMOTE_TMP carries the local PID and must expand
+# here; the remote shell has no such variable.
 ssh "${SSH_HOST}" "mkdir -p ${REMOTE_TMP}"
 # shellcheck disable=SC2064 # expand REMOTE_TMP now: the trap must survive the var going out of scope
 trap "ssh '${SSH_HOST}' 'rm -rf ${REMOTE_TMP}' >/dev/null 2>&1 || true" EXIT
@@ -132,6 +137,8 @@ fi
 
 cyan "═══ Creating the post ═══"
 scp -q "${CONTENT}" "${SSH_HOST}:${REMOTE_TMP}/body.html"
+# shellcheck disable=SC2029 # Same as above: both paths are local values that
+# have to be baked into the command before it is sent.
 POST_ID="$(ssh "${SSH_HOST}" "cd ${WP_PATH} && wp post create ${REMOTE_TMP}/body.html \
     --post_title=$(printf '%q' "${TITLE}") \
     --post_name='${SLUG}' \
