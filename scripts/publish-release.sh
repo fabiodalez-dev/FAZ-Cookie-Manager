@@ -78,7 +78,7 @@ bash "${PLUGIN_SRC}/scripts/bump-version.sh" "${VERSION}" --check >/dev/null 2>&
 green "  ✓ version consistent in 4 places; changelog entries present and under the cap"
 
 # CI is a gate here, not advice. A red Plugin Check means wp.org review will
-# reject what we are about to publish.
+# reject what I am about to publish.
 if command -v gh >/dev/null 2>&1; then
     concl="$(gh api "repos/{owner}/{repo}/commits/${head_sha}/check-runs" \
 		--jq '[.check_runs[] | select(.name | test("Plugin Check|CodeQL|Quality")) | .conclusion] | unique | join(",")' 2>/dev/null || echo "")"
@@ -192,6 +192,33 @@ else
     red "  ! wp.org still serves ${live:-unknown}"
 fi
 
+# ── F. The release write-up on fabiodalez.it ─────────────────────────────
+# Every release gets an article in the FAZ category: what it fixes, what was
+# hit on the way, what was done about it. Deliberately AFTER the SVN commit —
+# the post links a release that is already live, and a post published for a
+# release that then failed would have to be retracted.
+#
+# The body is authored per release at .release-post-X.Y.Z.html. It is not
+# generated from the changelog on purpose: what I ran into is the half a
+# diff cannot produce, and it is the half worth reading. Without that file the
+# release still completes and this step reports what is missing — a blog post
+# is not worth failing a published release over.
+cyan "═══ F. Release write-up ═══"
+POST_BODY="${PLUGIN_SRC}/.release-post-${VERSION}.html"
+if [[ -f "${POST_BODY}" ]]; then
+    if bash "${PLUGIN_SRC}/scripts/publish-release-post.sh" \
+            --version="${VERSION}" --content="${POST_BODY}"; then
+        rm -f "${POST_BODY}"
+    else
+        red "  ! the write-up did not publish — the release itself is fine."
+        red "    Retry: scripts/publish-release-post.sh --version=${VERSION} --content=${POST_BODY}"
+    fi
+else
+    red "  ! no ${POST_BODY} — no article was published for ${VERSION}."
+    red "    Write the body as classic HTML (<h2>/<p>), then run:"
+    red "    scripts/publish-release-post.sh --version=${VERSION} --content=<file>"
+fi
+
 rm -f "${PLUGIN_SRC}/.release-notes-${VERSION}.md"
 echo
 bold "Published ${VERSION}."
@@ -199,5 +226,6 @@ echo "Remaining manual steps — these are not automatable:"
 echo "  • Revoke and regenerate the SVN Application Password on wordpress.org."
 echo "  • Smoke-test in Playground: https://playground.wordpress.net/?plugin=${SLUG}"
 echo "  • Eyeball https://wordpress.org/plugins/${SLUG}/ once the directory page updates."
+echo "  • Read the FAZ post back on https://fabiodalez.it/category/faz/ — it is public the moment it is created."
 echo
 echo "State file kept at ${STATE} — delete it once you are satisfied."
