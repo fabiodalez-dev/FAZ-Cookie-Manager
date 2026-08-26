@@ -1629,8 +1629,17 @@ class Frontend {
 	private function has_country_signal_source() {
 		$has_source = false;
 
-		if ( ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- presence test only, value never used here.
-			&& apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
+		// The trust filter alone, NOT the header being present on this request.
+		// Requiring the header made the answer depend on who is asking: a cache
+		// warmer or any request that reaches the origin without passing through
+		// Cloudflare carries no CF-IPCountry, would have been told "no source",
+		// and its un-vetoed response would then be served from cache to a real
+		// visitor whose country the header DID identify — handing them the
+		// fallback ruleset and banner. That is precisely the leak the veto
+		// exists to stop, and the docblock above already says this predicate is
+		// about a source being CONFIGURED rather than resolved; the CF branch
+		// was the one place that did not honour it.
+		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
 			$has_source = true;
 		}
 		if ( ! $has_source && ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- presence test only.

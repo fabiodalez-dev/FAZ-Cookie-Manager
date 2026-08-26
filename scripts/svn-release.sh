@@ -196,7 +196,13 @@ mkdir -p assets
 # release, misdiagnosed twice as leftovers from the previous one. Pulling the
 # real children first makes the copies plain modifications, which is what they
 # are.
-svn up --set-depth infinity assets >/dev/null 2>&1 || true
+if ! svn up --set-depth infinity assets >/dev/null; then
+    red "could not materialise assets/ from the SVN working copy."
+    red "  Staging would proceed with an incomplete assets/ and fail later at"
+    red "  commit — which is how this went wrong in the first place. Fix the"
+    red "  working copy (svn cleanup / svn revert -R assets) and rerun."
+    exit 1
+fi
 cp "${PLUGIN_SRC}/.wordpress-org/"screenshot-*.png assets/ 2>/dev/null || true
 cp "${PLUGIN_SRC}/.wordpress-org/"banner-*.png assets/ 2>/dev/null || true
 cp "${PLUGIN_SRC}/.wordpress-org/"banner-*.jpg assets/ 2>/dev/null || true

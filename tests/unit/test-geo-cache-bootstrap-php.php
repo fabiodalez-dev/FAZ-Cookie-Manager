@@ -197,7 +197,28 @@ namespace {
 	unset( $_SERVER['GEOIP_COUNTRY_CODE'] );
 
 	// ...and the new branch: same configuration, no country source at all.
+	// Pinned through the filter rather than left to the environment: without it
+	// has_country_signal_source() would still find geoip_country_code_by_name()
+	// wherever the PHP GeoIP extension happens to be installed, and this case
+	// would fail for the machine it runs on rather than for the behaviour it
+	// tests.
+	add_filter( 'faz_has_country_signal_source', static function () { return false; } );
 	faz_geo_bootstrap_same( $off->flying_press_is_cacheable( true ), true, 'with no country source the page stays cacheable - the veto would buy nothing' );
+	unset( $GLOBALS['faz_geo_bootstrap_filters']['faz_has_country_signal_source'] );
+
+	// Cloudflare counts as a CONFIGURED source the moment the publisher trusts the
+	// header — not only on requests that happen to carry it. Requiring the header
+	// made the answer depend on who was asking: a cache warmer, or anything that
+	// reaches the origin without passing through Cloudflare, carries no
+	// CF-IPCountry and would have been told "no source". Its un-vetoed response
+	// then sits in the cache waiting for a real visitor whose country the header
+	// DID identify, and hands them the fallback ruleset and banner.
+	//
+	// Note there is deliberately NO CF-IPCountry in $_SERVER here: that absence is
+	// the whole point of the case.
+	add_filter( 'faz_trust_cf_ipcountry_header', static function () { return true; } );
+	faz_geo_bootstrap_same( $off->flying_press_is_cacheable( true ), false, 'a trusted CF header counts as a source even on a request that lacks it (cache-warmer leak)' );
+	unset( $GLOBALS['faz_geo_bootstrap_filters']['faz_trust_cf_ipcountry_header'] );
 
 	faz_geo_bootstrap_reset();
 	$saved_opt_in_settings = array(

@@ -79,12 +79,17 @@ EXISTING="$(wp_remote post list --post_type=post --name="${SLUG}" --field=ID --p
 green "  ✓ no existing post for ${VERSION}"
 
 CAT_ID="$(wp_remote term list category --slug="${CATEGORY_SLUG}" --field=term_id 2>/dev/null | tr -d '\r')"
-if [[ -z "${CAT_ID}" ]]; then
+if [[ -n "${CAT_ID}" ]]; then
+    green "  ✓ category '${CATEGORY_SLUG}' exists (${CAT_ID})"
+elif [[ "${DRY_RUN}" == "true" ]]; then
+    # A dry run must not touch the remote site. Creating the category here made
+    # --dry-run mutate production while printing "Nothing was published."
+    CAT_ID="<would be created>"
+    green "  ✓ category '${CATEGORY_SLUG}' would be created"
+else
     CAT_ID="$(wp_remote term create category "FAZ" --slug="${CATEGORY_SLUG}" --porcelain 2>/dev/null | tr -d '\r')"
     [[ -n "${CAT_ID}" ]] || die "could not create the '${CATEGORY_SLUG}' category"
     green "  ✓ category '${CATEGORY_SLUG}' created (${CAT_ID})"
-else
-    green "  ✓ category '${CATEGORY_SLUG}' exists (${CAT_ID})"
 fi
 
 # ── Screenshot ───────────────────────────────────────────────────────────
@@ -116,10 +121,13 @@ if [[ "${DRY_RUN}" == "true" ]]; then
 fi
 
 # ── Upload the image and create the post ─────────────────────────────────
-REMOTE_TMP="/tmp/faz-release-${VERSION}-$$"
-# shellcheck disable=SC2029 # REMOTE_TMP carries the local PID and must expand
-# here; the remote shell has no such variable.
-ssh "${SSH_HOST}" "mkdir -p ${REMOTE_TMP}"
+# mktemp on the far side, not a path built from the version and our PID. On a
+# shared host that name is guessable: another user could pre-create it, or leave
+# a symlink there before scp runs, and the article body and screenshot would be
+# written somewhere else entirely.
+REMOTE_TMP="$(ssh "${SSH_HOST}" 'mktemp -d /tmp/faz-release.XXXXXXXX')" \
+    || die "could not create a remote temporary directory"
+[[ -n "${REMOTE_TMP}" ]] || die "remote mktemp returned nothing"
 # shellcheck disable=SC2064 # expand REMOTE_TMP now: the trap must survive the var going out of scope
 trap "ssh '${SSH_HOST}' 'rm -rf ${REMOTE_TMP}' >/dev/null 2>&1 || true" EXIT
 
