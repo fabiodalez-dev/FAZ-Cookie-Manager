@@ -86,9 +86,37 @@ defined( 'ABSPATH' ) || exit;
 			<div class="faz-card-body">
 				<div class="faz-chart-wrap">
 					<canvas id="faz-chart-pageviews" width="600" height="220" style="width:100%;height:220px;"></canvas>
+					<?php
+					/*
+					 * Two empty states, because "no data" and "not measuring" are
+					 * different facts and only one of them is the visitor's doing.
+					 *
+					 * Pageview tracking is opt-in and ships off. With it off this
+					 * panel used to say "Data will appear once visitors interact
+					 * with your site" — which is not merely unhelpful, it is false:
+					 * nothing is recorded, so nothing will ever appear no matter how
+					 * many visitors arrive. An administrator reading an empty chart
+					 * concludes they have no traffic, when what they have is no
+					 * measurement. That misreading is what sent one site owner to the
+					 * support forum convinced the counter was broken.
+					 */
+					$faz_dash_settings = get_option( 'faz_settings', array() );
+					$faz_pv_on         = is_array( $faz_dash_settings )
+						&& isset( $faz_dash_settings['pageview_tracking'] )
+						&& true === $faz_dash_settings['pageview_tracking'];
+					?>
 					<div id="faz-chart-empty" class="faz-chart-empty faz-hidden">
 						<span class="dashicons dashicons-chart-area"></span>
-						<p><?php echo wp_kses_post( __( 'No pageview data yet.<br>Data will appear once visitors interact with your site.', 'faz-cookie-manager' ) ); ?></p>
+						<?php if ( $faz_pv_on ) : ?>
+							<p><?php echo wp_kses_post( __( 'No pageview data yet.<br>Data will appear once visitors interact with your site.', 'faz-cookie-manager' ) ); ?></p>
+						<?php else : ?>
+							<p><?php echo wp_kses_post( __( 'Pageview tracking is off, so nothing is being recorded.<br>This chart will stay empty however many visitors arrive.', 'faz-cookie-manager' ) ); ?></p>
+							<p>
+								<a class="faz-btn faz-btn-sm faz-btn-secondary" href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-settings' ) ); ?>">
+									<?php esc_html_e( 'Turn on pageview tracking', 'faz-cookie-manager' ); ?>
+								</a>
+							</p>
+						<?php endif; ?>
 					</div>
 				</div>
 			</div>
