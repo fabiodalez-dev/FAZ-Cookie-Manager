@@ -2,6 +2,13 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **`[faz_cookie_settings]` opened an invisible panel in pushdown mode for returning visitors** (#253). The pushdown preference center is the banner container itself, and after a recorded consent that container carries the `faz-hide` (`display:none`) utility class — which wins over `faz-consent-bar-expand`, since the expand class only reveals descendants. `_fazShowPreferenceCenter()` therefore "opened" a panel that never appeared (and returned `true`, so not even the diagnostic warning fired), while the revisit widget kept working because `_revisitFazConsent()` re-shows the banner first. The open path now clears `faz-hide` on the container (without firing the one-shot `fazcookie_banner_loaded` event) and remembers it did so, and the close path re-hides the container for a consented visitor instead of stranding the collapsed consent bar on screen; a deliberate `_fazShowBanner()` clears that memory so revisit-widget flows are unchanged. E2E test 13 now asserts the panel is *actually visible* (and re-hidden on Escape), the exact gap that let this regression pass — it only checked `aria-expanded`.
+- **The `[faz_cookie_settings]` delegated click handler now binds in the capture phase**, so a theme or page-builder handler that calls `stopPropagation()` on an ancestor (smooth-scroll links, mega-menus, accordion wrappers…) can no longer swallow the click before it reaches the document-level listener — another way the shortcode button could be dead while the directly-bound revisit widget worked (#253).
+- **`[faz_cookie_settings]` falls back to re-showing the banner** when no preference-center DOM exists to open (e.g. an opt-out law resolved for the visitor on a template without the opt-out popup panel), mirroring `_revisitFazConsent()`'s fallback; the `console.warn` diagnostic now fires only when no consent UI exists at all.
+
 ## [1.28.1] — 2026-08-26
 
 ### Fixed
