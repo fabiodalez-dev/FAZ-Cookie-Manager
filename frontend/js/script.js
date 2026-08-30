@@ -1876,6 +1876,17 @@ function _fazRegisterShortcodeTriggers() {
             } else if (window.console && console.warn) {
                 console.warn('FAZ Cookie Manager: [faz_cookie_settings] was clicked but no consent preference center is available on this page (the banner UI may be disabled for this visitor).');
             }
+        } else {
+            // Last parity gap with the revisit widget (#253): _revisitFazConsent()
+            // refreshes the IAB vendor switches from the stored consent before the
+            // panel is seen, honouring this function's documented contract ("when
+            // reopening the preference center"). The shortcode handler did not, so
+            // a panel opened this way showed the server-rendered defaults — and
+            // because the save path reads those switches
+            // (_fazAcceptCookies -> _fazSaveVendorConsent), pressing "Save my
+            // preferences" wrote the defaults back, silently discarding vendor
+            // choices the visitor had already made. No-op unless IAB TCF is on.
+            _fazUpdateVendorCheckboxStates();
         }
     // Capture phase: a theme / page-builder click handler that calls
     // stopPropagation() on an ancestor (smooth-scroll, mega-menu, accordion
