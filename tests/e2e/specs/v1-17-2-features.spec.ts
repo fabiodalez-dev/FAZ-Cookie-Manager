@@ -249,6 +249,14 @@ test.describe('1.17.2 — [faz_cookie_settings] revisit shortcode', () => {
       await revisitBtn.click();
       await page.waitForTimeout(400);
       expect(await settingsBtn.getAttribute('aria-expanded'), 'aria-expanded should be true after opening').toBe('true');
+      // #253: after a recorded consent the banner container carries `faz-hide`
+      // (display:none), which the expand class alone cannot beat — the panel
+      // must be ACTUALLY visible, not just aria-expanded. This is the exact
+      // gap the original test left open (it only checked the attribute).
+      await expect(
+        page.locator('[data-faz-tag="detail"]').first(),
+        'pushdown preference panel opened invisibly (container still faz-hide) — issue #253',
+      ).toBeVisible({ timeout: 4_000 });
 
       await revisitBtn.click(); // 2nd click — must NOT flip aria-expanded to false
       await page.waitForTimeout(400);
@@ -256,6 +264,16 @@ test.describe('1.17.2 — [faz_cookie_settings] revisit shortcode', () => {
         await settingsBtn.getAttribute('aria-expanded'),
         'aria-expanded desynced to false on the 2nd click while the panel stayed open',
       ).toBe('true');
+      await expect(page.locator('[data-faz-tag="detail"]').first()).toBeVisible();
+
+      // Closing (Escape) must re-hide the container for a consented visitor —
+      // the collapsed consent bar must not linger after the panel closes.
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+      await expect(
+        page.locator('[data-faz-tag="notice"]').first(),
+        'collapsed consent bar left on screen after closing the shortcode-opened pushdown panel',
+      ).toBeHidden({ timeout: 4_000 });
     } finally {
       // Restore the EXACT original settings blob (byte-for-byte), so the shared
       // banner_id=1 fixture is left exactly as it was found.
