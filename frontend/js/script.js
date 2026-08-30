@@ -2330,6 +2330,15 @@ function _fazTogglePreferenceCenter() {
         const preferenceCenter = element.querySelector('.faz-preference-center');
         _fazSetPreferenceCenterAccessibility(preferenceCenter);
         _fazToggleAriaExpandStatus("=settings-button");
+        // A panel revealed from a hidden container (shortcode open after a
+        // recorded consent, #253) can also be collapsed via this toggle (the
+        // settings/customize control). Consume the flag here too, or the
+        // collapsed consent bar would linger — and the stale flag would make a
+        // LATER _fazHidePreferenceCenter() hide a banner shown on purpose.
+        if (isOpen && _fazStore._pushdownRevealedFromHidden) {
+            _fazStore._pushdownRevealedFromHidden = false;
+            _fazHideBanner();
+        }
     } else {
         if (!isOpen) {
             _fazShowOverLay();
