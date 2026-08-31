@@ -1792,6 +1792,11 @@ ref._fazClearAdblockReassert = _fazClearAdblockReassert;
 // leaves WHEN it runs unguarded, which is the half that was actually wrong:
 // one timer at 1200ms never meets a filter list that lands later (#253).
 ref._fazScheduleAdblockGuard = _fazScheduleAdblockGuard;
+// Exposed for the jsdom suite that pins the "asked-for panel is absent" case
+// (classic + CCPA has no optout-popup). That combination needs a banner type,
+// a law and a recorded consent to line up at once, which is hostile to E2E and
+// exact in jsdom. Not part of the public API.
+ref._fazShowPreferenceCenter = _fazShowPreferenceCenter;
 
 function _fazScheduleDeadCookieCleanup() {
     // Staggered passes catch cookies written after load. The 5000 ms tail picks
@@ -2278,6 +2283,17 @@ function _fazShowPreferenceCenter() {
     // — notably the [faz_cookie_settings] delegated click handler — can react
     // instead of silently doing nothing.
     if (!element) return false;
+    // …and the panel the trigger actually asks for has to exist inside it.
+    // `classic` is the one template that ships no optout-popup, and it also
+    // forces pushdown — so on a CCPA banner _fazGetPreferenceCenter() answers
+    // with the banner CONTAINER, which is present, and this function used to
+    // report success while opening nothing the visitor asked for. Reporting
+    // success is what did the damage: it denied the caller the
+    // _fazShowBanner() fallback that exists for exactly this case, so the
+    // [faz_cookie_settings] button looked dead again. Verified against
+    // templates/6.2.0: every template carries `detail`, only classic lacks
+    // `optout-popup`, so this can never fire on the GDPR path.
+    if (!_fazGetElementByTag(_fazActivePreferenceTag())) return false;
     element.classList.add(_fazGetPreferenceClass());
 
     // For a "Both" banner, isolate the panel matching the trigger.
