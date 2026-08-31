@@ -806,6 +806,16 @@ class Frontend {
 						"var safeUrl=(function(){try{var current=new URL(window.location.href);return current.origin+current.pathname}catch(err){var origin=window.location.origin||(window.location.protocol+'//'+window.location.host);return origin+(window.location.pathname||'')}})();" .
 						"fetch(_fazConsentLog.restUrl,{" .
 							"method:'POST'," .
+							// keepalive so the request survives the navigation that
+							// follows it. Withdrawal forces window.location.reload()
+							// as soon as the storage cleanup resolves, and browsers
+							// abort in-flight non-keepalive fetches on unload — so
+							// the log rows most likely to be lost were exactly the
+							// ones proving a withdrawal, while acceptances (which do
+							// not reload) always landed. An accountability record
+							// that is systematically biased toward consents is worse
+							// than one with gaps.
+							"keepalive:true," .
 							"headers:{'Content-Type':'application/json'}," .
 							"body:JSON.stringify({" .
 								"consent_id:(function(){var m=document.cookie.match(/fazcookie-consent=([^;]+)/);if(!m)return '';var v=m[1];try{v=decodeURIComponent(v)}catch(err){}var p=v.match(/(?:^|,)consentid:([^,;]+)/);return p?p[1]:''})()," .

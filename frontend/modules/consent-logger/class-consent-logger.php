@@ -150,8 +150,26 @@ class Consent_Logger {
 		$is_ip_throttled      = faz_throttle_request( 'faz_consent_ip', 10 );
 		$is_consent_throttled = false;
 		if ( '' !== $sanitized_consent_id ) {
-			$consent_key          = 'faz_consent_' . substr( md5( $sanitized_consent_id ), 0, 8 );
-			$is_consent_throttled = faz_throttle_request( $consent_key, 300 );
+			// The per-consent_id throttle exists to stop one id being replayed
+			// from many IPs. But the consent_id is deliberately KEPT across
+			// sessions (script.js keeps `consentid` so analytics can correlate),
+			// so a visitor who accepts and then withdraws minutes later posts the
+			// SAME id — and the withdrawal was dropped inside the 300s window,
+			// with an HTTP 200 the fire-and-forget client never inspects.
+			//
+			// The surviving row then affirmatively states "accepted" for a
+			// visitor who has withdrawn: worse than a missing record, and the one
+			// record Art. 7(3) accountability actually needs. A status change is
+			// never a replay — it is the event — so it bypasses the id throttle.
+			// The per-IP throttle above still bounds flooding.
+			$status         = sanitize_key( (string) $request->get_param( 'status' ) );
+			$previous       = $this->last_logged_status( $sanitized_consent_id );
+			$status_changed = '' !== $status && $status !== $previous;
+
+			if ( ! $status_changed ) {
+				$consent_key          = 'faz_consent_' . substr( md5( $sanitized_consent_id ), 0, 8 );
+				$is_consent_throttled = faz_throttle_request( $consent_key, 300 );
+			}
 		}
 		if ( $is_ip_throttled || $is_consent_throttled ) {
 			return rest_ensure_response( array( 'throttled' => true ) );
@@ -187,6 +205,28 @@ class Consent_Logger {
 		}
 
 		return rest_ensure_response( $result );
+	}
+
+	/**
+	 * The status of the most recent log row for a consent id, if any.
+	 *
+	 * Used only to tell a status CHANGE apart from a replay of the same status:
+	 * the first is the event accountability exists to record and must never be
+	 * throttled away, the second is what the throttle is for. Reuses the
+	 * controller's own newest-row lookup rather than adding a second query with
+	 * its own idea of "latest".
+	 *
+	 * @param string $consent_id Sanitised consent id.
+	 * @return string Previous status, or '' when nothing is recorded yet.
+	 */
+	private function last_logged_status( $consent_id ) {
+		if ( '' === $consent_id ) {
+			return '';
+		}
+		$previous = Controller::get_instance()->get_log_by_consent_id( $consent_id );
+		return ( is_array( $previous ) && isset( $previous['status'] ) )
+			? sanitize_key( (string) $previous['status'] )
+			: '';
 	}
 
 	/**
