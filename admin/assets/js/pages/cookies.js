@@ -1441,7 +1441,12 @@
 		try {
 			return new Date(ts * 1000).toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
 		} catch (e) {
-			return new Date(ts * 1000).toLocaleTimeString();
+			// Only a malformed tag reaches here (toLocaleTimeString throws
+			// RangeError on one), so re-passing `loc` would throw again — the
+			// locale genuinely has to be dropped. The OPTIONS do not: without
+			// them the fallback also loses the zero-padded 24h shape and can
+			// return "9:05:03 AM" where every neighbouring string says "09:05".
+			return new Date(ts * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 		}
 	}
 
