@@ -164,7 +164,18 @@ test.describe('Per-service consent (1.18.3)', () => {
     // Core/category entries are never sacrificed to the cap.
     expect(result.hasCore, 'core category entry survives the cap').toBe(true);
     expect(result.hasCriticalDeny, 'explicit service denials have priority').toBe(true);
-    expect(result.hasCookieOverride, 'cookie overrides are dropped before service decisions').toBe(false);
+    // A per-cookie DENIAL is no longer discarded wholesale when the service tier
+    // overflowed. Dropping it failed OPEN — the cookie then inherited its service
+    // or category on the next page, which may be granted, so a recorded refusal
+    // came back as an allow.
+    //
+    // The priority this case exists to protect is untouched: the ck loops run
+    // AFTER both svc loops (script.js — svcDenied, svcAllowed, ckDenied,
+    // ckAllowed), so a ck entry can only ever use bytes the service tier did not
+    // claim. `hasCriticalDeny` above still pins that, and a ck ALLOW is still
+    // dropped outright, since falling back to the service decision can only be
+    // equally or more restrictive.
+    expect(result.hasCookieOverride, 'a per-cookie DENIAL survives in leftover space rather than failing open').toBe(true);
 
     await ctx.close();
   });
