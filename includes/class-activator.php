@@ -134,6 +134,12 @@ class Activator {
 		if ( get_option( 'faz_migrations_version' ) === self::MIGRATIONS_VERSION ) {
 			return;
 		}
+		// Steps that can decline to complete without failing the batch report it
+		// here. A `return false` is NOT the same as a throw: every migration
+		// after it still runs, and only the version marker is withheld, so the
+		// declining step is retried on the next admin load instead of waiting
+		// for the next release to bump MIGRATIONS_VERSION.
+		$all_complete = true;
 		try {
 			self::ensure_uncategorized_category();
 			self::ensure_wordpress_internal_category();
@@ -142,7 +148,7 @@ class Activator {
 			self::fix_banner_gdpr_defaults();
 			self::fix_brand_logo_path();
 			self::seed_default_whitelist();
-			self::seed_own_consent_cookie();
+			$all_complete = self::seed_own_consent_cookie() && $all_complete;
 			self::add_recaptcha_gstatic_pattern();
 			self::enable_gpc_on_ccpa_banners();
 			self::ensure_share_personal_data_column();
@@ -170,6 +176,16 @@ class Activator {
 			// per admin load, which is strictly cheaper than a stale classifier
 			// authorising the wrong deletions.
 			do_action( 'faz_clear_cache' );
+		}
+		// Withheld when a step declined, so the batch is reconsidered on the next
+		// admin load. Writing it regardless is what made an incomplete seed
+		// permanent: the fast path above returns before the try, so a step that
+		// never got to run was never called again until a release changed
+		// MIGRATIONS_VERSION — while its own comments claimed the next migration
+		// would retry it. The remaining migrations are individually flagged and
+		// idempotent, so re-entering the batch costs their guard reads.
+		if ( ! $all_complete ) {
+			return;
 		}
 		update_option( 'faz_migrations_version', self::MIGRATIONS_VERSION, false );
 
@@ -459,30 +475,38 @@ class Activator {
 	 * and one who deleted it does not get it silently restored — the marker is
 	 * written once and this never runs again.
 	 *
-	 * @return void
+	 * @return bool True when the row is seeded or already accounted for; false
+	 *              when this attempt could not complete and must be retried.
+	 *              run_pending_migrations() withholds faz_migrations_version on
+	 *              false — see the note there for why the caller, and not a
+	 *              thrown exception, owns that decision.
 	 */
 	private static function seed_own_consent_cookie() {
 		// Same discipline as the sibling seeders: marker first as a guard,
 		// written LAST and only on success, so a failed write is retried on the
 		// next migration rather than being recorded as done.
 		if ( get_option( 'faz_own_cookie_seeded' ) ) {
-			return;
+			return true;
 		}
 
 		// The scanner classes live in the admin module tree, which is not
 		// guaranteed to be loaded in every context this migration batch runs in.
-		// Returning WITHOUT the marker means the next migration retries; throwing
-		// would take the whole batch down with it, which is the failure this
-		// codebase already learned once in run_retention_cleanup().
+		// Report the miss instead of returning quietly: the marker alone cannot
+		// buy a retry, because run_pending_migrations() is gated on
+		// faz_migrations_version and never calls this again once that is
+		// written. Throwing would take the whole batch down with it, which is
+		// the failure this codebase already learned once in
+		// run_retention_cleanup(); a false return costs only the version marker.
 		if ( ! class_exists( Cookie_Database::class ) || ! class_exists( Scanner_Controller::class ) ) {
-			return;
+			return false;
 		}
 
 		$definition = Cookie_Database::lookup( 'fazcookie-consent' );
 		if ( ! is_array( $definition ) ) {
 			// The built-in record is the single source of truth for wording and
 			// category; inventing a second copy here would let the two drift.
-			return;
+			// Retryable, not done: the catalogue may simply not be loaded yet.
+			return false;
 		}
 
 		try {
@@ -509,23 +533,28 @@ class Activator {
 				)
 			);
 		} catch ( \Throwable $e ) {
-			// No marker: the next migration retries. A cookie missing from the
-			// declaration for one more admin load costs nothing; a batch that
-			// stops here costs every migration behind it.
-			return;
+			// Reported, not thrown. A cookie missing from the declaration for one
+			// more admin load costs nothing; a batch that stops here costs every
+			// migration behind it. The false return is what actually buys the
+			// retry — before it, the version marker was written anyway and this
+			// never ran again until the next release bumped MIGRATIONS_VERSION.
+			return false;
 		}
 
-		// A failed marker write is survivable — the next version bump re-runs the
-		// seed, exactly as seed_default_whitelist() does — but it should not be
-		// silent. Review asked for a RuntimeException here instead; that would
-		// abort the shared migration sequence at this call and skip every
-		// sibling after it, which is the bug d76d0fa was written to fix. Report,
-		// do not throw.
+		// A failed marker write is survivable — the seed re-runs — but it should
+		// not be silent. Review asked for a RuntimeException here instead; that
+		// would abort the shared migration sequence at this call and skip every
+		// sibling after it, which is the bug d76d0fa was written to fix. Report
+		// and return false: the caller withholds the version, so the retry
+		// happens on the next admin load rather than the next release.
 		if ( ! add_option( 'faz_own_cookie_seeded', '1', '', false )
 			&& ! get_option( 'faz_own_cookie_seeded' ) ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- surfacing a silent migration failure, same as run_retention_cleanup().
-			error_log( 'FAZ Cookie Manager: could not persist faz_own_cookie_seeded; the consent-cookie seed will re-run on the next migration.' );
+			error_log( 'FAZ Cookie Manager: could not persist faz_own_cookie_seeded; the consent-cookie seed will re-run on the next admin load.' );
+			return false;
 		}
+
+		return true;
 	}
 
 	/**

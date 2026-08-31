@@ -160,6 +160,19 @@ namespace {
 	 * @return array Actions fired during the batch.
 	 */
 	function mig_run( $options = array(), $boom = '' ) {
+		// seed_own_consent_cookie() reaches into the scanner module tree, which
+		// this harness does not load — no autoloader is registered here, so
+		// class_exists() is false and the step correctly declines, which now
+		// withholds faz_migrations_version and would make every assertion below
+		// read as "the batch did not complete". That is a property of the
+		// harness, not of the code under test: on a real admin request the
+		// autoloader resolves both classes. Start from an install where that
+		// step is already done, so this file keeps testing what it is about —
+		// the cache bust. The declined-step behaviour itself is covered in
+		// test-geo-enforcement-migration-php.php.
+		if ( ! array_key_exists( 'faz_own_cookie_seeded', $options ) ) {
+			$options['faz_own_cookie_seeded'] = '1';
+		}
 		$GLOBALS['faz_mig_options'] = $options;
 		$GLOBALS['faz_mig_actions'] = array();
 		$GLOBALS['faz_mig_boom']    = $boom;
