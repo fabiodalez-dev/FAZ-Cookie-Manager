@@ -1642,7 +1642,19 @@ class Frontend {
 		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
 			$has_source = true;
 		}
-		if ( ! $has_source && ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- presence test only.
+		// mod_geoip had the SAME defect, three lines below the fix — and the
+		// comment above claimed CF was "the one place", which is how it survived
+		// a review. GEOIP_COUNTRY_CODE is set by Apache from REMOTE_ADDR, so a
+		// cache warmer hitting from localhost carries none: the presence test
+		// answered "no source", the response was cached without the veto, and a
+		// real visitor was then served a page rendered for country ''. On an
+		// install whose only source is mod_geoip that is the whole audience.
+		//
+		// Configuration, not resolution: the module being loaded is the signal.
+		// apache_get_modules() is unavailable under PHP-FPM, so fall back to the
+		// header — on a warmer request that leaves the veto OFF exactly as
+		// before, never weaker, and the filter is the explicit override.
+		if ( ! $has_source && $this->mod_geoip_configured() ) {
 			$has_source = true;
 		}
 		if ( ! $has_source && function_exists( 'geoip_country_code_by_name' ) ) {
@@ -1670,6 +1682,33 @@ class Frontend {
 		 * @param bool $has_source Whether a country source was detected.
 		 */
 		return (bool) apply_filters( 'faz_has_country_signal_source', $has_source );
+	}
+
+	/**
+	 * Whether Apache mod_geoip is configured on this site.
+	 *
+	 * Asks whether the MODULE is loaded, not whether THIS request carries its
+	 * header — the distinction the cache veto turns on. mod_geoip resolves
+	 * REMOTE_ADDR and emits nothing for loopback or private addresses, so a
+	 * cache warmer's request looks identical to "no geo source at all" if you
+	 * only test the header.
+	 *
+	 * apache_get_modules() exists only under mod_php. Under PHP-FPM (and CGI)
+	 * there is no way to enumerate Apache's modules from PHP, so fall back to
+	 * the header. That fallback is the pre-existing behaviour, so this can only
+	 * ever widen the veto, never narrow it, and `faz_has_country_signal_source`
+	 * remains the explicit override for a publisher who knows their stack.
+	 *
+	 * @return bool
+	 */
+	private function mod_geoip_configured() {
+		if ( function_exists( 'apache_get_modules' ) ) {
+			$modules = apache_get_modules();
+			if ( is_array( $modules ) && in_array( 'mod_geoip', $modules, true ) ) {
+				return true;
+			}
+		}
+		return ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- presence test only.
 	}
 
 	/**

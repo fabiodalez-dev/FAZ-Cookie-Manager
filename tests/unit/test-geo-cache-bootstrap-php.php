@@ -143,6 +143,16 @@ namespace {
 
 	$passed = 0;
 	$failed = 0;
+	// CLI PHP has no apache_get_modules(); the predicate under test asks whether
+	// the MODULE is configured rather than whether this request carries its
+	// header, so the suite has to be able to stand one up. Driven by a global so
+	// a case can present the module as loaded, absent, or (unset) unavailable.
+	function apache_get_modules() {
+		return isset( $GLOBALS['faz_fake_apache_modules'] )
+			? (array) $GLOBALS['faz_fake_apache_modules']
+			: array();
+	}
+
 	function faz_geo_bootstrap_same( $actual, $expected, $label ) {
 		global $passed, $failed;
 		if ( $actual === $expected ) {
@@ -219,6 +229,46 @@ namespace {
 	add_filter( 'faz_trust_cf_ipcountry_header', static function () { return true; } );
 	faz_geo_bootstrap_same( $off->flying_press_is_cacheable( true ), false, 'a trusted CF header counts as a source even on a request that lacks it (cache-warmer leak)' );
 	unset( $GLOBALS['faz_geo_bootstrap_filters']['faz_trust_cf_ipcountry_header'] );
+
+	// The SAME leak through mod_geoip, which the CF fix left behind — and whose
+	// comment asserted CF "was the one place", three lines above a branch doing
+	// exactly the same thing. Nothing pinned this predicate directly: every case
+	// above reaches it through the filter or through a header it sets itself, so
+	// the sibling could not fail a test.
+	//
+	// GEOIP_COUNTRY_CODE is derived from REMOTE_ADDR, so a warmer on loopback
+	// carries none. The case therefore asserts the veto WITHOUT the header,
+	// which is the whole scenario — and it has to reach the real branch to mean
+	// anything. Going through `faz_has_country_signal_source` would have passed
+	// before the fix as well; standing up apache_get_modules(), which CLI PHP
+	// does not have, is what makes this case able to fail.
+	$GLOBALS['faz_fake_apache_modules'] = array( 'mod_rewrite', 'mod_geoip' );
+	faz_geo_bootstrap_same(
+		$off->flying_press_is_cacheable( true ),
+		false,
+		'mod_geoip being LOADED vetoes the cache on a request that carries no country header (cache-warmer leak)'
+	);
+
+	// The other direction, so the case cannot pass by always vetoing: the module
+	// absent and no header means no source, and the page stays cacheable.
+	$GLOBALS['faz_fake_apache_modules'] = array( 'mod_rewrite' );
+	faz_geo_bootstrap_same(
+		$off->flying_press_is_cacheable( true ),
+		true,
+		'without mod_geoip and without a header there is no source, so the cache is kept'
+	);
+	unset( $GLOBALS['faz_fake_apache_modules'] );
+
+	// And the direction that must NOT change: a request that merely happens to
+	// carry the header still counts, so hosts running mod_geoip under PHP-FPM
+	// keep the veto they had before.
+	$_SERVER['GEOIP_COUNTRY_CODE'] = 'IT';
+	faz_geo_bootstrap_same(
+		$off->flying_press_is_cacheable( true ),
+		false,
+		'the mod_geoip header still counts as a source where the module cannot be enumerated'
+	);
+	unset( $_SERVER['GEOIP_COUNTRY_CODE'] );
 
 	faz_geo_bootstrap_reset();
 	$saved_opt_in_settings = array(
