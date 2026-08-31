@@ -215,6 +215,14 @@ class Frontend {
 		// headers pending until page, AJAX, REST and redirect callbacks have had a
 		// chance to emit Set-Cookie. The output callback then filters the final
 		// header set immediately before PHP sends it.
+		// WP Consent API: declare the consent TYPE, not merely that a CMP exists.
+		// Without this filter the API treats the site as having no consent
+		// management at all and wp_has_consent() returns TRUE for every category
+		// — so any Consent-API-aware plugin gating server-rendered output on
+		// wp_has_consent('marketing') printed its pixel on every request, before
+		// any consent, on every FAZ install. Registering the plugin (below in
+		// faz-cookie-manager.php) was never enough on its own.
+		add_filter( 'wp_get_consent_type', array( $this, 'filter_wp_consent_type' ) );
 		add_action( 'init', array( $this, 'start_server_cookie_guard' ), 20 );
 		add_filter( 'rest_pre_echo_response', array( $this, 'filter_server_cookies_before_rest_echo' ), PHP_INT_MAX, 3 );
 		add_filter( 'wp_redirect', array( $this, 'filter_server_cookies_before_redirect' ), PHP_INT_MAX, 2 );
@@ -1682,6 +1690,32 @@ class Frontend {
 		 * @param bool $has_source Whether a country source was detected.
 		 */
 		return (bool) apply_filters( 'faz_has_country_signal_source', $has_source );
+	}
+
+	/**
+	 * Declare the WP Consent API consent type for this visitor.
+	 *
+	 * `optin`  — nothing may fire before an affirmative act (GDPR and friends).
+	 * `optout` — processing is permitted until the visitor objects (CCPA/CPRA).
+	 *
+	 * Resolved from the banner already selected for this visitor, which is the
+	 * same source get_blocked_categories() uses for `$is_optout_law`, so the
+	 * Consent API and this plugin's own gating can never disagree about the
+	 * regime. Before the banner is loaded there is nothing to distinguish, and
+	 * the stricter answer is the safe one.
+	 *
+	 * @param string $type Type proposed by another integration.
+	 * @return string
+	 */
+	public function filter_wp_consent_type( $type ) {
+		// Never downgrade a stricter declaration another plugin already made.
+		if ( 'optin' === $type ) {
+			return $type;
+		}
+		if ( $this->banner && 'ccpa' === $this->banner->get_law() ) {
+			return 'optout';
+		}
+		return 'optin';
 	}
 
 	/**

@@ -64,8 +64,12 @@
 	}
 
 	// Map FAZ category slugs → TCF Purpose IDs
+	// NOTE: `necessary` maps to NOTHING on purpose. TCF Purpose 1 ("Store and/or
+	// access information on a device") is a consent-basis purpose; the strictly-
+	// necessary category is consent-EXEMPT precisely because it does not rely on
+	// it. Mapping the two mints a consent the visitor never gave — see
+	// buildPurposeConsent() for how Purpose 1 is actually decided.
 	var CATEGORY_TO_PURPOSES = {
-		necessary:     [1],
 		functional:    [5, 6, 11],
 		analytics:     [8, 9, 10],
 		performance:   [8, 9],
@@ -150,9 +154,14 @@
 	 * Read the FAZ consent cookie and return a category→boolean map.
 	 */
 	function readConsent() {
-		var consent = { necessary: true };
+		// `_acted` records whether this visitor has actually made a choice. It is
+		// NOT a category — it is the difference between "no consent yet" and "the
+		// visitor decided". Purpose 1 turns on it, so a pre-banner pageview can no
+		// longer be presented to vendors as a settled record (#compliance-audit).
+		var consent = { necessary: true, _acted: false };
 		var pairs = readConsentCookiePairs();
 		if (!pairs || isConsentCookieStale(pairs)) return consent;
+		consent._acted = pairs.action === "yes";
 
 		Object.keys(pairs).forEach(function(key) {
 			var val = pairs[key];
@@ -205,7 +214,24 @@
 				}
 			}
 		}
-		purposes["1"] = PURPOSE_ONE_TREATMENT ? false : !!categoryConsent.necessary;
+		// Purpose 1 is earned, not assumed. It used to read
+		// `!!categoryConsent.necessary`, and readConsent() returns necessary:true
+		// unconditionally — so every TC string this CMP ever built carried
+		// Purpose 1 granted, from the first pre-banner pageview through an
+		// explicit Reject All. That is exactly what an IAB validator decodes.
+		//
+		// Correct basis: the visitor made a choice AND that choice granted at
+		// least one purpose that genuinely needs device storage. Reject All
+		// therefore clears it, and so does a pageview before the banner is
+		// answered.
+		var grantedNonNecessary = false;
+		for (var pid in purposes) {
+			if (purposes.hasOwnProperty(pid) && purposes[pid] && pid !== "1") {
+				grantedNonNecessary = true;
+				break;
+			}
+		}
+		purposes["1"] = PURPOSE_ONE_TREATMENT ? false : (!!categoryConsent._acted && grantedNonNecessary);
 		return purposes;
 	}
 

@@ -43,20 +43,29 @@ function applyConsentToWpApi() {
     window.wp_consent_type = consentData.activeLaw ? consentType[consentData.activeLaw] : 'optin';
     let event = new CustomEvent('wp_consent_type_defined');
     document.dispatchEvent( event );
+    // Resolve every FAZ category onto its WP Consent API purpose(s) FIRST, and
+    // let a denial win, before writing anything.
+    //
+    // Applying them one at a time wrote each purpose independently, so when two
+    // categories share a purpose the last one iterated decided it. `analytics`
+    // and `performance` both map to `statistics`, and both ship in the default
+    // category set: a visitor who denied Analytics but allowed Performance had
+    // `statistics` written `allow`, because `performance` comes later in the
+    // object. Merging two inputs onto one signal has to be most-restrictive —
+    // granted-wins always errs toward tracking the visitor refused.
+    const resolved = {};
     Object.entries(categories).forEach(([key, value]) => {
-        if (!(key in categoryMap))
-            return;
-        setConsentStatus(key, value ? 'allow' : 'deny');
+        if (!(key in categoryMap)) return;
+        const purposes = Array.isArray(categoryMap[key]) ? categoryMap[key] : [categoryMap[key]];
+        purposes.forEach((purpose) => {
+            // deny is sticky: once any contributing category denied a purpose,
+            // no later category can raise it back to allow.
+            resolved[purpose] = (purpose in resolved) ? (resolved[purpose] && !!value) : !!value;
+        });
     });
-    function setConsentStatus(key, status) {
-        if (Array.isArray(categoryMap[key])) {
-            categoryMap[key].forEach(el => {
-                wp_set_consent(el, status);
-            });
-        } else {
-            wp_set_consent(categoryMap[key], status);
-        }
-    }
+    Object.entries(resolved).forEach(([purpose, allowed]) => {
+        wp_set_consent(purpose, allowed ? 'allow' : 'deny');
+    });
 }
 
 // fazcookie_consent_update covers a first visit and every explicit choice.

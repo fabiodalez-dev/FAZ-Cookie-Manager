@@ -255,8 +255,23 @@ function buildConsentState(cookieObj) {
     // analytics_storage is granted when EITHER the "analytics" OR the
     // "performance" category is granted (performance is a valid analytics-class
     // slug on some installs); previously "performance" was dropped entirely.
+    // Two categories, one signal: most-restrictive wins. `||` was added to stop
+    // "performance" being dropped entirely, which was a real bug — but it fixed
+    // the missing direction by introducing the wrong one. Both slugs ship in the
+    // default category set, so a visitor who DENIED Analytics and allowed
+    // Performance was signalled analytics_storage: granted, and under Advanced
+    // Consent Mode (where the Google stack is deliberately not blocked) GA4 then
+    // actually wrote its cookies.
+    //
+    // Read the RAW cookie value, not fazCat(): fazCat answers "denied" for a
+    // category that is simply absent, which would make a site offering only
+    // "analytics" deny it forever because "performance" is missing. A category
+    // the visitor is never shown cannot deny anything.
+    var analyticsInputs = ["analytics", "performance"]
+        .map(function (slug) { return cookieObj ? cookieObj[slug] : undefined; })
+        .filter(function (value) { return "granted" === value || "denied" === value; });
     var analytics =
-        fazCat(cookieObj, "analytics") === "granted" || fazCat(cookieObj, "performance") === "granted"
+        analyticsInputs.length && analyticsInputs.every(function (v) { return "granted" === v; })
             ? "granted"
             : "denied";
     // Non-personalized ads fallback: when enabled and marketing is denied, we
