@@ -179,7 +179,7 @@ function run() {
 
     // --- Case 7: the guard must outlive a LATE filter list. --------------------
     //
-    // This started as one deferred check at 1200ms, which only ever meets a
+    // The schedule started as a single deferred check at 1200ms, which only meets a
     // cosmetic rule that is already applied by first paint. Measured against a
     // real page, an EasyList-Cookie style rule injected AFTER that single check
     // left the banner hidden permanently (#253: DuckDuckGo mobile, protection

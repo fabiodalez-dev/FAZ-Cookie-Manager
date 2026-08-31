@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: FAZ Cookie Manager 1.27.1\n"
+"Project-Id-Version: FAZ Cookie Manager 1.28.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-25T18:44:34+00:00\n"
+"POT-Creation-Date: 2026-08-31T18:12:59+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
@@ -53,7 +53,7 @@ msgstr ""
 
 #: admin/class-admin.php:231
 #: admin/views/base.php:21
-#: frontend/class-frontend.php:2632
+#: frontend/class-frontend.php:2709
 #: frontend/modules/banner-rest/class-banner-rest.php:597
 msgid "Cookies"
 msgstr ""
@@ -3499,7 +3499,7 @@ msgid "Notice Title"
 msgstr ""
 
 #: admin/views/banner.php:342
-#: frontend/class-frontend.php:2627
+#: frontend/class-frontend.php:2704
 #: frontend/modules/banner-rest/class-banner-rest.php:592
 msgid "We value your privacy"
 msgstr ""
@@ -3832,7 +3832,7 @@ msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking 
 msgstr ""
 
 #: admin/views/banner.php:828
-#: frontend/class-frontend.php:2629
+#: frontend/class-frontend.php:2706
 #: frontend/modules/banner-rest/class-banner-rest.php:594
 msgid "Opt-out Preferences"
 msgstr ""
@@ -5157,7 +5157,7 @@ msgid "Keep banner visible against ad blockers"
 msgstr ""
 
 #: admin/views/settings.php:60
-msgid "If an ad blocker's cosmetic filter list hides the consent banner (some lists hide any element whose name contains \"cookie\" or \"consent\"), this re-asserts the banner's visibility once, shortly after it loads, so the legally required notice is not suppressed. It never forces interaction and respects a visitor who has already accepted, rejected or dismissed. This is different from Ad-blocker compatibility mode above, which stops the banner script itself from being blocked."
+msgid "If an ad blocker's cosmetic filter list hides the consent banner (some lists hide any element whose name contains \"cookie\" or \"consent\"), this re-asserts the banner's visibility a few times over the first seconds after it loads, so the legally required notice is not suppressed even when the filter list is applied late. It never forces interaction and respects a visitor who has already accepted, rejected or dismissed. This is different from Ad-blocker compatibility mode above, which stops the banner script itself from being blocked."
 msgstr ""
 
 #: admin/views/settings.php:66
@@ -6367,50 +6367,50 @@ msgstr ""
 msgid "{name} disabled, enable {name}"
 msgstr ""
 
-#: frontend/class-frontend.php:2628
+#: frontend/class-frontend.php:2705
 #: frontend/modules/banner-rest/class-banner-rest.php:593
 msgid "Your cookie preferences have been saved."
 msgstr ""
 
-#: frontend/class-frontend.php:2630
+#: frontend/class-frontend.php:2707
 #: frontend/modules/banner-rest/class-banner-rest.php:595
 msgid "Customise Consent Preferences"
 msgstr ""
 
-#: frontend/class-frontend.php:2631
+#: frontend/class-frontend.php:2708
 #: frontend/modules/banner-rest/class-banner-rest.php:596
 msgid "Service consent"
 msgstr ""
 
-#: frontend/class-frontend.php:2633
+#: frontend/class-frontend.php:2710
 #: frontend/modules/banner-rest/class-banner-rest.php:598
 msgid "Cookie consent"
 msgstr ""
 
-#: frontend/class-frontend.php:2634
+#: frontend/class-frontend.php:2711
 #: frontend/modules/banner-rest/class-banner-rest.php:599
 msgid "Vendor consent"
 msgstr ""
 
-#: frontend/class-frontend.php:2635
+#: frontend/class-frontend.php:2712
 #: frontend/modules/banner-rest/class-banner-rest.php:600
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr ""
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:2639
+#: frontend/class-frontend.php:2716
 #: frontend/modules/banner-rest/class-banner-rest.php:605
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr ""
 
-#: frontend/class-frontend.php:2640
+#: frontend/class-frontend.php:2717
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr ""
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:2647
+#: frontend/class-frontend.php:2724
 #: frontend/modules/banner-rest/class-banner-rest.php:608
 #, php-format
 msgid "Banner closes automatically in %d s..."

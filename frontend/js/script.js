@@ -1673,11 +1673,14 @@ var _fazAdblockGuardScheduled = false;
  * inject `##[class*=consent]` / `##[id*=cookie]` rules that hide any element
  * whose class/id contains "cookie"/"consent" — which matches FAZ's own
  * `.faz-consent-container` / `#faz-consent`, suppressing a LEGALLY REQUIRED
- * notice. When the admin enables the safeguard, we schedule ONE deferred check
- * that re-asserts the banner container's visibility if (and only if) an
- * external rule has hidden it.
+ * notice. When the admin enables the safeguard, we schedule a SHORT BOUNDED
+ * SERIES of deferred checks, each of which re-asserts the banner container's
+ * visibility if (and only if) an external rule has hidden it.
  *
- * This is deliberately a single deferred re-assert — not a loop and not a
+ * A series rather than the single check this started as, because one timer only
+ * ever meets a list that is already applied by first paint; one arriving later
+ * — the mobile case in #253 — was never seen at all. Still deliberately
+ * bounded — not a loop and not a
  * MutationObserver war with the filter list: it keeps the behaviour
  * transparent, CPU-cheap, and squarely on the "keep a mandatory notice
  * visible" side rather than "defeat a privacy tool". It never forces

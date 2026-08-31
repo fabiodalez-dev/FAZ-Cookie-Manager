@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-08-25T18:44:34+00:00\n"
+"POT-Creation-Date: 2026-08-31T18:12:59+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -49,7 +49,7 @@ msgid "Cookie Banner"
 msgstr "Banner cookie"
 
 #: admin/class-admin.php:231 admin/views/base.php:21
-#: frontend/class-frontend.php:2632
+#: frontend/class-frontend.php:2709
 #: frontend/modules/banner-rest/class-banner-rest.php:597
 msgid "Cookies"
 msgstr "Cookie"
@@ -3680,7 +3680,7 @@ msgstr "Lingua:"
 msgid "Notice Title"
 msgstr "Titolo dell'avviso"
 
-#: admin/views/banner.php:342 frontend/class-frontend.php:2627
+#: admin/views/banner.php:342 frontend/class-frontend.php:2704
 #: frontend/modules/banner-rest/class-banner-rest.php:592
 msgid "We value your privacy"
 msgstr "La tua privacy è importante"
@@ -4007,7 +4007,7 @@ msgstr "Testo opt-out (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Testo del modale «Preferenze di opt-out» che il visitatore vede dopo aver cliccato il link «Do Not Sell or Share My Personal Information». Mostrato solo sui banner CCPA / US State Laws (ed Entrambi). Segue la lingua selezionata qui sopra."
 
-#: admin/views/banner.php:828 frontend/class-frontend.php:2629
+#: admin/views/banner.php:828 frontend/class-frontend.php:2706
 #: frontend/modules/banner-rest/class-banner-rest.php:594
 msgid "Opt-out Preferences"
 msgstr "Preferenze di opt-out"
@@ -5297,8 +5297,8 @@ msgid "Keep banner visible against ad blockers"
 msgstr "Mantieni il banner visibile contro gli ad blocker"
 
 #: admin/views/settings.php:60
-msgid "If an ad blocker's cosmetic filter list hides the consent banner (some lists hide any element whose name contains \"cookie\" or \"consent\"), this re-asserts the banner's visibility once, shortly after it loads, so the legally required notice is not suppressed. It never forces interaction and respects a visitor who has already accepted, rejected or dismissed. This is different from Ad-blocker compatibility mode above, which stops the banner script itself from being blocked."
-msgstr "Se la lista di filtri cosmetici di un ad blocker nasconde il banner di consenso (alcune liste nascondono qualsiasi elemento il cui nome contiene «cookie» o «consent»), questa opzione ripristina una volta la visibilità del banner, poco dopo il suo caricamento, in modo che l’informativa richiesta dalla legge non venga soppressa. Non forza mai l’interazione e rispetta il visitatore che ha già accettato, rifiutato o chiuso il banner. È diversa dalla modalità Compatibilità con gli ad blocker qui sopra, che impedisce il blocco dello script stesso del banner."
+msgid "If an ad blocker's cosmetic filter list hides the consent banner (some lists hide any element whose name contains \"cookie\" or \"consent\"), this re-asserts the banner's visibility a few times over the first seconds after it loads, so the legally required notice is not suppressed even when the filter list is applied late. It never forces interaction and respects a visitor who has already accepted, rejected or dismissed. This is different from Ad-blocker compatibility mode above, which stops the banner script itself from being blocked."
+msgstr "Se la lista di filtri cosmetici di un ad blocker nasconde il banner di consenso (alcune liste nascondono qualsiasi elemento il cui nome contenga \"cookie\" o \"consent\"), questa opzione riafferma la visibilità del banner alcune volte nei primi secondi dopo il caricamento, così l'avviso richiesto per legge non viene soppresso nemmeno quando la lista di filtri viene applicata in ritardo. Non forza mai l'interazione e rispetta chi ha già accettato, rifiutato o chiuso il banner. È diverso dalla Modalità di compatibilità con gli ad blocker qui sopra, che impedisce che sia lo script stesso del banner a essere bloccato."
 
 #: admin/views/settings.php:66
 msgid "Enable per-service consent"
@@ -6499,50 +6499,50 @@ msgstr "{name} abilitato, disabilita {name}"
 msgid "{name} disabled, enable {name}"
 msgstr "{name} disabilitato, abilita {name}"
 
-#: frontend/class-frontend.php:2628
+#: frontend/class-frontend.php:2705
 #: frontend/modules/banner-rest/class-banner-rest.php:593
 msgid "Your cookie preferences have been saved."
 msgstr "Le tue preferenze sui cookie sono state salvate."
 
-#: frontend/class-frontend.php:2630
+#: frontend/class-frontend.php:2707
 #: frontend/modules/banner-rest/class-banner-rest.php:595
 msgid "Customise Consent Preferences"
 msgstr "Personalizza le preferenze di consenso"
 
-#: frontend/class-frontend.php:2631
+#: frontend/class-frontend.php:2708
 #: frontend/modules/banner-rest/class-banner-rest.php:596
 msgid "Service consent"
 msgstr "Consenso al servizio"
 
-#: frontend/class-frontend.php:2633
+#: frontend/class-frontend.php:2710
 #: frontend/modules/banner-rest/class-banner-rest.php:598
 msgid "Cookie consent"
 msgstr "Consenso ai cookie"
 
-#: frontend/class-frontend.php:2634
+#: frontend/class-frontend.php:2711
 #: frontend/modules/banner-rest/class-banner-rest.php:599
 msgid "Vendor consent"
 msgstr "Consenso fornitore"
 
-#: frontend/class-frontend.php:2635
+#: frontend/class-frontend.php:2712
 #: frontend/modules/banner-rest/class-banner-rest.php:600
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Questi cookie sono impostati dal servizio incorporato sul proprio dominio e si controllano consentendo o bloccando l'embed qui sopra — non possono essere rimossi singolarmente."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:2639
+#: frontend/class-frontend.php:2716
 #: frontend/modules/banner-rest/class-banner-rest.php:605
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Confermo di avere almeno %d anni"
 
-#: frontend/class-frontend.php:2640
+#: frontend/class-frontend.php:2717
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Conferma di avere l’età minima per accettare i cookie facoltativi."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:2647
+#: frontend/class-frontend.php:2724
 #: frontend/modules/banner-rest/class-banner-rest.php:608
 #, php-format
 msgid "Banner closes automatically in %d s..."
