@@ -216,9 +216,18 @@ class Cookie_Database {
 			'description' => 'Used by Google reCAPTCHA to distinguish between humans and bots.',
 		),
 		// GDPR/Cookie consent.
+		// 6 months, not the "1 year" this used to declare. The cookie is written
+		// by JS, so a scan never observes a Set-Cookie expiry and cannot correct
+		// the record — it stays at whatever this table says. Meanwhile
+		// Frontend::normalize_consent_expiry() caps the real lifetime at 182 days
+		// for every non-CCPA banner (Garante: consent expires within 6 months),
+		// so the declaration was wrong by a factor of two on every GDPR site that
+		// ran the built-in scanner. Under CCPA the cap does not apply and the
+		// cookie can genuinely live longer; the declaration is law-invariant, so
+		// state the shorter, always-true figure rather than the longer one.
 		'fazcookie-consent'       => array(
 			'category'    => 'necessary',
-			'duration'    => '1 year',
+			'duration'    => '6 months',
 			'description' => 'Cookie consent preferences set by the visitor.',
 		),
 		'brikpanel_vid'           => array(

@@ -3639,10 +3639,50 @@ class Frontend {
 			}
 		}
 
-		// 5. Block <link rel="stylesheet"> (Google Fonts, Adobe Fonts, etc.).
+		// 4b. Block tracking <img> pixels rendered directly in the document.
+		//
+		// The identical beacon inside <noscript> was already gated, but one in
+		// the body was not: the buffer had no <img> pass at all, despite the
+		// docblock above claiming "Images: src → data-faz-src". A conversion
+		// plugin or an affiliate network that server-renders
+		// `<img src="https://www.facebook.com/tr?id=X&ev=Purchase" width="1">`
+		// fired it for every visitor, including one who had rejected marketing —
+		// and for a beacon the request IS the tracking event, so the client-side
+		// MutationObserver backstop cannot undo it: the preload scanner dispatches
+		// the fetch before any script runs.
+		if ( false !== stripos( $html, '<img' ) ) {
+			$result = preg_replace_callback(
+				'#<img\b([^>]*)/?>#is',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_img_tag( $m, $providers, $blocked_categories );
+				},
+				$html
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
+		}
+
+		// 5. Block fetching <link> tags: stylesheet AND the preload family.
+		//
+		// This used to match rel="stylesheet" only, which left the whole preload
+		// family open: `<link rel="preload" as="script" href="…/gtag/js?id=G-X">`
+		// is fetched by the browser's PRELOAD SCANNER, before any script runs, so
+		// the paired <script> being correctly re-typed to text/plain stops the
+		// execution but not the request. The visitor's IP and full URL reach the
+		// provider on a first visit with no consent — and with as="image" on a
+		// beacon URL the tracking hit completes outright. The ubiquitous
+		// async-CSS pattern (rel="preload" as="style" onload="this.rel='stylesheet'")
+		// escaped the same way.
+		//
+		// dns-prefetch/preconnect are deliberately NOT gated: they resolve DNS
+		// and open a socket but transfer no URL and set no cookie, and gating
+		// them would break unrelated performance work for no privacy gain.
 		if ( false !== stripos( $html, '<link' ) ) {
 			$result = preg_replace_callback(
-				'#<link\b([^>]*rel\s*=\s*["\']stylesheet["\'][^>]*)/?>#is',
+				'#<link\b([^>]*rel\s*=\s*["\'](?:stylesheet|preload|modulepreload|prefetch|prerender)["\'][^>]*)/?>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_link_tag( $m, $providers, $blocked_categories );
 				},
@@ -4124,6 +4164,56 @@ class Frontend {
 	 * @param array $blocked_categories Currently blocked category slugs.
 	 * @return string
 	 */
+	/**
+	 * Process an <img> tag rendered directly in the document.
+	 *
+	 * Deliberately narrow: an image is only gated when it matches a blocked
+	 * PROVIDER pattern or a denied per-service decision — i.e. it is a known
+	 * tracking endpoint. Ordinary content images, and anything already carrying
+	 * data-faz-src, are returned untouched, because gating them would blank the
+	 * page for a visitor who has merely not answered the banner yet.
+	 *
+	 * @param array $m                  Regex match: [0] full tag, [1] attributes.
+	 * @param array $providers          Provider match table.
+	 * @param array $blocked_categories Categories blocked for this visitor.
+	 * @return string
+	 */
+	private function process_img_tag( $m, $providers, $blocked_categories ) {
+		$attrs = $m[1];
+		$full  = $m[0];
+
+		if ( false !== strpos( $attrs, 'data-faz-src' ) ) {
+			return $full;
+		}
+		if ( $this->is_whitelisted( $attrs, '' ) ) {
+			return $full;
+		}
+
+		$matched_category = $this->match_script_to_provider( $attrs, '', $providers );
+		$svc_blocked      = $this->check_per_service_blocking( $attrs, '' );
+
+		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
+			// No blocked provider matched: gate only on an explicit service denial.
+			if ( true !== $svc_blocked ) {
+				return $full;
+			}
+			if ( ! $matched_category ) {
+				$matched_category = 'functional';
+			}
+		} elseif ( false === $svc_blocked ) {
+			// The category is blocked but this service was explicitly allowed.
+			return $full;
+		}
+
+		// Rename src → data-faz-src (first occurrence only, and never data-src).
+		$new_attrs = preg_replace( '/(^|\s)src\s*=\s*/i', '$1data-faz-src=', $attrs, 1 );
+		if ( null === $new_attrs || $new_attrs === $attrs ) {
+			return $full; // Nothing to park (no src, or PCRE failure) — leave as is.
+		}
+		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		return '<img' . $new_attrs . '>';
+	}
+
 	private function process_link_tag( $m, $providers, $blocked_categories ) {
 		$attrs = $m[1];
 		$full  = $m[0];
