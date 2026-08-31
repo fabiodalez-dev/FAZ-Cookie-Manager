@@ -2,6 +2,15 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Three more locales pointed at translations WordPress does not have.** The audit that followed the Croatian report ("Croatian translation not loading in FAZ 1.26.0") corrected eleven mappings by hand and left three behind: `es_PY`, `en_IN` and `en_IE` have never existed in WordPress, which ships thirteen Spanish locales and six English ones, none of them these. A locale that does not exist fails silently — `switch_to_locale()` finds no catalogue and the text renders in English — so a Paraguayan visitor was served English instead of Spanish, and Ireland and India quietly lost the British spelling that mapping exists to preserve. Paraguay now uses `es_MX`, this block's own stated Latin-American baseline, and Ireland and India use `en_GB`.
+- The Croatian catalogue still declared `Language: hr_HR` in its header while the file itself had been renamed to `-hr`. WordPress resolves the catalogue by filename, so nothing broke at runtime, but the stale header is what translation tools read — and regenerate filenames from.
+
+### Added
+- `tests/unit/test-locale-map-validity-php.php` asserts every locale the plugin maps to is one WordPress actually ships, checked against the real `wp core language list`. Reading a table of locale codes is precisely the check a person performs badly: the previous pass was done by eye, corrected eleven entries, and missed three.
+
 ## [1.28.1] — 2026-08-26
 
 ### Fixed

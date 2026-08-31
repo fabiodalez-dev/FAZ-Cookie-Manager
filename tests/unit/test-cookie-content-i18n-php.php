@@ -286,7 +286,7 @@ unset( $GLOBALS['cookie_i18n_selected_languages'] );
 
 // --- Croatian, and the guard that would have caught it being absent ---
 //
-// hr_HR ships as a plugin locale but had no entry in duration-units.json, so a
+// hr ships as a plugin locale but had no entry in duration-units.json, so a
 // Croatian banner silently kept its English durations. Nothing failed: the
 // fallback is deliberately non-destructive, which is exactly what makes a
 // missing language invisible. The coverage assertion below is the real fix —

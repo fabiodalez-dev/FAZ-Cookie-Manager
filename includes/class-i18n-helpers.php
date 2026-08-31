@@ -458,11 +458,22 @@ if ( ! function_exists( 'faz_country_to_locale' ) ) {
 			// the Latin-American baseline, hence the shared mapping).
 			'ES' => 'es_ES', 'MX' => 'es_MX', 'AR' => 'es_AR',
 			'CL' => 'es_CL', 'CO' => 'es_CO', 'PE' => 'es_PE',
-			'VE' => 'es_VE', 'UY' => 'es_UY', 'PY' => 'es_PY',
+			'VE' => 'es_VE', 'UY' => 'es_UY',
+			// Paraguay has no es_PY in WordPress (the thirteen Spanish locales
+			// are es_AR CL CO CR DO EC ES GT MX PE PR UY VE), so the old es_PY
+			// resolved to nothing and a Paraguayan visitor fell back to ENGLISH
+			// — the opposite of the intent. es_MX is this block's own stated
+			// Latin-American baseline, so use it rather than inventing a locale.
+			'PY' => 'es_MX',
 			// English — preserve regional spelling/locale conventions.
 			'GB' => 'en_GB', 'US' => 'en_US', 'CA' => 'en_CA',
-			'AU' => 'en_AU', 'NZ' => 'en_NZ', 'IN' => 'en_IN',
-			'ZA' => 'en_ZA', 'IE' => 'en_IE',
+			'AU' => 'en_AU', 'NZ' => 'en_NZ',
+			// WordPress ships only en_AU, en_CA, en_GB, en_NZ, en_US and en_ZA.
+			// en_IN and en_IE never existed, so both fell through to en_US and
+			// silently lost the British spelling this block exists to preserve;
+			// en_GB is the closest locale that actually resolves for each.
+			'IN' => 'en_GB', 'IE' => 'en_GB',
+			'ZA' => 'en_ZA',
 			// French — France / Monaco / Luxembourg.
 			// (Canada returns 'en_CA' from this map; sites targeting
 			// Quebec-French audiences should override via the
