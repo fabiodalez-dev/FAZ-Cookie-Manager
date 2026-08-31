@@ -1691,10 +1691,22 @@ function _fazScheduleAdblockGuard() {
         if (_fazAdblockGuardScheduled) return;
         if (!_fazStore || !_fazStore._adblockResilience) return;
         _fazAdblockGuardScheduled = true;
-        // ~1200ms: after first paint and after _fazInit lifts the anti-FOUC
-        // `faz-ready` gate, but well before the 2500ms fail-open watchdog, so a
-        // cosmetically-hidden banner is restored promptly. Single timer, fail-open.
-        window.setTimeout(_fazAdblockResilienceCheck, 1200);
+        // A fixed, short list of deferred checks rather than the single 1200ms
+        // one this started as. 1200ms is right for a filter list that is already
+        // applied by first paint, and it is still the first entry — but it is
+        // NOT when every list lands. On mobile, on a slow page, a cosmetic rule
+        // can arrive seconds after load; measured against an EasyList-Cookie
+        // style `.faz-consent-container{display:none!important}` injected after
+        // the single check had run, the banner stayed hidden for good (#253).
+        //
+        // Still bounded and still no MutationObserver: four timers, the last at
+        // 8s, then it stops for the life of the page. Each call is the same
+        // idempotent no-op when the banner is visible, when the visitor has
+        // decided, or when FAZ hid the banner itself — so the extra checks cost
+        // a getComputedStyle each and can never re-show a dismissed notice.
+        [1200, 3000, 5000, 8000].forEach(function (delay) {
+            window.setTimeout(_fazAdblockResilienceCheck, delay);
+        });
     } catch (e) {
         /* a guard must never break the page */
     }
@@ -1773,6 +1785,10 @@ function _fazClearAdblockReassert(container) {
 // declarations are not global). Not part of the public API.
 ref._fazAdblockResilienceCheck = _fazAdblockResilienceCheck;
 ref._fazClearAdblockReassert = _fazClearAdblockReassert;
+// The scheduler too, not just the check it defers. Asserting only the check
+// leaves WHEN it runs unguarded, which is the half that was actually wrong:
+// one timer at 1200ms never meets a filter list that lands later (#253).
+ref._fazScheduleAdblockGuard = _fazScheduleAdblockGuard;
 
 function _fazScheduleDeadCookieCleanup() {
     // Staggered passes catch cookies written after load. The 5000 ms tail picks

@@ -177,6 +177,33 @@ function run() {
     ok('case6: banner can be hidden again after clear', notice.classList.contains('faz-hide') && inlineDisplay(notice) === '');
   }
 
+    // --- Case 7: the guard must outlive a LATE filter list. --------------------
+    //
+    // This started as one deferred check at 1200ms, which only ever meets a
+    // cosmetic rule that is already applied by first paint. Measured against a
+    // real page, an EasyList-Cookie style rule injected AFTER that single check
+    // left the banner hidden permanently (#253: DuckDuckGo mobile, protection
+    // on, first visit). The schedule is what has to be asserted — a test that
+    // only calls _fazAdblockResilienceCheck() directly passes either way and is
+    // exactly the check that missed this.
+    {
+      const window = boot({ resilience: true, computed: { display: 'none', visibility: 'visible', opacity: '1' } });
+      const delays = [];
+      const realSetTimeout = window.setTimeout;
+      window.setTimeout = function (fn, ms) { delays.push(ms); return 0; };
+      window.fazcookie._fazScheduleAdblockGuard();
+      window.setTimeout = realSetTimeout;
+
+      ok('case7: more than one deferred check is scheduled', delays.length > 1);
+      eq('case7: the first check still lands at 1200ms', delays[0], 1200);
+      ok('case7: at least one check lands after 3s, when a slow list arrives', delays.some((d) => d > 3000));
+      // Bounded on purpose: no observer, no interval, and it stops. An unbounded
+      // guard on every page for the life of the session is not a trade this
+      // feature is allowed to make.
+      ok('case7: the schedule is bounded (<= 6 timers)', delays.length <= 6);
+      ok('case7: and ends within 10s', Math.max.apply(null, delays) <= 10000);
+    }
+
   console.log(`\n  adblock-resilience-guard: ${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exit(1);
