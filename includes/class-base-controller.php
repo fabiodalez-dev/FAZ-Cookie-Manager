@@ -416,6 +416,12 @@ abstract class Base_Controller {
 				return false;
 			}
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table_name comes from $this->get_tables() which returns plugin-prefix + literal names. Used during install/upgrade to detect missing default rows; caching would mask the missing-data state.
+			// Upstream 3.5.x wraps this name in esc_sql(). Deliberately NOT adopted:
+			// it closes no injection path ($table_name is plugin-prefix + literal,
+			// never user input), and it makes this line depend on a WordPress
+			// function being loaded — which fatals wherever it is not, as the
+			// controller-edge suite demonstrated the moment it was added. A purely
+			// cosmetic change is not worth a new failure mode.
 			$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table_name}" );
 			if ( $count > 0 ) {
 				return true;

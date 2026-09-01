@@ -1792,6 +1792,11 @@ ref._fazClearAdblockReassert = _fazClearAdblockReassert;
 // leaves WHEN it runs unguarded, which is the half that was actually wrong:
 // one timer at 1200ms never meets a filter list that lands later (#253).
 ref._fazScheduleAdblockGuard = _fazScheduleAdblockGuard;
+// Exposed for the jsdom suite that pins description truncation. Its correctness
+// turns on a subtle invariant — reaching the last paragraph implies no show-more
+// button was appended — and a test that cannot invoke it directly ends up
+// asserting nothing. Not part of the public API.
+ref._fazSetShowMoreLess = _fazSetShowMoreLess;
 
 function _fazScheduleDeadCookieCleanup() {
     // Staggered passes catch cookies written after load. The 5000 ms tail picks
