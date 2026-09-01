@@ -281,6 +281,32 @@ vc_ok(
 	'the worker holding the MATCHING target does close it'
 );
 
+// The target comparison and deletion must happen under the SAME lock as begin.
+// Reproduce the narrower race the stale-snapshot cases below do not cover:
+// worker A enters finalize; immediately before it acquires the ledger lock,
+// import B opens a new ledger and points the replay target at B. Once A gets the
+// lock it must re-read the pointer, see B, and leave it alone. Without locking
+// finalize at all, the hook never fires and A simply closes its old target.
+vc_reset();
+$finalize_a = str_repeat( 'a0', 16 );
+$finalize_b = str_repeat( 'b0', 16 );
+$controller->begin_visitor_check( $finalize_a, array(), array( 'from_a' ), array() );
+$GLOBALS['faz_test_after_get_key'] = Controller::VISITOR_CHECK_LOCK_OPTION;
+$GLOBALS['faz_test_after_get']     = static function () use ( $controller, $finalize_b ) {
+	$controller->begin_visitor_check( $finalize_b, array(), array( 'from_b' ), array() );
+};
+$raced_finalize = $controller->finalize_visitor_check( $finalize_a );
+$raced_stored   = get_option( Controller::VISITOR_CHECK_OPTION, array() );
+vc_ok( null === $raced_finalize, 'a finalizer re-checks its target after acquiring the visitor-ledger lock' );
+vc_ok(
+	isset( $raced_stored[ $finalize_b ]['status'] ) && 'pending' === $raced_stored[ $finalize_b ]['status'],
+	'the import that won the race keeps its pending ledger'
+);
+vc_ok(
+	$finalize_b === get_option( Controller::VISITOR_CHECK_TARGET_OPTION, null ),
+	'and the older finalizer cannot delete the newer replay target'
+);
+
 echo "== THE safety rule: anonymous absence never demotes ==\n";
 
 // The tally that deletion offers are built from. If the visitor check ever

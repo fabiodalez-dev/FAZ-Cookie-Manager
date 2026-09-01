@@ -3015,6 +3015,25 @@ class Controller {
 	 * @return array|null The completed ledger entry, or null when none is open.
 	 */
 	public function finalize_visitor_check( $expected_target = '' ) {
+		return $this->with_visitor_check_lock(
+			function () use ( $expected_target ) {
+				return $this->finalize_visitor_check_locked( $expected_target );
+			}
+		);
+	}
+
+	/**
+	 * Locked half of finalize_visitor_check().
+	 *
+	 * The target pointer and ledger must be read, validated, and closed while
+	 * holding the same lock as begin_visitor_check(). Otherwise a new import can
+	 * replace the target after this worker reads it but before it deletes it,
+	 * causing the old worker to erase the new scan's pointer.
+	 *
+	 * @param string $expected_target Target captured when the replay worker began.
+	 * @return array|null The completed ledger entry, or null when the target moved.
+	 */
+	private function finalize_visitor_check_locked( $expected_target = '' ) {
 		$target = sanitize_key( (string) get_option( self::VISITOR_CHECK_TARGET_OPTION, '' ) );
 		if ( '' === $target ) {
 			return null;
