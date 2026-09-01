@@ -85,8 +85,20 @@ async function attemptAdminLogin(page: Page, wpBaseURL: string, adminUser: strin
   }
 
   await expect(page.locator('#user_login')).toBeVisible({ timeout: 20_000 });
-  await page.locator('#user_login').fill(adminUser);
-  await page.locator('#user_pass').fill(adminPass);
+  // The login document may still be settling after a slow reauth redirect.
+  // Locator.fill() then repeats actionability checks until the whole test
+  // times out even though the fields are already visible. Set the native
+  // values and dispatch the events WordPress/browser integrations expect.
+  await page.locator('#user_login').evaluate((input: HTMLInputElement, value: string) => {
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, adminUser);
+  await page.locator('#user_pass').evaluate((input: HTMLInputElement, value: string) => {
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, adminPass);
 
   // A Locator click waits for the navigation it initiates using the global
   // 15-second action timeout. On the shared compatibility site WordPress can
