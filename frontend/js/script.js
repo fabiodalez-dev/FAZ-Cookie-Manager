@@ -2677,6 +2677,42 @@ function _fazSetPreferenceCenterAccessibility(preferenceCenter) {
     preferenceCenter.setAttribute('role', 'dialog');
     preferenceCenter.setAttribute('aria-modal', 'true');
     preferenceCenter.setAttribute('aria-label', _fazGetPreferenceCenterAriaLabel());
+    // A stable id so the controls that open this panel can point at it with
+    // aria-controls. Without it a screen-reader user is told a button opens a
+    // dialog but is never told WHICH element that dialog is; the banner's own
+    // buttons had no relationship to the panel at all, while the separate
+    // [faz_cookie_settings] shortcode already advertised aria-haspopup.
+    //
+    // Two ids, because a CCPA banner opens the opt-out panel and a GDPR one the
+    // detail panel — pointing both at a single id would name an element that is
+    // hidden on the other law.
+    if (!preferenceCenter.id) {
+        preferenceCenter.id = _fazActivePreferenceTag() === 'optout-popup'
+            ? 'fazOptoutPreferenceCenter'
+            : 'fazPreferenceCenter';
+    }
+    _fazLinkPreferenceTriggers(preferenceCenter.id);
+}
+
+/**
+ * Point every control that opens the preference center at the panel it opens.
+ *
+ * Applied at runtime rather than baked into the template because the id depends
+ * on the active law, which the template does not know. Idempotent: re-running
+ * simply rewrites the same attributes.
+ *
+ * @param {string} panelId Resolved id of the preference center.
+ */
+function _fazLinkPreferenceTriggers(panelId) {
+    if (!panelId) return;
+    ['settings-button', 'donotsell-button'].forEach(function (tag) {
+        document.querySelectorAll('[data-faz-tag="' + tag + '"]').forEach(function (el) {
+            // "dialog" rather than upstream's "true": it is the more specific
+            // value and matches what the [faz_cookie_settings] shortcode emits.
+            el.setAttribute('aria-haspopup', 'dialog');
+            el.setAttribute('aria-controls', panelId);
+        });
+    });
 }
 
 function _fazFocusIntoElement(element) {

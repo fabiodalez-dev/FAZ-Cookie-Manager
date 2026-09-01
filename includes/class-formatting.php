@@ -169,6 +169,13 @@ if ( ! function_exists( 'faz_allowed_html' ) ) {
 			'aria-label'       => true,
 			'aria-labelledby'  => true,
 			'aria-hidden'      => true,
+			// The trigger→dialog relationship. Without these two in the
+			// allowlist, kses silently strips them from any server-rendered
+			// markup that carries them — the [faz_cookie_settings] shortcode
+			// already emits aria-haspopup, so it was relying on not being
+			// filtered through here.
+			'aria-haspopup'    => true,
+			'aria-controls'    => true,
 			'class'            => true,
 			'id'               => true,
 			'style'            => true,

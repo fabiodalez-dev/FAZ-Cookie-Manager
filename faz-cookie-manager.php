@@ -94,12 +94,45 @@ function faz_get_consent_db_version() {
 }
 
 /**
+ * Whether this request is HTTPS, including behind a TLS-terminating proxy.
+ *
+ * `is_ssl()` inspects $_SERVER['HTTPS'] and the port, both of which a reverse
+ * proxy that terminates TLS may never forward to PHP. On those hosts is_ssl()
+ * is false on an https:// page, so `set_url_scheme()` emitted http:// asset URLs
+ * into an https document — a mixed-content block that silently kills the banner.
+ *
+ * Deliberately a standalone function, not Filesystem::is_ssl() (which applies
+ * the same three signals): the constants are defined before the autoloader is
+ * guaranteed to have run, so this must not depend on a class being loadable.
+ *
+ * @return bool
+ */
+if ( ! function_exists( 'faz_request_is_https' ) ) {
+	function faz_request_is_https() {
+		if ( is_ssl() ) {
+			return true;
+		}
+		if ( 0 === stripos( (string) get_option( 'siteurl' ), 'https://' ) ) {
+			return true;
+		}
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- compared to a literal, never stored or emitted.
+		if ( isset( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) && 'https' === strtolower( trim( (string) wp_unslash( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) ) ) ) {
+			return true;
+		}
+		return false;
+	}
+}
+
+/**
  * Define plugin URL constants.
  */
 if ( ! function_exists( 'faz_define_constants' ) ) {
 	function faz_define_constants() {
+		// Force https when the request really is https by any of the three
+		// signals — set_url_scheme() alone consults only is_ssl().
+		$faz_url_scheme = faz_request_is_https() ? 'https' : null;
 		if ( ! defined( 'FAZ_PLUGIN_URL' ) ) {
-			define( 'FAZ_PLUGIN_URL', set_url_scheme( plugin_dir_url( __FILE__ ) ) );
+			define( 'FAZ_PLUGIN_URL', set_url_scheme( plugin_dir_url( __FILE__ ), $faz_url_scheme ) );
 		}
 		if ( ! defined( 'FAZ_APP_ASSETS_URL' ) ) {
 			define( 'FAZ_APP_ASSETS_URL', set_url_scheme( plugin_dir_url( __FILE__ ) . 'frontend/images/' ) );
