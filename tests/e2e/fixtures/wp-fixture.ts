@@ -88,11 +88,17 @@ async function attemptAdminLogin(page: Page, wpBaseURL: string, adminUser: strin
   await page.locator('#user_login').fill(adminUser);
   await page.locator('#user_pass').fill(adminPass);
 
+  // A Locator click waits for the navigation it initiates using the global
+  // 15-second action timeout. On the shared compatibility site WordPress can
+  // authenticate successfully but take longer than that to finish the admin
+  // redirect, so the click throws even though the navigation budget below is
+  // deliberately 60 seconds. Trigger the native click without Playwright's
+  // implicit navigation wait and let the explicit waiter own that budget.
   await Promise.all([
-    page.locator('#wp-submit').click(),
-    page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => {
+    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => {
       // Some plugin combinations keep the request open after auth succeeds.
     }),
+    page.locator('#wp-submit').evaluate((button: HTMLInputElement) => button.click()),
   ]);
 
   if (page.url().includes('/wp-admin/')) {
