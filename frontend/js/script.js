@@ -2696,26 +2696,38 @@ function _fazSetPreferenceCenterAccessibility(preferenceCenter) {
             ? 'fazOptoutPreferenceCenter'
             : 'fazPreferenceCenter';
     }
-    _fazLinkPreferenceTriggers(preferenceCenter.id);
+    _fazLinkPreferenceTriggers();
 }
 
 /**
- * Point every control that opens the preference center at the panel it opens.
+ * Point each control that opens a preference panel at the panel IT opens.
  *
- * Applied at runtime rather than baked into the template because the id depends
- * on the active law, which the template does not know. Idempotent: re-running
- * simply rewrites the same attributes.
+ * Per trigger, not per "currently active panel": on a "Both" banner the settings
+ * button opens `detail` and the Do-Not-Sell button opens `optout-popup`, so
+ * handing both the same id — as a first version of this did — left one of them
+ * naming a dialog it does not control until its own first click.
  *
- * @param {string} panelId Resolved id of the preference center.
+ * Each panel is given its own stable id here rather than only when it becomes
+ * active, so the relationship holds before either has ever been opened. A
+ * trigger whose panel is not in the DOM is left alone: pointing aria-controls at
+ * a missing id is worse for a screen reader than saying nothing.
+ *
+ * Idempotent — re-running rewrites the same attributes.
  */
-function _fazLinkPreferenceTriggers(panelId) {
-    if (!panelId) return;
-    ['settings-button', 'donotsell-button'].forEach(function (tag) {
-        document.querySelectorAll('[data-faz-tag="' + tag + '"]').forEach(function (el) {
-            // "dialog" rather than upstream's "true": it is the more specific
-            // value and matches what the [faz_cookie_settings] shortcode emits.
+function _fazLinkPreferenceTriggers() {
+    var pairs = [
+        { trigger: 'settings-button', panel: 'detail', id: 'fazPreferenceCenter' },
+        { trigger: 'donotsell-button', panel: 'optout-popup', id: 'fazOptoutPreferenceCenter' }
+    ];
+    pairs.forEach(function (pair) {
+        var panel = _fazGetElementByTag(pair.panel);
+        if (!panel) return;
+        if (!panel.id) panel.id = pair.id;
+        document.querySelectorAll('[data-faz-tag="' + pair.trigger + '"]').forEach(function (el) {
+            // "dialog" rather than upstream's "true": more specific, and it
+            // matches what the [faz_cookie_settings] shortcode already emits.
             el.setAttribute('aria-haspopup', 'dialog');
-            el.setAttribute('aria-controls', panelId);
+            el.setAttribute('aria-controls', panel.id);
         });
     });
 }

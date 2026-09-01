@@ -135,8 +135,30 @@ if ( ! function_exists( 'faz_define_constants' ) ) {
 			define( 'FAZ_PLUGIN_URL', set_url_scheme( plugin_dir_url( __FILE__ ), $faz_url_scheme ) );
 		}
 		if ( ! defined( 'FAZ_APP_ASSETS_URL' ) ) {
-			define( 'FAZ_APP_ASSETS_URL', set_url_scheme( plugin_dir_url( __FILE__ ) . 'frontend/images/' ) );
+			// The SAME scheme, for the same reason. Fixing only FAZ_PLUGIN_URL
+			// left the images constant on bare set_url_scheme(), so behind a
+			// TLS-terminating proxy get_assets_path() still emitted http:// —
+			// exactly the sibling-branch mistake this whole file's HTTPS fix was
+			// written to correct.
+			define( 'FAZ_APP_ASSETS_URL', set_url_scheme( plugin_dir_url( __FILE__ ) . 'frontend/images/', $faz_url_scheme ) );
 		}
+	}
+}
+
+/**
+ * URL of the plugin's frontend/ directory, with the corrected HTTPS scheme.
+ *
+ * Frontend assets were enqueued through plugin_dir_url() directly, which routes
+ * to plugins_url() -> set_url_scheme() -> is_ssl(). Behind a TLS-terminating
+ * proxy that is false, so script.min.js / a11y.min.js / faz-cookie-policy.css
+ * were emitted as http:// into an https document and blocked as mixed content —
+ * fixing FAZ_PLUGIN_URL alone did not reach them, because they never used it.
+ *
+ * @return string
+ */
+if ( ! function_exists( 'faz_frontend_url' ) ) {
+	function faz_frontend_url() {
+		return FAZ_PLUGIN_URL . 'frontend/';
 	}
 }
 

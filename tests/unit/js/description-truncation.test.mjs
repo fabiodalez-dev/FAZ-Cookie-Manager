@@ -126,6 +126,10 @@ function run() {
     const paras = ['E'.repeat(300), 'F'.repeat(300), 'G'.repeat(300), 'H'.repeat(300)];
     const r = truncate(paras);
     ok('a long description still gets a show-more control', r.hasShowMore);
+    // …and the control has to correspond to text actually withheld. Asserting
+    // only its presence would pass a version that appended the button and left
+    // every paragraph on screen — truncation that does not truncate.
+    ok('and the paragraphs past the limit really are withheld', r.text.indexOf('H'.repeat(50)) === -1);
   }
 
   console.log(`\n  description-truncation: ${passed} passed, ${failed} failed`);
