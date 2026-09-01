@@ -69,6 +69,13 @@ function faz_consent_is_throttled( $consent_id, $status, $previous ) {
 		// Armed unconditionally; its verdict is ignored only for a change.
 		$key           = 'faz_consent_' . substr( md5( $consent_id ), 0, 8 );
 		$window_closed = faz_test_throttle( $key );
+		// First change in the window is free; later ones are rate-limited.
+		if ( $status_changed ) {
+			$hash = substr( md5( $consent_id ), 0, 8 );
+			if ( faz_test_throttle( 'faz_consent_chg1_' . $hash ) ) {
+				$status_changed = ! faz_test_throttle( 'faz_consent_chgn_' . $hash );
+			}
+		}
 		$is_consent_throttled = $status_changed ? false : $window_closed;
 	}
 	return $is_consent_throttled;
@@ -144,15 +151,20 @@ wcheck(
 	'a status outside the allowlist is not treated as a change'
 );
 
-// 4c. A change is NOT additionally rate-limited, on purpose. A 10s cap was tried
-//     and re-broke the case this guard exists for: accept by mistake, open the
-//     preference centre, reject seconds later — and the withdrawal is dropped
-//     again. Alternation is bounded by the per-IP throttle instead.
+// 4c. The FIRST change is free, later ones are rate-limited. A flat cap on every
+//     change was tried first and re-broke the case this guard exists for; a flat
+//     bypass left a script free to alternate valid statuses and mint a row per
+//     request. Splitting the two keeps both properties.
 $GLOBALS['faz_throttled_keys'] = array();
-wcheck( ! faz_consent_is_throttled( $id, 'accepted', '' ), 'the first change lands' );
+wcheck( ! faz_consent_is_throttled( $id, 'accepted', '' ), 'the first write lands' );
 wcheck(
 	! faz_consent_is_throttled( $id, 'rejected', 'accepted' ),
-	'an immediate correction (accept then reject within seconds) is still logged'
+	'an immediate correction (accept then reject within seconds) is STILL logged'
+);
+faz_consent_is_throttled( $id, 'accepted', 'rejected' );
+wcheck(
+	faz_consent_is_throttled( $id, 'rejected', 'accepted' ),
+	'sustained alternation is throttled, so it cannot be used as a write path'
 );
 
 // 5. The transcription above must still match the shipped source. If the real
@@ -176,8 +188,8 @@ wcheck(
 	'the shipped guard still allowlists the status before comparing it'
 );
 wcheck(
-	false === strpos( $src, "'faz_consent_chg_'" ),
-	'no extra rate-limit on the change bypass — it would drop an immediate withdrawal'
+	false !== strpos( $src, "'faz_consent_chg1_'" ) && false !== strpos( $src, "'faz_consent_chgn_'" ),
+	'the shipped guard frees the first change and rate-limits the ones after it'
 );
 
 echo "\nconsent-log withdrawal: {$passed} passed, {$failed} failed\n";

@@ -185,18 +185,22 @@ class Consent_Logger {
 			$consent_key   = 'faz_consent_' . substr( md5( $sanitized_consent_id ), 0, 8 );
 			$window_closed = faz_throttle_request( $consent_key, 300 );
 
-			// NO extra rate-limit on the change itself, deliberately. Review asked
-			// for one, and a 10s window was tried: it re-broke the exact case this
-			// whole guard exists for — accept by mistake, open the preference
-			// centre, reject seconds later, and the withdrawal is dropped again.
-			// A cure that reinstates the disease is not a fix.
-			//
-			// Alternating valid statuses to force writes is already bounded where
-			// it matters: the per-IP throttle above admits one consent POST per
-			// 10s per IP whatever the consent_id, so the bypass multiplies nothing
-			// — and forging rows for someone else is impossible anyway, since
-			// ip_hash and user_agent are derived server-side from the caller's own
-			// request (Controller::log_consent).
+			// The FIRST change in a window is always free; the ones after it are
+			// rate-limited. A flat cap on every change was tried first and was
+			// wrong — it re-broke the case this guard exists for (accept by
+			// mistake, reject seconds later, withdrawal dropped again). Splitting
+			// the two keeps the immediate correction guaranteed while denying a
+			// script an unbounded write path by alternating valid statuses, which
+			// the per-IP throttle alone does not stop across a distributed set of
+			// addresses sharing one consent_id.
+			if ( $status_changed ) {
+				$hash = substr( md5( $sanitized_consent_id ), 0, 8 );
+				if ( faz_throttle_request( 'faz_consent_chg1_' . $hash, 300 ) ) {
+					// A change already landed in this window — throttle the rest.
+					$status_changed = ! faz_throttle_request( 'faz_consent_chgn_' . $hash, 10 );
+				}
+			}
+
 			$is_consent_throttled = $status_changed ? false : $window_closed;
 		}
 		if ( $is_ip_throttled || $is_consent_throttled ) {
