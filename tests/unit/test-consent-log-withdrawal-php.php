@@ -60,7 +60,11 @@ function faz_test_throttle( $key ) {
 function faz_consent_is_throttled( $consent_id, $status, $previous ) {
 	$is_consent_throttled = false;
 	if ( '' !== $consent_id ) {
-		$status         = sanitize_key( $status );
+		$status = sanitize_key( $status );
+		// Allowlisted BEFORE the comparison — see the shipped guard.
+		if ( ! in_array( $status, array( 'accepted', 'rejected', 'partial', 'dnsmpi_optout', 'dns_rescinded', 'pmp_grant' ), true ) ) {
+			$status = '';
+		}
 		$status_changed = '' !== $status && $status !== $previous;
 		// Armed unconditionally; its verdict is ignored only for a change.
 		$key           = 'faz_consent_' . substr( md5( $consent_id ), 0, 8 );
@@ -129,6 +133,28 @@ wcheck(
 	'a missing status is not a "change" — it goes through the throttle, so it cannot be used to bypass it'
 );
 
+// 4b. A status outside the allowlist is not a change. sanitize_key() alone made
+//     ANY non-empty string one, so a caller could post junk — or alternate two
+//     valid values — and mint a row per request, turning the accountability
+//     bypass into an unthrottled write path.
+$GLOBALS['faz_throttled_keys'] = array();
+faz_consent_is_throttled( $id, 'accepted', '' );
+wcheck(
+	faz_consent_is_throttled( $id, 'not-a-real-status', 'accepted' ),
+	'a status outside the allowlist is not treated as a change'
+);
+
+// 4c. A change is NOT additionally rate-limited, on purpose. A 10s cap was tried
+//     and re-broke the case this guard exists for: accept by mistake, open the
+//     preference centre, reject seconds later — and the withdrawal is dropped
+//     again. Alternation is bounded by the per-IP throttle instead.
+$GLOBALS['faz_throttled_keys'] = array();
+wcheck( ! faz_consent_is_throttled( $id, 'accepted', '' ), 'the first change lands' );
+wcheck(
+	! faz_consent_is_throttled( $id, 'rejected', 'accepted' ),
+	'an immediate correction (accept then reject within seconds) is still logged'
+);
+
 // 5. The transcription above must still match the shipped source. If the real
 //    guard is edited, this file has to be revisited rather than quietly
 //    continuing to test a stale copy of the logic.
@@ -144,6 +170,14 @@ wcheck(
 wcheck(
 	false !== strpos( $src, 'private function last_logged_status(' ),
 	'the previous status is read back from the log rather than assumed'
+);
+wcheck(
+	false !== strpos( $src, "'accepted', 'rejected', 'partial', 'dnsmpi_optout', 'dns_rescinded', 'pmp_grant'" ),
+	'the shipped guard still allowlists the status before comparing it'
+);
+wcheck(
+	false === strpos( $src, "'faz_consent_chg_'" ),
+	'no extra rate-limit on the change bypass — it would drop an immediate withdrawal'
 );
 
 echo "\nconsent-log withdrawal: {$passed} passed, {$failed} failed\n";

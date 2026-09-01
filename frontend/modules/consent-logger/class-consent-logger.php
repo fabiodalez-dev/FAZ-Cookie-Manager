@@ -162,7 +162,16 @@ class Consent_Logger {
 			// record Art. 7(3) accountability actually needs. A status change is
 			// never a replay — it is the event — so it bypasses the id throttle.
 			// The per-IP throttle above still bounds flooding.
-			$status         = sanitize_key( (string) $request->get_param( 'status' ) );
+			// Allowlisted BEFORE the comparison, and matching the set the
+			// controller keeps (anything else it folds to 'partial'). Without
+			// this, sanitize_key() made any non-empty string a "change", so a
+			// caller could alternate junk values — or even valid ones — and mint
+			// a fresh row on every request, using the accountability bypass as an
+			// unthrottled write path.
+			$status = sanitize_key( (string) $request->get_param( 'status' ) );
+			if ( ! in_array( $status, array( 'accepted', 'rejected', 'partial', 'dnsmpi_optout', 'dns_rescinded', 'pmp_grant' ), true ) ) {
+				$status = '';
+			}
 			$previous       = $this->last_logged_status( $sanitized_consent_id );
 			$status_changed = '' !== $status && $status !== $previous;
 
@@ -176,6 +185,18 @@ class Consent_Logger {
 			$consent_key   = 'faz_consent_' . substr( md5( $sanitized_consent_id ), 0, 8 );
 			$window_closed = faz_throttle_request( $consent_key, 300 );
 
+			// NO extra rate-limit on the change itself, deliberately. Review asked
+			// for one, and a 10s window was tried: it re-broke the exact case this
+			// whole guard exists for — accept by mistake, open the preference
+			// centre, reject seconds later, and the withdrawal is dropped again.
+			// A cure that reinstates the disease is not a fix.
+			//
+			// Alternating valid statuses to force writes is already bounded where
+			// it matters: the per-IP throttle above admits one consent POST per
+			// 10s per IP whatever the consent_id, so the bypass multiplies nothing
+			// — and forging rows for someone else is impossible anyway, since
+			// ip_hash and user_agent are derived server-side from the caller's own
+			// request (Controller::log_consent).
 			$is_consent_throttled = $status_changed ? false : $window_closed;
 		}
 		if ( $is_ip_throttled || $is_consent_throttled ) {

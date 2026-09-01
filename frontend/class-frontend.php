@@ -3681,8 +3681,13 @@ class Frontend {
 		// and open a socket but transfer no URL and set no cookie, and gating
 		// them would break unrelated performance work for no privacy gain.
 		if ( false !== stripos( $html, '<link' ) ) {
+			// Match ANY <link> and decide inside the callback. Pinning the rel
+			// value in the pattern only caught a single quoted token, so
+			// `<link rel=preload …>` (unquoted, which HTML allows) and
+			// `rel="preload stylesheet"` (the standard async-CSS pair) both
+			// slipped past and fetched the provider pre-consent.
 			$result = preg_replace_callback(
-				'#<link\b([^>]*rel\s*=\s*["\'](?:stylesheet|preload|modulepreload|prefetch|prerender)["\'][^>]*)/?>#is',
+				'#<link\b([^>]*)/?>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_link_tag( $m, $providers, $blocked_categories );
 				},
@@ -4205,18 +4210,51 @@ class Frontend {
 			return $full;
 		}
 
-		// Rename src → data-faz-src (first occurrence only, and never data-src).
-		$new_attrs = preg_replace( '/(^|\s)src\s*=\s*/i', '$1data-faz-src=', $attrs, 1 );
-		if ( null === $new_attrs || $new_attrs === $attrs ) {
-			return $full; // Nothing to park (no src, or PCRE failure) — leave as is.
+		// Park src AND srcset. A responsive tracking image can carry the beacon
+		// in srcset alone — the browser picks a candidate from there in
+		// preference to src — so renaming only src leaves the request to fire.
+		// `data-faz-srcset` is the attribute the client's own restore pass
+		// already looks for (script.js: document.querySelectorAll('[data-faz-srcset]')),
+		// so no new convention is introduced.
+		$new_attrs = preg_replace( '/(^|\s)srcset\s*=\s*/i', '$1data-faz-srcset=', $attrs, 1 );
+		if ( null === $new_attrs ) {
+			return $full; // PCRE failure — never ship a half-rewritten tag.
 		}
-		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		$parked_srcset = ( $new_attrs !== $attrs );
+
+		$with_src = preg_replace( '/(^|\s)src\s*=\s*/i', '$1data-faz-src=', $new_attrs, 1 );
+		if ( null === $with_src ) {
+			return $full;
+		}
+		$parked_src = ( $with_src !== $new_attrs );
+		if ( ! $parked_src && ! $parked_srcset ) {
+			return $full; // Nothing fetchable to park — leave the tag alone.
+		}
+		$new_attrs = $with_src . ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		if ( $parked_srcset ) {
+			// The srcset restore reads its category from its own attribute.
+			$new_attrs .= ' data-faz-srcset-category="' . esc_attr( $matched_category ) . '"';
+		}
 		return '<img' . $new_attrs . '>';
 	}
 
 	private function process_link_tag( $m, $providers, $blocked_categories ) {
 		$attrs = $m[1];
 		$full  = $m[0];
+
+		// rel is a space-separated TOKEN LIST and its value may be unquoted, so
+		// the tokens are parsed here rather than pinned in the caller's pattern.
+		// Only fetching rels are gated: dns-prefetch and preconnect resolve DNS
+		// and open a socket but transfer no URL and set no cookie, so gating them
+		// would break unrelated performance work for no privacy gain.
+		if ( ! preg_match( '/\brel\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+))/i', $attrs, $rel_match ) ) {
+			return $full;
+		}
+		$rel_value  = '' !== $rel_match[1] ? $rel_match[1] : ( '' !== $rel_match[2] ? $rel_match[2] : ( isset( $rel_match[3] ) ? $rel_match[3] : '' ) );
+		$rel_tokens = preg_split( '/\s+/', strtolower( trim( $rel_value ) ), -1, PREG_SPLIT_NO_EMPTY );
+		if ( ! $rel_tokens || ! array_intersect( $rel_tokens, array( 'stylesheet', 'preload', 'modulepreload', 'prefetch', 'prerender' ) ) ) {
+			return $full;
+		}
 
 		// Own stylesheets (core prints them as id="<handle>-css") — e.g. the
 		// content-hashed banner CSS served from uploads — must never be gated
@@ -5284,6 +5322,18 @@ class Frontend {
 		if ( '' === $url ) {
 			$url = $this->extract_tag_attr( $attrs, 'href' );
 		}
+		// srcset / imagesrcset are matched IN ADDITION to src, never as a mere
+		// fallback: a responsive image can pair a perfectly innocent src with a
+		// tracking candidate in srcset, and the browser prefers the srcset one.
+		// Treating them as a fallback (the first shape of this fix) left exactly
+		// that tag ungated, because src was non-empty. Kept out of $url so the
+		// data: URI branch below still sees only the primary URL; folded into the
+		// haystack instead, which is what provider matching actually reads.
+		// Descriptors ("2x", "640w") and inter-candidate commas are harmless to
+		// fragment matching.
+		$srcset_haystack = trim(
+			$this->extract_tag_attr( $attrs, 'srcset' ) . ' ' . $this->extract_tag_attr( $attrs, 'imagesrcset' )
+		);
 
 		$normalized_content  = (string) $content;
 		$is_data_uri_payload = false;
@@ -5301,9 +5351,14 @@ class Frontend {
 		}
 
 		return array(
-			'url'                 => $url,
+			// srcset joins `url`, not just the haystack: match_script_to_provider()
+			// tests the ~840 URL-fragment patterns against `url` alone, so a
+			// candidate living only in srcset matched nothing when it was folded
+			// into the haystack only. Appended AFTER the data: branch above, which
+			// must keep seeing the primary URL by itself.
+			'url'                 => trim( $url . ' ' . $srcset_haystack ),
 			'content'             => $normalized_content,
-			'haystack'            => trim( $url . ' ' . $normalized_content ),
+			'haystack'            => trim( $url . ' ' . $srcset_haystack . ' ' . $normalized_content ),
 			'is_data_uri_payload' => $is_data_uri_payload,
 		);
 	}
