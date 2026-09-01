@@ -1797,6 +1797,11 @@ ref._fazScheduleAdblockGuard = _fazScheduleAdblockGuard;
 // button was appended — and a test that cannot invoke it directly ends up
 // asserting nothing. Not part of the public API.
 ref._fazSetShowMoreLess = _fazSetShowMoreLess;
+// Exposed for the jsdom suite that pins the trigger→panel pairing. The shipped
+// default banner disables donotSell, so the Do-Not-Sell half of that pairing is
+// not in the DOM end-to-end and a regression there cannot fail an E2E assertion.
+// Not part of the public API.
+ref._fazLinkPreferenceTriggers = _fazLinkPreferenceTriggers;
 
 function _fazScheduleDeadCookieCleanup() {
     // Staggered passes catch cookies written after load. The 5000 ms tail picks

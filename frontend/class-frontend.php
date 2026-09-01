@@ -2156,7 +2156,19 @@ class Frontend {
 					$repaired                = true;
 				}
 			}
-			if ( $repaired ) {
+			// Same rule as the mixed-content repair above, and for the same
+			// reason — this is the SIBLING branch I fixed there and left here.
+			// $current_origin derives from FAZ_PLUGIN_URL, whose scheme now
+			// follows faz_request_is_https(), which trusts X-Forwarded-Proto.
+			// That header is client-controlled on any site not behind a proxy
+			// that strips it, so persisting an origin derived from it hands an
+			// unauthenticated caller a durable rewrite of every visitor's banner.
+			// The per-request rewrite above keeps the wide signal; the DB write
+			// requires a server-controlled one.
+			$server_verified_https = is_ssl()
+				|| 0 === stripos( (string) get_option( 'siteurl' ), 'https://' );
+			$forged_scheme_only = ( 'https' === $current['scheme'] ) && ! $server_verified_https;
+			if ( $repaired && ! $forged_scheme_only ) {
 				// autoload=false — keep the multi-KB template blob out of alloptions.
 				update_option( $cache_key, $stored, false );
 			}
