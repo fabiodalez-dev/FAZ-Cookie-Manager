@@ -2025,9 +2025,27 @@ class Frontend {
 				$html      = str_replace( $http_url, $https_url, $html );
 
 				// Auto-repair the cached template so subsequent requests
-				// skip this replacement entirely.
+				// skip this replacement entirely — but ONLY on a server-verified
+				// HTTPS signal.
+				//
+				// The rewrite above is per-request and harmless: at worst one
+				// visitor gets https URLs on a page that did not need them. This
+				// branch is different — it writes the rewritten template back to
+				// wp_options, where it survives for every later visitor.
+				//
+				// faz_request_is_https() accepts X-Forwarded-Proto, which is
+				// client-controlled on any site NOT behind a proxy that strips it.
+				// Widening the outer gate to it therefore handed an unauthenticated
+				// caller a persistent state change: one
+				// `curl -H 'X-Forwarded-Proto: https'` against a plain-HTTP site
+				// rewrites its cached banner to a scheme the server does not serve,
+				// for everyone, until the cache is regenerated. is_ssl() and the
+				// stored siteurl are both server-controlled, so the durable write
+				// keeps the narrower signal it always had.
+				$server_verified_https = is_ssl()
+					|| 0 === stripos( (string) get_option( 'siteurl' ), 'https://' );
 				$cache_key = apply_filters( 'faz_banner_template_cache_key', 'faz_banner_template' );
-				$stored    = get_option( $cache_key, array() );
+				$stored    = $server_verified_https ? get_option( $cache_key, array() ) : false;
 				if ( is_array( $stored ) ) {
 					$repaired = false;
 					foreach ( $stored as $lang => $tpl ) {

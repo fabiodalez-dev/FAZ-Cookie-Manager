@@ -195,7 +195,18 @@ class Legal_Links {
 		}
 		wp_enqueue_style(
 			'faz-legal-links',
-			plugins_url( 'frontend/css/faz-legal-links.css', FAZ_PLUGIN_FILENAME ),
+			// FAZ_PLUGIN_URL, not plugins_url(): the latter resolves its scheme
+			// through is_ssl(), which is false behind a TLS-terminating proxy —
+			// mixed content on a public page. The seventh such call site; the
+			// first sweep measured a page where this feature was inactive, so it
+			// looked complete.
+			// defined() guard, matching class-cookie-table-shortcode.php:333: the
+			// standalone unit harness loads this class without the bootstrap that
+			// defines the constant. The fallback is the previous behaviour
+			// verbatim, so nothing regresses where the constant is absent.
+			defined( 'FAZ_PLUGIN_URL' )
+				? FAZ_PLUGIN_URL . 'frontend/css/faz-legal-links.css'
+				: plugins_url( 'frontend/css/faz-legal-links.css', FAZ_PLUGIN_FILENAME ),
 			array(),
 			defined( 'FAZ_VERSION' ) ? FAZ_VERSION : '1.0.0'
 		);
