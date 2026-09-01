@@ -61,20 +61,32 @@ class Cookie_Database {
 			'duration'    => 'session',
 			'description' => 'Stores the selected language during login.',
 		),
+		// Automattic Tracks (Jetpack). Classified `analytics`, not
+		// `wordpress-internal`, and the distinction is load-bearing:
+		// `wordpress-internal` means ALWAYS allowed and NEVER declared
+		// (Frontend::is_cookie_allowed returns true for it before any consent
+		// check, and every visitor-facing declaration filters it out). Jetpack
+		// sets these outside wp-admin too, so the old classification made them
+		// unblockable and undisclosed tracking on the front end.
+		//
+		// The change is safe in both readings. This table only classifies what a
+		// scan OBSERVES: on a site where they truly never reach a visitor they are
+		// never observed in a visitor context and nothing changes, while on a site
+		// where they do, they are now gated and disclosed.
 		'tk_ai'                   => array(
-			'category'    => 'wordpress-internal',
+			'category'    => 'analytics',
 			'duration'    => 'session',
-			'description' => 'Automattic Tracks identifier used inside the WordPress dashboard.',
+			'description' => 'Automattic Tracks (Jetpack) anonymous identifier used to attribute events to a visitor.',
 		),
 		'tk_qs'                   => array(
-			'category'    => 'wordpress-internal',
+			'category'    => 'analytics',
 			'duration'    => 'session',
-			'description' => 'Automattic Tracks dashboard analytics cookie.',
+			'description' => 'Automattic Tracks (Jetpack) analytics cookie recording the visitor session.',
 		),
 		'tk_lr'                   => array(
-			'category'    => 'wordpress-internal',
+			'category'    => 'analytics',
 			'duration'    => '1 year',
-			'description' => 'Automattic Tracks dashboard referral cookie.',
+			'description' => 'Automattic Tracks (Jetpack) referral cookie storing the traffic source for attribution.',
 		),
 		'comment_author_email_'   => array(
 			'category'    => 'functional',
