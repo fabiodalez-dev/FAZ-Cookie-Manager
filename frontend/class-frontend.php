@@ -4162,14 +4162,6 @@ class Frontend {
 	}
 
 	/**
-	 * Process a <link rel="stylesheet"> tag for blocking.
-	 *
-	 * @param array $m               Regex match.
-	 * @param array $providers       Provider→category map.
-	 * @param array $blocked_categories Currently blocked category slugs.
-	 * @return string
-	 */
-	/**
 	 * Process an <img> tag rendered directly in the document.
 	 *
 	 * Deliberately narrow: an image is only gated when it matches a blocked
@@ -4230,12 +4222,16 @@ class Frontend {
 		if ( ! $parked_src && ! $parked_srcset ) {
 			return $full; // Nothing fetchable to park — leave the tag alone.
 		}
-		$new_attrs = $with_src . ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		// Put metadata BEFORE the captured attributes. The outer tag regex keeps
+		// an XHTML-style closing slash inside $attrs (`<img ... />`), so appending
+		// metadata after it produced invalid `<img ... / data-faz-category=...>`.
+		// Prefixing preserves both ordinary and self-closing source markup.
+		$metadata = ' data-faz-category="' . esc_attr( $matched_category ) . '"';
 		if ( $parked_srcset ) {
 			// The srcset restore reads its category from its own attribute.
-			$new_attrs .= ' data-faz-srcset-category="' . esc_attr( $matched_category ) . '"';
+			$metadata .= ' data-faz-srcset-category="' . esc_attr( $matched_category ) . '"';
 		}
-		return '<img' . $new_attrs . '>';
+		return '<img' . $metadata . $with_src . '>';
 	}
 
 	private function process_link_tag( $m, $providers, $blocked_categories ) {
@@ -4287,8 +4283,10 @@ class Frontend {
 
 		// Rename href → data-faz-href (avoid matching data-href).
 		$new_attrs = preg_replace( '/(^|\s)href\s*=\s*/i', '$1data-faz-href=', $attrs, 1 );
-		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		return '<link' . $new_attrs . '/>';
+		// As with <img>, $attrs may already end in the source tag's `/`.
+		// Prefix metadata so the slash remains the final token before `>`.
+		$metadata = ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		return '<link' . $metadata . $new_attrs . '>';
 	}
 
 	/**
