@@ -36,12 +36,18 @@ if ( ! function_exists( 'sanitize_key' ) ) {
  * Stand-in for faz_throttle_request(): returns true (throttled) when the key was
  * already seen in this run, mirroring the transient-backed original.
  */
-function faz_test_throttle( $key ) {
-	if ( isset( $GLOBALS['faz_throttled_keys'][ $key ] ) ) {
+function faz_test_throttle( $key, $ttl = 300 ) {
+	$now = isset( $GLOBALS['faz_fake_now'] ) ? $GLOBALS['faz_fake_now'] : 0;
+	if ( isset( $GLOBALS['faz_throttled_keys'][ $key ] ) && $GLOBALS['faz_throttled_keys'][ $key ] > $now ) {
 		return true;
 	}
-	$GLOBALS['faz_throttled_keys'][ $key ] = true;
+	$GLOBALS['faz_throttled_keys'][ $key ] = $now + (int) $ttl;
 	return false;
+}
+
+/** Move the simulated clock forward, so a TTL can actually elapse. */
+function faz_test_advance( $seconds ) {
+	$GLOBALS['faz_fake_now'] = ( isset( $GLOBALS['faz_fake_now'] ) ? $GLOBALS['faz_fake_now'] : 0 ) + (int) $seconds;
 }
 
 /**
@@ -68,12 +74,12 @@ function faz_consent_is_throttled( $consent_id, $status, $previous ) {
 		$status_changed = '' !== $status && $status !== $previous;
 		// Armed unconditionally; its verdict is ignored only for a change.
 		$key           = 'faz_consent_' . substr( md5( $consent_id ), 0, 8 );
-		$window_closed = faz_test_throttle( $key );
+		$window_closed = faz_test_throttle( $key, 300 );
 		// First change in the window is free; later ones are rate-limited.
 		if ( $status_changed ) {
 			$hash = substr( md5( $consent_id ), 0, 8 );
-			if ( faz_test_throttle( 'faz_consent_chg1_' . $hash ) ) {
-				$status_changed = ! faz_test_throttle( 'faz_consent_chgn_' . $hash );
+			if ( faz_test_throttle( 'faz_consent_chg1_' . $hash, 300 ) ) {
+				$status_changed = ! faz_test_throttle( 'faz_consent_chgn_' . $hash, 10 );
 			}
 		}
 		$is_consent_throttled = $status_changed ? false : $window_closed;
@@ -167,6 +173,29 @@ wcheck(
 	'sustained alternation is throttled, so it cannot be used as a write path'
 );
 
+// 4d. The change window EXPIRES. Without a clock the suite could not tell a 10s
+//     limit from a permanent block, nor from a window of any other length — it
+//     only ever observed the immediate refusal.
+$GLOBALS['faz_throttled_keys'] = array();
+$GLOBALS['faz_fake_now']       = 0;
+faz_consent_is_throttled( $id, 'accepted', '' );          // first change, free
+faz_consent_is_throttled( $id, 'rejected', 'accepted' );  // second, arms the 10s window
+wcheck(
+	faz_consent_is_throttled( $id, 'accepted', 'rejected' ),
+	'a third change inside the 10s window is still refused'
+);
+faz_test_advance( 11 );
+wcheck(
+	! faz_consent_is_throttled( $id, 'accepted', 'rejected' ),
+	'and once the 10s window has passed a change is logged again — the limit is a window, not a wall'
+);
+// Guard the other end: the 300s per-id window must NOT have expired with it.
+wcheck(
+	faz_consent_is_throttled( $id, 'accepted', 'accepted' ),
+	'the 300s replay window outlives the 10s change window'
+);
+$GLOBALS['faz_fake_now'] = 0;
+
 // 5. The transcription above must still match the shipped source. If the real
 //    guard is edited, this file has to be revisited rather than quietly
 //    continuing to test a stale copy of the logic.
@@ -190,6 +219,10 @@ wcheck(
 wcheck(
 	false !== strpos( $src, "'faz_consent_chg1_'" ) && false !== strpos( $src, "'faz_consent_chgn_'" ),
 	'the shipped guard frees the first change and rate-limits the ones after it'
+);
+wcheck(
+	false !== strpos( $src, "'faz_consent_chgn_' . \$hash, 10 )" ),
+	'and the change window is still the 10s one this suite simulates'
 );
 
 echo "\nconsent-log withdrawal: {$passed} passed, {$failed} failed\n";
