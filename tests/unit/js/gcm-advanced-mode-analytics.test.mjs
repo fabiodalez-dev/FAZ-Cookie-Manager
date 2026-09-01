@@ -47,7 +47,7 @@ function eq(label, actual, expected) {
 }
 
 /** Run gcm.js against a real consent cookie and return the last consent update. */
-function analyticsSignal(cookie, advanced) {
+function analyticsSignal(cookie, advanced, updatedCookie = null) {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
     runScripts: 'outside-only',
     url: 'http://localhost/',
@@ -67,6 +67,11 @@ function analyticsSignal(cookie, advanced) {
   window.console.warn = () => {};
 
   window.eval(readFileSync(GCM_PATH, 'utf8'));
+
+  if (updatedCookie !== null) {
+    window.document.cookie = `fazcookie-consent=${encodeURIComponent(updatedCookie)}`;
+    window.document.dispatchEvent(new window.CustomEvent('fazcookie_consent_update'));
+  }
 
   const updates = window.dataLayer
     .map((a) => Array.prototype.slice.call(a))
@@ -119,6 +124,16 @@ function run() {
     'advanced: both granted is granted',
     analyticsSignal(ALLOW_BOTH, true),
     'granted',
+  );
+  eq(
+    'advanced: a live update follows a later Analytics grant',
+    analyticsSignal(DENY_ANALYTICS_ALLOW_PERF, true, ALLOW_ANALYTICS_DENY_PERF),
+    'granted',
+  );
+  eq(
+    'advanced: a live update follows a later Analytics withdrawal',
+    analyticsSignal(ALLOW_ANALYTICS_DENY_PERF, true, DENY_ANALYTICS_ALLOW_PERF),
+    'denied',
   );
 
   console.log(`\n  gcm-advanced-mode-analytics: ${passed} passed, ${failed} failed`);
