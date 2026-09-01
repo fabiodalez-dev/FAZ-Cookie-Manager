@@ -45,7 +45,16 @@ function faz_test_throttle( $key, $ttl = 300 ) {
 	return false;
 }
 
-/** Move the simulated clock forward, so a TTL can actually elapse. */
+/**
+ * Move the simulated clock forward, so a TTL can actually elapse.
+ *
+ * NOTE the boundary: this stub expires while `expiry > now`, so a 10s window set
+ * at t=0 is already open at t=10. WordPress transients use `$timeout < time()`
+ * (wp-includes/option.php), so the real one is still CLOSED at t=10 and opens at
+ * t=11. The cases below advance 11 or 20, where both models agree — but do not
+ * "tighten" an advance to exactly the TTL, or the suite will pass while the real
+ * endpoint still refuses the request.
+ */
 function faz_test_advance( $seconds ) {
 	$GLOBALS['faz_fake_now'] = ( isset( $GLOBALS['faz_fake_now'] ) ? $GLOBALS['faz_fake_now'] : 0 ) + (int) $seconds;
 }
@@ -189,10 +198,21 @@ wcheck(
 	! faz_consent_is_throttled( $id, 'accepted', 'rejected' ),
 	'and once the 10s window has passed a change is logged again — the limit is a window, not a wall'
 );
-// Guard the other end: the 300s per-id window must NOT have expired with it.
+// Guard the other end: the 300s replay window must NOT expire with the 10s one.
+//
+// Probed on a FRESH consent id, and this is the whole point of the case. The
+// first version asserted it on $id, immediately after a call that had just
+// re-armed that key — so the window was refreshed regardless of its TTL and the
+// assertion was green for ANY value >= 1. Verified by mutation: shrinking the
+// replay TTL from 300 to 10 left all 21 assertions passing. Both the real
+// faz_throttle_request() and this stub re-arm on expiry, so the flaw was in the
+// probe's placement, not the model.
+$replay_id = 'replay-window-probe';
+faz_consent_is_throttled( $replay_id, 'accepted', '' );   // arms the 300s replay key at t=11
+faz_test_advance( 20 );                                    // past 10s, nowhere near 300s
 wcheck(
-	faz_consent_is_throttled( $id, 'accepted', 'accepted' ),
-	'the 300s replay window outlives the 10s change window'
+	faz_consent_is_throttled( $replay_id, 'accepted', 'accepted' ),
+	'the 300s replay window is still closed 20s later — it does not expire with the 10s change window'
 );
 $GLOBALS['faz_fake_now'] = 0;
 
@@ -223,6 +243,16 @@ wcheck(
 wcheck(
 	false !== strpos( $src, "'faz_consent_chgn_' . \$hash, 10 )" ),
 	'and the change window is still the 10s one this suite simulates'
+);
+// Both 300s TTLs were unanchored: the replay window and the first-change window
+// could each have been retuned without a single assertion noticing.
+wcheck(
+	false !== strpos( $src, '$window_closed = faz_throttle_request( $consent_key, 300 );' ),
+	'the replay window is still 300s'
+);
+wcheck(
+	false !== strpos( $src, "'faz_consent_chg1_' . \$hash, 300 )" ),
+	'and the first-change window is still 300s'
 );
 
 echo "\nconsent-log withdrawal: {$passed} passed, {$failed} failed\n";
