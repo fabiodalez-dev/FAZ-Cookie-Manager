@@ -111,7 +111,11 @@ function run() {
       console.log('  \x1b[31mFAIL\x1b[0m _fazShowPreferenceCenter is not exposed for the test');
       failed += 1;
     } else {
+      const banner = window.document.getElementById('faz-consent');
+      banner.classList.add('faz-hide');
       eq('CCPA on a classic banner: the missing opt-out panel is reported, not claimed as opened', fn(), false);
+      eq('the failed open leaves the hidden banner hidden for the caller fallback', banner.classList.contains('faz-hide'), true);
+      eq('the failed open does not mark an absent panel expanded', banner.classList.contains('faz-consent-bar-expand'), false);
     }
   }
 
