@@ -166,10 +166,17 @@ class Consent_Logger {
 			$previous       = $this->last_logged_status( $sanitized_consent_id );
 			$status_changed = '' !== $status && $status !== $previous;
 
-			if ( ! $status_changed ) {
-				$consent_key          = 'faz_consent_' . substr( md5( $sanitized_consent_id ), 0, 8 );
-				$is_consent_throttled = faz_throttle_request( $consent_key, 300 );
-			}
+			// The window is ARMED unconditionally and its verdict ignored only for
+			// a status change. Skipping the call entirely — the first shape of this
+			// fix — meant a bypass never armed anything, so the next identical
+			// replay was let through too and only the one after it was blocked.
+			// That silently weakened the 300s guarantee by one request; arming it
+			// here keeps replays throttled from the very first repeat while a real
+			// change still always lands.
+			$consent_key   = 'faz_consent_' . substr( md5( $sanitized_consent_id ), 0, 8 );
+			$window_closed = faz_throttle_request( $consent_key, 300 );
+
+			$is_consent_throttled = $status_changed ? false : $window_closed;
 		}
 		if ( $is_ip_throttled || $is_consent_throttled ) {
 			return rest_ensure_response( array( 'throttled' => true ) );

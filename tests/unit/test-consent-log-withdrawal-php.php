@@ -62,10 +62,10 @@ function faz_consent_is_throttled( $consent_id, $status, $previous ) {
 	if ( '' !== $consent_id ) {
 		$status         = sanitize_key( $status );
 		$status_changed = '' !== $status && $status !== $previous;
-		if ( ! $status_changed ) {
-			$key                  = 'faz_consent_' . substr( md5( $consent_id ), 0, 8 );
-			$is_consent_throttled = faz_test_throttle( $key );
-		}
+		// Armed unconditionally; its verdict is ignored only for a change.
+		$key           = 'faz_consent_' . substr( md5( $consent_id ), 0, 8 );
+		$window_closed = faz_test_throttle( $key );
+		$is_consent_throttled = $status_changed ? false : $window_closed;
 	}
 	return $is_consent_throttled;
 }
@@ -93,22 +93,16 @@ wcheck(
 	'a withdrawal minutes later is NOT dropped, even on the same consent_id'
 );
 
-// 2. The throttle still does its job: repeated posts of the SAME status are
-//    dropped. Note the exact shape, which the first draft of this suite got
-//    wrong: a status CHANGE bypasses the throttle without registering its key,
-//    so the first replay after a change is what arms the window and the ones
-//    after it are blocked. That is the intended trade — the per-IP throttle
-//    (10s) bounds flooding regardless, and erring toward recording one extra
-//    row is the right direction for an accountability register.
+// 2. The throttle still does its job, from the FIRST repeat. An earlier shape of
+//    this fix skipped the throttle call entirely on a change, so the bypass never
+//    armed the window and the next identical replay was let through as well —
+//    weakening the documented 300s guarantee by one request, which the
+//    pr-2026-04-19-audit E2E case caught. Arming unconditionally fixes that.
 $GLOBALS['faz_throttled_keys'] = array();
 wcheck( ! faz_consent_is_throttled( $id, 'accepted', '' ), 'first write of a status goes through' );
 wcheck(
-	! faz_consent_is_throttled( $id, 'accepted', 'accepted' ),
-	'the first replay after a change arms the throttle window'
-);
-wcheck(
 	faz_consent_is_throttled( $id, 'accepted', 'accepted' ),
-	'further replays of the same status are throttled — the bypass is for changes only'
+	'the very next replay of the same status is throttled — the bypass is for changes only'
 );
 
 // 3. Every direction of change, not just accept -> reject. A partial save and a
@@ -130,7 +124,6 @@ foreach ( array(
 //    caller a free bypass of the throttle by omitting the field.
 $GLOBALS['faz_throttled_keys'] = array();
 faz_consent_is_throttled( $id, 'accepted', '' );
-faz_consent_is_throttled( $id, '', 'accepted' ); // arms the window (see case 2)
 wcheck(
 	faz_consent_is_throttled( $id, '', 'accepted' ),
 	'a missing status is not a "change" — it goes through the throttle, so it cannot be used to bypass it'
@@ -145,8 +138,8 @@ wcheck(
 	'the shipped guard still computes status_changed the way this suite transcribes it'
 );
 wcheck(
-	false !== strpos( $src, 'if ( ! $status_changed ) {' ),
-	'the shipped guard still applies the per-id throttle only when the status did not change'
+	false !== strpos( $src, '$is_consent_throttled = $status_changed ? false : $window_closed;' ),
+	'the shipped guard still arms the window unconditionally and ignores it only on a change'
 );
 wcheck(
 	false !== strpos( $src, 'private function last_logged_status(' ),
