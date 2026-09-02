@@ -359,7 +359,14 @@ coverage_check( '_ga|example.test' === Controller::canonical_key( '  _GA  ', '.E
 coverage_check( '' === Controller::canonical_key( '   ', 'example.test' ), 'a nameless row has no canonical identity' );
 coverage_check( '_ga|' === Controller::canonical_key( '_ga', '' ), 'a domainless row still canonicalizes to a usable key' );
 
-coverage_check( 'wordpress-internal' === Cookie_Database::lookup( 'tk_ai' )['category'], 'Automattic dashboard cookies remain inventoried but classified internal' );
+// Automattic Tracks is inventoried as ANALYTICS, not internal. The category is a
+// behaviour, not a label: `wordpress-internal` is allowed before any consent check
+// and filtered out of every visitor-facing declaration, so classifying a cookie
+// Jetpack also sets outside wp-admin there made it permanently unblockable and
+// undisclosed. The property this line exists to pin — that the cookie stays
+// INVENTORIED rather than dropping out of the database — is unchanged.
+coverage_check( is_array( Cookie_Database::lookup( 'tk_ai' ) ), 'Automattic Tracks cookies stay inventoried' );
+coverage_check( 'analytics' === Cookie_Database::lookup( 'tk_ai' )['category'], 'and are classified analytics, so they can be gated and must be declared' );
 coverage_check( 'analytics' === Cookie_Database::lookup( 'brikpanel_vid' )['category'], 'Brikpanel visitor ID is classified when observed' );
 
 $root = dirname( __DIR__, 2 );

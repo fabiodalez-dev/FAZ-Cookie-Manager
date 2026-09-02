@@ -172,10 +172,17 @@ ref._fazSetInStore = function (key, value) {
         const coreIndex = {};
         const svcDeniedEntries = [];
         const svcAllowedEntries = [];
-        const ckEntries = [];
+        // Per-cookie entries are split by decision, like the service ones above.
+        // They used to be one undifferentiated list appended purely by size, so
+        // a `ck.x.y:no` could be crowded out by an earlier `:yes` and simply
+        // vanish — after reload that cookie inherits its service or category,
+        // which may well be "yes". A recorded denial coming back as an allow is
+        // the one outcome this budget logic must never produce.
+        const ckDeniedEntries = [];
+        const ckAllowedEntries = [];
         cookieStringArray.forEach(function (entry) {
             if (entry.indexOf("ck.") === 0) {
-                ckEntries.push(entry);
+                (/:no$/.test(entry) ? ckDeniedEntries : ckAllowedEntries).push(entry);
             } else if (entry.indexOf("svc.") === 0) {
                 const sep = entry.indexOf(":");
                 const svcId = sep > 4 ? entry.substring(4, sep) : "";
@@ -265,8 +272,50 @@ ref._fazSetInStore = function (key, value) {
         // fitted. serviceDropped is set whenever ANY svc.* entry (a denial OR
         // an allow) overflowed the budget, so a shorter ck.* key can never
         // displace a higher-priority svc.* key.
+        // A per-cookie DENIAL that cannot be stored is escalated to a denial of
+        // its whole service, which is both shorter and stricter — the visitor
+        // refused one of that service's cookies, so refusing the service cannot
+        // grant them anything they did not ask for. Only when even that will not
+        // fit does the category downgrade take over. Escalation is what makes
+        // the "fail closed" claim in the warning below true for ck.* too; before
+        // it, only svc.* denials had any fallback at all.
+        const escalateCkDenial = function (entry) {
+            const dot = entry.indexOf(".", 3);
+            const svcId = dot > 3 ? entry.substring(3, dot) : "";
+            if (!svcId) return false;
+            const substitute = "svc." + svcId + ":no";
+            if (kept.indexOf(substitute) !== -1) return true; // already covered
+            kept.push(substitute);
+            if (_fazEncodedLen(kept) > FAZ_COOKIE_VALUE_BUDGET) {
+                kept.pop();
+                const cat = svcCatMap[svcId] || "";
+                if (cat && !downgradedCategories[cat]) {
+                    downgradedCategories[cat] = true;
+                    setCoreEntry(cat, "no");
+                }
+                return false;
+            }
+            return true;
+        };
+
+        // Denials first, and independently of serviceDropped: a service entry
+        // that did not fit must not also discard every per-cookie REFUSAL, which
+        // is what `dropped += ckEntries.length` did — it threw away denials
+        // belonging to services that were still allowed.
+        ckDeniedEntries.forEach(function (entry) {
+            kept.push(entry);
+            if (_fazEncodedLen(kept) > FAZ_COOKIE_VALUE_BUDGET) {
+                kept.pop();
+                dropped++;
+                escalateCkDenial(entry);
+            }
+        });
+        // Allows are the only entries safe to lose outright: falling back to the
+        // service or category decision can only ever be equally or more
+        // restrictive. Still gated on serviceDropped so a short ck.* allow never
+        // displaces a higher-priority svc.* key.
         if (!serviceDropped) {
-            ckEntries.forEach(function (entry) {
+            ckAllowedEntries.forEach(function (entry) {
                 kept.push(entry);
                 if (_fazEncodedLen(kept) > FAZ_COOKIE_VALUE_BUDGET) {
                     kept.pop();
@@ -274,7 +323,7 @@ ref._fazSetInStore = function (key, value) {
                 }
             });
         } else {
-            dropped += ckEntries.length;
+            dropped += ckAllowedEntries.length;
         }
         if (dropped > 0 && typeof console !== "undefined" && console.warn) {
             console.warn(
@@ -283,7 +332,8 @@ ref._fazSetInStore = function (key, value) {
                     " encoded bytes; dropped " +
                     dropped +
                     " per-service/per-cookie override(s) to avoid browser truncation. " +
-                    "Denied services that could not fit fail closed through category-level opt-out."
+                    "Denials that could not fit fail closed: a per-cookie refusal " +
+                    "escalates to its service, and a service refusal to its category."
             );
         }
         cookieStringArray = kept;
