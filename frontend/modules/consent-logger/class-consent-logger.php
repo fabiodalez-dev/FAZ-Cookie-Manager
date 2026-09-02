@@ -149,6 +149,18 @@ class Consent_Logger {
 		$sanitized_consent_id = sanitize_text_field( (string) ( $consent_id ?? '' ) );
 		$is_ip_throttled      = faz_throttle_request( 'faz_consent_ip', 10 );
 		$is_consent_throttled = false;
+
+		// Answer a throttled caller before doing any work for it. The block
+		// below runs a database query (last_logged_status) and arms two
+		// transients, and until now all of that happened even when the verdict
+		// at the bottom was already decided — so a client being rate-limited
+		// still cost a query per request, which is the flooding this endpoint
+		// throttles in the first place. Nothing below can clear an IP throttle,
+		// so returning here changes no outcome, only the price of reaching it.
+		if ( $is_ip_throttled ) {
+			return rest_ensure_response( array( 'throttled' => true ) );
+		}
+
 		if ( '' !== $sanitized_consent_id ) {
 			// The per-consent_id throttle exists to stop one id being replayed
 			// from many IPs. But the consent_id is deliberately KEPT across

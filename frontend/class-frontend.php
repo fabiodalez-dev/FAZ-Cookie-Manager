@@ -1722,6 +1722,29 @@ class Frontend {
 		if ( 'optin' === $type ) {
 			return $type;
 		}
+		// Answer with the regime actually being ENFORCED, not the banner's label.
+		// Declaring 'optout' makes wp_has_consent() return true by default, so
+		// every third-party plugin honouring the WP Consent API is told it may
+		// fire — including server-side, where FAZ's output filtering cannot
+		// reach it. Getting this wrong is not a mislabel, it is other people's
+		// trackers running before consent.
+		//
+		// Two states where the banner says ccpa and the enforcement does not:
+		//
+		// 1. The runtime ruleset resolved an opt-in law for this visitor while
+		//    the publisher has no active GDPR banner. maybe_apply_geo_runtime()
+		//    deliberately KEEPS the CCPA banner there (fail-closed, so blocking
+		//    still runs) — so the banner's law is the one thing that is known to
+		//    be wrong in exactly that case.
+		// 2. Cache Compatibility Mode blocks every non-necessary category
+		//    regardless of law, so nothing may be assumed consented.
+		$runtime_ruleset = $this->get_runtime_ruleset();
+		if ( null !== $runtime_ruleset && 'ccpa' !== Geo_Runtime::model_to_law( $runtime_ruleset ) ) {
+			return 'optin';
+		}
+		if ( $this->is_cache_compatibility_enabled() ) {
+			return 'optin';
+		}
 		if ( $this->banner && 'ccpa' === $this->banner->get_law() ) {
 			return 'optout';
 		}
@@ -4294,7 +4317,7 @@ class Frontend {
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
 			return $full;
 		}
-		if ( false !== strpos( $attrs, 'data-faz-href' ) ) {
+		if ( false !== strpos( $attrs, 'data-faz-href' ) || false !== strpos( $attrs, 'data-faz-imagesrcset' ) ) {
 			return $full;
 		}
 
@@ -4314,8 +4337,17 @@ class Frontend {
 			}
 		}
 
+		// Park imagesrcset BEFORE href. get_provider_match_context() folds
+		// srcset/imagesrcset into the text this tag is matched against, so a
+		// `<link rel="preload" as="image" imagesrcset="https://tracker/…">` was
+		// correctly recognised as blocked and then left able to fetch: renaming
+		// href alone does nothing to a preload whose URL lives in imagesrcset.
+		// The attribute name cannot collide with the srcset rule below it —
+		// `(^|\s)srcset` needs whitespace before it, which `imagesrcset=` does
+		// not provide.
+		$new_attrs = preg_replace( '/(^|\s)imagesrcset\s*=\s*/i', '$1data-faz-imagesrcset=', $attrs, 1 );
 		// Rename href → data-faz-href (avoid matching data-href).
-		$new_attrs = preg_replace( '/(^|\s)href\s*=\s*/i', '$1data-faz-href=', $attrs, 1 );
+		$new_attrs = preg_replace( '/(^|\s)href\s*=\s*/i', '$1data-faz-href=', $new_attrs, 1 );
 		// As with <img>, $attrs may already end in the source tag's `/`.
 		// Prefix metadata so the slash remains the final token before `>`.
 		$metadata = ' data-faz-category="' . esc_attr( $matched_category ) . '"';

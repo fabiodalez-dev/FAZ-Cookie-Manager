@@ -101,8 +101,15 @@ test.describe('Scan progress UI', () => {
 		expect(barWidth).not.toBe('0%');
 
 		// 7. Wait for scan to complete.
+		// :not(.faz-scan-session-wrap) — the session panel is built with BOTH classes
+		// (cookies.js: `wrap.className = 'faz-scan-progress-wrap faz-scan-session-wrap'`),
+		// so the bare selector matched it too. After a faz_browser_scan_in_progress
+		// error, handleScanFailure() calls refreshActiveScanSession(), which can put
+		// that panel back — and this wait would then never be satisfied, burning the
+		// full 180s and reporting a timeout instead of the failure that caused it.
+		// The app's own code already draws this distinction at cookies.js:1533.
 		await page.waitForFunction(
-			() => !document.querySelector('.faz-scan-progress-wrap'),
+			() => !document.querySelector('.faz-scan-progress-wrap:not(.faz-scan-session-wrap)'),
 			undefined,
 			{ timeout: 180000 }
 		);
@@ -156,7 +163,7 @@ test.describe('Scan progress UI', () => {
 		await page.click('.faz-dropdown-item[data-depth="10"]');
 
 		await page.waitForFunction(
-			() => !document.querySelector('.faz-scan-progress-wrap'),
+			() => !document.querySelector('.faz-scan-progress-wrap:not(.faz-scan-session-wrap)'),
 			undefined,
 			{ timeout: 180000 }
 		);

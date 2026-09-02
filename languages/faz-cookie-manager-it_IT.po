@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-09-02T17:56:45+00:00\n"
+"POT-Creation-Date: 2026-09-02T20:03:00+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -49,7 +49,7 @@ msgid "Cookie Banner"
 msgstr "Banner cookie"
 
 #: admin/class-admin.php:231 admin/views/base.php:21
-#: frontend/class-frontend.php:2825
+#: frontend/class-frontend.php:2848
 #: frontend/modules/banner-rest/class-banner-rest.php:597
 msgid "Cookies"
 msgstr "Cookie"
@@ -363,11 +363,11 @@ msgstr "Mostra i nomi"
 msgid "If you recognise one as a cookie your site really sets, add it manually with Add Cookie."
 msgstr "Se ne riconosci uno come un cookie che il tuo sito imposta davvero, aggiungilo a mano con Aggiungi cookie."
 
-#. translators: %d: numeric id of the scan the visitor check belongs to.
+#. translators: %s: id of the scan the visitor check belongs to (a 32-char hex token, not a number).
 #: admin/class-admin.php:601
 #, php-format
-msgid "Server-side visitor check (headers only) — scan #%d:"
-msgstr "Verifica lato server come visitatore (solo intestazioni) — scansione n. %d:"
+msgid "Server-side visitor check (headers only) — scan #%s:"
+msgstr "Verifica lato server come visitatore (solo intestazioni) — scansione n. %s:"
 
 #. translators: 1: number of cookies, 2: comma-separated cookie names.
 #: admin/class-admin.php:603
@@ -3738,7 +3738,7 @@ msgstr "Lingua:"
 msgid "Notice Title"
 msgstr "Titolo dell'avviso"
 
-#: admin/views/banner.php:342 frontend/class-frontend.php:2820
+#: admin/views/banner.php:342 frontend/class-frontend.php:2843
 #: frontend/modules/banner-rest/class-banner-rest.php:592
 msgid "We value your privacy"
 msgstr "La tua privacy è importante"
@@ -4065,7 +4065,7 @@ msgstr "Testo opt-out (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Testo del modale «Preferenze di opt-out» che il visitatore vede dopo aver cliccato il link «Do Not Sell or Share My Personal Information». Mostrato solo sui banner CCPA / US State Laws (ed Entrambi). Segue la lingua selezionata qui sopra."
 
-#: admin/views/banner.php:828 frontend/class-frontend.php:2822
+#: admin/views/banner.php:828 frontend/class-frontend.php:2845
 #: frontend/modules/banner-rest/class-banner-rest.php:594
 msgid "Opt-out Preferences"
 msgstr "Preferenze di opt-out"
@@ -5592,7 +5592,7 @@ msgstr "Frequenza di scansione"
 msgid "Daily"
 msgstr "Giornaliero"
 
-#: admin/views/settings.php:303 includes/class-activator.php:643
+#: admin/views/settings.php:303 includes/class-activator.php:681
 msgid "Weekly"
 msgstr "Settimanale"
 
@@ -6586,50 +6586,50 @@ msgstr "{name} abilitato, disabilita {name}"
 msgid "{name} disabled, enable {name}"
 msgstr "{name} disabilitato, abilita {name}"
 
-#: frontend/class-frontend.php:2821
+#: frontend/class-frontend.php:2844
 #: frontend/modules/banner-rest/class-banner-rest.php:593
 msgid "Your cookie preferences have been saved."
 msgstr "Le tue preferenze sui cookie sono state salvate."
 
-#: frontend/class-frontend.php:2823
+#: frontend/class-frontend.php:2846
 #: frontend/modules/banner-rest/class-banner-rest.php:595
 msgid "Customise Consent Preferences"
 msgstr "Personalizza le preferenze di consenso"
 
-#: frontend/class-frontend.php:2824
+#: frontend/class-frontend.php:2847
 #: frontend/modules/banner-rest/class-banner-rest.php:596
 msgid "Service consent"
 msgstr "Consenso al servizio"
 
-#: frontend/class-frontend.php:2826
+#: frontend/class-frontend.php:2849
 #: frontend/modules/banner-rest/class-banner-rest.php:598
 msgid "Cookie consent"
 msgstr "Consenso ai cookie"
 
-#: frontend/class-frontend.php:2827
+#: frontend/class-frontend.php:2850
 #: frontend/modules/banner-rest/class-banner-rest.php:599
 msgid "Vendor consent"
 msgstr "Consenso fornitore"
 
-#: frontend/class-frontend.php:2828
+#: frontend/class-frontend.php:2851
 #: frontend/modules/banner-rest/class-banner-rest.php:600
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Questi cookie sono impostati dal servizio incorporato sul proprio dominio e si controllano consentendo o bloccando l'embed qui sopra — non possono essere rimossi singolarmente."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:2832
+#: frontend/class-frontend.php:2855
 #: frontend/modules/banner-rest/class-banner-rest.php:605
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Confermo di avere almeno %d anni"
 
-#: frontend/class-frontend.php:2833
+#: frontend/class-frontend.php:2856
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Conferma di avere l’età minima per accettare i cookie facoltativi."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:2840
+#: frontend/class-frontend.php:2863
 #: frontend/modules/banner-rest/class-banner-rest.php:608
 #, php-format
 msgid "Banner closes automatically in %d s..."
@@ -6674,7 +6674,7 @@ msgstr "Nessun banner attivo trovato."
 msgid "This request must originate from this website."
 msgstr "Questa richiesta deve provenire da questo sito web."
 
-#: frontend/modules/consent-logger/class-consent-logger.php:234
+#: frontend/modules/consent-logger/class-consent-logger.php:246
 msgid "Failed to log consent."
 msgstr "Registrazione del consenso non riuscita."
 
@@ -6739,15 +6739,15 @@ msgstr "Un pulsante che apre le preferenze di consenso ai cookie."
 msgid "Manage Cookie Preferences"
 msgstr "Gestisci le preferenze sui cookie"
 
-#: includes/class-activator.php:649
+#: includes/class-activator.php:687
 msgid "Once Daily (FAZ)"
 msgstr "Una volta al giorno (FAZ)"
 
-#: includes/class-activator.php:655
+#: includes/class-activator.php:693
 msgid "Once Weekly (FAZ)"
 msgstr "Una volta alla settimana (FAZ)"
 
-#: includes/class-activator.php:661
+#: includes/class-activator.php:699
 msgid "Once Monthly (FAZ)"
 msgstr "Una volta al mese (FAZ)"
 
@@ -7179,7 +7179,7 @@ msgid "not scheduled"
 msgstr "non pianificato"
 
 #. translators: %s: human-readable duration, e.g. "5 days".
-#: includes/class-formatting.php:191
+#: includes/class-formatting.php:206
 #, php-format
 msgid "OVERDUE by %s — WP-Cron may not be running"
 msgstr "IN RITARDO di %s — WP-Cron potrebbe non essere in esecuzione"
@@ -7327,6 +7327,10 @@ msgstr "Pulsante"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Collegamento"
+
+#, php-format
+#~ msgid "Server-side visitor check (headers only) — scan #%d:"
+#~ msgstr "Verifica lato server come visitatore (solo intestazioni) — scansione n. %d:"
 
 #~ msgid "Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied."
 #~ msgstr "Il Geo-Targeting mantiene attivo l'instradamento per giurisdizione, quindi la Modalità compatibilità cache non verrà applicata."

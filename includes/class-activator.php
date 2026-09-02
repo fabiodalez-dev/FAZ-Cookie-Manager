@@ -481,11 +481,44 @@ class Activator {
 	 *              false — see the note there for why the caller, and not a
 	 *              thrown exception, owns that decision.
 	 */
+	/**
+	 * Short-lived claim that makes the consent-cookie seed single-writer.
+	 */
+	const OWN_COOKIE_SEED_CLAIM = 'faz_own_cookie_seed_claim';
+
 	private static function seed_own_consent_cookie() {
 		// Same discipline as the sibling seeders: marker first as a guard,
 		// written LAST and only on success, so a failed write is retried on the
 		// next migration rather than being recorded as done.
 		if ( get_option( 'faz_own_cookie_seeded' ) ) {
+			return true;
+		}
+
+		// Claim the seed atomically. The completion marker above is written LAST
+		// and on success only — deliberately, so a failed write retries — which
+		// leaves the whole body a check-then-act: two requests arriving together
+		// both saw no marker and no cookie, and both inserted. faz_cookies
+		// indexes `name` but does not make it UNIQUE, so nothing downstream
+		// rejected the duplicate; the admin just got the same row twice in the
+		// declaration.
+		//
+		// add_option() is the atomic primitive available here: the options table
+		// has a UNIQUE key on option_name, so exactly one caller can create this
+		// row. The claim is separate from the completion marker so a crash costs
+		// a retry, not a permanent skip — it is taken over once it is older than
+		// the window below.
+		$claim = get_option( self::OWN_COOKIE_SEED_CLAIM );
+		if ( false !== $claim ) {
+			if ( ( time() - (int) $claim ) < 60 ) {
+				// Someone else is inside right now. "Seeded or already accounted
+				// for" is exactly what this returns.
+				return true;
+			}
+			// Stale: the holder died. Take it over.
+			update_option( self::OWN_COOKIE_SEED_CLAIM, time(), false );
+		} elseif ( ! add_option( self::OWN_COOKIE_SEED_CLAIM, time(), '', false ) ) {
+			// Lost the race between the read and the insert — the winner is
+			// seeding as we speak.
 			return true;
 		}
 
@@ -498,6 +531,7 @@ class Activator {
 		// the failure this codebase already learned once in
 		// run_retention_cleanup(); a false return costs only the version marker.
 		if ( ! class_exists( Cookie_Database::class ) || ! class_exists( Scanner_Controller::class ) ) {
+			delete_option( self::OWN_COOKIE_SEED_CLAIM );
 			return false;
 		}
 
@@ -506,6 +540,7 @@ class Activator {
 			// The built-in record is the single source of truth for wording and
 			// category; inventing a second copy here would let the two drift.
 			// Retryable, not done: the catalogue may simply not be loaded yet.
+			delete_option( self::OWN_COOKIE_SEED_CLAIM );
 			return false;
 		}
 
@@ -538,6 +573,7 @@ class Activator {
 			// migration behind it. The false return is what actually buys the
 			// retry — before it, the version marker was written anyway and this
 			// never ran again until the next release bumped MIGRATIONS_VERSION.
+			delete_option( self::OWN_COOKIE_SEED_CLAIM );
 			return false;
 		}
 
@@ -551,9 +587,11 @@ class Activator {
 			&& ! get_option( 'faz_own_cookie_seeded' ) ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- surfacing a silent migration failure, same as run_retention_cleanup().
 			error_log( 'FAZ Cookie Manager: could not persist faz_own_cookie_seeded; the consent-cookie seed will re-run on the next admin load.' );
+			delete_option( self::OWN_COOKIE_SEED_CLAIM );
 			return false;
 		}
 
+		delete_option( self::OWN_COOKIE_SEED_CLAIM );
 		return true;
 	}
 

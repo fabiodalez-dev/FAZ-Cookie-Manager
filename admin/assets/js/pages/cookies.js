@@ -695,8 +695,8 @@
 			bar.style.display = '';
 
 			var title = document.createElement('strong');
-			title.textContent = __('cookies.visitorCheckTitle', 'Server-side visitor check (headers only) — scan #%d:')
-				.replace('%d', function () { return String(check.scan_id || 0); });
+			title.textContent = __('cookies.visitorCheckTitle', 'Server-side visitor check (headers only) — scan #%s:')
+				.replace('%s', function () { return String(check.scan_id || ''); });
 			bar.appendChild(title);
 
 			var list = document.createElement('ul');

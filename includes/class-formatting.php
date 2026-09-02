@@ -169,7 +169,22 @@ if ( ! function_exists( 'faz_status_schedule' ) ) {
 		if ( ! $timestamp ) {
 			return '&mdash; ' . esc_html__( 'not scheduled', 'faz-cookie-manager' );
 		}
-		$when = esc_html( date_i18n( 'Y-m-d H:i:s', $timestamp ) );
+		// date_i18n()'s second argument is a timestamp that ALREADY carries the
+		// site's offset — the legacy contract. wp_next_scheduled() hands back a
+		// true Unix timestamp, so passing it straight through renders UTC while
+		// every other admin screen shows local time. Measured on a Europe/Rome
+		// site: the row said 19:04 for a schedule that is 21:04 to the person
+		// reading it. Two hours of quiet error in a report whose only job is to
+		// be believed.
+		//
+		// wp_date() is the modern answer and is WP 5.3+; this plugin declares 5.0
+		// and Plugin Check flags the name statically regardless of guards, so the
+		// offset is applied by hand. get_option( 'gmt_offset' ) is safe for that:
+		// WordPress recomputes it from timezone_string through the
+		// pre_option_gmt_offset filter, so it follows DST — verified as 2 for
+		// Europe/Rome in September and 1 in January.
+		$offset = (int) round( (float) get_option( 'gmt_offset' ) * HOUR_IN_SECONDS );
+		$when   = esc_html( date_i18n( 'Y-m-d H:i:s', (int) $timestamp + $offset ) );
 		$late = time() - (int) $timestamp;
 
 		// WP-Cron is traffic-driven: a due event fires on the next page load, so

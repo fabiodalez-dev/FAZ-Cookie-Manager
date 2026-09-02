@@ -446,12 +446,22 @@ class Cookie_Definitions {
 			return true;
 		}
 
-		// update_definitions() stamps with current_time( 'mysql' ), i.e. site
-		// local time, against a UTC constant. The skew is under a day and the
-		// deltas this decides are weeks or months, so it does not matter here —
-		// worst case two datasets captured the same day resolve to the bundle,
-		// which is the same data.
-		return strtotime( self::BUNDLED_DATA_DATE ) > $downloaded_ts;
+		// update_definitions() stamps with current_time( 'mysql' ), i.e. SITE
+		// LOCAL time, while BUNDLED_DATA_DATE is UTC. Comparing them raw lets the
+		// site's offset decide the winner: at UTC+13 a download would look 13
+		// hours older than it is and lose to a bundle it actually postdates, and
+		// at UTC-11 the reverse. I first wrote this off as "under a day and the
+		// deltas are months", which is true of the common case and useless as an
+		// argument — the whole point of the comparison is the close call.
+		//
+		// Normalise the stored stamp to UTC. The offset at write time is not
+		// recorded, so the current one is the best available; being wrong by an
+		// hour across a DST boundary is bounded, unlike being wrong by the whole
+		// offset on every comparison.
+		$offset        = (int) round( (float) get_option( 'gmt_offset' ) * HOUR_IN_SECONDS );
+		$downloaded_ts = $downloaded_ts - $offset;
+
+		return strtotime( self::BUNDLED_DATA_DATE . ' UTC' ) > $downloaded_ts;
 	}
 
 	/**

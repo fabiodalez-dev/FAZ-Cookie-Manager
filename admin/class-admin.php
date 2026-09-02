@@ -597,8 +597,8 @@ class Admin {
 						'jarOnlyExplain'           => __( 'If you recognise one as a cookie your site really sets, add it manually with Add Cookie.', 'faz-cookie-manager' ),
 						// Server-side visitor check — the anonymous header
 						// replay diffed against the logged-in browser pass.
-						/* translators: %d: numeric id of the scan the visitor check belongs to. */
-						'visitorCheckTitle'        => __( 'Server-side visitor check (headers only) — scan #%d:', 'faz-cookie-manager' ),
+						/* translators: %s: id of the scan the visitor check belongs to (a 32-char hex token, not a number). */
+						'visitorCheckTitle'        => __( 'Server-side visitor check (headers only) — scan #%s:', 'faz-cookie-manager' ),
 						/* translators: 1: number of cookies, 2: comma-separated cookie names. */
 						'visitorCheckVisitorOnly'  => __( '%1$d cookie(s) were set for the anonymous check but never seen by the logged-in browser scan, and were added to the declaration: %2$s', 'faz-cookie-manager' ),
 						/* translators: 1: number of cookies, 2: comma-separated cookie names. */

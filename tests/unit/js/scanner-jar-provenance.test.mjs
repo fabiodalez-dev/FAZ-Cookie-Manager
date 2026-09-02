@@ -126,6 +126,17 @@ const allowedJarShapes = [
 ok(jarLines.length === 5 && jarLines.every((line) => allowedJarShapes.some((shape) => shape.test(line))),
   'the bucket is only filled, iterated, and handed to the ledger — never merged into the imported set');
 
+  // The shape above allows a BARE `$jar_cookies` token and says nothing about
+  // who receives it, so the comment's claim ("handed to begin_visitor_check")
+  // was documentation, not an assertion: passing the bucket to any other
+  // function would have satisfied every check here just as well.
+  // [\s\S] rather than [^)]: the call is multi-line and its third argument
+  // contains an array(), so a paren-excluding pattern stops short of the bucket.
+  ok(
+    /begin_visitor_check\([\s\S]{0,600}?\$jar_cookies/.test(importBody || ''),
+    'and the recipient is begin_visitor_check(), not merely something',
+  );
+
 const jarLoopStart = (importBody || '').indexOf('foreach ( $jar_cookies as $jar_cookie ) {');
 const jarLoop = jarLoopStart === -1
   ? ''

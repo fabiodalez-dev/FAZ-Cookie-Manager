@@ -2917,7 +2917,7 @@ class Controller {
 		}
 	}
 
-	public function record_visitor_observations( $observed_cookies, $expected_target = '' ) {
+	public function record_visitor_observations( $observed_cookies, $expected_target = null ) {
 		$target = sanitize_key( (string) get_option( self::VISITOR_CHECK_TARGET_OPTION, '' ) );
 		if ( '' === $target ) {
 			return;
@@ -2928,8 +2928,20 @@ class Controller {
 		// another, which corrupts exactly the visitor_only/jar_promoted buckets
 		// the whole feature is for. Guarding the close was not enough; the
 		// writes need the same check.
+		// `null` and `''` are different answers. `null` is "the caller said
+		// nothing", which keeps the permissive legacy behaviour; `''` is the
+		// caller stating there was NO open ledger when it captured one, and that
+		// has to mean "write nowhere" rather than "write anywhere". Production
+		// always passes the captured value (run_httponly_check, lines ~1444 and
+		// ~1470), so an empty capture used to let a ledger opened mid-batch by an
+		// unrelated import receive this scan's observations — the exact
+		// misattribution the comment above describes, arriving through the guard
+		// meant to prevent it.
+		if ( null === $expected_target ) {
+			$expected_target = $target;
+		}
 		$expected_target = sanitize_key( (string) $expected_target );
-		if ( '' !== $expected_target && $expected_target !== $target ) {
+		if ( $expected_target !== $target ) {
 			return;
 		}
 		$this->with_visitor_check_lock( function () use ( $observed_cookies, $target ) {
@@ -3014,7 +3026,7 @@ class Controller {
 	 *
 	 * @return array|null The completed ledger entry, or null when none is open.
 	 */
-	public function finalize_visitor_check( $expected_target = '' ) {
+	public function finalize_visitor_check( $expected_target = null ) {
 		return $this->with_visitor_check_lock(
 			function () use ( $expected_target ) {
 				return $this->finalize_visitor_check_locked( $expected_target );
@@ -3033,7 +3045,7 @@ class Controller {
 	 * @param string $expected_target Target captured when the replay worker began.
 	 * @return array|null The completed ledger entry, or null when the target moved.
 	 */
-	private function finalize_visitor_check_locked( $expected_target = '' ) {
+	private function finalize_visitor_check_locked( $expected_target = null ) {
 		$target = sanitize_key( (string) get_option( self::VISITOR_CHECK_TARGET_OPTION, '' ) );
 		if ( '' === $target ) {
 			return null;
@@ -3041,8 +3053,20 @@ class Controller {
 		// A ledger opened after this worker started belongs to a replay that has
 		// not run yet. Closing it here would freeze it empty and leave its own
 		// worker with nothing to write into.
+		// `null` and `''` are different answers. `null` is "the caller said
+		// nothing", which keeps the permissive legacy behaviour; `''` is the
+		// caller stating there was NO open ledger when it captured one, and that
+		// has to mean "write nowhere" rather than "write anywhere". Production
+		// always passes the captured value (run_httponly_check, lines ~1444 and
+		// ~1470), so an empty capture used to let a ledger opened mid-batch by an
+		// unrelated import receive this scan's observations — the exact
+		// misattribution the comment above describes, arriving through the guard
+		// meant to prevent it.
+		if ( null === $expected_target ) {
+			$expected_target = $target;
+		}
 		$expected_target = sanitize_key( (string) $expected_target );
-		if ( '' !== $expected_target && $expected_target !== $target ) {
+		if ( $expected_target !== $target ) {
 			return null;
 		}
 		delete_option( self::VISITOR_CHECK_TARGET_OPTION );

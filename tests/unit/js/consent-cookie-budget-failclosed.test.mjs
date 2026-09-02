@@ -134,7 +134,16 @@ function run() {
       'and the denial never resolves to a grant',
       !(cookie.indexOf(`ck.${MATOMO}._pk_id_long_enough_to_matter:yes`) !== -1 || cookie.indexOf(`svc.${MATOMO}:yes`) !== -1),
     );
-    ok('the cookie still fits the budget', cookie.length <= 4200);
+    // Measure what the code measures. The budget is FAZ_COOKIE_VALUE_BUDGET
+    // = 3500 ENCODED bytes (_fazEncodedLen), and this asserted raw .length
+    // against 4200 — a looser bound on a different quantity, so a regression
+    // landing anywhere between the two was invisible. encodeURIComponent is the
+    // same encoding _fazEncodedLen applies.
+    const encodedLen = encodeURIComponent(cookie).length;
+    ok(
+      `the cookie still fits the 3500-byte budget (encoded ${encodedLen})`,
+      encodedLen <= 3500,
+    );
   }
 
   // 2. The direction that must not regress: a service denial keeps its existing

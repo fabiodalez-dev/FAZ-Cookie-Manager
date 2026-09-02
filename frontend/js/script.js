@@ -4120,10 +4120,31 @@ function _fazParkResourceElementIfBlocked(el) {
         } else if (tag === "link") {
             var href = el.getAttribute("href");
             var rel = (el.getAttribute("rel") || "").toLowerCase();
-            if (href && rel.indexOf("stylesheet") !== -1 && !el.getAttribute("data-faz-href") && _fazImgShouldBlock(el, href)) {
+            // Same rel set the server-side pass gates (process_link_tag in
+            // class-frontend.php). It used to be "stylesheet" alone, so a
+            // <link rel="preload" href="https://tracker/…"> written with
+            // innerHTML AFTER load walked straight past a filter that would
+            // have caught the identical tag in the original HTML. A fetch is a
+            // fetch whenever the element arrives.
+            var gated = false;
+            var rels = ["stylesheet", "preload", "modulepreload", "prefetch", "prerender"];
+            for (var ri = 0; ri < rels.length; ri++) {
+                if (rel.indexOf(rels[ri]) !== -1) { gated = true; break; }
+            }
+            if (gated && href && !el.getAttribute("data-faz-href") && _fazImgShouldBlock(el, href)) {
                 el.setAttribute("data-faz-href", href);
                 el.setAttribute("data-faz-category", _fazImgCategory(href));
                 el.removeAttribute("href");
+            }
+            // A preload can carry its URL in imagesrcset instead of href, and
+            // then href alone is nothing to neutralise.
+            var iss = el.getAttribute("imagesrcset");
+            if (gated && iss && !el.getAttribute("data-faz-imagesrcset") && _fazImgShouldBlock(el, iss)) {
+                el.setAttribute("data-faz-imagesrcset", iss);
+                if (!el.getAttribute("data-faz-category")) {
+                    el.setAttribute("data-faz-category", _fazImgCategory(iss));
+                }
+                el.removeAttribute("imagesrcset");
             }
         }
     } catch (e) { /* leave the element untouched on error */ }
@@ -5434,6 +5455,20 @@ function _fazUnblockServerSide() {
             el.href = fazHref;
             if (!el.getAttribute("href")) return; // gate re-parked it — stay parked, recoverable
             el.removeAttribute("data-faz-href");
+        });
+
+    // 4a. <link imagesrcset> — a preload can carry its URL there instead of in
+    // href, and the server parks it for exactly that reason. Same category gate
+    // as the href pass above; restoring it unconditionally would hand back a
+    // blocked preload the moment ANY category was accepted.
+    document.querySelectorAll('link[data-faz-imagesrcset]')
+        .forEach(function (el) {
+            var cat = el.getAttribute("data-faz-category") || "";
+            var parked = el.getAttribute("data-faz-imagesrcset");
+            if (_fazShouldBlockResource(cat, parked, el.getAttribute("data-faz-service") || "")) return;
+            if (!_fazIsAllowedScheme(parked)) return;
+            el.setAttribute("imagesrcset", parked);
+            el.removeAttribute("data-faz-imagesrcset");
         });
 
     // 4b. Inline CSS whose url()/@import tokens were neutralised server-side or

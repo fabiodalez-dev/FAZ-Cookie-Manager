@@ -331,8 +331,22 @@ test.describe('Scan session resume — reload visibility and explicit stop', () 
       seedCaptureSession(uid, token, scanId, { idleS: 60, state: 'held' });
       const nonce = await openCookiesPage(page, loginAsAdmin);
 
-      // Give the page's session check time to have run, then require absence.
-      await page.waitForTimeout(2000);
+      // Wait for the session check to ANSWER, not for two seconds to pass. An
+      // absence assertion after a fixed sleep cannot tell "the panel is
+      // correctly not there" from "the request has not come back yet" — it
+      // passes either way, which makes it a test that cannot fail for the
+      // reason it exists.
+      await page
+        .waitForResponse(
+          (r) => /scans?\/session/.test(r.url()) && r.request().method() === 'GET',
+          { timeout: 15_000 }
+        )
+        .catch(() => {
+          // No request at all is itself a valid state here (the page may decide
+          // not to poll); fall back to a short settle so the assertion below
+          // still runs against a quiet page rather than a mid-flight one.
+          return page.waitForTimeout(1_000);
+        });
       await expect(page.locator('#faz-scan-session-panel')).toHaveCount(0);
 
       const freshScanId = randomScanId();

@@ -396,6 +396,31 @@ vc_ok(
 	'the worker holding the active target still records'
 );
 
+// The same guard, from the other side: a worker that captured NO open ledger.
+// `''` used to satisfy `'' !== $expected_target` and therefore matched whatever
+// ledger existed by the time it wrote — so a scan that began with nothing open
+// donated its observations to an import's ledger. `''` now means "write
+// nowhere"; only a caller that passed nothing at all (null) keeps the permissive
+// behaviour the older tests rely on.
+vc_reset();
+$ledger_c = str_repeat( 'cc', 16 );
+$controller->begin_visitor_check( $ledger_c, array(), array( 'c_session' ), array() );
+$controller->record_visitor_observations( array( array( 'name' => 'orphan_write', 'domain' => 'example.test' ) ), '' );
+$after = get_option( Controller::VISITOR_CHECK_OPTION, array() );
+vc_ok(
+	! in_array( 'orphan_write', (array) ( $after[ $ledger_c ]['observed'] ?? array() ), true ),
+	'a worker that captured no ledger writes into nobody else\'s'
+);
+vc_ok(
+	null === $controller->finalize_visitor_check( '' ),
+	'and it cannot close a ledger it never held'
+);
+$after = get_option( Controller::VISITOR_CHECK_OPTION, array() );
+vc_ok(
+	isset( $after[ $ledger_c ] ) && empty( $after[ $ledger_c ]['completed'] ),
+	'the unrelated ledger is left open, not frozen empty'
+);
+
 // ── latest_visitor_check() must find a hex-keyed completed ledger ─────────
 // It ordered on absint($check_id), which is 0 for every 32-char hex id, so the
 // comparison never fired and a complete ledger read as absent: the REST

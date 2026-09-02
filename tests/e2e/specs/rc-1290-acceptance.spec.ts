@@ -22,6 +22,34 @@ import { deleteOption, setOption, wpEval } from '../utils/wp-env';
  * the suite.
  */
 
+
+/**
+ * Snapshot an option and give back a restorer that puts it back exactly as it
+ * was — including "it did not exist", which is a different state from "it was
+ * empty" and the one a plain delete cannot express.
+ *
+ * The first version of these tests just deleted the keys afterwards. On this
+ * machine that is harmless (faz-test has no downloaded definitions), which is
+ * precisely why it looked fine: on an install that HAD downloaded them, running
+ * this spec would have thrown that dataset away and left the site quietly
+ * different from how it was found.
+ */
+async function snapshotOption(name: string): Promise<() => void> {
+  const raw = wpEval(
+    `$v = get_option( ${JSON.stringify(name)}, null ); echo wp_json_encode( array( "exists" => null !== $v, "value" => $v ) );`
+  ).trim();
+  const snap = JSON.parse(raw) as { exists: boolean; value: unknown };
+  return () => {
+    if (!snap.exists) {
+      deleteOption(name);
+      return;
+    }
+    wpEval(
+      `update_option( ${JSON.stringify(name)}, json_decode( ${JSON.stringify(JSON.stringify(snap.value))}, true ), false );`
+    );
+  };
+}
+
 const RC_VERSION = '1.29.0-rc1';
 
 test.describe('1.29.0-rc1 acceptance', () => {
@@ -40,7 +68,8 @@ test.describe('1.29.0-rc1 acceptance', () => {
   });
 
   test('#263 — a stale downloaded definitions copy no longer shadows the bundle', async () => {
-    const before = wpEval('echo wp_json_encode( array( get_option("faz_cookie_definitions_meta"), false !== get_option("faz_cookie_definitions") ) );');
+    const restoreDefs = await snapshotOption('faz_cookie_definitions');
+    const restoreMeta = await snapshotOption('faz_cookie_definitions_meta');
     try {
       // Reproduce the reported install: pressed "Update definitions" in July,
       // then never again, while newer bundles shipped past it unused.
@@ -71,12 +100,8 @@ test.describe('1.29.0-rc1 acceptance', () => {
       );
       expect(newer.source).not.toBe('bundled');
     } finally {
-      deleteOption('faz_cookie_definitions');
-      deleteOption('faz_cookie_definitions_meta');
-      const [meta, had] = JSON.parse(before);
-      if (had && meta) {
-        wpEval(`update_option("faz_cookie_definitions_meta", ${JSON.stringify(JSON.stringify(meta))} ? json_decode(${JSON.stringify(JSON.stringify(meta))}, true) : array(), false);`);
-      }
+      restoreDefs();
+      restoreMeta();
     }
   });
 
@@ -91,6 +116,8 @@ test.describe('1.29.0-rc1 acceptance', () => {
     // bare date under "Cookie definitions updated", which reads as the day this
     // site downloaded it. Nothing asserted this row, which is why it could go
     // wrong silently; this is that assertion.
+    const restoreDefs = await snapshotOption('faz_cookie_definitions');
+    const restoreMeta = await snapshotOption('faz_cookie_definitions_meta');
     try {
       wpEval(`
         update_option("faz_cookie_definitions", array("stale.example"=>array(array("cookie"=>"zzq9137probe","category"=>"Analytics"))), false);
@@ -117,8 +144,8 @@ test.describe('1.29.0-rc1 acceptance', () => {
       expect(value!).toMatch(/bundled/i);
       expect(value!, 'the row shows the stale download date as if it were current').not.toBe('2026-07-01 10:00:00');
     } finally {
-      deleteOption('faz_cookie_definitions');
-      deleteOption('faz_cookie_definitions_meta');
+      restoreDefs();
+      restoreMeta();
     }
   });
 
@@ -210,11 +237,17 @@ test.describe('1.29.0-rc1 acceptance', () => {
     wpBaseURL,
   }) => {
     const slug = 'faz-rc-shortcode-probe';
-    wpEval(`
+    // Only remove the page if THIS test made it. Deleting by slug would destroy
+    // a real page that happened to share the name — unlikely, and exactly the
+    // kind of unlikely that is unrecoverable when it happens on someone's site.
+    const created = wpEval(`
       $p = get_page_by_path("${slug}", OBJECT, "page");
-      if ( ! $p ) { wp_insert_post( array( "post_type"=>"page", "post_name"=>"${slug}", "post_title"=>"RC shortcode probe", "post_status"=>"publish", "post_content"=>"[faz_cookie_settings]" ) ); }
-      echo "ok";
-    `);
+      if ( $p ) { echo "existed"; }
+      else {
+        wp_insert_post( array( "post_type"=>"page", "post_name"=>"${slug}", "post_title"=>"RC shortcode probe", "post_status"=>"publish", "post_content"=>"[faz_cookie_settings]" ) );
+        echo "created";
+      }
+    `).trim() === 'created';
     try {
       await context.clearCookies();
       await page.goto(`${wpBaseURL}/${slug}/`, { waitUntil: 'domcontentloaded' });
@@ -241,7 +274,9 @@ test.describe('1.29.0-rc1 acceptance', () => {
       expect(box, 'the preference panel has no layout box').not.toBeNull();
       expect(box!.height).toBeGreaterThan(40);
     } finally {
-      wpEval(`$p = get_page_by_path("${slug}", OBJECT, "page"); if ( $p ) { wp_delete_post( $p->ID, true ); } echo "ok";`);
+      if (created) {
+        wpEval(`$p = get_page_by_path("${slug}", OBJECT, "page"); if ( $p ) { wp_delete_post( $p->ID, true ); } echo "ok";`);
+      }
     }
   });
 

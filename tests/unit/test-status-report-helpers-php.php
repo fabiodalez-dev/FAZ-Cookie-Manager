@@ -4,6 +4,7 @@ if (!defined('HOUR_IN_SECONDS')) define('HOUR_IN_SECONDS', 3600);
 function esc_html__($s,$d=null){return $s;} function esc_html($s){return $s;}
 function date_i18n($f,$t){return date($f,$t);}
 function human_time_diff($a,$b){$d=abs($b-$a); return floor($d/86400).' days';}
+function get_option($k,$d=false){ return $k==='gmt_offset' ? ($GLOBALS['FAZ_TZ_OFFSET'] ?? 0) : $d; }
 function esc_attr($s){return $s;} function esc_url($s){return $s;}
 function wp_kses_allowed_html($c){return array();} function apply_filters($t,$v){return $v;}
 require_once dirname( __DIR__, 2 ) . '/includes/class-formatting.php';
@@ -32,6 +33,18 @@ t(stripos($future,'OVERDUE')===false, 'a future schedule is not flagged');
 t(stripos($late,'OVERDUE')!==false,   'a past schedule IS flagged overdue');
 t(stripos($late,'5 days')!==false,    'and says how late it is');
 t(stripos($none,'not scheduled')!==false, 'an absent schedule says so instead of printing a dash');
+
+// The schedule is rendered with the site's offset, not UTC. date_i18n()'s
+// timestamp argument carries the offset already (legacy contract) while
+// wp_next_scheduled() returns a true Unix timestamp, so the naive call showed
+// 19:04 on a Europe/Rome site for a schedule that is 21:04 to its admin.
+$GLOBALS['FAZ_TZ_OFFSET'] = 0;
+$utc  = faz_status_schedule(1788375846);
+$GLOBALS['FAZ_TZ_OFFSET'] = 2;
+$rome = faz_status_schedule(1788375846);
+$GLOBALS['FAZ_TZ_OFFSET'] = 0;
+t($utc !== $rome, 'the same instant renders differently under a different site offset');
+t(strpos($rome, gmdate('Y-m-d H:i:s', 1788375846 + 7200)) !== false, 'and the offset applied is the site\'s, not zero');
 
 // WP-Cron fires on the next page load, so a just-passed schedule is the normal
 // state of every healthy site between the due instant and the next visitor.

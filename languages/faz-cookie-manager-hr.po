@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.12.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-09-02T17:56:45+00:00\n"
+"POT-Creation-Date: 2026-09-02T20:03:00+00:00\n"
 "PO-Revision-Date: 2026-04-20 00:00+0200\n"
 "Last-Translator: \n"
 "Language-Team: Croatian\n"
@@ -50,7 +50,7 @@ msgid "Cookie Banner"
 msgstr "Banner za kolačiće"
 
 #: admin/class-admin.php:231 admin/views/base.php:21
-#: frontend/class-frontend.php:2825
+#: frontend/class-frontend.php:2848
 #: frontend/modules/banner-rest/class-banner-rest.php:597
 msgid "Cookies"
 msgstr "Kolačići"
@@ -368,10 +368,10 @@ msgstr "Naziv stranice"
 msgid "If you recognise one as a cookie your site really sets, add it manually with Add Cookie."
 msgstr ""
 
-#. translators: %d: numeric id of the scan the visitor check belongs to.
+#. translators: %s: id of the scan the visitor check belongs to (a 32-char hex token, not a number).
 #: admin/class-admin.php:601
 #, php-format
-msgid "Server-side visitor check (headers only) — scan #%d:"
+msgid "Server-side visitor check (headers only) — scan #%s:"
 msgstr ""
 
 #. translators: 1: number of cookies, 2: comma-separated cookie names.
@@ -3516,7 +3516,7 @@ msgstr "Jezik:"
 msgid "Notice Title"
 msgstr "Naslov obavijesti"
 
-#: admin/views/banner.php:342 frontend/class-frontend.php:2820
+#: admin/views/banner.php:342 frontend/class-frontend.php:2843
 #: frontend/modules/banner-rest/class-banner-rest.php:592
 msgid "We value your privacy"
 msgstr "Cijenimo vašu privatnost"
@@ -3843,7 +3843,7 @@ msgstr "Tekst za opt-out (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Tekst modalnog prozora «Postavke odjave» koji posjetitelj vidi nakon klika na poveznicu «Do Not Sell or Share My Personal Information». Prikazuje se samo na CCPA / američkim državnim zakonima (i Oboje) bannerima. Slijedi jezik odabran gore."
 
-#: admin/views/banner.php:828 frontend/class-frontend.php:2822
+#: admin/views/banner.php:828 frontend/class-frontend.php:2845
 #: frontend/modules/banner-rest/class-banner-rest.php:594
 msgid "Opt-out Preferences"
 msgstr "Postavke odjave"
@@ -5378,7 +5378,7 @@ msgstr "Učestalost skeniranja"
 msgid "Daily"
 msgstr "Dnevno"
 
-#: admin/views/settings.php:303 includes/class-activator.php:643
+#: admin/views/settings.php:303 includes/class-activator.php:681
 msgid "Weekly"
 msgstr "Tjedno"
 
@@ -6386,50 +6386,50 @@ msgstr "{name} omogućen, onemogći {name}"
 msgid "{name} disabled, enable {name}"
 msgstr "{name} onemogćen, omogući {name}"
 
-#: frontend/class-frontend.php:2821
+#: frontend/class-frontend.php:2844
 #: frontend/modules/banner-rest/class-banner-rest.php:593
 msgid "Your cookie preferences have been saved."
 msgstr "Vaše preferencije kolačića su spremljene."
 
-#: frontend/class-frontend.php:2823
+#: frontend/class-frontend.php:2846
 #: frontend/modules/banner-rest/class-banner-rest.php:595
 msgid "Customise Consent Preferences"
 msgstr "Prilagodi postavke pristanka"
 
-#: frontend/class-frontend.php:2824
+#: frontend/class-frontend.php:2847
 #: frontend/modules/banner-rest/class-banner-rest.php:596
 msgid "Service consent"
 msgstr "Privola za uslugu"
 
-#: frontend/class-frontend.php:2826
+#: frontend/class-frontend.php:2849
 #: frontend/modules/banner-rest/class-banner-rest.php:598
 msgid "Cookie consent"
 msgstr "Privola za kolačiće"
 
-#: frontend/class-frontend.php:2827
+#: frontend/class-frontend.php:2850
 #: frontend/modules/banner-rest/class-banner-rest.php:599
 msgid "Vendor consent"
 msgstr "Suglasnost dobavljača"
 
-#: frontend/class-frontend.php:2828
+#: frontend/class-frontend.php:2851
 #: frontend/modules/banner-rest/class-banner-rest.php:600
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr ""
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:2832
+#: frontend/class-frontend.php:2855
 #: frontend/modules/banner-rest/class-banner-rest.php:605
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr ""
 
-#: frontend/class-frontend.php:2833
+#: frontend/class-frontend.php:2856
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr ""
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:2840
+#: frontend/class-frontend.php:2863
 #: frontend/modules/banner-rest/class-banner-rest.php:608
 #, php-format
 msgid "Banner closes automatically in %d s..."
@@ -6475,7 +6475,7 @@ msgstr "Nije pronađen aktivni banner."
 msgid "This request must originate from this website."
 msgstr "Traženi jezik nije konfiguriran za ovu stranicu."
 
-#: frontend/modules/consent-logger/class-consent-logger.php:234
+#: frontend/modules/consent-logger/class-consent-logger.php:246
 msgid "Failed to log consent."
 msgstr "Bilježenje privole nije uspjelo."
 
@@ -6543,15 +6543,15 @@ msgstr "Gumb koji otvara postavke privole za kolačiće."
 msgid "Manage Cookie Preferences"
 msgstr "Upravljanje postavkama kolačića"
 
-#: includes/class-activator.php:649
+#: includes/class-activator.php:687
 msgid "Once Daily (FAZ)"
 msgstr "Jednom dnevno (FAZ)"
 
-#: includes/class-activator.php:655
+#: includes/class-activator.php:693
 msgid "Once Weekly (FAZ)"
 msgstr "Jednom tjedno (FAZ)"
 
-#: includes/class-activator.php:661
+#: includes/class-activator.php:699
 msgid "Once Monthly (FAZ)"
 msgstr "Jednom mjesečno (FAZ)"
 
@@ -6984,7 +6984,7 @@ msgid "not scheduled"
 msgstr ""
 
 #. translators: %s: human-readable duration, e.g. "5 days".
-#: includes/class-formatting.php:191
+#: includes/class-formatting.php:206
 #, php-format
 msgid "OVERDUE by %s — WP-Cron may not be running"
 msgstr ""
