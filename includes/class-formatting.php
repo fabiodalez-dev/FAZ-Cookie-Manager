@@ -124,6 +124,76 @@ if ( ! function_exists( 'faz_sanitize_bool_strict' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_status_flag' ) ) {
+	/**
+	 * Render a yes/no value for the System Status report.
+	 *
+	 * Icon AND word, deliberately. The report used a bare ✅/❌ character, and
+	 * its "Copy report" button builds the text with `textContent` — so whether
+	 * the answer survives depends on what the reader pastes into. Frequently it
+	 * does not: a support report arrived with EVERY boolean blank, and the one
+	 * value needed to diagnose the reported problem was the one the format had
+	 * dropped (issue #259).
+	 *
+	 * The single row that did survive in that report was "Auto Scan", because it
+	 * happened to append a word after its icon. That is the whole fix, applied
+	 * everywhere: the icon stays for visual scanning, the word carries the
+	 * meaning through any clipboard.
+	 *
+	 * @since 1.29.0
+	 * @param bool $enabled Whether the feature is on.
+	 * @return string Escaped markup, safe to echo.
+	 */
+	function faz_status_flag( $enabled ) {
+		return $enabled
+			? '&#9989; ' . esc_html__( 'Yes', 'faz-cookie-manager' )
+			: '&#10060; ' . esc_html__( 'No', 'faz-cookie-manager' );
+	}
+}
+
+if ( ! function_exists( 'faz_status_schedule' ) ) {
+	/**
+	 * Render a scheduled-event timestamp, saying so when it is overdue.
+	 *
+	 * A bare timestamp states a fact nobody checks against today's date. The
+	 * report that prompted this listed a next scan of 2026-08-27 while the date
+	 * was 1 September — five days stale, because WP-Cron was not firing at all.
+	 * That was the actual cause of the "why are my definitions old?" question
+	 * the report was attached to, and it was sitting in plain sight, unlabelled.
+	 *
+	 * @since 1.29.0
+	 * @param int|false $timestamp Result of wp_next_scheduled().
+	 * @return string Escaped markup, safe to echo.
+	 */
+	function faz_status_schedule( $timestamp ) {
+		if ( ! $timestamp ) {
+			return '&mdash; ' . esc_html__( 'not scheduled', 'faz-cookie-manager' );
+		}
+		$when = esc_html( date_i18n( 'Y-m-d H:i:s', $timestamp ) );
+		$late = time() - (int) $timestamp;
+
+		// WP-Cron is traffic-driven: a due event fires on the next page load, so
+		// between the scheduled instant and that load the event is legitimately
+		// "late". On a quiet site that gap is routinely minutes. Flagging any
+		// positive lag would put an alarm on a perfectly healthy install — in the
+		// one document an admin pastes into a support thread, which is how a
+		// diagnosis goes down the wrong path. Only a lag no plausible traffic
+		// pattern explains is worth reporting.
+		if ( $late <= HOUR_IN_SECONDS ) {
+			return $when;
+		}
+
+		// Says what is known — the event is overdue by this much — and offers the
+		// likely cause as a hypothesis. The code has not tested whether WP-Cron
+		// runs; it has only read a timestamp, so it must not assert that it does not.
+		return $when . ' &#9888; ' . sprintf(
+			/* translators: %s: human-readable duration, e.g. "5 days". */
+			esc_html__( 'OVERDUE by %s — WP-Cron may not be running', 'faz-cookie-manager' ),
+			esc_html( human_time_diff( (int) $timestamp, time() ) )
+		);
+	}
+}
+
 if ( ! function_exists( 'faz_allowed_html' ) ) {
 	/**
 	 * Returns list of HTML tags allowed in HTML fields for use in declaration of wp_kset field validation.
