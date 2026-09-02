@@ -103,6 +103,12 @@ function run() {
     eq('both: the two triggers do NOT share one id', r.settings.controls === r.donotsell.controls, false);
     eq('both: settings advertises a dialog', r.settings.haspopup, 'dialog');
     eq('both: donotsell advertises a dialog', r.donotsell.haspopup, 'dialog');
+    // "Different from each other" is satisfied by any two distinct strings, so
+    // an implementation minting ids at random would pass the line above. These
+    // two ids are a contract: _fazShowPreferenceCenter() looks the panels up by
+    // exactly these names, and CSS/other callers reference them.
+    eq('both: settings points at the stable panel id', r.settings.controls, 'fazPreferenceCenter');
+    eq('both: donotsell points at the stable opt-out id', r.donotsell.controls, 'fazOptoutPreferenceCenter');
   }
 
   // 2. GDPR-only: no opt-out panel exists, so its trigger must be left alone
@@ -112,6 +118,11 @@ function run() {
     const r = link({ detail: true, optout: false });
     eq('gdpr-only: settings still resolves to detail', r.settings.targetTag, 'detail');
     eq('gdpr-only: donotsell gets no dangling aria-controls', r.donotsell.controls, null);
+    // aria-controls and aria-haspopup have to be withheld together. Announcing
+    // "opens a dialog" on a control that opens nothing is its own defect, and
+    // an implementation that set haspopup before checking for the panel would
+    // pass the assertion above while shipping it.
+    eq('gdpr-only: donotsell does not announce a dialog either', r.donotsell.haspopup, null);
   }
 
   // 3. CCPA-only: the mirror case.
@@ -119,6 +130,8 @@ function run() {
     const r = link({ detail: false, optout: true, law: 'ccpa' });
     eq('ccpa-only: donotsell resolves to the opt-out panel', r.donotsell.targetTag, 'optout-popup');
     eq('ccpa-only: settings gets no dangling aria-controls', r.settings.controls, null);
+    eq('ccpa-only: settings does not announce a dialog either', r.settings.haspopup, null);
+    eq('ccpa-only: donotsell points at the stable opt-out id', r.donotsell.controls, 'fazOptoutPreferenceCenter');
   }
 
   console.log(`\n  preference-trigger-aria-links: ${passed} passed, ${failed} failed`);
