@@ -4,6 +4,8 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-09-02
+
 ### Fixed
 - **`[faz_cookie_settings]` reported success while opening nothing on a CCPA banner using the Classic type.** Classic forces the pushdown preference centre, and in pushdown the preference centre *is* the banner container — which always exists — so `_fazShowPreferenceCenter()` returned true even though Classic is the one template that ships no opt-out panel. Returning success is what did the harm: it denied the shortcode handler the banner fallback that exists for exactly this case, so the button was dead again. It now reports failure when the panel the trigger asks for is absent. Every template carries the GDPR `detail` panel, so the GDPR path is untouched.
 - **The ad-blocker resilience guard could not see a filter list that arrived late.** It ran one deferred check ~1200ms after init, which only ever meets a cosmetic rule already applied by first paint. Measured on a real page: an EasyList-Cookie style `.faz-consent-container{display:none!important}` injected after that single check left the legally required notice hidden for the rest of the visit, with no way back. That is the shape reported on issue #253 — DuckDuckGo mobile with protection on, first visit, banner painted and then gone once the page settled. The guard now runs a short bounded series (1200ms, 3s, 5s, 8s) and then stops: still no MutationObserver, still no interval, and each pass is the same idempotent no-op when the banner is visible, when the visitor has already decided, or when FAZ hid the banner itself. Opt-in and off by default, as before.
