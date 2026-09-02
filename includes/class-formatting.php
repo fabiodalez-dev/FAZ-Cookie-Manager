@@ -171,12 +171,24 @@ if ( ! function_exists( 'faz_status_schedule' ) ) {
 		}
 		$when = esc_html( date_i18n( 'Y-m-d H:i:s', $timestamp ) );
 		$late = time() - (int) $timestamp;
-		if ( $late <= 0 ) {
+
+		// WP-Cron is traffic-driven: a due event fires on the next page load, so
+		// between the scheduled instant and that load the event is legitimately
+		// "late". On a quiet site that gap is routinely minutes. Flagging any
+		// positive lag would put an alarm on a perfectly healthy install — in the
+		// one document an admin pastes into a support thread, which is how a
+		// diagnosis goes down the wrong path. Only a lag no plausible traffic
+		// pattern explains is worth reporting.
+		if ( $late <= HOUR_IN_SECONDS ) {
 			return $when;
 		}
+
+		// Says what is known — the event is overdue by this much — and offers the
+		// likely cause as a hypothesis. The code has not tested whether WP-Cron
+		// runs; it has only read a timestamp, so it must not assert that it does not.
 		return $when . ' &#9888; ' . sprintf(
 			/* translators: %s: human-readable duration, e.g. "5 days". */
-			esc_html__( 'OVERDUE by %s — WP-Cron is not running', 'faz-cookie-manager' ),
+			esc_html__( 'OVERDUE by %s — WP-Cron may not be running', 'faz-cookie-manager' ),
 			esc_html( human_time_diff( (int) $timestamp, time() ) )
 		);
 	}
