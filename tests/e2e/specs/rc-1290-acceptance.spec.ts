@@ -183,7 +183,11 @@ test.describe('1.29.0-rc1 acceptance', () => {
       await page.click('[data-faz-tag="accept-button"]');
       await page.waitForTimeout(600);
 
-      const trigger = page.locator('.faz-settings-shortcode, [data-faz-tag="settings-button"]').first();
+      // The shortcode's own hook is the data attribute it emits, not a class —
+      // the class is user-overridable via the shortcode's `class` attribute, so
+      // selecting on it would make this test fail on a legitimate customisation.
+      const trigger = page.locator('[data-faz-open-preferences="1"]').first();
+      await expect(trigger).toHaveCount(1);
       await trigger.click();
       await page.waitForTimeout(600);
 
@@ -223,41 +227,74 @@ test.describe('1.29.0-rc1 acceptance', () => {
     await expect(page.locator('[data-faz-tag="reject-button"]')).toBeHidden();
   });
 
-  test('#257 — in Advanced Consent Mode a denied analytics category denies analytics_storage', async ({
+  /**
+   * Scope note, so this is not mistaken for full coverage of #257.
+   *
+   * The signal logic — analytics denied while performance is granted must yield
+   * analytics_storage denied in advanced mode, and granted in basic — cannot be
+   * asserted here. window._fazGcm is null on this site because no GCM tag id is
+   * configured, and with no tag to signal to the plugin correctly emits nothing.
+   * Configuring a fake measurement id would change site-wide state that other
+   * specs read.
+   *
+   * That logic is covered by tests/unit/js/gcm-advanced-mode-analytics.test.mjs,
+   * which drives the real gcm.js through real consent cookies in BOTH modes and
+   * is mutation-proved. What is left to check at this level — and what a bad
+   * merge would actually break — is the settings plumbing that decides whether
+   * advanced mode is on at all.
+   */
+  test('#257 — the Advanced Consent Mode setting still drives is_advanced_mode()', async ({
     page,
     context,
     wpBaseURL,
   }) => {
-    const before = wpEval('echo wp_json_encode( get_option("faz_gcm_settings") );');
-    let restore = false;
+    const before = wpEval('echo wp_json_encode( get_option("faz_gcm_settings") );').trim();
     try {
-      const gcm = JSON.parse(before || 'null');
-      if (!gcm || !gcm.status) {
-        test.skip(true, 'GCM is disabled on this site; the signal path is not live.');
-        return;
-      }
-      wpEval('$g = get_option("faz_gcm_settings"); $g["consent_mode"] = "advanced"; update_option("faz_gcm_settings", $g);');
-      restore = true;
+      // Turn the feature on rather than skipping. A skipped check is not a
+      // passed one, and this RC contains the change it is meant to guard.
+      wpEval(`
+        $g = get_option( "faz_gcm_settings" );
+        if ( ! is_array( $g ) ) { $g = array(); }
+        $g["status"] = true;
+        $g["advanced_mode"] = true;
+        update_option( "faz_gcm_settings", $g );
+        if ( class_exists( "FazCookie\\\\Admin\\\\Modules\\\\Gcm\\\\Includes\\\\Gcm_Settings" ) ) {
+          FazCookie\\Admin\\Modules\\Gcm\\Includes\\Gcm_Settings::flush_runtime_cache();
+        }
+        echo "ok";
+      `);
 
+      const on = wpEval(
+        '$s = new FazCookie\\Admin\\Modules\\Gcm\\Includes\\Gcm_Settings(); echo $s->is_advanced_mode() ? "yes" : "no";'
+      ).trim();
+      expect(on).toBe('yes');
+
+      // Both halves of the gate, or "always true" would pass: advanced_mode is
+      // meaningless unless GCM itself is on, and is_advanced_mode() is the AND
+      // of the two.
+      const offWhenGcmOff = wpEval(`
+        $g = get_option( "faz_gcm_settings" ); $g["status"] = false;
+        update_option( "faz_gcm_settings", $g );
+        FazCookie\\Admin\\Modules\\Gcm\\Includes\\Gcm_Settings::flush_runtime_cache();
+        $s = new FazCookie\\Admin\\Modules\\Gcm\\Includes\\Gcm_Settings();
+        echo $s->is_advanced_mode() ? "yes" : "no";
+      `).trim();
+      expect(offWhenGcmOff).toBe('no');
+
+      // And the page still renders with GCM configured — a merge that broke the
+      // payload assembly would fatal here rather than silently degrade.
       await context.clearCookies();
       await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
-      await page.waitForSelector('[data-faz-tag="reject-button"]', { timeout: 15_000 });
-      await page.click('[data-faz-tag="reject-button"]');
-      await page.waitForTimeout(900);
-
-      // Advanced mode deliberately does NOT block Google's own tags, so the
-      // signal is the only thing left standing between a refusal and a cookie.
-      const denied = await page.evaluate(() => {
-        const dl = (window as unknown as { dataLayer?: unknown[] }).dataLayer || [];
-        const updates = dl.filter((e) => Array.isArray(e) && e[0] === 'consent');
-        const last = updates[updates.length - 1] as unknown[] | undefined;
-        return last ? (last[2] as Record<string, string>)?.analytics_storage : null;
-      });
-      expect(denied === null || denied === 'denied').toBeTruthy();
+      await expect(page.locator('[data-faz-tag="accept-button"]')).toBeVisible({ timeout: 15_000 });
     } finally {
-      if (restore) {
+      if (before && before !== 'false' && before !== 'null') {
         setOption('faz_gcm_settings', before);
+      } else {
+        deleteOption('faz_gcm_settings');
       }
+      wpEval(
+        'if ( class_exists( "FazCookie\\\\Admin\\\\Modules\\\\Gcm\\\\Includes\\\\Gcm_Settings" ) ) { FazCookie\\Admin\\Modules\\Gcm\\Includes\\Gcm_Settings::flush_runtime_cache(); } echo "ok";'
+      );
     }
   });
 
@@ -274,8 +311,13 @@ test.describe('1.29.0-rc1 acceptance', () => {
     // The defect was cosmetic in the worst place: a working scan that told the
     // admin it had failed. Assert the resting state carries no failure text —
     // a scan that has not been started cannot have failed.
-    const body = (await page.textContent('body')) || '';
-    expect(body).not.toMatch(/scan failed|scansione fallita/i);
+    // innerText, not textContent: textContent returns the text of <script>
+    // elements too, so it matches the failure strings the progress UI ships as
+    // templates and would go red on every build that contains the feature. What
+    // matters is whether the admin SEES a failure, which is a rendered-text
+    // question.
+    const visible = await page.locator('body').innerText();
+    expect(visible).not.toMatch(/scan failed|scansione fallita/i);
 
     const errorBanner = page.locator('.faz-scan-progress .faz-error, .faz-scan-error');
     if ((await errorBanner.count()) > 0) {
