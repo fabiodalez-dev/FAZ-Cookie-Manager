@@ -390,4 +390,76 @@ test.describe('Native a11y — focus loop listener cleanup (regression #124)', (
       `Tab from last should focus first focusable (expected ${tabResult.expected_first_tag} got ${tabResult.focused_tag}) — regression #124 may have returned`,
     ).toBe(tabResult.expected_first_tag);
   });
+
+
+});
+
+test.describe('Native a11y — upstream parity (CookieYes 3.5.x)', () => {
+  test('banner headings are level 2 in the SERVED html, before a11y.js promotes them', async ({ page, context, wpBaseURL }) => {
+    await context.clearCookies();
+    const url = `${wpBaseURL}/?a11y-level=${Date.now()}`;
+    const res = await page.request.get(url);
+    const html = await res.text();
+
+    // Asserted on the server response, not the live DOM, and the difference is
+    // the point: a11y.js replaces these nodes with real <h2> elements and strips
+    // role/aria-level as it goes (frontend/js/a11y.js — replaceTag(..., 'h2',
+    // { remove: ['role','aria-level'] })), so by the time the DOM settles there
+    // is nothing left to measure. A first draft of this case queried the runtime
+    // DOM, found zero of BOTH levels, and would have passed at any aria-level.
+    //
+    // The markup still matters: it is what a visitor sees in the window before
+    // a11y.js runs, and on any page where that file fails to load. A consent
+    // banner is a region of someone else's document, so announcing its title at
+    // level 1 puts a second top-level heading beside the page's real H1.
+    const levelOne = (html.match(/aria-level="1"/g) || []).length;
+    const levelTwo = (html.match(/aria-level="2"/g) || []).length;
+
+    expect(levelOne, 'the served banner markup still carries a level-1 heading').toBe(0);
+    expect(levelTwo, 'the served banner markup should carry level-2 headings').toBeGreaterThan(0);
+  });
+
+  test('the control that opens the preference center points at it with aria-controls', async ({ page, context, wpBaseURL }) => {
+    await context.clearCookies();
+    await page.goto(`${wpBaseURL}/?a11y-controls=${Date.now()}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1200);
+
+    // Read the relationship BEFORE any click. Checking it afterwards would also
+    // pass if the attributes were only attached by the click handler — and the
+    // whole point is that a screen-reader user is told what the button does
+    // while deciding whether to press it.
+    const beforeClick = await page.evaluate(() => {
+      const btn = document.querySelector('[data-faz-tag="settings-button"]');
+      const controls = btn ? btn.getAttribute('aria-controls') : null;
+      const target = controls ? document.getElementById(controls) : null;
+      return {
+        haspopup: btn ? btn.getAttribute('aria-haspopup') : null,
+        controls,
+        // The id must name the panel this trigger actually opens, not merely
+        // some element: on a "Both" banner the settings button opens `detail`
+        // and Do-Not-Sell opens `optout-popup`.
+        targetTag: target ? target.getAttribute('data-faz-tag') : null,
+      };
+    });
+
+    expect(beforeClick.haspopup, 'the trigger should advertise a dialog before it is pressed').toBe('dialog');
+    expect(beforeClick.controls, 'the trigger should name its panel before it is pressed').toBeTruthy();
+    expect(
+      beforeClick.targetTag,
+      `aria-controls="${beforeClick.controls}" should resolve to the detail panel`,
+    ).toBe('detail');
+
+    // And the relationship must survive the panel actually opening.
+    await page.locator('[data-faz-tag="settings-button"]').first().click({ timeout: 10_000 });
+    await page.waitForTimeout(600);
+    const afterClick = await page.evaluate(() => {
+      const btn = document.querySelector('[data-faz-tag="settings-button"]');
+      const controls = btn ? btn.getAttribute('aria-controls') : null;
+      const target = controls ? document.getElementById(controls) : null;
+      return { controls, isDialog: !!target && !!target.closest('[role="dialog"]') };
+    });
+    expect(afterClick.controls, 'aria-controls should not change on open').toBe(beforeClick.controls);
+    expect(afterClick.isDialog, 'the named panel should live inside the dialog once opened').toBe(true);
+  });
+
 });

@@ -515,7 +515,7 @@ class Frontend {
 				 * @param bool $in_footer Effective position (true = footer).
 				 */
 				do_action( 'faz_main_script_effective_in_footer', $in_footer );
-				wp_enqueue_script( $script_handle, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', $static_deps, $this->version, $in_footer );
+				wp_enqueue_script( $script_handle, faz_frontend_url() . 'js/script' . $suffix . '.js', $static_deps, $this->version, $in_footer );
 			}
 
 			wp_localize_script( $script_handle, '_fazConfig', $store_data );
@@ -636,7 +636,7 @@ class Frontend {
 				if ( $alt_asset ) {
 					$this->enqueue_inline_bundle( $gcm_handle, 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), false );
 				} else {
-					wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
+					wp_enqueue_script( $gcm_handle, faz_frontend_url() . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
 				}
 			}
 
@@ -658,7 +658,7 @@ class Frontend {
 				if ( $alt_asset ) {
 					$this->enqueue_inline_bundle( $tcf_handle, 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), false );
 				} else {
-					wp_enqueue_script( $tcf_handle, plugin_dir_url( __FILE__ ) . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
+					wp_enqueue_script( $tcf_handle, faz_frontend_url() . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
 				}
 
 				// PublisherCC: use admin setting, fall back to site locale.
@@ -859,7 +859,7 @@ class Frontend {
 			if ( $alt_asset ) {
 				$this->enqueue_inline_bundle( $a11y_handle, 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), true );
 			} else {
-				wp_enqueue_script( $a11y_handle, plugin_dir_url( __FILE__ ) . 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), $this->version, true );
+				wp_enqueue_script( $a11y_handle, faz_frontend_url() . 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), $this->version, true );
 			}
 			// Pass translatable checkbox label templates — {name} is replaced in JS.
 			wp_localize_script(
@@ -880,7 +880,7 @@ class Frontend {
 			if ( $alt_asset ) {
 				$this->enqueue_inline_bundle( $handle, 'js/wca' . $wca_suffix . '.js', array( $script_handle ), false );
 			} else {
-				wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $wca_suffix . '.js', array( $script_handle ), $this->version, false );
+				wp_register_script( $handle, faz_frontend_url() . 'js/wca' . $wca_suffix . '.js', array( $script_handle ), $this->version, false );
 			}
 			if ( true === $this->is_gsk_enabled() ) {
 				wp_add_inline_script( $handle, 'var _fazGsk = true;', 'before' );
@@ -895,7 +895,7 @@ class Frontend {
 			if ( $alt_asset ) {
 				$this->enqueue_inline_bundle( $ms_handle, 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), false );
 			} else {
-				wp_enqueue_script( $ms_handle, plugin_dir_url( __FILE__ ) . 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), $this->version, false );
+				wp_enqueue_script( $ms_handle, faz_frontend_url() . 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), $this->version, false );
 			}
 			if ( $ms_uet ) {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftUET = true;', 'before' );
@@ -2098,16 +2098,37 @@ class Frontend {
 		// Fix mixed-content: cached template may contain http:// plugin URLs
 		// when the site is served over HTTPS (reverse proxy, load balancer, or
 		// siteurl stored as http:// in the database).
-		if ( is_ssl() && defined( 'FAZ_PLUGIN_URL' ) ) {
+		// faz_request_is_https(), not is_ssl(): behind a TLS-terminating proxy
+		// is_ssl() is false on an https page, so this repair — which exists for
+		// precisely that deployment — never ran on the hosts that need it.
+		if ( faz_request_is_https() && defined( 'FAZ_PLUGIN_URL' ) ) {
 			$http_url = str_replace( 'https://', 'http://', FAZ_PLUGIN_URL );
 			if ( strpos( $html, $http_url ) !== false ) {
 				$https_url = set_url_scheme( FAZ_PLUGIN_URL, 'https' );
 				$html      = str_replace( $http_url, $https_url, $html );
 
 				// Auto-repair the cached template so subsequent requests
-				// skip this replacement entirely.
+				// skip this replacement entirely — but ONLY on a server-verified
+				// HTTPS signal.
+				//
+				// The rewrite above is per-request and harmless: at worst one
+				// visitor gets https URLs on a page that did not need them. This
+				// branch is different — it writes the rewritten template back to
+				// wp_options, where it survives for every later visitor.
+				//
+				// faz_request_is_https() accepts X-Forwarded-Proto, which is
+				// client-controlled on any site NOT behind a proxy that strips it.
+				// Widening the outer gate to it therefore handed an unauthenticated
+				// caller a persistent state change: one
+				// `curl -H 'X-Forwarded-Proto: https'` against a plain-HTTP site
+				// rewrites its cached banner to a scheme the server does not serve,
+				// for everyone, until the cache is regenerated. is_ssl() and the
+				// stored siteurl are both server-controlled, so the durable write
+				// keeps the narrower signal it always had.
+				$server_verified_https = is_ssl()
+					|| 0 === stripos( (string) get_option( 'siteurl' ), 'https://' );
 				$cache_key = apply_filters( 'faz_banner_template_cache_key', 'faz_banner_template' );
-				$stored    = get_option( $cache_key, array() );
+				$stored    = $server_verified_https ? get_option( $cache_key, array() ) : false;
 				if ( is_array( $stored ) ) {
 					$repaired = false;
 					foreach ( $stored as $lang => $tpl ) {
@@ -2218,7 +2239,19 @@ class Frontend {
 					$repaired                = true;
 				}
 			}
-			if ( $repaired ) {
+			// Same rule as the mixed-content repair above, and for the same
+			// reason — this is the SIBLING branch I fixed there and left here.
+			// $current_origin derives from FAZ_PLUGIN_URL, whose scheme now
+			// follows faz_request_is_https(), which trusts X-Forwarded-Proto.
+			// That header is client-controlled on any site not behind a proxy
+			// that strips it, so persisting an origin derived from it hands an
+			// unauthenticated caller a durable rewrite of every visitor's banner.
+			// The per-request rewrite above keeps the wide signal; the DB write
+			// requires a server-controlled one.
+			$server_verified_https = is_ssl()
+				|| 0 === stripos( (string) get_option( 'siteurl' ), 'https://' );
+			$forged_scheme_only = ( 'https' === $current['scheme'] ) && ! $server_verified_https;
+			if ( $repaired && ! $forged_scheme_only ) {
 				// autoload=false — keep the multi-KB template blob out of alloptions.
 				update_option( $cache_key, $stored, false );
 			}

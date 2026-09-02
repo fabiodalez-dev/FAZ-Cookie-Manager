@@ -1847,6 +1847,16 @@ ref._fazScheduleAdblockGuard = _fazScheduleAdblockGuard;
 // a law and a recorded consent to line up at once, which is hostile to E2E and
 // exact in jsdom. Not part of the public API.
 ref._fazShowPreferenceCenter = _fazShowPreferenceCenter;
+// Exposed for the jsdom suite that pins description truncation. Its correctness
+// turns on a subtle invariant — reaching the last paragraph implies no show-more
+// button was appended — and a test that cannot invoke it directly ends up
+// asserting nothing. Not part of the public API.
+ref._fazSetShowMoreLess = _fazSetShowMoreLess;
+// Exposed for the jsdom suite that pins the trigger→panel pairing. The shipped
+// default banner disables donotSell, so the Do-Not-Sell half of that pairing is
+// not in the DOM end-to-end and a regression there cannot fail an E2E assertion.
+// Not part of the public API.
+ref._fazLinkPreferenceTriggers = _fazLinkPreferenceTriggers;
 
 function _fazScheduleDeadCookieCleanup() {
     // Staggered passes catch cookies written after load. The 5000 ms tail picks
@@ -2807,6 +2817,54 @@ function _fazSetPreferenceCenterAccessibility(preferenceCenter) {
     preferenceCenter.setAttribute('role', 'dialog');
     preferenceCenter.setAttribute('aria-modal', 'true');
     preferenceCenter.setAttribute('aria-label', _fazGetPreferenceCenterAriaLabel());
+    // A stable id so the controls that open this panel can point at it with
+    // aria-controls. Without it a screen-reader user is told a button opens a
+    // dialog but is never told WHICH element that dialog is; the banner's own
+    // buttons had no relationship to the panel at all, while the separate
+    // [faz_cookie_settings] shortcode already advertised aria-haspopup.
+    //
+    // Two ids, because a CCPA banner opens the opt-out panel and a GDPR one the
+    // detail panel — pointing both at a single id would name an element that is
+    // hidden on the other law.
+    if (!preferenceCenter.id) {
+        preferenceCenter.id = _fazActivePreferenceTag() === 'optout-popup'
+            ? 'fazOptoutPreferenceCenter'
+            : 'fazPreferenceCenter';
+    }
+    _fazLinkPreferenceTriggers();
+}
+
+/**
+ * Point each control that opens a preference panel at the panel IT opens.
+ *
+ * Per trigger, not per "currently active panel": on a "Both" banner the settings
+ * button opens `detail` and the Do-Not-Sell button opens `optout-popup`, so
+ * handing both the same id — as a first version of this did — left one of them
+ * naming a dialog it does not control until its own first click.
+ *
+ * Each panel is given its own stable id here rather than only when it becomes
+ * active, so the relationship holds before either has ever been opened. A
+ * trigger whose panel is not in the DOM is left alone: pointing aria-controls at
+ * a missing id is worse for a screen reader than saying nothing.
+ *
+ * Idempotent — re-running rewrites the same attributes.
+ */
+function _fazLinkPreferenceTriggers() {
+    var pairs = [
+        { trigger: 'settings-button', panel: 'detail', id: 'fazPreferenceCenter' },
+        { trigger: 'donotsell-button', panel: 'optout-popup', id: 'fazOptoutPreferenceCenter' }
+    ];
+    pairs.forEach(function (pair) {
+        var panel = _fazGetElementByTag(pair.panel);
+        if (!panel) return;
+        if (!panel.id) panel.id = pair.id;
+        document.querySelectorAll('[data-faz-tag="' + pair.trigger + '"]').forEach(function (el) {
+            // "dialog" rather than upstream's "true": more specific, and it
+            // matches what the [faz_cookie_settings] shortcode already emits.
+            el.setAttribute('aria-haspopup', 'dialog');
+            el.setAttribute('aria-controls', panel.id);
+        });
+    });
 }
 
 function _fazFocusIntoElement(element) {
