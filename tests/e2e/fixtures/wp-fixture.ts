@@ -85,14 +85,32 @@ async function attemptAdminLogin(page: Page, wpBaseURL: string, adminUser: strin
   }
 
   await expect(page.locator('#user_login')).toBeVisible({ timeout: 20_000 });
-  await page.locator('#user_login').fill(adminUser);
-  await page.locator('#user_pass').fill(adminPass);
+  // The login document may still be settling after a slow reauth redirect.
+  // Locator.fill() then repeats actionability checks until the whole test
+  // times out even though the fields are already visible. Set the native
+  // values and dispatch the events WordPress/browser integrations expect.
+  await page.locator('#user_login').evaluate((input: HTMLInputElement, value: string) => {
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, adminUser);
+  await page.locator('#user_pass').evaluate((input: HTMLInputElement, value: string) => {
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, adminPass);
 
+  // A Locator click waits for the navigation it initiates using the global
+  // 15-second action timeout. On the shared compatibility site WordPress can
+  // authenticate successfully but take longer than that to finish the admin
+  // redirect, so the click throws even though the navigation budget below is
+  // deliberately 60 seconds. Trigger the native click without Playwright's
+  // implicit navigation wait and let the explicit waiter own that budget.
   await Promise.all([
-    page.locator('#wp-submit').click(),
-    page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => {
+    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => {
       // Some plugin combinations keep the request open after auth succeeds.
     }),
+    page.locator('#wp-submit').evaluate((button: HTMLInputElement) => button.click()),
   ]);
 
   if (page.url().includes('/wp-admin/')) {

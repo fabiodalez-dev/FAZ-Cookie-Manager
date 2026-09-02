@@ -66,6 +66,13 @@ namespace {
 		return true;
 	}
 	function add_option( $name, $value, $deprecated = '', $autoload = null ) {
+		// Injection point for the "a step declined" scenario at the end of this
+		// file: a real add_option() returns false when the write does not land
+		// (full disk, replication lag, a filter vetoing it), and that is the one
+		// failure the seeder can experience without any missing dependency.
+		if ( ! empty( $GLOBALS['faz_geo_refuse_option'] ) && $GLOBALS['faz_geo_refuse_option'] === $name ) {
+			return false;
+		}
 		if ( array_key_exists( $name, $GLOBALS['faz_geo_options'] ) ) {
 			return false;
 		}
@@ -401,6 +408,43 @@ namespace {
 	geo_check(
 		'1' === get_option( 'faz_geo_enforcement_preserved' ),
 		'the migration records its own completion flag, independent of faz_migrations_version'
+	);
+
+	// --- A step that could not complete must not close the batch --------------
+	//
+	// run_pending_migrations() is gated on faz_migrations_version and returns
+	// BEFORE the try block once that is written. So a step that declined — no
+	// exception, just "I could not do this yet" — used to be recorded as done
+	// with everything else and was never called again until the next release
+	// changed MIGRATIONS_VERSION, while its own comments promised that "the next
+	// migration retries". The version marker is now withheld instead.
+	//
+	// The failure is injected through add_option() rather than by hiding a class:
+	// a refused option write is the one way the seeder can fail on an install
+	// where every dependency is present, and it is what a real site hits.
+	$GLOBALS['faz_geo_options']        = array();
+	$GLOBALS['faz_geo_refuse_option']  = 'faz_own_cookie_seeded';
+	Activator::run_pending_migrations();
+	geo_check(
+		! array_key_exists( 'faz_migrations_version', $GLOBALS['faz_geo_options'] ),
+		'a declined step withholds faz_migrations_version, so the batch is reconsidered on the next admin load'
+	);
+	geo_check(
+		! array_key_exists( 'faz_own_cookie_seeded', $GLOBALS['faz_geo_options'] ),
+		'and the step is genuinely unfinished — its own marker was never written'
+	);
+
+	// Same install, next admin load, with the write now landing: the batch must
+	// complete. A retry that can never succeed would be no better than the bug.
+	$GLOBALS['faz_geo_refuse_option'] = '';
+	Activator::run_pending_migrations();
+	geo_check(
+		Activator::MIGRATIONS_VERSION === get_option( 'faz_migrations_version' ),
+		'the retry completes the batch and records the version'
+	);
+	geo_check(
+		'1' === get_option( 'faz_own_cookie_seeded' ),
+		'the previously declined step is what actually got done on the retry'
 	);
 
 	echo "\n" . $run . ' checks, ' . $failed . " failed\n";

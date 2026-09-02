@@ -192,6 +192,9 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				// to be — and the bin can hold raw blocker scripts.
 				'faz_cookie_missed_scans',
 				'faz_cookies_recycle_bin',
+				// Visitor-check ledger and its replay-target pointer.
+				'faz_scan_visitor_check',
+				'faz_httponly_scan_target',
 			);
 			foreach ( $faz_options as $option_name ) {
 				delete_option( $option_name );
