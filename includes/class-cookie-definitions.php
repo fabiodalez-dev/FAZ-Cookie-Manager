@@ -29,6 +29,22 @@ class Cookie_Definitions {
 	const BUNDLED_DATA_FILE = 'includes/data/open-cookie-database.json';
 
 	/**
+	 * When the bundled snapshot's DATA was captured, in UTC.
+	 *
+	 * Deliberately not derived from the file's mtime. An unzip sets mtime to
+	 * whatever the extractor decides — usually the moment WordPress installed
+	 * the update — so mtime answers "when was this file written here", not
+	 * "how old is this data". The two differ by however long the release sat
+	 * on wordpress.org before a site took it, and the second question is the
+	 * one both the staleness check below and the admin screen are asking.
+	 *
+	 * MUST be updated whenever includes/data/open-cookie-database.json is
+	 * regenerated. tests/unit/test-bundled-definitions-date-php.php fails if
+	 * the file changes and this does not.
+	 */
+	const BUNDLED_DATA_DATE = '2026-08-14 09:36:46';
+
+	/**
 	 * WP option key where definitions are cached.
 	 */
 	const OPTION_KEY = 'faz_cookie_definitions';
@@ -206,7 +222,11 @@ class Cookie_Definitions {
 	 */
 	public function get_meta() {
 		$stored = get_option( self::OPTION_KEY, false );
-		if ( is_array( $stored ) && ! empty( $stored ) ) {
+		// Report the dataset the lookup actually uses. Describing the stored
+		// copy while get_runtime_data() answers from the bundle would put the
+		// wrong date and the wrong source on the one screen an admin consults
+		// to ask how old their definitions are.
+		if ( is_array( $stored ) && ! empty( $stored ) && ! $this->bundle_supersedes_stored() ) {
 			$meta = get_option( self::META_KEY, array() );
 			// Normalize legacy META_KEY entries that predate the 'source'
 			// field: without this, the UI branch that picks "downloaded"
@@ -388,11 +408,50 @@ class Cookie_Definitions {
 	 */
 	private function get_runtime_data() {
 		$stored = get_option( self::OPTION_KEY, array() );
-		if ( is_array( $stored ) && ! empty( $stored ) ) {
+		if ( is_array( $stored ) && ! empty( $stored ) && ! $this->bundle_supersedes_stored() ) {
 			return $stored;
 		}
 
 		return $this->get_bundled_data();
+	}
+
+	/**
+	 * Whether the bundled snapshot is newer than the downloaded copy.
+	 *
+	 * The stored option used to win unconditionally, and nothing ever revisited
+	 * it — no version check, no clearing on upgrade. That split installs in two:
+	 * a site that never pressed "Update definitions" got fresher data with every
+	 * plugin update, because each release ships a newer bundle; a site that
+	 * pressed it once was pinned to that instant forever, while newer bundles
+	 * shipped past it unused. The button offered as the cure for stale data was
+	 * the thing that made stale data permanent.
+	 *
+	 * Nothing is deleted. The verdict is taken at read time, so a later download
+	 * of a genuinely newer dataset wins again on its own.
+	 *
+	 * @return bool
+	 */
+	private function bundle_supersedes_stored() {
+		$meta       = get_option( self::META_KEY, array() );
+		$downloaded = is_array( $meta ) && ! empty( $meta['updated_at'] ) ? (string) $meta['updated_at'] : '';
+
+		// A stored copy with no date predates the versions that record one, so
+		// it is older than any bundle we could be shipping today.
+		if ( '' === $downloaded ) {
+			return true;
+		}
+
+		$downloaded_ts = strtotime( $downloaded );
+		if ( false === $downloaded_ts ) {
+			return true;
+		}
+
+		// update_definitions() stamps with current_time( 'mysql' ), i.e. site
+		// local time, against a UTC constant. The skew is under a day and the
+		// deltas this decides are weeks or months, so it does not matter here —
+		// worst case two datasets captured the same day resolve to the bundle,
+		// which is the same data.
+		return strtotime( self::BUNDLED_DATA_DATE ) > $downloaded_ts;
 	}
 
 	/**
@@ -446,7 +505,13 @@ class Cookie_Definitions {
 		// keyed by mtime+size instead of re-decoding 2.8 MB per admin screen.
 		$mtime       = (int) filemtime( $file );
 		$size        = (int) filesize( $file );
-		$fingerprint = $mtime . ':' . $size;
+		// The declared capture date is part of the key, not just the file's
+		// mtime and size. Without it a site that already cached this meta keeps
+		// serving the value computed by the previous code — which is how the
+		// old, filemtime-derived date survived this very change on a test site
+		// whose file rsync had left untouched. Any edit to BUNDLED_DATA_DATE
+		// now invalidates the cache by construction.
+		$fingerprint = $mtime . ':' . $size . ':' . self::BUNDLED_DATA_DATE;
 		$cached      = get_option( self::BUNDLED_META_KEY, false );
 		if (
 			is_array( $cached )
@@ -464,7 +529,10 @@ class Cookie_Definitions {
 
 		$meta = array(
 			'count'      => $this->count_definitions( $data ),
-			'updated_at' => gmdate( 'Y-m-d H:i:s', $mtime ),
+			// The capture date, not filemtime(): mtime is when the unzip wrote
+			// the file on this server, so the admin screen was reporting the
+			// install date of the update as the age of the data.
+			'updated_at' => self::BUNDLED_DATA_DATE,
 			'source'     => 'bundled',
 		);
 		update_option(
