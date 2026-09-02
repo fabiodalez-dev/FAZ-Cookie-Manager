@@ -39,8 +39,14 @@ if [[ -z "${VERSION}" ]]; then
     echo "ERROR: --version=X.Y.Z is required" >&2
     exit 1
 fi
-if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "ERROR: VERSION must be semantic (X.Y.Z), got: ${VERSION}" >&2
+# A pre-release (X.Y.Z-rc1 / -beta2 / -alpha1) is a legitimate build that is NOT
+# a wordpress.org release: it is for local install and testing. It takes a
+# different, stricter path below — see PRERELEASE.
+PRERELEASE=0
+if [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(rc|beta|alpha)[0-9]+$ ]]; then
+    PRERELEASE=1
+elif [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "ERROR: VERSION must be X.Y.Z, or X.Y.Z-rc1 / -beta1 / -alpha1 for a pre-release, got: ${VERSION}" >&2
     exit 1
 fi
 if [[ ! -d "${PLUGIN_SRC}" ]]; then
@@ -78,9 +84,18 @@ header_value() {
 
 README_TAG="$(grep -E '^Stable tag:' "${README_FILE}" | awk '{print $3}' | tr -d '\r')"
 PLUGIN_VERSION="$(header_value "Version")"
-FAZ_VERSION_CONST="$(grep -E "^define\( 'FAZ_VERSION'" "${MAIN_FILE}" | grep -oE "'[0-9]+\.[0-9]+\.[0-9]+'" | tr -d "'")"
+FAZ_VERSION_CONST="$(grep -E "^define\( 'FAZ_VERSION'" "${MAIN_FILE}" | grep -oE "'[0-9]+\.[0-9]+\.[0-9]+(-(rc|beta|alpha)[0-9]+)?'" | tr -d "'")"
 
-if [[ "${README_TAG}" != "${VERSION}" ]]; then
+if [[ "${PRERELEASE}" -eq 1 ]]; then
+    # Inverted on purpose. Stable tag is the pointer wordpress.org serves as the
+    # stable download; a release candidate claiming it is how an RC reaches
+    # people who never asked for one. For a pre-release the check is that it
+    # does NOT match.
+    if [[ "${README_TAG}" == "${VERSION}" ]]; then
+        red "readme.txt Stable tag must NOT be the pre-release version (${VERSION}) — leave it at the last stable"
+        exit 1
+    fi
+elif [[ "${README_TAG}" != "${VERSION}" ]]; then
     red "readme.txt Stable tag (${README_TAG}) does not match --version=${VERSION}"
     exit 1
 fi
