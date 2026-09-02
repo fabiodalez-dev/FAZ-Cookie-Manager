@@ -80,6 +80,48 @@ test.describe('1.29.0-rc1 acceptance', () => {
     }
   });
 
+  test('#263 — the System Status definitions row does not pass a bundled snapshot off as a download', async ({
+    page,
+    loginAsAdmin,
+    wpBaseURL,
+  }) => {
+    // The row keyed on "is there a date?", and after #263 get_meta() always
+    // returns one — the download's, or the bundled snapshot's capture date. So
+    // the bundled branch became unreachable and a shipped snapshot printed a
+    // bare date under "Cookie definitions updated", which reads as the day this
+    // site downloaded it. Nothing asserted this row, which is why it could go
+    // wrong silently; this is that assertion.
+    try {
+      wpEval(`
+        update_option("faz_cookie_definitions", array("stale.example"=>array(array("cookie"=>"zzq9137probe","category"=>"Analytics"))), false);
+        update_option("faz_cookie_definitions_meta", array("updated_at"=>"2026-07-01 10:00:00","count"=>1,"source"=>"stale"), false);
+      `);
+      await loginAsAdmin(page);
+      await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-system-status`, {
+        waitUntil: 'domcontentloaded',
+      });
+
+      const value = await page.$$eval('table tr', (trs) => {
+        for (const tr of trs) {
+          const c = tr.querySelectorAll('td');
+          if (c.length >= 2 && /definitions updated|definizioni/i.test(c[0].textContent || '')) {
+            return (c[1].textContent || '').trim();
+          }
+        }
+        return null;
+      });
+
+      expect(value, 'no "Cookie definitions updated" row found').not.toBeNull();
+      // The lookup answers from the bundle in this state, so the row has to say
+      // so. A bare timestamp here is the bug.
+      expect(value!).toMatch(/bundled/i);
+      expect(value!, 'the row shows the stale download date as if it were current').not.toBe('2026-07-01 10:00:00');
+    } finally {
+      deleteOption('faz_cookie_definitions');
+      deleteOption('faz_cookie_definitions_meta');
+    }
+  });
+
   test('#261 — every System Status answer survives being copied as plain text', async ({ page, loginAsAdmin, wpBaseURL }) => {
     await loginAsAdmin(page);
     await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-system-status`, {

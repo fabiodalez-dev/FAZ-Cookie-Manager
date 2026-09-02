@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-09-02T15:59:55+00:00\n"
+"POT-Creation-Date: 2026-09-02T17:56:45+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -6482,19 +6482,25 @@ msgstr "Prossima pulizia log consensi"
 msgid "Cookie definitions updated"
 msgstr "Definizioni dei cookie aggiornate"
 
-#: admin/views/system-status.php:209
+#. translators: %s: date the bundled snapshot's data was captured.
+#: admin/views/system-status.php:220
+#, php-format
+msgid "bundled data in use, captured %s"
+msgstr "in uso i dati inclusi nel plugin, acquisiti il %s"
+
+#: admin/views/system-status.php:226
 msgid "never downloaded (bundled data in use)"
 msgstr "mai scaricate (in uso i dati inclusi nel plugin)"
 
-#: admin/views/system-status.php:212
+#: admin/views/system-status.php:231
 msgid "IAB vendor list updated"
 msgstr "Elenco fornitori IAB aggiornato"
 
-#: admin/views/system-status.php:215
+#: admin/views/system-status.php:234
 msgid "never downloaded"
 msgstr "mai scaricato"
 
-#: admin/views/system-status.php:222
+#: admin/views/system-status.php:241
 msgid "Active Plugins"
 msgstr "Plugin attivi"
 

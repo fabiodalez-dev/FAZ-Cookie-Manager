@@ -159,7 +159,14 @@ test.describe('Playground compatibility (online — RUN_PLAYGROUND_TEST=1 to ena
     // first: it is the subject under test, not an obstacle to route around.
     if (await adminFrame.$('[data-faz-tag="reject-button"]')) {
       await clickInsideFrame(adminFrame, '[data-faz-tag="reject-button"]', 'consent banner Reject All');
-      await adminFrame.locator('[data-faz-tag="notice"]').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+      // No catch. This wait used to be a courtesy — get the banner out of the
+      // way before clicking the admin menu behind it — and swallowing its
+      // failure was harmless because the click that followed would fail loudly
+      // anyway. That click is now a goto(), which the banner cannot obstruct, so
+      // a swallowed failure here would be silent: Reject All could stop
+      // dismissing the banner and this test would still pass. It is now the
+      // assertion it looks like.
+      await adminFrame.locator('[data-faz-tag="notice"]').waitFor({ state: 'hidden', timeout: 10_000 });
     }
 
     // `login: true` lands on the FRONT END, not wp-admin — the admin bar is

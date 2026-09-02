@@ -204,9 +204,28 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 				?>
 				<tr>
 					<td><?php esc_html_e( 'Cookie definitions updated', 'faz-cookie-manager' ); ?></td>
-					<td><?php echo ! empty( $faz_ocd_meta['updated_at'] )
-						? esc_html( $faz_ocd_meta['updated_at'] )
-						: esc_html__( 'never downloaded (bundled data in use)', 'faz-cookie-manager' ); ?></td>
+					<td><?php
+					// Key on `source`, not on the presence of a date. get_meta()
+					// always returns an updated_at now — the download's, or the
+					// bundled snapshot's capture date — so testing the date alone
+					// made the bundled branch unreachable and printed a snapshot
+					// date as though the site had downloaded it that day. Two
+					// different situations report source 'bundled': never
+					// downloaded at all, and downloaded once but superseded by a
+					// newer bundle, so the copy must not claim "never downloaded"
+					// for both.
+					if ( isset( $faz_ocd_meta['source'] ) && 'bundled' === $faz_ocd_meta['source'] && ! empty( $faz_ocd_meta['updated_at'] ) ) {
+						printf(
+							/* translators: %s: date the bundled snapshot's data was captured. */
+							esc_html__( 'bundled data in use, captured %s', 'faz-cookie-manager' ),
+							esc_html( $faz_ocd_meta['updated_at'] )
+						);
+					} elseif ( ! empty( $faz_ocd_meta['updated_at'] ) ) {
+						echo esc_html( $faz_ocd_meta['updated_at'] );
+					} else {
+						esc_html_e( 'never downloaded (bundled data in use)', 'faz-cookie-manager' );
+					}
+					?></td>
 				</tr>
 				<tr>
 					<td><?php esc_html_e( 'IAB vendor list updated', 'faz-cookie-manager' ); ?></td>

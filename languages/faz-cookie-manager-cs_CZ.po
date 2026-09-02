@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-09-02T15:59:55+00:00\n"
+"POT-Creation-Date: 2026-09-02T17:56:45+00:00\n"
 "PO-Revision-Date: 2026-08-01 13:45+0200\n"
 "Last-Translator: \n"
 "Language-Team: Czech\n"
@@ -6473,19 +6473,25 @@ msgstr "Příští čištění záznamů souhlasu"
 msgid "Cookie definitions updated"
 msgstr ""
 
-#: admin/views/system-status.php:209
+#. translators: %s: date the bundled snapshot's data was captured.
+#: admin/views/system-status.php:220
+#, php-format
+msgid "bundled data in use, captured %s"
+msgstr ""
+
+#: admin/views/system-status.php:226
 msgid "never downloaded (bundled data in use)"
 msgstr ""
 
-#: admin/views/system-status.php:212
+#: admin/views/system-status.php:231
 msgid "IAB vendor list updated"
 msgstr ""
 
-#: admin/views/system-status.php:215
+#: admin/views/system-status.php:234
 msgid "never downloaded"
 msgstr ""
 
-#: admin/views/system-status.php:222
+#: admin/views/system-status.php:241
 msgid "Active Plugins"
 msgstr "Aktivní pluginy"
 
