@@ -1792,6 +1792,11 @@ ref._fazClearAdblockReassert = _fazClearAdblockReassert;
 // leaves WHEN it runs unguarded, which is the half that was actually wrong:
 // one timer at 1200ms never meets a filter list that lands later (#253).
 ref._fazScheduleAdblockGuard = _fazScheduleAdblockGuard;
+// Exposed for the jsdom suite that pins the "asked-for panel is absent" case
+// (classic + CCPA has no optout-popup). That combination needs a banner type,
+// a law and a recorded consent to line up at once, which is hostile to E2E and
+// exact in jsdom. Not part of the public API.
+ref._fazShowPreferenceCenter = _fazShowPreferenceCenter;
 
 function _fazScheduleDeadCookieCleanup() {
     // Staggered passes catch cookies written after load. The 5000 ms tail picks
@@ -1865,10 +1870,35 @@ function _fazRegisterShortcodeTriggers() {
             : null;
         if (!trigger) return;
         e.preventDefault();
-        if (_fazShowPreferenceCenter() === false && window.console && console.warn) {
-            console.warn('FAZ Cookie Manager: [faz_cookie_settings] was clicked but no consent preference center is available on this page (the banner UI may be disabled for this visitor).');
+        if (_fazShowPreferenceCenter() === false) {
+            // No preference-center DOM to open (e.g. an opt-out law resolved
+            // for this visitor on a template without the optout-popup panel).
+            // Fall back to re-showing the banner — mirrors the fallback in
+            // _revisitFazConsent() — so the button still surfaces SOME consent
+            // UI whenever one exists; warn only when there is none at all.
+            if (_fazGetBanner()) {
+                _fazShowBanner();
+            } else if (window.console && console.warn) {
+                console.warn('FAZ Cookie Manager: [faz_cookie_settings] was clicked but no consent preference center is available on this page (the banner UI may be disabled for this visitor).');
+            }
+        } else {
+            // Last parity gap with the revisit widget (#253): _revisitFazConsent()
+            // refreshes the IAB vendor switches from the stored consent before the
+            // panel is seen, honouring this function's documented contract ("when
+            // reopening the preference center"). The shortcode handler did not, so
+            // a panel opened this way showed the server-rendered defaults — and
+            // because the save path reads those switches
+            // (_fazAcceptCookies -> _fazSaveVendorConsent), pressing "Save my
+            // preferences" wrote the defaults back, silently discarding vendor
+            // choices the visitor had already made. No-op unless IAB TCF is on.
+            _fazUpdateVendorCheckboxStates();
         }
-    });
+    // Capture phase: a theme / page-builder click handler that calls
+    // stopPropagation() on an ancestor (smooth-scroll, mega-menu, accordion
+    // wrappers…) would otherwise swallow the bubbled event before it reached
+    // this document-level listener, leaving the shortcode button dead while
+    // the directly-bound revisit widget kept working (#253).
+    }, true);
 }
 
 function _fazRegisterListeners() {
@@ -2127,6 +2157,11 @@ function _fazShowBanner() {
         if (!_fazStore._bannerTriggerElement) {
             _fazStore._bannerTriggerElement = document.activeElement || document.body;
         }
+        // The banner is now shown on purpose (revisit widget, watchdog, GPC
+        // path…), so closing a pushdown preference panel must no longer
+        // re-hide the container — that flag only covers a reveal done solely
+        // to make the shortcode-opened panel visible (#253).
+        _fazStore._pushdownRevealedFromHidden = false;
         notice.classList.remove('faz-hide');
         if (!_fazBannerLoadedFired) {
             _fazBannerLoadedFired = true;
@@ -2190,6 +2225,15 @@ function _fazHidePreferenceCenter() {
         if (!ref._fazGetFromStore("action")) _fazShowBanner();
     } else {
         _fazToggleAriaExpandStatus("=settings-button", "false");
+        // Symmetry with the open path (#253): if the container was un-hidden
+        // purely to reveal the pushdown panel (shortcode open after a recorded
+        // consent), hide it again on close — otherwise the collapsed consent
+        // bar would linger for a visitor who already made a choice. A banner
+        // shown on purpose (_fazShowBanner clears the flag) is untouched.
+        if (_fazStore._pushdownRevealedFromHidden) {
+            _fazStore._pushdownRevealedFromHidden = false;
+            _fazHideBanner();
+        }
     }
     if (ref._fazGetFromStore("action")) _fazShowRevisit();
     const origin = _fazStore._preferenceOriginTag;
@@ -2239,6 +2283,17 @@ function _fazShowPreferenceCenter() {
     // — notably the [faz_cookie_settings] delegated click handler — can react
     // instead of silently doing nothing.
     if (!element) return false;
+    // …and the panel the trigger actually asks for has to exist inside it.
+    // `classic` is the one template that ships no optout-popup, and it also
+    // forces pushdown — so on a CCPA banner _fazGetPreferenceCenter() answers
+    // with the banner CONTAINER, which is present, and this function used to
+    // report success while opening nothing the visitor asked for. Reporting
+    // success is what did the damage: it denied the caller the
+    // _fazShowBanner() fallback that exists for exactly this case, so the
+    // [faz_cookie_settings] button looked dead again. Verified against
+    // templates/6.2.0: every template carries `detail`, only classic lacks
+    // `optout-popup`, so this can never fire on the GDPR path.
+    if (!_fazGetElementByTag(_fazActivePreferenceTag())) return false;
     element.classList.add(_fazGetPreferenceClass());
 
     // For a "Both" banner, isolate the panel matching the trigger.
@@ -2255,6 +2310,22 @@ function _fazShowPreferenceCenter() {
         _fazShowOverLay();
         _fazHideBanner();
     } else {
+        // The pushdown preference center IS the banner container
+        // (_fazGetPreferenceCenter() returns _fazGetBanner()), and after a
+        // recorded consent that container carries `faz-hide` (display:none),
+        // which wins over `faz-consent-bar-expand` — the expand class only
+        // reveals descendants. Without clearing it, the [faz_cookie_settings]
+        // button opened an INVISIBLE panel for returning visitors (#253); the
+        // revisit widget never hit this because _revisitFazConsent() calls
+        // _fazShowBanner() first. Un-hide directly instead of via
+        // _fazShowBanner() so the one-shot fazcookie_banner_loaded event is
+        // not fired for a panel-only reveal, and remember we did it so
+        // _fazHidePreferenceCenter() can re-hide the container on close
+        // instead of stranding the collapsed consent bar on screen.
+        if (element.classList.contains('faz-hide')) {
+            element.classList.remove('faz-hide');
+            _fazStore._pushdownRevealedFromHidden = true;
+        }
         // FORCE "true" — this is an idempotent OPEN, not a toggle. Without the
         // force value a second click of the [faz_cookie_settings] button (or any
         // [data-faz-open-preferences] trigger) flips aria-expanded to "false"
@@ -2286,6 +2357,15 @@ function _fazTogglePreferenceCenter() {
         const preferenceCenter = element.querySelector('.faz-preference-center');
         _fazSetPreferenceCenterAccessibility(preferenceCenter);
         _fazToggleAriaExpandStatus("=settings-button");
+        // A panel revealed from a hidden container (shortcode open after a
+        // recorded consent, #253) can also be collapsed via this toggle (the
+        // settings/customize control). Consume the flag here too, or the
+        // collapsed consent bar would linger — and the stale flag would make a
+        // LATER _fazHidePreferenceCenter() hide a banner shown on purpose.
+        if (isOpen && _fazStore._pushdownRevealedFromHidden) {
+            _fazStore._pushdownRevealedFromHidden = false;
+            _fazHideBanner();
+        }
     } else {
         if (!isOpen) {
             _fazShowOverLay();

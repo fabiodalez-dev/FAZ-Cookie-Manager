@@ -249,13 +249,59 @@ test.describe('1.17.2 — [faz_cookie_settings] revisit shortcode', () => {
       await revisitBtn.click();
       await page.waitForTimeout(400);
       expect(await settingsBtn.getAttribute('aria-expanded'), 'aria-expanded should be true after opening').toBe('true');
+      // #253: after a recorded consent the banner container carries `faz-hide`
+      // (display:none), which the expand class alone cannot beat — the panel
+      // must be ACTUALLY visible, not just aria-expanded. This is the exact
+      // gap the original test left open (it only checked the attribute).
+      await expect(
+        page.locator('[data-faz-tag="detail"]').first(),
+        'pushdown preference panel opened invisibly (container still faz-hide) — issue #253',
+      ).toBeVisible({ timeout: 4_000 });
 
-      await revisitBtn.click(); // 2nd click — must NOT flip aria-expanded to false
+      // 2nd trigger — must NOT flip aria-expanded to false. Dispatched instead
+      // of clicked: now that the panel genuinely becomes visible (#253), the
+      // expanded classic-bottom dialog covers the in-page shortcode button, so
+      // a pointer click is legitimately intercepted (aria-modal="true" — the
+      // page behind is meant to be inert). Before the fix this step passed only
+      // because the panel was INVISIBLE and therefore obscured nothing; keeping
+      // .click() here would assert the old, broken layout. The ARIA contract
+      // still matters for every trigger the panel does not cover, so exercise
+      // the handler directly rather than dropping the check.
+      await revisitBtn.dispatchEvent('click');
       await page.waitForTimeout(400);
       expect(
         await settingsBtn.getAttribute('aria-expanded'),
         'aria-expanded desynced to false on the 2nd click while the panel stayed open',
       ).toBe('true');
+      await expect(page.locator('[data-faz-tag="detail"]').first()).toBeVisible();
+
+      // Closing (Escape) must re-hide the container for a consented visitor —
+      // the collapsed consent bar must not linger after the panel closes.
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+      await expect(
+        page.locator('[data-faz-tag="notice"]').first(),
+        'collapsed consent bar left on screen after closing the shortcode-opened pushdown panel',
+      ).toBeHidden({ timeout: 4_000 });
+
+      // The reveal must also be undone by the banner's OWN settings control,
+      // which in pushdown mode routes to _fazTogglePreferenceCenter() — a close
+      // path DIFFERENT from the Escape above (_fazHidePreferenceCenter). Escape
+      // passing proves nothing about this branch, and it is the one that has to
+      // consume the reveal marker: otherwise the collapsed bar lingers, and the
+      // stale flag makes a LATER close hide a banner shown on purpose.
+      await revisitBtn.click(); // re-open from hidden, via the shortcode again
+      await page.waitForTimeout(400);
+      await expect(
+        page.locator('[data-faz-tag="detail"]').first(),
+        'the shortcode could not re-open the pushdown panel a second time',
+      ).toBeVisible({ timeout: 4_000 });
+      await settingsBtn.click(); // collapse via the banner's own control
+      await page.waitForTimeout(400);
+      await expect(
+        page.locator('[data-faz-tag="notice"]').first(),
+        'collapsed consent bar left on screen after closing the pushdown panel with the settings button',
+      ).toBeHidden({ timeout: 4_000 });
     } finally {
       // Restore the EXACT original settings blob (byte-for-byte), so the shared
       // banner_id=1 fixture is left exactly as it was found.
