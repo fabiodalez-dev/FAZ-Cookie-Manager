@@ -215,6 +215,14 @@ class Frontend {
 		// headers pending until page, AJAX, REST and redirect callbacks have had a
 		// chance to emit Set-Cookie. The output callback then filters the final
 		// header set immediately before PHP sends it.
+		// WP Consent API: declare the consent TYPE, not merely that a CMP exists.
+		// Without this filter the API treats the site as having no consent
+		// management at all and wp_has_consent() returns TRUE for every category
+		// — so any Consent-API-aware plugin gating server-rendered output on
+		// wp_has_consent('marketing') printed its pixel on every request, before
+		// any consent, on every FAZ install. Registering the plugin (below in
+		// faz-cookie-manager.php) was never enough on its own.
+		add_filter( 'wp_get_consent_type', array( $this, 'filter_wp_consent_type' ) );
 		add_action( 'init', array( $this, 'start_server_cookie_guard' ), 20 );
 		add_filter( 'rest_pre_echo_response', array( $this, 'filter_server_cookies_before_rest_echo' ), PHP_INT_MAX, 3 );
 		add_filter( 'wp_redirect', array( $this, 'filter_server_cookies_before_redirect' ), PHP_INT_MAX, 2 );
@@ -507,7 +515,7 @@ class Frontend {
 				 * @param bool $in_footer Effective position (true = footer).
 				 */
 				do_action( 'faz_main_script_effective_in_footer', $in_footer );
-				wp_enqueue_script( $script_handle, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', $static_deps, $this->version, $in_footer );
+				wp_enqueue_script( $script_handle, faz_frontend_url() . 'js/script' . $suffix . '.js', $static_deps, $this->version, $in_footer );
 			}
 
 			wp_localize_script( $script_handle, '_fazConfig', $store_data );
@@ -628,7 +636,7 @@ class Frontend {
 				if ( $alt_asset ) {
 					$this->enqueue_inline_bundle( $gcm_handle, 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), false );
 				} else {
-					wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
+					wp_enqueue_script( $gcm_handle, faz_frontend_url() . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
 				}
 			}
 
@@ -650,7 +658,7 @@ class Frontend {
 				if ( $alt_asset ) {
 					$this->enqueue_inline_bundle( $tcf_handle, 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), false );
 				} else {
-					wp_enqueue_script( $tcf_handle, plugin_dir_url( __FILE__ ) . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
+					wp_enqueue_script( $tcf_handle, faz_frontend_url() . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
 				}
 
 				// PublisherCC: use admin setting, fall back to site locale.
@@ -798,6 +806,16 @@ class Frontend {
 						"var safeUrl=(function(){try{var current=new URL(window.location.href);return current.origin+current.pathname}catch(err){var origin=window.location.origin||(window.location.protocol+'//'+window.location.host);return origin+(window.location.pathname||'')}})();" .
 						"fetch(_fazConsentLog.restUrl,{" .
 							"method:'POST'," .
+							// keepalive so the request survives the navigation that
+							// follows it. Withdrawal forces window.location.reload()
+							// as soon as the storage cleanup resolves, and browsers
+							// abort in-flight non-keepalive fetches on unload — so
+							// the log rows most likely to be lost were exactly the
+							// ones proving a withdrawal, while acceptances (which do
+							// not reload) always landed. An accountability record
+							// that is systematically biased toward consents is worse
+							// than one with gaps.
+							"keepalive:true," .
 							"headers:{'Content-Type':'application/json'}," .
 							"body:JSON.stringify({" .
 								"consent_id:(function(){var m=document.cookie.match(/fazcookie-consent=([^;]+)/);if(!m)return '';var v=m[1];try{v=decodeURIComponent(v)}catch(err){}var p=v.match(/(?:^|,)consentid:([^,;]+)/);return p?p[1]:''})()," .
@@ -841,7 +859,7 @@ class Frontend {
 			if ( $alt_asset ) {
 				$this->enqueue_inline_bundle( $a11y_handle, 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), true );
 			} else {
-				wp_enqueue_script( $a11y_handle, plugin_dir_url( __FILE__ ) . 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), $this->version, true );
+				wp_enqueue_script( $a11y_handle, faz_frontend_url() . 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), $this->version, true );
 			}
 			// Pass translatable checkbox label templates — {name} is replaced in JS.
 			wp_localize_script(
@@ -862,7 +880,7 @@ class Frontend {
 			if ( $alt_asset ) {
 				$this->enqueue_inline_bundle( $handle, 'js/wca' . $wca_suffix . '.js', array( $script_handle ), false );
 			} else {
-				wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $wca_suffix . '.js', array( $script_handle ), $this->version, false );
+				wp_register_script( $handle, faz_frontend_url() . 'js/wca' . $wca_suffix . '.js', array( $script_handle ), $this->version, false );
 			}
 			if ( true === $this->is_gsk_enabled() ) {
 				wp_add_inline_script( $handle, 'var _fazGsk = true;', 'before' );
@@ -877,7 +895,7 @@ class Frontend {
 			if ( $alt_asset ) {
 				$this->enqueue_inline_bundle( $ms_handle, 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), false );
 			} else {
-				wp_enqueue_script( $ms_handle, plugin_dir_url( __FILE__ ) . 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), $this->version, false );
+				wp_enqueue_script( $ms_handle, faz_frontend_url() . 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), $this->version, false );
 			}
 			if ( $ms_uet ) {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftUET = true;', 'before' );
@@ -1642,7 +1660,19 @@ class Frontend {
 		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
 			$has_source = true;
 		}
-		if ( ! $has_source && ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- presence test only.
+		// mod_geoip had the SAME defect, three lines below the fix — and the
+		// comment above claimed CF was "the one place", which is how it survived
+		// a review. GEOIP_COUNTRY_CODE is set by Apache from REMOTE_ADDR, so a
+		// cache warmer hitting from localhost carries none: the presence test
+		// answered "no source", the response was cached without the veto, and a
+		// real visitor was then served a page rendered for country ''. On an
+		// install whose only source is mod_geoip that is the whole audience.
+		//
+		// Configuration, not resolution: the module being loaded is the signal.
+		// apache_get_modules() is unavailable under PHP-FPM, so fall back to the
+		// header — on a warmer request that leaves the veto OFF exactly as
+		// before, never weaker, and the filter is the explicit override.
+		if ( ! $has_source && $this->mod_geoip_configured() ) {
 			$has_source = true;
 		}
 		if ( ! $has_source && function_exists( 'geoip_country_code_by_name' ) ) {
@@ -1670,6 +1700,82 @@ class Frontend {
 		 * @param bool $has_source Whether a country source was detected.
 		 */
 		return (bool) apply_filters( 'faz_has_country_signal_source', $has_source );
+	}
+
+	/**
+	 * Declare the WP Consent API consent type for this visitor.
+	 *
+	 * `optin`  — nothing may fire before an affirmative act (GDPR and friends).
+	 * `optout` — processing is permitted until the visitor objects (CCPA/CPRA).
+	 *
+	 * Resolved from the banner already selected for this visitor, which is the
+	 * same source get_blocked_categories() uses for `$is_optout_law`, so the
+	 * Consent API and this plugin's own gating can never disagree about the
+	 * regime. Before the banner is loaded there is nothing to distinguish, and
+	 * the stricter answer is the safe one.
+	 *
+	 * @param string $type Type proposed by another integration.
+	 * @return string
+	 */
+	public function filter_wp_consent_type( $type ) {
+		// Never downgrade a stricter declaration another plugin already made.
+		if ( 'optin' === $type ) {
+			return $type;
+		}
+		// Answer with the regime actually being ENFORCED, not the banner's label.
+		// Declaring 'optout' makes wp_has_consent() return true by default, so
+		// every third-party plugin honouring the WP Consent API is told it may
+		// fire — including server-side, where FAZ's output filtering cannot
+		// reach it. Getting this wrong is not a mislabel, it is other people's
+		// trackers running before consent.
+		//
+		// Two states where the banner says ccpa and the enforcement does not:
+		//
+		// 1. The runtime ruleset resolved an opt-in law for this visitor while
+		//    the publisher has no active GDPR banner. maybe_apply_geo_runtime()
+		//    deliberately KEEPS the CCPA banner there (fail-closed, so blocking
+		//    still runs) — so the banner's law is the one thing that is known to
+		//    be wrong in exactly that case.
+		// 2. Cache Compatibility Mode blocks every non-necessary category
+		//    regardless of law, so nothing may be assumed consented.
+		$runtime_ruleset = $this->get_runtime_ruleset();
+		if ( null !== $runtime_ruleset && 'ccpa' !== Geo_Runtime::model_to_law( $runtime_ruleset ) ) {
+			return 'optin';
+		}
+		if ( $this->is_cache_compatibility_enabled() ) {
+			return 'optin';
+		}
+		if ( $this->banner && 'ccpa' === $this->banner->get_law() ) {
+			return 'optout';
+		}
+		return 'optin';
+	}
+
+	/**
+	 * Whether Apache mod_geoip is configured on this site.
+	 *
+	 * Asks whether the MODULE is loaded, not whether THIS request carries its
+	 * header — the distinction the cache veto turns on. mod_geoip resolves
+	 * REMOTE_ADDR and emits nothing for loopback or private addresses, so a
+	 * cache warmer's request looks identical to "no geo source at all" if you
+	 * only test the header.
+	 *
+	 * apache_get_modules() exists only under mod_php. Under PHP-FPM (and CGI)
+	 * there is no way to enumerate Apache's modules from PHP, so fall back to
+	 * the header. That fallback is the pre-existing behaviour, so this can only
+	 * ever widen the veto, never narrow it, and `faz_has_country_signal_source`
+	 * remains the explicit override for a publisher who knows their stack.
+	 *
+	 * @return bool
+	 */
+	private function mod_geoip_configured() {
+		if ( function_exists( 'apache_get_modules' ) ) {
+			$modules = apache_get_modules();
+			if ( is_array( $modules ) && in_array( 'mod_geoip', $modules, true ) ) {
+				return true;
+			}
+		}
+		return ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- presence test only.
 	}
 
 	/**
@@ -2015,16 +2121,37 @@ class Frontend {
 		// Fix mixed-content: cached template may contain http:// plugin URLs
 		// when the site is served over HTTPS (reverse proxy, load balancer, or
 		// siteurl stored as http:// in the database).
-		if ( is_ssl() && defined( 'FAZ_PLUGIN_URL' ) ) {
+		// faz_request_is_https(), not is_ssl(): behind a TLS-terminating proxy
+		// is_ssl() is false on an https page, so this repair — which exists for
+		// precisely that deployment — never ran on the hosts that need it.
+		if ( faz_request_is_https() && defined( 'FAZ_PLUGIN_URL' ) ) {
 			$http_url = str_replace( 'https://', 'http://', FAZ_PLUGIN_URL );
 			if ( strpos( $html, $http_url ) !== false ) {
 				$https_url = set_url_scheme( FAZ_PLUGIN_URL, 'https' );
 				$html      = str_replace( $http_url, $https_url, $html );
 
 				// Auto-repair the cached template so subsequent requests
-				// skip this replacement entirely.
+				// skip this replacement entirely — but ONLY on a server-verified
+				// HTTPS signal.
+				//
+				// The rewrite above is per-request and harmless: at worst one
+				// visitor gets https URLs on a page that did not need them. This
+				// branch is different — it writes the rewritten template back to
+				// wp_options, where it survives for every later visitor.
+				//
+				// faz_request_is_https() accepts X-Forwarded-Proto, which is
+				// client-controlled on any site NOT behind a proxy that strips it.
+				// Widening the outer gate to it therefore handed an unauthenticated
+				// caller a persistent state change: one
+				// `curl -H 'X-Forwarded-Proto: https'` against a plain-HTTP site
+				// rewrites its cached banner to a scheme the server does not serve,
+				// for everyone, until the cache is regenerated. is_ssl() and the
+				// stored siteurl are both server-controlled, so the durable write
+				// keeps the narrower signal it always had.
+				$server_verified_https = is_ssl()
+					|| 0 === stripos( (string) get_option( 'siteurl' ), 'https://' );
 				$cache_key = apply_filters( 'faz_banner_template_cache_key', 'faz_banner_template' );
-				$stored    = get_option( $cache_key, array() );
+				$stored    = $server_verified_https ? get_option( $cache_key, array() ) : false;
 				if ( is_array( $stored ) ) {
 					$repaired = false;
 					foreach ( $stored as $lang => $tpl ) {
@@ -2135,7 +2262,19 @@ class Frontend {
 					$repaired                = true;
 				}
 			}
-			if ( $repaired ) {
+			// Same rule as the mixed-content repair above, and for the same
+			// reason — this is the SIBLING branch I fixed there and left here.
+			// $current_origin derives from FAZ_PLUGIN_URL, whose scheme now
+			// follows faz_request_is_https(), which trusts X-Forwarded-Proto.
+			// That header is client-controlled on any site not behind a proxy
+			// that strips it, so persisting an origin derived from it hands an
+			// unauthenticated caller a durable rewrite of every visitor's banner.
+			// The per-request rewrite above keeps the wide signal; the DB write
+			// requires a server-controlled one.
+			$server_verified_https = is_ssl()
+				|| 0 === stripos( (string) get_option( 'siteurl' ), 'https://' );
+			$forged_scheme_only = ( 'https' === $current['scheme'] ) && ! $server_verified_https;
+			if ( $repaired && ! $forged_scheme_only ) {
 				// autoload=false — keep the multi-KB template blob out of alloptions.
 				update_option( $cache_key, $stored, false );
 			}
@@ -3556,10 +3695,55 @@ class Frontend {
 			}
 		}
 
-		// 5. Block <link rel="stylesheet"> (Google Fonts, Adobe Fonts, etc.).
-		if ( false !== stripos( $html, '<link' ) ) {
+		// 4b. Block tracking <img> pixels rendered directly in the document.
+		//
+		// The identical beacon inside <noscript> was already gated, but one in
+		// the body was not: the buffer had no <img> pass at all, despite the
+		// docblock above claiming "Images: src → data-faz-src". A conversion
+		// plugin or an affiliate network that server-renders
+		// `<img src="https://www.facebook.com/tr?id=X&ev=Purchase" width="1">`
+		// fired it for every visitor, including one who had rejected marketing —
+		// and for a beacon the request IS the tracking event, so the client-side
+		// MutationObserver backstop cannot undo it: the preload scanner dispatches
+		// the fetch before any script runs.
+		if ( false !== stripos( $html, '<img' ) ) {
 			$result = preg_replace_callback(
-				'#<link\b([^>]*rel\s*=\s*["\']stylesheet["\'][^>]*)/?>#is',
+				'#<img\b([^>]*)/?>#is',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_img_tag( $m, $providers, $blocked_categories );
+				},
+				$html
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
+		}
+
+		// 5. Block fetching <link> tags: stylesheet AND the preload family.
+		//
+		// This used to match rel="stylesheet" only, which left the whole preload
+		// family open: `<link rel="preload" as="script" href="…/gtag/js?id=G-X">`
+		// is fetched by the browser's PRELOAD SCANNER, before any script runs, so
+		// the paired <script> being correctly re-typed to text/plain stops the
+		// execution but not the request. The visitor's IP and full URL reach the
+		// provider on a first visit with no consent — and with as="image" on a
+		// beacon URL the tracking hit completes outright. The ubiquitous
+		// async-CSS pattern (rel="preload" as="style" onload="this.rel='stylesheet'")
+		// escaped the same way.
+		//
+		// dns-prefetch/preconnect are deliberately NOT gated: they resolve DNS
+		// and open a socket but transfer no URL and set no cookie, and gating
+		// them would break unrelated performance work for no privacy gain.
+		if ( false !== stripos( $html, '<link' ) ) {
+			// Match ANY <link> and decide inside the callback. Pinning the rel
+			// value in the pattern only caught a single quoted token, so
+			// `<link rel=preload …>` (unquoted, which HTML allows) and
+			// `rel="preload stylesheet"` (the standard async-CSS pair) both
+			// slipped past and fetched the provider pre-consent.
+			$result = preg_replace_callback(
+				'#<link\b([^>]*)/?>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_link_tag( $m, $providers, $blocked_categories );
 				},
@@ -4034,16 +4218,95 @@ class Frontend {
 	}
 
 	/**
-	 * Process a <link rel="stylesheet"> tag for blocking.
+	 * Process an <img> tag rendered directly in the document.
 	 *
-	 * @param array $m               Regex match.
-	 * @param array $providers       Provider→category map.
-	 * @param array $blocked_categories Currently blocked category slugs.
+	 * Deliberately narrow: an image is only gated when it matches a blocked
+	 * PROVIDER pattern or a denied per-service decision — i.e. it is a known
+	 * tracking endpoint. Ordinary content images, and anything already carrying
+	 * data-faz-src, are returned untouched, because gating them would blank the
+	 * page for a visitor who has merely not answered the banner yet.
+	 *
+	 * @param array $m                  Regex match: [0] full tag, [1] attributes.
+	 * @param array $providers          Provider match table.
+	 * @param array $blocked_categories Categories blocked for this visitor.
 	 * @return string
 	 */
+	private function process_img_tag( $m, $providers, $blocked_categories ) {
+		$attrs = $m[1];
+		$full  = $m[0];
+
+		if ( false !== strpos( $attrs, 'data-faz-src' ) ) {
+			return $full;
+		}
+		if ( $this->is_whitelisted( $attrs, '' ) ) {
+			return $full;
+		}
+
+		$matched_category = $this->match_script_to_provider( $attrs, '', $providers );
+		$svc_blocked      = $this->check_per_service_blocking( $attrs, '' );
+
+		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
+			// No blocked provider matched: gate only on an explicit service denial.
+			if ( true !== $svc_blocked ) {
+				return $full;
+			}
+			if ( ! $matched_category ) {
+				$matched_category = 'functional';
+			}
+		} elseif ( false === $svc_blocked ) {
+			// The category is blocked but this service was explicitly allowed.
+			return $full;
+		}
+
+		// Park src AND srcset. A responsive tracking image can carry the beacon
+		// in srcset alone — the browser picks a candidate from there in
+		// preference to src — so renaming only src leaves the request to fire.
+		// `data-faz-srcset` is the attribute the client's own restore pass
+		// already looks for (script.js: document.querySelectorAll('[data-faz-srcset]')),
+		// so no new convention is introduced.
+		$new_attrs = preg_replace( '/(^|\s)srcset\s*=\s*/i', '$1data-faz-srcset=', $attrs, 1 );
+		if ( null === $new_attrs ) {
+			return $full; // PCRE failure — never ship a half-rewritten tag.
+		}
+		$parked_srcset = ( $new_attrs !== $attrs );
+
+		$with_src = preg_replace( '/(^|\s)src\s*=\s*/i', '$1data-faz-src=', $new_attrs, 1 );
+		if ( null === $with_src ) {
+			return $full;
+		}
+		$parked_src = ( $with_src !== $new_attrs );
+		if ( ! $parked_src && ! $parked_srcset ) {
+			return $full; // Nothing fetchable to park — leave the tag alone.
+		}
+		// Put metadata BEFORE the captured attributes. The outer tag regex keeps
+		// an XHTML-style closing slash inside $attrs (`<img ... />`), so appending
+		// metadata after it produced invalid `<img ... / data-faz-category=...>`.
+		// Prefixing preserves both ordinary and self-closing source markup.
+		$metadata = ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		if ( $parked_srcset ) {
+			// The srcset restore reads its category from its own attribute.
+			$metadata .= ' data-faz-srcset-category="' . esc_attr( $matched_category ) . '"';
+		}
+		return '<img' . $metadata . $with_src . '>';
+	}
+
 	private function process_link_tag( $m, $providers, $blocked_categories ) {
 		$attrs = $m[1];
 		$full  = $m[0];
+
+		// rel is a space-separated TOKEN LIST and its value may be unquoted, so
+		// the tokens are parsed here rather than pinned in the caller's pattern.
+		// Only fetching rels are gated: dns-prefetch and preconnect resolve DNS
+		// and open a socket but transfer no URL and set no cookie, so gating them
+		// would break unrelated performance work for no privacy gain.
+		if ( ! preg_match( '/\brel\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+))/i', $attrs, $rel_match ) ) {
+			return $full;
+		}
+		$rel_value  = '' !== $rel_match[1] ? $rel_match[1] : ( '' !== $rel_match[2] ? $rel_match[2] : ( isset( $rel_match[3] ) ? $rel_match[3] : '' ) );
+		$rel_tokens = preg_split( '/\s+/', strtolower( trim( $rel_value ) ), -1, PREG_SPLIT_NO_EMPTY );
+		if ( ! $rel_tokens || ! array_intersect( $rel_tokens, array( 'stylesheet', 'preload', 'modulepreload', 'prefetch', 'prerender' ) ) ) {
+			return $full;
+		}
 
 		// Own stylesheets (core prints them as id="<handle>-css") — e.g. the
 		// content-hashed banner CSS served from uploads — must never be gated
@@ -4054,7 +4317,7 @@ class Frontend {
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
 			return $full;
 		}
-		if ( false !== strpos( $attrs, 'data-faz-href' ) ) {
+		if ( false !== strpos( $attrs, 'data-faz-href' ) || false !== strpos( $attrs, 'data-faz-imagesrcset' ) ) {
 			return $full;
 		}
 
@@ -4074,10 +4337,21 @@ class Frontend {
 			}
 		}
 
+		// Park imagesrcset BEFORE href. get_provider_match_context() folds
+		// srcset/imagesrcset into the text this tag is matched against, so a
+		// `<link rel="preload" as="image" imagesrcset="https://tracker/…">` was
+		// correctly recognised as blocked and then left able to fetch: renaming
+		// href alone does nothing to a preload whose URL lives in imagesrcset.
+		// The attribute name cannot collide with the srcset rule below it —
+		// `(^|\s)srcset` needs whitespace before it, which `imagesrcset=` does
+		// not provide.
+		$new_attrs = preg_replace( '/(^|\s)imagesrcset\s*=\s*/i', '$1data-faz-imagesrcset=', $attrs, 1 );
 		// Rename href → data-faz-href (avoid matching data-href).
-		$new_attrs = preg_replace( '/(^|\s)href\s*=\s*/i', '$1data-faz-href=', $attrs, 1 );
-		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		return '<link' . $new_attrs . '/>';
+		$new_attrs = preg_replace( '/(^|\s)href\s*=\s*/i', '$1data-faz-href=', $new_attrs, 1 );
+		// As with <img>, $attrs may already end in the source tag's `/`.
+		// Prefix metadata so the slash remains the final token before `>`.
+		$metadata = ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		return '<link' . $metadata . $new_attrs . '>';
 	}
 
 	/**
@@ -5111,6 +5385,18 @@ class Frontend {
 		if ( '' === $url ) {
 			$url = $this->extract_tag_attr( $attrs, 'href' );
 		}
+		// srcset / imagesrcset are matched IN ADDITION to src, never as a mere
+		// fallback: a responsive image can pair a perfectly innocent src with a
+		// tracking candidate in srcset, and the browser prefers the srcset one.
+		// Treating them as a fallback (the first shape of this fix) left exactly
+		// that tag ungated, because src was non-empty. Kept out of $url so the
+		// data: URI branch below still sees only the primary URL; folded into the
+		// haystack instead, which is what provider matching actually reads.
+		// Descriptors ("2x", "640w") and inter-candidate commas are harmless to
+		// fragment matching.
+		$srcset_haystack = trim(
+			$this->extract_tag_attr( $attrs, 'srcset' ) . ' ' . $this->extract_tag_attr( $attrs, 'imagesrcset' )
+		);
 
 		$normalized_content  = (string) $content;
 		$is_data_uri_payload = false;
@@ -5128,9 +5414,14 @@ class Frontend {
 		}
 
 		return array(
-			'url'                 => $url,
+			// srcset joins `url`, not just the haystack: match_script_to_provider()
+			// tests the ~840 URL-fragment patterns against `url` alone, so a
+			// candidate living only in srcset matched nothing when it was folded
+			// into the haystack only. Appended AFTER the data: branch above, which
+			// must keep seeing the primary URL by itself.
+			'url'                 => trim( $url . ' ' . $srcset_haystack ),
 			'content'             => $normalized_content,
-			'haystack'            => trim( $url . ' ' . $normalized_content ),
+			'haystack'            => trim( $url . ' ' . $srcset_haystack . ' ' . $normalized_content ),
 			'is_data_uri_payload' => $is_data_uri_payload,
 		);
 	}

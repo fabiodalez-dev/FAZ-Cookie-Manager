@@ -117,9 +117,49 @@ const allowedJarShapes = [
   /^\$jar_cookies\[\] = \$entry;$/,
   /^\$jar_cookies\[\] = \$session_cookie;$/,
   /^foreach \( \$jar_cookies as \$jar_cookie \) \{$/,
+  // Read-only handoff: the bucket is passed BY VALUE into the visitor-check
+  // ledger (begin_visitor_check), which persists the classification so the
+  // anonymous replay can diff against it. It is a read, not a merge — the
+  // declaration path still sees only $raw_cookies.
+  /^\$jar_cookies$/,
 ];
-ok(jarLines.length === 4 && jarLines.every((line) => allowedJarShapes.some((shape) => shape.test(line))),
-  'the bucket is only filled and iterated — never merged into the imported set');
+ok(jarLines.length === 5 && jarLines.every((line) => allowedJarShapes.some((shape) => shape.test(line))),
+  'the bucket is only filled, iterated, and handed to the ledger — never merged into the imported set');
+
+  // The shape above allows a BARE `$jar_cookies` token and says nothing about
+  // who receives it, so the comment's claim ("handed to begin_visitor_check")
+  // was documentation, not an assertion.
+  //
+  // A character-window regex was the first attempt and was barely better: it
+  // only proved the token appears within N characters of the call, which a
+  // comment, a string, or unrelated code further down satisfies just as well.
+  // Extract the ACTUAL invocation by balancing parentheses, then require
+  // $jar_cookies to be its LAST argument — the position the callee's signature
+  // gives it.
+  const callAt = (importBody || '').indexOf('begin_visitor_check(');
+  let invocation = '';
+  if (callAt !== -1) {
+    let depth = 0;
+    for (let i = (importBody || '').indexOf('(', callAt); i < (importBody || '').length; i += 1) {
+      const ch = importBody[i];
+      if (ch === '(') depth += 1;
+      else if (ch === ')') {
+        depth -= 1;
+        if (depth === 0) { invocation = importBody.slice(callAt, i + 1); break; }
+      }
+    }
+  }
+  ok(invocation !== '', 'the begin_visitor_check() call can be located and balanced');
+  const args = invocation
+    .slice(invocation.indexOf('(') + 1, invocation.lastIndexOf(')'))
+    .replace(/\/\/[^\n]*/g, '')          // strip line comments before splitting
+    .split(/,(?![^(]*\))/)                // top-level commas only
+    .map((a) => a.trim())
+    .filter(Boolean);
+  ok(
+    args[args.length - 1] === '$jar_cookies',
+    `and $jar_cookies is its final argument (got: ${JSON.stringify(args[args.length - 1])})`,
+  );
 
 const jarLoopStart = (importBody || '').indexOf('foreach ( $jar_cookies as $jar_cookie ) {');
 const jarLoop = jarLoopStart === -1

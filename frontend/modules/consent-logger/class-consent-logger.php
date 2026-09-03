@@ -149,9 +149,71 @@ class Consent_Logger {
 		$sanitized_consent_id = sanitize_text_field( (string) ( $consent_id ?? '' ) );
 		$is_ip_throttled      = faz_throttle_request( 'faz_consent_ip', 10 );
 		$is_consent_throttled = false;
+
+		// Answer a throttled caller before doing any work for it. The block
+		// below runs a database query (last_logged_status) and arms two
+		// transients, and until now all of that happened even when the verdict
+		// at the bottom was already decided — so a client being rate-limited
+		// still cost a query per request, which is the flooding this endpoint
+		// throttles in the first place. Nothing below can clear an IP throttle,
+		// so returning here changes no outcome, only the price of reaching it.
+		if ( $is_ip_throttled ) {
+			return rest_ensure_response( array( 'throttled' => true ) );
+		}
+
 		if ( '' !== $sanitized_consent_id ) {
-			$consent_key          = 'faz_consent_' . substr( md5( $sanitized_consent_id ), 0, 8 );
-			$is_consent_throttled = faz_throttle_request( $consent_key, 300 );
+			// The per-consent_id throttle exists to stop one id being replayed
+			// from many IPs. But the consent_id is deliberately KEPT across
+			// sessions (script.js keeps `consentid` so analytics can correlate),
+			// so a visitor who accepts and then withdraws minutes later posts the
+			// SAME id — and the withdrawal was dropped inside the 300s window,
+			// with an HTTP 200 the fire-and-forget client never inspects.
+			//
+			// The surviving row then affirmatively states "accepted" for a
+			// visitor who has withdrawn: worse than a missing record, and the one
+			// record Art. 7(3) accountability actually needs. A status change is
+			// never a replay — it is the event — so it bypasses the id throttle.
+			// The per-IP throttle above still bounds flooding.
+			// Allowlisted BEFORE the comparison, and matching the set the
+			// controller keeps (anything else it folds to 'partial'). Without
+			// this, sanitize_key() made any non-empty string a "change", so a
+			// caller could alternate junk values — or even valid ones — and mint
+			// a fresh row on every request, using the accountability bypass as an
+			// unthrottled write path.
+			$status = sanitize_key( (string) $request->get_param( 'status' ) );
+			if ( ! in_array( $status, array( 'accepted', 'rejected', 'partial', 'dnsmpi_optout', 'dns_rescinded', 'pmp_grant' ), true ) ) {
+				$status = '';
+			}
+			$previous       = $this->last_logged_status( $sanitized_consent_id );
+			$status_changed = '' !== $status && $status !== $previous;
+
+			// The window is ARMED unconditionally and its verdict ignored only for
+			// a status change. Skipping the call entirely — the first shape of this
+			// fix — meant a bypass never armed anything, so the next identical
+			// replay was let through too and only the one after it was blocked.
+			// That silently weakened the 300s guarantee by one request; arming it
+			// here keeps replays throttled from the very first repeat while a real
+			// change still always lands.
+			$consent_key   = 'faz_consent_' . substr( md5( $sanitized_consent_id ), 0, 8 );
+			$window_closed = faz_throttle_request( $consent_key, 300 );
+
+			// The FIRST change in a window is always free; the ones after it are
+			// rate-limited. A flat cap on every change was tried first and was
+			// wrong — it re-broke the case this guard exists for (accept by
+			// mistake, reject seconds later, withdrawal dropped again). Splitting
+			// the two keeps the immediate correction guaranteed while denying a
+			// script an unbounded write path by alternating valid statuses, which
+			// the per-IP throttle alone does not stop across a distributed set of
+			// addresses sharing one consent_id.
+			if ( $status_changed ) {
+				$hash = substr( md5( $sanitized_consent_id ), 0, 8 );
+				if ( faz_throttle_request( 'faz_consent_chg1_' . $hash, 300 ) ) {
+					// A change already landed in this window — throttle the rest.
+					$status_changed = ! faz_throttle_request( 'faz_consent_chgn_' . $hash, 10 );
+				}
+			}
+
+			$is_consent_throttled = $status_changed ? false : $window_closed;
 		}
 		if ( $is_ip_throttled || $is_consent_throttled ) {
 			return rest_ensure_response( array( 'throttled' => true ) );
@@ -187,6 +249,28 @@ class Consent_Logger {
 		}
 
 		return rest_ensure_response( $result );
+	}
+
+	/**
+	 * The status of the most recent log row for a consent id, if any.
+	 *
+	 * Used only to tell a status CHANGE apart from a replay of the same status:
+	 * the first is the event accountability exists to record and must never be
+	 * throttled away, the second is what the throttle is for. Reuses the
+	 * controller's own newest-row lookup rather than adding a second query with
+	 * its own idea of "latest".
+	 *
+	 * @param string $consent_id Sanitised consent id.
+	 * @return string Previous status, or '' when nothing is recorded yet.
+	 */
+	private function last_logged_status( $consent_id ) {
+		if ( '' === $consent_id ) {
+			return '';
+		}
+		$previous = Controller::get_instance()->get_log_by_consent_id( $consent_id );
+		return ( is_array( $previous ) && isset( $previous['status'] ) )
+			? sanitize_key( (string) $previous['status'] )
+			: '';
 	}
 
 	/**

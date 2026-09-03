@@ -112,7 +112,11 @@ class Blocks {
 		// Register the shared editor script (no build step needed).
 		wp_register_script(
 			'faz-blocks-editor',
-			plugins_url( 'editor.js', __FILE__ ),
+			// Same scheme defect as the frontend enqueues, one severity lower:
+			// admin-only, but behind a TLS-terminating proxy the block editor would
+			// still refuse this script as mixed content and the FAZ blocks would not
+			// render in the editor.
+			FAZ_PLUGIN_URL . 'includes/blocks/editor.js',
 			array( 'wp-blocks', 'wp-element', 'wp-block-editor', 'wp-components', 'wp-i18n', 'wp-server-side-render' ),
 			FAZ_VERSION,
 			true

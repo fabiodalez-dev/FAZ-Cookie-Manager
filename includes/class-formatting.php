@@ -124,6 +124,124 @@ if ( ! function_exists( 'faz_sanitize_bool_strict' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_status_flag' ) ) {
+	/**
+	 * Render a yes/no value for the System Status report.
+	 *
+	 * Icon AND word, deliberately. The report used a bare ✅/❌ character, and
+	 * its "Copy report" button builds the text with `textContent` — so whether
+	 * the answer survives depends on what the reader pastes into. Frequently it
+	 * does not: a support report arrived with EVERY boolean blank, and the one
+	 * value needed to diagnose the reported problem was the one the format had
+	 * dropped (issue #259).
+	 *
+	 * The single row that did survive in that report was "Auto Scan", because it
+	 * happened to append a word after its icon. That is the whole fix, applied
+	 * everywhere: the icon stays for visual scanning, the word carries the
+	 * meaning through any clipboard.
+	 *
+	 * @since 1.29.0
+	 * @param bool $enabled Whether the feature is on.
+	 * @return string Escaped markup, safe to echo.
+	 */
+	function faz_status_flag( $enabled ) {
+		return $enabled
+			? '&#9989; ' . esc_html__( 'Yes', 'faz-cookie-manager' )
+			: '&#10060; ' . esc_html__( 'No', 'faz-cookie-manager' );
+	}
+}
+
+if ( ! function_exists( 'faz_site_utc_offset' ) ) {
+	/**
+	 * The site's UTC offset AT A GIVEN INSTANT, not right now.
+	 *
+	 * get_option( 'gmt_offset' ) is the offset in force today. Using it to render
+	 * a schedule in October, read from Rome in September, puts the row an hour
+	 * ahead: the DST change falls between the two moments. The same error can
+	 * invert the definitions comparison when the two dates are less than an hour
+	 * apart.
+	 *
+	 * timezone_string is authoritative when set, and DateTimeZone is plain PHP —
+	 * so this needs no WordPress function newer than the 5.0 floor. wp_timezone()
+	 * would be the idiomatic answer and is 5.3; Plugin Check flags that name
+	 * statically, guards or not. Sites configured with a raw numeric offset have
+	 * no DST to model, so gmt_offset is exact for them by definition.
+	 *
+	 * @param int $timestamp Unix timestamp the offset is wanted for.
+	 * @return int Offset in seconds.
+	 */
+	function faz_site_utc_offset( $timestamp ) {
+		$tz_string = (string) get_option( 'timezone_string' );
+		if ( '' !== $tz_string ) {
+			try {
+				$tz = new DateTimeZone( $tz_string );
+				return (int) $tz->getOffset( new DateTime( '@' . (int) $timestamp ) );
+			} catch ( Exception $e ) {
+				// Unparseable setting — fall through to the numeric offset.
+			}
+		}
+		return (int) round( (float) get_option( 'gmt_offset' ) * HOUR_IN_SECONDS );
+	}
+}
+
+if ( ! function_exists( 'faz_status_schedule' ) ) {
+	/**
+	 * Render a scheduled-event timestamp, saying so when it is overdue.
+	 *
+	 * A bare timestamp states a fact nobody checks against today's date. The
+	 * report that prompted this listed a next scan of 2026-08-27 while the date
+	 * was 1 September — five days stale, because WP-Cron was not firing at all.
+	 * That was the actual cause of the "why are my definitions old?" question
+	 * the report was attached to, and it was sitting in plain sight, unlabelled.
+	 *
+	 * @since 1.29.0
+	 * @param int|false $timestamp Result of wp_next_scheduled().
+	 * @return string Escaped markup, safe to echo.
+	 */
+	function faz_status_schedule( $timestamp ) {
+		if ( ! $timestamp ) {
+			return '&mdash; ' . esc_html__( 'not scheduled', 'faz-cookie-manager' );
+		}
+		// date_i18n()'s second argument is a timestamp that ALREADY carries the
+		// site's offset — the legacy contract. wp_next_scheduled() hands back a
+		// true Unix timestamp, so passing it straight through renders UTC while
+		// every other admin screen shows local time. Measured on a Europe/Rome
+		// site: the row said 19:04 for a schedule that is 21:04 to the person
+		// reading it. Two hours of quiet error in a report whose only job is to
+		// be believed.
+		//
+		// wp_date() is the modern answer and is WP 5.3+; this plugin declares 5.0
+		// and Plugin Check flags the name statically regardless of guards, so the
+		// offset is applied by hand. get_option( 'gmt_offset' ) is safe for that:
+		// WordPress recomputes it from timezone_string through the
+		// pre_option_gmt_offset filter, so it follows DST — verified as 2 for
+		// Europe/Rome in September and 1 in January.
+		$offset = faz_site_utc_offset( (int) $timestamp );
+		$when   = esc_html( date_i18n( 'Y-m-d H:i:s', (int) $timestamp + $offset ) );
+		$late = time() - (int) $timestamp;
+
+		// WP-Cron is traffic-driven: a due event fires on the next page load, so
+		// between the scheduled instant and that load the event is legitimately
+		// "late". On a quiet site that gap is routinely minutes. Flagging any
+		// positive lag would put an alarm on a perfectly healthy install — in the
+		// one document an admin pastes into a support thread, which is how a
+		// diagnosis goes down the wrong path. Only a lag no plausible traffic
+		// pattern explains is worth reporting.
+		if ( $late <= HOUR_IN_SECONDS ) {
+			return $when;
+		}
+
+		// Says what is known — the event is overdue by this much — and offers the
+		// likely cause as a hypothesis. The code has not tested whether WP-Cron
+		// runs; it has only read a timestamp, so it must not assert that it does not.
+		return $when . ' &#9888; ' . sprintf(
+			/* translators: %s: human-readable duration, e.g. "5 days". */
+			esc_html__( 'OVERDUE by %s — WP-Cron may not be running', 'faz-cookie-manager' ),
+			esc_html( human_time_diff( (int) $timestamp, time() ) )
+		);
+	}
+}
+
 if ( ! function_exists( 'faz_allowed_html' ) ) {
 	/**
 	 * Returns list of HTML tags allowed in HTML fields for use in declaration of wp_kset field validation.
@@ -169,6 +287,13 @@ if ( ! function_exists( 'faz_allowed_html' ) ) {
 			'aria-label'       => true,
 			'aria-labelledby'  => true,
 			'aria-hidden'      => true,
+			// The trigger→dialog relationship. Without these two in the
+			// allowlist, kses silently strips them from any server-rendered
+			// markup that carries them — the [faz_cookie_settings] shortcode
+			// already emits aria-haspopup, so it was relying on not being
+			// filtered through here.
+			'aria-haspopup'    => true,
+			'aria-controls'    => true,
 			'class'            => true,
 			'id'               => true,
 			'style'            => true,

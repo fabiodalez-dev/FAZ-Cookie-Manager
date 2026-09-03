@@ -315,6 +315,29 @@ namespace {
 	$out  = faz_ob_run( $fe, $html );
 	assert_true( $out === $html, 'own banner stylesheet never gated' );
 
+	echo "\n-- direct fetch tags keep valid self-closing markup --\n";
+
+	// The body-image pass added by this PR receives the trailing slash inside
+	// regex group 1. Appending metadata after that slash creates invalid markup;
+	// it must be inserted before the original attributes instead.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<img src="https://www.facebook.com/tr?id=8"/>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true(
+		'<img data-faz-category="marketing" data-faz-src="https://www.facebook.com/tr?id=8"/>' === $out,
+		'a self-closing tracking image is parked without moving attributes past its slash'
+	);
+
+	// The expanded preload-family pass has the same capture shape. Pin it too,
+	// including the unquoted rel form this PR deliberately began supporting.
+	$fe   = faz_ob_frontend( array( 'googletagmanager.com' => 'marketing' ), $blocked );
+	$html = '<link rel=preload as="script" href="https://www.googletagmanager.com/gtag/js?id=G-X"/>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true(
+		'<link data-faz-category="marketing" rel=preload as="script" data-faz-href="https://www.googletagmanager.com/gtag/js?id=G-X"/>' === $out,
+		'a self-closing preload is parked with valid attribute ordering'
+	);
+
 	// ---------- mixed-category <noscript> blocks ----------
 	//
 	// A <noscript> block is a list, and its entries need not share a category.

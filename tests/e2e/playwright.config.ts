@@ -27,7 +27,12 @@ process.env.FAZ_E2E_SERVER = process.env.FAZ_E2E_SERVER ?? 'nginx';
 
 export default defineConfig({
   testDir: './specs',
-  timeout: 45_000,
+  // Navigation helpers deliberately allow 60 seconds because the shared
+  // WordPress compatibility site can finish authentication or plugin-heavy
+  // admin loads after the former 45-second per-test ceiling. Keep the outer
+  // budget above those explicit waits so Playwright does not close the page
+  // while a resilient navigation is still allowed to succeed.
+  timeout: 90_000,
   expect: {
     timeout: 10_000,
   },

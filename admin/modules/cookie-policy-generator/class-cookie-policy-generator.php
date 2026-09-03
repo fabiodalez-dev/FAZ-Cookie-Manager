@@ -93,7 +93,11 @@ class Cookie_Policy_Generator {
 		}
 		wp_enqueue_style(
 			'faz-cookie-policy',
-			plugins_url( 'frontend/css/faz-cookie-policy.css', FAZ_PLUGIN_FILENAME ),
+			// Not plugins_url(), which resolves its scheme through is_ssl() and so
+			// emitted http:// behind a TLS-terminating proxy — mixed content on the
+			// public cookie-policy page. FAZ_PLUGIN_URL already carries the
+			// three-signal scheme.
+			FAZ_PLUGIN_URL . 'frontend/css/faz-cookie-policy.css',
 			array(),
 			defined( 'FAZ_VERSION' ) ? FAZ_VERSION : '1.0.0'
 		);

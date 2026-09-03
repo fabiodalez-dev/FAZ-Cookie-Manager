@@ -421,8 +421,13 @@ test.describe('Per-service consent — edge cases (per-service-e2e)', () => {
     expect(result.hasCore, 'core category entry survives the cap').toBe(true);
     // Explicit service denial outranks the flood of allows.
     expect(result.hasCriticalDeny, 'explicit svc:no kept over flooded svc:yes').toBe(true);
-    // ck.* is dropped before any svc.* survives the cap.
-    expect(result.hasCkOverride, 'ck.* override dropped before svc.* under the cap').toBe(false);
+    // ck.* still YIELDS to svc.* — both svc loops claim their bytes first — but a
+    // per-cookie DENIAL is no longer thrown away once they have. Dropping it
+    // failed OPEN: on the next page that cookie inherited its service or
+    // category, which may be granted, turning a recorded refusal into an allow.
+    // A ck ALLOW is still dropped outright, because inheriting the service
+    // decision can only ever be equally or more restrictive.
+    expect(result.hasCkOverride, 'a per-cookie DENIAL survives in space svc.* did not claim').toBe(true);
 
     await ctx.close();
   });

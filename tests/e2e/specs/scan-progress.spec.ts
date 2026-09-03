@@ -19,6 +19,13 @@ test.describe('Scan progress UI', () => {
 
 	test('shows total pages immediately after discover and updates progress', async ({ page }) => {
 		await page.goto(`${BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`);
+		// networkidle, deliberately. A review suggested domcontentloaded, but after
+		// a goto() the load event has already fired, so that call is a no-op — it
+		// does not relax the wait, it REMOVES it. The click below then lands on
+		// #faz-scan-btn before the admin JS binds its handler, discover never
+		// fires, and the test dies at its 45s ceiling. Measured: the change made
+		// this spec flaky. The session poll runs at 10s intervals, so 500ms of
+		// network idle is reachable here.
 		await page.waitForLoadState('networkidle');
 
 		// Clear stored fingerprint for a full scan.
@@ -94,8 +101,15 @@ test.describe('Scan progress UI', () => {
 		expect(barWidth).not.toBe('0%');
 
 		// 7. Wait for scan to complete.
+		// :not(.faz-scan-session-wrap) — the session panel is built with BOTH classes
+		// (cookies.js: `wrap.className = 'faz-scan-progress-wrap faz-scan-session-wrap'`),
+		// so the bare selector matched it too. After a faz_browser_scan_in_progress
+		// error, handleScanFailure() calls refreshActiveScanSession(), which can put
+		// that panel back — and this wait would then never be satisfied, burning the
+		// full 180s and reporting a timeout instead of the failure that caused it.
+		// The app's own code already draws this distinction at cookies.js:1533.
 		await page.waitForFunction(
-			() => !document.querySelector('.faz-scan-progress-wrap'),
+			() => !document.querySelector('.faz-scan-progress-wrap:not(.faz-scan-session-wrap)'),
 			undefined,
 			{ timeout: 180000 }
 		);
@@ -103,5 +117,78 @@ test.describe('Scan progress UI', () => {
 
 		// 8. Button should be back to normal.
 		await expect(page.locator('#faz-scan-btn')).toContainText('Scan Site');
+	});
+
+	// Regression pin for the production report "14/18 pages | 0 cookies | 126
+	// scripts" shown all the way through a crawl whose import then contained
+	// the cookies. The only number the client can compute mid-crawl is the
+	// count of cookies NEWLY set where document.cookie can see them; HttpOnly
+	// cookies captured server-side, cookies inferred from script URLs at save
+	// time, and names already in the administrator's jar all land only at
+	// import. Presenting that partial number as "N cookies" told the
+	// administrator the scanner found nothing while it was working, so the
+	// engine defers the cookie count to the completion summary, where it is
+	// the true post-import total.
+	test('mid-crawl status never presents a partial cookie count; the true total arrives at completion', async ({ page }) => {
+		await page.goto(`${BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`);
+		// networkidle, deliberately. A review suggested domcontentloaded, but after
+		// a goto() the load event has already fired, so that call is a no-op — it
+		// does not relax the wait, it REMOVES it. The click below then lands on
+		// #faz-scan-btn before the admin JS binds its handler, discover never
+		// fires, and the test dies at its 45s ceiling. Measured: the change made
+		// this spec flaky. The session poll runs at 10s intervals, so 500ms of
+		// network idle is reachable here.
+		await page.waitForLoadState('networkidle');
+
+		await page.evaluate(() => {
+			try { localStorage.removeItem('faz_scan_fingerprint'); } catch (_) {}
+		});
+
+		// Record every text the status element renders during the run. A
+		// MutationObserver mounted before the scan starts sees each update,
+		// including ones that land between Playwright polls.
+		await page.evaluate(() => {
+			(window as any).__fazStatusSamples = [];
+			const record = () => {
+				const el = document.querySelector('.faz-scan-status');
+				if (!el) return;
+				const text = el.textContent || '';
+				const log = (window as any).__fazStatusSamples;
+				if (text && log[log.length - 1] !== text) log.push(text);
+			};
+			new MutationObserver(record).observe(document.body, { subtree: true, childList: true, characterData: true });
+		});
+
+		await page.click('#faz-scan-btn');
+		await page.click('.faz-dropdown-item[data-depth="10"]');
+
+		await page.waitForFunction(
+			() => !document.querySelector('.faz-scan-progress-wrap:not(.faz-scan-session-wrap)'),
+			undefined,
+			{ timeout: 180000 }
+		);
+
+		const samples: string[] = await page.evaluate(() => (window as any).__fazStatusSamples);
+		console.log('[Progress] Sampled statuses:', JSON.stringify(samples, null, 1));
+
+		// Guard against a vacuous pass: the sampler must have observed real
+		// mid-crawl page-counter updates, not just the discovery message.
+		const crawlSamples = samples.filter((t) => /\d+\/\d+ pages/.test(t));
+		expect(crawlSamples.length).toBeGreaterThan(0);
+
+		// The defect under test: any status of the form "N cookies" mid-crawl
+		// is a partial, JS-only observation presented as the scan's answer.
+		const partialCookieClaims = samples.filter((t) => /\d+ cookies/.test(t));
+		expect(partialCookieClaims).toEqual([]);
+
+		// Deferred, not dropped: the completion summary reports the true
+		// post-import total (client observations + server-captured HttpOnly +
+		// script-inferred cookies).
+		// Two branches reach this toast: 'Scan complete — N cookies found on M
+		// pages' and, since the import became idempotent in this PR, the replay
+		// branch 'Already saved — N cookies on M pages …'. Matching only the
+		// first would fail on a legitimate retry with a message that reads like
+		// a scanner bug. Assert what both branches promise: a real total.
+		await expect(page.locator('.faz-toast').last()).toContainText(/\d+ cookies (?:found )?on \d+ pages/);
 	});
 });

@@ -595,6 +595,18 @@ class Admin {
 						'jarOnlyHint'              => __( '%d cookie(s) were already in your browser when the scan started, so they could not be attributed to any page and were not imported.', 'faz-cookie-manager' ),
 						'jarOnlyToggle'            => __( 'Show the names', 'faz-cookie-manager' ),
 						'jarOnlyExplain'           => __( 'If you recognise one as a cookie your site really sets, add it manually with Add Cookie.', 'faz-cookie-manager' ),
+						// Server-side visitor check — the anonymous header
+						// replay diffed against the logged-in browser pass.
+						/* translators: %s: id of the scan the visitor check belongs to (a 32-char hex token, not a number). */
+						'visitorCheckTitle'        => __( 'Server-side visitor check (headers only) — scan #%s:', 'faz-cookie-manager' ),
+						/* translators: 1: number of cookies, 2: comma-separated cookie names. */
+						'visitorCheckVisitorOnly'  => __( '%1$d cookie(s) were set for the anonymous check but never seen by the logged-in browser scan, and were added to the declaration: %2$s', 'faz-cookie-manager' ),
+						/* translators: 1: number of cookies, 2: comma-separated cookie names. */
+						'visitorCheckPromoted'     => __( '%1$d cookie(s) the scan could not attribute were confirmed by the anonymous check — the site sets them for visitors, so they are declared: %2$s', 'faz-cookie-manager' ),
+						/* translators: 1: number of cookies, 2: comma-separated cookie names. */
+						'visitorCheckAdminOnly'    => __( '%1$d cookie(s) were seen only in your browser and not confirmed for visitors; they stay reported, not declared: %2$s', 'faz-cookie-manager' ),
+						'visitorCheckNoDiff'       => __( 'The anonymous check found no cookie differences against the browser scan.', 'faz-cookie-manager' ),
+						'visitorCheckDisclaimer'   => __( 'This check re-fetches the scanned pages without a login and compares Set-Cookie headers only. It cannot see cookies that JavaScript sets for anonymous visitors, nor cookies set only after an interaction (for example an add-to-cart request), so a clean result does not mean the visitor view is fully verified.', 'faz-cookie-manager' ),
 						// Scan cancellation.
 						'stopScan'                 => __( 'Stop scan', 'faz-cookie-manager' ),
 						'stoppingScan'             => __( 'Stopping…', 'faz-cookie-manager' ),
@@ -629,6 +641,16 @@ class Admin {
 						'retryImport'              => __( 'Retry import', 'faz-cookie-manager' ),
 						'retryImportRescan'        => __( 'Retry import (re-scans the site)', 'faz-cookie-manager' ),
 						'discardHeldScan'          => __( 'Discard', 'faz-cookie-manager' ),
+						// Already-open capture session surfaced after a reload
+						// (an abandoned tab, or a crawl running in another tab).
+						/* translators: %s: clock time the scan session was opened, e.g. "14:32" */
+						'activeScanNotice'         => __( 'A cookie scan session for your account is already open on the server (started at %s). A new scan cannot start until it ends.', 'faz-cookie-manager' ),
+						/* translators: %1$d: number of cookie observations captured so far, %2$s: clock time of the most recent one */
+						'activeScanLive'           => __( 'It is capturing right now — %1$d observation(s) so far, the last at %2$s. If one of your other tabs is running a scan, let it finish. Ending the session discards everything it has captured.', 'faz-cookie-manager' ),
+						/* translators: %s: clock time the scan session last showed any activity */
+						'activeScanStalled'        => __( 'Nothing has reached the server since %s. If none of your tabs is running a scan, the tab that was driving this one is gone. The session will expire on its own in a few minutes, or you can end it now — ending it discards everything it captured.', 'faz-cookie-manager' ),
+						'endActiveScan'            => __( 'End this scan and discard its capture', 'faz-cookie-manager' ),
+						'activeScanEnded'          => __( 'Scan session ended — its capture was discarded. You can start a new scan.', 'faz-cookie-manager' ),
 						'browserScanUnavailable'   => __( 'The browser scan could not inspect any page. Make sure the public site is reachable through the WordPress admin origin and that framing is not blocked.', 'faz-cookie-manager' ),
 						'discoveringPages'         => __( 'Discovering pages...', 'faz-cookie-manager' ),
 						'enrichingServer'          => __( 'Enriching with server scan...', 'faz-cookie-manager' ),

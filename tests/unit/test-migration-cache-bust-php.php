@@ -91,6 +91,13 @@ namespace {
 		$GLOBALS['faz_mig_actions'][] = $tag;
 	}
 	function apply_filters( $tag, $value ) { return $value; }
+	// seed_own_consent_cookie() derives the cookie's domain from the site URL.
+	// Without these two the call raised an Error, the seeder's catch turned it
+	// into "declined", and the batch never completed — which reads as a bug in
+	// the code under test and is not one. Stub added rather than working around
+	// the step, exactly as the precondition below asks.
+	function home_url( $path = '' ) { return 'https://example.test' . $path; }
+	function wp_parse_url( $url, $component = -1 ) { return parse_url( $url, $component ); }
 	function wp_cache_delete( $key, $group = '' ) { return true; }
 	function wp_json_encode( $value ) { return json_encode( $value ); }
 	function esc_sql( $value ) { return $value; }

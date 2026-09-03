@@ -20,6 +20,7 @@ use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
 use FazCookie\Admin\Modules\Consentlogs\Includes\Controller as ConsentLogs_Controller;
 use FazCookie\Admin\Modules\Pageviews\Includes\Controller as Pageviews_Controller;
 use FazCookie\Admin\Modules\Scanner\Includes\Controller as Scanner_Controller;
+use FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database;
 use FazCookie\Admin\Modules\Settings\Includes\Settings;
 
 /**
@@ -133,6 +134,12 @@ class Activator {
 		if ( get_option( 'faz_migrations_version' ) === self::MIGRATIONS_VERSION ) {
 			return;
 		}
+		// Steps that can decline to complete without failing the batch report it
+		// here. A `return false` is NOT the same as a throw: every migration
+		// after it still runs, and only the version marker is withheld, so the
+		// declining step is retried on the next admin load instead of waiting
+		// for the next release to bump MIGRATIONS_VERSION.
+		$all_complete = true;
 		try {
 			self::ensure_uncategorized_category();
 			self::ensure_wordpress_internal_category();
@@ -141,6 +148,7 @@ class Activator {
 			self::fix_banner_gdpr_defaults();
 			self::fix_brand_logo_path();
 			self::seed_default_whitelist();
+			$all_complete = self::seed_own_consent_cookie() && $all_complete;
 			self::add_recaptcha_gstatic_pattern();
 			self::enable_gpc_on_ccpa_banners();
 			self::ensure_share_personal_data_column();
@@ -168,6 +176,16 @@ class Activator {
 			// per admin load, which is strictly cheaper than a stale classifier
 			// authorising the wrong deletions.
 			do_action( 'faz_clear_cache' );
+		}
+		// Withheld when a step declined, so the batch is reconsidered on the next
+		// admin load. Writing it regardless is what made an incomplete seed
+		// permanent: the fast path above returns before the try, so a step that
+		// never got to run was never called again until a release changed
+		// MIGRATIONS_VERSION — while its own comments claimed the next migration
+		// would retry it. The remaining migrations are individually flagged and
+		// idempotent, so re-entering the batch costs their guard reads.
+		if ( ! $all_complete ) {
+			return;
 		}
 		update_option( 'faz_migrations_version', self::MIGRATIONS_VERSION, false );
 
@@ -432,6 +450,171 @@ class Activator {
 		// claim, not a record.
 		// Autoload NO: read once, during migrations, never on a front-end request.
 		add_option( 'faz_default_whitelist_seeded', '1', '', false );
+	}
+
+	/**
+	 * Declare the plugin's own consent cookie without waiting for a scan.
+	 *
+	 * `fazcookie-consent` is the one cookie this plugin certainly sets — it is
+	 * how consent is remembered — and it is strictly necessary, so it belongs in
+	 * every declaration regardless of what any scan finds.
+	 *
+	 * It was reaching the catalogue only by accident. The built-in cookie
+	 * database carries a record for it, but that database only CATEGORISES what
+	 * a scan observes; activation seeds banners, categories and the whitelist,
+	 * and no cookies at all. So a fresh install declared nothing until someone
+	 * scanned, and a scan only observes this cookie if it happens to catch it
+	 * being set — which needs a visitor to consent during the crawl, or the
+	 * administrator to have consented earlier so it already sits in their jar.
+	 * On the site where this was found it was present for exactly that second
+	 * reason. A Cookie Policy generator that can omit its own cookie is the one
+	 * omission it has no excuse for.
+	 *
+	 * Seeded, never enforced: save_cookies() skips names that already exist, so
+	 * an administrator who edited or recategorised the row keeps their version,
+	 * and one who deleted it does not get it silently restored — the marker is
+	 * written once and this never runs again.
+	 *
+	 * @return bool True when the row is seeded or already accounted for; false
+	 *              when this attempt could not complete and must be retried.
+	 *              run_pending_migrations() withholds faz_migrations_version on
+	 *              false — see the note there for why the caller, and not a
+	 *              thrown exception, owns that decision.
+	 */
+	/**
+	 * Short-lived claim that makes the consent-cookie seed single-writer.
+	 */
+	const OWN_COOKIE_SEED_CLAIM = 'faz_own_cookie_seed_claim';
+
+	private static function seed_own_consent_cookie() {
+		// Same discipline as the sibling seeders: marker first as a guard,
+		// written LAST and only on success, so a failed write is retried on the
+		// next migration rather than being recorded as done.
+		if ( get_option( 'faz_own_cookie_seeded' ) ) {
+			return true;
+		}
+
+		// Claim the seed atomically. The completion marker above is written LAST
+		// and on success only — deliberately, so a failed write retries — which
+		// leaves the whole body a check-then-act: two requests arriving together
+		// both saw no marker and no cookie, and both inserted. faz_cookies
+		// indexes `name` but does not make it UNIQUE, so nothing downstream
+		// rejected the duplicate; the admin just got the same row twice in the
+		// declaration.
+		//
+		// add_option() is the atomic primitive available here: the options table
+		// has a UNIQUE key on option_name, so exactly one caller can create this
+		// row. The claim is separate from the completion marker so a crash costs
+		// a retry, not a permanent skip — it is taken over once it is older than
+		// the window below.
+		$claim = get_option( self::OWN_COOKIE_SEED_CLAIM );
+		if ( false !== $claim && ( time() - (int) $claim ) >= 60 ) {
+			// Stale: the holder died mid-seed. The delete must be CONDITIONAL on
+			// the value we read, or the recovery path reopens the very race it
+			// exists to close: two requests see the same stale claim, the first
+			// deletes and re-adds, and the second's unconditional delete then
+			// removes that BRAND NEW claim — after which both add_option() calls
+			// succeed and both seed. $wpdb->delete() with option_value in the
+			// WHERE is the compare-and-delete this needs; only the request whose
+			// read still matches gets a row, and only it goes on to add_option().
+			global $wpdb;
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-delete on the options table; delete_option() has no conditional form, and a read-then-delete is exactly the race being fixed.
+			$won_takeover = $wpdb->delete(
+				$wpdb->options,
+				array(
+					'option_name'  => self::OWN_COOKIE_SEED_CLAIM,
+					'option_value' => (string) $claim,
+				),
+				array( '%s', '%s' )
+			);
+			if ( ! $won_takeover ) {
+				// Someone else took it over first; they are seeding now.
+				return false;
+			}
+			wp_cache_delete( self::OWN_COOKIE_SEED_CLAIM, 'options' );
+			$claim = false;
+		}
+		if ( false !== $claim || ! add_option( self::OWN_COOKIE_SEED_CLAIM, time(), '', false ) ) {
+			// Someone else holds it. Return FALSE, not true: this function's
+			// result feeds $all_complete, and a true here lets THIS request write
+			// faz_migrations_version while the holder may still fail — after
+			// which nothing ever retries, because that version gate is what
+			// decides whether the batch runs again. False costs one more pass
+			// and cannot strand the seed.
+			return false;
+		}
+
+		// The scanner classes live in the admin module tree, which is not
+		// guaranteed to be loaded in every context this migration batch runs in.
+		// Report the miss instead of returning quietly: the marker alone cannot
+		// buy a retry, because run_pending_migrations() is gated on
+		// faz_migrations_version and never calls this again once that is
+		// written. Throwing would take the whole batch down with it, which is
+		// the failure this codebase already learned once in
+		// run_retention_cleanup(); a false return costs only the version marker.
+		if ( ! class_exists( Cookie_Database::class ) || ! class_exists( Scanner_Controller::class ) ) {
+			delete_option( self::OWN_COOKIE_SEED_CLAIM );
+			return false;
+		}
+
+		$definition = Cookie_Database::lookup( 'fazcookie-consent' );
+		if ( ! is_array( $definition ) ) {
+			// The built-in record is the single source of truth for wording and
+			// category; inventing a second copy here would let the two drift.
+			// Retryable, not done: the catalogue may simply not be loaded yet.
+			delete_option( self::OWN_COOKIE_SEED_CLAIM );
+			return false;
+		}
+
+		try {
+			// Wrapped, and the marker written only on success. save_cookies()
+			// needs the category catalogue, which a partly-built install may not
+			// have yet — and this is one step in a batch of migrations that all
+			// share one try block upstream, so an exception escaping here aborts
+			// every migration after it. That is the exact failure this codebase
+			// already fixed once in run_retention_cleanup(); it must not be
+			// reintroduced by a seeder that only adds a convenience.
+			//
+			// \wp_parse_url is fully qualified on purpose: an unqualified call
+			// resolves inside FazCookie\Includes first, which is a fatal wherever
+			// the plugin's own namespace has no such function loaded.
+			Scanner_Controller::get_instance()->save_cookies(
+				array(
+					array(
+						'name'        => 'fazcookie-consent',
+						'category'    => isset( $definition['category'] ) ? $definition['category'] : 'necessary',
+						'duration'    => isset( $definition['duration'] ) ? $definition['duration'] : '1 year',
+						'description' => isset( $definition['description'] ) ? $definition['description'] : '',
+						'domain'      => (string) \wp_parse_url( \home_url(), PHP_URL_HOST ),
+					),
+				)
+			);
+		} catch ( \Throwable $e ) {
+			// Reported, not thrown. A cookie missing from the declaration for one
+			// more admin load costs nothing; a batch that stops here costs every
+			// migration behind it. The false return is what actually buys the
+			// retry — before it, the version marker was written anyway and this
+			// never ran again until the next release bumped MIGRATIONS_VERSION.
+			delete_option( self::OWN_COOKIE_SEED_CLAIM );
+			return false;
+		}
+
+		// A failed marker write is survivable — the seed re-runs — but it should
+		// not be silent. Review asked for a RuntimeException here instead; that
+		// would abort the shared migration sequence at this call and skip every
+		// sibling after it, which is the bug d76d0fa was written to fix. Report
+		// and return false: the caller withholds the version, so the retry
+		// happens on the next admin load rather than the next release.
+		if ( ! add_option( 'faz_own_cookie_seeded', '1', '', false )
+			&& ! get_option( 'faz_own_cookie_seeded' ) ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- surfacing a silent migration failure, same as run_retention_cleanup().
+			error_log( 'FAZ Cookie Manager: could not persist faz_own_cookie_seeded; the consent-cookie seed will re-run on the next admin load.' );
+			delete_option( self::OWN_COOKIE_SEED_CLAIM );
+			return false;
+		}
+
+		delete_option( self::OWN_COOKIE_SEED_CLAIM );
+		return true;
 	}
 
 	/**

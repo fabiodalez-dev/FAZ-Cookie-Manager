@@ -36,6 +36,7 @@
  */
 
 import { test, expect } from '@playwright/test';
+import type { Frame } from '@playwright/test';
 
 const SHOULD_RUN = process.env.RUN_PLAYGROUND_TEST === '1';
 
@@ -66,6 +67,41 @@ const PLAYGROUND_URL =
   'https://playground.wordpress.net/?plugin=faz-cookie-manager' +
   '#ewogICJwbHVnaW5zIjogWwogICAgImZhei1jb29raWUtbWFuYWdlciIKICBdLAogICJzdGVwcyI6IFtdLAogICJwcmVmZXJyZWRWZXJzaW9ucyI6IHsKICAgICJwaHAiOiAiOC4zIiwKICAgICJ3cCI6ICJsYXRlc3QiCiAgfSwKICAiZmVhdHVyZXMiOiB7fSwKICAibG9naW4iOiB0cnVlCn0=';
 
+/**
+ * Click an element from inside its own frame, and fail loudly if something
+ * covers it.
+ *
+ * Playwright's `locator.click()` drives a real mouse at page coordinates, and
+ * on Playground the WordPress document sits inside a nested, scoped iframe.
+ * Measured against the live site: the Reject All button was visible, enabled,
+ * `pointer-events: auto`, unmoved across 800ms, and `elementFromPoint` at its
+ * centre returned the button itself — genuinely clickable by every property
+ * that matters — while `locator.click()` still burned 26 retries and timed out.
+ * The obstacle is the coordinate chain through the nested frames, not the page.
+ *
+ * So the click is dispatched in-frame, where the coordinates are real. The
+ * check the old strict click existed for is not lost: an intercepted click is
+ * still refused, and the covering element is named in the failure rather than
+ * surfacing 60 seconds later as a timeout on a heading that was never coming.
+ */
+async function clickInsideFrame(frame: Frame, selector: string, label: string): Promise<void> {
+  const outcome = await frame.evaluate((sel) => {
+    const el = document.querySelector(sel) as HTMLElement | null;
+    if (!el) return { ok: false, reason: 'not present in the DOM' };
+    el.scrollIntoView({ block: 'center', inline: 'center' });
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return { ok: false, reason: 'has no layout box' };
+    const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    if (!top || (top !== el && !el.contains(top) && !top.contains(el))) {
+      const who = top ? `${top.tagName}.${String(top.className).slice(0, 60)}` : 'nothing';
+      return { ok: false, reason: `covered by ${who}` };
+    }
+    el.click();
+    return { ok: true, reason: '' };
+  }, selector);
+  expect(outcome.ok, `${label}: ${outcome.reason}`).toBe(true);
+}
+
 test.describe('Playground compatibility (online — RUN_PLAYGROUND_TEST=1 to enable)', () => {
   test.skip(!SHOULD_RUN, 'opt-in only: set RUN_PLAYGROUND_TEST=1 to run');
 
@@ -91,8 +127,29 @@ test.describe('Playground compatibility (online — RUN_PLAYGROUND_TEST=1 to ena
     // The bootstrap can take 30-90s on a cold start (download PHP WASM,
     // install WP, install + activate the plugin). Poll with a generous
     // budget rather than a fixed wait.
-    const adminFrame = page.frameLocator('iframe').last();
-    await expect(adminFrame.locator('#wpadminbar')).toBeVisible({ timeout: 120_000 });
+    // Find the frame that actually holds wp-admin, at whatever depth Playground
+    // nests it today. `frameLocator('iframe').last()` only reaches TOP-LEVEL
+    // iframes, and Playground currently renders WordPress one level deeper
+    // (outer shell iframe -> inner WP iframe). That made this test fail against
+    // a Playground where everything worked: the plugin was active, the banner
+    // was painted and the admin bar was on screen, one frame below where the
+    // assertion was looking. Searching page.frames(), which is flat across all
+    // depths, is indifferent to the nesting Playground happens to use.
+    const adminFrameHandle = await (async () => {
+      const deadline = Date.now() + 120_000;
+      while (Date.now() < deadline) {
+        for (const frame of page.frames()) {
+          const bar = await frame.$('#wpadminbar').catch(() => null);
+          if (bar && (await bar.isVisible().catch(() => false))) {
+            return frame;
+          }
+        }
+        await page.waitForTimeout(2_000);
+      }
+      return null;
+    })();
+    expect(adminFrameHandle, 'no frame ever rendered #wpadminbar').not.toBeNull();
+    const adminFrame = adminFrameHandle!;
 
     // Navigate to the FAZ Cookie Manager admin page inside the Playground
     // iframe. If the plugin failed to activate (the 1.13.13/14 shape), this
@@ -100,20 +157,43 @@ test.describe('Playground compatibility (online — RUN_PLAYGROUND_TEST=1 to ena
     // The plugin's own consent banner renders over the page and is a dialog, so
     // it intercepts pointer events aimed at the admin menu behind it. Dismiss it
     // first: it is the subject under test, not an obstacle to route around.
-    const consentReject = adminFrame.locator('button:has-text("Reject All")').first();
-    if (await consentReject.isVisible().catch(() => false)) {
-      await consentReject.click();
-      await adminFrame.locator('[data-faz-tag="notice"]').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+    if (await adminFrame.$('[data-faz-tag="reject-button"]')) {
+      await clickInsideFrame(adminFrame, '[data-faz-tag="reject-button"]', 'consent banner Reject All');
+      // No catch. This wait used to be a courtesy — get the banner out of the
+      // way before clicking the admin menu behind it — and swallowing its
+      // failure was harmless because the click that followed would fail loudly
+      // anyway. That click is now a goto(), which the banner cannot obstruct, so
+      // a swallowed failure here would be silent: Reject All could stop
+      // dismissing the banner and this test would still pass. It is now the
+      // assertion it looks like.
+      await adminFrame.locator('[data-faz-tag="notice"]').waitFor({ state: 'hidden', timeout: 10_000 });
     }
 
-    // No swallowing catch here. A click that cannot land is the single most
-    // useful signal this test produces — an intercepted click used to be
-    // discarded silently, and the run then died 60s later on a heading that was
-    // never going to appear, reporting a timeout instead of the interception.
-    await adminFrame.locator('a[href*="page=faz-cookie-manager"]').first().click();
+    // `login: true` lands on the FRONT END, not wp-admin — the admin bar is
+    // there because we are logged in, and the consent banner dismissed above is
+    // itself the proof, since FAZ never renders it inside wp-admin. Looking for
+    // the admin menu here found nothing, which is correct: the menu does not
+    // exist on the front end. Navigate to the plugin page instead of clicking a
+    // link that only exists once we are already there.
+    //
+    // Playground scopes every site URL (…/scope:some-name/…), and the scope is
+    // minted per session, so it has to be read off the frame rather than
+    // assumed.
+    const frameUrl = new URL(adminFrame.url());
+    const scope = frameUrl.pathname.split('/').find((seg) => seg.startsWith('scope:'));
+    expect(scope, `no Playground scope in frame URL ${adminFrame.url()}`).toBeTruthy();
+    const adminUrl = `${frameUrl.origin}/${scope}/wp-admin/admin.php?page=faz-cookie-manager`;
+    await adminFrame.goto(adminUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     // Wait for the FAZ dashboard heading or the standard wp-admin error
     // notice that appears when a plugin fatals on activation.
-    const dashboardHeading = adminFrame.locator('h1:has-text("FAZ Cookie Manager"), h1:has-text("Cookie Manager")').first();
+    // Match the page's own root element, not its <h1>. base.php prints the h1
+    // from $faz_page_title, which on this screen is "Dashboard" — so the old
+    // `h1:has-text("Cookie Manager")` could never match, and reported a timeout
+    // against a Playground where the dashboard had rendered in full ("Quick
+    // Links", "Consent Statistics", "Per-Category Acceptance" were all on
+    // screen). #faz-dashboard is the container the view itself opens with, so it
+    // exists exactly when this page rendered and never when a fatal replaced it.
+    const dashboardHeading = adminFrame.locator('#faz-dashboard').first();
     const pluginErrorNotice = adminFrame.locator('text=/plugin (caused|could not be activated)/i').first();
 
     // Race the two — whichever appears first tells us what state Playground

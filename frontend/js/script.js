@@ -172,10 +172,17 @@ ref._fazSetInStore = function (key, value) {
         const coreIndex = {};
         const svcDeniedEntries = [];
         const svcAllowedEntries = [];
-        const ckEntries = [];
+        // Per-cookie entries are split by decision, like the service ones above.
+        // They used to be one undifferentiated list appended purely by size, so
+        // a `ck.x.y:no` could be crowded out by an earlier `:yes` and simply
+        // vanish — after reload that cookie inherits its service or category,
+        // which may well be "yes". A recorded denial coming back as an allow is
+        // the one outcome this budget logic must never produce.
+        const ckDeniedEntries = [];
+        const ckAllowedEntries = [];
         cookieStringArray.forEach(function (entry) {
             if (entry.indexOf("ck.") === 0) {
-                ckEntries.push(entry);
+                (/:no$/.test(entry) ? ckDeniedEntries : ckAllowedEntries).push(entry);
             } else if (entry.indexOf("svc.") === 0) {
                 const sep = entry.indexOf(":");
                 const svcId = sep > 4 ? entry.substring(4, sep) : "";
@@ -265,8 +272,50 @@ ref._fazSetInStore = function (key, value) {
         // fitted. serviceDropped is set whenever ANY svc.* entry (a denial OR
         // an allow) overflowed the budget, so a shorter ck.* key can never
         // displace a higher-priority svc.* key.
+        // A per-cookie DENIAL that cannot be stored is escalated to a denial of
+        // its whole service, which is both shorter and stricter — the visitor
+        // refused one of that service's cookies, so refusing the service cannot
+        // grant them anything they did not ask for. Only when even that will not
+        // fit does the category downgrade take over. Escalation is what makes
+        // the "fail closed" claim in the warning below true for ck.* too; before
+        // it, only svc.* denials had any fallback at all.
+        const escalateCkDenial = function (entry) {
+            const dot = entry.indexOf(".", 3);
+            const svcId = dot > 3 ? entry.substring(3, dot) : "";
+            if (!svcId) return false;
+            const substitute = "svc." + svcId + ":no";
+            if (kept.indexOf(substitute) !== -1) return true; // already covered
+            kept.push(substitute);
+            if (_fazEncodedLen(kept) > FAZ_COOKIE_VALUE_BUDGET) {
+                kept.pop();
+                const cat = svcCatMap[svcId] || "";
+                if (cat && !downgradedCategories[cat]) {
+                    downgradedCategories[cat] = true;
+                    setCoreEntry(cat, "no");
+                }
+                return false;
+            }
+            return true;
+        };
+
+        // Denials first, and independently of serviceDropped: a service entry
+        // that did not fit must not also discard every per-cookie REFUSAL, which
+        // is what `dropped += ckEntries.length` did — it threw away denials
+        // belonging to services that were still allowed.
+        ckDeniedEntries.forEach(function (entry) {
+            kept.push(entry);
+            if (_fazEncodedLen(kept) > FAZ_COOKIE_VALUE_BUDGET) {
+                kept.pop();
+                dropped++;
+                escalateCkDenial(entry);
+            }
+        });
+        // Allows are the only entries safe to lose outright: falling back to the
+        // service or category decision can only ever be equally or more
+        // restrictive. Still gated on serviceDropped so a short ck.* allow never
+        // displaces a higher-priority svc.* key.
         if (!serviceDropped) {
-            ckEntries.forEach(function (entry) {
+            ckAllowedEntries.forEach(function (entry) {
                 kept.push(entry);
                 if (_fazEncodedLen(kept) > FAZ_COOKIE_VALUE_BUDGET) {
                     kept.pop();
@@ -274,7 +323,7 @@ ref._fazSetInStore = function (key, value) {
                 }
             });
         } else {
-            dropped += ckEntries.length;
+            dropped += ckAllowedEntries.length;
         }
         if (dropped > 0 && typeof console !== "undefined" && console.warn) {
             console.warn(
@@ -283,7 +332,8 @@ ref._fazSetInStore = function (key, value) {
                     " encoded bytes; dropped " +
                     dropped +
                     " per-service/per-cookie override(s) to avoid browser truncation. " +
-                    "Denied services that could not fit fail closed through category-level opt-out."
+                    "Denials that could not fit fail closed: a per-cookie refusal " +
+                    "escalates to its service, and a service refusal to its category."
             );
         }
         cookieStringArray = kept;
@@ -1792,6 +1842,28 @@ ref._fazClearAdblockReassert = _fazClearAdblockReassert;
 // leaves WHEN it runs unguarded, which is the half that was actually wrong:
 // one timer at 1200ms never meets a filter list that lands later (#253).
 ref._fazScheduleAdblockGuard = _fazScheduleAdblockGuard;
+// Exposed for the jsdom suite that pins the "asked-for panel is absent" case
+// (classic + CCPA has no optout-popup). That combination needs a banner type,
+// a law and a recorded consent to line up at once, which is hostile to E2E and
+// exact in jsdom. Not part of the public API.
+ref._fazShowPreferenceCenter = _fazShowPreferenceCenter;
+// Exposed for the jsdom suite that pins description truncation. Its correctness
+// turns on a subtle invariant — reaching the last paragraph implies no show-more
+// button was appended — and a test that cannot invoke it directly ends up
+// asserting nothing. Not part of the public API.
+ref._fazSetShowMoreLess = _fazSetShowMoreLess;
+// Exposed for the jsdom suite that pins the trigger→panel pairing. The shipped
+// default banner disables donotSell, so the Do-Not-Sell half of that pairing is
+// not in the DOM end-to-end and a regression there cannot fail an E2E assertion.
+// Not part of the public API.
+ref._fazLinkPreferenceTriggers = _fazLinkPreferenceTriggers;
+
+// Exported for tests/unit/js/imagesrcset-candidate-list.test.mjs. The pair is
+// exported together on purpose: the test's point is that they answer
+// DIFFERENTLY on a candidate list, and that using the single-URL one there was
+// the bug.
+ref._fazSrcsetBlockedCategory = _fazSrcsetBlockedCategory;
+ref._fazImgShouldBlock = _fazImgShouldBlock;
 
 function _fazScheduleDeadCookieCleanup() {
     // Staggered passes catch cookies written after load. The 5000 ms tail picks
@@ -1865,10 +1937,35 @@ function _fazRegisterShortcodeTriggers() {
             : null;
         if (!trigger) return;
         e.preventDefault();
-        if (_fazShowPreferenceCenter() === false && window.console && console.warn) {
-            console.warn('FAZ Cookie Manager: [faz_cookie_settings] was clicked but no consent preference center is available on this page (the banner UI may be disabled for this visitor).');
+        if (_fazShowPreferenceCenter() === false) {
+            // No preference-center DOM to open (e.g. an opt-out law resolved
+            // for this visitor on a template without the optout-popup panel).
+            // Fall back to re-showing the banner — mirrors the fallback in
+            // _revisitFazConsent() — so the button still surfaces SOME consent
+            // UI whenever one exists; warn only when there is none at all.
+            if (_fazGetBanner()) {
+                _fazShowBanner();
+            } else if (window.console && console.warn) {
+                console.warn('FAZ Cookie Manager: [faz_cookie_settings] was clicked but no consent preference center is available on this page (the banner UI may be disabled for this visitor).');
+            }
+        } else {
+            // Last parity gap with the revisit widget (#253): _revisitFazConsent()
+            // refreshes the IAB vendor switches from the stored consent before the
+            // panel is seen, honouring this function's documented contract ("when
+            // reopening the preference center"). The shortcode handler did not, so
+            // a panel opened this way showed the server-rendered defaults — and
+            // because the save path reads those switches
+            // (_fazAcceptCookies -> _fazSaveVendorConsent), pressing "Save my
+            // preferences" wrote the defaults back, silently discarding vendor
+            // choices the visitor had already made. No-op unless IAB TCF is on.
+            _fazUpdateVendorCheckboxStates();
         }
-    });
+    // Capture phase: a theme / page-builder click handler that calls
+    // stopPropagation() on an ancestor (smooth-scroll, mega-menu, accordion
+    // wrappers…) would otherwise swallow the bubbled event before it reached
+    // this document-level listener, leaving the shortcode button dead while
+    // the directly-bound revisit widget kept working (#253).
+    }, true);
 }
 
 function _fazRegisterListeners() {
@@ -2127,6 +2224,11 @@ function _fazShowBanner() {
         if (!_fazStore._bannerTriggerElement) {
             _fazStore._bannerTriggerElement = document.activeElement || document.body;
         }
+        // The banner is now shown on purpose (revisit widget, watchdog, GPC
+        // path…), so closing a pushdown preference panel must no longer
+        // re-hide the container — that flag only covers a reveal done solely
+        // to make the shortcode-opened panel visible (#253).
+        _fazStore._pushdownRevealedFromHidden = false;
         notice.classList.remove('faz-hide');
         if (!_fazBannerLoadedFired) {
             _fazBannerLoadedFired = true;
@@ -2190,6 +2292,15 @@ function _fazHidePreferenceCenter() {
         if (!ref._fazGetFromStore("action")) _fazShowBanner();
     } else {
         _fazToggleAriaExpandStatus("=settings-button", "false");
+        // Symmetry with the open path (#253): if the container was un-hidden
+        // purely to reveal the pushdown panel (shortcode open after a recorded
+        // consent), hide it again on close — otherwise the collapsed consent
+        // bar would linger for a visitor who already made a choice. A banner
+        // shown on purpose (_fazShowBanner clears the flag) is untouched.
+        if (_fazStore._pushdownRevealedFromHidden) {
+            _fazStore._pushdownRevealedFromHidden = false;
+            _fazHideBanner();
+        }
     }
     if (ref._fazGetFromStore("action")) _fazShowRevisit();
     const origin = _fazStore._preferenceOriginTag;
@@ -2239,6 +2350,17 @@ function _fazShowPreferenceCenter() {
     // — notably the [faz_cookie_settings] delegated click handler — can react
     // instead of silently doing nothing.
     if (!element) return false;
+    // …and the panel the trigger actually asks for has to exist inside it.
+    // `classic` is the one template that ships no optout-popup, and it also
+    // forces pushdown — so on a CCPA banner _fazGetPreferenceCenter() answers
+    // with the banner CONTAINER, which is present, and this function used to
+    // report success while opening nothing the visitor asked for. Reporting
+    // success is what did the damage: it denied the caller the
+    // _fazShowBanner() fallback that exists for exactly this case, so the
+    // [faz_cookie_settings] button looked dead again. Verified against
+    // templates/6.2.0: every template carries `detail`, only classic lacks
+    // `optout-popup`, so this can never fire on the GDPR path.
+    if (!_fazGetElementByTag(_fazActivePreferenceTag())) return false;
     element.classList.add(_fazGetPreferenceClass());
 
     // For a "Both" banner, isolate the panel matching the trigger.
@@ -2255,6 +2377,22 @@ function _fazShowPreferenceCenter() {
         _fazShowOverLay();
         _fazHideBanner();
     } else {
+        // The pushdown preference center IS the banner container
+        // (_fazGetPreferenceCenter() returns _fazGetBanner()), and after a
+        // recorded consent that container carries `faz-hide` (display:none),
+        // which wins over `faz-consent-bar-expand` — the expand class only
+        // reveals descendants. Without clearing it, the [faz_cookie_settings]
+        // button opened an INVISIBLE panel for returning visitors (#253); the
+        // revisit widget never hit this because _revisitFazConsent() calls
+        // _fazShowBanner() first. Un-hide directly instead of via
+        // _fazShowBanner() so the one-shot fazcookie_banner_loaded event is
+        // not fired for a panel-only reveal, and remember we did it so
+        // _fazHidePreferenceCenter() can re-hide the container on close
+        // instead of stranding the collapsed consent bar on screen.
+        if (element.classList.contains('faz-hide')) {
+            element.classList.remove('faz-hide');
+            _fazStore._pushdownRevealedFromHidden = true;
+        }
         // FORCE "true" — this is an idempotent OPEN, not a toggle. Without the
         // force value a second click of the [faz_cookie_settings] button (or any
         // [data-faz-open-preferences] trigger) flips aria-expanded to "false"
@@ -2286,6 +2424,15 @@ function _fazTogglePreferenceCenter() {
         const preferenceCenter = element.querySelector('.faz-preference-center');
         _fazSetPreferenceCenterAccessibility(preferenceCenter);
         _fazToggleAriaExpandStatus("=settings-button");
+        // A panel revealed from a hidden container (shortcode open after a
+        // recorded consent, #253) can also be collapsed via this toggle (the
+        // settings/customize control). Consume the flag here too, or the
+        // collapsed consent bar would linger — and the stale flag would make a
+        // LATER _fazHidePreferenceCenter() hide a banner shown on purpose.
+        if (isOpen && _fazStore._pushdownRevealedFromHidden) {
+            _fazStore._pushdownRevealedFromHidden = false;
+            _fazHideBanner();
+        }
     } else {
         if (!isOpen) {
             _fazShowOverLay();
@@ -2677,6 +2824,54 @@ function _fazSetPreferenceCenterAccessibility(preferenceCenter) {
     preferenceCenter.setAttribute('role', 'dialog');
     preferenceCenter.setAttribute('aria-modal', 'true');
     preferenceCenter.setAttribute('aria-label', _fazGetPreferenceCenterAriaLabel());
+    // A stable id so the controls that open this panel can point at it with
+    // aria-controls. Without it a screen-reader user is told a button opens a
+    // dialog but is never told WHICH element that dialog is; the banner's own
+    // buttons had no relationship to the panel at all, while the separate
+    // [faz_cookie_settings] shortcode already advertised aria-haspopup.
+    //
+    // Two ids, because a CCPA banner opens the opt-out panel and a GDPR one the
+    // detail panel — pointing both at a single id would name an element that is
+    // hidden on the other law.
+    if (!preferenceCenter.id) {
+        preferenceCenter.id = _fazActivePreferenceTag() === 'optout-popup'
+            ? 'fazOptoutPreferenceCenter'
+            : 'fazPreferenceCenter';
+    }
+    _fazLinkPreferenceTriggers();
+}
+
+/**
+ * Point each control that opens a preference panel at the panel IT opens.
+ *
+ * Per trigger, not per "currently active panel": on a "Both" banner the settings
+ * button opens `detail` and the Do-Not-Sell button opens `optout-popup`, so
+ * handing both the same id — as a first version of this did — left one of them
+ * naming a dialog it does not control until its own first click.
+ *
+ * Each panel is given its own stable id here rather than only when it becomes
+ * active, so the relationship holds before either has ever been opened. A
+ * trigger whose panel is not in the DOM is left alone: pointing aria-controls at
+ * a missing id is worse for a screen reader than saying nothing.
+ *
+ * Idempotent — re-running rewrites the same attributes.
+ */
+function _fazLinkPreferenceTriggers() {
+    var pairs = [
+        { trigger: 'settings-button', panel: 'detail', id: 'fazPreferenceCenter' },
+        { trigger: 'donotsell-button', panel: 'optout-popup', id: 'fazOptoutPreferenceCenter' }
+    ];
+    pairs.forEach(function (pair) {
+        var panel = _fazGetElementByTag(pair.panel);
+        if (!panel) return;
+        if (!panel.id) panel.id = pair.id;
+        document.querySelectorAll('[data-faz-tag="' + pair.trigger + '"]').forEach(function (el) {
+            // "dialog" rather than upstream's "true": more specific, and it
+            // matches what the [faz_cookie_settings] shortcode already emits.
+            el.setAttribute('aria-haspopup', 'dialog');
+            el.setAttribute('aria-controls', panel.id);
+        });
+    });
 }
 
 function _fazFocusIntoElement(element) {
@@ -3932,10 +4127,48 @@ function _fazParkResourceElementIfBlocked(el) {
         } else if (tag === "link") {
             var href = el.getAttribute("href");
             var rel = (el.getAttribute("rel") || "").toLowerCase();
-            if (href && rel.indexOf("stylesheet") !== -1 && !el.getAttribute("data-faz-href") && _fazImgShouldBlock(el, href)) {
+            // Same rel set the server-side pass gates (process_link_tag in
+            // class-frontend.php). It used to be "stylesheet" alone, so a
+            // <link rel="preload" href="https://tracker/…"> written with
+            // innerHTML AFTER load walked straight past a filter that would
+            // have caught the identical tag in the original HTML. A fetch is a
+            // fetch whenever the element arrives.
+            // rel is a space-separated TOKEN LIST, so match whole tokens. A
+            // substring test made "dns-prefetch" contain "prefetch" and gated it,
+            // which the server pass deliberately does not: dns-prefetch and
+            // preconnect resolve DNS and open sockets without fetching a
+            // resource, so holding them until consent delays the page for no
+            // privacy gain. process_link_tag() splits and array_intersects for
+            // exactly this reason; the observer now agrees with it.
+            var gated = false;
+            var rels = ["stylesheet", "preload", "modulepreload", "prefetch", "prerender"];
+            var relTokens = rel.split(/\s+/);
+            for (var ri = 0; ri < rels.length; ri++) {
+                if (relTokens.indexOf(rels[ri]) !== -1) { gated = true; break; }
+            }
+            if (gated && href && !el.getAttribute("data-faz-href") && _fazImgShouldBlock(el, href)) {
                 el.setAttribute("data-faz-href", href);
                 el.setAttribute("data-faz-category", _fazImgCategory(href));
                 el.removeAttribute("href");
+            }
+            // A preload can carry its URL in imagesrcset instead of href, and
+            // then href alone is nothing to neutralise.
+            // _fazSrcsetBlockedCategory, NOT _fazImgShouldBlock: imagesrcset is a
+            // CANDIDATE LIST, and the single-URL check bails on the first token
+            // whenever it looks same-origin. "/local.jpg 1x, https://tracker/px 2x"
+            // starts with "/", so it returned false and the tracker candidate was
+            // never even looked at. The list helper walks every candidate, which
+            // is the same reason the srcset path already uses it.
+            var iss = el.getAttribute("imagesrcset");
+            if (gated && iss && !el.getAttribute("data-faz-imagesrcset")) {
+                var issCat = _fazSrcsetBlockedCategory(el, iss);
+                if (issCat) {
+                    el.setAttribute("data-faz-imagesrcset", iss);
+                    if (!el.getAttribute("data-faz-category")) {
+                        el.setAttribute("data-faz-category", issCat);
+                    }
+                    el.removeAttribute("imagesrcset");
+                }
             }
         }
     } catch (e) { /* leave the element untouched on error */ }
@@ -5246,6 +5479,22 @@ function _fazUnblockServerSide() {
             el.href = fazHref;
             if (!el.getAttribute("href")) return; // gate re-parked it — stay parked, recoverable
             el.removeAttribute("data-faz-href");
+        });
+
+    // 4a. <link imagesrcset> — a preload can carry its URL there instead of in
+    // href, and the server parks it for exactly that reason. Same category gate
+    // as the href pass above; restoring it unconditionally would hand back a
+    // blocked preload the moment ANY category was accepted.
+    document.querySelectorAll('link[data-faz-imagesrcset]')
+        .forEach(function (el) {
+            var parked = el.getAttribute("data-faz-imagesrcset");
+            // Re-evaluate EVERY candidate, exactly as the srcset restore does. A
+            // single stored category cannot speak for a list: accepting the
+            // category of one candidate would hand back the whole set, tracker
+            // entries included.
+            if (_fazSrcsetBlockedCategory(el, parked)) return; // still has a blocked candidate
+            el.setAttribute("imagesrcset", parked);
+            el.removeAttribute("data-faz-imagesrcset");
         });
 
     // 4b. Inline CSS whose url()/@import tokens were neutralised server-side or

@@ -85,6 +85,29 @@ class Controller {
 	const HTTPONLY_LOCK_OPTION = 'faz_httponly_scan_lock';
 
 	/**
+	 * Serialises the read-modify-write of VISITOR_CHECK_OPTION. Same add_option()
+	 * idiom as HTTPONLY_LOCK_OPTION: atomic on the option_name unique key.
+	 */
+	const VISITOR_CHECK_LOCK_OPTION = 'faz_visitor_check_lock';
+
+	/**
+	 * Per-scan visitor-check ledgers, keyed by numeric scan id.
+	 *
+	 * Each entry persists what the browser pass classified at import time (the
+	 * imported names and the jar/admin-context bucket that previously lived
+	 * only in the transient REST response) and accumulates what the anonymous
+	 * header replay actually observes, so the two vantage points can be
+	 * diffed once the replay queue drains.
+	 */
+	const VISITOR_CHECK_OPTION = 'faz_scan_visitor_check';
+
+	/** Numeric scan id whose import queued the replay currently being observed. */
+	const VISITOR_CHECK_TARGET_OPTION = 'faz_httponly_scan_target';
+
+	/** Ledger entries kept — pruned exactly like the 50-entry faz_scan_history. */
+	const VISITOR_CHECK_HISTORY_LIMIT = 50;
+
+	/**
 	 * How many consecutive FULL scans a discovered cookie has gone unobserved.
 	 *
 	 * Keyed "name|domain". A single scan missing a cookie proves nothing: a site
@@ -552,7 +575,7 @@ class Controller {
 				if ( 'held' !== ( isset( $active['state'] ) ? $active['state'] : '' ) ) {
 					return new \WP_Error( 'faz_browser_scan_in_progress', __( 'Another browser scan is already in progress for this administrator.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
 				}
-				$this->discard_held_browser_scan_session( $active );
+				$this->discard_browser_scan_session_record( $active );
 				$active = false;
 			}
 		}
@@ -582,7 +605,7 @@ class Controller {
 
 		set_transient(
 			self::browser_scan_transient_key( $token ),
-			array( 'user_id' => $user_id, 'scan_id' => $scan_id, 'created_at' => $created_at ),
+			array( 'user_id' => $user_id, 'scan_id' => $scan_id, 'created_at' => $created_at, 'touched_at' => time() ),
 			self::BROWSER_SCAN_TTL
 		);
 
@@ -678,6 +701,11 @@ class Controller {
 			return false;
 		}
 
+		// Liveness breadcrumb, not authorization: every successful renewal stamps
+		// the session, so describe_browser_scan_session() can honestly tell a
+		// crawl some tab is still driving from one nobody is. Written only after
+		// every ownership check above has passed.
+		$session['touched_at'] = time();
 		set_transient( $session_key, $session, self::BROWSER_SCAN_TTL );
 
 		$active_key = self::browser_scan_active_transient_key( $user_id );
@@ -874,11 +902,112 @@ class Controller {
 	/**
 	 * Release a failed/cancelled browser scan without importing observations.
 	 *
+	 * Two paths, tried in order. The marker-cookie path is the normal one: the
+	 * tab that ran the scan still carries the httpOnly token, so the session is
+	 * matched exactly as an import would match it. The fallback exists because
+	 * the marker belongs to the REQUEST while the session belongs to the
+	 * ADMINISTRATOR: after a reload, a new tab, or a different browser, the
+	 * request may carry a stale token or none at all, yet the stuck session is
+	 * still that administrator's own to end. In that case the session is looked
+	 * up through the user-keyed active record instead — which can only ever
+	 * name the CURRENT user's session, and only releases it when the caller
+	 * presents that session's own scan_id (obtainable only by having started it
+	 * or via the equally capability-gated scans/session route). Nothing here is
+	 * automatic: the server never ends a live session on its own; some request
+	 * this user made asked for it by id.
+	 *
 	 * @param string $scan_id Client scan identifier.
 	 * @return bool
 	 */
 	public function abort_browser_scan_session( $scan_id ) {
-		return $this->finish_browser_scan_session( $scan_id );
+		if ( $this->finish_browser_scan_session( $scan_id ) ) {
+			return true;
+		}
+
+		$user_id = get_current_user_id();
+		$scan_id = sanitize_key( (string) $scan_id );
+		if ( $user_id <= 0 || ! preg_match( '/^[a-f0-9]{32}$/', $scan_id ) ) {
+			return false;
+		}
+		$active = get_transient( self::browser_scan_active_transient_key( $user_id ) );
+		if ( ! is_array( $active )
+			|| empty( $active['token'] )
+			|| empty( $active['scan_id'] )
+			|| ! hash_equals( (string) $active['scan_id'], $scan_id ) ) {
+			return false;
+		}
+		$this->discard_browser_scan_session_record( $active );
+		return true;
+	}
+
+	/**
+	 * What the server knows about the current administrator's capture session.
+	 *
+	 * Exists so the Cookies page can SHOW an already-open session after a
+	 * reload instead of letting the administrator collide with it blindly as a
+	 * bare 409. Everything reported is genuinely server-side state: the client
+	 * counter that drove the progress bar died with the tab, so the only honest
+	 * signals left are when the session started, when a scan-tagged request or
+	 * heartbeat last renewed it (touched_at), when a Set-Cookie observation
+	 * last arrived, and how many observations exist. `last_activity` is the
+	 * max of those; the caller decides how to present a session nothing has
+	 * touched in a while. The scan_id is included deliberately — it is the
+	 * handle abort_browser_scan_session() needs, it names the caller's OWN
+	 * session, and this method never reaches across users.
+	 *
+	 * @return array{active:bool}|array{active:bool,state:string,scan_id:string,started_at:int,last_activity:int,observations:int,server_time:int}
+	 */
+	public function describe_browser_scan_session() {
+		$inactive = array( 'active' => false );
+		$user_id  = get_current_user_id();
+		if ( $user_id <= 0 ) {
+			return $inactive;
+		}
+		$active = get_transient( self::browser_scan_active_transient_key( $user_id ) );
+		if ( ! is_array( $active ) || empty( $active['token'] ) || empty( $active['scan_id'] ) ) {
+			return $inactive;
+		}
+		$token   = sanitize_key( (string) $active['token'] );
+		$session = get_transient( self::browser_scan_transient_key( $token ) );
+		if ( ! is_array( $session ) || empty( $session['user_id'] ) || $user_id !== absint( $session['user_id'] ) ) {
+			// An active record whose session transient is gone blocks nothing
+			// (start_browser_scan_session would mint a fresh session), so
+			// reporting it would invite an administrator to "end" a ghost.
+			return $inactive;
+		}
+
+		$observations  = 0;
+		$last_observed = 0;
+		foreach ( (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false ) as $observation ) {
+			if ( ! is_array( $observation ) || ! hash_equals( $token, isset( $observation['token'] ) ? (string) $observation['token'] : '' ) ) {
+				continue;
+			}
+			// The sentinel row written when BROWSER_SCAN_OBSERVATION_LIMIT is hit
+			// is not a cookie sighting; collect_browser_scan_session() skips it
+			// and this count must agree, or the panel reports one observation
+			// more than the import will ever see.
+			if ( ! empty( $observation['truncated'] ) ) {
+				continue;
+			}
+			$observations++;
+			$observed_at = isset( $observation['observed_at'] ) ? absint( $observation['observed_at'] ) : 0;
+			if ( $observed_at > $last_observed ) {
+				$last_observed = $observed_at;
+			}
+		}
+
+		$started_at = isset( $session['created_at'] ) ? absint( $session['created_at'] ) : 0;
+		$touched_at = isset( $session['touched_at'] ) ? absint( $session['touched_at'] ) : 0;
+
+		return array(
+			'active'        => true,
+			'state'         => ( isset( $active['state'] ) && 'held' === $active['state'] ) ? 'held' : 'live',
+			'scan_id'       => sanitize_key( (string) $active['scan_id'] ),
+			'started_at'    => $started_at,
+			'last_activity' => max( $started_at, $touched_at, $last_observed ),
+			'observations'  => $observations,
+			'server_time'   => time(),
+		);
 	}
 
 	/** @return bool */
@@ -989,17 +1118,22 @@ class Controller {
 	}
 
 	/**
-	 * Drop a held session's evidence so a new scan can take its place.
+	 * Drop a session's evidence by its active record, without the marker cookie.
 	 *
-	 * Only ever called for a session already established as `held`. It cannot
-	 * reuse finish_browser_scan_session(), which reads the marker cookie of the
-	 * CURRENT request — the tab starting the new scan may carry a different
-	 * token, or none — so the token is taken from the active record instead.
+	 * Two callers, both of which have already decided the session must go: the
+	 * held-session reclaim in start_browser_scan_session(), and the owner-keyed
+	 * fallback in abort_browser_scan_session() (an administrator explicitly
+	 * ending their own stuck session from a request that no longer carries the
+	 * marker). Neither can reuse finish_browser_scan_session(), which reads the
+	 * marker cookie of the CURRENT request — the calling tab may carry a
+	 * different token, or none — so the token is taken from the active record
+	 * instead. The record is user-keyed, so this only ever tears down the
+	 * current user's own session.
 	 *
 	 * @param array $active The active-session record being discarded.
 	 * @return void
 	 */
-	private function discard_held_browser_scan_session( $active ) {
+	private function discard_browser_scan_session_record( $active ) {
 		$user_id = get_current_user_id();
 		$token   = sanitize_key( isset( $active['token'] ) ? (string) $active['token'] : '' );
 		if ( '' !== $token ) {
@@ -1239,7 +1373,14 @@ class Controller {
 	 * @return void
 	 */
 	public function run_httponly_check() {
-		$lock_time = absint( get_option( self::HTTPONLY_LOCK_OPTION, 0 ) );
+		// Captured BEFORE the queue drains. finalize_visitor_check() used to
+		// re-read this option after the finally block, so an import landing in
+		// that window — which opens a ledger of its own — had its brand-new
+		// ledger frozen as complete with nothing observed, while the worker that
+		// should have filled it found the target already deleted and recorded
+		// nothing at all. One scan silently lost its whole visitor check.
+		$visitor_target = sanitize_key( (string) get_option( self::VISITOR_CHECK_TARGET_OPTION, '' ) );
+		$lock_time      = absint( get_option( self::HTTPONLY_LOCK_OPTION, 0 ) );
 		if ( $lock_time > 0 && $lock_time < time() - 600 ) {
 			delete_option( self::HTTPONLY_LOCK_OPTION );
 		}
@@ -1294,6 +1435,13 @@ class Controller {
 						}
 					}
 					$this->clear_scan_observations( $replayed_names );
+					// Ledger, beside the other checkpoints and for the same
+					// reason: a worker that dies on a later URL must keep what
+					// this one proved. Append-only, positive observations only —
+					// a URL yielding no Set-Cookie writes nothing, so a cached
+					// page degrades the diff toward "no finding", never toward
+					// a demotion.
+					$this->record_visitor_observations( $page_cookies, $visitor_target );
 				}
 				$latest = $this->sanitize_scanned_urls( get_option( self::HTTPONLY_URLS_OPTION, array() ) );
 				$latest = array_values( array_diff( $latest, array( $url ) ) );
@@ -1315,6 +1463,11 @@ class Controller {
 			$this->schedule_httponly_check( $remaining );
 		} else {
 			wp_clear_scheduled_hook( self::HTTPONLY_CRON_HOOK );
+			// The queue drained: every URL the browser visited has been
+			// re-fetched anonymously. Freeze the ledger into the three-bucket
+			// diff. Pure bookkeeping — it writes only its own option, never
+			// the missed-scan tally and never a catalogue row.
+			$this->finalize_visitor_check( $visitor_target );
 		}
 	}
 
@@ -2591,6 +2744,469 @@ class Controller {
 			}
 		}
 		return $keys;
+	}
+
+	/**
+	 * Open a visitor-check ledger for one imported browser scan.
+	 *
+	 * Persists the browser pass's classification at the only moment it exists:
+	 * the imported set (the names the scan declared) and the jar/admin-context
+	 * bucket, which until now lived solely in the REST response and evaporated
+	 * with it. The anonymous header replay that import just scheduled will
+	 * append its own observations to this ledger, and the diff between the two
+	 * vantage points is computed when the replay queue drains.
+	 *
+	 * Keys are canonical_key() — lowercased name plus domain stripped of
+	 * leading dots and port. Deliberately NOT set_cookie_identity(): the
+	 * JS-visible cookies of the browser pass carry no trustworthy path, so
+	 * keying on path would fabricate diffs. A missing domain defaults to the
+	 * site host on BOTH sides for the same reason.
+	 *
+	 * @param int      $scan_id        Numeric scan id from save_scan_result().
+	 * @param array    $imported_cookies Sanitized cookies the import received (name/domain pairs).
+	 * @param string[] $imported_names   Merged persisted names from save_scan_result().
+	 * @param array    $jar_cookies      Reported-not-imported jar/admin-context bucket.
+	 * @return void
+	 */
+	public function begin_visitor_check( $scan_id, $imported_cookies, $imported_names, $jar_cookies ) {
+		// A scan id is a 32-char hex STRING (start_browser_scan_session enforces
+		// /^[a-f0-9]{32}$/). absint() on one of those is 0, so the guard below
+		// used to reject every real id and return before writing anything: the
+		// ledger was never opened and the anonymous pass measured nothing, on
+		// every install, silently. Key it as the string it is.
+		$scan_id = sanitize_key( (string) $scan_id );
+		// '0' is the historic no-id sentinel and sanitize_key() keeps it as a
+		// non-empty string, so it has to be refused by name.
+		if ( '' === $scan_id || '0' === $scan_id ) {
+			return;
+		}
+		$site_host = (string) wp_parse_url( home_url(), PHP_URL_HOST );
+
+		$imported_keys = array();
+		foreach ( (array) $imported_cookies as $cookie ) {
+			if ( ! is_array( $cookie ) || empty( $cookie['name'] ) ) {
+				continue;
+			}
+			$domain = isset( $cookie['domain'] ) && '' !== $cookie['domain'] ? (string) $cookie['domain'] : $site_host;
+			$key    = self::canonical_key( sanitize_text_field( (string) $cookie['name'] ), $domain );
+			if ( '' !== $key ) {
+				$imported_keys[ $key ] = true;
+			}
+		}
+
+		$names = array();
+		foreach ( (array) $imported_names as $imported_name ) {
+			$imported_name = self::canonical_name( sanitize_text_field( (string) $imported_name ) );
+			if ( '' !== $imported_name ) {
+				$names[ $imported_name ] = true;
+			}
+		}
+
+		$jar = array();
+		foreach ( (array) $jar_cookies as $cookie ) {
+			if ( ! is_array( $cookie ) || empty( $cookie['name'] ) ) {
+				continue;
+			}
+			$display = sanitize_text_field( (string) $cookie['name'] );
+			$domain  = isset( $cookie['domain'] ) && '' !== $cookie['domain'] ? (string) $cookie['domain'] : $site_host;
+			$key     = self::canonical_key( $display, $domain );
+			if ( '' !== $key && ! isset( $jar[ $key ] ) ) {
+				$jar[ $key ] = $display;
+			}
+		}
+
+		$this->with_visitor_check_lock( function () use ( $scan_id, $imported_keys, $names, $jar ) {
+			$this->write_new_visitor_ledger( $scan_id, $imported_keys, $names, $jar );
+		} );
+	}
+
+	/**
+	 * The locked half of begin_visitor_check(): open the ledger and point the
+	 * target at it, on a freshly read option so a concurrent worker's write
+	 * cannot be clobbered by a stale snapshot.
+	 *
+	 * @param string $scan_id       Ledger key.
+	 * @param array  $imported_keys Canonical keys declared by the browser pass.
+	 * @param array  $names         Canonical names declared by the browser pass.
+	 * @param array  $jar           Reported-but-not-declared bucket.
+	 * @return void
+	 */
+	private function write_new_visitor_ledger( $scan_id, $imported_keys, $names, $jar ) {
+		$checks = get_option( self::VISITOR_CHECK_OPTION, array() );
+		if ( ! is_array( $checks ) ) {
+			$checks = array();
+		}
+		// A ledger still pending when a newer scan arrives will never be
+		// finalized — its replay queue was merged into the new one. Name that
+		// state instead of leaving a 'pending' that quietly means 'abandoned'.
+		foreach ( $checks as $existing_id => $existing_entry ) {
+			if ( is_array( $existing_entry ) && isset( $existing_entry['status'] ) && 'pending' === $existing_entry['status'] ) {
+				$checks[ $existing_id ]['status'] = 'superseded';
+			}
+		}
+		$checks[ (string) $scan_id ] = array(
+			'status'         => 'pending',
+			'date'           => current_time( 'mysql' ),
+			'imported_keys'  => array_keys( $imported_keys ),
+			'imported_names' => array_keys( $names ),
+			'jar'            => $jar,
+			'observed'       => array(),
+		);
+		// Pruned the way faz_scan_history is: newest entries win, 50 kept.
+		if ( count( $checks ) > self::VISITOR_CHECK_HISTORY_LIMIT ) {
+			$checks = array_slice( $checks, -self::VISITOR_CHECK_HISTORY_LIMIT, null, true );
+		}
+		update_option( self::VISITOR_CHECK_OPTION, $checks, false );
+		update_option( self::VISITOR_CHECK_TARGET_OPTION, $scan_id, false );
+	}
+
+	/**
+	 * Append anonymously observed Set-Cookie identities to the open ledger.
+	 *
+	 * Called by run_httponly_check() beside its existing checkpoint writes, so
+	 * a worker that dies on a later URL keeps what it proved. Append-only and
+	 * bounded: it records positive observations and nothing else, which is the
+	 * asymmetry the whole feature rests on — a page cache can suppress a
+	 * Set-Cookie, it cannot invent one.
+	 *
+	 * @param array $observed_cookies Cookie rows as returned by scan_page().
+	 * @return void
+	 */
+	/**
+	 * Run a ledger read-modify-write under a lock.
+	 *
+	 * begin_visitor_check(), record_visitor_observations() and
+	 * finalize_visitor_check() all rewrite the WHOLE option. Without this, a
+	 * worker that read the array before an import opened a new ledger would
+	 * write its stale snapshot back and delete that ledger outright, leaving
+	 * VISITOR_CHECK_TARGET_OPTION pointing at an entry that no longer exists.
+	 *
+	 * add_option() is the atomic primitive: the option_name column is unique, so
+	 * exactly one caller can create the row. A lock older than 30 seconds is
+	 * treated as abandoned — these are three option writes, not a crawl, and a
+	 * worker killed mid-write must not wedge the feature forever.
+	 *
+	 * Contention is brief, so a bounded wait is enough. On failure the callback
+	 * still runs: every caller re-reads inside the callback and merges only its
+	 * own entry, so the unlocked path can lose a concurrent update to the SAME
+	 * ledger but can never delete a different one. Refusing to run would drop
+	 * observations outright, which is worse.
+	 *
+	 * @param callable $fn Receives nothing; must re-read the option itself.
+	 * @return mixed Whatever $fn returns.
+	 */
+	private function with_visitor_check_lock( $fn ) {
+		$acquired  = false;
+		$lock_time = absint( get_option( self::VISITOR_CHECK_LOCK_OPTION, 0 ) );
+		if ( $lock_time > 0 && $lock_time < time() - 30 ) {
+			delete_option( self::VISITOR_CHECK_LOCK_OPTION );
+		}
+		for ( $attempt = 0; $attempt < 10; $attempt++ ) {
+			if ( add_option( self::VISITOR_CHECK_LOCK_OPTION, time(), '', false ) ) {
+				$acquired = true;
+				break;
+			}
+			usleep( 50000 );
+		}
+		try {
+			return call_user_func( $fn );
+		} finally {
+			if ( $acquired ) {
+				delete_option( self::VISITOR_CHECK_LOCK_OPTION );
+			}
+		}
+	}
+
+	public function record_visitor_observations( $observed_cookies, $expected_target = null ) {
+		$target = sanitize_key( (string) get_option( self::VISITOR_CHECK_TARGET_OPTION, '' ) );
+		if ( '' === $target ) {
+			return;
+		}
+		// The worker passes the target it captured at startup. Without this an
+		// import opening ledger B mid-batch would have worker A appending ITS
+		// observations to B — silently attributing one scan's anonymous pass to
+		// another, which corrupts exactly the visitor_only/jar_promoted buckets
+		// the whole feature is for. Guarding the close was not enough; the
+		// writes need the same check.
+		// `null` and `''` are different answers. `null` is "the caller said
+		// nothing", which keeps the permissive legacy behaviour; `''` is the
+		// caller stating there was NO open ledger when it captured one, and that
+		// has to mean "write nowhere" rather than "write anywhere". Production
+		// always passes the captured value (run_httponly_check, lines ~1444 and
+		// ~1470), so an empty capture used to let a ledger opened mid-batch by an
+		// unrelated import receive this scan's observations — the exact
+		// misattribution the comment above describes, arriving through the guard
+		// meant to prevent it.
+		if ( null === $expected_target ) {
+			$expected_target = $target;
+		}
+		$expected_target = sanitize_key( (string) $expected_target );
+		if ( $expected_target !== $target ) {
+			return;
+		}
+		$this->with_visitor_check_lock( function () use ( $observed_cookies, $target ) {
+			$this->write_visitor_observations( $observed_cookies, $target );
+		} );
+	}
+
+	/**
+	 * The locked half of record_visitor_observations().
+	 *
+	 * Re-reads the option and writes back ONLY this ledger's entry, so a
+	 * concurrently opened ledger survives even if the lock was not obtained.
+	 *
+	 * @param array  $observed_cookies Cookie rows as returned by scan_page().
+	 * @param string $target           Ledger key to append to.
+	 * @return void
+	 */
+	private function write_visitor_observations( $observed_cookies, $target ) {
+		$checks = get_option( self::VISITOR_CHECK_OPTION, array() );
+		if ( ! is_array( $checks ) || ! isset( $checks[ (string) $target ] ) || ! is_array( $checks[ (string) $target ] ) ) {
+			return;
+		}
+		$entry = $checks[ (string) $target ];
+		if ( ! isset( $entry['status'] ) || 'pending' !== $entry['status'] ) {
+			return;
+		}
+		$observed  = isset( $entry['observed'] ) && is_array( $entry['observed'] ) ? $entry['observed'] : array();
+		$site_host = (string) wp_parse_url( home_url(), PHP_URL_HOST );
+		$changed   = false;
+		foreach ( (array) $observed_cookies as $cookie ) {
+			if ( count( $observed ) >= self::BROWSER_SCAN_OBSERVATION_LIMIT ) {
+				break;
+			}
+			if ( ! is_array( $cookie ) || empty( $cookie['name'] ) ) {
+				continue;
+			}
+			$display = sanitize_text_field( (string) $cookie['name'] );
+			$domain  = isset( $cookie['domain'] ) && '' !== $cookie['domain'] ? (string) $cookie['domain'] : $site_host;
+			$key     = self::canonical_key( $display, $domain );
+			if ( '' === $key || isset( $observed[ $key ] ) ) {
+				continue;
+			}
+			$observed[ $key ] = $display;
+			$changed          = true;
+		}
+		if ( $changed ) {
+			// Re-read: between the read above and here another process may have
+			// opened a ledger. Writing the stale $checks back would delete it.
+			// Only this entry is ours to touch.
+			$fresh = get_option( self::VISITOR_CHECK_OPTION, array() );
+			if ( ! is_array( $fresh ) || ! isset( $fresh[ (string) $target ] ) ) {
+				return;
+			}
+			$entry['observed']          = $observed;
+			$fresh[ (string) $target ]  = $entry;
+			update_option( self::VISITOR_CHECK_OPTION, $fresh, false );
+		}
+	}
+
+	/**
+	 * Freeze the open ledger into the three-bucket diff when the replay drains.
+	 *
+	 * The buckets, and what happens to each:
+	 *
+	 * - visitor_only: the anonymous pass saw a Set-Cookie the browser pass
+	 *   never imported. The row is already declared — run_httponly_check()'s
+	 *   save_cookies() checkpoint did that on positive observation — so this
+	 *   records the provenance the catalogue merge used to swallow silently.
+	 * - jar_promoted: the name sat in the browser scan's jar/admin-context
+	 *   bucket AND the anonymous pass observed the site setting it. A measured
+	 *   Set-Cookie outranks a request-shape inference, so the name is declared
+	 *   (again, by the existing checkpoint) and noted here.
+	 * - admin_only: the browser pass saw it, the anonymous pass did not.
+	 *   UNCHANGED — still reported, never declared, never deleted.
+	 *
+	 * The safety rule this method must never weaken: anonymous PRESENCE may
+	 * promote, anonymous ABSENCE may never demote. This method writes exactly
+	 * one option — its own — and in particular never touches
+	 * MISSED_SCANS_OPTION, never calls record_scan_observations(), and never
+	 * removes a catalogue row. A fully cached site therefore degrades to
+	 * today's behaviour, not below it.
+	 *
+	 * @return array|null The completed ledger entry, or null when none is open.
+	 */
+	public function finalize_visitor_check( $expected_target = null ) {
+		return $this->with_visitor_check_lock(
+			function () use ( $expected_target ) {
+				return $this->finalize_visitor_check_locked( $expected_target );
+			}
+		);
+	}
+
+	/**
+	 * Locked half of finalize_visitor_check().
+	 *
+	 * The target pointer and ledger must be read, validated, and closed while
+	 * holding the same lock as begin_visitor_check(). Otherwise a new import can
+	 * replace the target after this worker reads it but before it deletes it,
+	 * causing the old worker to erase the new scan's pointer.
+	 *
+	 * @param string $expected_target Target captured when the replay worker began.
+	 * @return array|null The completed ledger entry, or null when the target moved.
+	 */
+	private function finalize_visitor_check_locked( $expected_target = null ) {
+		$target = sanitize_key( (string) get_option( self::VISITOR_CHECK_TARGET_OPTION, '' ) );
+		if ( '' === $target ) {
+			return null;
+		}
+		// A ledger opened after this worker started belongs to a replay that has
+		// not run yet. Closing it here would freeze it empty and leave its own
+		// worker with nothing to write into.
+		// `null` and `''` are different answers. `null` is "the caller said
+		// nothing", which keeps the permissive legacy behaviour; `''` is the
+		// caller stating there was NO open ledger when it captured one, and that
+		// has to mean "write nowhere" rather than "write anywhere". Production
+		// always passes the captured value (run_httponly_check, lines ~1444 and
+		// ~1470), so an empty capture used to let a ledger opened mid-batch by an
+		// unrelated import receive this scan's observations — the exact
+		// misattribution the comment above describes, arriving through the guard
+		// meant to prevent it.
+		if ( null === $expected_target ) {
+			$expected_target = $target;
+		}
+		$expected_target = sanitize_key( (string) $expected_target );
+		if ( $expected_target !== $target ) {
+			return null;
+		}
+		delete_option( self::VISITOR_CHECK_TARGET_OPTION );
+
+		$checks = get_option( self::VISITOR_CHECK_OPTION, array() );
+		if ( ! is_array( $checks ) || ! isset( $checks[ (string) $target ] ) || ! is_array( $checks[ (string) $target ] ) ) {
+			return null;
+		}
+		$entry = $checks[ (string) $target ];
+		if ( ! isset( $entry['status'] ) || 'pending' !== $entry['status'] ) {
+			return null;
+		}
+
+		$imported_keys  = array_flip( isset( $entry['imported_keys'] ) && is_array( $entry['imported_keys'] ) ? $entry['imported_keys'] : array() );
+		$imported_names = array_flip( isset( $entry['imported_names'] ) && is_array( $entry['imported_names'] ) ? $entry['imported_names'] : array() );
+		$jar            = isset( $entry['jar'] ) && is_array( $entry['jar'] ) ? $entry['jar'] : array();
+		$observed       = isset( $entry['observed'] ) && is_array( $entry['observed'] ) ? $entry['observed'] : array();
+
+		// Names observed anonymously, for jar promotion. The jar's domains are
+		// fabricated (the request-cookie header carries none), so promotion
+		// matches on the canonical NAME: the claim being tested is "the site
+		// sets this name for visitors", not a domain equality.
+		$observed_names = array();
+		foreach ( $observed as $observed_key => $observed_display ) {
+			$parts                        = explode( '|', (string) $observed_key, 2 );
+			$observed_names[ $parts[0] ] = true;
+		}
+		$jar_names = array();
+		foreach ( $jar as $jar_key => $jar_display ) {
+			$parts               = explode( '|', (string) $jar_key, 2 );
+			$jar_names[ $parts[0] ] = true;
+		}
+
+		$jar_promoted = array();
+		$admin_only   = array();
+		foreach ( $jar as $jar_key => $jar_display ) {
+			$parts = explode( '|', (string) $jar_key, 2 );
+			if ( isset( $observed_names[ $parts[0] ] ) ) {
+				$jar_promoted[ $jar_display ] = true;
+			} else {
+				$admin_only[ $jar_display ] = true;
+			}
+		}
+
+		$visitor_only = array();
+		foreach ( $observed as $observed_key => $observed_display ) {
+			$parts = explode( '|', (string) $observed_key, 2 );
+			if ( isset( $jar_names[ $parts[0] ] ) ) {
+				continue; // Counted as a promotion above.
+			}
+			// Imported under the same key, or under the same name with a
+			// different domain spelling (script-inferred rows carry provider
+			// domains): either way the browser pass already declared it, so
+			// claiming it as visitor-only would overstate the finding.
+			if ( isset( $imported_keys[ $observed_key ] ) || isset( $imported_names[ $parts[0] ] ) ) {
+				continue;
+			}
+			$visitor_only[ $observed_display ] = true;
+		}
+
+		// Keep the diff, drop the working sets: fifty ledgers each holding up
+		// to 2000 observation keys is not an option payload, a diff is.
+		$completed = array(
+			'status'       => 'complete',
+			'date'         => isset( $entry['date'] ) ? $entry['date'] : '',
+			'completed_at' => current_time( 'mysql' ),
+			'diff'         => array(
+				'visitor_only' => array_slice( array_keys( $visitor_only ), 0, 200 ),
+				'jar_promoted' => array_slice( array_keys( $jar_promoted ), 0, 200 ),
+				'admin_only'   => array_slice( array_keys( $admin_only ), 0, 200 ),
+			),
+		);
+		// Same re-read as the observation write: freeze OUR entry into whatever
+		// the option holds now, never a snapshot taken before the diff was
+		// computed. A ledger opened meanwhile must survive this write.
+		$fresh = get_option( self::VISITOR_CHECK_OPTION, array() );
+		if ( ! is_array( $fresh ) ) {
+			$fresh = $checks;
+		}
+		$fresh[ (string) $target ] = $completed;
+		update_option( self::VISITOR_CHECK_OPTION, $fresh, false );
+
+		$completed['scan_id'] = $target;
+		return $completed;
+	}
+
+	/**
+	 * The most recent completed visitor check, sanitized for REST/UI use.
+	 *
+	 * @return array|null
+	 */
+	public function latest_visitor_check() {
+		$checks = get_option( self::VISITOR_CHECK_OPTION, array() );
+		if ( ! is_array( $checks ) || empty( $checks ) ) {
+			return null;
+		}
+		// Scan ids are 32-char hex strings, so absint() is 0 for every one of
+		// them and the old `absint($check_id) > $best_id` comparison never
+		// selected anything: this returned null even with a complete ledger
+		// sitting in the option. The ledger is appended newest-last (and pruned
+		// with array_slice, which preserves order), so insertion order IS
+		// chronological — take the last complete entry.
+		$best      = null;
+		$best_id   = '';
+		$best_when = '';
+		foreach ( $checks as $check_id => $entry ) {
+			if ( ! is_array( $entry ) || ! isset( $entry['status'] ) || 'complete' !== $entry['status'] ) {
+				continue;
+			}
+			// Newest completed_at wins; iteration order breaks ties (the option
+			// is appended newest-last and array_slice preserves that). Ordering
+			// on the KEY is what broke this — absint() of a hex id is 0, so the
+			// old `> $best_id` never fired and a complete ledger read as absent.
+			$when = isset( $entry['completed_at'] ) ? (string) $entry['completed_at'] : '';
+			if ( null !== $best && $when < $best_when ) {
+				continue;
+			}
+			$best_when = $when;
+			$best_id   = (string) $check_id;
+			$best      = $entry;
+		}
+		if ( null === $best ) {
+			return null;
+		}
+		$diff = isset( $best['diff'] ) && is_array( $best['diff'] ) ? $best['diff'] : array();
+		$out  = array(
+			'scan_id'      => sanitize_key( $best_id ),
+			'completed_at' => isset( $best['completed_at'] ) ? sanitize_text_field( (string) $best['completed_at'] ) : '',
+		);
+		foreach ( array( 'visitor_only', 'jar_promoted', 'admin_only' ) as $bucket ) {
+			$names = array();
+			foreach ( ( isset( $diff[ $bucket ] ) && is_array( $diff[ $bucket ] ) ? $diff[ $bucket ] : array() ) as $name ) {
+				$name = sanitize_text_field( (string) $name );
+				if ( '' !== $name ) {
+					$names[] = $name;
+				}
+			}
+			$out[ $bucket ] = $names;
+		}
+		return $out;
 	}
 
 	/**

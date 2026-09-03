@@ -259,6 +259,35 @@ function buildConsentState(cookieObj) {
         fazCat(cookieObj, "analytics") === "granted" || fazCat(cookieObj, "performance") === "granted"
             ? "granted"
             : "denied";
+
+    // ADVANCED CONSENT MODE ONLY: the `analytics` category decides on its own.
+    //
+    // In Basic mode the granted-wins merge above is right. `performance` is an
+    // analytics-class category, so granting it is a consent to analytics-class
+    // storage, and the tags belonging to `analytics` are hard-blocked by the
+    // script gate regardless of what this signal says — the signal cannot let
+    // anything through.
+    //
+    // Advanced mode removes exactly that backstop: Consent-Mode-aware Google
+    // tags (gtag.js / GA4 / Ads) are deliberately allowed to load
+    // (class-frontend.php, is_gcm_managed_script) so they can send modeled
+    // pings. GA4 is classified `analytics`. So a visitor who denied Analytics
+    // and granted Performance had GA4 loaded AND told analytics_storage was
+    // granted, and it wrote its cookies against that denial — the signal became
+    // the only control, and it was pointing the wrong way.
+    //
+    // Deliberately keyed on the `analytics` category rather than made
+    // most-restrictive: the exempted tags are Google's own and that is the
+    // category they belong to, so an install that offers only `performance`
+    // keeps working (analytics absent -> the merge above still decides), while
+    // one that offers both honours the decision made about the tag actually
+    // running.
+    if (data.advanced_mode) {
+        var analyticsRaw = cookieObj ? cookieObj.analytics : undefined;
+        if ("granted" === analyticsRaw || "denied" === analyticsRaw) {
+            analytics = analyticsRaw;
+        }
+    }
     // Non-personalized ads fallback: when enabled and marketing is denied, we
     // do NOT grant ad_storage (that would set ad cookies without consent —
     // unlawful in EEA/UK/CH). ad_storage stays "denied"; Consent Mode v2 serves

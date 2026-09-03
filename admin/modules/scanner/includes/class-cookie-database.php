@@ -61,20 +61,32 @@ class Cookie_Database {
 			'duration'    => 'session',
 			'description' => 'Stores the selected language during login.',
 		),
+		// Automattic Tracks (Jetpack). Classified `analytics`, not
+		// `wordpress-internal`, and the distinction is load-bearing:
+		// `wordpress-internal` means ALWAYS allowed and NEVER declared
+		// (Frontend::is_cookie_allowed returns true for it before any consent
+		// check, and every visitor-facing declaration filters it out). Jetpack
+		// sets these outside wp-admin too, so the old classification made them
+		// unblockable and undisclosed tracking on the front end.
+		//
+		// The change is safe in both readings. This table only classifies what a
+		// scan OBSERVES: on a site where they truly never reach a visitor they are
+		// never observed in a visitor context and nothing changes, while on a site
+		// where they do, they are now gated and disclosed.
 		'tk_ai'                   => array(
-			'category'    => 'wordpress-internal',
+			'category'    => 'analytics',
 			'duration'    => 'session',
-			'description' => 'Automattic Tracks identifier used inside the WordPress dashboard.',
+			'description' => 'Automattic Tracks (Jetpack) anonymous identifier used to attribute events to a visitor.',
 		),
 		'tk_qs'                   => array(
-			'category'    => 'wordpress-internal',
+			'category'    => 'analytics',
 			'duration'    => 'session',
-			'description' => 'Automattic Tracks dashboard analytics cookie.',
+			'description' => 'Automattic Tracks (Jetpack) analytics cookie recording the visitor session.',
 		),
 		'tk_lr'                   => array(
-			'category'    => 'wordpress-internal',
+			'category'    => 'analytics',
 			'duration'    => '1 year',
-			'description' => 'Automattic Tracks dashboard referral cookie.',
+			'description' => 'Automattic Tracks (Jetpack) referral cookie storing the traffic source for attribution.',
 		),
 		'comment_author_email_'   => array(
 			'category'    => 'functional',
@@ -216,9 +228,18 @@ class Cookie_Database {
 			'description' => 'Used by Google reCAPTCHA to distinguish between humans and bots.',
 		),
 		// GDPR/Cookie consent.
+		// 6 months, not the "1 year" this used to declare. The cookie is written
+		// by JS, so a scan never observes a Set-Cookie expiry and cannot correct
+		// the record — it stays at whatever this table says. Meanwhile
+		// Frontend::normalize_consent_expiry() caps the real lifetime at 182 days
+		// for every non-CCPA banner (Garante: consent expires within 6 months),
+		// so the declaration was wrong by a factor of two on every GDPR site that
+		// ran the built-in scanner. Under CCPA the cap does not apply and the
+		// cookie can genuinely live longer; the declaration is law-invariant, so
+		// state the shorter, always-true figure rather than the longer one.
 		'fazcookie-consent'       => array(
 			'category'    => 'necessary',
-			'duration'    => '1 year',
+			'duration'    => '6 months',
 			'description' => 'Cookie consent preferences set by the visitor.',
 		),
 		'brikpanel_vid'           => array(

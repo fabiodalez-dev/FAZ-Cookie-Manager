@@ -610,6 +610,19 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.29.0 — 2026-09-02
+- **Fixed**: pressing "Update definitions" once froze the cookie database at that moment, permanently — the downloaded copy always beat the snapshot shipped with the plugin and nothing ever revisited that choice. The bundled snapshot now wins when it is newer.
+- **Fixed**: in Advanced Consent Mode a visitor who refused Analytics but allowed Performance was reported to Google as allowing analytics storage. Advanced mode does not block Google's tags, so the signal was the only control left and it pointed the wrong way.
+- **Fixed**: the System Status report lost every yes/no answer when copied; an overdue scheduled task now says so and by how much, and the definitions ages are in the report.
+- **Fixed**: `[faz_cookie_settings]` opened a preference panel that was present but invisible for visitors who had already consented.
+- **Fixed**: the scanner reported a failure while the scan was working, and an abandoned scan session now explains itself and can be ended.
+- **Fixed**: eight compliance defects from a full-plugin audit — TCF Purpose 1 asserted for visitors who had not acted, consent-log withdrawal lost to rate limiting, Jetpack Tracks cookies neither blockable nor disclosable, among others.
+- **Fixed**: accessibility and HTTPS parity with CookieYes 3.5.5 — preference triggers name their own panel, a trigger with no panel no longer announces a dialog that does not exist, and mixed-content repair reaches every asset path.
+- **Fixed**: the ad-blocker resilience guard could not see a cosmetic filter list that arrived after its single check; it now runs a short bounded series.
+- **Fixed**: three more locales (`es_PY`, `en_IN`, `en_IE`) pointed at translations WordPress does not have.
+- **Security**: a forged `X-Forwarded-Proto` header could rewrite the cached banner for every visitor. It can still correct asset URLs for its own request, but no longer causes a persistent write.
+- **Localisation**: 20 new strings added to the catalogues and translated into Italian.
+
 ### 1.28.1 — 2026-08-26
 - **Fixed**: a cached page could serve one visitor's jurisdiction to another when Cloudflare's country header was trusted. The country-source check required `CF-IPCountry` on the current request, so a cache warmer — or any request reaching the origin without passing through Cloudflare — was told no source existed and its response was cached without the country veto. The trust filter alone now decides it.
 - **Fixed**: release tooling — `--dry-run` no longer writes to the live blog, the remote temporary directory is no longer predictable, and a failed SVN asset refresh stops the release instead of being silenced.

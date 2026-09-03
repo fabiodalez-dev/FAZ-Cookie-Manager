@@ -75,13 +75,13 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 		<div class="faz-card-header"><h3><?php esc_html_e( 'Plugin Configuration', 'faz-cookie-manager' ); ?></h3></div>
 		<div class="faz-card-body">
 			<table class="faz-status-table">
-				<tr><td><?php esc_html_e( 'Banner Enabled', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['status'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'Consent Logging', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['consent_logs']['status'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'Google Consent Mode', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $gcm_settings['status'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'IAB TCF v2.3', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['iab']['enabled'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'Pageview Tracking', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['pageview_tracking'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'Auto Scan', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['scanner']['auto_scan'] ) ? '&#9989; ' . esc_html( $settings['scanner']['scan_frequency'] ?? 'weekly' ) : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'Geo-Targeting', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['geolocation']['geo_targeting'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
+				<tr><td><?php esc_html_e( 'Banner Enabled', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['banner_control']['status'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'Consent Logging', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['consent_logs']['status'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'Google Consent Mode', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $gcm_settings['status'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'IAB TCF v2.3', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['iab']['enabled'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'Pageview Tracking', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['pageview_tracking'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'Auto Scan', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['scanner']['auto_scan'] ) ? faz_status_flag( true ) . ' &mdash; ' . esc_html( $settings['scanner']['scan_frequency'] ?? 'weekly' ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'Geo-Targeting', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['geolocation']['geo_targeting'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
 				<?php
 				// Both features were masked off in an earlier release and this
 				// page said so. The mask was removed when they began to be driven
@@ -93,16 +93,16 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 				// does. The sanitiser already forces per_cookie false whenever
 				// per_service is off, so a plain read IS the effective state.
 				?>
-				<tr><td><?php esc_html_e( 'Per-Service Consent', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['per_service_consent'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'Per-Cookie Consent', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['per_cookie_consent'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'Bot Detection', 'faz-cookie-manager' ); ?></td><td><?php echo ( ! isset( $settings['banner_control']['hide_from_bots'] ) || ! empty( $settings['banner_control']['hide_from_bots'] ) ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'GTM Data Layer', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['gtm_datalayer'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'Age Gate', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['age_gate']['enabled'] ) ? '&#9989; (min ' . absint( $settings['age_gate']['min_age'] ?? 16 ) . ')' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'Cross-Domain Consent', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['consent_forwarding']['enabled'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'Ad-Blocker Compat', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['alternative_asset_path'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'Microsoft UET', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['microsoft']['uet_consent_mode'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'Microsoft Clarity', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['microsoft']['clarity_consent'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'PHP Set-Cookie Blocking', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['script_blocking']['block_server_cookies'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
+				<tr><td><?php esc_html_e( 'Per-Service Consent', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['banner_control']['per_service_consent'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'Per-Cookie Consent', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['banner_control']['per_cookie_consent'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'Bot Detection', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ( ! isset( $settings['banner_control']['hide_from_bots'] ) || ! empty( $settings['banner_control']['hide_from_bots'] ) ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'GTM Data Layer', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['banner_control']['gtm_datalayer'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'Age Gate', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['age_gate']['enabled'] ) ? faz_status_flag( true ) . ' ' . sprintf( /* translators: %d: minimum age in years. */ esc_html__( '(min age %d)', 'faz-cookie-manager' ), absint( $settings['age_gate']['min_age'] ?? 16 ) ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'Cross-Domain Consent', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['consent_forwarding']['enabled'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'Ad-Blocker Compat', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['banner_control']['alternative_asset_path'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'Microsoft UET', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['microsoft']['uet_consent_mode'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'Microsoft Clarity', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['microsoft']['clarity_consent'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<tr><td><?php esc_html_e( 'PHP Set-Cookie Blocking', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['script_blocking']['block_server_cookies'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
 			</table>
 		</div>
 	</div>
@@ -185,11 +185,53 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 			<table class="faz-status-table">
 				<tr>
 					<td><?php esc_html_e( 'Next Scheduled Scan', 'faz-cookie-manager' ); ?></td>
-					<td><?php echo $next_scan ? esc_html( date_i18n( 'Y-m-d H:i:s', $next_scan ) ) : '&mdash;'; ?></td>
+					<td><?php echo wp_kses_post( faz_status_schedule( $next_scan ) ); ?></td>
 				</tr>
 				<tr>
 					<td><?php esc_html_e( 'Next Consent Log Cleanup', 'faz-cookie-manager' ); ?></td>
-					<td><?php echo $next_cleanup ? esc_html( date_i18n( 'Y-m-d H:i:s', $next_cleanup ) ) : '&mdash;'; ?></td>
+					<td><?php echo wp_kses_post( faz_status_schedule( $next_cleanup ) ); ?></td>
+				</tr>
+				<?php
+				// The definitions' age belongs beside the cron rows, because the
+				// two questions are the same one: "why are my definitions old?"
+				// is usually answered by an overdue schedule two lines up.
+				$faz_ocd_meta = class_exists( '\\FazCookie\\Includes\\Cookie_Definitions' )
+					? ( new \FazCookie\Includes\Cookie_Definitions() )->get_meta()
+					: array();
+				$faz_gvl_meta = class_exists( '\\FazCookie\\Includes\\Gvl' )
+					? ( new \FazCookie\Includes\Gvl() )->get_meta()
+					: array();
+				?>
+				<tr>
+					<td><?php esc_html_e( 'Cookie definitions updated', 'faz-cookie-manager' ); ?></td>
+					<td><?php
+					// Key on `source`, not on the presence of a date. get_meta()
+					// always returns an updated_at now — the download's, or the
+					// bundled snapshot's capture date — so testing the date alone
+					// made the bundled branch unreachable and printed a snapshot
+					// date as though the site had downloaded it that day. Two
+					// different situations report source 'bundled': never
+					// downloaded at all, and downloaded once but superseded by a
+					// newer bundle, so the copy must not claim "never downloaded"
+					// for both.
+					if ( isset( $faz_ocd_meta['source'] ) && 'bundled' === $faz_ocd_meta['source'] && ! empty( $faz_ocd_meta['updated_at'] ) ) {
+						printf(
+							/* translators: %s: date the bundled snapshot's data was captured. */
+							esc_html__( 'bundled data in use, captured %s', 'faz-cookie-manager' ),
+							esc_html( $faz_ocd_meta['updated_at'] )
+						);
+					} elseif ( ! empty( $faz_ocd_meta['updated_at'] ) ) {
+						echo esc_html( $faz_ocd_meta['updated_at'] );
+					} else {
+						esc_html_e( 'never downloaded (bundled data in use)', 'faz-cookie-manager' );
+					}
+					?></td>
+				</tr>
+				<tr>
+					<td><?php esc_html_e( 'IAB vendor list updated', 'faz-cookie-manager' ); ?></td>
+					<td><?php echo ! empty( $faz_gvl_meta['last_updated'] )
+						? esc_html( $faz_gvl_meta['last_updated'] )
+						: esc_html__( 'never downloaded', 'faz-cookie-manager' ); ?></td>
 				</tr>
 			</table>
 		</div>
