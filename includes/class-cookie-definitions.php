@@ -170,9 +170,16 @@ class Cookie_Definitions {
 		update_option(
 			self::META_KEY,
 			array(
-				'updated_at' => current_time( 'mysql' ),
-				'count'      => $total_cookies,
-				'source'     => self::SOURCE_URL,
+				// Local time for display — every admin screen shows local — and
+				// the SAME instant in UTC for comparison. Storing only the local
+				// string forced the reader to guess the offset that was in force
+				// when it was written, which is unknowable across a DST change
+				// and is the ambiguity that made the comparison fragile. This is
+				// WordPress's own post_date / post_date_gmt convention.
+				'updated_at'     => current_time( 'mysql' ),
+				'updated_at_gmt' => current_time( 'mysql', true ),
+				'count'          => $total_cookies,
+				'source'         => self::SOURCE_URL,
 			),
 			false // autoload=false, matches OPTION_KEY and keeps meta out of the autoload bucket
 		);
@@ -441,6 +448,17 @@ class Cookie_Definitions {
 			return true;
 		}
 
+		// Prefer the UTC stamp when the metadata carries one: it needs no offset
+		// applied, so no guess can be wrong. Only metadata written before that
+		// field existed takes the legacy path below.
+		$downloaded_gmt = is_array( $meta ) && ! empty( $meta['updated_at_gmt'] ) ? (string) $meta['updated_at_gmt'] : '';
+		if ( '' !== $downloaded_gmt ) {
+			$gmt_ts = strtotime( $downloaded_gmt . ' UTC' );
+			if ( false !== $gmt_ts ) {
+				return strtotime( self::BUNDLED_DATA_DATE . ' UTC' ) > $gmt_ts;
+			}
+		}
+
 		$downloaded_ts = strtotime( $downloaded );
 		if ( false === $downloaded_ts ) {
 			return true;
@@ -458,7 +476,9 @@ class Cookie_Definitions {
 		// recorded, so the current one is the best available; being wrong by an
 		// hour across a DST boundary is bounded, unlike being wrong by the whole
 		// offset on every comparison.
-		// The offset AT THE MOMENT THE DOWNLOAD WAS STAMPED, not today's. Using
+		// LEGACY PATH: metadata without updated_at_gmt. The offset at write
+		// time was never recorded, so the best available reconstruction is the
+		// offset AT THE MOMENT THE DOWNLOAD WAS STAMPED, not today's. Using
 		// the current one shifts a stamp written on the other side of a DST
 		// change by an hour, which is enough to invert this comparison when the
 		// two dates are close — and close is the only case that needs deciding.

@@ -68,7 +68,7 @@ $seed_bundled_cache = function () use ( $file, $bundle_date ) {
 	);
 };
 
-$scenario = function ( $downloaded_at ) use ( $seed_bundled_cache ) {
+$scenario = function ( $downloaded_at, $downloaded_gmt = null ) use ( $seed_bundled_cache ) {
 	$GLOBALS['OPTS'] = array();
 	$seed_bundled_cache();
 	// A non-empty stored dataset, shaped like the real one.
@@ -76,6 +76,9 @@ $scenario = function ( $downloaded_at ) use ( $seed_bundled_cache ) {
 	$meta = array( 'count' => 1, 'source' => Cookie_Definitions::SOURCE_URL );
 	if ( null !== $downloaded_at ) {
 		$meta['updated_at'] = $downloaded_at;
+	}
+	if ( null !== $downloaded_gmt ) {
+		$meta['updated_at_gmt'] = $downloaded_gmt;
 	}
 	$GLOBALS['OPTS']['faz_cookie_definitions_meta'] = $meta;
 	$defs = new Cookie_Definitions();
@@ -146,6 +149,22 @@ $GLOBALS['FAZ_TZ_OFFSET'] = -11;
 $r = $scenario( gmdate( 'Y-m-d H:i:s', $bundle_ts + 3600 - 11 * 3600 ) );
 t( Cookie_Definitions::SOURCE_URL === $r['meta']['source'], 'UTC-11: a download newer than the bundle is not discarded by timezone' );
 $GLOBALS['FAZ_TZ_OFFSET'] = 0;
+
+// --- updated_at_gmt: nessun offset da indovinare ------------------------
+// Il caso che il ramo legacy non puo' risolvere: scritto in ora legale, letto
+// in ora solare. Con il solo stamp locale l'offset applicato in lettura non e'
+// quello in vigore alla scrittura, e a distanza ravvicinata puo' ribaltare il
+// verdetto. Con updated_at_gmt il confronto e' esatto per costruzione.
+$GLOBALS['FAZ_TZ_NAME'] = 'Europe/Rome';
+$bundle_ts = strtotime( $bundle_date . ' UTC' );
+// Download un'ora DOPO il bundle, timbrato in UTC.
+$r = $scenario( 'irrilevante', gmdate( 'Y-m-d H:i:s', $bundle_ts + 3600 ) );
+t( Cookie_Definitions::SOURCE_URL === $r['meta']['source'], 'a UTC-stamped newer download wins regardless of site timezone' );
+t( 'stored' === $r['runtime'], 'and the lookup uses it' );
+// Download un'ora PRIMA, sempre in UTC.
+$r = $scenario( 'irrilevante', gmdate( 'Y-m-d H:i:s', $bundle_ts - 3600 ) );
+t( 'bundled' === $r['meta']['source'], 'a UTC-stamped older download still loses' );
+$GLOBALS['FAZ_TZ_NAME'] = '';
 
 // 6. TRIPWIRE. BUNDLED_DATA_DATE is hand-maintained, and a constant that can
 //    silently drift from the file it describes is a future bug, not a fix. If

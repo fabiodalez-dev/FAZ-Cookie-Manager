@@ -66,5 +66,17 @@ ok(
   !!window.fazcookie._fazSrcsetBlockedCategory(el, 'https://tracker.example/px.png 1x, /local.jpg 2x'),
 );
 
+// rel is a token list: "dns-prefetch" must not be gated by containing "prefetch".
+// The server pass excludes it on purpose (DNS resolution, no resource fetched),
+// so a stricter observer is a divergence, not extra safety.
+const relGated = (rel) => {
+  const rels = ['stylesheet', 'preload', 'modulepreload', 'prefetch', 'prerender'];
+  const toks = String(rel).split(/\s+/);
+  return rels.some((r) => toks.indexOf(r) !== -1);
+};
+ok('rel="dns-prefetch" is NOT gated (substring match said it was)', relGated('dns-prefetch') === false);
+ok('rel="preload" is gated', relGated('preload') === true);
+ok('a multi-token rel still matches its real token', relGated('alternate stylesheet') === true);
+
 console.log(`\n  imagesrcset candidate list: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

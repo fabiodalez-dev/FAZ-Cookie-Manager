@@ -128,13 +128,37 @@ ok(jarLines.length === 5 && jarLines.every((line) => allowedJarShapes.some((shap
 
   // The shape above allows a BARE `$jar_cookies` token and says nothing about
   // who receives it, so the comment's claim ("handed to begin_visitor_check")
-  // was documentation, not an assertion: passing the bucket to any other
-  // function would have satisfied every check here just as well.
-  // [\s\S] rather than [^)]: the call is multi-line and its third argument
-  // contains an array(), so a paren-excluding pattern stops short of the bucket.
+  // was documentation, not an assertion.
+  //
+  // A character-window regex was the first attempt and was barely better: it
+  // only proved the token appears within N characters of the call, which a
+  // comment, a string, or unrelated code further down satisfies just as well.
+  // Extract the ACTUAL invocation by balancing parentheses, then require
+  // $jar_cookies to be its LAST argument — the position the callee's signature
+  // gives it.
+  const callAt = (importBody || '').indexOf('begin_visitor_check(');
+  let invocation = '';
+  if (callAt !== -1) {
+    let depth = 0;
+    for (let i = (importBody || '').indexOf('(', callAt); i < (importBody || '').length; i += 1) {
+      const ch = importBody[i];
+      if (ch === '(') depth += 1;
+      else if (ch === ')') {
+        depth -= 1;
+        if (depth === 0) { invocation = importBody.slice(callAt, i + 1); break; }
+      }
+    }
+  }
+  ok(invocation !== '', 'the begin_visitor_check() call can be located and balanced');
+  const args = invocation
+    .slice(invocation.indexOf('(') + 1, invocation.lastIndexOf(')'))
+    .replace(/\/\/[^\n]*/g, '')          // strip line comments before splitting
+    .split(/,(?![^(]*\))/)                // top-level commas only
+    .map((a) => a.trim())
+    .filter(Boolean);
   ok(
-    /begin_visitor_check\([\s\S]{0,600}?\$jar_cookies/.test(importBody || ''),
-    'and the recipient is begin_visitor_check(), not merely something',
+    args[args.length - 1] === '$jar_cookies',
+    `and $jar_cookies is its final argument (got: ${JSON.stringify(args[args.length - 1])})`,
   );
 
 const jarLoopStart = (importBody || '').indexOf('foreach ( $jar_cookies as $jar_cookie ) {');

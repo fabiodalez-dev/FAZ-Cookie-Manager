@@ -4133,10 +4133,18 @@ function _fazParkResourceElementIfBlocked(el) {
             // innerHTML AFTER load walked straight past a filter that would
             // have caught the identical tag in the original HTML. A fetch is a
             // fetch whenever the element arrives.
+            // rel is a space-separated TOKEN LIST, so match whole tokens. A
+            // substring test made "dns-prefetch" contain "prefetch" and gated it,
+            // which the server pass deliberately does not: dns-prefetch and
+            // preconnect resolve DNS and open sockets without fetching a
+            // resource, so holding them until consent delays the page for no
+            // privacy gain. process_link_tag() splits and array_intersects for
+            // exactly this reason; the observer now agrees with it.
             var gated = false;
             var rels = ["stylesheet", "preload", "modulepreload", "prefetch", "prerender"];
+            var relTokens = rel.split(/\s+/);
             for (var ri = 0; ri < rels.length; ri++) {
-                if (rel.indexOf(rels[ri]) !== -1) { gated = true; break; }
+                if (relTokens.indexOf(rels[ri]) !== -1) { gated = true; break; }
             }
             if (gated && href && !el.getAttribute("data-faz-href") && _fazImgShouldBlock(el, href)) {
                 el.setAttribute("data-faz-href", href);

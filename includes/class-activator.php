@@ -509,12 +509,29 @@ class Activator {
 		// the window below.
 		$claim = get_option( self::OWN_COOKIE_SEED_CLAIM );
 		if ( false !== $claim && ( time() - (int) $claim ) >= 60 ) {
-			// Stale: the holder died mid-seed. Clearing it first means the
-			// takeover goes through add_option() like every other path, so it is
-			// still one winner. update_option() here would have let two requests
-			// that both saw the stale claim proceed together — a lock whose
-			// recovery path is not itself locked.
-			delete_option( self::OWN_COOKIE_SEED_CLAIM );
+			// Stale: the holder died mid-seed. The delete must be CONDITIONAL on
+			// the value we read, or the recovery path reopens the very race it
+			// exists to close: two requests see the same stale claim, the first
+			// deletes and re-adds, and the second's unconditional delete then
+			// removes that BRAND NEW claim — after which both add_option() calls
+			// succeed and both seed. $wpdb->delete() with option_value in the
+			// WHERE is the compare-and-delete this needs; only the request whose
+			// read still matches gets a row, and only it goes on to add_option().
+			global $wpdb;
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-delete on the options table; delete_option() has no conditional form, and a read-then-delete is exactly the race being fixed.
+			$won_takeover = $wpdb->delete(
+				$wpdb->options,
+				array(
+					'option_name'  => self::OWN_COOKIE_SEED_CLAIM,
+					'option_value' => (string) $claim,
+				),
+				array( '%s', '%s' )
+			);
+			if ( ! $won_takeover ) {
+				// Someone else took it over first; they are seeding now.
+				return false;
+			}
+			wp_cache_delete( self::OWN_COOKIE_SEED_CLAIM, 'options' );
 			$claim = false;
 		}
 		if ( false !== $claim || ! add_option( self::OWN_COOKIE_SEED_CLAIM, time(), '', false ) ) {

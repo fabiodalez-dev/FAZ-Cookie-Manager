@@ -116,12 +116,18 @@ test.describe('1.29.0-rc1 acceptance', () => {
       );
       expect(newer.source).not.toBe('bundled');
     } finally {
-      // Independently: a throw in the first must not skip the second.
-      const errs: unknown[] = [];
+      // Every restore runs; none of them throws out of the finally. Throwing
+      // here replaces whatever the test was actually failing on with a cleanup
+      // error — the original diagnosis lost to its own tidying — and it is a
+      // noUnsafeFinally lint error besides. A cleanup failure is loud in the
+      // log and cannot mask the real one.
       for (const restore of [restoreDefs, restoreMeta]) {
-        try { restore(); } catch (e) { errs.push(e); }
+        try {
+          restore();
+        } catch (cleanupError) {
+          console.error('cleanup failed (test result above is authoritative):', cleanupError);
+        }
       }
-      if (errs.length) throw errs[0];
     }
   });
 
@@ -164,12 +170,18 @@ test.describe('1.29.0-rc1 acceptance', () => {
       expect(value!).toMatch(/bundled/i);
       expect(value!, 'the row shows the stale download date as if it were current').not.toBe('2026-07-01 10:00:00');
     } finally {
-      // Independently: a throw in the first must not skip the second.
-      const errs: unknown[] = [];
+      // Every restore runs; none of them throws out of the finally. Throwing
+      // here replaces whatever the test was actually failing on with a cleanup
+      // error — the original diagnosis lost to its own tidying — and it is a
+      // noUnsafeFinally lint error besides. A cleanup failure is loud in the
+      // log and cannot mask the real one.
       for (const restore of [restoreDefs, restoreMeta]) {
-        try { restore(); } catch (e) { errs.push(e); }
+        try {
+          restore();
+        } catch (cleanupError) {
+          console.error('cleanup failed (test result above is authoritative):', cleanupError);
+        }
       }
-      if (errs.length) throw errs[0];
     }
   });
 
