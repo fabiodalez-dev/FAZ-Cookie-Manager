@@ -16,6 +16,7 @@ define( 'FAZ_PLUGIN_BASEPATH', dirname( __DIR__, 2 ) . '/' );
 
 $GLOBALS['OPTS'] = array();
 function get_option( $k, $d = false ) {
+	if ( 'timezone_string' === $k ) { return $GLOBALS['FAZ_TZ_NAME'] ?? ''; }
 	if ( 'gmt_offset' === $k ) { return $GLOBALS['FAZ_TZ_OFFSET'] ?? 0; }
 	return array_key_exists( $k, $GLOBALS['OPTS'] ) ? $GLOBALS['OPTS'][ $k ] : $d;
 }

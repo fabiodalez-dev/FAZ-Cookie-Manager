@@ -508,18 +508,23 @@ class Activator {
 		// a retry, not a permanent skip — it is taken over once it is older than
 		// the window below.
 		$claim = get_option( self::OWN_COOKIE_SEED_CLAIM );
-		if ( false !== $claim ) {
-			if ( ( time() - (int) $claim ) < 60 ) {
-				// Someone else is inside right now. "Seeded or already accounted
-				// for" is exactly what this returns.
-				return true;
-			}
-			// Stale: the holder died. Take it over.
-			update_option( self::OWN_COOKIE_SEED_CLAIM, time(), false );
-		} elseif ( ! add_option( self::OWN_COOKIE_SEED_CLAIM, time(), '', false ) ) {
-			// Lost the race between the read and the insert — the winner is
-			// seeding as we speak.
-			return true;
+		if ( false !== $claim && ( time() - (int) $claim ) >= 60 ) {
+			// Stale: the holder died mid-seed. Clearing it first means the
+			// takeover goes through add_option() like every other path, so it is
+			// still one winner. update_option() here would have let two requests
+			// that both saw the stale claim proceed together — a lock whose
+			// recovery path is not itself locked.
+			delete_option( self::OWN_COOKIE_SEED_CLAIM );
+			$claim = false;
+		}
+		if ( false !== $claim || ! add_option( self::OWN_COOKIE_SEED_CLAIM, time(), '', false ) ) {
+			// Someone else holds it. Return FALSE, not true: this function's
+			// result feeds $all_complete, and a true here lets THIS request write
+			// faz_migrations_version while the holder may still fail — after
+			// which nothing ever retries, because that version gate is what
+			// decides whether the batch runs again. False costs one more pass
+			// and cannot strand the seed.
+			return false;
 		}
 
 		// The scanner classes live in the admin module tree, which is not

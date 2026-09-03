@@ -151,6 +151,39 @@ if ( ! function_exists( 'faz_status_flag' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_site_utc_offset' ) ) {
+	/**
+	 * The site's UTC offset AT A GIVEN INSTANT, not right now.
+	 *
+	 * get_option( 'gmt_offset' ) is the offset in force today. Using it to render
+	 * a schedule in October, read from Rome in September, puts the row an hour
+	 * ahead: the DST change falls between the two moments. The same error can
+	 * invert the definitions comparison when the two dates are less than an hour
+	 * apart.
+	 *
+	 * timezone_string is authoritative when set, and DateTimeZone is plain PHP —
+	 * so this needs no WordPress function newer than the 5.0 floor. wp_timezone()
+	 * would be the idiomatic answer and is 5.3; Plugin Check flags that name
+	 * statically, guards or not. Sites configured with a raw numeric offset have
+	 * no DST to model, so gmt_offset is exact for them by definition.
+	 *
+	 * @param int $timestamp Unix timestamp the offset is wanted for.
+	 * @return int Offset in seconds.
+	 */
+	function faz_site_utc_offset( $timestamp ) {
+		$tz_string = (string) get_option( 'timezone_string' );
+		if ( '' !== $tz_string ) {
+			try {
+				$tz = new DateTimeZone( $tz_string );
+				return (int) $tz->getOffset( new DateTime( '@' . (int) $timestamp ) );
+			} catch ( Exception $e ) {
+				// Unparseable setting — fall through to the numeric offset.
+			}
+		}
+		return (int) round( (float) get_option( 'gmt_offset' ) * HOUR_IN_SECONDS );
+	}
+}
+
 if ( ! function_exists( 'faz_status_schedule' ) ) {
 	/**
 	 * Render a scheduled-event timestamp, saying so when it is overdue.
@@ -183,7 +216,7 @@ if ( ! function_exists( 'faz_status_schedule' ) ) {
 		// WordPress recomputes it from timezone_string through the
 		// pre_option_gmt_offset filter, so it follows DST — verified as 2 for
 		// Europe/Rome in September and 1 in January.
-		$offset = (int) round( (float) get_option( 'gmt_offset' ) * HOUR_IN_SECONDS );
+		$offset = faz_site_utc_offset( (int) $timestamp );
 		$when   = esc_html( date_i18n( 'Y-m-d H:i:s', (int) $timestamp + $offset ) );
 		$late = time() - (int) $timestamp;
 

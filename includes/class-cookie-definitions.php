@@ -458,7 +458,13 @@ class Cookie_Definitions {
 		// recorded, so the current one is the best available; being wrong by an
 		// hour across a DST boundary is bounded, unlike being wrong by the whole
 		// offset on every comparison.
-		$offset        = (int) round( (float) get_option( 'gmt_offset' ) * HOUR_IN_SECONDS );
+		// The offset AT THE MOMENT THE DOWNLOAD WAS STAMPED, not today's. Using
+		// the current one shifts a stamp written on the other side of a DST
+		// change by an hour, which is enough to invert this comparison when the
+		// two dates are close — and close is the only case that needs deciding.
+		$offset        = function_exists( 'faz_site_utc_offset' )
+			? faz_site_utc_offset( $downloaded_ts )
+			: (int) round( (float) get_option( 'gmt_offset' ) * HOUR_IN_SECONDS );
 		$downloaded_ts = $downloaded_ts - $offset;
 
 		return strtotime( self::BUNDLED_DATA_DATE . ' UTC' ) > $downloaded_ts;

@@ -1858,6 +1858,13 @@ ref._fazSetShowMoreLess = _fazSetShowMoreLess;
 // Not part of the public API.
 ref._fazLinkPreferenceTriggers = _fazLinkPreferenceTriggers;
 
+// Exported for tests/unit/js/imagesrcset-candidate-list.test.mjs. The pair is
+// exported together on purpose: the test's point is that they answer
+// DIFFERENTLY on a candidate list, and that using the single-URL one there was
+// the bug.
+ref._fazSrcsetBlockedCategory = _fazSrcsetBlockedCategory;
+ref._fazImgShouldBlock = _fazImgShouldBlock;
+
 function _fazScheduleDeadCookieCleanup() {
     // Staggered passes catch cookies written after load. The 5000 ms tail picks
     // up lazy/deferred trackers that write a non-consented cookie well after the
@@ -4138,13 +4145,22 @@ function _fazParkResourceElementIfBlocked(el) {
             }
             // A preload can carry its URL in imagesrcset instead of href, and
             // then href alone is nothing to neutralise.
+            // _fazSrcsetBlockedCategory, NOT _fazImgShouldBlock: imagesrcset is a
+            // CANDIDATE LIST, and the single-URL check bails on the first token
+            // whenever it looks same-origin. "/local.jpg 1x, https://tracker/px 2x"
+            // starts with "/", so it returned false and the tracker candidate was
+            // never even looked at. The list helper walks every candidate, which
+            // is the same reason the srcset path already uses it.
             var iss = el.getAttribute("imagesrcset");
-            if (gated && iss && !el.getAttribute("data-faz-imagesrcset") && _fazImgShouldBlock(el, iss)) {
-                el.setAttribute("data-faz-imagesrcset", iss);
-                if (!el.getAttribute("data-faz-category")) {
-                    el.setAttribute("data-faz-category", _fazImgCategory(iss));
+            if (gated && iss && !el.getAttribute("data-faz-imagesrcset")) {
+                var issCat = _fazSrcsetBlockedCategory(el, iss);
+                if (issCat) {
+                    el.setAttribute("data-faz-imagesrcset", iss);
+                    if (!el.getAttribute("data-faz-category")) {
+                        el.setAttribute("data-faz-category", issCat);
+                    }
+                    el.removeAttribute("imagesrcset");
                 }
-                el.removeAttribute("imagesrcset");
             }
         }
     } catch (e) { /* leave the element untouched on error */ }
@@ -5463,10 +5479,12 @@ function _fazUnblockServerSide() {
     // blocked preload the moment ANY category was accepted.
     document.querySelectorAll('link[data-faz-imagesrcset]')
         .forEach(function (el) {
-            var cat = el.getAttribute("data-faz-category") || "";
             var parked = el.getAttribute("data-faz-imagesrcset");
-            if (_fazShouldBlockResource(cat, parked, el.getAttribute("data-faz-service") || "")) return;
-            if (!_fazIsAllowedScheme(parked)) return;
+            // Re-evaluate EVERY candidate, exactly as the srcset restore does. A
+            // single stored category cannot speak for a list: accepting the
+            // category of one candidate would hand back the whole set, tracker
+            // entries included.
+            if (_fazSrcsetBlockedCategory(el, parked)) return; // still has a blocked candidate
             el.setAttribute("imagesrcset", parked);
             el.removeAttribute("data-faz-imagesrcset");
         });

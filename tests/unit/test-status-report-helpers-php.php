@@ -4,7 +4,7 @@ if (!defined('HOUR_IN_SECONDS')) define('HOUR_IN_SECONDS', 3600);
 function esc_html__($s,$d=null){return $s;} function esc_html($s){return $s;}
 function date_i18n($f,$t){return date($f,$t);}
 function human_time_diff($a,$b){$d=abs($b-$a); return floor($d/86400).' days';}
-function get_option($k,$d=false){ return $k==='gmt_offset' ? ($GLOBALS['FAZ_TZ_OFFSET'] ?? 0) : $d; }
+function get_option($k,$d=false){ if($k==='timezone_string') return $GLOBALS['FAZ_TZ_NAME'] ?? ''; return $k==='gmt_offset' ? ($GLOBALS['FAZ_TZ_OFFSET'] ?? 0) : $d; }
 function esc_attr($s){return $s;} function esc_url($s){return $s;}
 function wp_kses_allowed_html($c){return array();} function apply_filters($t,$v){return $v;}
 require_once dirname( __DIR__, 2 ) . '/includes/class-formatting.php';
@@ -33,6 +33,19 @@ t(stripos($future,'OVERDUE')===false, 'a future schedule is not flagged');
 t(stripos($late,'OVERDUE')!==false,   'a past schedule IS flagged overdue');
 t(stripos($late,'5 days')!==false,    'and says how late it is');
 t(stripos($none,'not scheduled')!==false, 'an absent schedule says so instead of printing a dash');
+
+// Across a DST boundary the offset must be the one in force AT THE SCHEDULED
+// INSTANT. Read from Rome in September (CEST, +2), an event in December (CET,
+// +1) was shown an hour ahead, because today's offset was applied to a moment
+// that does not share it.
+$GLOBALS['FAZ_TZ_NAME'] = 'Europe/Rome';
+$summer = mktime(12, 0, 0, 9, 15, 2026);   // CEST, +2
+$winter = mktime(12, 0, 0, 12, 15, 2026);  // CET,  +1
+$s_out = faz_status_schedule($summer);
+$w_out = faz_status_schedule($winter);
+t(strpos($s_out, gmdate('Y-m-d H:i:s', $summer + 7200)) !== false, 'a September schedule uses +2 (CEST)');
+t(strpos($w_out, gmdate('Y-m-d H:i:s', $winter + 3600)) !== false, 'a December schedule uses +1 (CET), not September\'s offset');
+$GLOBALS['FAZ_TZ_NAME'] = '';
 
 // The schedule is rendered with the site's offset, not UTC. date_i18n()'s
 // timestamp argument carries the offset already (legacy contract) while

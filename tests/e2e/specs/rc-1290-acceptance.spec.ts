@@ -35,18 +35,34 @@ import { deleteOption, setOption, wpEval } from '../utils/wp-env';
  * different from how it was found.
  */
 async function snapshotOption(name: string): Promise<() => void> {
-  const raw = wpEval(
-    `$v = get_option( ${JSON.stringify(name)}, null ); echo wp_json_encode( array( "exists" => null !== $v, "value" => $v ) );`
-  ).trim();
-  const snap = JSON.parse(raw) as { exists: boolean; value: unknown };
+  // The value never crosses the shell. An earlier version round-tripped it
+  // through a wp eval argument, which works on this machine only because
+  // faz-test has no downloaded definitions: the real option is the size of the
+  // bundled dataset (2,571,036 bytes) against an ARG_MAX of 1,048,576, so on an
+  // install that HAD one the restore would have thrown inside the finally —
+  // leaving the test's fixture installed AND skipping every restore after it.
+  // Copying option-to-option keeps the payload inside PHP, where its size is
+  // nobody's business.
+  const backup = `faz_e2e_bak_${name}`;
+  wpEval(
+    `$v = get_option( ${JSON.stringify(name)}, null );` +
+    ` update_option( ${JSON.stringify(backup)}, array( "exists" => null !== $v, "value" => $v ), false );` +
+    ` echo "ok";`
+  );
   return () => {
-    if (!snap.exists) {
-      deleteOption(name);
-      return;
+    // Each restore is independent: one failing must not skip the others, which
+    // is the other half of what made the old shape dangerous.
+    try {
+      wpEval(
+        `$b = get_option( ${JSON.stringify(backup)}, null );` +
+        ` if ( is_array( $b ) && ! empty( $b["exists"] ) ) { update_option( ${JSON.stringify(name)}, $b["value"], false ); }` +
+        ` else { delete_option( ${JSON.stringify(name)} ); }` +
+        ` delete_option( ${JSON.stringify(backup)} ); echo "ok";`
+      );
+    } catch (err) {
+      console.error(`restore of ${name} failed:`, err);
+      throw err;
     }
-    wpEval(
-      `update_option( ${JSON.stringify(name)}, json_decode( ${JSON.stringify(JSON.stringify(snap.value))}, true ), false );`
-    );
   };
 }
 
@@ -100,8 +116,12 @@ test.describe('1.29.0-rc1 acceptance', () => {
       );
       expect(newer.source).not.toBe('bundled');
     } finally {
-      restoreDefs();
-      restoreMeta();
+      // Independently: a throw in the first must not skip the second.
+      const errs: unknown[] = [];
+      for (const restore of [restoreDefs, restoreMeta]) {
+        try { restore(); } catch (e) { errs.push(e); }
+      }
+      if (errs.length) throw errs[0];
     }
   });
 
@@ -144,8 +164,12 @@ test.describe('1.29.0-rc1 acceptance', () => {
       expect(value!).toMatch(/bundled/i);
       expect(value!, 'the row shows the stale download date as if it were current').not.toBe('2026-07-01 10:00:00');
     } finally {
-      restoreDefs();
-      restoreMeta();
+      // Independently: a throw in the first must not skip the second.
+      const errs: unknown[] = [];
+      for (const restore of [restoreDefs, restoreMeta]) {
+        try { restore(); } catch (e) { errs.push(e); }
+      }
+      if (errs.length) throw errs[0];
     }
   });
 
