@@ -1885,9 +1885,8 @@ msgid "Every active banner uses the opt-out (Do Not Sell) model. For a visitor i
 msgstr "Tutti i banner attivi adottano il modello opt-out (Do Not Sell). Per un visitatore nell’Unione europea, nel Regno Unito, in Brasile o in qualsiasi altra giurisdizione di tipo opt-in, mostrare un avviso di rinuncia mentre i suoi cookie sono bloccati rappresenterebbe male la sua posizione: il banner resta quindi nascosto e agisce solo il blocco. Aggiungi un secondo banner attivo impostato sul modello opt-in per coprire quei visitatori."
 
 #: admin/class-admin.php:2092
-#, fuzzy
 msgid "Open banner settings"
-msgstr "Apri le impostazioni"
+msgstr "Apri le impostazioni del banner"
 
 #. translators: %d: number of new cookies found
 #: admin/class-admin.php:2115
@@ -5157,18 +5156,16 @@ msgid "Each country (and US state with a privacy law) maps to the rule-set enfor
 msgstr "Ogni paese (e ogni stato USA dotato di una legge sulla privacy) corrisponde al set di regole applicato dal banner in produzione. Verifica qui il modello, i valori predefiniti e i controlli obbligatori prima della pubblicazione; il filtro faz_geo_ruleset_runtime è riservato come interruttore di emergenza."
 
 #: admin/views/geo-routing.php:75
-#, fuzzy
 msgid "Override the enforced rule-set for a specific country. Overrides affect both the live banner and this preview. Use the dot-notation delta to selectively change individual fields (e.g. signals.cmv2.ad_storage)."
-msgstr "Sostituisci il set di regole rilevato automaticamente per un paese specifico. Usa la notazione puntata delta per modificare selettivamente singoli campi (es. signals.cmv2.ad_storage)."
+msgstr "Sostituisci il set di regole applicato per un paese specifico. Le sostituzioni valgono sia per il banner in produzione sia per questa anteprima. Usa la notazione puntata delta per modificare selettivamente singoli campi (es. signals.cmv2.ad_storage)."
 
 #: admin/views/geo-routing.php:84
 msgid "Preview routing"
 msgstr "Anteprima routing"
 
 #: admin/views/geo-routing.php:86
-#, fuzzy
 msgid "Simulate a visitor from any country / US state / VPN status and inspect the rule-set the live banner would enforce. Previewing does not alter saved settings or a real visitor's state."
-msgstr "Simula un visitatore da qualsiasi paese / stato USA / stato VPN e visualizza il set di regole che il plugin applicherebbe."
+msgstr "Simula un visitatore da qualsiasi paese / stato USA / stato VPN e ispeziona il set di regole che il banner in produzione applicherebbe. L'anteprima non altera le impostazioni salvate né lo stato di un visitatore reale."
 
 #: admin/views/geo-routing.php:90
 msgid "Country (ISO 3166-1 alpha-2)"
@@ -5192,9 +5189,9 @@ msgstr "ipinfo.io — rilevamento VPN"
 
 #. translators: %s URL to ipinfo.io
 #: admin/views/geo-routing.php:117
-#, fuzzy, php-format
+#, php-format
 msgid "Optionally use <a href=\"%s\" target=\"_blank\" rel=\"noopener noreferrer\">ipinfo.io</a> for VPN/proxy/Tor classification in the live jurisdiction pipeline and the admin preview. When enabled, visitor IP addresses may be sent to ipinfo.io during banner rendering so a detected privacy relay can receive the most-protective fallback. Opt-in is gated by your acknowledgment of the cross-border data-transfer obligations under GDPR / DPF / SCC."
-msgstr "Rileva i visitatori che usano VPN/proxy/Tor tramite <a href=\"%s\" target=\"_blank\" rel=\"noopener noreferrer\">ipinfo.io</a>. Quando viene rilevata una VPN, il plugin utilizza il set di regole più restrittivo (gdpr-strict) indipendentemente dal paese apparente del visitatore. L'opt-in è condizionato dalla tua conferma degli obblighi di trasferimento transfrontaliero dei dati ai sensi del GDPR / DPF / SCC."
+msgstr "Puoi usare facoltativamente <a href=\"%s\" target=\"_blank\" rel=\"noopener noreferrer\">ipinfo.io</a> per la classificazione VPN/proxy/Tor nel flusso di giurisdizione in produzione e nell'anteprima amministrativa. Quando è attivo, gli indirizzi IP dei visitatori possono essere inviati a ipinfo.io durante il rendering del banner, così che un relay per la privacy rilevato riceva il fallback più protettivo. L'opt-in è condizionato dalla tua conferma degli obblighi di trasferimento transfrontaliero dei dati ai sensi del GDPR / DPF / SCC."
 
 #: admin/views/geo-routing.php:129
 msgid "PIPL — Cross-border data transfer attestation"
@@ -5448,14 +5445,12 @@ msgid "Tracks pageviews and banner interactions (accept, reject, settings) for t
 msgstr "Tiene traccia delle visualizzazioni di pagina e delle interazioni con il banner (accetta, rifiuta, impostazioni) per le analisi della dashboard. I dati sono solo aggregati: vengono inviati l'URL e il titolo della pagina senza alcun identificatore del singolo visitatore né cookie, quindi gli eventi non possono essere collegati tra pagine o sessioni. I conteggi sono memorizzati come prima parte nel tuo database. Disabilita per una conformità più rigorosa."
 
 #: admin/views/settings.php:169
-#, fuzzy
 msgid "Pageview and interaction retention (months)"
-msgstr "Conservazione delle visualizzazioni (mesi)"
+msgstr "Conservazione di visualizzazioni e interazioni (mesi)"
 
 #: admin/views/settings.php:171
-#, fuzzy
 msgid "How long aggregate pageview and banner-interaction records are kept before automatic deletion. Enter 0 to disable automatic deletion; choose and document a period appropriate to your analytics purpose. Default is 6 months."
-msgstr "Per quanto tempo vengono conservati i dati aggregati sulle visualizzazioni prima della cancellazione automatica. Inserisci 0 per disattivare la cancellazione automatica; scegli un periodo documentato e adeguato alle tue esigenze di rendicontazione."
+msgstr "Per quanto tempo vengono conservati i dati aggregati su visualizzazioni e interazioni con il banner prima della cancellazione automatica. Inserisci 0 per disattivare la cancellazione automatica; scegli e documenta un periodo adeguato alla tua finalità analitica. Il valore predefinito è 6 mesi."
 
 #: admin/views/settings.php:178
 msgid "Script Blocking"
@@ -5556,9 +5551,8 @@ msgid "Maximum number of pages the cookie scanner will crawl. Higher values find
 msgstr "Numero massimo di pagine che lo scanner cookie analizzerà. Valori più alti trovano più cookie ma richiedono più tempo. 100 pagine sono sufficienti per la maggior parte dei siti."
 
 #: admin/views/settings.php:271
-#, fuzzy
 msgid "Static public IP (optional)"
-msgstr "Etichetta personalizzata (facoltativa)"
+msgstr "IP pubblico statico (facoltativo)"
 
 #: admin/views/settings.php:273
 msgid "Pin every server-side scanner request — sitemap discovery and page fetches — to this site IP while preserving the hostname, HTTPS certificate validation and SNI. Only public IPv4/IPv6 addresses are accepted; requires the WordPress cURL transport. Leave blank to use DNS."
@@ -5821,14 +5815,12 @@ msgid "When enabled, deleting the plugin will permanently remove ALL data: cooki
 msgstr "Se abilitato, l’eliminazione del plugin rimuoverà definitivamente TUTTI i dati: cookie, categorie, log dei consensi, visualizzazioni di pagina, impostazioni del banner e cronologia delle scansioni. Tieni questa opzione DISATTIVATA se prevedi di reinstallare o aggiornare il plugin."
 
 #: admin/views/settings.php:500
-#, fuzzy
 msgid "Privacy Request Retention Period (months)"
-msgstr "Periodo di conservazione (mesi)"
+msgstr "Periodo di conservazione delle richieste privacy (mesi)"
 
 #: admin/views/settings.php:502
-#, fuzzy
 msgid "How long completed privacy (DSAR) request records are kept before automatic deletion. They are the evidence that a data-subject request was answered, so a minimum of 12–24 months is recommended. Default is 24 months."
-msgstr "Per quanto tempo vengono conservate le richieste degli interessati già evase prima della cancellazione automatica. Mantieni un periodo che sostenga i tuoi obblighi di rendicontazione."
+msgstr "Per quanto tempo vengono conservate le richieste privacy (DSAR) già evase prima della cancellazione automatica. Sono la prova che a una richiesta dell'interessato è stata data risposta, quindi si consiglia un minimo di 12-24 mesi. Il valore predefinito è 24 mesi."
 
 #: admin/views/settings.php:510
 msgid "Paid Memberships Pro integration"
@@ -6506,57 +6498,48 @@ msgstr "Plugin attivi"
 
 #: frontend/class-amp-consent-rest.php:498
 #: frontend/class-amp-consent-rest.php:604
-#, fuzzy
 msgid "Invalid AMP consent instance."
-msgstr "Invalida tutti i consensi"
+msgstr "Istanza di consenso AMP non valida."
 
 #: frontend/class-amp-consent-rest.php:582
-#, fuzzy
 msgid "The AMP consent banner is disabled."
-msgstr "Banner cookie disabilitato."
+msgstr "Il banner di consenso AMP è disattivato."
 
 #: frontend/class-amp-consent-rest.php:592
 msgid "Missing AMP consent state."
 msgstr "Stato del consenso AMP mancante."
 
 #: frontend/class-amp-consent-rest.php:609
-#, fuzzy
 msgid "Invalid AMP consent state."
-msgstr "Invalida tutti i consensi"
+msgstr "Stato di consenso AMP non valido."
 
 #: frontend/class-amp-consent-rest.php:613
-#, fuzzy
 msgid "Too many consent updates."
-msgstr "Filtra per stato del consenso."
+msgstr "Troppi aggiornamenti del consenso."
 
 #: frontend/class-amp-consent-rest.php:711
-#, fuzzy
 msgid "Invalid AMP consent scope."
-msgstr "Invalida tutti i consensi"
+msgstr "Ambito di consenso AMP non valido."
 
 #: frontend/class-amp-consent-rest.php:716
 msgid "The AMP consent banner is no longer active."
 msgstr "Il banner di consenso AMP non è più attivo."
 
 #: frontend/class-amp-consent.php:439
-#, fuzzy
 msgid "Save preferences"
-msgstr "Salva le mie preferenze"
+msgstr "Salva le preferenze"
 
 #: frontend/class-amp-consent.php:480
-#, fuzzy
 msgid "Cookie preferences"
-msgstr "Gestisci le preferenze sui cookie"
+msgstr "Preferenze sui cookie"
 
 #: frontend/class-amp-consent.php:481
-#, fuzzy
 msgid "Choose and save your cookie preferences."
-msgstr "Gestisci le preferenze sui cookie"
+msgstr "Scegli e salva le tue preferenze sui cookie."
 
 #: frontend/class-amp-consent.php:544
-#, fuzzy
 msgid "Optional cookie categories"
-msgstr "Categorie cookie"
+msgstr "Categorie di cookie facoltative"
 
 #: frontend/class-amp-consent.php:545
 msgid "Tick the categories you want to allow. Saving applies exactly what is shown here, so anything left unticked stays blocked."
@@ -6564,9 +6547,9 @@ msgstr "Seleziona le categorie che vuoi consentire. Il salvataggio applica esatt
 
 #. translators: %s: cookie category name, for example Analytics.
 #: frontend/class-amp-consent.php:571
-#, fuzzy, php-format
+#, php-format
 msgid "Allow %s cookies"
-msgstr "Tutti i cookie"
+msgstr "Consenti i cookie %s"
 
 #: frontend/class-amp-consent.php:574
 msgid "Allow"
@@ -6656,9 +6639,8 @@ msgid "The requested language is not configured for this site."
 msgstr "La lingua richiesta non è configurata per questo sito."
 
 #: frontend/modules/banner-rest/class-banner-rest.php:156
-#, fuzzy
 msgid "The cookie banner is disabled on this site."
-msgstr "Banner cookie disabilitato."
+msgstr "Il banner dei cookie è disattivato su questo sito."
 
 #: frontend/modules/banner-rest/class-banner-rest.php:189
 msgid "No banner available for the resolved jurisdiction."
