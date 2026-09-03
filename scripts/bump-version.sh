@@ -50,10 +50,10 @@ changelog_words() {
 if [[ "${CHECK_ONLY}" == "false" ]]; then
     cyan "Setting version to ${VERSION}"
     # Four literal sites; anchored so a stray match elsewhere cannot be hit.
-    sed -i '' -E "s/^( \* Version:[[:space:]]*)[0-9]+\.[0-9]+\.[0-9]+$/\1${VERSION}/" "${MAIN_FILE}"
-    sed -i '' -E "s/^( \* Stable tag:[[:space:]]*)[0-9]+\.[0-9]+\.[0-9]+$/\1${VERSION}/" "${MAIN_FILE}"
-    sed -i '' -E "s/(define\( 'FAZ_VERSION', ')[0-9]+\.[0-9]+\.[0-9]+('  *\);)/\1${VERSION}\2/" "${MAIN_FILE}"
-    sed -i '' -E "s/^(Stable tag: )[0-9]+\.[0-9]+\.[0-9]+$/\1${VERSION}/" "${README_TXT}"
+    sed -i '' -E "s/^( \* Version:[[:space:]]*)[0-9]+\.[0-9]+\.[0-9]+(-(rc|beta|alpha)[0-9]+)?$/\1${VERSION}/" "${MAIN_FILE}"
+    sed -i '' -E "s/^( \* Stable tag:[[:space:]]*)[0-9]+\.[0-9]+\.[0-9]+(-(rc|beta|alpha)[0-9]+)?$/\1${VERSION}/" "${MAIN_FILE}"
+    sed -i '' -E "s/(define\( 'FAZ_VERSION', ')[0-9]+\.[0-9]+\.[0-9]+(-(rc|beta|alpha)[0-9]+)?('  *\);)/\1${VERSION}\4/" "${MAIN_FILE}"
+    sed -i '' -E "s/^(Stable tag: )[0-9]+\.[0-9]+\.[0-9]+(-(rc|beta|alpha)[0-9]+)?$/\1${VERSION}/" "${README_TXT}"
 
     # Trim the changelog to the newest KEEP_ENTRIES versions, preserving the
     # "= Older versions =" pointer that sends readers to the full history.
@@ -84,7 +84,7 @@ check() {  # label expected actual
 cyan "Verifying"
 check "faz-cookie-manager.php Version"    "${VERSION}" "$(grep -E '^ \* Version:' "${MAIN_FILE}" | awk '{print $3}')"
 check "faz-cookie-manager.php Stable tag" "${VERSION}" "$(grep -E '^ \* Stable tag:' "${MAIN_FILE}" | awk '{print $4}')"
-check "FAZ_VERSION"                       "${VERSION}" "$(grep -oE "'[0-9]+\.[0-9]+\.[0-9]+'" <<< "$(grep "define( 'FAZ_VERSION'" "${MAIN_FILE}")" | tr -d "'")"
+check "FAZ_VERSION"                       "${VERSION}" "$(grep -oE "'[0-9]+\.[0-9]+\.[0-9]+(-(rc|beta|alpha)[0-9]+)?'" <<< "$(grep "define( 'FAZ_VERSION'" "${MAIN_FILE}")" | tr -d "'")"
 check "readme.txt Stable tag"             "${VERSION}" "$(grep -E '^Stable tag:' "${README_TXT}" | awk '{print $3}')"
 
 # Plugin Check fails when these differ, and nothing else in the toolchain
