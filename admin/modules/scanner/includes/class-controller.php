@@ -547,6 +547,40 @@ class Controller {
 	 * @param string $scan_id Client-generated identifier used to isolate retries/tabs.
 	 * @return string|\WP_Error Opaque session token, or a conflict response.
 	 */
+
+	/**
+	 * Seconds a teardown tombstone survives.
+	 *
+	 * Only has to outlive requests that were already in flight when the crawl
+	 * ended. A minute is generous for that and short enough that a stale marker
+	 * cannot obstruct a genuinely new scan for long — and the new-scan path
+	 * clears it explicitly anyway.
+	 */
+	const BROWSER_SCAN_TOMBSTONE_TTL = 60;
+
+	/**
+	 * Close a session so late writers can tell it was closed.
+	 *
+	 * @param string $token   Session token.
+	 * @param int    $user_id Owning user.
+	 * @return void
+	 */
+	private static function tombstone_browser_scan_session( $token, $user_id ) {
+		$marker = array( 'faz_closed_at' => time() );
+		set_transient( self::browser_scan_transient_key( $token ), $marker, self::BROWSER_SCAN_TOMBSTONE_TTL );
+		set_transient( self::browser_scan_active_transient_key( (int) $user_id ), $marker, self::BROWSER_SCAN_TOMBSTONE_TTL );
+	}
+
+	/**
+	 * Whether a transient payload is a teardown tombstone rather than a session.
+	 *
+	 * @param mixed $value Transient payload.
+	 * @return bool
+	 */
+	private static function is_browser_scan_tombstone( $value ) {
+		return is_array( $value ) && ! empty( $value['faz_closed_at'] );
+	}
+
 	public function start_browser_scan_session( $scan_id = '' ) {
 		$user_id = get_current_user_id();
 		if ( $user_id <= 0 ) {
@@ -706,10 +740,35 @@ class Controller {
 		// crawl some tab is still driving from one nobody is. Written only after
 		// every ownership check above has passed.
 		$session['touched_at'] = time();
+
+		// Re-read immediately before writing. Everything above — ownership,
+		// token shape, max age — was decided from a copy that may be seconds
+		// old on a slow request, and a teardown can have landed in that gap.
+		// This is the last moment at which the write can still be abandoned,
+		// and abandoning it is what keeps a teardown final (#245).
+		//
+		// It narrows the window from "the whole validation block" to the gap
+		// between this read and the set_transient below; it does not close it.
+		// WordPress transients have no compare-and-swap, and the two storage
+		// backends they can sit on (options table, persistent object cache)
+		// have no primitive in common that would provide one. A residual
+		// microsecond window is worth stating rather than papering over: its
+		// cost is one stale lock that clears itself within the idle TTL, and
+		// #244's session panel lets an administrator end it immediately.
+		if ( self::is_browser_scan_tombstone( get_transient( $session_key ) ) ) {
+			return false;
+		}
 		set_transient( $session_key, $session, self::BROWSER_SCAN_TTL );
 
 		$active_key = self::browser_scan_active_transient_key( $user_id );
 		$active     = get_transient( $active_key );
+		if ( self::is_browser_scan_tombstone( $active ) ) {
+			// The per-user slot was closed while this request was in flight.
+			// Undo the session write above rather than leave half a resurrected
+			// session behind.
+			self::tombstone_browser_scan_session( $token, $user_id );
+			return false;
+		}
 		if ( ! is_array( $active ) ) {
 			$active = array( 'token' => $token, 'scan_id' => $scan_id, 'created_at' => $created_at );
 		}
@@ -858,8 +917,20 @@ class Controller {
 				delete_user_meta( $user_id, self::BROWSER_SCAN_META, $observation );
 			}
 		}
-		delete_transient( self::browser_scan_transient_key( $token ) );
-		delete_transient( self::browser_scan_active_transient_key( $user_id ) );
+		// A TOMBSTONE, not a delete. The touch path reads the session, validates
+		// it, and only then writes — so a request already in flight when this ran
+		// used to write the pre-teardown array back afterwards and resurrect a
+		// crawl nobody was driving. The next scan then met
+		// faz_browser_scan_in_progress for a session no tab owned, and the
+		// administrator waited out the idle TTL for a crawl that had finished
+		// (#245).
+		//
+		// Deleting cannot express "this was closed" — absence and "not yet
+		// created" are the same observation, so a late writer has nothing to
+		// detect. A closed marker can be detected, and it is not new storage:
+		// it lives in the transient the session already used, and expires on its
+		// own shortly after.
+		self::tombstone_browser_scan_session( $token, $user_id );
 		if ( ! headers_sent() ) {
 			setcookie(
 				self::BROWSER_SCAN_COOKIE,
