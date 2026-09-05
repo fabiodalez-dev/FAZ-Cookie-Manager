@@ -2,6 +2,7 @@ import { request } from '@playwright/test';
 import { assertPrerequisites } from './utils/preflight';
 import { getWpLoginPath } from './utils/wp-auth';
 import { wpEval } from './utils/wp-env';
+import { resetBaseline } from './utils/seed-defaults';
 
 async function globalSetup(): Promise<void> {
   const baseURL = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
@@ -61,6 +62,9 @@ async function globalSetup(): Promise<void> {
   // or stale environment fails here, named, instead of surfacing later as a
   // handful of assertions that look like product regressions.
   await assertPrerequisites(baseURL);
+
+  // Validate the target and deployed build before mutating the baseline.
+  resetBaseline();
 
   // Reset the active banner to a known clean shape and remove any secondary
   // banners left over by previous runs. Without this reset, specs that mutate

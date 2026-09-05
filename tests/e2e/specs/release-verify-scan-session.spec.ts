@@ -28,13 +28,14 @@
  *
  * State discipline: every session a test opens is released in `finally`
  * through the real scans/abort route (status asserted), and the ephemeral
- * scan-session transients are verified gone so no per-user "scan already in
+ * scan sessions are verified inactive so no per-user "scan already in
  * progress" lock (TTL up to 15 minutes) leaks into later specs.
  */
 import { randomBytes } from 'node:crypto';
 import { expect, test } from '../fixtures/wp-fixture';
 import { fazApiPost, openCookiesPage } from '../utils/faz-api';
 import { wpEval } from '../utils/wp-env';
+import { countActiveBrowserScanSessions } from '../utils/scan-session-state';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
@@ -64,17 +65,6 @@ function clearBrowserScanSessionState(): void {
   `);
 }
 
-/** How many browser-scan session/active transient rows currently exist. */
-function countBrowserScanSessionRows(): number {
-  const raw = wpEval(`
-    global $wpdb;
-    echo (int) $wpdb->get_var(
-      "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE '_transient_faz_scan_session_%'"
-      . " OR option_name LIKE '_transient_faz_scan_active_%'"
-    );
-  `);
-  return Number.parseInt(raw.trim(), 10);
-}
 
 /**
  * Read the httpOnly scan marker issued by scans/discover. Playwright's
@@ -114,13 +104,13 @@ async function openCaptureSession(page: import('@playwright/test').Page, nonce: 
 /**
  * Release a session through the real scans/abort route and assert the
  * release actually happened — both at the transport (200) and in the DB
- * (no session/active transients left behind for later specs to trip on).
+ * (no live session left behind for later specs to trip on).
  */
 async function abortCaptureSession(page: import('@playwright/test').Page, nonce: string, scanId: string): Promise<void> {
   const abort = await fazApiPost<{ aborted: boolean }>(page, nonce, 'scans/abort', { scan_id: scanId });
   expect(abort.status, 'session cleanup via scans/abort must succeed').toBe(200);
   expect(abort.data.aborted, 'scans/abort must report the session as released').toBe(true);
-  expect(countBrowserScanSessionRows(), 'no scan-session transients may leak past this test').toBe(0);
+  expect(countActiveBrowserScanSessions(), 'no live scan session may leak past this test').toBe(0);
   await page.context().clearCookies();
 }
 
@@ -353,7 +343,7 @@ test.describe('Release verify — browser-scan session TTL and import boundary',
       expect(importPayloads[0].scan_id).toMatch(/^[a-f0-9]{32}$/);
       expect(importPayloads[1].scan_id).toBe(importPayloads[0].scan_id);
       expect(importPayloads[1]).toEqual(importPayloads[0]);
-      expect(countBrowserScanSessionRows(), 'successful retried import must close the session').toBe(0);
+      expect(countActiveBrowserScanSessions(), 'successful retried import must close the session').toBe(0);
     } finally {
       await page.unroute('**/*');
       clearBrowserScanSessionState();

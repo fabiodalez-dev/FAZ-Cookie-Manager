@@ -309,7 +309,7 @@ class Controller {
 		add_action(
 			'shutdown',
 			static function () use ( $token ) {
-				$session = get_transient( self::browser_scan_transient_key( $token ) );
+				$session = self::browser_scan_session_record( $token );
 				$user_id = get_current_user_id();
 				if ( ! is_array( $session ) || empty( $session['user_id'] ) || $user_id !== absint( $session['user_id'] ) ) {
 					return;
@@ -535,10 +535,71 @@ class Controller {
 		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) ) {
 			return false;
 		}
-		$session = get_transient( self::browser_scan_transient_key( $token ) );
+		$session = self::browser_scan_session_record( $token );
 		return is_array( $session )
 			&& ! empty( $session['user_id'] )
 			&& get_current_user_id() === absint( $session['user_id'] );
+	}
+
+	/** Short-lived replacement payload for a closed session. */
+	const BROWSER_SCAN_TOMBSTONE_TTL = 60;
+
+	/**
+	 * Read concurrency-sensitive transients without a request-local snapshot.
+	 * Transients backed by options otherwise keep both values and negative
+	 * lookups in the options cache for the remainder of an in-flight request.
+	 */
+	private static function read_browser_scan_transient( $key ) {
+		if ( function_exists( 'wp_using_ext_object_cache' ) && wp_using_ext_object_cache() ) {
+			return wp_cache_get( $key, 'transient', true );
+		}
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( '_transient_' . $key, 'options' );
+			wp_cache_delete( '_transient_timeout_' . $key, 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+		}
+		return get_transient( $key );
+	}
+
+	/** A close record is token-specific and never overwritten by a renewal. */
+	private static function browser_scan_session_record( $token ) {
+		$key = self::browser_scan_transient_key( $token );
+		$session = self::read_browser_scan_transient( $key );
+		if ( ! is_array( $session ) || empty( $session['user_id'] )
+			|| self::read_browser_scan_transient( $key . '_closed' )
+			|| ( ! empty( $session['created_at'] ) && time() - absint( $session['created_at'] ) > self::BROWSER_SCAN_MAX_AGE ) ) {
+			return false;
+		}
+		return $session;
+	}
+
+	/** The per-user slot is an index; only its live session can hold the scan. */
+	private static function browser_scan_active_record( $user_id ) {
+		$active = self::read_browser_scan_transient( self::browser_scan_active_transient_key( $user_id ) );
+		if ( ! is_array( $active ) || empty( $active['token'] ) || empty( $active['scan_id'] ) ) {
+			return false;
+		}
+		$session = self::browser_scan_session_record( $active['token'] );
+		if ( ! $session || (int) $user_id !== absint( $session['user_id'] )
+			|| ! isset( $session['scan_id'] ) || ! hash_equals( (string) $active['scan_id'], (string) $session['scan_id'] ) ) {
+			return false;
+		}
+		$state = self::read_browser_scan_transient( self::browser_scan_transient_key( $active['token'] ) . '_held' );
+		if ( 'held' === $state || 'live' === $state ) {
+			$active['state'] = $state;
+		}
+		return $active;
+	}
+
+	/** Close only this token; never clear a successor's per-user index. */
+	private static function tombstone_browser_scan_session( $token, $user_id ) {
+		$key = self::browser_scan_transient_key( $token );
+		$marker = array( 'faz_closed_at' => time() );
+		// This separate record survives every possible renewal of the old
+		// payload, including a teardown between the last read and the write.
+		// Once it expires, the original created_at already exceeds MAX_AGE.
+		set_transient( $key . '_closed', $marker, self::BROWSER_SCAN_MAX_AGE + self::BROWSER_SCAN_TTL );
+		set_transient( $key, $marker, self::BROWSER_SCAN_TOMBSTONE_TTL );
 	}
 
 	/**
@@ -558,7 +619,7 @@ class Controller {
 		}
 
 		$active_key = self::browser_scan_active_transient_key( $user_id );
-		$active     = get_transient( $active_key );
+		$active     = self::browser_scan_active_record( $user_id );
 		if ( is_array( $active ) && ! empty( $active['token'] ) && ! empty( $active['scan_id'] ) ) {
 			if ( ! hash_equals( (string) $active['scan_id'], $scan_id ) ) {
 				// A HELD session is evidence kept for a retry after an import
@@ -583,11 +644,6 @@ class Controller {
 			$token = sanitize_key( (string) $active['token'] );
 		} else {
 			$token = str_replace( '-', '', wp_generate_uuid4() );
-			set_transient(
-				$active_key,
-				array( 'token' => $token, 'scan_id' => $scan_id, 'created_at' => time() ),
-				self::BROWSER_SCAN_TTL
-			);
 		}
 
 		// created_at is the ABSOLUTE-age ceiling: touch_browser_scan_session()
@@ -598,7 +654,10 @@ class Controller {
 		// the same scan_id renewed the guarantee — and could revive a session
 		// that had already idled out. Carry the original forward; only a
 		// genuinely new session starts its clock now.
-		$existing_session = get_transient( self::browser_scan_transient_key( $token ) );
+		$existing_session = self::browser_scan_session_record( $token );
+		if ( $active && ! $existing_session ) {
+			return new \WP_Error( 'faz_browser_scan_expired', __( 'The browser scan session has expired.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+		}
 		$created_at       = ( is_array( $existing_session ) && ! empty( $existing_session['created_at'] ) )
 			? absint( $existing_session['created_at'] )
 			: time();
@@ -608,6 +667,18 @@ class Controller {
 			array( 'user_id' => $user_id, 'scan_id' => $scan_id, 'created_at' => $created_at, 'touched_at' => time() ),
 			self::BROWSER_SCAN_TTL
 		);
+
+		if ( ! self::browser_scan_session_record( $token ) ) {
+			return new \WP_Error( 'faz_browser_scan_expired', __( 'The browser scan session has expired.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+		}
+		if ( ! $active ) {
+			set_transient(
+				$active_key,
+				array( 'token' => $token, 'scan_id' => $scan_id, 'created_at' => $created_at ),
+				self::BROWSER_SCAN_MAX_AGE + self::BROWSER_SCAN_TTL
+			);
+		}
+		set_transient( self::browser_scan_transient_key( $token ) . '_held', 'live', self::BROWSER_SCAN_MAX_AGE + self::BROWSER_SCAN_TTL );
 
 		// Remove abandoned observations from expired scans without touching a
 		// still-live parallel session owned by the same administrator.
@@ -623,11 +694,11 @@ class Controller {
 	}
 
 	/**
-	 * (Re-)issue the httpOnly scan marker with a fresh window.
+	 * Issue the marker at start, bounded by the absolute capture lifetime.
 	 *
 	 * Kept in one place so the attributes — httpOnly, Secure on TLS,
 	 * SameSite=Strict, path=/ — stay byte-for-byte identical everywhere the
-	 * cookie is written. A renewal that quietly widened the scope or dropped
+	 * cookie is written. A change that quietly widened the scope or dropped
 	 * SameSite would be a silent security regression.
 	 *
 	 * @param string $token Session token to write.
@@ -641,7 +712,7 @@ class Controller {
 			self::BROWSER_SCAN_COOKIE,
 			$token,
 			array(
-				'expires'  => time() + self::BROWSER_SCAN_TTL,
+				'expires'  => time() + self::BROWSER_SCAN_MAX_AGE,
 				'path'     => '/',
 				'secure'   => is_ssl(),
 				'httponly' => true,
@@ -684,7 +755,7 @@ class Controller {
 		}
 
 		$session_key = self::browser_scan_transient_key( $token );
-		$session     = get_transient( $session_key );
+		$session     = self::browser_scan_session_record( $token );
 		$user_id     = get_current_user_id();
 		if ( ! is_array( $session )
 			|| empty( $session['user_id'] )
@@ -706,16 +777,18 @@ class Controller {
 		// crawl some tab is still driving from one nobody is. Written only after
 		// every ownership check above has passed.
 		$session['touched_at'] = time();
-		set_transient( $session_key, $session, self::BROWSER_SCAN_TTL );
 
-		$active_key = self::browser_scan_active_transient_key( $user_id );
-		$active     = get_transient( $active_key );
-		if ( ! is_array( $active ) ) {
-			$active = array( 'token' => $token, 'scan_id' => $scan_id, 'created_at' => $created_at );
+		$active = self::browser_scan_active_record( $user_id );
+		if ( ! $active || ! hash_equals( (string) $active['token'], $token )
+			|| ! self::browser_scan_session_record( $token ) ) {
+			return false;
 		}
-		set_transient( $active_key, $active, self::BROWSER_SCAN_TTL );
-
-		$this->issue_browser_scan_cookie( $token );
+		set_transient( $session_key, $session, self::BROWSER_SCAN_TTL );
+		// A concurrent close can follow the last read. Its independent marker
+		// still wins, and this heartbeat never writes a successor's index.
+		if ( ! self::browser_scan_session_record( $token ) ) {
+			return false;
+		}
 
 		return true;
 	}
@@ -737,7 +810,7 @@ class Controller {
 			return 'match';
 		}
 		$scan_id = sanitize_key( (string) $scan_id );
-		$active  = get_transient( self::browser_scan_active_transient_key( get_current_user_id() ) );
+		$active  = self::browser_scan_active_record( get_current_user_id() );
 		if ( is_array( $active ) && ! empty( $active['scan_id'] ) && ! hash_equals( (string) $active['scan_id'], $scan_id ) ) {
 			return 'conflict';
 		}
@@ -858,21 +931,11 @@ class Controller {
 				delete_user_meta( $user_id, self::BROWSER_SCAN_META, $observation );
 			}
 		}
-		delete_transient( self::browser_scan_transient_key( $token ) );
-		delete_transient( self::browser_scan_active_transient_key( $user_id ) );
-		if ( ! headers_sent() ) {
-			setcookie(
-				self::BROWSER_SCAN_COOKIE,
-				'',
-				array(
-					'expires'  => time() - YEAR_IN_SECONDS,
-					'path'     => '/',
-					'secure'   => is_ssl(),
-					'httponly' => true,
-					'samesite' => 'Strict',
-				)
-			);
-		}
+		// Revoke the token before replacing its renewable payload.
+		self::tombstone_browser_scan_session( $token, $user_id );
+		// Leave the cookie to expire: a delayed teardown response must not
+		// clear the marker a newer discover response has already installed.
+		// The revoked token cannot authorize capture or import.
 
 		return true;
 	}
@@ -889,7 +952,7 @@ class Controller {
 		}
 		$token   = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
 		$scan_id = sanitize_key( (string) $scan_id );
-		$session = get_transient( self::browser_scan_transient_key( $token ) );
+		$session = self::browser_scan_session_record( $token );
 		return preg_match( '/^[a-f0-9]{32}$/', $token )
 			&& preg_match( '/^[a-f0-9]{32}$/', $scan_id )
 			&& is_array( $session )
@@ -929,7 +992,9 @@ class Controller {
 		if ( $user_id <= 0 || ! preg_match( '/^[a-f0-9]{32}$/', $scan_id ) ) {
 			return false;
 		}
-		$active = get_transient( self::browser_scan_active_transient_key( $user_id ) );
+		// Cleanup may release an expired token too. The raw index belongs to
+		// this user; discard revokes only its token and never edits the index.
+		$active = self::read_browser_scan_transient( self::browser_scan_active_transient_key( $user_id ) );
 		if ( ! is_array( $active )
 			|| empty( $active['token'] )
 			|| empty( $active['scan_id'] )
@@ -963,12 +1028,12 @@ class Controller {
 		if ( $user_id <= 0 ) {
 			return $inactive;
 		}
-		$active = get_transient( self::browser_scan_active_transient_key( $user_id ) );
+		$active = self::browser_scan_active_record( $user_id );
 		if ( ! is_array( $active ) || empty( $active['token'] ) || empty( $active['scan_id'] ) ) {
 			return $inactive;
 		}
 		$token   = sanitize_key( (string) $active['token'] );
-		$session = get_transient( self::browser_scan_transient_key( $token ) );
+		$session = self::browser_scan_session_record( $token );
 		if ( ! is_array( $session ) || empty( $session['user_id'] ) || $user_id !== absint( $session['user_id'] ) ) {
 			// An active record whose session transient is gone blocks nothing
 			// (start_browser_scan_session would mint a fresh session), so
@@ -1094,24 +1159,18 @@ class Controller {
 			return false;
 		}
 
-		$user_id    = get_current_user_id();
-		$active_key = self::browser_scan_active_transient_key( $user_id );
-		$active     = get_transient( $active_key );
-		if ( ! is_array( $active ) ) {
+		$user_id = get_current_user_id();
+		$token = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
+		$active = self::browser_scan_active_record( $user_id );
+		if ( ! $active || ! hash_equals( (string) $active['token'], $token ) ) {
 			return false;
 		}
-
-		$active['state']   = 'held';
-		$active['held_at'] = time();
-		set_transient( $active_key, $active, self::BROWSER_SCAN_TTL );
-
-		// Slide the session transient too. The client stops its heartbeat once
-		// the run has failed, so without this the retry window is whatever was
-		// left of the last touch rather than a full one.
-		$token = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
-		$session = get_transient( self::browser_scan_transient_key( $token ) );
-		if ( is_array( $session ) ) {
-			set_transient( self::browser_scan_transient_key( $token ), $session, self::BROWSER_SCAN_TTL );
+		$key = self::browser_scan_transient_key( $token );
+		// A late hold must neither mark a successor held nor lose its state to
+		// an in-flight heartbeat's older copy of the session.
+		set_transient( $key . '_held', 'held', self::BROWSER_SCAN_MAX_AGE + self::BROWSER_SCAN_TTL );
+		if ( ! $this->touch_browser_scan_session( $token, $scan_id ) ) {
+			return false;
 		}
 
 		return true;
@@ -1142,9 +1201,8 @@ class Controller {
 					delete_user_meta( $user_id, self::BROWSER_SCAN_META, $observation );
 				}
 			}
-			delete_transient( self::browser_scan_transient_key( $token ) );
+			self::tombstone_browser_scan_session( $token, $user_id );
 		}
-		delete_transient( self::browser_scan_active_transient_key( $user_id ) );
 	}
 
 	/**
