@@ -2,8 +2,17 @@ import { request } from '@playwright/test';
 import { assertPrerequisites } from './utils/preflight';
 import { getWpLoginPath } from './utils/wp-auth';
 import { wpEval } from './utils/wp-env';
+import { resetBaseline } from './utils/seed-defaults';
 
 async function globalSetup(): Promise<void> {
+  // Put the site on a known baseline before anything runs. resetBaseline() has
+  // existed in utils/seed-defaults.ts and was called by NOBODY — a reset written
+  // and never wired in, so every run inherited whatever the previous one left
+  // behind. That is how a release-verification run produced twelve reds across
+  // specs that assert banner copy: the site was still on the Italian default a
+  // prior, interrupted run had set.
+  resetBaseline();
+
   const baseURL = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
   const adminUser = process.env.WP_ADMIN_USER ?? 'admin';
   const adminPass = process.env.WP_ADMIN_PASS ?? 'admin';

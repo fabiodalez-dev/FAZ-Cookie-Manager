@@ -48,20 +48,52 @@ const TECHNICAL_COOKIE_RE = [
 
 const isTechnicalCookie = (name: string): boolean => TECHNICAL_COOKIE_RE.some((re) => re.test(name));
 
-async function gotoResilient(page: Page, url: string): Promise<void> {
+/**
+ * How long the whole login is allowed to take, and the slice each attempt gets.
+ *
+ * These used to be independent of the test budget, and that made the retry loops
+ * decorative: one page.goto was allowed 60s plus a 60s load wait — 120s — inside
+ * a 90s test. The outer budget killed the run before a second attempt could
+ * start, so a slow login never retried; it just died, and reported
+ * "Test timeout exceeded" pointing at whatever line happened to be awaiting.
+ *
+ * Measured cost of that: a release-verification run produced 14 red tests across
+ * six specs that have nothing to do with authentication. The first failure was a
+ * login (`#wpadminbar` never appeared); everything after it was a spec operating
+ * on a page it believed was wp-admin — saves that silently did nothing, reads
+ * that returned pre-existing values. Hours to attribute, and nothing wrong with
+ * the product.
+ *
+ * A shared deadline fixes the shape rather than the number: several fast
+ * attempts now fit where one slow attempt used to consume everything, and when
+ * the budget really is exhausted the error names the login instead of a timeout
+ * on an unrelated locator.
+ */
+const LOGIN_TOTAL_BUDGET_MS = 60_000;
+const LOGIN_ATTEMPT_MS = 12_000;
+
+/** Milliseconds left before `deadline`, floored at 1 so callers never pass 0 (= no timeout). */
+function remaining(deadline: number, cap = LOGIN_ATTEMPT_MS): number {
+  return Math.max(1, Math.min(cap, deadline - Date.now()));
+}
+
+async function gotoResilient(page: Page, url: string, deadline: number): Promise<void> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (Date.now() >= deadline) break;
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-      await page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => {
-        // Some WordPress/plugin combinations keep requests open longer than needed.
-      });
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: remaining(deadline) });
+      await page
+        .waitForLoadState('domcontentloaded', { timeout: remaining(deadline, 5_000) })
+        .catch(() => {
+          // Some WordPress/plugin combinations keep requests open longer than needed.
+        });
       return;
     } catch (error) {
       lastError = error;
     }
   }
-  throw lastError;
+  throw lastError ?? new Error(`gotoResilient: budget exhausted before reaching ${url}`);
 }
 
 /**
@@ -71,20 +103,20 @@ async function gotoResilient(page: Page, url: string): Promise<void> {
  * banner_default which the plugin treats as an auth-impacting change).
  * The caller wraps this in a retry that clears cookies between attempts.
  */
-async function attemptAdminLogin(page: Page, wpBaseURL: string, adminUser: string, adminPass: string): Promise<void> {
+async function attemptAdminLogin(page: Page, wpBaseURL: string, adminUser: string, adminPass: string, deadline: number): Promise<void> {
   const loginPath = getWpLoginPath();
-  await gotoResilient(page, `${wpBaseURL}${loginPath}`);
+  await gotoResilient(page, `${wpBaseURL}${loginPath}`, deadline);
 
   // Lucky path: existing session cookie still valid and WP redirected
   // straight to /wp-admin/. NB: a `reauth=1` URL landing on wp-login.php
   // is NOT this branch — WP keeps the URL on /wp-login.php while the
   // partial cookie is rejected, so we fall through to fill below.
   if (page.url().includes('/wp-admin/') && !page.url().includes('reauth=')) {
-    await expect(page.locator('#wpadminbar')).toBeVisible();
+    await expect(page.locator('#wpadminbar')).toBeVisible({ timeout: remaining(deadline) });
     return;
   }
 
-  await expect(page.locator('#user_login')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#user_login')).toBeVisible({ timeout: remaining(deadline) });
   // The login document may still be settling after a slow reauth redirect.
   // Locator.fill() then repeats actionability checks until the whole test
   // times out even though the fields are already visible. Set the native
@@ -107,14 +139,14 @@ async function attemptAdminLogin(page: Page, wpBaseURL: string, adminUser: strin
   // deliberately 60 seconds. Trigger the native click without Playwright's
   // implicit navigation wait and let the explicit waiter own that budget.
   await Promise.all([
-    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => {
+    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: remaining(deadline) }).catch(() => {
       // Some plugin combinations keep the request open after auth succeeds.
     }),
     page.locator('#wp-submit').evaluate((button: HTMLInputElement) => button.click()),
   ]);
 
   if (page.url().includes('/wp-admin/')) {
-    await expect(page.locator('#wpadminbar')).toBeVisible();
+    await expect(page.locator('#wpadminbar')).toBeVisible({ timeout: remaining(deadline) });
     await expect(page.locator('#loginform')).toHaveCount(0);
     return;
   }
@@ -122,9 +154,9 @@ async function attemptAdminLogin(page: Page, wpBaseURL: string, adminUser: strin
   const cookies = await page.context().cookies(wpBaseURL);
   const hasLoggedCookie = cookies.some((cookie) => cookie.name.startsWith('wordpress_logged_in_'));
   if (hasLoggedCookie) {
-    await gotoResilient(page, `${wpBaseURL}/wp-admin/`);
-    await expect(page).toHaveURL(/\/wp-admin\//, { timeout: 20_000 });
-    await expect(page.locator('#wpadminbar')).toBeVisible();
+    await gotoResilient(page, `${wpBaseURL}/wp-admin/`, deadline);
+    await expect(page).toHaveURL(/\/wp-admin\//, { timeout: remaining(deadline) });
+    await expect(page.locator('#wpadminbar')).toBeVisible({ timeout: remaining(deadline) });
     await expect(page.locator('#loginform')).toHaveCount(0);
     return;
   }
@@ -144,24 +176,36 @@ export async function completeAdminLogin(page: Page, wpBaseURL: string, adminUse
   // try is a true fresh login rather than another reauth roundtrip
   // against the same stale cookie. Pattern matches Playwright's own
   // recommended retry-on-flaky-auth approach.
+  // One budget for the whole login, shared by every attempt below.
+  const deadline = Date.now() + LOGIN_TOTAL_BUDGET_MS;
   let lastError: unknown;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  let attempts = 0;
+  // Bounded by the DEADLINE, not by a fixed count. Two was the old cap, and with
+  // 12s attempts inside a 60s budget it would leave most of the budget unused —
+  // the opposite of the original bug but the same mistake: a number picked
+  // without reference to the one that governs it. MAX_LOGIN_ATTEMPTS is only a
+  // runaway guard.
+  const MAX_LOGIN_ATTEMPTS = 4;
+  while (attempts < MAX_LOGIN_ATTEMPTS && Date.now() < deadline) {
+    attempts += 1;
     try {
-      await attemptAdminLogin(page, wpBaseURL, adminUser, adminPass);
+      await attemptAdminLogin(page, wpBaseURL, adminUser, adminPass, deadline);
       return;
     } catch (error) {
       lastError = error;
-      if (attempt < 2) {
-        try {
-          await page.context().clearCookies();
-        } catch {
-          // Non-fatal — the retry will still reach wp-login.php and WP
-          // will issue fresh cookies on a successful POST.
-        }
+      try {
+        await page.context().clearCookies();
+      } catch {
+        // Non-fatal — the retry will still reach wp-login.php and WP
+        // will issue fresh cookies on a successful POST.
       }
     }
   }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  // Name the login. The whole point of a budget is that an exhausted one reports
+  // itself, instead of surfacing later as a timeout on whatever locator the spec
+  // happened to be awaiting when the page was never wp-admin.
+  const detail = lastError instanceof Error ? lastError.message : String(lastError ?? 'no attempt completed');
+  throw new Error(`admin login failed after ${attempts} attempt(s) within ${LOGIN_TOTAL_BUDGET_MS}ms: ${detail}`);
 }
 
 export const test = base.extend<WPFixtures, WPWorkerFixtures>({
