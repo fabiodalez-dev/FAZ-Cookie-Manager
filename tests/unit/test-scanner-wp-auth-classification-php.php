@@ -39,8 +39,7 @@ t( $cat( 'wordpress_logged_in_9f2a41' ) === $cat( 'wordpress_sec_9f2a41' ),
 	'and agrees with wordpress_sec_*, the other half of the same auth pair' );
 
 // The regression guard. wordpress_test_cookie IS set for anonymous visitors on
-// wp-login.php, so it must stay declarable; sweeping the whole wordpress_*
-// family into the internal bucket would hide a cookie a visitor really gets.
+// wp-login.php, so its catalogue classification stays necessary; the display guard is a separate policy tested below.
 t( 'necessary' === $cat( 'wordpress_test_cookie' ),
 	'wordpress_test_cookie stays necessary — anonymous visitors do receive it' );
 
@@ -51,11 +50,13 @@ t( 'wordpress-internal' === $cat( 'wordpress_deadbeef' ),
 // The invariant that makes this a no-op for visitors: the frontend name guard
 // already suppressed this cookie, and still does. Asserted against the real
 // list rather than a copy of it, so the two cannot drift apart again silently.
-$frontend = file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' );
-$guard    = strstr( $frontend, 'public static function is_wp_internal_cookie' );
-$guard    = false === $guard ? '' : substr( $guard, 0, 2000 );
-t( '' !== $guard && false !== strpos( $guard, "'wordpress_logged_in_'" ),
-	'Frontend::is_wp_internal_cookie() still lists the prefix, so nothing visible changes' );
+require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
+t( \FazCookie\Frontend\Frontend::is_wp_internal_cookie( 'wordpress_logged_in_9f2a41' ),
+	'the real frontend guard suppresses the authentication cookie' );
+t( ! \FazCookie\Frontend\Frontend::is_wp_internal_cookie( '_ga' ),
+	'the guard does not suppress an unrelated analytics cookie' );
+t( \FazCookie\Frontend\Frontend::is_wp_internal_cookie( 'wordpress_test_cookie' ),
+	'test-cookie classification stays necessary while its existing display guard stays unchanged' );
 
 echo "\nscanner WP auth classification: $ok passed, $ko failed\n";
 exit( $ko > 0 ? 1 : 0 );

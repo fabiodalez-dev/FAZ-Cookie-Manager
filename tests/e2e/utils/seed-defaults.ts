@@ -67,6 +67,17 @@ export function resetBaseline(): void {
       $faz_settings['geolocation'] = array();
     }
     $faz_settings['geolocation']['geo_targeting'] = false;
+
+    // Restore English as default without removing locales required by other specs.
+    if ( ! isset( $faz_settings['languages'] ) || ! is_array( $faz_settings['languages'] ) ) {
+      $faz_settings['languages'] = array();
+    }
+    $selected = $faz_settings['languages']['selected'] ?? array();
+    if ( ! is_array( $selected ) ) { $selected = array(); }
+    if ( ! in_array( 'en', $selected, true ) ) { array_unshift( $selected, 'en' ); }
+    $faz_settings['languages']['selected'] = array_values( $selected );
+    $faz_settings['languages']['default']  = 'en';
+
     update_option( 'faz_settings', $faz_settings );
 
     delete_option( 'faz_banner_template' );

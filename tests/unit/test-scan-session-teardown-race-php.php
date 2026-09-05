@@ -1,41 +1,19 @@
 <?php
-/**
- * #245 — a teardown must be final.
- *
- * touch_browser_scan_session() reads the session transient, validates it, and
- * only then writes. A request already in flight when the crawl ended used to
- * write the pre-teardown array back afterwards, resurrecting a session no tab
- * was driving; the next scan then met faz_browser_scan_in_progress and the
- * administrator waited out the idle TTL for a crawl that had finished.
- *
- * Deleting the transient cannot express "this was closed" — absence and "never
- * existed" are the same observation, so a late writer has nothing to detect.
- * The teardown now leaves a short-lived tombstone, and the touch path re-reads
- * immediately before writing and abandons the write when it finds one.
- *
- * Run: php tests/unit/test-scan-session-teardown-race-php.php
- */
-
+/** Deterministic interleavings around the real session lifecycle, on both stores. */
+namespace FazCookie\Admin\Modules\Scanner\Includes {
+	function headers_sent() { return false; }
+	function setcookie( $name, $value, $options ) {
+		$GLOBALS['cookie_writes'][] = array( $name, $value, $options );
+		return true;
+	}
+}
+namespace {
 define( 'ABSPATH', __DIR__ . '/' );
 define( 'DAY_IN_SECONDS', 86400 );
 define( 'HOUR_IN_SECONDS', 3600 );
 define( 'MINUTE_IN_SECONDS', 60 );
 define( 'YEAR_IN_SECONDS', 31536000 );
-
-$GLOBALS['faz_t']      = array();   // transient store
-$GLOBALS['faz_meta']   = array();
-$GLOBALS['faz_cookie'] = array();
-// Fires on the Nth read of the session key, so a teardown can be placed exactly
-// between touch()'s initial read and its re-read — the window the fix closes.
-// Firing on the FIRST read (the obvious thing, and what this harness did at
-// first) proves nothing: touch() then sees the closed session in its opening
-// validation and bails long before reaching the code under test, so the
-// assertions pass whether the fix is present or not.
-$GLOBALS['faz_on_read']       = null;
-$GLOBALS['faz_on_read_key']   = '';
-$GLOBALS['faz_on_read_after'] = 1;
-$GLOBALS['faz_read_count']    = 0;
-
+class WP_Error { public function __construct( ...$args ) {} }
 function sanitize_text_field( $v ) { return trim( strip_tags( (string) $v ) ); }
 function sanitize_key( $v ) { return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $v ) ); }
 function __( $v, ...$u ) { return $v; }
@@ -49,93 +27,147 @@ function is_ssl() { return true; }
 function get_current_user_id() { return 7; }
 function wp_doing_ajax() { return false; }
 function is_admin() { return false; }
-function wp_generate_uuid4() { return sprintf( '%08x-0000-4000-8000-%012x', mt_rand(), mt_rand() ); }
+function wp_generate_uuid4() { static $id = 0; return sprintf( '%032x', ++$id ); }
 function wp_rand( $min = 0, $max = 0 ) { return mt_rand( $min, $max ); }
-function get_user_meta( $u, $k, $single = false ) { return $GLOBALS['faz_meta'][ $k ] ?? array(); }
-function delete_user_meta( $u, $k, $v = '' ) { unset( $GLOBALS['faz_meta'][ $k ] ); return true; }
-function add_user_meta( $u, $k, $v, $unique = false ) { $GLOBALS['faz_meta'][ $k ][] = $v; return true; }
+function get_user_meta( $u, $k, $single = false ) { return $GLOBALS['meta'][ $k ] ?? array(); }
+function delete_user_meta( $u, $k, $v = '' ) {
+	$GLOBALS['meta'][ $k ] = array_values( array_filter( $GLOBALS['meta'][ $k ] ?? array(), static function ( $row ) use ( $v ) { return $row !== $v; } ) );
+	return true;
+}
+function add_user_meta( $u, $k, $v, $unique = false ) { $GLOBALS['meta'][ $k ][] = $v; return true; }
+function wp_using_ext_object_cache() { return $GLOBALS['external']; }
+function wp_cache_delete( $key, $group = '' ) {
+	if ( 'options' === $group ) {
+		unset( $GLOBALS['local'][ preg_replace( '/^_transient_/', '', $key ) ] );
+	}
+}
+function concurrent_request( $cb ) {
+	$local = $GLOBALS['local'];
+	$GLOBALS['local'] = array();
+	try { $cb(); } finally { $GLOBALS['local'] = $local; }
+}
+function read_store( $key, $fresh ) {
+	if ( ! $fresh && array_key_exists( $key, $GLOBALS['local'] ) ) { return $GLOBALS['local'][ $key ]; }
+	$value = $GLOBALS['store'][ $key ] ?? false;
+	$GLOBALS['local'][ $key ] = $value;
+	if ( $GLOBALS['on_read'] && $GLOBALS['read_key'] === $key ) {
+		$cb = $GLOBALS['on_read']; $GLOBALS['on_read'] = null;
+		concurrent_request( $cb ); // Return the pre-callback snapshot, as an in-flight request would.
+	}
+	return $value;
+}
+function get_transient( $key ) { return read_store( $key, false ); }
+function wp_cache_get( $key, $group = '', $force = false ) { return read_store( $key, $force ); }
+function set_transient( $key, $value, $ttl = 0 ) {
+	if ( $GLOBALS['on_write'] && $GLOBALS['write_key'] === $key ) {
+		$cb = $GLOBALS['on_write']; $GLOBALS['on_write'] = null;
+		concurrent_request( $cb ); // The concurrent teardown finishes BEFORE this stale write lands.
+	}
+	$GLOBALS['store'][ $key ] = $value;
+	$GLOBALS['ttl'][ $key ] = $ttl;
+	unset( $GLOBALS['local'][ $key ] );
+	return true;
+}
+function delete_transient( $key ) { unset( $GLOBALS['store'][ $key ], $GLOBALS['local'][ $key ] ); return true; }
+require_once dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-controller.php';
+use FazCookie\Admin\Modules\Scanner\Includes\Controller;
+$ok = 0; $ko = 0;
+function t( $c, $l ) { global $ok, $ko; if ( $c ) { ++$ok; echo "PASS $l\n"; } else { ++$ko; echo "FAIL $l\n"; } }
+$ctl = Controller::get_instance();
+$scan = str_repeat( 'c', 32 );
+$next_scan = str_repeat( 'd', 32 );
+$seed = function () use ( $ctl, $scan ) {
+	$GLOBALS['store'] = $GLOBALS['local'] = $GLOBALS['ttl'] = $GLOBALS['meta'] = $GLOBALS['cookie_writes'] = array();
+	$GLOBALS['on_read'] = $GLOBALS['on_write'] = null;
+	$GLOBALS['read_key'] = $GLOBALS['write_key'] = '';
+	$token = $ctl->start_browser_scan_session( $scan );
+	$_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] = $token;
+	return $token;
+};
+foreach ( array( false, true ) as $external ) {
+	$GLOBALS['external'] = $external;
+	$backend = $external ? 'object cache' : 'options';
+	$token = $seed();
+	$key = 'faz_scan_session_' . hash( 'sha256', $token );
+	t( $ctl->touch_browser_scan_session( $token, $scan ), "$backend: live heartbeat renews" );
+	t( count( $GLOBALS['cookie_writes'] ) === 1, "$backend: heartbeat cannot overwrite a newer browser marker" );
+	t( $GLOBALS['cookie_writes'][0][2]['expires'] >= time() + Controller::BROWSER_SCAN_MAX_AGE - 1, "$backend: start marker survives a long crawl" );
+	t( ! $ctl->touch_browser_scan_session( $token, $next_scan ), "$backend: wrong scan cannot renew" );
 
-function get_transient( $key ) {
-	if ( $GLOBALS['faz_on_read'] && $key === $GLOBALS['faz_on_read_key'] ) {
-		++$GLOBALS['faz_read_count'];
-		if ( $GLOBALS['faz_read_count'] > $GLOBALS['faz_on_read_after'] ) {
-			$cb = $GLOBALS['faz_on_read'];
-			$GLOBALS['faz_on_read'] = null;   // one shot
-			$cb( $key );
-			return $GLOBALS['faz_t'][ $key ] ?? false;   // post-callback state
+	// Capture an old read, then close through the public finish path.
+	$GLOBALS['read_key'] = $key;
+	$GLOBALS['on_read'] = function () use ( $ctl, $scan ) { $ctl->finish_browser_scan_session( $scan ); };
+	t( ! $ctl->touch_browser_scan_session( $token, $scan ), "$backend: teardown after initial read wins" );
+	t( ! Controller::is_browser_scan_request(), "$backend: closed cookie cannot authorize capture" );
+	t( ! $ctl->browser_scan_session_matches( $scan ), "$backend: closed cookie cannot authorize import" );
+	t( ! $ctl->describe_browser_scan_session()['active'], "$backend: closed index is inactive" );
+	t( count( $GLOBALS['cookie_writes'] ) === 1, "$backend: teardown cannot clear a newer browser marker" );
+
+	// No amount of re-reading closes THIS window: inject at the actual write.
+	foreach ( array( 'finish', 'abort', 'successor' ) as $mode ) {
+		$token = $seed();
+		$key = 'faz_scan_session_' . hash( 'sha256', $token );
+		$GLOBALS['write_key'] = $key;
+		$successor = null;
+		$GLOBALS['on_write'] = function () use ( $ctl, $scan, $next_scan, $mode, &$successor ) {
+			if ( 'abort' === $mode ) {
+				unset( $_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] );
+				t( $ctl->abort_browser_scan_session( $scan ), 'abort without marker reaches the owner fallback' );
+			} else {
+				$ctl->finish_browser_scan_session( $scan );
+			}
+			if ( 'successor' === $mode ) { $successor = $ctl->start_browser_scan_session( $next_scan ); }
+		};
+		t( ! $ctl->touch_browser_scan_session( $token, $scan ), "$backend/$mode: close between final read and write wins" );
+		$_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] = $token;
+		t( ! $ctl->browser_scan_session_matches( $scan ), "$backend/$mode: stale rewritten payload stays revoked" );
+		if ( 'successor' === $mode ) {
+			t( $GLOBALS['store']['faz_scan_active_7']['token'] === $successor, "$backend: old heartbeat leaves successor index untouched" );
+			$_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] = $successor;
+			t( $ctl->browser_scan_session_matches( $next_scan ), "$backend: successor remains importable" );
+			t( $ctl->touch_browser_scan_session( $successor, $next_scan ), "$backend: successor heartbeat works" );
 		}
 	}
-	return $GLOBALS['faz_t'][ $key ] ?? false;
+
+	// A held session is reclaimable, and its old heartbeat cannot hold the new one.
+	$token = $seed();
+	t( $ctl->hold_browser_scan_session( $scan ), "$backend: failed import holds evidence" );
+	t( $ctl->touch_browser_scan_session( $token, $scan ) && 'held' === $ctl->describe_browser_scan_session()['state'], "$backend: heartbeat preserves held state" );
+	$successor = $ctl->start_browser_scan_session( $next_scan );
+	t( is_string( $successor ) && $successor !== $token, "$backend: new scan reclaims held session" );
+	t( ! $ctl->hold_browser_scan_session( $scan ), "$backend: late hold cannot mark successor held" );
+	t( ! $ctl->touch_browser_scan_session( $token, $scan ), "$backend: reclaimed token cannot renew" );
+	$_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] = $successor;
+	t( 'live' === $ctl->describe_browser_scan_session()['state'], "$backend: successor stays live" );
+
+	$token = $seed();
+	$key = 'faz_scan_session_' . hash( 'sha256', $token );
+	unset( $GLOBALS['store'][ $key . '_held' ] );
+	$GLOBALS['store']['faz_scan_active_7']['state'] = 'held';
+	t( $ctl->start_browser_scan_session( $scan ) === $token && 'live' === $ctl->describe_browser_scan_session()['state'], "$backend: resume clears a pre-upgrade held index" );
+
+	$token = $seed();
+	$key = 'faz_scan_session_' . hash( 'sha256', $token );
+	$GLOBALS['read_key'] = $key;
+	$GLOBALS['on_read'] = function () use ( $key ) { unset( $GLOBALS['store'][ $key ] ); };
+	t( $ctl->start_browser_scan_session( $scan ) instanceof WP_Error, "$backend: expiry during discover cannot reset an old token's birth time" );
+	t( ! isset( $GLOBALS['store'][ $key ] ), "$backend: expired reused token is not rewritten" );
+
+	$token = $seed();
+	$ctl->hold_browser_scan_session( $scan );
+	t( $ctl->start_browser_scan_session( $scan ) === $token && 'live' === $ctl->describe_browser_scan_session()['state'], "$backend: explicit resume consumes held state" );
+	$key = 'faz_scan_session_' . hash( 'sha256', $token );
+	unset( $GLOBALS['store'][ $key ] ); // Idle expiry, with an old request-local cache.
+	t( ! $ctl->describe_browser_scan_session()['active'], "$backend: an expired session's index is not a lock" );
+	t( is_string( $ctl->start_browser_scan_session( $next_scan ) ), "$backend: idle expiry permits immediate next scan" );
+
+	$token = $seed();
+	$key = 'faz_scan_session_' . hash( 'sha256', $token );
+	$GLOBALS['store'][ $key ]['created_at'] = time() - Controller::BROWSER_SCAN_MAX_AGE - 1;
+	t( ! $ctl->browser_scan_session_matches( $scan ) && ! Controller::is_browser_scan_request(), "$backend: absolute expiry protects import and capture too" );
+	t( $ctl->abort_browser_scan_session( $scan ), "$backend: explicit cleanup can revoke an expired token" );
+	t( is_string( $ctl->start_browser_scan_session( $next_scan ) ), "$backend: absolute expiry releases the scan index" );
 }
-function set_transient( $key, $value, $ttl = 0 ) { $GLOBALS['faz_t'][ $key ] = $value; return true; }
-function delete_transient( $key ) { unset( $GLOBALS['faz_t'][ $key ] ); return true; }
-
-require_once dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-controller.php';
-
-use FazCookie\Admin\Modules\Scanner\Includes\Controller;
-
-$ok = 0; $ko = 0;
-function t( $c, $l ) { global $ok, $ko; if ( $c ) { ++$ok; echo "  PASS $l\n"; } else { ++$ko; echo "  FAIL $l\n"; } }
-
-$ctl   = Controller::get_instance();
-$token = str_repeat( 'ab', 16 );
-$scan  = str_repeat( 'cd', 16 );
-
-$ref       = new ReflectionClass( $ctl );
-$key_m     = $ref->getMethod( 'browser_scan_transient_key' );     $key_m->setAccessible( true );
-$akey_m    = $ref->getMethod( 'browser_scan_active_transient_key' ); $akey_m->setAccessible( true );
-$tomb_m    = $ref->getMethod( 'tombstone_browser_scan_session' ); $tomb_m->setAccessible( true );
-$skey      = $key_m->invoke( null, $token );
-$akey      = $akey_m->invoke( null, 7 );
-
-$seed = function () use ( $skey, $akey, $token, $scan ) {
-	$GLOBALS['faz_t'] = array(
-		$skey => array( 'user_id' => 7, 'scan_id' => $scan, 'created_at' => time(), 'touched_at' => time() ),
-		$akey => array( 'token' => $token, 'scan_id' => $scan, 'created_at' => time() ),
-	);
-};
-
-// 1. The baseline the fix must not break: a live session still slides.
-$seed();
-$GLOBALS['faz_on_read'] = null;
-t( true === $ctl->touch_browser_scan_session( $token, $scan ), 'a live session is still renewed by a heartbeat' );
-t( ! empty( $GLOBALS['faz_t'][ $skey ]['user_id'] ), 'and the session survives the renewal' );
-
-// 2. The race itself. The teardown lands after touch() has read and validated,
-//    which is precisely the window that used to resurrect the session.
-$seed();
-// The REAL teardown, not the tombstone helper. Calling the helper directly
-// tested that touch() reacts to a tombstone, which is true but does not prove
-// the teardown produces one — a first version of this test did exactly that and
-// stayed green when the teardown was reverted to a plain delete.
-// finish_browser_scan_session() identifies the session from the marker cookie,
-// exactly as the real teardown request does.
-$_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] = $token;
-$GLOBALS['faz_on_read_key']   = $skey;
-$GLOBALS['faz_on_read_after'] = 1;   // let the initial read through, fire on the re-read
-$GLOBALS['faz_read_count']    = 0;
-$GLOBALS['faz_on_read'] = function () use ( $ctl, $scan ) {
-	$ctl->finish_browser_scan_session( $scan );   // teardown, mid-flight
-};
-$resurrected = $ctl->touch_browser_scan_session( $token, $scan );
-t( false === $resurrected, 'a heartbeat that raced a teardown reports failure' );
-unset( $_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] );
-$after = $GLOBALS['faz_t'][ $skey ] ?? false;
-t( empty( $after['user_id'] ), 'and does NOT write the pre-teardown session back' );
-
-// 3. The regression this fix could have introduced: the tombstone is an array,
-//    so a reader that only checked is_array() would mistake it for a live
-//    session and refuse the next scan — the very symptom #245 describes.
-$GLOBALS['faz_t'] = array();
-$tomb_m->invoke( null, $token, 7 );
-// is_browser_scan_request() is the guard that decides whether a request belongs
-// to a live capture session; it requires user_id, which a tombstone has not.
-$_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] = $token;
-t( false === Controller::is_browser_scan_request(), 'a tombstone is not mistaken for a live capture session' );
-unset( $_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] );
-$tombstone = $GLOBALS['faz_t'][ $akey ] ?? array();
-t( empty( $tombstone['token'] ) && empty( $tombstone['scan_id'] ),
-	'and carries none of the fields the active-session guards require' );
-
-echo "\nscan session teardown race: $ok passed, $ko failed\n";
+echo "\nscan session lifecycle: $ok passed, $ko failed\n";
 exit( $ko > 0 ? 1 : 0 );
+}

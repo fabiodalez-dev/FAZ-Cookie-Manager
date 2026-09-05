@@ -31,6 +31,7 @@ import { randomBytes } from 'node:crypto';
 import { expect, test } from '../fixtures/wp-fixture';
 import { fazApiGet, fazApiPost, openCookiesPage } from '../utils/faz-api';
 import { wpEval } from '../utils/wp-env';
+import { countActiveBrowserScanSessions } from '../utils/scan-session-state';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const ADMIN_LOGIN = process.env.WP_ADMIN_USER ?? 'admin';
@@ -65,17 +66,6 @@ function clearBrowserScanSessionState(): void {
   `);
 }
 
-/** How many browser-scan session/active transient rows currently exist. */
-function countBrowserScanSessionRows(): number {
-  const raw = wpEval(`
-    global $wpdb;
-    echo (int) $wpdb->get_var(
-      "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE '_transient_faz_scan_session_%'"
-      . " OR option_name LIKE '_transient_faz_scan_active_%'"
-    );
-  `);
-  return Number.parseInt(raw.trim(), 10);
-}
 
 /**
  * Seed a capture session exactly as an interrupted crawl leaves it: active
@@ -174,7 +164,7 @@ test.describe('Scan session resume — reload visibility and explicit stop', () 
       // Explicit human action — the only sanctioned way out.
       await page.locator('#faz-scan-session-end').click();
       await expect(panel).toHaveCount(0, { timeout: 10_000 });
-      await expect.poll(() => countBrowserScanSessionRows(), { timeout: 10_000 }).toBe(0);
+      await expect.poll(() => countActiveBrowserScanSessions(), { timeout: 10_000 }).toBe(0);
       // Ending discards the capture: the seeded observation must be gone too.
       expect(countSeededObservations(uid)).toBe(0);
 
@@ -223,7 +213,7 @@ test.describe('Scan session resume — reload visibility and explicit stop', () 
       expect(refused.data.code).toBe('faz_browser_scan_in_progress');
 
       // Neither the refusal nor the page's own polling stole the session.
-      expect(countBrowserScanSessionRows()).toBe(2);
+      expect(countActiveBrowserScanSessions()).toBe(1);
       const described = await fazApiGet<{ active: boolean; scan_id?: string }>(page, nonce, 'scans/session');
       expect(described.status).toBe(200);
       expect(described.data.active).toBe(true);
@@ -252,13 +242,13 @@ test.describe('Scan session resume — reload visibility and explicit stop', () 
       const wrongId = await fazApiPost<{ aborted: boolean }>(page, nonce, 'scans/abort', { scan_id: randomScanId() });
       expect(wrongId.status).toBe(200);
       expect(wrongId.data.aborted).toBe(false);
-      expect(countBrowserScanSessionRows(), 'a stranger scan id must release nothing').toBe(2);
+      expect(countActiveBrowserScanSessions(), 'a stranger scan id must release nothing').toBe(1);
       expect(countSeededObservations(uid)).toBe(1);
 
       const ownId = await fazApiPost<{ aborted: boolean }>(page, nonce, 'scans/abort', { scan_id: scanId });
       expect(ownId.status).toBe(200);
       expect(ownId.data.aborted).toBe(true);
-      expect(countBrowserScanSessionRows()).toBe(0);
+      expect(countActiveBrowserScanSessions()).toBe(0);
       expect(countSeededObservations(uid)).toBe(0);
     } finally {
       clearSeededObservations(uid);
@@ -396,11 +386,11 @@ test.describe('Scan session resume — reload visibility and explicit stop', () 
       await page.click('#faz-scan-dropdown [data-depth="10"]');
 
       // Session open on the server = discover committed, crawl underway.
-      await expect.poll(() => countBrowserScanSessionRows(), { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
+      await expect.poll(() => countActiveBrowserScanSessions(), { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
 
       // Abandon the crawl. The blocked beacon means the session survives.
       await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
-      expect(countBrowserScanSessionRows()).toBeGreaterThanOrEqual(2);
+      expect(countActiveBrowserScanSessions()).toBeGreaterThanOrEqual(1);
 
       // The reloaded page surfaces the orphaned session...
       const panel = page.locator('#faz-scan-session-panel');
@@ -409,20 +399,20 @@ test.describe('Scan session resume — reload visibility and explicit stop', () 
       // ...and ends it on explicit request (marker-cookie path).
       await page.locator('#faz-scan-session-end').click();
       await expect(panel).toHaveCount(0, { timeout: 10_000 });
-      await expect.poll(() => countBrowserScanSessionRows(), { timeout: 10_000 }).toBe(0);
+      await expect.poll(() => countActiveBrowserScanSessions(), { timeout: 10_000 }).toBe(0);
 
       // The next scan starts instead of 409ing.
       await page.click('#faz-scan-btn');
       await page.click('#faz-scan-dropdown [data-depth="10"]');
       const progress = page.locator('.faz-scan-progress-wrap:not(.faz-scan-session-wrap)');
       await expect(progress).toBeVisible({ timeout: 15_000 });
-      await expect.poll(() => countBrowserScanSessionRows(), { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
+      await expect.poll(() => countActiveBrowserScanSessions(), { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
 
       // Wind the run down quickly: Stop imports the partial result and
       // finishes the session, leaving nothing for later specs.
       await page.locator('.faz-scan-stop').click();
       await expect(progress).toHaveCount(0, { timeout: 180_000 });
-      await expect.poll(() => countBrowserScanSessionRows(), { timeout: 15_000 }).toBe(0);
+      await expect.poll(() => countActiveBrowserScanSessions(), { timeout: 15_000 }).toBe(0);
     } finally {
       clearBrowserScanSessionState();
       await page.context().clearCookies();
