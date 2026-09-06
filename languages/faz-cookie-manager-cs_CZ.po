@@ -2166,7 +2166,7 @@ msgstr "Datum zaznamenání souhlasu."
 
 #: admin/modules/cookie-policy-generator/api/class-cookie-policy-api.php:210
 msgid "The consent revision could not be updated safely. Retry the operation."
-msgstr ""
+msgstr "Revizi souhlasu se nepodařilo bezpečně aktualizovat. Zopakujte operaci."
 
 #: admin/modules/cookie-policy-generator/api/class-cookie-policy-api.php:302
 msgid "No policy template is available for that jurisdiction and language."
@@ -6497,71 +6497,62 @@ msgstr "Aktivní pluginy"
 
 #: frontend/class-amp-consent-rest.php:498
 #: frontend/class-amp-consent-rest.php:604
-#, fuzzy
 msgid "Invalid AMP consent instance."
-msgstr "Zneplatit všechny souhlasy"
+msgstr "Neplatná instance souhlasu AMP."
 
 #: frontend/class-amp-consent-rest.php:582
-#, fuzzy
 msgid "The AMP consent banner is disabled."
-msgstr "Cookiebanner deaktivován."
+msgstr "Banner souhlasu AMP je zakázán."
 
 #: frontend/class-amp-consent-rest.php:592
 msgid "Missing AMP consent state."
-msgstr ""
+msgstr "Chybí stav souhlasu AMP."
 
 #: frontend/class-amp-consent-rest.php:609
-#, fuzzy
 msgid "Invalid AMP consent state."
-msgstr "Zneplatit všechny souhlasy"
+msgstr "Neplatný stav souhlasu AMP."
 
 #: frontend/class-amp-consent-rest.php:613
-#, fuzzy
 msgid "Too many consent updates."
-msgstr "Filtrovat podle stavu souhlasu."
+msgstr "Příliš mnoho aktualizací souhlasu."
 
 #: frontend/class-amp-consent-rest.php:711
-#, fuzzy
 msgid "Invalid AMP consent scope."
-msgstr "Zneplatit všechny souhlasy"
+msgstr "Neplatný rozsah souhlasu AMP."
 
 #: frontend/class-amp-consent-rest.php:716
 msgid "The AMP consent banner is no longer active."
-msgstr ""
+msgstr "Banner souhlasu AMP již není aktivní."
 
 #: frontend/class-amp-consent.php:439
-#, fuzzy
 msgid "Save preferences"
-msgstr "Uložit moje předvolby"
+msgstr "Uložit předvolby"
 
 #: frontend/class-amp-consent.php:480
-#, fuzzy
 msgid "Cookie preferences"
-msgstr "Spravovat předvolby cookies"
+msgstr "Předvolby cookies"
 
 #: frontend/class-amp-consent.php:481
-#, fuzzy
 msgid "Choose and save your cookie preferences."
-msgstr "Spravovat předvolby cookies"
+msgstr "Vyberte a uložte své předvolby cookies."
 
 #: frontend/class-amp-consent.php:544
-#, fuzzy
 msgid "Optional cookie categories"
-msgstr "Kategorie cookies"
+msgstr "Volitelné kategorie cookies"
 
 #: frontend/class-amp-consent.php:545
 msgid "Tick the categories you want to allow. Saving applies exactly what is shown here, so anything left unticked stays blocked."
-msgstr ""
+msgstr "Zaškrtněte kategorie, které chcete povolit. Uložením se použije přesně to, co je zde zobrazeno, takže vše nezaškrtnuté zůstane blokováno."
 
 #. translators: %s: cookie category name, for example Analytics.
 #: frontend/class-amp-consent.php:571
-#, fuzzy, php-format
+#, php-format
 msgid "Allow %s cookies"
-msgstr "Všechny cookies"
+msgstr "Povolit cookies: %s"
 
 #: frontend/class-amp-consent.php:574
 msgid "Allow"
-msgstr ""
+msgstr "Povolit"
 
 #: frontend/class-amp-consent.php:597
 msgid "Manage cookie preferences"
@@ -6624,7 +6615,7 @@ msgstr "Potvrďte prosím, že splňujete minimální věk pro přijetí volitel
 #: frontend/modules/banner-rest/class-banner-rest.php:608
 #, php-format
 msgid "Banner closes automatically in %d s..."
-msgstr ""
+msgstr "Banner se automaticky zavře za %d s..."
 
 #. translators: %s: service name (e.g., "YouTube", "Google Maps")
 #: frontend/includes/class-placeholder-builder.php:214
@@ -6647,9 +6638,8 @@ msgid "The requested language is not configured for this site."
 msgstr "Požadovaný jazyk není pro tento web nakonfigurován."
 
 #: frontend/modules/banner-rest/class-banner-rest.php:156
-#, fuzzy
 msgid "The cookie banner is disabled on this site."
-msgstr "Cookiebanner deaktivován."
+msgstr "Cookie banner je na tomto webu zakázán."
 
 #: frontend/modules/banner-rest/class-banner-rest.php:189
 msgid "No banner available for the resolved jurisdiction."
