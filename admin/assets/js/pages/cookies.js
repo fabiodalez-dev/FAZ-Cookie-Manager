@@ -50,6 +50,7 @@
 	}
 
 	FAZ.ready(function () {
+		initCategoryLanguage();
 		loadCategories(true);
 		loadCookies();
 		updateRestoreBar();
@@ -231,9 +232,13 @@
 	});
 
 	function loadCategories(refreshEditor) {
-		FAZ.get('cookies/categories').then(function (data) {
+		return FAZ.get('cookies/categories').then(function (data) {
 			categories = Array.isArray(data) ? data : (data.items || []);
-			categoryEditorData = categories;
+			// A copy, not the same array. captureCategoryDrafts() writes unsaved
+			// edits into these objects, and the category filter buttons render
+			// from `categories` — sharing them put draft names in the filter bar
+			// the moment anything re-rendered it.
+			categoryEditorData = JSON.parse(JSON.stringify(categories));
 			renderCategories();
 			if (refreshEditor) renderCategoryEditor();
 		}).catch(function (err) { console.error('FAZ: Failed to load categories', err); });
@@ -242,10 +247,45 @@
 	// ── Category editor (name & description editing) ──────────────────
 	var categoryEditorData = []; // raw category objects for the editor
 
+	var categoryEditorLanguage = '';
+
 	function getCategoryEditorLang() {
-		return (window.fazConfig && fazConfig.languages && fazConfig.languages['default'])
-			? fazConfig.languages['default']
-			: 'en';
+		return categoryEditorLanguage || (window.fazConfig && fazConfig.languages && fazConfig.languages['default']) || 'en';
+	}
+
+	function captureCategoryDrafts() {
+		var lang = getCategoryEditorLang();
+		document.querySelectorAll('#faz-category-edit-rows tr[data-cat-id]').forEach(function (row) {
+			var cat = categoryEditorData.find(function (item) { return String(item.id) === row.dataset.catId; });
+			if (!cat) return;
+			['name', 'description'].forEach(function (field) {
+				var input = row.querySelector(field === 'name' ? '.faz-cat-edit-name' : '.faz-cat-edit-desc');
+				// Guarded like the sell/share inputs below: a row without the field
+				// would otherwise throw here and abandon every later row's draft.
+				if (!input) return;
+				if (!cat[field] || typeof cat[field] !== 'object') {
+					var previous = cat[field];
+					cat[field] = {};
+					cat[field][(window.fazConfig && fazConfig.languages && fazConfig.languages['default']) || 'en'] = previous || '';
+				}
+				cat[field][lang] = input.value;
+			});
+			['sell', 'share'].forEach(function (flag) {
+				var input = row.querySelector('.faz-cat-edit-' + flag);
+				if (input) cat[flag + '_personal_data'] = input.checked;
+			});
+		});
+	}
+
+	function initCategoryLanguage() {
+		var select = document.getElementById('faz-category-language');
+		if (!select) return;
+		categoryEditorLanguage = select.value || getCategoryEditorLang();
+		select.addEventListener('change', function () {
+			captureCategoryDrafts();
+			categoryEditorLanguage = select.value;
+			renderCategoryEditor();
+		});
 	}
 
 	/**
@@ -286,7 +326,7 @@
 			nameInput.className = 'faz-input faz-input-sm faz-cat-edit-name';
 			var nameObj = cat.name;
 			nameInput.value = (typeof nameObj === 'object' && nameObj !== null)
-				? (nameObj[lang] || nameObj.en || Object.values(nameObj)[0] || '')
+				? (nameObj[lang] || '')
 				: (nameObj || '');
 			tdName.appendChild(nameInput);
 			tr.appendChild(tdName);
@@ -299,7 +339,7 @@
 			descInput.style.cssText = 'font-size:13px;min-height:50px;width:100%;';
 			var descObj = cat.description;
 			var rawDesc = (typeof descObj === 'object' && descObj !== null)
-				? (descObj[lang] || descObj.en || Object.values(descObj)[0] || '')
+				? (descObj[lang] || '')
 				: (descObj || '');
 			descInput.value = stripParagraphTags(rawDesc);
 			tdDesc.appendChild(descInput);
@@ -353,7 +393,10 @@
 		var rows = document.querySelectorAll('#faz-category-edit-rows tr[data-cat-id]');
 		if (!rows.length) return;
 
+		captureCategoryDrafts();
 		var lang = getCategoryEditorLang();
+		var controls = document.querySelectorAll('#faz-category-language, #faz-category-edit-rows input, #faz-category-edit-rows textarea');
+		controls.forEach(function (input) { input.disabled = true; });
 		var saveBtn = document.getElementById('faz-save-categories');
 		if (saveBtn) saveBtn.disabled = true;
 
@@ -411,10 +454,12 @@
 			var failed = results.filter(function (r) { return r.status === 'rejected'; }).length;
 			if (failed === 0) {
 				FAZ.notify(__('cookies.categoriesSaved', 'Categories saved.'), 'success');
+				return loadCategories(true);
 			} else {
 				FAZ.notify((results.length - failed) + ' saved, ' + failed + ' failed.', 'error');
 			}
-			loadCategories(true);
+		}).finally(function () {
+			controls.forEach(function (input) { input.disabled = false; });
 			if (saveBtn) saveBtn.disabled = false;
 		});
 	}
