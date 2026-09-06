@@ -102,6 +102,16 @@ foreach ( array( false, true ) as $external ) {
 	t( ! $ctl->browser_scan_session_matches( $scan ), "$backend: closed cookie cannot authorize import" );
 	t( ! $ctl->describe_browser_scan_session()['active'], "$backend: closed index is inactive" );
 	t( count( $GLOBALS['cookie_writes'] ) === 1, "$backend: teardown cannot clear a newer browser marker" );
+	// The two lifetimes the close depends on, pinned because nothing else would
+	// notice them drifting. The revoked payload only has to outlast requests
+	// already in flight, so it expires quickly; the _closed marker has to outlive
+	// the longest session anyone can still renew, or it lapses while a heartbeat
+	// can still write — and #245 returns silently, with every other assertion here
+	// still green.
+	t( Controller::BROWSER_SCAN_TOMBSTONE_TTL === $GLOBALS['ttl'][ $key ],
+		"$backend: the revoked payload expires as a short-lived tombstone" );
+	t( Controller::BROWSER_SCAN_MAX_AGE + Controller::BROWSER_SCAN_TTL === $GLOBALS['ttl'][ $key . '_closed' ],
+		"$backend: the close marker outlives any session that could still be renewed" );
 
 	// No amount of re-reading closes THIS window: inject at the actual write.
 	foreach ( array( 'finish', 'abort', 'successor' ) as $mode ) {
