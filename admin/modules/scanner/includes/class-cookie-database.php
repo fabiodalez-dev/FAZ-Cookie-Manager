@@ -37,13 +37,24 @@ class Cookie_Database {
 			'duration'    => 'session',
 			'description' => 'WordPress test cookie to check if cookies are enabled.',
 		),
+		// WordPress — admin-only (hidden internal category).
+		// wordpress_logged_in_* sat in the frontend-visible group above until
+		// #243. It is an authentication cookie: a logged-out visitor never
+		// receives it, and its sibling wordpress_sec_* was already classified
+		// here. The two tables that describe this cookie therefore disagreed —
+		// this one called it declarable, Frontend::is_wp_internal_cookie() called
+		// it internal — and the stricter one won only because every
+		// visitor-facing surface happens to consult it as well. Same visible
+		// behaviour either way (both categories are always allowed and the name
+		// guard already suppressed the declaration); the point is that the
+		// catalogue now says what the cookie is instead of relying on a
+		// downstream guard to correct it.
 		'wordpress_logged_in_'    => array(
-			'category'    => 'necessary',
+			'category'    => 'wordpress-internal',
 			'duration'    => 'session',
 			'description' => 'Indicates logged-in status and user identity.',
 			'match'       => 'prefix',
 		),
-		// WordPress — admin-only (hidden internal category).
 		'wp-settings-'            => array(
 			'category'    => 'wordpress-internal',
 			'duration'    => '1 year',
