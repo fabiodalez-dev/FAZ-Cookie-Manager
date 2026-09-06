@@ -385,6 +385,27 @@ class Cookie_Categories extends Store {
 	}
 
 	/**
+	 * Discard the resolved catalogue for one language.
+	 *
+	 * get_translations() caches the merged English + bundled + downloaded result
+	 * for twelve hours. Replacing the downloaded file on disk does not touch that
+	 * cache, so without this the editor and the banner REST payload keep serving
+	 * the previous catalogue for up to twelve hours after an administrator
+	 * downloads a language — long enough to look like the download silently
+	 * failed.
+	 *
+	 * @param string $lang Language code.
+	 * @return void
+	 */
+	public static function flush_translation_cache( $lang ) {
+		$safe_lang = sanitize_file_name( (string) $lang );
+		if ( '' === $safe_lang ) {
+			return;
+		}
+		wp_cache_delete( 'faz_category_contents_v2_' . $safe_lang, 'faz_category_contents' );
+	}
+
+	/**
 	 * Replace English defaults previously materialised in non-English slots.
 	 *
 	 * The editor used to allow edits in the default language only, so saving

@@ -21,6 +21,7 @@ namespace {
 	function wp_upload_dir() { return array( 'basedir' => '/category-test-uploads' ); }
 	function wp_cache_get( $key, $group ) { return $GLOBALS['category_cache'][ $key ] ?? false; }
 	function wp_cache_set( $key, $value, $group, $ttl ) { $GLOBALS['category_cache'][ $key ] = $value; }
+	function wp_cache_delete( $key, $group ) { unset( $GLOBALS['category_cache'][ $key ] ); return true; }
 	function faz_read_json_file( $path ) {
 		if ( 0 === strpos( $path, '/category-test-uploads/' ) ) { return $GLOBALS['category_uploads'][ basename( $path ) ] ?? array(); }
 		return is_file( $path ) ? json_decode( file_get_contents( $path ), true ) : array();
@@ -98,5 +99,24 @@ namespace {
 	eq( $model->get_description( 'ru' ), $ru['necessary']['description'], 'partial upload retains bundled description' );
 	$model->set_slug( 'functional' );
 	eq( $model->get_name( 'ru' ), $ru['functional']['name'], 'English upload does not hide bundled Russian' );
+	// Downloading a language replaces the file on disk; the resolved catalogue is
+	// cached for twelve hours, so without an explicit flush the editor and the
+	// REST payload keep serving the previous one — indistinguishable, to an
+	// administrator, from the download having failed.
+	$GLOBALS['category_cache'] = array();
+	$GLOBALS['category_uploads']['ru.json'] = array( 'category_data' => array( 'necessary' => array( 'name' => 'Прежнее имя' ) ) );
+	$model = new Cookie_Categories();
+	$model->set_slug( 'necessary' );
+	eq( $model->get_name( 'ru' ), 'Прежнее имя', 'the downloaded catalogue is served' );
+	// A newer file lands on disk, exactly as Controller::download() leaves it.
+	$GLOBALS['category_uploads']['ru.json'] = array( 'category_data' => array( 'necessary' => array( 'name' => 'Новое имя' ) ) );
+	eq( $model->get_name( 'ru' ), 'Прежнее имя', 'and the cache still holds the old one until flushed' );
+	Cookie_Categories::flush_translation_cache( 'ru' );
+	eq( $model->get_name( 'ru' ), 'Новое имя', 'flushing makes the new download visible immediately' );
+	// A flush must be scoped to its language, not clear the whole group.
+	$GLOBALS['category_cache']['faz_category_contents_v2_uk'] = array( 'necessary' => array( 'name' => 'sentinel' ) );
+	Cookie_Categories::flush_translation_cache( 'ru' );
+	eq( isset( $GLOBALS['category_cache']['faz_category_contents_v2_uk'] ), true, 'and leaves other languages cached' );
+
 	echo "category i18n: $passed passed\n";
 }
