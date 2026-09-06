@@ -1,6 +1,6 @@
 import { expect, test } from '../fixtures/wp-fixture';
 import { readFileSync } from 'node:fs';
-import { deleteOption, setOption, wpEval } from '../utils/wp-env';
+import { deleteOption, setOption, wp, wpEval } from '../utils/wp-env';
 
 /**
  * Acceptance gate for the 1.29.0-rc1 bundle.
@@ -85,21 +85,27 @@ const EXPECTED_VERSION =
 
 const IS_PRERELEASE = /-(rc|beta|alpha)\d+$/.test(EXPECTED_VERSION);
 
-test.describe('1.29.0 release acceptance', () => {
+test.describe(`${EXPECTED_VERSION || 'unknown version'} release acceptance`, () => {
   test('the build under test is the expected one, and it is what WordPress loaded', async () => {
     expect(EXPECTED_VERSION, 'could not read a version to expect').not.toBe('');
 
     // Everything below is worthless if it ran against a stale deploy. Ask
     // WordPress what it loaded rather than reading the repo's own file.
-    const loaded = wpEval('echo defined("FAZ_VERSION") ? FAZ_VERSION : "undefined";').trim();
+    // wp() rather than wpEval(): these two probes only read, so a retry is
+    // safe, and they are the first WP-CLI calls of the acceptance run — a
+    // bootstrap or MySQL blip here fails the whole spec with a version
+    // mismatch that never happened. wpEval() opts out of the retry because it
+    // is the general-purpose escape hatch and most of its callers mutate.
+    const loaded = wp(['eval', 'echo defined("FAZ_VERSION") ? FAZ_VERSION : "undefined";']).trim();
     expect(loaded, `WordPress loaded ${loaded}; expected ${EXPECTED_VERSION}`).toBe(EXPECTED_VERSION);
 
     // Stable tag is the pointer wordpress.org serves as the stable download.
     // The invariant runs BOTH ways, which is what makes it hold across
     // releases: a pre-release must never claim it, and a final release must.
-    const stable = wpEval(
-      'echo get_file_data( WP_PLUGIN_DIR . "/faz-cookie-manager/faz-cookie-manager.php", array( "s" => "Stable tag" ) )["s"];'
-    ).trim();
+    const stable = wp([
+      'eval',
+      'echo get_file_data( WP_PLUGIN_DIR . "/faz-cookie-manager/faz-cookie-manager.php", array( "s" => "Stable tag" ) )["s"];',
+    ]).trim();
     if (IS_PRERELEASE) {
       expect(stable, 'a pre-release must not claim the stable tag').not.toBe(loaded);
     } else {
