@@ -598,12 +598,10 @@ abstract class Store {
 	 * Translate one already-populated multilingual value when the model knows
 	 * how to distinguish bundled stock copy from administrator-authored copy.
 	 *
-	 * The base model deliberately stands down. Categories and banners also use
-	 * Store::get_description(), but their get_translations() methods return
-	 * shipped fallback wording without inspecting the supplied source. Calling
-	 * those methods for a non-empty value would overwrite administrator text.
-	 * Cookie overrides this hook because its catalogue resolver can prove that a
-	 * source string is stock wording before replacing it.
+	 * The base model deliberately stands down: calling get_translations() for
+	 * every non-empty value would overwrite administrator text. Cookies and
+	 * categories override this hook only when their catalogue can establish
+	 * that the source is stock wording.
 	 *
 	 * @param string $lang   Language code.
 	 * @param string $key    Field name.
