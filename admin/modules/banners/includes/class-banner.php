@@ -915,6 +915,27 @@ class Banner extends Store {
 	}
 
 	/**
+	 * Discard every cached view of one language's shipped copy.
+	 *
+	 * Two caches derive from the same downloaded file and both go stale when it is
+	 * replaced: the resolved contents tree, and the law-notice baseline the banner
+	 * editor compares against. Clearing only the first leaves the editor reporting
+	 * a default that no longer matches what the frontend renders — the precise
+	 * disagreement that folding both onto one resolver was meant to end.
+	 *
+	 * @param string $lang Language code.
+	 * @return void
+	 */
+	public static function flush_translation_cache( $lang ) {
+		$safe_lang = sanitize_file_name( (string) $lang );
+		if ( '' === $safe_lang ) {
+			return;
+		}
+		wp_cache_delete( 'faz_contents_v2_' . $safe_lang, 'faz_banner_contents' );
+		wp_cache_delete( 'faz_law_notice_desc_' . $safe_lang, 'faz_banner_contents' );
+	}
+
+	/**
 	 * Lay one catalogue over another, leaf by leaf.
 	 *
 	 * @param array $base         Tree to write into.

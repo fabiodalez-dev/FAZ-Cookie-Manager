@@ -153,5 +153,40 @@ foreach ( array( 'ru', 'uk', 'en', 'sw' ) as $lang ) {
 	t( $agree, "$lang: the reported baseline matches the rendered copy" );
 }
 
+// 7. Downloading a language replaces the file on disk. Two caches read it, and
+//    both must go: the resolved tree, and the law-notice baseline the editor
+//    shows. Clearing one and not the other is how the editor comes to report a
+//    default the frontend no longer renders.
+reset_cache();
+$GLOBALS['uploads']['ru.json'] = array( 'banner_data' => array(
+	'gdpr' => array( 'notice' => array( 'elements' => array(
+		'title' => 'Старый заголовок',
+		'description' => 'Старое описание',
+	) ) ),
+) );
+$c = Banner::resolve_bundled_contents( 'ru' );
+$d = Banner::get_law_notice_descriptions( 'ru' );
+t( 'Старый заголовок' === ( $c['gdpr']['notice']['elements']['title'] ?? '' ), 'the downloaded copy is served' );
+t( 'Старое описание' === $d['gdpr'], 'and the baseline agrees with it' );
+
+$GLOBALS['uploads']['ru.json'] = array( 'banner_data' => array(
+	'gdpr' => array( 'notice' => array( 'elements' => array(
+		'title' => 'Новый заголовок',
+		'description' => 'Новое описание',
+	) ) ),
+) );
+$c = Banner::resolve_bundled_contents( 'ru' );
+t( 'Старый заголовок' === ( $c['gdpr']['notice']['elements']['title'] ?? '' ), 'and both stay cached until flushed' );
+
+Banner::flush_translation_cache( 'ru' );
+$c = Banner::resolve_bundled_contents( 'ru' );
+$d = Banner::get_law_notice_descriptions( 'ru' );
+t( 'Новый заголовок' === ( $c['gdpr']['notice']['elements']['title'] ?? '' ), 'flushing exposes the new contents' );
+t( 'Новое описание' === $d['gdpr'], 'and the baseline too, not just the tree' );
+
+$GLOBALS['cache']['faz_banner_contents/faz_contents_v2_uk'] = array( 'sentinel' => true );
+Banner::flush_translation_cache( 'ru' );
+t( isset( $GLOBALS['cache']['faz_banner_contents/faz_contents_v2_uk'] ), 'and leaves other languages cached' );
+
 echo "\nbanner contents i18n: $ok passed, $ko failed\n";
 exit( $ko > 0 ? 1 : 0 );
