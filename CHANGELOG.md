@@ -4,6 +4,9 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Cookie Policy templates in Dutch and Croatian for all four jurisdictions (GDPR, CCPA/CPRA, LGPD, POPIA). Both locales already offered a translated interface and were selectable as a policy language, but no template shipped for them, so the generator fell back to English and produced a legal document in the wrong language without saying so. The Cookie Policy screen already shows the shipped text as the placeholder in each override box, so those boxes now show Dutch and Croatian and the "no template ships for this language" notice no longer appears.
+
 ## [1.29.0] - 2026-09-02
 
 ### Fixed

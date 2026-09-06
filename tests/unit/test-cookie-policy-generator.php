@@ -442,6 +442,68 @@ foreach ( Generator::LANGUAGES as $popia_lang ) {
 // ---------- Summary ----------
 
 echo "\n--\n";
+// ── Template matrix completeness ──────────────────────────────────────────
+// A language is either shipped for every jurisdiction or for none. Shipping it
+// for some is the failure this guards: resolve_template_path() then silently
+// serves the English fallback for the jurisdictions that lack it, and nothing
+// in the product reports the substitution. That is how nl and hr came to have a
+// gettext catalogue, a selectable policy language and no template at all —
+// every site on those locales was handed an English legal document, quietly.
+$faz_matrix_dirs = glob( $tpl_dir . '/*', GLOB_ONLYDIR );
+$faz_langs       = array();
+foreach ( $faz_matrix_dirs as $faz_dir ) {
+	foreach ( glob( $faz_dir . '/*.md' ) as $faz_file ) {
+		$faz_langs[ basename( $faz_file, '.md' ) ] = true;
+	}
+}
+$faz_langs = array_keys( $faz_langs );
+sort( $faz_langs );
+assert_true( count( $faz_matrix_dirs ) > 0 && count( $faz_langs ) > 0, 'template matrix is discoverable' );
+
+$faz_tokens = static function ( $text ) {
+	preg_match_all( '/\{\{[A-Z_]+\}\}/', (string) $text, $m );
+	sort( $m[0] );
+	return $m[0];
+};
+$faz_missing = array();
+$faz_lost    = array();
+$faz_drifted = array();
+// Faithful translations of the English source. The older localized templates
+// are deliberately abridged — several drop the standalone "Contact" section —
+// so exact parity is asserted only where it was the translator's intent. Every
+// template, abridged or not, is still held to the placeholder-type rule below.
+$faz_faithful = array( 'nl', 'hr' );
+foreach ( $faz_matrix_dirs as $faz_dir ) {
+	$faz_j  = basename( $faz_dir );
+	$faz_en = @file_get_contents( $faz_dir . '/en.md' );
+	foreach ( $faz_langs as $faz_l ) {
+		$faz_path = $faz_dir . '/' . $faz_l . '.md';
+		if ( ! file_exists( $faz_path ) ) {
+			$faz_missing[] = $faz_j . '/' . $faz_l;
+			continue;
+		}
+		if ( ! is_string( $faz_en ) || 'en' === $faz_l ) {
+			continue;
+		}
+		$faz_body = (string) file_get_contents( $faz_path );
+		// Losing a placeholder TYPE removes something the document cannot do
+		// without — the controller's contact, the cookie inventory, the
+		// retention period. Abridging a section is an editorial choice; losing
+		// the only occurrence of a token is a defect in a legal document.
+		if ( array_diff( array_unique( $faz_tokens( $faz_en ) ), array_unique( $faz_tokens( $faz_body ) ) ) ) {
+			$faz_lost[] = $faz_j . '/' . $faz_l;
+		}
+		if ( in_array( $faz_l, $faz_faithful, true )
+			&& ( $faz_tokens( $faz_body ) !== $faz_tokens( $faz_en )
+				|| substr_count( $faz_body, "\n#" ) !== substr_count( $faz_en, "\n#" ) ) ) {
+			$faz_drifted[] = $faz_j . '/' . $faz_l;
+		}
+	}
+}
+assert_eq( $faz_missing, array(), 'every policy language ships for every jurisdiction' );
+assert_eq( $faz_lost, array(), 'no localized template drops a placeholder the English source has' );
+assert_eq( $faz_drifted, array(), 'faithful translations keep the English section count and placeholder multiset' );
+
 echo "Tests:  $tests_run\n";
 echo "Passed: $tests_passed\n";
 echo "Failed: $tests_failed\n\n";
