@@ -67,7 +67,9 @@ Als inwoner van Californië hebt u het recht op:
 - **Right to Non-Discrimination** (§ 1798.125) — wij zullen u niet benadelen omdat u een van deze rechten uitoefent
 - **Right to Data Portability** (§ 1798.130(a)(2)) — Personal Information ontvangen in een direct bruikbaar formaat
 
-Stuur voor een verzoek een e-mail naar **{{COMPANY_EMAIL}}** of gebruik de links "Do Not Sell or Share" en "Voorkeuren beheren" in de voettekst van de website. Wij verifiëren uw identiteit (CCPA § 1798.130(a)(2)) en reageren binnen **45 dagen** (met kennisgeving verlengbaar tot 90 dagen, § 1798.130(a)(2)(B)).
+Stuur voor de rechten op inzage, verwijdering, correctie of overdraagbaarheid een e-mail naar **{{COMPANY_EMAIL}}**. Dat zijn verifieerbare consumentenverzoeken, dus wij verifiëren uw identiteit voordat wij handelen (CCPA § 1798.130(a)(2)) en reageren binnen **45 dagen** (met kennisgeving verlengbaar tot 90 dagen, § 1798.130(a)(2)(B)).
+
+Gebruik voor het afmelden van de verkoop of het delen van uw Personal Information de links "Do Not Sell or Share" en "Voorkeuren beheren" in de voettekst van de website. Een afmelding is **geen** verifieerbaar consumentenverzoek: wij voeren die uit zonder u te vragen uw identiteit te verifiëren of een account aan te maken.
 
 U kunt ook een gemachtigde aanwijzen om namens u een verzoek in te dienen (Cal. Civ. Code § 1798.135(c)).
 

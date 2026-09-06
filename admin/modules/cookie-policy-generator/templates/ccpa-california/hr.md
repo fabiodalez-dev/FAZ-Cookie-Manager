@@ -67,7 +67,9 @@ Kao stanovnik Kalifornije imate pravo na:
 - **Right to Non-Discrimination** (§ 1798.125) — nećemo vas stavljati u nepovoljniji položaj zbog ostvarivanja bilo kojeg od ovih prava
 - **Right to Data Portability** (§ 1798.130(a)(2)) — primiti Personal Information u lako upotrebljivom obliku
 
-Zahtjev pošaljite na **{{COMPANY_EMAIL}}** ili upotrijebite poveznice "Do Not Sell or Share" i "Upravljanje postavkama" u podnožju web stranice. Provjerit ćemo vaš identitet (CCPA § 1798.130(a)(2)) i odgovoriti u roku od **45 dana** (uz obavijest produživo na 90 dana, § 1798.130(a)(2)(B)).
+Za prava na uvid, brisanje, ispravak ili prenosivost pišite na **{{COMPANY_EMAIL}}**. To su provjerljivi zahtjevi potrošača, pa ćemo prije postupanja provjeriti vaš identitet (CCPA § 1798.130(a)(2)) i odgovoriti u roku od **45 dana** (uz obavijest produživo na 90 dana, § 1798.130(a)(2)(B)).
+
+Za izuzimanje od prodaje ili dijeljenja vaših Personal Information upotrijebite poveznice "Do Not Sell or Share" i "Upravljanje postavkama" u podnožju web stranice. Izuzimanje **nije** provjerljiv zahtjev potrošača: postupit ćemo po njemu bez traženja provjere identiteta ili otvaranja računa.
 
 Možete i ovlastiti zastupnika da podnese zahtjev u vaše ime (Cal. Civ. Code § 1798.135(c)).
 

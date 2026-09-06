@@ -208,7 +208,9 @@ As a California resident, you have the right to:
 - **Right to Non-Discrimination** (§ 1798.125) — we will not discriminate against you for exercising any of these rights
 - **Right to Data Portability** (§ 1798.130(a)(2)) — receive Personal Information in a readily usable format
 
-To submit a request, email **{{COMPANY_EMAIL}}** or use the "Do Not Sell or Share" and "Manage Preferences" links in the website footer. We will verify your identity (CCPA § 1798.130(a)(2)) and respond within **45 days** (extendable to 90 with notice, § 1798.130(a)(2)(B)).
+To exercise the rights to know, delete, correct or port, email **{{COMPANY_EMAIL}}**. Those are verifiable consumer requests, so we will verify your identity before acting (CCPA § 1798.130(a)(2)), and we will respond within **45 days** (extendable to 90 with notice, § 1798.130(a)(2)(B)).
+
+To opt out of the sale or sharing of your Personal Information, use the "Do Not Sell or Share" and "Manage Preferences" links in the website footer. An opt-out is **not** a verifiable consumer request: we will act on it without asking you to verify your identity or to create an account.
 
 You may also designate an authorized agent to submit a request on your behalf (Cal. Civ. Code § 1798.135(c)).',
 			'Cookie policy template: ccpa-california / section-8',
