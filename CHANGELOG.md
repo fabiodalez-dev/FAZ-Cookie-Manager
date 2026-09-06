@@ -4,6 +4,9 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- The admin JavaScript translation helper is named `fazI18n()` instead of `__()`. It never was gettext — it looks up a dotted key in the PHP-provided `fazConfig.i18n` map — but under the gettext name the string extractor on translate.wordpress.org harvested 285 of those keys as if they were translatable English text, which capped every locale's completion at 84.8% and blocked language-pack generation. No runtime behaviour changes: the keys, the English fallbacks and the lookup are untouched.
+
 ## [1.29.0] - 2026-09-02
 
 ### Fixed

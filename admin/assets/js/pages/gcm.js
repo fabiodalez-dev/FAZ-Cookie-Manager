@@ -5,7 +5,10 @@
 	'use strict';
 
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
-	function __(key, fallback) {
+	// Not named `__`: this is a key lookup into the PHP-provided fazConfig.i18n
+	// map, not gettext. Under the gettext name, translate.wordpress.org harvests
+	// the dotted keys below as if they were translatable English text.
+	function fazI18n(key, fallback) {
 		var parts = key.split('.');
 		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
 		for (var i = 0; i < parts.length; i++) {
@@ -28,7 +31,7 @@
 		FAZ.get('gcm').then(function (data) {
 			FAZ.populateForm(form, data);
 		}).catch(function () {
-			FAZ.notify(__('gcm.loadFailed', 'Failed to load GCM settings.'), 'error');
+			FAZ.notify(fazI18n('gcm.loadFailed', 'Failed to load GCM settings.'), 'error');
 		});
 	}
 
@@ -40,10 +43,10 @@
 
 		FAZ.post('gcm', data).then(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('gcm.saved', 'GCM settings saved successfully.'));
+			FAZ.notify(fazI18n('gcm.saved', 'GCM settings saved successfully.'));
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('gcm.saveFailed', 'Failed to save GCM settings.'), 'error');
+			FAZ.notify(fazI18n('gcm.saveFailed', 'Failed to save GCM settings.'), 'error');
 		});
 	}
 

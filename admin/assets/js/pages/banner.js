@@ -7,7 +7,10 @@
 	'use strict';
 
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
-	function __(key, fallback) {
+	// Not named `__`: this is a key lookup into the PHP-provided fazConfig.i18n
+	// map, not gettext. Under the gettext name, translate.wordpress.org harvests
+	// the dotted keys below as if they were translatable English text.
+	function fazI18n(key, fallback) {
 		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
 		// Read-only dot-path lookup via reduce (not a mutating for-loop) — a
 		// pure traversal that returns the localized string or the fallback.
@@ -53,17 +56,17 @@
 	// ── Colour-contrast checker (WCAG AA) — hoisted to module scope so
 	// loadBanner()'s on-load check (outside FAZ.ready) can reach it; the
 	// in-FAZ.ready colour-change handlers call it too. Self-contained:
-	// only dependency is the module-level __() i18n helper.
+	// only dependency is the module-level fazI18n() i18n helper.
 	var FAZ_CONTRAST_PAIRS = [
-		{ fg: 'faz-b-title-color',       bg: 'faz-b-notice-bg',       min: 4.5, label: __('banner.cTitle', 'Title vs banner background') },
-		{ fg: 'faz-b-desc-color',        bg: 'faz-b-notice-bg',       min: 4.5, label: __('banner.cDesc', 'Description vs banner background') },
-		{ fg: 'faz-b-link-color',        bg: 'faz-b-notice-bg',       min: 4.5, label: __('banner.cLink', 'Link vs banner background') },
-		{ fg: 'faz-b-accept-text',       bg: 'faz-b-accept-bg',       min: 4.5, label: __('banner.cAccept', 'Accept button text vs its background') },
-		{ fg: 'faz-b-reject-text',       bg: 'faz-b-reject-bg',       min: 4.5, label: __('banner.cReject', 'Reject button text vs its background') },
-		{ fg: 'faz-b-settings-text',     bg: 'faz-b-settings-bg',      min: 4.5, label: __('banner.cSettings', 'Settings button text vs its background'), fallbackBg: 'faz-b-notice-bg' },
-		{ fg: 'faz-b-catprev-save-text', bg: 'faz-b-catprev-save-bg',  min: 4.5, label: __('banner.cSave', 'Save button text vs its background') },
-		{ fg: 'faz-b-catprev-label',     bg: 'faz-b-notice-bg',        min: 4.5, label: __('banner.cCatLabel', 'Category label vs banner background') },
-		{ fg: 'faz-b-donotsell-text',    bg: 'faz-b-notice-bg',        min: 4.5, label: __('banner.cDoNotSell', 'Do Not Sell text vs banner background') }
+		{ fg: 'faz-b-title-color',       bg: 'faz-b-notice-bg',       min: 4.5, label: fazI18n('banner.cTitle', 'Title vs banner background') },
+		{ fg: 'faz-b-desc-color',        bg: 'faz-b-notice-bg',       min: 4.5, label: fazI18n('banner.cDesc', 'Description vs banner background') },
+		{ fg: 'faz-b-link-color',        bg: 'faz-b-notice-bg',       min: 4.5, label: fazI18n('banner.cLink', 'Link vs banner background') },
+		{ fg: 'faz-b-accept-text',       bg: 'faz-b-accept-bg',       min: 4.5, label: fazI18n('banner.cAccept', 'Accept button text vs its background') },
+		{ fg: 'faz-b-reject-text',       bg: 'faz-b-reject-bg',       min: 4.5, label: fazI18n('banner.cReject', 'Reject button text vs its background') },
+		{ fg: 'faz-b-settings-text',     bg: 'faz-b-settings-bg',      min: 4.5, label: fazI18n('banner.cSettings', 'Settings button text vs its background'), fallbackBg: 'faz-b-notice-bg' },
+		{ fg: 'faz-b-catprev-save-text', bg: 'faz-b-catprev-save-bg',  min: 4.5, label: fazI18n('banner.cSave', 'Save button text vs its background') },
+		{ fg: 'faz-b-catprev-label',     bg: 'faz-b-notice-bg',        min: 4.5, label: fazI18n('banner.cCatLabel', 'Category label vs banner background') },
+		{ fg: 'faz-b-donotsell-text',    bg: 'faz-b-notice-bg',        min: 4.5, label: fazI18n('banner.cDoNotSell', 'Do Not Sell text vs banner background') }
 	];
 	function fazReadColor(id) {
 		// The -hex text input is the canonical value (can hold "transparent"
@@ -125,10 +128,10 @@
 		var card = document.createElement('div');
 		card.style.cssText = 'border-left:4px solid var(--faz-warning,#b86900);background:#fff8e6;padding:10px 14px;border-radius:4px;font-size:13px';
 		var h = document.createElement('strong');
-		h.textContent = __('banner.contrastTitle', 'Accessibility: low colour contrast');
+		h.textContent = fazI18n('banner.contrastTitle', 'Accessibility: low colour contrast');
 		var p = document.createElement('p');
 		p.style.margin = '6px 0 4px';
-		p.textContent = __('banner.contrastIntro', 'These colour pairs fall below the WCAG AA 4.5:1 minimum and may be hard to read:');
+		p.textContent = fazI18n('banner.contrastIntro', 'These colour pairs fall below the WCAG AA 4.5:1 minimum and may be hard to read:');
 		var ul = document.createElement('ul');
 		ul.style.cssText = 'margin:0;padding-left:18px';
 		issues.forEach(function (i) {
@@ -200,7 +203,7 @@
 			var stored = parseInt(expiryEl.value, 10);
 			var served = isFinite(stored) ? Math.max(min, Math.min(max, stored)) : stored;
 			if (isFinite(stored) && served !== stored) {
-				hint.textContent = __('banner.expiryRuntimeBounded', 'This banner stores %1$d days, but visitors are served %2$d days: the selected regulation bounds the lifetime when the banner is served.')
+				hint.textContent = fazI18n('banner.expiryRuntimeBounded', 'This banner stores %1$d days, but visitors are served %2$d days: the selected regulation bounds the lifetime when the banner is served.')
 					.replace('%1$d', String(stored))
 					.replace('%2$d', String(served));
 				hint.style.display = '';
@@ -494,7 +497,7 @@
 			migrated = true;
 		}
 		if (migrated && typeof FAZ !== 'undefined' && FAZ.notify) {
-			FAZ.notify(__('banner.layoutMigrated', 'Classic / Pushdown has no opt-out popup, which a CCPA "Do Not Sell" banner requires — switched to a compatible layout.'), 'warning');
+			FAZ.notify(fazI18n('banner.layoutMigrated', 'Classic / Pushdown has no opt-out popup, which a CCPA "Do Not Sell" banner requires — switched to a compatible layout.'), 'warning');
 		}
 		var hint = document.getElementById('faz-b-type-ccpa-hint');
 		if (hint) hint.style.display = lawShowsDoNotSell ? '' : 'none';
@@ -506,7 +509,7 @@
 		if (!opt) return;
 		if (!opt.dataset.baseLabel) opt.dataset.baseLabel = opt.textContent;
 		opt.textContent = unavailable
-			? opt.dataset.baseLabel + ' — ' + __('banner.notAvailCcpa', 'not available for CCPA / US State Laws')
+			? opt.dataset.baseLabel + ' — ' + fazI18n('banner.notAvailCcpa', 'not available for CCPA / US State Laws')
 			: opt.dataset.baseLabel;
 	}
 
@@ -813,7 +816,7 @@
 				showMissingBannerNotice(bannerId);
 				return;
 			}
-			FAZ.notify(__('banner.loadFailed', 'Failed to load banner settings.'), 'error');
+			FAZ.notify(fazI18n('banner.loadFailed', 'Failed to load banner settings.'), 'error');
 		});
 	}
 
@@ -882,7 +885,7 @@
 			btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
 			var label = b.name || ('Banner #' + b.id);
 			if (Number(b['default']) === 1) label = '★ ' + label;
-			if (Number(b.status) !== 1) label += ' (' + __('banner.inactive', 'inactive') + ')';
+			if (Number(b.status) !== 1) label += ' (' + fazI18n('banner.inactive', 'inactive') + ')';
 			btn.textContent = label;
 			if (!isActive) {
 				btn.addEventListener('click', function () {
@@ -924,11 +927,11 @@
 					contents: bannerData.contents
 				}).then(function () {
 					bannerData.name = next;
-					FAZ.notify(__('banner.renamed', 'Banner renamed.'));
+					FAZ.notify(fazI18n('banner.renamed', 'Banner renamed.'));
 					// Re-render the chip row so the new name is reflected.
 					populateSwitcher();
 				}).catch(function () {
-					FAZ.notify(__('banner.renameFailed', 'Failed to save the new name.'), 'error');
+					FAZ.notify(fazI18n('banner.renameFailed', 'Failed to save the new name.'), 'error');
 					nameIn.value = bannerData.name || '';
 				});
 			};
@@ -949,7 +952,7 @@
 		}
 		if (delBtn && !delBtn.dataset.fazSwitcherBound) {
 			delBtn.addEventListener('click', function () {
-				if (!window.confirm(__('banner.deleteConfirm', 'Delete this banner permanently? This cannot be undone.'))) return;
+				if (!window.confirm(fazI18n('banner.deleteConfirm', 'Delete this banner permanently? This cannot be undone.'))) return;
 				delBtn.disabled = true;
 				// Helper: navigate back to the page-without-banner-id so the
 				// editor mounts on the default banner. Used by both the
@@ -992,7 +995,7 @@
 					// it as "already deleted" rather than a hard failure.
 					var n = (typeof resp === 'number') ? resp : (resp && typeof resp.deleted === 'number' ? resp.deleted : 1);
 					if (!n) {
-						FAZ.notify(__('banner.alreadyDeleted', 'This banner was already removed. Reloading…'));
+						FAZ.notify(fazI18n('banner.alreadyDeleted', 'This banner was already removed. Reloading…'));
 						redirectWithGrace();
 						return;
 					}
@@ -1002,10 +1005,10 @@
 						var still = Array.isArray(rows) && rows.some(function (b) { return Number(b.id) === Number(bannerId); });
 						if (still) {
 							delBtn.disabled = false;
-							FAZ.notify(__('banner.deleteFailed', 'Failed to delete banner.') + ' (server still lists id=' + bannerId + ')', 'error');
+							FAZ.notify(fazI18n('banner.deleteFailed', 'Failed to delete banner.') + ' (server still lists id=' + bannerId + ')', 'error');
 							return;
 						}
-						FAZ.notify(__('banner.deleted', 'Banner deleted.'));
+						FAZ.notify(fazI18n('banner.deleted', 'Banner deleted.'));
 						redirectToDefault();
 					});
 				}).catch(function (err) {
@@ -1022,7 +1025,7 @@
 						|| (err.data && err.data.status === 404)
 					);
 					if ( alreadyGone ) {
-						FAZ.notify(__('banner.alreadyDeleted', 'This banner was already removed. Reloading…'));
+						FAZ.notify(fazI18n('banner.alreadyDeleted', 'This banner was already removed. Reloading…'));
 						redirectWithGrace();
 						return;
 					}
@@ -1030,7 +1033,7 @@
 					var detail = '';
 					if (err && err.code) detail = ' [' + err.code + ']';
 					else if (err && err.message) detail = ' [' + err.message + ']';
-					FAZ.notify(__('banner.deleteFailed', 'Failed to delete banner.') + detail, 'error');
+					FAZ.notify(fazI18n('banner.deleteFailed', 'Failed to delete banner.') + detail, 'error');
 					if (window.console && console.error) console.error('FAZ delete banner failed', err);
 				});
 			});
@@ -1050,14 +1053,14 @@
 		// Name
 		var nameWrap = document.createElement('div');
 		var nameLabel = document.createElement('label');
-		nameLabel.textContent = __('banner.new.name', 'Banner name');
+		nameLabel.textContent = fazI18n('banner.new.name', 'Banner name');
 		nameLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;';
 		var nameInput = document.createElement('input');
 		nameInput.type = 'text';
 		nameInput.className = 'faz-input';
 		nameInput.style.width = '100%';
-		nameInput.placeholder = __('banner.new.namePlaceholder', 'e.g. CCPA US visitors');
-		nameInput.value = __('banner.new.defaultName', 'New banner');
+		nameInput.placeholder = fazI18n('banner.new.namePlaceholder', 'e.g. CCPA US visitors');
+		nameInput.value = fazI18n('banner.new.defaultName', 'New banner');
 		nameWrap.appendChild(nameLabel);
 		nameWrap.appendChild(nameInput);
 		form.appendChild(nameWrap);
@@ -1065,12 +1068,12 @@
 		// Law
 		var lawWrap = document.createElement('div');
 		var lawLabel = document.createElement('label');
-		lawLabel.textContent = __('banner.new.law', 'Consent model');
+		lawLabel.textContent = fazI18n('banner.new.law', 'Consent model');
 		lawLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;';
 		var lawHelp = document.createElement('div');
 		lawHelp.className = 'faz-help';
 		lawHelp.style.cssText = 'margin-bottom:.4rem;';
-		lawHelp.innerHTML = __(
+		lawHelp.innerHTML = fazI18n(
 			'banner.new.lawHelp',
 			'Pick the legal paradigm, not the country — language, "Do not sell" copy and country targeting live in the Content + Geo Targeting tabs after creation.<br><strong>Opt-in</strong> covers GDPR, UK-GDPR, ePrivacy, LGPD (Brazil), Swiss nFADP, PIPEDA (Canada), KVKK (Turkey) and similar consent-first regimes. <strong>Opt-out</strong> covers CCPA/CPRA (California), Virginia CDPA, Colorado CPA, Connecticut CTDPA, Utah UCPA and other US state laws.'
 		);
@@ -1078,8 +1081,8 @@
 		lawSelect.className = 'faz-input';
 		lawSelect.style.width = '100%';
 		[
-			{ value: 'gdpr', label: __('banner.new.lawOptionGdpr', 'Opt-in — GDPR, UK-GDPR, ePrivacy, LGPD, nFADP, PIPEDA, …') },
-			{ value: 'ccpa', label: __('banner.new.lawOptionCcpa', 'Opt-out — CCPA/CPRA, Virginia, Colorado, Connecticut, Utah, …') }
+			{ value: 'gdpr', label: fazI18n('banner.new.lawOptionGdpr', 'Opt-in — GDPR, UK-GDPR, ePrivacy, LGPD, nFADP, PIPEDA, …') },
+			{ value: 'ccpa', label: fazI18n('banner.new.lawOptionCcpa', 'Opt-out — CCPA/CPRA, Virginia, Colorado, Connecticut, Utah, …') }
 		].forEach(function (opt) {
 			var o = document.createElement('option');
 			o.value = opt.value;
@@ -1096,23 +1099,23 @@
 		// "EU/EEA" here produces the same target_countries the tab does.
 		var regWrap = document.createElement('div');
 		var regLabel = document.createElement('label');
-		regLabel.textContent = __('banner.new.regions', 'Target regions (optional)');
+		regLabel.textContent = fazI18n('banner.new.regions', 'Target regions (optional)');
 		regLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;';
 		var regHelp = document.createElement('div');
 		regHelp.className = 'faz-help';
 		regHelp.style.cssText = 'margin-bottom:.4rem;';
-		regHelp.textContent = __('banner.new.regionsHelp', 'Tick the regions this banner should target. Leave all unchecked to make this a match-all / fallback banner.');
+		regHelp.textContent = fazI18n('banner.new.regionsHelp', 'Tick the regions this banner should target. Leave all unchecked to make this a match-all / fallback banner.');
 		var regGrid = document.createElement('div');
 		regGrid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.4rem;';
 		var REGION_LABELS = {
-			EU: __('banner.new.regionEu', 'EU / EEA (27 + IS, LI, NO)'),
-			UK: __('banner.new.regionUk', 'United Kingdom (UK-GDPR)'),
-			US: __('banner.new.regionUs', 'United States'),
-			CA: __('banner.new.regionCa', 'Canada'),
-			BR: __('banner.new.regionBr', 'Brazil (LGPD)'),
-			AU: __('banner.new.regionAu', 'Australia'),
-			JP: __('banner.new.regionJp', 'Japan'),
-			CH: __('banner.new.regionCh', 'Switzerland (nFADP)')
+			EU: fazI18n('banner.new.regionEu', 'EU / EEA (27 + IS, LI, NO)'),
+			UK: fazI18n('banner.new.regionUk', 'United Kingdom (UK-GDPR)'),
+			US: fazI18n('banner.new.regionUs', 'United States'),
+			CA: fazI18n('banner.new.regionCa', 'Canada'),
+			BR: fazI18n('banner.new.regionBr', 'Brazil (LGPD)'),
+			AU: fazI18n('banner.new.regionAu', 'Australia'),
+			JP: fazI18n('banner.new.regionJp', 'Japan'),
+			CH: fazI18n('banner.new.regionCh', 'Switzerland (nFADP)')
 		};
 		Object.keys(REGION_PRESETS).forEach(function (key) {
 			var lbl = document.createElement('label');
@@ -1139,13 +1142,13 @@
 		// Custom country codes
 		var customWrap = document.createElement('div');
 		var customLabel = document.createElement('label');
-		customLabel.textContent = __('banner.new.customCountries', 'Additional country codes (optional)');
+		customLabel.textContent = fazI18n('banner.new.customCountries', 'Additional country codes (optional)');
 		customLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;';
 		var customInput = document.createElement('input');
 		customInput.type = 'text';
 		customInput.className = 'faz-input';
 		customInput.style.width = '100%';
-		customInput.placeholder = __('banner.new.customCountriesPlaceholder', 'NZ, SG, KR');
+		customInput.placeholder = fazI18n('banner.new.customCountriesPlaceholder', 'NZ, SG, KR');
 		customWrap.appendChild(customLabel);
 		customWrap.appendChild(customInput);
 		form.appendChild(customWrap);
@@ -1155,7 +1158,7 @@
 		rowWrap.style.cssText = 'display:flex;gap:1rem;align-items:flex-end;';
 		var prioWrap = document.createElement('div');
 		var prioLabel = document.createElement('label');
-		prioLabel.textContent = __('banner.new.priority', 'Priority');
+		prioLabel.textContent = fazI18n('banner.new.priority', 'Priority');
 		prioLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;font-size:13px;';
 		var prioInput = document.createElement('input');
 		prioInput.type = 'number';
@@ -1173,7 +1176,7 @@
 		var defTrack = document.createElement('span');
 		defTrack.className = 'faz-toggle-track';
 		var defText = document.createElement('span');
-		defText.textContent = __('banner.new.useAsDefault', 'Use as default fallback');
+		defText.textContent = fazI18n('banner.new.useAsDefault', 'Use as default fallback');
 		defLbl.appendChild(defInput);
 		defLbl.appendChild(defTrack);
 		defLbl.appendChild(defText);
@@ -1187,16 +1190,16 @@
 		var cancelBtn = document.createElement('button');
 		cancelBtn.type = 'button';
 		cancelBtn.className = 'faz-btn faz-btn-secondary';
-		cancelBtn.textContent = __('banner.new.cancel', 'Cancel');
+		cancelBtn.textContent = fazI18n('banner.new.cancel', 'Cancel');
 		var createBtn = document.createElement('button');
 		createBtn.type = 'button';
 		createBtn.className = 'faz-btn faz-btn-primary';
-		createBtn.textContent = __('banner.new.create', 'Create banner');
+		createBtn.textContent = fazI18n('banner.new.create', 'Create banner');
 		footer.appendChild(cancelBtn);
 		footer.appendChild(createBtn);
 
 		var m = FAZ.modal({
-			title: __('banner.new.title', 'Create a new banner'),
+			title: fazI18n('banner.new.title', 'Create a new banner'),
 			body: form,
 			footer: footer,
 			size: 'lg'
@@ -1225,7 +1228,7 @@
 
 			createBtn.disabled = true;
 			cancelBtn.disabled = true;
-			createBtn.textContent = __('banner.new.creating', 'Creating…');
+			createBtn.textContent = fazI18n('banner.new.creating', 'Creating…');
 
 			// Pull the law-appropriate default config so the new banner
 			// starts with sane content/translations/colours instead of an
@@ -1244,20 +1247,20 @@
 			}).then(function (created) {
 				var newId = created && created.id ? Number(created.id) : 0;
 				if (newId <= 0) {
-					FAZ.notify(__('banner.new.failed', 'Failed to create banner.'), 'error');
+					FAZ.notify(fazI18n('banner.new.failed', 'Failed to create banner.'), 'error');
 					createBtn.disabled = false;
 					cancelBtn.disabled = false;
-					createBtn.textContent = __('banner.new.create', 'Create banner');
+					createBtn.textContent = fazI18n('banner.new.create', 'Create banner');
 					return;
 				}
 				var base = window.location.href.split('?')[0];
 				var page = (window.location.search.match(/page=([^&]+)/) || [null, 'faz-cookie-manager-banner'])[1];
 				window.location.href = base + '?page=' + encodeURIComponent(page) + '&banner_id=' + newId;
 			}).catch(function () {
-				FAZ.notify(__('banner.new.failed', 'Failed to create banner.'), 'error');
+				FAZ.notify(fazI18n('banner.new.failed', 'Failed to create banner.'), 'error');
 				createBtn.disabled = false;
 				cancelBtn.disabled = false;
-				createBtn.textContent = __('banner.new.create', 'Create banner');
+				createBtn.textContent = fazI18n('banner.new.create', 'Create banner');
 			});
 		});
 	}
@@ -1370,7 +1373,7 @@
 						impact.textContent = '';
 						return;
 					}
-					impact.textContent = __(
+					impact.textContent = fazI18n(
 						'banner.defaultImpact',
 						'Saving will clear the default flag on: '
 					) + others.join(', ') + '.';
@@ -1434,11 +1437,11 @@
 					banner_control: { status: newValue }
 				}).then(function () {
 					FAZ.notify(newValue
-						? __('banner.enabled', 'Cookie banner enabled.')
-						: __('banner.disabled', 'Cookie banner disabled.'));
+						? fazI18n('banner.enabled', 'Cookie banner enabled.')
+						: fazI18n('banner.disabled', 'Cookie banner disabled.'));
 				}).catch(function () {
 					toggle.checked = !newValue;
-					FAZ.notify(__('banner.toggleFailed', 'Failed to update banner status.'), 'error');
+					FAZ.notify(fazI18n('banner.toggleFailed', 'Failed to update banner status.'), 'error');
 				});
 			});
 		}).catch(function () {
@@ -2016,7 +2019,7 @@
 		syncFormToBannerData();
 		refreshPreview();
 
-		FAZ.notify(__('banner.presetApplied', 'Preset applied: %s').replace('%s', preset.name), 'success');
+		FAZ.notify(fazI18n('banner.presetApplied', 'Preset applied: %s').replace('%s', preset.name), 'success');
 	}
 
 	function setColorPair(baseId, value) {
@@ -2298,7 +2301,7 @@
 			var dnsHint = document.getElementById('faz-b-law-content-hint');
 			if (dnsHint) dnsHint.style.display = '';
 			FAZ.notify(
-				__('banner.dnsMismatch', 'Heads up: the banner text still promises the "Do Not Sell" link under a law that no longer shows it (languages: %s). Saved anyway — update the Content tab to match.').replace('%s', dnsMismatch.join(', ')),
+				fazI18n('banner.dnsMismatch', 'Heads up: the banner text still promises the "Do Not Sell" link under a law that no longer shows it (languages: %s). Saved anyway — update the Content tab to match.').replace('%s', dnsMismatch.join(', ')),
 				'warning'
 			);
 		}
@@ -2322,11 +2325,11 @@
 				bannerData = updated;
 				normalizeBannerConfig(bannerData.properties);
 				FAZ.btnLoading(btn, false);
-				FAZ.notify(__('banner.saved', 'Banner settings saved.'));
+				FAZ.notify(fazI18n('banner.saved', 'Banner settings saved.'));
 			refreshPreview();
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('banner.saveFailed', 'Failed to save banner settings.'), 'error');
+			FAZ.notify(fazI18n('banner.saveFailed', 'Failed to save banner settings.'), 'error');
 		});
 	}
 

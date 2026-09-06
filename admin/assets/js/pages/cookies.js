@@ -10,7 +10,10 @@
 	window.fazCookiesBooted = true;
 
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
-	function __(key, fallback) {
+	// Not named `__`: this is a key lookup into the PHP-provided fazConfig.i18n
+	// map, not gettext. Under the gettext name, translate.wordpress.org harvests
+	// the dotted keys below as if they were translatable English text.
+	function fazI18n(key, fallback) {
 		var parts = key.split('.');
 		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
 		for (var i = 0; i < parts.length; i++) {
@@ -110,7 +113,7 @@
 				svcSelect.innerHTML = '';
 				var placeholder = document.createElement('option');
 				placeholder.value = '';
-				placeholder.textContent = __('cookies.selectService', 'Select a service…');
+				placeholder.textContent = fazI18n('cookies.selectService', 'Select a service…');
 				svcSelect.appendChild(placeholder);
 				services.forEach(function (s) {
 					var opt = document.createElement('option');
@@ -124,7 +127,7 @@
 				svcSelect.innerHTML = '';
 				var failOpt = document.createElement('option');
 				failOpt.value = '';
-				failOpt.textContent = __('cookies.servicesLoadFailed', 'Could not load services');
+				failOpt.textContent = fazI18n('cookies.servicesLoadFailed', 'Could not load services');
 				svcSelect.appendChild(failOpt);
 			}).then(function () {
 				catalogueRequest = null;
@@ -151,7 +154,7 @@
 					// One i18n key for the whole sentence so translators can reorder
 					// the service label, count and text and handle plural forms.
 					FAZ.notify(
-						__('cookies.serviceRegistered', '%1$s: %2$d cookie(s) registered')
+						fazI18n('cookies.serviceRegistered', '%1$s: %2$d cookie(s) registered')
 							.replace('%1$s', function () { return label; })
 							.replace('%2$d', function () { return String(added); }),
 						'success'
@@ -161,7 +164,7 @@
 					loadCookies();
 					loadCategories();
 				}).catch(function () {
-					FAZ.notify(__('cookies.registerFailed', 'Could not register service.'), 'error');
+					FAZ.notify(fazI18n('cookies.registerFailed', 'Could not register service.'), 'error');
 				}).then(function () {
 					registerSvcBtn.disabled = false;
 				});
@@ -186,11 +189,11 @@
 			var ids = [];
 			document.querySelectorAll('.faz-cookie-check:checked').forEach(function (cb) { ids.push(parseInt(cb.value, 10)); });
 			if (!ids.length) return;
-			FAZ.confirm(__('cookies.bulkDeleteConfirm', 'Delete selected cookie(s)?') + ' (' + ids.length + ')').then(function (ok) {
+			FAZ.confirm(fazI18n('cookies.bulkDeleteConfirm', 'Delete selected cookie(s)?') + ' (' + ids.length + ')').then(function (ok) {
 				if (!ok) return;
 				FAZ.post('cookies/bulk-delete', { ids: ids }).then(function (res) {
 					var deletedCount = (res && typeof res.deleted === 'number') ? res.deleted : ids.length;
-					FAZ.notify(deletedCount + ' ' + __('cookies.cookieDeleted', 'Cookie deleted.'));
+					FAZ.notify(deletedCount + ' ' + fazI18n('cookies.cookieDeleted', 'Cookie deleted.'));
 					loadCookies();
 					loadCategories();
 					// `restorable` is what makes the undo affordance appear; the
@@ -204,8 +207,8 @@
 					var snapshotFailed = !!(err && err.code === 'faz_recycle_bin_write_failed');
 					FAZ.notify(
 						snapshotFailed
-							? __('cookies.bulkDeleteSnapshotFailed', 'Nothing was deleted: the undo snapshot could not be saved, so the cookies were left in place.')
-							: __('cookies.bulkDeleteFailed', 'Bulk delete failed.'),
+							? fazI18n('cookies.bulkDeleteSnapshotFailed', 'Nothing was deleted: the undo snapshot could not be saved, so the cookies were left in place.')
+							: fazI18n('cookies.bulkDeleteFailed', 'Bulk delete failed.'),
 						'error'
 					);
 				});
@@ -322,7 +325,7 @@
 			if (cat.slug === 'necessary') {
 				var naSpan = document.createElement('span');
 				naSpan.style.color = 'var(--faz-text-muted)';
-				naSpan.textContent = __('cookies.notApplicable', '—');
+				naSpan.textContent = fazI18n('cookies.notApplicable', '—');
 				tdSaleShare.appendChild(naSpan);
 			} else {
 				var mkToggle = function (kind, label, checked) {
@@ -340,8 +343,8 @@
 				// the schema default.
 				var sellOn = (cat.sell_personal_data === undefined) ? true : !!cat.sell_personal_data;
 				var shareOn = (cat.share_personal_data === undefined) ? true : !!cat.share_personal_data;
-				tdSaleShare.appendChild(mkToggle('sell', __('cookies.sell', 'Sell'), sellOn));
-				tdSaleShare.appendChild(mkToggle('share', __('cookies.share', 'Share'), shareOn));
+				tdSaleShare.appendChild(mkToggle('sell', fazI18n('cookies.sell', 'Sell'), sellOn));
+				tdSaleShare.appendChild(mkToggle('share', fazI18n('cookies.share', 'Share'), shareOn));
 			}
 			tr.appendChild(tdSaleShare);
 
@@ -410,7 +413,7 @@
 		Promise.allSettled(promises).then(function (results) {
 			var failed = results.filter(function (r) { return r.status === 'rejected'; }).length;
 			if (failed === 0) {
-				FAZ.notify(__('cookies.categoriesSaved', 'Categories saved.'), 'success');
+				FAZ.notify(fazI18n('cookies.categoriesSaved', 'Categories saved.'), 'success');
 			} else {
 				FAZ.notify((results.length - failed) + ' saved, ' + failed + ' failed.', 'error');
 			}
@@ -568,7 +571,7 @@
 		var deleteAllBtn = document.createElement('button');
 		deleteAllBtn.type = 'button';
 		deleteAllBtn.className = 'faz-btn faz-btn-sm faz-stale-delete-all';
-		deleteAllBtn.textContent = __('cookies.deleteAllStale', 'Delete all stale');
+		deleteAllBtn.textContent = fazI18n('cookies.deleteAllStale', 'Delete all stale');
 		deleteAllBtn.addEventListener('click', deleteAllStaleCookies);
 		staleBar.appendChild(deleteAllBtn);
 	}
@@ -638,18 +641,18 @@
 		bar.style.display = '';
 
 		var msg = document.createElement('span');
-		msg.textContent = __('cookies.jarOnlyHint', '%d cookie(s) were already in your browser when the scan started, so they could not be attributed to any page and were not imported.')
+		msg.textContent = fazI18n('cookies.jarOnlyHint', '%d cookie(s) were already in your browser when the scan started, so they could not be attributed to any page and were not imported.')
 			.replace('%d', function () { return String(names.length); });
 		bar.appendChild(msg);
 
 		var details = document.createElement('details');
 		details.className = 'faz-jar-details';
 		var summary = document.createElement('summary');
-		summary.textContent = __('cookies.jarOnlyToggle', 'Show the names');
+		summary.textContent = fazI18n('cookies.jarOnlyToggle', 'Show the names');
 		details.appendChild(summary);
 
 		var explain = document.createElement('p');
-		explain.textContent = __('cookies.jarOnlyExplain', 'If you recognise one as a cookie your site really sets, add it manually with Add Cookie.');
+		explain.textContent = fazI18n('cookies.jarOnlyExplain', 'If you recognise one as a cookie your site really sets, add it manually with Add Cookie.');
 		details.appendChild(explain);
 
 		var list = document.createElement('ul');
@@ -695,7 +698,7 @@
 			bar.style.display = '';
 
 			var title = document.createElement('strong');
-			title.textContent = __('cookies.visitorCheckTitle', 'Server-side visitor check (headers only) — scan #%s:')
+			title.textContent = fazI18n('cookies.visitorCheckTitle', 'Server-side visitor check (headers only) — scan #%s:')
 				.replace('%s', function () { return String(check.scan_id || ''); });
 			bar.appendChild(title);
 
@@ -705,7 +708,7 @@
 				var li = document.createElement('li');
 				// textContent, never innerHTML: cookie names are content a
 				// scanned page (or a third party it embeds) controls.
-				li.textContent = __(key, fallback)
+				li.textContent = fazI18n(key, fallback)
 					.replace('%1$d', function () { return String(names.length); })
 					.replace('%2$s', function () { return names.join(', '); });
 				list.appendChild(li);
@@ -717,13 +720,13 @@
 				bar.appendChild(list);
 			} else {
 				var none = document.createElement('p');
-				none.textContent = __('cookies.visitorCheckNoDiff', 'The anonymous check found no cookie differences against the browser scan.');
+				none.textContent = fazI18n('cookies.visitorCheckNoDiff', 'The anonymous check found no cookie differences against the browser scan.');
 				bar.appendChild(none);
 			}
 
 			var disclaimer = document.createElement('p');
 			disclaimer.className = 'faz-help';
-			disclaimer.textContent = __('cookies.visitorCheckDisclaimer', 'This check re-fetches the scanned pages without a login and compares Set-Cookie headers only. It cannot see cookies that JavaScript sets for anonymous visitors, nor cookies set only after an interaction (for example an add-to-cart request), so a clean result does not mean the visitor view is fully verified.');
+			disclaimer.textContent = fazI18n('cookies.visitorCheckDisclaimer', 'This check re-fetches the scanned pages without a login and compares Set-Cookie headers only. It cannot see cookies that JavaScript sets for anonymous visitors, nor cookies set only after an interaction (for example an add-to-cart request), so a clean result does not mean the visitor view is fully verified.');
 			bar.appendChild(disclaimer);
 		}).catch(function () {
 			bar.style.display = 'none';
@@ -768,17 +771,17 @@
 			var msg = document.createElement('span');
 			msg.textContent = age
 				/* translators: 1: number of cookies, 2: human-readable age such as "3 hours". */
-				? __('cookies.restoreDeletedHintAged', '%1$d deleted cookie(s) can still be restored (deleted %2$s ago).')
+				? fazI18n('cookies.restoreDeletedHintAged', '%1$d deleted cookie(s) can still be restored (deleted %2$s ago).')
 					.replace('%1$d', function () { return String(count); })
 					.replace('%2$s', function () { return age; })
-				: __('cookies.restoreDeletedHint', '%d recently deleted cookie(s) can still be restored.')
+				: fazI18n('cookies.restoreDeletedHint', '%d recently deleted cookie(s) can still be restored.')
 					.replace('%d', function () { return String(count); });
 			bar.appendChild(msg);
 
 			var restoreBtn = document.createElement('button');
 			restoreBtn.type = 'button';
 			restoreBtn.className = 'faz-btn faz-btn-sm faz-restore-deleted';
-			restoreBtn.textContent = __('cookies.restoreDeleted', 'Undo delete');
+			restoreBtn.textContent = fazI18n('cookies.restoreDeleted', 'Undo delete');
 			restoreBtn.addEventListener('click', function () {
 				restoreBtn.disabled = true;
 				FAZ.post('cookies/restore-deleted', {}).then(function (res) {
@@ -793,19 +796,19 @@
 					if (0 === restored) {
 						FAZ.notify(
 							skipped > 0
-								? __('cookies.restoreAllPresent', 'Nothing to restore: those cookies are already in the list again.')
-								: __('cookies.restoreNoneRestored', 'No cookies were restored.'),
+								? fazI18n('cookies.restoreAllPresent', 'Nothing to restore: those cookies are already in the list again.')
+								: fazI18n('cookies.restoreNoneRestored', 'No cookies were restored.'),
 							'info'
 						);
 					} else if (skipped > 0) {
 						FAZ.notify(
-							__('cookies.restoreSucceededPartial', '%1$d cookie(s) restored. %2$d were already in the list.')
+							fazI18n('cookies.restoreSucceededPartial', '%1$d cookie(s) restored. %2$d were already in the list.')
 								.replace('%1$d', String(restored))
 								.replace('%2$d', String(skipped)),
 							'success'
 						);
 					} else {
-						FAZ.notify(__('cookies.restoreSucceeded', '%d cookie(s) restored.')
+						FAZ.notify(fazI18n('cookies.restoreSucceeded', '%d cookie(s) restored.')
 							.replace('%d', function () { return String(restored); }), 'success');
 					}
 					loadCookies();
@@ -827,10 +830,10 @@
 					var serverMessage = (err && typeof err.message === 'string' && err.message) ? err.message : '';
 					FAZ.notify(
 						emptied
-							? __('cookies.nothingToRestore', 'There is nothing left to restore.')
+							? fazI18n('cookies.nothingToRestore', 'There is nothing left to restore.')
 							: (needsCap && serverMessage
 								? serverMessage
-								: __('cookies.restoreFailed', 'Could not restore the deleted cookies.')),
+								: fazI18n('cookies.restoreFailed', 'Could not restore the deleted cookies.')),
 						emptied ? 'info' : (needsCap ? 'warning' : 'error')
 					);
 				}).then(function () {
@@ -861,7 +864,7 @@
 		var allBtn = document.createElement('button');
 		allBtn.className = activeCat === 'all' ? 'active' : '';
 		var allName = document.createElement('span');
-		allName.textContent = __('cookies.allCookies', 'All Cookies');
+		allName.textContent = fazI18n('cookies.allCookies', 'All Cookies');
 		allBtn.appendChild(allName);
 		var allCount = document.createElement('span');
 		allCount.className = 'faz-count';
@@ -886,8 +889,8 @@
 			if (cat.visibility !== undefined && !cat.visibility) {
 				var badge = document.createElement('span');
 				badge.className = 'faz-badge faz-badge-muted';
-				badge.textContent = __('cookies.hidden', 'hidden');
-				badge.title = __('cookies.hiddenFromFrontend', 'Hidden from frontend');
+				badge.textContent = fazI18n('cookies.hidden', 'hidden');
+				badge.title = fazI18n('cookies.hiddenFromFrontend', 'Hidden from frontend');
 				badge.style.cssText = 'font-size:10px;margin-left:6px;padding:1px 6px;border-radius:3px;background:#e2e8f0;color:#64748b;vertical-align:middle;';
 				btn.appendChild(badge);
 			}
@@ -926,7 +929,7 @@
 			td.colSpan = 6;
 			td.className = 'faz-empty';
 			var p = document.createElement('p');
-			p.textContent = __('cookies.noCookiesFound', 'No cookies found.');
+			p.textContent = fazI18n('cookies.noCookiesFound', 'No cookies found.');
 			td.appendChild(p);
 			tr.appendChild(td);
 			tbody.appendChild(tr);
@@ -962,8 +965,8 @@
 			if (cookie.transfer && cookie.transfer.enabled) {
 				var transferBadge = document.createElement('span');
 				transferBadge.className = 'faz-cookie-transfer-badge';
-				transferBadge.textContent = __('cookies.transferBadge', '3rd country');
-				transferBadge.title = __('cookies.transferBadgeTitle', 'Transfers personal data to a third country (Schrems II)');
+				transferBadge.textContent = fazI18n('cookies.transferBadge', '3rd country');
+				transferBadge.title = fazI18n('cookies.transferBadgeTitle', 'Transfers personal data to a third country (Schrems II)');
 				tdName.appendChild(transferBadge);
 			}
 			tr.appendChild(tdName);
@@ -990,7 +993,7 @@
 
 			var editBtn = document.createElement('button');
 			editBtn.className = 'faz-btn faz-btn-outline faz-btn-sm';
-			editBtn.textContent = __('cookies.edit', 'Edit');
+			editBtn.textContent = fazI18n('cookies.edit', 'Edit');
 			editBtn.addEventListener('click', function () {
 				var cookieId = getCookieId(cookie);
 				if (!cookieId) {
@@ -1002,7 +1005,7 @@
 				FAZ.get('cookies/' + cookieId, { context: 'edit' }).then(function (fullCookie) {
 					openCookieModal(fullCookie || cookie);
 				}).catch(function () {
-					FAZ.notify(__('cookies.cookieLoadFailed', 'Failed to load cookie details.'), 'error');
+					FAZ.notify(fazI18n('cookies.cookieLoadFailed', 'Failed to load cookie details.'), 'error');
 				}).then(function () {
 					editBtn.disabled = false;
 				});
@@ -1011,7 +1014,7 @@
 
 			var delBtn = document.createElement('button');
 			delBtn.className = 'faz-btn faz-btn-outline faz-btn-sm';
-			delBtn.textContent = __('cookies.delete', 'Delete');
+			delBtn.textContent = fazI18n('cookies.delete', 'Delete');
 			delBtn.style.color = 'var(--faz-danger)';
 			delBtn.addEventListener('click', function () { deleteCookie(cookie); });
 			tdActions.appendChild(delBtn);
@@ -1019,7 +1022,7 @@
 			if (isStale) {
 				var staleBtn = document.createElement('button');
 				staleBtn.className = 'faz-btn faz-btn-sm';
-				staleBtn.textContent = __('cookies.deleteStale', 'Delete stale');
+				staleBtn.textContent = fazI18n('cookies.deleteStale', 'Delete stale');
 				staleBtn.style.background = '#fee2e2';
 				staleBtn.style.color = '#991b1b';
 				staleBtn.style.border = '1px solid #fecaca';
@@ -1059,10 +1062,10 @@
 		var canEditScripts = !!(window.fazConfig && window.fazConfig.canEditScripts);
 
 		var fields = [
-			{ label: __('cookies.nameLabel', 'Cookie Name'), path: 'name', type: 'text' },
-			{ label: __('cookies.domainLabel', 'Domain'), path: 'domain', type: 'text' },
-			{ label: __('cookies.durationLabel', 'Duration'), path: 'duration', type: 'text', placeholder: __('cookies.durationPlaceholder', 'e.g. 1 year') },
-			{ label: __('cookies.descriptionLabel', 'Description'), path: 'description', type: 'textarea' },
+			{ label: fazI18n('cookies.nameLabel', 'Cookie Name'), path: 'name', type: 'text' },
+			{ label: fazI18n('cookies.domainLabel', 'Domain'), path: 'domain', type: 'text' },
+			{ label: fazI18n('cookies.durationLabel', 'Duration'), path: 'duration', type: 'text', placeholder: fazI18n('cookies.durationPlaceholder', 'e.g. 1 year') },
+			{ label: fazI18n('cookies.descriptionLabel', 'Description'), path: 'description', type: 'textarea' },
 		];
 
 		// Only expose opt-in/opt-out script fields to users with the
@@ -1070,8 +1073,8 @@
 		// always POST these fields (even empty), tripping the REST sanitize
 		// callback's 403 for multisite site-admins who lack the capability.
 		if (canEditScripts) {
-			fields.push({ label: __('cookies.optInScriptLabel', 'Opt-in Script (runs when category is accepted)'), path: 'opt_in_script', type: 'textarea', placeholder: __('cookies.optInScriptPlaceholder', '// JS executed on consent accept\n// e.g. gtag("event", "consent_granted");') });
-			fields.push({ label: __('cookies.optOutScriptLabel', 'Opt-out Script (runs when category is rejected/revoked)'), path: 'opt_out_script', type: 'textarea', placeholder: __('cookies.optOutScriptPlaceholder', '// JS executed on consent reject or revoke') });
+			fields.push({ label: fazI18n('cookies.optInScriptLabel', 'Opt-in Script (runs when category is accepted)'), path: 'opt_in_script', type: 'textarea', placeholder: fazI18n('cookies.optInScriptPlaceholder', '// JS executed on consent accept\n// e.g. gtag("event", "consent_granted");') });
+			fields.push({ label: fazI18n('cookies.optOutScriptLabel', 'Opt-out Script (runs when category is rejected/revoked)'), path: 'opt_out_script', type: 'textarea', placeholder: fazI18n('cookies.optOutScriptPlaceholder', '// JS executed on consent reject or revoke') });
 		}
 
 		fields.forEach(function (f) {
@@ -1106,7 +1109,7 @@
 				// text some breathing room without breaking the compact form
 				// layout.
 				scriptNotice.style.cssText = 'font-size:12px;color:#767676;margin:4px 0 0;';
-				scriptNotice.textContent = __('cookies.scriptNotice', 'Note: code entered here is included in the page source and visible to all visitors.');
+				scriptNotice.textContent = fazI18n('cookies.scriptNotice', 'Note: code entered here is included in the page source and visible to all visitors.');
 				group.appendChild(scriptNotice);
 			}
 			form.appendChild(group);
@@ -1121,7 +1124,7 @@
 		transferGroup.className = 'faz-form-group faz-transfer-fieldset';
 
 		var transferTitle = document.createElement('label');
-		transferTitle.textContent = __('cookies.transferTitle', 'International data transfers (Schrems II)');
+		transferTitle.textContent = fazI18n('cookies.transferTitle', 'International data transfers (Schrems II)');
 		transferGroup.appendChild(transferTitle);
 
 		var transferEnabledLabel = document.createElement('label');
@@ -1131,34 +1134,34 @@
 		transferEnabled.className = 'faz-transfer-enabled';
 		transferEnabled.checked = !!existingTransfer.enabled;
 		transferEnabledLabel.appendChild(transferEnabled);
-		transferEnabledLabel.appendChild(document.createTextNode(__('cookies.transferEnabledLabel', 'This cookie may transfer personal data to a country without an EU adequacy decision')));
+		transferEnabledLabel.appendChild(document.createTextNode(fazI18n('cookies.transferEnabledLabel', 'This cookie may transfer personal data to a country without an EU adequacy decision')));
 		transferGroup.appendChild(transferEnabledLabel);
 
 		var countryLabel = document.createElement('label');
 		countryLabel.style.cssText = 'font-weight:400;font-size:12px;';
-		countryLabel.textContent = __('cookies.transferCountryLabel', 'Recipient country / countries');
+		countryLabel.textContent = fazI18n('cookies.transferCountryLabel', 'Recipient country / countries');
 		transferGroup.appendChild(countryLabel);
 		var countryInput = document.createElement('input');
 		countryInput.type = 'text';
 		countryInput.className = 'faz-input faz-transfer-country';
-		countryInput.placeholder = __('cookies.transferCountryPlaceholder', 'e.g. United States');
+		countryInput.placeholder = fazI18n('cookies.transferCountryPlaceholder', 'e.g. United States');
 		countryInput.value = textVal(existingTransfer.countries) || '';
 		transferGroup.appendChild(countryInput);
 
 		var safeguardLabel = document.createElement('label');
 		safeguardLabel.style.cssText = 'font-weight:400;font-size:12px;margin-top:8px;';
-		safeguardLabel.textContent = __('cookies.transferSafeguardLabel', 'Safeguard (optional)');
+		safeguardLabel.textContent = fazI18n('cookies.transferSafeguardLabel', 'Safeguard (optional)');
 		transferGroup.appendChild(safeguardLabel);
 		var safeguardInput = document.createElement('textarea');
 		safeguardInput.className = 'faz-textarea faz-transfer-safeguard';
 		safeguardInput.rows = 2;
-		safeguardInput.placeholder = __('cookies.transferSafeguardPlaceholder', 'e.g. Standard Contractual Clauses, EU-US Data Privacy Framework, or explicit consent (Art. 49(1)(a))');
+		safeguardInput.placeholder = fazI18n('cookies.transferSafeguardPlaceholder', 'e.g. Standard Contractual Clauses, EU-US Data Privacy Framework, or explicit consent (Art. 49(1)(a))');
 		safeguardInput.value = textVal(existingTransfer.safeguard) || '';
 		transferGroup.appendChild(safeguardInput);
 
 		var transferHelp = document.createElement('p');
 		transferHelp.style.cssText = 'font-size:12px;color:#767676;margin:4px 0 0;';
-		transferHelp.textContent = __('cookies.transferHelp', 'Naming a third-country transfer helps you obtain informed consent. This plugin does not provide legal advice — describe the safeguard your provider relies on.');
+		transferHelp.textContent = fazI18n('cookies.transferHelp', 'Naming a third-country transfer helps you obtain informed consent. This plugin does not provide legal advice — describe the safeguard your provider relies on.');
 		transferGroup.appendChild(transferHelp);
 
 		form.appendChild(transferGroup);
@@ -1190,7 +1193,7 @@
 		var catGroup = document.createElement('div');
 		catGroup.className = 'faz-form-group';
 		var catLabel = document.createElement('label');
-		catLabel.textContent = __('cookies.category', 'Category');
+		catLabel.textContent = fazI18n('cookies.category', 'Category');
 		catGroup.appendChild(catLabel);
 		var catSelect = document.createElement('select');
 		catSelect.className = 'faz-select';
@@ -1209,7 +1212,7 @@
 		footer.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;width:100%';
 		var cancelBtn = document.createElement('button');
 		cancelBtn.className = 'faz-btn faz-btn-outline';
-		cancelBtn.textContent = __('cookies.cancel', 'Cancel');
+		cancelBtn.textContent = fazI18n('cookies.cancel', 'Cancel');
 		cancelBtn.type = 'button';
 		var saveBtn = document.createElement('button');
 		saveBtn.className = 'faz-btn faz-btn-primary';
@@ -1278,25 +1281,25 @@
 
 			promise.then(function () {
 				m.close();
-				FAZ.notify(isEdit ? __('cookies.cookieUpdated', 'Cookie updated.') : __('cookies.cookieAdded', 'Cookie added.'));
+				FAZ.notify(isEdit ? fazI18n('cookies.cookieUpdated', 'Cookie updated.') : fazI18n('cookies.cookieAdded', 'Cookie added.'));
 				loadCookies();
 				loadCategories();
 			}).catch(function () {
 				FAZ.btnLoading(saveBtn, false);
-				FAZ.notify(__('cookies.cookieSaveFailed', 'Failed to save cookie.'), 'error');
+				FAZ.notify(fazI18n('cookies.cookieSaveFailed', 'Failed to save cookie.'), 'error');
 			});
 		});
 	}
 
 	function deleteCookie(cookie) {
-		FAZ.confirm(__('cookies.cookieDeleteConfirm', 'Delete cookie "%s"?').replace('%s', cookie.name || '')).then(function (ok) {
+		FAZ.confirm(fazI18n('cookies.cookieDeleteConfirm', 'Delete cookie "%s"?').replace('%s', cookie.name || '')).then(function (ok) {
 			if (!ok) return;
 			FAZ.del('cookies/' + getCookieId(cookie)).then(function () {
-				FAZ.notify(__('cookies.cookieDeleted', 'Cookie deleted.'));
+				FAZ.notify(fazI18n('cookies.cookieDeleted', 'Cookie deleted.'));
 				loadCookies();
 				loadCategories();
 			}).catch(function () {
-				FAZ.notify(__('cookies.cookieDeleteFailed', 'Failed to delete cookie.'), 'error');
+				FAZ.notify(fazI18n('cookies.cookieDeleteFailed', 'Failed to delete cookie.'), 'error');
 			});
 		});
 	}
@@ -1308,17 +1311,17 @@
 				delete staleCookieNames[staleKey];
 				staleCookieCount = Math.max(0, staleCookieCount - 1);
 			}
-			FAZ.notify(__('cookies.staleDeleted', 'Stale cookie deleted.'));
+			FAZ.notify(fazI18n('cookies.staleDeleted', 'Stale cookie deleted.'));
 			loadCookies();
 			loadCategories();
 		}).catch(function () {
-			FAZ.notify(__('cookies.staleDeleteFailed', 'Failed to delete stale cookie.'), 'error');
+			FAZ.notify(fazI18n('cookies.staleDeleteFailed', 'Failed to delete stale cookie.'), 'error');
 		});
 	}
 
 	function deleteAllStaleCookies() {
 		if (!staleCookieCount) return;
-		FAZ.confirm(__('cookies.staleAllConfirm', 'Remove these cookie-policy entries? Cookies that load only after an interaction, during a flow, or as httpOnly cookies may still be present even if the scan did not observe them.')).then(function (ok) {
+		FAZ.confirm(fazI18n('cookies.staleAllConfirm', 'Remove these cookie-policy entries? Cookies that load only after an interaction, during a flow, or as httpOnly cookies may still be present even if the scan did not observe them.')).then(function (ok) {
 			if (!ok) return;
 			FAZ.get('cookies').then(function (data) {
 				var list = Array.isArray(data) ? data : (data.items || []);
@@ -1331,7 +1334,7 @@
 					}
 				});
 				if (!ids.length) {
-					FAZ.notify(__('cookies.staleNone', 'No stale cookies to delete.'));
+					FAZ.notify(fazI18n('cookies.staleNone', 'No stale cookies to delete.'));
 					return;
 				}
 				// `reason: 'stale'` opts this call into the server-side threshold
@@ -1343,9 +1346,9 @@
 					var refusedCount = (res && typeof res.refused === 'number') ? res.refused : 0;
 					staleCookieNames = {};
 					staleCookieCount = 0;
-					var message = deletedCount + ' ' + __('cookies.staleDeleted', 'stale cookie(s) deleted.');
+					var message = deletedCount + ' ' + fazI18n('cookies.staleDeleted', 'stale cookie(s) deleted.');
 					if (refusedCount > 0) {
-						message += ' ' + __('cookies.staleRefusedNotEarned', '%d entry(ies) were kept: they have not yet been missing from enough complete scans.')
+						message += ' ' + fazI18n('cookies.staleRefusedNotEarned', '%d entry(ies) were kept: they have not yet been missing from enough complete scans.')
 							.replace('%d', function () { return String(refusedCount); });
 					}
 					FAZ.notify(message);
@@ -1356,13 +1359,13 @@
 					var snapshotFailed = !!(err && err.code === 'faz_recycle_bin_write_failed');
 					FAZ.notify(
 						snapshotFailed
-							? __('cookies.bulkDeleteSnapshotFailed', 'Nothing was deleted: the undo snapshot could not be saved, so the cookies were left in place.')
-							: __('cookies.staleDeleteAllFailed', 'Failed to delete stale cookies.'),
+							? fazI18n('cookies.bulkDeleteSnapshotFailed', 'Nothing was deleted: the undo snapshot could not be saved, so the cookies were left in place.')
+							: fazI18n('cookies.staleDeleteAllFailed', 'Failed to delete stale cookies.'),
 						'error'
 					);
 				});
 			}).catch(function () {
-				FAZ.notify(__('cookies.staleLoadFailed', 'Failed to load cookies for stale cleanup.'), 'error');
+				FAZ.notify(fazI18n('cookies.staleLoadFailed', 'Failed to load cookies for stale cleanup.'), 'error');
 			});
 		});
 	}
@@ -1487,7 +1490,7 @@
 		endBtn.type = 'button';
 		endBtn.id = 'faz-scan-session-end';
 		endBtn.className = 'faz-btn faz-btn-sm faz-btn-danger';
-		endBtn.textContent = __('cookies.endActiveScan', 'End this scan and discard its capture');
+		endBtn.textContent = fazI18n('cookies.endActiveScan', 'End this scan and discard its capture');
 		actions.appendChild(endBtn);
 		box.appendChild(notice);
 		box.appendChild(detail);
@@ -1502,10 +1505,10 @@
 				// aborted:false means the session lapsed on its own between the
 				// last poll and the click — either way it no longer exists.
 				removeActiveSessionPanel();
-				FAZ.notify(__('cookies.activeScanEnded', 'Scan session ended — its capture was discarded. You can start a new scan.'), 'success');
+				FAZ.notify(fazI18n('cookies.activeScanEnded', 'Scan session ended — its capture was discarded. You can start a new scan.'), 'success');
 			}, function (err) {
 				endBtn.disabled = false;
-				FAZ.notify((err && err.message) || __('cookies.scanFailed', 'Scan failed.'), 'error');
+				FAZ.notify((err && err.message) || fazI18n('cookies.scanFailed', 'Scan failed.'), 'error');
 			});
 		});
 
@@ -1545,14 +1548,14 @@
 		var isLive = idleFor >= 0 && idleFor <= SESSION_STALL_AFTER_S;
 
 		activeSessionPanel.wrap.classList.toggle('faz-scan-progress-held', !isLive);
-		els.statusEl.textContent = isLive ? __('cookies.scanStarted', 'Scanning...') : '';
-		els.notice.textContent = __('cookies.activeScanNotice', 'A cookie scan session for your account is already open on the server (started at %s). A new scan cannot start until it ends.')
+		els.statusEl.textContent = isLive ? fazI18n('cookies.scanStarted', 'Scanning...') : '';
+		els.notice.textContent = fazI18n('cookies.activeScanNotice', 'A cookie scan session for your account is already open on the server (started at %s). A new scan cannot start until it ends.')
 			.replace('%s', function () { return formatClockTime(info.started_at); });
 		els.detail.textContent = isLive
-			? __('cookies.activeScanLive', 'It is capturing right now — %1$d observation(s) so far, the last at %2$s. If one of your other tabs is running a scan, let it finish. Ending the session discards everything it has captured.')
+			? fazI18n('cookies.activeScanLive', 'It is capturing right now — %1$d observation(s) so far, the last at %2$s. If one of your other tabs is running a scan, let it finish. Ending the session discards everything it has captured.')
 				.replace('%1$d', function () { return String(info.observations || 0); })
 				.replace('%2$s', function () { return formatClockTime(info.last_activity); })
-			: __('cookies.activeScanStalled', 'Nothing has reached the server since %s. If none of your tabs is running a scan, the tab that was driving this one is gone. The session will expire on its own in a few minutes, or you can end it now — ending it discards everything it captured.')
+			: fazI18n('cookies.activeScanStalled', 'Nothing has reached the server since %s. If none of your tabs is running a scan, the tab that was driving this one is gone. The session will expire on its own in a few minutes, or you can end it now — ending it discards everything it captured.')
 				.replace('%s', function () { return formatClockTime(info.last_activity); });
 
 		if (!activeSessionPanel.timer) {
@@ -1567,7 +1570,7 @@
 		var btn = document.getElementById('faz-scan-btn');
 		var dropdown = document.getElementById('faz-scan-dropdown');
 		FAZ.btnLoading(btn, true);
-		btn.textContent = __('cookies.scanStarted', 'Scanning...');
+		btn.textContent = fazI18n('cookies.scanStarted', 'Scanning...');
 
 		// The session panel's poll timer must stop before its wrapper goes: the
 		// sweep below removes the DOM but would leave the interval re-creating
@@ -1593,7 +1596,7 @@
 		bar.className = 'faz-scan-bar';
 		var statusEl = document.createElement('span');
 		statusEl.className = 'faz-scan-status';
-		statusEl.textContent = __('cookies.discoveringPages', 'Discovering pages...');
+		statusEl.textContent = fazI18n('cookies.discoveringPages', 'Discovering pages...');
 		var pagesEl = document.createElement('div');
 		pagesEl.className = 'faz-scan-pages';
 		pagesEl.textContent = '0/0 pages';
@@ -1605,7 +1608,7 @@
 		var stopBtn = document.createElement('button');
 		stopBtn.type = 'button';
 		stopBtn.className = 'faz-btn faz-btn-sm faz-scan-stop';
-		stopBtn.textContent = __('cookies.stopScan', 'Stop scan');
+		stopBtn.textContent = fazI18n('cookies.stopScan', 'Stop scan');
 		progress.appendChild(bar);
 		progress.appendChild(statusEl);
 		progressWrap.appendChild(progress);
@@ -1660,7 +1663,7 @@
 					setStaleCookies(previousDiscoveredSet, currentDetectedSet, getEarnedDeletableSet(res));
 				}
 
-				// Every fragment of this summary goes through __(): a half-translated
+				// Every fragment of this summary goes through fazI18n(): a half-translated
 				// sentence is worse than an untranslated one, and the two clauses
 				// below were already localized. Replacements use callbacks so a
 				// value containing "$&" cannot be read as a replacement pattern.
@@ -1672,26 +1675,26 @@
 				// below are described as what is already on record.
 				var duplicate = !!(res.importResult && res.importResult.duplicate);
 				var msg = duplicate
-					? __('cookies.scanAlreadySaved', 'Already saved — %1$d cookies on %2$d pages were imported by an earlier attempt. Nothing was saved twice.')
+					? fazI18n('cookies.scanAlreadySaved', 'Already saved — %1$d cookies on %2$d pages were imported by an earlier attempt. Nothing was saved twice.')
 						.replace('%1$d', function () { return String(res.total); })
 						.replace('%2$d', function () { return String(res.pagesScanned); })
-					: __('cookies.scanComplete', 'Scan complete — %1$d cookies found on %2$d pages')
+					: fazI18n('cookies.scanComplete', 'Scan complete — %1$d cookies found on %2$d pages')
 						.replace('%1$d', function () { return String(res.total); })
 						.replace('%2$d', function () { return String(res.pagesScanned); });
 				if (res.stoppedReason) {
-					msg += ' ' + __('cookies.scanStopped', '(stopped by you before every page was visited)');
+					msg += ' ' + fazI18n('cookies.scanStopped', '(stopped by you before every page was visited)');
 				} else if (res.earlyStopReason) {
-					msg += ' ' + __('cookies.scanEarlyStop', '(early stop: %s)')
+					msg += ' ' + fazI18n('cookies.scanEarlyStop', '(early stop: %s)')
 						.replace('%s', function () { return String(res.earlyStopReason); });
 				}
 				if (!coverageIsComplete) {
-					msg += ' | ' + __('cookies.scanCoverageIncomplete', 'Scan coverage was incomplete, so no cookie was marked as stale.');
+					msg += ' | ' + fazI18n('cookies.scanCoverageIncomplete', 'Scan coverage was incomplete, so no cookie was marked as stale.');
 				} else if (staleCookieCount > 0) {
-					msg += ' | ' + __('cookies.staleHighlighted', '%d stale cookie(s) highlighted')
+					msg += ' | ' + fazI18n('cookies.staleHighlighted', '%d stale cookie(s) highlighted')
 						.replace('%d', function () { return String(staleCookieCount); });
 				}
 				if (res.importResult && res.importResult.enrichment_pending) {
-					msg += ' | ' + __('cookies.enrichmentPending', 'The browser scan was saved. Server-header enrichment is still running in the background, so a few more cookies may appear shortly.');
+					msg += ' | ' + fazI18n('cookies.enrichmentPending', 'The browser scan was saved. Server-header enrichment is still running in the background, so a few more cookies may appear shortly.');
 				}
 				msg += FAZ.scanEngine.diagnosticsHint(res.diagnostics, res.total);
 				if (res.diagnostics && res.diagnostics.totalIssues > 0) {
@@ -1702,7 +1705,7 @@
 			}
 
 			function terminalFailure(err) {
-				finishScan(btn, progressWrap, (err && err.message) || __('cookies.scanFailed', 'Scan failed.'), true);
+				finishScan(btn, progressWrap, (err && err.message) || fazI18n('cookies.scanFailed', 'Scan failed.'), true);
 			}
 
 			// The import stage is the only failure the administrator can still
@@ -1739,11 +1742,11 @@
 			 */
 			function offerImportRetry(err) {
 				FAZ.btnLoading(btn, false);
-				btn.textContent = __('cookies.scanSite', 'Scan Site') + ' ▾';
+				btn.textContent = fazI18n('cookies.scanSite', 'Scan Site') + ' ▾';
 				if (stopBtn.parentNode) { stopBtn.parentNode.removeChild(stopBtn); }
 				bar.style.width = '100%';
 				progressWrap.classList.add('faz-scan-progress-held');
-				statusEl.textContent = __('cookies.importNotSaved', 'Not saved');
+				statusEl.textContent = fazI18n('cookies.importNotSaved', 'Not saved');
 				pagesEl.textContent = '';
 
 				// The engine hands back a resubmit of the payload it already
@@ -1762,8 +1765,8 @@
 				var explain = document.createElement('p');
 				explain.className = 'faz-scan-held-text';
 				explain.textContent = savesOnly
-					? __('cookies.importHeldRetrySave', 'The scan finished but the results could not be saved. Nothing is lost — they are held on the server for a few minutes. Retrying saves them; it does not scan the site again.')
-					: __('cookies.importHeldRerun', 'The scan finished but the results could not be saved. The capture session is held on the server for a few minutes, so retrying reuses it instead of failing — but this browser has to walk the pages again.');
+					? fazI18n('cookies.importHeldRetrySave', 'The scan finished but the results could not be saved. Nothing is lost — they are held on the server for a few minutes. Retrying saves them; it does not scan the site again.')
+					: fazI18n('cookies.importHeldRerun', 'The scan finished but the results could not be saved. The capture session is held on the server for a few minutes, so retrying reuses it instead of failing — but this browser has to walk the pages again.');
 				panel.appendChild(explain);
 
 				if (err && err.message) {
@@ -1779,12 +1782,12 @@
 				retryBtn.type = 'button';
 				retryBtn.className = 'faz-btn faz-btn-sm faz-btn-primary';
 				retryBtn.textContent = savesOnly
-					? __('cookies.retryImport', 'Retry import')
-					: __('cookies.retryImportRescan', 'Retry import (re-scans the site)');
+					? fazI18n('cookies.retryImport', 'Retry import')
+					: fazI18n('cookies.retryImportRescan', 'Retry import (re-scans the site)');
 				var dismissBtn = document.createElement('button');
 				dismissBtn.type = 'button';
 				dismissBtn.className = 'faz-btn faz-btn-sm';
-				dismissBtn.textContent = __('cookies.discardHeldScan', 'Discard');
+				dismissBtn.textContent = fazI18n('cookies.discardHeldScan', 'Discard');
 				actions.appendChild(retryBtn);
 				actions.appendChild(dismissBtn);
 				panel.appendChild(actions);
@@ -1799,8 +1802,8 @@
 					retryBtn.disabled = true;
 					dismissBtn.disabled = true;
 					FAZ.btnLoading(btn, true);
-					btn.textContent = __('cookies.scanStarted', 'Scanning...');
-					statusEl.textContent = __('cookies.savingResults', 'Saving results...');
+					btn.textContent = fazI18n('cookies.scanStarted', 'Scanning...');
+					statusEl.textContent = fazI18n('cookies.savingResults', 'Saving results...');
 					var attempt = savesOnly
 						? err.retryImport()
 						// Same scan id, so the held session is re-entered rather
@@ -1830,19 +1833,19 @@
 			stopBtn.addEventListener('click', function () {
 				if (typeof run.cancel !== 'function') { return; }
 				stopBtn.disabled = true;
-				stopBtn.textContent = __('cookies.stoppingScan', 'Stopping…');
+				stopBtn.textContent = fazI18n('cookies.stoppingScan', 'Stopping…');
 				run.cancel();
 			});
 			return run.then(handleScanSuccess, handleScanFailure);
 		}).catch(function (err) {
 			console.error('[FAZ Scanner] Scan failed:', err);
-			finishScan(btn, progressWrap, (err && err.message) || __('cookies.scanFailed', 'Scan failed.'), true);
+			finishScan(btn, progressWrap, (err && err.message) || fazI18n('cookies.scanFailed', 'Scan failed.'), true);
 		});
 	}
 
 	function finishScan(btn, progress, message, isError) {
 		FAZ.btnLoading(btn, false);
-		btn.textContent = __('cookies.scanSite', 'Scan Site') + ' ▾';
+		btn.textContent = fazI18n('cookies.scanSite', 'Scan Site') + ' ▾';
 		if (progress.parentNode) { progress.parentNode.removeChild(progress); }
 		FAZ.notify(message, isError ? 'error' : 'success');
 	}
@@ -1872,7 +1875,7 @@
 
 			if (!targetCookies.length) {
 				FAZ.btnLoading(btn, false);
-				FAZ.notify(scopeAll ? __('cookies.noCookiesToProcess', 'No cookies to process.') : __('cookies.noUncategorized', 'No uncategorized cookies to process.'));
+				FAZ.notify(scopeAll ? fazI18n('cookies.noCookiesToProcess', 'No cookies to process.') : fazI18n('cookies.noUncategorized', 'No uncategorized cookies to process.'));
 				return;
 			}
 
@@ -1913,7 +1916,7 @@
 
 				if (!updateQueue.length) {
 					FAZ.btnLoading(btn, false);
-					FAZ.notify(__('cookies.noneAutoCategorized', 'No cookies could be auto-categorized.'));
+					FAZ.notify(fazI18n('cookies.noneAutoCategorized', 'No cookies could be auto-categorized.'));
 					return;
 				}
 
@@ -1945,7 +1948,7 @@
 			});
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('cookies.autoCatFailed', 'Auto-categorize failed.'), 'error');
+			FAZ.notify(fazI18n('cookies.autoCatFailed', 'Auto-categorize failed.'), 'error');
 		});
 	}
 
@@ -1955,7 +1958,7 @@
 		if (!el) return;
 		FAZ.get('cookies/definitions').then(function (meta) {
 			if (!meta || !meta.has_definitions) {
-				el.textContent = __('cookies.noDefinitions', 'No definitions downloaded yet. Click "Update Definitions" to download.');
+				el.textContent = fazI18n('cookies.noDefinitions', 'No definitions downloaded yet. Click "Update Definitions" to download.');
 				return;
 			}
 			var count = meta.count || 0;
@@ -1966,7 +1969,7 @@
 			}
 			el.textContent = count + ' cookie definitions loaded' + (updated ? ' - last updated: ' + updated : '');
 		}).catch(function () {
-			el.textContent = __('cookies.definitionsLoadFailed', 'Could not load definitions status.');
+			el.textContent = fazI18n('cookies.definitionsLoadFailed', 'Could not load definitions status.');
 		});
 	}
 
@@ -1974,21 +1977,21 @@
 		var btn = document.getElementById('faz-update-defs-btn');
 		var el = document.getElementById('faz-defs-status');
 		FAZ.btnLoading(btn, true);
-		if (el) el.textContent = __('cookies.downloadingDefinitions', 'Downloading definitions from GitHub...');
+		if (el) el.textContent = fazI18n('cookies.downloadingDefinitions', 'Downloading definitions from GitHub...');
 
 		FAZ.post('cookies/definitions/update').then(function (result) {
 			FAZ.btnLoading(btn, false);
 			if (result && result.success) {
-				FAZ.notify(result.message || __('cookies.definitionsUpdated', 'Definitions updated.'));
+				FAZ.notify(result.message || fazI18n('cookies.definitionsUpdated', 'Definitions updated.'));
 				loadDefinitionsStatus();
 			} else {
-				FAZ.notify(result.message || __('cookies.definitionsFailed', 'Update failed.'), 'error');
-				if (el) el.textContent = __('cookies.definitionsFailed', 'Update failed.') + ': ' + (result.message || 'unknown error');
+				FAZ.notify(result.message || fazI18n('cookies.definitionsFailed', 'Update failed.'), 'error');
+				if (el) el.textContent = fazI18n('cookies.definitionsFailed', 'Update failed.') + ': ' + (result.message || 'unknown error');
 			}
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('cookies.definitionsFailed', 'Update failed.'), 'error');
-			if (el) el.textContent = __('cookies.definitionsNetworkFailed', 'Update failed. Check your network connection.');
+			FAZ.notify(fazI18n('cookies.definitionsFailed', 'Update failed.'), 'error');
+			if (el) el.textContent = fazI18n('cookies.definitionsNetworkFailed', 'Update failed. Check your network connection.');
 		});
 	}
 
@@ -2030,7 +2033,7 @@
 		var input = document.createElement('input');
 		input.type = 'text';
 		input.className = 'faz-input';
-		input.placeholder = __('cookies.rulePlaceholder', 'e.g. custom-tracker.com/script.js');
+		input.placeholder = fazI18n('cookies.rulePlaceholder', 'e.g. custom-tracker.com/script.js');
 		input.value = pattern;
 		input.setAttribute('data-rule', 'pattern');
 		input.style.width = '100%';
@@ -2043,7 +2046,7 @@
 		select.style.width = '100%';
 		var emptyOpt = document.createElement('option');
 		emptyOpt.value = '';
-		emptyOpt.textContent = __('cookies.select', '— Select —');
+		emptyOpt.textContent = fazI18n('cookies.select', '— Select —');
 		select.appendChild(emptyOpt);
 		ruleCategories.forEach(function (cat) {
 			var opt = document.createElement('option');
@@ -2059,7 +2062,7 @@
 		var removeBtn = document.createElement('button');
 		removeBtn.type = 'button';
 		removeBtn.className = 'faz-btn faz-btn-danger faz-btn-sm';
-		removeBtn.textContent = __('cookies.remove', 'Remove');
+		removeBtn.textContent = fazI18n('cookies.remove', 'Remove');
 		removeBtn.addEventListener('click', function () { tr.remove(); });
 		tdActions.appendChild(removeBtn);
 
@@ -2093,7 +2096,7 @@
 		var btn = document.getElementById('faz-save-rules-btn');
 		var collected = collectCustomRules();
 		if (collected.invalid > 0) {
-			FAZ.notify(collected.invalid + ' ' + __('cookies.rulesIncomplete', 'rule(s) incomplete — fill in both pattern and category.'), 'error');
+			FAZ.notify(collected.invalid + ' ' + fazI18n('cookies.rulesIncomplete', 'rule(s) incomplete — fill in both pattern and category.'), 'error');
 			return;
 		}
 		FAZ.btnLoading(btn, true);
@@ -2103,10 +2106,10 @@
 			return FAZ.post('settings', current);
 		}).then(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('cookies.rulesSaved', 'Custom rules saved.'));
+			FAZ.notify(fazI18n('cookies.rulesSaved', 'Custom rules saved.'));
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('cookies.rulesSaveFailed', 'Failed to save custom rules.'), 'error');
+			FAZ.notify(fazI18n('cookies.rulesSaveFailed', 'Failed to save custom rules.'), 'error');
 		});
 	}
 
@@ -2123,7 +2126,7 @@
 			if (!templates || !templates.length) {
 				var emptyMsg = document.createElement('p');
 				emptyMsg.style.color = 'var(--faz-text-muted)';
-				emptyMsg.textContent = __('cookies.noTemplates', 'No templates available.');
+				emptyMsg.textContent = fazI18n('cookies.noTemplates', 'No templates available.');
 				container.appendChild(emptyMsg);
 				return;
 			}
@@ -2189,7 +2192,7 @@
 							link.className = 'faz-template-card-inert-link';
 							link.href = inertUrl;
 							link.textContent = tpl.not_applicable.link_label
-								|| __('cookies.sbOpenSettings', 'Open Instagram Feed settings');
+								|| fazI18n('cookies.sbOpenSettings', 'Open Instagram Feed settings');
 							card.appendChild(link);
 						}
 					}
@@ -2198,7 +2201,7 @@
 				cardAction.addEventListener('click', function () {
 					var patterns = Array.isArray(tpl.patterns) ? tpl.patterns : [];
 					if (!patterns.length && !(Array.isArray(tpl.cookies) && tpl.cookies.length)) {
-						FAZ.notify(__('cookies.templateEmpty', 'No patterns or cookies in template.'), 'error');
+						FAZ.notify(fazI18n('cookies.templateEmpty', 'No patterns or cookies in template.'), 'error');
 						return;
 					}
 					var added = 0;
@@ -2208,7 +2211,7 @@
 					});
 					if (added) {
 						saveCustomRules();
-						FAZ.notify(__('cookies.rulesAdded', 'Added %1$d rules from %2$s (saved)').replace('%1$d', added).replace('%2$s', tpl.name), 'success');
+						FAZ.notify(fazI18n('cookies.rulesAdded', 'Added %1$d rules from %2$s (saved)').replace('%1$d', added).replace('%2$s', tpl.name), 'success');
 					}
 
 					// Also create cookies from the template if they don't already exist
@@ -2221,7 +2224,7 @@
 						if (c.slug === tpl.category) catId = c.id;
 					});
 					if (!catId) {
-						FAZ.notify('Category "' + tpl.category + '" ' + __('cookies.templateCatNotFound', 'not found — cookies not added.'), 'error');
+						FAZ.notify('Category "' + tpl.category + '" ' + fazI18n('cookies.templateCatNotFound', 'not found — cookies not added.'), 'error');
 						return;
 					}
 
@@ -2251,7 +2254,7 @@
 						});
 
 						if (!creates.length) {
-							FAZ.notify(__('cookies.allCookiesExist', 'All cookies from %s already exist').replace('%s', tpl.name), 'info');
+							FAZ.notify(fazI18n('cookies.allCookiesExist', 'All cookies from %s already exist').replace('%s', tpl.name), 'info');
 							return;
 						}
 
@@ -2261,7 +2264,7 @@
 							loadCategories();
 						});
 					}).catch(function () {
-						FAZ.notify(__('cookies.templateCookiesFailed', 'Failed to create cookies from template.'), 'error');
+						FAZ.notify(fazI18n('cookies.templateCookiesFailed', 'Failed to create cookies from template.'), 'error');
 					});
 				});
 
@@ -2273,7 +2276,7 @@
 				while (container.firstChild) container.removeChild(container.firstChild);
 				var errMsg = document.createElement('p');
 				errMsg.style.color = 'var(--faz-danger, red)';
-				errMsg.textContent = __('cookies.templateLoadFailed', 'Failed to load templates.');
+				errMsg.textContent = fazI18n('cookies.templateLoadFailed', 'Failed to load templates.');
 				container.appendChild(errMsg);
 			}
 		});
