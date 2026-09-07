@@ -161,8 +161,10 @@ class Cookie_Categories extends Store {
 		foreach ( $languages as $lang ) {
 			$content           = isset( $data[ $lang ] ) ? $data[ $lang ] : '';
 			$content           = empty( $content ) ? $this->get_translations( $lang, $prop ) : $content;
+			$translated        = $this->translate_stored_value( $lang, $prop, $content );
+			$content           = '' !== $translated ? $translated : $content;
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
-			$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
+			$contents[ $lang ] = is_string( $content ) ? stripslashes( wp_kses_post( $content ) ) : '';
 		}
 		if ( is_array( $data ) ) {
 			foreach ( $data as $lang => $content ) {
@@ -258,7 +260,7 @@ class Cookie_Categories extends Store {
 		$name      = array();
 		$languages = faz_selected_languages();
 		foreach ( $languages as $lang ) {
-			$name[ $lang ] = isset( $data[ $lang ] ) ? wp_filter_post_kses( $data[ $lang ] ) : '';
+			$name[ $lang ] = isset( $data[ $lang ] ) && is_string( $data[ $lang ] ) ? wp_filter_post_kses( $data[ $lang ] ) : '';
 		}
 		if ( is_array( $data ) ) {
 			foreach ( $data as $lang => $value ) {
@@ -349,26 +351,96 @@ class Cookie_Categories extends Store {
 	 * @return string
 	 */
 	public function get_translations( $lang = '', $key = '' ) {
-		$slug     = $this->get_slug();
-		$contents = wp_cache_get( 'faz_category_contents_' . $lang, 'faz_category_contents' );
-		$translated     = \FazCookie\Admin\Modules\Languages\Includes\Controller::get_instance()->is_faz_translated($lang);
-		$upload_dir    = wp_upload_dir();
-		if ( ! $contents ) {
-			if ( $translated ) {
-				$safe_lang = sanitize_file_name( $lang );
-				$translation = faz_read_json_file( $upload_dir['basedir'] . '/fazcookie/languages/banners/' . $safe_lang . '.json' );
-				if($translation) {
-					$contents = $translation['category_data'];
+		$slug      = $this->get_slug();
+		$cache_key = 'faz_category_contents_v2_' . $lang;
+		$contents  = wp_cache_get( $cache_key, 'faz_category_contents' );
+		if ( false === $contents ) {
+			$safe_lang  = sanitize_file_name( $lang );
+			$upload_dir = wp_upload_dir();
+			$translation = faz_read_json_file( $upload_dir['basedir'] . '/fazcookie/languages/banners/' . $safe_lang . '.json' );
+			$bundled = faz_read_json_file( __DIR__ . "/contents/categories/{$safe_lang}.json" );
+			$english = faz_read_json_file( __DIR__ . '/contents/categories/en.json' );
+			// Resolve per field: a partial uploaded catalogue must not hide the
+			// bundled translation for all of the other categories.
+			$contents = is_array( $english ) ? $english : array();
+			foreach ( array( $bundled, $translation['category_data'] ?? array() ) as $catalogue ) {
+				if ( ! is_array( $catalogue ) ) {
+					continue;
 				}
-				if(!$contents) {
-					$contents = faz_read_json_file( dirname( __FILE__ ) . "/contents/categories/{$safe_lang}.json" );
+				foreach ( $catalogue as $category => $fields ) {
+					foreach ( is_array( $fields ) ? $fields : array() as $field => $value ) {
+						if ( is_string( $value ) && '' !== trim( $value ) ) {
+							if ( 'en' !== $lang && $value === ( $english[ $category ][ $field ] ?? null ) ) {
+								continue; // An English fallback must not replace a local translation.
+							}
+
+							$contents[ $category ][ $field ] = $value;
+						}
+					}
 				}
 			}
-			if (empty($contents)) {
-				$contents = faz_read_json_file( dirname( __FILE__ ) . "/contents/categories/en.json" );
-			}
-			wp_cache_set( 'faz_category_contents_' . $lang, $contents, 'faz_category_contents', 12 * HOUR_IN_SECONDS );
+			wp_cache_set( $cache_key, $contents, 'faz_category_contents', 12 * HOUR_IN_SECONDS );
 		}
 		return isset( $contents[ $slug ][ $key ] ) ? $contents[ $slug ][ $key ] : '';
+	}
+
+	/**
+	 * Discard the resolved catalogue for one language.
+	 *
+	 * get_translations() caches the merged English + bundled + downloaded result
+	 * for twelve hours. Replacing the downloaded file on disk does not touch that
+	 * cache, so without this the editor and the banner REST payload keep serving
+	 * the previous catalogue for up to twelve hours after an administrator
+	 * downloads a language — long enough to look like the download silently
+	 * failed.
+	 *
+	 * @param string $lang Language code.
+	 * @return void
+	 */
+	public static function flush_translation_cache( $lang ) {
+		$safe_lang = sanitize_file_name( (string) $lang );
+		if ( '' === $safe_lang ) {
+			return;
+		}
+		wp_cache_delete( 'faz_category_contents_v2_' . $safe_lang, 'faz_category_contents' );
+	}
+
+	/**
+	 * Replace English defaults previously materialised in non-English slots.
+	 *
+	 * The editor used to allow edits in the default language only, so saving
+	 * wrote "Necessary" into the ru and uk slots. Those slots are then no longer
+	 * empty, so no fallback fires and the English text is stored data — which is
+	 * why shipping a catalogue is not enough on its own to repair an existing
+	 * install.
+	 *
+	 * The test is equality with the shipped English default, compared with tags
+	 * stripped so an editor-flattened description still matches. Wording that
+	 * differs is administrator-authored and preserved.
+	 *
+	 * The one case this cannot serve: an administrator who deliberately wants the
+	 * English word in a non-English slot (say "Marketing" left as-is in Russian)
+	 * gets the bundled translation instead. Stored text carries no record of
+	 * whether it was chosen or inherited, so the two are indistinguishable here,
+	 * and repairing the far more common case is the better trade.
+	 *
+	 * @param string $lang Target language.
+	 * @param string $key Field name.
+	 * @param mixed  $source Stored value.
+	 * @return string Translation, or empty to preserve the stored value.
+	 */
+	protected function translate_stored_value( $lang, $key, $source ) {
+		if ( 'en' === $lang || ! is_string( $source ) || '' === $source ) {
+			return '';
+		}
+		static $catalogue = null;
+		if ( null === $catalogue ) {
+			$catalogue = faz_read_json_file( __DIR__ . '/contents/categories/en.json' );
+		}
+		$english   = $catalogue[ $this->get_slug() ][ $key ] ?? '';
+		if ( '' === $english || trim( wp_strip_all_tags( $source ) ) !== trim( wp_strip_all_tags( $english ) ) ) {
+			return '';
+		}
+		return $this->get_translations( $lang, $key );
 	}
 }
