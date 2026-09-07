@@ -22,7 +22,7 @@ This PR combines open PRs #267–#274 and tests the resulting code together. Sou
 - `tests/unit/test-jurisdiction-server-intent-php.php`: **6,392 cases**, invoking real `Frontend::get_blocked_categories()` and real `Geo_Runtime`. Covers 47 rulesets × both banner laws × all 16 optional-category combinations × four independent GPC/DNSMPI signal states; first visit, absent/invalid category entries, and cache shells warmed with grants. Only the database catalogue, resolved-ruleset input and validated-cookie input boundary are fixtures. This does not test WordPress cookie validation or geolocation detection itself; existing suites cover those boundaries.
 - `tests/unit/js/jurisdiction-user-intent.test.mjs`: **3,854 scenarios**, using actual PHP-generated runtime payloads and the unmodified source frontend engine. Covers initial state/no consent identifier, malformed grants, Accept All/separate sensitive consent, targeted Do Not Sell, all 16 category selections and reconstruction from the persisted cookie in a fresh window, rejection, age gate, DNSMPI, GPC precedence, service revocation, and signal disappearance. An additional 1,504 cases cover all 16 granular selections with runtime geolocation disabled. The 16 selections are deliberate state transitions, not random samples. jsdom suppresses automatic banner bootstrap; it is not a network/browser integration test.
 - `npm run test:consent:browser`: **282 browser flows** = 47 rulesets × both banner laws × Chromium/Firefox/WebKit. Loads the production minified frontend, drives consent handlers through fixture buttons, observes locally intercepted script requests, and checks initial gating, acceptance, targeted opt-out, withdrawal, persistence across navigation, GPC and malformed grants. Blocked requests are observed over a bounded 100 ms settling window and parked/removed script state is checked. It does not claim to detect arbitrary delayed tracking on every website.
-- `tests/unit/js/full-suite-entrypoints.test.mjs`: **8 executable harness cases** prove the real npm entrypoints run unit → browser → WordPress, propagate failures, and make batch runs stop before site mutation when either consent stage fails.
+- `tests/unit/js/full-suite-entrypoints.test.mjs`: **9 executable harness cases** prove the real npm entrypoints run unit → browser → WordPress, propagate failures, and make batch runs stop before site mutation when either consent stage fails. The real unit runner also fails if the required Node runtime is unavailable.
 - CI runs the browser suite as three independent required-to-pass job results, with no retries or skipped browsers. Repository branch-protection settings determine whether these checks are mandatory for merging.
 - Full WordPress E2E: execution result to be recorded below. An interrupted run on earlier code is not accepted as final evidence.
 
@@ -101,9 +101,9 @@ Each row participates in the PHP, JavaScript and three-browser matrices. The sen
 - Complete ordinary `npm test` chain on consent runtime `7615e3eb`: all 156 unit suites pass; all 282 production-minified browser flows pass without retries/skips (4.8 minutes); WordPress completes with **1,153 passed, 1 flaky, 8 skipped, 0 unexpected failures** in 81.97 minutes.
 - Server matrix: 6,392/6,392 pass. JavaScript matrix: 3,854/3,854 pass, including 705 failures reproduced before the manual-banner fix.
 - The flaky per-cookie test read `document.cookie` during the automatic reload triggered by withdrawal. It now reads the context cookie jar across navigation. The affected 10-test group (per-cookie and PR #92) passes without retries/skips after this fix and the parked-iframe fix.
-- The final parked-iframe change follows the full WordPress run. Full unit/browser matrices and the directly affected WordPress suites are being rerun on this final delta; the earlier full run is not presented as a fresh full pass on that delta.
+- The final parked-iframe runtime is `48900e85`. After that delta, the ordinary `npm run test:e2e -- <17 affected spec files>` command automatically passed all **156 unit suites**, **282 browser flows** with zero retries/skips (3.9 minutes), and **163 WordPress tests** with zero failures/retries plus the one baseline-disabled TCF ping skip (5.9 minutes). This covers resource gates, actual provider requests, per-category/per-service/per-cookie consent, GCM/TCF, iframe restoration and storage. The earlier full run is not presented as a fresh full pass on this later delta. Subsequent changes only enforce the missing-Node gate and update this report; the nine gate tests pass and CI Quality runs the full unit runner again.
 - The resource gate unit suite passes 161 assertions, including parked-iframe restoration and service-marker preservation.
-- Full-suite entrypoint harness: 8/8 pass.
+- Full-suite entrypoint harness: 9/9 pass; missing Node is a hard failure, never a silent JavaScript skip.
 - Isolated multisite: 1/1 pass; disposable network/database cleaned by the runner.
 - PHP syntax, PHPStan, shellcheck and strict JSON schemas pass (47 profiles plus routing index; zero schema warnings).
 
@@ -111,8 +111,10 @@ The eight full-run skips are explicit:
 - two PR #92 dynamic placeholders: exposed and fixed above; both now execute and pass;
 - the conditional TCF ping test: TCF is disabled in baseline; the following test explicitly enables it and passes ping/timestamp/withdrawal checks;
 - multisite: requires its dedicated disposable network and passes there;
-- Koko Analytics and Instagram Feed integrations: installed but inactive in the full-run environment; targeted verification pending;
+- Koko Analytics and Instagram Feed integrations: installed but inactive in the full-run environment; both subsequently pass with the installed real plugins temporarily activated and then restored (2/2 tests, no retries/skips);
 - one banner focus-loop test: pre-existing `fixme` for issue #62, not executed and not claimed as covered;
 - online Playground: tests the version published on WordPress.org, not this branch, and is intentionally excluded from candidate evidence.
+
+All source heads of PRs #267–#274 are retained as ancestors. CI Quality, three consent browsers, PHP/WordPress checks and the available security scans pass on the final code. The original checkout’s six uncommitted policy edits were preserved outside this isolated consolidation.
 
 No release or universal-compliance certification is asserted.
