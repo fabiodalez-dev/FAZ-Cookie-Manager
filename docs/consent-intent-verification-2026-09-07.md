@@ -94,14 +94,15 @@ Each row participates in the PHP, JavaScript and three-browser matrices. The sen
 
 ## Execution results
 
-- Runtime code under verification: `86f6d60352574aa4f5054a6fe92ea324cd24103c`; subsequent commits change CI/test entrypoints and documentation, not production enforcement.
+- Runtime code under verification: `86f6d60352574aa4f5054a6fe92ea324cd24103c`; subsequent commits change CI/test infrastructure, documentation and normalize admin JavaScript line endings, not production consent enforcement.
 - PHP server matrix: 6,392/6,392 pass.
 - JavaScript matrix: 2,350/2,350 pass.
 - Production-minified browser matrix: 282/282 pass, zero retries/skips (Chromium, Firefox, WebKit), 4.0 minutes on the final runtime code.
 - Full-suite entrypoint harness: 8/8 pass.
 - Isolated multisite: 1/1 pass; disposable network/database cleaned by the runner. This exercises the multisite case intentionally skipped by the ordinary single-site configuration.
 - PHP syntax, PHPStan, shellcheck and strict JSON schemas: pass (47 profiles plus the routing index; zero schema warnings).
-- Full unit runner: final result pending after adding the entrypoint harness.
-- Full WordPress E2E: in progress. Earlier interrupted runs are not counted as final evidence.
+- Full unit runner: 156/156 standalone suites pass, including the new entrypoint harness.
+- WordPress E2E: the first segment passed 383 tests before a TCF test raced with the reload triggered by Reject. The assertion now reads the browser cookie jar across navigation and rechecks after reload. Focused GCM/TCF rerun: 3 pass, 1 intentional disabled-feature skip, no retries. The remaining 774 tests are in progress. The interrupted segment is not reported as a passing full run.
+- Test deployment now excludes the multisite runner’s `test-results` artifacts; the executable deploy-boundary regression passes 7 checks.
 
 No release or universal-compliance certification is asserted.

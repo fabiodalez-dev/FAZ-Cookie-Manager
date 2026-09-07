@@ -29,9 +29,11 @@ try {
 	mkdir( $target . '/vendor', 0777, true );
 	mkdir( $target . '/.git/objects', 0777, true );
 	mkdir( $target . '/tests/stale', 0777, true );
+	mkdir( $target . '/test-results', 0777, true );
 	file_put_contents( $target . '/vendor/stale.php', 'stale' );
 	file_put_contents( $target . '/.git/objects/stale', 'stale' );
 	file_put_contents( $target . '/tests/stale/result.txt', 'stale' );
+	file_put_contents( $target . '/test-results/.last-run.json', '{}' );
 
 	$output = array();
 	$status = 0;
@@ -45,6 +47,7 @@ try {
 		'previously deployed excluded vendor is removed' => ! file_exists( $target . '/vendor' ),
 		'previously deployed .git is removed'             => ! file_exists( $target . '/.git' ),
 		'previously deployed tests are removed'            => ! file_exists( $target . '/tests' ),
+		'browser artifacts never reach the webroot'        => ! file_exists( $target . '/test-results' ),
 		'node_modules never reaches the webroot'           => ! file_exists( $target . '/node_modules' ),
 	);
 	foreach ( $checks as $label => $passed ) {
@@ -65,4 +68,4 @@ try {
 if ( $failed ) {
 	exit( 1 );
 }
-echo "Deploy target cleanliness: 6 passed.\n";
+echo "Deploy target cleanliness: 7 passed.\n";

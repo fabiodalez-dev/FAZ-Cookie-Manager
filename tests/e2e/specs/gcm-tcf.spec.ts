@@ -614,12 +614,16 @@ test.describe('GCM and IAB TCF behavior', () => {
       ]);
       expect(rejected).toBeTruthy();
 
-      await freshPage.waitForFunction(() => !document.cookie.includes('euconsent-v2='), undefined, { timeout: 5_000 });
-
-      const rejectedState = await freshPage.evaluate(() => ({
-        euconsentPresent: document.cookie.includes('euconsent-v2='),
-      }));
-      expect(rejectedState.euconsentPresent).toBe(false);
+      // Reject may reload the document. Read the browser cookie jar so the
+      // assertion remains valid while the old execution context is destroyed.
+      await expect.poll(async () => (await freshContext.cookies()).some(
+        (cookie) => cookie.name === 'euconsent-v2',
+      ), { timeout: 5_000 }).toBe(false);
+      await freshPage.reload({ waitUntil: 'domcontentloaded' });
+      await expect(freshPage.locator('[data-faz-tag="revisit-consent"]')).toBeVisible();
+      expect((await freshContext.cookies()).some(
+        (cookie) => cookie.name === 'euconsent-v2',
+      )).toBe(false);
     } finally {
       await freshContext.clearCookies();
       await freshContext.close();
