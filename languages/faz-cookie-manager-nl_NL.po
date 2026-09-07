@@ -2178,17 +2178,16 @@ msgid "Date the consent was logged."
 msgstr "Datum waarop de toestemming is geregistreerd."
 
 #: admin/modules/cookie-policy-generator/api/class-cookie-policy-api.php:210
-#, fuzzy
 msgid "The consent revision could not be updated safely. Retry the operation."
-msgstr "Netwerkfout. Probeer het opnieuw."
+msgstr "De toestemmingsrevisie kon niet veilig worden bijgewerkt. Probeer de bewerking opnieuw."
 
 #: admin/modules/cookie-policy-generator/api/class-cookie-policy-api.php:302
 msgid "No policy template is available for that jurisdiction and language."
-msgstr ""
+msgstr "Er is geen beleidssjabloon beschikbaar voor die jurisdictie en taal."
 
 #: admin/modules/cookie-policy-generator/api/class-cookie-policy-api.php:423
 msgid "Complete all fields required for the selected jurisdiction before saving or previewing the Cookie Policy."
-msgstr ""
+msgstr "Vul alle velden in die vereist zijn voor de gekozen jurisdictie voordat je het cookiebeleid opslaat of bekijkt."
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:493
 #: admin/views/system-status.php:130
@@ -2205,15 +2204,15 @@ msgstr "cookies"
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:514
 #, php-format
 msgid "Transfers personal data to: %s"
-msgstr ""
+msgstr "Draagt persoonsgegevens over naar: %s"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:515
 msgid "Transfers personal data outside the EU/EEA"
-msgstr ""
+msgstr "Draagt persoonsgegevens over buiten de EU/EER"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:895
 msgid "International data transfers"
-msgstr ""
+msgstr "Internationale gegevensoverdrachten"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:896
 msgid "Some cookies listed above may transfer your personal data to a country outside the EU/EEA that does not have an EU adequacy decision. Under Articles 44 to 49 of the GDPR, such transfers require a valid transfer mechanism (for example an adequacy decision, Standard Contractual Clauses, or your explicit and informed consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
@@ -2221,16 +2220,16 @@ msgstr ""
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:897
 msgid "Recipient country:"
-msgstr ""
+msgstr "Ontvangend land:"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:898
 msgid "transfers personal data outside the EU/EEA"
-msgstr ""
+msgstr "draagt persoonsgegevens over buiten de EU/EER"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:899
 #: frontend/modules/shortcodes/class-shortcodes.php:1087
 msgid "Safeguard:"
-msgstr ""
+msgstr "Waarborg:"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1100
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1216
@@ -2245,13 +2244,13 @@ msgstr "FAZ Cookie Policy: geen sjabloonstructuur gevonden voor jurisdictie \"%1
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1299
 msgid "FAZ Cookie Policy: complete the fields required for the selected jurisdiction before publishing this policy."
-msgstr ""
+msgstr "FAZ Cookie Policy: vul de velden in die vereist zijn voor de gekozen jurisdictie voordat je dit beleid publiceert."
 
 #. translators: 1: section heading, 2: comma-separated placeholder list.
 #: admin/modules/cookie-policy-generator/includes/class-section-overrides.php:185
 #, php-format
 msgid "Your text for \"%1$s\" no longer uses %2$s, so that information will not appear in the policy."
-msgstr ""
+msgstr "Je tekst voor \\\"%1$s\\\" gebruikt %2$s niet meer, dus die informatie verschijnt niet in het beleid."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:16
 msgctxt "Cookie policy template: gdpr-strict / introduction"
@@ -6306,71 +6305,62 @@ msgstr "Actieve plugins"
 
 #: frontend/class-amp-consent-rest.php:498
 #: frontend/class-amp-consent-rest.php:604
-#, fuzzy
 msgid "Invalid AMP consent instance."
-msgstr "Alle toestemmingen ongeldig maken"
+msgstr "Ongeldige AMP-toestemmingsinstantie."
 
 #: frontend/class-amp-consent-rest.php:582
-#, fuzzy
 msgid "The AMP consent banner is disabled."
-msgstr "Cookiebanner uitgeschakeld."
+msgstr "De AMP-toestemmingsbanner is uitgeschakeld."
 
 #: frontend/class-amp-consent-rest.php:592
 msgid "Missing AMP consent state."
-msgstr ""
+msgstr "Ontbrekende AMP-toestemmingsstatus."
 
 #: frontend/class-amp-consent-rest.php:609
-#, fuzzy
 msgid "Invalid AMP consent state."
-msgstr "Alle toestemmingen ongeldig maken"
+msgstr "Ongeldige AMP-toestemmingsstatus."
 
 #: frontend/class-amp-consent-rest.php:613
-#, fuzzy
 msgid "Too many consent updates."
-msgstr "Filteren op toestemmingsstatus."
+msgstr "Te veel toestemmingsupdates."
 
 #: frontend/class-amp-consent-rest.php:711
-#, fuzzy
 msgid "Invalid AMP consent scope."
-msgstr "Alle toestemmingen ongeldig maken"
+msgstr "Ongeldig AMP-toestemmingsbereik."
 
 #: frontend/class-amp-consent-rest.php:716
 msgid "The AMP consent banner is no longer active."
-msgstr ""
+msgstr "De AMP-toestemmingsbanner is niet langer actief."
 
 #: frontend/class-amp-consent.php:439
-#, fuzzy
 msgid "Save preferences"
-msgstr "Mijn Voorkeuren Opslaan"
+msgstr "Voorkeuren opslaan"
 
 #: frontend/class-amp-consent.php:480
-#, fuzzy
 msgid "Cookie preferences"
-msgstr "Beheer cookie-voorkeuren"
+msgstr "Cookievoorkeuren"
 
 #: frontend/class-amp-consent.php:481
-#, fuzzy
 msgid "Choose and save your cookie preferences."
-msgstr "Beheer cookie-voorkeuren"
+msgstr "Kies en bewaar je cookievoorkeuren."
 
 #: frontend/class-amp-consent.php:544
-#, fuzzy
 msgid "Optional cookie categories"
-msgstr "Cookiecategorieën"
+msgstr "Optionele cookiecategorieën"
 
 #: frontend/class-amp-consent.php:545
 msgid "Tick the categories you want to allow. Saving applies exactly what is shown here, so anything left unticked stays blocked."
-msgstr ""
+msgstr "Vink de categorieën aan die je wilt toestaan. Bij opslaan wordt precies toegepast wat hier staat; alles wat niet is aangevinkt blijft geblokkeerd."
 
 #. translators: %s: cookie category name, for example Analytics.
 #: frontend/class-amp-consent.php:571
-#, fuzzy, php-format
+#, php-format
 msgid "Allow %s cookies"
-msgstr "Alle cookies"
+msgstr "%s-cookies toestaan"
 
 #: frontend/class-amp-consent.php:574
 msgid "Allow"
-msgstr ""
+msgstr "Toestaan"
 
 #: frontend/class-amp-consent.php:597
 msgid "Manage cookie preferences"
@@ -6414,26 +6404,26 @@ msgstr "Leverancierstoestemming"
 #: frontend/class-frontend.php:2851
 #: frontend/modules/banner-rest/class-banner-rest.php:600
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
-msgstr ""
+msgstr "Deze cookies worden geplaatst door de ingesloten dienst op het eigen domein en worden beheerd door de insluiting hierboven toe te staan of te blokkeren — ze kunnen niet afzonderlijk worden verwijderd."
 
 #. translators: %d is the minimum digital age of consent.
 #: frontend/class-frontend.php:2855
 #: frontend/modules/banner-rest/class-banner-rest.php:605
 #, php-format
 msgid "I confirm I am at least %d years old"
-msgstr ""
+msgstr "Ik bevestig dat ik minstens %d jaar oud ben"
 
 #: frontend/class-frontend.php:2856
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "Please confirm you meet the minimum age to accept optional cookies."
-msgstr ""
+msgstr "Bevestig dat je de minimumleeftijd hebt om optionele cookies te accepteren."
 
 #. translators: %d is a number of seconds.
 #: frontend/class-frontend.php:2863
 #: frontend/modules/banner-rest/class-banner-rest.php:608
 #, php-format
 msgid "Banner closes automatically in %d s..."
-msgstr ""
+msgstr "Banner sluit automatisch over %d s..."
 
 #. translators: %s: service name (e.g., "YouTube", "Google Maps")
 #: frontend/includes/class-placeholder-builder.php:214
@@ -6456,13 +6446,12 @@ msgid "The requested language is not configured for this site."
 msgstr "De gevraagde taal is niet geconfigureerd voor deze site."
 
 #: frontend/modules/banner-rest/class-banner-rest.php:156
-#, fuzzy
 msgid "The cookie banner is disabled on this site."
-msgstr "Cookiebanner uitgeschakeld."
+msgstr "De cookiebanner is uitgeschakeld op deze site."
 
 #: frontend/modules/banner-rest/class-banner-rest.php:189
 msgid "No banner available for the resolved jurisdiction."
-msgstr ""
+msgstr "Geen banner beschikbaar voor de vastgestelde jurisdictie."
 
 #: frontend/modules/banner-rest/class-banner-rest.php:199
 msgid "No active banner found."
@@ -6471,44 +6460,40 @@ msgstr "Geen actieve banner gevonden."
 #: frontend/modules/consent-logger/class-consent-logger.php:116
 #: includes/class-do-not-sell-shortcode.php:220
 #: includes/class-do-not-sell-shortcode.php:278
-#, fuzzy
 msgid "This request must originate from this website."
-msgstr "De gevraagde taal is niet geconfigureerd voor deze site."
+msgstr "Dit verzoek moet afkomstig zijn van deze website."
 
 #: frontend/modules/consent-logger/class-consent-logger.php:246
 msgid "Failed to log consent."
 msgstr "Toestemming loggen mislukt."
 
 #: frontend/modules/legal-links/class-legal-links.php:169
-#, fuzzy
 msgid "Legal information"
-msgstr "Meer informatie"
+msgstr "Juridische informatie"
 
 #: frontend/modules/shortcodes/class-shortcodes.php:240
-#, fuzzy
 msgid "Always Active"
-msgstr "Actief"
+msgstr "Altijd actief"
 
 #: frontend/modules/shortcodes/class-shortcodes.php:242
 msgid "Show more"
-msgstr ""
+msgstr "Meer tonen"
 
 #: frontend/modules/shortcodes/class-shortcodes.php:244
 msgid "Show less"
-msgstr ""
+msgstr "Minder tonen"
 
 #: frontend/modules/shortcodes/class-shortcodes.php:647
-#, fuzzy
 msgid "Data transfer"
-msgstr "Database"
+msgstr "Gegevensoverdracht"
 
 #: frontend/modules/shortcodes/class-shortcodes.php:1076
 msgid "This cookie may transfer personal data to:"
-msgstr ""
+msgstr "Deze cookie kan persoonsgegevens overdragen naar:"
 
 #: frontend/modules/shortcodes/class-shortcodes.php:1082
 msgid "This cookie may transfer personal data to a country without an EU adequacy decision."
-msgstr ""
+msgstr "Deze cookie kan persoonsgegevens overdragen naar een land zonder EU-adequaatheidsbesluit."
 
 #: frontend/views/banner-preview-frame.php:32
 msgid "Banner Preview"
