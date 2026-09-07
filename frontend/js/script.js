@@ -3319,7 +3319,9 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
     // re-grant sale/share before the next request/boot reconciles the store.
     const gpcActive = !_fazPreviewEnabled() && _fazGpcActive();
     const dnsmpiActive = !_fazPreviewEnabled() && _fazDnsmpiCookieActive();
-    const bindingSaleShareOptOut = gpcActive || dnsmpiActive;
+    const popupOptOut = choice === "custom" && ccpaCheckBoxValue &&
+        _fazActivePreferenceTag() === "optout-popup";
+    const bindingSaleShareOptOut = gpcActive || dnsmpiActive || popupOptOut;
     const bindingSaleShareSlugs = [];
     _fazClearStoredServiceConsent();
 
@@ -3350,64 +3352,30 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
     let saleShareWithheld = false;
     for (const category of _fazStore._categories) {
         let valueToSet = "no";
-        if (activeLaw === 'gdpr') {
-            valueToSet =
-                !category.isNecessary &&
-                    (choice === "reject" ||
-                        (choice === "custom" && !_fazFindCheckBoxValue(category.slug)))
-                    ? "no"
-                    : "yes";
-            // A jurisdiction that requires a separate sensitive-data opt-in
-            // cannot bundle that grant into Accept All. The visitor may grant
-            // it only through its own preference toggle and Save action.
-            if (choice === "all" && category.requiresSeparateOptIn && !category.isNecessary) {
-                valueToSet = "no";
-                separateOptInWithheld = true;
-            }
-            // "Both" (gdpr_ccpa) encoding: the US Do-Not-Sell entry point
-            // renders alongside the opt-in banner, but this branch reads only
-            // the per-category toggles — and the opt-out popup renders none,
-            // so a Do-Not-Sell confirm fell back to the stored values and
-            // revoked nothing for exactly the visitors the entry point exists
-            // for (prior accept-all). When the save originates from the
-            // opt-out popup with the box ticked, revoke every sell/share
-            // category, mirroring the ccpa branch below. Scoped to the popup
-            // origin so a later preference-center save (origin
-            // 'settings-button') keeps honouring the visitor's toggles.
-            if (
-                valueToSet === "yes" &&
-                ccpaCheckBoxValue &&
-                !category.isNecessary &&
-                !category.defaultConsent.ccpa &&
-                _fazActivePreferenceTag() === "optout-popup"
-            ) {
-                valueToSet = "no";
-            }
-        } else if (_fazStore._runtimeGeo && category.defaultFromRuleset && (choice === "reject" || choice === "custom")) {
-            // Runtime geo-routing can serve a CCPA (opt-out) banner as a
-            // fallback to a visitor whose resolved ruleset is opt-in. The
-            // opt-out checkbox logic in the else branch would leave every
-            // non-necessary category "yes" (silently granting all cookies),
-            // which is wrong for both an explicit reject AND a custom save
-            // from the preference center (where the visitor's per-category
-            // toggles, not the single opt-out checkbox, express intent).
-            if (choice === "custom") {
-                // Honour the visitor's explicit per-category toggle; the
-                // preference-center toggles were seeded from the ruleset in
-                // _fazSetInitialState, so an untouched toggle already reflects
-                // the jurisdiction default. Necessary is always granted.
-                valueToSet = (category.isNecessary || _fazFindCheckBoxValue(category.slug)) ? "yes" : "no";
-            } else {
-                // reject/close → ruleset-authoritative default. defaultConsent.gdpr
-                // is jurisdiction-authoritative and mirrors _fazSetInitialState, so
-                // a ruleset-denied category becomes "no" while a ruleset-granted one
-                // (e.g. functional under an opt-out ruleset) stays "yes".
-                valueToSet = (category.isNecessary || category.defaultConsent.gdpr) ? "yes" : "no";
-            }
+        if (choice === "reject") {
+            // Explicit rejection (including close-as-reject) overrides even
+            // permissive opt-out defaults and clears all optional grants.
+            valueToSet = category.isNecessary ? "yes" : "no";
+        } else if (popupOptOut) {
+            // Do Not Sell is a targeted withdrawal, not a new consent grant.
+            // Keep unrelated choices; the binding opt-out below revokes sale/
+            // share using its explicit marker, NOT the geo-overlaid default.
+            valueToSet = category.isNecessary || ref._fazGetFromStore(category.slug) === "yes" ? "yes" : "no";
+        } else if (choice === 'all' || activeLaw === 'gdpr' ||
+            (_fazStore._runtimeGeo && category.defaultFromRuleset && choice === "custom")) {
+            valueToSet = category.isNecessary || choice === "all" ||
+                (choice === "custom" && _fazFindCheckBoxValue(category.slug)) ? "yes" : "no";
         } else {
             valueToSet = ccpaCheckBoxValue && !category.defaultConsent.ccpa ? "no" : "yes";
         }
-        if (!category.isNecessary && category.ccpaDoNotSell) {
+        // Separate sensitive consent is a jurisdiction requirement in BOTH
+        // banner modes. Accept All must never bundle it into an ordinary grant.
+        if (choice === "all" && category.requiresSeparateOptIn && !category.isNecessary) {
+            valueToSet = "no";
+            separateOptInWithheld = true;
+        }
+        if (!category.isNecessary && (category.ccpaDoNotSell ||
+            (popupOptOut && typeof category.ccpaDoNotSell === "undefined" && !category.defaultConsent.ccpa))) {
             bindingSaleShareSlugs.push(category.slug);
             if (bindingSaleShareOptOut) {
                 if (valueToSet !== "no") saleShareWithheld = true;
@@ -5674,7 +5642,7 @@ function _fazIsCategoryToBeBlocked(category) {
     const cookieValue = ref._fazGetFromStore(category);
     return (
         cookieValue === "no" ||
-        (!cookieValue &&
+        (cookieValue !== "yes" &&
             _fazStore._categories.some(
                 (cat) => cat.slug === category && !cat.isNecessary
             ))
