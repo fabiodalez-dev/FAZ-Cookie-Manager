@@ -1,25 +1,23 @@
-# CI server, with GitHub as the primary platform
+# GitHub-hosted CI and private Git backups
 
 GitHub remains authoritative for code, PRs, issues, discussions, Actions checks,
-logs, artifacts and releases. The private GitLab mirror only backs up Git refs;
-it does not replace GitHub.
+logs, artifacts and releases. Quality, Plugin Check and CodeQL always use
+standard GitHub-hosted Ubuntu runners, including same-repository and fork PRs.
+There is no actor-dependent route to the personal server.
 
-Quality, Plugin Check and CodeQL run on Fabio's disposable Linux VM runners
-for the repository owner and same-repository Dependabot jobs. Fork PRs and
-other actors use GitHub-hosted Ubuntu runners. Preserve this routing.
+The owner withdrew the self-hosted migration on 7 September 2026. The CI
+controller on SSH host `fabiodalez` is stopped and disabled at boot. Do not
+re-enable it or restore self-hosted labels. Superseded queued runs must be
+cancelled and replaced by runs on the updated workflow revision.
 
-The `fabiodalez` SSH host executes one job at a time across repositories, in
-a fresh KVM Ubuntu 24.04 VM (4 vCPU, 8 GiB RAM), labelled
-`self-hosted`, `Linux`, `X64`, `fabio-ci`. Docker/wp-env runs inside the VM;
-the disk is discarded after the job. Host credentials and private networking
-are not available to the VM. Never use a persistent runner for public PR code.
-Workflow expressions/labels alone are not a security boundary; host-side VM
-and network isolation must stay enabled.
+Existing WordPress, Plugin Check, dependency pins and quality gates remain.
+Concurrency cancels superseded PR runs; workflow timeouts prevent unbounded
+execution. No plugin version, tag or release is created by this change.
 
-Existing WordPress, Plugin Check, dependency pins and quality gates are retained.
-The runner installs its required Linux tools explicitly. No plugin release is
-created by this migration. Check all three workflows on the migration commit
-before treating the new runner as verified.
+The private GitLab mirror is retained with CI disabled. The server polls for
+new GitHub pushes every minute when the mirror queue is free, backs up changed
+repositories and performs an hourly full check. Replaced Git history is kept;
+PRs/issues remain on GitHub, not in this Git-only backup.
 
-Shared orchestration code and tests live in `eventi/infra/ci/`; root-only server
-configuration controls reviewed public repositories. GitLab CI remains disabled.
+Shared backup code lives in `eventi/infra/ci/`. Keep `fabio-git-mirror.timer`
+and `fabio-git-mirror-poll.timer` active. Credentials remain outside Git.
