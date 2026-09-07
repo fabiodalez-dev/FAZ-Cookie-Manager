@@ -18,7 +18,9 @@
     "test:live:report": "playwright show-report tests/e2e/reports/live-html",
     "test:unit": "bash scripts/run-unit-tests.sh",
     "test:verify": "node tests/compliance/final-verification.mjs",
-    "test:consent:browser": "playwright test -c tests/browser-intent/playwright.config.ts"
+    "test:consent:browser": "playwright test -c tests/browser-intent/playwright.config.ts",
+    "pretest:e2e": "npm run test:unit && npm run test:consent:browser",
+    "test": "npm run test:e2e"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",

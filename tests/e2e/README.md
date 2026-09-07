@@ -46,6 +46,21 @@ confronta poi i checksum e interrompe il run se anche un solo file, incluso
 `firefox` e `webkit`; il default resta `chromium`, quindi il costo della suite
 storica non cambia.
 
+## Suite completa obbligatoria
+
+`npm test` e `npm run test:e2e` eseguono, nell’ordine:
+
+1. Tutte le suite PHP e JavaScript (`npm run test:unit`), incluse le matrici di consenso per tutti i 47 profili normativi.
+2. La matrice sul JavaScript di produzione in Chromium, Firefox e WebKit (`npm run test:consent:browser`).
+3. L’intera suite WordPress.
+
+Il lifecycle `pretest:e2e` interrompe il comando al primo fallimento: i test
+aggiunti non sono opzionali e non vengono saltati quando un browser manca.
+Installare prima i browser con `npx playwright install chromium firefox webkit`.
+La CI esegue tutte le nuove matrici ad ogni PR, insieme alla validazione degli
+schemi normativi. I comandi con uno spec esplicito restano verifiche mirate e non
+sostituiscono la suite completa.
+
 ## Output report
 
 - HTML: `tests/e2e/reports/html`
