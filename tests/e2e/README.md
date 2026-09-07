@@ -34,7 +34,8 @@ Copia `.env.e2e.example` e imposta:
 La suite multisite non va lanciata con la configurazione E2E ordinaria: il runner
 crea una rete temporanea, passa al test gli URL main/child e usa il relativo
 `playwright.multisite.config.ts`. Eseguire direttamente lo spec contro il sito
-single-site produce correttamente un errore di topologia (`/child` mancante).
+single-site registra uno skip esplicito perché manca la topologia `/child`;
+la verifica effettiva richiede il runner multisite dedicato.
 
 Prima della suite E2E ordinaria, sincronizza il worktree nel WordPress di test:
 `FAZ_DEPLOY_TARGET="$FAZ_PLUGIN_DEPLOY_PATH" npm run test:e2e:deploy`. Il preflight
