@@ -11,8 +11,12 @@ on:
 jobs:
   analyze:
     name: Analyze
-    runs-on: ubuntu-latest
+    # Trusted jobs run in disposable VMs; fork PRs stay on GitHub-hosted runners.
+    runs-on: ${{ fromJSON((github.actor == github.repository_owner || github.actor == 'dependabot[bot]') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","Linux","X64","fabio-ci"]' || '["ubuntu-latest"]') }}
+    timeout-minutes: 60
     permissions:
+      contents: read
+      actions: read
       security-events: write
     strategy:
       matrix:
@@ -21,6 +25,12 @@ jobs:
         # PHPCS in their own jobs; CodeQL only scans the JS/TS here.
         language: [ javascript-typescript ]
     steps:
+      - name: Prepare disposable Linux runner
+        if: runner.environment == 'self-hosted'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends default-mysql-client gh jq rsync gettext zip unzip shellcheck python3-venv
+
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: github/codeql-action/init@0daab03d71ff584ef619d027a3fd9146679c5d84 # v3
         with:
