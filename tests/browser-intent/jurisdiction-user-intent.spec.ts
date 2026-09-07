@@ -106,6 +106,24 @@ for (const payload of payloads) for (const law of ['gdpr', 'ccpa']) {
     await boot();
     for (const c of payload.categories) expect((await states())[c.slug]).toBe(c.isNecessary ? 'yes' : 'no');
     await probe('marketing', 'rejected', false);
+    // Manual banner configuration must honor the same granular choice even
+    // without geolocation. In particular, CCPA detail-panel Save is not Accept All.
+    await page.evaluate(() => {
+      const w = window as any;
+      w._fazConfig._runtimeGeo = false;
+      w._fazConfig._preferenceOriginTag = 'settings-button';
+      for (const c of w._fazConfig._categories.filter((c: any) => !c.isNecessary)) {
+        const input = document.createElement('input'); input.type = 'checkbox';
+        input.id = `fazSwitch${c.slug}`; input.checked = c.slug === 'functional'; document.body.appendChild(input);
+      }
+    });
+    await page.click('#save');
+    expect((await states()).functional).toBe('yes');
+    expect((await states()).analytics).toBe('no');
+    await probe('analytics', 'manual-denied', false);
+    await boot();
+    expect((await states()).functional).toBe('yes');
+    expect((await states()).analytics).toBe('no');
     await page.evaluate(() => Object.defineProperty(navigator, 'globalPrivacyControl', { value: true, configurable: true }));
     await page.click('#accept');
     expect((await states()).marketing).toBe('no');

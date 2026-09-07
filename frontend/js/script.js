@@ -3364,7 +3364,8 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
             // share using its explicit marker, NOT the geo-overlaid default.
             valueToSet = category.isNecessary || ref._fazGetFromStore(category.slug) === "yes" ? "yes" : "no";
         } else if (choice === 'all' || activeLaw === 'gdpr' ||
-            (_fazStore._runtimeGeo && category.defaultFromRuleset && choice === "custom")) {
+            (choice === "custom" && (_fazActivePreferenceTag() === 'detail' ||
+                (_fazStore._runtimeGeo && category.defaultFromRuleset)))) {
             valueToSet = category.isNecessary || choice === "all" ||
                 (choice === "custom" && _fazFindCheckBoxValue(category.slug)) ? "yes" : "no";
         } else {

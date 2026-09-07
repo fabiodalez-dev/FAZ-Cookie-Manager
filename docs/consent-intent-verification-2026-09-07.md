@@ -11,12 +11,14 @@ This PR combines open PRs #267–#274 and tests the resulting code together. Sou
 5. A targeted sale/share opt-out cleared unrelated per-cookie choices or read stale hidden preference controls. It now keeps unrelated granular choices and clears only sale/share overrides.
 6. A malformed persisted category value could be denied by PHP but treated as allowed by the JavaScript resource gate. The client now requires the literal `yes` before allowing a known optional category.
 
+7. With runtime geolocation disabled, a manually configured CCPA detail panel could ignore granular toggles and grant denied categories. Detail-panel Save now respects the explicit toggles regardless of geolocation. The added matrix reproduced 705 failures before this fix.
+
 ## Reproducible coverage
 
 - `npm test` / `npm run test:e2e`: the `pretest:e2e` lifecycle automatically runs all unit suites and all three consent browsers before the full WordPress suite. Any failure stops the run.
 - `npm run test:unit`: automatically includes both new jurisdiction suites, alongside all existing PHP and JavaScript suites.
 - `tests/unit/test-jurisdiction-server-intent-php.php`: **6,392 cases**, invoking real `Frontend::get_blocked_categories()` and real `Geo_Runtime`. Covers 47 rulesets × both banner laws × all 16 optional-category combinations × four independent GPC/DNSMPI signal states; first visit, absent/invalid category entries, and cache shells warmed with grants. Only the database catalogue, resolved-ruleset input and validated-cookie input boundary are fixtures. This does not test WordPress cookie validation or geolocation detection itself; existing suites cover those boundaries.
-- `tests/unit/js/jurisdiction-user-intent.test.mjs`: **2,350 scenarios**, using actual PHP-generated runtime payloads and the unmodified source frontend engine. Covers initial state/no consent identifier, malformed grants, Accept All/separate sensitive consent, targeted Do Not Sell, all 16 category selections and reconstruction from the persisted cookie in a fresh window, rejection, age gate, DNSMPI, GPC precedence, service revocation, and signal disappearance. The 16 selections are deliberate state transitions, not random samples. jsdom suppresses automatic banner bootstrap; it is not a network/browser integration test.
+- `tests/unit/js/jurisdiction-user-intent.test.mjs`: **3,854 scenarios**, using actual PHP-generated runtime payloads and the unmodified source frontend engine. Covers initial state/no consent identifier, malformed grants, Accept All/separate sensitive consent, targeted Do Not Sell, all 16 category selections and reconstruction from the persisted cookie in a fresh window, rejection, age gate, DNSMPI, GPC precedence, service revocation, and signal disappearance. An additional 1,504 cases cover all 16 granular selections with runtime geolocation disabled. The 16 selections are deliberate state transitions, not random samples. jsdom suppresses automatic banner bootstrap; it is not a network/browser integration test.
 - `npm run test:consent:browser`: **282 browser flows** = 47 rulesets × both banner laws × Chromium/Firefox/WebKit. Loads the production minified frontend, drives consent handlers through fixture buttons, observes locally intercepted script requests, and checks initial gating, acceptance, targeted opt-out, withdrawal, persistence across navigation, GPC and malformed grants. Blocked requests are observed over a bounded 100 ms settling window and parked/removed script state is checked. It does not claim to detect arbitrary delayed tracking on every website.
 - `tests/unit/js/full-suite-entrypoints.test.mjs`: **8 executable harness cases** prove the real npm entrypoints run unit → browser → WordPress, propagate failures, and make batch runs stop before site mutation when either consent stage fails.
 - CI runs the browser suite as three independent required-to-pass job results, with no retries or skipped browsers. Repository branch-protection settings determine whether these checks are mandatory for merging.
@@ -94,15 +96,15 @@ Each row participates in the PHP, JavaScript and three-browser matrices. The sen
 
 ## Execution results
 
-- Runtime code under verification: `86f6d60352574aa4f5054a6fe92ea324cd24103c`; subsequent commits change CI/test infrastructure, documentation and normalize admin JavaScript line endings, not production consent enforcement.
+- The complete normal `npm test` chain is being rerun after the manual-banner fix; prior interrupted runs are diagnostic evidence, not a passing final full suite.
 - PHP server matrix: 6,392/6,392 pass.
-- JavaScript matrix: 2,350/2,350 pass.
-- Production-minified browser matrix: 282/282 pass, zero retries/skips (Chromium, Firefox, WebKit), 4.0 minutes on the final runtime code.
+- Extended JavaScript matrix: result pending.
+- Production-minified browser matrix: rerun pending after adding manual-banner coverage (previous runtime: 282/282 pass with zero retries/skips).
 - Full-suite entrypoint harness: 8/8 pass.
 - Isolated multisite: 1/1 pass; disposable network/database cleaned by the runner. This exercises the multisite case intentionally skipped by the ordinary single-site configuration.
 - PHP syntax, PHPStan, shellcheck and strict JSON schemas: pass (47 profiles plus the routing index; zero schema warnings).
-- Full unit runner: 156/156 standalone suites pass, including the new entrypoint harness.
-- WordPress E2E: the first segment passed 383 tests before a TCF test raced with the reload triggered by Reject. The assertion now reads the browser cookie jar across navigation and rechecks after reload. Focused GCM/TCF rerun: 3 pass, 1 intentional disabled-feature skip, no retries. The remaining 774 tests are in progress. The interrupted segment is not reported as a passing full run.
-- Test deployment now excludes the multisite runner’s `test-results` artifacts; the executable deploy-boundary regression passes 7 checks.
+- Full unit runner before the manual-banner extension: 156/156 standalone suites pass.
+- The TCF withdrawal test now reads the browser cookie jar across navigation and rechecks after reload, eliminating an execution-context race. Focused GCM/TCF rerun: 3 pass, 1 intentional disabled-feature skip, no retries.
+- Test deployment excludes the multisite runner’s `test-results` artifacts; the executable deploy-boundary regression passes 7 checks.
 
 No release or universal-compliance certification is asserted.
