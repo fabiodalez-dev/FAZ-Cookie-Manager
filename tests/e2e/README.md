@@ -54,6 +54,9 @@ storica non cambia.
 2. La matrice sul JavaScript di produzione in Chromium, Firefox e WebKit (`npm run test:consent:browser`).
 3. L’intera suite WordPress.
 
+Lo stesso gate `npm run test:consent` viene eseguito anche dalla modalità
+headed e dal runner a batch, una sola volta prima di modificare il sito.
+
 Il lifecycle `pretest:e2e` interrompe il comando al primo fallimento: i test
 aggiunti non sono opzionali e non vengono saltati quando un browser manca.
 Installare prima i browser con `npx playwright install chromium firefox webkit`.

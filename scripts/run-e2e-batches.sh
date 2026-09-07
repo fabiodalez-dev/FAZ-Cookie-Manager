@@ -17,6 +17,8 @@ E2E_WORKERS="${E2E_WORKERS:-1}"
 mkdir -p "$OUT"
 
 cd "$REPO" || exit 1
+# The same mandatory consent gate as npm run test:e2e, once before any reset.
+npm run test:consent || exit $?
 # macOS ships bash 3.2, which has no mapfile; fill the array portably.
 SPECS=()
 while IFS= read -r line; do

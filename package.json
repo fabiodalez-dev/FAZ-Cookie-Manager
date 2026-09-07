@@ -19,8 +19,10 @@
     "test:unit": "bash scripts/run-unit-tests.sh",
     "test:verify": "node tests/compliance/final-verification.mjs",
     "test:consent:browser": "playwright test -c tests/browser-intent/playwright.config.ts",
-    "pretest:e2e": "npm run test:unit && npm run test:consent:browser",
-    "test": "npm run test:e2e"
+    "pretest:e2e": "npm run test:consent",
+    "test": "npm run test:e2e",
+    "test:consent": "npm run test:unit && npm run test:consent:browser",
+    "pretest:e2e:headed": "npm run test:consent"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
