@@ -29,7 +29,7 @@ const stage = process.argv.join(' ').includes('browser-intent') ? 'browser' : 'w
 fs.appendFileSync(process.env.FAZ_GATE_LOG, stage + '\\n');
 process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
 `, { mode: 0o755 });
-  function run(command, args, fail, expected) {
+  function run(command, args, fail, expected, extraEnv = {}) {
     const log = join(fixture, 'calls.log');
     rmSync(log, { force: true });
     let code = 0;
@@ -37,7 +37,7 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
       execFileSync(command, args, {
         cwd: fixture, timeout: 30_000, stdio: 'pipe',
         env: { ...process.env, FAZ_GATE_LOG: log, FAZ_GATE_FAIL: fail,
-          E2E_BATCH_OUT: join(fixture, 'batch-output'), WP_PATH: join(fixture, 'absent-wordpress') },
+          E2E_BATCH_OUT: join(fixture, 'batch-output'), WP_PATH: join(fixture, 'absent-wordpress'), ...extraEnv },
       });
     } catch (error) { code = error.status ?? -1; }
     assert.equal(code === 0, !fail, `${command} ${args.join(' ')}: failure must propagate`);
@@ -53,5 +53,12 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
   run('npm', ['test'], 'wordpress', ['unit', 'browser', 'wordpress']);
   run('bash', ['scripts/run-e2e-batches.sh'], 'unit', ['unit']);
   run('bash', ['scripts/run-e2e-batches.sh'], 'browser', ['unit', 'browser']);
+  mkdirSync(join(fixture, 'tests/unit/js'), { recursive: true });
+  writeFileSync(join(fixture, 'scripts/real-unit-runner.sh'), readFileSync(join(root, 'scripts/run-unit-tests.sh')));
+  writeFileSync(join(fixture, 'tests/unit/test-probe.php'), '<?php echo "passed";');
+  writeFileSync(join(fixture, 'tests/unit/js/probe.test.mjs'), 'throw new Error("must not silently skip me");');
+  run('bash', ['scripts/real-unit-runner.sh'], 'missing-node', [], {
+    NODE_BIN: 'faz-node-runtime-intentionally-missing',
+  });
   console.log(`full-suite-entrypoints: ${passed} passed`);
 } finally { rmSync(fixture, { recursive: true, force: true }); }

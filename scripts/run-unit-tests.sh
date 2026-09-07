@@ -55,7 +55,8 @@ node_bin="${NODE_BIN:-node}"
 js_ran=0
 if [ "${#js_suites[@]}" -gt 0 ]; then
 	if ! command -v "$node_bin" >/dev/null 2>&1; then
-		printf '  \033[33mSKIP\033[0m  %s (node not found)\n' "tests/unit/js/*.test.mjs"
+		printf '  \033[31mFAIL\033[0m  JavaScript suites require a working Node runtime: %s\n' "$node_bin" >&2
+		exit 2
 	else
 		js_ran=${#js_suites[@]}
 		for f in "${js_suites[@]}"; do
