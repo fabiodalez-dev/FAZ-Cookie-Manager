@@ -40,7 +40,7 @@ jobs:
       - name: Install test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes gettext shellcheck
+          sudo apt-get install --yes gettext shellcheck python3-jsonschema
           npm ci
           composer install --no-interaction --no-progress --prefer-dist
 
@@ -51,6 +51,9 @@ jobs:
         run: |
           bash -n scripts/*.sh
           shellcheck scripts/*.sh
+
+      - name: Jurisdiction schemas
+        run: PATH=/usr/bin:$PATH bash scripts/validate-rulesets.sh --strict
 
       - name: Unit suites
         run: npm run test:unit
