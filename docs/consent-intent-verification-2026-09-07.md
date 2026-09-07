@@ -13,6 +13,8 @@ This PR combines open PRs #267–#274 and tests the resulting code together. Sou
 
 7. With runtime geolocation disabled, a manually configured CCPA detail panel could ignore granular toggles and grant denied categories. Detail-panel Save now respects the explicit toggles regardless of geolocation. The added matrix reproduced 705 failures before this fix.
 
+8. The synchronous iframe gate parked `src` in `data-faz-src` before the observer ran; the observer then missed the dynamic placeholder. It now processes parked iframes, preserves their inert URL through backup and restores a visible iframe only after consent. Vimeo/YouTube regressions now assert zero provider requests before consent and a visible restored iframe afterward; they cannot silently skip missing placeholders.
+
 ## Reproducible coverage
 
 - `npm test` / `npm run test:e2e`: the `pretest:e2e` lifecycle automatically runs all unit suites and all three consent browsers before the full WordPress suite. Any failure stops the run.
@@ -96,15 +98,21 @@ Each row participates in the PHP, JavaScript and three-browser matrices. The sen
 
 ## Execution results
 
-- The complete normal `npm test` chain is being rerun after the manual-banner fix; prior interrupted runs are diagnostic evidence, not a passing final full suite.
-- PHP server matrix: 6,392/6,392 pass.
-- Extended JavaScript matrix: result pending.
-- Production-minified browser matrix: rerun pending after adding manual-banner coverage (previous runtime: 282/282 pass with zero retries/skips).
+- Complete ordinary `npm test` chain on consent runtime `7615e3eb`: all 156 unit suites pass; all 282 production-minified browser flows pass without retries/skips (4.8 minutes); WordPress completes with **1,153 passed, 1 flaky, 8 skipped, 0 unexpected failures** in 81.97 minutes.
+- Server matrix: 6,392/6,392 pass. JavaScript matrix: 3,854/3,854 pass, including 705 failures reproduced before the manual-banner fix.
+- The flaky per-cookie test read `document.cookie` during the automatic reload triggered by withdrawal. It now reads the context cookie jar across navigation. The affected 10-test group (per-cookie and PR #92) passes without retries/skips after this fix and the parked-iframe fix.
+- The final parked-iframe change follows the full WordPress run. Full unit/browser matrices and the directly affected WordPress suites are being rerun on this final delta; the earlier full run is not presented as a fresh full pass on that delta.
+- The resource gate unit suite passes 161 assertions, including parked-iframe restoration and service-marker preservation.
 - Full-suite entrypoint harness: 8/8 pass.
-- Isolated multisite: 1/1 pass; disposable network/database cleaned by the runner. This exercises the multisite case intentionally skipped by the ordinary single-site configuration.
-- PHP syntax, PHPStan, shellcheck and strict JSON schemas: pass (47 profiles plus the routing index; zero schema warnings).
-- Full unit runner before the manual-banner extension: 156/156 standalone suites pass.
-- The TCF withdrawal test now reads the browser cookie jar across navigation and rechecks after reload, eliminating an execution-context race. Focused GCM/TCF rerun: 3 pass, 1 intentional disabled-feature skip, no retries.
-- Test deployment excludes the multisite runner’s `test-results` artifacts; the executable deploy-boundary regression passes 7 checks.
+- Isolated multisite: 1/1 pass; disposable network/database cleaned by the runner.
+- PHP syntax, PHPStan, shellcheck and strict JSON schemas pass (47 profiles plus routing index; zero schema warnings).
+
+The eight full-run skips are explicit:
+- two PR #92 dynamic placeholders: exposed and fixed above; both now execute and pass;
+- the conditional TCF ping test: TCF is disabled in baseline; the following test explicitly enables it and passes ping/timestamp/withdrawal checks;
+- multisite: requires its dedicated disposable network and passes there;
+- Koko Analytics and Instagram Feed integrations: installed but inactive in the full-run environment; targeted verification pending;
+- one banner focus-loop test: pre-existing `fixme` for issue #62, not executed and not claimed as covered;
+- online Playground: tests the version published on WordPress.org, not this branch, and is intentionally excluded from candidate evidence.
 
 No release or universal-compliance certification is asserted.

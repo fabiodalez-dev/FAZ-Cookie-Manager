@@ -162,19 +162,21 @@ test.describe('Per-cookie consent (issue #135)', () => {
     expect(decoded).toContain('ck.' + target.svc + '.' + target.name + ':no');
 
     // enforcement: the denied cookie was shredded inside the save action
-    const stillThere = await fp.evaluate((p) => document.cookie.indexOf(p.name + '=') !== -1, target);
-    expect(stillThere, 'denied cookie is shredded on save').toBe(false);
+    // Withdrawal can reload the document; the context cookie jar remains
+    // readable while the old JavaScript execution context is destroyed.
+    await expect.poll(async () => (await ctx.cookies()).some(
+      (cookie) => cookie.name === target.name,
+    ), { message: 'denied cookie is shredded on save' }).toBe(false);
 
     // server-side enforcement persists across requests: re-plant the denied
     // cookie so the browser sends it on the next request, reload, and confirm
     // the send_headers shredder removes it again while the ck.*:no choice holds.
-    await fp.evaluate((p) => {
-      document.cookie = p.name + '=replanted; path=/';
-    }, target);
+    await ctx.addCookies([{ name: target.name, value: 'replanted', url: new URL('/', fp.url()).href }]);
     await fp.goto('/', { waitUntil: 'domcontentloaded' });
     await fp.waitForTimeout(900);
-    const afterReload = await fp.evaluate((p) => document.cookie.indexOf(p.name + '=') !== -1, target);
-    expect(afterReload, 'denied cookie stays shredded across a reload').toBe(false);
+    await expect.poll(async () => (await ctx.cookies()).some(
+      (cookie) => cookie.name === target.name,
+    ), { message: 'denied cookie stays shredded across a reload' }).toBe(false);
     const cookies2 = await ctx.cookies();
     const consent2 = cookies2.find((c) => c.name === 'fazcookie-consent');
     const decoded2 = consent2 ? decodeURIComponent(consent2.value) : '';

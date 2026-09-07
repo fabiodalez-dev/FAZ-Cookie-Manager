@@ -4952,7 +4952,7 @@ function _fazMutationObserver(mutations) {
                 if (typeof n.querySelectorAll === 'function') {
                     // Descend: <script[src]>/<iframe[src]> queue for blocking; parsed
                     // img/link/source get parked in place.
-                    var nested = n.querySelectorAll('script[src], iframe[src]');
+                    var nested = n.querySelectorAll('script[src], iframe[src], iframe[data-faz-src]');
                     for (var ni = 0; ni < nested.length; ni++) {
                         if (_fazInsideNoscript(nested[ni])) continue;
                         nodesToProcess.push(nested[ni]);
@@ -4981,8 +4981,11 @@ function _fazMutationObserver(mutations) {
     }
 
     for (const node of nodesToProcess) {
+            // The synchronous iframe gate may already have parked src before
+            // insertion. It still needs a placeholder and a restorable backup.
             const nodeSrc = node && typeof node.getAttribute === "function"
-                ? (node.getAttribute("src") || node.src || "")
+                ? (node.getAttribute("src") ||
+                    (node.nodeName.toLowerCase() === "iframe" ? node.getAttribute("data-faz-src") : "") || node.src || "")
                 : (node && node.src ? node.src : "");
             if (
                 !nodeSrc ||
@@ -5087,7 +5090,8 @@ function _fazUnblock() {
                     : "";
                 nodeCategory = nodeCategory.replace("fazcookie-", "");
                 var nodeSrc = (node && typeof node.getAttribute === "function")
-                    ? (node.getAttribute("src") || node.src || "")
+                    ? (node.getAttribute("src") ||
+                    (node.nodeName.toLowerCase() === "iframe" ? node.getAttribute("data-faz-src") : "") || node.src || "")
                     : (node && node.src ? node.src : "");
                 var nodeTarget = nodeSrc || (node && node.textContent ? node.textContent : "");
                 var nodeService = node && typeof node.getAttribute === "function"
@@ -5189,11 +5193,11 @@ function _fazBuildRestoredScript(script, extraSkipAttributes) {
 
 function _fazBuildRestoredIframe(iframe, placeholder) {
     var clone = document.createElement('iframe');
-    var iframeSrc = iframe.getAttribute('src') || iframe.src;
+    var iframeSrc = iframe.getAttribute('src') || iframe.getAttribute('data-faz-src') || iframe.src;
     // Keep data-faz-service on the restored clone so the live MutationObserver
     // can resolve its explicit per-service consent (svc.<id>:yes) instead of
     // falling back to the still-denied category and re-blocking it. #134/#146.
-    var skip = { 'src': 1, 'data-faz-category': 1, 'data-fazcookie': 1, 'data-faz-original-type': 1 };
+    var skip = { 'src': 1, 'data-faz-src': 1, 'data-faz-category': 1, 'data-fazcookie': 1, 'data-faz-original-type': 1 };
 
     for (var i = 0; i < iframe.attributes.length; i++) {
         var attr = iframe.attributes[i];
@@ -5204,6 +5208,7 @@ function _fazBuildRestoredIframe(iframe, placeholder) {
     // faz-skip so the observer never re-wraps it in the banner video-placeholder
     // ("Please accept cookies to access this content") within the same session.
     clone.classList.add('faz-skip');
+    if (iframe.hasAttribute('data-faz-src')) clone.classList.remove('faz-hidden');
 
     if (iframeSrc) {
         clone.src = iframeSrc;
@@ -6721,7 +6726,7 @@ function _fazAddPlaceholder(htmlElm, uniqueID) {
         `#${uniqueID} .video-placeholder-text-normal`
     );
     if (innerTextElement) innerTextElement.classList.add('faz-hidden');
-    var youtubeID = _fazGetYoutubeID(htmlElm.src || '');
+    var youtubeID = _fazGetYoutubeID(htmlElm.getAttribute('src') || htmlElm.getAttribute('data-faz-src') || htmlElm.src || '');
     if (!youtubeID) {
         _fazSetPlaceHolder(addedNode);
         return;
