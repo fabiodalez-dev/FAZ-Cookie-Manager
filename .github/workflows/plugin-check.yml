@@ -7,10 +7,15 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   plugin-check:
     name: Plugin Check (wp.org shape)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
 
