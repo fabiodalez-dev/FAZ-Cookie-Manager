@@ -67,6 +67,27 @@ for (const p of payloads) {
         for (const c of p.categories) state(w, c.slug, c.isNecessary || !c.requiresSeparateOptIn);
         assert.match(w.document.cookie, /fazcookie-consent=/, 'explicit action persisted');
       });
+      scenario(label + '/targeted-optout-preserves-unrelated-granular-choices', () => {
+        const granular = open(p, law);
+        try {
+          granular._fazConfig._perCookieConsent = true;
+          granular._fazConfig._preferenceOriginTag = 'donotsell-button';
+          granular._fazConfig._services.push({ id: 'prefs', category: 'analytics' });
+          granular.document.body.innerHTML = '<input id="fazCCPAOptOut" type="checkbox" checked><div hidden><input class="faz-service-toggle" data-service="stats" data-category="analytics" type="checkbox" checked><input class="faz-cookie-toggle" data-service="prefs" data-cookie-name="personalization" type="checkbox" checked></div>';
+          const store = granular.fazcookie._fazConsentStore;
+          store.set('analytics', 'yes'); store.set('marketing', 'yes');
+          store.set('svc.stats', 'no'); store.set('ck.stats.preference', 'yes');
+          store.set('ck.prefs.personalization', 'no');
+          store.set('svc.ads', 'yes'); store.set('ck.ads.tracker', 'yes');
+          granular.eval('_fazAcceptCookies("custom", true)');
+          state(granular, 'marketing', false); state(granular, 'analytics', true);
+          assert.equal(store.get('svc.stats'), 'no', 'unrelated service denial survives');
+          assert.equal(store.get('ck.stats.preference'), 'yes', 'unrelated cookie preference survives');
+          assert.equal(store.get('ck.prefs.personalization'), 'no', 'unrelated cookie denial survives stale hidden controls');
+          assert.equal(store.has('svc.ads'), false);
+          assert.equal(store.has('ck.ads.tracker'), false);
+        } finally { granular.close(); }
+      });
       scenario(label + '/do-not-sell-popup', () => {
         w.document.body.innerHTML = '<input id="fazCCPAOptOut" type="checkbox" checked>';
         w._fazConfig._preferenceOriginTag = 'donotsell-button';

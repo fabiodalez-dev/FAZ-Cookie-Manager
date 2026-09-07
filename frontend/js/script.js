@@ -3323,7 +3323,9 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
         _fazActivePreferenceTag() === "optout-popup";
     const bindingSaleShareOptOut = gpcActive || dnsmpiActive || popupOptOut;
     const bindingSaleShareSlugs = [];
-    _fazClearStoredServiceConsent();
+    // The opt-out popup expresses no change to unrelated service/cookie
+    // choices, even if stale controls remain in the hidden preference panel.
+    if (!popupOptOut) _fazClearStoredServiceConsent();
 
     // Generate a consentid now (first user action) — deferred from init so no
     // stable tracker is created before the user gives or refuses consent.
@@ -3398,7 +3400,7 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
         responseCategories.dnsmpi = true;
     }
     // Handle per-service consent.
-    if (_fazStore._perServiceConsent && _fazStore._services) {
+    if (!popupOptOut && _fazStore._perServiceConsent && _fazStore._services) {
         _fazStoreCustomServiceConsent(choice);
         // Per-cookie overrides are saved AFTER per-service so they read the
         // freshly-written svc.<id> values when deciding what diverges.
