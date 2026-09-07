@@ -248,7 +248,7 @@ assert_true(
 // ---------- Constants ----------
 
 assert_eq( count( Generator::JURISDICTIONS ), 4, '4 jurisdictions in scope (gdpr, ccpa, lgpd + popia added for wp.org review request)' );
-assert_eq( count( Generator::LANGUAGES ), 8, '8 languages in scope (en, it, fr, de, es, pt-BR, bg, cs)' );
+assert_eq( count( Generator::LANGUAGES ), 10, '10 languages in scope (en, it, fr, de, es, pt-BR, bg, cs + nl, hr)' );
 assert_eq( Generator::normalize_language_code( 'pt_br' ), 'pt-BR', 'Policy language canonicalises locale-style region codes' );
 assert_eq( Generator::normalize_language_code( 'sr-latn' ), 'sr-Latn', 'Policy language canonicalises script subtags' );
 assert_eq( Generator::normalize_language_code( 'sk' ), 'sk', 'Slovak is a valid administrator-authored policy language' );
@@ -442,6 +442,90 @@ foreach ( Generator::LANGUAGES as $popia_lang ) {
 // ---------- Summary ----------
 
 echo "\n--\n";
+// ── Template matrix completeness ──────────────────────────────────────────
+// The expected sets come from the generator's own declarations, not from what
+// happens to be on disk. Deriving them from the filesystem makes the test agree
+// with reality by construction: add a language to Generator::LANGUAGES and ship
+// no template for it and a disk-derived test still passes, which is the exact
+// drift this guards. (Generator::policy_languages() is the wrong source here —
+// it unions in every selectable locale, ~180 of them, none of which we ship a
+// template for.)
+//
+// The failure being guarded is silent: resolve_template_path() falls back
+// lang -> native -> en, so a missing template serves an English legal document
+// and nothing reports the substitution. That is how nl and hr came to have a
+// gettext catalogue, a selectable policy language and no template at all.
+$faz_expect_j = Generator::JURISDICTIONS;
+$faz_expect_l = Generator::LANGUAGES;
+sort( $faz_expect_j );
+sort( $faz_expect_l );
+assert_true( count( $faz_expect_j ) > 0 && count( $faz_expect_l ) > 0, 'generator declares jurisdictions and languages' );
+
+$faz_tokens = static function ( $text ) {
+	preg_match_all( '/\{\{[A-Z_]+\}\}/', (string) $text, $m );
+	sort( $m[0] );
+	return $m[0];
+};
+$faz_no_dir   = array();
+$faz_missing  = array();
+$faz_unread   = array();
+$faz_lost     = array();
+$faz_drifted  = array();
+// Faithful translations of the English source. The older localized templates are
+// deliberately abridged — several drop the standalone "Contact" section — so
+// exact parity is asserted only where it was the translator's intent. Every
+// template is still held to the placeholder-type rule below.
+$faz_faithful = array( 'nl', 'hr' );
+foreach ( $faz_expect_j as $faz_j ) {
+	$faz_dir = $tpl_dir . '/' . $faz_j;
+	if ( ! is_dir( $faz_dir ) ) {
+		$faz_no_dir[] = $faz_j;
+		continue;
+	}
+	$faz_en_path = $faz_dir . '/en.md';
+	// Readability, not just existence: resolve_template_path() requires both, so
+	// an unreadable en.md is a broken fallback. Reading it with @ and skipping on
+	// failure would let the whole jurisdiction pass unchecked.
+	$faz_en = ( file_exists( $faz_en_path ) && is_readable( $faz_en_path ) )
+		? file_get_contents( $faz_en_path )
+		: false;
+	if ( ! is_string( $faz_en ) ) {
+		$faz_unread[] = $faz_j . '/en';
+	}
+	foreach ( $faz_expect_l as $faz_l ) {
+		$faz_path = $faz_dir . '/' . $faz_l . '.md';
+		if ( ! file_exists( $faz_path ) ) {
+			$faz_missing[] = $faz_j . '/' . $faz_l;
+			continue;
+		}
+		if ( ! is_readable( $faz_path ) ) {
+			$faz_unread[] = $faz_j . '/' . $faz_l;
+			continue;
+		}
+		if ( ! is_string( $faz_en ) || 'en' === $faz_l ) {
+			continue;
+		}
+		$faz_body = (string) file_get_contents( $faz_path );
+		// Losing a placeholder TYPE removes something the document cannot do
+		// without — the controller's contact, the cookie inventory, the retention
+		// period. Abridging a section is an editorial choice; losing the only
+		// occurrence of a token is a defect in a legal document.
+		if ( array_diff( array_unique( $faz_tokens( $faz_en ) ), array_unique( $faz_tokens( $faz_body ) ) ) ) {
+			$faz_lost[] = $faz_j . '/' . $faz_l;
+		}
+		if ( in_array( $faz_l, $faz_faithful, true )
+			&& ( $faz_tokens( $faz_body ) !== $faz_tokens( $faz_en )
+				|| substr_count( $faz_body, "\n#" ) !== substr_count( $faz_en, "\n#" ) ) ) {
+			$faz_drifted[] = $faz_j . '/' . $faz_l;
+		}
+	}
+}
+assert_eq( $faz_no_dir, array(), 'every declared jurisdiction has a template directory' );
+assert_eq( $faz_missing, array(), 'every declared language ships for every jurisdiction' );
+assert_eq( $faz_unread, array(), 'every shipped template is readable, as resolve_template_path() requires' );
+assert_eq( $faz_lost, array(), 'no localized template drops a placeholder the English source has' );
+assert_eq( $faz_drifted, array(), 'faithful translations keep the English section count and placeholder multiset' );
+
 echo "Tests:  $tests_run\n";
 echo "Passed: $tests_passed\n";
 echo "Failed: $tests_failed\n\n";

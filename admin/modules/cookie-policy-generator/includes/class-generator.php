@@ -49,7 +49,7 @@ class Generator {
 	 *
 	 * @var string[]
 	 */
-	const LANGUAGES = array( 'en', 'it', 'fr', 'de', 'es', 'pt-BR', 'bg', 'cs' );
+	const LANGUAGES = array( 'en', 'it', 'fr', 'de', 'es', 'pt-BR', 'bg', 'cs', 'nl', 'hr' );
 
 	/**
 	 * Canonicalise and validate a policy language code.
