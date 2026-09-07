@@ -839,28 +839,11 @@ class Banner extends Store {
 			return $cached;
 		}
 
-		$dir  = dirname( __FILE__ ) . '/contents/';
-		$data = array();
-
-		// Prefer a downloaded translation, but ONLY when the language is
-		// registered as translated — the same gate get_translations() uses, so
-		// the untouched-default baseline is read from the same source the
-		// frontend actually renders (an orphaned file on disk is ignored).
-		if ( '' !== $safe_lang
-			&& \FazCookie\Admin\Modules\Languages\Includes\Controller::get_instance()->is_faz_translated( $safe_lang ) ) {
-			$upload_dir      = wp_upload_dir();
-			$translated_file = trailingslashit( $upload_dir['basedir'] ) . 'fazcookie/languages/banners/' . $safe_lang . '.json';
-			if ( file_exists( $translated_file ) ) {
-				$translated = faz_read_json_file( $translated_file );
-				if ( isset( $translated['banner_data'] ) && is_array( $translated['banner_data'] ) ) {
-					$data = $translated['banner_data'];
-				}
-			}
-		}
-		if ( empty( $data ) ) {
-			$file = ( '' !== $safe_lang && file_exists( $dir . $safe_lang . '.json' ) ) ? $dir . $safe_lang . '.json' : $dir . 'en.json';
-			$data = faz_read_json_file( $file );
-		}
+		// Resolved through the same merge the frontend renders from, so the
+		// untouched-default baseline this method reports cannot disagree with
+		// what a visitor actually sees. It used to assemble its own, differently
+		// gated, view of the same files.
+		$data = self::resolve_bundled_contents( $safe_lang );
 		$out = array(
 			'gdpr' => '',
 			'ccpa' => '',
@@ -882,27 +865,105 @@ class Banner extends Store {
 	 * @return array
 	 */
 	public function get_translations( $lang = '', $key = '' ) {
-		$contents = wp_cache_get( 'faz_contents_' . $lang, 'faz_banner_contents' );
+		$contents = self::resolve_bundled_contents( $lang );
 		$law      = $this->get_law();
-		$translated     = \FazCookie\Admin\Modules\Languages\Includes\Controller::get_instance()->is_faz_translated($lang);
-		$upload_dir    = wp_upload_dir();
-		if ( ! $contents ) {
-			if($translated) {
-				$safe_lang = sanitize_file_name( $lang );
-				$translation = faz_read_json_file( $upload_dir['basedir'] . '/fazcookie/languages/banners/' . $safe_lang . '.json' );
-				if($translation) {
-					$contents = $translation['banner_data'];
-				}
-				if(!$contents) {
-					$contents = faz_read_json_file( dirname( __FILE__ ) . '/contents/' . $safe_lang . '.json' );
-				}
-			}
-			if ( empty( $contents ) ) {
-				$contents = faz_read_json_file( dirname( __FILE__ ) . '/contents/en.json' );
-			}
-			wp_cache_set( 'faz_contents_' . $lang, $contents, 'faz_banner_contents', 12 * HOUR_IN_SECONDS );
-		}
 		return isset( $contents[ $law ] ) && is_array( $contents[ $law ] ) ? $contents[ $law ] : array();
+	}
+
+	/**
+	 * The shipped banner copy for one language, both laws, fully resolved.
+	 *
+	 * English is the base and every other source is laid over it FIELD BY FIELD.
+	 * The previous shape took one whole catalogue or another, which meant a
+	 * downloaded translation covering half the banner silently dropped the
+	 * bundled wording for the other half, and a language whose downloaded file
+	 * was missing never consulted its bundled catalogue at all — that second
+	 * branch sat behind is_faz_translated(), a hard-coded list of 41 codes, so a
+	 * site on any other locale could not reach a catalogue however complete.
+	 *
+	 * A value equal to the English default is skipped for a non-English target:
+	 * downloaded catalogues carry untranslated strings verbatim, and letting one
+	 * through would overwrite a bundled translation with the English it fell back
+	 * from.
+	 *
+	 * @param string $lang Language code.
+	 * @return array Full contents tree keyed by law.
+	 */
+	public static function resolve_bundled_contents( $lang = '' ) {
+		$safe_lang = sanitize_file_name( (string) $lang );
+		$cache_key = 'faz_contents_v2_' . ( '' !== $safe_lang ? $safe_lang : 'en' );
+		$contents  = wp_cache_get( $cache_key, 'faz_banner_contents' );
+		// Not `! $contents`: a legitimately empty result would be recomputed on
+		// every request, and the read is four JSON files.
+		if ( false === $contents ) {
+			$english     = faz_read_json_file( __DIR__ . '/contents/en.json' );
+			$english     = is_array( $english ) ? $english : array();
+			$bundled     = faz_read_json_file( __DIR__ . '/contents/' . $safe_lang . '.json' );
+			$upload_dir  = wp_upload_dir();
+			$translation = faz_read_json_file( trailingslashit( $upload_dir['basedir'] ) . 'fazcookie/languages/banners/' . $safe_lang . '.json' );
+			$downloaded  = isset( $translation['banner_data'] ) && is_array( $translation['banner_data'] ) ? $translation['banner_data'] : array();
+
+			$contents = $english;
+			foreach ( array( $bundled, $downloaded ) as $catalogue ) {
+				if ( is_array( $catalogue ) ) {
+					$contents = self::overlay_contents( $contents, $catalogue, $english, 'en' !== $safe_lang );
+				}
+			}
+			wp_cache_set( $cache_key, $contents, 'faz_banner_contents', 12 * HOUR_IN_SECONDS );
+		}
+		return is_array( $contents ) ? $contents : array();
+	}
+
+	/**
+	 * Discard every cached view of one language's shipped copy.
+	 *
+	 * Two caches derive from the same downloaded file and both go stale when it is
+	 * replaced: the resolved contents tree, and the law-notice baseline the banner
+	 * editor compares against. Clearing only the first leaves the editor reporting
+	 * a default that no longer matches what the frontend renders — the precise
+	 * disagreement that folding both onto one resolver was meant to end.
+	 *
+	 * @param string $lang Language code.
+	 * @return void
+	 */
+	public static function flush_translation_cache( $lang ) {
+		$safe_lang = sanitize_file_name( (string) $lang );
+		if ( '' === $safe_lang ) {
+			return;
+		}
+		wp_cache_delete( 'faz_contents_v2_' . $safe_lang, 'faz_banner_contents' );
+		wp_cache_delete( 'faz_law_notice_desc_' . $safe_lang, 'faz_banner_contents' );
+	}
+
+	/**
+	 * Lay one catalogue over another, leaf by leaf.
+	 *
+	 * @param array $base         Tree to write into.
+	 * @param array $catalogue    Tree to read from.
+	 * @param array $english      Same subtree of the English catalogue, for the skip test.
+	 * @param bool  $skip_english Whether a value equal to the English default is ignored.
+	 * @return array
+	 */
+	private static function overlay_contents( $base, $catalogue, $english, $skip_english ) {
+		foreach ( $catalogue as $k => $value ) {
+			if ( is_array( $value ) ) {
+				$base[ $k ] = self::overlay_contents(
+					isset( $base[ $k ] ) && is_array( $base[ $k ] ) ? $base[ $k ] : array(),
+					$value,
+					isset( $english[ $k ] ) && is_array( $english[ $k ] ) ? $english[ $k ] : array(),
+					$skip_english
+				);
+				continue;
+			}
+			if ( ! is_string( $value ) || '' === trim( $value ) ) {
+				continue;
+			}
+			if ( $skip_english && isset( $english[ $k ] ) && is_string( $english[ $k ] ) && $value === $english[ $k ] ) {
+				continue;
+			}
+			$base[ $k ] = $value;
+		}
+		return $base;
 	}
 	/**
 	 * Get selected languages for the banner.

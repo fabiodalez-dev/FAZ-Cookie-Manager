@@ -7,6 +7,7 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 ### Fixed
 - Cookie category names and descriptions can now be edited in every enabled language from Cookies → Cookie Categories. Switching languages preserves drafts, saving retains other translations, and failed saves keep the edits available for retry.
 - Added bundled Russian and Ukrainian category translations. Category rendering repairs stored English defaults, preserves custom wording and legacy plain-text values, and fills partial downloaded catalogues from bundled translations. Regression coverage checks multilingual category data through the controller and banner REST payload.
+- Banner copy now ships in Russian and Ukrainian, and the shipped catalogue is consulted for every language rather than only the 41 in a hard-coded list. A downloaded translation is merged field by field instead of replacing the whole catalogue, so a partial download no longer drops the bundled wording it does not cover, and an untranslated English string inside one cannot overwrite a bundled translation. The default-copy baseline reported to the banner editor is resolved from that same merge, so it can no longer disagree with what a visitor sees.
 
 ## [1.29.0] - 2026-09-02
 

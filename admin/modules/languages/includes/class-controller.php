@@ -332,6 +332,12 @@ class Controller {
 						if ( class_exists( '\\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Cookie_Categories' ) ) {
 							\FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories::flush_translation_cache( $safe_lang );
 						}
+						// Both banner caches read that file and hold it for twelve
+						// hours; without this the download appears to do nothing.
+						if ( class_exists( '\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner' ) ) {
+							\FazCookie\Admin\Modules\Banners\Includes\Banner::flush_translation_cache( $safe_lang );
+
+						}
 					} else {
 						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 							// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- gated behind WP_DEBUG; non-fatal warning, copy() returning false is rare and worth knowing about during development.
