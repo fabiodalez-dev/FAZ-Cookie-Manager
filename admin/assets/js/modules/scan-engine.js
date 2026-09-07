@@ -23,7 +23,10 @@
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back
 	// to the provided string. Mirrors the per-page helper so the engine carries
 	// no dependency on whichever page happens to load it.
-	function __(key, fallback) {
+	// Not named `__`: this is a key lookup into the PHP-provided fazConfig.i18n
+	// map, not gettext. Under the gettext name, translate.wordpress.org harvests
+	// the dotted keys below as if they were translatable English text.
+	function fazI18n(key, fallback) {
 		var parts = key.split('.');
 		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
 		for (var i = 0; i < parts.length; i++) {
@@ -463,7 +466,7 @@
 				return FAZ.post('scans/discover', discoverPayload).catch(function (err) {
 					if (attempt < 2 && err && err.code === 'fetch_error') {
 						var delay = attempt === 0 ? 1000 : 3000;
-						emit.status(__('cookies.serverBusyRetrying', 'Server busy, retrying in %ds...').replace('%d', delay / 1000));
+						emit.status(fazI18n('cookies.serverBusyRetrying', 'Server busy, retrying in %ds...').replace('%d', delay / 1000));
 						console.warn('[FAZ Scanner] Discover attempt ' + (attempt + 1) + ' failed, retrying...', err.message);
 						return new Promise(function (r) { setTimeout(r, delay); })
 							.then(function () { return discoverWithRetry(attempt + 1); });
@@ -494,11 +497,11 @@
 				scanMetrics.urlsDiscovered = urls.length;
 
 				if (!urls.length) {
-					rejectAndAbort(new Error(__('cookies.noPagesFound', 'No pages found to scan.')));
+					rejectAndAbort(new Error(fazI18n('cookies.noPagesFound', 'No pages found to scan.')));
 					return;
 				}
 
-				emit.status(__('cookies.scanningPages', 'Scanning 0/%d pages...').replace('%d', urls.length));
+				emit.status(fazI18n('cookies.scanningPages', 'Scanning 0/%d pages...').replace('%d', urls.length));
 				emit.pages('0/' + urls.length + ' pages');
 				emit.progress(0);
 
@@ -516,7 +519,7 @@
 						collectedScripts
 					)) {
 						var browserError = new Error(
-							__('cookies.browserScanUnavailable', 'The browser scan could not inspect any page. Make sure the public site is reachable through the WordPress admin origin and that framing is not blocked.')
+							fazI18n('cookies.browserScanUnavailable', 'The browser scan could not inspect any page. Make sure the public site is reachable through the WordPress admin origin and that framing is not blocked.')
 							+ buildScanDiagnosticsHint(diagnostics, 0)
 						);
 						browserError.stage = 'browser';
@@ -528,7 +531,7 @@
 					// scripts an iframe never requests. Site root, not urls[0],
 					// which may be a WooCommerce page after priority prepending.
 					if (urls.length > 0) {
-						emit.status(__('cookies.enrichingServer', 'Enriching with server scan...'));
+						emit.status(fazI18n('cookies.enrichingServer', 'Enriching with server scan...'));
 						var homepageUrl = result.home_url || urls[0];
 						FAZ.post('scans/server-scan', { url: homepageUrl }).then(function (serverResult) {
 							var existingScripts = {};
@@ -570,7 +573,7 @@
 
 					function doImport() {
 						emit.progress(100);
-						emit.status(__('cookies.savingResults', 'Saving results...'));
+						emit.status(fazI18n('cookies.savingResults', 'Saving results...'));
 
 						var importStart = Date.now();
 						var metricsToSend = {
@@ -643,7 +646,7 @@
 									throw err;
 								}
 								var delay = IMPORT_RETRY_DELAYS_MS[attempt];
-								emit.status(__('cookies.serverBusyRetrying', 'Server busy, retrying in %ds...').replace('%d', delay / 1000));
+								emit.status(fazI18n('cookies.serverBusyRetrying', 'Server busy, retrying in %ds...').replace('%d', delay / 1000));
 								console.warn('[FAZ Scanner] Import attempt ' + (attempt + 1) + ' failed, retrying the same scan...', err.message);
 								return new Promise(function (retry) { setTimeout(retry, delay); })
 									.then(function () { return importWithRetry(attempt + 1); });
@@ -684,7 +687,7 @@
 						// One shape for every import failure, so the first attempt and
 						// a later manual retry are indistinguishable to the caller.
 						function buildImportError(err) {
-							var failure = new Error(__('cookies.scanSaveFailed', 'Scan finished but failed to save results.') + buildScanApiErrorDetail(err));
+							var failure = new Error(fazI18n('cookies.scanSaveFailed', 'Scan finished but failed to save results.') + buildScanApiErrorDetail(err));
 							failure.stage = 'import';
 							failure.scanId = scanId;
 							// Only what the SERVER said. See getApiErrorSessionHeld().
@@ -716,7 +719,7 @@
 				}, emit, scanMetrics, scanOptions);
 			}).catch(function (err) {
 				console.error('[FAZ Scanner] Discover failed:', err);
-				var e1 = new Error(__('cookies.discoverFailed', 'Failed to discover pages.') + buildScanApiErrorDetail(err));
+				var e1 = new Error(fazI18n('cookies.discoverFailed', 'Failed to discover pages.') + buildScanApiErrorDetail(err));
 				e1.stage = 'discover';
 				// The server's error code already travels in the MESSAGE above,
 				// which is for humans. Carry it as data too, so a caller can

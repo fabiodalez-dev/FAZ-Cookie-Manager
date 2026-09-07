@@ -10,6 +10,8 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 - Banner copy now ships in Russian and Ukrainian, and the shipped catalogue is consulted for every language rather than only the 41 in a hard-coded list. A downloaded translation is merged field by field instead of replacing the whole catalogue, so a partial download no longer drops the bundled wording it does not cover, and an untranslated English string inside one cannot overwrite a bundled translation. The default-copy baseline reported to the banner editor is resolved from that same merge, so it can no longer disagree with what a visitor sees.
 ### Added
 - Cookie Policy templates in Dutch and Croatian for all four jurisdictions (GDPR, CCPA/CPRA, LGPD, POPIA). Both locales already offered a translated interface and were selectable as a policy language, but no template shipped for them, so the generator fell back to English and produced a legal document in the wrong language without saying so. The Cookie Policy screen already shows the shipped text as the placeholder in each override box, so those boxes now show Dutch and Croatian and the "no template ships for this language" notice no longer appears.
+### Changed
+- The admin JavaScript translation helper is named `fazI18n()` instead of `__()`. It never was gettext — it looks up a dotted key in the PHP-provided `fazConfig.i18n` map — but under the gettext name the string extractor on translate.wordpress.org harvested 285 of those keys as if they were translatable English text, which capped every locale's completion at 84.8% and blocked language-pack generation. No runtime behaviour changes: the keys, the English fallbacks and the lookup are untouched.
 
 ## [1.29.0] - 2026-09-02
 

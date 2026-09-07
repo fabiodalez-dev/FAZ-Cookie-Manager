@@ -7,7 +7,10 @@
 	'use strict';
 
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
-	function __(key, fallback) {
+	// Not named `__`: this is a key lookup into the PHP-provided fazConfig.i18n
+	// map, not gettext. Under the gettext name, translate.wordpress.org harvests
+	// the dotted keys below as if they were translatable English text.
+	function fazI18n(key, fallback) {
 		var parts = key.split('.');
 		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
 		for (var i = 0; i < parts.length; i++) {
@@ -51,7 +54,7 @@
 						card.hidden = true;
 					}).catch(function () {
 						dismissBtn.disabled = false;
-						FAZ.notify(__('setup.dismiss_failed', 'Could not dismiss. Please try again.'), 'error');
+						FAZ.notify(fazI18n('setup.dismiss_failed', 'Could not dismiss. Please try again.'), 'error');
 					});
 				});
 			}
@@ -95,11 +98,11 @@
 				var to = toEl ? toEl.value : '';
 
 				if (!from || !to) {
-					FAZ.notify(__('dashboard.selectBothDates', 'Please select both start and end dates.'), 'error');
+					FAZ.notify(fazI18n('dashboard.selectBothDates', 'Please select both start and end dates.'), 'error');
 					return;
 				}
 				if (from > to) {
-					FAZ.notify(__('dashboard.startBeforeEnd', 'Start date must be before end date.'), 'error');
+					FAZ.notify(fazI18n('dashboard.startBeforeEnd', 'Start date must be before end date.'), 'error');
 					return;
 				}
 
@@ -492,7 +495,7 @@
 				if (!hasCats) {
 					var emptyP = document.createElement('p');
 					emptyP.style.color = 'var(--faz-text-muted)';
-					emptyP.textContent = __('dashboard.noCategoryData', 'No category data yet.');
+					emptyP.textContent = fazI18n('dashboard.noCategoryData', 'No category data yet.');
 					catContainer.appendChild(emptyP);
 				}
 			}
@@ -537,7 +540,7 @@
 			if (totalConsents === 0) {
 				var empty = document.createElement('p');
 				empty.style.color = 'var(--faz-text-muted)';
-				empty.textContent = __(
+				empty.textContent = fazI18n(
 					'dashboard.abTestNoData',
 					'No consents recorded for these variants yet. Results appear once visitors respond to the banner.'
 				);
@@ -574,7 +577,7 @@
 				meta.style.color = 'var(--faz-text-muted)';
 				meta.style.fontSize = '12px';
 				meta.style.marginTop = '2px';
-				meta.textContent = __('dashboard.abTestAcceptedOf', '{accepted} accepted of {total} consents')
+				meta.textContent = fazI18n('dashboard.abTestAcceptedOf', '{accepted} accepted of {total} consents')
 					.replace('{accepted}', (parseInt(v.accepted, 10) || 0).toLocaleString())
 					.replace('{total}', total.toLocaleString());
 
@@ -601,7 +604,7 @@
 				while (body.firstChild) { body.removeChild(body.firstChild); }
 				var errEl = document.createElement('p');
 				errEl.style.color = 'var(--faz-text-muted)';
-				errEl.textContent = __('dashboard.abTestLoadError', 'Could not load A/B test results.');
+				errEl.textContent = fazI18n('dashboard.abTestLoadError', 'Could not load A/B test results.');
 				body.appendChild(errEl);
 			}).catch(function () {
 				// Can't even confirm the enabled state — fall back to hiding.

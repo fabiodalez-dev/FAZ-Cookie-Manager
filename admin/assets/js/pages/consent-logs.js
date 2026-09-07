@@ -6,7 +6,10 @@
 	'use strict';
 
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
-	function __(key, fallback) {
+	// Not named `__`: this is a key lookup into the PHP-provided fazConfig.i18n
+	// map, not gettext. Under the gettext name, translate.wordpress.org harvests
+	// the dotted keys below as if they were translatable English text.
+	function fazI18n(key, fallback) {
 		var parts = key.split('.');
 		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
 		for (var i = 0; i < parts.length; i++) {
@@ -92,7 +95,7 @@
 			td.colSpan = 6;
 			td.className = 'faz-text-center faz-text-muted';
 			td.style.padding = '40px';
-			td.textContent = __('consentLogs.loadFailed', 'Failed to load consent logs.');
+			td.textContent = fazI18n('consentLogs.loadFailed', 'Failed to load consent logs.');
 			tr.appendChild(td);
 			tbody.appendChild(tr);
 		});
@@ -108,7 +111,7 @@
 			td.colSpan = 6;
 			td.className = 'faz-text-center faz-text-muted';
 			td.style.padding = '40px';
-			td.textContent = __('consentLogs.noLogs', 'No consent logs found.');
+			td.textContent = fazI18n('consentLogs.noLogs', 'No consent logs found.');
 			tr.appendChild(td);
 			tbody.appendChild(tr);
 			document.getElementById('faz-log-footer').style.display = 'none';
@@ -169,7 +172,7 @@
 						// auto-humanized label.
 						var metaKey = k.slice(5);
 						var metaLabel = metaKey === 'age_affirmed'
-							? __('consentLogs.metaAgeAffirmed', 'Age affirmed')
+							? fazI18n('consentLogs.metaAgeAffirmed', 'Age affirmed')
 							: metaKey.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
 						catBadge.className = 'faz-cat-pill faz-cat-audit';
 						catBadge.textContent = metaLabel;
@@ -222,14 +225,14 @@
 		// Info text
 		var start = (page - 1) * perPage + 1;
 		var end = Math.min(page * perPage, totalItems);
-		info.textContent = __('consentLogs.showing', 'Showing %1$s\u2013%2$s of %3$s').replace('%1$s', start).replace('%2$s', end).replace('%3$s', totalItems);
+		info.textContent = fazI18n('consentLogs.showing', 'Showing %1$s\u2013%2$s of %3$s').replace('%1$s', start).replace('%2$s', end).replace('%3$s', totalItems);
 
 		if (totalPages <= 1) return;
 
 		// Prev button
 		var prev = document.createElement('button');
 		prev.className = 'faz-btn faz-btn-sm faz-btn-outline';
-		prev.textContent = __('consentLogs.prev', '← Prev');
+		prev.textContent = fazI18n('consentLogs.prev', '← Prev');
 		prev.disabled = page <= 1;
 		prev.addEventListener('click', function () { page--; loadLogs(); });
 		container.appendChild(prev);
@@ -256,7 +259,7 @@
 		// Next button
 		var next = document.createElement('button');
 		next.className = 'faz-btn faz-btn-sm faz-btn-outline';
-		next.textContent = __('consentLogs.next', 'Next →');
+		next.textContent = fazI18n('consentLogs.next', 'Next →');
 		next.disabled = page >= totalPages;
 		next.addEventListener('click', function () { page++; loadLogs(); });
 		container.appendChild(next);
@@ -302,10 +305,10 @@
 				link.click();
 				document.body.removeChild(link);
 				URL.revokeObjectURL(link.href);
-				FAZ.notify(__('consentLogs.exportOk', 'CSV exported successfully.'));
+				FAZ.notify(fazI18n('consentLogs.exportOk', 'CSV exported successfully.'));
 			})
 			.catch(function () {
-				FAZ.notify(__('consentLogs.exportFailed', 'Failed to export CSV.'), 'error');
+				FAZ.notify(fazI18n('consentLogs.exportFailed', 'Failed to export CSV.'), 'error');
 			});
 	}
 
