@@ -116,19 +116,19 @@ for (const p of payloads) {
       }
       // A manually selected banner must also respect explicit toggles when
       // runtime geolocation is disabled (including the CCPA detail panel).
-      for (let mask = 0; mask < (1 << optional.length); mask++) {
-        scenario(`${label}/manual-banner-save-${mask}`, () => {
-          const manual = open(p, law);
-          try {
-            manual._fazConfig._runtimeGeo = false;
-            manual._fazConfig._preferenceOriginTag = 'settings-button';
+      const manual = open(p, law);
+      try {
+        manual._fazConfig._runtimeGeo = false;
+        manual._fazConfig._preferenceOriginTag = 'settings-button';
+        for (let mask = 0; mask < (1 << optional.length); mask++) {
+          scenario(`${label}/manual-banner-save-${mask}`, () => {
             manual.document.body.innerHTML = optional.map((c, i) => `<input type="checkbox" id="fazSwitch${c.slug}" ${mask & (1 << i) ? 'checked' : ''}>`).join('');
             manual.eval('_fazAcceptCookies("custom", true)');
             state(manual, 'necessary', true);
             optional.forEach((c, i) => state(manual, c.slug, !!(mask & (1 << i))));
-          } finally { manual.close(); }
-        });
-      }
+          });
+        }
+      } finally { manual.close(); }
       scenario(label + '/explicit-reject-after-grant', () => {
         w.eval('_fazAcceptCookies("reject")');
         for (const c of p.categories) state(w, c.slug, c.isNecessary);
