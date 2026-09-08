@@ -69,7 +69,7 @@ Kao stanovnik Kalifornije imate pravo na:
 
 Za prava na uvid, brisanje, ispravak ili prenosivost pišite na **{{COMPANY_EMAIL}}**. To su provjerljivi zahtjevi potrošača, pa ćemo prije postupanja provjeriti vaš identitet (CCPA § 1798.130(a)(2)) i odgovoriti u roku od **45 dana** (uz obavijest produživo na 90 dana, § 1798.130(a)(2)(B)).
 
-Za izuzimanje od prodaje ili dijeljenja vaših Personal Information upotrijebite poveznice "Do Not Sell or Share" i "Upravljanje postavkama" u podnožju web stranice. Izuzimanje **nije** provjerljiv zahtjev potrošača: postupit ćemo po njemu bez traženja provjere identiteta ili otvaranja računa.
+Za izuzimanje od prodaje ili dijeljenja vaših Personal Information upotrijebite poveznice "Do Not Sell or Share" i "Upravljanje postavkama" u podnožju web stranice. Za ograničavanje naše upotrebe Sensitive Personal Information pišite na **{{COMPANY_EMAIL}}**. Ni izuzimanje ni zahtjev za ograničenje nisu provjerljivi zahtjevi potrošača (CPPA Reg. § 7060(b)): po oboma ćemo postupiti bez traženja provjere identiteta ili otvaranja računa.
 
 Možete i ovlastiti zastupnika da podnese zahtjev u vaše ime (Cal. Civ. Code § 1798.135(c)).
 

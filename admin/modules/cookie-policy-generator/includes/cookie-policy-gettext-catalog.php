@@ -210,7 +210,7 @@ As a California resident, you have the right to:
 
 To exercise the rights to know, delete, correct or port, email **{{COMPANY_EMAIL}}**. Those are verifiable consumer requests, so we will verify your identity before acting (CCPA § 1798.130(a)(2)), and we will respond within **45 days** (extendable to 90 with notice, § 1798.130(a)(2)(B)).
 
-To opt out of the sale or sharing of your Personal Information, use the "Do Not Sell or Share" and "Manage Preferences" links in the website footer. An opt-out is **not** a verifiable consumer request: we will act on it without asking you to verify your identity or to create an account.
+To opt out of the sale or sharing of your Personal Information, use the "Do Not Sell or Share" and "Manage Preferences" links in the website footer. To limit our use of Sensitive Personal Information, email **{{COMPANY_EMAIL}}**. Neither an opt-out nor a request to limit is a verifiable consumer request (CPPA Reg. § 7060(b)): we will act on both without asking you to verify your identity or to create an account.
 
 You may also designate an authorized agent to submit a request on your behalf (Cal. Civ. Code § 1798.135(c)).',
 			'Cookie policy template: ccpa-california / section-8',
