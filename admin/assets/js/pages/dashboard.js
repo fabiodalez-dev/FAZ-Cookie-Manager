@@ -187,12 +187,28 @@
 	// Whether the site records pageviews at all. Printed on the wrapper by
 	// dashboard.php so the panel can tell "nobody visited" from "we are not
 	// counting", which the old zeroes conflated.
+	// Every filter click fires loadStats() and loadChart() again without
+	// cancelling what is already in flight, and the two ranges are served by
+	// different queries with different costs. Clicking 30D while 1D is still
+	// loading therefore lets the slower answer land last and paint the range
+	// nobody asked for, under a filter bar that says something else. Each call
+	// takes a ticket and refuses to touch the DOM unless it is still the
+	// newest, which is cheaper and more reliable than trying to abort a fetch.
+	//
+	// One counter PER endpoint, not one for the panel: reloadDashboard() calls
+	// both loaders in a row, so a shared counter would have the chart's ticket
+	// invalidate the stats request issued a line earlier and the cards would
+	// stay empty. A request may only cancel an older request of its own kind.
+	var statsRequestSeq = 0;
+	var chartRequestSeq = 0;
+
 	function pageviewTrackingEnabled() {
 		var dashboard = document.getElementById('faz-dashboard');
 		return !!dashboard && dashboard.getAttribute('data-pageview-tracking') === '1';
 	}
 
 	function loadStats(params) {
+		var seq = ++statsRequestSeq;
 		if (!pageviewTrackingEnabled()) {
 			// Not zero — unavailable. Reporting 0 accepted / 0 rejected reads as
 			// "every visitor ignored the banner", which is a very different and
@@ -206,6 +222,7 @@
 			return;
 		}
 		FAZ.get('pageviews/banner-stats', params).then(function (data) {
+			if (seq !== statsRequestSeq) return; // a newer range was requested
 			var banner   = data.banner_view || 0;
 			var accepted = data.banner_accept || 0;
 			var rejected = data.banner_reject || 0;
@@ -222,6 +239,7 @@
 			hideEmpty('faz-consent-empty');
 			drawConsentDonut(accepted, rejected);
 		}).catch(function () {
+			if (seq !== statsRequestSeq) return;
 			showEmpty('faz-consent-empty');
 		});
 	}
@@ -229,6 +247,7 @@
 	/* ── Pageviews Line Chart ── */
 
 	function loadChart(params) {
+		var seq = ++chartRequestSeq;
 		var totalEl = document.getElementById('faz-stat-pageviews');
 		// Cleared first so a failed or pending request never leaves the previous
 		// range's total on screen next to the new range's chart.
@@ -239,6 +258,7 @@
 			return;
 		}
 		FAZ.get('pageviews/chart', params).then(function (data) {
+			if (seq !== chartRequestSeq) return; // a newer range was requested
 			var items = Array.isArray(data) ? data : (data.data || data.items || []);
 			// A genuine zero is reported as 0; only a missing figure stays '--'.
 			if (totalEl && typeof data.total_views === 'number') {
@@ -268,6 +288,7 @@
 
 			drawLineChart('faz-chart-pageviews', labels, values);
 		}).catch(function () {
+			if (seq !== chartRequestSeq) return;
 			showEmpty('faz-chart-empty');
 		});
 	}

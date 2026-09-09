@@ -545,7 +545,7 @@ $faz_gpc_req      = $faz_requirement( array( 'signals.gpc_honored', 'signals.gpc
 				</div>
 				<div class="faz-form-group" style="border-top:1px solid var(--faz-border);padding-top:16px;margin-top:4px;max-width:280px;">
 					<label for="faz-b-border-radius"><?php esc_html_e( 'Button corner radius', 'faz-cookie-manager' ); ?></label>
-					<input type="text" class="faz-input faz-input-sm" id="faz-b-border-radius" style="width:110px;" placeholder="2px" inputmode="numeric" aria-describedby="faz-b-border-radius-help">
+					<input type="text" class="faz-input faz-input-sm" id="faz-b-border-radius" style="width:110px;" placeholder="2px" aria-describedby="faz-b-border-radius-help">
 					<div id="faz-b-border-radius-help" class="faz-help"><?php esc_html_e( 'Applies to every banner button — Accept, Reject, Customise and Do Not Sell — in the notice bar and the preference center. A length such as 0, 8px, 50px for pill-shaped, or 0.5rem. Leave empty to keep the shipped 2px.', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
