@@ -37,10 +37,10 @@
 set -euo pipefail
 
 # ── Defaults (override via env) ──────────────────────────────────────────
-PROJECT_ROOT="${PROJECT_ROOT:-/Users/fabio/Documents/GitHub/Cookie Crawler}"
+PLUGIN_SRC="${PLUGIN_SRC:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+PROJECT_ROOT="${PROJECT_ROOT:-$(dirname "${PLUGIN_SRC}")}"
 SVN_DIR="${SVN_DIR:-${HOME}/Sites/faz-cookie-manager-svn}"
 STAGE_DIR="${STAGE_DIR:-${HOME}/Sites/faz-cookie-manager-svn-stage}"
-PLUGIN_SRC="${PROJECT_ROOT}/faz-cookie-manager"
 SVN_USERNAME="${SVN_USERNAME:-fabiodalez}"
 
 # ── Args ─────────────────────────────────────────────────────────────────
