@@ -26,7 +26,7 @@ test('footer shortcode opens preferences using keyboard navigation', async ({ pa
   upsertPage(slug, 'Footer consent link', '[faz_cookie_settings type="link" text="Cookie preferences"]');
   const url = wpEval(`$p = get_page_by_path('${slug}'); echo get_permalink($p->ID);`).trim();
   try {
-    await page.goto(url);
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
     const accept = page.locator('[data-faz-tag="accept-button"]:visible').first();
     await expect(accept).toBeVisible();
     await accept.click();
@@ -47,7 +47,7 @@ test('disabled pageview tracking displays unavailable metrics', async ({ page, l
   try {
     wpEval('$s = get_option("faz_settings", array()); $s["pageview_tracking"] = false; update_option("faz_settings", $s);');
     await loginAsAdmin(page);
-    await page.goto('/wp-admin/admin.php?page=faz-cookie-manager');
+    await page.goto('/wp-admin/admin.php?page=faz-cookie-manager', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#faz-dashboard')).toHaveAttribute('data-pageview-tracking', '0');
     for (const stat of ['pageviews', 'banner', 'accept', 'reject']) {
       await expect(page.locator('#faz-stat-' + stat)).toHaveText('--');

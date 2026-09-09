@@ -28,5 +28,42 @@ w.FAZ.get = () => Promise.reject(new Error('offline'));
 w.chart({});
 await new Promise(resolve => setTimeout(resolve, 0));
 assert.equal(w.document.getElementById('faz-stat-pageviews').textContent, '--');
-console.log('10 passed: disabled tracking, genuine zero, actual pageview total, request error');
+
+// Out-of-order responses. Clicking 30D while 1D is still loading leaves two
+// requests in flight over different queries with different costs; before the
+// sequence token the slower one landed last and painted the range nobody
+// asked for, under a filter bar that said something else.
+const deferred = [];
+w.FAZ.get = () => new Promise(resolve => deferred.push(resolve));
+w.chart({ days: 1 });    // richiesta lenta, chiesta per prima
+w.chart({ days: 30 });   // richiesta veloce, chiesta per seconda
+assert.equal(deferred.length, 2, 'both requests are in flight');
+deferred[1]({ total_views: 30, data: [] });   // la seconda risponde per prima
+await new Promise(resolve => setTimeout(resolve, 0));
+assert.equal(w.document.getElementById('faz-stat-pageviews').textContent, '30');
+deferred[0]({ total_views: 1, data: [] });    // la prima arriva in ritardo
+await new Promise(resolve => setTimeout(resolve, 0));
+assert.equal(
+  w.document.getElementById('faz-stat-pageviews').textContent,
+  '30',
+  'a stale response must not overwrite the range actually selected'
+);
+
+// The same applies to a stale FAILURE: an old request rejecting must not blank
+// the panel that a newer, successful one has already filled.
+const late = [];
+w.FAZ.get = () => new Promise((resolve, reject) => late.push({ resolve, reject }));
+w.chart({ days: 1 });
+w.chart({ days: 30 });
+late[1].resolve({ total_views: 42, data: [] });
+await new Promise(resolve => setTimeout(resolve, 0));
+late[0].reject(new Error('slow request gave up'));
+await new Promise(resolve => setTimeout(resolve, 0));
+assert.equal(
+  w.document.getElementById('faz-stat-pageviews').textContent,
+  '42',
+  'a stale rejection must not blank a newer answer'
+);
+
+console.log('15 passed: disabled tracking, genuine zero, actual pageview total, request error, out-of-order responses');
 dom.window.close();

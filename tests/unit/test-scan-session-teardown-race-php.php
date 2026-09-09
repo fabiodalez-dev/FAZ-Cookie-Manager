@@ -41,11 +41,22 @@ function wp_cache_delete( $key, $group = '' ) {
 		unset( $GLOBALS['local'][ preg_replace( '/^_transient_/', '', $key ) ] );
 	}
 }
+$GLOBALS['simulated_connections'] = array();
 function concurrent_request( $cb ) {
-	$owner = $GLOBALS['wpdb']->owner++;
+	// Every simulated request has to look like a DIFFERENT database connection.
+	// The previous version took the id with a post-increment and then restored
+	// the counter in the finally, so each call handed out the same one. That
+	// matters because GET_LOCK is re-entrant for a single connection: a second
+	// request re-using the first one's id is granted a lock the first still
+	// holds, and the contention these tests exist to prove never happens.
+	// A static counter is never rewound, so no id is issued twice in a run.
+	static $next_connection = 1000;
+	$outer = $GLOBALS['wpdb']->owner;
+	$GLOBALS['wpdb']->owner = ++$next_connection;
+	$GLOBALS['simulated_connections'][] = $GLOBALS['wpdb']->owner;
 	$local = $GLOBALS['local'];
 	$GLOBALS['local'] = array();
-	try { $cb(); } finally { $GLOBALS['local'] = $local; $GLOBALS['wpdb']->owner = $owner; }
+	try { $cb(); } finally { $GLOBALS['local'] = $local; $GLOBALS['wpdb']->owner = $outer; }
 }
 function read_store( $key, $fresh ) {
 	if ( ! $fresh && array_key_exists( $key, $GLOBALS['local'] ) ) { return $GLOBALS['local'][ $key ]; }
@@ -200,6 +211,14 @@ foreach ( array( false, true ) as $external ) {
 	t( $ctl->abort_browser_scan_session( $scan ), "$backend: explicit cleanup can revoke an expired token" );
 	t( is_string( $ctl->start_browser_scan_session( $next_scan ) ), "$backend: absolute expiry releases the scan index" );
 }
+// The concurrency proof rests on each simulated request being a separate
+// database connection. If ids were ever reused, GET_LOCK would grant the second
+// request a lock the first still holds and every contention assertion above
+// would pass without contending — green, and meaningless.
+$sim = $GLOBALS['simulated_connections'];
+t( count( $sim ) > 1, 'more than one concurrent request was simulated' );
+t( count( $sim ) === count( array_unique( $sim ) ), 'no simulated connection id is reused' );
+
 echo "\nscan session lifecycle: $ok passed, $ko failed\n";
 exit( $ko > 0 ? 1 : 0 );
 }
