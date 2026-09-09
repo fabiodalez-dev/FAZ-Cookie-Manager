@@ -13,8 +13,8 @@
 
 set -euo pipefail
 
-PROJECT_ROOT="${PROJECT_ROOT:-/Users/fabio/Documents/GitHub/Cookie Crawler}"
-PLUGIN_SRC="${PLUGIN_SRC:-${PROJECT_ROOT}/faz-cookie-manager}"
+PLUGIN_SRC="${PLUGIN_SRC:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+PROJECT_ROOT="${PROJECT_ROOT:-$(dirname "${PLUGIN_SRC}")}"
 OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}}"
 CP_REQUIRES="${CP_REQUIRES:-1.0}"
 
