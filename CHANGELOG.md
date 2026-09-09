@@ -2,9 +2,15 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
-## [Unreleased]
+## [1.30.0] - 2026-09-09
 
 ### Fixed
+- Dashboard pageview and banner interaction metrics now show `--` and explain when tracking is disabled. Total Pageviews uses the actual pageview count instead of adding banner views and consent actions.
+- Per-service grants from blocked embeds are persisted on CCPA banners, even when a previous opt-out popup supplied the panel origin. An embed grant preserves unrelated category choices and standing sale/share opt-outs.
+- Browser scan session starts acquire a database lock before reading the active session. Concurrent starts for the same site and administrator return HTTP 409; retries reuse the existing token, and the lock is released on success, conflict, exception or connection termination.
+- Explicit category choices control all 47 supported jurisdiction profiles. Targeted sale/share opt-outs preserve unrelated granular preferences, Reject overrides permissive defaults, and separately gated processing requires its own grant.
+- Parked iframe URLs survive placeholder creation and restoration; Vimeo and YouTube embeds can be accepted after dynamic blocking. The banner focus trap now starts when the banner becomes visible.
+- Translation cache keys use the same normalization on read and invalidation; consent-log dates and dashboard time ranges follow administrative localization.
 - Cookie category names and descriptions can now be edited in every enabled language from Cookies → Cookie Categories. Switching languages preserves drafts, saving retains other translations, and failed saves keep the edits available for retry.
 - Added bundled Russian and Ukrainian category translations. Category rendering repairs stored English defaults, preserves custom wording and legacy plain-text values, and fills partial downloaded catalogues from bundled translations. Regression coverage checks multilingual category data through the controller and banner REST payload.
 - Banner copy now ships in Russian and Ukrainian, and the shipped catalogue is consulted for every language rather than only the 41 in a hard-coded list. A downloaded translation is merged field by field instead of replacing the whole catalogue, so a partial download no longer drops the bundled wording it does not cover, and an untranslated English string inside one cannot overwrite a bundled translation. The default-copy baseline reported to the banner editor is resolved from that same merge, so it can no longer disagree with what a visitor sees.
@@ -15,9 +21,6 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 - Cookie Policy templates in Dutch and Croatian for all four jurisdictions (GDPR, CCPA/CPRA, LGPD, POPIA). Both locales already offered a translated interface and were selectable as a policy language, but no template shipped for them, so the generator fell back to English and produced a legal document in the wrong language without saying so. The Cookie Policy screen already shows the shipped text as the placeholder in each override box, so those boxes now show Dutch and Croatian and the "no template ships for this language" notice no longer appears.
 ### Changed
 - The admin JavaScript translation helper is named `fazI18n()` instead of `__()`. It never was gettext — it looks up a dotted key in the PHP-provided `fazConfig.i18n` map — but under the gettext name the string extractor on translate.wordpress.org harvested 285 of those keys as if they were translatable English text, which capped every locale's completion at 84.8% and blocked language-pack generation. No runtime behaviour changes: the keys, the English fallbacks and the lookup are untouched.
-
-### Fixed
-- Dashboard pageview and banner interaction metrics now show `--` and explain when tracking is disabled. Total Pageviews uses the actual pageview count instead of adding banner views and consent actions.
 
 ## [1.29.0] - 2026-09-02
 
