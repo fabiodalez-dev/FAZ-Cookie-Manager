@@ -91,6 +91,7 @@ function delete_user_meta( $user_id, $key, $value = '' ) {
 	);
 }
 
+require_once __DIR__ . '/helpers/scan-start-lock-db.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-controller.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-cookie-database.php';
 

@@ -67,6 +67,28 @@ export function resetBaseline(): void {
       $faz_settings['geolocation'] = array();
     }
     $faz_settings['geolocation']['geo_targeting'] = false;
+
+    // Language baseline. Specs that need another language set their own and
+    // restore it (banner-i18n-non-english, multilingual-edge), but a run that is
+    // interrupted — or a spec that fails before its afterAll — leaves the site
+    // on whatever it had configured. Everything asserting banner COPY then reads
+    // Italian where it expects English and reports a content bug.
+    //
+    // Only the DEFAULT is normalised, and 'en' is ensured present in the
+    // selection. Replacing the whole languages block with English-only was the
+    // first attempt and was too blunt: several specs assert the settings payload
+    // and need other locales selected, so it traded one class of failure for
+    // another — twelve reds became sixteen. The polluting axis is the default,
+    // which decides which copy the banner renders, not the size of the selection.
+    if ( ! isset( $faz_settings['languages'] ) || ! is_array( $faz_settings['languages'] ) ) {
+      $faz_settings['languages'] = array();
+    }
+    $selected = $faz_settings['languages']['selected'] ?? array();
+    if ( ! is_array( $selected ) ) { $selected = array(); }
+    if ( ! in_array( 'en', $selected, true ) ) { array_unshift( $selected, 'en' ); }
+    $faz_settings['languages']['selected'] = array_values( $selected );
+    $faz_settings['languages']['default']  = 'en';
+
     update_option( 'faz_settings', $faz_settings );
 
     delete_option( 'faz_banner_template' );

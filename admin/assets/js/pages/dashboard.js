@@ -7,7 +7,10 @@
 	'use strict';
 
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
-	function __(key, fallback) {
+	// Not named `__`: this is a key lookup into the PHP-provided fazConfig.i18n
+	// map, not gettext. Under the gettext name, translate.wordpress.org harvests
+	// the dotted keys below as if they were translatable English text.
+	function fazI18n(key, fallback) {
 		var parts = key.split('.');
 		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
 		for (var i = 0; i < parts.length; i++) {
@@ -51,7 +54,7 @@
 						card.hidden = true;
 					}).catch(function () {
 						dismissBtn.disabled = false;
-						FAZ.notify(__('setup.dismiss_failed', 'Could not dismiss. Please try again.'), 'error');
+						FAZ.notify(fazI18n('setup.dismiss_failed', 'Could not dismiss. Please try again.'), 'error');
 					});
 				});
 			}
@@ -95,11 +98,11 @@
 				var to = toEl ? toEl.value : '';
 
 				if (!from || !to) {
-					FAZ.notify(__('dashboard.selectBothDates', 'Please select both start and end dates.'), 'error');
+					FAZ.notify(fazI18n('dashboard.selectBothDates', 'Please select both start and end dates.'), 'error');
 					return;
 				}
 				if (from > to) {
-					FAZ.notify(__('dashboard.startBeforeEnd', 'Start date must be before end date.'), 'error');
+					FAZ.notify(fazI18n('dashboard.startBeforeEnd', 'Start date must be before end date.'), 'error');
 					return;
 				}
 
@@ -119,13 +122,16 @@
 	// queries its own days window independently (see loadAbTestStats).
 	function rangeLabelForDays(days) {
 		var map = {
-			1: 'Last 24 Hours',
-			7: 'Last 7 Days',
-			30: 'Last 30 Days',
-			365: 'Last Year',
-			0: 'All Time'
+			1: fazI18n('dashboard.rangeLast24Hours', 'Last 24 Hours'),
+			7: fazI18n('dashboard.rangeLast7Days', 'Last 7 Days'),
+			30: fazI18n('dashboard.rangeLast30Days', 'Last 30 Days'),
+			365: fazI18n('dashboard.rangeLastYear', 'Last Year'),
+			0: fazI18n('dashboard.rangeAllTime', 'All Time')
 		};
-		return map[days] || ('Last ' + days + ' Days');
+		if (map[days]) return map[days];
+		// %d rather than concatenation: the number's position is not the same in
+		// every language, and a translator cannot move it out of a joined string.
+		return fazI18n('dashboard.rangeLastNDays', 'Last %d Days').replace('%d', days);
 	}
 
 	function updateRangeLabel() {
@@ -178,14 +184,36 @@
 
 	/* ── Stats + Donut ── */
 
+	// Whether the site records pageviews at all. Printed on the wrapper by
+	// dashboard.php so the panel can tell "nobody visited" from "we are not
+	// counting", which the old zeroes conflated.
+	function pageviewTrackingEnabled() {
+		var dashboard = document.getElementById('faz-dashboard');
+		return !!dashboard && dashboard.getAttribute('data-pageview-tracking') === '1';
+	}
+
 	function loadStats(params) {
+		if (!pageviewTrackingEnabled()) {
+			// Not zero — unavailable. Reporting 0 accepted / 0 rejected reads as
+			// "every visitor ignored the banner", which is a very different and
+			// alarming claim from "this site does not count pageviews".
+			['pageviews', 'banner', 'accept', 'reject'].forEach(function (stat) {
+				var el = document.getElementById('faz-stat-' + stat);
+				if (el) el.textContent = '--';
+			});
+			resetCanvas('faz-chart-consent');
+			showEmpty('faz-consent-empty');
+			return;
+		}
 		FAZ.get('pageviews/banner-stats', params).then(function (data) {
 			var banner   = data.banner_view || 0;
 			var accepted = data.banner_accept || 0;
 			var rejected = data.banner_reject || 0;
 			var total    = accepted + rejected;
 
-			document.getElementById('faz-stat-pageviews').textContent = (banner + total).toLocaleString();
+			// Total Pageviews comes from loadChart()'s total_views. It used to be
+			// banner views plus consent actions, which is not a pageview count at
+			// all and overstated it on every page that showed the banner.
 			document.getElementById('faz-stat-banner').textContent = banner.toLocaleString();
 			document.getElementById('faz-stat-accept').textContent = total > 0 ? Math.round((accepted / total) * 100) + '%' : '--';
 			document.getElementById('faz-stat-reject').textContent = total > 0 ? Math.round((rejected / total) * 100) + '%' : '--';
@@ -201,8 +229,21 @@
 	/* ── Pageviews Line Chart ── */
 
 	function loadChart(params) {
+		var totalEl = document.getElementById('faz-stat-pageviews');
+		// Cleared first so a failed or pending request never leaves the previous
+		// range's total on screen next to the new range's chart.
+		if (totalEl) totalEl.textContent = '--';
+		if (!pageviewTrackingEnabled()) {
+			resetCanvas('faz-chart-pageviews');
+			showEmpty('faz-chart-empty');
+			return;
+		}
 		FAZ.get('pageviews/chart', params).then(function (data) {
 			var items = Array.isArray(data) ? data : (data.data || data.items || []);
+			// A genuine zero is reported as 0; only a missing figure stays '--'.
+			if (totalEl && typeof data.total_views === 'number') {
+				totalEl.textContent = data.total_views.toLocaleString();
+			}
 
 			resetCanvas('faz-chart-pageviews');
 			hideEmpty('faz-chart-empty');
@@ -492,7 +533,7 @@
 				if (!hasCats) {
 					var emptyP = document.createElement('p');
 					emptyP.style.color = 'var(--faz-text-muted)';
-					emptyP.textContent = __('dashboard.noCategoryData', 'No category data yet.');
+					emptyP.textContent = fazI18n('dashboard.noCategoryData', 'No category data yet.');
 					catContainer.appendChild(emptyP);
 				}
 			}
@@ -537,7 +578,7 @@
 			if (totalConsents === 0) {
 				var empty = document.createElement('p');
 				empty.style.color = 'var(--faz-text-muted)';
-				empty.textContent = __(
+				empty.textContent = fazI18n(
 					'dashboard.abTestNoData',
 					'No consents recorded for these variants yet. Results appear once visitors respond to the banner.'
 				);
@@ -574,7 +615,7 @@
 				meta.style.color = 'var(--faz-text-muted)';
 				meta.style.fontSize = '12px';
 				meta.style.marginTop = '2px';
-				meta.textContent = __('dashboard.abTestAcceptedOf', '{accepted} accepted of {total} consents')
+				meta.textContent = fazI18n('dashboard.abTestAcceptedOf', '{accepted} accepted of {total} consents')
 					.replace('{accepted}', (parseInt(v.accepted, 10) || 0).toLocaleString())
 					.replace('{total}', total.toLocaleString());
 
@@ -601,7 +642,7 @@
 				while (body.firstChild) { body.removeChild(body.firstChild); }
 				var errEl = document.createElement('p');
 				errEl.style.color = 'var(--faz-text-muted)';
-				errEl.textContent = __('dashboard.abTestLoadError', 'Could not load A/B test results.');
+				errEl.textContent = fazI18n('dashboard.abTestLoadError', 'Could not load A/B test results.');
 				body.appendChild(errEl);
 			}).catch(function () {
 				// Can't even confirm the enabled state — fall back to hiding.

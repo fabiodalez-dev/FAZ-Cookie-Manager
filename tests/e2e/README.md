@@ -34,7 +34,8 @@ Copia `.env.e2e.example` e imposta:
 La suite multisite non va lanciata con la configurazione E2E ordinaria: il runner
 crea una rete temporanea, passa al test gli URL main/child e usa il relativo
 `playwright.multisite.config.ts`. Eseguire direttamente lo spec contro il sito
-single-site produce correttamente un errore di topologia (`/child` mancante).
+single-site registra uno skip esplicito perché manca la topologia `/child`;
+la verifica effettiva richiede il runner multisite dedicato.
 
 Prima della suite E2E ordinaria, sincronizza il worktree nel WordPress di test:
 `FAZ_DEPLOY_TARGET="$FAZ_PLUGIN_DEPLOY_PATH" npm run test:e2e:deploy`. Il preflight
@@ -45,6 +46,24 @@ confronta poi i checksum e interrompe il run se anche un solo file, incluso
 `FAZ_E2E_BROWSERS` accetta una lista separata da virgole tra `chromium`,
 `firefox` e `webkit`; il default resta `chromium`, quindi il costo della suite
 storica non cambia.
+
+## Suite completa obbligatoria
+
+`npm test` e `npm run test:e2e` eseguono, nell’ordine:
+
+1. Tutte le suite PHP e JavaScript (`npm run test:unit`), incluse le matrici di consenso per tutti i 47 profili normativi.
+2. La matrice sul JavaScript di produzione in Chromium, Firefox e WebKit (`npm run test:consent:browser`).
+3. L’intera suite WordPress.
+
+Lo stesso gate `npm run test:consent` viene eseguito anche dalla modalità
+headed e dal runner a batch, una sola volta prima di modificare il sito.
+
+Il lifecycle `pretest:e2e` interrompe il comando al primo fallimento: i test
+aggiunti non sono opzionali e non vengono saltati quando un browser manca.
+Installare prima i browser con `npx playwright install chromium firefox webkit`.
+La CI esegue tutte le nuove matrici ad ogni PR, insieme alla validazione degli
+schemi normativi. I comandi con uno spec esplicito restano verifiche mirate e non
+sostituiscono la suite completa.
 
 ## Output report
 

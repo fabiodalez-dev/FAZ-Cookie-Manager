@@ -50,6 +50,7 @@ EXCLUDES=(
 	'.code-review-graph'
 	'.serena'
 	'tests'
+	'test-results'
 	'*.zip'
 	'.DS_Store'
 )

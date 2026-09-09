@@ -99,13 +99,13 @@ test.describe('Native a11y — structural DOM fixes', () => {
 test.describe('Native a11y — focus loop on banner', () => {
   test.describe.configure({ mode: 'serial' });
 
-  // FIXME(#62): focus trap test is flaky — fails when the banner template
-  // cache is regenerated fresh (the focus loop keydown handler on the last
-  // notice button does not fire consistently under Playwright's
-  // keyboard.press). The underlying _fazLoopFocus() code is correct; the
-  // issue appears to be timing between template injection and event
-  // listener attachment. Tracked as issue #62.
-  test.fixme('Tab from last banner button wraps to first (box type)', async ({ page }) => {
+  // #62. This was disabled as "flaky, the underlying code is correct". It was
+  // neither: the trap was never armed at banner render. _fazLoopFocus() ran only
+  // from the preference-centre path, so a visitor who never opened preferences
+  // could Tab straight out of a role="dialog". Verified by hand before fixing —
+  // attaching the same handler manually made Tab wrap immediately, which is what
+  // ruled out the timing explanation.
+  test('Tab from last banner button wraps to first (box type)', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const notice = page.locator('[data-faz-tag="notice"]');

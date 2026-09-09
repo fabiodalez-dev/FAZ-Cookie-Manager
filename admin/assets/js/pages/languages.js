@@ -6,7 +6,10 @@
 	'use strict';
 
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
-	function __(key, fallback) {
+	// Not named `__`: this is a key lookup into the PHP-provided fazConfig.i18n
+	// map, not gettext. Under the gettext name, translate.wordpress.org harvests
+	// the dotted keys below as if they were translatable English text.
+	function fazI18n(key, fallback) {
 		var parts = key.split('.');
 		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
 		for (var i = 0; i < parts.length; i++) {
@@ -40,7 +43,7 @@
 			renderTags();
 			renderDefaultSelect();
 		}).catch(function () {
-			FAZ.notify(__('languages.loadFailed', 'Failed to load languages.'), 'error');
+			FAZ.notify(fazI18n('languages.loadFailed', 'Failed to load languages.'), 'error');
 		});
 	}
 
@@ -51,7 +54,7 @@
 		if (!selected.length) {
 			var empty = document.createElement('span');
 			empty.className = 'faz-text-muted';
-			empty.textContent = __('languages.noLanguages', 'No languages selected. Add one below.');
+			empty.textContent = fazI18n('languages.noLanguages', 'No languages selected. Add one below.');
 			container.appendChild(empty);
 			return;
 		}
@@ -69,7 +72,7 @@
 			removeBtn.type = 'button';
 			removeBtn.className = 'faz-lang-tag-remove';
 			removeBtn.textContent = '\u00D7'; // multiplication sign ×
-			removeBtn.title = __('languages.removeLanguage', 'Remove %s').replace('%s', name);
+			removeBtn.title = fazI18n('languages.removeLanguage', 'Remove %s').replace('%s', name);
 			removeBtn.addEventListener('click', function () {
 				removeLanguage(code);
 			});
@@ -103,7 +106,7 @@
 
 	function removeLanguage(code) {
 		if (selected.length <= 1) {
-			FAZ.notify(__('languages.atLeastOne', 'At least one language must be selected.'), 'error');
+			FAZ.notify(fazI18n('languages.atLeastOne', 'At least one language must be selected.'), 'error');
 			return;
 		}
 		selected = selected.filter(function (c) { return c !== code; });
@@ -168,7 +171,7 @@
 				if (already) {
 					var badge = document.createElement('span');
 					badge.className = 'faz-badge faz-badge-muted';
-					badge.textContent = __('languages.added', 'Added');
+					badge.textContent = fazI18n('languages.added', 'Added');
 					item.appendChild(badge);
 				} else {
 					(function (c) {
@@ -186,7 +189,7 @@
 		if (count === 0) {
 			var noResult = document.createElement('div');
 			noResult.className = 'faz-lang-dropdown-item disabled';
-			noResult.textContent = __('languages.noResults', 'No languages found.');
+			noResult.textContent = fazI18n('languages.noResults', 'No languages found.');
 			dropdown.appendChild(noResult);
 		}
 
@@ -217,10 +220,10 @@
 			return FAZ.post('settings', current);
 		}).then(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('languages.saved', 'Languages saved successfully.'));
+			FAZ.notify(fazI18n('languages.saved', 'Languages saved successfully.'));
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('languages.saveFailed', 'Failed to save languages.'), 'error');
+			FAZ.notify(fazI18n('languages.saveFailed', 'Failed to save languages.'), 'error');
 		});
 	}
 

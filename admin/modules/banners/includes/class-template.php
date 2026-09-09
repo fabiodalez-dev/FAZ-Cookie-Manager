@@ -589,6 +589,19 @@ class Template {
 				$css_vars['--faz-toggle-inactive-background-color'] = $cp_toggle['inactive']['styles']['background-color'];
 			}
 
+			// Button corner radius (issue #191). The template's .faz-btn rules
+			// already read --faz-btn-border-radius with a 2px fallback, so an
+			// empty setting emits nothing and every existing banner keeps the
+			// shipped look byte for byte. The value is shape-checked by
+			// faz_sanitize_css_length() on save, which is what keeps it from
+			// closing this declaration and injecting free-form CSS.
+			$radius = isset( $properties['settings']['borderRadius'] )
+				? (string) $properties['settings']['borderRadius']
+				: '';
+			if ( '' !== $radius ) {
+				$css_vars['--faz-btn-border-radius'] = $radius;
+			}
+
 			if ( ! empty( $css_vars ) ) {
 				$vars_string = '';
 				foreach ( $css_vars as $var => $val ) {

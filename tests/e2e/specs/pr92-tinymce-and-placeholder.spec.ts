@@ -12,11 +12,36 @@
  * 5. REST PUT category must not wipe unspecified fields (partial update, commit 9563859)
  */
 import { expect, test } from '../fixtures/wp-fixture';
+import type { Page } from '@playwright/test';
+import { resetBaseline, resetDefaultBannerState } from '../utils/seed-defaults';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
+async function interceptVideo(page: Page, url: string) {
+  const requests: string[] = [];
+  await page.route(url, async (route) => {
+    requests.push(route.request().url());
+    await route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>consented video</p>' });
+  });
+  return requests;
+}
+async function verifyVideoChoice(page: Page, requests: string[], url: string, selector: string) {
+  expect(requests, 'a blocked iframe must not contact its provider').toHaveLength(0);
+  await page.evaluate(() => { (window as any)._fazConfig._bannerConfig.behaviours.reloadBannerOnAccept = false; });
+  await page.locator('[data-faz-tag="accept-button"]').first().click();
+  await expect.poll(() => requests.length, { message: 'the iframe loads only after explicit consent' }).toBeGreaterThan(0);
+  const restored = page.locator(selector);
+  await expect(restored).toHaveAttribute('src', url);
+  await expect(restored).not.toHaveAttribute('data-faz-src');
+  await expect(restored).toBeVisible();
+}
+
 test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', () => {
   test.describe.configure({ mode: 'serial' });
+  test.beforeAll(() => {
+    resetBaseline();
+    resetDefaultBannerState();
+  });
 
   // ──────────────────────────────────────────────────────────────────────────
   // 1. TinyMCE editors
@@ -171,6 +196,8 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
     // in the YouTube branch, leaving faz-hidden on non-YouTube placeholders.
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
+    const videoURL = 'https://player.vimeo.com/video/123456789';
+    const requests = await interceptVideo(page, videoURL);
 
     try {
       await page.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded' });
@@ -181,8 +208,7 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
         .catch(() => false);
 
       if (!fazLoaded) {
-        test.skip();
-        return;
+        throw new Error('The default banner must load the placeholder runtime');
       }
 
       // Tag our injected iframe with a unique marker so we can identify the
@@ -195,6 +221,9 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
       await page.evaluate((marker) => {
         const iframe = document.createElement('iframe');
         iframe.src = 'https://player.vimeo.com/video/123456789';
+        // Pin the denied category: this test exercises dynamic placeholders,
+        // independent of catalogue changes made by earlier REST tests.
+        iframe.setAttribute('data-faz-category', 'marketing');
         iframe.width = '640';
         iframe.height = '360';
         iframe.setAttribute('data-e2e-vimeo-marker', marker);
@@ -229,18 +258,12 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
         return last?.id || '';
       }, vimeoMarker);
 
-      if (!vimeoPlaceholderId) {
-        test.skip();
-        return;
-      }
+      expect(vimeoPlaceholderId, 'the explicitly blocked Vimeo iframe must have a placeholder').toBeTruthy();
 
       const vimeoPlaceholder = page.locator(`#${vimeoPlaceholderId}`);
       const vimeoPlaceholderCount = await vimeoPlaceholder.count();
 
-      if (vimeoPlaceholderCount === 0) {
-        test.skip();
-        return;
-      }
+      expect(vimeoPlaceholderCount).toBe(1);
 
       // THE KEY ASSERTION — without the fix, non-YouTube providers returned
       // before _fazSetPlaceHolder(), leaving faz-hidden on the title element.
@@ -253,6 +276,7 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
         titleInVimeo,
         'Vimeo placeholder title must be visible',
       ).toBeVisible();
+      await verifyVideoChoice(page, requests, videoURL, `iframe[data-e2e-vimeo-marker="${vimeoMarker}"]`);
     } finally {
       await ctx.close();
     }
@@ -262,6 +286,8 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
     // Fresh context: no consent cookie → all non-necessary categories blocked.
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
+    const videoURL = 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ';
+    const requests = await interceptVideo(page, videoURL);
 
     try {
       await page.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded' });
@@ -273,8 +299,7 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
         .catch(() => false);
 
       if (!fazLoaded) {
-        test.skip();
-        return;
+        throw new Error('The default banner must load the placeholder runtime');
       }
 
       // Inject a YouTube iframe dynamically — same shape as Bricks Video
@@ -282,8 +307,12 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
       await page.evaluate(() => {
         const iframe = document.createElement('iframe');
         iframe.src = 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ';
+        // Pin the denied category: this test exercises dynamic placeholders,
+        // independent of catalogue changes made by earlier REST tests.
+        iframe.setAttribute('data-faz-category', 'marketing');
         iframe.width = '640';
         iframe.height = '360';
+        iframe.id = 'faz-e2e-dynamic-youtube';
         document.body.appendChild(iframe);
       });
 
@@ -292,13 +321,7 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
 
       const placeholderCount = await page.locator('[data-faz-tag="video-placeholder"]').count();
 
-      if (placeholderCount === 0) {
-        // FAZ is not blocking youtube-nocookie.com in this environment
-        // (marketing category may be off or consent already granted).
-        // Skip — the static source check above is the definitive assertion.
-        test.skip();
-        return;
-      }
+      expect(placeholderCount, 'the explicitly blocked YouTube iframe must have a placeholder').toBeGreaterThan(0);
 
       // THE KEY ASSERTION — before the fix _fazSetPlaceHolder() was never
       // called for dynamically-injected placeholders, leaving the <p> with
@@ -310,6 +333,7 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
         page.locator('[data-faz-tag="placeholder-title"]').first(),
         'placeholder title must be visible',
       ).toBeVisible();
+      await verifyVideoChoice(page, requests, videoURL, '#faz-e2e-dynamic-youtube');
     } finally {
       await ctx.close();
     }

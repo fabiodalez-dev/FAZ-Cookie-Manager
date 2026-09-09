@@ -2456,3 +2456,10 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 	.faz-wizard-progress-label { display: none; }
 	.faz-setup-nudge-actions { width: 100%; }
 }
+
+/* Language picker above the category editor. Scoped to this one field: .faz-field
+   carries no styling of its own anywhere in the admin, so giving it a margin here
+   would silently reflow every other view that uses the class as a plain wrapper. */
+.faz-category-language-field {
+	margin-bottom: 12px;
+}

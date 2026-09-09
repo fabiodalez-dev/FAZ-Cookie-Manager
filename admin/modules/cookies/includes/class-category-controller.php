@@ -288,9 +288,9 @@ class Category_Controller extends Base_Controller {
 		}
 		$object                     = new stdClass();
 		$object->category_id        = isset( $item->category_id ) ? absint( $item->category_id ) : 0;
-		$object->name               = isset( $item->name ) ? $this->prepare_json( $item->name ) : '';
+		$object->name               = isset( $item->name ) ? $this->prepare_json( $item->name, true ) : '';
 		$object->slug               = isset( $item->slug ) ? sanitize_text_field( $item->slug ) : '';
-		$object->description        = isset( $item->description ) ? $this->prepare_json( $item->description ) : '';
+		$object->description        = isset( $item->description ) ? $this->prepare_json( $item->description, true ) : '';
 		$object->prior_consent      = isset( $item->prior_consent ) ? absint( $item->prior_consent ) : '';
 		$object->priority           = isset( $item->priority ) ? absint( $item->priority ) : '';
 		$object->visibility         = isset( $item->visibility ) ? absint( $item->visibility ) : 0;
@@ -497,14 +497,19 @@ class Category_Controller extends Base_Controller {
 	/**
 	 * Decode a JSON string if necessary
 	 *
-	 * @param string $data String data.
-	 * @return array
+	 * @param mixed $data Raw data.
+	 * @param bool  $preserve_text Preserve legacy plain-text names and descriptions.
+	 * @return mixed
 	 */
-	public function prepare_json( $data ) {
+	public function prepare_json( $data, $preserve_text = false ) {
 		if ( empty( $data ) ) {
 			return array();
 		}
-		return is_string( $data ) ? json_decode( $data, true ) : $data;
+		if ( ! is_string( $data ) ) {
+			return $data;
+		}
+		$decoded = json_decode( $data, true );
+		return JSON_ERROR_NONE === json_last_error() ? $decoded : ( $preserve_text ? $data : array() );
 	}
 
 	/**

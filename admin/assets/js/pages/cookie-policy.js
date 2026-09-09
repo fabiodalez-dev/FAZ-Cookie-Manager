@@ -180,6 +180,12 @@
 	function syncJurisdictionRequirements() {
 		var jurisdiction = document.getElementById('cp-jurisdiction');
 		var popia = !!jurisdiction && jurisdiction.value === 'popia-southafrica';
+		var ccpa = !!jurisdiction && jurisdiction.value === 'ccpa-california';
+		var summary = document.getElementById('cp-ccpa-methods-summary');
+		if (summary) { summary.hidden = !ccpa; }
+		var editorLaw = document.getElementById('cp-override-jurisdiction');
+		var methods = document.getElementById('cp-ccpa-methods-help');
+		if (methods) { methods.hidden = !(ccpa || (editorLaw && editorLaw.value === 'ccpa-california')); }
 		[
 			'company.address', 'dpo.name', 'dpo.email', 'privacy_policy_url'
 		].forEach(function (name) {
@@ -866,6 +872,7 @@
 			var selector = document.getElementById(id);
 			if (!selector) { return; }
 			selector.addEventListener('change', function () {
+				syncJurisdictionRequirements();
 				overrideRequestId += 1;
 				renderOverrideSections(null);
 				setOverrideStatus('');

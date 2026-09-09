@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.29.0
+Stable tag: 1.30.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -218,6 +218,21 @@ Every outbound request documented above happens only when its feature is used. `
 
 == Frequently Asked Questions ==
 
+= Can I put a consent link in my footer? =
+
+Yes. Add a Shortcode block to your site-wide footer containing `[faz_cookie_settings type="link" text="Cookie preferences"]`. The link uses your theme’s styling. Omit `type="link"` for the existing banner-coloured button. Both support a custom `text` and additional CSS `class`.
+
+To replace the floating widget, put the link on every page and disable **Banner → Advanced → Show revisit consent widget**. Jurisdiction routing may lock that widget on; in that case both controls remain available. The shortcode needs the banner runtime and does not work on pages excluded from the banner. Standard navigation menu labels do not execute shortcodes; custom HTML can use `<a href="#faz-consent" data-faz-open-preferences="1" aria-haspopup="dialog">Cookie preferences</a>`.
+
+= Do scheduled scans require WP-CLI? =
+
+No. A hosting cron that calls WordPress’s `wp-cron.php` runs the plugin’s scheduled events too. If your host already provides that job, do not add a duplicate. **System Status → Cron Jobs** includes a cPanel example and explains how to check the next scheduled times.
+
+= Why does the dashboard show -- for pageviews? =
+
+Pageview and banner interaction metrics show `--` when pageview tracking is disabled. This means unavailable, rather than zero visits. Consent logging is a separate setting and can remain enabled.
+
+
 = Does this plugin require a cloud account or subscription? =
 
 No required cloud account or subscription is needed. Core consent features run locally, while some optional refresh/download features can contact documented third-party services such as GitHub, IAB Europe, MaxMind, or AMP infrastructure.
@@ -382,6 +397,17 @@ The full changelog (every release back to 1.0.0) lives at:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
+
+= 1.30.0 =
+* Added: Footer consent links with [faz_cookie_settings type="link"] and configurable banner button radius (#191).
+* Added: Cookie Policy templates in Dutch and Croatian, plus Russian and Ukrainian banner and category translations.
+* Fixed: Explicit consent choices remain authoritative across all 47 jurisdiction profiles, including targeted sale/share opt-outs and separately gated categories.
+* Fixed: Per-service grants from blocked embeds persist on CCPA banners without granting unrelated categories; standing sale/share opt-outs remain binding.
+* Fixed: Simultaneous browser scan starts by the same administrator are serialized before session lookup; competing starts return HTTP 409.
+* Fixed: Category translations preserve drafts and catalogue fallback; translation cache invalidation uses normalized language keys.
+* Fixed: Blocked Vimeo and YouTube embeds restore correctly after consent, and keyboard focus stays inside the visible consent dialog.
+* Fixed: Dashboard metrics show -- when pageview tracking is disabled and use the actual pageview total. Administrative dates and time-range labels follow the selected language.
+* Changed: System Status explains hosting cron integration. Administrative translation keys no longer pollute gettext extraction.
 
 = 1.29.0 =
 * Fixed: pressing "Update definitions" once froze the cookie database at that moment, permanently. The downloaded copy always won over the snapshot shipped with the plugin, and nothing ever revisited that choice — no version check, no date comparison, no refresh on upgrade. Sites that never pressed the button kept receiving fresher data with every plugin update; sites that pressed it fell further behind for as long as they ran. The bundled snapshot now wins when it is newer, so the button offered as the cure for stale definitions is no longer what makes staleness permanent.

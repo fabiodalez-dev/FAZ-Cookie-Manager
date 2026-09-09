@@ -14,7 +14,10 @@
 
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back
 	// to the provided English string. Mirrors dashboard.js.
-	function __(key, fallback) {
+	// Not named `__`: this is a key lookup into the PHP-provided fazConfig.i18n
+	// map, not gettext. Under the gettext name, translate.wordpress.org harvests
+	// the dotted keys below as if they were translatable English text.
+	function fazI18n(key, fallback) {
 		var parts = key.split('.');
 		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
 		for (var i = 0; i < parts.length; i++) {
@@ -298,7 +301,7 @@
 		if (recommendations.cache_plugin && bootstrap) {
 			if (cacheBadge) {
 				cacheBadge.textContent = interpolateStr(
-				__('setup.detected_named', 'Detected: %s'),
+				fazI18n('setup.detected_named', 'Detected: %s'),
 				recommendations.cache_plugin
 				);
 				cacheBadge.hidden = false;
@@ -312,7 +315,7 @@
 		// Google tags badge (step 4).
 		var googleBadge = document.getElementById('faz-setup-google-badge');
 		if (googleBadge && recommendations.google_tags) {
-			googleBadge.textContent = __('setup.detected_google', 'Google tags detected on this site');
+			googleBadge.textContent = fazI18n('setup.detected_google', 'Google tags detected on this site');
 			googleBadge.hidden = false;
 		}
 
@@ -364,10 +367,10 @@
 			var badge = document.createElement('span');
 			badge.className = 'faz-setup-badge';
 			badge.textContent = gateway.source === 'scan'
-				? __('setup.detected_scan', 'Found by the cookie scan')
+				? fazI18n('setup.detected_scan', 'Found by the cookie scan')
 				: (gateway.source === 'enabled'
-					? __('setup.detected_enabled', 'Currently always allowed')
-					: __('setup.detected_plugin', 'Active plugin detected'));
+					? fazI18n('setup.detected_enabled', 'Currently always allowed')
+					: fazI18n('setup.detected_plugin', 'Active plugin detected'));
 			label.appendChild(document.createTextNode(' '));
 			label.appendChild(badge);
 
@@ -451,7 +454,7 @@
 		if (!window.FAZ || !FAZ.scanEngine || typeof FAZ.scanEngine.run !== 'function') {
 			// The engine script was blocked (ad blockers match "cookie"/"scan"
 			// filenames). Say so rather than failing mutely.
-			setScanStatus(__('setup.scan_engine_missing', 'The scanner could not load. You can skip this step and run a full scan on the Cookies page.'));
+			setScanStatus(fazI18n('setup.scan_engine_missing', 'The scanner could not load. You can skip this step and run a full scan on the Cookies page.'));
 			return;
 		}
 
@@ -459,7 +462,7 @@
 		// A fresh scan reclaims any held capture session on the server, so a
 		// leftover retry offer would 409 the moment it was used. Remove it.
 		removeHeldPanel();
-		setScanStatus(__('setup.scan_starting', 'Starting scan…'));
+		setScanStatus(fazI18n('setup.scan_starting', 'Starting scan…'));
 		startScanActivity();
 
 		var hooks = {
@@ -500,8 +503,8 @@
 	}
 
 	function showTerminalScanFailure(err) {
-		setScanStatus((err && err.message) || __('setup.scan_failed', 'The scan could not be started. You can skip this step or run a full scan on the Cookies page.'));
-		FAZ.notify(__('setup.scan_failed_notify', 'Cookie scan could not be started.'), 'error');
+		setScanStatus((err && err.message) || fazI18n('setup.scan_failed', 'The scan could not be started. You can skip this step or run a full scan on the Cookies page.'));
+		FAZ.notify(fazI18n('setup.scan_failed_notify', 'Cookie scan could not be started.'), 'error');
 	}
 
 	function handleScanSuccess(res) {
@@ -512,16 +515,16 @@
 		// twice, so the counts are described as what is already on record
 		// rather than as a fresh import.
 		if (res && res.importResult && res.importResult.duplicate) {
-			doneMessage = __('cookies.scanAlreadySaved', 'Already saved — %1$d cookies on %2$d pages were imported by an earlier attempt. Nothing was saved twice.')
+			doneMessage = fazI18n('cookies.scanAlreadySaved', 'Already saved — %1$d cookies on %2$d pages were imported by an earlier attempt. Nothing was saved twice.')
 				.replace('%1$d', function () { return String(found); })
 				.replace('%2$d', function () { return String((res && typeof res.pagesScanned === 'number') ? res.pagesScanned : 0); });
 		} else {
 			doneMessage = found > 0
-				? interpolate(__('setup.scan_done_found', 'Scan complete — %d cookies found.'), found)
-				: __('setup.scan_done_empty', 'Scan complete. No new cookies were found.');
+				? interpolate(fazI18n('setup.scan_done_found', 'Scan complete — %d cookies found.'), found)
+				: fazI18n('setup.scan_done_empty', 'Scan complete. No new cookies were found.');
 		}
 		if (res && res.importResult && res.importResult.enrichment_pending) {
-			doneMessage += ' ' + __('setup.scan_enrichment_pending', 'Server-header enrichment continues in the background.');
+			doneMessage += ' ' + fazI18n('setup.scan_enrichment_pending', 'Server-header enrichment continues in the background.');
 		}
 		setScanStatus(doneMessage);
 		// The scan may have discovered payment-gateway cookies — refresh the
@@ -556,7 +559,7 @@
 			return;
 		}
 		removeHeldPanel();
-		setScanStatus(__('cookies.importNotSaved', 'Not saved'));
+		setScanStatus(fazI18n('cookies.importNotSaved', 'Not saved'));
 
 		var savesOnly = !!(err && typeof err.retryImport === 'function');
 
@@ -569,8 +572,8 @@
 		var explain = document.createElement('p');
 		explain.className = 'faz-scan-held-text';
 		explain.textContent = savesOnly
-			? __('cookies.importHeldRetrySave', 'The scan finished but the results could not be saved. Nothing is lost — they are held on the server for a few minutes. Retrying saves them; it does not scan the site again.')
-			: __('cookies.importHeldRerun', 'The scan finished but the results could not be saved. The capture session is held on the server for a few minutes, so retrying reuses it instead of failing — but this browser has to walk the pages again.');
+			? fazI18n('cookies.importHeldRetrySave', 'The scan finished but the results could not be saved. Nothing is lost — they are held on the server for a few minutes. Retrying saves them; it does not scan the site again.')
+			: fazI18n('cookies.importHeldRerun', 'The scan finished but the results could not be saved. The capture session is held on the server for a few minutes, so retrying reuses it instead of failing — but this browser has to walk the pages again.');
 		panel.appendChild(explain);
 
 		if (err && err.message) {
@@ -586,12 +589,12 @@
 		retryBtn.type = 'button';
 		retryBtn.className = 'faz-btn faz-btn-sm faz-btn-primary';
 		retryBtn.textContent = savesOnly
-			? __('cookies.retryImport', 'Retry import')
-			: __('cookies.retryImportRescan', 'Retry import (re-scans the site)');
+			? fazI18n('cookies.retryImport', 'Retry import')
+			: fazI18n('cookies.retryImportRescan', 'Retry import (re-scans the site)');
 		var dismissBtn = document.createElement('button');
 		dismissBtn.type = 'button';
 		dismissBtn.className = 'faz-btn faz-btn-sm';
-		dismissBtn.textContent = __('cookies.discardHeldScan', 'Discard');
+		dismissBtn.textContent = fazI18n('cookies.discardHeldScan', 'Discard');
 		actions.appendChild(retryBtn);
 		actions.appendChild(dismissBtn);
 		panel.appendChild(actions);
@@ -600,7 +603,7 @@
 		retryBtn.addEventListener('click', function () {
 			removeHeldPanel();
 			btn.disabled = true;
-			setScanStatus(__('cookies.savingResults', 'Saving results...'));
+			setScanStatus(fazI18n('cookies.savingResults', 'Saving results...'));
 			var attempt;
 			if (savesOnly) {
 				attempt = err.retryImport();
@@ -840,7 +843,7 @@
 				// Keep the response contract forward-compatible with advisory notices.
 				FAZ.notify(result.warning, 'warning');
 			} else {
-				FAZ.notify(__('setup.finished', 'Setup complete. Your cookie banner is ready.'), 'success');
+				FAZ.notify(fazI18n('setup.finished', 'Setup complete. Your cookie banner is ready.'), 'success');
 			}
 			// Brief pause so the toast is visible before navigating.
 			setTimeout(function () {
@@ -852,7 +855,7 @@
 			finishing = false;
 			finishBtn.disabled = false;
 			backBtn.disabled = false;
-			FAZ.notify((err && err.message) || __('setup.finish_failed', 'Setup could not be saved. Please try again.'), 'error');
+			FAZ.notify((err && err.message) || fazI18n('setup.finish_failed', 'Setup could not be saved. Please try again.'), 'error');
 		});
 	}
 

@@ -675,5 +675,19 @@ if (irStyle.sheet && typeof irStyle.sheet.insertRule === 'function') {
   eq('RF8: insertRule neutralizes a blocked url()', irStyle.sheet.cssRules[0].cssText.includes('fonts.gstatic.com'), false);
 } else { eq('RF8: insertRule unavailable (skip)', true, true); }
 
+// A synchronously parked iframe must retain its URL through the dynamic
+// placeholder backup and become visible when the effective consent allows it.
+resetConsent();
+const parkedVideo = w.document.createElement('iframe');
+parkedVideo.src = YT;
+parkedVideo.setAttribute('data-faz-service', 'youtube');
+eq('parked restore: pre-consent URL is inert', parkedVideo.hasAttribute('src'), false);
+setConsent({ marketing: 'yes' });
+const restoredVideo = w.eval('_fazBuildRestoredIframe')(parkedVideo, null);
+eq('parked restore: URL is restored', restoredVideo.getAttribute('src'), YT);
+eq('parked restore: inert URL marker is removed', restoredVideo.hasAttribute('data-faz-src'), false);
+eq('parked restore: iframe is visible', restoredVideo.classList.contains('faz-hidden'), false);
+eq('parked restore: service decision remains addressable', restoredVideo.getAttribute('data-faz-service'), 'youtube');
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);

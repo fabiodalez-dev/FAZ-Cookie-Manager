@@ -2230,6 +2230,15 @@ function _fazShowBanner() {
         // to make the shortcode-opened panel visible (#253).
         _fazStore._pushdownRevealedFromHidden = false;
         notice.classList.remove('faz-hide');
+        // Arm the focus trap now the banner is actually visible. Until #62 this
+        // ran only when the preference centre opened, so a visitor who never
+        // opened it had no trap at all: Tab from the last button left a
+        // role="dialog" and landed on the page behind it. It has to be AFTER
+        // the faz-hide removal — _fazGetFocusableElements() filters out anything
+        // inside .faz-hide, so calling it earlier finds nothing and
+        // _fazAttachFocusLoop() returns on its null guard, silently.
+        // Idempotent: the WeakMap replaces handlers rather than stacking them.
+        _fazLoopFocus();
         if (!_fazBannerLoadedFired) {
             _fazBannerLoadedFired = true;
             // Record the one-shot event before dispatch so late-running
@@ -3267,7 +3276,7 @@ function _fazActionClose() {
  *   and window._fazAcceptCategory check `=== false` to short-circuit downstream
  *   state changes when the gate fires.
  */
-function _fazAcceptCookies(choice = "all", ungated = false) {
+function _fazAcceptCookies(choice = "all", ungated = false, source = "preferences") {
     // Age gate (GDPR Art. 8): gate ONLY the accept/partial path, never reject
     // or withdraw (choice === 'reject' — and the ungated CCPA opt-out — short-
     // circuit here). Equal weight is preserved — the Accept button is never
@@ -3319,9 +3328,16 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
     // re-grant sale/share before the next request/boot reconciles the store.
     const gpcActive = !_fazPreviewEnabled() && _fazGpcActive();
     const dnsmpiActive = !_fazPreviewEnabled() && _fazDnsmpiCookieActive();
-    const bindingSaleShareOptOut = gpcActive || dnsmpiActive;
+    // Embed grants are explicit granular saves, even with a stale popup origin.
+    const embedGrant = source === "embed";
+    const popupOptOut = !embedGrant && choice === "custom" && ccpaCheckBoxValue &&
+        _fazActivePreferenceTag() === "optout-popup";
+    const bindingSaleShareOptOut = gpcActive || dnsmpiActive || popupOptOut ||
+        (embedGrant && activeLaw === "ccpa" && ccpaCheckBoxValue);
     const bindingSaleShareSlugs = [];
-    _fazClearStoredServiceConsent();
+    // The opt-out popup expresses no change to unrelated service/cookie
+    // choices, even if stale controls remain in the hidden preference panel.
+    if (!popupOptOut) _fazClearStoredServiceConsent();
 
     // Generate a consentid now (first user action) — deferred from init so no
     // stable tracker is created before the user gives or refuses consent.
@@ -3350,64 +3366,31 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
     let saleShareWithheld = false;
     for (const category of _fazStore._categories) {
         let valueToSet = "no";
-        if (activeLaw === 'gdpr') {
-            valueToSet =
-                !category.isNecessary &&
-                    (choice === "reject" ||
-                        (choice === "custom" && !_fazFindCheckBoxValue(category.slug)))
-                    ? "no"
-                    : "yes";
-            // A jurisdiction that requires a separate sensitive-data opt-in
-            // cannot bundle that grant into Accept All. The visitor may grant
-            // it only through its own preference toggle and Save action.
-            if (choice === "all" && category.requiresSeparateOptIn && !category.isNecessary) {
-                valueToSet = "no";
-                separateOptInWithheld = true;
-            }
-            // "Both" (gdpr_ccpa) encoding: the US Do-Not-Sell entry point
-            // renders alongside the opt-in banner, but this branch reads only
-            // the per-category toggles — and the opt-out popup renders none,
-            // so a Do-Not-Sell confirm fell back to the stored values and
-            // revoked nothing for exactly the visitors the entry point exists
-            // for (prior accept-all). When the save originates from the
-            // opt-out popup with the box ticked, revoke every sell/share
-            // category, mirroring the ccpa branch below. Scoped to the popup
-            // origin so a later preference-center save (origin
-            // 'settings-button') keeps honouring the visitor's toggles.
-            if (
-                valueToSet === "yes" &&
-                ccpaCheckBoxValue &&
-                !category.isNecessary &&
-                !category.defaultConsent.ccpa &&
-                _fazActivePreferenceTag() === "optout-popup"
-            ) {
-                valueToSet = "no";
-            }
-        } else if (_fazStore._runtimeGeo && category.defaultFromRuleset && (choice === "reject" || choice === "custom")) {
-            // Runtime geo-routing can serve a CCPA (opt-out) banner as a
-            // fallback to a visitor whose resolved ruleset is opt-in. The
-            // opt-out checkbox logic in the else branch would leave every
-            // non-necessary category "yes" (silently granting all cookies),
-            // which is wrong for both an explicit reject AND a custom save
-            // from the preference center (where the visitor's per-category
-            // toggles, not the single opt-out checkbox, express intent).
-            if (choice === "custom") {
-                // Honour the visitor's explicit per-category toggle; the
-                // preference-center toggles were seeded from the ruleset in
-                // _fazSetInitialState, so an untouched toggle already reflects
-                // the jurisdiction default. Necessary is always granted.
-                valueToSet = (category.isNecessary || _fazFindCheckBoxValue(category.slug)) ? "yes" : "no";
-            } else {
-                // reject/close → ruleset-authoritative default. defaultConsent.gdpr
-                // is jurisdiction-authoritative and mirrors _fazSetInitialState, so
-                // a ruleset-denied category becomes "no" while a ruleset-granted one
-                // (e.g. functional under an opt-out ruleset) stays "yes".
-                valueToSet = (category.isNecessary || category.defaultConsent.gdpr) ? "yes" : "no";
-            }
+        if (choice === "reject") {
+            // Explicit rejection (including close-as-reject) overrides even
+            // permissive opt-out defaults and clears all optional grants.
+            valueToSet = category.isNecessary ? "yes" : "no";
+        } else if (popupOptOut) {
+            // Do Not Sell is a targeted withdrawal, not a new consent grant.
+            // Keep unrelated choices; the binding opt-out below revokes sale/
+            // share using its explicit marker, NOT the geo-overlaid default.
+            valueToSet = category.isNecessary || ref._fazGetFromStore(category.slug) === "yes" ? "yes" : "no";
+        } else if (choice === 'all' || activeLaw === 'gdpr' ||
+            (choice === "custom" && (embedGrant || _fazActivePreferenceTag() === 'detail' ||
+                (_fazStore._runtimeGeo && category.defaultFromRuleset)))) {
+            valueToSet = category.isNecessary || choice === "all" ||
+                (choice === "custom" && _fazFindCheckBoxValue(category.slug)) ? "yes" : "no";
         } else {
             valueToSet = ccpaCheckBoxValue && !category.defaultConsent.ccpa ? "no" : "yes";
         }
-        if (!category.isNecessary && category.ccpaDoNotSell) {
+        // Separate sensitive consent is a jurisdiction requirement in BOTH
+        // banner modes. Accept All must never bundle it into an ordinary grant.
+        if (choice === "all" && category.requiresSeparateOptIn && !category.isNecessary) {
+            valueToSet = "no";
+            separateOptInWithheld = true;
+        }
+        if (!category.isNecessary && (category.ccpaDoNotSell ||
+            (popupOptOut && typeof category.ccpaDoNotSell === "undefined" && !category.defaultConsent.ccpa))) {
             bindingSaleShareSlugs.push(category.slug);
             if (bindingSaleShareOptOut) {
                 if (valueToSet !== "no") saleShareWithheld = true;
@@ -3430,7 +3413,7 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
         responseCategories.dnsmpi = true;
     }
     // Handle per-service consent.
-    if (_fazStore._perServiceConsent && _fazStore._services) {
+    if (!popupOptOut && _fazStore._perServiceConsent && _fazStore._services) {
         _fazStoreCustomServiceConsent(choice);
         // Per-cookie overrides are saved AFTER per-service so they read the
         // freshly-written svc.<id> values when deciding what diverges.
@@ -4981,7 +4964,7 @@ function _fazMutationObserver(mutations) {
                 if (typeof n.querySelectorAll === 'function') {
                     // Descend: <script[src]>/<iframe[src]> queue for blocking; parsed
                     // img/link/source get parked in place.
-                    var nested = n.querySelectorAll('script[src], iframe[src]');
+                    var nested = n.querySelectorAll('script[src], iframe[src], iframe[data-faz-src]');
                     for (var ni = 0; ni < nested.length; ni++) {
                         if (_fazInsideNoscript(nested[ni])) continue;
                         nodesToProcess.push(nested[ni]);
@@ -5010,8 +4993,11 @@ function _fazMutationObserver(mutations) {
     }
 
     for (const node of nodesToProcess) {
+            // The synchronous iframe gate may already have parked src before
+            // insertion. It still needs a placeholder and a restorable backup.
             const nodeSrc = node && typeof node.getAttribute === "function"
-                ? (node.getAttribute("src") || node.src || "")
+                ? (node.getAttribute("src") ||
+                    (node.nodeName.toLowerCase() === "iframe" ? node.getAttribute("data-faz-src") : "") || node.src || "")
                 : (node && node.src ? node.src : "");
             if (
                 !nodeSrc ||
@@ -5116,7 +5102,8 @@ function _fazUnblock() {
                     : "";
                 nodeCategory = nodeCategory.replace("fazcookie-", "");
                 var nodeSrc = (node && typeof node.getAttribute === "function")
-                    ? (node.getAttribute("src") || node.src || "")
+                    ? (node.getAttribute("src") ||
+                    (node.nodeName.toLowerCase() === "iframe" ? node.getAttribute("data-faz-src") : "") || node.src || "")
                     : (node && node.src ? node.src : "");
                 var nodeTarget = nodeSrc || (node && node.textContent ? node.textContent : "");
                 var nodeService = node && typeof node.getAttribute === "function"
@@ -5218,11 +5205,11 @@ function _fazBuildRestoredScript(script, extraSkipAttributes) {
 
 function _fazBuildRestoredIframe(iframe, placeholder) {
     var clone = document.createElement('iframe');
-    var iframeSrc = iframe.getAttribute('src') || iframe.src;
+    var iframeSrc = iframe.getAttribute('src') || iframe.getAttribute('data-faz-src') || iframe.src;
     // Keep data-faz-service on the restored clone so the live MutationObserver
     // can resolve its explicit per-service consent (svc.<id>:yes) instead of
     // falling back to the still-denied category and re-blocking it. #134/#146.
-    var skip = { 'src': 1, 'data-faz-category': 1, 'data-fazcookie': 1, 'data-faz-original-type': 1 };
+    var skip = { 'src': 1, 'data-faz-src': 1, 'data-faz-category': 1, 'data-fazcookie': 1, 'data-faz-original-type': 1 };
 
     for (var i = 0; i < iframe.attributes.length; i++) {
         var attr = iframe.attributes[i];
@@ -5233,6 +5220,7 @@ function _fazBuildRestoredIframe(iframe, placeholder) {
     // faz-skip so the observer never re-wraps it in the banner video-placeholder
     // ("Please accept cookies to access this content") within the same session.
     clone.classList.add('faz-skip');
+    if (iframe.hasAttribute('data-faz-src')) clone.classList.remove('faz-hidden');
 
     if (iframeSrc) {
         clone.src = iframeSrc;
@@ -5674,7 +5662,7 @@ function _fazIsCategoryToBeBlocked(category) {
     const cookieValue = ref._fazGetFromStore(category);
     return (
         cookieValue === "no" ||
-        (!cookieValue &&
+        (cookieValue !== "yes" &&
             _fazStore._categories.some(
                 (cat) => cat.slug === category && !cat.isNecessary
             ))
@@ -6750,7 +6738,7 @@ function _fazAddPlaceholder(htmlElm, uniqueID) {
         `#${uniqueID} .video-placeholder-text-normal`
     );
     if (innerTextElement) innerTextElement.classList.add('faz-hidden');
-    var youtubeID = _fazGetYoutubeID(htmlElm.src || '');
+    var youtubeID = _fazGetYoutubeID(htmlElm.getAttribute('src') || htmlElm.getAttribute('data-faz-src') || htmlElm.src || '');
     if (!youtubeID) {
         _fazSetPlaceHolder(addedNode);
         return;
@@ -7872,7 +7860,7 @@ window._fazAcceptService = function (serviceId, categorySlug, trustService) {
     serviceToggle.checked = true;
     serviceToggle.dispatchEvent(new Event('change', { bubbles: true }));
 
-    if (_fazAcceptCookies("custom") === false) {
+    if (_fazAcceptCookies("custom", false, "embed") === false) {
         serviceToggle.checked = previousChecked;
         serviceToggle.dispatchEvent(new Event('change', { bubbles: true }));
         _fazCleanupSyntheticToggle();
@@ -7936,7 +7924,7 @@ window._fazAcceptCategory = function (categorySlug) {
         _fazServicesBeforeConsent = null;
         return;
     }
-    if (_fazAcceptCookies("custom") === false) {
+    if (_fazAcceptCookies("custom", false, "embed") === false) {
         // Age gate blocked the accept — rollback store and UI to original state.
         if (categorySlugToRollback) {
             ref._fazConsentStore.set(categorySlugToRollback, previousCategoryValue);

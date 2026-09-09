@@ -326,7 +326,19 @@ class Controller {
 				$bundled = dirname( __DIR__, 2 ) . '/banners/includes/contents/' . $safe_lang . '.json';
 				if ( file_exists( $bundled ) ) {
 					$dest_dir = $this->get_upload_path( 'languages/banners/' );
-					if ( ! @copy( $bundled, $dest_dir . $safe_lang . '.json' ) ) {
+					if ( @copy( $bundled, $dest_dir . $safe_lang . '.json' ) ) {
+						// The resolved catalogue is cached for twelve hours; the new
+						// file would otherwise not be read until it expired.
+						if ( class_exists( '\\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Cookie_Categories' ) ) {
+							\FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories::flush_translation_cache( $safe_lang );
+						}
+						// Both banner caches read that file and hold it for twelve
+						// hours; without this the download appears to do nothing.
+						if ( class_exists( '\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner' ) ) {
+							\FazCookie\Admin\Modules\Banners\Includes\Banner::flush_translation_cache( $safe_lang );
+
+						}
+					} else {
 						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 							// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- gated behind WP_DEBUG; non-fatal warning, copy() returning false is rare and worth knowing about during development.
 							error_log( 'FazCookie: failed to copy translation file for language ' . $safe_lang );

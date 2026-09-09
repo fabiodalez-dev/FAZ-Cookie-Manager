@@ -22,6 +22,7 @@
  * Attributes:
  *   - text  (string) custom button label (default: localized "Manage consent preferences")
  *   - class (string) extra CSS classes (sanitized)
+ *   - type  (string) button (default) or link, for a theme-styled footer link
  *
  * @package FazCookie\Includes
  */
@@ -52,6 +53,7 @@ class Cookie_Settings_Shortcode {
 			array(
 				'text'  => '',
 				'class' => '',
+				'type'  => 'button',
 			),
 			(array) $atts,
 			'faz_cookie_settings'
@@ -62,7 +64,8 @@ class Cookie_Settings_Shortcode {
 			: __( 'Manage consent preferences', 'faz-cookie-manager' );
 
 		// Whitelist extra classes (sanitize_html_class drops anything unsafe).
-		$classes = array( 'faz-cookie-settings-btn' );
+		$is_link = 'link' === $atts['type'];
+		$classes = array( $is_link ? 'faz-cookie-settings-link' : 'faz-cookie-settings-btn' );
 		foreach ( preg_split( '/\s+/', (string) $atts['class'] ) as $candidate ) {
 			$clean = sanitize_html_class( (string) $candidate );
 			if ( '' !== $clean ) {
@@ -74,6 +77,14 @@ class Cookie_Settings_Shortcode {
 		// consent preference center (a dialog), since this is the first such
 		// trigger that lives entirely outside the banner DOM in arbitrary page
 		// content (WCAG 4.1.2 Name, Role, Value).
+		if ( $is_link ) {
+			return sprintf(
+				'<a href="#faz-consent" class="%s" data-faz-open-preferences="1" aria-haspopup="dialog">%s</a>',
+				esc_attr( implode( ' ', $classes ) ),
+				esc_html( $label )
+			);
+		}
+
 		return sprintf(
 			'<button type="button" class="%s" data-faz-open-preferences="1" aria-haspopup="dialog">%s</button>',
 			esc_attr( implode( ' ', $classes ) ),

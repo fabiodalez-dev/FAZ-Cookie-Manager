@@ -17,6 +17,7 @@
       "status": false
     },
     "theme": "light",
+    "borderRadius": "",
     "consentExpiry": {
       "status": true,
       "value": 180

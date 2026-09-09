@@ -1,5 +1,6 @@
 import { expect, test } from '../fixtures/wp-fixture';
-import { deleteOption, setOption, wpEval } from '../utils/wp-env';
+import { readFileSync } from 'node:fs';
+import { deleteOption, setOption, wp, wpEval } from '../utils/wp-env';
 
 /**
  * Acceptance gate for the 1.29.0-rc1 bundle.
@@ -66,21 +67,50 @@ async function snapshotOption(name: string): Promise<() => void> {
   };
 }
 
-const RC_VERSION = '1.29.0-rc1';
+/**
+ * The version this run is meant to be testing.
+ *
+ * Pinned to the literal '1.29.0-rc1' at first, which made the check fail the
+ * moment 1.29.0 shipped — the assertion was about one release rather than about
+ * staleness, so it was guaranteed to go red at every future release and teach
+ * everyone to ignore it. It now reads the repo's own plugin header, which is
+ * what "the build under test" means when the deploy comes from this working
+ * copy; FAZ_EXPECTED_VERSION overrides it when the target is a package built
+ * elsewhere.
+ */
+const EXPECTED_VERSION =
+  process.env.FAZ_EXPECTED_VERSION ||
+  (readFileSync(new URL('../../../faz-cookie-manager.php', import.meta.url), 'utf8')
+    .match(/^\s*\*\s*Version:\s*(\S+)\s*$/m)?.[1] ?? '');
 
-test.describe('1.29.0-rc1 acceptance', () => {
-  test('the build under test is the RC, and it is the one WordPress loaded', async () => {
+const IS_PRERELEASE = /-(rc|beta|alpha)\d+$/.test(EXPECTED_VERSION);
+
+test.describe(`${EXPECTED_VERSION || 'unknown version'} release acceptance`, () => {
+  test('the build under test is the expected one, and it is what WordPress loaded', async () => {
+    expect(EXPECTED_VERSION, 'could not read a version to expect').not.toBe('');
+
     // Everything below is worthless if it ran against a stale deploy. Ask
     // WordPress what it loaded rather than reading the repo's own file.
-    const loaded = wpEval('echo defined("FAZ_VERSION") ? FAZ_VERSION : "undefined";').trim();
-    expect(loaded).toBe(RC_VERSION);
+    // wp() rather than wpEval(): these two probes only read, so a retry is
+    // safe, and they are the first WP-CLI calls of the acceptance run — a
+    // bootstrap or MySQL blip here fails the whole spec with a version
+    // mismatch that never happened. wpEval() opts out of the retry because it
+    // is the general-purpose escape hatch and most of its callers mutate.
+    const loaded = wp(['eval', 'echo defined("FAZ_VERSION") ? FAZ_VERSION : "undefined";']).trim();
+    expect(loaded, `WordPress loaded ${loaded}; expected ${EXPECTED_VERSION}`).toBe(EXPECTED_VERSION);
 
-    // An RC must not claim the stable tag: that is the pointer wordpress.org
-    // serves as the stable download.
-    const stable = wpEval(
-      'echo get_file_data( WP_PLUGIN_DIR . "/faz-cookie-manager/faz-cookie-manager.php", array( "s" => "Stable tag" ) )["s"];'
-    ).trim();
-    expect(stable).not.toBe(RC_VERSION);
+    // Stable tag is the pointer wordpress.org serves as the stable download.
+    // The invariant runs BOTH ways, which is what makes it hold across
+    // releases: a pre-release must never claim it, and a final release must.
+    const stable = wp([
+      'eval',
+      'echo get_file_data( WP_PLUGIN_DIR . "/faz-cookie-manager/readme.txt", array( "s" => "Stable tag" ) )["s"];',
+    ]).trim();
+    if (IS_PRERELEASE) {
+      expect(stable, 'a pre-release must not claim the stable tag').not.toBe(loaded);
+    } else {
+      expect(stable, 'a final release must claim its own stable tag').toBe(loaded);
+    }
   });
 
   test('#263 — a stale downloaded definitions copy no longer shadows the bundle', async () => {

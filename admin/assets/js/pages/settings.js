@@ -5,7 +5,10 @@
 	'use strict';
 
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
-	function __(key, fallback) {
+	// Not named `__`: this is a key lookup into the PHP-provided fazConfig.i18n
+	// map, not gettext. Under the gettext name, translate.wordpress.org harvests
+	// the dotted keys below as if they were translatable English text.
+	function fazI18n(key, fallback) {
 		var parts = key.split('.');
 		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
 		for (var i = 0; i < parts.length; i++) {
@@ -64,7 +67,7 @@
 				// Invalidate any readiness request still in flight: it answers
 				// the question the admin has just stopped asking.
 				geoBootstrapStatusId++;
-				status.textContent = __('settings.bootstrapSaveToCheck', 'Save settings to check whether the bootstrap can activate.');
+				status.textContent = fazI18n('settings.bootstrapSaveToCheck', 'Save settings to check whether the bootstrap can activate.');
 				status.setAttribute('data-level', 'info');
 			});
 		}
@@ -80,7 +83,7 @@
 	 */
 	function invalidateConsents() {
 		var btn = document.getElementById('faz-invalidate-consents');
-		var message = __(
+		var message = fazI18n(
 			'settings.invalidateConfirm',
 			'Show the cookie banner to ALL returning visitors on their next visit? This cannot be undone from the UI.'
 		);
@@ -95,10 +98,10 @@
 			// Invalidate any in-flight loadSettings() so its stale payload
 			// cannot overwrite the revision we just bumped.
 			settingsRequestId++;
-			FAZ.notify(__('settings.invalidateOk', 'All consents invalidated. Banner will reappear for returning visitors.'));
+			FAZ.notify(fazI18n('settings.invalidateOk', 'All consents invalidated. Banner will reappear for returning visitors.'));
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('settings.invalidateFail', 'Failed to invalidate consents.'), 'error');
+			FAZ.notify(fazI18n('settings.invalidateFail', 'Failed to invalidate consents.'), 'error');
 		});
 	}
 
@@ -132,7 +135,7 @@
 			renderAbVariants(data);
 			applyShowIf();
 		}).catch(function () {
-			FAZ.notify(__('settings.loadFailed', 'Failed to load settings.'), 'error');
+			FAZ.notify(fazI18n('settings.loadFailed', 'Failed to load settings.'), 'error');
 		});
 	}
 
@@ -166,7 +169,7 @@
 			if (list.length < 2) {
 				var hint = document.createElement('p');
 				hint.style.color = 'var(--faz-text-muted)';
-				hint.textContent = __(
+				hint.textContent = fazI18n(
 					'settings.abTestNeedBanners',
 					'Create at least two active banners on the Banner page to run an A/B test.'
 				);
@@ -204,7 +207,7 @@
 			while (container.firstChild) { container.removeChild(container.firstChild); }
 			var err = document.createElement('p');
 			err.style.color = 'var(--faz-text-muted)';
-			err.textContent = __('settings.abTestLoadFailed', 'Could not load banners for the A/B test.');
+			err.textContent = fazI18n('settings.abTestLoadFailed', 'Could not load banners for the A/B test.');
 			container.appendChild(err);
 			// Load failed — the checkbox list is empty/stale. Keep saveSettings()
 			// from treating serializeAbVariants() as authoritative.
@@ -463,14 +466,14 @@
 			});
 		}).then(function (saveWarnings) {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('settings.saved', 'Settings saved successfully.'));
+			FAZ.notify(fazI18n('settings.saved', 'Settings saved successfully.'));
 			loadGeoBootstrapStatus();
 			(saveWarnings || []).forEach(function (message) {
 				FAZ.notify(message, 'warning');
 			});
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('settings.saveFailed', 'Failed to save settings.'), 'error');
+			FAZ.notify(fazI18n('settings.saveFailed', 'Failed to save settings.'), 'error');
 		});
 	}
 
@@ -482,11 +485,11 @@
 			if (requestId !== geoBootstrapStatusId) return;
 			el.textContent = data && data.message
 				? data.message
-				: __('settings.bootstrapStatusFailed', 'Bootstrap readiness could not be determined. Pages keep the safe no-cache fallback.');
+				: fazI18n('settings.bootstrapStatusFailed', 'Bootstrap readiness could not be determined. Pages keep the safe no-cache fallback.');
 			el.setAttribute('data-level', data && data.level ? data.level : 'warning');
 		}).catch(function () {
 			if (requestId !== geoBootstrapStatusId) return;
-			el.textContent = __('settings.bootstrapStatusFailed', 'Bootstrap readiness could not be determined. Pages keep the safe no-cache fallback.');
+			el.textContent = fazI18n('settings.bootstrapStatusFailed', 'Bootstrap readiness could not be determined. Pages keep the safe no-cache fallback.');
 			el.setAttribute('data-level', 'warning');
 		});
 	}
@@ -527,13 +530,13 @@
 			// no longer active and Ab_Test::pick_variant() has nothing to choose
 			// between. Ask the catalogue, not the leftovers.
 			if (effectiveVariants.length < 2 || (abActiveBannerCount !== null && abActiveBannerCount < 2)) {
-				abTestWarnings.push(__(
+				abTestWarnings.push(fazI18n(
 					'settings.abTestWarnVariants',
 					'A/B testing needs at least 2 selected banner variants to run.'
 				));
 			}
 			if (current.banner_control.cache_compatibility) {
-				abTestWarnings.push(__(
+				abTestWarnings.push(fazI18n(
 					'settings.abTestWarnCache',
 					'A/B testing is disabled while Cache Compatibility Mode is on.'
 				));
@@ -548,14 +551,14 @@
 		if (current.banner_control && current.banner_control.cache_compatibility) {
 			var geoOn = !!(current.geolocation && current.geolocation.geo_targeting);
 			if (geoOn) {
-					saveWarnings.push(__(
+					saveWarnings.push(fazI18n(
 						'settings.cacheCompatWarnGeo',
 						'Jurisdiction enforcement keeps Cache Compatibility Mode itself inactive. Enable the cache-safe jurisdiction bootstrap to cache compatible pages without weakening enforcement.'
 					));
 			}
 			var cmpId = current.iab ? parseInt(current.iab.cmp_id, 10) : 0;
 			if (!geoOn && current.iab && current.iab.enabled && !isNaN(cmpId) && cmpId >= 2) {
-				saveWarnings.push(__(
+				saveWarnings.push(fazI18n(
 					'settings.cacheCompatWarnIab',
 					'Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country.'
 				));
@@ -574,16 +577,16 @@
 				var rawSize = parseInt(data.database.size, 10);
 			var sizeKB = isFinite(rawSize) ? Math.round(rawSize / 1024) : 0;
 				var b = document.createElement('strong');
-				b.textContent = __('settings.dbLabel', 'Database: ');
+				b.textContent = fazI18n('settings.dbLabel', 'Database: ');
 				el.appendChild(b);
 				el.appendChild(document.createTextNode(
-					__('settings.dbFileInfo', '{file} ({size} KB) - Last updated: {date}')
+					fazI18n('settings.dbFileInfo', '{file} ({size} KB) - Last updated: {date}')
 						.replace('{file}', data.database.file)
 						.replace('{size}', sizeKB)
 						.replace('{date}', data.database.modified)
 				));
 			} else {
-				el.textContent = __('settings.noGeoipDb', 'No GeoIP database installed. Enter your license key and click "Update Database".');
+				el.textContent = fazI18n('settings.noGeoipDb', 'No GeoIP database installed. Enter your license key and click "Update Database".');
 			}
 			el.style.display = 'block';
 		}).catch(function (err) {
@@ -598,23 +601,23 @@
 			el.textContent = '';
 			if (data.version && data.version > 0) {
 				var b1 = document.createElement('strong');
-				b1.textContent = __('settings.gvlVersion', 'GVL Version: ');
+				b1.textContent = fazI18n('settings.gvlVersion', 'GVL Version: ');
 				el.appendChild(b1);
 				el.appendChild(document.createTextNode(data.version + ' | '));
 				var b2 = document.createElement('strong');
-				b2.textContent = __('settings.gvlVendors', 'Vendors: ');
+				b2.textContent = fazI18n('settings.gvlVendors', 'Vendors: ');
 				el.appendChild(b2);
 				el.appendChild(document.createTextNode((data.vendor_count || 0) + ' | '));
 				var b3 = document.createElement('strong');
-				b3.textContent = __('settings.gvlLastUpdated', 'Last Updated: ');
+				b3.textContent = fazI18n('settings.gvlLastUpdated', 'Last Updated: ');
 				el.appendChild(b3);
 				el.appendChild(document.createTextNode(data.last_updated || 'N/A'));
 			} else {
-				el.textContent = __('settings.noGvlData', 'No GVL data downloaded yet. Click "Update GVL Now" to download.');
+				el.textContent = fazI18n('settings.noGvlData', 'No GVL data downloaded yet. Click "Update GVL Now" to download.');
 			}
 		}).catch(function () {
 			var el = document.getElementById('faz-gvl-status');
-			if (el) el.textContent = __('settings.noGvlAvailable', 'No GVL data available.');
+			if (el) el.textContent = fazI18n('settings.noGvlAvailable', 'No GVL data available.');
 		});
 	}
 
@@ -625,17 +628,17 @@
 		FAZ.post('gvl/update').then(function (data) {
 			FAZ.btnLoading(btn, false);
 			if (data.success) {
-				var gvlMsg = __('settings.gvlUpdatedWithMeta', 'GVL updated: v{version} ({count} vendors)')
+				var gvlMsg = fazI18n('settings.gvlUpdatedWithMeta', 'GVL updated: v{version} ({count} vendors)')
 					.replace('{version}', String(data.version))
 					.replace('{count}', String(data.vendor_count));
 				FAZ.notify(gvlMsg);
 				loadGvlStatus();
 			} else {
-				FAZ.notify(data.message || __('settings.gvlFailed', 'Failed to update GVL.'), 'error');
+				FAZ.notify(data.message || fazI18n('settings.gvlFailed', 'Failed to update GVL.'), 'error');
 			}
 		}).catch(function (err) {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify((err && err.message) || __('settings.gvlFailed', 'Failed to update GVL.'), 'error');
+			FAZ.notify((err && err.message) || fazI18n('settings.gvlFailed', 'Failed to update GVL.'), 'error');
 		});
 	}
 
@@ -648,7 +651,7 @@
 		var edition = edInput && (edInput.value === 'city' || edInput.value === 'country') ? edInput.value : '';
 
 		if (!licenseKey) {
-			FAZ.notify(__('settings.geoipNoKey', 'Please enter a MaxMind license key first.'), 'error');
+			FAZ.notify(fazI18n('settings.geoipNoKey', 'Please enter a MaxMind license key first.'), 'error');
 			return;
 		}
 
@@ -656,15 +659,15 @@
 		FAZ.post('settings/geolite2/update', { license_key: licenseKey, edition: edition }).then(function (data) {
 			FAZ.btnLoading(btn, false);
 			if (data.success) {
-				FAZ.notify(__('settings.geoipUpdated', 'GeoIP database updated successfully.'));
+				FAZ.notify(fazI18n('settings.geoipUpdated', 'GeoIP database updated successfully.'));
 				loadGeoDbStatus();
 			}
 			else {
-				FAZ.notify(data.message || __('settings.geoipFailed', 'Failed to update database.'), 'error');
+				FAZ.notify(data.message || fazI18n('settings.geoipFailed', 'Failed to update database.'), 'error');
 			}
 		}).catch(function (err) {
 			FAZ.btnLoading(btn, false);
-			var msg = (err && err.message) ? err.message : __('settings.geoipFailed', 'Failed to update database.');
+			var msg = (err && err.message) ? err.message : fazI18n('settings.geoipFailed', 'Failed to update database.');
 			FAZ.notify(msg, 'error');
 		});
 	}

@@ -7,7 +7,10 @@
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
 	// `key` is a hard-coded string from this file (e.g. 'gvl.savedCount'),
 	// never reachable from user input — the computed-key walk is safe.
-	function __(key, fallback) {
+	// Not named `__`: this is a key lookup into the PHP-provided fazConfig.i18n
+	// map, not gettext. Under the gettext name, translate.wordpress.org harvests
+	// the dotted keys below as if they were translatable English text.
+	function fazI18n(key, fallback) {
 		var parts = key.split('.');
 		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
 		for (var i = 0; i < parts.length; i++) {
@@ -74,7 +77,7 @@
 			// Give AT users context for the disabled button while the saved
 			// selection hydrates. Cleared once hydration completes / the button
 			// is re-enabled in loadSelectedVendors().
-			setAutoDetectStatus(__('gvl.autoDetectHydrating', 'Loading saved selection…'), 'info');
+			setAutoDetectStatus(fazI18n('gvl.autoDetectHydrating', 'Loading saved selection…'), 'info');
 			autoBtn.addEventListener('click', autoDetectFromCookies);
 		}
 
@@ -104,15 +107,15 @@
 
 			if (data.version && data.version > 0) {
 				var b1 = document.createElement('strong');
-				b1.textContent = __('gvl.version', 'GVL Version: ');
+				b1.textContent = fazI18n('gvl.version', 'GVL Version: ');
 				el.appendChild(b1);
 				el.appendChild(document.createTextNode(data.version + '  |  '));
 				var b2 = document.createElement('strong');
-				b2.textContent = __('gvl.vendors', 'Vendors: ');
+				b2.textContent = fazI18n('gvl.vendors', 'Vendors: ');
 				el.appendChild(b2);
 				el.appendChild(document.createTextNode(data.vendor_count + '  |  '));
 				var b3 = document.createElement('strong');
-				b3.textContent = __('gvl.lastUpdated', 'Last Updated: ');
+				b3.textContent = fazI18n('gvl.lastUpdated', 'Last Updated: ');
 				el.appendChild(b3);
 				el.appendChild(document.createTextNode(data.last_updated || 'N/A'));
 
@@ -129,11 +132,11 @@
 					});
 				}
 			} else {
-				el.textContent = __('gvl.noData', 'No GVL data downloaded yet. Click "Update GVL Now" to download.');
+				el.textContent = fazI18n('gvl.noData', 'No GVL data downloaded yet. Click "Update GVL Now" to download.');
 			}
 		}).catch(function () {
 			var el = document.getElementById('faz-gvl-meta');
-			if (el) el.textContent = __('gvl.loadFailed', 'Failed to load GVL status.');
+			if (el) el.textContent = fazI18n('gvl.loadFailed', 'Failed to load GVL status.');
 		});
 	}
 
@@ -160,7 +163,7 @@
 			// Auto-detect and leave `hydrated` false — saveSelection() now holds
 			// only an empty set, and committing it would wipe the server-side
 			// selection. Surface the failure and still show the vendor list.
-			setAutoDetectStatus(__('gvl.selectedLoadFailed', 'Could not load your saved selection — reload before changing it.'), 'error');
+			setAutoDetectStatus(fazI18n('gvl.selectedLoadFailed', 'Could not load your saved selection — reload before changing it.'), 'error');
 			loadVendors();
 		});
 	}
@@ -175,7 +178,7 @@
 			renderPagination(data.total || 0, data.pages || 0, data.page || 1);
 		}).catch(function () {
 			var el = document.getElementById('faz-gvl-vendor-list');
-			if (el) el.textContent = __('gvl.vendorsLoadFailed', 'Failed to load vendors. Make sure GVL is downloaded.');
+			if (el) el.textContent = fazI18n('gvl.vendorsLoadFailed', 'Failed to load vendors. Make sure GVL is downloaded.');
 		});
 	}
 
@@ -184,7 +187,7 @@
 		container.textContent = '';
 
 		if (!vendors.length) {
-			container.textContent = __('gvl.noVendors', 'No vendors found.');
+			container.textContent = fazI18n('gvl.noVendors', 'No vendors found.');
 			return;
 		}
 
@@ -304,7 +307,7 @@
 
 		var info = document.createElement('span');
 		info.style.color = 'var(--faz-text-secondary)';
-		info.textContent = __('gvl.pagination', 'Page %1$d of %2$d (%3$d vendors)').replace('%1$d', page).replace('%2$d', pages).replace('%3$d', total);
+		info.textContent = fazI18n('gvl.pagination', 'Page %1$d of %2$d (%3$d vendors)').replace('%1$d', page).replace('%2$d', pages).replace('%3$d', total);
 		container.appendChild(info);
 	}
 
@@ -327,7 +330,7 @@
 
 			alert(lines.join('\n'));
 		}).catch(function () {
-			FAZ.notify(__('gvl.vendorDetailFailed', 'Failed to load vendor details.'), 'error');
+			FAZ.notify(fazI18n('gvl.vendorDetailFailed', 'Failed to load vendor details.'), 'error');
 		});
 	}
 
@@ -349,14 +352,14 @@
 	function updateSelectedCount() {
 		var count = Object.keys(selectedVendors).length;
 		var el = document.getElementById('faz-gvl-selected-count');
-		if (el) el.textContent = (count !== 1 ? __('gvl.selectedVendors', 'Selected: %d vendors') : __('gvl.selectedVendor', 'Selected: %d vendor')).replace('%d', count);
+		if (el) el.textContent = (count !== 1 ? fazI18n('gvl.selectedVendors', 'Selected: %d vendors') : fazI18n('gvl.selectedVendor', 'Selected: %d vendor')).replace('%d', count);
 	}
 
 	function saveSelection() {
 		// Refuse to save before the saved selection has loaded — selectedVendors
 		// would be empty and committing it would wipe the server-side selection.
 		if (!hydrated) {
-			FAZ.notify(__('gvl.notHydrated', 'Your saved selection has not loaded yet — reload the page before saving.'), 'error');
+			FAZ.notify(fazI18n('gvl.notHydrated', 'Your saved selection has not loaded yet — reload the page before saving.'), 'error');
 			return;
 		}
 		var btn = document.getElementById('faz-gvl-save');
@@ -366,13 +369,13 @@
 		FAZ.post('gvl/selected', { vendor_ids: ids }).then(function (data) {
 			FAZ.btnLoading(btn, false);
 			if (data.success) {
-				FAZ.notify(__('gvl.savedCount', 'Saved %d vendor(s).').replace('%d', data.count), 'success');
+				FAZ.notify(fazI18n('gvl.savedCount', 'Saved %d vendor(s).').replace('%d', data.count), 'success');
 			} else {
-				FAZ.notify(__('gvl.selectionFailed', 'Failed to save selection.'), 'error');
+				FAZ.notify(fazI18n('gvl.selectionFailed', 'Failed to save selection.'), 'error');
 			}
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('gvl.selectionFailed', 'Failed to save selection.'), 'error');
+			FAZ.notify(fazI18n('gvl.selectionFailed', 'Failed to save selection.'), 'error');
 		});
 	}
 
@@ -393,11 +396,11 @@
 		var requestId = ++autoDetectRequestId;
 		// Read-only scan, not a save — pass a scan-specific spinner label so
 		// the button doesn't misleadingly read "Saving..." during detection.
-		FAZ.btnLoading(btn, true, __('gvl.autoDetectScanning', 'Scanning cookie inventory…'));
+		FAZ.btnLoading(btn, true, fazI18n('gvl.autoDetectScanning', 'Scanning cookie inventory…'));
 		// Scanning state: announce it in the aria-live status region (no
 		// timer — stays until the next status write replaces it) so screen
 		// readers hear the scan start, matching the cookie-policy page.
-		setAutoDetectStatus(__('gvl.autoDetectScanning', 'Scanning cookie inventory…'), 'info');
+		setAutoDetectStatus(fazI18n('gvl.autoDetectScanning', 'Scanning cookie inventory…'), 'info');
 
 		FAZ.get('gvl/suggest').then(function (data) {
 			if (requestId !== autoDetectRequestId) { return; }
@@ -408,7 +411,7 @@
 				// silently doing nothing. Write the SAME message to the
 				// persistent status span so a faded toast still leaves a
 				// trace — parity with cookie-policy.js (F007).
-				var noGvlMsg = __('gvl.autoDetectNoGvl', 'Update the Global Vendor List first, then try Auto-detect again.');
+				var noGvlMsg = fazI18n('gvl.autoDetectNoGvl', 'Update the Global Vendor List first, then try Auto-detect again.');
 				setAutoDetectStatus(noGvlMsg, 'warning');
 				FAZ.notify(noGvlMsg, 'warning');
 				return;
@@ -419,7 +422,7 @@
 			// both collapse to the no-match hint, so the admin who simply
 			// forgot to run the scanner gets the wrong nudge.
 			if (data.scan_available !== true) {
-				var noScanMsg = __('gvl.autoDetectNoScan', 'No scanner data yet. Run the cookie scanner first.');
+				var noScanMsg = fazI18n('gvl.autoDetectNoScan', 'No scanner data yet. Run the cookie scanner first.');
 				setAutoDetectStatus(noScanMsg, 'warning');
 				FAZ.notify(noScanMsg, 'warning');
 				return;
@@ -434,7 +437,7 @@
 				// but no scanned domain matched the curated map. Soft info
 				// string in the persistent span instead of going blank — keeps
 				// a trace after the toast fades (F007).
-				var noMatchMsg = __('gvl.autoDetectNoMatch', 'No matching ad-tech vendors were found in the scanned cookies.');
+				var noMatchMsg = fazI18n('gvl.autoDetectNoMatch', 'No matching ad-tech vendors were found in the scanned cookies.');
 				setAutoDetectStatus(noMatchMsg, 'info');
 				FAZ.notify(noMatchMsg, 'info');
 				return;
@@ -484,11 +487,11 @@
 				// sibling branches already avoid via alreadyInSession). Fall back to
 				// a "left unticked" note when none remain.
 				msg = (alreadyInSession.length > 0)
-					? __('gvl.autoDetectAllAlready', 'All %d auto-detected vendor(s) were already in your selection.').replace('%d', alreadyInSession.length)
-					: __('gvl.autoDetectNoneAdded', 'Auto-detected vendors left unticked, as you set them.');
+					? fazI18n('gvl.autoDetectAllAlready', 'All %d auto-detected vendor(s) were already in your selection.').replace('%d', alreadyInSession.length)
+					: fazI18n('gvl.autoDetectNoneAdded', 'Auto-detected vendors left unticked, as you set them.');
 			} else if (alreadyInSession.length === 0) {
 				// Single placeholder — no reordering possible, plain %d is fine.
-				msg = __('gvl.autoDetectAdded', 'Pre-ticked %d vendor(s) from cookie scan. Click Save Selection to apply.')
+				msg = fazI18n('gvl.autoDetectAdded', 'Pre-ticked %d vendor(s) from cookie scan. Click Save Selection to apply.')
 					.replace('%d', added.length);
 			} else {
 				// Dual-mode formatter. Both the registered string (class-admin.php)
@@ -497,7 +500,7 @@
 				// handle that case. The trailing plain-%d replaces are a defensive
 				// no-op kept only so a translation that happens to use plain %d
 				// still renders. Mirrors cookie-policy.js svcAutoDetectDone.
-				var template = __('gvl.autoDetectMixed', 'Pre-ticked %1$d new vendor(s), %2$d were already selected. Click Save Selection to apply.');
+				var template = fazI18n('gvl.autoDetectMixed', 'Pre-ticked %1$d new vendor(s), %2$d were already selected. Click Save Selection to apply.');
 				msg = template
 					.replace(/%1\$d/g, String(added.length))
 					.replace(/%2\$d/g, String(alreadyInSession.length))
@@ -514,7 +517,7 @@
 			// Persist the failure in the status span too — the toast
 			// auto-dismisses but the admin still needs a trace (F007).
 			// 'error' kind => no auto-clear timer, stays visible.
-			var failedMsg = __('gvl.autoDetectFailed', 'Auto-detect failed. Check the cookie scanner and try again.');
+			var failedMsg = fazI18n('gvl.autoDetectFailed', 'Auto-detect failed. Check the cookie scanner and try again.');
 			setAutoDetectStatus(failedMsg, 'error');
 			FAZ.notify(failedMsg, 'error');
 		});
@@ -526,18 +529,18 @@
 		FAZ.post('gvl/update').then(function (data) {
 			FAZ.btnLoading(btn, false);
 			if (data.success) {
-				var updatedMsg = __('gvl.updatedWithMeta', 'GVL updated: v{version} ({count} vendors)')
+				var updatedMsg = fazI18n('gvl.updatedWithMeta', 'GVL updated: v{version} ({count} vendors)')
 					.replace('{version}', String(data.version))
 					.replace('{count}', String(data.vendor_count));
 				FAZ.notify(updatedMsg);
 				loadMeta();
 				loadVendors();
 			} else {
-				FAZ.notify(data.message || __('gvl.updateFailed', 'Failed to update GVL.'), 'error');
+				FAZ.notify(data.message || fazI18n('gvl.updateFailed', 'Failed to update GVL.'), 'error');
 			}
 		}).catch(function (err) {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify((err && err.message) || __('gvl.updateFailed', 'Failed to update GVL.'), 'error');
+			FAZ.notify((err && err.message) || fazI18n('gvl.updateFailed', 'Failed to update GVL.'), 'error');
 		});
 	}
 
