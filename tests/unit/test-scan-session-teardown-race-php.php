@@ -42,9 +42,10 @@ function wp_cache_delete( $key, $group = '' ) {
 	}
 }
 function concurrent_request( $cb ) {
+	$owner = $GLOBALS['wpdb']->owner++;
 	$local = $GLOBALS['local'];
 	$GLOBALS['local'] = array();
-	try { $cb(); } finally { $GLOBALS['local'] = $local; }
+	try { $cb(); } finally { $GLOBALS['local'] = $local; $GLOBALS['wpdb']->owner = $owner; }
 }
 function read_store( $key, $fresh ) {
 	if ( ! $fresh && array_key_exists( $key, $GLOBALS['local'] ) ) { return $GLOBALS['local'][ $key ]; }
@@ -69,6 +70,7 @@ function set_transient( $key, $value, $ttl = 0 ) {
 	return true;
 }
 function delete_transient( $key ) { unset( $GLOBALS['store'][ $key ], $GLOBALS['local'][ $key ] ); return true; }
+require_once __DIR__ . '/helpers/scan-start-lock-db.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-controller.php';
 use FazCookie\Admin\Modules\Scanner\Includes\Controller;
 $ok = 0; $ko = 0;
@@ -87,6 +89,26 @@ $seed = function () use ( $ctl, $scan ) {
 foreach ( array( false, true ) as $external ) {
 	$GLOBALS['external'] = $external;
 	$backend = $external ? 'object cache' : 'options';
+	$seed();
+	$GLOBALS['store'] = $GLOBALS['local'] = array();
+	$GLOBALS['read_key'] = 'faz_scan_active_7';
+	$overlap = null;
+	$GLOBALS['on_read'] = function () use ( $ctl, $next_scan, &$overlap ) {
+		$overlap = $ctl->start_browser_scan_session( $next_scan );
+	};
+	$winner = $ctl->start_browser_scan_session( $scan );
+	t( is_string( $winner ) && $overlap instanceof WP_Error, "$backend: simultaneous start conflicts before reading stale state" );
+	t( $GLOBALS['store']['faz_scan_active_7']['token'] === $winner, "$backend: losing start cannot overwrite winner" );
+	t( empty( $GLOBALS['wpdb']->locks ), "$backend: successful start releases lock" );
+	$ctl->start_browser_scan_session( $next_scan );
+	t( empty( $GLOBALS['wpdb']->locks ), "$backend: conflicting start releases lock" );
+	$GLOBALS['wpdb']->unavailable = true;
+	t( $ctl->start_browser_scan_session( $scan ) instanceof WP_Error, "$backend: database lock failure fails closed" );
+	$GLOBALS['wpdb']->unavailable = false;
+	$GLOBALS['read_key'] = 'faz_scan_active_7';
+	$GLOBALS['on_read'] = function () { throw new \RuntimeException( 'interrupted start' ); };
+	try { $ctl->start_browser_scan_session( $scan ); } catch ( \RuntimeException $e ) {}
+	t( empty( $GLOBALS['wpdb']->locks ), "$backend: exception releases lock" );
 	$token = $seed();
 	$key = 'faz_scan_session_' . hash( 'sha256', $token );
 	t( $ctl->touch_browser_scan_session( $token, $scan ), "$backend: live heartbeat renews" );

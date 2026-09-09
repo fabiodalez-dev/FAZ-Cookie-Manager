@@ -88,6 +88,27 @@ for (const p of payloads) {
           assert.equal(store.has('ck.ads.tracker'), false);
         } finally { granular.close(); }
       });
+      scenario(label + '/embed-service-grant-persists', () => {
+        const embed = open(p, law);
+        try {
+          embed._fazConfig._runtimeGeo = false;
+          embed._fazConfig._shortCodes = [];
+          embed._fazConfig._bannerConfig.config = { revisitConsent: { status: false } };
+          embed._fazConfig._services.push({ id: 'maps', category: 'functional' });
+          const store = embed.fazcookie._fazConsentStore;
+          for (const c of p.categories) store.set(c.slug, c.isNecessary ? 'yes' : 'no');
+          store.set('consent', 'yes'); store.set('action', 'yes');
+          // A stale popup origin must not turn an embed click into Do Not Sell.
+          embed._fazConfig._preferenceOriginTag = 'donotsell-button';
+          embed._fazAcceptService('maps', 'functional');
+          assert.equal(store.get('svc.maps'), 'yes', 'clicked service granted');
+          for (const c of p.categories) state(embed, c.slug, c.isNecessary);
+          const returning = open(p, law, false, embed.document.cookie);
+          try {
+            assert.equal(returning.fazcookie._fazConsentStore.get('svc.maps'), 'yes', 'grant survives reload');
+          } finally { returning.close(); }
+        } finally { embed.close(); }
+      });
       scenario(label + '/do-not-sell-popup', () => {
         w.document.body.innerHTML = '<input id="fazCCPAOptOut" type="checkbox" checked>';
         w._fazConfig._preferenceOriginTag = 'donotsell-button';

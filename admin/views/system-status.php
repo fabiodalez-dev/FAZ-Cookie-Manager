@@ -182,6 +182,13 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 	<div class="faz-card">
 		<div class="faz-card-header"><h3><?php esc_html_e( 'Cron Jobs', 'faz-cookie-manager' ); ?></h3></div>
 		<div class="faz-card-body">
+			<p class="faz-help"><?php esc_html_e( 'A hosting cron that runs wp-cron.php processes WordPress scheduled events, including FAZ scans and cleanup. WP-CLI is optional. DISABLE_WP_CRON only disables automatic spawning on page visits; it does not prevent your host from running scheduled events.', 'faz-cookie-manager' ); ?></p>
+			<details>
+				<summary><?php esc_html_e( 'cPanel setup without WP-CLI', 'faz-cookie-manager' ); ?></summary>
+				<p><?php esc_html_e( 'If your host already runs wp-cron.php regularly, keep that job; do not create a duplicate. Otherwise, ask your host to add a Cron Job in cPanel every five minutes (minute: */5; all other schedule fields: *), using the command below. The host should confirm the curl path and that the request is not blocked by authentication or a firewall.', 'faz-cookie-manager' ); ?></p>
+				<code style="overflow-wrap:anywhere;user-select:all;"><?php echo esc_html( '/usr/bin/curl --fail --silent --show-error ' . escapeshellarg( site_url( 'wp-cron.php?doing_wp_cron' ) ) . ' > /dev/null' ); ?></code>
+				<p><?php esc_html_e( 'No separate Rulesets schedule is needed for WordPress cron events. Check that overdue dates advance after a run. A next-run timestamp shows scheduling, not proof that the last run succeeded.', 'faz-cookie-manager' ); ?></p>
+			</details>
 			<table class="faz-status-table">
 				<tr>
 					<td><?php esc_html_e( 'Next Scheduled Scan', 'faz-cookie-manager' ); ?></td>

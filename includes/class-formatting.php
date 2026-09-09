@@ -376,6 +376,44 @@ if ( ! function_exists( 'faz_sanitize_color' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_sanitize_css_length' ) ) {
+	/**
+	 * Sanitise an admin-set CSS length that is emitted as a custom property.
+	 *
+	 * Same hazard as faz_sanitize_color(): the value ends up inside a custom
+	 * property declaration in class-template.php, and esc_attr() there does not
+	 * strip the CSS metacharacters `{`, `}` and `;`. A value like
+	 * "4px;}body{display:none" would close the declaration and inject free-form
+	 * CSS on every page of the site, so the shape is enforced here rather than
+	 * at output.
+	 *
+	 * A bare "0" is valid CSS and is accepted without a unit. Everything else
+	 * must be a non-negative number followed by one unit from the allow-list;
+	 * anything else returns '' and the caller falls back to the shipped default.
+	 *
+	 * @param mixed $value Raw admin value.
+	 * @return string Safe CSS length, or '' when the value is not one.
+	 */
+	function faz_sanitize_css_length( $value ) {
+		if ( ! is_scalar( $value ) ) {
+			return '';
+		}
+		$value = trim( (string) $value );
+		if ( '' === $value ) {
+			return '';
+		}
+		if ( '0' === $value ) {
+			return '0';
+		}
+		// Digits, one optional decimal part, then a unit. No signs: a negative
+		// radius is not meaningful and CSS ignores it anyway.
+		if ( ! preg_match( '/^([0-9]+(?:\.[0-9]+)?)(px|rem|em|%)$/', $value, $matches ) ) {
+			return '';
+		}
+		return $matches[1] . $matches[2];
+	}
+}
+
 if ( ! function_exists( 'faz_asset_suffix' ) ) {
 	/**
 	 * Return `.min` when a production JavaScript build exists and debug is off.

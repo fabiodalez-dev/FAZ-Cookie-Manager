@@ -610,6 +610,17 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.30.0 — 2026-09-09
+- **Added**: Footer consent links with [faz_cookie_settings type="link"] and configurable banner button radius (#191).
+- **Added**: Cookie Policy templates in Dutch and Croatian, plus Russian and Ukrainian banner and category translations.
+- **Fixed**: Explicit consent choices remain authoritative across all 47 jurisdiction profiles, including targeted sale/share opt-outs and separately gated categories.
+- **Fixed**: Per-service grants from blocked embeds persist on CCPA banners without granting unrelated categories; standing sale/share opt-outs remain binding.
+- **Fixed**: Simultaneous browser scan starts by the same administrator are serialized before session lookup; competing starts return HTTP 409.
+- **Fixed**: Category translations preserve drafts and catalogue fallback; translation cache invalidation uses normalized language keys.
+- **Fixed**: Blocked Vimeo and YouTube embeds restore correctly after consent, and keyboard focus stays inside the visible consent dialog.
+- **Fixed**: Dashboard metrics show -- when pageview tracking is disabled and use the actual pageview total. Administrative dates and time-range labels follow the selected language.
+- **Changed**: System Status explains hosting cron integration. Administrative translation keys no longer pollute gettext extraction.
+
 ### 1.29.0 — 2026-09-02
 - **Fixed**: pressing "Update definitions" once froze the cookie database at that moment, permanently — the downloaded copy always beat the snapshot shipped with the plugin and nothing ever revisited that choice. The bundled snapshot now wins when it is newer.
 - **Fixed**: in Advanced Consent Mode a visitor who refused Analytics but allowed Performance was reported to Google as allowing analytics storage. Advanced mode does not block Google's tags, so the signal was the only control left and it pointed the wrong way.

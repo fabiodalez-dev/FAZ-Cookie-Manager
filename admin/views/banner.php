@@ -543,6 +543,11 @@ $faz_gpc_req      = $faz_requirement( array( 'signals.gpc_honored', 'signals.gpc
 						</div>
 					</div>
 				</div>
+				<div class="faz-form-group" style="border-top:1px solid var(--faz-border);padding-top:16px;margin-top:4px;max-width:280px;">
+					<label for="faz-b-border-radius"><?php esc_html_e( 'Button corner radius', 'faz-cookie-manager' ); ?></label>
+					<input type="text" class="faz-input faz-input-sm" id="faz-b-border-radius" style="width:110px;" placeholder="2px" inputmode="numeric" aria-describedby="faz-b-border-radius-help">
+					<div id="faz-b-border-radius-help" class="faz-help"><?php esc_html_e( 'Applies to every banner button — Accept, Reject, Customise and Do Not Sell — in the notice bar and the preference center. A length such as 0, 8px, 50px for pill-shaped, or 0.5rem. Leave empty to keep the shipped 2px.', 'faz-cookie-manager' ); ?></div>
+				</div>
 			</div>
 		</div>
 
@@ -896,9 +901,13 @@ $faz_gpc_req      = $faz_requirement( array( 'signals.gpc_honored', 'signals.gpc
 					<div class="faz-help"><?php esc_html_e( 'Used as tooltip and screen reader label (aria-label).', 'faz-cookie-manager' ); ?></div>
 				</div>
 				<div class="faz-form-group" style="border-top:1px solid var(--faz-border);padding-top:16px;margin-top:4px;">
-					<strong style="display:block;font-size:13px;font-weight:700;color:var(--faz-text);margin-bottom:8px;"><?php esc_html_e( 'Inline &quot;manage preferences&quot; button (shortcode)', 'faz-cookie-manager' ); ?></strong>
-					<p style="margin:0 0 8px;font-size:13px;"><?php esc_html_e( 'As an alternative to the floating widget, place this shortcode in a page, post, footer or menu to render a button that re-opens this consent preference center:', 'faz-cookie-manager' ); ?></p>
+					<strong style="display:block;font-size:13px;font-weight:700;color:var(--faz-text);margin-bottom:8px;"><?php esc_html_e( 'Inline consent button or footer link', 'faz-cookie-manager' ); ?></strong>
+					<p style="margin:0 0 8px;font-size:13px;"><?php esc_html_e( 'Place this shortcode in a Shortcode block in your footer, page or post to reopen consent preferences:', 'faz-cookie-manager' ); ?></p>
 					<code style="display:inline-block;font-size:14px;padding:8px 12px;background:var(--faz-bg);border:1px solid var(--faz-border);border-radius:var(--faz-radius);user-select:all;">[faz_cookie_settings]</code>
+					<p><code style="user-select:all;">[faz_cookie_settings type="link" text="Cookie preferences"]</code></p>
+					<p class="faz-help"><?php esc_html_e( 'The link uses your theme’s link styling. To use it instead of the floating widget, add it to a persistent footer on every page and turn off “Show revisit consent widget” above. When jurisdiction routing locks that switch on, the widget remains visible alongside the link.', 'faz-cookie-manager' ); ?></p>
+					<p class="faz-help"><?php esc_html_e( 'For a custom HTML link, use the data-faz-open-preferences attribute. Standard navigation menu labels do not process shortcodes.', 'faz-cookie-manager' ); ?></p>
+					<code style="user-select:all;">&lt;a href="#faz-consent" data-faz-open-preferences="1" aria-haspopup="dialog"&gt;Cookie preferences&lt;/a&gt;</code>
 					<div class="faz-help"><?php echo wp_kses_post( __( 'Optional attributes: <code>text=&quot;Manage cookies&quot;</code> (custom label) and <code>class=&quot;my-button&quot;</code> (extra CSS classes). The button automatically inherits your banner&#39;s primary button colours. <strong>It needs the banner runtime to work, so place it on a page where the banner is active</strong> — pages added to the banner exclusion list don\'t load the consent runtime, so the button won\'t open the preferences there.', 'faz-cookie-manager' ) ); ?></div>
 				</div>
 			</div>

@@ -3276,7 +3276,7 @@ function _fazActionClose() {
  *   and window._fazAcceptCategory check `=== false` to short-circuit downstream
  *   state changes when the gate fires.
  */
-function _fazAcceptCookies(choice = "all", ungated = false) {
+function _fazAcceptCookies(choice = "all", ungated = false, source = "preferences") {
     // Age gate (GDPR Art. 8): gate ONLY the accept/partial path, never reject
     // or withdraw (choice === 'reject' — and the ungated CCPA opt-out — short-
     // circuit here). Equal weight is preserved — the Accept button is never
@@ -3328,9 +3328,12 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
     // re-grant sale/share before the next request/boot reconciles the store.
     const gpcActive = !_fazPreviewEnabled() && _fazGpcActive();
     const dnsmpiActive = !_fazPreviewEnabled() && _fazDnsmpiCookieActive();
-    const popupOptOut = choice === "custom" && ccpaCheckBoxValue &&
+    // Embed grants are explicit granular saves, even with a stale popup origin.
+    const embedGrant = source === "embed";
+    const popupOptOut = !embedGrant && choice === "custom" && ccpaCheckBoxValue &&
         _fazActivePreferenceTag() === "optout-popup";
-    const bindingSaleShareOptOut = gpcActive || dnsmpiActive || popupOptOut;
+    const bindingSaleShareOptOut = gpcActive || dnsmpiActive || popupOptOut ||
+        (embedGrant && activeLaw === "ccpa" && ccpaCheckBoxValue);
     const bindingSaleShareSlugs = [];
     // The opt-out popup expresses no change to unrelated service/cookie
     // choices, even if stale controls remain in the hidden preference panel.
@@ -3373,7 +3376,7 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
             // share using its explicit marker, NOT the geo-overlaid default.
             valueToSet = category.isNecessary || ref._fazGetFromStore(category.slug) === "yes" ? "yes" : "no";
         } else if (choice === 'all' || activeLaw === 'gdpr' ||
-            (choice === "custom" && (_fazActivePreferenceTag() === 'detail' ||
+            (choice === "custom" && (embedGrant || _fazActivePreferenceTag() === 'detail' ||
                 (_fazStore._runtimeGeo && category.defaultFromRuleset)))) {
             valueToSet = category.isNecessary || choice === "all" ||
                 (choice === "custom" && _fazFindCheckBoxValue(category.slug)) ? "yes" : "no";
@@ -7857,7 +7860,7 @@ window._fazAcceptService = function (serviceId, categorySlug, trustService) {
     serviceToggle.checked = true;
     serviceToggle.dispatchEvent(new Event('change', { bubbles: true }));
 
-    if (_fazAcceptCookies("custom") === false) {
+    if (_fazAcceptCookies("custom", false, "embed") === false) {
         serviceToggle.checked = previousChecked;
         serviceToggle.dispatchEvent(new Event('change', { bubbles: true }));
         _fazCleanupSyntheticToggle();
@@ -7921,7 +7924,7 @@ window._fazAcceptCategory = function (categorySlug) {
         _fazServicesBeforeConsent = null;
         return;
     }
-    if (_fazAcceptCookies("custom") === false) {
+    if (_fazAcceptCookies("custom", false, "embed") === false) {
         // Age gate blocked the accept — rollback store and UI to original state.
         if (categorySlugToRollback) {
             ref._fazConsentStore.set(categorySlugToRollback, previousCategoryValue);

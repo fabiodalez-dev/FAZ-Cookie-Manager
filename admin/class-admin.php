@@ -832,6 +832,13 @@ class Admin {
 						/* translators: {accepted}: accepted count, {total}: total consent count. */
 						'abTestAcceptedOf'          => __( '{accepted} accepted of {total} consents', 'faz-cookie-manager' ),
 						'abTestLoadError'          => __( 'Could not load A/B test results.', 'faz-cookie-manager' ),
+						'rangeLast24Hours'         => __( 'Last 24 Hours', 'faz-cookie-manager' ),
+						'rangeLast7Days'           => __( 'Last 7 Days', 'faz-cookie-manager' ),
+						'rangeLast30Days'          => __( 'Last 30 Days', 'faz-cookie-manager' ),
+						'rangeLastYear'            => __( 'Last Year', 'faz-cookie-manager' ),
+						'rangeAllTime'             => __( 'All Time', 'faz-cookie-manager' ),
+						/* translators: %d: number of days. */
+						'rangeLastNDays'           => __( 'Last %d Days', 'faz-cookie-manager' ),
 					),
 					// Guided setup wizard (admin/assets/js/pages/setup.js).
 					'setup'                    => array(

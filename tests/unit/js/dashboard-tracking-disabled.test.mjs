@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { JSDOM } from 'jsdom';
+const dom = new JSDOM(`<div id="faz-dashboard" data-pageview-tracking="0"></div>
+${['pageviews', 'banner', 'accept', 'reject'].map(id => `<span id="faz-stat-${id}">0</span>`).join('')}
+<div id="faz-chart-empty" class="faz-hidden"></div><div id="faz-consent-empty" class="faz-hidden"></div>`, { runScripts: 'outside-only' });
+const w = dom.window;
+let calls = [];
+let total = 17;
+w.FAZ = { ready() {}, get(path) { calls.push(path); return Promise.resolve(path.endsWith('/chart') ? { total_views: total, data: [] } : { banner_view: 3, banner_accept: 2, banner_reject: 1 }); } };
+let code = readFileSync(new URL('../../../admin/assets/js/pages/dashboard.js', import.meta.url), 'utf8');
+code = code.replace(/^\}\)\(\);/m, 'window.stats = loadStats; window.chart = loadChart; drawConsentDonut = function () {}; })();');
+w.eval(code);
+w.stats({}); w.chart({});
+assert.equal(calls.length, 0);
+for (const id of ['pageviews', 'banner', 'accept', 'reject']) assert.equal(w.document.getElementById('faz-stat-' + id).textContent, '--');
+assert.equal(w.document.getElementById('faz-chart-empty').classList.contains('faz-hidden'), false);
+w.document.getElementById('faz-dashboard').dataset.pageviewTracking = '1';
+w.stats({}); w.chart({});
+await new Promise(resolve => setTimeout(resolve, 0));
+assert.equal(w.document.getElementById('faz-stat-pageviews').textContent, '17');
+assert.equal(w.document.getElementById('faz-stat-banner').textContent, '3');
+total = 0;
+w.chart({});
+await new Promise(resolve => setTimeout(resolve, 0));
+assert.equal(w.document.getElementById('faz-stat-pageviews').textContent, '0');
+w.FAZ.get = () => Promise.reject(new Error('offline'));
+w.chart({});
+await new Promise(resolve => setTimeout(resolve, 0));
+assert.equal(w.document.getElementById('faz-stat-pageviews').textContent, '--');
+console.log('10 passed: disabled tracking, genuine zero, actual pageview total, request error');
+dom.window.close();

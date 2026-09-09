@@ -351,11 +351,16 @@ class Cookie_Categories extends Store {
 	 * @return string
 	 */
 	public function get_translations( $lang = '', $key = '' ) {
-		$slug      = $this->get_slug();
-		$cache_key = 'faz_category_contents_v2_' . $lang;
+		$slug = $this->get_slug();
+		// Normalise BEFORE the key is built, not after. flush_translation_cache()
+		// deletes 'faz_category_contents_v2_' . sanitize_file_name( $lang ), so a
+		// raw $lang that sanitising would alter produced a key the flush could
+		// never reach — the administrator saved a translation and kept being
+		// served the previous one until the cache expired on its own.
+		$safe_lang = sanitize_file_name( (string) $lang );
+		$cache_key = 'faz_category_contents_v2_' . $safe_lang;
 		$contents  = wp_cache_get( $cache_key, 'faz_category_contents' );
 		if ( false === $contents ) {
-			$safe_lang  = sanitize_file_name( $lang );
 			$upload_dir = wp_upload_dir();
 			$translation = faz_read_json_file( $upload_dir['basedir'] . '/fazcookie/languages/banners/' . $safe_lang . '.json' );
 			$bundled = faz_read_json_file( __DIR__ . "/contents/categories/{$safe_lang}.json" );
