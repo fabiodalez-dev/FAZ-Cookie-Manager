@@ -54,7 +54,10 @@ function waitForFazAjax(page: Page, action: string) {
     }
     const body = r.request().postData() ?? '';
     return urlEncodedRe.test(body) || multipartRe.test(body);
-  });
+  // Network replies must not inherit the 15s locator/action timeout. DSAR
+  // persists the request and sends notifications before returning its JSON;
+  // keep a separate bounded response budget within the 90s test timeout.
+  }, { timeout: 45_000 });
 }
 
 const CCPA_SLUG = 'faz-e2e-do-not-sell';
