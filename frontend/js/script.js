@@ -2230,6 +2230,15 @@ function _fazShowBanner() {
         // to make the shortcode-opened panel visible (#253).
         _fazStore._pushdownRevealedFromHidden = false;
         notice.classList.remove('faz-hide');
+        // Arm the focus trap now the banner is actually visible. Until #62 this
+        // ran only when the preference centre opened, so a visitor who never
+        // opened it had no trap at all: Tab from the last button left a
+        // role="dialog" and landed on the page behind it. It has to be AFTER
+        // the faz-hide removal — _fazGetFocusableElements() filters out anything
+        // inside .faz-hide, so calling it earlier finds nothing and
+        // _fazAttachFocusLoop() returns on its null guard, silently.
+        // Idempotent: the WeakMap replaces handlers rather than stacking them.
+        _fazLoopFocus();
         if (!_fazBannerLoadedFired) {
             _fazBannerLoadedFired = true;
             // Record the one-shot event before dispatch so late-running
