@@ -218,6 +218,21 @@ Every outbound request documented above happens only when its feature is used. `
 
 == Frequently Asked Questions ==
 
+= Can I put a consent link in my footer? =
+
+Yes. Add a Shortcode block to your site-wide footer containing `[faz_cookie_settings type="link" text="Cookie preferences"]`. The link uses your theme’s styling. Omit `type="link"` for the existing banner-coloured button. Both support a custom `text` and additional CSS `class`.
+
+To replace the floating widget, put the link on every page and disable **Banner → Advanced → Show revisit consent widget**. Jurisdiction routing may lock that widget on; in that case both controls remain available. The shortcode needs the banner runtime and does not work on pages excluded from the banner. Standard navigation menu labels do not execute shortcodes; custom HTML can use `<a href="#faz-consent" data-faz-open-preferences="1" aria-haspopup="dialog">Cookie preferences</a>`.
+
+= Do scheduled scans require WP-CLI? =
+
+No. A hosting cron that calls WordPress’s `wp-cron.php` runs the plugin’s scheduled events too. If your host already provides that job, do not add a duplicate. **System Status → Cron Jobs** includes a cPanel example and explains how to check the next scheduled times.
+
+= Why does the dashboard show -- for pageviews? =
+
+Pageview and banner interaction metrics show `--` when pageview tracking is disabled. This means unavailable, rather than zero visits. Consent logging is a separate setting and can remain enabled.
+
+
 = Does this plugin require a cloud account or subscription? =
 
 No required cloud account or subscription is needed. Core consent features run locally, while some optional refresh/download features can contact documented third-party services such as GitHub, IAB Europe, MaxMind, or AMP infrastructure.

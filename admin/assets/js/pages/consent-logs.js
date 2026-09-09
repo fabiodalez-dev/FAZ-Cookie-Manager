@@ -5,6 +5,14 @@
 (function () {
 	'use strict';
 
+	// Same helper as dashboard.js / geo-routing.js: fazConfig.locale is the WP
+	// user_locale, so the log timestamps follow the administrative language
+	// rather than whatever the browser happens to be set to. undefined falls
+	// back to the runtime default, which is the previous behaviour.
+	function getLocale() {
+		return (typeof fazConfig !== 'undefined' && fazConfig.locale) || document.documentElement.lang || undefined;
+	}
+
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
 	// Not named `__`: this is a key lookup into the PHP-provided fazConfig.i18n
 	// map, not gettext. Under the gettext name, translate.wordpress.org harvests
@@ -126,7 +134,8 @@
 			tdDate.style.fontSize = '13px';
 			if (item.created_at) {
 				var d = new Date(item.created_at.replace(' ', 'T'));
-				tdDate.textContent = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+				var logLocale = getLocale();
+				tdDate.textContent = d.toLocaleDateString(logLocale) + ' ' + d.toLocaleTimeString(logLocale, { hour: '2-digit', minute: '2-digit' });
 			} else {
 				tdDate.textContent = '--';
 			}

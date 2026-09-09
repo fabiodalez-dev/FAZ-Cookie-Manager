@@ -1464,6 +1464,10 @@
 		setVal('faz-b-type', displayType);
 		setVal('faz-b-position', s.position || 'bottom-right');
 		setVal('faz-b-theme', s.theme || 'light');
+		// Empty means "keep the shipped 2px" (issue #191): the template only emits
+		// --faz-btn-border-radius when this is set, so a blank field leaves every
+		// existing banner byte-identical.
+		setVal('faz-b-border-radius', s.borderRadius || '');
 		setVal('faz-b-pref-type', s.preferenceCenterType || 'popup');
 		var wallEl = document.getElementById('faz-b-soft-cookie-wall');
 		if (wallEl) wallEl.checked = !!s.softCookieWall;
@@ -2151,6 +2155,7 @@
 		}
 		props.settings.position = getVal('faz-b-position');
 		props.settings.theme = getVal('faz-b-theme');
+		props.settings.borderRadius = getVal('faz-b-border-radius');
 		var wallEl = document.getElementById('faz-b-soft-cookie-wall');
 		props.settings.softCookieWall = wallEl ? wallEl.checked : false;
 		var law = getVal('faz-b-law') || 'gdpr';

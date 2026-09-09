@@ -765,6 +765,13 @@ class Banner extends Store {
 				// free-form CSS on every page.
 				$value = faz_sanitize_color( $value );
 				break;
+			case 'borderRadius':
+				// Emitted as a CSS custom-property value by class-template.php,
+				// exactly like the colours above, so it needs the same strict
+				// shape check here — esc_attr() at output does not stop a value
+				// from closing the declaration and injecting free-form CSS.
+				$value = faz_sanitize_css_length( $value );
+				break;
 			case 'customCSS':
 				// customCSS field removed from the admin UI in 1.13.11 for
 				// wp.org compliance ("plugins must not allow arbitrary code

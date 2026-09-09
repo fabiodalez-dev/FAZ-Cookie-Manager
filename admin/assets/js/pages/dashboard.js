@@ -122,13 +122,16 @@
 	// queries its own days window independently (see loadAbTestStats).
 	function rangeLabelForDays(days) {
 		var map = {
-			1: 'Last 24 Hours',
-			7: 'Last 7 Days',
-			30: 'Last 30 Days',
-			365: 'Last Year',
-			0: 'All Time'
+			1: fazI18n('dashboard.rangeLast24Hours', 'Last 24 Hours'),
+			7: fazI18n('dashboard.rangeLast7Days', 'Last 7 Days'),
+			30: fazI18n('dashboard.rangeLast30Days', 'Last 30 Days'),
+			365: fazI18n('dashboard.rangeLastYear', 'Last Year'),
+			0: fazI18n('dashboard.rangeAllTime', 'All Time')
 		};
-		return map[days] || ('Last ' + days + ' Days');
+		if (map[days]) return map[days];
+		// %d rather than concatenation: the number's position is not the same in
+		// every language, and a translator cannot move it out of a joined string.
+		return fazI18n('dashboard.rangeLastNDays', 'Last %d Days').replace('%d', days);
 	}
 
 	function updateRangeLabel() {
@@ -181,14 +184,36 @@
 
 	/* ── Stats + Donut ── */
 
+	// Whether the site records pageviews at all. Printed on the wrapper by
+	// dashboard.php so the panel can tell "nobody visited" from "we are not
+	// counting", which the old zeroes conflated.
+	function pageviewTrackingEnabled() {
+		var dashboard = document.getElementById('faz-dashboard');
+		return !!dashboard && dashboard.getAttribute('data-pageview-tracking') === '1';
+	}
+
 	function loadStats(params) {
+		if (!pageviewTrackingEnabled()) {
+			// Not zero — unavailable. Reporting 0 accepted / 0 rejected reads as
+			// "every visitor ignored the banner", which is a very different and
+			// alarming claim from "this site does not count pageviews".
+			['pageviews', 'banner', 'accept', 'reject'].forEach(function (stat) {
+				var el = document.getElementById('faz-stat-' + stat);
+				if (el) el.textContent = '--';
+			});
+			resetCanvas('faz-chart-consent');
+			showEmpty('faz-consent-empty');
+			return;
+		}
 		FAZ.get('pageviews/banner-stats', params).then(function (data) {
 			var banner   = data.banner_view || 0;
 			var accepted = data.banner_accept || 0;
 			var rejected = data.banner_reject || 0;
 			var total    = accepted + rejected;
 
-			document.getElementById('faz-stat-pageviews').textContent = (banner + total).toLocaleString();
+			// Total Pageviews comes from loadChart()'s total_views. It used to be
+			// banner views plus consent actions, which is not a pageview count at
+			// all and overstated it on every page that showed the banner.
 			document.getElementById('faz-stat-banner').textContent = banner.toLocaleString();
 			document.getElementById('faz-stat-accept').textContent = total > 0 ? Math.round((accepted / total) * 100) + '%' : '--';
 			document.getElementById('faz-stat-reject').textContent = total > 0 ? Math.round((rejected / total) * 100) + '%' : '--';
@@ -204,8 +229,21 @@
 	/* ── Pageviews Line Chart ── */
 
 	function loadChart(params) {
+		var totalEl = document.getElementById('faz-stat-pageviews');
+		// Cleared first so a failed or pending request never leaves the previous
+		// range's total on screen next to the new range's chart.
+		if (totalEl) totalEl.textContent = '--';
+		if (!pageviewTrackingEnabled()) {
+			resetCanvas('faz-chart-pageviews');
+			showEmpty('faz-chart-empty');
+			return;
+		}
 		FAZ.get('pageviews/chart', params).then(function (data) {
 			var items = Array.isArray(data) ? data : (data.data || data.items || []);
+			// A genuine zero is reported as 0; only a missing figure stays '--'.
+			if (totalEl && typeof data.total_views === 'number') {
+				totalEl.textContent = data.total_views.toLocaleString();
+			}
 
 			resetCanvas('faz-chart-pageviews');
 			hideEmpty('faz-chart-empty');

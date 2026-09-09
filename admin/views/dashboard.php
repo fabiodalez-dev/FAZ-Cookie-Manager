@@ -6,9 +6,11 @@
  */
 
 defined( 'ABSPATH' ) || exit;
+$faz_dashboard_settings = get_option( 'faz_settings', array() );
+$faz_tracking_enabled = isset( $faz_dashboard_settings['pageview_tracking'] ) && true === $faz_dashboard_settings['pageview_tracking'];
 ?>
 
-<div id="faz-dashboard">
+<div id="faz-dashboard" data-pageview-tracking="<?php echo $faz_tracking_enabled ? '1' : '0'; ?>">
 	<?php
 	// "Complete setup" card — hidden by default and revealed by dashboard.js only
 	// when onboarding is incomplete and not dismissed (i.e. a fresh install whose
@@ -31,6 +33,9 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 	</div>
 
+	<?php if ( ! $faz_tracking_enabled ) : ?>
+		<p class="faz-help"><?php esc_html_e( 'Pageview tracking is disabled. Pageview and banner interaction metrics are unavailable (--); consent logging is independent of this setting.', 'faz-cookie-manager' ); ?></p>
+	<?php endif; ?>
 	<div class="faz-grid faz-grid-4" id="faz-stats-row">
 		<div class="faz-stat-card">
 			<div class="faz-stat-icon faz-stat-icon-primary">
@@ -88,7 +93,7 @@ defined( 'ABSPATH' ) || exit;
 					<canvas id="faz-chart-pageviews" width="600" height="220" style="width:100%;height:220px;"></canvas>
 					<div id="faz-chart-empty" class="faz-chart-empty faz-hidden">
 						<span class="dashicons dashicons-chart-area"></span>
-						<p><?php echo wp_kses_post( __( 'No pageview data yet.<br>Data will appear once visitors interact with your site.', 'faz-cookie-manager' ) ); ?></p>
+						<p><?php echo wp_kses_post( ( $faz_tracking_enabled ? __( 'No pageview data yet.<br>Data will appear once visitors interact with your site.', 'faz-cookie-manager' ) : __( 'Pageview tracking is disabled.', 'faz-cookie-manager' ) ) ); ?></p>
 					</div>
 				</div>
 			</div>
@@ -103,7 +108,7 @@ defined( 'ABSPATH' ) || exit;
 					<canvas id="faz-chart-consent" width="300" height="220" style="width:100%;height:220px;"></canvas>
 					<div id="faz-consent-empty" class="faz-chart-empty faz-hidden">
 						<span class="dashicons dashicons-chart-pie"></span>
-						<p><?php echo wp_kses_post( __( 'No consent data yet.<br>Data will appear once visitors respond to the banner.', 'faz-cookie-manager' ) ); ?></p>
+						<p><?php echo wp_kses_post( ( $faz_tracking_enabled ? __( 'No consent data yet.<br>Data will appear once visitors respond to the banner.', 'faz-cookie-manager' ) : __( 'Banner interaction tracking is disabled.', 'faz-cookie-manager' ) ) ); ?></p>
 					</div>
 				</div>
 			</div>
