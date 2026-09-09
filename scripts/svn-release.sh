@@ -177,7 +177,7 @@ echo
 read -r -p "  Proceed with sync into ${SVN_DIR}/trunk/ ? [y/N] " confirm1
 if [[ "${confirm1}" != "y" && "${confirm1}" != "Y" ]]; then
     yellow "Aborted at Gate 1 — no SVN changes made."
-    exit 0
+    exit 2
 fi
 
 # ── Apply: rsync staging → trunk, copy assets, svn cp tag ────────────────
@@ -254,7 +254,7 @@ echo "  Total SVN changes staged: ${TOTAL_CHANGES}"
 
 if [[ "${TOTAL_CHANGES}" == "0" ]]; then
     yellow "  No SVN changes — nothing to commit. Aborting."
-    exit 0
+    exit 2
 fi
 
 # ── Gate 2: pre-commit confirmation ──────────────────────────────────────
@@ -278,7 +278,7 @@ read -r -p "  Run 'svn ci' now? [y/N] " confirm2
 if [[ "${confirm2}" != "y" && "${confirm2}" != "Y" ]]; then
     yellow "Aborted at Gate 2 — working copy left in staged state."
     echo "  To revert: cd ${SVN_DIR} && svn revert -R ."
-    exit 0
+    exit 2
 fi
 
 # ── Commit ───────────────────────────────────────────────────────────────
