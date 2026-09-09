@@ -148,6 +148,9 @@ bold "  The staging diff is the last line of defence. Read it."
 
 if ! done_step svn_committed; then
     bash "${PLUGIN_SRC}/scripts/svn-release.sh" --version="${VERSION}"
+    # A successful child exit alone does not prove a release was committed.
+    svn ls "https://plugins.svn.wordpress.org/${SLUG}/tags/${VERSION}" >/dev/null 2>&1 \
+        || die "SVN tag ${VERSION} is absent; refusing to record or publish the release"
     mark_step svn_committed
     green "  ✓ published to wordpress.org"
 fi
