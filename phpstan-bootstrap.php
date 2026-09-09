@@ -22,3 +22,7 @@ define( 'FAZ_APP_ASSETS_URL', FAZ_PLUGIN_URL . 'frontend/images/' );
 if ( ! defined( 'WP_MEMORY_LIMIT' ) ) {
 	define( 'WP_MEMORY_LIMIT', '256M' );
 }
+
+if ( ! defined( 'DB_NAME' ) ) {
+	define( 'DB_NAME', 'faz_static_analysis' );
+}

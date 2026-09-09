@@ -161,6 +161,7 @@ $faz_cp_bundled_language_names = array(
 						<option value="popia-southafrica"><?php esc_html_e( 'POPIA (South Africa)', 'faz-cookie-manager' ); ?></option>
 					</select>
 					<div class="faz-help"><?php esc_html_e( 'Override per shortcode call with [faz_cookie_policy_complete jurisdiction="..."].', 'faz-cookie-manager' ); ?></div>
+					<p id="cp-ccpa-methods-summary" class="faz-help" hidden><?php esc_html_e( 'For CCPA, review the rights section in Policy text below and configure the request methods your business provides. The default email-only wording does not fit every business.', 'faz-cookie-manager' ); ?></p>
 				</div>
 			</div>
 		</div>
@@ -202,7 +203,7 @@ $faz_cp_bundled_language_names = array(
 		     Exists because the operator is the one who knows their own
 		     processing, and because a policy may be needed in a language the
 		     plugin ships no template for. -->
-		<div class="faz-card">
+		<div class="faz-card" id="cp-policy-text">
 			<details>
 				<summary class="faz-card-header" style="cursor:pointer; list-style:revert;">
 					<h3 style="display:inline-block; margin:0;">
@@ -246,6 +247,10 @@ $faz_cp_bundled_language_names = array(
 							<?php esc_html_e( 'Load sections', 'faz-cookie-manager' ); ?>
 						</button>
 						<span id="cp-override-status" aria-live="polite" aria-atomic="true" style="color:var(--faz-text-secondary);font-size:12px;"></span>
+					</div>
+					<div id="cp-ccpa-methods-help" class="faz-help" hidden>
+						<p><?php esc_html_e( 'CCPA request methods: the default rights section uses the privacy email. Email alone is appropriate only for a business operating exclusively online with a direct relationship with the consumers whose information it collects. Otherwise, replace the rights section below with at least two designated request methods, including a toll-free number and a method on your website. Use your real contact details in every published language.', 'faz-cookie-manager' ); ?></p>
+						<p><?php esc_html_e( 'Also describe how to request a limit on sensitive information use and disclosure when that right applies. Provide the required website link and request method; an opt-out or limit request must not require identity verification or an account.', 'faz-cookie-manager' ); ?> <a href="https://cppa.ca.gov/faq.html" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'CPPA request guidance', 'faz-cookie-manager' ); ?></a></p>
 					</div>
 					<div id="cp-override-sections" class="faz-form-group"></div>
 				</div>

@@ -182,3 +182,28 @@ test('language/jurisdiction isolation is byte-stable and stale anchors fail clos
   expect(stale).not.toContain(MARKER);
   expect(stale).toContain('Slovak Override Company');
 });
+
+
+test('CCPA request methods can be authored and survive save and public rendering', async ({ page, loginAsAdmin }) => {
+  await loginAsAdmin(page);
+  await page.goto(ADMIN_PAGE, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#cp-company-name')).toHaveValue('Slovak Override Company');
+  await page.locator('#cp-jurisdiction').selectOption('ccpa-california');
+  await expect(page.locator('#cp-ccpa-methods-summary')).toBeVisible();
+  await openPolicyTextEditor(page);
+  await page.locator('#cp-override-jurisdiction').selectOption('ccpa-california');
+  await page.locator('#cp-override-lang').selectOption('en');
+  await expect(page.locator('#cp-ccpa-methods-help')).toContainText('toll-free');
+  await page.locator('#cp-override-load').click();
+  const rightsBox = page.locator('#cp-override-sections textarea[placeholder*="## Your CCPA/CPRA rights"]');
+  await expect(rightsBox).toBeVisible();
+  const text = (await rightsBox.getAttribute('placeholder'))! + '\n\nSubmit requests to know, delete, correct or limit through [Privacy requests](https://example.test/privacy-requests) or toll-free 1-800-555-0100. Contact: {{COMPANY_EMAIL}}.';
+  await rightsBox.fill(text);
+  await page.locator('form#faz-cookie-policy-form button[type=submit]').click();
+  await expect(page.locator('#cp-save-status')).toContainText(/Saved/i);
+  const published = render('en', 'ccpa-california');
+  expect(published).toContain('href="https://example.test/privacy-requests"');
+  expect(published).toContain('1-800-555-0100');
+  expect(published).toContain('privacy@example.test');
+  expect(render('en')).toBe(englishBefore);
+});

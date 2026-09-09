@@ -104,7 +104,7 @@ test.describe(`${EXPECTED_VERSION || 'unknown version'} release acceptance`, () 
     // releases: a pre-release must never claim it, and a final release must.
     const stable = wp([
       'eval',
-      'echo get_file_data( WP_PLUGIN_DIR . "/faz-cookie-manager/faz-cookie-manager.php", array( "s" => "Stable tag" ) )["s"];',
+      'echo get_file_data( WP_PLUGIN_DIR . "/faz-cookie-manager/readme.txt", array( "s" => "Stable tag" ) )["s"];',
     ]).trim();
     if (IS_PRERELEASE) {
       expect(stable, 'a pre-release must not claim the stable tag').not.toBe(loaded);

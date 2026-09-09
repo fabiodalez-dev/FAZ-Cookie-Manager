@@ -5,6 +5,7 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 ## [1.30.0] - 2026-09-09
 
 ### Fixed
+- Release acceptance reads the stable download pointer from readme.txt. The policy editor explains when CCPA request methods need customization and where to enter the actual website and telephone channels.
 - Dashboard pageview and banner interaction metrics now show `--` and explain when tracking is disabled. Total Pageviews uses the actual pageview count instead of adding banner views and consent actions.
 - Per-service grants from blocked embeds are persisted on CCPA banners, even when a previous opt-out popup supplied the panel origin. An embed grant preserves unrelated category choices and standing sale/share opt-outs.
 - Browser scan session starts acquire a database lock before reading the active session. Concurrent starts for the same site and administrator return HTTP 409; retries reuse the existing token, and the lock is released on success, conflict, exception or connection termination.
