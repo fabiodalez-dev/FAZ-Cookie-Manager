@@ -21,14 +21,14 @@ for (const payload of payloads) for (const law of ['gdpr', 'ccpa']) {
         await route.fulfill({ contentType: 'text/javascript', body: 'window.probesExecuted=(window.probesExecuted||0)+1;' });
       } else await route.fulfill({ contentType: 'text/html', body: '<!doctype html><body><button id="accept">Accept</button><button id="reject">Reject</button><button id="save">Save</button></body>' });
     });
-    const boot = async () => {
+    const boot = async (granular = false) => {
       await page.goto('https://intent.example.test/');
-      await page.evaluate(({ categories, law }) => {
+      await page.evaluate(({ categories, law, granular }) => {
         const w = window as any;
         w._fazConfig = {
           _runtimeGeo: true, _activeLaw: law, _bannerSlug: law, _expiry: 180,
-          _categories: categories, _services: [], _providersToBlock: [], _cookieCategoryMap: {},
-          _whitelistedCookiePatterns: [], _userWhitelist: [], _perServiceConsent: false, _perCookieConsent: false,
+          _categories: categories, _services: granular ? [{ id: 'maps', category: 'functional' }] : [], _providersToBlock: [], _cookieCategoryMap: {},
+          _whitelistedCookiePatterns: [], _userWhitelist: [], _perServiceConsent: granular, _perCookieConsent: false,
           _rootDomain: '', _bannerConfig: { settings: { applicableLaw: law }, behaviours: {} }, i18n: {},
         };
         // The component fixture drives real consent handlers explicitly. Full
@@ -36,7 +36,7 @@ for (const payload of payloads) for (const law of ['gdpr', 'ccpa']) {
         const add = document.addEventListener.bind(document);
         w.restoreListener = () => { document.addEventListener = add; };
         document.addEventListener = ((type: string, ...args: any[]) => type === 'DOMContentLoaded' ? undefined : (add as any)(type, ...args)) as any;
-      }, { categories: payload.categories, law });
+      }, { categories: payload.categories, law, granular });
       await page.addScriptTag({ content: source });
       await page.evaluate(() => {
         const w = window as any;
@@ -132,5 +132,24 @@ for (const payload of payloads) for (const law of ['gdpr', 'ccpa']) {
     await context.addCookies([{ name: 'fazcookie-consent', value: 'action:yes,consent:yes,necessary:yes,analytics:garbage,marketing:0,functional:true,profiling:1', url: 'https://intent.example.test/' }]);
     await boot();
     await probe('analytics', 'malformed', false);
+    await page.evaluate(() => {
+      const w = window as any;
+      w._fazConfig._runtimeGeo = false;
+      w._fazConfig._perServiceConsent = true;
+      w._fazConfig._services = [{ id: 'maps', category: 'functional' }];
+      w._fazConfig._shortCodes = [];
+      w._fazConfig._bannerConfig.config = { revisitConsent: { status: false } };
+      w._fazConfig._preferenceOriginTag = 'donotsell-button';
+      for (const c of w._fazConfig._categories) w.fazcookie._fazConsentStore.set(c.slug, c.isNecessary ? 'yes' : 'no');
+      const button = document.createElement('button'); button.id = 'embed-grant';
+      button.textContent = 'Accept maps'; button.onclick = () => w._fazAcceptService('maps', 'functional');
+      document.body.appendChild(button);
+    });
+    await page.click('#embed-grant');
+    expect((await states())['svc.maps']).toBe('yes');
+    for (const c of payload.categories) expect((await states())[c.slug]).toBe(c.isNecessary ? 'yes' : 'no');
+    await boot(true);
+    expect((await states())['svc.maps']).toBe('yes');
+
   });
 }

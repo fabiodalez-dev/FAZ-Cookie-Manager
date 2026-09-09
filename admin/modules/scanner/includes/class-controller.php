@@ -618,79 +618,94 @@ class Controller {
 			return new \WP_Error( 'faz_invalid_browser_scan_id', __( 'Invalid browser scan identifier.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
 
-		$active_key = self::browser_scan_active_transient_key( $user_id );
-		$active     = self::browser_scan_active_record( $user_id );
-		if ( is_array( $active ) && ! empty( $active['token'] ) && ! empty( $active['scan_id'] ) ) {
-			if ( ! hash_equals( (string) $active['scan_id'], $scan_id ) ) {
-				// A HELD session is evidence kept for a retry after an import
-				// failed; nothing is driving it. Refusing a new scan because one
-				// exists would trade the old bug (evidence destroyed on failure)
-				// for a worse one: an administrator locked out of scanning until
-				// the idle window lapses, with no way to clear it from the UI.
-				// Starting a fresh scan is an unambiguous statement that the held
-				// evidence is no longer wanted, so reclaim it and continue.
-				//
-				// A LIVE session still gets the 409 — a second tab really is a
-				// conflict, and taking its capture away mid-crawl would silently
-				// corrupt a scan someone is watching.
-				if ( 'held' !== ( isset( $active['state'] ) ? $active['state'] : '' ) ) {
-					return new \WP_Error( 'faz_browser_scan_in_progress', __( 'Another browser scan is already in progress for this administrator.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+		// Connection-scoped MySQL/MariaDB lock: atomic across PHP requests and
+		// independent of the transient backend. No lease can expire while its
+		// owner is still writing; a terminated connection releases it automatically.
+		global $wpdb;
+		$lock_name = 'faz_scan_' . substr( hash( 'sha256', DB_NAME . ':' . $wpdb->options . ':' . $user_id ), 0, 55 );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- synchronization must reach the database.
+		$acquired = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock_name ) );
+		if ( '1' !== (string) $acquired ) {
+			return new \WP_Error( 'faz_browser_scan_in_progress', __( 'Another browser scan is already in progress for this administrator.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+		}
+		try {
+			$active_key = self::browser_scan_active_transient_key( $user_id );
+			$active     = self::browser_scan_active_record( $user_id );
+			if ( is_array( $active ) && ! empty( $active['token'] ) && ! empty( $active['scan_id'] ) ) {
+				if ( ! hash_equals( (string) $active['scan_id'], $scan_id ) ) {
+					// A HELD session is evidence kept for a retry after an import
+					// failed; nothing is driving it. Refusing a new scan because one
+					// exists would trade the old bug (evidence destroyed on failure)
+					// for a worse one: an administrator locked out of scanning until
+					// the idle window lapses, with no way to clear it from the UI.
+					// Starting a fresh scan is an unambiguous statement that the held
+					// evidence is no longer wanted, so reclaim it and continue.
+					//
+					// A LIVE session still gets the 409 — a second tab really is a
+					// conflict, and taking its capture away mid-crawl would silently
+					// corrupt a scan someone is watching.
+					if ( 'held' !== ( isset( $active['state'] ) ? $active['state'] : '' ) ) {
+						return new \WP_Error( 'faz_browser_scan_in_progress', __( 'Another browser scan is already in progress for this administrator.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+					}
+					$this->discard_browser_scan_session_record( $active );
+					$active = false;
 				}
-				$this->discard_browser_scan_session_record( $active );
-				$active = false;
 			}
-		}
-		if ( is_array( $active ) && ! empty( $active['token'] ) && ! empty( $active['scan_id'] ) ) {
-			$token = sanitize_key( (string) $active['token'] );
-		} else {
-			$token = str_replace( '-', '', wp_generate_uuid4() );
-		}
+			if ( is_array( $active ) && ! empty( $active['token'] ) && ! empty( $active['scan_id'] ) ) {
+				$token = sanitize_key( (string) $active['token'] );
+			} else {
+				$token = str_replace( '-', '', wp_generate_uuid4() );
+			}
 
-		// created_at is the ABSOLUTE-age ceiling: touch_browser_scan_session()
-		// slides the idle window but refuses once the session is older than
-		// BROWSER_SCAN_MAX_AGE, which is what stops a wedged tab holding the
-		// capture lock indefinitely. Writing time() unconditionally here reset
-		// that ceiling on the REUSE branch too, so any caller re-entering with
-		// the same scan_id renewed the guarantee — and could revive a session
-		// that had already idled out. Carry the original forward; only a
-		// genuinely new session starts its clock now.
-		$existing_session = self::browser_scan_session_record( $token );
-		if ( $active && ! $existing_session ) {
-			return new \WP_Error( 'faz_browser_scan_expired', __( 'The browser scan session has expired.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
-		}
-		$created_at       = ( is_array( $existing_session ) && ! empty( $existing_session['created_at'] ) )
-			? absint( $existing_session['created_at'] )
-			: time();
+			// created_at is the ABSOLUTE-age ceiling: touch_browser_scan_session()
+			// slides the idle window but refuses once the session is older than
+			// BROWSER_SCAN_MAX_AGE, which is what stops a wedged tab holding the
+			// capture lock indefinitely. Writing time() unconditionally here reset
+			// that ceiling on the REUSE branch too, so any caller re-entering with
+			// the same scan_id renewed the guarantee — and could revive a session
+			// that had already idled out. Carry the original forward; only a
+			// genuinely new session starts its clock now.
+			$existing_session = self::browser_scan_session_record( $token );
+			if ( $active && ! $existing_session ) {
+				return new \WP_Error( 'faz_browser_scan_expired', __( 'The browser scan session has expired.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+			}
+			$created_at       = ( is_array( $existing_session ) && ! empty( $existing_session['created_at'] ) )
+				? absint( $existing_session['created_at'] )
+				: time();
 
-		set_transient(
-			self::browser_scan_transient_key( $token ),
-			array( 'user_id' => $user_id, 'scan_id' => $scan_id, 'created_at' => $created_at, 'touched_at' => time() ),
-			self::BROWSER_SCAN_TTL
-		);
-
-		if ( ! self::browser_scan_session_record( $token ) ) {
-			return new \WP_Error( 'faz_browser_scan_expired', __( 'The browser scan session has expired.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
-		}
-		if ( ! $active ) {
 			set_transient(
-				$active_key,
-				array( 'token' => $token, 'scan_id' => $scan_id, 'created_at' => $created_at ),
-				self::BROWSER_SCAN_MAX_AGE + self::BROWSER_SCAN_TTL
+				self::browser_scan_transient_key( $token ),
+				array( 'user_id' => $user_id, 'scan_id' => $scan_id, 'created_at' => $created_at, 'touched_at' => time() ),
+				self::BROWSER_SCAN_TTL
 			);
-		}
-		set_transient( self::browser_scan_transient_key( $token ) . '_held', 'live', self::BROWSER_SCAN_MAX_AGE + self::BROWSER_SCAN_TTL );
 
-		// Remove abandoned observations from expired scans without touching a
-		// still-live parallel session owned by the same administrator.
-		foreach ( (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false ) as $old ) {
-			if ( ! is_array( $old ) || empty( $old['observed_at'] ) || (int) $old['observed_at'] < time() - self::BROWSER_SCAN_TTL ) {
-				delete_user_meta( $user_id, self::BROWSER_SCAN_META, $old );
+			if ( ! self::browser_scan_session_record( $token ) ) {
+				return new \WP_Error( 'faz_browser_scan_expired', __( 'The browser scan session has expired.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
 			}
+			if ( ! $active ) {
+				set_transient(
+					$active_key,
+					array( 'token' => $token, 'scan_id' => $scan_id, 'created_at' => $created_at ),
+					self::BROWSER_SCAN_MAX_AGE + self::BROWSER_SCAN_TTL
+				);
+			}
+			set_transient( self::browser_scan_transient_key( $token ) . '_held', 'live', self::BROWSER_SCAN_MAX_AGE + self::BROWSER_SCAN_TTL );
+
+			// Remove abandoned observations from expired scans without touching a
+			// still-live parallel session owned by the same administrator.
+			foreach ( (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false ) as $old ) {
+				if ( ! is_array( $old ) || empty( $old['observed_at'] ) || (int) $old['observed_at'] < time() - self::BROWSER_SCAN_TTL ) {
+					delete_user_meta( $user_id, self::BROWSER_SCAN_META, $old );
+				}
+			}
+
+			$this->issue_browser_scan_cookie( $token );
+
+			return $token;
+		} finally {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- release on success, conflict and exception.
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
 		}
-
-		$this->issue_browser_scan_cookie( $token );
-
-		return $token;
 	}
 
 	/**
