@@ -473,6 +473,12 @@
 		if (activeCat !== 'all') params.category = activeCat;
 		FAZ.get('cookies', params).then(function (data) {
 			cookies = Array.isArray(data) ? data : (data.items || []);
+			// A declaration can promote a previously stale discovery while this
+			// page is open. Retire its old delete affordance on catalogue refresh.
+			cookies.forEach(function (cookie) {
+				if (!isDiscoveredCookie(cookie)) { delete staleCookieNames[getStaleKey(cookie)]; }
+			});
+			staleCookieCount = Object.keys(staleCookieNames).length;
 			renderCookies();
 			if (typeof done === 'function') done();
 		}).catch(function (err) {

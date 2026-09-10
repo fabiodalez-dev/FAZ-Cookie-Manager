@@ -38,7 +38,7 @@ function boot({ previousCookies, scanResult, maxPages = 0 }) {
   const notifications = [];
   // Do not run the page boot sequence: this test targets the private scan
   // completion path and supplies only the DOM nodes it owns.
-  const instrumented = SCRIPT.replace('FAZ.ready(function () {', 'window.__fazCookiesTest = { startScan: startScan }; FAZ.ready(function () {');
+  const instrumented = SCRIPT.replace('FAZ.ready(function () {', 'window.__fazCookiesTest = { startScan: startScan, loadCookies: loadCookies }; FAZ.ready(function () {');
   window.fazConfig = { i18n: {} };
   window.FAZ = {
     ready() {},
@@ -60,7 +60,7 @@ async function flush() {
   for (let i = 0; i < 6; i += 1) await Promise.resolve();
 }
 
-console.log('cookie stale-marking scan coverage safety (20 checks)');
+console.log('cookie stale-marking scan coverage safety (22 checks)');
 
 const ENRICHMENT_NOTICE = 'Server-header enrichment is still running in the background';
 
@@ -265,5 +265,19 @@ const healthyFullScan = { total: 0, pagesScanned: 20, cookies: [], diagnostics: 
   check('20 and the summary says the run was stopped', message.includes('stopped by you'));
 }
 
+{
+  const rows = [{ id: 7, name: '_delayed_tracker', domain: 'example.test', discovered: 1 }];
+  const app = boot({ previousCookies: rows, scanResult: { ...healthyFullScan, importResult: EARNED } });
+  app.window.__fazCookiesTest.startScan(0);
+  await flush();
+  check('21 the declaration scenario starts with a stale row', app.document.querySelector('.faz-cookie-stale') !== null);
+  rows[0].discovered = false;
+  app.window.__fazCookiesTest.loadCookies();
+  await flush();
+  check('22 refreshing a manually declared row retires all its stale-delete controls',
+    app.document.querySelector('.faz-cookie-stale') === null && app.document.querySelector('.faz-stale-delete-all') === null);
+  app.window.close();
+}
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
-process.exit(failed === 0 && passed === 20 ? 0 : 1);
+process.exit(failed === 0 && passed === 22 ? 0 : 1);
