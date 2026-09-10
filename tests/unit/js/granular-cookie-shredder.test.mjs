@@ -73,6 +73,37 @@ function hasCookie(window, name) {
 
 console.log('granular cookie shredder category fallback (jsdom)');
 
+// Public declarations of infrastructure cookies must never arm cleanup,
+// including explicit service/per-cookie rejection inside an accepted category.
+for (const name of ['_lscache_vary', 'comment_author_deadbeef', 'wpdiscuz_nonce_deadbeef']) {
+  for (const granular of [false, true]) {
+    const window = loadFrontend({
+      _categories: [{ slug: 'functional', isNecessary: false, cookies: [
+        { cookieID: name, domain: 'example.test', neverDelete: true },
+        { cookieID: 'optional_cookie', domain: 'example.test', neverDelete: false },
+      ] }],
+      _services: [{ id: 'test-service', category: 'functional', cookies: [name, 'optional_cookie'] }],
+      _cookieCategoryMap: { [name]: 'functional', optional_cookie: 'functional' },
+    });
+    setCookie(window, name);
+    setCookie(window, 'optional_cookie');
+    window.fazcookie._fazConsentStore.set('functional', granular ? 'yes' : 'no');
+    if (granular) {
+      window.fazcookie._fazConsentStore.set('svc.test-service', 'no');
+      window.fazcookie._fazConsentStore.set('ck.test-service.' + name, 'no');
+    }
+    window.eval('_fazRemoveAllDeadCookies()');
+    check(`${name} survives ${granular ? 'granular' : 'category'} rejection`, hasCookie(window, name));
+    check('ordinary cookie is still removed', !hasCookie(window, 'optional_cookie'));
+    setCookie(window, name);
+    setCookie(window, 'optional_cookie');
+    window.eval('_fazCleanupRevokedCookies()');
+    check(`${name} also survives revocation cleanup`, hasCookie(window, name));
+    check('revocation still removes the ordinary cookie', !hasCookie(window, 'optional_cookie'));
+    window.close();
+  }
+}
+
 // The first cleanup pass runs before first-visit defaults are written into the
 // consent store. Necessary cookies must still survive that pass.
 {

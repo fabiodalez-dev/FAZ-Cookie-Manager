@@ -55,10 +55,17 @@ function did_action( $t ) { return 1; }
 function get_transient( $k ) { return false; }
 function set_transient( $k, $v, $t = 0 ) { return true; }
 function delete_transient( $k ) { return true; }
+function do_action( $hook, ...$args ) {}
+function faz_selected_languages() { return array( 'en', 'it' ); }
+function faz_current_language() { return 'en'; }
+$GLOBALS['cache_deleted'] = array();
+function wp_cache_delete( $key, $group ) { $GLOBALS['cache_deleted'][] = $group . ':' . $key; return true; }
 class WP_Error { public function __construct( ...$args ) {} }
 
 require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-controller.php';
+require_once dirname( __DIR__, 2 ) . '/frontend/modules/banner-rest/class-banner-rest.php';
+require_once dirname( __DIR__, 2 ) . '/admin/modules/cookie-policy-generator/includes/class-renderer.php';
 
 use FazCookie\Frontend\Frontend;
 
@@ -173,6 +180,28 @@ t( 'shop.example' === $ctl->saved[0][0]['domain'] && '2 days' === $ctl->saved[0]
 Frontend::flush_declared_internal_cache();
 t( ! Frontend::is_declaration_suppressed( '_lscache_vary' ),
 	'and the display guard is lifted in the same operation — a row nobody can see is not a declaration' );
+
+foreach ( array( 'en', 'it' ) as $language ) {
+	foreach ( array( 'list', 'transfers' ) as $surface ) {
+		t( in_array( 'faz_cookie_policy:faz_cookie_policy_' . $surface . '_' . $language, $GLOBALS['cache_deleted'], true ),
+			'the declaration invalidates the ' . $language . ' policy ' . $surface );
+	}
+}
+
+// Verify the real inline and REST payload producers carry the protection,
+// rather than only exercising JS with a hand-authored protected payload.
+$items = array( (object) array( 'name' => '_lscache_vary' ), (object) array( 'name' => '_ga' ) );
+foreach ( array(
+	array( Frontend::class, 'prepare_frontend_cookies', array( $items, 'functional' ) ),
+	array( \FazCookie\Frontend\Modules\Banner_Rest\Banner_Rest::class, 'build_category_cookies_payload', array( $items ) ),
+) as $producer ) {
+	$instance = ( new \ReflectionClass( $producer[0] ) )->newInstanceWithoutConstructor();
+	$method = new \ReflectionMethod( $producer[0], $producer[1] );
+	$method->setAccessible( true );
+	$payload = $method->invokeArgs( $instance, $producer[2] );
+	t( true === $payload[0]['neverDelete'] && false === $payload[1]['neverDelete'],
+		$producer[1] . ' protects infrastructure cookies without exempting analytics' );
+}
 
 $left = array_column( $ctl->set_aside_cookies(), 'name' );
 t( ! in_array( '_lscache_vary', $left, true ) && in_array( '_ga', $left, true ),

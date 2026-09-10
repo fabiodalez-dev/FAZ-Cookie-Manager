@@ -6202,9 +6202,10 @@ class Frontend {
 			}
 			$provider = isset( $item->url_pattern ) ? sanitize_text_field( (string) $item->url_pattern ) : '';
 			$cookies[] = array(
-				'cookieID' => $name,
-				'domain'   => isset( $item->domain ) ? sanitize_text_field( (string) $item->domain ) : '',
-				'provider' => $provider,
+				'cookieID'    => $name,
+				'neverDelete' => self::is_wp_internal_cookie( $name ),
+				'domain'      => isset( $item->domain ) ? sanitize_text_field( (string) $item->domain ) : '',
+				'provider'    => $provider,
 			);
 			if ( '' !== $provider && 'necessary' !== $cat_slug ) {
 				if ( ! isset( $this->providers[ $provider ] ) ) {
@@ -6242,9 +6243,10 @@ class Frontend {
 				continue;
 			}
 			$cookies[] = array(
-				'cookieID' => sanitize_text_field( $cookie->get_name() ),
-				'domain'   => sanitize_text_field( $cookie->get_domain() ),
-				'provider' => sanitize_text_field( $cookie->get_url_pattern() ),
+				'cookieID'    => sanitize_text_field( $cookie->get_name() ),
+				'neverDelete' => self::is_wp_internal_cookie( $cookie->get_name() ),
+				'domain'      => sanitize_text_field( $cookie->get_domain() ),
+				'provider'    => sanitize_text_field( $cookie->get_url_pattern() ),
 			);
 			$provider  = $cookie->get_url_pattern();
 			if ( '' !== $provider && 'necessary' !== $cat_slug ) {

@@ -2586,7 +2586,10 @@ function _fazSetFooterShadow($doc) {
 function _fazRemoveDeadCookies(category) {
     const cookies = category.cookies || [];
     const currentCookieMap = ref._fazGetCookieMap();
-    for (const { cookieID, domain } of cookies) {
+    for (const { cookieID, domain, neverDelete } of cookies) {
+        // Declaring an infrastructure cookie changes its visibility only.
+        // This server-provided protection also outranks granular denials.
+        if (neverDelete === true) continue;
         // Never delete the plugin's own consent-mechanism cookies.
         if (cookieID === "fazcookie-consent" || cookieID === "fazVendorConsent" || cookieID === "euconsent-v2") continue;
         var serviceDecision = _fazGetServiceCookieDecision(cookieID);
@@ -6433,6 +6436,13 @@ function _fazCleanupRevokedCookies() {
 
     // Plugin cookies that must never be deleted.
     var protectedCookies = ['fazcookie-consent', 'fazVendorConsent', 'euconsent-v2'];
+    // The same protection applies to revocation cleanup, which walks the
+    // browser jar independently of _fazRemoveDeadCookies().
+    (_fazStore._categories || []).forEach(function (category) {
+        (category.cookies || []).forEach(function (cookie) {
+            if (cookie.neverDelete === true) protectedCookies.push(cookie.cookieID);
+        });
+    });
     var svcRevoked = false;
 
     var currentCookies = document.cookie.split(";");

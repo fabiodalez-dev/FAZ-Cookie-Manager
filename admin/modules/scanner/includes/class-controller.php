@@ -3431,10 +3431,11 @@ class Controller {
 		$this->save_cookies(
 			array(
 				array(
-					'name'     => $name,
-					'domain'   => isset( $row['domain'] ) ? (string) $row['domain'] : '',
-					'duration' => isset( $row['duration'] ) ? (string) $row['duration'] : 'session',
-					'category' => 'uncategorized',
+					'name'       => $name,
+					'domain'     => isset( $row['domain'] ) ? (string) $row['domain'] : '',
+					'duration'   => isset( $row['duration'] ) ? (string) $row['duration'] : 'session',
+					'category'   => 'uncategorized',
+					'discovered' => false,
 				),
 			)
 		);
@@ -3446,6 +3447,15 @@ class Controller {
 			update_option( \FazCookie\Frontend\Frontend::DECLARED_INTERNAL_OPTION, $declared, false );
 			\FazCookie\Frontend\Frontend::flush_declared_internal_cache();
 		}
+
+		// This is a manual declaration, including when the catalogue already
+		// contained the name. Old scan misses must no longer offer its deletion.
+		$this->clear_scan_observations( array( $name ) );
+		if ( class_exists( '\FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Renderer' ) ) {
+			\FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Renderer::clear_cookie_declaration_cache();
+		}
+		// Purge after the visibility override is stored, even without an INSERT.
+		do_action( 'faz_clear_cache' );
 
 		if ( empty( $remaining ) ) {
 			delete_option( self::SET_ASIDE_OPTION );
@@ -3693,9 +3703,9 @@ class Controller {
 	/**
 	 * Save discovered cookies to the database using the Cookie model.
 	 *
-	 * @param array $cookies Array of discovered cookie data arrays.
+	 * @param array $cookies Cookie data arrays; discovered=false marks an explicit declaration.
 	 * @return int Number of NEW cookie rows created (existing names are skipped,
-	 *             never overwritten — manual recategorisations always survive).
+	 *             except for promotion to manual; curated attributes are preserved).
 	 */
 	public function save_cookies( $cookies ) {
 		$created = 0;
@@ -3715,7 +3725,7 @@ class Controller {
 		$existing_names   = array();
 		if ( ! empty( $existing_cookies ) && is_array( $existing_cookies ) ) {
 			foreach ( $existing_cookies as $ec ) {
-				$existing_names[ $ec->name ] = true;
+				$existing_names[ $ec->name ] = $ec;
 			}
 		}
 
@@ -3752,6 +3762,16 @@ class Controller {
 				$logger->log( 'Processing: "' . $name . '"' );
 
 				if ( isset( $existing_names[ $name ] ) ) {
+					// A deliberate declaration promotes an existing discovery without
+					// overwriting its category, translations or measured attributes.
+					if ( isset( $cookie_data['discovered'] ) && false === $cookie_data['discovered']
+						&& ! empty( $existing_names[ $name ]->discovered ) ) {
+						$declared_cookie = new Cookie( $existing_names[ $name ] );
+						$declared_cookie->set_discovered( false );
+						if ( false === Cookie_Controller::get_instance()->update_item( $declared_cookie ) ) {
+							throw new \RuntimeException( 'FAZ: failed to persist declared cookie "' . $name . '".' );
+						}
+					}
 					$logger->log( '  SKIPPED: already exists in DB' );
 					continue; // Don't overwrite existing cookies.
 				}
@@ -3823,7 +3843,7 @@ class Controller {
 				$cookie->set_domain( sanitize_text_field( $cookie_data['domain'] ) );
 				$cookie->set_category( $category_id );
 				$cookie->set_type( 1 );
-				$cookie->set_discovered( true );
+				$cookie->set_discovered( ! isset( $cookie_data['discovered'] ) || false !== $cookie_data['discovered'] );
 
 				$result = Cookie_Controller::get_instance()->create_item( $cookie );
 				if ( false === $result ) {
