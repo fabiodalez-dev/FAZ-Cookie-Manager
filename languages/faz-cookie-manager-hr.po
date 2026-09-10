@@ -3981,7 +3981,7 @@ msgstr "Radijus kutova gumba"
 
 #: admin/views/banner.php:549
 msgid "Applies to every banner button — Accept, Reject, Customise and Do Not Sell — in the notice bar and the preference center. A length such as 0, 8px, 50px for pill-shaped, or 0.5rem. Leave empty to keep the shipped 2px."
-msgstr "Primjenjuje se na sve gumbe bannera — Prihvati, Odbij, Prilagodi i Do Not Sell — u traci s obavijesti i u centru za postavke. Duljina poput 0, 8px, 50px za oblik pilule ili 0.5rem. Ostavite prazno da zadržite isporučenih 2px."
+msgstr "Primjenjuje se na sve gumbe bannera — Prihvati, Odbij, Prilagodi i Do Not Sell — u traci s obavijesti i u centru postavki. Duljina poput 0, 8px, 50px za oblik pilule ili 0.5rem. Ostavite prazno da zadržite isporučenih 2px."
 
 #: admin/views/banner.php:570
 msgid "Consent Toggle Colours"
@@ -4206,7 +4206,7 @@ msgstr "Ugrađeni gumb privole ili poveznica u podnožju"
 
 #: admin/views/banner.php:905
 msgid "Place this shortcode in a Shortcode block in your footer, page or post to reopen consent preferences:"
-msgstr "Postavite ovaj kratki kod u blok Kratki kod u podnožju, na stranici ili u objavi kako biste ponovno otvorili postavke privole:"
+msgstr "Postavite ovaj shortcode u blok Shortcode u podnožju, na stranici ili u objavi kako biste ponovno otvorili postavke privole:"
 
 #: admin/views/banner.php:908
 msgid "The link uses your theme’s link styling. To use it instead of the floating widget, add it to a persistent footer on every page and turn off “Show revisit consent widget” above. When jurisdiction routing locks that switch on, the widget remains visible alongside the link."

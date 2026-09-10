@@ -412,7 +412,7 @@ msgstr "Deklarovat tento soubor cookie"
 
 #: admin/class-admin.php:618
 msgid "This name is normally hidden from the banner and the cookie policy. Declaring it will also make it visible there. It is never deleted either way."
-msgstr "Tento název je za normálních okolností v banneru a v zásadách používání souborů cookie skrytý. Jeho deklarováním jej zviditelníte i tam. V žádném případě nebude odstraněn."
+msgstr "Tento název je za normálních okolností v banneru a v zásadách cookies skrytý. Jeho deklarováním jej zviditelníte i tam. V žádném případě nebude odstraněn."
 
 #. translators: %s: cookie name.
 #: admin/class-admin.php:620
