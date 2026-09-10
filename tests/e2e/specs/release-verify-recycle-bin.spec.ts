@@ -457,12 +457,20 @@ test.describe('Release verify — cookies recycle bin (bulk-delete / restore-del
       const del = await bulkDelete(page, nonce, [id]);
       expect(del.restorable).toBe(1);
 
-      // What the server says the age is — the bar must render THIS string,
-      // which keeps the assertion locale-proof.
+      // The server computes the age relative to NOW, so it keeps advancing:
+      // read here it is "1 second", and by the time the page below has
+      // rendered the same endpoint answers "2 seconds". Asserting the bar
+      // contains the string captured here compares two independent
+      // clock-dependent computations and passes only when both happen to land
+      // in the same second — which is why this test was intermittently red and
+      // reproducibly red once the page load reliably took longer than a tick.
+      // What must hold is that the server produced an age at all, and that the
+      // bar rendered the AGED sentence rather than the un-aged fallback.
       const batches = await getDeletedBatches(page, nonce);
       expect(batches.batch_count).toBe(1);
       const age = batches.batches[0].deleted_at_human;
       expect(age.length, 'server computed a human age for the bar to render').toBeGreaterThan(0);
+      expect(age, 'the age the server computed is quantified, not a vague word').toMatch(/\d/);
 
       // Fresh page load: the bar is read from the server on load, precisely
       // so an admin who navigated away still sees the undo affordance.
@@ -471,7 +479,15 @@ test.describe('Release verify — cookies recycle bin (bulk-delete / restore-del
       await expect(bar, 'restore bar becomes visible when the bin holds a batch').toBeVisible({ timeout: 20_000 });
       const text = (await bar.innerText()).trim();
       expect(text, 'bar shows the batch size').toContain('1');
-      expect(text, 'bar renders the server-computed age instead of a bare "recently"').toContain(age);
+      // The distinction this test exists to guard: cookies.js renders the aged
+      // sentence "(deleted <age> ago)" only when the server supplied
+      // deleted_at_human, and falls back to "N recently deleted cookie(s)"
+      // when it did not. Discriminating on those two shapes tests the same
+      // thing the exact-string comparison was reaching for, without tying the
+      // assertion to the instant the age was read.
+      expect(text, 'bar renders the server-computed age, not the un-aged fallback').toMatch(/deleted\s+.+\s+ago/);
+      expect(text, 'and the age it renders is quantified').toMatch(/deleted\s+\d+\s+\S+\s+ago/);
+      expect(text, 'the bare "recently" wording is the fallback and must not appear').not.toContain('recently');
       await expect(bar.locator('button.faz-restore-deleted'), 'the Undo action is offered next to the age').toBeVisible();
     } finally {
       await deleteCookiesByPrefix(page, nonce, prefix);
