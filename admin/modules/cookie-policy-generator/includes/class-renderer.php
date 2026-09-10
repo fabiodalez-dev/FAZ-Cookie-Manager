@@ -79,6 +79,18 @@ class Renderer {
 	 */
 	private static $public_cookie_rows_cache = null;
 
+	/** Invalidate declarations after an administrator changes their visibility. */
+	public static function clear_cookie_declaration_cache() {
+		$languages = array_unique( array_merge( faz_selected_languages(), array( faz_current_language() ) ) );
+		foreach ( $languages as $language ) {
+			wp_cache_delete( 'faz_cookie_policy_list_' . $language, 'faz_cookie_policy' );
+			wp_cache_delete( 'faz_cookie_policy_transfers_' . $language, 'faz_cookie_policy' );
+		}
+		self::$cookie_list_cache        = array();
+		self::$transfer_cache           = array();
+		self::$public_cookie_rows_cache = null;
+	}
+
 	/**
 	 * Public entry point used by the shortcode handler.
 	 *
@@ -811,7 +823,7 @@ class Renderer {
 			}
 			$name = (string) ( $row['cookie_name'] ?? '' );
 			return ! class_exists( '\\FazCookie\\Frontend\\Frontend' )
-				|| ! \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name );
+				|| ! \FazCookie\Frontend\Frontend::is_declaration_suppressed( $name );
 		} ) );
 
 		self::$public_cookie_rows_cache = $rows;

@@ -158,6 +158,15 @@ defined( 'ABSPATH' ) || exit;
 						// coverage is headers-only and the strip says so.
 						?>
 						<div id="faz-visitor-check-bar" style="display:none" class="faz-stale-bar" role="status" aria-live="polite" aria-atomic="true"></div>
+						<?php
+						// The observations the last import set aside, each with
+						// the domain and lifetime the scan measured and a button
+						// to declare it. Whether the administrator's browser and
+						// a visitor's browser receive the same cookie depends on
+						// site configuration no crawl can observe (#243), so the
+						// decision is offered here rather than guessed.
+						?>
+						<div id="faz-set-aside-bar" style="display:none" class="faz-stale-bar" role="status" aria-live="polite" aria-atomic="true"></div>
 						<div class="faz-table-wrap">
 						<table class="faz-table" id="faz-cookies-table">
 							<thead>

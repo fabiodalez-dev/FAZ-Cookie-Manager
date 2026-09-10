@@ -108,6 +108,26 @@ class Controller {
 	const VISITOR_CHECK_HISTORY_LIMIT = 50;
 
 	/**
+	 * Observations the last import set aside: seen in the administrator's own
+	 * browser, never attributed to a scanned page, therefore reported and not
+	 * declared.
+	 *
+	 * The names alone already reached the admin (`jar_only_cookies` in the
+	 * import response). What did not survive were the ATTRIBUTES the scan had
+	 * measured — domain and lifetime — so the only offer the product could make
+	 * was "add it by hand with Add Cookie", which asks someone to retype
+	 * evidence the scanner is already holding. Keeping the rows is what turns
+	 * that dead end into a one-click decision.
+	 *
+	 * Replaced wholesale by each import: this describes the LAST scan, not a
+	 * history. Values are never present here — the capture never stores them.
+	 */
+	const SET_ASIDE_OPTION = 'faz_scan_set_aside_cookies';
+
+	/** Rows kept in SET_ASIDE_OPTION. A bucket, not a log. */
+	const SET_ASIDE_LIMIT = 100;
+
+	/**
 	 * How many consecutive FULL scans a discovered cookie has gone unobserved.
 	 *
 	 * Keyed "name|domain". A single scan missing a cookie proves nothing: a site
@@ -3283,6 +3303,169 @@ class Controller {
 	}
 
 	/**
+	 * Keep the rows the import set aside, not just their names.
+	 *
+	 * The names already reached the administrator as `jar_only_cookies`, with
+	 * copy inviting them to "add it manually with Add Cookie" — that is, to
+	 * retype a domain and a lifetime the scan had already measured and then
+	 * thrown away. Retyping evidence is how a judgement never gets made, and
+	 * issue #243 turns on a judgement only the administrator can make: whether
+	 * a cookie the scan saw in the admin's browser also reaches visitors.
+	 *
+	 * Structural WordPress cookies are dropped here rather than stored and
+	 * refused later. An offer that cannot be accepted is worse than no offer:
+	 * it invites a decision and then overrules it.
+	 *
+	 * @param array[] $rows Set-aside observation rows.
+	 * @return void
+	 */
+	public function remember_set_aside_cookies( $rows ) {
+		$kept = array();
+		foreach ( (array) $rows as $row ) {
+			if ( ! is_array( $row ) || empty( $row['name'] ) ) {
+				continue;
+			}
+			$name = sanitize_text_field( (string) $row['name'] );
+			if ( '' === $name || isset( $kept[ $name ] ) ) {
+				continue;
+			}
+			if ( class_exists( '\FazCookie\Frontend\Frontend' )
+				&& \FazCookie\Frontend\Frontend::internal_cookie_is_structural( $name ) ) {
+				continue;
+			}
+			$kept[ $name ] = array(
+				'name'     => $name,
+				'domain'   => isset( $row['domain'] ) ? sanitize_text_field( (string) $row['domain'] ) : '',
+				'duration' => isset( $row['duration'] ) ? sanitize_text_field( (string) $row['duration'] ) : 'session',
+				'source'   => isset( $row['source'] ) ? sanitize_text_field( (string) $row['source'] ) : '',
+			);
+			if ( count( $kept ) >= self::SET_ASIDE_LIMIT ) {
+				break;
+			}
+		}
+		if ( empty( $kept ) ) {
+			delete_option( self::SET_ASIDE_OPTION );
+			return;
+		}
+		update_option( self::SET_ASIDE_OPTION, array_values( $kept ), false );
+	}
+
+	/**
+	 * The set-aside rows still awaiting a decision, sanitized for REST/UI use.
+	 *
+	 * Each row carries `suppressed`: true when declaring it would additionally
+	 * have to lift the name-based display guard. The UI needs that to say what
+	 * the button will actually do, because for those names "declare" means two
+	 * things at once and the administrator should be told which.
+	 *
+	 * @return array[]
+	 */
+	public function set_aside_cookies() {
+		$stored = get_option( self::SET_ASIDE_OPTION, array() );
+		$out    = array();
+		foreach ( (array) $stored as $row ) {
+			if ( ! is_array( $row ) || empty( $row['name'] ) ) {
+				continue;
+			}
+			$name = sanitize_text_field( (string) $row['name'] );
+			if ( '' === $name ) {
+				continue;
+			}
+			$suppressed = class_exists( '\FazCookie\Frontend\Frontend' )
+				&& \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name );
+			$out[] = array(
+				'name'       => $name,
+				'domain'     => isset( $row['domain'] ) ? sanitize_text_field( (string) $row['domain'] ) : '',
+				'duration'   => isset( $row['duration'] ) ? sanitize_text_field( (string) $row['duration'] ) : 'session',
+				'suppressed' => (bool) $suppressed,
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Promote one set-aside observation into the declaration.
+	 *
+	 * Two things have to happen together, and doing only the first is the trap
+	 * this method exists to avoid. Writing the catalogue row is not enough for
+	 * a name the display guard hides: `_lscache_vary` — the cookie the issue is
+	 * actually about — is on Frontend::is_wp_internal_cookie()'s exact list, so
+	 * a row declared without lifting that guard would be stored, reported as
+	 * declared, and shown to nobody.
+	 *
+	 * What is NOT lifted is the shredder. is_always_allowed_cookie_name() still
+	 * consults the unmodified is_wp_internal_cookie(), so a declared cache-vary
+	 * cookie is described to visitors and still never deleted. Declaring adds
+	 * transparency and can never arm a deletion.
+	 *
+	 * @param string $name Cookie name to declare.
+	 * @return array{status:string,name:string}
+	 */
+	public function declare_set_aside_cookie( $name ) {
+		$name = sanitize_text_field( (string) $name );
+		if ( '' === $name ) {
+			return array( 'status' => 'invalid', 'name' => '' );
+		}
+		if ( class_exists( '\FazCookie\Frontend\Frontend' )
+			&& \FazCookie\Frontend\Frontend::internal_cookie_is_structural( $name ) ) {
+			// Unreachable through the UI — remember_set_aside_cookies() never
+			// offers these — but the route is addressable directly, and the
+			// refusal belongs where the write is, not only where the list is.
+			return array( 'status' => 'structural', 'name' => $name );
+		}
+
+		$stored    = (array) get_option( self::SET_ASIDE_OPTION, array() );
+		$row       = null;
+		$remaining = array();
+		foreach ( $stored as $candidate ) {
+			if ( is_array( $candidate ) && isset( $candidate['name'] ) && $name === (string) $candidate['name'] ) {
+				$row = $candidate;
+				continue;
+			}
+			$remaining[] = $candidate;
+		}
+		if ( null === $row ) {
+			return array( 'status' => 'unknown', 'name' => $name );
+		}
+
+		$this->save_cookies(
+			array(
+				array(
+					'name'       => $name,
+					'domain'     => isset( $row['domain'] ) ? (string) $row['domain'] : '',
+					'duration'   => isset( $row['duration'] ) ? (string) $row['duration'] : 'session',
+					'category'   => 'uncategorized',
+					'discovered' => false,
+				),
+			)
+		);
+
+		if ( class_exists( '\FazCookie\Frontend\Frontend' )
+			&& \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name ) ) {
+			$declared = (array) get_option( \FazCookie\Frontend\Frontend::DECLARED_INTERNAL_OPTION, array() );
+			$declared = array_values( array_unique( array_merge( $declared, array( $name ) ) ) );
+			update_option( \FazCookie\Frontend\Frontend::DECLARED_INTERNAL_OPTION, $declared, false );
+			\FazCookie\Frontend\Frontend::flush_declared_internal_cache();
+		}
+
+		// This is a manual declaration, including when the catalogue already
+		// contained the name. Old scan misses must no longer offer its deletion.
+		$this->clear_scan_observations( array( $name ) );
+		if ( class_exists( '\FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Renderer' ) ) {
+			\FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Renderer::clear_cookie_declaration_cache();
+		}
+		// Purge after the visibility override is stored, even without an INSERT.
+		do_action( 'faz_clear_cache' );
+
+		if ( empty( $remaining ) ) {
+			delete_option( self::SET_ASIDE_OPTION );
+		} else {
+			update_option( self::SET_ASIDE_OPTION, array_values( $remaining ), false );
+		}
+		return array( 'status' => 'declared', 'name' => $name );
+	}
+
+	/**
 	 * The one canonical form of a cookie identity, shared by client and server.
 	 *
 	 * This MUST stay byte-identical to getStaleKey()/normalizeDomain() in
@@ -3520,9 +3703,9 @@ class Controller {
 	/**
 	 * Save discovered cookies to the database using the Cookie model.
 	 *
-	 * @param array $cookies Array of discovered cookie data arrays.
+	 * @param array $cookies Cookie data arrays; discovered=false marks an explicit declaration.
 	 * @return int Number of NEW cookie rows created (existing names are skipped,
-	 *             never overwritten — manual recategorisations always survive).
+	 *             except for promotion to manual; curated attributes are preserved).
 	 */
 	public function save_cookies( $cookies ) {
 		$created = 0;
@@ -3542,7 +3725,7 @@ class Controller {
 		$existing_names   = array();
 		if ( ! empty( $existing_cookies ) && is_array( $existing_cookies ) ) {
 			foreach ( $existing_cookies as $ec ) {
-				$existing_names[ $ec->name ] = true;
+				$existing_names[ $ec->name ] = $ec;
 			}
 		}
 
@@ -3579,6 +3762,16 @@ class Controller {
 				$logger->log( 'Processing: "' . $name . '"' );
 
 				if ( isset( $existing_names[ $name ] ) ) {
+					// A deliberate declaration promotes an existing discovery without
+					// overwriting its category, translations or measured attributes.
+					if ( isset( $cookie_data['discovered'] ) && false === $cookie_data['discovered']
+						&& ! empty( $existing_names[ $name ]->discovered ) ) {
+						$declared_cookie = new Cookie( $existing_names[ $name ] );
+						$declared_cookie->set_discovered( false );
+						if ( false === Cookie_Controller::get_instance()->update_item( $declared_cookie ) ) {
+							throw new \RuntimeException( 'FAZ: failed to persist declared cookie "' . $name . '".' );
+						}
+					}
 					$logger->log( '  SKIPPED: already exists in DB' );
 					continue; // Don't overwrite existing cookies.
 				}
@@ -3650,7 +3843,7 @@ class Controller {
 				$cookie->set_domain( sanitize_text_field( $cookie_data['domain'] ) );
 				$cookie->set_category( $category_id );
 				$cookie->set_type( 1 );
-				$cookie->set_discovered( true );
+				$cookie->set_discovered( ! isset( $cookie_data['discovered'] ) || false !== $cookie_data['discovered'] );
 
 				$result = Cookie_Controller::get_instance()->create_item( $cookie );
 				if ( false === $result ) {

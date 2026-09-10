@@ -566,13 +566,14 @@ class Banner_Rest {
 				continue;
 			}
 			$name = isset( $item->name ) ? sanitize_text_field( (string) $item->name ) : '';
-			if ( \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name ) ) {
+			if ( \FazCookie\Frontend\Frontend::is_declaration_suppressed( $name ) ) {
 				continue;
 			}
 			$cookies[] = array(
-				'cookieID' => $name,
-				'domain'   => isset( $item->domain ) ? sanitize_text_field( (string) $item->domain ) : '',
-				'provider' => isset( $item->url_pattern ) ? sanitize_text_field( (string) $item->url_pattern ) : '',
+				'cookieID'    => $name,
+				'neverDelete' => \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name ),
+				'domain'      => isset( $item->domain ) ? sanitize_text_field( (string) $item->domain ) : '',
+				'provider'    => isset( $item->url_pattern ) ? sanitize_text_field( (string) $item->url_pattern ) : '',
 			);
 		}
 		return $cookies;

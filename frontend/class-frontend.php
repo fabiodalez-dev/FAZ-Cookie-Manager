@@ -6019,6 +6019,111 @@ class Frontend {
 	}
 
 	/**
+	 * Names an administrator has explicitly declared despite the name-based
+	 * suppression above. Written only by the scanner's set-aside review.
+	 */
+	const DECLARED_INTERNAL_OPTION = 'faz_declared_internal_cookies';
+
+	/** Request-lifetime cache for DECLARED_INTERNAL_OPTION. */
+	private static $declared_internal_cache = null;
+
+	/**
+	 * Whether suppression of this name is a FACT about WordPress rather than a
+	 * guess about the site.
+	 *
+	 * is_wp_internal_cookie() answers two different questions with one list:
+	 * "never shred this" and "never show this". For authentication and
+	 * administrative state the two answers coincide and both are certain — a
+	 * logged-out visitor structurally cannot receive `wordpress_logged_in_*`,
+	 * so declaring it would misdescribe the site in the opposite direction.
+	 * Those stay non-negotiable here.
+	 *
+	 * Everything else on that list is site-dependent, which is the whole of
+	 * issue #243: `_lscache_vary` never reaches an anonymous visitor on a
+	 * plain blog and reaches every one of them on a WooCommerce site with a
+	 * cart, and `comment_author_*`, `wp-postpass_`, `wpdiscuz_nonce_` and
+	 * `wordpress_test_cookie` are all set for people who are not logged in at
+	 * all. Suppressing those is a reasonable default, not a fact, so an
+	 * administrator who has looked at their own site may overrule it.
+	 *
+	 * @param string $name Cookie name.
+	 * @return bool
+	 */
+	public static function internal_cookie_is_structural( $name ) {
+		$prefixes = array(
+			'wordpress_logged_in_',
+			'wordpress_sec_',
+			'wp-settings-',
+			'wp-settings-time-',
+		);
+		foreach ( $prefixes as $prefix ) {
+			if ( 0 === strpos( (string) $name, $prefix ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether this cookie must be kept out of everything a visitor reads.
+	 *
+	 * The display-side twin of is_wp_internal_cookie(), and deliberately a
+	 * SEPARATE predicate rather than a change to it. is_wp_internal_cookie()
+	 * still governs is_always_allowed_cookie_name(), so the invariant that
+	 * matters for site breakage is strengthened rather than relaxed: these
+	 * cookies are never shredded whether or not they are declared. Declaring
+	 * one only ever adds transparency; it can never arm a deletion.
+	 *
+	 * Default behaviour is byte-identical to before — every name the old
+	 * predicate hid is still hidden until an administrator says otherwise
+	 * about that specific name.
+	 *
+	 * @param string $name Cookie name.
+	 * @return bool
+	 */
+	public static function is_declaration_suppressed( $name ) {
+		$name = (string) $name;
+		if ( ! self::is_wp_internal_cookie( $name ) ) {
+			return false;
+		}
+		if ( self::internal_cookie_is_structural( $name ) ) {
+			return true;
+		}
+		return ! in_array( $name, self::declared_internal_cookies(), true );
+	}
+
+	/**
+	 * The administrator's per-name overrides, read once per request.
+	 *
+	 * @return string[]
+	 */
+	public static function declared_internal_cookies() {
+		if ( null !== self::$declared_internal_cache ) {
+			return self::$declared_internal_cache;
+		}
+		$stored = get_option( self::DECLARED_INTERNAL_OPTION, array() );
+		$names  = array();
+		foreach ( (array) $stored as $stored_name ) {
+			$stored_name = sanitize_text_field( (string) $stored_name );
+			// An override is only meaningful for a name the default would hide,
+			// and it must never reach the structural tier — re-checked on READ
+			// as well as on write, so a row that predates this rule (or arrives
+			// by a route that skipped the guard) cannot take effect.
+			if ( '' === $stored_name || self::internal_cookie_is_structural( $stored_name ) ) {
+				continue;
+			}
+			$names[] = $stored_name;
+		}
+		self::$declared_internal_cache = array_values( array_unique( $names ) );
+		return self::$declared_internal_cache;
+	}
+
+	/** Drop the request-lifetime override cache. For tests and after a write. */
+	public static function flush_declared_internal_cache() {
+		self::$declared_internal_cache = null;
+	}
+
+	/**
 	 * Assemble the per-category cookie groups exposed to the frontend banner.
 	 *
 	 * Skips hidden and `wordpress-internal` categories, then for each visible
@@ -6092,14 +6197,15 @@ class Frontend {
 				continue;
 			}
 			$name = isset( $item->name ) ? sanitize_text_field( (string) $item->name ) : '';
-			if ( self::is_wp_internal_cookie( $name ) ) {
+			if ( self::is_declaration_suppressed( $name ) ) {
 				continue;
 			}
 			$provider = isset( $item->url_pattern ) ? sanitize_text_field( (string) $item->url_pattern ) : '';
 			$cookies[] = array(
-				'cookieID' => $name,
-				'domain'   => isset( $item->domain ) ? sanitize_text_field( (string) $item->domain ) : '',
-				'provider' => $provider,
+				'cookieID'    => $name,
+				'neverDelete' => self::is_wp_internal_cookie( $name ),
+				'domain'      => isset( $item->domain ) ? sanitize_text_field( (string) $item->domain ) : '',
+				'provider'    => $provider,
 			);
 			if ( '' !== $provider && 'necessary' !== $cat_slug ) {
 				if ( ! isset( $this->providers[ $provider ] ) ) {
@@ -6133,13 +6239,14 @@ class Frontend {
 		foreach ( $items as $item ) {
 			$cookie = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie( $item );
 			// Skip WordPress-internal cookies — visitors never receive them.
-			if ( self::is_wp_internal_cookie( $cookie->get_name() ) ) {
+			if ( self::is_declaration_suppressed( $cookie->get_name() ) ) {
 				continue;
 			}
 			$cookies[] = array(
-				'cookieID' => sanitize_text_field( $cookie->get_name() ),
-				'domain'   => sanitize_text_field( $cookie->get_domain() ),
-				'provider' => sanitize_text_field( $cookie->get_url_pattern() ),
+				'cookieID'    => sanitize_text_field( $cookie->get_name() ),
+				'neverDelete' => self::is_wp_internal_cookie( $cookie->get_name() ),
+				'domain'      => sanitize_text_field( $cookie->get_domain() ),
+				'provider'    => sanitize_text_field( $cookie->get_url_pattern() ),
 			);
 			$provider  = $cookie->get_url_pattern();
 			if ( '' !== $provider && 'necessary' !== $cat_slug ) {

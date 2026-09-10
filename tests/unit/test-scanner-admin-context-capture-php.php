@@ -563,6 +563,13 @@ namespace {
 				'jar'      => $jar_cookies,
 			);
 		}
+		// Set-aside rows kept for the Cookies page to offer a decision on (#243).
+		// Recording, not stubbed, for the same reason begin_visitor_check() is:
+		// a stub would make "the import keeps the ROWS, not only the names"
+		// structurally unable to fail, and the names alone are exactly what the
+		// import already had and could not act on.
+		public $set_aside = null;
+		public function remember_set_aside_cookies( $rows ) { $this->set_aside = $rows; }
 		public function save_scan_result( $cookies, $pages, $scripts, $metrics ) {
 			if ( $this->fail_next_save ) {
 				$this->fail_next_save = false;
@@ -606,6 +613,32 @@ namespace {
 	check( in_array( 'thirdparty_admin_ui', $jar_names, true ), 'the wp-admin observation is reported instead of dropped in silence' );
 	check( in_array( 'tk_ai', $jar_names, true ), 'an unattributable jar name is still reported' );
 	check( ! in_array( 'tk_ai', $persisted_names, true ), 'an unattributable jar name is still not declared' );
+
+	// #243. Reporting the NAMES is what this endpoint already did, and it is
+	// why the only offer the Cookies page could make was "retype it by hand":
+	// the domain and lifetime the scan measured died with the response. The
+	// rows must therefore be handed on, and asserted on their ATTRIBUTES —
+	// a check that only counted names would pass against the old behaviour.
+	check( is_array( $fake->set_aside ), 'the import hands the set-aside rows on instead of only counting them' );
+	$set_aside_by_name = array();
+	foreach ( (array) $fake->set_aside as $set_aside_row ) {
+		if ( is_array( $set_aside_row ) && isset( $set_aside_row['name'] ) ) {
+			$set_aside_by_name[ $set_aside_row['name'] ] = $set_aside_row;
+		}
+	}
+	check(
+		isset( $set_aside_by_name['thirdparty_admin_ui'] ),
+		'a wp-admin observation is among the rows offered for a decision'
+	);
+	check(
+		isset( $set_aside_by_name['thirdparty_admin_ui']['domain'] )
+			&& '' !== $set_aside_by_name['thirdparty_admin_ui']['domain'],
+		'and carries the domain the scan measured, so nothing has to be retyped'
+	);
+	check(
+		! isset( $set_aside_by_name['shop_session'] ),
+		'a declared cookie is not also offered as an undecided one'
+	);
 
 	// The ledger handoff, asserted rather than merely recorded. The double has
 	// collected begin_visitor_check()'s arguments since it was written, but

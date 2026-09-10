@@ -122,9 +122,16 @@ const allowedJarShapes = [
   // anonymous replay can diff against it. It is a read, not a merge — the
   // declaration path still sees only $raw_cookies.
   /^\$jar_cookies$/,
+  // Second read-only handoff, by value, for the same reason as the ledger one
+  // above: the Cookies page offers a decision on these rows (#243) and needs
+  // the domain and lifetime the scan measured, which the names-only response
+  // field threw away. Persisting them is a READ of the bucket — the
+  // declaration path still sees only $raw_cookies, and a row leaves the bucket
+  // for the catalogue only when an administrator says so.
+  /^\$this->controller->remember_set_aside_cookies\( \$jar_cookies \);$/,
 ];
-ok(jarLines.length === 5 && jarLines.every((line) => allowedJarShapes.some((shape) => shape.test(line))),
-  'the bucket is only filled, iterated, and handed to the ledger — never merged into the imported set');
+ok(jarLines.length === 6 && jarLines.every((line) => allowedJarShapes.some((shape) => shape.test(line))),
+  'the bucket is only filled, iterated, and handed to the two readers — never merged into the imported set');
 
   // The shape above allows a BARE `$jar_cookies` token and says nothing about
   // who receives it, so the comment's claim ("handed to begin_visitor_check")
