@@ -26,10 +26,24 @@ const SECTION_FILTER = args.find(a => a.startsWith('--section='))?.split('=')[1]
 const ADMIN_USER = process.env.WP_ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.WP_ADMIN_PASS || 'admin';
 
-// Technical cookies that don't require consent
+// Technical cookies that don't require consent.
+//
+// The three FAZ entries are the plugin's own consent-mechanism cookies, and
+// they are listed here because the product lists exactly these three in three
+// separate places (frontend/js/script.js: the revoke sweep, the per-category
+// shredder, and _fazCleanupRevokedCookies' protectedCookies) as the ones it
+// must never delete. This allowlist knew only fazcookie-consent, so once IAB
+// TCF was actually enabled on the test site, ZA09 reported the refusal as
+// leaving non-essential cookies behind.
+//
+// It has to be this way round on the merits, not just for symmetry:
+// euconsent-v2 IS the TC string, and it is how the downstream supply chain
+// learns the visitor said no. Deleting it after a rejection would discard the
+// refusal — the opposite of what ZA09 exists to protect.
 const TECHNICAL_COOKIE_RE = [
 	/^wordpress_/i, /^wp-settings/i, /^PHPSESSID$/i,
-	/^fazcookie-consent$/, /^wp_lang$/i, /^wordpress_test_cookie$/i,
+	/^fazcookie-consent$/, /^fazVendorConsent$/, /^euconsent-v2$/,
+	/^wp_lang$/i, /^wordpress_test_cookie$/i,
 ];
 const isTechnicalCookie = (name) => TECHNICAL_COOKIE_RE.some(re => re.test(name));
 
@@ -49,6 +63,26 @@ function test(id, pass, detail = '') {
 	const icon = pass ? '\x1b[32m PASS\x1b[0m' : '\x1b[31m FAIL\x1b[0m';
 	const info = detail ? ` — ${detail}` : '';
 	console.log(`  ${icon}  ${id}${info}`);
+}
+
+/**
+ * Record that a group of assertions was NOT run.
+ *
+ * This exists because the alternative was worse than an omission. A section
+ * gated on a feature being enabled used to register `test(id, true, '… —
+ * skipped')`, which is a pass whose only assertion is the literal `true`: it
+ * entered the total as a verified test. With IAB TCF disabled the suite
+ * reported 111/111 green; with TCF and GCM actually enabled it runs 182
+ * assertions. Seventy-one were never exercised, and the section that should
+ * have covered them contributed a green.
+ *
+ * A skip is not a pass. It is counted separately, printed differently, and
+ * named again in the summary, so the total says what was actually checked and
+ * a number can no longer improve by turning a feature off.
+ */
+function skip(id, reason) {
+	results.push({ section: currentSection, id, pass: true, skipped: true, detail: reason });
+	console.log(`  \x1b[33m SKIP\x1b[0m  ${id} — ${reason}`);
 }
 
 // --- Helpers ---
@@ -950,7 +984,7 @@ async function testIABTCF(browser) {
 
 	const tcfAvailable = await page.evaluate(() => typeof window.__tcfapi === 'function');
 	if (!tcfAvailable) {
-		test('T01-T12', true, 'TCF not enabled in settings — skipped');
+		skip('T01-T18', 'TCF not enabled in settings (iab.enabled + cmp_id >= 2)');
 		await ctx.close();
 		return;
 	}
@@ -1100,7 +1134,26 @@ async function testIABTCF(browser) {
 			window.__tcfapi('getTCData', 2, (data, success) => resolve({ data, success }));
 		}));
 		const rpc = afterReject?.data?.purpose?.consents || {};
-		test('T08 After reject: Purpose 1 still granted (necessary)', rpc['1'] === true);
+		// TCF Purpose 1 is "Store and/or access information on a device" — a
+		// CONSENT purpose, not a strictly-necessary exemption. This assertion
+		// used to require it to stay GRANTED after a Reject, describing it as
+		// "(necessary)", which conflates the plugin's own necessary-cookies
+		// concept with a TCF purpose. The product denies it, correctly.
+		//
+		// The direction is why this mattered rather than merely being wrong:
+		// satisfying the old expectation would have signalled consent to device
+		// storage that the visitor had just refused. A red compliance test that
+		// argues for a violation recruits whoever fixes it to break the product.
+		//
+		// purposeOneTreatment is the only thing that legitimately changes this,
+		// and it means Purpose 1 is handled outside the TCF signal entirely —
+		// so it is read here rather than assumed.
+		const p1Treatment = afterReject?.data?.purposeOneTreatment === true;
+		test(
+			'T08 After reject: Purpose 1 denied (consent purpose, not an exemption)',
+			p1Treatment ? true : rpc['1'] === false,
+			p1Treatment ? 'purposeOneTreatment=true — Purpose 1 signalled outside TCF' : 'p1=' + JSON.stringify(rpc['1'])
+		);
 		test('T08b After reject: Purpose 2 denied', rpc['2'] === false);
 		test('T08c After reject: Purpose 3 denied', rpc['3'] === false);
 		test('T08d After reject: Purpose 4 denied', rpc['4'] === false);
@@ -2613,18 +2666,31 @@ console.log('='.repeat(60));
 const sections = [...new Set(results.map(r => r.section))];
 let totalPass = 0, totalFail = 0;
 
+let totalSkip = 0;
+
 for (const s of sections) {
 	const sectionResults = results.filter(r => r.section === s);
-	const pass = sectionResults.filter(r => r.pass).length;
+	const skipped = sectionResults.filter(r => r.skipped).length;
+	const pass = sectionResults.filter(r => r.pass && !r.skipped).length;
 	const fail = sectionResults.filter(r => !r.pass).length;
 	totalPass += pass;
 	totalFail += fail;
+	totalSkip += skipped;
 	const icon = fail === 0 ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
-	console.log(`  ${icon} ${s}: ${pass}/${pass + fail}`);
+	const skipNote = skipped ? ` \x1b[33m(${skipped} skipped)\x1b[0m` : '';
+	console.log(`  ${icon} ${s}: ${pass}/${pass + fail}${skipNote}`);
 }
 
 console.log('\n' + '-'.repeat(60));
 console.log(`  TOTAL: \x1b[${totalFail === 0 ? '32' : '31'}m${totalPass}/${totalPass + totalFail}\x1b[0m tests passed`);
+if (totalSkip > 0) {
+	// Named, not folded into the total. A run that skipped a section is not
+	// the same run as one that verified it, and the summary has to say so.
+	console.log(`  \x1b[33m${totalSkip} assertion group(s) SKIPPED — not verified\x1b[0m`);
+	results.filter(r => r.skipped).forEach(r => {
+		console.log(`  \x1b[33m•\x1b[0m [${r.section}] ${r.id} — ${r.detail}`);
+	});
+}
 
 if (totalFail > 0) {
 	console.log('\n  FAILURES:');
