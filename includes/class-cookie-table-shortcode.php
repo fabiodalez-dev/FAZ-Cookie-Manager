@@ -290,7 +290,7 @@ class Cookie_Table_Shortcode {
 		// Exclude individual WP-internal cookies (may appear under "necessary" or other categories).
 		$cookies = array_filter( $cookies, function( $cookie ) {
 			$name = isset( $cookie->name ) ? $cookie->name : '';
-			return ! \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name );
+			return ! \FazCookie\Frontend\Frontend::is_declaration_suppressed( $name );
 		} );
 
 		if ( empty( $cookies ) ) {

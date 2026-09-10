@@ -58,6 +58,7 @@
 		loadCookies();
 		updateRestoreBar();
 		updateVisitorCheckBar();
+		updateSetAsideBar();
 		// A capture session opened before this page load (another tab, or a
 		// crawl a reload killed) is invisible without asking the server.
 		refreshActiveScanSession();
@@ -697,7 +698,7 @@
 		details.appendChild(summary);
 
 		var explain = document.createElement('p');
-		explain.textContent = fazI18n('cookies.jarOnlyExplain', 'If you recognise one as a cookie your site really sets, add it manually with Add Cookie.');
+		explain.textContent = fazI18n('cookies.jarOnlyExplain', 'If you recognise one as a cookie your site really sets, declare it in the list below — the scan already recorded its domain and lifetime.');
 		details.appendChild(explain);
 
 		var list = document.createElement('ul');
@@ -776,6 +777,99 @@
 		}).catch(function () {
 			bar.style.display = 'none';
 		});
+	}
+
+	/**
+	 * Offer a decision on the observations the last import set aside.
+	 *
+	 * The scan sees the site through one pair of eyes — a logged-in
+	 * administrator's — and cannot tell whether a cookie it saw there also
+	 * reaches visitors. That depends on site configuration no crawl observes:
+	 * LiteSpeed's `_lscache_vary` never reaches an anonymous visitor on a plain
+	 * blog and reaches every one of them on a shop with a cart. So the product
+	 * asks instead of guessing (#243).
+	 *
+	 * Until now the only offer was "add it manually with Add Cookie", which
+	 * asks someone to retype a domain and a lifetime the scanner had already
+	 * measured. The rows are kept server-side now, so this is one click.
+	 *
+	 * Rows flagged `suppressed` need the extra sentence: for those, declaring
+	 * also lifts the name-based rule that keeps them out of the banner and the
+	 * policy. The button must say what it will do.
+	 */
+	function updateSetAsideBar() {
+		var bar = document.getElementById('faz-set-aside-bar');
+		if (!bar) { return; }
+		FAZ.get('scans/info').then(function (info) {
+			var rows = (info && Array.isArray(info.set_aside_cookies)) ? info.set_aside_cookies : [];
+			renderSetAsideBar(bar, rows);
+		}).catch(function () {
+			bar.textContent = '';
+			bar.style.display = 'none';
+		});
+	}
+
+	function renderSetAsideBar(bar, rows) {
+		bar.textContent = '';
+		if (!rows.length) {
+			bar.style.display = 'none';
+			return;
+		}
+		bar.style.display = '';
+
+		var title = document.createElement('strong');
+		title.textContent = fazI18n('cookies.setAsideTitle', '%d cookie(s) were seen in your browser during the last scan but could not be attributed to a scanned page:')
+			.replace('%d', function () { return String(rows.length); });
+		bar.appendChild(title);
+
+		var explain = document.createElement('p');
+		explain.className = 'faz-help';
+		explain.textContent = fazI18n('cookies.setAsideExplain', 'A scan runs from your logged-in session, so it cannot tell whether visitors receive these too — that depends on how your site is configured. Declare the ones you know reach visitors; leave the rest.');
+		bar.appendChild(explain);
+
+		var list = document.createElement('ul');
+		rows.forEach(function (row) {
+			var name = (row && typeof row.name === 'string') ? row.name : '';
+			if (!name) { return; }
+			var li = document.createElement('li');
+
+			// textContent, never innerHTML: these names and domains come from a
+			// scanned page's headers and are attacker-influenceable content.
+			var label = document.createElement('span');
+			var domain = (row && typeof row.domain === 'string') ? row.domain : '';
+			var duration = (row && typeof row.duration === 'string') ? row.duration : '';
+			label.textContent = name + (domain ? ' — ' + domain : '') + (duration ? ' (' + duration + ')' : '');
+			li.appendChild(label);
+
+			var btn = document.createElement('button');
+			btn.type = 'button';
+			btn.className = 'faz-btn faz-btn-sm';
+			btn.textContent = fazI18n('cookies.setAsideDeclare', 'Declare this cookie');
+			if (row && row.suppressed) {
+				btn.title = fazI18n('cookies.setAsideSuppressedHint', 'This name is normally hidden from the banner and the cookie policy. Declaring it will also make it visible there. It is never deleted either way.');
+			}
+			btn.addEventListener('click', function () {
+				btn.disabled = true;
+				FAZ.post('scans/set-aside/declare', { name: name }).then(function (res) {
+					FAZ.notify(fazI18n('cookies.setAsideDeclared', '%s is now declared.')
+						.replace('%s', function () { return name; }), 'success');
+					// Re-render from the server's own list rather than removing
+					// the row locally: the two must not be able to disagree.
+					renderSetAsideBar(bar, (res && Array.isArray(res.set_aside_cookies)) ? res.set_aside_cookies : []);
+					loadCookies();
+				}).catch(function (err) {
+					// The route's refusals carry explanations worth reading —
+					// a WordPress authentication cookie genuinely cannot be
+					// declared, and saying so is more useful than "failed".
+					var serverMessage = (err && typeof err.message === 'string' && err.message) ? err.message : '';
+					FAZ.notify(serverMessage || fazI18n('cookies.setAsideFailed', 'Could not declare that cookie.'), 'error');
+					btn.disabled = false;
+				});
+			});
+			li.appendChild(btn);
+			list.appendChild(li);
+		});
+		bar.appendChild(list);
 	}
 
 	/**
@@ -1697,6 +1791,11 @@
 				// itself when a later scan withholds nothing, or a stale list
 				// would sit there describing a run that is over.
 				updateJarOnlyBar(res);
+				// The same names, now with the decision attached. Refreshed from
+				// the server rather than built from `res`, because the rows the
+				// import persisted are the ones carrying the measured domain and
+				// lifetime — the response still only lists names.
+				updateSetAsideBar();
 
 				var coverageIsComplete = scanCoverageIsComplete(res, maxPages);
 				if (!coverageIsComplete) {

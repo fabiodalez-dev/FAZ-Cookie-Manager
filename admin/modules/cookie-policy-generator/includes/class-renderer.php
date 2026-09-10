@@ -811,7 +811,7 @@ class Renderer {
 			}
 			$name = (string) ( $row['cookie_name'] ?? '' );
 			return ! class_exists( '\\FazCookie\\Frontend\\Frontend' )
-				|| ! \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name );
+				|| ! \FazCookie\Frontend\Frontend::is_declaration_suppressed( $name );
 		} ) );
 
 		self::$public_cookie_rows_cache = $rows;

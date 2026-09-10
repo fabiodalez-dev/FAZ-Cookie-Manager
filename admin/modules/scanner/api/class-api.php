@@ -269,6 +269,64 @@ class Api extends Rest_Controller {
 				),
 			)
 		);
+
+		// Declare one observation the import set aside (#243). The scanner
+		// cannot decide these — whether the administrator's own browser and a
+		// visitor's browser receive the same cookie depends on site
+		// configuration no crawl can see — so the decision is offered rather
+		// than guessed.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/set-aside/declare',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'declare_set_aside_cookie' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+					'args'                => array(
+						'name' => array(
+							'type'              => 'string',
+							'required'          => true,
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Declare a set-aside observation as a cookie visitors also receive.
+	 *
+	 * Reads the registered argument rather than the raw body so the route's own
+	 * sanitize pair governs the value, matching release_browser_scan() below.
+	 *
+	 * @param \WP_REST_Request $request Full details about the request.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function declare_set_aside_cookie( $request ) {
+		$name   = (string) $request->get_param( 'name' );
+		$result = $this->controller->declare_set_aside_cookie( $name );
+
+		if ( 'declared' !== $result['status'] ) {
+			$messages = array(
+				'invalid'    => __( 'No cookie name was supplied.', 'faz-cookie-manager' ),
+				'structural' => __( 'This is a WordPress authentication cookie. A logged-out visitor never receives it, so it cannot be declared.', 'faz-cookie-manager' ),
+				'unknown'    => __( 'That cookie is no longer waiting for a decision. Run a new scan if you need to review it again.', 'faz-cookie-manager' ),
+			);
+			return new WP_Error(
+				'faz_set_aside_not_declarable',
+				isset( $messages[ $result['status'] ] ) ? $messages[ $result['status'] ] : $messages['unknown'],
+				array( 'status' => 400 )
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'declared'          => $result['name'],
+				'set_aside_cookies' => $this->controller->set_aside_cookies(),
+			)
+		);
 	}
 
 	/**
@@ -455,6 +513,10 @@ class Api extends Rest_Controller {
 		// null. Already sanitized by latest_visitor_check(). Additive: nothing
 		// existing reads this field, and polling clients ignore it.
 		$safe['visitor_check'] = $this->controller->latest_visitor_check();
+		// Observations the last import set aside, still awaiting a decision.
+		// Already sanitized by set_aside_cookies(). Additive, like the field
+		// above: existing clients ignore it.
+		$safe['set_aside_cookies'] = $this->controller->set_aside_cookies();
 		return rest_ensure_response( $safe );
 	}
 
@@ -990,6 +1052,11 @@ class Api extends Rest_Controller {
 		}
 		$result['jar_only_cookies'] = $jar_names;
 		$result['jar_only_count']   = count( $jar_names );
+		// Keep the ROWS, not only the names above. The names are what the
+		// import response reports; the rows are what lets the Cookies page
+		// offer "declare this one" with the domain and lifetime the scan
+		// measured, instead of asking for them to be retyped (#243).
+		$this->controller->remember_set_aside_cookies( $jar_cookies );
 		return rest_ensure_response( $result );
 	}
 

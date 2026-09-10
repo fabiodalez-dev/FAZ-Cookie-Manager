@@ -614,7 +614,7 @@ class Shortcodes {
 		}
 		foreach ( $cookies as $cookie ) {
 			// Skip WordPress-internal cookies — visitors never receive them.
-			if ( \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $cookie['name'] ) ) {
+			if ( \FazCookie\Frontend\Frontend::is_declaration_suppressed( $cookie['name'] ) ) {
 				continue;
 			}
 			$table_body  = '';
@@ -947,7 +947,7 @@ class Shortcodes {
 		$table_body = '<tbody>';
 		foreach ( $cookies as $cookie ) {
 			// Skip WordPress-internal cookies — visitors never receive them.
-			if ( \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $cookie['name'] ) ) {
+			if ( \FazCookie\Frontend\Frontend::is_declaration_suppressed( $cookie['name'] ) ) {
 				continue;
 			}
 			$description = $cookie['description'];

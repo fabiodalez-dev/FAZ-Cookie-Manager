@@ -594,7 +594,7 @@ class Admin {
 						/* translators: %d: number of cookies that were present in the browser before the scan started and were not imported. */
 						'jarOnlyHint'              => __( '%d cookie(s) were already in your browser when the scan started, so they could not be attributed to any page and were not imported.', 'faz-cookie-manager' ),
 						'jarOnlyToggle'            => __( 'Show the names', 'faz-cookie-manager' ),
-						'jarOnlyExplain'           => __( 'If you recognise one as a cookie your site really sets, add it manually with Add Cookie.', 'faz-cookie-manager' ),
+						'jarOnlyExplain'           => __( 'If you recognise one as a cookie your site really sets, declare it in the list below — the scan already recorded its domain and lifetime.', 'faz-cookie-manager' ),
 						// Server-side visitor check — the anonymous header
 						// replay diffed against the logged-in browser pass.
 						/* translators: %s: id of the scan the visitor check belongs to (a 32-char hex token, not a number). */
@@ -607,6 +607,18 @@ class Admin {
 						'visitorCheckAdminOnly'    => __( '%1$d cookie(s) were seen only in your browser and not confirmed for visitors; they stay reported, not declared: %2$s', 'faz-cookie-manager' ),
 						'visitorCheckNoDiff'       => __( 'The anonymous check found no cookie differences against the browser scan.', 'faz-cookie-manager' ),
 						'visitorCheckDisclaimer'   => __( 'This check re-fetches the scanned pages without a login and compares Set-Cookie headers only. It cannot see cookies that JavaScript sets for anonymous visitors, nor cookies set only after an interaction (for example an add-to-cart request), so a clean result does not mean the visitor view is fully verified.', 'faz-cookie-manager' ),
+						// Set-aside review (#243). A scan runs from one logged-in
+						// session and cannot tell whether a cookie it saw there
+						// also reaches visitors; these strings ask instead of
+						// guessing, and must say what the button will do.
+						/* translators: %d: number of cookies the scan could not attribute to a page. */
+						'setAsideTitle'            => __( '%d cookie(s) were seen in your browser during the last scan but could not be attributed to a scanned page:', 'faz-cookie-manager' ),
+						'setAsideExplain'          => __( 'A scan runs from your logged-in session, so it cannot tell whether visitors receive these too — that depends on how your site is configured. Declare the ones you know reach visitors; leave the rest.', 'faz-cookie-manager' ),
+						'setAsideDeclare'          => __( 'Declare this cookie', 'faz-cookie-manager' ),
+						'setAsideSuppressedHint'   => __( 'This name is normally hidden from the banner and the cookie policy. Declaring it will also make it visible there. It is never deleted either way.', 'faz-cookie-manager' ),
+						/* translators: %s: cookie name. */
+						'setAsideDeclared'         => __( '%s is now declared.', 'faz-cookie-manager' ),
+						'setAsideFailed'           => __( 'Could not declare that cookie.', 'faz-cookie-manager' ),
 						// Scan cancellation.
 						'stopScan'                 => __( 'Stop scan', 'faz-cookie-manager' ),
 						'stoppingScan'             => __( 'Stopping…', 'faz-cookie-manager' ),

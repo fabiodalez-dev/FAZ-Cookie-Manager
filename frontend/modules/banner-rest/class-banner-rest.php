@@ -566,7 +566,7 @@ class Banner_Rest {
 				continue;
 			}
 			$name = isset( $item->name ) ? sanitize_text_field( (string) $item->name ) : '';
-			if ( \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name ) ) {
+			if ( \FazCookie\Frontend\Frontend::is_declaration_suppressed( $name ) ) {
 				continue;
 			}
 			$cookies[] = array(
