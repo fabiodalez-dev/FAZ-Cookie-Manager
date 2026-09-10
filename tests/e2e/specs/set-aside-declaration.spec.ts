@@ -111,10 +111,16 @@ test.describe('#243 set-aside declaration', () => {
       const visitor = await afterContext.newPage();
       await visitor.goto(`${wpBaseURL}/`, { waitUntil: 'domcontentloaded' });
       await expect(visitor.locator('[data-faz-tag="notice"]')).toBeVisible();
+      // Reload inside the poll. `declaredCookieNames` reads the snapshot the
+      // page was served, so without a fresh request every attempt re-reads the
+      // same bytes: the retry window looks like patience and is really one
+      // assertion repeated. The declaration invalidates server-side caches, so
+      // what has to be observed is a NEW response, not the old one again.
       await expect
-        .poll(async () => (await declaredCookieNames(visitor)).includes(COOKIE_NAME), {
-          timeout: 15_000,
-        })
+        .poll(async () => {
+          await visitor.reload({ waitUntil: 'domcontentloaded' });
+          return (await declaredCookieNames(visitor)).includes(COOKIE_NAME);
+        }, { timeout: 15_000 })
         .toBe(true);
     } finally {
       await afterContext.close();

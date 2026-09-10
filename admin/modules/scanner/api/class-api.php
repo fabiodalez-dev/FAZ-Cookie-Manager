@@ -305,8 +305,22 @@ class Api extends Rest_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	public function declare_set_aside_cookie( $request ) {
-		$name   = (string) $request->get_param( 'name' );
-		$result = $this->controller->declare_set_aside_cookie( $name );
+		$name = (string) $request->get_param( 'name' );
+
+		// save_cookies() throws when a row cannot be persisted, and promoting an
+		// existing discovery goes through update_item() which can fail the same
+		// way. import_cookies() below already turns that into a 500 rather than
+		// an unhandled PHP error; a manual declaration deserves the same, and
+		// the administrator deserves a sentence instead of a stack trace.
+		try {
+			$result = $this->controller->declare_set_aside_cookie( $name );
+		} catch ( \Throwable $e ) {
+			return new WP_Error(
+				'faz_set_aside_declare_failed',
+				__( 'Could not declare that cookie because it could not be saved. Please try again.', 'faz-cookie-manager' ),
+				array( 'status' => 500 )
+			);
+		}
 
 		if ( 'declared' !== $result['status'] ) {
 			$messages = array(

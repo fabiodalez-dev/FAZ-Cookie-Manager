@@ -613,6 +613,7 @@ Only the most recent release is listed here. The complete history is in [CHANGEL
 ### 1.30.0 — 2026-09-09
 - **Added**: Footer consent links with [faz_cookie_settings type="link"] and configurable banner button radius (#191).
 - **Added**: Cookie Policy templates in Dutch and Croatian, plus Russian and Ukrainian banner and category translations.
+- **Added**: Set-aside scan observations can be declared from the Cookies screen with the attributes the scan measured (#243). Declaring an infrastructure cookie makes it visible in the banner and policy without ever making it deletable; WordPress authentication cookies cannot be declared.
 - **Fixed**: Explicit consent choices remain authoritative across all 47 jurisdiction profiles, including targeted sale/share opt-outs and separately gated categories.
 - **Fixed**: Per-service grants from blocked embeds persist on CCPA banners without granting unrelated categories; standing sale/share opt-outs remain binding.
 - **Fixed**: Simultaneous browser scan starts by the same administrator are serialized before session lookup; competing starts return HTTP 409.
