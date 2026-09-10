@@ -361,7 +361,7 @@ msgstr "Namen anzeigen"
 
 #: admin/class-admin.php:597
 msgid "If you recognise one as a cookie your site really sets, declare it in the list below — the scan already recorded its domain and lifetime."
-msgstr ""
+msgstr "Wenn Sie eines davon als ein Cookie erkennen, das Ihre Website tatsächlich setzt, deklarieren Sie es in der Liste unten — die Prüfung hat Domain und Lebensdauer bereits erfasst."
 
 #. translators: %s: id of the scan the visitor check belongs to (a 32-char hex token, not a number).
 #: admin/class-admin.php:601
@@ -399,29 +399,29 @@ msgstr "Diese Prüfung ruft die gescannten Seiten ohne Anmeldung erneut ab und v
 #: admin/class-admin.php:615
 #, php-format
 msgid "%d cookie(s) were seen in your browser during the last scan but could not be attributed to a scanned page:"
-msgstr ""
+msgstr "%d Cookie(s) wurden bei der letzten Prüfung in Ihrem Browser gesehen, konnten aber keiner geprüften Seite zugeordnet werden:"
 
 #: admin/class-admin.php:616
 msgid "A scan runs from your logged-in session, so it cannot tell whether visitors receive these too — that depends on how your site is configured. Declare the ones you know reach visitors; leave the rest."
-msgstr ""
+msgstr "Eine Prüfung läuft in Ihrer angemeldeten Sitzung und kann daher nicht feststellen, ob Besucher diese Cookies ebenfalls erhalten — das hängt von der Konfiguration Ihrer Website ab. Deklarieren Sie die Cookies, von denen Sie wissen, dass sie Besucher erreichen; lassen Sie die übrigen unangetastet."
 
 #: admin/class-admin.php:617
 msgid "Declare this cookie"
-msgstr ""
+msgstr "Dieses Cookie deklarieren"
 
 #: admin/class-admin.php:618
 msgid "This name is normally hidden from the banner and the cookie policy. Declaring it will also make it visible there. It is never deleted either way."
-msgstr ""
+msgstr "Dieser Name wird normalerweise im Banner und in der Cookie-Richtlinie ausgeblendet. Durch die Deklaration wird er auch dort sichtbar. Gelöscht wird er in keinem Fall."
 
 #. translators: %s: cookie name.
 #: admin/class-admin.php:620
 #, php-format
 msgid "%s is now declared."
-msgstr ""
+msgstr "%s ist jetzt deklariert."
 
 #: admin/class-admin.php:621
 msgid "Could not declare that cookie."
-msgstr ""
+msgstr "Dieses Cookie konnte nicht deklariert werden."
 
 #: admin/class-admin.php:623
 msgid "Stop scan"
@@ -1082,7 +1082,7 @@ msgstr "A/B-Testergebnisse konnten nicht geladen werden."
 
 #: admin/class-admin.php:847
 msgid "Last 24 Hours"
-msgstr ""
+msgstr "Letzte 24 Stunden"
 
 #. translators: %s: date range label injected by JS
 #: admin/class-admin.php:848 admin/views/dashboard.php:89
@@ -1096,17 +1096,17 @@ msgstr "Letzte 30 Tage"
 
 #: admin/class-admin.php:850
 msgid "Last Year"
-msgstr ""
+msgstr "Letztes Jahr"
 
 #: admin/class-admin.php:851
 msgid "All Time"
-msgstr ""
+msgstr "Gesamter Zeitraum"
 
 #. translators: %d: number of days.
 #: admin/class-admin.php:853
 #, php-format
 msgid "Last %d Days"
-msgstr ""
+msgstr "Letzte %d Tage"
 
 #: admin/class-admin.php:857
 msgid "Starting scan…"
@@ -2616,6 +2616,23 @@ msgid ""
 "\n"
 "You may also designate an authorized agent to submit a request on your behalf (Cal. Civ. Code § 1798.135(c))."
 msgstr ""
+"## Ihre Rechte nach CCPA/CPRA\n"
+"\n"
+"Als in Kalifornien ansässige Person haben Sie das Recht:\n"
+"\n"
+"- **Recht auf Auskunft** (§ 1798.100, .110, .115) — zu erfragen, welche personenbezogenen Daten wir erheben, verwenden, offenlegen oder verkaufen\n"
+"- **Recht auf Löschung** (§ 1798.105) — die Löschung Ihrer personenbezogenen Daten zu verlangen\n"
+"- **Recht auf Berichtigung** (§ 1798.106) — die Berichtigung unrichtiger personenbezogener Daten zu verlangen\n"
+"- **Recht auf Widerspruch gegen Verkauf oder Weitergabe** (§ 1798.120) — uns anzuweisen, Ihre personenbezogenen Daten nicht zu verkaufen oder weiterzugeben\n"
+"- **Recht auf Einschränkung der Verwendung sensibler personenbezogener Daten** (§ 1798.121) — unsere Verwendung sensibler personenbezogener Daten auf die offengelegten Zwecke zu beschränken\n"
+"- **Recht auf Nichtdiskriminierung** (§ 1798.125) — wir werden Sie wegen der Ausübung eines dieser Rechte nicht benachteiligen\n"
+"- **Recht auf Datenübertragbarkeit** (§ 1798.130(a)(2)) — personenbezogene Daten in einem ohne Weiteres verwendbaren Format zu erhalten\n"
+"\n"
+"Um die Rechte auf Auskunft, Löschung, Berichtigung oder Übertragbarkeit auszuüben, schreiben Sie an **{{COMPANY_EMAIL}}**. Dies sind überprüfbare Verbraucheranträge, daher werden wir vor der Bearbeitung Ihre Identität überprüfen (CCPA § 1798.130(a)(2)) und innerhalb von **45 Tagen** antworten (mit Mitteilung auf 90 Tage verlängerbar, § 1798.130(a)(2)(B)).\n"
+"\n"
+"Um dem Verkauf oder der Weitergabe Ihrer personenbezogenen Daten zu widersprechen, verwenden Sie die Links „Do Not Sell or Share“ und „Einstellungen verwalten“ im Footer der Website. Um unsere Verwendung sensibler personenbezogener Daten einzuschränken, schreiben Sie an **{{COMPANY_EMAIL}}**. Weder ein Widerspruch noch ein Einschränkungsantrag ist ein überprüfbarer Verbraucherantrag (CPPA Reg. § 7060(b)): Wir werden beide umsetzen, ohne von Ihnen eine Identitätsprüfung oder die Anlage eines Kontos zu verlangen.\n"
+"\n"
+"Sie können außerdem eine bevollmächtigte Person benennen, die einen Antrag in Ihrem Namen stellt (Cal. Civ. Code § 1798.135(c))."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:219
 msgctxt "Cookie policy template: ccpa-california / section-9"
@@ -3253,15 +3270,15 @@ msgstr "Ereignis konnte nicht aufgezeichnet werden."
 
 #: admin/modules/scanner/api/class-api.php:313
 msgid "No cookie name was supplied."
-msgstr ""
+msgstr "Es wurde kein Cookie-Name angegeben."
 
 #: admin/modules/scanner/api/class-api.php:314
 msgid "This is a WordPress authentication cookie. A logged-out visitor never receives it, so it cannot be declared."
-msgstr ""
+msgstr "Dies ist ein WordPress-Authentifizierungs-Cookie. Ein abgemeldeter Besucher erhält es nie, daher kann es nicht deklariert werden."
 
 #: admin/modules/scanner/api/class-api.php:315
 msgid "That cookie is no longer waiting for a decision. Run a new scan if you need to review it again."
-msgstr ""
+msgstr "Dieses Cookie wartet nicht mehr auf eine Entscheidung. Führen Sie eine neue Prüfung durch, wenn Sie es erneut ansehen möchten."
 
 #: admin/modules/scanner/api/class-api.php:357
 #: admin/modules/scanner/includes/class-controller.php:638
@@ -3338,7 +3355,7 @@ msgstr "Für diesen Administrator läuft bereits ein anderer Browser-Scan."
 #: admin/modules/scanner/includes/class-controller.php:690
 #: admin/modules/scanner/includes/class-controller.php:703
 msgid "The browser scan session has expired."
-msgstr ""
+msgstr "Die Browser-Prüfsitzung ist abgelaufen."
 
 #: admin/modules/scanner/includes/class-controller.php:2436
 msgid "Static IP pinning is limited to this site hostname."
@@ -3959,11 +3976,11 @@ msgstr "Hex-Wert der Textfarbe für «Nicht verkaufen»"
 
 #: admin/views/banner.php:547
 msgid "Button corner radius"
-msgstr ""
+msgstr "Eckenradius der Schaltflächen"
 
 #: admin/views/banner.php:549
 msgid "Applies to every banner button — Accept, Reject, Customise and Do Not Sell — in the notice bar and the preference center. A length such as 0, 8px, 50px for pill-shaped, or 0.5rem. Leave empty to keep the shipped 2px."
-msgstr ""
+msgstr "Gilt für alle Banner-Schaltflächen — Akzeptieren, Ablehnen, Anpassen und Do Not Sell — in der Hinweisleiste und im Präferenzcenter. Eine Länge wie 0, 8px, 50px für Pillenform oder 0.5rem. Leer lassen, um die ausgelieferten 2px beizubehalten."
 
 #: admin/views/banner.php:570
 msgid "Consent Toggle Colours"
@@ -4184,19 +4201,19 @@ msgstr "Wird als Tooltip und Screenreader-Bezeichnung (aria-label) verwendet."
 
 #: admin/views/banner.php:904
 msgid "Inline consent button or footer link"
-msgstr ""
+msgstr "Inline-Einwilligungsschaltfläche oder Footer-Link"
 
 #: admin/views/banner.php:905
 msgid "Place this shortcode in a Shortcode block in your footer, page or post to reopen consent preferences:"
-msgstr ""
+msgstr "Fügen Sie diesen Shortcode in einen Shortcode-Block in Ihrem Footer, einer Seite oder einem Beitrag ein, um die Einwilligungseinstellungen erneut zu öffnen:"
 
 #: admin/views/banner.php:908
 msgid "The link uses your theme’s link styling. To use it instead of the floating widget, add it to a persistent footer on every page and turn off “Show revisit consent widget” above. When jurisdiction routing locks that switch on, the widget remains visible alongside the link."
-msgstr ""
+msgstr "Der Link übernimmt die Link-Gestaltung Ihres Themes. Um ihn anstelle des schwebenden Widgets zu verwenden, fügen Sie ihn in einen auf jeder Seite vorhandenen Footer ein und deaktivieren Sie oben „Widget zum erneuten Aufrufen der Einwilligung anzeigen“. Wenn die Rechtsraum-Steuerung diesen Schalter erzwingt, bleibt das Widget neben dem Link sichtbar."
 
 #: admin/views/banner.php:909
 msgid "For a custom HTML link, use the data-faz-open-preferences attribute. Standard navigation menu labels do not process shortcodes."
-msgstr ""
+msgstr "Für einen eigenen HTML-Link verwenden Sie das Attribut data-faz-open-preferences. Standardmäßige Navigationsmenü-Beschriftungen verarbeiten keine Shortcodes."
 
 #: admin/views/banner.php:911
 msgid "Optional attributes: <code>text=&quot;Manage cookies&quot;</code> (custom label) and <code>class=&quot;my-button&quot;</code> (extra CSS classes). The button automatically inherits your banner&#39;s primary button colours. <strong>It needs the banner runtime to work, so place it on a page where the banner is active</strong> — pages added to the banner exclusion list don't load the consent runtime, so the button won't open the preferences there."
@@ -4593,7 +4610,7 @@ msgstr "Pro Shortcode-Aufruf überschreiben mit [faz_cookie_policy_complete juri
 
 #: admin/views/cookie-policy.php:164
 msgid "For CCPA, review the rights section in Policy text below and configure the request methods your business provides. The default email-only wording does not fit every business."
-msgstr ""
+msgstr "Prüfen Sie für den CCPA den Abschnitt zu den Rechten unter Richtlinientext weiter unten und konfigurieren Sie die Antragswege, die Ihr Unternehmen anbietet. Die Standardformulierung, die nur eine E-Mail-Adresse vorsieht, passt nicht zu jedem Unternehmen."
 
 #: admin/views/cookie-policy.php:181
 msgid "Third-party services"
@@ -4634,15 +4651,15 @@ msgstr "Abschnitte laden"
 
 #: admin/views/cookie-policy.php:252
 msgid "CCPA request methods: the default rights section uses the privacy email. Email alone is appropriate only for a business operating exclusively online with a direct relationship with the consumers whose information it collects. Otherwise, replace the rights section below with at least two designated request methods, including a toll-free number and a method on your website. Use your real contact details in every published language."
-msgstr ""
+msgstr "CCPA-Antragswege: Der Standardabschnitt zu den Rechten verwendet die Datenschutz-E-Mail-Adresse. Eine E-Mail-Adresse allein ist nur für ein Unternehmen angemessen, das ausschließlich online tätig ist und eine direkte Beziehung zu den Verbrauchern unterhält, deren Daten es erhebt. Andernfalls ersetzen Sie den Abschnitt zu den Rechten unten durch mindestens zwei ausgewiesene Antragswege, darunter eine gebührenfreie Rufnummer und einen Weg über Ihre Website. Verwenden Sie in jeder veröffentlichten Sprache Ihre echten Kontaktdaten."
 
 #: admin/views/cookie-policy.php:253
 msgid "Also describe how to request a limit on sensitive information use and disclosure when that right applies. Provide the required website link and request method; an opt-out or limit request must not require identity verification or an account."
-msgstr ""
+msgstr "Beschreiben Sie außerdem, wie eine Einschränkung der Verwendung und Offenlegung sensibler Daten beantragt werden kann, sofern dieses Recht anwendbar ist. Geben Sie den erforderlichen Website-Link und den Antragsweg an; ein Widerspruch oder ein Einschränkungsantrag darf weder eine Identitätsprüfung noch ein Konto voraussetzen."
 
 #: admin/views/cookie-policy.php:253
 msgid "CPPA request guidance"
-msgstr ""
+msgstr "CPPA-Hinweise zu Antragswegen"
 
 #: admin/views/cookie-policy.php:263
 msgid "Cookies on this site"
@@ -4784,7 +4801,7 @@ msgstr "Bearbeiten Sie den Anzeigenamen und die Beschreibung für jede Cookie-Ka
 
 #: admin/views/cookies.php:56
 msgid "Choose a language to translate category names and descriptions. Save Categories saves changes in every language, not just this one."
-msgstr ""
+msgstr "Wählen Sie eine Sprache, um Kategorienamen und -beschreibungen zu übersetzen. „Kategorien speichern“ sichert die Änderungen in allen Sprachen, nicht nur in dieser."
 
 #: admin/views/cookies.php:62
 msgid "Slug"
@@ -5018,7 +5035,7 @@ msgstr "Einrichtung abschließen"
 
 #: admin/views/dashboard.php:37
 msgid "Pageview tracking is disabled. Pageview and banner interaction metrics are unavailable (--); consent logging is independent of this setting."
-msgstr ""
+msgstr "Die Erfassung von Seitenaufrufen ist deaktiviert. Kennzahlen zu Seitenaufrufen und Banner-Interaktionen sind nicht verfügbar (--); die Protokollierung der Einwilligungen ist von dieser Einstellung unabhängig."
 
 #: admin/views/dashboard.php:45
 msgid "Total Pageviews"
@@ -5056,7 +5073,7 @@ msgstr "Noch keine Seitenaufruf-Daten.<br>Daten erscheinen, sobald Besucher mit 
 
 #: admin/views/dashboard.php:96
 msgid "Pageview tracking is disabled."
-msgstr ""
+msgstr "Die Erfassung von Seitenaufrufen ist deaktiviert."
 
 #. translators: %s: date range label injected by JS
 #: admin/views/dashboard.php:104
@@ -5070,7 +5087,7 @@ msgstr "Noch keine Einwilligungsdaten.<br>Daten erscheinen, sobald Besucher auf 
 
 #: admin/views/dashboard.php:111
 msgid "Banner interaction tracking is disabled."
-msgstr ""
+msgstr "Die Erfassung von Banner-Interaktionen ist deaktiviert."
 
 #. translators: %s: date range label injected by JS
 #: admin/views/dashboard.php:123
@@ -6564,19 +6581,19 @@ msgstr "Cron-Jobs"
 
 #: admin/views/system-status.php:185
 msgid "A hosting cron that runs wp-cron.php processes WordPress scheduled events, including FAZ scans and cleanup. WP-CLI is optional. DISABLE_WP_CRON only disables automatic spawning on page visits; it does not prevent your host from running scheduled events."
-msgstr ""
+msgstr "Ein Cronjob des Hosters, der wp-cron.php ausführt, verarbeitet die geplanten Ereignisse von WordPress, einschließlich der FAZ-Prüfungen und der Bereinigung. WP-CLI ist optional. DISABLE_WP_CRON deaktiviert nur den automatischen Start bei Seitenaufrufen; es hindert Ihren Hoster nicht daran, geplante Ereignisse auszuführen."
 
 #: admin/views/system-status.php:187
 msgid "cPanel setup without WP-CLI"
-msgstr ""
+msgstr "cPanel-Einrichtung ohne WP-CLI"
 
 #: admin/views/system-status.php:188
 msgid "If your host already runs wp-cron.php regularly, keep that job; do not create a duplicate. Otherwise, ask your host to add a Cron Job in cPanel every five minutes (minute: */5; all other schedule fields: *), using the command below. The host should confirm the curl path and that the request is not blocked by authentication or a firewall."
-msgstr ""
+msgstr "Wenn Ihr Hoster wp-cron.php bereits regelmäßig ausführt, behalten Sie diesen Job bei und legen Sie keinen zweiten an. Andernfalls bitten Sie Ihren Hoster, in cPanel alle fünf Minuten einen Cron Job einzurichten (Minute: */5; alle übrigen Zeitplanfelder: *) und dabei den untenstehenden Befehl zu verwenden. Der Hoster sollte den curl-Pfad bestätigen und prüfen, dass die Anfrage nicht durch Authentifizierung oder eine Firewall blockiert wird."
 
 #: admin/views/system-status.php:190
 msgid "No separate Rulesets schedule is needed for WordPress cron events. Check that overdue dates advance after a run. A next-run timestamp shows scheduling, not proof that the last run succeeded."
-msgstr ""
+msgstr "Für WordPress-Cron-Ereignisse ist kein separater Zeitplan für Regelsätze erforderlich. Prüfen Sie, ob überfällige Termine nach einem Durchlauf weiterrücken. Ein Zeitstempel für den nächsten Lauf zeigt die Planung an, nicht den Nachweis, dass der letzte Lauf erfolgreich war."
 
 #: admin/views/system-status.php:194
 msgid "Next Scheduled Scan"

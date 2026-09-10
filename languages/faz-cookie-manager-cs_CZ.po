@@ -362,7 +362,7 @@ msgstr "Zobrazit názvy"
 
 #: admin/class-admin.php:597
 msgid "If you recognise one as a cookie your site really sets, declare it in the list below — the scan already recorded its domain and lifetime."
-msgstr ""
+msgstr "Pokud některý z nich poznáte jako soubor cookie, který váš web skutečně nastavuje, deklarujte jej v seznamu níže — skenování už zaznamenalo jeho doménu i dobu platnosti."
 
 #. translators: %s: id of the scan the visitor check belongs to (a 32-char hex token, not a number).
 #: admin/class-admin.php:601
@@ -400,29 +400,29 @@ msgstr "Tato kontrola znovu načte skenované stránky bez přihlášení a poro
 #: admin/class-admin.php:615
 #, php-format
 msgid "%d cookie(s) were seen in your browser during the last scan but could not be attributed to a scanned page:"
-msgstr ""
+msgstr "Při posledním skenování bylo ve vašem prohlížeči zaznamenáno %d souborů cookie, které nebylo možné přiřadit k žádné skenované stránce:"
 
 #: admin/class-admin.php:616
 msgid "A scan runs from your logged-in session, so it cannot tell whether visitors receive these too — that depends on how your site is configured. Declare the ones you know reach visitors; leave the rest."
-msgstr ""
+msgstr "Skenování probíhá z vaší přihlášené relace, a nemůže proto zjistit, zda tyto soubory cookie dostávají i návštěvníci — to závisí na konfiguraci vašeho webu. Deklarujte ty, o kterých víte, že se k návštěvníkům dostanou; ostatní ponechte beze změny."
 
 #: admin/class-admin.php:617
 msgid "Declare this cookie"
-msgstr ""
+msgstr "Deklarovat tento soubor cookie"
 
 #: admin/class-admin.php:618
 msgid "This name is normally hidden from the banner and the cookie policy. Declaring it will also make it visible there. It is never deleted either way."
-msgstr ""
+msgstr "Tento název je za normálních okolností v banneru a v zásadách používání souborů cookie skrytý. Jeho deklarováním jej zviditelníte i tam. V žádném případě nebude odstraněn."
 
 #. translators: %s: cookie name.
 #: admin/class-admin.php:620
 #, php-format
 msgid "%s is now declared."
-msgstr ""
+msgstr "%s je nyní deklarován."
 
 #: admin/class-admin.php:621
 msgid "Could not declare that cookie."
-msgstr ""
+msgstr "Tento soubor cookie se nepodařilo deklarovat."
 
 #: admin/class-admin.php:623
 msgid "Stop scan"
@@ -1083,7 +1083,7 @@ msgstr "Nelze načíst A/B stav definic."
 
 #: admin/class-admin.php:847
 msgid "Last 24 Hours"
-msgstr ""
+msgstr "Posledních 24 hodin"
 
 #. translators: %s: date range label injected by JS
 #: admin/class-admin.php:848 admin/views/dashboard.php:89
@@ -1097,17 +1097,17 @@ msgstr "Posledních 30 dní"
 
 #: admin/class-admin.php:850
 msgid "Last Year"
-msgstr ""
+msgstr "Poslední rok"
 
 #: admin/class-admin.php:851
 msgid "All Time"
-msgstr ""
+msgstr "Celé období"
 
 #. translators: %d: number of days.
 #: admin/class-admin.php:853
 #, php-format
 msgid "Last %d Days"
-msgstr ""
+msgstr "Posledních %d dní"
 
 #: admin/class-admin.php:857
 msgid "Starting scan…"
@@ -2622,6 +2622,23 @@ msgid ""
 "\n"
 "You may also designate an authorized agent to submit a request on your behalf (Cal. Civ. Code § 1798.135(c))."
 msgstr ""
+"## Vaše práva podle CCPA/CPRA\n"
+"\n"
+"Jako obyvatel Kalifornie máte právo:\n"
+"\n"
+"- **Právo na informace** (§ 1798.100, .110, .115) — požádat o informaci, jaké osobní údaje shromažďujeme, používáme, zpřístupňujeme nebo prodáváme\n"
+"- **Právo na výmaz** (§ 1798.105) — požádat o výmaz svých osobních údajů\n"
+"- **Právo na opravu** (§ 1798.106) — požádat o opravu nepřesných osobních údajů\n"
+"- **Právo odmítnout prodej nebo sdílení** (§ 1798.120) — uložit nám, abychom vaše osobní údaje neprodávali ani nesdíleli\n"
+"- **Právo omezit použití citlivých osobních údajů** (§ 1798.121) — omezit naše použití citlivých osobních údajů na zveřejněné účely\n"
+"- **Právo na nediskriminaci** (§ 1798.125) — za uplatnění kteréhokoli z těchto práv vás nebudeme znevýhodňovat\n"
+"- **Právo na přenositelnost údajů** (§ 1798.130(a)(2)) — obdržet osobní údaje ve snadno použitelném formátu\n"
+"\n"
+"Chcete-li uplatnit právo na informace, výmaz, opravu nebo přenositelnost, napište na **{{COMPANY_EMAIL}}**. Jde o ověřitelné žádosti spotřebitele, proto před vyřízením ověříme vaši totožnost (CCPA § 1798.130(a)(2)) a odpovíme do **45 dnů** (s oznámením lze prodloužit na 90 dnů, § 1798.130(a)(2)(B)).\n"
+"\n"
+"Chcete-li odmítnout prodej nebo sdílení svých osobních údajů, použijte odkazy „Do Not Sell or Share“ a „Spravovat předvolby“ v patičce webu. Chcete-li omezit naše použití citlivých osobních údajů, napište na **{{COMPANY_EMAIL}}**. Odmítnutí ani žádost o omezení nejsou ověřitelnou žádostí spotřebitele (CPPA Reg. § 7060(b)): oběma vyhovíme, aniž bychom po vás požadovali ověření totožnosti nebo založení účtu.\n"
+"\n"
+"Můžete rovněž pověřit zmocněnce, aby žádost podal vaším jménem (Cal. Civ. Code § 1798.135(c))."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:219
 msgctxt "Cookie policy template: ccpa-california / section-9"
@@ -3261,15 +3278,15 @@ msgstr "Nepodařilo se zaznamenat událost."
 
 #: admin/modules/scanner/api/class-api.php:313
 msgid "No cookie name was supplied."
-msgstr ""
+msgstr "Nebyl zadán žádný název souboru cookie."
 
 #: admin/modules/scanner/api/class-api.php:314
 msgid "This is a WordPress authentication cookie. A logged-out visitor never receives it, so it cannot be declared."
-msgstr ""
+msgstr "Toto je autentizační soubor cookie systému WordPress. Odhlášený návštěvník jej nikdy neobdrží, a nelze jej proto deklarovat."
 
 #: admin/modules/scanner/api/class-api.php:315
 msgid "That cookie is no longer waiting for a decision. Run a new scan if you need to review it again."
-msgstr ""
+msgstr "Tento soubor cookie už nečeká na rozhodnutí. Pokud jej potřebujete znovu posoudit, spusťte nové skenování."
 
 #: admin/modules/scanner/api/class-api.php:357
 #: admin/modules/scanner/includes/class-controller.php:638
@@ -3346,7 +3363,7 @@ msgstr "Pro tohoto administrátora již probíhá jiné skenování v prohlíže
 #: admin/modules/scanner/includes/class-controller.php:690
 #: admin/modules/scanner/includes/class-controller.php:703
 msgid "The browser scan session has expired."
-msgstr ""
+msgstr "Relace skenování prohlížeče vypršela."
 
 #: admin/modules/scanner/includes/class-controller.php:2436
 msgid "Static IP pinning is limited to this site hostname."
@@ -3967,11 +3984,11 @@ msgstr "Hexadecimální hodnota barvy textu Neprodávat"
 
 #: admin/views/banner.php:547
 msgid "Button corner radius"
-msgstr ""
+msgstr "Poloměr rohů tlačítek"
 
 #: admin/views/banner.php:549
 msgid "Applies to every banner button — Accept, Reject, Customise and Do Not Sell — in the notice bar and the preference center. A length such as 0, 8px, 50px for pill-shaped, or 0.5rem. Leave empty to keep the shipped 2px."
-msgstr ""
+msgstr "Platí pro všechna tlačítka banneru — Přijmout, Odmítnout, Přizpůsobit a Do Not Sell — v informační liště i v centru předvoleb. Délka například 0, 8px, 50px pro tvar pilulky nebo 0.5rem. Ponechte prázdné, chcete-li zachovat dodávané 2px."
 
 #: admin/views/banner.php:570
 msgid "Consent Toggle Colours"
@@ -4192,19 +4209,19 @@ msgstr "Používá se jako popisek a štítek pro čtečky obrazovky (aria-label
 
 #: admin/views/banner.php:904
 msgid "Inline consent button or footer link"
-msgstr ""
+msgstr "Vložené tlačítko souhlasu nebo odkaz v patičce"
 
 #: admin/views/banner.php:905
 msgid "Place this shortcode in a Shortcode block in your footer, page or post to reopen consent preferences:"
-msgstr ""
+msgstr "Vložte tento shortcode do bloku Shortcode v patičce, na stránce nebo v příspěvku, chcete-li znovu otevřít předvolby souhlasu:"
 
 #: admin/views/banner.php:908
 msgid "The link uses your theme’s link styling. To use it instead of the floating widget, add it to a persistent footer on every page and turn off “Show revisit consent widget” above. When jurisdiction routing locks that switch on, the widget remains visible alongside the link."
-msgstr ""
+msgstr "Odkaz přebírá styl odkazů vaší šablony. Chcete-li jej použít místo plovoucího widgetu, umístěte jej do patičky přítomné na každé stránce a výše vypněte možnost „Zobrazit widget pro opětovné zobrazení souhlasu“. Pokud směrování podle jurisdikce tento přepínač vynutí, zůstane widget viditelný vedle odkazu."
 
 #: admin/views/banner.php:909
 msgid "For a custom HTML link, use the data-faz-open-preferences attribute. Standard navigation menu labels do not process shortcodes."
-msgstr ""
+msgstr "Pro vlastní odkaz v HTML použijte atribut data-faz-open-preferences. Standardní popisky navigačních nabídek shortcody nezpracovávají."
 
 #: admin/views/banner.php:911
 msgid "Optional attributes: <code>text=&quot;Manage cookies&quot;</code> (custom label) and <code>class=&quot;my-button&quot;</code> (extra CSS classes). The button automatically inherits your banner&#39;s primary button colours. <strong>It needs the banner runtime to work, so place it on a page where the banner is active</strong> — pages added to the banner exclusion list don't load the consent runtime, so the button won't open the preferences there."
@@ -4601,7 +4618,7 @@ msgstr "Přepište pro každé volání shortcodu pomocí [faz_cookie_policy_com
 
 #: admin/views/cookie-policy.php:164
 msgid "For CCPA, review the rights section in Policy text below and configure the request methods your business provides. The default email-only wording does not fit every business."
-msgstr ""
+msgstr "U CCPA zkontrolujte oddíl o právech v části Text zásad níže a nastavte způsoby podávání žádostí, které vaše firma nabízí. Výchozí znění pouze s e-mailem nevyhovuje každé firmě."
 
 #: admin/views/cookie-policy.php:181
 msgid "Third-party services"
@@ -4642,15 +4659,15 @@ msgstr "Načíst sekce"
 
 #: admin/views/cookie-policy.php:252
 msgid "CCPA request methods: the default rights section uses the privacy email. Email alone is appropriate only for a business operating exclusively online with a direct relationship with the consumers whose information it collects. Otherwise, replace the rights section below with at least two designated request methods, including a toll-free number and a method on your website. Use your real contact details in every published language."
-msgstr ""
+msgstr "Způsoby podávání žádostí podle CCPA: výchozí oddíl o právech používá e-mail pro ochranu soukromí. Samotný e-mail je vhodný pouze pro firmu působící výhradně online, která má přímý vztah se spotřebiteli, jejichž údaje shromažďuje. Jinak nahraďte oddíl o právech níže alespoň dvěma určenými způsoby podávání žádostí, včetně bezplatného telefonního čísla a způsobu na vašem webu. Ve všech publikovaných jazycích uvádějte své skutečné kontaktní údaje."
 
 #: admin/views/cookie-policy.php:253
 msgid "Also describe how to request a limit on sensitive information use and disclosure when that right applies. Provide the required website link and request method; an opt-out or limit request must not require identity verification or an account."
-msgstr ""
+msgstr "Popište také, jak požádat o omezení použití a zpřístupnění citlivých údajů, pokud se toto právo uplatní. Uveďte požadovaný odkaz na web a způsob podání žádosti; žádost o odmítnutí ani o omezení nesmí vyžadovat ověření totožnosti ani vytvoření účtu."
 
 #: admin/views/cookie-policy.php:253
 msgid "CPPA request guidance"
-msgstr ""
+msgstr "Pokyny CPPA ke způsobům podávání žádostí"
 
 #: admin/views/cookie-policy.php:263
 msgid "Cookies on this site"
@@ -4792,7 +4809,7 @@ msgstr "Upravte zobrazovaný název a popis každé kategorie souborů cookie. N
 
 #: admin/views/cookies.php:56
 msgid "Choose a language to translate category names and descriptions. Save Categories saves changes in every language, not just this one."
-msgstr ""
+msgstr "Zvolte jazyk, ve kterém chcete přeložit názvy a popisy kategorií. Volba „Uložit kategorie“ uloží změny ve všech jazycích, nejen v tomto."
 
 #: admin/views/cookies.php:62
 msgid "Slug"
@@ -5026,7 +5043,7 @@ msgstr "Dokončit nastavení"
 
 #: admin/views/dashboard.php:37
 msgid "Pageview tracking is disabled. Pageview and banner interaction metrics are unavailable (--); consent logging is independent of this setting."
-msgstr ""
+msgstr "Sledování zobrazení stránek je vypnuto. Metriky zobrazení stránek a interakcí s bannerem nejsou k dispozici (--); zaznamenávání souhlasů je na tomto nastavení nezávislé."
 
 #: admin/views/dashboard.php:45
 msgid "Total Pageviews"
@@ -5064,7 +5081,7 @@ msgstr "Zatím žádná data o zobrazení stránek.<br>Data se zobrazí, jakmile
 
 #: admin/views/dashboard.php:96
 msgid "Pageview tracking is disabled."
-msgstr ""
+msgstr "Sledování zobrazení stránek je vypnuto."
 
 #. translators: %s: date range label injected by JS
 #: admin/views/dashboard.php:104
@@ -5078,7 +5095,7 @@ msgstr "Zatím žádná data o souhlasu.<br>Data se zobrazí, jakmile návštěv
 
 #: admin/views/dashboard.php:111
 msgid "Banner interaction tracking is disabled."
-msgstr ""
+msgstr "Sledování interakcí s bannerem je vypnuto."
 
 #. translators: %s: date range label injected by JS
 #: admin/views/dashboard.php:123
@@ -6572,19 +6589,19 @@ msgstr "Cron úlohy"
 
 #: admin/views/system-status.php:185
 msgid "A hosting cron that runs wp-cron.php processes WordPress scheduled events, including FAZ scans and cleanup. WP-CLI is optional. DISABLE_WP_CRON only disables automatic spawning on page visits; it does not prevent your host from running scheduled events."
-msgstr ""
+msgstr "Úloha cron u poskytovatele hostingu, která spouští wp-cron.php, zpracovává naplánované události systému WordPress včetně skenování a úklidu FAZ. WP-CLI je volitelné. Konstanta DISABLE_WP_CRON vypíná pouze automatické spouštění při návštěvách stránek; nebrání poskytovateli hostingu ve spouštění naplánovaných událostí."
 
 #: admin/views/system-status.php:187
 msgid "cPanel setup without WP-CLI"
-msgstr ""
+msgstr "Nastavení cPanelu bez WP-CLI"
 
 #: admin/views/system-status.php:188
 msgid "If your host already runs wp-cron.php regularly, keep that job; do not create a duplicate. Otherwise, ask your host to add a Cron Job in cPanel every five minutes (minute: */5; all other schedule fields: *), using the command below. The host should confirm the curl path and that the request is not blocked by authentication or a firewall."
-msgstr ""
+msgstr "Pokud váš poskytovatel hostingu už wp-cron.php pravidelně spouští, tuto úlohu ponechte a nevytvářejte duplicitní. V opačném případě požádejte poskytovatele hostingu, aby v cPanelu přidal úlohu cron každých pět minut (minuta: */5; všechna ostatní pole plánu: *) s použitím příkazu níže. Poskytovatel by měl potvrdit cestu k curl a to, že požadavek neblokuje ověřování ani firewall."
 
 #: admin/views/system-status.php:190
 msgid "No separate Rulesets schedule is needed for WordPress cron events. Check that overdue dates advance after a run. A next-run timestamp shows scheduling, not proof that the last run succeeded."
-msgstr ""
+msgstr "Pro události cron systému WordPress není nutný samostatný plán sad pravidel. Ověřte, že se po spuštění posunou termíny po splatnosti. Časové razítko příštího spuštění dokládá naplánování, nikoli to, že poslední spuštění proběhlo úspěšně."
 
 #: admin/views/system-status.php:194
 msgid "Next Scheduled Scan"

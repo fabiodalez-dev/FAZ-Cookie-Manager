@@ -362,7 +362,7 @@ msgstr "Prikaži nazive"
 
 #: admin/class-admin.php:597
 msgid "If you recognise one as a cookie your site really sets, declare it in the list below — the scan already recorded its domain and lifetime."
-msgstr ""
+msgstr "Ako neki od njih prepoznate kao kolačić koji vaša stranica doista postavlja, prijavite ga na popisu u nastavku — skeniranje je već zabilježilo njegovu domenu i trajanje."
 
 #. translators: %s: id of the scan the visitor check belongs to (a 32-char hex token, not a number).
 #: admin/class-admin.php:601
@@ -400,29 +400,29 @@ msgstr "Ova provjera ponovno dohvaća skenirane stranice bez prijave i uspoređu
 #: admin/class-admin.php:615
 #, php-format
 msgid "%d cookie(s) were seen in your browser during the last scan but could not be attributed to a scanned page:"
-msgstr ""
+msgstr "Tijekom posljednjeg skeniranja u vašem je pregledniku zabilježeno %d kolačića koje nije bilo moguće pripisati nijednoj skeniranoj stranici:"
 
 #: admin/class-admin.php:616
 msgid "A scan runs from your logged-in session, so it cannot tell whether visitors receive these too — that depends on how your site is configured. Declare the ones you know reach visitors; leave the rest."
-msgstr ""
+msgstr "Skeniranje se izvodi iz vaše prijavljene sesije pa ne može utvrditi primaju li i posjetitelji te kolačiće — to ovisi o konfiguraciji vaše stranice. Prijavite one za koje znate da dopiru do posjetitelja, a ostale ostavite."
 
 #: admin/class-admin.php:617
 msgid "Declare this cookie"
-msgstr ""
+msgstr "Prijavi ovaj kolačić"
 
 #: admin/class-admin.php:618
 msgid "This name is normally hidden from the banner and the cookie policy. Declaring it will also make it visible there. It is never deleted either way."
-msgstr ""
+msgstr "Taj je naziv uobičajeno skriven u banneru i u pravilima o kolačićima. Prijavom će postati vidljiv i ondje. Ni u kojem slučaju neće biti izbrisan."
 
 #. translators: %s: cookie name.
 #: admin/class-admin.php:620
 #, php-format
 msgid "%s is now declared."
-msgstr ""
+msgstr "%s je sada prijavljen."
 
 #: admin/class-admin.php:621
 msgid "Could not declare that cookie."
-msgstr ""
+msgstr "Nije bilo moguće prijaviti taj kolačić."
 
 #: admin/class-admin.php:623
 msgid "Stop scan"
@@ -1083,7 +1083,7 @@ msgstr "Nije moguće učitati rezultate A/B testa."
 
 #: admin/class-admin.php:847
 msgid "Last 24 Hours"
-msgstr ""
+msgstr "Posljednja 24 sata"
 
 #. translators: %s: date range label injected by JS
 #: admin/class-admin.php:848 admin/views/dashboard.php:89
@@ -1097,17 +1097,17 @@ msgstr "Zadnjih 30 dana"
 
 #: admin/class-admin.php:850
 msgid "Last Year"
-msgstr ""
+msgstr "Posljednja godina"
 
 #: admin/class-admin.php:851
 msgid "All Time"
-msgstr ""
+msgstr "Cijelo razdoblje"
 
 #. translators: %d: number of days.
 #: admin/class-admin.php:853
 #, php-format
 msgid "Last %d Days"
-msgstr ""
+msgstr "Posljednjih %d dana"
 
 #: admin/class-admin.php:857
 msgid "Starting scan…"
@@ -2617,6 +2617,23 @@ msgid ""
 "\n"
 "You may also designate an authorized agent to submit a request on your behalf (Cal. Civ. Code § 1798.135(c))."
 msgstr ""
+"## Vaša prava prema CCPA/CPRA\n"
+"\n"
+"Kao stanovnik Kalifornije imate pravo:\n"
+"\n"
+"- **Pravo na uvid** (§ 1798.100, .110, .115) — zatražiti koje osobne podatke prikupljamo, upotrebljavamo, otkrivamo ili prodajemo\n"
+"- **Pravo na brisanje** (§ 1798.105) — zatražiti brisanje svojih osobnih podataka\n"
+"- **Pravo na ispravak** (§ 1798.106) — zatražiti ispravak netočnih osobnih podataka\n"
+"- **Pravo na odbijanje prodaje ili dijeljenja** (§ 1798.120) — naložiti nam da vaše osobne podatke ne prodajemo niti dijelimo\n"
+"- **Pravo na ograničenje uporabe osjetljivih osobnih podataka** (§ 1798.121) — ograničiti našu uporabu osjetljivih osobnih podataka na objavljene svrhe\n"
+"- **Pravo na nediskriminaciju** (§ 1798.125) — nećemo vas stavljati u nepovoljniji položaj zbog ostvarivanja bilo kojeg od ovih prava\n"
+"- **Pravo na prenosivost podataka** (§ 1798.130(a)(2)) — primiti osobne podatke u lako upotrebljivom obliku\n"
+"\n"
+"Za ostvarivanje prava na uvid, brisanje, ispravak ili prenosivost pišite na **{{COMPANY_EMAIL}}**. Riječ je o provjerljivim zahtjevima potrošača pa ćemo prije postupanja provjeriti vaš identitet (CCPA § 1798.130(a)(2)) i odgovoriti u roku od **45 dana** (uz obavijest produživo na 90 dana, § 1798.130(a)(2)(B)).\n"
+"\n"
+"Za odbijanje prodaje ili dijeljenja vaših osobnih podataka upotrijebite poveznice „Do Not Sell or Share“ i „Upravljanje postavkama“ u podnožju web-stranice. Za ograničenje naše uporabe osjetljivih osobnih podataka pišite na **{{COMPANY_EMAIL}}**. Ni odbijanje ni zahtjev za ograničenje nisu provjerljiv zahtjev potrošača (CPPA Reg. § 7060(b)): postupit ćemo po oba bez traženja provjere identiteta ili otvaranja računa.\n"
+"\n"
+"Možete i ovlastiti zastupnika da podnese zahtjev u vaše ime (Cal. Civ. Code § 1798.135(c))."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:219
 msgctxt "Cookie policy template: ccpa-california / section-9"
@@ -3254,15 +3271,15 @@ msgstr "Bilježenje događaja nije uspjelo."
 
 #: admin/modules/scanner/api/class-api.php:313
 msgid "No cookie name was supplied."
-msgstr ""
+msgstr "Nije naveden naziv kolačića."
 
 #: admin/modules/scanner/api/class-api.php:314
 msgid "This is a WordPress authentication cookie. A logged-out visitor never receives it, so it cannot be declared."
-msgstr ""
+msgstr "Ovo je WordPressov kolačić za autentifikaciju. Odjavljeni posjetitelj nikada ga ne prima pa se ne može prijaviti."
 
 #: admin/modules/scanner/api/class-api.php:315
 msgid "That cookie is no longer waiting for a decision. Run a new scan if you need to review it again."
-msgstr ""
+msgstr "Taj kolačić više ne čeka odluku. Pokrenite novo skeniranje ako ga trebate ponovno pregledati."
 
 #: admin/modules/scanner/api/class-api.php:357
 #: admin/modules/scanner/includes/class-controller.php:638
@@ -3339,7 +3356,7 @@ msgstr "Za ovog administratora već je u tijeku drugo skeniranje preglednikom."
 #: admin/modules/scanner/includes/class-controller.php:690
 #: admin/modules/scanner/includes/class-controller.php:703
 msgid "The browser scan session has expired."
-msgstr ""
+msgstr "Sesija skeniranja preglednika je istekla."
 
 #: admin/modules/scanner/includes/class-controller.php:2436
 msgid "Static IP pinning is limited to this site hostname."
@@ -3960,11 +3977,11 @@ msgstr "Hex vrijednost boje teksta „Ne prodaj”"
 
 #: admin/views/banner.php:547
 msgid "Button corner radius"
-msgstr ""
+msgstr "Radijus kutova gumba"
 
 #: admin/views/banner.php:549
 msgid "Applies to every banner button — Accept, Reject, Customise and Do Not Sell — in the notice bar and the preference center. A length such as 0, 8px, 50px for pill-shaped, or 0.5rem. Leave empty to keep the shipped 2px."
-msgstr ""
+msgstr "Primjenjuje se na sve gumbe bannera — Prihvati, Odbij, Prilagodi i Do Not Sell — u traci s obavijesti i u centru za postavke. Duljina poput 0, 8px, 50px za oblik pilule ili 0.5rem. Ostavite prazno da zadržite isporučenih 2px."
 
 #: admin/views/banner.php:570
 msgid "Consent Toggle Colours"
@@ -4185,19 +4202,19 @@ msgstr "Koristi se kao tooltip i oznaka za čitače zaslona (aria-label)."
 
 #: admin/views/banner.php:904
 msgid "Inline consent button or footer link"
-msgstr ""
+msgstr "Ugrađeni gumb privole ili poveznica u podnožju"
 
 #: admin/views/banner.php:905
 msgid "Place this shortcode in a Shortcode block in your footer, page or post to reopen consent preferences:"
-msgstr ""
+msgstr "Postavite ovaj kratki kod u blok Kratki kod u podnožju, na stranici ili u objavi kako biste ponovno otvorili postavke privole:"
 
 #: admin/views/banner.php:908
 msgid "The link uses your theme’s link styling. To use it instead of the floating widget, add it to a persistent footer on every page and turn off “Show revisit consent widget” above. When jurisdiction routing locks that switch on, the widget remains visible alongside the link."
-msgstr ""
+msgstr "Poveznica preuzima stil poveznica vaše teme. Želite li je koristiti umjesto plutajućeg widgeta, dodajte je u podnožje prisutno na svakoj stranici i iznad isključite „Prikaži widget za ponovni pregled privole“. Kada usmjeravanje prema jurisdikciji prisili taj prekidač, widget ostaje vidljiv uz poveznicu."
 
 #: admin/views/banner.php:909
 msgid "For a custom HTML link, use the data-faz-open-preferences attribute. Standard navigation menu labels do not process shortcodes."
-msgstr ""
+msgstr "Za prilagođenu HTML poveznicu upotrijebite atribut data-faz-open-preferences. Standardne oznake navigacijskih izbornika ne obrađuju kratke kodove."
 
 #: admin/views/banner.php:911
 msgid "Optional attributes: <code>text=&quot;Manage cookies&quot;</code> (custom label) and <code>class=&quot;my-button&quot;</code> (extra CSS classes). The button automatically inherits your banner&#39;s primary button colours. <strong>It needs the banner runtime to work, so place it on a page where the banner is active</strong> — pages added to the banner exclusion list don't load the consent runtime, so the button won't open the preferences there."
@@ -4594,7 +4611,7 @@ msgstr "Nadjačaj po pozivu kratkog koda s [faz_cookie_policy_complete jurisdict
 
 #: admin/views/cookie-policy.php:164
 msgid "For CCPA, review the rights section in Policy text below and configure the request methods your business provides. The default email-only wording does not fit every business."
-msgstr ""
+msgstr "Za CCPA pregledajte odjeljak o pravima u dijelu Tekst pravila u nastavku i postavite načine podnošenja zahtjeva koje vaša tvrtka nudi. Zadana formulacija samo s e-poštom ne odgovara svakoj tvrtki."
 
 #: admin/views/cookie-policy.php:181
 msgid "Third-party services"
@@ -4635,15 +4652,15 @@ msgstr "Učitaj odjeljke"
 
 #: admin/views/cookie-policy.php:252
 msgid "CCPA request methods: the default rights section uses the privacy email. Email alone is appropriate only for a business operating exclusively online with a direct relationship with the consumers whose information it collects. Otherwise, replace the rights section below with at least two designated request methods, including a toll-free number and a method on your website. Use your real contact details in every published language."
-msgstr ""
+msgstr "Načini podnošenja zahtjeva prema CCPA: zadani odjeljak o pravima koristi e-poštu za privatnost. Sama e-pošta primjerena je samo tvrtki koja posluje isključivo na internetu i ima izravan odnos s potrošačima čije podatke prikuplja. U protivnom, odjeljak o pravima u nastavku zamijenite s najmanje dva određena načina podnošenja zahtjeva, uključujući besplatni telefonski broj i način na vašoj web-stranici. U svakom objavljenom jeziku navedite svoje stvarne kontaktne podatke."
 
 #: admin/views/cookie-policy.php:253
 msgid "Also describe how to request a limit on sensitive information use and disclosure when that right applies. Provide the required website link and request method; an opt-out or limit request must not require identity verification or an account."
-msgstr ""
+msgstr "Opišite i kako zatražiti ograničenje uporabe i otkrivanja osjetljivih podataka kada se to pravo primjenjuje. Navedite traženu poveznicu na web-stranicu i način podnošenja zahtjeva; zahtjev za odbijanje ili ograničenje ne smije zahtijevati provjeru identiteta ni otvaranje računa."
 
 #: admin/views/cookie-policy.php:253
 msgid "CPPA request guidance"
-msgstr ""
+msgstr "Upute CPPA za načine podnošenja zahtjeva"
 
 #: admin/views/cookie-policy.php:263
 msgid "Cookies on this site"
@@ -4785,7 +4802,7 @@ msgstr "Uredite prikazani naziv i opis za svaku kategoriju kolačića. Nazivi i 
 
 #: admin/views/cookies.php:56
 msgid "Choose a language to translate category names and descriptions. Save Categories saves changes in every language, not just this one."
-msgstr ""
+msgstr "Odaberite jezik za prijevod naziva i opisa kategorija. Mogućnost „Spremi kategorije“ sprema promjene na svim jezicima, ne samo na ovome."
 
 #: admin/views/cookies.php:62
 msgid "Slug"
@@ -5019,7 +5036,7 @@ msgstr "Dovrši postavljanje"
 
 #: admin/views/dashboard.php:37
 msgid "Pageview tracking is disabled. Pageview and banner interaction metrics are unavailable (--); consent logging is independent of this setting."
-msgstr ""
+msgstr "Praćenje pregleda stranica je isključeno. Mjerni podaci o pregledima stranica i interakcijama s bannerom nisu dostupni (--); bilježenje privola neovisno je o ovoj postavci."
 
 #: admin/views/dashboard.php:45
 msgid "Total Pageviews"
@@ -5057,7 +5074,7 @@ msgstr "Još nema podataka o pregledima stranica.<br>Podaci će se pojaviti kada
 
 #: admin/views/dashboard.php:96
 msgid "Pageview tracking is disabled."
-msgstr ""
+msgstr "Praćenje pregleda stranica je isključeno."
 
 #. translators: %s: date range label injected by JS
 #: admin/views/dashboard.php:104
@@ -5071,7 +5088,7 @@ msgstr "Još nema podataka o privolama.<br>Podaci će se pojaviti kada posjetite
 
 #: admin/views/dashboard.php:111
 msgid "Banner interaction tracking is disabled."
-msgstr ""
+msgstr "Praćenje interakcija s bannerom je isključeno."
 
 #. translators: %s: date range label injected by JS
 #: admin/views/dashboard.php:123
@@ -6565,19 +6582,19 @@ msgstr "Cron poslovi"
 
 #: admin/views/system-status.php:185
 msgid "A hosting cron that runs wp-cron.php processes WordPress scheduled events, including FAZ scans and cleanup. WP-CLI is optional. DISABLE_WP_CRON only disables automatic spawning on page visits; it does not prevent your host from running scheduled events."
-msgstr ""
+msgstr "Cron zadatak kod davatelja usluge smještaja koji pokreće wp-cron.php obrađuje WordPressove zakazane događaje, uključujući FAZ skeniranja i čišćenje. WP-CLI nije obvezan. Konstanta DISABLE_WP_CRON isključuje samo automatsko pokretanje pri posjetima stranicama; ne sprječava davatelja usluge da izvodi zakazane događaje."
 
 #: admin/views/system-status.php:187
 msgid "cPanel setup without WP-CLI"
-msgstr ""
+msgstr "Postavljanje cPanela bez WP-CLI-ja"
 
 #: admin/views/system-status.php:188
 msgid "If your host already runs wp-cron.php regularly, keep that job; do not create a duplicate. Otherwise, ask your host to add a Cron Job in cPanel every five minutes (minute: */5; all other schedule fields: *), using the command below. The host should confirm the curl path and that the request is not blocked by authentication or a firewall."
-msgstr ""
+msgstr "Ako vaš davatelj usluge smještaja već redovito pokreće wp-cron.php, zadržite taj zadatak i nemojte stvarati duplikat. U protivnom zamolite davatelja usluge da u cPanelu doda Cron Job svakih pet minuta (minuta: */5; sva ostala polja rasporeda: *), koristeći naredbu u nastavku. Davatelj usluge trebao bi potvrditi putanju do curl-a i da zahtjev ne blokiraju autentifikacija ili vatrozid."
 
 #: admin/views/system-status.php:190
 msgid "No separate Rulesets schedule is needed for WordPress cron events. Check that overdue dates advance after a run. A next-run timestamp shows scheduling, not proof that the last run succeeded."
-msgstr ""
+msgstr "Za WordPressove cron događaje nije potreban zaseban raspored skupova pravila. Provjerite pomiču li se dospjeli datumi nakon izvođenja. Vremenska oznaka sljedećeg izvođenja pokazuje raspoređivanje, a ne dokaz da je posljednje izvođenje uspjelo."
 
 #: admin/views/system-status.php:194
 msgid "Next Scheduled Scan"
