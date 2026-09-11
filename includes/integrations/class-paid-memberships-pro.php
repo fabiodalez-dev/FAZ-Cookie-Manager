@@ -210,7 +210,10 @@ class Paid_Memberships_Pro {
 			$parsed_current = function_exists( 'faz_parse_consent_cookie' )
 				? faz_parse_consent_cookie( $current_cookie )
 				: array();
-			if ( isset( $parsed_current['action'] ) && 'yes' === $parsed_current['action'] ) {
+			// A record a privacy signal created (undecided:1) is not a choice the
+			// member made, so the managed privacy default still applies to it.
+			$is_undecided = isset( $parsed_current['undecided'] ) && '1' === $parsed_current['undecided'];
+			if ( isset( $parsed_current['action'] ) && 'yes' === $parsed_current['action'] && ! $is_undecided ) {
 				return;
 			}
 		}

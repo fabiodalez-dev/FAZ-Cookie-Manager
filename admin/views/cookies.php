@@ -23,12 +23,14 @@ defined( 'ABSPATH' ) || exit;
 	</div>
 
 	<?php
-	// The Sale/Sharing flags only drive the CCPA/CPRA Do-Not-Sell opt-out. On a
-	// pure-GDPR site (no active banner with a Do-Not-Sell surface) they have no
-	// visitor-facing effect, so the column is hidden to keep the editor focused.
-	// Stored flags are preserved either way: cookies.js only PUTs the flags for
-	// rows that actually render the toggles.
-	$faz_show_ccpa_col = \FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance()->has_do_not_sell_surface();
+	// The Sale/Sharing column is shown on every site. It used to be hidden on
+	// pure-GDPR sites on the premise that the flags drive nothing visitor-facing
+	// there — but a Global Privacy Control signal is enforced under every law,
+	// and it opts the visitor out of exactly the flagged categories. On a GDPR
+	// site with functional still flagged (the pre-1.17.2 default) that blocked
+	// maps and videos for Brave/Firefox visitors while hiding the only switch
+	// that explained it. Only the help copy depends on the law now.
+	$faz_dns_surface = \FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance()->has_do_not_sell_surface();
 	?>
 	<!-- Cookie Categories Editor -->
 	<div class="faz-card" style="margin-bottom:16px;">
@@ -37,10 +39,10 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 		<div class="faz-card-body">
 			<div class="faz-help" style="margin-bottom:12px;">
-				<?php if ( $faz_show_ccpa_col ) : ?>
-					<?php esc_html_e( 'Edit the display name and description for each cookie category, and flag whether it involves the sale or sharing of personal data. Names and descriptions are shown to visitors in the cookie preference center; the sale/sharing flags drive the CCPA/CPRA "Do Not Sell or Share" opt-out.', 'faz-cookie-manager' ); ?>
+				<?php if ( $faz_dns_surface ) : ?>
+					<?php esc_html_e( 'Edit the display name and description for each cookie category, and flag whether it involves the sale or sharing of personal data. Names and descriptions are shown to visitors in the cookie preference center; the sale/sharing flags drive the CCPA/CPRA "Do Not Sell or Share" opt-out and what a Global Privacy Control signal blocks.', 'faz-cookie-manager' ); ?>
 				<?php else : ?>
-					<?php esc_html_e( 'Edit the display name and description for each cookie category. Names and descriptions are shown to visitors in the cookie preference center.', 'faz-cookie-manager' ); ?>
+					<?php esc_html_e( 'Edit the display name and description for each cookie category. Names and descriptions are shown to visitors in the cookie preference center. The sale/sharing flags still matter on this site: a visitor whose browser sends Global Privacy Control (Brave, DuckDuckGo, Firefox with the setting on) is opted out of every flagged category, whatever the applicable law. Flag only categories that really sell or share personal data — a flagged Functional category blocks maps and videos for those visitors.', 'faz-cookie-manager' ); ?>
 				<?php endif; ?>
 			</div>
 			<div class="faz-field faz-category-language-field">
@@ -56,19 +58,17 @@ defined( 'ABSPATH' ) || exit;
 				<p id="faz-category-language-help" class="faz-help"><?php esc_html_e( 'Choose a language to translate category names and descriptions. Save Categories saves changes in every language, not just this one.', 'faz-cookie-manager' ); ?></p>
 			</div>
 			<div class="faz-table-wrap">
-				<table class="faz-table" id="faz-category-edit-table" data-show-ccpa="<?php echo esc_attr( $faz_show_ccpa_col ? '1' : '0' ); ?>">
+				<table class="faz-table" id="faz-category-edit-table">
 					<thead>
 						<tr>
 							<th style="width:120px;"><?php esc_html_e( 'Slug', 'faz-cookie-manager' ); ?></th>
 							<th style="width:200px;"><?php esc_html_e( 'Display Name', 'faz-cookie-manager' ); ?></th>
 							<th><?php esc_html_e( 'Description', 'faz-cookie-manager' ); ?></th>
-							<?php if ( $faz_show_ccpa_col ) : ?>
-								<th style="width:160px;" title="<?php esc_attr_e( 'CPRA distinguishes a sale (for valuable consideration) from sharing (for cross-context behavioural advertising). A category flagged for either is covered by the visitor Do Not Sell or Share opt-out.', 'faz-cookie-manager' ); ?>"><?php esc_html_e( 'Sale / Sharing (CCPA)', 'faz-cookie-manager' ); ?></th>
-							<?php endif; ?>
+							<th style="width:160px;" title="<?php esc_attr_e( 'CPRA distinguishes a sale (for valuable consideration) from sharing (for cross-context behavioural advertising). A category flagged for either is covered by the visitor Do Not Sell or Share opt-out and by a Global Privacy Control signal.', 'faz-cookie-manager' ); ?>"><?php esc_html_e( 'Sale / Sharing (CCPA)', 'faz-cookie-manager' ); ?></th>
 						</tr>
 					</thead>
 					<tbody id="faz-category-edit-rows">
-						<tr><td colspan="<?php echo esc_attr( $faz_show_ccpa_col ? '4' : '3' ); ?>" style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading...', 'faz-cookie-manager' ); ?></td></tr>
+						<tr><td colspan="4" style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading...', 'faz-cookie-manager' ); ?></td></tr>
 					</tbody>
 				</table>
 			</div>

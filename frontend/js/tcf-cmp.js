@@ -161,7 +161,9 @@
 		var consent = { necessary: true, _acted: false };
 		var pairs = readConsentCookiePairs();
 		if (!pairs || isConsentCookieStale(pairs)) return consent;
-		consent._acted = pairs.action === "yes";
+		// A record a privacy signal created before the visitor answered the
+		// banner (undecided:1) is not a choice, so it is not an action either.
+		consent._acted = pairs.action === "yes" && pairs.undecided !== "1";
 
 		Object.keys(pairs).forEach(function(key) {
 			var val = pairs[key];
@@ -781,7 +783,7 @@
 	function hasUserAction() {
 		var pairs = readConsentCookiePairs();
 		if (!pairs || isConsentCookieStale(pairs)) return false;
-		return pairs.action === "yes";
+		return pairs.action === "yes" && pairs.undecided !== "1";
 	}
 
 	if (hasUserAction()) {

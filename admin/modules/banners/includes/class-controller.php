@@ -1103,8 +1103,9 @@ class Controller extends Base_Controller {
 	 * True when an active row is stored under the ccpa (or legacy gdpr_ccpa)
 	 * law, or has the Do-Not-Sell entry point enabled (the "Both" wizard choice
 	 * stores applicableLaw='gdpr' WITH donotSell on). Used by the admin Cookies
-	 * page to hide the Sale/Sharing category column on pure-GDPR sites, where
-	 * the flags drive nothing visitor-facing.
+	 * page to choose the help copy for the Sale/Sharing column. It no longer
+	 * hides the column: a Global Privacy Control signal opts visitors out of
+	 * the flagged categories under every law, so the flags always matter.
 	 *
 	 * @return boolean
 	 */

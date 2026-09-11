@@ -237,11 +237,38 @@ namespace {
 	eq( $evilCats['necessary'] ?? null, 'yes', 'the legitimate necessary:yes key still persists' );
 
 	// ============================================================
+	// 2b. A GPC exception rides the same reserved prefix
+	// ============================================================
+	// The inline logger turns gpcx.<id>:1 into meta.gpc_exception.<id>:yes
+	// (tests/unit/js/consent-log-fold.test.mjs). It must survive the sanitiser
+	// next to the svc.<id>:yes grant it explains, or the record shows a
+	// sale/share service granted under GPC with nothing saying why.
+	echo "\n-- meta.gpc_exception.<id> round-trip --\n";
+
+	$ctrl->log_consent( array(
+		'consent_id' => 'cid-gpcx',
+		'status'     => 'partial',
+		'categories' => array(
+			'necessary'                      => 'yes',
+			'functional'                     => 'no',
+			'svc.google-maps'                => 'yes',
+			'meta.gpc_exception.google-maps' => 'yes',
+		),
+		'url'         => 'https://example.com/',
+		'banner_slug' => 'gdpr',
+	) );
+	$gpcx     = $ctrl->get_log_by_consent_id( 'cid-gpcx' );
+	$gpcxCats = is_array( $gpcx ) ? $gpcx['categories'] : array();
+	eq( $gpcxCats['meta.gpc_exception.google-maps'] ?? null, 'yes', 'meta.gpc_exception.<id>:yes is persisted' );
+	eq( $gpcxCats['svc.google-maps'] ?? null, 'yes', 'next to the service grant it explains' );
+
+	// ============================================================
 	// 3. get_consent_stats() excludes meta.* from the category chart
 	// ============================================================
 	echo "\n-- get_consent_stats() skips the reserved meta.* prefix --\n";
 
 	$stats = $ctrl->get_consent_stats( 30 );
+	ok( ! isset( $stats['categories']['meta.gpc_exception.google-maps'] ), 'a GPC exception is NOT counted as a category' );
 	ok( is_array( $stats ) && isset( $stats['categories'] ), 'get_consent_stats() returns a categories breakdown' );
 	$catStats = $stats['categories'];
 	ok( ! isset( $catStats['meta.age_affirmed'] ), 'meta.age_affirmed is NOT counted as a category (no phantom bar)' );

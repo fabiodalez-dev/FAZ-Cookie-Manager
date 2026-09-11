@@ -19,11 +19,10 @@ function marketingShareFlag(): string {
 }
 
 test.describe('CPRA sale/sharing flags in the category editor (1.17.2)', () => {
-  // The Sale/Sharing column only renders when an active banner exposes a
-  // Do-Not-Sell surface (Banner_Controller::has_do_not_sell_surface) — on a
-  // pure-GDPR site the flags drive nothing visitor-facing and the editor
-  // hides them. Enable the Do-Not-Sell entry point on the default banner for
-  // the toggle tests, snapshotting the prior settings for restore.
+  // The Sale/Sharing column renders on every site (GPC is enforced under every
+  // law); a Do-Not-Sell surface only changes its help copy. The toggle tests
+  // run with the Do-Not-Sell entry point enabled on the default banner, the
+  // CCPA shape they were written for, snapshotting the prior settings.
   let bannerSnapshot = '';
 
   test.beforeAll(() => {
@@ -94,7 +93,12 @@ test.describe('CPRA sale/sharing flags in the category editor (1.17.2)', () => {
     expect(marketingShareFlag(), 'marketing share_personal_data must persist as 0 after unchecking Share').toBe('0');
   });
 
-  test('column is hidden on a pure-GDPR site (no active Do-Not-Sell surface)', async ({ page, loginAsAdmin, wpBaseURL }) => {
+  // This test used to assert the opposite — the column hidden on a pure-GDPR
+  // site. That hid the switch behind a real bug: GPC is enforced under every
+  // law and opts visitors out of exactly the flagged categories, so a GDPR
+  // site with Functional still flagged blocked maps for Brave/Firefox visitors
+  // with no visible cause. The column must stay, and say why it matters.
+  test('column stays visible on a pure-GDPR site and explains the GPC effect', async ({ page, loginAsAdmin, wpBaseURL }) => {
     // Reset the marketing share flag the previous test set to 0, so the
     // preservation assertion below is meaningful.
     wpEval(
@@ -104,8 +108,8 @@ test.describe('CPRA sale/sharing flags in the category editor (1.17.2)', () => {
       `echo 'flag-reset';`,
     );
     // Temporarily disable the Do-Not-Sell entry point enabled in beforeAll:
-    // with no active banner exposing the opt-out, the editor must render
-    // WITHOUT the Sale/Sharing column (flags preserved server-side).
+    // with no active banner exposing the opt-out, the editor must STILL render
+    // the Sale/Sharing column, with the GPC help copy.
     wpEval(
       `global $wpdb;$t=$wpdb->prefix.'faz_banners';` +
       `$row=$wpdb->get_row("SELECT banner_id, settings FROM $t WHERE banner_default=1 LIMIT 1");` +
@@ -122,12 +126,22 @@ test.describe('CPRA sale/sharing flags in the category editor (1.17.2)', () => {
       await page.waitForSelector('#faz-category-edit-rows tr[data-cat-id]', { timeout: 10_000 });
       await page.waitForTimeout(800);
 
-      await expect(page.locator('#faz-category-edit-table')).toHaveAttribute('data-show-ccpa', '0');
-      await expect(page.locator('#faz-category-edit-rows .faz-cat-edit-sell')).toHaveCount(0);
-      await expect(page.locator('#faz-category-edit-rows .faz-cat-edit-share')).toHaveCount(0);
-      // Stored flags survive a save without the column (JS only PUTs flags
-      // for rows that render the toggles).
-      expect(marketingShareFlag(), 'share flag must be preserved while the column is hidden').toBe('1');
+      // Exactly one Sell and one Share toggle on EVERY non-necessary row — per
+      // row, so a row losing its toggle cannot hide behind another's duplicate.
+      const rows = page.locator('#faz-category-edit-rows tr[data-cat-id]');
+      const nonNecessaryRows = rows.filter({ hasNot: page.locator('code', { hasText: /^necessary$/ }) });
+      const nonNecessary = await nonNecessaryRows.count();
+      expect(nonNecessary).toBeGreaterThan(0);
+      for (let i = 0; i < nonNecessary; i++) {
+        await expect(nonNecessaryRows.nth(i).locator('.faz-cat-edit-sell')).toHaveCount(1);
+        await expect(nonNecessaryRows.nth(i).locator('.faz-cat-edit-share')).toHaveCount(1);
+      }
+      // The stored flag is what the toggle shows — nothing reset it.
+      const marketing = rows.filter({ has: page.locator('code', { hasText: /^marketing$/ }) });
+      await expect(marketing.locator('.faz-cat-edit-share')).toBeChecked();
+      expect(marketingShareFlag(), 'the stored share flag is untouched by rendering the editor').toBe('1');
+      // And the copy says why the flags matter on a site with no Do Not Sell link.
+      await expect(page.locator('.faz-card-body .faz-help').first()).toContainText('Global Privacy Control');
     } finally {
       // Re-enable for any later spec ordering (afterAll restores the snapshot anyway).
       wpEval(

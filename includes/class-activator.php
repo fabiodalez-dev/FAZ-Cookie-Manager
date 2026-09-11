@@ -118,7 +118,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.08.25.1';
+	const MIGRATIONS_VERSION = '2026.09.11.1';
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -153,6 +153,7 @@ class Activator {
 			self::enable_gpc_on_ccpa_banners();
 			self::ensure_share_personal_data_column();
 			self::clear_necessary_optout_flags();
+			self::normalize_legacy_functional_optout_flags();
 			self::reset_stale_per_cookie_consent();
 			self::demote_bulky_autoloaded_options();
 			self::refresh_cookie_translation_caches();
@@ -2200,9 +2201,11 @@ class Activator {
 		// sell/share=0 on existing installs can't clobber a legitimate admin
 		// choice. functional / wordpress-internal are seeded to 0 for NEW
 		// installs (Category_Controller::load_default), but they are NOT
-		// force-reset on existing installs — an admin may have deliberately
-		// flagged a functional cookie as shared, and a migration must not
-		// silently overwrite that explicit classification.
+		// force-reset here — an admin may have deliberately flagged a
+		// functional cookie as shared, and a migration must not silently
+		// overwrite that explicit classification. The legacy functional row
+		// that was never edited is handled separately, and narrowly, by
+		// normalize_legacy_functional_optout_flags().
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_cookie_categories" (escaped via esc_sql); slug bound via %s; one-shot idempotent migration write.
 		$result = $wpdb->query(
 			$wpdb->prepare(
@@ -2218,6 +2221,67 @@ class Activator {
 		if ( $result > 0 ) {
 			Category_Controller::get_instance()->delete_cache();
 		}
+	}
+
+	/**
+	 * Un-flag the Functional category as sold/shared on installs that never
+	 * chose that flag.
+	 *
+	 * Installs created before 1.17.2 seeded every category from the schema
+	 * default, sell_personal_data = share_personal_data = 1, so Functional was
+	 * marked as sold and shared. Nobody decided that: 1.17.2 changed the seed
+	 * for new installs to 0/0 and left existing rows alone.
+	 *
+	 * It became visible through Global Privacy Control. A visitor whose browser
+	 * sends GPC (Brave by default, privacy-focused Firefox builds such as Zen
+	 * and Waterfox) has every sale/share category switched off, so on those
+	 * sites the Functional category — a map, a video player, a chat widget —
+	 * was denied to them and could not be accepted. A Functional embed is not a
+	 * "sale" (no consideration) nor "sharing" (no cross-context behavioural
+	 * advertising, Cal. Civ. Code 1798.140(ah)).
+	 *
+	 * The row is reset only where it provably still carries the schema default
+	 * rather than an administrator's decision: Category_Controller::create_item()
+	 * writes date_created and date_modified from the same value, and every save
+	 * through the category editor or the REST API goes through update_item(),
+	 * which advances date_modified. So date_modified = date_created means the
+	 * row was never saved from the editor. A row that was edited — even only
+	 * its description — is left exactly as it is; the Cookies screen explains
+	 * the effect of the flag instead.
+	 *
+	 * It runs ONCE per install (`faz_normalize_legacy_functional_optout_done`).
+	 * run_pending_migrations() replays the whole list on every future
+	 * MIGRATIONS_VERSION bump, and a settings import inserts rows without their
+	 * dates (both then read 0000-00-00), so without the marker a Functional 1/1
+	 * an administrator deliberately imported would be reset by some later
+	 * release that had nothing to do with it.
+	 */
+	public static function normalize_legacy_functional_optout_flags() {
+		if ( get_option( 'faz_normalize_legacy_functional_optout_done' ) ) {
+			return;
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_cookie_categories';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the activation/upgrade path.
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+			return; // No table yet: retried on the next run, marker not set.
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_cookie_categories" (escaped via esc_sql); slug bound via %s; one-shot idempotent migration write.
+		$result = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE `" . esc_sql( $table ) . "` SET sell_personal_data = 0, share_personal_data = 0 WHERE slug = %s AND sell_personal_data = 1 AND share_personal_data = 1 AND date_modified = date_created",
+				'functional'
+			)
+		);
+		if ( false === $result ) {
+			// Throw so run_pending_migrations() does not bump the version and the
+			// normalisation is retried on the next admin load.
+			throw new \RuntimeException( 'FAZ: failed to normalise the legacy Functional opt-out flags; migration will retry.' );
+		}
+		if ( $result > 0 ) {
+			Category_Controller::get_instance()->delete_cache();
+		}
+		update_option( 'faz_normalize_legacy_functional_optout_done', 1, false );
 	}
 
 	/**
