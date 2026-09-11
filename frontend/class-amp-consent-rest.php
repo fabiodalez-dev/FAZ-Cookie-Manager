@@ -1130,6 +1130,11 @@ class AMP_Consent_Rest {
 			if ( isset( $pairs[ $key ] ) || isset( $purpose_keys[ $key ] ) ) {
 				continue;
 			}
+			// An AMP accept or reject answers the banner: the record is no
+			// longer one a signal created on the visitor's behalf.
+			if ( 'undecided' === $key ) {
+				continue;
+			}
 			// A GPC exception marker lives only as long as its grant and the
 			// signal: the classic runtime prunes it the same way.
 			if ( 0 === strpos( $key, 'gpcx.' ) ) {
@@ -1215,6 +1220,12 @@ class AMP_Consent_Rest {
 		}
 		$parsed = function_exists( 'faz_parse_consent_cookie' ) ? faz_parse_consent_cookie( $cookie ) : array();
 		if ( 'yes' !== ( isset( $parsed['action'] ) ? $parsed['action'] : '' ) ) {
+			return false;
+		}
+		// A record a privacy signal created before the visitor answered the
+		// banner (script.js writes undecided:1) holds the opt-out, not a
+		// decision: the AMP page must still ask, as the classic one does.
+		if ( isset( $parsed['undecided'] ) && '1' === $parsed['undecided'] ) {
 			return false;
 		}
 		if ( absint( isset( $parsed['rev'] ) ? $parsed['rev'] : 1 ) < absint( $context['revision'] ) ) {

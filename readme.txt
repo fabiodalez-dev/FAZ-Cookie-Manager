@@ -401,6 +401,7 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 = 1.31.0 =
 * Fixed: Visitors sending Global Privacy Control can open a blocked map or video by clicking Accept on it. Only that service is granted: the category stays denied, Accept All cannot re-grant it, and a Do Not Sell request still wins.
 * Fixed: Installs from before 1.17.2 no longer treat the Functional category as sale/sharing unless an administrator set it that way, so GPC visitors are not denied every functional embed.
+* Fixed: With GPC or a Do Not Sell request the banner no longer disappears after the first page, leaving only the revisit icon: it stays until the visitor makes a choice, and the opt-out is no longer re-sent as a new consent on every page.
 * Fixed: The Sale / Sharing column is shown on every site, and the Respect GPC note explains what is actually enforced: a GPC signal is honoured whether the switch is on or off.
 
 = 1.30.0 =

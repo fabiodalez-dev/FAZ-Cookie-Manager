@@ -119,6 +119,45 @@ test.describe('GPC: Accept on a blocked embed grants that service only', () => {
     }
   });
 
+  test('the banner stays until the visitor answers it, then gives way to the icon', async ({ browser, getConsentCookie, parseConsentCookie }) => {
+    // The other half of the report: "the banner doesn't appear, only the
+    // cookie icon". GPC records its opt-out on the first page; the init path
+    // then read that record as a decision and dropped the banner from the
+    // second page on. The signal answers the sale/sharing question only.
+    const ctx = await gpcContext(browser);
+    const page = await ctx.newPage();
+    const notice = page.locator('[data-faz-tag="notice"]');
+    const icon = page.locator('[data-faz-tag="revisit-consent"]');
+    let updates = 0;
+    await page.exposeFunction('__fazCountUpdate', () => { updates += 1; });
+    await page.addInitScript(() => {
+      document.addEventListener('fazcookie_consent_update', () => (window as unknown as { __fazCountUpdate: () => void }).__fazCountUpdate());
+    });
+    try {
+      for (const n of [1, 2, 3]) {
+        await openPage(page, url);
+        await expect(notice, `page ${n}: the banner is offered`).toBeVisible({ timeout: 10_000 });
+        await expect(icon, `page ${n}: no revisit icon yet`).toBeHidden();
+      }
+      const undecided = parseConsentCookie((await getConsentCookie(ctx))!.value);
+      expect(undecided.undecided, 'the record the signal created is marked undecided').toBe('1');
+      expect(undecided.functional, 'and it still denies the flagged category').toBe('no');
+      await page.waitForTimeout(500);
+      expect(updates, 'one consent update in three pages — the opt-out itself, not one per page').toBe(1);
+
+      await page.locator('[data-faz-tag="reject-button"]').first().click();
+      await expect(notice).toBeHidden({ timeout: 10_000 });
+      const decided = parseConsentCookie((await getConsentCookie(ctx))!.value);
+      expect(decided.undecided, 'a choice clears the flag').toBeUndefined();
+
+      await openPage(page, url);
+      await expect(notice, 'after a choice the banner is not offered again').toBeHidden();
+      await expect(icon, 'and the revisit icon takes its place').toBeVisible({ timeout: 10_000 });
+    } finally {
+      await ctx.close();
+    }
+  });
+
   test('Accept All on the banner does not open the map under GPC', async ({ browser, getConsentCookie, parseConsentCookie }) => {
     // The other half of the rule: GPC still binds the category, so a broad
     // Accept All cannot re-grant it. Only an Accept on the embed itself can.

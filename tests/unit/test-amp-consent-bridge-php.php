@@ -569,6 +569,16 @@ namespace {
 		);
 	}
 
+	// ── A record a privacy signal created is not a decision ─────────────────
+	// script.js marks the record GPC or a Do Not Sell request creates before
+	// the visitor answers the banner as undecided:1, and keeps offering the
+	// banner. The AMP page must ask too, and an AMP answer ends that state.
+	$undecided_cookie = $cookie . ',undecided:1';
+	amp_same( AMP_Consent_Rest::state_from_cookie( $undecided_cookie, $amp_context ), false, 'an undecided (signal-created) record is not read as an AMP decision' );
+	$answered = faz_parse_consent_cookie( AMP_Consent_Rest::build_cookie_value( 'rejected', array( 'analytics' => false ), $amp_context, 'cid', time() + 3600, $undecided_cookie, true ) );
+	amp_ok( ! isset( $answered['undecided'] ), 'an AMP answer does not carry the undecided flag forward' );
+	amp_ok( false !== AMP_Consent_Rest::state_from_cookie( AMP_Consent_Rest::build_cookie_value( 'rejected', array( 'analytics' => false ), $amp_context, 'cid', time() + 3600, $undecided_cookie, true ), $amp_context ), 'and the record it writes reads back as a decision' );
+
 	// ── Clearing cookies must reach AMP as a withdrawal ─────────────────────
 	// The signed consentString exists for a browser that REFUSES the publisher
 	// cookie in a third-party context. On a same-origin request the cookie is

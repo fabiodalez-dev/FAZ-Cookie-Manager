@@ -543,6 +543,7 @@ function _fazInvalidateStoredConsent() {
     });
     _fazClearStoredServiceConsent();
     _fazClearGpcExceptions();
+    ref._fazConsentStore.delete("undecided");
 }
 const _fazStoredRevision = parseInt(fazcookieConsentMap.rev, 10);
 const _fazConsentRevisionInvalidated =
@@ -572,6 +573,21 @@ if (_fazConsentInvalidated) {
         if (!value && item === _FAZ_SCOPE_LAW_KEY) value = fazcookieConsentMap.law || "";
         ref._fazConsentStore.set(item, value);
     });
+// Signal markers. The store is re-serialised into the cookie on every write,
+// and anything not loaded here is dropped by the next write — so `gpc` and
+// `dnsmpi` used to vanish after a reload, _fazApplyGpcOptOut() then reported a
+// change on EVERY page, and fazcookie_consent_update (consent-log POST, GCM
+// update, TCF useractioncomplete) fired once per page view for every GPC
+// visitor. `undecided` marks a record a privacy signal created before the
+// visitor answered the banner. Restored only when present, so a cookie that
+// never carried them keeps its shape; the two signal markers only while their
+// signal is still asserted, so a visitor who switches GPC off loses the marker
+// on the next write exactly as before (_fazUnblock reads it).
+if (!_fazConsentInvalidated) {
+    if (fazcookieConsentMap.gpc && _fazGpcActive()) ref._fazConsentStore.set("gpc", fazcookieConsentMap.gpc);
+    if (fazcookieConsentMap.dnsmpi && _fazDnsmpiCookieActive()) ref._fazConsentStore.set("dnsmpi", fazcookieConsentMap.dnsmpi);
+    if (fazcookieConsentMap.undecided === "1") ref._fazConsentStore.set("undecided", "1");
+}
 // Always track the revision currently in effect so next _fazSetInStore()
 // persists it into the cookie.
 ref._fazConsentStore.set("rev", String(_fazServerRevision));
@@ -877,6 +893,14 @@ function _fazInitOperations() {
         _fazInvalidateStoredConsent();
         _fazStoredAction = null;
     }
+    // A record a privacy signal (GPC, a Do Not Sell request) created before the
+    // visitor answered the banner. It must persist — it holds the binding
+    // opt-out and the audit trail — but it is not the visitor's decision, so
+    // the banner keeps being offered on every page until they make one.
+    // Without this, the record read as a decision from the second page on:
+    // the banner vanished and only the revisit icon was left, even though
+    // every comment below says the notice must stay available.
+    var _fazUndecided = !!_fazStoredAction && ref._fazGetFromStore("undecided") === "1";
     // Honour a standing [faz_do_not_sell] opt-out before anything unblocks.
     // Runs regardless of a stored action — the form opt-out postdates the
     // stored consent — and no-ops once the store already reflects it.
@@ -908,7 +932,7 @@ function _fazInitOperations() {
             _fazSeedInitialState();
         }
         var _fazGpcChanged = _fazApplyGpcOptOut();
-        if (_fazStoredAction) {
+        if (_fazStoredAction && !_fazUndecided) {
             _fazRemoveBanner();
         } else {
             // GPC is not blanket consent. Keep the notice/preferences visible
@@ -931,18 +955,32 @@ function _fazInitOperations() {
         // violating ePrivacy Art. 5(3). It is generated lazily inside
         // _fazAcceptCookies() on the first user action.
     } else {
-        _fazRemoveBanner();
+        // An undecided record whose signal is gone (GPC switched off, the Do
+        // Not Sell cookie expired) still has not been answered: offer the
+        // banner, but keep the stored state rather than re-seeding defaults.
+        if (_fazUndecided) _fazShowBanner();
+        else _fazRemoveBanner();
         _fazFireConsentReadyEvent('restore');
-        // Returning visitors with a stored "consent:yes" cookie still need the
-        // bootstrap unblock pass for server-side blocked scripts/iframes.
-        // Delay the restore pass so later synchronous DOM mutations cannot
-        // remove the restored nodes before they get a chance to execute.
-        [250, 1000, 2000].forEach((delay) => {
-            window.setTimeout(_fazUnblock, delay);
-        });
-        if (document.readyState !== 'complete') {
-            window.addEventListener('load', _fazUnblock, { once: true });
-        }
+        _fazScheduleRestoreUnblock();
+    }
+}
+
+/**
+ * Bootstrap unblock pass for a returning visitor.
+ *
+ * Returning visitors with a stored consent cookie still need the unblock pass
+ * for server-side blocked scripts/iframes. Delay it so later synchronous DOM
+ * mutations cannot remove the restored nodes before they get a chance to
+ * execute.
+ *
+ * @returns {void}
+ */
+function _fazScheduleRestoreUnblock() {
+    [250, 1000, 2000].forEach((delay) => {
+        window.setTimeout(_fazUnblock, delay);
+    });
+    if (document.readyState !== 'complete') {
+        window.addEventListener('load', _fazUnblock, { once: true });
     }
 }
 
@@ -1084,6 +1122,10 @@ function _fazApplyDnsmpiOptOut() {
         ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
         ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
         ref._fazSetInStore("consent", "no");
+        // The signal created this record, not the visitor: they have not
+        // answered the banner yet. _fazInitOperations() keeps showing it
+        // until they do; _fazAcceptCookies() clears the flag.
+        ref._fazSetInStore("undecided", "1");
     }
     // Audit marker, mirroring the gpc:1 marker: the recorded state says WHY it
     // changed without a banner interaction.
@@ -1151,6 +1193,10 @@ function _fazApplyGpcOptOut() {
         ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
         ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
         ref._fazSetInStore("consent", "no");
+        // The signal created this record, not the visitor: they have not
+        // answered the banner yet. _fazInitOperations() keeps showing it
+        // until they do; _fazAcceptCookies() clears the flag.
+        ref._fazSetInStore("undecided", "1");
     }
     ref._fazSetInStore("gpc", "1");
 
@@ -3370,6 +3416,11 @@ function _fazAcceptCookies(choice = "all", ungated = false, source = "preference
     // stable tracker is created before the user gives or refuses consent.
     _fazSetConsentID();
 
+    // An explicit choice answers the banner: a record a privacy signal created
+    // on an earlier page stops being "undecided" here, and only here — every
+    // visitor choice passes through this function. Deleted before the next
+    // store write so the serialised cookie no longer carries it.
+    ref._fazConsentStore.delete("undecided");
     ref._fazSetInStore("action", "yes");
     // __scope.banner / __scope.law — see _fazConsentScopeChanged header.
     // Unprefixed "banner"/"law" keys would collide with admin-renameable
