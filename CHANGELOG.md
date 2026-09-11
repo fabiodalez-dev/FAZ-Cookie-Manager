@@ -2,6 +2,17 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.31.0] - 2026-09-11
+
+### Fixed
+- A visitor whose browser sends Global Privacy Control (Brave, DuckDuckGo, Firefox with the setting on) could not open a blocked map or video by clicking Accept on it, when per-service consent is on and the embed's category is flagged as sale or sharing. The click granted the service and the same save removed it again as a sale/share bypass, so the button did nothing. The service the visitor accepts on its own embed is now granted and marked as a GPC exception (`gpcx.<id>:1` in the consent cookie). The category stays denied, Accept All still cannot re-grant it, every other sale/share service stays blocked, a standing Do Not Sell request still wins over the click, and Reject withdraws it. The AMP consent bridge keeps the same exception, and the consent log records it as `meta.gpc_exception.<id>`.
+- Installs created before 1.17.2 still had the Functional category flagged as sale and sharing, the schema default of the time. GPC is enforced under every applicable law and opts the visitor out of every flagged category, so on those sites maps, videos and other functional embeds never loaded for GPC visitors, whatever they clicked. The upgrade clears both flags on Functional when the row was never saved from the category editor; a row an administrator edited keeps its values.
+- The Sale / Sharing column in Cookies → Cookie Categories was hidden on sites without a Do Not Sell link, on the premise that the flags did nothing there. They decide what a GPC signal blocks on every site, so the column is now always shown, with help text that says so.
+- The note under Banner → Respect Global Privacy Control said that, outside a few US rule sets, "this switch decides". It has not since 1.27: a GPC signal is honoured whether the switch is on or off. The note now explains what is enforced, where it is configured, and the per-embed exception.
+
+### Added
+- A consent liveness matrix: 32 configurations (applicable law, GPC, Do Not Sell, per-service consent, sale/share flag on the embed's category) through four scenarios, each checked on the same page and after a reload, against one written rule — a consent the visitor gives stays alive, and dies only where a binding opt-out requires it. An end-to-end spec reproduces the reported configuration on the real stack.
+
 ## [1.30.0] - 2026-09-09
 
 ### Fixed

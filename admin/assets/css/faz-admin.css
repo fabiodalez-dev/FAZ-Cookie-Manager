@@ -477,6 +477,13 @@ body[class*="faz-cookie-manager"] #wpbody-content {
 	margin-top: 6px;
 	line-height: 1.55;
 }
+.faz-form-group .faz-help p {
+	font-size: inherit;
+	margin: 0 0 6px;
+}
+.faz-form-group .faz-help p:last-child {
+	margin-bottom: 0;
+}
 .faz-input,
 .faz-select,
 .faz-textarea {

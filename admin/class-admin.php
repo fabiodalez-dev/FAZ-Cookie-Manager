@@ -762,7 +762,11 @@ class Admin {
 						// Humanized label for the reserved meta.age_affirmed audit key
 						// in the categories cell (rendered as a distinct audit pill).
 						'metaAgeAffirmed'          => __( 'Age affirmed', 'faz-cookie-manager' ),
-						'loadFailed'               => __( 'Failed to load consent logs.', 'faz-cookie-manager' ),
+						// Label for meta.gpc_exception.<id>: a service the visitor
+						// accepted on its own blocked embed while sending GPC.
+						/* translators: %s: service identifier, e.g. google-maps */
+						'metaGpcException'         => __( 'GPC exception: %s', 'faz-cookie-manager' ),
+						'loadFailed'            => __( 'Failed to load consent logs.', 'faz-cookie-manager' ),
 						'noLogs'                   => __( 'No consent logs found.', 'faz-cookie-manager' ),
 						'exportOk'                 => __( 'CSV exported successfully.', 'faz-cookie-manager' ),
 						'exportFailed'             => __( 'Failed to export CSV.', 'faz-cookie-manager' ),

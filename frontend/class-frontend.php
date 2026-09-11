@@ -827,7 +827,12 @@ class Frontend {
 									// complete audit trail (GDPR accountability) — not just the
 									// category-level summary. When per-service consent is off there
 									// are no svc.*/ck.* entries and this adds nothing.
-									"try{var cm=document.cookie.match(/fazcookie-consent=([^;]+)/);if(cm){var cv=cm[1];try{cv=decodeURIComponent(cv)}catch(er){}cv.split(',').forEach(function(pr){var ci=pr.indexOf(':');if(ci<1)return;var ck=pr.substring(0,ci);if(ck.indexOf('svc.')===0||ck.indexOf('ck.')===0){c[ck]=pr.substring(ci+1)}})}}catch(er){}" .
+									// A gpcx.<id>:1 marker (a service accepted on its own
+									// blocked embed while GPC was asserted) is logged as the
+									// audit key meta.gpc_exception.<id>:yes — the log keeps only
+									// yes/no values, and meta.* stays out of the dashboard's
+									// per-category acceptance chart.
+									"try{var cm=document.cookie.match(/fazcookie-consent=([^;]+)/);if(cm){var cv=cm[1];try{cv=decodeURIComponent(cv)}catch(er){}cv.split(',').forEach(function(pr){var ci=pr.indexOf(':');if(ci<1)return;var ck=pr.substring(0,ci);if(ck.indexOf('svc.')===0||ck.indexOf('ck.')===0){c[ck]=pr.substring(ci+1)}else if(ck.indexOf('gpcx.')===0&&pr.substring(ci+1)==='1'){c['meta.gpc_exception.'+ck.substring(5)]='yes'}})}}catch(er){}" .
 										// Age-gate accountability (GDPR Art. 5(2)/7(1)): when the
 										// visitor affirmed they meet the digital age of consent, fold
 										// the reserved meta.age_affirmed:yes key into the logged

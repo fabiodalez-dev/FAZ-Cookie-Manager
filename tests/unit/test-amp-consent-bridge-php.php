@@ -478,6 +478,40 @@ namespace {
 	amp_ok( false !== strpos( $rejected, 'svc.youtube:no' ), 'an AMP reject preserves an existing DENIAL — only grants are refused' );
 	amp_ok( false !== strpos( $rejected, 'gpc:yes' ), 'an AMP reject still preserves the GPC opt-out signal' );
 
+	// ── A GPC exception survives an AMP accept, and nothing else does ───────
+	//
+	// script.js grants a service the visitor accepted on its own blocked embed
+	// while GPC was asserted, and marks it gpcx.<id>:1. The bridge used to drop
+	// every svc.* under GPC, so an Accept on an AMP page re-blocked a map the
+	// visitor had opened on a classic one. The marker is what separates that
+	// consent from a bypass, so the unmarked grant beside it must still go.
+	$gpcx_existing = 'consentid:old,consent:yes,action:yes,necessary:yes,gpc:1,svc.maps:yes,gpcx.maps:1,svc.ads:yes,gpcx.ghost:1,rev:2';
+	$gpcx_pairs    = faz_parse_consent_cookie( AMP_Consent_Rest::build_cookie_value(
+		'accepted', array( 'analytics' => true, 'marketing' => false ), $context, 'cid', time() + 3600, $gpcx_existing, true
+	) );
+	amp_same( isset( $gpcx_pairs['svc.maps'] ) ? $gpcx_pairs['svc.maps'] : '', 'yes', 'GPC + AMP accept keeps a service the visitor accepted on its embed' );
+	amp_same( isset( $gpcx_pairs['gpcx.maps'] ) ? $gpcx_pairs['gpcx.maps'] : '', '1', 'and keeps its exception marker' );
+	amp_ok( ! isset( $gpcx_pairs['svc.ads'] ), 'GPC + AMP accept still drops an UNMARKED sale/share grant' );
+	amp_ok( ! isset( $gpcx_pairs['gpcx.ghost'] ), 'a marker without its grant is not carried' );
+
+	$gpcx_rejected = faz_parse_consent_cookie( AMP_Consent_Rest::build_cookie_value(
+		'rejected', array( 'analytics' => false, 'marketing' => false ), $context, 'cid', time() + 3600, $gpcx_existing, true
+	) );
+	amp_ok( ! isset( $gpcx_rejected['svc.maps'] ) && ! isset( $gpcx_rejected['gpcx.maps'] ), 'an AMP reject withdraws the exception and its marker' );
+
+	$_COOKIE['fazcookie-dnsmpi'] = '1';
+	$gpcx_dnsmpi = faz_parse_consent_cookie( AMP_Consent_Rest::build_cookie_value(
+		'accepted', array( 'analytics' => true, 'marketing' => false ), $context, 'cid', time() + 3600, $gpcx_existing, true
+	) );
+	unset( $_COOKIE['fazcookie-dnsmpi'] );
+	amp_ok( ! isset( $gpcx_dnsmpi['svc.maps'] ) && ! isset( $gpcx_dnsmpi['gpcx.maps'] ), 'a standing Do Not Sell request voids the exception' );
+
+	$gpcx_no_signal = faz_parse_consent_cookie( AMP_Consent_Rest::build_cookie_value(
+		'accepted', array( 'analytics' => true, 'marketing' => true ), $context, 'cid', time() + 3600, $gpcx_existing, false
+	) );
+	amp_same( isset( $gpcx_no_signal['svc.maps'] ) ? $gpcx_no_signal['svc.maps'] : '', 'yes', 'without GPC the grant is an ordinary one and is carried' );
+	amp_ok( ! isset( $gpcx_no_signal['gpcx.maps'] ), 'without GPC the marker is pruned, as script.js does' );
+
 	// A category hidden AFTER the visitor consented never reaches get_purposes(),
 	// so the purpose loop cannot write it and its old grant would ride through a
 	// total withdrawal untouched. Same rule, same guarantee.

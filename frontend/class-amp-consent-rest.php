@@ -1124,8 +1124,19 @@ class AMP_Consent_Rest {
 		// to protect, so they still survive: only `yes` is refused, and only
 		// when the decision was not an acceptance.
 		$faz_carry_grants = ( 'accepted' === $state );
-		foreach ( self::parse_cookie_pairs( $existing_cookie ) as $key => $value ) {
+		$existing_pairs   = self::parse_cookie_pairs( $existing_cookie );
+		$gpc_exceptions   = self::gpc_exception_ids( $existing_pairs, $gpc_active && $faz_carry_grants );
+		foreach ( $existing_pairs as $key => $value ) {
 			if ( isset( $pairs[ $key ] ) || isset( $purpose_keys[ $key ] ) ) {
+				continue;
+			}
+			// A GPC exception marker lives only as long as its grant and the
+			// signal: the classic runtime prunes it the same way.
+			if ( 0 === strpos( $key, 'gpcx.' ) ) {
+				$id = substr( $key, 5 );
+				if ( isset( $gpc_exceptions[ $id ] ) ) {
+					$pairs[ $key ] = '1';
+				}
 				continue;
 			}
 			// AMP exposes category purposes, not the classic runtime's granular
@@ -1134,7 +1145,15 @@ class AMP_Consent_Rest {
 			// denial on the next classic request. Clear granular overrides rather
 			// than preserve an unprovable exemption; unrelated category consent is
 			// retained in the explicit purpose map above.
+			//
+			// The one grant that is not opaque is a service the visitor accepted
+			// on its own blocked embed while GPC was asserted: script.js marks it
+			// gpcx.<id>:1. Dropping it here meant an Accept on an AMP page
+			// silently re-blocked a map the visitor had opened on a classic one.
 			if ( $gpc_active && ( 0 === strpos( $key, 'svc.' ) || 0 === strpos( $key, 'ck.' ) ) ) {
+				if ( 0 === strpos( $key, 'svc.' ) && isset( $gpc_exceptions[ substr( $key, 4 ) ] ) ) {
+					$pairs[ $key ] = 'yes';
+				}
 				continue;
 			}
 			if ( ! $faz_carry_grants && 'gpc' !== $key && 'yes' === $value ) {
@@ -1148,6 +1167,41 @@ class AMP_Consent_Rest {
 			$out[] = $key . ':' . $value;
 		}
 		return implode( ',', $out );
+	}
+
+	/**
+	 * Services holding a GPC exception that this decision may keep.
+	 *
+	 * Mirrors _fazIsGpcException() in script.js: a service is excepted only when
+	 * the cookie carries both svc.<id>:yes and the gpcx.<id>:1 marker. The
+	 * exception exists only while GPC is the sole binding opt-out, so a standing
+	 * Do Not Sell request (fazcookie-dnsmpi=1) — a later explicit act — voids it,
+	 * and a decision that is not an acceptance keeps no grant at all.
+	 *
+	 * @param array $existing_pairs Parsed pairs of the current cookie.
+	 * @param bool  $eligible       GPC asserted and the decision is an acceptance.
+	 * @return array Service id => true.
+	 */
+	private static function gpc_exception_ids( $existing_pairs, $eligible ) {
+		if ( ! $eligible ) {
+			return array();
+		}
+		$dnsmpi = isset( $_COOKIE['fazcookie-dnsmpi'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+		if ( $dnsmpi ) {
+			return array();
+		}
+		$ids = array();
+		foreach ( (array) $existing_pairs as $key => $value ) {
+			if ( 0 !== strpos( (string) $key, 'gpcx.' ) || '1' !== (string) $value ) {
+				continue;
+			}
+			$id = substr( (string) $key, 5 );
+			if ( '' !== $id && isset( $existing_pairs[ 'svc.' . $id ] ) && 'yes' === $existing_pairs[ 'svc.' . $id ] ) {
+				$ids[ $id ] = true;
+			}
+		}
+		return $ids;
 	}
 
 	/**

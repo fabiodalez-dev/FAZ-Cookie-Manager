@@ -65,7 +65,6 @@ $faz_requirement = function ( $paths ) use ( $faz_geo_on ) {
 $faz_equal_weight = $faz_requirement( 'ui.equal_weight_buttons' );
 $faz_revisit_req  = $faz_requirement( 'ui.revisit_widget_required' );
 $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
-$faz_gpc_req      = $faz_requirement( array( 'signals.gpc_honored', 'signals.gpc_required' ) );
 ?>
 
 <div id="faz-banner">
@@ -925,22 +924,23 @@ $faz_gpc_req      = $faz_requirement( array( 'signals.gpc_honored', 'signals.gpc
 				</div>
 				<div class="faz-form-group">
 					<label class="faz-toggle" id="faz-b-gpc-toggle">
-						<input type="checkbox"<?php echo $faz_gpc_req['some'] ? ' aria-describedby="faz-b-gpc-note"' : ''; ?>>
+						<input type="checkbox" aria-describedby="faz-b-gpc-note">
 						<span class="faz-toggle-track"></span>
 						<span><?php esc_html_e( 'Respect Global Privacy Control (GPC)', 'faz-cookie-manager' ); ?></span>
 					</label>
-					<?php if ( $faz_gpc_req['some'] ) : ?>
-						<p class="faz-help" id="faz-b-gpc-note">
-							<?php
-							printf(
-								/* translators: 1: number of rule sets that honour or mandate GPC, 2: total number of shipped rule sets. */
-								esc_html__( 'Switching this off does not reach everyone: %1$d of the %2$d shipped rule sets treat a GPC signal as a binding opt-out, and the runtime honours it for those visitors regardless. In several US states ignoring the signal is itself the violation. Outside them, this switch decides.', 'faz-cookie-manager' ),
-								(int) $faz_gpc_req['required'],
-								(int) $faz_gpc_req['total']
-							);
-							?>
-						</p>
-					<?php endif; ?>
+					<?php
+					// This note used to say "Outside them, this switch decides". It
+					// did not: since 1.27 neither script.js, the server-side blocker
+					// nor the AMP bridge reads the switch — a browser signal is not a
+					// publisher preference, and a browser cannot say which law covers
+					// its visitor. Telling admins otherwise sent them looking in the
+					// wrong place when GPC visitors could not load maps.
+					?>
+					<div class="faz-help" id="faz-b-gpc-note">
+						<p><?php esc_html_e( 'A Global Privacy Control signal is always honoured, whether this switch is on or off. GPC is a binding opt-out of the sale and sharing of personal data in several US states, and a browser does not say which law applies to its visitor, so the plugin treats it the same everywhere.', 'faz-cookie-manager' ); ?></p>
+						<p><?php esc_html_e( 'What it blocks is decided on the Cookies page: a visitor sending GPC (Brave, DuckDuckGo, Firefox with the setting on) is opted out of every category flagged Sale or Sharing, and of nothing else. If those visitors report that maps or videos never load, check that Functional is not flagged there.', 'faz-cookie-manager' ); ?></p>
+						<p><?php esc_html_e( 'One exception: with per-service consent on, a visitor who clicks Accept on a blocked embed (a map, a video) gets that one service, even under GPC. The category stays denied, every other service stays blocked, and a Do Not Sell request still wins over the click. The consent log records it as a GPC exception.', 'faz-cookie-manager' ); ?></p>
+					</div>
 				</div>
 			</div>
 		</div>

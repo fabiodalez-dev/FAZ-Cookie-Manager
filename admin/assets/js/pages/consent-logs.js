@@ -180,9 +180,17 @@
 						// here is humanized. Unknown future meta.* keys degrade to an
 						// auto-humanized label.
 						var metaKey = k.slice(5);
-						var metaLabel = metaKey === 'age_affirmed'
-							? fazI18n('consentLogs.metaAgeAffirmed', 'Age affirmed')
-							: metaKey.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+						var metaLabel;
+						if (metaKey === 'age_affirmed') {
+							metaLabel = fazI18n('consentLogs.metaAgeAffirmed', 'Age affirmed');
+						} else if (metaKey.indexOf('gpc_exception.') === 0) {
+							// A service accepted on its own blocked embed while the
+							// visitor's browser sent Global Privacy Control.
+							metaLabel = fazI18n('consentLogs.metaGpcException', 'GPC exception: %s')
+								.replace('%s', metaKey.slice('gpc_exception.'.length));
+						} else {
+							metaLabel = metaKey.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+						}
 						catBadge.className = 'faz-cat-pill faz-cat-audit';
 						catBadge.textContent = metaLabel;
 					} else {
