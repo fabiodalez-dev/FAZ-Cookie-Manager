@@ -175,6 +175,9 @@ test.describe('GPC: Accept on a blocked embed grants that service only', () => {
       const parsed = parseConsentCookie((await getConsentCookie(ctx))!.value);
       expect(parsed.functional).toBe('no');
       expect(parsed['svc.google-maps'] === 'yes').toBeFalsy();
+      // Nor a stray exception marker without its grant: a regression writing
+      // gpcx.<id>:1 here would leave the map blocked and pass the line above.
+      expect(parsed['gpcx.google-maps']).not.toBe('1');
 
       await openPage(page, url);
       await expect(placeholder(page), 'and after a reload').toHaveCount(1);

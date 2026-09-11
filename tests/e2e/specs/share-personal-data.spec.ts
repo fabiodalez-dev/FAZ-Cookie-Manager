@@ -126,12 +126,16 @@ test.describe('CPRA sale/sharing flags in the category editor (1.17.2)', () => {
       await page.waitForSelector('#faz-category-edit-rows tr[data-cat-id]', { timeout: 10_000 });
       await page.waitForTimeout(800);
 
-      // One sell + one share toggle per non-necessary category.
+      // Exactly one Sell and one Share toggle on EVERY non-necessary row — per
+      // row, so a row losing its toggle cannot hide behind another's duplicate.
       const rows = page.locator('#faz-category-edit-rows tr[data-cat-id]');
-      const nonNecessary = (await rows.count()) - (await rows.filter({ has: page.locator('code', { hasText: /^necessary$/ }) }).count());
+      const nonNecessaryRows = rows.filter({ hasNot: page.locator('code', { hasText: /^necessary$/ }) });
+      const nonNecessary = await nonNecessaryRows.count();
       expect(nonNecessary).toBeGreaterThan(0);
-      await expect(page.locator('#faz-category-edit-rows .faz-cat-edit-sell')).toHaveCount(nonNecessary);
-      await expect(page.locator('#faz-category-edit-rows .faz-cat-edit-share')).toHaveCount(nonNecessary);
+      for (let i = 0; i < nonNecessary; i++) {
+        await expect(nonNecessaryRows.nth(i).locator('.faz-cat-edit-sell')).toHaveCount(1);
+        await expect(nonNecessaryRows.nth(i).locator('.faz-cat-edit-share')).toHaveCount(1);
+      }
       // The stored flag is what the toggle shows — nothing reset it.
       const marketing = rows.filter({ has: page.locator('code', { hasText: /^marketing$/ }) });
       await expect(marketing.locator('.faz-cat-edit-share')).toBeChecked();
