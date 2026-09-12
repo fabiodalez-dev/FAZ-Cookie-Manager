@@ -192,16 +192,20 @@ check('(k) so the service is bound by GPC again', get(w12, 'svc.google-maps') !=
 // without carrying the origin on the parked entry the replayed grant would not
 // be an exception and the binding pass would drop it — the embed would stay
 // blocked for a visitor who did everything asked of them.
+// The checkbox is the one the plugin renders, and the replay is triggered the
+// way a visitor triggers it — by ticking the box — so the `change` listener
+// that calls _fazResumePendingAgeGatedGrant() is itself under test.
 const w13 = loadFrontend({ ageGate: true });
 w13.eval('_fazApplyGpcOptOut()');
 w13.eval('_fazWatchBannerElement()');
 w13.document.body.innerHTML =
   '<button data-faz-accept="functional" data-faz-accept-service="google-maps"></button>' +
-  '<input type="checkbox" class="faz-age-confirm-cb">';
+  '<div data-faz-tag="notice-buttons"></div>';
+w13.eval('_fazRenderAgeConfirmations()');
+check('(l) the age row is rendered above the accept surface', !!w13.document.querySelector('.faz-age-confirm-cb'));
 w13.document.querySelector('[data-faz-accept]').click();
 check('(l) the age gate parks the click instead of granting it', get(w13, 'svc.google-maps') !== 'yes');
-w13.document.querySelector('.faz-age-confirm-cb').checked = true;
-w13.eval('_fazResumePendingAgeGatedGrant()');
+w13.eval("var b=document.querySelector('.faz-age-confirm-cb');b.checked=true;b.dispatchEvent(new Event('change'))");
 check('(l) ticking the age box replays it as an embed click', get(w13, 'svc.google-maps') === 'yes');
 check('(l) so the exception is minted', get(w13, 'gpcx.google-maps') === '1');
 check('(l) and the category stays denied', get(w13, 'functional') === 'no');
