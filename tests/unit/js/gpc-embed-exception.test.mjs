@@ -59,6 +59,18 @@ function loadFrontend({ gpc = true, cookie = '' } = {}) {
 }
 
 const get = (w, k) => w.fazcookie._fazConsentStore.get(k);
+// Accept THROUGH the shipped placeholder handler, the way a visitor does.
+// Calling window._fazAcceptService directly no longer mints an exception: it
+// is a public global any script on the page can call, and an exception is a
+// consent, so it takes a click on that service's own blocked-content card.
+function acceptOnPlaceholder(w, serviceId, category) {
+  w.eval('_fazWatchBannerElement()');
+  const btn = w.document.createElement('button');
+  btn.setAttribute('data-faz-accept', category);
+  btn.setAttribute('data-faz-accept-service', serviceId);
+  w.document.body.appendChild(btn);
+  btn.click();
+}
 const cookieValue = (w) => {
   const part = w.document.cookie.split('; ').find((c) => c.startsWith('fazcookie-consent='));
   return part ? part.substring('fazcookie-consent='.length) : '';
@@ -69,7 +81,7 @@ console.log('GPC embed exception (jsdom)');
 // (a) the click works under GPC, and only for that service.
 const w = loadFrontend();
 w.eval('_fazApplyGpcOptOut()');
-w.eval("window._fazAcceptService('google-maps', 'functional')");
+acceptOnPlaceholder(w, 'google-maps', 'functional');
 check('(a) the clicked service is granted under GPC', get(w, 'svc.google-maps') === 'yes');
 check('(a) and marked as a GPC exception', get(w, 'gpcx.google-maps') === '1');
 check('(a) the CATEGORY stays denied — only the service is excused', get(w, 'functional') === 'no');
@@ -98,15 +110,62 @@ w3.eval('_fazApplyGpcOptOut()');
 check('(d) an unmarked svc grant in a sale/share category is still removed', get(w3, 'svc.ads') !== 'yes');
 
 // (e) once GPC is gone the marker is pruned; the grant remains an ordinary one.
+// The cookie is checked, not just the store: the store is rebuilt from the
+// cookie on the next load, so a marker deleted in memory and left in the
+// cookie comes straight back — and did, until the deletion learned to persist.
 const w4 = loadFrontend({ gpc: false, cookie: saved });
 w4.eval("_fazAcceptCookies('custom', true)");
 check('(e) without GPC the marker is pruned', get(w4, 'gpcx.google-maps') === undefined || get(w4, 'gpcx.google-maps') === '');
+check('(e) and the pruning reaches the cookie, not only the store',
+  !decodeURIComponent(cookieValue(w4)).includes('gpcx.google-maps'));
+
+// (e2) a marker that outlived its signal is not honoured on the next load, and
+// leaves the cookie. Otherwise a GPC opt-out asserted later would find the
+// service already excused, with no new act from the visitor.
+const w4b = loadFrontend({ gpc: false, cookie: saved });
+check('(e2) with GPC off the stored marker is not loaded', get(w4b, 'gpcx.google-maps') !== '1');
+w4b.eval("_fazAcceptCookies('custom', true)");
+const w4c = loadFrontend({ cookie: cookieValue(w4b) });
+w4c.eval('_fazApplyGpcOptOut()');
+check('(e2) so GPC asserted later still binds that service', get(w4c, 'svc.google-maps') !== 'yes');
+
+// (h) unticking the service in the preference centre withdraws the exception.
+// Withdrawal must be as easy as the grant. Under GPC the category is forced to
+// "no", so an unticked toggle matches its category and no svc.<id>:no is ever
+// written — the re-assert used to read that absence as "no denial" and put the
+// grant straight back, leaving Reject All as the only way out.
+const w7 = loadFrontend({ cookie: saved });
+w7.eval('_fazApplyGpcOptOut()');
+w7.document.body.innerHTML =
+  '<input type="checkbox" class="faz-service-toggle" data-service="google-maps" data-category="functional">';
+w7.eval("_fazAcceptCookies('custom', true)");
+check('(h) an untick withdraws the granted service', get(w7, 'svc.google-maps') !== 'yes');
+check('(h) and its marker', get(w7, 'gpcx.google-maps') !== '1');
+check('(h) the withdrawal reaches the cookie', !decodeURIComponent(cookieValue(w7)).includes('svc.google-maps:yes'));
+
+// (h2) control: with the toggle still ticked, a save keeps the exception.
+const w8 = loadFrontend({ cookie: saved });
+w8.eval('_fazApplyGpcOptOut()');
+w8.document.body.innerHTML =
+  '<input type="checkbox" class="faz-service-toggle" data-service="google-maps" data-category="functional" checked>';
+w8.eval("_fazAcceptCookies('custom', true)");
+check('(h2) a save with the toggle still ticked keeps the service', get(w8, 'svc.google-maps') === 'yes');
+check('(h2) and its marker', get(w8, 'gpcx.google-maps') === '1');
+
+// (i) the marker only excuses a service this site exposes. A hand-edited
+// cookie must not be able to keep an arbitrary provider through the binding
+// clear, nor put a gpc_exception for it into the consent log.
+const w9 = loadFrontend();
+w9.fazcookie._fazConsentStore.set('svc.not-a-service-here', 'yes');
+w9.fazcookie._fazConsentStore.set('gpcx.not-a-service-here', '1');
+w9.eval('_fazApplyGpcOptOut()');
+check('(i) a forged marker for an unknown service is not honoured', get(w9, 'svc.not-a-service-here') !== 'yes');
 
 // (f) a standing Do Not Sell request keeps winning over the embed click.
 const w5 = loadFrontend();
 w5.document.cookie = 'fazcookie-dnsmpi=1; path=/';
 w5.eval('_fazApplyGpcOptOut()');
-w5.eval("window._fazAcceptService('google-maps', 'functional')");
+acceptOnPlaceholder(w5, 'google-maps', 'functional');
 check('(f) with a Do Not Sell request, the click does not create an exception', get(w5, 'gpcx.google-maps') !== '1');
 check('(f) and the service is not granted', get(w5, 'svc.google-maps') !== 'yes');
 
@@ -115,6 +174,16 @@ const w6 = loadFrontend({ cookie: saved });
 w6.eval("_fazAcceptCookies('reject', true)");
 check('(g) Reject removes the granted service', get(w6, 'svc.google-maps') !== 'yes');
 check('(g) and its marker', get(w6, 'gpcx.google-maps') !== '1');
+
+// (j) a script calling the public API directly gets no exception: the grant is
+// still made and then cleared by the binding pass, exactly as before 1.31.0.
+const w10 = loadFrontend();
+w10.eval('_fazApplyGpcOptOut()');
+w10.eval("window._fazAcceptService('google-maps', 'functional')");
+check('(j) a direct API call mints no GPC exception marker', get(w10, 'gpcx.google-maps') !== '1');
+const w11 = loadFrontend({ cookie: cookieValue(w10) });
+w11.eval('_fazApplyGpcOptOut()');
+check('(j) and the grant does not survive the next GPC pass', get(w11, 'svc.google-maps') !== 'yes');
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);

@@ -101,9 +101,20 @@ function reload(w, cfg) {
 }
 const get = (w, k) => w.fazcookie._fazConsentStore.get(k);
 
+// The click goes through the shipped placeholder handler, not the public API:
+// only a click on that service's own blocked-content card mints a GPC
+// exception (window._fazAcceptService is a global any page script can call).
 function embedClick(w, cfg) {
-  if (cfg.perService) w.eval("window._fazAcceptService('google-maps', 'functional')");
-  else w.eval("window._fazAcceptCategory('functional')");
+  if (!cfg.perService) {
+    w.eval("window._fazAcceptCategory('functional')");
+    return;
+  }
+  w.eval('_fazWatchBannerElement()');
+  const btn = w.document.createElement('button');
+  btn.setAttribute('data-faz-accept', 'functional');
+  btn.setAttribute('data-faz-accept-service', 'google-maps');
+  w.document.body.appendChild(btn);
+  btn.click();
 }
 // "Alive" means the embed actually loads, and it is asked of the product's own
 // blocking decision rather than inferred from a store key. An earlier version

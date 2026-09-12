@@ -362,6 +362,32 @@ namespace {
 	amp_ok( ! isset( $gpc_cookie['svc.ads'] ) && ! isset( $gpc_cookie['svc.maps'] ), 'AMP clears granular overrides that could bypass a GPC denial' );
 	unset( $_COOKIE['fazcookie-consent'] );
 	$_SERVER = array( 'HTTP_AMP_SAME_ORIGIN' => 'true' );
+
+	// ── A standing Do Not Sell request binds the AMP endpoints too ──────────
+	// The update path enforced only Sec-GPC. The classic runtime forces every
+	// sale/share category to "no" whenever the fazcookie-dnsmpi cookie stands,
+	// including on Accept All, so an AMP accept could re-grant precisely what
+	// that request opted out of. It became reachable once a signal-created
+	// record started reporting as "no decision" (undecided:1) and the AMP page
+	// began asking again.
+	// Reuse the scope/revision the block above already wrote, drop the GPC
+	// marker, and put the record in the shape script.js leaves after a Do Not
+	// Sell request: the opt-out recorded, the banner still unanswered.
+	$dns_cookie_in = str_replace( array( ',gpc:1', 'marketing:no' ), array( '', 'marketing:yes' ), $GLOBALS['faz_test_cookie'] ) . ',dnsmpi:1,undecided:1';
+	$GLOBALS['faz_test_cookie'] = $dns_cookie_in;
+	$_COOKIE['fazcookie-consent'] = $GLOBALS['faz_test_cookie'];
+	$_COOKIE['fazcookie-dnsmpi']  = '1';
+	$dns_update = $bridge->handle_update( new Faz_AMP_Test_Request(
+		$base + array(
+			'consentStateValue' => 'accepted',
+			'purposeConsents'   => array( 'analytics' => 1, 'marketing' => 1 ),
+		),
+		'/faz/v1/amp-consent/update'
+	) );
+	amp_same( $dns_update->get_data()['purposeConsents'], array( 'analytics' => true, 'marketing' => false ), 'a standing Do Not Sell request survives an AMP Accept' );
+	$dns_cookie = faz_parse_consent_cookie( $GLOBALS['faz_test_cookie'] );
+	amp_same( isset( $dns_cookie['marketing'] ) ? $dns_cookie['marketing'] : '', 'no', 'and the cookie it writes keeps the sale/share category denied' );
+	unset( $_COOKIE['fazcookie-dnsmpi'], $_COOKIE['fazcookie-consent'] );
 	amp_same(
 		AMP_Consent_Rest::normalize_purpose_consent( array( 'analytics' => 2, 'marketing' => 1 ), AMP_Consent_Rest::get_purposes(), 'accepted' ),
 		array( 'analytics' => false, 'marketing' => true ),
@@ -485,7 +511,7 @@ namespace {
 	// every svc.* under GPC, so an Accept on an AMP page re-blocked a map the
 	// visitor had opened on a classic one. The marker is what separates that
 	// consent from a bypass, so the unmarked grant beside it must still go.
-	$gpcx_existing = 'consentid:old,consent:yes,action:yes,necessary:yes,gpc:1,svc.maps:yes,gpcx.maps:1,svc.ads:yes,gpcx.ghost:1,rev:2';
+	$gpcx_existing = 'consentid:old,consent:yes,action:yes,necessary:yes,gpc:1,svc.maps:yes,gpcx.maps:1,ck.maps._gid:no,svc.ads:yes,ck.ads._x:yes,gpcx.ghost:1,rev:2';
 	$gpcx_pairs    = faz_parse_consent_cookie( AMP_Consent_Rest::build_cookie_value(
 		'accepted', array( 'analytics' => true, 'marketing' => false ), $context, 'cid', time() + 3600, $gpcx_existing, true
 	) );
@@ -493,6 +519,16 @@ namespace {
 	amp_same( isset( $gpcx_pairs['gpcx.maps'] ) ? $gpcx_pairs['gpcx.maps'] : '', '1', 'and keeps its exception marker' );
 	amp_ok( ! isset( $gpcx_pairs['svc.ads'] ), 'GPC + AMP accept still drops an UNMARKED sale/share grant' );
 	amp_ok( ! isset( $gpcx_pairs['gpcx.ghost'] ), 'a marker without its grant is not carried' );
+
+	amp_same( isset( $gpcx_pairs['ck.maps._gid'] ) ? $gpcx_pairs['ck.maps._gid'] : '', 'no', 'a per-cookie refusal inside the exception survives as a refusal' );
+	amp_ok( ! isset( $gpcx_pairs['ck.ads._x'] ), 'while per-cookie keys of an unmarked service are still dropped' );
+
+	$_COOKIE['fazcookie-dnsmpi'] = '1';
+	$gpcx_dns_granular = faz_parse_consent_cookie( AMP_Consent_Rest::build_cookie_value(
+		'accepted', array( 'analytics' => true, 'marketing' => true ), $context, 'cid', time() + 3600, $gpcx_existing, false
+	) );
+	unset( $_COOKIE['fazcookie-dnsmpi'] );
+	amp_ok( ! isset( $gpcx_dns_granular['svc.maps'] ) && ! isset( $gpcx_dns_granular['svc.ads'] ), 'a Do Not Sell request drops carried service grants even without GPC' );
 
 	$gpcx_rejected = faz_parse_consent_cookie( AMP_Consent_Rest::build_cookie_value(
 		'rejected', array( 'analytics' => false, 'marketing' => false ), $context, 'cid', time() + 3600, $gpcx_existing, true

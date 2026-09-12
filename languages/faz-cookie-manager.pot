@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-11T13:56:31+00:00\n"
+"POT-Creation-Date: 2026-09-12T10:32:51+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
@@ -49,7 +49,7 @@ msgid "Cookie Banner"
 msgstr ""
 
 #: admin/class-admin.php:231 admin/views/base.php:21
-#: frontend/class-frontend.php:2853
+#: frontend/class-frontend.php:2863
 #: frontend/modules/banner-rest/class-banner-rest.php:598
 msgid "Cookies"
 msgstr ""
@@ -3575,7 +3575,7 @@ msgstr ""
 msgid "Notice Title"
 msgstr ""
 
-#: admin/views/banner.php:341 frontend/class-frontend.php:2848
+#: admin/views/banner.php:341 frontend/class-frontend.php:2858
 #: frontend/modules/banner-rest/class-banner-rest.php:593
 msgid "We value your privacy"
 msgstr ""
@@ -3910,7 +3910,7 @@ msgstr ""
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr ""
 
-#: admin/views/banner.php:832 frontend/class-frontend.php:2850
+#: admin/views/banner.php:832 frontend/class-frontend.php:2860
 #: frontend/modules/banner-rest/class-banner-rest.php:595
 msgid "Opt-out Preferences"
 msgstr ""
@@ -3996,7 +3996,7 @@ msgid "A Global Privacy Control signal is always honoured, whether this switch i
 msgstr ""
 
 #: admin/views/banner.php:941
-msgid "What it blocks is decided on the Cookies page: a visitor sending GPC (Brave, DuckDuckGo, Firefox with the setting on) is opted out of every category flagged Sale or Sharing, and of nothing else. If those visitors report that maps or videos never load, check that Functional is not flagged there."
+msgid "What it blocks is decided on the Cookies page: a visitor sending GPC (Brave, DuckDuckGo, Firefox with the setting on) is opted out of every category flagged Sale or Sharing, and no other category is touched. On a site running IAB TCF, their vendor consents are withdrawn as well. If those visitors report that maps or videos never load, check that Functional is not flagged there."
 msgstr ""
 
 #: admin/views/banner.php:942
@@ -6416,11 +6416,11 @@ msgstr ""
 msgid "Too many consent updates."
 msgstr ""
 
-#: frontend/class-amp-consent-rest.php:711
+#: frontend/class-amp-consent-rest.php:737
 msgid "Invalid AMP consent scope."
 msgstr ""
 
-#: frontend/class-amp-consent-rest.php:716
+#: frontend/class-amp-consent-rest.php:742
 msgid "The AMP consent banner is no longer active."
 msgstr ""
 
@@ -6459,59 +6459,59 @@ msgid "Manage cookie preferences"
 msgstr ""
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:875
+#: frontend/class-frontend.php:885
 msgid "{name} enabled, disable {name}"
 msgstr ""
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:877
+#: frontend/class-frontend.php:887
 msgid "{name} disabled, enable {name}"
 msgstr ""
 
-#: frontend/class-frontend.php:2849
+#: frontend/class-frontend.php:2859
 #: frontend/modules/banner-rest/class-banner-rest.php:594
 msgid "Your cookie preferences have been saved."
 msgstr ""
 
-#: frontend/class-frontend.php:2851
+#: frontend/class-frontend.php:2861
 #: frontend/modules/banner-rest/class-banner-rest.php:596
 msgid "Customise Consent Preferences"
 msgstr ""
 
-#: frontend/class-frontend.php:2852
+#: frontend/class-frontend.php:2862
 #: frontend/modules/banner-rest/class-banner-rest.php:597
 msgid "Service consent"
 msgstr ""
 
-#: frontend/class-frontend.php:2854
+#: frontend/class-frontend.php:2864
 #: frontend/modules/banner-rest/class-banner-rest.php:599
 msgid "Cookie consent"
 msgstr ""
 
-#: frontend/class-frontend.php:2855
+#: frontend/class-frontend.php:2865
 #: frontend/modules/banner-rest/class-banner-rest.php:600
 msgid "Vendor consent"
 msgstr ""
 
-#: frontend/class-frontend.php:2856
+#: frontend/class-frontend.php:2866
 #: frontend/modules/banner-rest/class-banner-rest.php:601
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr ""
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:2860
+#: frontend/class-frontend.php:2870
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr ""
 
-#: frontend/class-frontend.php:2861
+#: frontend/class-frontend.php:2871
 #: frontend/modules/banner-rest/class-banner-rest.php:607
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr ""
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:2868
+#: frontend/class-frontend.php:2878
 #: frontend/modules/banner-rest/class-banner-rest.php:609
 #, php-format
 msgid "Banner closes automatically in %d s..."

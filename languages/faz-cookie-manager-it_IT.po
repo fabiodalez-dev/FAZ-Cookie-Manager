@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-09-11T13:56:31+00:00\n"
+"POT-Creation-Date: 2026-09-12T10:32:51+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -49,7 +49,7 @@ msgid "Cookie Banner"
 msgstr "Banner cookie"
 
 #: admin/class-admin.php:231 admin/views/base.php:21
-#: frontend/class-frontend.php:2853
+#: frontend/class-frontend.php:2863
 #: frontend/modules/banner-rest/class-banner-rest.php:598
 msgid "Cookies"
 msgstr "Cookie"
@@ -3825,7 +3825,7 @@ msgstr "Lingua:"
 msgid "Notice Title"
 msgstr "Titolo dell'avviso"
 
-#: admin/views/banner.php:341 frontend/class-frontend.php:2848
+#: admin/views/banner.php:341 frontend/class-frontend.php:2858
 #: frontend/modules/banner-rest/class-banner-rest.php:593
 msgid "We value your privacy"
 msgstr "La tua privacy è importante"
@@ -4160,7 +4160,7 @@ msgstr "Testo opt-out (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Testo del modale «Preferenze di opt-out» che il visitatore vede dopo aver cliccato il link «Do Not Sell or Share My Personal Information». Mostrato solo sui banner CCPA / US State Laws (ed Entrambi). Segue la lingua selezionata qui sopra."
 
-#: admin/views/banner.php:832 frontend/class-frontend.php:2850
+#: admin/views/banner.php:832 frontend/class-frontend.php:2860
 #: frontend/modules/banner-rest/class-banner-rest.php:595
 msgid "Opt-out Preferences"
 msgstr "Preferenze di opt-out"
@@ -4246,8 +4246,8 @@ msgid "A Global Privacy Control signal is always honoured, whether this switch i
 msgstr "Un segnale Global Privacy Control viene sempre rispettato, che questo interruttore sia attivo o no. In diversi stati USA il GPC è un opt-out vincolante dalla vendita e dalla condivisione dei dati personali, e il browser non dice quale legge si applica al suo utente: per questo il plugin lo tratta allo stesso modo ovunque."
 
 #: admin/views/banner.php:941
-msgid "What it blocks is decided on the Cookies page: a visitor sending GPC (Brave, DuckDuckGo, Firefox with the setting on) is opted out of every category flagged Sale or Sharing, and of nothing else. If those visitors report that maps or videos never load, check that Functional is not flagged there."
-msgstr "Cosa blocca si decide nella pagina Cookie: a un visitatore che invia il GPC (Brave, DuckDuckGo, Firefox con l’impostazione attiva) vengono negate tutte le categorie contrassegnate come Vendita o Condivisione, e nient’altro. Se questi visitatori segnalano che mappe o video non si caricano mai, verifica che la categoria Funzionale non sia contrassegnata lì."
+msgid "What it blocks is decided on the Cookies page: a visitor sending GPC (Brave, DuckDuckGo, Firefox with the setting on) is opted out of every category flagged Sale or Sharing, and no other category is touched. On a site running IAB TCF, their vendor consents are withdrawn as well. If those visitors report that maps or videos never load, check that Functional is not flagged there."
+msgstr "Cosa blocca si decide nella pagina Cookie: a un visitatore che invia il GPC (Brave, DuckDuckGo, Firefox con l’impostazione attiva) vengono negate tutte le categorie contrassegnate come Vendita o Condivisione, e nessun’altra categoria viene toccata. Su un sito con IAB TCF vengono revocati anche i suoi consensi ai vendor. Se questi visitatori segnalano che mappe o video non si caricano mai, verifica che la categoria Funzionale non sia contrassegnata lì."
 
 #: admin/views/banner.php:942
 msgid "One exception: with per-service consent on, a visitor who clicks Accept on a blocked embed (a map, a video) gets that one service, even under GPC. The category stays denied, every other service stays blocked, and a Do Not Sell request still wins over the click. The consent log records it as a GPC exception."
@@ -6666,11 +6666,11 @@ msgstr "Stato di consenso AMP non valido."
 msgid "Too many consent updates."
 msgstr "Troppi aggiornamenti del consenso."
 
-#: frontend/class-amp-consent-rest.php:711
+#: frontend/class-amp-consent-rest.php:737
 msgid "Invalid AMP consent scope."
 msgstr "Ambito di consenso AMP non valido."
 
-#: frontend/class-amp-consent-rest.php:716
+#: frontend/class-amp-consent-rest.php:742
 msgid "The AMP consent banner is no longer active."
 msgstr "Il banner di consenso AMP non è più attivo."
 
@@ -6709,59 +6709,59 @@ msgid "Manage cookie preferences"
 msgstr "Gestisci le preferenze sui cookie"
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:875
+#: frontend/class-frontend.php:885
 msgid "{name} enabled, disable {name}"
 msgstr "{name} abilitato, disabilita {name}"
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:877
+#: frontend/class-frontend.php:887
 msgid "{name} disabled, enable {name}"
 msgstr "{name} disabilitato, abilita {name}"
 
-#: frontend/class-frontend.php:2849
+#: frontend/class-frontend.php:2859
 #: frontend/modules/banner-rest/class-banner-rest.php:594
 msgid "Your cookie preferences have been saved."
 msgstr "Le tue preferenze sui cookie sono state salvate."
 
-#: frontend/class-frontend.php:2851
+#: frontend/class-frontend.php:2861
 #: frontend/modules/banner-rest/class-banner-rest.php:596
 msgid "Customise Consent Preferences"
 msgstr "Personalizza le preferenze di consenso"
 
-#: frontend/class-frontend.php:2852
+#: frontend/class-frontend.php:2862
 #: frontend/modules/banner-rest/class-banner-rest.php:597
 msgid "Service consent"
 msgstr "Consenso al servizio"
 
-#: frontend/class-frontend.php:2854
+#: frontend/class-frontend.php:2864
 #: frontend/modules/banner-rest/class-banner-rest.php:599
 msgid "Cookie consent"
 msgstr "Consenso ai cookie"
 
-#: frontend/class-frontend.php:2855
+#: frontend/class-frontend.php:2865
 #: frontend/modules/banner-rest/class-banner-rest.php:600
 msgid "Vendor consent"
 msgstr "Consenso fornitore"
 
-#: frontend/class-frontend.php:2856
+#: frontend/class-frontend.php:2866
 #: frontend/modules/banner-rest/class-banner-rest.php:601
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Questi cookie sono impostati dal servizio incorporato sul proprio dominio e si controllano consentendo o bloccando l'embed qui sopra — non possono essere rimossi singolarmente."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:2860
+#: frontend/class-frontend.php:2870
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Confermo di avere almeno %d anni"
 
-#: frontend/class-frontend.php:2861
+#: frontend/class-frontend.php:2871
 #: frontend/modules/banner-rest/class-banner-rest.php:607
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Conferma di avere l’età minima per accettare i cookie facoltativi."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:2868
+#: frontend/class-frontend.php:2878
 #: frontend/modules/banner-rest/class-banner-rest.php:609
 #, php-format
 msgid "Banner closes automatically in %d s..."
@@ -7458,6 +7458,9 @@ msgstr "Pulsante"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Collegamento"
+
+#~ msgid "What it blocks is decided on the Cookies page: a visitor sending GPC (Brave, DuckDuckGo, Firefox with the setting on) is opted out of every category flagged Sale or Sharing, and of nothing else. If those visitors report that maps or videos never load, check that Functional is not flagged there."
+#~ msgstr "Cosa blocca si decide nella pagina Cookie: a un visitatore che invia il GPC (Brave, DuckDuckGo, Firefox con l’impostazione attiva) vengono negate tutte le categorie contrassegnate come Vendita o Condivisione, e nient’altro. Se questi visitatori segnalano che mappe o video non si caricano mai, verifica che la categoria Funzionale non sia contrassegnata lì."
 
 #, php-format
 #~ msgid "Switching this off does not reach everyone: %1$d of the %2$d shipped rule sets treat a GPC signal as a binding opt-out, and the runtime honours it for those visitors regardless. In several US states ignoring the signal is itself the violation. Outside them, this switch decides."

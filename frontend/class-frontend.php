@@ -125,6 +125,16 @@ class Frontend {
 	private $provider_map_cache       = null;
 	private $whitelist_cache          = null;
 	private $service_consent_cache    = null;
+	/**
+	 * Categories blocked by a binding privacy signal on THIS request.
+	 *
+	 * Populated by get_blocked_categories(); read by get_service_consent(),
+	 * which must not let a stale per-service grant reopen a category GPC or a
+	 * Do Not Sell request closed. Keyed by slug.
+	 *
+	 * @var array<string,string>|null 'gpc'|'dnsmpi' per slug.
+	 */
+	private $signal_blocked_categories = null;
 	private $pattern_service_cache    = null;
 	private $per_service_cache        = null;
 	private $enforceable_cache        = null;
@@ -5085,6 +5095,7 @@ class Frontend {
 		if ( null !== $this->blocked_categories_cache ) {
 			return $this->blocked_categories_cache;
 		}
+		$this->signal_blocked_categories = array();
 		$categories = \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items();
 		$blocked = array();
 
@@ -5173,10 +5184,12 @@ class Frontend {
 			// overriding any consent-cookie value (mirrors the GPC override).
 			if ( $dnsmpi_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
 				$blocked[] = $slug;
+				$this->signal_blocked_categories[ $slug ] = 'dnsmpi';
 				continue;
 			}
 			if ( $gpc_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
 				$blocked[] = $slug;
+				$this->signal_blocked_categories[ $slug ] = 'gpc';
 				continue;
 			}
 			if ( empty( $consent ) ) {
@@ -5255,12 +5268,53 @@ class Frontend {
 			true
 		);
 
+		// A binding signal (Sec-GPC, or a standing Do Not Sell request) closes the
+		// sale/share categories on this very request — and is_cookie_allowed()
+		// consults the per-service map BEFORE the category, so a stale
+		// `svc.<id>:yes` in the cookie reopened one of them server-side and the
+		// tag ran before script.js could clear the grant. Only the one grant the
+		// visitor gave on that service's own blocked embed survives, and only
+		// under GPC alone: it carries the `gpcx.<id>:1` marker script.js writes
+		// (the same rule as _fazIsGpcException and the AMP bridge). A Do Not Sell
+		// request is a later explicit act and voids even that.
+		// Resolved only when a signal is actually present: on an ordinary request
+		// there is nothing to enforce, and get_blocked_categories() would pull in
+		// the category controller for no reason.
+		$gpc_header = isset( $_SERVER['HTTP_SEC_GPC'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
+		$dnsmpi_req = isset( $_COOKIE['fazcookie-dnsmpi'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+		$signal_blocked = array();
+		if ( $gpc_header || $dnsmpi_req ) {
+			$this->get_blocked_categories();
+			$signal_blocked = is_array( $this->signal_blocked_categories ) ? $this->signal_blocked_categories : array();
+		}
+		$gpc_exceptions = array();
+		if ( ! empty( $signal_blocked ) && ! in_array( 'dnsmpi', $signal_blocked, true ) ) {
+			if ( preg_match_all( '/(?:^|,)gpcx\.([a-z0-9_-]+):1(?=,|$)/', $consent, $gx, PREG_SET_ORDER ) ) {
+				foreach ( $gx as $g ) {
+					$gpc_exceptions[ $g[1] ] = true;
+				}
+			}
+		}
+		$service_categories = array();
+		foreach ( $this->get_enforceable_services() as $svc ) {
+			$service_categories[ $svc['id'] ] = $svc['category'];
+		}
+
 		// Extract valid svc.* entries for services currently exposed by this site.
 		if ( preg_match_all( '/(?:^|,)svc\.([a-z0-9_-]+):(yes|no)(?=,|$)/', $consent, $matches, PREG_SET_ORDER ) ) {
 			foreach ( $matches as $match ) {
-				if ( isset( $active_service_ids[ $match[1] ] ) ) {
-					$this->service_consent_cache[ $match[1] ] = $match[2];
+				if ( ! isset( $active_service_ids[ $match[1] ] ) ) {
+					continue;
 				}
+				if ( 'yes' === $match[2] ) {
+					$cat = isset( $service_categories[ $match[1] ] ) ? $service_categories[ $match[1] ] : '';
+					if ( '' !== $cat && isset( $signal_blocked[ $cat ] ) && ! isset( $gpc_exceptions[ $match[1] ] ) ) {
+						continue; // Unmarked grant inside a signal-closed category: not enforceable.
+					}
+				}
+				$this->service_consent_cache[ $match[1] ] = $match[2];
 			}
 		}
 		return $this->service_consent_cache;

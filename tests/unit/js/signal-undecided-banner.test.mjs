@@ -16,6 +16,14 @@
  *
  * These checks run the real _fazInitOperations() against a minimal banner
  * container and observe what the real show/remove functions do to it.
+ *
+ * The rule is not the same under both laws, and that difference is the point.
+ * Under an opt-in law (GDPR) the signal answers the sale/sharing question only,
+ * so the notice stays available until the visitor answers the rest. Under an
+ * opt-out law (CCPA/CPRA) the signal IS the consumer's decision, and 11 CCR
+ * §7026(k) tells the business to wait twelve months before asking an opted-out
+ * consumer to opt back in — re-showing the notice every page would be exactly
+ * that solicitation, so there the record counts as decided.
  */
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
@@ -88,13 +96,15 @@ for (const law of ['gdpr', 'ccpa']) {
   check(`[${law}] GPC, first page: the record is written and marked undecided`, pairs(p1.w).action === 'yes' && pairs(p1.w).undecided === '1' && pairs(p1.w).gpc === '1');
   check(`[${law}] GPC, first page: one consent update (the opt-out itself)`, p1.spy.updates === 1);
 
+  const reoffered = law === 'gdpr';   // opt-in law: the banner still has a question to ask
   const p2 = page({ gpc: true, law, cookie: cookieOf(p1.w) });
-  check(`[${law}] GPC, second page: banner STILL shown — the visitor has not answered it`, banner(p2.spy) === 'shown');
+  check(`[${law}] GPC, second page: banner ${reoffered ? 'STILL shown — the visitor has not answered it' : 'removed — under an opt-out law the signal is the decision'}`,
+    banner(p2.spy) === (reoffered ? 'shown' : 'removed'));
   check(`[${law}] GPC, second page: no consent update — nothing changed`, p2.spy.updates === 0);
   check(`[${law}] GPC, second page: still undecided, opt-out still recorded`, pairs(p2.w).undecided === '1' && pairs(p2.w).marketing === 'no');
 
   const p3 = page({ gpc: true, law, cookie: cookieOf(p2.w) });
-  check(`[${law}] GPC, third page: banner still shown`, banner(p3.spy) === 'shown');
+  check(`[${law}] GPC, third page: unchanged from the second`, banner(p3.spy) === (reoffered ? 'shown' : 'removed'));
 
   // The visitor answers: Reject.
   p3.w.eval("_fazAcceptCookies('reject', true)");
@@ -112,7 +122,8 @@ for (const law of ['gdpr', 'ccpa']) {
 
   // --- GPC switched off after the signal created the record ---------------
   const off = page({ gpc: false, law, cookie: cookieOf(p2.w) });
-  check(`[${law}] GPC switched off, undecided record: banner offered`, banner(off.spy) === 'shown');
+  check(`[${law}] GPC switched off, undecided record: banner ${reoffered ? 'offered' : 'not re-offered'}`,
+    banner(off.spy) === (reoffered ? 'shown' : 'removed'));
   check(`[${law}] GPC switched off: the stored state is kept, not re-seeded`, off.w.fazcookie._fazConsentStore.get('marketing') === 'no');
   off.w.eval("_fazAcceptCookies('reject', true)");
   check(`[${law}] GPC switched off: the gpc marker is not carried into a new choice`, pairs(off.w).gpc === undefined);
@@ -121,7 +132,8 @@ for (const law of ['gdpr', 'ccpa']) {
   const d1 = page({ dnsmpi: true, law });
   check(`[${law}] Do Not Sell, first page: banner shown, record undecided`, banner(d1.spy) === 'shown' && pairs(d1.w).undecided === '1' && pairs(d1.w).dnsmpi === '1');
   const d2 = page({ dnsmpi: true, law, cookie: cookieOf(d1.w) });
-  check(`[${law}] Do Not Sell, second page: banner STILL shown`, banner(d2.spy) === 'shown');
+  check(`[${law}] Do Not Sell, second page: banner ${reoffered ? 'STILL shown' : 'removed (opt-out law)'}`,
+    banner(d2.spy) === (reoffered ? 'shown' : 'removed'));
   check(`[${law}] Do Not Sell, second page: no consent update`, d2.spy.updates === 0);
   d2.w.eval("_fazAcceptCookies('all', true)");
   const d3 = page({ dnsmpi: true, law, cookie: cookieOf(d2.w) });
