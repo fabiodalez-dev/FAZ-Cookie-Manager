@@ -89,7 +89,21 @@ ref._fazGetFromStore = function (key) {
 
 ref._fazSetInStore = function (key, value) {
     ref._fazConsentStore.set(key, value);
+    ref._fazPersistConsentCookie();
+};
 
+/**
+ * Serialise the consent store into the fazcookie-consent cookie.
+ *
+ * Split out of _fazSetInStore because a DELETION has to persist as well: the
+ * cookie is rebuilt from the store on every write, so a key removed from the
+ * store with nothing written afterwards stayed in the cookie and came back on
+ * the next load. That is how a pruned GPC exception marker survived the signal
+ * it documents (see _fazPruneGpcExceptions).
+ *
+ * @returns {void}
+ */
+ref._fazPersistConsentCookie = function () {
     // Build a service-id → category-slug map so we can skip redundant
     // `svc.<id>:<category-value>` entries below. On installs with many
     // registered services (the default shipped catalog has ~160), the
@@ -622,7 +636,12 @@ if (!_fazConsentInvalidated && _fazStore._perServiceConsent && _fazStore._servic
     // chose, so this is bounded. #134/#146.
     Object.keys(fazcookieConsentMap).forEach(function (k) {
         // gpcx.* travels with its svc.* grant: without the marker the grant
-        // reads as a GPC bypass on reload and the init path removes it.
+        // reads as a GPC bypass on reload and the init path removes it. It is
+        // restored ONLY while GPC is still asserted — a marker that outlived
+        // its signal would pre-excuse the service from a GPC opt-out asserted
+        // later, with no new act from the visitor. Left out of the store, it
+        // disappears from the cookie at the next write.
+        if (k.indexOf('gpcx.') === 0 && !_fazGpcActive()) return;
         if ((k.indexOf('svc.') === 0 || k.indexOf('gpcx.') === 0) && !ref._fazConsentStore.has(k)) {
             ref._fazConsentStore.set(k, fazcookieConsentMap[k]);
         }
@@ -900,7 +919,24 @@ function _fazInitOperations() {
     // Without this, the record read as a decision from the second page on:
     // the banner vanished and only the revisit icon was left, even though
     // every comment below says the notice must stay available.
-    var _fazUndecided = !!_fazStoredAction && ref._fazGetFromStore("undecided") === "1";
+    // Opt-out laws are the exception to re-offering the banner. Under CCPA/CPRA
+    // the signal IS the consumer's decision, and 11 CCR §7026(k) tells a
+    // business to wait twelve months before asking someone who has opted out to
+    // opt back in — so re-showing the notice on every page would be the
+    // soliciting that rule forbids. Under an opt-in law the visitor has
+    // answered nothing yet, and the notice must stay available.
+    // Two conditions, and both are about who decided what.
+    // An opt-out law: the signal IS the consumer's decision (11 CCR 7026(k)
+    // asks a business to wait twelve months before inviting an opted-out
+    // consumer back), so the notice is not re-offered there.
+    // A Do Not Sell request: the visitor filled in a form. That is an explicit
+    // act even on an opt-in site — re-offering the banner to them on every
+    // page would be nagging someone who has already answered. GPC alone is
+    // different: the browser sent it, the visitor answered nothing.
+    var _fazUndecided = !!_fazStoredAction &&
+        ref._fazGetFromStore("undecided") === "1" &&
+        _fazGetLaw() !== "ccpa" &&
+        ref._fazGetFromStore("dnsmpi") !== "1";
     // Honour a standing [faz_do_not_sell] opt-out before anything unblocks.
     // Runs regardless of a stored action — the form opt-out postdates the
     // stored consent — and no-ops once the store already reflects it.
@@ -932,6 +968,12 @@ function _fazInitOperations() {
             _fazSeedInitialState();
         }
         var _fazGpcChanged = _fazApplyGpcOptOut();
+        // A returning GPC visitor can now hold a service grant (the embed
+        // exception), and this branch returns before the shared restore pass.
+        // Without the delayed retries a theme or lazy-loader that rewrites the
+        // region after DOMContentLoaded leaves the embed dead — the very
+        // symptom the exception exists to fix.
+        if (_fazStoredAction) _fazScheduleRestoreUnblock();
         if (_fazStoredAction && !_fazUndecided) {
             _fazRemoveBanner();
         } else {
@@ -3135,6 +3177,10 @@ var _fazPendingAgeGatedGrants = [];
 // "embed"-sourced save. Module-scoped rather than a new parameter to keep the
 // public _fazAcceptCookies(choice, ungated, source) signature unchanged.
 var _fazEmbedGrantServiceId = "";
+// Whether the embed grant being saved came from a click on that service's own
+// blocked-content placeholder, rather than from a direct call to the public
+// window._fazAcceptService API. See gpcEmbedException.
+var _fazEmbedGrantFromPlaceholder = false;
 
 /**
  * Replay every grant parked by placeholders while the age gate intercepted
@@ -3151,7 +3197,12 @@ function _fazResumePendingAgeGatedGrant() {
     for (var i = 0; i < queued.length; i++) {
         var pending = queued[i];
         if (pending.type === 'service' && typeof window._fazAcceptService === 'function') {
-            window._fazAcceptService(pending.serviceId, pending.categorySlug, pending.trustService);
+            _fazEmbedGrantFromPlaceholder = !!pending.fromPlaceholder;
+            try {
+                window._fazAcceptService(pending.serviceId, pending.categorySlug, pending.trustService);
+            } finally {
+                _fazEmbedGrantFromPlaceholder = false;
+            }
         } else if (pending.type === 'category' && typeof window._fazAcceptCategory === 'function') {
             window._fazAcceptCategory(pending.categorySlug);
         }
@@ -3403,8 +3454,15 @@ function _fazAcceptCookies(choice = "all", ungated = false, source = "preference
     const gpcOnlyBinding = gpcActive && !dnsmpiActive && !popupOptOut &&
         !(embedGrant && activeLaw === "ccpa" && ccpaCheckBoxValue);
     // An Accept click on one service's own blocked embed. The service id is
-    // set by _fazAcceptService for the duration of this call only.
-    const gpcEmbedException = gpcOnlyBinding && embedGrant && !!_fazEmbedGrantServiceId;
+    // set by _fazAcceptService for the duration of this call only, and the
+    // exception is minted only for a click on that service's own placeholder.
+    // window._fazAcceptService is a public global: a theme or another plugin
+    // calling it on page load would otherwise exempt a service from the
+    // visitor's GPC opt-out permanently, and have the consent log record it as
+    // the visitor's own act. Called directly, the grant still happens and is
+    // still cleared by the binding sale/share pass, exactly as before.
+    const gpcEmbedException = gpcOnlyBinding && embedGrant &&
+        !!_fazEmbedGrantServiceId && _fazEmbedGrantFromPlaceholder;
     // Exceptions already granted on earlier pages, read before any clearing.
     const gpcExceptionIds = gpcOnlyBinding ? _fazGpcExceptionIds() : [];
     const bindingSaleShareSlugs = [];
@@ -3513,10 +3571,24 @@ function _fazAcceptCookies(choice = "all", ungated = false, source = "preference
     // exceptions unless this action is a rejection or an explicit untick.
     if (choice !== "reject" && gpcOnlyBinding) {
         gpcExceptionIds.forEach(function (id) {
-            if (ref._fazGetFromStore("svc." + id) !== "no") {
-                ref._fazSetInStore("svc." + id, "yes");
-                ref._fazSetInStore("gpcx." + id, "1");
+            if (ref._fazGetFromStore("svc." + id) === "no") return;
+            // An untick in the preference centre is a withdrawal, and it must
+            // be as easy as the grant was. It cannot be read from the store:
+            // GPC forces the category to "no", so an unticked toggle matches
+            // its category and _fazStoreCustomServiceConsent writes no
+            // svc.<id>:no at all — the absent key used to read as "no denial"
+            // here and the grant was written straight back, leaving Reject All
+            // as the only way out.
+            var toggle = document.querySelector(
+                '.faz-service-toggle[data-service="' + id + '"]'
+            );
+            if (toggle && !toggle.checked) {
+                ref._fazConsentStore.delete("gpcx." + id);
+                ref._fazConsentStore.delete("svc." + id);
+                return;
             }
+            ref._fazSetInStore("svc." + id, "yes");
+            ref._fazSetInStore("gpcx." + id, "1");
         });
     }
     // Granular Save/Accept handlers run after the category loop and could have
@@ -3644,6 +3716,14 @@ function _fazClearStoredServiceConsent(categorySlugs, honourGpcExceptions) {
  */
 function _fazIsGpcException(serviceId) {
     if (!serviceId) return false;
+    // The marker is a plain cookie token, so it is only honoured for a service
+    // this site actually exposes — the same allowlist window._fazAcceptService
+    // applies before minting one. A hand-edited cookie can then no longer make
+    // an arbitrary provider survive the binding sale/share clear, nor put a
+    // gpc_exception entry for it into the consent log.
+    if (typeof _fazIsRecognizedService === "function" && !_fazIsRecognizedService(serviceId)) {
+        return false;
+    }
     return ref._fazGetFromStore("gpcx." + serviceId) === "1" &&
         ref._fazGetFromStore("svc." + serviceId) === "yes";
 }
@@ -3679,6 +3759,11 @@ function _fazPruneGpcExceptions(gpcActive) {
         if (!gpcActive || ref._fazGetFromStore("svc." + key.substring(5)) !== "yes") stale.push(key);
     });
     stale.forEach(function(key) { ref._fazConsentStore.delete(key); });
+    // Persist the removal. Deleting from the store alone left the marker in
+    // the cookie whenever no later write rebuilt it, and the next load read it
+    // back. Only once a decision exists: writing the cookie earlier would
+    // create a consent record before the visitor has acted.
+    if (stale.length && ref._fazGetFromStore("action")) ref._fazPersistConsentCookie();
     return stale.length;
 }
 
@@ -7018,7 +7103,12 @@ function _fazWatchBannerElement() {
             // scanner-detected _services list (block-first site): accept ONLY this
             // service, never the whole category. The server enforces the resulting
             // svc.<id>:yes for any real Known_Providers embed. #134/#146.
-            window._fazAcceptService(serviceId, cat, true);
+            _fazEmbedGrantFromPlaceholder = true;
+            try {
+                window._fazAcceptService(serviceId, cat, true);
+            } finally {
+                _fazEmbedGrantFromPlaceholder = false;
+            }
             return;
         }
         if (cat && typeof window._fazAcceptCategory === "function") {
@@ -8061,7 +8151,14 @@ window._fazAcceptService = function (serviceId, categorySlug, trustService) {
             type: 'service',
             serviceId: serviceId,
             categorySlug: categorySlug,
-            trustService: trustService
+            trustService: trustService,
+            // Where the click came from has to travel with the parked grant:
+            // the replay happens after the age box is ticked, long after the
+            // placeholder handler reset the flag, and without it the replayed
+            // grant would not be a GPC exception and the binding pass would
+            // drop it — the embed would stay blocked for a visitor who did
+            // everything right.
+            fromPlaceholder: _fazEmbedGrantFromPlaceholder
         });
         return;
     }

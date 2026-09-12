@@ -119,6 +119,38 @@ test.describe('GPC: Accept on a blocked embed grants that service only', () => {
     }
   });
 
+  test('the server blocks the same grant once the marker is gone', async ({ browser }) => {
+    // The rule has to hold on the PHP render path too, not only in script.js:
+    // is_cookie_allowed() consults the per-service map BEFORE the category, so
+    // an unmarked svc.<id>:yes reopened a GPC-closed category server-side and
+    // the embed was served before any script could clear the grant. Same
+    // visitor, same cookie, marker removed — nothing else changes.
+    const ctx = await gpcContext(browser);
+    const page = await ctx.newPage();
+    try {
+      await openPage(page, url);
+      await placeholder(page).locator('[data-faz-accept]').first().click();
+      await expect(liveMap(page)).toHaveCount(1, { timeout: 10_000 });
+
+      const cookies = await ctx.cookies();
+      const consent = cookies.find((c) => c.name === 'fazcookie-consent');
+      expect(consent, 'the click must have written a consent cookie').toBeDefined();
+      const stripped = decodeURIComponent(consent!.value)
+        .split(',')
+        .filter((pair) => !pair.startsWith('gpcx.'))
+        .join(',');
+      expect(stripped).toContain('svc.google-maps:yes');
+      await ctx.clearCookies();
+      await ctx.addCookies([{ ...consent!, value: encodeURIComponent(stripped) }]);
+
+      await openPage(page, url);
+      await expect(placeholder(page), 'without the marker the server blocks it again').toHaveCount(1);
+      await expect(liveMap(page)).toHaveCount(0);
+    } finally {
+      await ctx.close();
+    }
+  });
+
   test('the banner stays until the visitor answers it, then gives way to the icon', async ({ browser, getConsentCookie, parseConsentCookie }) => {
     // The other half of the report: "the banner doesn't appear, only the
     // cookie icon". GPC records its opt-out on the first page; the init path

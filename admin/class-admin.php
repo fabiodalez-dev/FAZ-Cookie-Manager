@@ -109,6 +109,7 @@ class Admin {
 		add_action( 'admin_notices', array( $this, 'unmatched_vendors_notice' ) );
 		add_action( 'admin_notices', array( $this, 'redundant_geo_routing_notice' ) );
 		add_action( 'admin_notices', array( $this, 'geo_enforcement_migration_notice' ) );
+		add_action( 'admin_notices', array( $this, 'functional_optout_migration_notice' ) );
 		add_action( 'wp_ajax_faz_dismiss_unmatched', array( $this, 'ajax_dismiss_unmatched_vendors' ) );
 		add_action( 'wp_ajax_faz_disable_redundant_geo_routing', array( $this, 'ajax_disable_redundant_geo_routing' ) );
 		add_action( 'wp_ajax_faz_dismiss_redundant_geo_routing', array( $this, 'ajax_dismiss_redundant_geo_routing' ) );
@@ -766,6 +767,9 @@ class Admin {
 						// accepted on its own blocked embed while sending GPC.
 						/* translators: %s: service identifier, e.g. google-maps */
 						'metaGpcException'         => __( 'GPC exception: %s', 'faz-cookie-manager' ),
+						// Label for meta.signal_only: the record was created by a
+						// privacy signal and the visitor never answered the banner.
+						'metaSignalOnly'           => __( 'Privacy signal, banner unanswered', 'faz-cookie-manager' ),
 						'loadFailed'            => __( 'Failed to load consent logs.', 'faz-cookie-manager' ),
 						'noLogs'                   => __( 'No consent logs found.', 'faz-cookie-manager' ),
 						'exportOk'                 => __( 'CSV exported successfully.', 'faz-cookie-manager' ),
@@ -2408,6 +2412,46 @@ class Admin {
 			'<p><a href="%s" class="button">%s</a></p>',
 			esc_url( $settings_url ),
 			esc_html__( 'Open Geo-Targeting settings', 'faz-cookie-manager' )
+		);
+		echo '<a href="' . esc_url( $dismiss_url ) . '" aria-label="' . esc_attr__( 'Dismiss this notice', 'faz-cookie-manager' ) . '" style="position:absolute;top:0;right:0;padding:9px;text-decoration:none;color:#787c82">';
+		echo '<span class="dashicons dashicons-dismiss" aria-hidden="true"></span></a>';
+		echo '</div>';
+	}
+
+	/**
+	 * One-time notice: the Functional category is no longer flagged sale/sharing.
+	 *
+	 * Armed by Activator::normalize_legacy_functional_optout_flags() only when
+	 * it actually changed the row. The change is visitor-facing — a Global
+	 * Privacy Control signal stops blocking that category — so it is stated
+	 * rather than left to a changelog, with the way back one click away.
+	 *
+	 * @return void
+	 */
+	public function functional_optout_migration_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		if ( ! get_option( 'faz_functional_optout_notice' ) ) {
+			return;
+		}
+		if ( isset( $_GET['faz_dismiss_functional_optout'] )
+			&& wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_faz_nonce'] ?? '' ) ), 'faz_dismiss_functional_optout' ) ) {
+			delete_option( 'faz_functional_optout_notice' );
+			return;
+		}
+
+		$cookies_url = admin_url( 'admin.php?page=faz-cookie-manager-cookies' );
+		$dismiss_url = wp_nonce_url( add_query_arg( 'faz_dismiss_functional_optout', '1' ), 'faz_dismiss_functional_optout', '_faz_nonce' );
+
+		echo '<div class="notice notice-info" style="position:relative">';
+		echo '<p><strong>' . esc_html__( 'FAZ Cookie Manager — the Functional category is no longer marked as sale or sharing', 'faz-cookie-manager' ) . '</strong></p>';
+		echo '<p>' . esc_html__( 'Installs created before version 1.17.2 marked every category as involving the sale and sharing of personal data, Functional included, because that was the database default at the time. This update cleared it, because nobody chose it here.', 'faz-cookie-manager' ) . '</p>';
+		echo '<p>' . esc_html__( 'What changes for your visitors: a browser sending Global Privacy Control is opted out of the categories marked Sale or Sharing, so maps, videos and other functional embeds were being blocked for those visitors with no way to accept them. They load again now. If your Functional category really does involve selling or sharing personal data, mark it again on the Cookies screen — the column is now shown on every site.', 'faz-cookie-manager' ) . '</p>';
+		printf(
+			'<p><a href="%s" class="button">%s</a></p>',
+			esc_url( $cookies_url ),
+			esc_html__( 'Open the cookie categories', 'faz-cookie-manager' )
 		);
 		echo '<a href="' . esc_url( $dismiss_url ) . '" aria-label="' . esc_attr__( 'Dismiss this notice', 'faz-cookie-manager' ) . '" style="position:absolute;top:0;right:0;padding:9px;text-decoration:none;color:#787c82">';
 		echo '<span class="dashicons dashicons-dismiss" aria-hidden="true"></span></a>';

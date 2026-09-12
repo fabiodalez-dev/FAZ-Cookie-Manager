@@ -664,14 +664,25 @@ class AMP_Consent_Rest {
 	}
 
 	/**
-	 * Enforce GPC against sale/share purposes while retaining unrelated choices.
+	 * Enforce the binding signals against sale/share purposes while retaining
+	 * unrelated choices.
+	 *
+	 * Both signals bind here, not just GPC. A standing Do Not Sell request
+	 * (the `fazcookie-dnsmpi` cookie the [faz_do_not_sell] form sets) is a
+	 * CCPA/CPRA 1798.120 opt-out and the classic runtime forces every
+	 * sale/share category to "no" on every save because of it
+	 * (`bindingSaleShareOptOut` in script.js). This endpoint used to read only
+	 * Sec-GPC, so an AMP "Accept" re-granted the very categories that request
+	 * had opted out of. It became reachable for a visitor who had already
+	 * answered, because a record a signal created is now `undecided:1` and
+	 * state_from_cookie() reports it as no decision, so the AMP page asks again.
 	 *
 	 * @param array $values   Purpose slug => bool map, modified by reference.
 	 * @param array $purposes Purpose descriptors.
 	 * @return bool Whether any grant was revoked.
 	 */
 	private static function apply_gpc_to_purposes( &$values, $purposes ) {
-		$active = self::is_gpc_active();
+		$active = self::is_gpc_active() || self::is_dnsmpi_active();
 		if ( ! $active ) {
 			return false;
 		}
@@ -696,6 +707,21 @@ class AMP_Consent_Rest {
 	private static function is_gpc_active() {
 		return isset( $_SERVER['HTTP_SEC_GPC'] )
 			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
+	}
+
+	/**
+	 * Whether this request carries a standing Do Not Sell request.
+	 *
+	 * The [faz_do_not_sell] form sets `fazcookie-dnsmpi=1`. Like GPC it is a
+	 * binding opt-out of the sale/sharing of personal information, and unlike
+	 * GPC it is an explicit act of the visitor, so it also beats an embed
+	 * click (see gpc_exception_ids()).
+	 *
+	 * @return bool
+	 */
+	private static function is_dnsmpi_active() {
+		return isset( $_COOKIE['fazcookie-dnsmpi'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
 	}
 
 	/**
@@ -1016,6 +1042,13 @@ class AMP_Consent_Rest {
 		'source',
 		'ts',
 		'exp',
+		// Signal fields. `undecided` is hard-gated on by state_from_cookie()
+		// exactly like `action`, and `gpc`/`dnsmpi` record which signal wrote
+		// the record; a category slug sanitising to one of these would corrupt
+		// the decision it names.
+		'undecided',
+		'gpc',
+		'dnsmpi',
 	);
 
 	/**
@@ -1126,6 +1159,10 @@ class AMP_Consent_Rest {
 		$faz_carry_grants = ( 'accepted' === $state );
 		$existing_pairs   = self::parse_cookie_pairs( $existing_cookie );
 		$gpc_exceptions   = self::gpc_exception_ids( $existing_pairs, $gpc_active && $faz_carry_grants );
+		// A Do Not Sell request binds the granular keys exactly as GPC does:
+		// without this, an AMP accept carried svc.<id>:yes forward while the
+		// standing opt-out denied its category.
+		$signal_active    = $gpc_active || self::is_dnsmpi_active();
 		foreach ( $existing_pairs as $key => $value ) {
 			if ( isset( $pairs[ $key ] ) || isset( $purpose_keys[ $key ] ) ) {
 				continue;
@@ -1155,9 +1192,16 @@ class AMP_Consent_Rest {
 			// on its own blocked embed while GPC was asserted: script.js marks it
 			// gpcx.<id>:1. Dropping it here meant an Accept on an AMP page
 			// silently re-blocked a map the visitor had opened on a classic one.
-			if ( $gpc_active && ( 0 === strpos( $key, 'svc.' ) || 0 === strpos( $key, 'ck.' ) ) ) {
-				if ( 0 === strpos( $key, 'svc.' ) && isset( $gpc_exceptions[ substr( $key, 4 ) ] ) ) {
-					$pairs[ $key ] = 'yes';
+			if ( $signal_active && ( 0 === strpos( $key, 'svc.' ) || 0 === strpos( $key, 'ck.' ) ) ) {
+				$granular_id = 0 === strpos( $key, 'svc.' ) ? substr( $key, 4 ) : self::ck_service_id( $key );
+				if ( '' !== $granular_id && isset( $gpc_exceptions[ $granular_id ] ) ) {
+					// The exception covers the service AND the per-cookie
+					// choices inside it. Keeping svc.<id>:yes while dropping a
+					// ck.<id>.<name>:no turned a recorded refusal of one cookie
+					// into consent, because both the server resolver and
+					// script.js fall back to the service decision when the
+					// ck key is absent.
+					$pairs[ $key ] = 0 === strpos( $key, 'svc.' ) ? 'yes' : $value;
 				}
 				continue;
 			}
@@ -1172,6 +1216,25 @@ class AMP_Consent_Rest {
 			$out[] = $key . ':' . $value;
 		}
 		return implode( ',', $out );
+	}
+
+	/**
+	 * Service id carried by a per-cookie override key (ck.<service>.<cookie>).
+	 *
+	 * The service id is sanitize_key()'d server-side and cannot contain a dot,
+	 * so the FIRST dot after the prefix ends it; the cookie name that follows
+	 * may contain dots of its own (`_pk_ses.*`).
+	 *
+	 * @param string $key Consent-cookie key.
+	 * @return string Service id, or '' when the key is not a ck.* key.
+	 */
+	private static function ck_service_id( $key ) {
+		if ( 0 !== strpos( (string) $key, 'ck.' ) ) {
+			return '';
+		}
+		$rest = substr( (string) $key, 3 );
+		$dot  = strpos( $rest, '.' );
+		return false === $dot || 0 === $dot ? '' : substr( $rest, 0, $dot );
 	}
 
 	/**
@@ -1191,9 +1254,7 @@ class AMP_Consent_Rest {
 		if ( ! $eligible ) {
 			return array();
 		}
-		$dnsmpi = isset( $_COOKIE['fazcookie-dnsmpi'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
-		if ( $dnsmpi ) {
+		if ( self::is_dnsmpi_active() ) {
 			return array();
 		}
 		$ids = array();
