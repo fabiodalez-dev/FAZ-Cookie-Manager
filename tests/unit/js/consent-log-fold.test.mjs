@@ -53,6 +53,15 @@ check('a GPC exception is logged as meta.gpc_exception.<id>:yes', c['meta.gpc_ex
 check('the raw gpcx.* key is not logged (the server would drop its value)', !('gpcx.google-maps' in c));
 check('category and control keys are not folded from the cookie', !('functional' in c) && !('gpc' in c) && !('consent' in c));
 
+// A record a privacy signal created, with the banner still unanswered, must be
+// distinguishable in the log from a visitor's partial save: both are stored
+// with status "partial".
+const sig = fold('consentid:x,consent:no,action:yes,undecided:1,gpc:1,necessary:yes,functional:no');
+check('a signal-created record is logged as such', sig['meta.signal_only'] === 'yes');
+check('and the raw undecided key is not logged', !('undecided' in sig));
+const answered = fold('consentid:x,consent:no,action:yes,gpc:1,necessary:yes,functional:no');
+check('a record the visitor answered carries no such key', !('meta.signal_only' in answered));
+
 const d = fold('consent:yes,action:yes,gpcx.google-maps:0,svc.google-maps:yes');
 check('a marker whose value is not 1 is not logged as an exception', !('meta.gpc_exception.google-maps' in d));
 

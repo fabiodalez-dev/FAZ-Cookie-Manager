@@ -100,6 +100,16 @@ namespace {
 		'no persistent identifier is created'         => ! isset( $parts['consentid'] ),
 	);
 
+	// A record a privacy signal created is not the member's own choice — the
+	// managed privacy default must still be applied to it. Before 1.31.0 this
+	// branch read `action:yes` alone, and nothing tested it at all.
+	$own = array( '\\FazCookie\\Includes\\Integrations\\Paid_Memberships_Pro', 'is_member_own_choice' );
+	$checks['a saved banner choice is the member\'s own']            = true === call_user_func( $own, array( 'action' => 'yes', 'consent' => 'yes' ) );
+	$checks['a GPC/DNSMPI record (undecided:1) is not']              = false === call_user_func( $own, array( 'action' => 'yes', 'consent' => 'no', 'undecided' => '1', 'gpc' => '1' ) );
+	$checks['an answered record that once was undecided is again']   = true === call_user_func( $own, array( 'action' => 'yes', 'consent' => 'no', 'gpc' => '1' ) );
+	$checks['no recorded action is not a choice']                    = false === call_user_func( $own, array( 'consent' => 'no' ) );
+	$checks['the PMP-managed state itself is not a choice']          = false === call_user_func( $own, array( 'action' => 'auto', 'source' => 'pmp' ) );
+
 	$failed = 0;
 	foreach ( $checks as $label => $passed ) {
 		if ( $passed ) {

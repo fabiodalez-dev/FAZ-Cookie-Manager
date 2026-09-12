@@ -615,6 +615,7 @@ Only the most recent release is listed here. The complete history is in [CHANGEL
 - **Fixed**: Installs from before 1.17.2 no longer treat the Functional category as sale/sharing unless an administrator set it that way, so GPC visitors are not denied every functional embed.
 - **Fixed**: With GPC or a Do Not Sell request the banner no longer disappears after the first page, leaving only the revisit icon: it stays until the visitor makes a choice, and the opt-out is no longer re-sent as a new consent on every page.
 - **Fixed**: The GPC exception can be withdrawn from the preference centre, is created only by a click on the embed itself, and is enforced identically by the browser, the server and the AMP bridge; a standing Do Not Sell request binds the AMP endpoints too.
+- **Fixed**: The Functional migration now also covers sites with no Do Not Sell link, where the flags could never have been chosen, and says so with an admin notice; the consent log marks records created by a privacy signal rather than by an answer.
 - **Fixed**: The Sale / Sharing column is shown on every site, and the Respect GPC note explains what is actually enforced: a GPC signal is honoured whether the switch is on or off.
 - **Added**: A consent liveness matrix (32 configurations, four scenarios, same page and after reload) and an end-to-end spec for the reported configuration.
 

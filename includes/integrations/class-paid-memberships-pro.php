@@ -210,10 +210,7 @@ class Paid_Memberships_Pro {
 			$parsed_current = function_exists( 'faz_parse_consent_cookie' )
 				? faz_parse_consent_cookie( $current_cookie )
 				: array();
-			// A record a privacy signal created (undecided:1) is not a choice the
-			// member made, so the managed privacy default still applies to it.
-			$is_undecided = isset( $parsed_current['undecided'] ) && '1' === $parsed_current['undecided'];
-			if ( isset( $parsed_current['action'] ) && 'yes' === $parsed_current['action'] && ! $is_undecided ) {
+			if ( self::is_member_own_choice( $parsed_current ) ) {
 				return;
 			}
 		}
@@ -279,6 +276,30 @@ class Paid_Memberships_Pro {
 	 * @param string $cookie_value The PMP-managed privacy cookie that was set.
 	 * @return void
 	 */
+	/**
+	 * Whether a consent cookie records a choice the member made themselves.
+	 *
+	 * `action:yes` alone is not enough. A privacy signal — GPC, or a Do Not
+	 * Sell request — writes that same field on the visitor's behalf and marks
+	 * the record `undecided:1` until the banner is actually answered. Treating
+	 * it as the member's own choice would leave a paying member on whatever the
+	 * signal wrote instead of the managed necessary-only privacy state they are
+	 * entitled to, and the managed default would never be applied again.
+	 *
+	 * Static and free of WordPress so the rule can be tested on its own.
+	 *
+	 * @param array $parsed Parsed consent-cookie pairs.
+	 * @return bool
+	 */
+	public static function is_member_own_choice( $parsed ) {
+		if ( ! is_array( $parsed ) ) {
+			return false;
+		}
+		$acted = isset( $parsed['action'] ) && 'yes' === $parsed['action'];
+		$signal_created = isset( $parsed['undecided'] ) && '1' === $parsed['undecided'];
+		return $acted && ! $signal_created;
+	}
+
 	private function log_pmp_privacy_state( $cookie_value ) {
 		$settings = new Settings();
 		if ( true !== $settings->get( 'consent_logs', 'status' ) ) {

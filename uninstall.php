@@ -180,6 +180,7 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				'faz_share_personal_data_column_added',
 				'faz_reset_stale_per_cookie_consent_done',
 				'faz_normalize_legacy_functional_optout_done',
+				'faz_functional_optout_notice',
 				'faz_migrations_version',
 				'faz_cookie_definitions',
 				'faz_cookie_definitions_meta',

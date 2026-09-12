@@ -8,17 +8,27 @@
  * sites maps and videos never loaded for Brave/Firefox visitors.
  *
  * The migration must separate "never touched" from "an administrator chose
- * this", and the only evidence is the row itself: create_item() writes
+ * this", and there are two rules for that, both checked here against the real
+ * MySQL table because each lives in one SQL predicate that a stubbed $wpdb
+ * would only prove as a string.
+ *
+ * Where the site exposes a Do Not Sell link the administrator could see and set
+ * the Sale / Sharing toggles, so only the dates can say: create_item() writes
  * date_created and date_modified from the same value, update_item() moves
- * date_modified. These checks run against the real MySQL table, because the
- * whole rule lives in one SQL predicate and a stubbed $wpdb would only prove
- * the string.
+ * date_modified.
+ *
+ * Where it does not, the column was HIDDEN until 1.31.0 and `share_personal_data`
+ * was added later by an ALTER with DEFAULT 1 that stamped every row without
+ * touching its dates — so the flags cannot be anyone's decision, whatever the
+ * dates say. That is the reporter's population, and the date rule alone left it
+ * unfixed.
  */
 import { test, expect } from '../fixtures/wp-fixture';
 import { wpEval } from '../utils/wp-env';
 
 const T = `global $wpdb;$t=$wpdb->prefix.'faz_cookie_categories';`;
 const MARKER = 'faz_normalize_legacy_functional_optout_done';
+const NOTICE = 'faz_functional_optout_notice';
 // Each case is a first run: the migration is once-per-install by design.
 const MIGRATE = `delete_option('${MARKER}');\\FazCookie\\Includes\\Activator::normalize_legacy_functional_optout_flags();`;
 const MIGRATE_AGAIN = `\\FazCookie\\Includes\\Activator::normalize_legacy_functional_optout_flags();`;
@@ -43,8 +53,23 @@ test.describe('1.31.0 migration: Functional is not sale/sharing unless chosen', 
   let snapshot = '';
   let markerBefore = '';
 
+  let bannerBefore = '';
+
   test.beforeAll(() => {
     markerBefore = lastLine(wpEval(`echo wp_json_encode(get_option('${MARKER}', null));`));
+    // The date rule only applies where the admin could see the toggles, so the
+    // default banner exposes the Do Not Sell entry point for these cases.
+    bannerBefore = lastLine(wpEval(
+      `global $wpdb;echo base64_encode((string)$wpdb->get_var("SELECT settings FROM {$wpdb->prefix}faz_banners WHERE banner_default=1 LIMIT 1"));`,
+    ));
+    wpEval(
+      `global $wpdb;$t=$wpdb->prefix.'faz_banners';` +
+      `$row=$wpdb->get_row("SELECT banner_id, settings FROM $t WHERE banner_default=1 LIMIT 1");` +
+      `$s=json_decode($row->settings,true);` +
+      `$s['config']['notice']['elements']['buttons']['elements']['donotSell']['status']=true;` +
+      `$wpdb->update($t,array('settings'=>wp_json_encode($s)),array('banner_id'=>(int)$row->banner_id));` +
+      `\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();`,
+    );
     snapshot = lastLine(wpEval(
       T + `echo wp_json_encode($wpdb->get_results("SELECT slug,sell_personal_data,share_personal_data,date_created,date_modified FROM $t WHERE slug IN ('functional','marketing')",ARRAY_A));`,
     ));
@@ -53,6 +78,14 @@ test.describe('1.31.0 migration: Functional is not sale/sharing unless chosen', 
 
   test.afterAll(() => {
     wpEval(markerBefore === 'null' ? `delete_option('${MARKER}');` : `update_option('${MARKER}', ${markerBefore}, false);`);
+    wpEval(`delete_option('${NOTICE}');`);
+    if (bannerBefore) {
+      wpEval(
+        `global $wpdb;$t=$wpdb->prefix.'faz_banners';` +
+        `$wpdb->update($t,array('settings'=>base64_decode('${bannerBefore}')),array('banner_default'=>1));` +
+        `\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();`,
+      );
+    }
     const rows = JSON.parse(snapshot) as Array<Record<string, string>>;
     for (const r of rows) {
       wpEval(
@@ -95,6 +128,47 @@ test.describe('1.31.0 migration: Functional is not sale/sharing unless chosen', 
       `echo $wpdb->get_var("SELECT CONCAT(sell_personal_data,share_personal_data) FROM $t WHERE slug='functional'");`,
     ));
     expect(again, 'an imported 1/1 is left alone once the migration has run').toBe('11');
+  });
+
+  test('without a Do Not Sell link the flags are cleared whatever the dates say', () => {
+    // The column was hidden there until this release, so nobody could have set
+    // them; the ALTER that added share_personal_data stamped 1 on every row
+    // without moving its dates. A row "edited in 2025" is still a schema value.
+    wpEval(
+      `global $wpdb;$t=$wpdb->prefix.'faz_banners';` +
+      `$row=$wpdb->get_row("SELECT banner_id, settings FROM $t WHERE banner_default=1 LIMIT 1");` +
+      `$s=json_decode($row->settings,true);` +
+      `$s['config']['notice']['elements']['buttons']['elements']['donotSell']['status']=false;` +
+      `$s['settings']['applicableLaw']='gdpr';` +
+      `$wpdb->update($t,array('settings'=>wp_json_encode($s)),array('banner_id'=>(int)$row->banner_id));` +
+      `\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();`,
+    );
+    try {
+      expect(migrate('functional', 1, 1, '2024-03-01 10:00:00', '2025-02-01 12:00:00')).toBe('00');
+      // The ALTER's fingerprint on a row whose sale flag an admin had cleared.
+      expect(migrate('functional', 0, 1, '2024-03-01 10:00:00', '2025-02-01 12:00:00')).toBe('00');
+      expect(migrate('marketing', 1, 1, '2024-03-01 10:00:00', '2025-02-01 12:00:00'), 'and still only Functional').toBe('11');
+    } finally {
+      wpEval(
+        `global $wpdb;$t=$wpdb->prefix.'faz_banners';` +
+        `$row=$wpdb->get_row("SELECT banner_id, settings FROM $t WHERE banner_default=1 LIMIT 1");` +
+        `$s=json_decode($row->settings,true);` +
+        `$s['config']['notice']['elements']['buttons']['elements']['donotSell']['status']=true;` +
+        `$wpdb->update($t,array('settings'=>wp_json_encode($s)),array('banner_id'=>(int)$row->banner_id));` +
+        `\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();`,
+      );
+    }
+  });
+
+  test('a change is announced to the administrator, a no-op is not', () => {
+    // The change narrows what a GPC signal blocks for this site's visitors, so
+    // it is stated in the admin rather than left to a changelog.
+    wpEval(`delete_option('${NOTICE}');`);
+    expect(migrate('functional', 1, 1, '2024-03-01 10:00:00', '2024-03-01 10:00:00')).toBe('00');
+    expect(lastLine(wpEval(`echo (int) get_option('${NOTICE}');`)), 'the notice is armed after a real change').toBe('1');
+    wpEval(`delete_option('${NOTICE}');`);
+    expect(migrate('functional', 0, 0, '2024-03-01 10:00:00', '2024-03-01 10:00:00')).toBe('00');
+    expect(lastLine(wpEval(`echo (int) get_option('${NOTICE}');`)), 'and stays silent when nothing changed').toBe('0');
   });
 
   test('a save through the category editor path marks the row as chosen', () => {

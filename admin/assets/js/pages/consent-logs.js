@@ -191,6 +191,10 @@
 							// and mangle the label.
 							metaLabel = fazI18n('consentLogs.metaGpcException', 'GPC exception: %s')
 								.replace('%s', function () { return metaKey.slice('gpc_exception.'.length); });
+						} else if (metaKey === 'signal_only') {
+							// The record was created by GPC or a Do Not Sell request
+							// and the visitor never answered the banner.
+							metaLabel = fazI18n('consentLogs.metaSignalOnly', 'Privacy signal, banner unanswered');
 						} else {
 							metaLabel = metaKey.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
 						}

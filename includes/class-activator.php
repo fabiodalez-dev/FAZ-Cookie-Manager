@@ -2240,14 +2240,24 @@ class Activator {
 	 * "sale" (no consideration) nor "sharing" (no cross-context behavioural
 	 * advertising, Cal. Civ. Code 1798.140(ah)).
 	 *
-	 * The row is reset only where it provably still carries the schema default
-	 * rather than an administrator's decision: Category_Controller::create_item()
-	 * writes date_created and date_modified from the same value, and every save
-	 * through the category editor or the REST API goes through update_item(),
-	 * which advances date_modified. So date_modified = date_created means the
-	 * row was never saved from the editor. A row that was edited — even only
-	 * its description — is left exactly as it is; the Cookies screen explains
-	 * the effect of the flag instead.
+	 * Two rules decide whether the value is the schema's or a person's.
+	 *
+	 * On a site with no Do-Not-Sell surface the flags cannot be a decision at
+	 * all: until this release the Cookies screen HID the Sale / Sharing column
+	 * exactly there, so nobody could set them, and `share_personal_data` was
+	 * added to the schema later by an ALTER with DEFAULT 1 that stamped every
+	 * existing row without touching its dates. Those rows are reset whatever
+	 * their dates say — which is the reporter's population, a GDPR site whose
+	 * Functional category had been flagged since before 1.17.2 and whose
+	 * administrator had edited the row at some point for an unrelated reason.
+	 *
+	 * Where the column WAS visible (an active banner exposes the opt-out), the
+	 * dates are the only evidence: Category_Controller::create_item() writes
+	 * date_created and date_modified from the same value, and every save
+	 * through the editor or the REST API goes through update_item(), which
+	 * advances date_modified. So date_modified = date_created means the row was
+	 * never saved. A row that was edited is left exactly as it is; the Cookies
+	 * screen now explains the effect of the flag instead.
 	 *
 	 * It runs ONCE per install (`faz_normalize_legacy_functional_optout_done`).
 	 * run_pending_migrations() replays the whole list on every future
@@ -2266,13 +2276,32 @@ class Activator {
 		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 			return; // No table yet: retried on the next run, marker not set.
 		}
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_cookie_categories" (escaped via esc_sql); slug bound via %s; one-shot idempotent migration write.
-		$result = $wpdb->query(
-			$wpdb->prepare(
-				"UPDATE `" . esc_sql( $table ) . "` SET sell_personal_data = 0, share_personal_data = 0 WHERE slug = %s AND sell_personal_data = 1 AND share_personal_data = 1 AND date_modified = date_created",
-				'functional'
-			)
-		);
+		$has_optout_surface = false;
+		$banner_controller  = '\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller';
+		if ( class_exists( $banner_controller ) ) {
+			$has_optout_surface = (bool) $banner_controller::get_instance()->has_do_not_sell_surface();
+		}
+		if ( $has_optout_surface ) {
+			// The administrator could see and set the toggles: only an untouched
+			// row is safe to reset.
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_cookie_categories" (escaped via esc_sql); slug bound via %s; one-shot idempotent migration write.
+			$result = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE `" . esc_sql( $table ) . "` SET sell_personal_data = 0, share_personal_data = 0 WHERE slug = %s AND sell_personal_data = 1 AND share_personal_data = 1 AND date_modified = date_created",
+					'functional'
+				)
+			);
+		} else {
+			// No opt-out surface: the column was hidden, so whatever is stored
+			// came from the schema. Either flag being set is enough to match.
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_cookie_categories" (escaped via esc_sql); slug bound via %s; one-shot idempotent migration write.
+			$result = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE `" . esc_sql( $table ) . "` SET sell_personal_data = 0, share_personal_data = 0 WHERE slug = %s AND ( sell_personal_data = 1 OR share_personal_data = 1 )",
+					'functional'
+				)
+			);
+		}
 		if ( false === $result ) {
 			// Throw so run_pending_migrations() does not bump the version and the
 			// normalisation is retried on the next admin load.
@@ -2280,6 +2309,12 @@ class Activator {
 		}
 		if ( $result > 0 ) {
 			Category_Controller::get_instance()->delete_cache();
+			// Say it out loud. The change narrows what a Global Privacy Control
+			// signal blocks for this site's visitors, and an administrator who
+			// did want Functional treated as sharing must be able to find that
+			// out without reading a changelog. Arms the one-time notice in
+			// Admin::functional_optout_migration_notice().
+			update_option( 'faz_functional_optout_notice', '1', false );
 		}
 		update_option( 'faz_normalize_legacy_functional_optout_done', 1, false );
 	}

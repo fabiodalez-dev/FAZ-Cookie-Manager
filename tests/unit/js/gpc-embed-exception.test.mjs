@@ -28,7 +28,7 @@ function check(label, condition) {
 
 // Mirrors the reporter's site: GDPR, functional flagged as sale/share (the
 // pre-1.17.2 schema default), per-service consent on.
-function loadFrontend({ gpc = true, cookie = '' } = {}) {
+function loadFrontend({ gpc = true, cookie = '', revision = 1 } = {}) {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
     runScripts: 'outside-only', url: 'https://villa.example.test/',
   });
@@ -46,7 +46,7 @@ function loadFrontend({ gpc = true, cookie = '' } = {}) {
       { id: 'ads', category: 'marketing' },
     ],
     _providersToBlock: [], _cookieCategoryMap: {}, _whitelistedCookiePatterns: [], _userWhitelist: [],
-    _perServiceConsent: true, _perCookieConsent: false, _rootDomain: '',
+    _perServiceConsent: true, _perCookieConsent: false, _rootDomain: '', _consentRevision: revision,
     _bannerConfig: { settings: { applicableLaw: 'gdpr' }, behaviours: { respectGPC: false }, config: { revisitConsent: { status: false } } },
     _shortCodes: [],
     i18n: {},
@@ -174,6 +174,15 @@ const w6 = loadFrontend({ cookie: saved });
 w6.eval("_fazAcceptCookies('reject', true)");
 check('(g) Reject removes the granted service', get(w6, 'svc.google-maps') !== 'yes');
 check('(g) and its marker', get(w6, 'gpcx.google-maps') !== '1');
+
+// (k) a consent revision bump wipes the record, exception and marker included.
+// The visitor is asked again from scratch, so nothing may quietly carry over.
+const w12 = loadFrontend({ cookie: saved, revision: 5 });
+check('(k) a revision bump clears the granted service', get(w12, 'svc.google-maps') !== 'yes');
+check('(k) and its marker', get(w12, 'gpcx.google-maps') !== '1');
+check('(k) and the recorded action', get(w12, 'action') !== 'yes');
+w12.eval('_fazApplyGpcOptOut()');
+check('(k) so the service is bound by GPC again', get(w12, 'svc.google-maps') !== 'yes');
 
 // (j) a script calling the public API directly gets no exception: the grant is
 // still made and then cleared by the binding pass, exactly as before 1.31.0.
