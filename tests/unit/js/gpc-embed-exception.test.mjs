@@ -28,7 +28,7 @@ function check(label, condition) {
 
 // Mirrors the reporter's site: GDPR, functional flagged as sale/share (the
 // pre-1.17.2 schema default), per-service consent on.
-function loadFrontend({ gpc = true, cookie = '', revision = 1 } = {}) {
+function loadFrontend({ gpc = true, cookie = '', revision = 1, ageGate = false } = {}) {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
     runScripts: 'outside-only', url: 'https://villa.example.test/',
   });
@@ -47,6 +47,7 @@ function loadFrontend({ gpc = true, cookie = '', revision = 1 } = {}) {
     ],
     _providersToBlock: [], _cookieCategoryMap: {}, _whitelistedCookiePatterns: [], _userWhitelist: [],
     _perServiceConsent: true, _perCookieConsent: false, _rootDomain: '', _consentRevision: revision,
+    _ageGate: ageGate ? { enabled: true, minAge: 16 } : { enabled: false },
     _bannerConfig: { settings: { applicableLaw: 'gdpr' }, behaviours: { respectGPC: false }, config: { revisitConsent: { status: false } } },
     _shortCodes: [],
     i18n: {},
@@ -180,9 +181,30 @@ check('(g) and its marker', get(w6, 'gpcx.google-maps') !== '1');
 const w12 = loadFrontend({ cookie: saved, revision: 5 });
 check('(k) a revision bump clears the granted service', get(w12, 'svc.google-maps') !== 'yes');
 check('(k) and its marker', get(w12, 'gpcx.google-maps') !== '1');
-check('(k) and the recorded action', get(w12, 'action') !== 'yes');
+// _fazInvalidateStoredConsent() keeps the key and empties it; "not yes" would
+// also accept "no", which is truthy and reads as a recorded action.
+check('(k) and the recorded action', (get(w12, 'action') || '') === '');
 w12.eval('_fazApplyGpcOptOut()');
 check('(k) so the service is bound by GPC again', get(w12, 'svc.google-maps') !== 'yes');
+
+// (l) the age gate parks the click; ticking the box must replay it AS a
+// placeholder click. The replay runs long after the handler reset the flag, so
+// without carrying the origin on the parked entry the replayed grant would not
+// be an exception and the binding pass would drop it — the embed would stay
+// blocked for a visitor who did everything asked of them.
+const w13 = loadFrontend({ ageGate: true });
+w13.eval('_fazApplyGpcOptOut()');
+w13.eval('_fazWatchBannerElement()');
+w13.document.body.innerHTML =
+  '<button data-faz-accept="functional" data-faz-accept-service="google-maps"></button>' +
+  '<input type="checkbox" class="faz-age-confirm-cb">';
+w13.document.querySelector('[data-faz-accept]').click();
+check('(l) the age gate parks the click instead of granting it', get(w13, 'svc.google-maps') !== 'yes');
+w13.document.querySelector('.faz-age-confirm-cb').checked = true;
+w13.eval('_fazResumePendingAgeGatedGrant()');
+check('(l) ticking the age box replays it as an embed click', get(w13, 'svc.google-maps') === 'yes');
+check('(l) so the exception is minted', get(w13, 'gpcx.google-maps') === '1');
+check('(l) and the category stays denied', get(w13, 'functional') === 'no');
 
 // (j) a script calling the public API directly gets no exception: the grant is
 // still made and then cleared by the binding pass, exactly as before 1.31.0.

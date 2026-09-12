@@ -925,9 +925,18 @@ function _fazInitOperations() {
     // opt back in — so re-showing the notice on every page would be the
     // soliciting that rule forbids. Under an opt-in law the visitor has
     // answered nothing yet, and the notice must stay available.
+    // Two conditions, and both are about who decided what.
+    // An opt-out law: the signal IS the consumer's decision (11 CCR 7026(k)
+    // asks a business to wait twelve months before inviting an opted-out
+    // consumer back), so the notice is not re-offered there.
+    // A Do Not Sell request: the visitor filled in a form. That is an explicit
+    // act even on an opt-in site — re-offering the banner to them on every
+    // page would be nagging someone who has already answered. GPC alone is
+    // different: the browser sent it, the visitor answered nothing.
     var _fazUndecided = !!_fazStoredAction &&
         ref._fazGetFromStore("undecided") === "1" &&
-        _fazGetLaw() !== "ccpa";
+        _fazGetLaw() !== "ccpa" &&
+        ref._fazGetFromStore("dnsmpi") !== "1";
     // Honour a standing [faz_do_not_sell] opt-out before anything unblocks.
     // Runs regardless of a stored action — the form opt-out postdates the
     // stored consent — and no-ops once the store already reflects it.
@@ -3188,7 +3197,12 @@ function _fazResumePendingAgeGatedGrant() {
     for (var i = 0; i < queued.length; i++) {
         var pending = queued[i];
         if (pending.type === 'service' && typeof window._fazAcceptService === 'function') {
-            window._fazAcceptService(pending.serviceId, pending.categorySlug, pending.trustService);
+            _fazEmbedGrantFromPlaceholder = !!pending.fromPlaceholder;
+            try {
+                window._fazAcceptService(pending.serviceId, pending.categorySlug, pending.trustService);
+            } finally {
+                _fazEmbedGrantFromPlaceholder = false;
+            }
         } else if (pending.type === 'category' && typeof window._fazAcceptCategory === 'function') {
             window._fazAcceptCategory(pending.categorySlug);
         }
@@ -8137,7 +8151,14 @@ window._fazAcceptService = function (serviceId, categorySlug, trustService) {
             type: 'service',
             serviceId: serviceId,
             categorySlug: categorySlug,
-            trustService: trustService
+            trustService: trustService,
+            // Where the click came from has to travel with the parked grant:
+            // the replay happens after the age box is ticked, long after the
+            // placeholder handler reset the flag, and without it the replayed
+            // grant would not be a GPC exception and the binding pass would
+            // drop it — the embed would stay blocked for a visitor who did
+            // everything right.
+            fromPlaceholder: _fazEmbedGrantFromPlaceholder
         });
         return;
     }
