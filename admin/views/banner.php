@@ -938,7 +938,7 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 					?>
 					<div class="faz-help" id="faz-b-gpc-note">
 						<p><?php esc_html_e( 'A Global Privacy Control signal is always honoured, whether this switch is on or off. GPC is a binding opt-out of the sale and sharing of personal data in several US states, and a browser does not say which law applies to its visitor, so the plugin treats it the same everywhere.', 'faz-cookie-manager' ); ?></p>
-						<p><?php esc_html_e( 'What it blocks is decided on the Cookies page: a visitor sending GPC (Brave, DuckDuckGo, Firefox with the setting on) is opted out of every category flagged Sale or Sharing, and of nothing else. If those visitors report that maps or videos never load, check that Functional is not flagged there.', 'faz-cookie-manager' ); ?></p>
+						<p><?php esc_html_e( 'What it blocks is decided on the Cookies page: a visitor sending GPC (Brave, DuckDuckGo, Firefox with the setting on) is opted out of every category flagged Sale or Sharing, and no other category is touched. On a site running IAB TCF, their vendor consents are withdrawn as well. If those visitors report that maps or videos never load, check that Functional is not flagged there.', 'faz-cookie-manager' ); ?></p>
 						<p><?php esc_html_e( 'One exception: with per-service consent on, a visitor who clicks Accept on a blocked embed (a map, a video) gets that one service, even under GPC. The category stays denied, every other service stays blocked, and a Do Not Sell request still wins over the click. The consent log records it as a GPC exception.', 'faz-cookie-manager' ); ?></p>
 					</div>
 				</div>

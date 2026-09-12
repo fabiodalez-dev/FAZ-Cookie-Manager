@@ -402,6 +402,8 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Fixed: Visitors sending Global Privacy Control can open a blocked map or video by clicking Accept on it. Only that service is granted: the category stays denied, Accept All cannot re-grant it, and a Do Not Sell request still wins.
 * Fixed: Installs from before 1.17.2 no longer treat the Functional category as sale/sharing unless an administrator set it that way, so GPC visitors are not denied every functional embed.
 * Fixed: With GPC or a Do Not Sell request the banner no longer disappears after the first page, leaving only the revisit icon: it stays until the visitor makes a choice, and the opt-out is no longer re-sent as a new consent on every page.
+* Fixed: The GPC exception can be withdrawn from the preference centre, is created only by a click on the embed itself, and is enforced identically by the browser, the server and the AMP bridge; a standing Do Not Sell request binds the AMP endpoints too.
+* Fixed: The Functional migration now also covers sites with no Do Not Sell link, where the flags could never have been chosen, and says so with an admin notice; the consent log marks records created by a privacy signal rather than by an answer.
 * Fixed: The Sale / Sharing column is shown on every site, and the Respect GPC note explains what is actually enforced: a GPC signal is honoured whether the switch is on or off.
 
 = 1.30.0 =
@@ -519,14 +521,6 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Added: "Box (centered)" banner type - positions the consent box in the centre of the screen via CSS transform, a common pattern on European sites.
 * Added: "Dim the page behind the banner" option - a semi-transparent overlay greys out the page to draw attention to the banner. The overlay is a visual cue only (pointer-events: none) and never blocks reading, scrolling, or clicking, so it does not act as a cookie wall. Available for Box corner, Box centered, and Full-width Banner types; automatically disabled for the Classic layout.
 * Changed: geo-routing admin clarity - corrected the misleading "automatic per-country" copy (runtime rule-set application is off; the catalogue is preview/reference only, while per-country banner selection still works), exposed the runtime off-state in the geo status endpoint, and finished i18n of the Pipeline-status panel.
-
-= 1.22.0 =
-* Added: inline-CSS url()/@import blocking before consent — a Google Fonts @font-face src url() or @import in a <style> tag previously reached the provider with consent denied; any url()/@import pointing at a blocked provider in a denied category is now neutralised (inert data: placeholder, restored on consent). Server-rendered <style> and direct runtime HTMLStyleElement writes are covered by default; a new opt-in "Advanced inline CSS URL blocking" setting (default off) additionally hooks page-builder/CSS-in-JS channels (innerHTML/insertAdjacentHTML, CharacterData incl. nodeValue/replaceWith, replaceChildren/insertAdjacentText, Constructable Stylesheets/insertRule).
-* Added: wider runtime resource blocking for <img>/<iframe>/<link>/<source> (extends #163/#167) — beyond the src/href property setters, the setAttribute('src'|'href'|'srcset') path and the srcset property setter are gated, blocked <source> src/srcset are parked, and the MutationObserver also parks parsed img/link/source.
-* Added: Advanced Consent Mode for Google Consent Mode v2 (#165) — opt-in (default off); the Google tag stack (gtag.js/GA4/Ads) may load before consent with a synchronous denied consent default, while non-Google trackers and the GTM container stay blocked.
-* Added: manual service registration from the built-in catalogue (#161) — register a known provider's cookies into the declaration table from the Cookies page without a scan.
-* Fixed: map tiles, lazy-loaded embeds and runtime-injected stylesheets now blocked before consent (#163, #167). Leaflet/OpenStreetMap and Bricks Map tiles load as runtime <img>, Bricks lazy-load swaps a URL into iframe.src, and Web Font Loader injects a Google Fonts <link> at runtime — all bypassed the blocker. The src/href property setters are now gated on the image, iframe and link prototypes: a cross-origin resource matching a blocked provider in a denied category is parked until consent, then restored.
-* Fixed: banner chrome (Always Active, cookie-table headers) now translates on non-English single-language sites (#164); European Portuguese banner content corrected (#159).
 
 
 = Older versions =
