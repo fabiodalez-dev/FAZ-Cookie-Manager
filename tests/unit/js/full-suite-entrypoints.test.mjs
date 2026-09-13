@@ -36,7 +36,9 @@ const stage = process.argv.join(' ').includes('browser-intent') ? 'browser' : 'w
 fs.appendFileSync(process.env.FAZ_GATE_LOG, stage + '\\n');
 process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
 `, { mode: 0o755 });
-  writeFileSync(join(fixture, '.gitignore'), 'calls.log\nbatch-output/\n');
+  // The fixture's own site copy is not part of the candidate: the runner reads
+  // the tree with --untracked-files=all and would refuse to start.
+  writeFileSync(join(fixture, '.gitignore'), 'calls.log\nbatch-output/\nabsent-wordpress/\n');
   writeFileSync(join(fixture, 'scripts/check-package-deploy.py'), readFileSync(join(root, 'scripts/check-package-deploy.py')));
   writeFileSync(join(fixture, 'faz-cookie-manager.php'), '<?php // release-only');
   writeFileSync(join(fixture, 'scripts/build-release.sh'), "#!/bin/sh\npython3 - \"$@\" <<'PYBUILD'\nimport subprocess,sys,zipfile\nfrom pathlib import Path\noutput=next(a.split('=',1)[1] for a in sys.argv[1:] if a.startswith('--output-dir='))\nwith zipfile.ZipFile(Path(output)/'release.zip','w') as archive:\n    archive.writestr('faz-cookie-manager/faz-cookie-manager.php',subprocess.check_output(['git','show','HEAD:faz-cookie-manager.php']))\nPYBUILD\n");
@@ -70,6 +72,12 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
   run('bash', ['scripts/run-e2e-batches.sh'], 'browser', ['unit', 'browser']);
   mkdirSync(join(packageFixture, 'faz-cookie-manager'));
   writeFileSync(join(packageFixture, 'faz-cookie-manager/faz-cookie-manager.php'), '<?php // release-only');
+  // In package mode the runner now refuses to start unless the site under test
+  // actually runs the package, so the fixture site has to carry it. WordPress
+  // itself stays absent: the run stops at the first gate, well before any spec.
+  const installed = join(fixture, 'absent-wordpress/wp-content/plugins/faz-cookie-manager');
+  mkdirSync(installed, { recursive: true });
+  writeFileSync(join(installed, 'faz-cookie-manager.php'), '<?php // release-only');
   const packageZip = join(packageFixture, 'release.zip');
   execFileSync('zip', ['-qr', packageZip, 'faz-cookie-manager'], {cwd:packageFixture});
   const manifest = join(packageFixture, 'build.json');
