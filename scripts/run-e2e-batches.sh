@@ -17,7 +17,7 @@ E2E_WORKERS="${E2E_WORKERS:-1}"
 mkdir -p "$OUT"
 # A resumed run must not combine green batches from different candidates.
 COMMIT="$(git -C "$REPO" rev-parse HEAD)"
-if ! git -C "$REPO" diff --quiet HEAD --; then
+if ! CANDIDATE_STATUS="$(git -C "$REPO" status --porcelain --untracked-files=all)" || [ -n "$CANDIDATE_STATUS" ]; then
   echo 'Commit the candidate before collecting release E2E evidence.' >&2
   exit 2
 fi

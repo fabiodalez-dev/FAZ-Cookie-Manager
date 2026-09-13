@@ -244,6 +244,8 @@ from pathlib import Path
 root, epoch = Path(sys.argv[1]), int(sys.argv[2])
 for path in list(root.rglob('*')) + [root]:
     os.utime(path, (epoch, epoch), follow_symlinks=False)
+    if not path.is_symlink():
+        os.chmod(path, 0o755 if path.is_dir() or path.stat().st_mode & 0o111 else 0o644)
 PYZIP
     ( cd "${stage}" && find "${PLUGIN_SLUG}" -print | LC_ALL=C sort | TZ=UTC zip -Xq "${zip_file}" -@ )
 }

@@ -12,8 +12,10 @@ def check(path):
         findings = []
     else:
         findings = json.loads(raw)
+    required = {"file", "line", "column", "type", "code", "message"}
     if not isinstance(findings, list) or any(
         not isinstance(row, dict) or row.get("type") not in ("ERROR", "WARNING")
+        or not required.issubset(row)
         for row in findings
     ):
         raise ValueError("expected Plugin Check --format=strict-json findings")

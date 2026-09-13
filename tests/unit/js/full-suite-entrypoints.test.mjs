@@ -29,6 +29,7 @@ const stage = process.argv.join(' ').includes('browser-intent') ? 'browser' : 'w
 fs.appendFileSync(process.env.FAZ_GATE_LOG, stage + '\\n');
 process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
 `, { mode: 0o755 });
+  writeFileSync(join(fixture, '.gitignore'), 'calls.log\nbatch-output/\n');
   // The batch runner now binds evidence to a clean, committed candidate.
   execFileSync('git', ['init', '-q'], { cwd: fixture });
   execFileSync('git', ['add', '.'], { cwd: fixture });
@@ -57,6 +58,9 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
   run('npm', ['test'], 'wordpress', ['unit', 'browser', 'wordpress']);
   run('bash', ['scripts/run-e2e-batches.sh'], 'unit', ['unit']);
   run('bash', ['scripts/run-e2e-batches.sh'], 'browser', ['unit', 'browser']);
+  writeFileSync(join(fixture, 'untracked.php'), '<?php // not committed');
+  run('bash', ['scripts/run-e2e-batches.sh'], 'dirty-candidate', []);
+  rmSync(join(fixture, 'untracked.php'));
   mkdirSync(join(fixture, 'tests/unit/js'), { recursive: true });
   writeFileSync(join(fixture, 'scripts/real-unit-runner.sh'), readFileSync(join(root, 'scripts/run-unit-tests.sh')));
   writeFileSync(join(fixture, 'tests/unit/test-probe.php'), '<?php echo "passed";');

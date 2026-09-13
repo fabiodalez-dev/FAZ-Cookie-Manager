@@ -12,7 +12,8 @@ def compare(package, manifest, repo, deployed):
     package, deployed = Path(package), Path(deployed)
     data = json.loads(Path(manifest).read_text())
     head = subprocess.check_output(['git', '-C', repo, 'rev-parse', 'HEAD'], text=True).strip()
-    subprocess.run(['git', '-C', repo, 'diff', '--quiet', 'HEAD', '--'], check=True)
+    if subprocess.check_output(['git', '-C', repo, 'status', '--porcelain', '--untracked-files=all'], text=True).strip():
+        raise ValueError('candidate contains uncommitted or untracked files')
     if data.get('commit') != head or data.get('packages', {}).get(package.name) != hashlib.sha256(package.read_bytes()).hexdigest():
         raise ValueError('release package manifest does not match HEAD and ZIP')
     expected = {}

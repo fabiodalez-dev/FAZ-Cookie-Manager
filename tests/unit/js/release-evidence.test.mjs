@@ -17,8 +17,14 @@ try {
   };
   assert.equal(pluginCheck('[]').status, 0);
   assert.equal(pluginCheck('Success: Checks complete. No errors found.').status, 0);
-  assert.equal(pluginCheck('[{"type":"WARNING"}]').status, 0);
-  assert.equal(pluginCheck('[{"type":"ERROR","code":"example"}]').status, 1);
+  const finding = {file:'example.php',line:1,column:1,type:'WARNING',code:'example',message:'example finding'};
+  assert.equal(pluginCheck(JSON.stringify([finding])).status, 0);
+  assert.equal(pluginCheck(JSON.stringify([{...finding,type:'ERROR'}])).status, 1);
+  for (const field of Object.keys(finding)) {
+    const incomplete = {...finding};
+    delete incomplete[field];
+    assert.equal(pluginCheck(JSON.stringify([incomplete])).status, 2, `missing ${field}`);
+  }
   for (const invalid of ['', '[', '{}', '[{"code":"untyped"}]', 'Success: unrelated operation']) {
     assert.equal(pluginCheck(invalid).status, 2, invalid);
   }
@@ -112,6 +118,9 @@ try {
   manifest.commit='another-commit';
   assert.equal(packageCheck().status,2);
   manifest.commit=head;
+  writeFileSync(join(packageRepo,'untracked.php'),'<?php // absent from HEAD');
+  assert.equal(packageCheck().status,2, 'untracked source invalidates provenance');
+  rmSync(join(packageRepo,'untracked.php'));
   writeFileSync(join(packageRepo,'source.txt'),'uncommitted');
   assert.equal(packageCheck().status,2);
 
