@@ -18,7 +18,11 @@ cleanup() {
         kill "$SERVER_PID" >/dev/null 2>&1 || true
         wait "$SERVER_PID" >/dev/null 2>&1 || true
     fi
-    wp --path="$SOURCE_WP" db query "DROP DATABASE IF EXISTS \`${DB_NAME}\`" >/dev/null
+    # Under set -e a failing DROP (MySQL down, credentials rotated) would abort
+    # cleanup here and leave a full WordPress copy behind on every such run.
+    # Report it and still remove the directory: one failure must not accumulate.
+    wp --path="$SOURCE_WP" db query "DROP DATABASE IF EXISTS \`${DB_NAME}\`" >/dev/null \
+        || echo "cleanup: could not drop ${DB_NAME}; remove it by hand" >&2
     case "$RUN_DIR" in /private/tmp/faz-install-gate.*) rm -rf -- "$RUN_DIR" ;; esac
 }
 trap cleanup EXIT

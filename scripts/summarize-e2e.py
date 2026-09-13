@@ -43,6 +43,9 @@ def summarize(directory, count):
         # skipped while the run skipped tests nobody ever reads a reason for.
         if len(skipped) - before != stats["skipped"]:
             failures.append(batch)
+    # A batch can trip more than one rule; it is still one failed batch, and an
+    # audit document that lists it twice reads like two.
+    failures = sorted(set(failures))
     result = {"commit": (directory / "commit.txt").read_text().strip(), "batches": count, "counts": total, "failed_batches": failures, "skips": skipped}
     (directory / "evidence.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))

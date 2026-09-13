@@ -163,6 +163,13 @@ try {
   assert.deepEqual(
     JSON.parse(readFileSync(join(batches,'evidence.json'),'utf8')).skips.map(s => s.reasons[0]),
     ['third-party plugin absent', 'feature disabled']);
+  // One batch breaking several rules at once is still one failed batch.
+  writeFileSync(join(batches, 'batch-01.json'),
+    JSON.stringify({stats:{expected:0,unexpected:1,flaky:1,skipped:2}, errors:['boom'], suites:[]}));
+  assert.equal(summarize(1).status, 1);
+  assert.deepEqual(
+    JSON.parse(readFileSync(join(batches,'evidence.json'),'utf8')).failed_batches, [1],
+    'a failed batch is listed once, however many rules it broke');
 
   const called = [];
   const run = await runSections([
