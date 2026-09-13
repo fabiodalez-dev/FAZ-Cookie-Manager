@@ -38,6 +38,8 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
 `, { mode: 0o755 });
   writeFileSync(join(fixture, '.gitignore'), 'calls.log\nbatch-output/\n');
   writeFileSync(join(fixture, 'scripts/check-package-deploy.py'), readFileSync(join(root, 'scripts/check-package-deploy.py')));
+  writeFileSync(join(fixture, 'faz-cookie-manager.php'), '<?php // release-only');
+  writeFileSync(join(fixture, 'scripts/build-release.sh'), "#!/bin/sh\npython3 - \"$@\" <<'PYBUILD'\nimport subprocess,sys,zipfile\nfrom pathlib import Path\noutput=next(a.split('=',1)[1] for a in sys.argv[1:] if a.startswith('--output-dir='))\nwith zipfile.ZipFile(Path(output)/'release.zip','w') as archive:\n    archive.writestr('faz-cookie-manager/faz-cookie-manager.php',subprocess.check_output(['git','show','HEAD:faz-cookie-manager.php']))\nPYBUILD\n");
   // The batch runner now binds evidence to a clean, committed candidate.
   execFileSync('git', ['init', '-q'], { cwd: fixture });
   execFileSync('git', ['add', '.'], { cwd: fixture });
@@ -73,6 +75,7 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
   const manifest = join(packageFixture, 'build.json');
   writeFileSync(manifest, JSON.stringify({
     commit:execFileSync('git', ['rev-parse','HEAD'], {cwd:fixture,encoding:'utf8'}).trim(),
+    version:'1.31.0',
     packages:{'release.zip':createHash('sha256').update(readFileSync(packageZip)).digest('hex')},
   }));
   run('bash', ['scripts/run-e2e-batches.sh'], 'unit', ['package-source','unit'], {

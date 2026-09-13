@@ -99,6 +99,9 @@ try {
   mkdirSync(packageRepo, {recursive:true});
   mkdirSync(deployed, {recursive:true});
   writeFileSync(join(packageRepo, 'source.txt'), 'candidate');
+  mkdirSync(join(packageRepo, 'scripts'));
+  writeFileSync(join(packageRepo, 'faz-cookie-manager.php'), '<?php // candidate');
+  writeFileSync(join(packageRepo, 'scripts/build-release.sh'), "#!/bin/sh\npython3 - \"$@\" <<'PYBUILD'\nimport subprocess,sys,zipfile\nfrom pathlib import Path\noutput=next(a.split('=',1)[1] for a in sys.argv[1:] if a.startswith('--output-dir='))\nwith zipfile.ZipFile(Path(output)/'candidate.zip','w') as archive:\n    archive.writestr('faz-cookie-manager/faz-cookie-manager.php',subprocess.check_output(['git','show','HEAD:faz-cookie-manager.php']))\nPYBUILD\n");
   for (const args of [['init', '-q'], ['add', '.'], ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'candidate']]) {
     assert.equal(spawnSync('git', args, {cwd:packageRepo}).status, 0);
   }
@@ -107,7 +110,7 @@ try {
   const candidateZip = join(temp, 'candidate.zip');
   assert.equal(spawnSync('zip', ['-qr',candidateZip,'faz-cookie-manager'], {cwd:join(temp,'deployed')}).status, 0);
   const manifestFile = join(temp,'build.json');
-  const manifest = {commit:head,packages:{'candidate.zip':digest(readFileSync(candidateZip))}};
+  const manifest = {commit:head,version:'1.31.0',packages:{'candidate.zip':digest(readFileSync(candidateZip))}};
   const packageCheck = () => {
     writeFileSync(manifestFile,JSON.stringify(manifest));
     return spawnSync('python3',[join(repo,'scripts/check-package-deploy.py'),candidateZip,manifestFile,packageRepo,deployed],{encoding:'utf8'});
@@ -123,6 +126,12 @@ try {
   rmSync(join(packageRepo,'untracked.php'));
   writeFileSync(join(packageRepo,'source.txt'),'uncommitted');
   assert.equal(packageCheck().status,2);
+  writeFileSync(join(packageRepo,'source.txt'),'candidate');
+  // Forge a matching ZIP, manifest hash and deployment without changing HEAD.
+  assert.equal(spawnSync('zip', ['-q',candidateZip,'faz-cookie-manager/faz-cookie-manager.php'], {cwd:join(temp,'deployed')}).status, 0);
+  manifest.packages['candidate.zip']=digest(readFileSync(candidateZip));
+  assert.equal(packageCheck().status,2, 'self-consistent forged package must not prove HEAD provenance');
+
 
   const called = [];
   const run = await runSections([
