@@ -46,9 +46,19 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
     archive.extractall(sys.argv[2])
 PYSOURCE
   export FAZ_PLUGIN_SOURCE_PATH="$PACKAGE_SOURCE/faz-cookie-manager/"
-  python3 "$REPO/scripts/check-package-deploy.py" "$FAZ_E2E_PACKAGE" \
+  # Compare the ZIP with the INSTALLED plugin, not with the copy just extracted
+  # from that same ZIP — that comparison can only ever come back empty. The
+  # drift list is the answer here, so an empty one is the only one that may
+  # continue: the site must already run the package under test.
+  PACKAGE_DRIFT="$(python3 "$REPO/scripts/check-package-deploy.py" "$FAZ_E2E_PACKAGE" \
     "${FAZ_E2E_BUILD_MANIFEST:?Release package manifest is required}" "$REPO" \
-    "$FAZ_PLUGIN_SOURCE_PATH" || exit 2
+    "$WP/wp-content/plugins/faz-cookie-manager/")" || exit 2
+  if [ "$PACKAGE_DRIFT" != "[]" ]; then
+    echo "The installed plugin is not the package under test:" >&2
+    echo "$PACKAGE_DRIFT" >&2
+    echo "Install it first: wp --path=$WP plugin install $FAZ_E2E_PACKAGE --force" >&2
+    exit 2
+  fi
 fi
 cd "$REPO" || exit 1
 # The same mandatory consent gate as npm run test:e2e, once before any reset.

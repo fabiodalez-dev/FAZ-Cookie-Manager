@@ -148,6 +148,21 @@ try {
   writeFileSync(join(batches, 'batch-01.json'), batchReport({expected:0,unexpected:0,flaky:0,skipped:0}));
   assert.equal(summarize(1).status, 1, 'a batch that ran no test is a failed batch');
   assert.equal(summarize(2).status, 2, 'a missing batch report cannot be skipped over');
+  // A skip the report counts but does not expose must not pass as "no skips":
+  // the evidence contract is one documented entry per skipped test.
+  writeFileSync(join(batches, 'batch-01.json'),
+    batchReport({expected:5,unexpected:0,flaky:0,skipped:2}));
+  assert.equal(summarize(1).status, 1, 'counted skips with no entry cannot be evidence');
+  const skippedSpec = (title, reason) => ({specs:[{file:'a.spec.ts',title,tests:[
+    {status:'skipped',annotations:[{type:'skip',description:reason}]}]}],suites:[]});
+  writeFileSync(join(batches, 'batch-01.json'), JSON.stringify({
+    stats:{expected:5,unexpected:0,flaky:0,skipped:2}, errors:[],
+    suites:[skippedSpec('one','third-party plugin absent'), skippedSpec('two','feature disabled')],
+  }));
+  assert.equal(summarize(1).status, 0, 'every skip documented is a valid gate');
+  assert.deepEqual(
+    JSON.parse(readFileSync(join(batches,'evidence.json'),'utf8')).skips.map(s => s.reasons[0]),
+    ['third-party plugin absent', 'feature disabled']);
 
   const called = [];
   const run = await runSections([

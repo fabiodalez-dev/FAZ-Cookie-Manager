@@ -35,7 +35,14 @@ def summarize(directory, count):
             failures.append(batch)
         if sum(stats[key] for key in total) == 0:
             failures.append(batch)
+        before = len(skipped)
         walk(data["suites"])
+        # Every skipped test must produce its own entry. A report that counts
+        # skips its tree does not expose leaves a hole exactly where "a skip is
+        # not a pass" has to be checked: the evidence would claim nothing was
+        # skipped while the run skipped tests nobody ever reads a reason for.
+        if len(skipped) - before != stats["skipped"]:
+            failures.append(batch)
     result = {"commit": (directory / "commit.txt").read_text().strip(), "batches": count, "counts": total, "failed_batches": failures, "skips": skipped}
     (directory / "evidence.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))
