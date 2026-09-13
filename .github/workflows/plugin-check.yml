@@ -47,6 +47,7 @@ jobs:
       # wp-env start — which is what the two steps below do.
       - name: Provision wp-env (plugin-check installed post-boot, not as a URL plugin)
         run: |
+          mkdir -p /tmp/faz-plugin-check-results
           cat > .wp-env.json <<'JSON'
           {
             "core": "WordPress/WordPress#7.1",
@@ -54,7 +55,8 @@ jobs:
             "testsPort": 8881,
             "testsEnvironment": false,
             "mappings": {
-              "wp-content/plugins/faz-cookie-manager": "/tmp/faz-cookie-manager"
+              "wp-content/plugins/faz-cookie-manager": "/tmp/faz-cookie-manager",
+              "faz-plugin-check-results": "/tmp/faz-plugin-check-results"
             }
           }
           JSON
@@ -74,10 +76,10 @@ jobs:
         run: |
           # Pin Plugin Check so a new release can't change the pass/fail
           # outcome of this gate without a deliberate version bump here.
-          wp-env run cli wp plugin install plugin-check --version=1.9.0 --activate
+          wp-env run cli sh -c 'wp plugin install plugin-check --version=1.9.0 --activate'
           wp-env run cli wp plugin activate faz-cookie-manager
           # Plugin Check can print ERROR findings and still exit 0. Write a
-          # machine-readable result through the existing bind mount, then
+          # machine-readable result through a separate bind mount, then
           # independently reject errors, empty output or malformed results.
-          wp-env run cli sh -c 'wp plugin check faz-cookie-manager --categories=plugin_repo --format=strict-json --fields=file,line,column,type,code,message > /var/www/html/wp-content/plugins/faz-cookie-manager/.plugin-check-results.json'
-          python3 scripts/check-plugin-check.py /tmp/faz-cookie-manager/.plugin-check-results.json
+          wp-env run cli sh -c 'wp plugin check faz-cookie-manager --categories=plugin_repo --format=strict-json --fields=file,line,column,type,code,message > /var/www/html/faz-plugin-check-results/results.json'
+          python3 scripts/check-plugin-check.py /tmp/faz-plugin-check-results/results.json
