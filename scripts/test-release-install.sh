@@ -44,7 +44,10 @@ install_core() {
     wp --path="$WP_DIR" option update permalink_structure '/%postname%/' --quiet
 }
 install_core
-php -S "127.0.0.1:${PORT}" -t "$WP_DIR" "$REPO/tests/e2e/fixtures/multisite-router.php" >"$RUN_DIR/server.log" 2>&1 &
+# WP-CLI cannot invalidate the separate HTTP process opcode cache after
+# replacing plugin files. Test the deployed version immediately, without the
+# built-in server serving old opcodes during opcache.revalidate_freq.
+php -d opcache.enable=0 -S "127.0.0.1:${PORT}" -t "$WP_DIR" "$REPO/tests/e2e/fixtures/multisite-router.php" >"$RUN_DIR/server.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 40); do
     curl -fsS "$URL/wp-login.php" >/dev/null 2>&1 && break
