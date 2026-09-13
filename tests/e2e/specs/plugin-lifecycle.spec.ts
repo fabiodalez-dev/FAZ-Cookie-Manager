@@ -927,8 +927,8 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
   //    non-zero and the stderr must mention the ZIP path.
   // ───────────────────────────────────────────────────────────────────────────
   test('svn-release.sh smoke test: syntax-clean, validates --version, fails on missing ZIP', () => {
-    const PLUGIN_ROOT = SOURCE_PATH.replace(/\/$/, '');
-    const svnRelease = joinPath(PLUGIN_ROOT, 'scripts/svn-release.sh');
+    // Release tooling is deliberately absent from the distributed package.
+    const svnRelease = joinPath(process.cwd(), 'scripts/svn-release.sh');
 
     // 1. File exists and is executable.
     const stat = statSync(svnRelease);
