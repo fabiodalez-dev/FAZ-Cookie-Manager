@@ -1749,7 +1749,7 @@ async function testFunctionalScenarios(browser) {
 			});
 			test('TF17b GCM update signal after accept', updateCmd);
 		} else {
-			test('TF17 GCM signals', true, 'GCM not enabled — covered by the dedicated self-provisioning GCM section');
+			skip('TF17 GCM signals', 'GCM not enabled in this banner; the dedicated GCM section provisions its own configuration');
 		}
 		await ctx.close();
 	}
@@ -2431,7 +2431,7 @@ async function testTogglePersistence(browser) {
 				`functional=${p['functional']}`);
 		} else {
 			// No inline toggle in this banner type — skip
-			test('TP04 Inline toggle sync (skipped: no inline toggle)', true, 'no fazCategoryDirect');
+			skip('TP04 Inline toggle sync', 'This banner has no inline category toggle');
 		}
 
 		await ctx.close();
