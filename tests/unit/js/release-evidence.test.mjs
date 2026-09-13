@@ -133,6 +133,22 @@ try {
   assert.equal(packageCheck().status,2, 'self-consistent forged package must not prove HEAD provenance');
 
 
+  // A batch run that executed nothing must not summarize as a pass, and a
+  // report whose own counts are all zero must be rejected batch by batch.
+  const batches = join(temp, 'batches');
+  mkdirSync(batches, {recursive:true});
+  writeFileSync(join(batches, 'commit.txt'), 'commit-a\n');
+  const summarize = (count) => spawnSync('python3',
+    [join(repo, 'scripts/summarize-e2e.py'), batches, String(count)], {encoding:'utf8'});
+  assert.equal(summarize(0).status, 2, 'zero batches cannot be a green E2E gate');
+  const batchReport = (stats) => JSON.stringify({stats, errors:[], suites:[]});
+  writeFileSync(join(batches, 'batch-01.json'), batchReport({expected:7,unexpected:0,flaky:0,skipped:0}));
+  assert.equal(summarize(1).status, 0);
+  assert.equal(JSON.parse(readFileSync(join(batches,'evidence.json'),'utf8')).counts.expected, 7);
+  writeFileSync(join(batches, 'batch-01.json'), batchReport({expected:0,unexpected:0,flaky:0,skipped:0}));
+  assert.equal(summarize(1).status, 1, 'a batch that ran no test is a failed batch');
+  assert.equal(summarize(2).status, 2, 'a missing batch report cannot be skipped over');
+
   const called = [];
   const run = await runSections([
     ['first', async () => called.push('first')],

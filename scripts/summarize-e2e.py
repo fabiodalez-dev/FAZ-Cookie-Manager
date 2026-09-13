@@ -6,6 +6,12 @@ from pathlib import Path
 
 
 def summarize(directory, count):
+    # Zero batches is not an empty success: with no report to read, every count
+    # below stays at zero and the loop has nothing to reject. A runner that
+    # found no spec to execute must fail here, as a compliance run with no
+    # section does in run-sections.mjs.
+    if count < 1:
+        raise ValueError("no E2E batches to summarize")
     total = {"expected": 0, "unexpected": 0, "flaky": 0, "skipped": 0}
     skipped = []
     failures = []

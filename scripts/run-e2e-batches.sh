@@ -65,6 +65,13 @@ while IFS= read -r line; do
   SPECS+=("$line")
 done < <(find tests/e2e/specs -maxdepth 1 -type f -name '*.spec.ts' -print | LC_ALL=C sort)
 TOTAL=${#SPECS[@]}
+# No spec found means the glob, the path or the checkout is wrong — never that
+# the suite passed. Without this the batch loop never runs and the evidence is
+# written for zero tests.
+if [ "$TOTAL" -eq 0 ]; then
+  echo 'No single-site E2E specs found: refusing to record evidence for zero tests.' >&2
+  exit 2
+fi
 
 reset_site() {
   ( cd "$WP" || return
