@@ -4782,8 +4782,10 @@ class Frontend {
 			$whitelist,
 			array(
 				'google.com/recaptcha',
+				// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
 				'gstatic.com/recaptcha',
 				'hcaptcha.com',
+				// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
 				'challenges.cloudflare.com/turnstile',
 			)
 		);
@@ -5272,18 +5274,33 @@ class Frontend {
 			true
 		);
 
-		// A binding signal (Sec-GPC, or a standing Do Not Sell request) closes the
-		// sale/share categories on this very request — and is_cookie_allowed()
-		// consults the per-service map BEFORE the category, so a stale
-		// `svc.<id>:yes` in the cookie reopened one of them server-side and the
-		// tag ran before script.js could clear the grant. Only the one grant the
-		// visitor gave on that service's own blocked embed survives, and only
-		// under GPC alone: it carries the `gpcx.<id>:1` marker script.js writes
-		// (the same rule as _fazIsGpcException and the AMP bridge). A Do Not Sell
-		// request is a later explicit act and voids even that.
-		// Resolved only when a signal is actually present: on an ordinary request
-		// there is nothing to enforce, and get_blocked_categories() would pull in
-		// the category controller for no reason.
+		$signal_blocked_services = $this->get_signal_blocked_services( $consent );
+
+		// Extract valid svc.* entries for services currently exposed by this site.
+		if ( preg_match_all( '/(?:^|,)svc\.([a-z0-9_-]+):(yes|no)(?=,|$)/', $consent, $matches, PREG_SET_ORDER ) ) {
+			foreach ( $matches as $match ) {
+				if ( ! isset( $active_service_ids[ $match[1] ] ) ) {
+					continue;
+				}
+				if ( 'yes' === $match[2] && isset( $signal_blocked_services[ $match[1] ] ) ) {
+					continue;
+				}
+				$this->service_consent_cache[ $match[1] ] = $match[2];
+			}
+		}
+		return $this->service_consent_cache;
+	}
+
+	/**
+	 * Services whose grants cannot override the current sale/share opt-out.
+	 * Shared by svc.* and ck.*: a per-cookie YES must not reopen a category
+	 * after the service grant has already been filtered. Explicit NO survives.
+	 * GPC permits a marked exception; a Do Not Sell request never does.
+	 *
+	 * @param string $consent Valid consent cookie.
+	 * @return array<string,bool>
+	 */
+	private function get_signal_blocked_services( $consent ) {
 		$gpc_header = isset( $_SERVER['HTTP_SEC_GPC'] )
 			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
 		$dnsmpi_req = isset( $_COOKIE['fazcookie-dnsmpi'] )
@@ -5297,31 +5314,20 @@ class Frontend {
 		if ( ! empty( $signal_blocked ) && ! in_array( 'dnsmpi', $signal_blocked, true ) ) {
 			if ( preg_match_all( '/(?:^|,)gpcx\.([a-z0-9_-]+):1(?=,|$)/', $consent, $gx, PREG_SET_ORDER ) ) {
 				foreach ( $gx as $g ) {
-					$gpc_exceptions[ $g[1] ] = true;
-				}
-			}
-		}
-		$service_categories = array();
-		foreach ( $this->get_enforceable_services() as $svc ) {
-			$service_categories[ $svc['id'] ] = $svc['category'];
-		}
-
-		// Extract valid svc.* entries for services currently exposed by this site.
-		if ( preg_match_all( '/(?:^|,)svc\.([a-z0-9_-]+):(yes|no)(?=,|$)/', $consent, $matches, PREG_SET_ORDER ) ) {
-			foreach ( $matches as $match ) {
-				if ( ! isset( $active_service_ids[ $match[1] ] ) ) {
-					continue;
-				}
-				if ( 'yes' === $match[2] ) {
-					$cat = isset( $service_categories[ $match[1] ] ) ? $service_categories[ $match[1] ] : '';
-					if ( '' !== $cat && isset( $signal_blocked[ $cat ] ) && ! isset( $gpc_exceptions[ $match[1] ] ) ) {
-						continue; // Unmarked grant inside a signal-closed category: not enforceable.
+					// A marker without its live service grant is not an exception.
+					if ( preg_match( '/(?:^|,)svc\.' . preg_quote( $g[1], '/' ) . ':yes(?=,|$)/', $consent ) ) {
+						$gpc_exceptions[ $g[1] ] = true;
 					}
 				}
-				$this->service_consent_cache[ $match[1] ] = $match[2];
 			}
 		}
-		return $this->service_consent_cache;
+		$blocked = array();
+		foreach ( $this->get_enforceable_services() as $service ) {
+			if ( isset( $signal_blocked[ $service['category'] ] ) && ! isset( $gpc_exceptions[ $service['id'] ] ) ) {
+				$blocked[ $service['id'] ] = true;
+			}
+		}
+		return $blocked;
 	}
 
 	/**
@@ -8365,6 +8371,7 @@ class Frontend {
 		$per_cookie      = ! empty( $banner_control['per_cookie_consent'] ) && ! empty( $banner_control['per_service_consent'] );
 		$valid           = ( $per_cookie && function_exists( 'faz_get_valid_consent_cookie' ) ) ? (string) faz_get_valid_consent_cookie() : '';
 		$consent         = ( '' !== $valid && function_exists( 'faz_parse_consent_cookie' ) ) ? faz_parse_consent_cookie( $valid ) : array();
+		$signal_blocked = $per_cookie ? $this->get_signal_blocked_services( $valid ) : array();
 		if ( empty( $service_consent ) && ! $per_cookie ) {
 			return $this->service_cookie_decisions_cache;
 		}
@@ -8377,6 +8384,9 @@ class Frontend {
 			foreach ( $service['cookies'] as $cookie_pattern ) {
 				$cookie_pattern = sanitize_text_field( (string) $cookie_pattern );
 				$decision       = $this->resolve_service_cookie_decision( $svc_id, $cookie_pattern, $svc_decision, $consent, $per_cookie );
+				if ( 'yes' === $decision && isset( $signal_blocked[ $svc_id ] ) ) {
+					continue;
+				}
 				if ( '' === $cookie_pattern || ! in_array( $decision, array( 'yes', 'no' ), true ) ) {
 					continue;
 				}

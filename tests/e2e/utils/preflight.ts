@@ -105,6 +105,18 @@ const ITEMIZED = /^(?:[<>ch.][a-zA-Z.][^\s]{9}|\*\w+)\s+\S/;
  * preserve both is still caught; `-n` makes it a dry run.
  */
 function deploymentDrift(deployPath: string): string[] {
+  if (process.env.FAZ_E2E_PACKAGE) {
+    if (!process.env.FAZ_E2E_BUILD_MANIFEST) {
+      throw new Error('FAZ_E2E_BUILD_MANIFEST is required with FAZ_E2E_PACKAGE');
+    }
+    const output = execFileSync('python3', [
+      join(REPO_ROOT, 'scripts/check-package-deploy.py'),
+      process.env.FAZ_E2E_PACKAGE, process.env.FAZ_E2E_BUILD_MANIFEST,
+      REPO_ROOT, deployPath,
+    ], { encoding: 'utf8', timeout: 60_000 });
+    return JSON.parse(output) as string[];
+  }
+
   const args = [
     '-rcni',
     '--delete',

@@ -25,8 +25,11 @@ jobs:
       # Build a wp.org-shape copy (mirrors scripts/build-release.sh).
       # Excludes run-scan.php because Plugin Check cannot parse its CLI
       # ABSPATH guard, and the file is excluded from the wp.org ZIP anyway.
-      - name: Build wp.org-shape plugin copy
-        run: rsync -a --exclude-from=.distignore . /tmp/faz-cookie-manager/
+      - name: Build the actual wp.org release package
+        run: |
+          version="$(awk '/^Stable tag:/ {print $3; exit}' readme.txt)"
+          bash scripts/build-release.sh --version="$version" --output-dir=/tmp/faz-release
+          unzip -q "/tmp/faz-release/faz-cookie-manager-${version}.zip" -d /tmp
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
@@ -73,6 +76,8 @@ jobs:
           # outcome of this gate without a deliberate version bump here.
           wp-env run cli wp plugin install plugin-check --version=1.9.0 --activate
           wp-env run cli wp plugin activate faz-cookie-manager
-          # `wp plugin check` exits non-zero when ERROR-severity findings
-          # exist, so the job fails on real problems (pipefail is on).
-          wp-env run cli wp plugin check faz-cookie-manager --categories=plugin_repo
+          # Plugin Check can print ERROR findings and still exit 0. Write a
+          # machine-readable result through the existing bind mount, then
+          # independently reject errors, empty output or malformed results.
+          wp-env run cli sh -c 'wp plugin check faz-cookie-manager --categories=plugin_repo --format=strict-json --fields=file,line,column,type,code,message > /var/www/html/wp-content/plugins/faz-cookie-manager/.plugin-check-results.json'
+          python3 scripts/check-plugin-check.py /tmp/faz-cookie-manager/.plugin-check-results.json

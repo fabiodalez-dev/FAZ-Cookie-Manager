@@ -606,6 +606,52 @@ namespace {
 		'no pattern match → null (svc.* NO does not block an unmatched script)'
 	);
 
+	// Signal filtering must cover ck.* as well as svc.* on the actual public
+	// shredder decision path. Cached catalogue/category state isolates the
+	// decision from WordPress IO; none of the decision methods are stubbed.
+	function wp_unslash( $value ) { return $value; }
+	function faz_parse_consent_cookie( $value ) {
+		$parsed = array();
+		foreach ( explode( ',', $value ) as $entry ) {
+			$parts = explode( ':', $entry, 2 );
+			if ( 2 === count( $parts ) ) { $parsed[ $parts[0] ] = $parts[1]; }
+		}
+		return $parsed;
+	}
+	foreach ( array( 'none', 'gpc', 'dnsmpi', 'both' ) as $signal ) {
+		foreach ( array( '', 'yes', 'no' ) as $cookie_choice ) {
+			foreach ( array( false, true ) as $exception ) {
+				$_SERVER['HTTP_SEC_GPC'] = in_array( $signal, array( 'gpc', 'both' ), true ) ? '1' : '0';
+				$_COOKIE['fazcookie-dnsmpi'] = in_array( $signal, array( 'dnsmpi', 'both' ), true ) ? '1' : '0';
+				$GLOBALS['__faz_consent_cookie'] = 'action:yes,marketing:no,svc.facebook-pixel:yes';
+				if ( '' !== $cookie_choice ) { $GLOBALS['__faz_consent_cookie'] .= ',ck.facebook-pixel._fbp:' . $cookie_choice; }
+				if ( $exception ) { $GLOBALS['__faz_consent_cookie'] .= ',gpcx.facebook-pixel:1'; }
+				$fe = faz_new_frontend();
+				faz_set_prop( $fe, 'settings_option_cache', array( 'banner_control' => array( 'per_service_consent' => true, 'per_cookie_consent' => true ) ) );
+				faz_set_prop( $fe, 'geo_bootstrap_active_cache', false );
+				faz_set_prop( $fe, 'blocked_categories_cache', array( 'marketing' ) );
+				$reason = 'both' === $signal ? 'dnsmpi' : $signal;
+				faz_set_prop( $fe, 'signal_blocked_categories', 'none' === $signal ? array() : array( 'marketing' => $reason ) );
+				faz_set_prop( $fe, 'enforceable_cache', array( array( 'id' => 'facebook-pixel', 'category' => 'marketing', 'cookies' => array( '_fbp' ), 'patterns' => array() ) ) );
+				faz_set_prop( $fe, 'catalog_cookie_categories_cache', array( '_fbp' => 'marketing' ) );
+				faz_set_prop( $fe, 'whitelisted_cookie_patterns_cache', array() );
+				$allowed = 'no' !== $cookie_choice && ( 'none' === $signal || ( 'gpc' === $signal && $exception ) );
+				assert_eq( $fe->is_cookie_allowed( '_fbp' ), $allowed, "shredder signal=$signal ck=$cookie_choice exception=" . (int) $exception );
+				if ( 'gpc' === $signal && $exception && 'yes' === $cookie_choice ) {
+					foreach ( array( '', 'no' ) as $service_choice ) {
+						$GLOBALS['__faz_consent_cookie'] = 'action:yes,marketing:no,ck.facebook-pixel._fbp:yes,gpcx.facebook-pixel:1,svc.facebook-pixel:' . $service_choice;
+						faz_set_prop( $fe, 'service_consent_cache', null );
+						faz_set_prop( $fe, 'service_cookie_decisions_cache', null );
+						faz_set_prop( $fe, 'cookie_allowed_cache', array() );
+						assert_eq( $fe->is_cookie_allowed( '_fbp' ), false, 'orphan marker cannot authorise a cookie without a live service grant: ' . $service_choice );
+					}
+				}
+
+			}
+		}
+	}
+	unset( $_SERVER['HTTP_SEC_GPC'], $_COOKIE['fazcookie-dnsmpi'] );
+
 	// ---------- Summary ----------
 
 	echo "\n--\n";

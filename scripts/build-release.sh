@@ -73,6 +73,7 @@ require_cmd() {
 require_cmd rsync
 require_cmd zip
 require_cmd unzip
+require_cmd python3
 
 header_value() {
     local field="$1"
@@ -234,7 +235,17 @@ zip_stage() {
     local zip_file="$2"
 
     rm -f "${zip_file}"
-    ( cd "${stage}" && zip -qr "${zip_file}" "${PLUGIN_SLUG}" )
+    # Identical commits produce identical bytes, including CP's staged header.
+    # ZIP otherwise stores extraction/edit times and host-specific attributes.
+    python3 - "${stage}/${PLUGIN_SLUG}" "$(git -C "${PLUGIN_SRC}" log -1 --format=%ct)" <<'PYZIP'
+import os
+import sys
+from pathlib import Path
+root, epoch = Path(sys.argv[1]), int(sys.argv[2])
+for path in list(root.rglob('*')) + [root]:
+    os.utime(path, (epoch, epoch), follow_symlinks=False)
+PYZIP
+    ( cd "${stage}" && find "${PLUGIN_SLUG}" -print | LC_ALL=C sort | TZ=UTC zip -Xq "${zip_file}" -@ )
 }
 
 assert_contains() {
@@ -382,3 +393,15 @@ green "Built release ZIPs:"
 printf '  %s (%s)\n' "${WPORG_ZIP}" "$(du -h "${WPORG_ZIP}" | cut -f1)"
 printf '  %s (%s)\n' "${FULL_ZIP}" "$(du -h "${FULL_ZIP}" | cut -f1)"
 printf '  %s (%s)\n' "${CP_ZIP}" "$(du -h "${CP_ZIP}" | cut -f1)"
+
+# Sidecar for E2E provenance. It is outside the plugin and never ships in a ZIP.
+python3 - "${OUTPUT_DIR}" "${VERSION}" "$(git -C "${PLUGIN_SRC}" rev-parse HEAD)" <<'PYMANIFEST'
+import hashlib
+import json
+import sys
+from pathlib import Path
+root, version, commit = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+names = [f'faz-cookie-manager-{version}.zip', f'faz-cookie-manager-{version}-full.zip', f'faz-cookie-manager-v{version}.zip']
+manifest = {'commit': commit, 'version': version, 'packages': {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names}}
+(root / f'faz-cookie-manager-{version}-build.json').write_text(json.dumps(manifest, indent=2) + '\n')
+PYMANIFEST

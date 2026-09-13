@@ -125,7 +125,9 @@ check('(e) and the pruning reaches the cookie, not only the store',
 // service already excused, with no new act from the visitor.
 const w4b = loadFrontend({ gpc: false, cookie: saved });
 check('(e2) with GPC off the stored marker is not loaded', get(w4b, 'gpcx.google-maps') !== '1');
-w4b.eval("_fazAcceptCookies('custom', true)");
+w4b.eval('_fazInitOperations()');
+check('(e2) a page load without a new choice removes the persisted marker',
+  !decodeURIComponent(cookieValue(w4b)).includes('gpcx.google-maps'));
 const w4c = loadFrontend({ cookie: cookieValue(w4b) });
 w4c.eval('_fazApplyGpcOptOut()');
 check('(e2) so GPC asserted later still binds that service', get(w4c, 'svc.google-maps') !== 'yes');

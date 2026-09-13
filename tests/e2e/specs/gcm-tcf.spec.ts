@@ -471,6 +471,18 @@ test.describe('GCM and IAB TCF behavior', () => {
   });
 
   test('TCF API responds when enabled', async ({ page }) => {
+    const original = wpEval(`echo wp_json_encode(get_option('faz_settings', array()));`);
+    const encoded = Buffer.from(original).toString('base64');
+    try {
+      wpEval(`
+        $s = get_option('faz_settings', array());
+        $s['iab']['enabled'] = true;
+        $s['iab']['cmp_id'] = 123;
+        update_option('faz_settings', $s);
+        delete_option('faz_banner_template');
+        do_action('rest_api_init');
+        do_action('faz_after_update_settings', $s);
+      `);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const tcf = await page.evaluate(async () => {
@@ -488,12 +500,21 @@ test.describe('GCM and IAB TCF behavior', () => {
       };
     });
 
-    test.skip(!tcf.available, 'IAB TCF not enabled in current plugin settings');
+    expect(tcf.available, 'TCF was explicitly enabled for this test').toBe(true);
 
     expect(tcf.ping).toBeTruthy();
     expect(tcf.ping.cmpLoaded).toBeTruthy();
     expect(typeof tcf.ping.gdprApplies).toBe('boolean');
     expect(tcf.ping.apiVersion).toBe('2.3');
+    } finally {
+      wpEval(`
+        $s = json_decode(base64_decode('${encoded}'), true);
+        update_option('faz_settings', $s);
+        delete_option('faz_banner_template');
+        do_action('rest_api_init');
+        do_action('faz_after_update_settings', $s);
+      `);
+    }
   });
 
   test('TCF preserves timestamps on getTCData and clears euconsent-v2 after reject', async ({ page, browser }) => {

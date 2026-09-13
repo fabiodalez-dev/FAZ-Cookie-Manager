@@ -605,6 +605,10 @@ if (!_fazConsentInvalidated) {
 // Always track the revision currently in effect so next _fazSetInStore()
 // persists it into the cookie.
 ref._fazConsentStore.set("rev", String(_fazServerRevision));
+// Remember discarded markers even when no consent UI is used on this visit.
+// Dropping them only from memory resurrected an exception on GPC off → on.
+const _fazDiscardedGpcMarkers = !_fazConsentInvalidated && !_fazGpcActive() &&
+    Object.keys(fazcookieConsentMap).some(function (key) { return key.indexOf('gpcx.') === 0; });
 // Restore per-service consent keys (svc.service-id) from existing cookie.
 if (!_fazConsentInvalidated && _fazStore._perServiceConsent && _fazStore._services) {
     _fazStore._services.forEach(function(svc) {
@@ -639,8 +643,8 @@ if (!_fazConsentInvalidated && _fazStore._perServiceConsent && _fazStore._servic
         // reads as a GPC bypass on reload and the init path removes it. It is
         // restored ONLY while GPC is still asserted — a marker that outlived
         // its signal would pre-excuse the service from a GPC opt-out asserted
-        // later, with no new act from the visitor. Left out of the store, it
-        // disappears from the cookie at the next write.
+        // later, with no new act from the visitor. The bootstrap below persists
+        // this omission even when the visitor does not save another choice.
         if (k.indexOf('gpcx.') === 0 && !_fazGpcActive()) return;
         if ((k.indexOf('svc.') === 0 || k.indexOf('gpcx.') === 0) && !ref._fazConsentStore.has(k)) {
             ref._fazConsentStore.set(k, fazcookieConsentMap[k]);
@@ -702,6 +706,12 @@ ref._fazSetCookie = function (name, value, days = 0, domain = _fazStore._rootDom
         );
     }
     document.cookie = cookieStr;
+}
+
+// _fazSetCookie is now installed and the store has been completely restored.
+// Do not create a consent record on a first visit or after invalidation.
+if (_fazDiscardedGpcMarkers && ref._fazGetFromStore("action")) {
+    ref._fazPersistConsentCookie();
 }
 
 function _fazSetConsentID() {
@@ -3585,6 +3595,7 @@ function _fazAcceptCookies(choice = "all", ungated = false, source = "preference
             if (toggle && !toggle.checked) {
                 ref._fazConsentStore.delete("gpcx." + id);
                 ref._fazConsentStore.delete("svc." + id);
+                ref._fazPersistConsentCookie();
                 return;
             }
             ref._fazSetInStore("svc." + id, "yes");

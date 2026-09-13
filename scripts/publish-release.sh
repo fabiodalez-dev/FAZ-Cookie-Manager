@@ -54,8 +54,12 @@ green() { printf '\033[32m%s\033[0m\n' "$*"; }
 cyan()  { printf '\033[36m%s\033[0m\n' "$*"; }
 bold()  { printf '\033[1m%s\033[0m\n' "$*"; }
 
-done_step()  { [[ -f "${STATE}" ]] && grep -q "\"$1\"" "${STATE}"; }
-mark_step()  { printf '{"step":"%s","at":"%s"}\n' "$1" "$(date -u +%FT%TZ)" >> "${STATE}"; }
+release_state() {
+    python3 "${PLUGIN_SRC}/scripts/release-state.py" "$@" --state "${STATE}" \
+        --commit "${head_sha}" --project-root "${PROJECT_ROOT}" --version "${VERSION}"
+}
+done_step() { release_state check "$1"; }
+mark_step() { release_state mark "$1"; }
 die()        { red "FAIL: $*"; exit 1; }
 
 # ═══════════════════════════ Phase A — preflight ═══════════════════════════
@@ -79,17 +83,20 @@ green "  ✓ version consistent in 4 places; changelog entries present and under
 
 # CI is a gate here, not advice. A red Plugin Check means wp.org review will
 # reject what I am about to publish.
-if command -v gh >/dev/null 2>&1; then
-    concl="$(gh api "repos/{owner}/{repo}/commits/${head_sha}/check-runs" \
-		--jq '[.check_runs[] | select(.name | test("Plugin Check|CodeQL|Quality")) | .conclusion] | unique | join(",")' 2>/dev/null || echo "")"
-    if [[ -z "${concl}" ]]; then
-        red "  ! could not read CI status for ${head_sha:0:7} — continuing, verify manually"
-    elif [[ "${concl}" != "success" ]]; then
-        die "CI on ${head_sha:0:7} is '${concl}', not success"
-    else
-        green "  ✓ CI green on this commit"
-    fi
-fi
+command -v gh >/dev/null 2>&1 || die "gh is required to verify CI"
+release_state validate || die "release state validation failed"
+# Require every expected check; an empty/partial response is not a green gate.
+# For reruns, only the newest result for each name is authoritative.
+# shellcheck disable=SC2016 # jq variables belong to jq, not the shell.
+concl="$(gh api "repos/{owner}/{repo}/commits/${head_sha}/check-runs?per_page=100" \
+    --jq '.check_runs | group_by(.name) | map(max_by(.id)) as $checks | ["Plugin Check (wp.org shape)", "Analyze (javascript-typescript)", "Quality", "Consent intent (chromium)", "Consent intent (firefox)", "Consent intent (webkit)"] | all(. as $name | any($checks[]; .name == $name and .status == "completed" and .conclusion == "success"))')" \
+    || die "cannot read CI status; refusing publication"
+[[ "${concl}" == "true" ]] || die "required CI checks are missing, pending or unsuccessful"
+green "  ✓ all required CI checks passed on this commit"
+EVIDENCE="${PROJECT_ROOT}/${SLUG}-${VERSION}-evidence.json"
+python3 "${PLUGIN_SRC}/scripts/verify-release-evidence.py" "${EVIDENCE}" "${head_sha}" "${VERSION}" "${PROJECT_ROOT}" \
+    || die "local release gates are incomplete or stale"
+
 
 # Nothing may already exist under this version. Discovering a half-published
 # version mid-flight is the state this script exists to prevent.
@@ -119,6 +126,8 @@ FULL_ZIP="${PROJECT_ROOT}/${SLUG}-${VERSION}-full.zip"
 CP_ZIP="${PROJECT_ROOT}/${SLUG}-v${VERSION}.zip"
 for z in "${WPORG_ZIP}" "${FULL_ZIP}" "${CP_ZIP}"; do [[ -f "$z" ]] || die "missing build output: $z"; done
 green "  ✓ three ZIPs built"
+python3 "${PLUGIN_SRC}/scripts/verify-release-evidence.py" "${EVIDENCE}" "${head_sha}" "${VERSION}" "${PROJECT_ROOT}" \
+    || die "rebuilt packages differ from the tested artifacts"
 
 if ! done_step draft; then
     # Release notes come from this version's CHANGELOG.md section only. Passing
@@ -132,8 +141,14 @@ if ! done_step draft; then
     notes="$(awk -v hdr="## [${VERSION}]" 'index($0, hdr) == 1 {f=1; next} /^## \[/ {f=0} f' "${PLUGIN_SRC}/CHANGELOG.md")"
     [[ -n "${notes}" ]] || die "no CHANGELOG.md section for ${VERSION}"
     printf '%s\n' "${notes}" > "${PLUGIN_SRC}/.release-notes-${VERSION}.md"
-    gh release create "${TAG}" --draft --title "${TAG}" \
-        --notes-file "${PLUGIN_SRC}/.release-notes-${VERSION}.md" --target main
+    if draft_status="$(gh release view "${TAG}" --json isDraft --jq '.isDraft' 2>/dev/null)"; then
+        [[ "${draft_status}" == "true" ]] || die "existing release is not a draft"
+        gh release edit "${TAG}" --title "${TAG}" \
+            --notes-file "${PLUGIN_SRC}/.release-notes-${VERSION}.md" --target "${head_sha}"
+    else
+        gh release create "${TAG}" --draft --title "${TAG}" \
+            --notes-file "${PLUGIN_SRC}/.release-notes-${VERSION}.md" --target "${head_sha}"
+    fi
     gh release upload "${TAG}" "${WPORG_ZIP}" "${FULL_ZIP}" "${CP_ZIP}" --clobber
     mark_step draft
 fi
@@ -207,11 +222,12 @@ fi
 # release still completes and this step reports what is missing — a blog post
 # is not worth failing a published release over.
 cyan "═══ F. Release write-up ═══"
-POST_BODY="${PLUGIN_SRC}/.release-post-${VERSION}.html"
+POST_BODY="${PLUGIN_SRC}/docs/releases/${VERSION}.html"
+[[ -f "${POST_BODY}" ]] || POST_BODY="${PLUGIN_SRC}/.release-post-${VERSION}.html"
 if [[ -f "${POST_BODY}" ]]; then
     if bash "${PLUGIN_SRC}/scripts/publish-release-post.sh" \
             --version="${VERSION}" --content="${POST_BODY}"; then
-        rm -f "${POST_BODY}"
+        green "  ✓ write-up published; source retained"
     else
         red "  ! the write-up did not publish — the release itself is fine."
         red "    Retry: scripts/publish-release-post.sh --version=${VERSION} --content=${POST_BODY}"

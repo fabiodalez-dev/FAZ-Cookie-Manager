@@ -1,0 +1,46 @@
+<p>FAZ Cookie Manager 1.31.0 è online. È una release minore, nata da una sola segnalazione sul forum di wordpress.org, e la racconto perché la strada per arrivarci è stata più istruttiva della correzione stessa: la prima diagnosi era sbagliata, e il bug vero erano due regole corrette che si annullavano a vicenda.</p>
+
+<h2>«Strano comportamento in Firefox»</h2>
+
+<p>La segnalazione diceva due cose. Al primo caricamento il banner non compariva, solo l'icona dei cookie. E il pulsante «Accetta» sul segnaposto di Google Maps non faceva nulla: la mappa restava bloccata. Il titolo parlava di Firefox.</p>
+
+<p>Ho aperto il sito in un Firefox pulito, poi con la protezione antitracciamento al massimo, poi in Chromium: tutto funzionava. Banner visibile, mappa sbloccabile. Ho risposto che il problema doveva stare nel profilo e ho suggerito di cercare un'estensione, uBlock Origin in testa. Era una risposta ragionevole ed era sbagliata.</p>
+
+<p>Il dettaglio che mancava è arrivato dopo: non era Firefox, erano Zen e Waterfox, due browser derivati. In Firefox vero il plugin funzionava. Quello che distingue quei due browser da un Firefox di serie non è un'estensione, è un segnale: Global Privacy Control, GPC, che inviano per impostazione predefinita come fa Brave. Con quel segnale acceso ho riprodotto entrambi i sintomi, sul sito del segnalante.</p>
+
+<h2>Due regole giuste, un pulsante che non funziona</h2>
+
+<p>GPC è un opt-out vincolante dalla vendita e dalla condivisione dei dati personali in diversi stati americani, e il plugin lo rispetta sempre, qualunque sia la legge applicata al sito: un browser non dice quale legge vale per chi lo usa. Un visitatore con GPC viene escluso da ogni categoria di cookie contrassegnata come «vendita o condivisione».</p>
+
+<p>Sul sito del segnalante la categoria Funzionali era contrassegnata così. Non l'aveva deciso nessuno: era il valore predefinito per le installazioni nate prima della versione 1.17.2, e da allora le installazioni nuove partono corrette mentre quelle vecchie erano rimaste com'erano. Una mappa di Google non è né una vendita né una condivisione nel senso della legge californiana, ma per il plugin lo era.</p>
+
+<p>Da lì il pulsante morto. Cliccare «Accetta» sulla mappa scriveva il consenso a quel servizio; lo stesso salvataggio, subito dopo, applicava la regola di GPC e cancellava ogni consenso dentro una categoria di vendita o condivisione, perché è esattamente il modo in cui qualcuno potrebbe aggirare l'opt-out. Due regole, ognuna corretta presa da sola, messe una dopo l'altra nella stessa funzione. Ogni test esistente ne esercitava una alla volta, ed è per questo che nessuno poteva vederlo.</p>
+
+<h2>L'eccezione, e quanto deve essere stretta</h2>
+
+<p>La correzione non è spegnere GPC, ma riconoscere l'unico atto che viene dopo il segnale e lo supera: il visitatore che clicca «Accetta» sul contenuto bloccato di un servizio specifico. Quel servizio ora viene concesso e marcato come eccezione GPC, e nient'altro si allenta. La categoria resta negata, così «Accetta tutto» non può riaprirla; ogni altro servizio di vendita o condivisione resta bloccato; una richiesta Do Not Sell esplicita continua a vincere sul clic; un rifiuto ritira l'eccezione. Il registro dei consensi la annota come tale, così chi fa un audit vede perché quel servizio è attivo nonostante il segnale.</p>
+
+<p>Per le installazioni vecchie c'è una migrazione che toglie il contrassegno da Funzionali. Sui siti con una superficie Do Not Sell agisce solo sulle righe rimaste intatte; dove quella superficie manca, corregge anche righe salvate o importate, perché la colonna era nascosta e non esiste una provenienza affidabile dell’importazione. Un avviso informa l’amministratore, che può ripristinare una classificazione intenzionale dalla colonna ora visibile. Durante i test ho scoperto che il plugin riesegue tutte le migrazioni a ogni release che ne aggiunge una: senza un marcatore, questa sarebbe ripassata anche fra un anno, e avrebbe potuto azzerare una scelta importata apposta. Ora gira una volta sola.</p>
+
+<h2>Una colonna nascosta e un interruttore che non faceva niente</h2>
+
+<p>Il segnalante non poteva accorgersi del contrassegno perché l'amministrazione lo nascondeva: la colonna «Vendita / Condivisione» compariva solo sui siti con un link Do Not Sell, sul presupposto che altrove non avesse effetti. Il presupposto era falso proprio a causa di GPC. La colonna ora c'è sempre, con un testo che spiega cosa blocca.</p>
+
+<p>E nelle impostazioni del banner c'era un interruttore «Rispetta Global Privacy Control» con una nota che diceva che, fuori da alcuni stati americani, «decide questo interruttore». Dalla 1.27 non lo legge più nessuno: il segnale viene rispettato comunque. Un'interfaccia che promette un controllo che non esiste manda l'amministratore a cercare nel posto sbagliato, ed è quello che avevo quasi fatto anch'io. La nota ora dice la verità, e spiega l'eccezione.</p>
+
+<h2>Il banner che spariva</h2>
+
+<p>Restava il primo sintomo, e l'avevo inizialmente archiviato come comportamento voluto. Non lo era. Alla prima pagina GPC registra l'opt-out, e quel record contiene la stessa marca che il plugin usa per dire «il visitatore ha scelto». Dalla seconda pagina il banner veniva quindi rimosso e restava solo l'icona, anche se ogni commento nel codice diceva l'opposto: il segnale risponde alla domanda sulla vendita, non a tutte le altre. Ora quel record è marcato come «indeciso» finché il visitatore non sceglie davvero, e, nelle configurazioni opt-in, il banner continua a essere offerto. Nelle configurazioni CCPA/CPRA opt-out il segnale vale invece come decisione; anche una richiesta esplicita Do Not Sell interrompe la riproposizione.</p>
+
+<p>Cercando questo ne ho trovato un altro con la stessa radice. Il plugin riscrive il cookie di consenso a ogni salvataggio, ricaricando solo un elenco fisso di chiavi, e il segno «GPC già applicato» non era nell'elenco. Risultato: a ogni pagina l'opt-out veniva applicato di nuovo come se fosse nuovo, e partivano ogni volta una richiesta al registro dei consensi, un aggiornamento di Consent Mode e un evento TCF. Il server deduplicava le righe, quindi nel registro non si vedeva quasi nulla; nella rete sì.</p>
+
+<h2>I test che non avevo</h2>
+
+<p>La lezione di questa release sta nei test più che nel codice. Il bug non era una regola sbagliata ma un incrocio di regole giuste, e un incrocio non lo vede nessun test che le prova una alla volta. Ho scritto una matrice: legge applicata, GPC, Do Not Sell, consenso per singolo servizio, contrassegno sulla categoria, trentadue combinazioni per quattro scenari, ognuna confrontata con una sola frase scritta di cosa deve succedere. Una prima versione controllava solo dopo il ricaricamento, e una modifica che rendeva innocuo il Do Not Sell passava verde: il ricaricamento riapplicava l'opt-out e riparava in silenzio la violazione commessa al salvataggio. Ma la pagina che il visitatore guarda è quella prima del ricaricamento, ed è lì che un tracker parte. Un ricaricamento che guarisce un errore lo nasconde a ogni test che guarda solo dopo.</p>
+
+<p>Ogni test nuovo l'ho visto fallire prima di fidarmene: contro il codice della versione precedente, e contro modifiche mirate che reintroducevano ciascun difetto. Un test che non si è mai visto rosso non dimostra niente.</p>
+
+<h2>Controllare anche i controlli</h2>
+<p>Una verifica indipendente ha trovato due percorsi ancora scoperti: un consenso per singolo cookie poteva superare il filtro del servizio sul server, e una vecchia eccezione riappariva dopo aver spento e riacceso GPC senza salvare preferenze. Ho allineato i due filtri e reso persistente la rimozione del marcatore anche nelle visite senza interazione. Il test dell’età ora usa la checkbox resa dal plugin e il suo evento change.</p>
+<p>Ho corretto anche i gate: Plugin Check poteva stampare errori e terminare con successo, e la suite di verifica poteva presentare un totale verde dopo un’eccezione. Adesso un risultato incompleto blocca il rilascio. I pacchetti e le evidenze dei test sono collegati al commit e agli hash dei file; i test saltati restano nominati con la loro motivazione.</p>
+<p>Il marcatore distingue una scelta dall’eredità di un consenso precedente: non autentica un’azione umana contro JavaScript ostile già in esecuzione nella pagina. Quel limite del modello di fiducia resta esplicito nella issue dedicata; un token leggibile o richiedibile dallo stesso script non sarebbe, da solo, una soluzione.</p>

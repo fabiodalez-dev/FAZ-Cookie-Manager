@@ -251,7 +251,9 @@ class Settings extends Store {
 				// are not, and stay out.
 				'whitelist_patterns' => array(
 					'www.google.com/recaptcha/api',
+					// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
 					'www.gstatic.com/recaptcha/',
+					// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
 					'challenges.cloudflare.com/',
 					'hcaptcha.com/',
 				),

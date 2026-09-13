@@ -13,6 +13,7 @@
  */
 
 import { chromium } from 'playwright';
+import { runSections } from './run-sections.mjs';
 import { createTracedContext, bannerToMarkdown, printTraceInfo, isTraceEnabled } from './test-helpers.mjs';
 
 // --- Configuration ---
@@ -2632,25 +2633,26 @@ if (SECTION_FILTER) console.log(`Filter: ${SECTION_FILTER}`);
 
 const browser = await chromium.launch({ headless: !HEADED });
 
+const plannedSections = [
+    ['banner', testBannerAppearance], ['info', testInformationContent],
+    ['buttons', testCommandsButtons], ['granular', testGranularPreferences],
+    ['blocking', testPriorBlocking], ['consent', testConsentManagement],
+    ['revocation', testRevocation], ['gcm', testGoogleConsentMode],
+    ['tcf', testIABTCF], ['functional', testFunctionalScenarios],
+    ['settings', testSettingsReflection], ['prohibited', testProhibitedPractices],
+    ['visual', testVisualIntegrity], ['toggle', testTogglePersistence],
+    ['popia', testPopiaSouthAfrica],
+].filter(([key]) => shouldRun(key));
 try {
-	await testBannerAppearance(browser);
-	await testInformationContent(browser);
-	await testCommandsButtons(browser);
-	await testGranularPreferences(browser);
-	await testPriorBlocking(browser);
-	await testConsentManagement(browser);
-	await testRevocation(browser);
-	await testGoogleConsentMode(browser);
-	await testIABTCF(browser);
-	await testFunctionalScenarios(browser);
-	await testSettingsReflection(browser);
-	await testProhibitedPractices(browser);
-	await testVisualIntegrity(browser);
-	await testTogglePersistence(browser);
-	await testPopiaSouthAfrica(browser);
+    const run = await runSections(plannedSections, browser);
+    if (run.failed) {
+        startSection('RUNNER — incomplete run');
+        test('FATAL ' + run.failed, false, String(run.error));
+        console.error('Sections not run: ' + (run.notRun.join(', ') || '(none; final section interrupted)'));
+    }
 } catch (err) {
-	console.error('\n\x1b[31mFATAL ERROR:\x1b[0m', err.message);
-	console.error(err.stack);
+    startSection('RUNNER — invalid run');
+    test('FATAL', false, String(err));
 }
 
 await browser.close();

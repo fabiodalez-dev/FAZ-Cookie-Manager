@@ -21,6 +21,7 @@ class Cookie_Definitions {
 	 * Raw GitHub URL for the JSON definitions file.
 	 * Points to the user's fork so they can sync upstream updates.
 	 */
+	// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- JSON cookie classification data, never executable code or a remotely hosted plugin asset.
 	const SOURCE_URL = 'https://raw.githubusercontent.com/fabiodalez-dev/Open-Cookie-Database/master/open-cookie-database.json';
 
 	/**

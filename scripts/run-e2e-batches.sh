@@ -15,7 +15,20 @@ OUT="${E2E_BATCH_OUT:-/private/tmp/faz-e2e-batch}"
 BATCH_SIZE="${BATCH_SIZE:-1}"
 E2E_WORKERS="${E2E_WORKERS:-1}"
 mkdir -p "$OUT"
+# A resumed run must not combine green batches from different candidates.
+COMMIT="$(git -C "$REPO" rev-parse HEAD)"
+if ! git -C "$REPO" diff --quiet HEAD --; then
+  echo 'Commit the candidate before collecting release E2E evidence.' >&2
+  exit 2
+fi
+if [ "${START_BATCH:-1}" = "1" ]; then
+  printf '%s\n' "$COMMIT" > "$OUT/commit.txt"
+elif [ "$(cat "$OUT/commit.txt" 2>/dev/null)" != "$COMMIT" ]; then
+  echo 'Cannot resume E2E batches from a different commit.' >&2
+  exit 2
+fi
 
+rm -f "$OUT/evidence.json"
 cd "$REPO" || exit 1
 # The same mandatory consent gate as npm run test:e2e, once before any reset.
 npm run test:consent || exit $?
@@ -52,12 +65,14 @@ while [ "$i" -lt "$TOTAL" ]; do
   slice=("${SPECS[@]:$i:$BATCH_SIZE}")
   log="$OUT/batch-$(printf '%02d' $batch).log"
 
-  reset_site
+  rm -f "$OUT/batch-$(printf '%02d' "$batch").json"
+  reset_site || exit 2
+  PLAYWRIGHT_JSON_OUTPUT_NAME="$OUT/batch-$(printf '%02d' "$batch").json" \
   CI=1 WP_BASE_URL=http://127.0.0.1:9998 WP_ADMIN_USER=admin WP_ADMIN_PASS=admin \
     WP_PATH="$WP" \
     FAZ_PLUGIN_DEPLOY_PATH="$WP/wp-content/plugins/faz-cookie-manager/" \
     npx playwright test -c tests/e2e/playwright.config.ts "${slice[@]}" \
-    --workers="$E2E_WORKERS" --reporter=line > "$log" 2>&1
+    --workers="$E2E_WORKERS" --retries=0 --reporter=line,json > "$log" 2>&1
   rc=$?
 	[ "$rc" -eq 0 ] || overall_rc=1
 
@@ -73,4 +88,5 @@ done
 
 echo "--- TOTALE ---"
 cat "$SUMMARY"
+python3 "$REPO/scripts/summarize-e2e.py" "$OUT" "$batch" || overall_rc=1
 exit "$overall_rc"

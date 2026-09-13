@@ -29,6 +29,10 @@ const stage = process.argv.join(' ').includes('browser-intent') ? 'browser' : 'w
 fs.appendFileSync(process.env.FAZ_GATE_LOG, stage + '\\n');
 process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
 `, { mode: 0o755 });
+  // The batch runner now binds evidence to a clean, committed candidate.
+  execFileSync('git', ['init', '-q'], { cwd: fixture });
+  execFileSync('git', ['add', '.'], { cwd: fixture });
+  execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'fixture'], { cwd: fixture });
   function run(command, args, fail, expected, extraEnv = {}) {
     const log = join(fixture, 'calls.log');
     rmSync(log, { force: true });

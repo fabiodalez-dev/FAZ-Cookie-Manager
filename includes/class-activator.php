@@ -671,6 +671,7 @@ class Activator {
 			// Matched loosely on purpose: an admin may have typed the host
 			// without the trailing path, or with a scheme. Any existing
 			// mention means the decision has already been made here.
+			// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
 			if ( false !== stripos( $pattern, 'gstatic.com/recaptcha' ) ) {
 				$has_gstatic = true;
 			}
@@ -680,6 +681,7 @@ class Activator {
 			return;
 		}
 
+		// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
 		$patterns[] = 'www.gstatic.com/recaptcha/';
 		$settings['script_blocking']['whitelist_patterns'] = array_values( $patterns );
 		update_option( 'faz_settings', $settings );

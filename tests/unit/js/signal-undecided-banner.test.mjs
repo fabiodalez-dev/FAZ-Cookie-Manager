@@ -93,14 +93,14 @@ const banner = (spy) => (spy.loaded > 0 && !spy.hidden ? 'shown' : spy.loaded ==
 
 console.log('signal-created records stay undecided (jsdom, real _fazInitOperations)');
 
-for (const law of ['gdpr', 'ccpa']) {
+for (const law of ['gdpr', 'ccpa', 'gdpr_ccpa']) {
   // --- GPC ---------------------------------------------------------------
   const p1 = page({ gpc: true, law });
   check(`[${law}] GPC, first page: banner shown`, banner(p1.spy) === 'shown');
   check(`[${law}] GPC, first page: the record is written and marked undecided`, pairs(p1.w).action === 'yes' && pairs(p1.w).undecided === '1' && pairs(p1.w).gpc === '1');
   check(`[${law}] GPC, first page: one consent update (the opt-out itself)`, p1.spy.updates === 1);
 
-  const reoffered = law === 'gdpr';   // opt-in law: the banner still has a question to ask
+  const reoffered = law !== 'ccpa';   // opt-in law: the banner still has a question to ask
   const p2 = page({ gpc: true, law, cookie: cookieOf(p1.w) });
   check(`[${law}] GPC, second page: banner ${reoffered ? 'STILL shown — the visitor has not answered it' : 'removed — under an opt-out law the signal is the decision'}`,
     banner(p2.spy) === (reoffered ? 'shown' : 'removed'));
