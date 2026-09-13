@@ -3,6 +3,7 @@
  * or touching a WordPress installation. The scripts themselves are unchanged.
  */
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const fixture = mkdtempSync(join(tmpdir(), 'faz-suite-entrypoints-'));
+const packageFixture = mkdtempSync(join(tmpdir(), 'faz-package-source-'));
 let passed = 0;
 try {
   mkdirSync(join(fixture, 'scripts'), { recursive: true });
@@ -18,6 +20,11 @@ try {
   writeFileSync(join(fixture, 'gate.cjs'), `
 const fs = require('node:fs');
 const stage = process.argv[2];
+if (stage === 'unit' && process.env.FAZ_EXPECT_PACKAGED_SOURCE) {
+  const source = process.env.FAZ_PLUGIN_SOURCE_PATH;
+  if (!source || fs.readFileSync(source + '/faz-cookie-manager.php', 'utf8') !== '<?php // release-only' || fs.existsSync(source + '/gate.cjs')) process.exit(3);
+  fs.appendFileSync(process.env.FAZ_GATE_LOG, 'package-source' + '\\n');
+}
 fs.appendFileSync(process.env.FAZ_GATE_LOG, stage + '\\n');
 process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
 `);
@@ -30,6 +37,7 @@ fs.appendFileSync(process.env.FAZ_GATE_LOG, stage + '\\n');
 process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
 `, { mode: 0o755 });
   writeFileSync(join(fixture, '.gitignore'), 'calls.log\nbatch-output/\n');
+  writeFileSync(join(fixture, 'scripts/check-package-deploy.py'), readFileSync(join(root, 'scripts/check-package-deploy.py')));
   // The batch runner now binds evidence to a clean, committed candidate.
   execFileSync('git', ['init', '-q'], { cwd: fixture });
   execFileSync('git', ['add', '.'], { cwd: fixture });
@@ -41,7 +49,7 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
     try {
       execFileSync(command, args, {
         cwd: fixture, timeout: 30_000, stdio: 'pipe',
-        env: { ...process.env, FAZ_GATE_LOG: log, FAZ_GATE_FAIL: fail,
+        env: { ...process.env, FAZ_E2E_PACKAGE: '', FAZ_E2E_BUILD_MANIFEST: '', FAZ_PLUGIN_SOURCE_PATH: '', FAZ_GATE_LOG: log, FAZ_GATE_FAIL: fail,
           E2E_BATCH_OUT: join(fixture, 'batch-output'), WP_PATH: join(fixture, 'absent-wordpress'), ...extraEnv },
       });
     } catch (error) { code = error.status ?? -1; }
@@ -58,6 +66,18 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
   run('npm', ['test'], 'wordpress', ['unit', 'browser', 'wordpress']);
   run('bash', ['scripts/run-e2e-batches.sh'], 'unit', ['unit']);
   run('bash', ['scripts/run-e2e-batches.sh'], 'browser', ['unit', 'browser']);
+  mkdirSync(join(packageFixture, 'faz-cookie-manager'));
+  writeFileSync(join(packageFixture, 'faz-cookie-manager/faz-cookie-manager.php'), '<?php // release-only');
+  const packageZip = join(packageFixture, 'release.zip');
+  execFileSync('zip', ['-qr', packageZip, 'faz-cookie-manager'], {cwd:packageFixture});
+  const manifest = join(packageFixture, 'build.json');
+  writeFileSync(manifest, JSON.stringify({
+    commit:execFileSync('git', ['rev-parse','HEAD'], {cwd:fixture,encoding:'utf8'}).trim(),
+    packages:{'release.zip':createHash('sha256').update(readFileSync(packageZip)).digest('hex')},
+  }));
+  run('bash', ['scripts/run-e2e-batches.sh'], 'unit', ['package-source','unit'], {
+    FAZ_E2E_PACKAGE:packageZip, FAZ_E2E_BUILD_MANIFEST:manifest, FAZ_EXPECT_PACKAGED_SOURCE:'1',
+  });
   writeFileSync(join(fixture, 'untracked.php'), '<?php // not committed');
   run('bash', ['scripts/run-e2e-batches.sh'], 'dirty-candidate', []);
   rmSync(join(fixture, 'untracked.php'));
@@ -69,4 +89,7 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
     NODE_BIN: 'faz-node-runtime-intentionally-missing',
   });
   console.log(`full-suite-entrypoints: ${passed} passed`);
-} finally { rmSync(fixture, { recursive: true, force: true }); }
+} finally {
+  rmSync(fixture, { recursive: true, force: true });
+  rmSync(packageFixture, { recursive: true, force: true });
+}

@@ -29,6 +29,27 @@ elif [ "$(cat "$OUT/commit.txt" 2>/dev/null)" != "$COMMIT" ]; then
 fi
 
 rm -f "$OUT/evidence.json"
+# Lifecycle and compliance specs re-deploy their source tree. In release mode
+# their source must remain the verified archive, never the development checkout.
+if [ -n "${FAZ_E2E_PACKAGE:-}" ]; then
+  PACKAGE_SOURCE="$(mktemp -d "$OUT/package-source.XXXXXX")" || exit 2
+  python3 - "$FAZ_E2E_PACKAGE" "$PACKAGE_SOURCE" <<'PYSOURCE' || exit 2
+import stat
+import sys
+import zipfile
+from pathlib import PurePosixPath
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    for entry in archive.infolist():
+        parts = PurePosixPath(entry.filename).parts
+        if not parts or parts[0] != 'faz-cookie-manager' or '..' in parts or stat.S_ISLNK(entry.external_attr >> 16):
+            raise ValueError('unsafe release ZIP member')
+    archive.extractall(sys.argv[2])
+PYSOURCE
+  export FAZ_PLUGIN_SOURCE_PATH="$PACKAGE_SOURCE/faz-cookie-manager/"
+  python3 "$REPO/scripts/check-package-deploy.py" "$FAZ_E2E_PACKAGE" \
+    "${FAZ_E2E_BUILD_MANIFEST:?Release package manifest is required}" "$REPO" \
+    "$FAZ_PLUGIN_SOURCE_PATH" || exit 2
+fi
 cd "$REPO" || exit 1
 # The same mandatory consent gate as npm run test:e2e, once before any reset.
 npm run test:consent || exit $?
