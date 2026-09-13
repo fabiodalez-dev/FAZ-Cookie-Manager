@@ -51,6 +51,16 @@ for _ in $(seq 1 40); do
     sleep 0.25
 done
 kill -0 "$SERVER_PID"
+# Visiting the old admin settles first-activation markers before the snapshot;
+# visiting the new admin dispatches the actual upgrade migrations.
+visit_admin() {
+    curl -fsS -c "$RUN_DIR/admin-cookies.txt" "$URL/wp-login.php" >/dev/null
+    curl -fsSL -c "$RUN_DIR/admin-cookies.txt" -b "$RUN_DIR/admin-cookies.txt" \
+        --data-urlencode 'log=admin' --data-urlencode 'pwd=admin' \
+        --data-urlencode 'testcookie=1' --data-urlencode "redirect_to=$URL/wp-admin/index.php" \
+        "$URL/wp-login.php" > "$RUN_DIR/admin.html"
+    grep -q 'id="wpbody-content"' "$RUN_DIR/admin.html"
+}
 verify_http() {
     curl -fsS "$URL/" > "$RUN_DIR/front.html"
     grep -q '_fazConfig' "$RUN_DIR/front.html"
@@ -86,6 +96,7 @@ echo 'INSTALL PASSED'
 wp --path="$WP_DIR" db reset --yes --quiet
 install_core
 wp --path="$WP_DIR" plugin install faz-cookie-manager --version="$PREVIOUS" --force --activate --quiet
+visit_admin
 # shellcheck disable=SC2016 # PHP variables must reach wp eval literally.
 wp --path="$WP_DIR" eval '
 global $wpdb;
@@ -98,14 +109,7 @@ echo "UPGRADE: previous version ".FAZ_VERSION."; probe and intentional option in
 wp --path="$WP_DIR" option list --search='faz_*' --field=option_name > "$RUN_DIR/options-before.txt"
 : > "$WP_DIR/wp-content/debug.log"
 wp --path="$WP_DIR" plugin install "$ZIP" --force --quiet
-# Exercise the real admin_init migration entry point after the file upgrade.
-# WP-CLI eval alone does not dispatch admin_init.
-curl -fsS -c "$RUN_DIR/admin-cookies.txt" "$URL/wp-login.php" >/dev/null
-curl -fsSL -c "$RUN_DIR/admin-cookies.txt" -b "$RUN_DIR/admin-cookies.txt" \
-    --data-urlencode 'log=admin' --data-urlencode 'pwd=admin' \
-    --data-urlencode 'testcookie=1' --data-urlencode "redirect_to=$URL/wp-admin/" \
-    "$URL/wp-login.php" > "$RUN_DIR/admin.html"
-grep -q 'id="wpadminbar"' "$RUN_DIR/admin.html"
+visit_admin
 
 # shellcheck disable=SC2016 # PHP variables must reach wp eval literally.
 wp --path="$WP_DIR" eval '
