@@ -200,6 +200,10 @@ class Placeholder_Builder {
 	 * @return string Placeholder HTML.
 	 */
 	public static function build( $service_id, $service_name, $category, $blocked_html, $thumbnail_url = '' ) {
+		// The page offered this embed. Recorded per page, never per visitor —
+		// see Embed_Inventory. One array write; the flush happens at shutdown.
+		Embed_Inventory::note( $service_id, $category );
+
 		$icon_svg = isset( self::$service_icons[ $service_id ] )
 			? self::$service_icons[ $service_id ]
 			: self::$service_icons['default'];
@@ -266,6 +270,10 @@ class Placeholder_Builder {
 	 * @return string Placeholder HTML (placed before the hidden original element).
 	 */
 	public static function build_social( $service_id, $service_name, $category ) {
+		// Same record as build(): social embeds mint exceptions the same way,
+		// and on page builders this is the path most sites actually take.
+		Embed_Inventory::note( $service_id, $category );
+
 		$icon_svg = isset( self::$service_icons[ $service_id ] )
 			? self::$service_icons[ $service_id ]
 			: self::$service_icons['default'];

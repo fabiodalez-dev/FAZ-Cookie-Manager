@@ -767,6 +767,18 @@ class Admin {
 						// accepted on its own blocked embed while sending GPC.
 						/* translators: %s: service identifier, e.g. google-maps */
 						'metaGpcException'         => __( 'GPC exception: %s', 'faz-cookie-manager' ),
+						// Label for meta.gpc_exception_served.<id> = yes: the server
+						// confirmed the GPC exception was actually honoured.
+						/* translators: %s: service identifier, e.g. google-maps */
+						'metaGpcExceptionVerified' => __( 'GPC exception: %s — verified', 'faz-cookie-manager' ),
+						// Label for meta.gpc_exception_served.<id> = no: the server
+						// could not confirm the GPC exception was honoured.
+						/* translators: %s: service identifier, e.g. google-maps */
+						'metaGpcExceptionUnverified' => __( 'GPC exception: %s — unverified', 'faz-cookie-manager' ),
+						// Label for meta.gpc_exception_carried.<id>: the GPC exception
+						// was carried over from a prior record.
+						/* translators: %s: service identifier, e.g. google-maps */
+						'metaGpcExceptionCarried'  => __( 'GPC exception: %s — carried', 'faz-cookie-manager' ),
 						// Label for meta.signal_only: the record was created by a
 						// privacy signal and the visitor never answered the banner.
 						'metaSignalOnly'           => __( 'Privacy signal, banner unanswered', 'faz-cookie-manager' ),

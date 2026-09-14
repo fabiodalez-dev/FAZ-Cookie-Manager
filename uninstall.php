@@ -71,7 +71,7 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 
 			// Drop all plugin tables, checking each result.
 			$blog_id    = function_exists( 'get_current_blog_id' ) ? get_current_blog_id() : 0;
-			$faz_tables = array( 'faz_banners', 'faz_cookie_categories', 'faz_cookies', 'faz_consent_logs', 'faz_pageviews' );
+			$faz_tables = array( 'faz_banners', 'faz_cookie_categories', 'faz_cookies', 'faz_consent_logs', 'faz_pageviews', 'faz_embed_placeholders' );
 			foreach ( $faz_tables as $tbl ) {
 				$result = $wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . $tbl ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 				if ( false === $result ) {
@@ -160,6 +160,7 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				'faz_consent_table_version',
 				'faz_consent_logs_db_version',
 				'faz_pageviews_db_version',
+				'faz_embed_inventory_db_version',
 				'faz_missing_tables',
 				'faz_migration_options',
 				'faz_privacy_content_snapshot',

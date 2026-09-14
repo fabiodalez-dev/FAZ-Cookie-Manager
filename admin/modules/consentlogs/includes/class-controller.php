@@ -332,6 +332,24 @@ class Controller {
 				$clean[ $key ] = $value;
 				++$count;
 			}
+
+			// A GPC exception in this map is the client's claim that the visitor
+			// clicked Accept on a blocked embed. The cookie cannot prove it —
+			// a page script can write the same pairs (#285) — so the server adds
+			// its own verdict: whether the circumstances it would have been
+			// minted in actually held. The client cannot write these keys; the
+			// audit strips them first.
+			if ( class_exists( '\\FazCookie\\Includes\\Gpc_Exception_Audit' ) ) {
+				$clean = \FazCookie\Includes\Gpc_Exception_Audit::decide(
+					$clean,
+					$data,
+					function_exists( 'faz_get_valid_consent_cookie' ) ? (string) faz_get_valid_consent_cookie() : '',
+					( isset( $data['consent_id'] ) && '' !== (string) $data['consent_id'] )
+						? (array) $this->get_log_by_consent_id( (string) $data['consent_id'] )
+						: array()
+				);
+			}
+
 			$categories = wp_json_encode( $clean );
 		} else {
 			// A scalar value (e.g. a DNSMPI opt-out passes '' and the audit /
@@ -541,8 +559,18 @@ class Controller {
 		}
 
 		if ( ! empty( $args['status'] ) ) {
-			$where[]  = 'status = %s';
-			$values[] = $args['status'];
+			if ( 'gpc_exception' === $args['status'] ) {
+				// A pseudo-status, not a column value: rows that record an
+				// exception to a binding opt-out are the ones worth auditing,
+				// and they occur under every real status. The prefix matches
+				// both the client-written marker and the server's verdicts, so
+				// a row is listed whatever the verdict says.
+				$where[]  = 'categories LIKE %s';
+				$values[] = '%' . $wpdb->esc_like( 'meta.gpc_exception' ) . '%';
+			} else {
+				$where[]  = 'status = %s';
+				$values[] = $args['status'];
+			}
 		}
 
 		$where_clause = implode( ' AND ', $where );
@@ -721,8 +749,18 @@ class Controller {
 		}
 
 		if ( ! empty( $args['status'] ) ) {
-			$where[]  = 'status = %s';
-			$values[] = $args['status'];
+			if ( 'gpc_exception' === $args['status'] ) {
+				// A pseudo-status, not a column value: rows that record an
+				// exception to a binding opt-out are the ones worth auditing,
+				// and they occur under every real status. The prefix matches
+				// both the client-written marker and the server's verdicts, so
+				// a row is listed whatever the verdict says.
+				$where[]  = 'categories LIKE %s';
+				$values[] = '%' . $wpdb->esc_like( 'meta.gpc_exception' ) . '%';
+			} else {
+				$where[]  = 'status = %s';
+				$values[] = $args['status'];
+			}
 		}
 
 		$where_clause = implode( ' AND ', $where );

@@ -181,6 +181,7 @@
 						// auto-humanized label.
 						var metaKey = k.slice(5);
 						var metaLabel;
+						var metaClass = 'faz-cat-audit';
 						if (metaKey === 'age_affirmed') {
 							metaLabel = fazI18n('consentLogs.metaAgeAffirmed', 'Age affirmed');
 						} else if (metaKey.indexOf('gpc_exception.') === 0) {
@@ -191,6 +192,22 @@
 							// and mangle the label.
 							metaLabel = fazI18n('consentLogs.metaGpcException', 'GPC exception: %s')
 								.replace('%s', function () { return metaKey.slice('gpc_exception.'.length); });
+						} else if (metaKey.indexOf('gpc_exception_served.') === 0) {
+							// The server records whether a GPC exception was actually
+							// honoured (verified) or not (unverified) for this service.
+							var servedId = metaKey.slice('gpc_exception_served.'.length);
+							if (cats[k] === 'yes') {
+								metaLabel = fazI18n('consentLogs.metaGpcExceptionVerified', 'GPC exception: %s — verified')
+									.replace('%s', function () { return servedId; });
+							} else {
+								metaLabel = fazI18n('consentLogs.metaGpcExceptionUnverified', 'GPC exception: %s — unverified')
+									.replace('%s', function () { return servedId; });
+								metaClass = 'faz-cat-no';
+							}
+						} else if (metaKey.indexOf('gpc_exception_carried.') === 0) {
+							// The GPC exception was carried over from a prior record.
+							metaLabel = fazI18n('consentLogs.metaGpcExceptionCarried', 'GPC exception: %s — carried')
+								.replace('%s', function () { return metaKey.slice('gpc_exception_carried.'.length); });
 						} else if (metaKey === 'signal_only') {
 							// The record was created by GPC or a Do Not Sell request
 							// and the visitor never answered the banner.
@@ -198,7 +215,7 @@
 						} else {
 							metaLabel = metaKey.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
 						}
-						catBadge.className = 'faz-cat-pill faz-cat-audit';
+						catBadge.className = 'faz-cat-pill ' + metaClass;
 						catBadge.textContent = metaLabel;
 					} else {
 						var accepted = cats[k] === 'yes' || cats[k] === true || cats[k] === 'true';
