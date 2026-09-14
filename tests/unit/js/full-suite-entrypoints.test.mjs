@@ -53,7 +53,13 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
     try {
       execFileSync(command, args, {
         cwd: fixture, timeout: 30_000, stdio: 'pipe',
+        // Every variable the batch runner reads has to be pinned here, not
+        // inherited. A resumed release run exports START_BATCH, and the runner
+        // then calls the consent gate — which runs this very file — so an
+        // inherited START_BATCH made the fixture try to resume a run that does
+        // not exist, and the resume died in the gate meant to protect it.
         env: { ...process.env, FAZ_E2E_PACKAGE: '', FAZ_E2E_BUILD_MANIFEST: '', FAZ_PLUGIN_SOURCE_PATH: '', FAZ_GATE_LOG: log, FAZ_GATE_FAIL: fail,
+          START_BATCH: '', BATCH_SIZE: '', E2E_WORKERS: '',
           E2E_BATCH_OUT: join(fixture, 'batch-output'), WP_PATH: join(fixture, 'absent-wordpress'), ...extraEnv },
       });
     } catch (error) { code = error.status ?? -1; }
@@ -62,6 +68,15 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
     assert.deepEqual(calls, expected, `${command} ${args.join(' ')}: stage order / fail-fast`);
     passed++;
   }
+  // Run everything below inside the environment a resumed release run leaves
+  // behind. These must not reach the fixture: without the pinning in run(),
+  // every case here fails, which is exactly what happened to a resume — the
+  // consent gate runs this file, so the fixture inherited the resume state and
+  // refused to start. Dirtying the environment here is the only way to prove it.
+  process.env.START_BATCH = '104';
+  process.env.BATCH_SIZE = '7';
+  process.env.E2E_WORKERS = '3';
+
   run('npm', ['test'], '', ['unit', 'browser', 'wordpress']);
   run('npm', ['run', 'test:e2e'], '', ['unit', 'browser', 'wordpress']);
   run('npm', ['run', 'test:e2e:headed'], '', ['unit', 'browser', 'wordpress']);
