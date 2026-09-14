@@ -5,12 +5,12 @@
 (function () {
 	'use strict';
 
-	// Same helper as dashboard.js / geo-routing.js: fazConfig.locale is the WP
-	// user_locale, so the log timestamps follow the administrative language
-	// rather than whatever the browser happens to be set to. undefined falls
-	// back to the runtime default, which is the previous behaviour.
+	// Log timestamps follow the administrative language rather than whatever
+	// the browser is set to. FAZ.locale() converts the WordPress user locale
+	// into a tag Intl accepts; this file used to read fazConfig.locale raw and
+	// hand 'de_DE' to toLocaleDateString(), which throws (issue #284).
 	function getLocale() {
-		return (typeof fazConfig !== 'undefined' && fazConfig.locale) || document.documentElement.lang || undefined;
+		return (window.FAZ && FAZ.locale) ? FAZ.locale() : undefined;
 	}
 
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.

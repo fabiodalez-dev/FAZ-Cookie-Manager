@@ -1576,8 +1576,7 @@
 		// 12-hour clock inside otherwise-Italian text. fazConfig.locale is the
 		// WP user_locale ('it_IT'), converted to a BCP-47 tag the way
 		// geo-routing.js and dashboard.js already do it.
-		var loc = (window.fazConfig && window.fazConfig.locale) || document.documentElement.lang;
-		loc = loc ? String(loc).replace(/_/g, '-') : undefined;
+		var loc = (window.FAZ && FAZ.locale) ? FAZ.locale() : undefined;
 		try {
 			return new Date(ts * 1000).toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
 		} catch (e) {

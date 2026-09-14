@@ -27,12 +27,9 @@
 		return (FAZ_I18N && FAZ_I18N[key]) || fallback;
 	}
 	function getLocale() {
-		// `fazConfig.locale` is the WP user_locale (e.g. 'it_IT'); convert
-		// to a BCP-47 tag JS understands ('it-IT'). Fallback to the
-		// document's lang attribute, then to undefined (lets the JS
-		// engine pick the runtime default).
-		var loc = (window.fazConfig && window.fazConfig.locale) || document.documentElement.lang;
-		return loc ? String(loc).replace(/_/g, '-') : undefined;
+		// See FAZ.locale(). Replacing underscores is not enough on its own:
+		// 'pt_PT_ao90' becomes 'pt-PT-ao90', which Intl still rejects.
+		return (window.FAZ && FAZ.locale) ? FAZ.locale() : undefined;
 	}
 	function sprintf1(template, value) {
 		// Trivial single-substitution sprintf-alike for %s / %d / %1$s.

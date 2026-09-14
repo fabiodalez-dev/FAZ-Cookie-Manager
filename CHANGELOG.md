@@ -5,6 +5,7 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 ## [1.31.0] - 2026-09-11
 
 ### Fixed
+- Consent Logs showed "Failed to load consent logs." on every site that had at least one log, since 1.30.0 (#284). Nothing had failed to load — the statistics above the table, from the same endpoint, were right. Each row's date was formatted with the WordPress user locale, which is written `de_DE` and is not a tag the browser's Intl API accepts; it raised an error, and because that happened while rendering the response it reached the handler written for a failed request. Locale handling now lives in one place for every admin page, and WordPress variants such as `pt_PT_ao90` fall back to the closest valid tag instead of breaking the page. The Dashboard date ranges and the geo-routing timestamps had the same flaw.
 - Per-cookie grants now obey the same server-side GPC/Do Not Sell filter as per-service grants; a stale `ck.*:yes` cannot reopen a signal-blocked category. Explicit per-cookie denials still take priority.
 - GPC exception markers are removed from the stored cookie when the signal is absent, even on visits without a new consent action, and service withdrawals persist immediately.
 - Release gates reject Plugin Check ERROR findings independently of CLI exit status, missing CI checks, incomplete compliance runs, and evidence from another commit or package. ZIP builds are reproducible; batch E2E reports retain every skipped test and its reason.

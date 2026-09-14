@@ -150,8 +150,10 @@
 		});
 	}
 
+	// See FAZ.locale(): the WordPress user locale is not a BCP 47 tag and
+	// Intl throws on it, which here would blank the dashboard's date ranges.
 	function getLocale() {
-		return (typeof fazConfig !== 'undefined' && fazConfig.locale) || document.documentElement.lang || undefined;
+		return (window.FAZ && FAZ.locale) ? FAZ.locale() : undefined;
 	}
 
 	function formatDateRange(from, to) {

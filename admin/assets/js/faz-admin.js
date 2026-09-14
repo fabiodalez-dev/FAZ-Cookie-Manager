@@ -61,6 +61,43 @@
 		});
 	};
 
+	// ── Locale ───────────────────────────────────────────────
+	/**
+	 * The admin's locale as a tag the Intl APIs actually accept.
+	 *
+	 * fazConfig.locale is the WordPress user locale, and WordPress does not
+	 * speak BCP 47: it writes 'de_DE' with an underscore, and ships variants
+	 * such as 'pt_PT_ao90' whose last subtag is not a well-formed variant.
+	 * toLocaleDateString() answers either with a RangeError — and a throw
+	 * inside a .then() arrives at the .catch() written for the request, so
+	 * the page reports that it could not load data it had already received.
+	 * That is exactly how the consent log page broke in 1.30.0 (issue #284).
+	 *
+	 * Four pages had grown their own copy of this helper and two had dropped
+	 * the conversion, so it lives here now, once. Degrade rather than throw:
+	 * full tag, then language-region, then language, then undefined, which
+	 * tells Intl to use the runtime default.
+	 *
+	 * @returns {string|undefined} A tag Intl accepts, or undefined.
+	 */
+	FAZ.locale = function () {
+		var raw = (window.fazConfig && window.fazConfig.locale) ||
+			(document.documentElement && document.documentElement.lang) || '';
+		if (!raw || typeof raw !== 'string') return undefined;
+		var tag = raw.replace(/_/g, '-');
+		var parts = tag.split('-');
+		var candidates = [tag];
+		if (parts.length > 2) candidates.push(parts.slice(0, 2).join('-'));
+		if (parts.length > 1) candidates.push(parts[0]);
+		for (var i = 0; i < candidates.length; i++) {
+			try {
+				new Intl.DateTimeFormat(candidates[i]);
+				return candidates[i];
+			} catch (e) { /* try the next, shorter, candidate */ }
+		}
+		return undefined;
+	};
+
 	// ── Tabs ─────────────────────────────────────────────────
 	FAZ.tabs = function (container) {
 		if (typeof container === 'string') container = document.querySelector(container);
