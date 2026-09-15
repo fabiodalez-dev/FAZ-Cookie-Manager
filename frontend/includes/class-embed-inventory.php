@@ -17,6 +17,11 @@
  * once per request at shutdown, and a transient keeps it to at most one write
  * per page per day while the page's embeds stay the same.
  *
+ * A visit only ever refreshes what it saw. It never deletes: a page with no
+ * placeholder may simply be one this visitor has consented to, and deleting on
+ * that would discard valid rows the moment anyone accepts. Rows nobody
+ * refreshes age out instead — see STALE_AFTER_DAYS.
+ *
  * @package FazCookie\Frontend\Includes
  */
 
@@ -53,6 +58,25 @@ class Embed_Inventory {
 	private static $hooked = false;
 
 	/**
+	 * Start observing a front-end page.
+	 *
+	 * The output-buffer callback can build placeholders from a PHP shutdown
+	 * function, after WordPress's `shutdown` action has already fired, so an
+	 * add_action( 'shutdown' ) hook here would run before the set it is meant to
+	 * persist exists. A native shutdown callback registered after the frontend
+	 * buffer flusher sees the final set.
+	 *
+	 * @return void
+	 */
+	public static function begin() {
+		if ( self::$hooked ) {
+			return;
+		}
+		self::$hooked = true;
+		register_shutdown_function( array( __CLASS__, 'flush' ) );
+	}
+
+	/**
 	 * Table name.
 	 *
 	 * @return string
@@ -79,10 +103,7 @@ class Embed_Inventory {
 		}
 		self::$seen[ $service_id ] = sanitize_key( (string) $category );
 
-		if ( ! self::$hooked ) {
-			self::$hooked = true;
-			add_action( 'shutdown', array( __CLASS__, 'flush' ), 99 );
-		}
+		self::begin();
 	}
 
 	/**
@@ -91,9 +112,6 @@ class Embed_Inventory {
 	 * @return void
 	 */
 	public static function flush() {
-		if ( empty( self::$seen ) ) {
-			return;
-		}
 		$seen       = self::$seen;
 		self::$seen = array();
 
@@ -114,13 +132,34 @@ class Embed_Inventory {
 			return;
 		}
 
+		// Nothing seen is not information, so nothing is deleted for it.
+		//
+		// A page can render no placeholder for any of several reasons: the embed
+		// was removed, this visitor has already consented, that one category is
+		// consented while others are not, or a whitelist entry let the request
+		// through. One request cannot tell them apart. Deleting on absence
+		// therefore threw away valid rows on the commonest case of all — a
+		// visitor who accepted — and, with partial consent, deleted the rows of
+		// the services that were allowed while keeping the blocked ones.
+		//
+		// So a visit only ever refreshes what it actually saw, and rows nobody
+		// refreshes expire on their own (see prune()). An embed removed from a
+		// page stops corroborating after that window rather than instantly,
+		// which is the price of never losing a row that is still true.
+		if ( empty( $seen ) ) {
+			return;
+		}
+
 		// The guard: one write per page per day while its embeds are unchanged.
 		// Cached pages render on a cache miss, so the cost follows misses, not
-		// visitors — and an unchanged page costs a transient read.
-		$key    = 'faz_embinv_' . md5( $url );
-		$ids    = array_keys( $seen );
+		// visitors — and an unchanged page costs a transient read. Keyed by the
+		// set seen, so a visitor who sees a different subset (partial consent)
+		// still refreshes those rows rather than being short-circuited by
+		// another visitor's digest.
+		$ids = array_keys( $seen );
 		sort( $ids );
 		$digest = implode( ',', $ids );
+		$key    = 'faz_embinv_' . md5( $url . '|' . $digest );
 		if ( get_transient( $key ) === $digest ) {
 			return;
 		}
@@ -248,7 +287,8 @@ class Embed_Inventory {
 		if ( empty( $_SERVER['HTTP_HOST'] ) || empty( $_SERVER['REQUEST_URI'] ) ) {
 			return '';
 		}
-		$scheme = is_ssl() ? 'https://' : 'http://';
+		$https  = function_exists( 'faz_request_is_https' ) ? faz_request_is_https() : is_ssl();
+		$scheme = $https ? 'https://' : 'http://';
 		$host   = sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) );
 		$uri    = sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) );
 
@@ -291,19 +331,35 @@ class Embed_Inventory {
 	}
 
 	/**
-	 * Drop rows older than the consent-log retention window.
+	 * How long a row survives without being seen again, in days.
 	 *
-	 * A row that can no longer corroborate any log is only a record of which
-	 * pages carry which embeds, which is not something to keep indefinitely.
+	 * This is how an embed removed from a page stops corroborating exceptions:
+	 * by ageing out, not by being deleted the moment a visitor happens to see
+	 * no placeholder. It is deliberately much shorter than the consent-log
+	 * retention — a stale row is only useful to a forgery, so it should not
+	 * outlive the page it describes by months — and long enough that a page
+	 * nobody visits for a week is not forgotten while its embed is still there.
 	 *
-	 * @param int $months Retention in months.
+	 * @var int
+	 */
+	const STALE_AFTER_DAYS = 7;
+
+	/**
+	 * Drop rows nobody has seen for a while.
+	 *
+	 * Called from the daily cleanup. The retention argument is accepted for the
+	 * caller's convenience and ignored on purpose: this table's lifetime is the
+	 * staleness window above, not the log's. A row that outlives the page it
+	 * describes can only ever corroborate something untrue.
+	 *
+	 * @param int $months Consent-log retention in months (unused; see above).
 	 * @return void
 	 */
-	public static function prune( $months ) {
-		$months = max( 1, (int) $months );
+	public static function prune( $months = 0 ) {
+		unset( $months );
 		global $wpdb;
 		$table  = self::table();
-		$cutoff = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months" ) );
+		$cutoff = gmdate( 'Y-m-d H:i:s', strtotime( '-' . self::STALE_AFTER_DAYS . ' days' ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is plugin prefix + literal; cutoff is bound. Portable DELETE (no LIMIT): SQLite rejects DELETE … LIMIT.
 		$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE last_seen < %s", $cutoff ) );
 	}
