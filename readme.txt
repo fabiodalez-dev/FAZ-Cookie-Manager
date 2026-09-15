@@ -398,6 +398,12 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
+= 1.32.0 =
+* Added: The consent log records whether the server would have served each GPC exception, so a forged one is distinguishable after the fact (#285). A script on the page can write the same cookie values a real click writes, so the record claims consistency rather than authenticity.
+* Added: System Status lists the services blocked without a visible placeholder (#279) — they set no cookies and park plain requests, so before consent a stylesheet simply does not load and the symptom points at the theme or the cache instead of here.
+* Fixed: A GPC exception accepted within five minutes of saving preferences was never logged at all, because it does not change the consent status and the repeat throttle dropped it.
+* Fixed: The Dashboard no longer implies data will arrive when pageview tracking is off, and says that consent records are kept regardless.
+
 = 1.31.0 =
 * Fixed: Consent Logs no longer reports "Failed to load consent logs." on sites that have logs (#284): the page formatted dates with the WordPress locale (de_DE), which the browser rejects, and the error was mistaken for a failed request. The Dashboard and geo-routing timestamps shared the flaw.
 * Fixed: Per-cookie grants obey GPC and Do Not Sell server-side; old GPC exception markers cannot return after the signal is switched off and on without a new choice.
