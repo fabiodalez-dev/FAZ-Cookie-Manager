@@ -17,10 +17,10 @@
  * once per request at shutdown, and a transient keeps it to at most one write
  * per page per day while the page's embeds stay the same.
  *
- * A visit only ever refreshes what it saw. It never deletes: a page with no
- * placeholder may simply be one this visitor has consented to, and deleting on
- * that would discard valid rows the moment anyone accepts. Rows nobody
- * refreshes age out instead — see STALE_AFTER_DAYS.
+	 * Most visits only refresh what they saw: a page with no placeholder may
+	 * simply be one this visitor has consented to. A GPC request with no existing
+	 * consent is different: every sale/share embed must be blocked, so that render
+	 * is a complete snapshot and may safely remove records no longer present.
  *
  * @package FazCookie\Frontend\Includes
  */
@@ -117,7 +117,7 @@ class Embed_Inventory {
 
 		// Only a real front-end page view describes a page. REST, admin, cron
 		// and AMP either have no URL worth recording or mint no exceptions.
-		if ( ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ( defined( 'DOING_CRON' ) && DOING_CRON ) || is_admin() ) {
+		if ( ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || wp_doing_cron() || is_admin() ) {
 			return;
 		}
 
@@ -132,7 +132,7 @@ class Embed_Inventory {
 			return;
 		}
 
-		// Nothing seen is not information, so nothing is deleted for it.
+		// Usually, nothing seen is not information.
 		//
 		// A page can render no placeholder for any of several reasons: the embed
 		// was removed, this visitor has already consented, that one category is
@@ -142,11 +142,19 @@ class Embed_Inventory {
 		// visitor who accepted — and, with partial consent, deleted the rows of
 		// the services that were allowed while keeping the blocked ones.
 		//
-		// So a visit only ever refreshes what it actually saw, and rows nobody
-		// refreshes expire on their own (see prune()). An embed removed from a
-		// page stops corroborating after that window rather than instantly,
-		// which is the price of never losing a row that is still true.
-		if ( empty( $seen ) ) {
+		// A virgin GPC request is the exception: it carries no prior consent that
+		// could hide a sale/share placeholder, while GPC itself closes every
+		// relevant category. Its rendered set is therefore authoritative. This
+		// also aligns validity with full-page caches: a record lives as long as the
+		// cached HTML that created it, and is replaced when an uncached GPC render
+		// observes the new page.
+		$raw_consent  = function_exists( 'faz_get_valid_consent_cookie' ) ? (string) faz_get_valid_consent_cookie() : '';
+		$gpc_snapshot = '' === $raw_consent
+			&& isset( $_SERVER['HTTP_SEC_GPC'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
+
+		// A visit that saw nothing and is not authoritative has nothing to say.
+		if ( empty( $seen ) && ! $gpc_snapshot ) {
 			return;
 		}
 
@@ -156,14 +164,25 @@ class Embed_Inventory {
 		// set seen, so a visitor who sees a different subset (partial consent)
 		// still refreshes those rows rather than being short-circuited by
 		// another visitor's digest.
+		//
+		// This check comes BEFORE the clear, and the two must not be separated:
+		// clearing first and then returning here — because the digest matched —
+		// deleted the page's rows without writing them back, and the transient
+		// then kept that state for a day. Every repeat visit from a GPC browser
+		// left the inventory empty, so genuine exceptions read as unverified.
 		$ids = array_keys( $seen );
 		sort( $ids );
 		$digest = implode( ',', $ids );
-		$key    = 'faz_embinv_' . md5( $url . '|' . $digest );
+		$key    = 'faz_embinv_' . md5( $url . '|' . ( $gpc_snapshot ? 'gpc|' : '' ) . $digest );
 		if ( get_transient( $key ) === $digest ) {
 			return;
 		}
 
+		// Clear and rewrite as one step, only when something is actually being
+		// written back.
+		if ( $gpc_snapshot ) {
+			self::clear_page( $url );
+		}
 		foreach ( $seen as $service_id => $category ) {
 			self::store( $url, $service_id, $category );
 		}
@@ -220,6 +239,19 @@ class Embed_Inventory {
 			),
 			array( '%s', '%s', '%s', '%s', '%s', '%s' )
 		);
+	}
+
+	/**
+	 * Remove the previous snapshot for one authoritatively rendered page.
+	 *
+	 * @param string $url Normalised page URL.
+	 * @return void
+	 */
+	private static function clear_page( $url ) {
+		global $wpdb;
+		$table = self::table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- plugin-owned table; table name is prefix + literal and the hash is bound.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE url_hash = %s", md5( $url ) ) );
 	}
 
 	/**
@@ -331,35 +363,20 @@ class Embed_Inventory {
 	}
 
 	/**
-	 * How long a row survives without being seen again, in days.
+	 * Drop rows older than the consent-log retention window.
 	 *
-	 * This is how an embed removed from a page stops corroborating exceptions:
-	 * by ageing out, not by being deleted the moment a visitor happens to see
-	 * no placeholder. It is deliberately much shorter than the consent-log
-	 * retention — a stale row is only useful to a forgery, so it should not
-	 * outlive the page it describes by months — and long enough that a page
-	 * nobody visits for a week is not forgotten while its embed is still there.
+	 * Page changes are handled by authoritative GPC snapshots. Time-based expiry
+	 * follows the evidence this table corroborates; using a shorter window would
+	 * invalidate genuine exceptions served from long-lived full-page caches.
 	 *
-	 * @var int
-	 */
-	const STALE_AFTER_DAYS = 7;
-
-	/**
-	 * Drop rows nobody has seen for a while.
-	 *
-	 * Called from the daily cleanup. The retention argument is accepted for the
-	 * caller's convenience and ignored on purpose: this table's lifetime is the
-	 * staleness window above, not the log's. A row that outlives the page it
-	 * describes can only ever corroborate something untrue.
-	 *
-	 * @param int $months Consent-log retention in months (unused; see above).
+	 * @param int $months Consent-log retention in months.
 	 * @return void
 	 */
-	public static function prune( $months = 0 ) {
-		unset( $months );
+	public static function prune( $months ) {
+		$months = max( 1, (int) $months );
 		global $wpdb;
 		$table  = self::table();
-		$cutoff = gmdate( 'Y-m-d H:i:s', strtotime( '-' . self::STALE_AFTER_DAYS . ' days' ) );
+		$cutoff = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months" ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is plugin prefix + literal; cutoff is bound. Portable DELETE (no LIMIT): SQLite rejects DELETE … LIMIT.
 		$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE last_seen < %s", $cutoff ) );
 	}

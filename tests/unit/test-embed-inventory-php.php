@@ -17,13 +17,24 @@ namespace {
 	function sanitize_text_field( $value ) { return trim( (string) $value ); }
 	function wp_unslash( $value ) { return $value; }
 	function is_admin() { return false; }
+	function wp_doing_cron() { return false; }
 	function is_ssl() { return false; }
 	function faz_request_is_https() { return true; }
+	function faz_get_valid_consent_cookie() { return isset( $GLOBALS['faz_test_consent'] ) ? $GLOBALS['faz_test_consent'] : ''; }
 	function get_option( $key, $default = array() ) {
 		return 'faz_settings' === $key ? array( 'consent_logs' => array( 'status' => true ) ) : $default;
 	}
-	function get_transient( $key ) { return false; }
-	function set_transient( $key, $value, $ttl ) { return true; }
+	// Backed by an array rather than stubbed to false: the per-page guard is
+	// part of what these cases check — a clear that happens before it, and a
+	// return that happens after it, together lose the page's rows for a day.
+	$GLOBALS['faz_test_transients'] = array();
+	function get_transient( $key ) {
+		return isset( $GLOBALS['faz_test_transients'][ $key ] ) ? $GLOBALS['faz_test_transients'][ $key ] : false;
+	}
+	function set_transient( $key, $value, $ttl ) {
+		$GLOBALS['faz_test_transients'][ $key ] = $value;
+		return true;
+	}
 	function current_time( $type ) { return '2026-09-15 12:00:00'; }
 	function esc_url_raw( $url ) { return (string) $url; }
 	function wp_parse_url( $url ) { return parse_url( (string) $url ); }
@@ -70,7 +81,7 @@ namespace {
 		'inventory uses the proxy-aware HTTPS signal and normalises the page URL'
 	);
 
-	// A render with no placeholder deletes NOTHING.
+	// A normal render with no placeholder deletes NOTHING.
 	//
 	// It was written the other way first — an empty render treated as a snapshot
 	// that clears the page — and that reads well until you ask why a page
@@ -84,6 +95,18 @@ namespace {
 		array() === $GLOBALS['wpdb']->queries,
 		'a render with no placeholder issues no query at all'
 	);
+
+	// A GPC request without prior consent is authoritative: consent cannot hide
+	// a relevant placeholder, so an empty render means the old embed is gone.
+	$_SERVER['HTTP_SEC_GPC'] = '1';
+	Embed_Inventory::flush();
+	inventory_check(
+		1 === count( $GLOBALS['wpdb']->queries )
+			&& false !== strpos( $GLOBALS['wpdb']->queries[0], 'DELETE FROM wp_faz_embed_placeholders' ),
+		'a virgin GPC render replaces the historical page snapshot even when empty'
+	);
+	unset( $_SERVER['HTTP_SEC_GPC'] );
+	$GLOBALS['wpdb']->queries = array();
 
 	// Partial consent is the case that also breaks "delete only when something
 	// was seen": with marketing consented and functional not, the visitor sees
@@ -101,15 +124,32 @@ namespace {
 		'seeing one service of two refreshes it without deleting the other'
 	);
 
-	// Rows nobody refreshes are what expires, and on their own window — a row
-	// that outlives the page it describes can only corroborate something untrue,
-	// so it must not inherit the consent log's months-long retention.
+	// The clear and the rewrite are one step, and the transient guard comes
+	// first. Written the other way round — clear, then return because the digest
+	// matched — the second visit from a GPC browser deleted the page's rows
+	// without writing them back, and the transient held that empty state for a
+	// day. Reproduced against the running site: three identical GPC requests
+	// left 2 rows, then 0, then 0.
+	$GLOBALS['wpdb']->queries = array();
+	$GLOBALS['faz_test_transients'] = array();
+	$_SERVER['HTTP_SEC_GPC'] = '1';
+	$note = new \ReflectionMethod( Embed_Inventory::class, 'note' );
+	$note->invoke( null, 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	$first = $GLOBALS['wpdb']->queries;
+
+	$GLOBALS['wpdb']->queries = array();
+	$note->invoke( null, 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	$second = $GLOBALS['wpdb']->queries;
+
 	inventory_check(
-		defined( 'FazCookie\\Frontend\\Includes\\Embed_Inventory::STALE_AFTER_DAYS' )
-			&& Embed_Inventory::STALE_AFTER_DAYS > 0
-			&& Embed_Inventory::STALE_AFTER_DAYS <= 30,
-		'stale rows expire on a short window of their own (' . Embed_Inventory::STALE_AFTER_DAYS . ' days)'
+		0 === count( array_filter( $second, static function ( $q ) {
+			return false !== stripos( $q, 'DELETE' );
+		} ) ),
+		'a repeated identical GPC visit deletes nothing (it is short-circuited before the clear)'
 	);
+	unset( $_SERVER['HTTP_SEC_GPC'] );
 
 	$source = file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' );
 	inventory_check(
