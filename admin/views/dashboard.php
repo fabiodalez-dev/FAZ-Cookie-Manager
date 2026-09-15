@@ -91,9 +91,29 @@ $faz_tracking_enabled = isset( $faz_dashboard_settings['pageview_tracking'] ) &&
 			<div class="faz-card-body">
 				<div class="faz-chart-wrap">
 					<canvas id="faz-chart-pageviews" width="600" height="220" style="width:100%;height:220px;"></canvas>
+					<?php
+					/*
+					 * "No data yet" and "not measuring" are different facts, and
+					 * only one of them is about the visitors. Saying the tracking
+					 * is disabled is true but leaves the reader to work out that
+					 * the chart will therefore never fill, whatever their traffic —
+					 * the misreading that sent one site owner to the support forum
+					 * convinced the counter was broken. Say it outright, and offer
+					 * the setting rather than making them go looking for it.
+					 */
+					?>
 					<div id="faz-chart-empty" class="faz-chart-empty faz-hidden">
 						<span class="dashicons dashicons-chart-area"></span>
-						<p><?php echo wp_kses_post( ( $faz_tracking_enabled ? __( 'No pageview data yet.<br>Data will appear once visitors interact with your site.', 'faz-cookie-manager' ) : __( 'Pageview tracking is disabled.', 'faz-cookie-manager' ) ) ); ?></p>
+						<?php if ( $faz_tracking_enabled ) : ?>
+							<p><?php echo wp_kses_post( __( 'No pageview data yet.<br>Data will appear once visitors interact with your site.', 'faz-cookie-manager' ) ); ?></p>
+						<?php else : ?>
+							<p><?php echo wp_kses_post( __( 'Pageview tracking is off, so nothing is being recorded.<br>This chart will stay empty however many visitors arrive.', 'faz-cookie-manager' ) ); ?></p>
+							<p>
+								<a class="faz-btn faz-btn-sm faz-btn-secondary" href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-settings' ) ); ?>">
+									<?php esc_html_e( 'Turn on pageview tracking', 'faz-cookie-manager' ); ?>
+								</a>
+							</p>
+						<?php endif; ?>
 					</div>
 				</div>
 			</div>
