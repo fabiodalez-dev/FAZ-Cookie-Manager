@@ -825,6 +825,22 @@ class Activator {
 			}
 		);
 
+		// The placeholder inventory exists to corroborate consent-log rows, so
+		// it follows the consent-log window: once the row it could vouch for is
+		// gone, keeping a record of which pages carry which embeds serves no
+		// purpose. Housekeeping, not a compliance obligation — it stays silent.
+		if ( $retention > 0 ) {
+			self::run_cleanup_step(
+				'embed inventory retention',
+				false,
+				static function () use ( $retention ) {
+					if ( class_exists( '\\FazCookie\\Frontend\\Includes\\Embed_Inventory' ) ) {
+						\FazCookie\Frontend\Includes\Embed_Inventory::prune( $retention );
+					}
+				}
+			);
+		}
+
 		// Pageview analytics rows grow one-per-visit when tracking is enabled
 		// and previously had NO purge wired up at all, so the table (and every
 		// GROUP BY over it) grew without bound. 0 disables the purge.
@@ -1482,6 +1498,13 @@ class Activator {
 		// Pageviews table (standalone controller).
 		if ( class_exists( 'FazCookie\Admin\Modules\Pageviews\Includes\Controller' ) ) {
 			Pageviews_Controller::get_instance()->maybe_create_table();
+		}
+
+		// Placeholder inventory: which pages offer which blocked embed. Read
+		// when auditing a GPC exception, so it has to exist before the first
+		// one can be minted.
+		if ( class_exists( 'FazCookie\Frontend\Includes\Embed_Inventory' ) ) {
+			\FazCookie\Frontend\Includes\Embed_Inventory::maybe_create_table();
 		}
 	}
 

@@ -244,6 +244,63 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 		</div>
 	</div>
 
+	<?php
+	/*
+	 * Requests this plugin parks without leaving a visible trace (#279).
+	 *
+	 * A blocked embed shows a placeholder, so it announces itself. A blocked
+	 * stylesheet or script does not: the page simply renders in fallback fonts,
+	 * or a control appears not to work. Those providers also declare no cookies,
+	 * so they contribute no row to the cookie declaration either — nothing in
+	 * the banner, the preference centre or the Cookie Policy says a third-party
+	 * request is being held back.
+	 *
+	 * The result is a symptom that points at the wrong component. In #253 the
+	 * report was a shortcode button "not functioning"; the cause was the theme
+	 * loading Google Fonts from Google and FAZ parking that request. The
+	 * reporter had already ruled out their cache plugin and their CDN. Days on
+	 * both sides, for something the plugin knew it was doing.
+	 *
+	 * This is the page an administrator opens when something is odd, so it is
+	 * where the answer belongs. The list is the shipped catalogue rather than
+	 * what this site actually loads — knowing that would mean recording every
+	 * parked request at render time, and this page should not cost that.
+	 */
+	$faz_silent_providers = class_exists( '\FazCookie\Includes\Known_Providers' )
+		? \FazCookie\Includes\Known_Providers::get_silent_providers()
+		: array();
+	?>
+	<?php if ( ! empty( $faz_silent_providers ) ) : ?>
+	<div class="faz-card">
+		<div class="faz-card-header"><h3><?php esc_html_e( 'May be blocked without a visible placeholder', 'faz-cookie-manager' ); ?></h3></div>
+		<div class="faz-card-body">
+			<p class="faz-help">
+				<?php
+				printf(
+					/* translators: %d: number of providers. */
+					esc_html__( 'These %d catalogued services set no cookies, so they appear in no cookie declaration, and may be blocked as plain requests rather than as embeds — no placeholder is shown. This is a catalogue of potential matches, not a report of what this site loads; a matching whitelist entry may also allow a request. When a request is blocked before consent, fonts can fall back or a control can look broken.', 'faz-cookie-manager' ),
+					count( $faz_silent_providers )
+				);
+				?>
+			</p>
+			<p class="faz-help">
+				<?php esc_html_e( 'Whitelisting a pattern in Settings → Script Blocking lets it load before consent. Google Fonts is deliberately not whitelisted: German courts have held that loading it from Google without consent is unlawful. Serving those fonts from your own server avoids both the block and the question.', 'faz-cookie-manager' ); ?>
+			</p>
+			<div style="font-size:13px;line-height:1.8;max-height:300px;overflow-y:auto;">
+				<?php
+				foreach ( $faz_silent_providers as $faz_provider ) {
+					$faz_patterns = (array) $faz_provider['patterns'];
+					echo '<strong>' . esc_html( $faz_provider['label'] ?? '?' ) . '</strong> ';
+					echo '<code>' . esc_html( $faz_provider['category'] ?? '' ) . '</code> ';
+					echo esc_html( implode( ', ', array_slice( $faz_patterns, 0, 3 ) ) );
+					echo '<br>';
+				}
+				?>
+			</div>
+		</div>
+	</div>
+	<?php endif; ?>
+
 	<div class="faz-card">
 		<div class="faz-card-header"><h3><?php esc_html_e( 'Active Plugins', 'faz-cookie-manager' ); ?></h3></div>
 		<div class="faz-card-body">

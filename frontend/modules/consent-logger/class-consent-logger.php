@@ -187,6 +187,19 @@ class Consent_Logger {
 			$previous       = $this->last_logged_status( $sanitized_consent_id );
 			$status_changed = '' !== $status && $status !== $previous;
 
+			// A GPC exception minted from a blocked embed does not change the
+			// status — a visitor who saved preferences and then opened a map
+			// posts "partial" twice — so inside the 300s window the second post
+			// was dropped and the exception was never recorded at all. It is the
+			// single riskiest consent event this plugin writes (an exception to a
+			// binding opt-out), and the row that proves it existed is the whole
+			// point of logging it. Treat a NEW exception key as a change; the
+			// chg1/chgn caps below still bound how many land in a window, so this
+			// does not reopen the unthrottled write path they close.
+			if ( ! $status_changed && $this->has_new_gpc_exception( $sanitized_consent_id, $request->get_param( 'categories' ) ) ) {
+				$status_changed = true;
+			}
+
 			// The window is ARMED unconditionally and its verdict ignored only for
 			// a status change. Skipping the call entirely — the first shape of this
 			// fix — meant a bypass never armed anything, so the next identical
@@ -263,6 +276,49 @@ class Consent_Logger {
 	 * @param string $consent_id Sanitised consent id.
 	 * @return string Previous status, or '' when nothing is recorded yet.
 	 */
+	/**
+	 * Whether this request carries a GPC exception the last row did not.
+	 *
+	 * Compares only the `meta.gpc_exception.<id>` keys: a repeat of an exception
+	 * already on record is a replay and stays throttled, while the first post
+	 * that carries a new one is the event itself. The value is ignored — the
+	 * server decides what an exception means at ingest; here the question is
+	 * only whether this row would record something the previous one did not.
+	 *
+	 * @param string $consent_id Sanitised consent id.
+	 * @param mixed  $categories The request's categories map.
+	 * @return bool
+	 */
+	private function has_new_gpc_exception( $consent_id, $categories ) {
+		if ( '' === $consent_id || ! is_array( $categories ) ) {
+			return false;
+		}
+		$incoming = array();
+		foreach ( array_keys( $categories ) as $key ) {
+			$key = (string) $key;
+			if ( 0 === strpos( $key, 'meta.gpc_exception.' ) ) {
+				$incoming[ $key ] = true;
+			}
+		}
+		if ( empty( $incoming ) ) {
+			return false;
+		}
+		$previous = Controller::get_instance()->get_log_by_consent_id( $consent_id );
+		if ( ! is_array( $previous ) || empty( $previous['categories'] ) ) {
+			return true;
+		}
+		$stored = json_decode( (string) $previous['categories'], true );
+		if ( ! is_array( $stored ) ) {
+			return true;
+		}
+		foreach ( array_keys( $incoming ) as $key ) {
+			if ( ! array_key_exists( $key, $stored ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private function last_logged_status( $consent_id ) {
 		if ( '' === $consent_id ) {
 			return '';

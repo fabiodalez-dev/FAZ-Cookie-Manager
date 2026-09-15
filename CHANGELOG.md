@@ -2,6 +2,19 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.32.0] - unreleased
+
+### Added
+- The consent log now records whether the server would have served each GPC exception, so a forged one becomes distinguishable after the fact (#285). A GPC exception says a visitor clicked Accept on a blocked embed; the consent cookie cannot prove that, because a script on the site's own pages can write the same values, and no token can prove it either — anything issued into the page is readable by a script in that page. So the record does not claim the click was genuine. It claims consistency: the server marks an exception as served only when the GPC signal was present, no Do Not Sell request was in force, the cookie really carried the grant and its marker, the page had actually shown a placeholder for that service, and that service's category is one the signal closes. Exceptions the visitor is simply carrying from page to page are marked as carried rather than judged again. The consent log shows all three as their own pill and can be filtered down to the rows that carry an exception, whatever their status.
+- System Status lists the catalogued services that are blocked without leaving any visible trace (#279): they set no cookies, so they appear in no cookie declaration, and they are parked as plain requests rather than embeds, so no placeholder is shown either. Before consent a stylesheet or script from one of them simply does not load — fonts fall back, or a control appears not to work — and the symptom points at the theme, the cache or the CDN instead of here. Google Fonts, the reported case, stays blocked: German courts have held that loading it from Google without consent is unlawful, and serving those fonts from your own server avoids both the block and the question.
+
+### Fixed
+- A GPC exception minted within five minutes of saving preferences was never written to the consent log at all. The per-visitor throttle drops a repeat whose status has not changed, and accepting a blocked embed does not change the status — so the one record that proves an exception to a binding opt-out existed was the record being dropped. A newly appearing exception now counts as a change; a repeat of one already on record stays throttled.
+- The Dashboard no longer implies that data will arrive when nothing is being recorded. With pageview tracking off — how the plugin ships — the empty charts stated the setting and left the reader to work out that no number of visitors would ever fill them; an administrator reading an empty chart concludes they have no traffic, when what they have is no measurement. Both panels now say so plainly and offer the setting, and the consent panel adds that consent records are kept regardless, because "tracking off" on a consent plugin should not be read as "consent evidence off".
+
+### Known limitation
+- The exception record shows consistency, not authenticity: a forgery that reproduces a real click's circumstances stays indistinguishable. Preventing that is not available to a browser extension of this kind — a same-origin script has the visitor's own powers — so the limit is stated rather than papered over (#285).
+
 ## [1.31.0] - 2026-09-11
 
 ### Fixed

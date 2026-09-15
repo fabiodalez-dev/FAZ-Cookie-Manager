@@ -52,6 +52,8 @@ defined( 'ABSPATH' ) || exit;
 						<option value="accepted"><?php esc_html_e( 'Accepted', 'faz-cookie-manager' ); ?></option>
 						<option value="rejected"><?php esc_html_e( 'Rejected', 'faz-cookie-manager' ); ?></option>
 						<option value="partial"><?php esc_html_e( 'Partial', 'faz-cookie-manager' ); ?></option>
+						<?php // Not a status: a filter for the rows that record an exception to a GPC opt-out, which are the ones worth auditing. ?>
+						<option value="gpc_exception"><?php esc_html_e( 'GPC exceptions', 'faz-cookie-manager' ); ?></option>
 					</select>
 					<input type="text" class="faz-input" id="faz-log-search" placeholder="<?php esc_attr_e( 'Search consent ID or URL...', 'faz-cookie-manager' ); ?>" style="width:260px;">
 					<button class="faz-btn faz-btn-secondary" id="faz-log-filter">

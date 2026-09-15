@@ -27,6 +27,67 @@ if ( ! function_exists( 'faz_parse_url' ) ) {
 			: parse_url( $url ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
 	}
 }
+if ( ! function_exists( 'faz_normalize_page_url' ) ) {
+	/**
+	 * Reduce a URL to the page it identifies.
+	 *
+	 * Scheme, host, port and path; no credentials, no query, no fragment, and
+	 * no trailing slash. Two sides depend on producing the SAME string for the
+	 * same page: the consent log stores it, and the placeholder inventory looks
+	 * it up to answer "did this page ever offer that embed". If the two spellings
+	 * drift, every exception reads as unverifiable, so the rule lives here once
+	 * rather than in each caller.
+	 *
+	 * The query is dropped deliberately: it carries campaign and session
+	 * parameters that would both fragment the inventory and store more about the
+	 * visitor's navigation than the question needs.
+	 *
+	 * @param string $url URL to reduce.
+	 * @return string Normalised URL, or '' when nothing usable remains.
+	 */
+	function faz_normalize_page_url( $url ) {
+		$url = function_exists( 'esc_url_raw' ) ? esc_url_raw( (string) $url ) : (string) $url;
+		if ( '' === $url ) {
+			return '';
+		}
+
+		$parts = faz_parse_url( $url );
+		if ( false === $parts || ! is_array( $parts ) ) {
+			return '';
+		}
+
+		$normalized = '';
+		if ( ! empty( $parts['scheme'] ) ) {
+			$normalized .= $parts['scheme'] . '://';
+		}
+		// Deliberately omit user:pass — never persist credentials.
+		if ( ! empty( $parts['host'] ) ) {
+			$normalized .= $parts['host'];
+		}
+		if ( ! empty( $parts['port'] ) ) {
+			$normalized .= ':' . absint( $parts['port'] );
+		}
+		if ( ! empty( $parts['path'] ) ) {
+			$normalized .= $parts['path'];
+		}
+
+		// A deeper path is the same page with or without a trailing slash, and
+		// WordPress serves both. The home page is the case that bites: it
+		// arrives as "https://site" from a stored value and "https://site/"
+		// from a browser, so it is spelled one way — with the slash — rather
+		// than left to whichever form happened to reach us.
+		if ( '' !== $normalized ) {
+			$path = isset( $parts['path'] ) ? (string) $parts['path'] : '';
+			if ( '' === $path || '/' === $path ) {
+				$normalized = rtrim( $normalized, '/' ) . '/';
+			} else {
+				$normalized = rtrim( $normalized, '/' );
+			}
+		}
+
+		return $normalized;
+	}
+}
 if ( ! function_exists( 'faz_read_json_file' ) ) {
 	/**
 	 * Processes a json file from the specified path

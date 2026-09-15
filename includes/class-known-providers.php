@@ -122,4 +122,27 @@ class Known_Providers {
 		}
 		return $map;
 	}
+
+	/**
+	 * Providers that are blocked without leaving any visible trace.
+	 *
+	 * They declare no cookies, so they contribute no row to the cookie
+	 * declaration, and they are parked as plain requests rather than embeds, so
+	 * no placeholder is rendered either. Before consent the page simply renders
+	 * without them — fallback fonts, a control that appears not to work — and
+	 * the symptom points at the theme, the cache or the CDN rather than here
+	 * (#279, found while closing #253).
+	 *
+	 * @return array Providers, in catalogue order.
+	 */
+	public static function get_silent_providers() {
+		$silent = array();
+		foreach ( self::get_all() as $service ) {
+			if ( empty( $service['cookies'] ) && ! empty( $service['patterns'] ) ) {
+				$silent[] = $service;
+			}
+		}
+		return $silent;
+	}
+
 }

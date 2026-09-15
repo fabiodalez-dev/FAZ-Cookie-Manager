@@ -91,8 +91,8 @@ global $wpdb;
 $tables = $wpdb->get_col("SHOW TABLES LIKE \"{$wpdb->prefix}faz_%\"");
 $categories = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookie_categories");
 $banners = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}faz_banners");
-if (count($tables)!==5 || $categories!==7 || $banners!==2) { throw new Exception("Fresh-install schema mismatch"); }
-echo "INSTALL: ".FAZ_VERSION."; 5 tables, 7 categories, 2 banners\n";
+if (count($tables)!==6 || $categories!==7 || $banners!==2) { throw new Exception("Fresh-install schema mismatch"); }
+echo "INSTALL: ".FAZ_VERSION."; 6 tables, 7 categories, 2 banners\n";
 '
 VERSION="$(wp --path="$WP_DIR" plugin get faz-cookie-manager --field=version)"
 verify_http

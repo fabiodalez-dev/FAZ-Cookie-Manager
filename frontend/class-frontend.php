@@ -29,6 +29,7 @@ use FazCookie\Includes\Cookie_Policy_Shortcode;
 use FazCookie\Includes\Do_Not_Sell_Shortcode;
 use FazCookie\Includes\Cookie_Settings_Shortcode;
 use FazCookie\Frontend\Includes\Placeholder_Builder;
+use FazCookie\Frontend\Includes\Embed_Inventory;
 use FazCookie\Frontend\Includes\Geo_Runtime;
 /**
  * The public-facing functionality of the plugin.
@@ -221,6 +222,10 @@ class Frontend {
 		// scripts are actually allowed.
 		add_action( 'template_redirect', array( $this, 'shred_non_consented_cookies' ), 1 );
 		add_action( 'template_redirect', array( $this, 'start_output_buffer' ) );
+		// Register after the output-buffer flusher. Its shutdown callback can
+		// create placeholders, and the inventory must persist the final set —
+		// including an empty set when embeds were removed from this page.
+		add_action( 'template_redirect', array( Embed_Inventory::class, 'begin' ) );
 		// Optional server-cookie guard. Opening a dedicated buffer on init keeps
 		// headers pending until page, AJAX, REST and redirect callbacks have had a
 		// chance to emit Set-Cookie. The output callback then filters the final
