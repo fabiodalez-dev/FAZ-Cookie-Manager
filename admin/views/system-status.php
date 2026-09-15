@@ -272,13 +272,13 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 	?>
 	<?php if ( ! empty( $faz_silent_providers ) ) : ?>
 	<div class="faz-card">
-		<div class="faz-card-header"><h3><?php esc_html_e( 'Blocked without a visible placeholder', 'faz-cookie-manager' ); ?></h3></div>
+		<div class="faz-card-header"><h3><?php esc_html_e( 'May be blocked without a visible placeholder', 'faz-cookie-manager' ); ?></h3></div>
 		<div class="faz-card-body">
 			<p class="faz-help">
 				<?php
 				printf(
 					/* translators: %d: number of providers. */
-					esc_html__( 'These %d services set no cookies, so they appear in no cookie declaration, and they are blocked as plain requests rather than as embeds — no placeholder is shown. Before consent, a stylesheet or script from one of them simply does not load: fonts fall back, or a control looks broken. If a visitor reports something on this site behaving oddly before they accept, check this list first.', 'faz-cookie-manager' ),
+					esc_html__( 'These %d catalogued services set no cookies, so they appear in no cookie declaration, and may be blocked as plain requests rather than as embeds — no placeholder is shown. This is a catalogue of potential matches, not a report of what this site loads; a matching whitelist entry may also allow a request. When a request is blocked before consent, fonts can fall back or a control can look broken.', 'faz-cookie-manager' ),
 					count( $faz_silent_providers )
 				);
 				?>

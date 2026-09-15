@@ -6700,13 +6700,13 @@ msgid "never downloaded"
 msgstr "nikdy nestaženo"
 
 #: admin/views/system-status.php:275
-msgid "Blocked without a visible placeholder"
+msgid "May be blocked without a visible placeholder"
 msgstr ""
 
 #. translators: %d: number of providers.
 #: admin/views/system-status.php:281
 #, php-format
-msgid "These %d services set no cookies, so they appear in no cookie declaration, and they are blocked as plain requests rather than as embeds — no placeholder is shown. Before consent, a stylesheet or script from one of them simply does not load: fonts fall back, or a control looks broken. If a visitor reports something on this site behaving oddly before they accept, check this list first."
+msgid "These %d catalogued services set no cookies, so they appear in no cookie declaration, and may be blocked as plain requests rather than as embeds — no placeholder is shown. This is a catalogue of potential matches, not a report of what this site loads; a matching whitelist entry may also allow a request. When a request is blocked before consent, fonts can fall back or a control can look broken."
 msgstr ""
 
 #: admin/views/system-status.php:287

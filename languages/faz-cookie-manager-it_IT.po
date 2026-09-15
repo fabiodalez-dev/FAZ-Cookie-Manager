@@ -6692,14 +6692,14 @@ msgid "never downloaded"
 msgstr "mai scaricato"
 
 #: admin/views/system-status.php:275
-msgid "Blocked without a visible placeholder"
-msgstr "Bloccati senza un segnaposto visibile"
+msgid "May be blocked without a visible placeholder"
+msgstr "Potrebbero essere bloccati senza un segnaposto visibile"
 
 #. translators: %d: number of providers.
 #: admin/views/system-status.php:281
 #, php-format
-msgid "These %d services set no cookies, so they appear in no cookie declaration, and they are blocked as plain requests rather than as embeds — no placeholder is shown. Before consent, a stylesheet or script from one of them simply does not load: fonts fall back, or a control looks broken. If a visitor reports something on this site behaving oddly before they accept, check this list first."
-msgstr "Questi %d servizi non impostano cookie, quindi non compaiono in alcuna dichiarazione dei cookie, e vengono bloccati come semplici richieste anziché come contenuti incorporati: non viene mostrato alcun segnaposto. Prima del consenso, un foglio di stile o uno script di uno di essi semplicemente non viene caricato: i caratteri ripiegano su quelli di sistema, oppure un comando sembra non funzionare. Se un visitatore segnala che qualcosa su questo sito si comporta in modo strano prima di aver accettato, controlla prima questo elenco."
+msgid "These %d catalogued services set no cookies, so they appear in no cookie declaration, and may be blocked as plain requests rather than as embeds — no placeholder is shown. This is a catalogue of potential matches, not a report of what this site loads; a matching whitelist entry may also allow a request. When a request is blocked before consent, fonts can fall back or a control can look broken."
+msgstr "Questi %d servizi presenti nel catalogo non impostano cookie, quindi non compaiono in alcuna dichiarazione dei cookie, e potrebbero essere bloccati come semplici richieste anziché come contenuti incorporati: non viene mostrato alcun segnaposto. Questo è un catalogo di potenziali corrispondenze, non un resoconto di ciò che il sito carica; inoltre, una voce corrispondente nella whitelist potrebbe consentire la richiesta. Quando una richiesta viene bloccata prima del consenso, i caratteri possono tornare a quelli predefiniti oppure un controllo può sembrare non funzionante."
 
 #: admin/views/system-status.php:287
 msgid "Whitelisting a pattern in Settings → Script Blocking lets it load before consent. Google Fonts is deliberately not whitelisted: German courts have held that loading it from Google without consent is unlawful. Serving those fonts from your own server avoids both the block and the question."
