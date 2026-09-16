@@ -307,7 +307,10 @@ class Consent_Logger {
 		if ( ! is_array( $previous ) || empty( $previous['categories'] ) ) {
 			return true;
 		}
-		$stored = json_decode( (string) $previous['categories'], true );
+		$stored = $previous['categories'];
+		if ( is_string( $stored ) ) {
+			$stored = json_decode( $stored, true );
+		}
 		if ( ! is_array( $stored ) ) {
 			return true;
 		}

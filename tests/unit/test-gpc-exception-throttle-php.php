@@ -77,7 +77,7 @@ namespace {
 	};
 
 	$row = function ( array $categories ) {
-		return array( 'status' => 'partial', 'categories' => wp_json_encode_shim( $categories ) );
+		return array( 'status' => 'partial', 'categories' => $categories );
 	};
 	function wp_json_encode_shim( $value ) { return json_encode( $value ); }
 

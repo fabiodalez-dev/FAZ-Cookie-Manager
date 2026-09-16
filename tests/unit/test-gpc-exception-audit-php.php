@@ -387,7 +387,7 @@ namespace {
 	foreach ( array( 'meta.gpc_exception.', $served_key, $carried_key ) as $prefix ) {
 		audit_reset();
 		$id       = 'svc-c';
-		$previous = array( 'categories' => wp_json_encode( array( $prefix . $id => 'yes' ) ) );
+		$previous = array( 'categories' => array( $prefix . $id => 'yes' ) );
 		$result   = Gpc_Exception_Audit::decide(
 			array( 'meta.gpc_exception.' . $id => 'yes' ),
 			array(

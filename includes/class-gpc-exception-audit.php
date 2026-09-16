@@ -163,7 +163,10 @@ class Gpc_Exception_Audit {
 		if ( empty( $previous['categories'] ) ) {
 			return array();
 		}
-		$stored = json_decode( (string) $previous['categories'], true );
+		$stored = $previous['categories'];
+		if ( is_string( $stored ) ) {
+			$stored = json_decode( $stored, true );
+		}
 		if ( ! is_array( $stored ) ) {
 			return array();
 		}

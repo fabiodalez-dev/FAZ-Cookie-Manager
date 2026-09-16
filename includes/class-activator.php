@@ -89,6 +89,9 @@ class Activator {
 	 */
 	public static function init() {
 		add_action( 'init', array( __CLASS__, 'check_version' ), 5 );
+		// Independently versioned schema: also upgrade when testing a branch
+		// whose release version has not been bumped yet.
+		add_action( 'init', array( '\FazCookie\Frontend\Includes\Embed_Inventory', 'maybe_create_table' ), 6 );
 		// Consolidate one-time migrations into a single admin_init callback
 		// to avoid 7 separate get_option() calls on every admin page load.
 		add_action( 'admin_init', array( __CLASS__, 'run_pending_migrations' ) );

@@ -565,8 +565,10 @@ class Controller {
 				// and they occur under every real status. The prefix matches
 				// both the client-written marker and the server's verdicts, so
 				// a row is listed whatever the verdict says.
-				$where[]  = 'categories LIKE %s';
-				$values[] = '%' . $wpdb->esc_like( 'meta.gpc_exception' ) . '%';
+				$where[]  = '(categories LIKE %s OR categories LIKE %s OR categories LIKE %s)';
+				foreach ( array( 'meta.gpc_exception.', 'meta.gpc_exception_served.', 'meta.gpc_exception_carried.' ) as $prefix ) {
+					$values[] = '%' . $wpdb->esc_like( '"' . $prefix ) . '%';
+				}
 			} else {
 				$where[]  = 'status = %s';
 				$values[] = $args['status'];
@@ -755,8 +757,10 @@ class Controller {
 				// and they occur under every real status. The prefix matches
 				// both the client-written marker and the server's verdicts, so
 				// a row is listed whatever the verdict says.
-				$where[]  = 'categories LIKE %s';
-				$values[] = '%' . $wpdb->esc_like( 'meta.gpc_exception' ) . '%';
+				$where[]  = '(categories LIKE %s OR categories LIKE %s OR categories LIKE %s)';
+				foreach ( array( 'meta.gpc_exception.', 'meta.gpc_exception_served.', 'meta.gpc_exception_carried.' ) as $prefix ) {
+					$values[] = '%' . $wpdb->esc_like( '"' . $prefix ) . '%';
+				}
 			} else {
 				$where[]  = 'status = %s';
 				$values[] = $args['status'];

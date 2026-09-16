@@ -399,7 +399,7 @@ and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
 = 1.32.0 =
-* Added: The consent log records whether the server would have served each GPC exception, so a forged one is distinguishable after the fact (#285). A script on the page can write the same cookie values a real click writes, so the record claims consistency rather than authenticity.
+* Added: The consent log records whether the server would have served each GPC exception, so inconsistent markers can be identified after the fact (#285). A script on the page can write the same cookie values a real click writes, so the record claims consistency rather than authenticity.
 * Added: System Status lists the services blocked without a visible placeholder (#279) — they set no cookies and park plain requests, so before consent a stylesheet simply does not load and the symptom points at the theme or the cache instead of here.
 * Fixed: A GPC exception accepted within five minutes of saving preferences was never logged at all, because it does not change the consent status and the repeat throttle dropped it.
 * Fixed: The Dashboard no longer implies data will arrive when pageview tracking is off, and says that consent records are kept regardless.
