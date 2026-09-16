@@ -127,6 +127,29 @@ namespace {
 		'seeing one service of two refreshes it without deleting the other'
 	);
 
+	// The observed digest has the same no-write guard as an authoritative snapshot.
+	$GLOBALS['wpdb']->queries = array();
+	$note->invoke( null, 'google-maps', 'functional' );
+	Embed_Inventory::flush();
+	inventory_check( array() === $GLOBALS['wpdb']->queries, 'an identical non-GPC observation performs no database writes' );
+
+	// A partial render may record observations but cannot erase prior history.
+	$complete = new \ReflectionProperty( Embed_Inventory::class, 'render_complete' );
+	$complete->setAccessible( true );
+	$complete->setValue( null, false );
+	$GLOBALS['wpdb']->queries = array();
+	$GLOBALS['faz_test_transients'] = array();
+	$_SERVER['HTTP_SEC_GPC'] = '1';
+	$note->invoke( null, 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	$partial = $GLOBALS['wpdb']->queries;
+	inventory_check(
+		! empty( $partial ) && 0 === count( array_filter( $partial, static function ( $q ) { return false !== stripos( $q, 'DELETE' ); } ) ),
+		'an interrupted GPC render records observed placeholders without clearing history'
+	);
+	Embed_Inventory::complete_render();
+	unset( $_SERVER['HTTP_SEC_GPC'] );
+
 	// The clear and the rewrite are one step, and the transient guard comes
 	// first. Written the other way round — clear, then return because the digest
 	// matched — the second visit from a GPC browser deleted the page's rows

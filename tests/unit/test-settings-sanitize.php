@@ -50,6 +50,13 @@ namespace {
 	}
 
 	echo "\n== Settings sanitize guards ==\n\n";
+	foreach ( array( 'false', '0', false ) as $legacy_status ) {
+		$logs = Settings::sanitize(
+			array( 'consent_logs' => array( 'status' => $legacy_status ) ),
+			array( 'consent_logs' => array( 'status' => true ) )
+		);
+		faz_assert_same( $logs['consent_logs']['status'], false, 'legacy disabled consent logging is sanitized before display' );
+	}
 
 	$defaults = array(
 		'banner_control' => array(

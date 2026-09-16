@@ -624,7 +624,12 @@ class Cookie_Definitions {
 		$total_cookies = 0;
 		foreach ( $data as $entries ) {
 			if ( is_array( $entries ) ) {
-				$total_cookies += isset( $entries[0] ) ? count( $entries ) : 1;
+				$entry_list = isset( $entries[0] ) ? $entries : array( $entries );
+				foreach ( $entry_list as $entry ) {
+					if ( is_array( $entry ) && isset( $entry['cookie'] ) && is_string( $entry['cookie'] ) && '' !== trim( $entry['cookie'] ) ) {
+						++$total_cookies;
+					}
+				}
 			}
 		}
 
