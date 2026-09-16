@@ -17,10 +17,9 @@
  * once per request at shutdown, and a transient keeps it to at most one write
  * per page per day while the page's embeds stay the same.
  *
-	 * Most visits only refresh what they saw: a page with no placeholder may
-	 * simply be one this visitor has consented to. A GPC request with no existing
-	 * consent is different: every sale/share embed must be blocked, so that render
-	 * is a complete snapshot and may safely remove records no longer present.
+ * Most visits only refresh what they saw: a page with no placeholder may
+ * simply be one this visitor has consented to. A completed GPC render with no
+ * existing consent can replace the snapshot of relevant placeholders.
  *
  * @package FazCookie\Frontend\Includes
  */
@@ -56,6 +55,14 @@ class Embed_Inventory {
 	 * @var bool
 	 */
 	private static $hooked = false;
+
+	/** @var bool A complete HTML blocking pass succeeded for this request. */
+	private static $render_complete = false;
+
+	/** Record completion before the inventory can replace a page snapshot. */
+	public static function complete_render() {
+		self::$render_complete = true;
+	}
 
 	/**
 	 * Start observing a front-end page.
@@ -149,7 +156,7 @@ class Embed_Inventory {
 		// cached HTML that created it, and is replaced when an uncached GPC render
 		// observes the new page.
 		$raw_consent  = function_exists( 'faz_get_valid_consent_cookie' ) ? (string) faz_get_valid_consent_cookie() : '';
-		$gpc_snapshot = '' === $raw_consent
+		$gpc_snapshot = self::$render_complete && '' === $raw_consent
 			&& isset( $_SERVER['HTTP_SEC_GPC'] )
 			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
 
@@ -170,10 +177,10 @@ class Embed_Inventory {
 		// deleted the page's rows without writing them back, and the transient
 		// then kept that state for a day. Every repeat visit from a GPC browser
 		// left the inventory empty, so genuine exceptions read as unverified.
-		$ids = array_keys( $seen );
-		sort( $ids );
-		$digest = implode( ',', $ids );
-		$key    = 'faz_embinv_' . md5( $url . '|' . ( $gpc_snapshot ? 'gpc|' : '' ) . $digest );
+		ksort( $seen );
+		$digest = ( $gpc_snapshot ? 'snapshot:' : 'observed:' ) . md5( serialize( $seen ) );
+		// One cache entry describes the latest write, not every historical set.
+		$key    = 'faz_embinv_current_' . md5( $url );
 		if ( get_transient( $key ) === $digest ) {
 			return;
 		}

@@ -100,6 +100,9 @@ namespace {
 	// a relevant placeholder, so an empty render means the old embed is gone.
 	$_SERVER['HTTP_SEC_GPC'] = '1';
 	Embed_Inventory::flush();
+	inventory_check( array() === $GLOBALS['wpdb']->queries, 'GPC alone cannot replace a snapshot before a complete render' );
+	Embed_Inventory::complete_render();
+	Embed_Inventory::flush();
 	inventory_check(
 		1 === count( $GLOBALS['wpdb']->queries )
 			&& false !== strpos( $GLOBALS['wpdb']->queries[0], 'DELETE FROM wp_faz_embed_placeholders' ),
@@ -152,6 +155,17 @@ namespace {
 	unset( $_SERVER['HTTP_SEC_GPC'] );
 
 	$source = file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' );
+	$_SERVER['HTTP_SEC_GPC'] = '1';
+	$GLOBALS['faz_test_transients'] = array();
+	foreach ( array( array( 'youtube' ), array(), array( 'youtube' ), array() ) as $snapshot ) {
+		$GLOBALS['wpdb']->queries = array();
+		foreach ( $snapshot as $id ) { Embed_Inventory::note( $id, 'marketing' ); }
+		Embed_Inventory::flush();
+		inventory_check( ! empty( $GLOBALS['wpdb']->queries ), 'a changed snapshot is written even if this set was seen earlier' );
+	}
+	unset( $_SERVER['HTTP_SEC_GPC'] );
+	inventory_check( faz_normalize_page_url( 'https://example.test/?p=123' ) !== faz_normalize_page_url( 'https://example.test/?p=456' ), 'plain permalink pages have distinct inventory keys' );
+	inventory_check( faz_normalize_page_url( 'https://example.test/?p=123&utm_source=a' ) === faz_normalize_page_url( 'https://example.test/?p=123&utm_source=b' ), 'tracking parameters do not fragment a page' );
 	inventory_check(
 		false !== strpos( $source, "array( Embed_Inventory::class, 'begin' )" ),
 		'the frontend starts inventory observation even when a page has no embeds'

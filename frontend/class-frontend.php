@@ -3833,6 +3833,9 @@ class Frontend {
 		$html = $this->process_social_embeds( $html, $blocked_categories );
 		$html = $this->process_elementor_video_widgets( $html, $blocked_categories );
 
+		if ( ! $pcre_failed ) {
+			Embed_Inventory::complete_render();
+		}
 		return $html;
 	}
 

@@ -94,6 +94,8 @@ class Activator {
 		add_action( 'admin_init', array( __CLASS__, 'run_pending_migrations' ) );
 		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
+		add_action( 'faz_weekly_definitions_update', array( 'FazCookie\Includes\Cookie_Definitions', 'cron_update' ) );
+		add_action( 'faz_after_update_settings', array( 'FazCookie\Includes\Cookie_Definitions', 'schedule_updates' ) );
 		add_action( 'faz_scheduled_scan', array( __CLASS__, 'run_scheduled_scan' ) );
 		add_action( 'faz_after_update_settings', array( __CLASS__, 'reschedule_auto_scan' ) );
 		// F009: keep the IAB unmatched-vendors transient fresh on every
@@ -738,6 +740,7 @@ class Activator {
 			wp_schedule_event( time(), 'weekly', 'faz_weekly_gvl_update' );
 		}
 		self::schedule_auto_scan();
+		Cookie_Definitions::schedule_updates();
 	}
 
 	/**

@@ -121,6 +121,7 @@ class Settings extends Store {
 				'last_scan'       => '',
 				'static_ip'       => '',
 				'auto_scan'       => false,
+				'auto_update_definitions' => false,
 				'scan_frequency'  => 'weekly',
 				'debug_mode'      => false,
 			),
@@ -498,6 +499,7 @@ class Settings extends Store {
 			case 'purpose_one_treatment':
 			case 'pageview_tracking':
 			case 'auto_scan':
+			case 'auto_update_definitions':
 			case 'remove_data_on_uninstall':
 			case 'debug_mode':
 			case 'geo_targeting':

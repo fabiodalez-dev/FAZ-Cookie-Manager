@@ -191,6 +191,15 @@ defined( 'ABSPATH' ) || exit;
 
 	<!-- Cookie Definitions (Open Cookie Database) -->
 	<div class="faz-card" id="faz-cookie-definitions-card" style="margin-top:16px;">
+		<?php $faz_refresh = get_option( 'faz_definitions_refresh_status', array() ); ?>
+		<?php if ( ! empty( $faz_refresh['at'] ) ) : ?>
+			<p class="faz-help" role="status">
+				<?php esc_html_e( 'Last automatic definitions update attempt:', 'faz-cookie-manager' ); ?>
+				<?php echo esc_html( $faz_refresh['at'] ); ?> —
+				<?php echo ! empty( $faz_refresh['success'] ) ? esc_html__( 'Successful', 'faz-cookie-manager' ) : esc_html__( 'Failed; existing definitions retained.', 'faz-cookie-manager' ); ?>
+				<?php if ( empty( $faz_refresh['success'] ) ) { echo esc_html( $faz_refresh['message'] ?? '' ); } ?>
+			</p>
+		<?php endif; ?>
 		<div class="faz-card-header">
 			<h3><?php esc_html_e( 'Cookie Definitions', 'faz-cookie-manager' ); ?></h3>
 			<div class="faz-page-header-actions">

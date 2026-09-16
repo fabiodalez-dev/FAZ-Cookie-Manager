@@ -96,7 +96,7 @@ In practice that means two banner rows rather than eight: one EU banner holding 
 
 Used to refresh the built-in cookie definitions snapshot for the optional auto-categorize feature.
 
-Triggered when: you click the definitions update action in the Cookies screen.
+Triggered when: you click the definitions update action in the Cookies screen, or once a week after explicitly enabling "Update cookie definitions weekly" in Settings. Automatic updates are off by default; disabling the option cancels scheduled downloads. Failed downloads retain the existing database. The bundled snapshot remains available without enabling network updates.
 
 Data sent: your server IP address and standard HTTP request headers.
 

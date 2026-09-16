@@ -31,16 +31,15 @@ if ( ! function_exists( 'faz_normalize_page_url' ) ) {
 	/**
 	 * Reduce a URL to the page it identifies.
 	 *
-	 * Scheme, host, port and path; no credentials, no query, no fragment, and
+	 * Scheme, host, port, path and routing query; no credentials, no fragment, and
 	 * no trailing slash. Two sides depend on producing the SAME string for the
 	 * same page: the consent log stores it, and the placeholder inventory looks
 	 * it up to answer "did this page ever offer that embed". If the two spellings
 	 * drift, every exception reads as unverifiable, so the rule lives here once
 	 * rather than in each caller.
 	 *
-	 * The query is dropped deliberately: it carries campaign and session
-	 * parameters that would both fragment the inventory and store more about the
-	 * visitor's navigation than the question needs.
+	 * Campaign and session parameters are dropped; WordPress routing parameters
+	 * are retained so distinct posts and language variants cannot share evidence.
 	 *
 	 * @param string $url URL to reduce.
 	 * @return string Normalised URL, or '' when nothing usable remains.
@@ -85,6 +84,16 @@ if ( ! function_exists( 'faz_normalize_page_url' ) ) {
 			}
 		}
 
+		// Preserve WordPress routing parameters (plain permalinks, archives and
+		// language/AMP variants), never campaign or arbitrary session parameters.
+		if ( ! empty( $parts['query'] ) ) {
+			parse_str( $parts['query'], $query );
+			$route = array_intersect_key( $query, array_flip( array( 'p', 'page_id', 'attachment_id', 'name', 'pagename', 'post_type', 'cat', 'tag', 'taxonomy', 'term', 'author', 'year', 'monthnum', 'day', 'paged', 'page', 's', 'lang', 'amp', 'feed' ) ) );
+			ksort( $route );
+			if ( ! empty( $route ) ) {
+				$normalized .= '?' . http_build_query( $route, '', '&', PHP_QUERY_RFC3986 );
+			}
+		}
 		return $normalized;
 	}
 }

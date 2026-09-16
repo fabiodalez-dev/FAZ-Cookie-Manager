@@ -297,6 +297,14 @@ defined( 'ABSPATH' ) || exit;
 				<div class="faz-help"><?php esc_html_e( 'Automatically scan your site for new cookies on a schedule. You will receive an email notification if new uncategorized cookies are found.', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="scanner.auto_update_definitions">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Update cookie definitions weekly', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'Optional: downloads the Open Cookie Database from raw.githubusercontent.com once a week. Off by default. Without this option, the bundled database is updated with plugin releases. A failed download keeps the existing definitions.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group">
 				<label><?php esc_html_e( 'Scan Frequency', 'faz-cookie-manager' ); ?></label>
 				<select class="faz-select" data-path="scanner.scan_frequency" style="width:auto;max-width:200px;">
 					<option value="daily"><?php esc_html_e( 'Daily', 'faz-cookie-manager' ); ?></option>

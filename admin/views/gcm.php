@@ -123,6 +123,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-label"><?php esc_html_e( 'Advanced Consent Mode (load Google tags before consent)', 'faz-cookie-manager' ); ?></span>
 				</label>
 				<div class="faz-help" id="faz-gcm-advanced-help">
+					<p><?php esc_html_e( 'When Analytics and Performance are both offered, Advanced mode makes analytics_storage follow Analytics. Moving GA4 or another Google analytics tag to Performance or a custom category does not change this mapping: granting that category while denying Analytics keeps analytics_storage denied. Keep Google analytics tags in Analytics when using Advanced mode. Basic mode also considers Performance.', 'faz-cookie-manager' ); ?></p>
 					<strong><?php esc_html_e( 'This lets Google tags (gtag.js / GA4 / Google Ads) load BEFORE consent.', 'faz-cookie-manager' ); ?></strong><br>
 					<?php esc_html_e( 'They run with consent default → denied, so pre-consent hits are cookieless (Google\'s "Advanced"/modeled mode) and upgrade to full measurement once the visitor accepts. Non-Google trackers and the Google Tag Manager container (gtm.js) stay fully blocked.', 'faz-cookie-manager' ); ?><br>
 					<?php esc_html_e( 'Leave this OFF for the strictest, block-everything-before-consent behaviour. Loading Google before consent is a legal judgement call: some EU authorities still treat cookieless pings as a third-party transfer, so enabling it is your responsibility as the site operator. Default: off.', 'faz-cookie-manager' ); ?>

@@ -161,6 +161,7 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				'faz_consent_logs_db_version',
 				'faz_pageviews_db_version',
 				'faz_embed_inventory_db_version',
+				'faz_definitions_refresh_status',
 				'faz_missing_tables',
 				'faz_migration_options',
 				'faz_privacy_content_snapshot',

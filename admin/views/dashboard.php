@@ -144,7 +144,11 @@ $faz_tracking_enabled = isset( $faz_dashboard_settings['pageview_tracking'] ) &&
 						<?php if ( $faz_tracking_enabled ) : ?>
 							<p><?php echo wp_kses_post( __( 'No consent data yet.<br>Data will appear once visitors respond to the banner.', 'faz-cookie-manager' ) ); ?></p>
 						<?php else : ?>
+							<?php if ( ! empty( $faz_dashboard_settings['consent_logs']['status'] ) ) : ?>
 							<p><?php echo wp_kses_post( __( 'Banner interaction tracking is off, so these proportions are not being measured.<br>Consent records are kept regardless — see Consent Logs.', 'faz-cookie-manager' ) ); ?></p>
+							<?php else : ?>
+							<p><?php esc_html_e( 'Banner interaction tracking and consent logging are both off. No new consent records are being saved.', 'faz-cookie-manager' ); ?></p>
+							<?php endif; ?>
 							<p>
 								<a class="faz-btn faz-btn-sm faz-btn-secondary" href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-settings' ) ); ?>">
 									<?php esc_html_e( 'Turn on pageview tracking', 'faz-cookie-manager' ); ?>
