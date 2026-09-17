@@ -29,7 +29,7 @@ Most cookie consent plugins follow the same pattern: a free version with cripple
 * **Consent logging with CSV export** -- every consent is recorded locally in your database. Export anytime for audits.
 * **Google Consent Mode v2** -- all 7 consent signals sent to Google tags. No premium required.
 * **IAB TCF v2.3** -- full Transparency and Consent Framework API and UI. Operating as a recognised CMP needs your own registered IAB Europe CMP ID; without one the TCF interface stays inactive and no TC string is produced, so invalid signals are never broadcast to vendors.
-* **Script blocking** -- tag any script with `data-faz-tag` to hold it until its category is accepted.
+* **Script blocking** -- mark a script `type="text/plain" data-faz-category="analytics"` to hold it until that category is accepted; it runs on its own as soon as consent is granted, and on every later page load.
 * **Geo-targeting and 180+ languages** -- serve the right banner per region and translate every string, or use a built-in translation.
 * **Guided setup wizard** -- a first-run wizard detects your environment (multilingual plugin, page cache, WooCommerce, existing consent data) and configures jurisdiction-appropriate defaults, explaining each choice in plain language. Existing sites are treated as already set up and are never nagged.
 * **A/B test your consent banner** -- run two or more existing banners with a persistent random split and read the accept rate per variant. Only active, independently compliant banners take part, so improving your wording can never quietly become a dark pattern. Off by default.
@@ -247,7 +247,15 @@ Yes. The plugin sends all 7 consent signals (`ad_storage`, `analytics_storage`, 
 
 = Does the banner block cookies before consent? =
 
-Yes. Any script tagged with `data-faz-tag="category-name"` is blocked until the visitor grants consent for that category. This helps you implement consent-based blocking for ePrivacy/GDPR workflows.
+Yes. Known third-party scripts are blocked automatically. To gate one of your own, give it a non-executable type and name the category it belongs to:
+
+`<script type="text/plain" data-faz-category="analytics">/* your code */</script>`
+
+Both parts are required. The type is what stops the browser from running it before consent; `data-faz-category` is what the plugin looks for when it runs it afterwards. A script with only the type never runs at all — including after consent — and a script with only the attribute runs immediately, before any consent is given.
+
+The same pair works for iframes, images and stylesheets using `data-faz-src` or `data-faz-href` in place of the real attribute.
+
+Once consent is granted the plugin runs the script itself, on that page and on every later page load. You do not need to listen for `fazcookie_consent_update` to start it; that event is for your own code that has nothing to do with these tags.
 
 = How does the cookie scanner work? =
 
@@ -313,7 +321,7 @@ Listen for `fazcookie_consent_ready` on `document`. It announces the initial con
 
 `e.detail` is `{ accepted: [slug, ...], rejected: [slug, ...], action: 'init' | 'restore' | 'gpc' | 'update' }` -- `init` on a first visit before any choice, `restore` for a visitor whose choice was already stored, `gpc` when a Global Privacy Control signal was auto-applied, and `update` right after the visitor accepts, rejects or saves preferences. Register the listener before the plugin's script runs, for example from an inline `<script>` in the head.
 
-One caveat on timing: the event tells you the consent state, which is not the same as the plugin having already re-activated the scripts it was blocking. That unblock pass runs shortly afterwards. Your own code can act immediately; if you depend on a resource the plugin itself gated (a `data-faz-tag` script or iframe), wait for it rather than assuming it is live in the same tick.
+One caveat on timing: the event tells you the consent state, which is not the same as the plugin having already re-activated the scripts it was blocking. That unblock pass runs shortly afterwards. Your own code can act immediately; if you depend on a resource the plugin itself gated (a `data-faz-category` script or iframe), wait for it rather than assuming it is live in the same tick.
 
 Use `fazcookie_consent_update` instead when you want to react to a **change**: it fires when the visitor accepts, rejects or saves preferences, and not on a plain page load by someone who already decided. A snippet that sends an analytics event belongs there, or it would fire on every page view.
 
@@ -399,6 +407,7 @@ and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
 = 1.32.0 =
+* Added: Publish a language-specific cookie policy page from the setup wizard. Repeated submissions reuse the page and unavailable translations are reported. Page-link fields now suggest published pages, with keyboard navigation and manual URL support.
 * Added: The consent log records whether the server would have served each GPC exception, so inconsistent markers can be identified after the fact (#285). A script on the page can write the same cookie values a real click writes, so the record claims consistency rather than authenticity.
 * Added: System Status lists the services blocked without a visible placeholder (#279) — they set no cookies and park plain requests, so before consent a stylesheet simply does not load and the symptom points at the theme or the cache instead of here.
 * Fixed: A GPC exception accepted within five minutes of saving preferences was never logged at all, because it does not change the consent status and the repeat throttle dropped it.
