@@ -1,8 +1,8 @@
 {
     "id": "sourcebuster",
     "name": "Sourcebuster",
-    "description": "Blocks Sourcebuster analytics tracking, page-view collection, and session data.",
-    "category": "analytics",
+    "description": "Blocks Sourcebuster, the library WooCommerce Order Attribution uses to record where a visitor came from (UTM parameters, referrer, session) until marketing consent — the same category WooCommerce itself checks through the WP Consent API.",
+    "category": "marketing",
     "patterns": [
         "sourcebuster-js"
     ],

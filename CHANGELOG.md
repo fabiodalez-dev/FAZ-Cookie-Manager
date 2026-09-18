@@ -2,6 +2,12 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- WooCommerce Order Attribution recorded orders as "Unknown" when the visitor accepted cookies on the page they landed on. FAZ keeps sourcebuster.js, the library WooCommerce uses to read the traffic source, blocked until consent, and restores it by inserting a new script, which runs after the consent click has finished. WooCommerce reacts to the consent change inside that same click: it asked for tracking before the library existed, stored the request and returned, and nothing asked again once the library arrived. The landing page's UTM parameters were never captured, and on later pages they are gone. When a restored script brings sourcebuster onto the page, FAZ now replays WooCommerce's own call, once, and only if WooCommerce had already decided to allow tracking — its `wc_order_attribution_allow_tracking` filter and, with the WP Consent API, the visitor's marketing consent still decide.
+- Sourcebuster is now gated on Marketing instead of Analytics, the category WooCommerce itself checks through the WP Consent API. Before, a visitor who accepted only Marketing never got attribution, and one who accepted only Analytics loaded a library WooCommerce then refused to start. New scans classify the `sbjs_*` cookies as Marketing too. A site whose cookie list already has them keeps the category saved there, because a scan never overwrites an existing entry; move them to Marketing in Cookies so the declaration and the blocking agree.
+
 ## [1.31.0] - 2026-09-11
 
 ### Fixed
