@@ -7,7 +7,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-15T06:46:21+00:00\n"
+"POT-Creation-Date: 2026-09-16T19:58:27+00:00\n"
 "PO-Revision-Date: 2026-08-01 13:45+0200\n"
 "Language: cs_CZ\n"
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
@@ -96,7 +96,7 @@ msgid "Cookie Policy"
 msgstr "Zásady cookies"
 
 #: admin/class-admin.php:267
-#: admin/class-admin.php:2689
+#: admin/class-admin.php:2698
 #: admin/views/base.php:25
 #: admin/views/dashboard.php:255
 #: includes/blocks/editor.js:27
@@ -120,14 +120,14 @@ msgid "Setup"
 msgstr "Nastavení"
 
 #: admin/class-admin.php:513
-#: admin/class-admin.php:2662
+#: admin/class-admin.php:2671
 #: admin/views/consent-logs.php:27
 #: admin/views/consent-logs.php:52
 msgid "Accepted"
 msgstr "Přijato"
 
 #: admin/class-admin.php:514
-#: admin/class-admin.php:2666
+#: admin/class-admin.php:2675
 #: admin/views/consent-logs.php:34
 #: admin/views/consent-logs.php:53
 msgid "Rejected"
@@ -153,7 +153,7 @@ msgid "Failed to load settings."
 msgstr "Nepodařilo se načíst nastavení."
 
 #: admin/class-admin.php:522
-#: admin/class-admin.php:952
+#: admin/class-admin.php:961
 msgid "Saving…"
 msgstr "Ukládání…"
 
@@ -186,8 +186,8 @@ msgstr "např. 1 rok"
 
 #: admin/class-admin.php:539
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:508
-#: admin/views/banner.php:787
-#: admin/views/banner.php:835
+#: admin/views/banner.php:788
+#: admin/views/banner.php:836
 #: admin/views/cookies.php:66
 #: admin/views/cookies.php:178
 #: admin/views/cookies.php:279
@@ -264,7 +264,7 @@ msgid "Edit"
 msgstr "Upravit"
 
 #: admin/class-admin.php:558
-#: admin/class-admin.php:904
+#: admin/class-admin.php:913
 msgid "Delete"
 msgstr "Smazat"
 
@@ -1042,7 +1042,7 @@ msgid "Failed to save selection."
 msgstr "Nepodařilo se uložit výběr."
 
 #: admin/class-admin.php:831
-#: admin/class-admin.php:968
+#: admin/class-admin.php:977
 msgid "Scanning cookie inventory…"
 msgstr "Skenování inventáře souborů cookie…"
 
@@ -1057,7 +1057,7 @@ msgid "Update the Global Vendor List first, then try Auto-detect again."
 msgstr "Nejprve aktualizujte Global Vendor List a poté zkuste automatické zjišťování znovu."
 
 #: admin/class-admin.php:834
-#: admin/class-admin.php:969
+#: admin/class-admin.php:978
 msgid "No scanner data yet. Run the cookie scanner first."
 msgstr "Zatím žádná data skeneru. Nejprve spusťte skener cookies."
 
@@ -1185,258 +1185,286 @@ msgstr "Celé období"
 msgid "Last %d Days"
 msgstr "Posledních %d dní"
 
+#: admin/class-admin.php:876
+#, fuzzy
+msgid "Matching pages"
+msgstr "Jazyky"
+
 #: admin/class-admin.php:877
+#, fuzzy
+msgid "Searching pages…"
+msgstr "Hledat poskytovatele…"
+
+#: admin/class-admin.php:878
+msgid "Use the arrow keys and Enter to choose a page."
+msgstr ""
+
+#: admin/class-admin.php:879
+msgid "No published pages found. You can enter a URL manually."
+msgstr ""
+
+#: admin/class-admin.php:880
+msgid "Page search is unavailable. You can enter a URL manually."
+msgstr ""
+
+#. translators: %s: selected language name.
+#: admin/class-admin.php:885
+#, fuzzy,php-format
+msgid "Cookie policy language: %s"
+msgstr "Jazyk kategorie cookie"
+
+#: admin/class-admin.php:886
 msgid "Starting scan…"
 msgstr "Spouštění skenování…"
 
-#: admin/class-admin.php:878
+#: admin/class-admin.php:887
 msgid "The scan could not be started. You can skip this step or run a full scan on the Cookies page."
 msgstr "Skenování se nepodařilo spustit. Tento krok můžete přeskočit nebo spustit úplné skenování na stránce Cookies."
 
-#: admin/class-admin.php:879
+#: admin/class-admin.php:888
 msgid "Cookie scan could not be started."
 msgstr "Skenování souborů cookie se nepodařilo spustit."
 
-#: admin/class-admin.php:880
+#: admin/class-admin.php:889
 msgid "The scanner could not load. You can skip this step and run a full scan on the Cookies page."
 msgstr "Skener se nepodařilo načíst. Tento krok můžete přeskočit a spustit úplnou kontrolu na stránce Cookies."
 
 #. translators: %d: number of cookies found by the scan.
-#: admin/class-admin.php:882
+#: admin/class-admin.php:891
 #, php-format
 msgid "Scan complete — %d cookies found."
 msgstr "Skenování dokončeno — %d nalezeno souborů cookie."
 
-#: admin/class-admin.php:883
+#: admin/class-admin.php:892
 msgid "Scan complete. No new cookies were found."
 msgstr "Skenování dokončeno. Nebyly nalezeny žádné nové soubory cookie."
 
-#: admin/class-admin.php:884
+#: admin/class-admin.php:893
 msgid "Setup complete. Your cookie banner is ready."
 msgstr "Nastavení je dokončeno. Váš banner s informacemi o souborech cookie je připraven."
 
-#: admin/class-admin.php:885
+#: admin/class-admin.php:894
 #: admin/modules/settings/includes/class-onboarding.php:275
 #: admin/modules/settings/includes/class-onboarding.php:444
 msgid "Setup could not be saved. Please try again."
 msgstr "Nastavení se nepodařilo uložit. Zkuste to prosím znovu."
 
 #. translators: %s: name of the detected plugin (e.g. a cache plugin).
-#: admin/class-admin.php:887
+#: admin/class-admin.php:896
 #, php-format
 msgid "Detected: %s"
 msgstr "Zjištěno: %s"
 
-#: admin/class-admin.php:888
+#: admin/class-admin.php:897
 msgid "Google tags detected on this site"
 msgstr "Na této stránce byly zjištěny tagy Google"
 
-#: admin/class-admin.php:889
+#: admin/class-admin.php:898
 msgid "Found by the cookie scan"
 msgstr "Zjištěno při kontrole souborů cookie"
 
-#: admin/class-admin.php:890
+#: admin/class-admin.php:899
 msgid "Active plugin detected"
 msgstr "Zjištěn aktivní plugin"
 
-#: admin/class-admin.php:891
+#: admin/class-admin.php:900
 msgid "Currently always allowed"
 msgstr "V současné době je to vždy povoleno"
 
-#: admin/class-admin.php:895
+#: admin/class-admin.php:904
 msgid "Status copied to clipboard!"
 msgstr "Stav zkopírován do schránky!"
 
-#: admin/class-admin.php:900
+#: admin/class-admin.php:909
 msgid "Country"
 msgstr "Země"
 
-#: admin/class-admin.php:901
+#: admin/class-admin.php:910
 msgid "Ruleset override"
 msgstr "Přepsání sady pravidel"
 
-#: admin/class-admin.php:902
+#: admin/class-admin.php:911
 msgid "Delta fields"
 msgstr "Delta pole"
 
-#: admin/class-admin.php:903
+#: admin/class-admin.php:912
 msgid "Action"
 msgstr "Akce"
 
-#: admin/class-admin.php:905
+#: admin/class-admin.php:914
 msgid "(auto-detect)"
 msgstr "(automatické zjišťování)"
 
 #. translators: %d: number of country overrides configured
-#: admin/class-admin.php:907
+#: admin/class-admin.php:916
 #, php-format
 msgid "%d override configured."
 msgstr "%d přepsání nakonfiguróváno."
 
 #. translators: %d: number of country overrides configured
-#: admin/class-admin.php:909
+#: admin/class-admin.php:918
 #, php-format
 msgid "%d overrides configured."
 msgstr "%d přepsání nakonfiguróvána."
 
-#: admin/class-admin.php:910
+#: admin/class-admin.php:919
 msgid "Add override"
 msgstr "Přidat přepsání"
 
-#: admin/class-admin.php:911
+#: admin/class-admin.php:920
 msgid "No per-country overrides configured. Rule-sets are resolved and enforced automatically per country and US state."
 msgstr "Nejsou nakonfigurována žádná přepsání pro jednotlivé země. Sady pravidel se automaticky vyhodnocují a vynucují podle země a státu USA."
 
-#: admin/class-admin.php:912
+#: admin/class-admin.php:921
 msgid "Remove this override?"
 msgstr "Odebrat toto přepsání?"
 
-#: admin/class-admin.php:914
+#: admin/class-admin.php:923
 msgid "Runtime rule-set application"
 msgstr "Aplikace sady pravidel za běhu"
 
-#: admin/class-admin.php:915
 #: admin/class-admin.php:924
+#: admin/class-admin.php:933
 msgid "✅ active"
 msgstr "✅ activní"
 
-#: admin/class-admin.php:916
+#: admin/class-admin.php:925
 msgid "⚠️ disabled by Geo-Targeting settings or the faz_geo_ruleset_runtime filter"
 msgstr "⚠️ zakázáno nastavením Geografického cílení nebo filtrem faz_geo_ruleset_runtime"
 
-#: admin/class-admin.php:917
+#: admin/class-admin.php:926
 msgid "Catalog rulesets"
 msgstr "Sady pravidel katalogu"
 
-#: admin/class-admin.php:918
+#: admin/class-admin.php:927
 msgid "Fallback ruleset"
 msgstr "Záložní sada pravidel"
 
-#: admin/class-admin.php:919
+#: admin/class-admin.php:928
 msgid "ipinfo opt-in"
 msgstr "ipinfo opt-in"
 
-#: admin/class-admin.php:920
+#: admin/class-admin.php:929
 msgid "ipinfo API key"
 msgstr "Klíč API služby ipinfo"
 
-#: admin/class-admin.php:921
+#: admin/class-admin.php:930
 msgid "Schema migration v2"
 msgstr "Migrace schématu v2"
 
-#: admin/class-admin.php:922
+#: admin/class-admin.php:931
 msgid "Pending columns"
 msgstr "Sloupce čekající na zpracování"
 
-#: admin/class-admin.php:923
+#: admin/class-admin.php:932
 msgid "Migration disabled"
 msgstr "Migrace je deaktivována"
 
-#: admin/class-admin.php:925
+#: admin/class-admin.php:934
 msgid "⚪ disabled"
 msgstr "⚪ vypnuto"
 
-#: admin/class-admin.php:926
+#: admin/class-admin.php:935
 msgid "✅ configured"
 msgstr "✅ konfigurovat"
 
-#: admin/class-admin.php:927
+#: admin/class-admin.php:936
 msgid "⚪ not set"
 msgstr "⚪ není nastaveno"
 
-#: admin/class-admin.php:928
+#: admin/class-admin.php:937
 msgid "✅ complete"
 msgstr "✅ kompletní"
 
-#: admin/class-admin.php:929
+#: admin/class-admin.php:938
 msgid "⚠️ incomplete"
 msgstr "⚠️ nrekompletní"
 
-#: admin/class-admin.php:931
+#: admin/class-admin.php:940
 msgid "Resolved ruleset"
 msgstr "Vyřešená sada pravidel"
 
-#: admin/class-admin.php:932
+#: admin/class-admin.php:941
 msgid "Full ruleset JSON"
 msgstr "Úplný JSON sady pravidel"
 
-#: admin/class-admin.php:934
+#: admin/class-admin.php:943
 msgid "Settings saved."
 msgstr "Nastavení uložena."
 
-#: admin/class-admin.php:935
+#: admin/class-admin.php:944
 msgid "API key"
 msgstr "Klíč API"
 
-#: admin/class-admin.php:936
+#: admin/class-admin.php:945
 msgid "(stored — leave blank to keep)"
 msgstr "(uloženo — ponechte prázdné pro zachování)"
 
-#: admin/class-admin.php:937
+#: admin/class-admin.php:946
 msgid "token from ipinfo.io/account/token"
 msgstr "token z ipinfo.io/account/token"
 
-#: admin/class-admin.php:938
+#: admin/class-admin.php:947
 msgid "Enable ipinfo.io VPN detection"
 msgstr "Povolit detekci VPN přes ipinfo.io"
 
-#: admin/class-admin.php:939
+#: admin/class-admin.php:948
 msgid "I attest to having a DPF / SCC / DPA agreement with ipinfo.io for cross-border data transfer of EU/UK visitor IPs (required for opt-in)"
 msgstr "Potvrzuji, že mám smlouvu DPF / SCC / DPA s ipinfo.io pro přeshraniční předávání IP adres návštěvníků z EU/UK (vyžadováno pro opt-in)"
 
-#: admin/class-admin.php:941
+#: admin/class-admin.php:950
 msgid "I attest to having a Standard Contract (PIPL Art. 38) or CAC security assessment (Art. 40) for cross-border data transfers OF data subject to PIPL, OR to not process any data that requires such mechanisms."
 msgstr "Potvrzuji, že mám Standardní smlouvu (PIPL čl. 38) nebo bezpečnostní posouzení CAC (čl. 40) pro přeshraniční předávání dat podléhajících PIPL, NEBO že nezpracovávám žádná data vyžadující takové mechanismy."
 
 #. translators: %1$s: localised timestamp, %2$s: WP user id of the attesting admin
-#: admin/class-admin.php:943
+#: admin/class-admin.php:952
 #, php-format
 msgid "Attested at %1$s by user ID %2$s"
 msgstr "Ověřeno dne %1$s uživatelem ID %2$s"
 
-#: admin/class-admin.php:945
+#: admin/class-admin.php:954
 msgid "Save"
 msgstr "Uložit"
 
 #. translators: %s: low-level error message from the REST endpoint
-#: admin/class-admin.php:947
+#: admin/class-admin.php:956
 #, php-format
 msgid "Error: %s"
 msgstr "Chyba: %s"
 
-#: admin/class-admin.php:951
+#: admin/class-admin.php:960
 msgid "Load failed"
 msgstr "Načítání selhalo"
 
-#: admin/class-admin.php:953
+#: admin/class-admin.php:962
 msgid "Saved."
 msgstr "Uloženo."
 
-#: admin/class-admin.php:954
+#: admin/class-admin.php:963
 msgid "Save failed"
 msgstr "Uložení se nezdařilo"
 
-#: admin/class-admin.php:955
+#: admin/class-admin.php:964
 msgid "Preview failed"
 msgstr "Náhled selhal"
 
-#: admin/class-admin.php:956
+#: admin/class-admin.php:965
 msgid "The generator could not start on this page. Please reload; if it persists, a plugin or theme conflict is likely."
 msgstr "Na této stránce se generátor nepodařilo spustit. Zkuste stránku znovu načíst; pokud problém přetrvává, pravděpodobně jde o konflikt mezi pluginem a šablonou."
 
-#: admin/class-admin.php:958
+#: admin/class-admin.php:967
 msgid "Version confirmed. Existing consents are unchanged."
 msgstr "Verze potvrzena. Stávající souhlasy zůstávají beze změny."
 
-#: admin/class-admin.php:959
+#: admin/class-admin.php:968
 msgid "All returning visitors will be shown the consent banner again on their next visit. Continue?"
 msgstr "Všem vracejícím se návštěvníkům bude při příští návštěvě znovu zobrazen banner se žádostí o souhlas. Pokračovat?"
 
-#: admin/class-admin.php:960
+#: admin/class-admin.php:969
 msgid "Consents invalidated — returning visitors will be asked again."
 msgstr "Souhlasy byly zneplatněny — vracející se návštěvníci budou požádáni znovu."
 
-#: admin/class-admin.php:963
+#: admin/class-admin.php:972
 #: admin/views/dashboard.php:222
 #: admin/views/geo-routing.php:56
 #: admin/views/geo-routing.php:67
@@ -1446,694 +1474,694 @@ msgstr "Souhlasy byly zneplatněny — vracející se návštěvníci budou pož
 msgid "Loading…"
 msgstr "Načítání…"
 
-#: admin/class-admin.php:964
+#: admin/class-admin.php:973
 msgid "Could not load the sections."
 msgstr "Sekce se nepodařilo načíst."
 
-#: admin/class-admin.php:965
+#: admin/class-admin.php:974
 msgid "No template ships for this language, so the sections below show the bundled fallback. What you write is still stored against the language you picked."
 msgstr "Pro tento jazyk nejsou k dispozici žádné šablony, takže v následujících částech je zobrazen výchozí vzhled, který je součástí balíčku. To, co napíšete, se i tak uloží v jazyce, který jste vybrali."
 
-#: admin/class-admin.php:966
+#: admin/class-admin.php:975
 msgid "Detected"
 msgstr "Zjištěno"
 
-#: admin/class-admin.php:967
+#: admin/class-admin.php:976
 msgid "The cookie scanner observed a tracking domain for this service on your site."
 msgstr "Skener cookies zjistil sledovací doménu pro tuto službu na vašem webu."
 
-#: admin/class-admin.php:970
+#: admin/class-admin.php:979
 msgid "No matching services found among scanned cookies."
 msgstr "Mezi naskenovanými soubory cookie nebyly nalezeny žádné odpovídající služby."
 
 #. translators: %d: number of detected services already selected
-#: admin/class-admin.php:972
+#: admin/class-admin.php:981
 #, php-format
 msgid "All %d detected service(s) are already selected."
 msgstr "Všechny %d zjištěné služby jsou již vybrány."
 
-#: admin/class-admin.php:973
+#: admin/class-admin.php:982
 msgid "Detected services left unticked, as you set them."
 msgstr "Zjištěné služby ponechány nezaškrtnuté, jak jste nastavili."
 
 #. translators: %1$d: number of newly pre-ticked services, %2$d: number of services already selected
-#: admin/class-admin.php:975
+#: admin/class-admin.php:984
 #, php-format
 msgid "Pre-ticked %1$d new service(s), %2$d were already selected. Click Save to commit."
 msgstr "Předem zaškrtnuto %1$d nových služeb, %2$d bylo již vybráno. Klikněte na Uložit pro potvrzení."
 
-#: admin/class-admin.php:976
+#: admin/class-admin.php:985
 msgid "Auto-detect failed"
 msgstr "Automatické zjišťování selhalo"
 
-#: admin/class-admin.php:978
+#: admin/class-admin.php:987
 msgid "Analytics"
 msgstr "Analytika"
 
-#: admin/class-admin.php:979
+#: admin/class-admin.php:988
 msgid "Heatmaps & session recording"
 msgstr "Heatmapy a nahrávání relací"
 
-#: admin/class-admin.php:980
+#: admin/class-admin.php:989
 msgid "Advertising pixels"
 msgstr "Reklamní pixely"
 
-#: admin/class-admin.php:981
+#: admin/class-admin.php:990
 msgid "CDN, edge & performance"
 msgstr "CDN, edge & výkon"
 
-#: admin/class-admin.php:982
+#: admin/class-admin.php:991
 msgid "Anti-bot & forms"
 msgstr "Anti-bot a formuláře"
 
-#: admin/class-admin.php:983
+#: admin/class-admin.php:992
 msgid "Maps, embeds & media"
 msgstr "Mapy, vložený obsah a média"
 
-#: admin/class-admin.php:984
+#: admin/class-admin.php:993
 msgid "Chat & support"
 msgstr "Chat a podpora"
 
-#: admin/class-admin.php:985
+#: admin/class-admin.php:994
 msgid "Email & marketing automation"
 msgstr "E-mail a marketingová automatizace"
 
-#: admin/class-admin.php:986
+#: admin/class-admin.php:995
 msgid "Payments & commerce"
 msgstr "Platby a obchod"
 
-#: admin/class-admin.php:987
+#: admin/class-admin.php:996
 msgid "Social sign-in & auth"
 msgstr "Přihlášení přes sociální sítě a auth"
 
-#: admin/class-admin.php:988
+#: admin/class-admin.php:997
 msgid "Error & RUM monitoring"
 msgstr "Monitorování chyb a RUM"
 
-#: admin/class-admin.php:989
+#: admin/class-admin.php:998
 msgid "Personalisation & A/B testing"
 msgstr "Personalizace a A/B testování"
 
-#: admin/class-admin.php:990
+#: admin/class-admin.php:999
 msgid "Push notifications"
 msgstr "Push notifikace"
 
-#: admin/class-admin.php:994
+#: admin/class-admin.php:1003
 msgid "Google Analytics 4"
 msgstr "Google Analytics 4"
 
-#: admin/class-admin.php:995
+#: admin/class-admin.php:1004
 msgid "Google Tag Manager"
 msgstr "Google Tag Manager"
 
-#: admin/class-admin.php:996
+#: admin/class-admin.php:1005
 msgid "Matomo Analytics"
 msgstr "Matomo Analytics"
 
-#: admin/class-admin.php:997
+#: admin/class-admin.php:1006
 msgid "Plausible Analytics"
 msgstr "Plausible Analytics"
 
-#: admin/class-admin.php:998
+#: admin/class-admin.php:1007
 msgid "Mixpanel"
 msgstr "Mixpanel"
 
-#: admin/class-admin.php:999
+#: admin/class-admin.php:1008
 msgid "Amplitude"
 msgstr "Amplitude"
 
-#: admin/class-admin.php:1000
+#: admin/class-admin.php:1009
 msgid "Heap"
 msgstr "Heap"
 
-#: admin/class-admin.php:1001
+#: admin/class-admin.php:1010
 msgid "Fathom Analytics"
 msgstr "Fathom Analytics"
 
-#: admin/class-admin.php:1002
+#: admin/class-admin.php:1011
 msgid "Statcounter"
 msgstr "Statcounter"
 
-#: admin/class-admin.php:1004
+#: admin/class-admin.php:1013
 msgid "Hotjar"
 msgstr "Hotjar"
 
-#: admin/class-admin.php:1005
+#: admin/class-admin.php:1014
 #: admin/views/system-status.php:104
 msgid "Microsoft Clarity"
 msgstr "Microsoft Clarity"
 
-#: admin/class-admin.php:1006
+#: admin/class-admin.php:1015
 msgid "Mouseflow"
 msgstr "Mouseflow"
 
-#: admin/class-admin.php:1007
+#: admin/class-admin.php:1016
 msgid "Smartlook"
 msgstr "Smartlook"
 
-#: admin/class-admin.php:1008
+#: admin/class-admin.php:1017
 msgid "Lucky Orange"
 msgstr "Lucky Orange"
 
-#: admin/class-admin.php:1009
+#: admin/class-admin.php:1018
 msgid "FullStory"
 msgstr "FullStory"
 
-#: admin/class-admin.php:1010
+#: admin/class-admin.php:1019
 msgid "LogRocket"
 msgstr "LogRocket"
 
-#: admin/class-admin.php:1011
+#: admin/class-admin.php:1020
 msgid "Crazy Egg"
 msgstr "Crazy Egg"
 
-#: admin/class-admin.php:1013
+#: admin/class-admin.php:1022
 msgid "Google Ads"
 msgstr "Google Ads"
 
-#: admin/class-admin.php:1014
+#: admin/class-admin.php:1023
 msgid "Meta (Facebook) Pixel"
 msgstr "Meta (Facebook) Pixel"
 
-#: admin/class-admin.php:1015
+#: admin/class-admin.php:1024
 msgid "TikTok Pixel"
 msgstr "TikTok Pixel"
 
-#: admin/class-admin.php:1016
+#: admin/class-admin.php:1025
 msgid "LinkedIn Insight Tag"
 msgstr "LinkedIn Insight Tag"
 
-#: admin/class-admin.php:1017
+#: admin/class-admin.php:1026
 #: admin/views/system-status.php:103
 msgid "Microsoft UET"
 msgstr "Microsoft UET"
 
-#: admin/class-admin.php:1018
+#: admin/class-admin.php:1027
 msgid "Twitter (X) Pixel"
 msgstr "Twitter (X) Pixel"
 
-#: admin/class-admin.php:1019
+#: admin/class-admin.php:1028
 msgid "Pinterest Tag"
 msgstr "Pinterest Tag"
 
-#: admin/class-admin.php:1020
+#: admin/class-admin.php:1029
 msgid "Reddit Pixel"
 msgstr "Reddit Pixel"
 
-#: admin/class-admin.php:1021
+#: admin/class-admin.php:1030
 msgid "Snapchat Pixel"
 msgstr "Snapchat Pixel"
 
-#: admin/class-admin.php:1022
+#: admin/class-admin.php:1031
 msgid "Quora Pixel"
 msgstr "Quora Pixel"
 
-#: admin/class-admin.php:1023
+#: admin/class-admin.php:1032
 msgid "Outbrain"
 msgstr "Outbrain"
 
-#: admin/class-admin.php:1024
+#: admin/class-admin.php:1033
 msgid "Taboola"
 msgstr "Taboola"
 
-#: admin/class-admin.php:1025
+#: admin/class-admin.php:1034
 msgid "Criteo"
 msgstr "Criteo"
 
-#: admin/class-admin.php:1027
+#: admin/class-admin.php:1036
 msgid "Cloudflare"
 msgstr "Cloudflare"
 
-#: admin/class-admin.php:1028
+#: admin/class-admin.php:1037
 msgid "Fastly"
 msgstr "Fastly"
 
-#: admin/class-admin.php:1029
+#: admin/class-admin.php:1038
 msgid "Akamai"
 msgstr "Akamai"
 
-#: admin/class-admin.php:1030
+#: admin/class-admin.php:1039
 msgid "Amazon CloudFront"
 msgstr "Amazon CloudFront"
 
-#: admin/class-admin.php:1031
+#: admin/class-admin.php:1040
 msgid "BunnyCDN"
 msgstr "BunnyCDN"
 
-#: admin/class-admin.php:1032
+#: admin/class-admin.php:1041
 msgid "jsDelivr"
 msgstr "jsDelivr"
 
-#: admin/class-admin.php:1034
+#: admin/class-admin.php:1043
 msgid "Google reCAPTCHA"
 msgstr "Google reCAPTCHA"
 
-#: admin/class-admin.php:1035
+#: admin/class-admin.php:1044
 msgid "hCaptcha"
 msgstr "hCaptcha"
 
-#: admin/class-admin.php:1036
+#: admin/class-admin.php:1045
 msgid "Cloudflare Turnstile"
 msgstr "Cloudflare Turnstile"
 
-#: admin/class-admin.php:1037
+#: admin/class-admin.php:1046
 msgid "Akismet"
 msgstr "Akismet"
 
-#: admin/class-admin.php:1039
+#: admin/class-admin.php:1048
 msgid "Google Maps"
 msgstr "Google Maps"
 
-#: admin/class-admin.php:1040
+#: admin/class-admin.php:1049
 msgid "Mapbox"
 msgstr "Mapbox"
 
-#: admin/class-admin.php:1041
+#: admin/class-admin.php:1050
 msgid "OpenStreetMap"
 msgstr "OpenStreetMap"
 
-#: admin/class-admin.php:1042
+#: admin/class-admin.php:1051
 msgid "YouTube (embed)"
 msgstr "YouTube (vložené)"
 
-#: admin/class-admin.php:1043
+#: admin/class-admin.php:1052
 msgid "Vimeo (embed)"
 msgstr "Vimeo (vložené)"
 
-#: admin/class-admin.php:1044
+#: admin/class-admin.php:1053
 msgid "Twitter / X (embed)"
 msgstr "Twitter / X (vložení)"
 
-#: admin/class-admin.php:1045
+#: admin/class-admin.php:1054
 msgid "Instagram (embed)"
 msgstr "Instagram (vložené)"
 
-#: admin/class-admin.php:1046
+#: admin/class-admin.php:1055
 msgid "Spotify (embed)"
 msgstr "Spotify (vloženo)"
 
-#: admin/class-admin.php:1047
+#: admin/class-admin.php:1056
 msgid "SoundCloud (embed)"
 msgstr "SoundCloud (vloženo)"
 
-#: admin/class-admin.php:1048
+#: admin/class-admin.php:1057
 msgid "Wistia"
 msgstr "Wistia"
 
-#: admin/class-admin.php:1049
+#: admin/class-admin.php:1058
 msgid "Brightcove"
 msgstr "Brightcove"
 
-#: admin/class-admin.php:1050
+#: admin/class-admin.php:1059
 msgid "JW Player"
 msgstr "JW Player"
 
-#: admin/class-admin.php:1052
+#: admin/class-admin.php:1061
 msgid "Intercom"
 msgstr "Intercom"
 
-#: admin/class-admin.php:1053
+#: admin/class-admin.php:1062
 msgid "Zendesk Chat"
 msgstr "Zendesk Chat"
 
-#: admin/class-admin.php:1054
+#: admin/class-admin.php:1063
 msgid "Crisp"
 msgstr "Crisp"
 
-#: admin/class-admin.php:1055
+#: admin/class-admin.php:1064
 msgid "LiveChat"
 msgstr "LiveChat"
 
-#: admin/class-admin.php:1056
+#: admin/class-admin.php:1065
 msgid "Tawk.to"
 msgstr "Tawk.to"
 
-#: admin/class-admin.php:1057
+#: admin/class-admin.php:1066
 msgid "Drift"
 msgstr "Drift"
 
-#: admin/class-admin.php:1058
+#: admin/class-admin.php:1067
 msgid "HubSpot Chat"
 msgstr "HubSpot Chat"
 
-#: admin/class-admin.php:1059
+#: admin/class-admin.php:1068
 msgid "Tidio"
 msgstr "Tidio"
 
-#: admin/class-admin.php:1061
+#: admin/class-admin.php:1070
 msgid "Mailchimp"
 msgstr "Mailchimp"
 
-#: admin/class-admin.php:1062
+#: admin/class-admin.php:1071
 msgid "ActiveCampaign"
 msgstr "ActiveCampaign"
 
-#: admin/class-admin.php:1063
+#: admin/class-admin.php:1072
 msgid "ConvertKit / Kit"
 msgstr "ConvertKit / Kit"
 
-#: admin/class-admin.php:1064
+#: admin/class-admin.php:1073
 msgid "HubSpot"
 msgstr "HubSpot"
 
-#: admin/class-admin.php:1065
+#: admin/class-admin.php:1074
 msgid "Brevo (Sendinblue)"
 msgstr "Brevo (Sendinblue)"
 
-#: admin/class-admin.php:1066
+#: admin/class-admin.php:1075
 msgid "Klaviyo"
 msgstr "Klaviyo"
 
-#: admin/class-admin.php:1067
+#: admin/class-admin.php:1076
 msgid "Salesforce Pardot"
 msgstr "Salesforce Pardot"
 
-#: admin/class-admin.php:1068
+#: admin/class-admin.php:1077
 msgid "Adobe Marketo Engage"
 msgstr "Adobe Marketo Engage"
 
-#: admin/class-admin.php:1069
+#: admin/class-admin.php:1078
 msgid "Adobe Analytics"
 msgstr "Adobe Analytics"
 
-#: admin/class-admin.php:1071
+#: admin/class-admin.php:1080
 msgid "Stripe"
 msgstr "Stripe"
 
-#: admin/class-admin.php:1072
+#: admin/class-admin.php:1081
 msgid "PayPal"
 msgstr "PayPal"
 
-#: admin/class-admin.php:1073
+#: admin/class-admin.php:1082
 msgid "Square"
 msgstr "Square"
 
-#: admin/class-admin.php:1074
+#: admin/class-admin.php:1083
 msgid "Shopify"
 msgstr "Shopify"
 
-#: admin/class-admin.php:1076
+#: admin/class-admin.php:1085
 msgid "Sign in with Google"
 msgstr "Přihlásit se přes Google"
 
-#: admin/class-admin.php:1077
+#: admin/class-admin.php:1086
 msgid "Sign in with Apple"
 msgstr "Přihlásit se přes Apple"
 
-#: admin/class-admin.php:1078
+#: admin/class-admin.php:1087
 msgid "Sign in with Facebook"
 msgstr "Přihlásit se přes Facebook"
 
-#: admin/class-admin.php:1079
+#: admin/class-admin.php:1088
 msgid "Auth0"
 msgstr "Auth0"
 
-#: admin/class-admin.php:1080
+#: admin/class-admin.php:1089
 msgid "Okta"
 msgstr "Okta"
 
-#: admin/class-admin.php:1082
+#: admin/class-admin.php:1091
 msgid "Sentry"
 msgstr "Sentry"
 
-#: admin/class-admin.php:1083
+#: admin/class-admin.php:1092
 msgid "New Relic"
 msgstr "New Relic"
 
-#: admin/class-admin.php:1084
+#: admin/class-admin.php:1093
 msgid "Datadog"
 msgstr "Datadog"
 
-#: admin/class-admin.php:1085
+#: admin/class-admin.php:1094
 msgid "Bugsnag"
 msgstr "Bugsnag"
 
-#: admin/class-admin.php:1086
+#: admin/class-admin.php:1095
 msgid "Raygun"
 msgstr "Raygun"
 
-#: admin/class-admin.php:1088
+#: admin/class-admin.php:1097
 msgid "Optimizely"
 msgstr "Optimizely"
 
-#: admin/class-admin.php:1089
+#: admin/class-admin.php:1098
 msgid "VWO"
 msgstr "VWO"
 
-#: admin/class-admin.php:1090
+#: admin/class-admin.php:1099
 msgid "Convert.com"
 msgstr "Convert.com"
 
-#: admin/class-admin.php:1091
+#: admin/class-admin.php:1100
 msgid "AB Tasty"
 msgstr "AB Tasty"
 
-#: admin/class-admin.php:1093
+#: admin/class-admin.php:1102
 msgid "OneSignal"
 msgstr "OneSignal"
 
-#: admin/class-admin.php:1094
+#: admin/class-admin.php:1103
 msgid "Pushwoosh"
 msgstr "Pushwoosh"
 
-#: admin/class-admin.php:1095
+#: admin/class-admin.php:1104
 msgid "Firebase Cloud Messaging"
 msgstr "Firebase Cloud Messaging"
 
-#: admin/class-admin.php:1514
-#: admin/class-admin.php:1515
-#: admin/class-admin.php:1544
-#: admin/class-admin.php:1545
+#: admin/class-admin.php:1523
+#: admin/class-admin.php:1524
+#: admin/class-admin.php:1553
+#: admin/class-admin.php:1554
 msgid "FAZ Cookie"
 msgstr "FAZ Cookie"
 
-#: admin/class-admin.php:1566
+#: admin/class-admin.php:1575
 msgid "FAZ Cookie Manager — Network"
 msgstr "FAZ Cookie Manager — Síť"
 
-#: admin/class-admin.php:1568
+#: admin/class-admin.php:1577
 msgid "Multisite Configuration"
 msgstr "Konfigurace multisite"
 
-#: admin/class-admin.php:1569
+#: admin/class-admin.php:1578
 msgid "FAZ Cookie Manager is network-activated. Each subsite has its own independent configuration."
 msgstr "FAZ Cookie Manager je aktivován na úrovni sítě. Každý podweb má svou vlastní nezávislou konfiguraci."
 
-#: admin/class-admin.php:1570
+#: admin/class-admin.php:1579
 msgid "Navigate to each subsite's admin panel to configure the cookie banner, categories, and settings."
 msgstr "Přejděte do administračního panelu každého podwebu pro konfiguraci cookie banneru, kategorií a nastavení."
 
-#: admin/class-admin.php:1572
+#: admin/class-admin.php:1581
 msgid "Active Sites"
 msgstr "Aktivní weby"
 
-#: admin/class-admin.php:1576
+#: admin/class-admin.php:1585
 msgid "Site"
 msgstr "Web"
 
-#: admin/class-admin.php:1577
+#: admin/class-admin.php:1586
 #: admin/views/banner.php:169
 msgid "Banner Status"
 msgstr "Stav banneru"
 
-#: admin/class-admin.php:1578
+#: admin/class-admin.php:1587
 #: admin/views/cookies.php:179
 #: admin/views/cookies.php:245
 msgid "Actions"
 msgstr "Akce"
 
-#: admin/class-admin.php:1615
+#: admin/class-admin.php:1624
 msgid "Active"
 msgstr "Aktivní"
 
-#: admin/class-admin.php:1617
+#: admin/class-admin.php:1626
 msgid "Inactive"
 msgstr "Neaktivní"
 
-#: admin/class-admin.php:1620
+#: admin/class-admin.php:1629
 msgid "Configure"
 msgstr "Konfigurovat"
 
-#: admin/class-admin.php:1863
+#: admin/class-admin.php:1872
 msgid "WooCommerce detected"
 msgstr "WooCommerce detekován"
 
-#: admin/class-admin.php:1864
+#: admin/class-admin.php:1873
 msgid "FAZ Cookie Manager automatically whitelists WooCommerce core scripts and payment gateway scripts (PayPal, Stripe, Mollie, etc.) on checkout and cart pages so your store keeps working. This can be customised via the"
 msgstr "FAZ Cookie Manager automaticky přidává na seznam povolených základní skripty WooCommerce a skripty platebních bran (PayPal, Stripe, Mollie atd.) na stránkách pokladny a košíku, aby váš obchod fungoval. Toto lze přizpůsobit pomocí"
 
-#: admin/class-admin.php:1865
+#: admin/class-admin.php:1874
 msgid "and"
 msgstr "a"
 
-#: admin/class-admin.php:1866
+#: admin/class-admin.php:1875
 msgid "filters."
 msgstr "filtrů."
 
-#: admin/class-admin.php:1868
-#: admin/class-admin.php:2020
-#: admin/class-admin.php:2428
-#: admin/class-admin.php:2468
+#: admin/class-admin.php:1877
+#: admin/class-admin.php:2029
+#: admin/class-admin.php:2437
+#: admin/class-admin.php:2477
 msgid "Dismiss this notice"
 msgstr "Zavřít toto upozornění"
 
-#: admin/class-admin.php:1964
+#: admin/class-admin.php:1973
 msgid "Instagram Feed is handling its own consent"
 msgstr "Instagram Feed si spravuje souhlas sám"
 
-#: admin/class-admin.php:1965
+#: admin/class-admin.php:1974
 msgid "Its GDPR setting is set to Yes, so it serves local copies of images and never contacts Instagram. There is nothing left to block, so your cookie settings do not apply to that feed — and a visitor accepting will not restore the connection either, because Instagram Feed's restriction does not depend on consent."
 msgstr "Jeho nastavení GDPR je na hodnotě Ano, takže poskytuje lokální kopie obrázků a Instagram nikdy nekontaktuje. Není tedy co blokovat, a proto se vaše nastavení cookies na tento kanál nevztahuje — a ani souhlas návštěvníka spojení neobnoví, protože omezení Instagram Feed nezávisí na souhlasu."
 
-#: admin/class-admin.php:1968
+#: admin/class-admin.php:1977
 #: admin/modules/cookies/api/class-cookies-api.php:1157
 msgid "Open Instagram Feed settings"
 msgstr "Otevřít nastavení Instagram Feed"
 
-#: admin/class-admin.php:1969
-#: admin/class-admin.php:2202
+#: admin/class-admin.php:1978
+#: admin/class-admin.php:2211
 #: admin/views/dashboard.php:32
 msgid "Dismiss"
 msgstr "Zavřít"
 
-#: admin/class-admin.php:1972
+#: admin/class-admin.php:1981
 msgid "Set it to Automatic or No there if you would rather the visitor's choice decided whether that feed loads."
 msgstr "Pokud chcete, aby o načtení tohoto kanálu rozhodovala volba návštěvníka, nastavte tam možnost Automaticky nebo Ne."
 
-#: admin/class-admin.php:2012
+#: admin/class-admin.php:2021
 msgid "Payment plugin detected"
 msgstr "Zjištěn platební plugin"
 
 #. translators: %s: comma-separated list of detected payment plugin names.
-#: admin/class-admin.php:2015
+#: admin/class-admin.php:2024
 #, php-format
 msgid "FAZ Cookie Manager blocks payment provider scripts (PayPal, Stripe, …) until consent, so a payment form in %s can fail with an error like \"paypal is not defined\" until you authorise the provider. If your payment forms are broken, enable the specific gateway under Settings → Script Blocking → Payment gateways (it loads that provider's scripts before consent — your decision and responsibility)."
 msgstr "Nástroj FAZ Cookie Manager blokuje skripty platebních poskytovatelů (PayPal, Stripe, …) až do udělení souhlasu, takže platební formulář v %s může selhat s chybou typu \"paypal není definován\", dokud daného poskytovatele nepovolíte. Pokud vaše platební formuláře nefungují, povolte konkrétní platební bránu v části Nastavení → Blokování skriptů → Platební brány (skripty daného poskytovatele se tak načtou ještě před udělením souhlasu – rozhodnutí a odpovědnost jsou na vás)."
 
-#: admin/class-admin.php:2018
+#: admin/class-admin.php:2027
 msgid "Open settings"
 msgstr "Otevřít nastavení"
 
-#: admin/class-admin.php:2048
+#: admin/class-admin.php:2057
 msgid "Cookie definitions are using the built-in snapshot. Download the latest version from GitHub for improved categorization."
 msgstr "Definice cookies používají vestavěný snímek. Stáhněte si nejnovější verzi z GitHubu pro vylepšenou kategorizaci."
 
-#: admin/class-admin.php:2050
+#: admin/class-admin.php:2059
 msgid "Update Cookie Definitions"
 msgstr "Aktualizovat definice souborů cookie"
 
-#: admin/class-admin.php:2128
+#: admin/class-admin.php:2137
 msgid "Visitors under an opt-in privacy law are seeing no banner."
 msgstr "Návštěvníkům podléhajícím zákonu o ochraně soukromí typu opt-in se banner nezobrazuje."
 
-#: admin/class-admin.php:2129
+#: admin/class-admin.php:2138
 msgid "Every active banner uses the opt-out (Do Not Sell) model. For a visitor in the EU, UK, Brazil or any other opt-in jurisdiction, showing an opt-out notice while their cookies are blocked would misstate their position, so the banner is hidden for them and only the blocking stays on. Add a second active banner set to the opt-in model to cover those visitors."
 msgstr "Všechny aktivní bannery používají model opt-out (Neprodávat). U návštěvníka z EU, Spojeného království, Brazílie nebo jiné jurisdikce typu opt-in by zobrazení oznámení opt-out při zablokovaných cookies zkreslovalo jeho skutečnou situaci, proto je pro něj banner skrytý a zůstává aktivní pouze blokování. Pro pokrytí těchto návštěvníků přidejte druhý aktivní banner nastavený na model opt-in."
 
-#: admin/class-admin.php:2131
+#: admin/class-admin.php:2140
 msgid "Open banner settings"
 msgstr "Otevřít nastavení banneru"
 
 #. translators: %d: number of new cookies found
-#: admin/class-admin.php:2154
+#: admin/class-admin.php:2163
 #, php-format
 msgid "Scheduled scan found %d new cookie(s)."
 msgstr "Naplánované skenování našlo %d nových cookies."
 
-#: admin/class-admin.php:2158
+#: admin/class-admin.php:2167
 msgid "Review now"
 msgstr "Zkontrolovat nyní"
 
 #. translators: %s: comma-separated list of service names
-#: admin/class-admin.php:2194
+#: admin/class-admin.php:2203
 #, php-format
 msgid "FAZ Cookie Manager detected services on your site that are not covered by any selected IAB vendor: %s."
 msgstr "FAZ Cookie Manager detekoval služby na vašem webu, které nejsou pokryty žádným vybraným dodavatelem IAB: %s."
 
-#: admin/class-admin.php:2198
+#: admin/class-admin.php:2207
 msgid "Add the matching vendors to ensure proper TCF consent for these services."
 msgstr "Přidejte odpovídající dodavatele pro zajištění správného TCF souhlasu pro tyto služby."
 
-#: admin/class-admin.php:2200
+#: admin/class-admin.php:2209
 msgid "Go to Vendor List"
 msgstr "Přejít na seznam dodavatelů"
 
-#: admin/class-admin.php:2330
+#: admin/class-admin.php:2339
 msgid "FAZ Cookie Manager — Geo-routing is on but has no effect"
 msgstr "FAZ Cookie Manager — Geografické směrování je zapnuté, ale nemá žádný efekt"
 
-#: admin/class-admin.php:2331
+#: admin/class-admin.php:2340
 msgid "Geo-routing is enabled in Settings with \"Hide banner outside target regions\" as the default behaviour, but no target regions are selected and none of your banners has a target-countries list. In this configuration the plugin tells the CDN that every page is country-dependent (so no full-page cache is kept) while the geo-routing gate has nothing to target, so it can never actually fire. The most common symptom is \"X-Cdn-Cache-Status: MISS\" on every page, and a Lighthouse drop."
 msgstr "Geo-routing je v Nastavení povolen s \"Skrýt banner mimo cílové regiony\" jako výchozím chováním, ale nejsou vybrány žádné cílové regiony a žádný z vašich bannerů nemá seznam cílových zemí. V této konfiguraci plugin informuje CDN, že každá stránka závisí na zemi (není tedy udržována žádná celostránková mezipaměť), zatímco geo-routovací brána nemá nic, na co by cílila, takže se nikdy nemůže aktivovat. Nejčastějším příznakem je \"X-Cdn-Cache-Status: MISS\" na každé stránce a pokles skóre Lighthouse."
 
-#: admin/class-admin.php:2332
+#: admin/class-admin.php:2341
 msgid "Read this before you disable it: Geo-routing does two jobs. It picks a per-country banner, and it applies the jurisdiction ruleset resolved from the visitor's country, out of the plugin's whole catalogue — GDPR, UK GDPR, the US state laws, and the rest. Turning it off restores full-page caching and stops both. Every visitor is then handled by whatever law your active banner itself is set to, wherever they are — so if that banner is set to an opt-out law such as CCPA, nothing is blocked before consent, including for visitors in the EEA."
 msgstr "Než jej vypnete, přečtěte si toto: Geo-routing plní dvě úlohy. Vybírá banner podle země a aplikuje sadu pravidel dané jurisdikce zjištěnou podle země návštěvníka, a to z celého katalogu pluginu — GDPR, UK GDPR, zákony jednotlivých států USA a další. Jeho vypnutí obnoví celostránkovou mezipaměť a zastaví obě funkce. Každý návštěvník je pak posuzován podle práva, na které je nastaven váš aktivní banner, ať se nachází kdekoli — pokud je tedy tento banner nastaven na zákon typu opt-out, jako je CCPA, nic není před udělením souhlasu blokováno, a to ani u návštěvníků z EHP."
 
-#: admin/class-admin.php:2333
+#: admin/class-admin.php:2342
 msgid "So: disable Geo-routing if your site serves one jurisdiction and your banner is already configured for it, and you want the cache back. Keep it on if you rely on the plugin to apply the right law per country — in that case select one or more target regions in Settings → Geolocation, or add a target-countries list to at least one banner, and the warning will clear on its own."
 msgstr "Tedy: Geo-routing vypněte, pokud váš web obsluhuje jednu jurisdikci a váš banner je pro ni už nastaven a chcete zpět mezipaměť. Ponechte jej zapnutý, pokud se spoléháte na to, že plugin aplikuje správné právo podle jednotlivých zemí — v takovém případě vyberte jednu nebo více cílových oblastí v Nastavení → Geolokace, nebo přidejte seznam cílových zemí alespoň k jednomu banneru, a upozornění samo zmizí."
 
-#: admin/class-admin.php:2337
-#: admin/class-admin.php:2379
+#: admin/class-admin.php:2346
+#: admin/class-admin.php:2388
 msgid "Disable Geo-routing now"
 msgstr "Nyní zakázat geo-routing"
 
-#: admin/class-admin.php:2339
+#: admin/class-admin.php:2348
 msgid "Open Geo-routing settings"
 msgstr "Otevřít nastavení geo-směrování"
 
-#: admin/class-admin.php:2377
+#: admin/class-admin.php:2386
 msgid "Disabling…"
 msgstr "Deaktivuje se…"
 
-#: admin/class-admin.php:2378
+#: admin/class-admin.php:2387
 msgid "Geo-routing disabled. The CDN cache should start filling again within minutes of organic traffic. Per-country jurisdiction rulesets are no longer applied: every visitor is now handled by the law your active banner is set to. Re-enable Geo-Targeting in Settings → Geolocation if you need it back."
 msgstr "Geo-routing vypnut. Mezipaměť CDN by se měla během několika minut organického provozu začít znovu plnit. Sady pravidel podle jurisdikce pro jednotlivé země se už neuplatňují: každý návštěvník je nyní posuzován podle práva, na které je nastaven váš aktivní banner. Pokud to znovu potřebujete, zapněte Geografické cílení v Nastavení → Geolokace."
 
-#: admin/class-admin.php:2420
+#: admin/class-admin.php:2429
 msgid "FAZ Cookie Manager — Geo-Targeting now also controls jurisdiction enforcement"
 msgstr "FAZ Cookie Manager — Geografické cílení nyní řídí i vynucování jurisdikce"
 
-#: admin/class-admin.php:2421
+#: admin/class-admin.php:2430
 msgid "Until this update the plugin always applied the jurisdiction ruleset resolved from each visitor's country, whether or not Geo-Targeting was switched on. That is now what the Geo-Targeting toggle controls. Your site had it switched off, so this update switched it ON for you — otherwise visitors would have silently stopped being handled under their own country's law. Nothing about which visitors see the banner has changed."
 msgstr "Až do této aktualizace plugin vždy uplatňoval sadu pravidel podle jurisdikce zjištěnou podle země každého návštěvníka, bez ohledu na to, zda bylo Geografické cílení zapnuté. Přesně to teď řídí přepínač Geografického cílení. Na vašem webu bylo vypnuté, takže tato aktualizace ho za vás ZAPNULA — jinak by návštěvníci bez upozornění přestali být posuzováni podle práva své vlastní země. Na tom, kterým návštěvníkům se banner zobrazuje, se nic nezměnilo."
 
-#: admin/class-admin.php:2422
+#: admin/class-admin.php:2431
 msgid "If your site serves a single jurisdiction and your banner is already configured for it, you can safely turn Geo-Targeting off in Settings → Geolocation. Doing so also restores full-page caching, because the plugin then no longer has to tell your cache or CDN that every page depends on the visitor's country."
 msgstr "Pokud váš web obsluhuje jedinou jurisdikci a váš banner je pro ni už nastaven, můžete Geografické cílení bez obav vypnout v Nastavení → Geolokace. Tím se také obnoví celostránková mezipaměť, protože plugin už pak nemusí vaší mezipaměti nebo CDN sdělovat, že každá stránka závisí na zemi návštěvníka."
 
-#: admin/class-admin.php:2426
+#: admin/class-admin.php:2435
 msgid "Open Geo-Targeting settings"
 msgstr "Otevřít nastavení Geografického cílení"
 
-#: admin/class-admin.php:2460
+#: admin/class-admin.php:2469
 msgid "FAZ Cookie Manager — the Functional category is no longer marked as sale or sharing"
 msgstr "FAZ Cookie Manager — kategorie Funkční už není označena jako prodej nebo sdílení"
 
-#: admin/class-admin.php:2461
+#: admin/class-admin.php:2470
 msgid "Installs created before version 1.17.2 marked every category as involving the sale and sharing of personal data, Functional included, because that was the database default at the time. This update cleared it, because nobody chose it here."
 msgstr "Instalace vytvořené před verzí 1.17.2 označovaly každou kategorii jako prodej a sdílení osobních údajů, včetně kategorie Funkční, protože to byla tehdejší výchozí hodnota databáze. Tato aktualizace to zrušila, protože to zde nikdo nezvolil."
 
-#: admin/class-admin.php:2462
+#: admin/class-admin.php:2471
 msgid "What changes for your visitors: a browser sending Global Privacy Control is opted out of the categories marked Sale or Sharing, so maps, videos and other functional embeds were being blocked for those visitors with no way to accept them. They load again now. If your Functional category really does involve selling or sharing personal data, mark it again on the Cookies screen — the column is now shown on every site."
 msgstr "Co se mění pro vaše návštěvníky: prohlížeč, který odesílá Global Privacy Control, je vyloučen z kategorií označených jako Prodej nebo Sdílení, takže mapy, videa a další funkční vložený obsah byly pro tyto návštěvníky blokovány bez jakékoli možnosti je přijmout. Nyní se opět načítají. Pokud vaše kategorie Funkční skutečně zahrnuje prodej nebo sdílení osobních údajů, označte ji znovu na stránce Cookies — sloupec se nyní zobrazuje na každém webu."
 
-#: admin/class-admin.php:2466
+#: admin/class-admin.php:2475
 msgid "Open the cookie categories"
 msgstr "Otevřít kategorie cookies"
 
-#: admin/class-admin.php:2606
+#: admin/class-admin.php:2615
 msgid "Cookie Consent Overview"
 msgstr "Přehled souhlasu s cookies"
 
 #. translators: %d: number of consent interactions in last 30 days
-#: admin/class-admin.php:2673
+#: admin/class-admin.php:2682
 #, php-format
 msgid "%d consent interactions in the last 30 days."
 msgstr "%d interakcí se souhlasem za posledních 30 dní."
 
-#: admin/class-admin.php:2677
+#: admin/class-admin.php:2686
 msgid "View details"
 msgstr "Zobrazit podrobnosti"
 
@@ -2145,7 +2173,7 @@ msgstr "Zobrazit podrobnosti"
 #: admin/modules/cookies/api/class-cookies-api.php:515
 #: admin/modules/scanner/api/class-api.php:240
 #: admin/modules/scanner/api/class-api.php:1178
-#: admin/modules/settings/api/class-api.php:614
+#: admin/modules/settings/api/class-api.php:672
 msgid "Unique identifier for the resource."
 msgstr "Jedinečný identifikátor pro zdroj."
 
@@ -2204,7 +2232,7 @@ msgstr "Příliš mnoho požadavků. Zpomalte prosím."
 #: admin/modules/banners/api/class-api.php:768
 #: admin/modules/consentlogs/api/class-api.php:387
 #: admin/modules/cookies/api/class-api-controller.php:291
-#: admin/modules/settings/api/class-api.php:582
+#: admin/modules/settings/api/class-api.php:640
 msgid "Limit results to those matching a string."
 msgstr "Omezit výsledky na ty, které odpovídají řetězci."
 
@@ -2275,13 +2303,13 @@ msgstr "NEÚPLNÝ EXPORT: stahování přerušila chyba databáze."
 
 #: admin/modules/consentlogs/api/class-api.php:370
 #: admin/modules/cookies/api/class-api-controller.php:274
-#: admin/modules/settings/api/class-api.php:565
+#: admin/modules/settings/api/class-api.php:623
 msgid "Current page of the collection."
 msgstr "Aktuální stránka kolekce."
 
 #: admin/modules/consentlogs/api/class-api.php:378
 #: admin/modules/cookies/api/class-api-controller.php:282
-#: admin/modules/settings/api/class-api.php:573
+#: admin/modules/settings/api/class-api.php:631
 msgid "Maximum number of items to be returned in result set."
 msgstr "Maximální počet položek vrácených v sadě výsledků."
 
@@ -3485,113 +3513,118 @@ msgstr "Připnutí statické IP adresy je omezeno na název hostitele tohoto web
 msgid "Static IP pinning requires the WordPress cURL HTTP transport."
 msgstr "Připnutí statické IP adresy vyžaduje HTTP transport WordPress cURL."
 
-#: admin/modules/settings/api/class-api.php:320
+#: admin/modules/settings/api/class-api.php:347
 #: admin/modules/settings/includes/class-onboarding.php:160
 #: admin/modules/settings/includes/class-onboarding.php:349
 msgid "Choose a valid privacy law before finishing setup."
 msgstr "Před dokončením nastavení zvolte platnou legislativu pro ochranu soukromí."
 
-#: admin/modules/settings/api/class-api.php:385
+#: admin/modules/settings/api/class-api.php:387
+#, fuzzy
+msgid "The cookie policy was created, but its banner link could not be saved. Please try again."
+msgstr "Banner s informacemi o souborech cookie se nepodařilo vytvořit. Zkuste to prosím znovu."
+
+#: admin/modules/settings/api/class-api.php:443
 msgid "Filter name is required."
 msgstr "Název filtru je povinný."
 
-#: admin/modules/settings/api/class-api.php:395
+#: admin/modules/settings/api/class-api.php:453
 msgid "Filter name is not permitted."
 msgstr "Název filtru není povolen."
 
-#: admin/modules/settings/api/class-api.php:589
+#: admin/modules/settings/api/class-api.php:647
 msgid "Force fetch data"
 msgstr "Vynutit načtení dat"
 
-#: admin/modules/settings/api/class-api.php:592
+#: admin/modules/settings/api/class-api.php:650
 msgid "Notice dismissal duration in seconds; zero dismisses permanently."
 msgstr "Doba skrytí oznámení v sekundách; nula jej skryje trvale."
 
-#: admin/modules/settings/api/class-api.php:620
-#: admin/modules/settings/api/class-api.php:625
-#: admin/modules/settings/api/class-api.php:630
-#: admin/modules/settings/api/class-api.php:635
-#: admin/modules/settings/api/class-api.php:640
+#: admin/modules/settings/api/class-api.php:678
+#: admin/modules/settings/api/class-api.php:683
+#: admin/modules/settings/api/class-api.php:688
+#: admin/modules/settings/api/class-api.php:693
+#: admin/modules/settings/api/class-api.php:698
 msgid "Language."
 msgstr "Jazyk."
 
-#: admin/modules/settings/api/class-api.php:645
+#: admin/modules/settings/api/class-api.php:703
 msgid "Banner control settings."
 msgstr "Nastavení ovládání banneru."
 
-#: admin/modules/settings/api/class-api.php:650
+#: admin/modules/settings/api/class-api.php:708
 msgid "Microsoft consent settings."
 msgstr "Nastavení souhlasu Microsoft."
 
-#: admin/modules/settings/api/class-api.php:655
+#: admin/modules/settings/api/class-api.php:713
 msgid "Scanner settings."
 msgstr "Nastavení skeneru."
 
-#: admin/modules/settings/api/class-api.php:660
+#: admin/modules/settings/api/class-api.php:718
 msgid "Linked sites settings."
 msgstr "Nastavení propojených webů."
 
-#: admin/modules/settings/api/class-api.php:665
+#: admin/modules/settings/api/class-api.php:723
 msgid "IAB TCF settings."
 msgstr "Nastavení IAB TCF."
 
-#: admin/modules/settings/api/class-api.php:691
+#: admin/modules/settings/api/class-api.php:749
 msgid "A MaxMind license key is required."
 msgstr "Je vyžadován licenční klíč MaxMind."
 
-#: admin/modules/settings/api/class-api.php:761
+#: admin/modules/settings/api/class-api.php:819
 msgid "Active: pages use one strict GDPR shell, then resolve the live jurisdiction before the banner mounts or optional scripts can run."
 msgstr "Aktivní: stránky používají jediný přísný shell GDPR a poté zjistí aktuální jurisdikci ještě před připojením banneru nebo spuštěním volitelných skriptů."
 
-#: admin/modules/settings/api/class-api.php:762
+#: admin/modules/settings/api/class-api.php:820
 msgid "Off: while jurisdiction enforcement is active, country-dependent pages bypass the full-page cache."
 msgstr "Vypnuto: dokud je vynucování jurisdikce aktivní, stránky závislé na zemi obcházejí celostránkovou mezipaměť."
 
-#: admin/modules/settings/api/class-api.php:763
+#: admin/modules/settings/api/class-api.php:821
 msgid "Unavailable because jurisdiction enforcement is off. The active banner law applies to every visitor instead."
 msgstr "Není k dispozici, protože vynucování jurisdikce je vypnuté. Místo toho se na každého návštěvníka použije zákon uložený v aktivním banneru."
 
-#: admin/modules/settings/api/class-api.php:764
+#: admin/modules/settings/api/class-api.php:822
 msgid "Safe fallback: country-based language selection still changes server output, so these pages bypass the full-page cache."
 msgstr "Bezpečný záložní režim: výběr jazyka podle země stále mění výstup serveru, proto tyto stránky obcházejí celostránkovou mezipaměť."
 
-#: admin/modules/settings/api/class-api.php:765
+#: admin/modules/settings/api/class-api.php:823
 msgid "Safe fallback: IAB TCF output is not yet represented by the bootstrap payload, so these pages bypass the full-page cache."
 msgstr "Bezpečný záložní režim: výstup IAB TCF zatím není součástí dat bootstrapu, proto tyto stránky obcházejí celostránkovou mezipaměť."
 
-#: admin/modules/settings/api/class-api.php:766
+#: admin/modules/settings/api/class-api.php:824
 msgid "Safe fallback: hiding the banner outside target regions changes server output, so these pages bypass the full-page cache."
 msgstr "Bezpečný záložní režim: skrytí banneru mimo cílové oblasti mění výstup serveru, proto tyto stránky obcházejí celostránkovou mezipaměť."
 
-#: admin/modules/settings/api/class-api.php:767
+#: admin/modules/settings/api/class-api.php:825
 msgid "Safe fallback: one or more banners target specific countries, so these pages bypass the full-page cache."
 msgstr "Bezpečný záložní režim: jeden nebo více bannerů cílí na konkrétní země, proto tyto stránky obcházejí celostránkovou mezipaměť."
 
-#: admin/modules/settings/api/class-api.php:768
+#: admin/modules/settings/api/class-api.php:826
 msgid "Safe fallback: a custom integration declared country-dependent output, so these pages bypass the full-page cache."
 msgstr "Bezpečný záložní režim: vlastní integrace deklarovala výstup závislý na zemi, proto tyto stránky obcházejí celostránkovou mezipaměť."
 
-#: admin/modules/settings/api/class-api.php:769
+#: admin/modules/settings/api/class-api.php:827
 msgid "Safe fallback: no active global GDPR banner is available for the strict shell, so these pages bypass the full-page cache."
 msgstr "Bezpečný záložní režim: pro přísný shell není k dispozici žádný aktivní globální banner GDPR, proto tyto stránky obcházejí celostránkovou mezipaměť."
 
-#: admin/modules/settings/api/class-api.php:770
+#: admin/modules/settings/api/class-api.php:828
 msgid "Safe fallback: the strict GDPR ruleset could not be loaded, so these pages bypass the full-page cache."
 msgstr "Bezpečný záložní režim: přísnou sadu pravidel GDPR se nepodařilo načíst, proto tyto stránky obcházejí celostránkovou mezipaměť."
 
-#: admin/modules/settings/api/class-api.php:887
+#: admin/modules/settings/api/class-api.php:945
 msgid "Invalid export file."
 msgstr "Neplatný soubor exportu."
 
-#: admin/modules/settings/api/class-api.php:960
+#: admin/modules/settings/api/class-api.php:1018
 msgid "Failed to import banners. Transaction rolled back."
 msgstr "Import bannerů selhal. Transakce vrácena zpět."
 
-#: admin/modules/settings/api/class-api.php:1009
+#: admin/modules/settings/api/class-api.php:1067
 msgid "Failed to import categories. Transaction rolled back."
 msgstr "Import kategorií selhal. Transakce vrácena zpět."
 
-#: admin/modules/settings/api/class-api.php:1053
+#: admin/modules/settings/api/class-api.php:1111
 msgid "Failed to import cookies. Transaction rolled back."
 msgstr "Import cookies selhal. Transakce vrácena zpět."
 
@@ -3664,6 +3697,28 @@ msgstr "Neznámý klíč platební brány."
 msgid "Payment gateway values must be true or false."
 msgstr "Hodnoty platebních bran musí být true nebo false."
 
+#: admin/modules/settings/includes/class-policy-page.php:14
+msgid "You need permission to publish pages to create the cookie policy."
+msgstr ""
+
+#: admin/modules/settings/includes/class-policy-page.php:18
+msgid "Choose a supported language for the cookie policy."
+msgstr ""
+
+#: admin/modules/settings/includes/class-policy-page.php:24
+msgid "A cookie policy template is not available in the selected language. Choose another language or turn off automatic page creation and translate the policy manually."
+msgstr ""
+
+#: admin/modules/settings/includes/class-policy-page.php:44
+#, fuzzy
+msgid "Cookie policy creation is already in progress. Please try again shortly."
+msgstr "Skenování již probíhá, počkejte prosím na jeho dokončení."
+
+#: admin/modules/settings/includes/class-policy-page.php:69
+#, fuzzy
+msgid "The cookie policy page could not be created. Please try again."
+msgstr "Banner s informacemi o souborech cookie se nepodařilo vytvořit. Zkuste to prosím znovu."
+
 #: admin/views/banner.php:81
 msgid "Banners:"
 msgstr "Bannery:"
@@ -3685,13 +3740,13 @@ msgid "General"
 msgstr "Obecné"
 
 #: admin/views/banner.php:103
-#: admin/views/banner.php:1014
+#: admin/views/banner.php:1015
 msgid "Geo Targeting"
 msgstr "Geo cílení"
 
 #: admin/views/banner.php:104
-#: admin/views/banner.php:1015
-#: admin/views/banner.php:1025
+#: admin/views/banner.php:1016
+#: admin/views/banner.php:1026
 msgid "Content"
 msgstr "Obsah"
 
@@ -3801,12 +3856,12 @@ msgid "Position"
 msgstr "Pozice"
 
 #: admin/views/banner.php:228
-#: admin/views/banner.php:893
+#: admin/views/banner.php:894
 msgid "Bottom Left"
 msgstr "Vlevo dole"
 
 #: admin/views/banner.php:229
-#: admin/views/banner.php:894
+#: admin/views/banner.php:895
 msgid "Bottom Right"
 msgstr "Vpravo dole"
 
@@ -3933,7 +3988,7 @@ msgid "Banner Text"
 msgstr "Text banneru"
 
 #: admin/views/banner.php:333
-#: admin/views/banner.php:776
+#: admin/views/banner.php:777
 msgid "Language:"
 msgstr "Jazyk:"
 
@@ -3964,7 +4019,7 @@ msgid "Accept Button"
 msgstr "Tlačítko Přijmout"
 
 #: admin/views/banner.php:372
-#: admin/views/banner.php:809
+#: admin/views/banner.php:810
 #: frontend/class-amp-consent.php:428
 msgid "Accept All"
 msgstr "Přijmout vše"
@@ -3974,7 +4029,7 @@ msgid "Reject Button"
 msgstr "Tlačítko Odmítnout"
 
 #: admin/views/banner.php:376
-#: admin/views/banner.php:817
+#: admin/views/banner.php:818
 #: frontend/class-amp-consent.php:429
 msgid "Reject All"
 msgstr "Odmítnout vše"
@@ -3996,516 +4051,521 @@ msgid "Cookie Policy URL"
 msgstr "URL zásad cookies"
 
 #: admin/views/banner.php:389
+#: admin/views/cookie-policy.php:294
+msgid "Type a page title to find its URL, or enter a link manually."
+msgstr ""
+
+#: admin/views/banner.php:390
 msgid "Relative (/cookie-policy) or absolute (https://example.com/privacy). Default: /cookie-policy"
 msgstr "Relativní (/cookie-policy) nebo absolutní (https://example.com/privacy). Výchozí: /cookie-policy"
 
-#: admin/views/banner.php:396
+#: admin/views/banner.php:397
 msgid "Close Button"
 msgstr "Tlačítko Zavřít"
 
-#: admin/views/banner.php:399
+#: admin/views/banner.php:400
 msgid "Close Button Text (Accessibility)"
 msgstr "Text tlačítka Zavřít (Přístupnost)"
 
-#: admin/views/banner.php:400
+#: admin/views/banner.php:401
 msgid "Close"
 msgstr "Zavřít"
 
-#: admin/views/banner.php:401
+#: admin/views/banner.php:402
 msgid "Used as <code>aria-label</code> for screen readers. The close button displays only the X icon — this text is read aloud by assistive technology to describe the button's action."
 msgstr "Používá se jako <code>aria-label</code> pro čtečky obrazovky. Tlačítko zavřít zobrazuje pouze ikonu X — tento text je čten nahlas pomocnou technologií k popisu akce tlačítka."
 
-#: admin/views/banner.php:410
+#: admin/views/banner.php:411
 msgid "Notice Banner Colours"
 msgstr "Barvy oznámení banneru"
 
-#: admin/views/banner.php:414
-#: admin/views/banner.php:654
+#: admin/views/banner.php:415
+#: admin/views/banner.php:655
 msgid "Background"
 msgstr "Pozadí"
 
-#: admin/views/banner.php:421
+#: admin/views/banner.php:422
 msgid "Border"
 msgstr "Ohraničení"
 
-#: admin/views/banner.php:428
+#: admin/views/banner.php:429
 msgid "Title Text"
 msgstr "Text nadpisu"
 
-#: admin/views/banner.php:435
+#: admin/views/banner.php:436
 msgid "Description Text"
 msgstr "Text popisu"
 
-#: admin/views/banner.php:442
+#: admin/views/banner.php:443
 msgid "Link Text"
 msgstr "Text odkazu"
 
-#: admin/views/banner.php:444
+#: admin/views/banner.php:445
 msgid "Link text colour picker"
 msgstr "Výběr barvy textu odkazu"
 
-#: admin/views/banner.php:445
+#: admin/views/banner.php:446
 msgid "Link text colour hex value"
 msgstr "Hexadecimální hodnota barvy textu odkazu"
 
-#: admin/views/banner.php:453
+#: admin/views/banner.php:454
 msgid "Button Colours"
 msgstr "Barvy tlačítek"
 
-#: admin/views/banner.php:457
+#: admin/views/banner.php:458
 msgid "Accept — Background"
 msgstr "Přijmout — Pozadí"
 
-#: admin/views/banner.php:464
+#: admin/views/banner.php:465
 msgid "Accept — Text"
 msgstr "Přijmout — Text"
 
-#: admin/views/banner.php:471
+#: admin/views/banner.php:472
 msgid "Accept — Border"
 msgstr "Přijmout — Ohraničení"
 
-#: admin/views/banner.php:490
+#: admin/views/banner.php:491
 msgid "While jurisdiction routing is active these three fields are overridden: equal prominence means Reject is painted with the Accept button's colours, so set the pair you want on Accept above. They apply again if you disable the routing runtime."
 msgstr "Dokud je aktivní směrování podle jurisdikce, jsou tato tři pole přepsána: rovnocenná viditelnost znamená, že tlačítko Odmítnout je vykresleno barvami tlačítka Přijmout, takže požadovanou dvojici barev nastavte výše u tlačítka Přijmout. Znovu se uplatní, pokud běhové směrování vypnete."
 
-#: admin/views/banner.php:494
+#: admin/views/banner.php:495
 msgid "Reject — Background"
 msgstr "Odmítnout — Pozadí"
 
-#: admin/views/banner.php:501
+#: admin/views/banner.php:502
 msgid "Reject — Text"
 msgstr "Odmítnout — Text"
 
-#: admin/views/banner.php:508
+#: admin/views/banner.php:509
 msgid "Reject — Border"
 msgstr "Odmítnout — Ohraničení"
 
-#: admin/views/banner.php:516
+#: admin/views/banner.php:517
 msgid "Settings — Background"
 msgstr "Nastavení — Pozadí"
 
-#: admin/views/banner.php:523
+#: admin/views/banner.php:524
 msgid "Settings — Text"
 msgstr "Nastavení — Text"
 
-#: admin/views/banner.php:530
+#: admin/views/banner.php:531
 msgid "Settings — Border"
 msgstr "Nastavení — Ohraničení"
 
-#: admin/views/banner.php:538
+#: admin/views/banner.php:539
 msgid "Do Not Sell — Text"
 msgstr "Neprodávat — Text"
 
-#: admin/views/banner.php:540
+#: admin/views/banner.php:541
 msgid "Do Not Sell text colour picker"
 msgstr "Výběr barvy textu Neprodávat"
 
-#: admin/views/banner.php:541
+#: admin/views/banner.php:542
 msgid "Do Not Sell text colour hex value"
 msgstr "Hexadecimální hodnota barvy textu Neprodávat"
 
-#: admin/views/banner.php:546
+#: admin/views/banner.php:547
 msgid "Button corner radius"
 msgstr "Poloměr rohů tlačítek"
 
-#: admin/views/banner.php:548
+#: admin/views/banner.php:549
 msgid "Applies to every banner button — Accept, Reject, Customise and Do Not Sell — in the notice bar and the preference center. A length such as 0, 8px, 50px for pill-shaped, or 0.5rem. Leave empty to keep the shipped 2px."
 msgstr "Platí pro všechna tlačítka banneru — Přijmout, Odmítnout, Přizpůsobit a Do Not Sell — v informační liště i v centru předvoleb. Délka například 0, 8px, 50px pro tvar pilulky nebo 0.5rem. Ponechte prázdné, chcete-li zachovat dodávané 2px."
 
-#: admin/views/banner.php:569
+#: admin/views/banner.php:570
 msgid "Consent Toggle Colours"
 msgstr "Barvy přepínačů souhlasu"
 
-#: admin/views/banner.php:573
+#: admin/views/banner.php:574
 msgid "Toggle — Active"
 msgstr "Přepínač — Aktivní"
 
-#: admin/views/banner.php:580
+#: admin/views/banner.php:581
 msgid "Toggle — Inactive"
 msgstr "Přepínač — Neaktivní"
 
-#: admin/views/banner.php:587
+#: admin/views/banner.php:588
 msgid "Applies to the category switches in the preference centre, and to the inline category toggles when the Classic banner type shows them."
 msgstr "Platí pro přepínače kategorií v centru předvoleb a pro vložené přepínače kategorií, pokud je zobrazuje klasický typ banneru."
 
-#: admin/views/banner.php:592
+#: admin/views/banner.php:593
 msgid "Category Preview Colours"
 msgstr "Barvy náhledu kategorie"
 
-#: admin/views/banner.php:596
+#: admin/views/banner.php:597
 msgid "Label Text"
 msgstr "Text štítku"
 
-#: admin/views/banner.php:603
+#: admin/views/banner.php:604
 msgid "Save Button — Text"
 msgstr "Tlačítko Uložit — Text"
 
-#: admin/views/banner.php:610
+#: admin/views/banner.php:611
 msgid "Save Button — Background"
 msgstr "Tlačítko Uložit — Pozadí"
 
-#: admin/views/banner.php:617
+#: admin/views/banner.php:618
 msgid "Save Button — Border"
 msgstr "Tlačítko Uložit — Ohraničení"
 
-#: admin/views/banner.php:628
+#: admin/views/banner.php:629
 msgid "Preference Center Colours"
 msgstr "Barvy centra předvoleb"
 
-#: admin/views/banner.php:632
+#: admin/views/banner.php:633
 msgid "Show More / Show Less Link"
 msgstr "Odkaz Zobrazit více / Zobrazit méně"
 
-#: admin/views/banner.php:634
+#: admin/views/banner.php:635
 msgid "Show More / Show Less link colour picker"
 msgstr "Výber barvy odkazu Zobrazit více / Zobrazit méně"
 
-#: admin/views/banner.php:635
+#: admin/views/banner.php:636
 msgid "Show More / Show Less link colour hex value"
 msgstr "Hex hodnota barvy odkazu Zobrazit více / Zobrazit méně"
 
-#: admin/views/banner.php:639
+#: admin/views/banner.php:640
 msgid "Read More / Cookie Policy Link"
 msgstr "Odkaz Číst více / Zásady cookies"
 
-#: admin/views/banner.php:641
+#: admin/views/banner.php:642
 msgid "Read More / Cookie Policy link colour picker"
 msgstr "Výběr barvy odkazu Číst více / Zásady cookies"
 
-#: admin/views/banner.php:642
+#: admin/views/banner.php:643
 msgid "Read More / Cookie Policy link colour hex value"
 msgstr "Hexadecimální hodnota barvy odkazu Číst více / Zásady cookies"
 
-#: admin/views/banner.php:650
+#: admin/views/banner.php:651
 msgid "Revisit Widget"
 msgstr "Widget pro opětovné navštívení"
 
-#: admin/views/banner.php:661
+#: admin/views/banner.php:662
 msgid "Icon"
 msgstr "Ikona"
 
-#: admin/views/banner.php:675
+#: admin/views/banner.php:676
 msgid "Button Visibility"
 msgstr "Viditelnost tlačítek"
 
-#: admin/views/banner.php:688
+#: admin/views/banner.php:689
 msgid "Show Accept Button"
 msgstr "Zobrazit tlačítko Přijmout"
 
-#: admin/views/banner.php:691
+#: admin/views/banner.php:692
 msgid "Locked on while jurisdiction routing is active. Equal prominence works both ways: the runtime keeps Accept and Reject on together, so neither can be hidden while the other stays. Their wording and colours are still yours."
 msgstr "Uzamčeno v zapnutém stavu, dokud je aktivní směrování podle jurisdikce. Rovnocenná viditelnost funguje oběma směry: běhové prostředí udržuje Přijmout a Odmítnout zapnuté společně, takže žádné z nich nelze skrýt, zatímco druhé zůstává zobrazeno. Jejich znění a barvy zůstávají zcela na vás."
 
-#: admin/views/banner.php:698
+#: admin/views/banner.php:699
 msgid "Show Reject Button"
 msgstr "Zobrazit tlačítko Odmítnout"
 
-#: admin/views/banner.php:701
+#: admin/views/banner.php:702
 msgid "Locked on while jurisdiction routing is active. Rule sets for the EU, UK, Switzerland and most other opt-in regimes require Reject to sit beside Accept with equal prominence, so the runtime keeps it visible for those visitors whatever this switch says. Styling both buttons more quietly is fine; hiding the refusal is not."
 msgstr "Uzamčeno v zapnutém stavu, dokud je aktivní směrování podle jurisdikce. Sady pravidel pro EU, Spojené království, Švýcarsko a většinu ostatních režimů opt-in vyžadují, aby tlačítko Odmítnout stálo vedle tlačítka Přijmout se stejnou viditelností, takže je běhové prostředí pro tyto návštěvníky ponechá viditelné bez ohledu na nastavení tohoto přepínače. Ztlumit styl obou tlačítek je v pořádku; skrýt odmítnutí nikoli."
 
-#: admin/views/banner.php:708
+#: admin/views/banner.php:709
 msgid "Show Settings Button"
 msgstr "Zobrazit tlačítko Nastavení"
 
 #. translators: 1: number of rule sets requiring a separate sensitive-data choice, 2: total number of shipped rule sets.
-#: admin/views/banner.php:715
+#: admin/views/banner.php:716
 #, php-format
 msgid "This switch still applies, but not everywhere: %1$d of the %2$d shipped rule sets require a separate opt-in for sensitive data, which needs a reachable preference centre. For visitors under those laws the runtime shows this button and the Save control regardless. Everyone else sees your choice."
 msgstr "Tento přepínač stále platí, ale ne všude: %1$d z %2$d dodávaných sad pravidel vyžaduje samostatný souhlas opt-in pro citlivé údaje, což vyžaduje dostupné centrum předvoleb. Pro návštěvníky podléhající těmto zákonům běhové prostředí toto tlačítko a ovládací prvek Uložit zobrazí vždy. Všem ostatním se zobrazí vaše volba."
 
-#: admin/views/banner.php:727
+#: admin/views/banner.php:728
 msgid "Show Read More / Cookie Policy Link"
 msgstr "Zobrazit odkaz Číst více / Zásady cookies"
 
-#: admin/views/banner.php:734
+#: admin/views/banner.php:735
 msgid "Show Close Button"
 msgstr "Zobrazit tlačítko Zavřít"
 
-#: admin/views/banner.php:742
+#: admin/views/banner.php:743
 msgid "Allow Close (X) alongside Reject button"
 msgstr "Povolit zavření (X) vedle tlačítka Odmítnout"
 
-#: admin/views/banner.php:743
+#: admin/views/banner.php:744
 msgid "Non-EU only"
 msgstr "Pouze mimo EU"
 
 #. translators: %1$s: EDPB Guidelines link, %2$s: Italian Garante Provvedimento link.
-#: admin/views/banner.php:750
+#: admin/views/banner.php:751
 #, php-format
 msgid "<strong>Off by default — keep OFF for EU/EEA/UK visitors.</strong> The %1$s and the %2$s identify \"X close + labelled Reject on the same banner\" as a recognised dark pattern (unequal-weight dismissal paths). Safe to enable on banners targeted at US, Brazil, Canada or Australian traffic where this rule does not apply — typically used together with multi-banner geo-routing (Geo Targeting tab) to keep the X on a CCPA-style banner."
 msgstr "<strong>Výchozí stav: vypnuto — nechejte VYPNUTO pro návštěvníky z EU/EHP/VB.</strong> %1$s a %2$s označují \"zavření X + označené Odmítnout na stejném banneru\" jako uznávaný temný vzor (nerovnocenné cesty zavření). Bezpečné zapnout na bannerech cílených na provoz z USA, Brazílie, Kanady nebo Austrálie, kde toto pravidlo neplatí — obvykle se používá spolu s geo-routingem více bannerů (záložka Geo Targeting) pro zachování X na banneru ve stylu CCPA."
 
-#: admin/views/banner.php:771
+#: admin/views/banner.php:772
 msgid "Looking for the preference center <strong>colours</strong> (the &quot;Show more/less&quot; and Cookie Policy link)? They live under <strong>Colours → Preference Center Colours</strong>, grouped with every other colour setting."
 msgstr "Hledáte <strong>barvy</strong> centra předvoleb (odkaz &quot;Zobrazit více/méně&quot; a Zásady cookies)? Najdete je pod <strong>Barvy → Barvy centra předvoleb</strong>, seskupené se všemi ostatními nastaveními barev."
 
-#: admin/views/banner.php:774
+#: admin/views/banner.php:775
 msgid "Preference Center Text"
 msgstr "Text centra předvoleb"
 
-#: admin/views/banner.php:783
-#: admin/views/banner.php:831
+#: admin/views/banner.php:784
+#: admin/views/banner.php:832
 msgid "Title"
 msgstr "Nadpis"
 
-#: admin/views/banner.php:784
+#: admin/views/banner.php:785
 msgid "Customize consent preferences"
 msgstr "Přizpůsobit předvolby souhlasu"
 
-#: admin/views/banner.php:804
-#: admin/views/banner.php:852
+#: admin/views/banner.php:805
+#: admin/views/banner.php:853
 msgid "Supports plain text or HTML. Keep it short enough to stay readable on mobile."
 msgstr "Podporuje prostý text nebo HTML. Udržujte jej dostatečně krátký, aby zůstal čitelný na mobilních zařízeních."
 
-#: admin/views/banner.php:808
+#: admin/views/banner.php:809
 msgid "Accept All Button"
 msgstr "Tlačítko Přijmout vše"
 
-#: admin/views/banner.php:812
+#: admin/views/banner.php:813
 msgid "Save Preferences Button"
 msgstr "Tlačítko Uložit předvolby"
 
-#: admin/views/banner.php:813
+#: admin/views/banner.php:814
 msgid "Save My Preferences"
 msgstr "Uložit moje předvolby"
 
-#: admin/views/banner.php:816
+#: admin/views/banner.php:817
 msgid "Reject All Button"
 msgstr "Tlačítko Odmítnout vše"
 
-#: admin/views/banner.php:826
+#: admin/views/banner.php:827
 msgid "Opt-out (Do Not Sell) Text"
 msgstr "Text pro opt-out (Do Not Sell)"
 
-#: admin/views/banner.php:829
+#: admin/views/banner.php:830
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Text modálního okna «Předvolby odhlášení», které návštěvník uvidí po kliknutí na odkaz «Do Not Sell or Share My Personal Information». Zobrazuje se pouze u bannerů CCPA / zákonů států USA (a Obojí). Řídí se jazykem vybraným výše."
 
-#: admin/views/banner.php:832
+#: admin/views/banner.php:833
 #: frontend/class-frontend.php:2869
 #: frontend/modules/banner-rest/class-banner-rest.php:595
 msgid "Opt-out Preferences"
 msgstr "Předvolby odhlášení"
 
-#: admin/views/banner.php:855
+#: admin/views/banner.php:856
 msgid "Opt-out Toggle Label"
 msgstr "Popisek přepínače opt-out"
 
-#: admin/views/banner.php:856
+#: admin/views/banner.php:857
 #: includes/class-do-not-sell-shortcode.php:90
 msgid "Do Not Sell or Share My Personal Information"
 msgstr "Neprodávat ani nesdílet mé osobní údaje"
 
-#: admin/views/banner.php:862
+#: admin/views/banner.php:863
 msgid "Audit Table"
 msgstr "Kontrolní tabulka"
 
-#: admin/views/banner.php:868
+#: admin/views/banner.php:869
 msgid "Show cookie audit table in preference center"
 msgstr "Zobrazit kontrolní tabulku cookies v centru předvoleb"
 
-#: admin/views/banner.php:878
+#: admin/views/banner.php:879
 msgid "Revisit Consent"
 msgstr "Opětovné navštívení souhlasu"
 
-#: admin/views/banner.php:884
+#: admin/views/banner.php:885
 msgid "Show revisit consent widget"
 msgstr "Zobrazit widget pro opětovné navštívení souhlasu"
 
-#: admin/views/banner.php:887
+#: admin/views/banner.php:888
 msgid "Locked on while jurisdiction routing is active. Every shipped rule set requires a standing way to reopen and withdraw consent, so the runtime keeps this widget visible whatever this switch says — withdrawing has to stay as easy as giving. Its position, colours and icon below remain yours to change."
 msgstr "Uzamčeno v zapnutém stavu, dokud je aktivní směrování podle jurisdikce. Každá dodávaná sada pravidel vyžaduje trvalý způsob, jak souhlas znovu otevřít a odvolat, takže běhové prostředí ponechá tento widget viditelný bez ohledu na nastavení tohoto přepínače — odvolání souhlasu musí zůstat stejně snadné jako jeho udělení. Jeho umístění, barvy a ikona níže zůstávají plně na vás."
 
-#: admin/views/banner.php:891
+#: admin/views/banner.php:892
 msgid "Widget Position"
 msgstr "Pozice widgetu"
 
-#: admin/views/banner.php:898
+#: admin/views/banner.php:899
 msgid "Widget Label"
 msgstr "Štítek widgetu"
 
-#: admin/views/banner.php:899
+#: admin/views/banner.php:900
 msgid "Consent Preferences"
 msgstr "Předvolby souhlasu"
 
-#: admin/views/banner.php:900
+#: admin/views/banner.php:901
 msgid "Used as tooltip and screen reader label (aria-label)."
 msgstr "Používá se jako popisek a štítek pro čtečky obrazovky (aria-label)."
 
-#: admin/views/banner.php:903
+#: admin/views/banner.php:904
 msgid "Inline consent button or footer link"
 msgstr "Vložené tlačítko souhlasu nebo odkaz v patičce"
 
-#: admin/views/banner.php:904
+#: admin/views/banner.php:905
 msgid "Place this shortcode in a Shortcode block in your footer, page or post to reopen consent preferences:"
 msgstr "Vložte tento shortcode do bloku Shortcode v patičce, na stránce nebo v příspěvku, chcete-li znovu otevřít předvolby souhlasu:"
 
-#: admin/views/banner.php:907
+#: admin/views/banner.php:908
 msgid "The link uses your theme’s link styling. To use it instead of the floating widget, add it to a persistent footer on every page and turn off “Show revisit consent widget” above. When jurisdiction routing locks that switch on, the widget remains visible alongside the link."
 msgstr "Odkaz přebírá styl odkazů vaší šablony. Chcete-li jej použít místo plovoucího widgetu, umístěte jej do patičky přítomné na každé stránce a výše vypněte možnost „Zobrazit widget pro opětovné zobrazení souhlasu“. Pokud směrování podle jurisdikce tento přepínač vynutí, zůstane widget viditelný vedle odkazu."
 
-#: admin/views/banner.php:908
+#: admin/views/banner.php:909
 msgid "For a custom HTML link, use the data-faz-open-preferences attribute. Standard navigation menu labels do not process shortcodes."
 msgstr "Pro vlastní odkaz v HTML použijte atribut data-faz-open-preferences. Standardní popisky navigačních nabídek shortcody nezpracovávají."
 
-#: admin/views/banner.php:910
+#: admin/views/banner.php:911
 msgid "Optional attributes: <code>text=&quot;Manage cookies&quot;</code> (custom label) and <code>class=&quot;my-button&quot;</code> (extra CSS classes). The button automatically inherits your banner&#39;s primary button colours. <strong>It needs the banner runtime to work, so place it on a page where the banner is active</strong> — pages added to the banner exclusion list don't load the consent runtime, so the button won't open the preferences there."
 msgstr "Volitelné atributy: <code>text=&quot;Spravovat cookies&quot;</code> (vlastní popisek) a <code>class=&quot;my-button&quot;</code> (dodatečné CSS třídy). Tlačítko automaticky přebírá barvy primárního tlačítka vašeho banneru. <strong>Vyžaduje ke svému fungování runtime banneru, proto jej umístěte na stránku, kde je banner aktivní</strong> — stránky přidané do seznamu vyloučení banneru nenačítají runtime souhlasu, takže tam tlačítko předvolby neotevře."
 
-#: admin/views/banner.php:916
+#: admin/views/banner.php:917
 msgid "Behaviours"
 msgstr "Chování"
 
-#: admin/views/banner.php:922
+#: admin/views/banner.php:923
 msgid "Reload page after accepting consent"
 msgstr "Znovu načíst stránku po přijetí souhlasu"
 
-#: admin/views/banner.php:929
+#: admin/views/banner.php:930
 msgid "Respect Global Privacy Control (GPC)"
 msgstr "Respektovat Global Privacy Control (GPC)"
 
-#: admin/views/banner.php:940
+#: admin/views/banner.php:941
 msgid "A Global Privacy Control signal is always honoured, whether this switch is on or off. GPC is a binding opt-out of the sale and sharing of personal data in several US states, and a browser does not say which law applies to its visitor, so the plugin treats it the same everywhere."
 msgstr "Signál Global Privacy Control je vždy respektován, ať je tento přepínač zapnutý, nebo vypnutý. V několika státech USA je GPC závazným odmítnutím (opt-out) prodeje a sdílení osobních údajů a prohlížeč neuvádí, jaký zákon se na jeho uživatele vztahuje, proto s ním plugin všude zachází stejně."
 
-#: admin/views/banner.php:941
+#: admin/views/banner.php:942
 msgid "What it blocks is decided on the Cookies page: a visitor sending GPC (Brave, DuckDuckGo, Firefox with the setting on) is opted out of every category flagged Sale or Sharing, and no other category is touched. On a site running IAB TCF, their vendor consents are withdrawn as well. If those visitors report that maps or videos never load, check that Functional is not flagged there."
 msgstr "Co blokuje, se určuje na stránce Cookies: návštěvníkovi, který odesílá GPC (Brave, DuckDuckGo, Firefox se zapnutým nastavením), jsou odepřeny všechny kategorie označené jako Prodej nebo Sdílení a žádné jiné kategorie se to netýká. Na webu s IAB TCF se mu odvolají i souhlasy s dodavateli. Pokud tito návštěvníci hlásí, že se mapy nebo videa nikdy nenačtou, zkontrolujte, zda tam není označena kategorie Funkční."
 
-#: admin/views/banner.php:942
+#: admin/views/banner.php:943
 msgid "One exception: with per-service consent on, a visitor who clicks Accept on a blocked embed (a map, a video) gets that one service, even under GPC. The category stays denied, every other service stays blocked, and a Do Not Sell request still wins over the click. The consent log records it as a GPC exception."
 msgstr "Jedna výjimka: se zapnutým souhlasem podle služby získá návštěvník, který na zablokovaném vloženém obsahu (mapě, videu) klikne na Přijmout, právě tuto jednu službu, i při GPC. Kategorie zůstává odepřena, všechny ostatní služby zůstávají blokovány a žádost \"Neprodávat ani nesdílet\" má před kliknutím stále přednost. Záznamy souhlasu to evidují jako výjimku GPC."
 
-#: admin/views/banner.php:977
+#: admin/views/banner.php:978
 msgid "Geo source not configured"
 msgstr "Zdroj geo není nakonfigurován"
 
 #. translators: %1$s: Settings -> Geolocation link, %2$s: the faz_trust_cf_ipcountry_header filter name, %3$s: the add_filter() code snippet.
-#: admin/views/banner.php:983
+#: admin/views/banner.php:984
 #, php-format
 msgid "No country signal is available on this install. Multi-banner geo-routing will resolve every visitor to \"unknown\" and fall back to your match-all / default banner. The usual fix is to configure %1$s with a free MaxMind GeoLite2 license key. If your site sits behind Cloudflare instead, the %2$s filter is available — note this is a developer code filter, NOT a setting in this screen: a developer adds %3$s in your theme or a code-snippets plugin. Without one of these, the targets you set below have no effect."
 msgstr "V této instalaci není k dispozici signál o zemi. Geografické směrování s více bannery přiřadí každému návštěvníkovi hodnotu \"neznámý\" a přepne na váš univerzální / výchozí banner. Obvyklým řešením je nakonfigurovat %1$s pomocí bezplatného licenčního klíče MaxMind GeoLite2. Pokud je váš web místo toho za Cloudflare, je k dispozici filtr %2$s — všimněte si, že se jedná o filtr v kódu pro vývojáře, NE o nastavení na této obrazovce: vývojář přidá %3$s do vašeho šablony nebo do pluginu s úryvky kódu. Bez jednoho z těchto prvků nebudou cíle, které nastavíte níže, mít žádný účinek."
 
-#: admin/views/banner.php:984
+#: admin/views/banner.php:985
 msgid "Settings &raquo; Geolocation"
 msgstr "Nastavení &raquo; Geolokace"
 
-#: admin/views/banner.php:1006
+#: admin/views/banner.php:1007
 msgid "How multi-banner works — quick guide"
 msgstr "Jak funguje více bannerů — stručný průvodce"
 
 #. translators: %1$s: Geo Targeting (tab name), %2$s: Content (tab name).
-#: admin/views/banner.php:1013
+#: admin/views/banner.php:1014
 #, php-format
 msgid "%1$s (this tab) = <em>WHICH visitors</em> see this banner. Pick countries / regions; the multi-banner picker matches against the visitor's detected country. Leave empty to make this banner the universal fallback."
 msgstr "%1$s (tato záložka) = <em>KTEŘÍ návštěvníci</em> vidí tento banner. Vyberte země/regiony; selektor více bannerů porovnává zjištěnou zemi návštěvníka. Ponechte prázdné, aby byl tento banner univerzálním záložním řešením."
 
 #. translators: %1$s: Content (tab name).
-#: admin/views/banner.php:1024
+#: admin/views/banner.php:1025
 #, php-format
 msgid "%1$s = <em>WHAT the banner says</em> — title, description, button labels, per-language translations. This is where you put law-specific copy: \"Não vender minhas informações pessoais\" for LGPD (Brazil), \"Do not sell or share my personal information\" for CCPA/CPRA (California 2024+), German consent text for GDPR-DE, and so on. Same banner row, multiple languages."
 msgstr "%1$s = <em>CO BANNER ŘÍ KÁ</em> — nadpis, popis, popisky tlačítek, překlady podle jazyka. Zde vkládáte text specifický pro daný zákon: \"Não vender minhas informações pessoais\" pro LGPD (Brazílie), \"Do not sell or share my personal information\" pro CCPA/CPRA (Kalifornie 2024+), německý text souhlasu pro GDPR-DE a podobně. Stejný řádek banneru, více jazyků."
 
-#: admin/views/banner.php:1032
+#: admin/views/banner.php:1033
 msgid "<strong>EU</strong> preset = 27 EU + 3 EEA (Iceland, Liechtenstein, Norway). It does <em>not</em> include the UK — pick the <strong>United Kingdom</strong> preset separately when you want a UK-GDPR variant with different copy. To cover EU+UK with one banner, tick both presets."
 msgstr "<strong>Předvolba EU</strong> = 27 EU + 3 EHP (Island, Lichtenštejnsko, Norsko). <em>Nezahrnuje</em> Spojené království — vyberte předvolbu <strong>United Kingdom</strong> samostatně, pokud chcete variantu UK-GDPR s jiným textem. Chcete-li pokrýt EU+VB jedním bannerem, zaškrtněte obě předvolby."
 
-#: admin/views/banner.php:1041
+#: admin/views/banner.php:1042
 msgid "Region presets"
 msgstr "Přednastavení regionu"
 
-#: admin/views/banner.php:1045
+#: admin/views/banner.php:1046
 msgid "Tick the regions where this banner should be shown. A visitor from any country in the selected regions sees this banner. Leave all unchecked to make this banner match every visitor (fallback / single-banner installs)."
 msgstr "Zaškrtněte regiony, kde má být tento banner zobrazen. Návštěvník z jakékoli země ve vybraných regionech uvidí tento banner. Ponechte vše nezaškrtnuté, aby se tento banner shodoval se všemi návštěvníky (záložní / instalace s jedním bannerem)."
 
-#: admin/views/banner.php:1048
+#: admin/views/banner.php:1049
 msgid "EU / EEA (27 + IS, LI, NO)"
 msgstr "EU / EHP (27 + IS, LI, NO)"
 
-#: admin/views/banner.php:1049
+#: admin/views/banner.php:1050
 msgid "United Kingdom (UK-GDPR)"
 msgstr "Spojené království (UK-GDPR)"
 
-#: admin/views/banner.php:1050
+#: admin/views/banner.php:1051
 msgid "United States (CCPA / state laws)"
 msgstr "Spojené státy (CCPA / státní zákony)"
 
-#: admin/views/banner.php:1051
+#: admin/views/banner.php:1052
 msgid "Canada (PIPEDA)"
 msgstr "Kanada (PIPEDA)"
 
-#: admin/views/banner.php:1052
+#: admin/views/banner.php:1053
 msgid "Brazil (LGPD)"
 msgstr "Brazílie (LGPD)"
 
-#: admin/views/banner.php:1053
+#: admin/views/banner.php:1054
 #: admin/views/settings.php:440
 #: admin/views/setup.php:173
 msgid "Australia"
 msgstr "Austrálie"
 
-#: admin/views/banner.php:1054
+#: admin/views/banner.php:1055
 msgid "Japan (APPI)"
 msgstr "Japonsko (APPI)"
 
-#: admin/views/banner.php:1055
+#: admin/views/banner.php:1056
 msgid "Switzerland (nFADP)"
 msgstr "Švýcarsko (nFADP)"
 
-#: admin/views/banner.php:1062
+#: admin/views/banner.php:1063
 msgid "Custom country list"
 msgstr "Vlastní seznam zemí"
 
-#: admin/views/banner.php:1065
+#: admin/views/banner.php:1066
 msgid "Additional ISO-3166 alpha-2 country codes"
 msgstr "Další kódy zemí ISO-3166 alpha-2"
 
-#: admin/views/banner.php:1066
+#: admin/views/banner.php:1067
 msgid "e.g. NZ, SG, KR"
 msgstr "např. NZ, SG, KR"
 
-#: admin/views/banner.php:1067
+#: admin/views/banner.php:1068
 msgid "Comma-separated, two letters per code. Use this for countries not covered by the region presets above. Codes are normalised to upper-case and deduplicated automatically."
 msgstr "Oddělené čárkami, dva znaky na kód. Použijte pro země, na které se nevztahují výše uvedené předvolby oblastí. Kódy jsou automaticky normalizovány na velká písmena a deduplikovány."
 
-#: admin/views/banner.php:1073
+#: admin/views/banner.php:1074
 msgid "Priority & fallback"
 msgstr "Priorita a záloha"
 
-#: admin/views/banner.php:1076
+#: admin/views/banner.php:1077
 msgid "Priority"
 msgstr "Priorita"
 
-#: admin/views/banner.php:1078
+#: admin/views/banner.php:1079
 msgid "Tie-breaker when multiple banners target the same country. Higher wins. Default 0."
 msgstr "Rozhodující při remíze, když více bannerů cílí na stejnou zemi. Vyšší hodnota vítězí. Výchozí 0."
 
-#: admin/views/banner.php:1084
+#: admin/views/banner.php:1085
 msgid "Use this banner as the default fallback"
 msgstr "Pouzit tento banner jako vychozi zalozni"
 
-#: admin/views/banner.php:1086
+#: admin/views/banner.php:1087
 msgid "Shown to visitors from countries no banner targets explicitly. Exactly one banner should be marked as default. Saving this option will clear the flag on every other banner."
 msgstr "Zobrazuje se návštěvníkům ze zemí, na které žádný banner explicitně necílí. Právě jeden banner by měl být označen jako výchozí. Uložení této možnosti odstraní příznak u všech ostatních bannerů."
 
-#: admin/views/banner.php:1102
+#: admin/views/banner.php:1103
 msgid "Frontend banner preview"
 msgstr "Náhled banneru na frontendu"
 
-#: admin/views/banner.php:1110
+#: admin/views/banner.php:1111
 msgid "Loading real site preview..."
 msgstr "Načítání náhledu skutečného webu..."
 
-#: admin/views/banner.php:1115
+#: admin/views/banner.php:1116
 msgid "Save Banner Settings"
 msgstr "Uložit nastavení banneru"
 
-#: admin/views/banner.php:1116
+#: admin/views/banner.php:1117
 msgid "Hide Preview"
 msgstr "Skrýt náhled"
 
-#: admin/views/banner.php:1117
+#: admin/views/banner.php:1118
 msgid "Refresh Preview"
 msgstr "Obnovit náhled"
 
@@ -4849,96 +4909,96 @@ msgstr "Samostatná URL adresa zásad ochrany osobních údajů (požadováno po
 msgid "https://example.com/privacy"
 msgstr "https://example.com/privacy"
 
-#: admin/views/cookie-policy.php:301
+#: admin/views/cookie-policy.php:302
 msgid "Default language"
 msgstr "Výchozí jazyk"
 
-#: admin/views/cookie-policy.php:305
+#: admin/views/cookie-policy.php:306
 msgid "Force a specific language (otherwise follows visitor locale)"
 msgstr "Vynutit konkrétní jazyk (jinak sleduje jazyk návštěvníka)"
 
-#: admin/views/cookie-policy.php:307
+#: admin/views/cookie-policy.php:308
 msgid "Follow visitor locale (recommended)"
 msgstr "Sledovat jazyk návštěvníka (doporučeno)"
 
-#: admin/views/cookie-policy.php:327
+#: admin/views/cookie-policy.php:328
 msgid "Footer disclaimer"
 msgstr "Prohlášení v zápatí"
 
-#: admin/views/cookie-policy.php:334
+#: admin/views/cookie-policy.php:335
 msgid "Show the disclaimer at the bottom of the policy"
 msgstr "Zobrazit zřeknutí se odpovědnosti na konci zásad"
 
-#: admin/views/cookie-policy.php:336
+#: admin/views/cookie-policy.php:337
 msgid "When enabled, a short notice is appended to clarify that the generated policy is a template and not legal advice. Recommended for sites without an in-house legal review."
 msgstr "Pokud je povoleno, přidá se krátká poznámka objasněující, že vygenerované zásady jsou šablonou, nikoli právním poradenstvím. Doporučeno pro weby bez interní právní kontroly."
 
-#: admin/views/cookie-policy.php:339
+#: admin/views/cookie-policy.php:340
 msgid "Custom disclaimer text (optional)"
 msgstr "Vlastní text odmítnutí odpovědnosti (volitelné)"
 
-#: admin/views/cookie-policy.php:340
+#: admin/views/cookie-policy.php:341
 msgid "Leave empty to use the default localised disclaimer."
 msgstr "Nechte prázdné pro použití výchozího lokalizovaného prohlášení."
 
-#: admin/views/cookie-policy.php:341
+#: admin/views/cookie-policy.php:342
 msgid "Basic HTML is allowed (links, emphasis, line breaks). Leave blank to fall back to the standard FAZ disclaimer in the active language."
 msgstr "Základní HTML je povoleno (odkazy, důraz, zalomení řádků). Ponechte prázdné pro návrat ke standardnímu upozornění FAZ v aktivním jazyce."
 
-#: admin/views/cookie-policy.php:349
+#: admin/views/cookie-policy.php:350
 msgid "Save settings"
 msgstr "Uložit nastavení"
 
-#: admin/views/cookie-policy.php:350
+#: admin/views/cookie-policy.php:351
 #: admin/views/geo-routing.php:42
 msgid "Preview"
 msgstr "Náhled"
 
-#: admin/views/cookie-policy.php:360
+#: admin/views/cookie-policy.php:361
 msgid "Embed the policy"
 msgstr "Vložit zásady"
 
-#: admin/views/cookie-policy.php:363
+#: admin/views/cookie-policy.php:364
 msgid "Paste this shortcode on any page or post:"
 msgstr "Vložte tento shortcode na libovolnou stránku nebo příspěvek:"
 
-#: admin/views/cookie-policy.php:365
+#: admin/views/cookie-policy.php:366
 msgid "With explicit language or jurisdiction:"
 msgstr "S explicitním jazykem nebo jurisdikcí:"
 
-#: admin/views/cookie-policy.php:371
+#: admin/views/cookie-policy.php:372
 msgid "By default the policy does <strong>not</strong> print its own title — your page already has one, so a second \"Cookie Policy\" heading would duplicate it. Add <code>show_title=\"true\"</code> if you embed the policy somewhere without a page title and want the heading back."
 msgstr "Výchozí nastavení je, že zásady svůj vlastní nadpis <strong>nevypisují</strong> — vaše stránka již jeden má, takže druhý nadpis \"Zásady cookies\" by byl duplicitní. Přidejte <code>show_title=\"true\"</code>, pokud zásady vkládáte na místo bez nadpisu stránky a chcete nadpis zobrazit."
 
-#: admin/views/cookie-policy.php:373
+#: admin/views/cookie-policy.php:374
 msgid "<strong>Note:</strong> the long-standing <code>[faz_cookie_policy]</code> shortcode (with <code>site_name</code> / <code>contact</code> / <code>show_table</code> attributes) is still supported for backward compatibility. The new <code>[faz_cookie_policy_complete]</code> renders the jurisdiction-aware template from the form above."
 msgstr "<strong>Poznámka:</strong> Zažitý shortcode <code>[faz_cookie_policy]</code> (s atributy <code>site_name</code> / <code>contact</code> / <code>show_table</code>) je stále podporován pro zpětnou kompatibilitu. Nový <code>[faz_cookie_policy_complete]</code> vykresluje šablonu zohledňující jurisdikci z výše uvedeného formuláře."
 
-#: admin/views/cookie-policy.php:376
+#: admin/views/cookie-policy.php:377
 msgid "Editor compatibility:"
 msgstr "Kompatibilita s editorem:"
 
-#: admin/views/cookie-policy.php:378
+#: admin/views/cookie-policy.php:379
 msgid "Classic editor: paste the shortcode anywhere in the content area."
 msgstr "Klasický editor: vložte shortcode kamkoli do oblasti obsahu."
 
-#: admin/views/cookie-policy.php:379
+#: admin/views/cookie-policy.php:380
 msgid "Gutenberg / block editor: add a <strong>Shortcode block</strong>, paste the code inside."
 msgstr "Gutenberg / blokový editor: přidejte <strong>blok Shortcode</strong>, vložte kód dovnitř."
 
-#: admin/views/cookie-policy.php:380
+#: admin/views/cookie-policy.php:381
 msgid "Page builders (Bricks, Elementor, Beaver, Divi, WPBakery): use the builder's <strong>Shortcode</strong> widget/element and paste the code. Some builders (Bricks in particular) skip <code>the_content()</code> entirely on pages without a builder template, so the bare shortcode in the WP editor will not render — use the shortcode element of your builder instead."
 msgstr "Tvůrci stránek (Bricks, Elementor, Beaver, Divi, WPBakery): použijte widget/element <strong>Shortcode</strong> tvůrce a vložte kód. Někteří tvůrci (zejména Bricks) na stránkách bez šablony tvůrce zcela přeskakují <code>the_content()</code>, takže holý shortcode v editoru WP se nevykreslí — místo toho použijte element shortcodu vašeho tvůrce."
 
-#: admin/views/cookie-policy.php:381
+#: admin/views/cookie-policy.php:382
 msgid "Theme template files: <code>echo do_shortcode( '[faz_cookie_policy_complete]' );</code>"
 msgstr "Soubory šablon motivu: <code>echo do_shortcode( '[faz_cookie_policy_complete]' );</code>"
 
-#: admin/views/cookie-policy.php:382
+#: admin/views/cookie-policy.php:383
 msgid "WordPress block templates (FSE themes like Twenty Twenty-Four/Five): add a Shortcode block to your <em>Single Page</em> template, or use the Shortcode block on the individual page."
 msgstr "WordPress blokové šablony (FSE témata jako Twenty Twenty-Four/Five): přidejte blok Shortcode do vaší šablony <em>Jednotlivá stránka</em> nebo použijte blok Shortcode na konkrétní stránce."
 
-#: admin/views/cookie-policy.php:390
+#: admin/views/cookie-policy.php:391
 msgid "Close preview"
 msgstr "Zavřít náhled"
 
@@ -5063,6 +5123,18 @@ msgstr "Vybrat všechny cookies"
 #: includes/class-utils.php:772
 msgid "Name"
 msgstr "Název"
+
+#: admin/views/cookies.php:197
+msgid "Last automatic definitions update attempt:"
+msgstr ""
+
+#: admin/views/cookies.php:199
+msgid "Successful"
+msgstr ""
+
+#: admin/views/cookies.php:199
+msgid "Failed; existing definitions retained."
+msgstr ""
 
 #: admin/views/cookies.php:204
 msgid "Cookie Definitions"
@@ -5192,7 +5264,7 @@ msgid "A few guided steps configure consent correctly for the privacy law that a
 msgstr "Pomocí několika jednoduchých kroků s průvodcem správně nastavíte souhlas v souladu s právními předpisy o ochraně osobních údajů, které se vztahují na vaše návštěvníky."
 
 #: admin/views/dashboard.php:31
-#: admin/views/setup.php:450
+#: admin/views/setup.php:462
 msgid "Finish setup"
 msgstr "Dokončit nastavení"
 
@@ -5255,6 +5327,10 @@ msgstr "Zatím žádná data o souhlasu.<br>Data se zobrazí, jakmile návštěv
 
 #: admin/views/dashboard.php:148
 msgid "Banner interaction tracking is off, so these proportions are not being measured.<br>Consent records are kept regardless — see Consent Logs."
+msgstr ""
+
+#: admin/views/dashboard.php:150
+msgid "Banner interaction tracking and consent logging are both off. No new consent records are being saved."
 msgstr ""
 
 #: admin/views/dashboard.php:157
@@ -5385,6 +5461,10 @@ msgstr "Když návštěvník odmítne marketingové cookies, ad_storage / ad_use
 #: admin/views/gcm.php:123
 msgid "Advanced Consent Mode (load Google tags before consent)"
 msgstr "Pokročilý režim souhlasu (načíst tagy Google před udělením souhlasu)"
+
+#: admin/views/gcm.php:126
+msgid "When Analytics and Performance are both offered, Advanced mode makes analytics_storage follow Analytics. Moving GA4 or another Google analytics tag to Performance or a custom category does not change this mapping: granting that category while denying Analytics keeps analytics_storage denied. Keep Google analytics tags in Analytics when using Advanced mode. Basic mode also considers Performance."
+msgstr ""
 
 #: admin/views/gcm.php:127
 msgid "This lets Google tags (gtag.js / GA4 / Google Ads) load BEFORE consent."
@@ -5885,6 +5965,14 @@ msgstr "Povolit automatické skenování cookies"
 msgid "Automatically scan your site for new cookies on a schedule. You will receive an email notification if new uncategorized cookies are found."
 msgstr "Automaticky skenujte váš web na nové cookies podle plánu. Obdržíte e-mailové oznámení, pokud budou nalezeny nové nekategorizované cookies."
 
+#: admin/views/settings.php:303
+msgid "Update cookie definitions weekly"
+msgstr ""
+
+#: admin/views/settings.php:305
+msgid "Optional: downloads the Open Cookie Database from raw.githubusercontent.com once a week. Off by default. Without this option, the bundled database is updated with plugin releases. A failed download keeps the existing definitions."
+msgstr ""
+
 #: admin/views/settings.php:308
 msgid "Scan Frequency"
 msgstr "Frekvence skenování"
@@ -5894,7 +5982,7 @@ msgid "Daily"
 msgstr "Denně"
 
 #: admin/views/settings.php:311
-#: includes/class-activator.php:708
+#: includes/class-activator.php:711
 msgid "Weekly"
 msgstr "Týdně"
 
@@ -6639,11 +6727,28 @@ msgstr "Zaznamenávání souhlasů zůstává zapnuté z důvodu zajištění od
 msgid "Consent logging is kept on for accountability, and your cookie banner will be shown to visitors. You can adjust anything afterwards on the Cookie Banner and Settings pages."
 msgstr "Záznamy o souhlasu se uchovávají z důvodu zajištění odpovědnosti a návštěvníkům se bude zobrazovat váš banner s informacemi o souborech cookie. Veškerá nastavení můžete následně upravit na stránkách Banner s informacemi o souborech cookie a Nastavení."
 
-#: admin/views/setup.php:447
+#: admin/views/setup.php:444
+#, fuzzy
+msgid "Cookie policy page"
+msgstr "Zásady cookies"
+
+#: admin/views/setup.php:448
+msgid "Create and publish the cookie policy when setup finishes"
+msgstr ""
+
+#: admin/views/setup.php:449
+msgid "Includes the policy shortcode in the selected language. An existing generated page in that language is reused. Custom banner links are kept."
+msgstr ""
+
+#: admin/views/setup.php:453
+msgid "Review your company details and policy text on the Cookie Policy page before using the banner on your live site."
+msgstr ""
+
+#: admin/views/setup.php:459
 msgid "Back"
 msgstr "Zpět"
 
-#: admin/views/setup.php:449
+#: admin/views/setup.php:461
 msgid "Next"
 msgstr "Další"
 
@@ -7078,15 +7183,15 @@ msgstr "Tlačítko, které otevírá předvolby souhlasu s cookies."
 msgid "Manage Cookie Preferences"
 msgstr "Spravovat předvolby cookies"
 
-#: includes/class-activator.php:714
+#: includes/class-activator.php:717
 msgid "Once Daily (FAZ)"
 msgstr "Jednou denně (FAZ)"
 
-#: includes/class-activator.php:720
+#: includes/class-activator.php:723
 msgid "Once Weekly (FAZ)"
 msgstr "Jednou týdně (FAZ)"
 
-#: includes/class-activator.php:726
+#: includes/class-activator.php:729
 msgid "Once Monthly (FAZ)"
 msgstr "Jednou měsíčně (FAZ)"
 
@@ -7674,30 +7779,6 @@ msgstr "Tlačítko"
 msgid "Link"
 msgstr "Odkaz"
 
-#: admin/views/cookies.php:197
-msgid "Last automatic definitions update attempt:"
-msgstr ""
-
-#: admin/views/cookies.php:199
-msgid "Successful"
-msgstr ""
-
-#: admin/views/cookies.php:199
-msgid "Failed; existing definitions retained."
-msgstr ""
-
-#: admin/views/dashboard.php:150
-msgid "Banner interaction tracking and consent logging are both off. No new consent records are being saved."
-msgstr ""
-
-#: admin/views/gcm.php:126
-msgid "When Analytics and Performance are both offered, Advanced mode makes analytics_storage follow Analytics. Moving GA4 or another Google analytics tag to Performance or a custom category does not change this mapping: granting that category while denying Analytics keeps analytics_storage denied. Keep Google analytics tags in Analytics when using Advanced mode. Basic mode also considers Performance."
-msgstr ""
-
-#: admin/views/settings.php:303
-msgid "Update cookie definitions weekly"
-msgstr ""
-
-#: admin/views/settings.php:305
-msgid "Optional: downloads the Open Cookie Database from raw.githubusercontent.com once a week. Off by default. Without this option, the bundled database is updated with plugin releases. A failed download keeps the existing definitions."
+#: admin/modules/settings/includes/class-policy-page.php:88
+msgid "The cookie policy page is not public. Publish it without password protection in Pages, or turn off automatic page creation to finish setup."
 msgstr ""

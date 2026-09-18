@@ -1,5 +1,5 @@
 /**
- * Guided setup wizard (jsdom) — 50 behavioural regression checks.
+ * Guided setup wizard (jsdom) — 52 behavioural regression checks.
  *
  * Loads the real admin/assets/js/pages/setup.js and exercises navigation,
  * review rendering, the exact onboarding payload, duplicate-submit protection,
@@ -95,6 +95,8 @@ function markup() {
         <div id="faz-setup-payments" hidden><div id="faz-setup-payments-list"></div></div>
       </section>
       <section class="faz-wizard-step" data-step="8" hidden>
+		<input type="checkbox" id="faz-setup-create-cookie-page" checked>
+		<p id="faz-setup-policy-language"></p>
         <ul id="faz-setup-review"
           data-label-law="Law"
           data-label-effect="Model"
@@ -181,7 +183,7 @@ async function flush() {
   await Promise.resolve();
 }
 
-console.log('guided setup wizard (50 checks)');
+console.log('guided setup wizard (52 checks)');
 
 // Navigation, selection, and review rendering (14 checks).
 {
@@ -239,6 +241,8 @@ console.log('guided setup wizard (50 checks)');
 
   check('15 Finish posts to the onboarding endpoint', app.calls.post[0]?.endpoint === 'settings/onboarding');
   const sent = app.calls.post[0]?.payload || {};
+	check('Finish explicitly requests the cookie page in the selected language', sent.create_cookie_page === true && sent.language === 'en');
+	check('Review states the cookie page language', document.getElementById('faz-setup-policy-language').textContent.includes('English'));
   check('16 Finish sends the law plus the structured option groups', sent.law === 'both'
     && sent.banner_control && sent.banner_control.per_service_consent === false
     && sent.gcm && sent.gcm.enabled === false
@@ -490,4 +494,4 @@ console.log('guided setup wizard (50 checks)');
 }
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
-process.exit(failed === 0 && passed === 50 ? 0 : 1);
+process.exit(failed === 0 && passed === 52 ? 0 : 1);

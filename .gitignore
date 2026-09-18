@@ -32,6 +32,7 @@ phpstan.neon
 
 # Release docs (local only)
 release.md
+PRODUCT.md
 report.md
 
 # wp.org assets + publishing guide (local only — never shipped, never tracked)

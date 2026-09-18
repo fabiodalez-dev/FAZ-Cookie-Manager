@@ -248,13 +248,22 @@
 			var n = parseInt(item.getAttribute('data-progress'), 10);
 			item.classList.toggle('is-active', n === currentStep);
 			item.classList.toggle('is-done', n < currentStep);
+			if (n === currentStep) { item.setAttribute('aria-current', 'step'); }
+			else { item.removeAttribute('aria-current'); }
 		});
 
 		backBtn.hidden = (currentStep === 1);
 		nextBtn.hidden = (currentStep === TOTAL_STEPS);
 		finishBtn.hidden = (currentStep !== TOTAL_STEPS);
 
-		if (currentStep === TOTAL_STEPS) { renderReview(); }
+		if (currentStep === TOTAL_STEPS) {
+			renderReview();
+			var language = document.getElementById('faz-setup-lang');
+			var policyLanguage = document.getElementById('faz-setup-policy-language');
+			if (language && policyLanguage) {
+				policyLanguage.textContent = fazI18n('setup.policy_language', 'Cookie policy language: %s').replace('%s', language.options[language.selectedIndex].textContent);
+			}
+		}
 
 		// Move focus to the newly-active step's heading so keyboard/screen-reader
 		// users get step-change feedback (focus would otherwise remain on a
@@ -639,6 +648,7 @@
 	// server-side anyway.
 	function collectOptions() {
 		var options = {};
+		options.create_cookie_page = isChecked('faz-setup-create-cookie-page');
 
 		var lang = document.getElementById('faz-setup-lang');
 		if (lang && lang.value) { options.language = lang.value; }

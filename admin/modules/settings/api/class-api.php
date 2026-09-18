@@ -58,6 +58,14 @@ class Api extends Rest_Controller {
 	 * @return void
 	 */
 	public function register_routes() {
+		register_rest_route( $this->namespace, '/' . $this->rest_base . '/pages', array(
+			'methods'             => WP_REST_Server::READABLE,
+			'callback'            => array( $this, 'search_pages' ),
+			'permission_callback' => array( $this, 'get_items_permissions_check' ),
+			'args'                => array(
+				'search' => array( 'type' => 'string', 'required' => true, 'maxLength' => 100, 'sanitize_callback' => 'sanitize_text_field', 'validate_callback' => 'rest_validate_request_arg' ),
+			),
+		) );
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base,
@@ -200,6 +208,7 @@ class Api extends Rest_Controller {
 					'callback'            => array( $this, 'complete_onboarding' ),
 					'permission_callback' => array( $this, 'create_item_permissions_check' ),
 					'args'                => array(
+						'create_cookie_page' => array( 'type' => 'boolean', 'validate_callback' => 'rest_validate_request_arg' ),
 						'law'              => array(
 							'required'          => true,
 							'type'              => 'string',
@@ -298,6 +307,24 @@ class Api extends Rest_Controller {
 		);
 	}
 
+	/** Search published pages without exposing drafts or password-protected content. */
+	public function search_pages( $request ) {
+		$search = trim( (string) $request->get_param( 'search' ) );
+		if ( strlen( $search ) < 2 ) {
+			return rest_ensure_response( array() );
+		}
+		$query = new \WP_Query( array(
+			'post_type' => 'page', 'post_status' => 'publish', 'has_password' => false,
+			's' => $search, 'posts_per_page' => 10, 'no_found_rows' => true,
+			'orderby' => 'title', 'order' => 'ASC',
+		) );
+		$pages = array();
+		foreach ( $query->posts as $page ) {
+			$pages[] = array( 'id' => $page->ID, 'title' => wp_strip_all_tags( get_the_title( $page ) ), 'url' => get_permalink( $page ) );
+		}
+		return rest_ensure_response( $pages );
+	}
+
 	/**
 	 * Finish the guided setup wizard.
 	 *
@@ -331,7 +358,38 @@ class Api extends Rest_Controller {
 		}
 
 		$onboarding = new Onboarding();
+		if ( true === $request->get_param( 'create_cookie_page' ) ) {
+			$validation = \FazCookie\Admin\Modules\Settings\Includes\Policy_Page::validate( $options['language'] ?? '', $law );
+			if ( is_wp_error( $validation ) ) { return $validation; }
+		}
 		$result     = $onboarding->finish( $law, $options );
+		if ( ! is_wp_error( $result ) && true === $request->get_param( 'create_cookie_page' ) ) {
+			$page = \FazCookie\Admin\Modules\Settings\Includes\Policy_Page::ensure( $options['language'] ?? '', $law );
+			if ( is_wp_error( $page ) ) {
+				return $page;
+			}
+			$result['cookie_page'] = $page;
+			$banner = \FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance()->get_active_banner();
+			if ( $banner ) {
+				$language = $options['language'];
+				$contents = $banner->get_contents();
+				$link = $contents[ $language ]['notice']['elements']['privacyLink'] ?? '';
+				// Preserve a custom link the administrator has already assigned.
+				$resolved_link = 0 === strpos( $link, '/' ) && 0 !== strpos( $link, '//' ) ? home_url( $link ) : $link;
+				$linked_page = $resolved_link ? url_to_postid( $resolved_link ) : 0;
+				if ( '' === $link || ( '/cookie-policy' === $link && ! $linked_page ) || ( $linked_page && get_post_meta( $linked_page, '_faz_setup_policy_language', true ) ) ) {
+					$contents[ $language ]['notice']['elements']['privacyLink'] = $page['url'];
+					$banner->set_contents( $contents );
+					$saved_id = $banner->save();
+					$persisted = new \FazCookie\Admin\Modules\Banners\Includes\Banner( (int) $saved_id );
+					$saved_contents = $persisted->get_contents();
+					if ( ( $saved_contents[ $language ]['notice']['elements']['privacyLink'] ?? '' ) !== $page['url'] ) {
+						return new WP_Error( 'faz_policy_link_failed', __( 'The cookie policy was created, but its banner link could not be saved. Please try again.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
+					}
+					faz_clear_banner_template_cache();
+				}
+			}
+		}
 
 		return rest_ensure_response( $result );
 	}

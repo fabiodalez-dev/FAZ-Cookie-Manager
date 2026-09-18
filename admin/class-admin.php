@@ -872,8 +872,17 @@ class Admin {
 						/* translators: %d: number of days. */
 						'rangeLastNDays'           => __( 'Last %d Days', 'faz-cookie-manager' ),
 					),
+					'pageSearch' => array(
+						'results' => __( 'Matching pages', 'faz-cookie-manager' ),
+						'searching' => __( 'Searching pages…', 'faz-cookie-manager' ),
+						'choose' => __( 'Use the arrow keys and Enter to choose a page.', 'faz-cookie-manager' ),
+						'empty' => __( 'No published pages found. You can enter a URL manually.', 'faz-cookie-manager' ),
+						'failed' => __( 'Page search is unavailable. You can enter a URL manually.', 'faz-cookie-manager' ),
+					),
 					// Guided setup wizard (admin/assets/js/pages/setup.js).
 					'setup'                    => array(
+						/* translators: %s: selected language name. */
+						'policy_language' => __( 'Cookie policy language: %s', 'faz-cookie-manager' ),
 						'scan_starting'             => __( 'Starting scan…', 'faz-cookie-manager' ),
 						'scan_failed'               => __( 'The scan could not be started. You can skip this step or run a full scan on the Cookies page.', 'faz-cookie-manager' ),
 						'scan_failed_notify'        => __( 'Cookie scan could not be started.', 'faz-cookie-manager' ),

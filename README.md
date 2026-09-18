@@ -170,7 +170,9 @@ An eight-step first run that configures the plugin for your jurisdiction instead
 - **Environment detection**: finds your multilingual plugin, page cache, WooCommerce and any pre-existing consent data, and adapts the recommendations to what it sees.
 - **Plain-language choices**: every option explains what it does and what it costs. The more protective option is pre-selected; nothing nudges toward weaker settings.
 - **Never nags an existing install**: upgrading sites are treated as already onboarded. The wizard arms itself only on a genuine fresh install, with a dismissible re-entry card on the Dashboard.
-- **Atomic finish**: the wizard's writes run inside a database transaction, so a failure rolls back rather than leaving the banner half-configured.
+- **Atomic settings save**: banner and consent settings run inside a database transaction. Optional policy-page publication runs afterwards and can be retried without duplicating the page.
+- **Cookie policy page**: the final step can publish a page containing `[faz_cookie_policy_complete]`, with the selected language and jurisdiction fixed in the shortcode. It reuses a matching generated page, preserves custom banner links, and refuses silent language fallbacks. Review company details and policy wording before using the banner on a live site.
+- **Page-link search**: type a page title in the banner's policy link or the Cookie Policy privacy URL field, then choose a published page with the keyboard or mouse. Manual and external URLs remain supported.
 - **Real cookie scan**: the optional scan step runs the same browser-based engine as the Cookies page, so it sees what a visitor's browser sees — including cookies written by JavaScript.
 
 ### Cookie Banner
@@ -611,6 +613,7 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
 ### 1.32.0 — unreleased
+- **Added**: Language-aware cookie policy publication from the setup wizard and accessible page-link autocomplete in banner and Cookie Policy settings. The wizard now uses a compact step rail and simpler option rows.
 - **Added**: The consent log records whether the server would have served each GPC exception, so inconsistent markers can be identified after the fact (#285). A same-origin script can write the same cookie values a real click writes, and no token changes that, so the record claims consistency rather than authenticity.
 - **Added**: System Status lists the services blocked without a visible placeholder (#279) — they set no cookies and park plain requests, so before consent a stylesheet simply does not load and the symptom points at the theme or the cache instead of here.
 - **Fixed**: A GPC exception accepted within five minutes of saving preferences was never logged at all, because it does not change the consent status and the repeat throttle dropped it.

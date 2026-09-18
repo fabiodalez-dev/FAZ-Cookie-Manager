@@ -440,6 +440,18 @@ $faz_setup_step_titles = array(
 					data-logging="<?php esc_attr_e( 'Consent logging stays on for accountability.', 'faz-cookie-manager' ); ?>"></ul>
 
 				<p class="faz-setup-review-note"><?php esc_html_e( 'Consent logging is kept on for accountability, and your cookie banner will be shown to visitors. You can adjust anything afterwards on the Cookie Banner and Settings pages.', 'faz-cookie-manager' ); ?></p>
+				<div class="faz-setup-policy">
+					<h3 class="faz-setup-subtitle"><?php esc_html_e( 'Cookie policy page', 'faz-cookie-manager' ); ?></h3>
+					<label class="faz-setup-toggle-row">
+						<input type="checkbox" id="faz-setup-create-cookie-page" checked>
+						<span class="faz-setup-toggle-body">
+							<span class="faz-setup-toggle-label"><?php esc_html_e( 'Create and publish the cookie policy when setup finishes', 'faz-cookie-manager' ); ?></span>
+							<span class="faz-setup-toggle-help"><?php esc_html_e( 'Includes the policy shortcode in the selected language. An existing generated page in that language is reused. Custom banner links are kept.', 'faz-cookie-manager' ); ?></span>
+						</span>
+					</label>
+					<p id="faz-setup-policy-language" class="faz-help" aria-live="polite"></p>
+					<p class="faz-help"><?php esc_html_e( 'Review your company details and policy text on the Cookie Policy page before using the banner on your live site.', 'faz-cookie-manager' ); ?></p>
+				</div>
 			</section>
 
 			<!-- Wizard navigation -->
