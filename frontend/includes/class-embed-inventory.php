@@ -59,6 +59,16 @@ class Embed_Inventory {
 	/** @var bool A complete HTML blocking pass succeeded for this request. */
 	private static $render_complete = false;
 
+	/**
+	 * page_category() answers already given in this request: key|service => category.
+	 *
+	 * The audit asks the same (page, service) question once per exception in a
+	 * payload, and a payload can carry many; one query per pair is enough.
+	 *
+	 * @var array<string,string>
+	 */
+	private static $category_memo = array();
+
 	/** Record completion before the inventory can replace a page snapshot. */
 	public static function complete_render() {
 		self::$render_complete = true;
@@ -135,7 +145,22 @@ class Embed_Inventory {
 		}
 
 		$url = self::current_url();
-		if ( '' === $url ) {
+		$key = self::key( $url );
+		if ( '' === $key ) {
+			return;
+		}
+
+		// Only pages that exist once are worth a row. A 404 and a search results
+		// page each answer an unbounded set of URLs anyone can invent, so
+		// recording them let a crawler — or a script — mint rows without limit.
+		// This is a different question from the one faz_is_machine_readable_
+		// request() answers, which deliberately still BLOCKS embeds on both:
+		// a visitor sees those pages, and what renders there must stay gated.
+		// Only the record of them is dropped.
+		if ( ( function_exists( 'is_404' ) && is_404() ) || ( function_exists( 'is_search' ) && is_search() ) ) {
+			return;
+		}
+		if ( ! self::routing_params_parsed() ) {
 			return;
 		}
 
@@ -177,11 +202,31 @@ class Embed_Inventory {
 		// deleted the page's rows without writing them back, and the transient
 		// then kept that state for a day. Every repeat visit from a GPC browser
 		// left the inventory empty, so genuine exceptions read as unverified.
+		//
+		// The guard is asymmetric. A snapshot says everything an observation of
+		// the same set could, so a stored `snapshot:<set>` short-circuits both
+		// kinds of visitor. An observation cannot vouch for what is ABSENT, so a
+		// stored `observed:<set>` short-circuits only another observation: a GPC
+		// render of that set must still be allowed to clear stale rows. With a
+		// plain equality check the two prefixes never matched each other, and a
+		// page whose visitors alternated between GPC and non-GPC wrote on every
+		// single visit. One transient per page either way.
 		ksort( $seen );
-		$digest = ( $gpc_snapshot ? 'snapshot:' : 'observed:' ) . md5( serialize( $seen ) );
-		// One cache entry describes the latest write, not every historical set.
-		$key    = 'faz_embinv_current_' . md5( $url );
-		if ( get_transient( $key ) === $digest ) {
+		$set       = md5( serialize( $seen ) );
+		$digest    = ( $gpc_snapshot ? 'snapshot:' : 'observed:' ) . $set;
+		$guard_key = 'faz_embinv_current_' . $key;
+		$stored    = get_transient( $guard_key );
+		if ( 'snapshot:' . $set === $stored || ( ! $gpc_snapshot && 'observed:' . $set === $stored ) ) {
+			return;
+		}
+
+		// An empty snapshot has nothing to write back, only something to clear.
+		// When the page has no rows there is nothing to clear either, and
+		// without this probe every 404-free URL a GPC browser visited — pages
+		// with no embed at all, the commonest page there is — cost a DELETE and
+		// a transient. The probe sits here, after the guard and before the
+		// clear, so the ordering above still holds.
+		if ( $gpc_snapshot && empty( $seen ) && ! self::page_has_rows( $key ) ) {
 			return;
 		}
 
@@ -193,7 +238,84 @@ class Embed_Inventory {
 		foreach ( $seen as $service_id => $category ) {
 			self::store( $url, $service_id, $category );
 		}
-		set_transient( $key, $digest, DAY_IN_SECONDS );
+		set_transient( $guard_key, $digest, DAY_IN_SECONDS );
+	}
+
+	/**
+	 * The key a page's rows live under.
+	 *
+	 * The scheme is left out on purpose. The row is written by the rendering
+	 * request and read by the consent-log request, and behind a proxy that
+	 * terminates TLS the two can disagree about it — one sees https, the other
+	 * http — so a scheme-bearing key made a page's rows unreachable from the
+	 * lookup that needed them, and every genuine exception read as unverified.
+	 * The host still comes from the request, not home_url(): an install served
+	 * under several domains keeps each domain's pages apart.
+	 *
+	 * Every join point goes through here: store, clear, both lookups and the
+	 * write guard. A second spelling anywhere is the bug this exists to prevent.
+	 *
+	 * @param string $url Page URL, in any spelling.
+	 * @return string md5 key, or '' when the URL reduces to nothing.
+	 */
+	private static function key( $url ) {
+		$normalized = faz_normalize_page_url( (string) $url );
+		$normalized = (string) preg_replace( '#^[a-z][a-z0-9+.\-]*://#i', '', $normalized );
+		return '' === $normalized ? '' : md5( $normalized );
+	}
+
+	/**
+	 * Whether every routing parameter the page URL keeps was really routing.
+	 *
+	 * faz_normalize_page_url() keeps a fixed list of WordPress routing
+	 * parameters so that distinct posts and language variants cannot share
+	 * evidence. On a site where nothing reads one of them — `?lang=` without a
+	 * language plugin — the value changes nothing on the page but still changes
+	 * the key, so `?lang=<anything>` minted a fresh row per value. Only the
+	 * write side asks this; the lookup keeps the same normalisation, so the
+	 * two sides still agree on every URL that does get recorded.
+	 *
+	 * @return bool True when the write may proceed.
+	 */
+	private static function routing_params_parsed() {
+		if ( empty( $_SERVER['REQUEST_URI'] ) ) {
+			return true;
+		}
+		$query = faz_parse_url( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) );
+		if ( ! is_array( $query ) || empty( $query['query'] ) ) {
+			return true;
+		}
+		// No WP object to consult (an early exit, a non-standard bootstrap):
+		// nothing to compare against, so do not guess.
+		if ( ! isset( $GLOBALS['wp'] ) || ! is_object( $GLOBALS['wp'] ) || ! isset( $GLOBALS['wp']->query_vars ) || ! is_array( $GLOBALS['wp']->query_vars ) ) {
+			return true;
+		}
+		$kept = faz_normalize_page_url( 'http://h/?' . $query['query'] );
+		$pos  = strpos( $kept, '?' );
+		if ( false === $pos ) {
+			return true;
+		}
+		parse_str( substr( $kept, $pos + 1 ), $route );
+		foreach ( array_keys( $route ) as $param ) {
+			if ( ! array_key_exists( $param, $GLOBALS['wp']->query_vars ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether any row exists for a page key. One indexed lookup on url_hash.
+	 *
+	 * @param string $key Page key, from key().
+	 * @return bool
+	 */
+	private static function page_has_rows( $key ) {
+		global $wpdb;
+		$table = self::table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- plugin-owned table; table name is prefix + literal and the key is bound. The transient guard is the cache.
+		$found = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE url_hash = %s LIMIT 1", $key ) );
+		return ! empty( $found );
 	}
 
 	/**
@@ -203,7 +325,8 @@ class Embed_Inventory {
 	 * SQLite does not speak. This project has already shipped a purge that was
 	 * a permanent silent no-op on SQLite because it used MySQL-only syntax.
 	 *
-	 * @param string $url        Normalised page URL.
+	 * @param string $url        Normalised page URL; the row is keyed by key()
+	 *                           of it and the full URL is kept for display.
 	 * @param string $service_id Service slug.
 	 * @param string $category   Category slug.
 	 * @return void
@@ -212,7 +335,7 @@ class Embed_Inventory {
 		global $wpdb;
 		$table = self::table();
 		$now   = current_time( 'mysql' );
-		$hash  = md5( $url );
+		$hash  = self::key( $url );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- plugin-owned table; the transient above is the cache, and this write is what it guards.
 		$updated = $wpdb->update(
@@ -258,7 +381,7 @@ class Embed_Inventory {
 		global $wpdb;
 		$table = self::table();
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- plugin-owned table; table name is prefix + literal and the hash is bound.
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE url_hash = %s", md5( $url ) ) );
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE url_hash = %s", self::key( $url ) ) );
 	}
 
 	/**
@@ -271,9 +394,9 @@ class Embed_Inventory {
 	 * @return bool
 	 */
 	public static function page_offered( $url, $service_id, $not_after = '' ) {
-		$url        = faz_normalize_page_url( $url );
+		$key        = self::key( $url );
 		$service_id = sanitize_key( (string) $service_id );
-		if ( '' === $url || '' === $service_id ) {
+		if ( '' === $key || '' === $service_id ) {
 			return false;
 		}
 
@@ -281,10 +404,10 @@ class Embed_Inventory {
 		$table = self::table();
 		if ( '' !== $not_after ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is plugin prefix + literal; every value is bound. Audit lookup: a cached answer could contradict the row being written.
-			$found = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE url_hash = %s AND service_id = %s AND first_seen <= %s LIMIT 1", md5( $url ), $service_id, $not_after ) );
+			$found = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE url_hash = %s AND service_id = %s AND first_seen <= %s LIMIT 1", $key, $service_id, $not_after ) );
 		} else {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- see above.
-			$found = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE url_hash = %s AND service_id = %s LIMIT 1", md5( $url ), $service_id ) );
+			$found = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE url_hash = %s AND service_id = %s LIMIT 1", $key, $service_id ) );
 		}
 
 		return ! empty( $found );
@@ -298,31 +421,45 @@ class Embed_Inventory {
 	 * verdict does not have to consult the service catalogue separately and
 	 * cannot disagree with what was actually rendered.
 	 *
+	 * Memoised per request on the page key, so every spelling of one page
+	 * shares a single lookup. Nothing in a consent-log request writes this
+	 * table, so the memo cannot go stale within it.
+	 *
 	 * @param string $url        Page URL, in any spelling.
 	 * @param string $service_id Service slug.
 	 * @return string Category slug, or ''.
 	 */
 	public static function page_category( $url, $service_id ) {
-		$url        = faz_normalize_page_url( $url );
+		$key        = self::key( $url );
 		$service_id = sanitize_key( (string) $service_id );
-		if ( '' === $url || '' === $service_id ) {
+		if ( '' === $key || '' === $service_id ) {
 			return '';
+		}
+		$memo_key = $key . '|' . $service_id;
+		if ( isset( self::$category_memo[ $memo_key ] ) ) {
+			return self::$category_memo[ $memo_key ];
 		}
 
 		global $wpdb;
 		$table = self::table();
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is plugin prefix + literal; both values bound. Audit lookup: a cached answer could contradict the row being written.
-		$category = $wpdb->get_var( $wpdb->prepare( "SELECT category FROM {$table} WHERE url_hash = %s AND service_id = %s LIMIT 1", md5( $url ), $service_id ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is plugin prefix + literal; both values bound. Audit lookup: a persistent cache could contradict the row being written; the memo above lives for this request only.
+		$category = $wpdb->get_var( $wpdb->prepare( "SELECT category FROM {$table} WHERE url_hash = %s AND service_id = %s LIMIT 1", $key, $service_id ) );
 
-		return null === $category ? '' : (string) $category;
+		self::$category_memo[ $memo_key ] = null === $category ? '' : (string) $category;
+		return self::$category_memo[ $memo_key ];
 	}
 
 	/**
 	 * The URL of the page being rendered, normalised.
 	 *
+	 * Public because the page bakes it into the consent-log payload
+	 * (`_fazConsentLog.pageUrl`): the row the log writes and the row this class
+	 * wrote then name the page with the same function, instead of the browser
+	 * rebuilding a URL that drops the routing parameters kept here.
+	 *
 	 * @return string
 	 */
-	private static function current_url() {
+	public static function current_url() {
 		if ( empty( $_SERVER['HTTP_HOST'] ) || empty( $_SERVER['REQUEST_URI'] ) ) {
 			return '';
 		}

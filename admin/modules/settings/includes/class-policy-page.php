@@ -8,6 +8,30 @@ use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Generator;
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class Policy_Page {
+	/** Wizard law => Cookie Policy generator jurisdiction. */
+	const JURISDICTIONS = array( 'gdpr' => 'gdpr-strict', 'both' => 'gdpr-strict', 'ccpa' => 'ccpa-california', 'popia' => 'popia-southafrica' );
+
+	/**
+	 * Whether a policy template ships in exactly this language for this law.
+	 *
+	 * The generator falls back to the jurisdiction's native language or to
+	 * English when a translation is missing; the wizard must never publish that
+	 * fallback under another language's name, so only an exact match counts.
+	 * Used by the setup view to disable page creation up front, and by
+	 * validate() as the authoritative server-side check.
+	 *
+	 * @param mixed  $language Wizard language code.
+	 * @param string $law      Wizard law key.
+	 * @return bool
+	 */
+	public static function has_template( $language, $law ) {
+		if ( ! is_scalar( $law ) || ! isset( self::JURISDICTIONS[ $law ] ) ) { return false; }
+		$language = Generator::normalize_language_code( $language );
+		if ( '' === $language ) { return false; }
+		$path = Generator::resolve_template_path( self::JURISDICTIONS[ $law ], $language );
+		return $path && basename( $path, '.md' ) === $language;
+	}
+
 	/** Refuse silent template-language fallbacks before publishing anything. */
 	public static function validate( $language, $law ) {
 		if ( ! current_user_can( 'publish_pages' ) ) {
@@ -17,13 +41,82 @@ class Policy_Page {
 		if ( ! is_string( $language ) || ! in_array( $language, array_values( $languages ), true ) || ! in_array( $law, Onboarding::LAWS, true ) ) {
 			return new WP_Error( 'faz_policy_language', __( 'Choose a supported language for the cookie policy.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
-		$language = Generator::normalize_language_code( $language );
-		$jurisdictions = array( 'gdpr' => 'gdpr-strict', 'both' => 'gdpr-strict', 'ccpa' => 'ccpa-california', 'popia' => 'popia-southafrica' );
-		$path = Generator::resolve_template_path( $jurisdictions[ $law ], $language );
-		if ( ! $path || basename( $path, '.md' ) !== $language ) {
-			return new WP_Error( 'faz_policy_translation_missing', __( 'A cookie policy template is not available in the selected language. Choose another language or turn off automatic page creation and translate the policy manually.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
+		if ( ! self::has_template( $language, $law ) ) {
+			return new WP_Error( 'faz_policy_translation_missing', __( 'A cookie policy template is not available in the selected language. Create the policy on the Cookie Policy page and translate it manually.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
-		return array( 'language' => $language, 'jurisdiction' => $jurisdictions[ $law ], 'path' => $path );
+		$language = Generator::normalize_language_code( $language );
+		return array( 'language' => $language, 'jurisdiction' => self::JURISDICTIONS[ $law ], 'path' => Generator::resolve_template_path( self::JURISDICTIONS[ $law ], $language ) );
+	}
+
+	/**
+	 * The setup wizard's cookie-policy step. Advisory: it never fails setup.
+	 *
+	 * It runs only after Onboarding::finish() has saved the jurisdiction, so
+	 * the setup is already complete. Returning an error at this point would
+	 * report a saved configuration as a failure and invite a retry of work that
+	 * succeeded. Every failure, from page creation to the banner link read-back,
+	 * is therefore appended to finish()'s own advisory warning instead, and the
+	 * administrator can create or link the page afterwards. When the page could
+	 * not be created, the banner is left untouched and no cookie_page is set.
+	 *
+	 * @param array  $result   Successful Onboarding::finish() result.
+	 * @param mixed  $language Wizard language code (the banner contents key).
+	 * @param string $law      Wizard law key.
+	 * @return array The result, with cookie_page on success and warning always a string.
+	 */
+	public static function apply_to_setup( array $result, $language, $law ) {
+		$warnings = array();
+		if ( isset( $result['warning'] ) && is_string( $result['warning'] ) && '' !== $result['warning'] ) {
+			$warnings[] = $result['warning'];
+		}
+		$page = self::ensure( $language, $law );
+		if ( is_wp_error( $page ) ) {
+			/* translators: %s: the reason the cookie policy page could not be created. */
+			$warnings[] = sprintf( __( 'Setup is complete, but the cookie policy page was not created: %s', 'faz-cookie-manager' ), $page->get_error_message() );
+		} else {
+			$result['cookie_page'] = $page;
+			if ( ! self::link_banner( $language, $page['url'] ) ) {
+				$warnings[] = __( 'The cookie policy page was created, but the banner could not be linked to it. Set the privacy link on the Cookie Banner page.', 'faz-cookie-manager' );
+			}
+		}
+		$result['warning'] = implode( ' ', $warnings );
+		return $result;
+	}
+
+	/**
+	 * Point the active banner's privacy link at the generated page.
+	 *
+	 * A custom link the administrator already assigned is preserved; only an
+	 * empty link, the unresolved default "/cookie-policy", or a link to a page
+	 * this wizard generated is replaced. The saved banner is read back, because
+	 * a save that silently dropped the link would leave visitors without it.
+	 *
+	 * @param mixed  $language Banner contents language key.
+	 * @param string $url      Published page URL.
+	 * @return bool False only when the link was written but did not persist.
+	 */
+	private static function link_banner( $language, $url ) {
+		$banner = \FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance()->get_active_banner();
+		if ( ! $banner ) { return true; }
+		$contents = $banner->get_contents();
+		$link = $contents[ $language ]['notice']['elements']['privacyLink'] ?? '';
+		// Stored banner contents are not type-guaranteed: a non-string value
+		// counts as no link at all rather than reaching the string functions.
+		$link = is_scalar( $link ) ? (string) $link : '';
+		$resolved_link = 0 === strpos( $link, '/' ) && 0 !== strpos( $link, '//' ) ? home_url( $link ) : $link;
+		$linked_page = $resolved_link ? url_to_postid( $resolved_link ) : 0;
+		if ( '' === $link || ( '/cookie-policy' === $link && ! $linked_page ) || ( $linked_page && get_post_meta( $linked_page, '_faz_setup_policy_language', true ) ) ) {
+			$contents[ $language ]['notice']['elements']['privacyLink'] = $url;
+			$banner->set_contents( $contents );
+			$saved_id = $banner->save();
+			$persisted = new \FazCookie\Admin\Modules\Banners\Includes\Banner( (int) $saved_id );
+			$saved_contents = $persisted->get_contents();
+			if ( ( $saved_contents[ $language ]['notice']['elements']['privacyLink'] ?? '' ) !== $url ) {
+				return false;
+			}
+			faz_clear_banner_template_cache();
+		}
+		return true;
 	}
 
 	/** Create once per language and jurisdiction; never overwrite existing content. */
@@ -85,7 +178,7 @@ class Policy_Page {
 
 	/** Report a publication veto without overwriting or duplicating the page. */
 	private static function not_public_error() {
-		return new WP_Error( 'faz_policy_not_public', __( 'The cookie policy page is not public. Publish it without password protection in Pages, or turn off automatic page creation to finish setup.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+		return new WP_Error( 'faz_policy_not_public', __( 'The cookie policy page is not public. Publish it without password protection in Pages, then link it from the Cookie Banner page.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
 	}
 
 	/** Delete only the lease we observed, not a successor's lease. */

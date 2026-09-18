@@ -191,15 +191,6 @@ defined( 'ABSPATH' ) || exit;
 
 	<!-- Cookie Definitions (Open Cookie Database) -->
 	<div class="faz-card" id="faz-cookie-definitions-card" style="margin-top:16px;">
-		<?php $faz_refresh = get_option( 'faz_definitions_refresh_status', array() ); ?>
-		<?php if ( ! empty( $faz_refresh['at'] ) ) : ?>
-			<p class="faz-help" role="status">
-				<?php esc_html_e( 'Last automatic definitions update attempt:', 'faz-cookie-manager' ); ?>
-				<?php echo esc_html( $faz_refresh['at'] ); ?> —
-				<?php echo ! empty( $faz_refresh['success'] ) ? esc_html__( 'Successful', 'faz-cookie-manager' ) : esc_html__( 'Failed; existing definitions retained.', 'faz-cookie-manager' ); ?>
-				<?php if ( empty( $faz_refresh['success'] ) ) { echo esc_html( $faz_refresh['message'] ?? '' ); } ?>
-			</p>
-		<?php endif; ?>
 		<div class="faz-card-header">
 			<h3><?php esc_html_e( 'Cookie Definitions', 'faz-cookie-manager' ); ?></h3>
 			<div class="faz-page-header-actions">
@@ -207,6 +198,29 @@ defined( 'ABSPATH' ) || exit;
 			</div>
 		</div>
 		<div class="faz-card-body">
+			<?php
+			$faz_refresh = get_option( 'faz_definitions_refresh_status', array() );
+			// The option is only ever written as an array (see Cookie_Definitions::
+			// cron_update()), but a manually-cleared or corrupted option could hand
+			// back anything get_option()'s $default doesn't cover. Reading a string
+			// key off a non-array silently returns null (or, on a string value,
+			// warns and reads a character), so confirm the shape first.
+			if ( is_array( $faz_refresh ) && ! empty( $faz_refresh['at'] ) ) :
+				// Stored via current_time( 'mysql' ), i.e. already the site's local
+				// time — format it with the site's own date/time formats rather than
+				// echoing the raw "Y-m-d H:i:s" string.
+				$faz_refresh_ts = strtotime( $faz_refresh['at'] );
+				$faz_refresh_when = $faz_refresh_ts
+					? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $faz_refresh_ts )
+					: $faz_refresh['at'];
+				?>
+				<p class="faz-help" role="status">
+					<?php esc_html_e( 'Last automatic definitions update attempt:', 'faz-cookie-manager' ); ?>
+					<?php echo esc_html( $faz_refresh_when ); ?> —
+					<?php echo ! empty( $faz_refresh['success'] ) ? esc_html__( 'Successful', 'faz-cookie-manager' ) : esc_html__( 'Failed; existing definitions retained.', 'faz-cookie-manager' ); ?>
+					<?php if ( empty( $faz_refresh['success'] ) ) { echo esc_html( $faz_refresh['message'] ?? '' ); } ?>
+				</p>
+			<?php endif; ?>
 			<p><?php echo wp_kses_post( __( 'Cookie definitions are sourced from the <a href="https://github.com/fabiodalez-dev/Open-Cookie-Database" target="_blank" rel="noopener">Open Cookie Database</a> (Apache-2.0 license). These definitions power the auto-categorize feature.', 'faz-cookie-manager' ) ); ?></p>
 			<div id="faz-defs-status" style="margin-top:8px;font-size:13px;color:var(--faz-text-muted);"><?php esc_html_e( 'Loading status...', 'faz-cookie-manager' ); ?></div>
 		</div>

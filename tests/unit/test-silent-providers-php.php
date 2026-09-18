@@ -20,6 +20,9 @@ namespace {
 	}
 
 	require_once dirname( __DIR__, 2 ) . '/includes/class-known-providers.php';
+	// Loaded so Known_Providers::get_silent_providers() can class_exists()
+	// its way into the real embed check instead of silently skipping it.
+	require_once dirname( __DIR__, 2 ) . '/frontend/includes/class-placeholder-builder.php';
 
 	use FazCookie\Includes\Known_Providers;
 
@@ -68,6 +71,14 @@ namespace {
 	}
 	sp_check( null !== $with_cookies && ! in_array( $with_cookies, $labels, true ),
 		'a provider that declares cookies is not listed (' . (string) $with_cookies . ')' );
+
+	// An embed-only provider (no cookies, but rendered via Placeholder_Builder
+	// as a blocked embed) must NOT be listed either: it DOES show a placeholder,
+	// so it is not silent. Loom and Rumble both declare zero cookies in the
+	// catalogue yet are video embeds (Placeholder_Builder::$video_services /
+	// $url_service_map), so the old cookies-only predicate wrongly caught them.
+	sp_check( ! in_array( 'Loom', $labels, true ), 'Loom (embed, no cookies) is not listed' );
+	sp_check( ! in_array( 'Rumble', $labels, true ), 'Rumble (embed, no cookies) is not listed' );
 
 	// Deliberately NOT asserted here: whether a given provider is exempted by
 	// the site's whitelist. The real matcher (Frontend::matches_whitelist_pattern)

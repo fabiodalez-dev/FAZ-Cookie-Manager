@@ -52,9 +52,21 @@ namespace FazCookie\Frontend\Includes {
 		/** @var array<string,string> */
 		public static $map = array();
 
+		/**
+		 * Keyed the way the real class keys: scheme stripped on both sides,
+		 * so a Referer and a render that disagree on the scheme still meet —
+		 * and so this double cannot stay green on a shape production dropped.
+		 */
 		public static function page_category( $url, $service_id ) {
-			$key = $url . '|' . $service_id;
-			return isset( self::$map[ $key ] ) ? self::$map[ $key ] : '';
+			$strip = static function ( $u ) {
+				return (string) preg_replace( '#^[a-z][a-z0-9+.\-]*://#i', '', (string) $u );
+			};
+			foreach ( self::$map as $key => $category ) {
+				if ( $strip( $key ) === $strip( $url ) . '|' . $service_id ) {
+					return $category;
+				}
+			}
+			return '';
 		}
 	}
 }
@@ -116,7 +128,11 @@ namespace {
 			return $q;
 		}
 
+		/** @var int Category lookups issued, for the per-request memo case. */
+		public static $row_reads = 0;
+
 		public function get_row( $q ) {
+			++self::$row_reads;
 			if ( ! preg_match( "/slug = '([^']*)'/", $q, $m ) ) {
 				return null;
 			}
@@ -164,6 +180,14 @@ namespace {
 		FazTest_AuditWPDB::$categories = array();
 		unset( $_COOKIE['fazcookie-dnsmpi'] );
 		unset( $_SERVER['HTTP_REFERER'] );
+		FazTest_AuditWPDB::$row_reads = 0;
+		// The category memo lives for one request; each case is one request.
+		$rc = new \ReflectionClass( Gpc_Exception_Audit::class );
+		if ( $rc->hasProperty( 'sale_share_memo' ) ) {
+			$prop = $rc->getProperty( 'sale_share_memo' );
+			$prop->setAccessible( true );
+			$prop->setValue( null, array() );
+		}
 	}
 
 	/** Build a "svc.<id>:<svc>,gpcx.<id>:<gpcx>" consent cookie fragment. */
@@ -502,6 +526,123 @@ namespace {
 		'no' === ( $result[ $served_key . $id ] ?? null ),
 		'8. a service id with regex metacharacters ("a.b*c") does not let an unrelated cookie token match'
 	);
+
+
+	// ============================================================
+	// 9. A Referer reduced to its origin falls back to the payload url.
+	// ============================================================
+	// `Referrer-Policy: origin` / `strict-origin` (and some privacy
+	// extensions) send only the origin, so on every page but the home page the
+	// Referer named a page that never offered the embed and a genuine click
+	// read as unverified. The fallback is narrow: only a bare origin, only when
+	// the origin itself has no row, only to a deeper path on the same host.
+	$id        = 'svc-e';
+	$deep      = 'https://example.test/contact';
+	$fallback  = function ( $referer, $payload_url, array $map ) use ( $id, $served_key ) {
+		audit_reset();
+		foreach ( $map as $page ) {
+			Embed_Inventory::$map[ $page . '|' . $id ] = 'marketing';
+		}
+		FazTest_AuditWPDB::$categories['marketing'] = array( 'sell' => 1, 'share' => 0 );
+		$_SERVER['HTTP_REFERER'] = $referer;
+		$result = Gpc_Exception_Audit::decide(
+			array( 'meta.gpc_exception.' . $id => 'yes' ),
+			array( 'signal_gpc' => 1, 'url' => $payload_url ),
+			audit_consent( $id ),
+			array()
+		);
+		return isset( $result[ $served_key . $id ] ) ? $result[ $served_key . $id ] : null;
+	};
+	audit_check( 'yes' === $fallback( 'https://example.test/', $deep, array( $deep ) ), '9a. a bare-origin Referer with no row falls back to the payload page -> yes' );
+	audit_check( 'yes' === $fallback( 'https://example.test', $deep, array( $deep ) ), '9b. the same without the trailing slash -> yes' );
+	audit_check( 'no' === $fallback( 'https://example.test/', 'https://elsewhere.test/contact', array( 'https://elsewhere.test/contact' ) ), '9c. the fallback never crosses to another host -> no' );
+	audit_check( 'no' === $fallback( 'https://example.test/', 'https://example.test/', array() ), '9d. a payload that is itself the bare origin adds nothing -> no' );
+	audit_check( 'yes' === $fallback( 'https://example.test/', 'https://example.test/unknown', array( 'https://example.test/' ) ), '9e. a bare origin that HAS a row is judged on its own row -> yes' );
+	audit_check( 'no' === $fallback( 'https://example.test/other', $deep, array( $deep ) ), '9f. a full-path Referer never falls back (7b contract) -> no' );
+
+	// ============================================================
+	// 10. The number of exceptions judged per row is bounded.
+	// ============================================================
+	audit_check( defined( Gpc_Exception_Audit::class . '::MAX_IDS' ) && 50 === Gpc_Exception_Audit::MAX_IDS, '10. MAX_IDS is 50' );
+	audit_reset();
+	$many = array();
+	for ( $i = 0; $i < 60; $i++ ) {
+		$many[ 'meta.gpc_exception.svc' . $i ] = 'yes';
+	}
+	$result   = Gpc_Exception_Audit::decide( $many, array( 'url' => 'https://example.test/x' ), '', array() );
+	$verdicts = array_filter( array_keys( $result ), function ( $k ) use ( $served_key, $carried_key ) {
+		return 0 === strpos( $k, $served_key ) || 0 === strpos( $k, $carried_key );
+	} );
+	audit_check( defined( Gpc_Exception_Audit::class . '::MAX_IDS' ) && Gpc_Exception_Audit::MAX_IDS === count( $verdicts ), '10. only the first MAX_IDS exceptions receive a verdict key' );
+	audit_check( ! isset( $result[ $served_key . 'svc55' ] ), '10. an exception beyond the bound gets no verdict at all' );
+
+	// ============================================================
+	// 11. A carried verdict remembers what the first one said.
+	// ============================================================
+	// "carried" used to render the same whatever the first row concluded, so an
+	// exception the server had judged unverified turned into an innocuous
+	// "carried" one page later — laundering the verdict it was carrying.
+	$carry = function ( array $previous_categories ) use ( $carried_key ) {
+		audit_reset();
+		$result = Gpc_Exception_Audit::decide(
+			array( 'meta.gpc_exception.svc-f' => 'yes' ),
+			array( 'signal_gpc' => 1, 'url' => 'https://example.test/f' ),
+			'',
+			array( 'categories' => $previous_categories )
+		);
+		return isset( $result[ $carried_key . 'svc-f' ] ) ? $result[ $carried_key . 'svc-f' ] : null;
+	};
+	audit_check( 'no' === $carry( array( $served_key . 'svc-f' => 'no' ) ), '11a. carried from an unverified serve -> carried=no' );
+	audit_check( 'no' === $carry( array( $carried_key . 'svc-f' => 'no' ) ), '11b. carried from an unverified carry -> carried=no' );
+	audit_check( 'yes' === $carry( array( $served_key . 'svc-f' => 'yes' ) ), '11c. carried from a verified serve -> carried=yes' );
+	audit_check( 'yes' === $carry( array( $served_key . 'svc-f' => 'yes', $carried_key . 'svc-f' => 'no' ) ), '11d. an explicit served value wins over a carried one' );
+	audit_check( 'yes' === $carry( array( 'meta.gpc_exception.svc-f' => 'yes' ) ), '11e. a legacy row with only the client key does not turn red' );
+	audit_check( 'yes' === $carry( array( 'meta.gpc_exception.svc-f' => 'yes', $carried_key . 'svc-f' => 'yes' ) ), '11f. a verdict wins over the bare client key' );
+
+	// ============================================================
+	// 12. The category flags are read once per request.
+	// ============================================================
+	audit_reset();
+	FazTest_AuditWPDB::$categories['marketing'] = array( 'sell' => 1, 'share' => 0 );
+	Embed_Inventory::$map['https://example.test/g|one'] = 'marketing';
+	Embed_Inventory::$map['https://example.test/g|two'] = 'marketing';
+	Gpc_Exception_Audit::decide(
+		array( 'meta.gpc_exception.one' => 'yes', 'meta.gpc_exception.two' => 'yes' ),
+		array( 'signal_gpc' => 1, 'url' => 'https://example.test/g' ),
+		audit_consent( 'one' ) . ',' . audit_consent( 'two' ),
+		array()
+	);
+	audit_check( 1 === FazTest_AuditWPDB::$row_reads, '12. two exceptions in one category cost one category lookup' );
+
+	// ============================================================
+	// 13. Page identity across schemes and routing parameters.
+	// ============================================================
+	// Behind a TLS-terminating proxy the render and the consent post can see
+	// different schemes; the page is still the same page.
+	audit_check( 'yes' === $fallback( 'http://example.test/contact', 'http://example.test/contact', array( $deep ) ), '13a. an http:// Referer finds the row an https:// render wrote -> yes' );
+
+	// A plain-permalink page with no Referer at all: the payload now carries the
+	// routing query, and it must match the row the render keyed on it.
+	audit_reset();
+	Embed_Inventory::$map['https://example.test/?p=123|' . $id] = 'marketing';
+	FazTest_AuditWPDB::$categories['marketing'] = array( 'sell' => 1, 'share' => 0 );
+	$result = Gpc_Exception_Audit::decide(
+		array( 'meta.gpc_exception.' . $id => 'yes' ),
+		array( 'signal_gpc' => 1, 'url' => 'https://example.test/?p=123&utm_source=x' ),
+		audit_consent( $id ),
+		array()
+	);
+	audit_check( 'yes' === ( $result[ $served_key . $id ] ?? null ), '13b. a ?p=123 payload with no Referer matches the ?p=123 row -> yes' );
+	audit_reset();
+	Embed_Inventory::$map['https://example.test/?p=123|' . $id] = 'marketing';
+	FazTest_AuditWPDB::$categories['marketing'] = array( 'sell' => 1, 'share' => 0 );
+	$result = Gpc_Exception_Audit::decide(
+		array( 'meta.gpc_exception.' . $id => 'yes' ),
+		array( 'signal_gpc' => 1, 'url' => 'https://example.test/' ),
+		audit_consent( $id ),
+		array()
+	);
+	audit_check( 'no' === ( $result[ $served_key . $id ] ?? null ), '13c. the bare home page does not borrow a ?p=123 row -> no' );
 
 	echo "\nPassed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );

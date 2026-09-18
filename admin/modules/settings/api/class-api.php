@@ -335,6 +335,10 @@ class Api extends Rest_Controller {
 	 * All compliance-critical logic lives in the Onboarding helper so it can be
 	 * unit-tested directly.
 	 *
+	 * When create_cookie_page is true, the cookie policy page is created and
+	 * linked afterwards by Policy_Page::apply_to_setup(). That step is advisory:
+	 * its failures come back in the response's `warning`, never as an error.
+	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 * @return WP_Error|WP_REST_Response
 	 */
@@ -358,37 +362,12 @@ class Api extends Rest_Controller {
 		}
 
 		$onboarding = new Onboarding();
-		if ( true === $request->get_param( 'create_cookie_page' ) ) {
-			$validation = \FazCookie\Admin\Modules\Settings\Includes\Policy_Page::validate( $options['language'] ?? '', $law );
-			if ( is_wp_error( $validation ) ) { return $validation; }
-		}
 		$result     = $onboarding->finish( $law, $options );
+		// The cookie-policy page is advisory: finish() errors are the only hard
+		// failures. Everything the policy step cannot do is reported through
+		// the result's warning, because the setup itself is already saved.
 		if ( ! is_wp_error( $result ) && true === $request->get_param( 'create_cookie_page' ) ) {
-			$page = \FazCookie\Admin\Modules\Settings\Includes\Policy_Page::ensure( $options['language'] ?? '', $law );
-			if ( is_wp_error( $page ) ) {
-				return $page;
-			}
-			$result['cookie_page'] = $page;
-			$banner = \FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance()->get_active_banner();
-			if ( $banner ) {
-				$language = $options['language'];
-				$contents = $banner->get_contents();
-				$link = $contents[ $language ]['notice']['elements']['privacyLink'] ?? '';
-				// Preserve a custom link the administrator has already assigned.
-				$resolved_link = 0 === strpos( $link, '/' ) && 0 !== strpos( $link, '//' ) ? home_url( $link ) : $link;
-				$linked_page = $resolved_link ? url_to_postid( $resolved_link ) : 0;
-				if ( '' === $link || ( '/cookie-policy' === $link && ! $linked_page ) || ( $linked_page && get_post_meta( $linked_page, '_faz_setup_policy_language', true ) ) ) {
-					$contents[ $language ]['notice']['elements']['privacyLink'] = $page['url'];
-					$banner->set_contents( $contents );
-					$saved_id = $banner->save();
-					$persisted = new \FazCookie\Admin\Modules\Banners\Includes\Banner( (int) $saved_id );
-					$saved_contents = $persisted->get_contents();
-					if ( ( $saved_contents[ $language ]['notice']['elements']['privacyLink'] ?? '' ) !== $page['url'] ) {
-						return new WP_Error( 'faz_policy_link_failed', __( 'The cookie policy was created, but its banner link could not be saved. Please try again.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
-					}
-					faz_clear_banner_template_cache();
-				}
-			}
+			$result = \FazCookie\Admin\Modules\Settings\Includes\Policy_Page::apply_to_setup( $result, $options['language'] ?? '', $law );
 		}
 
 		return rest_ensure_response( $result );

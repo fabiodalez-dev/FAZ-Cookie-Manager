@@ -812,13 +812,20 @@ class Frontend {
 						'token'          => $hmac_token,
 						'bannerSlug'     => $this->banner ? $this->banner->get_slug() : '',
 						'policyRevision' => isset( $faz_settings['general']['consent_revision'] ) ? max( 1, absint( $faz_settings['general']['consent_revision'] ) ) : 1,
+						// The page's identity as the placeholder inventory records
+						// it — the same function, for the same render — so the
+						// audit compares like with like. A browser-built URL kept
+						// only origin + path and dropped the routing parameters
+						// (?p=, ?lang=) the inventory keys on. It varies by page,
+						// never by visitor, so a cached copy stays correct.
+						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::current_url() : '',
 					)
 				);
 					$inline_js = "document.addEventListener('fazcookie_consent_update',function(e){" .
 						"var d=e.detail||{};" .
 						"if(!d.action||d.action==='init')return;" .
 						"if(typeof _fazConsentLog==='undefined')return;" .
-						"var safeUrl=(function(){try{var current=new URL(window.location.href);return current.origin+current.pathname}catch(err){var origin=window.location.origin||(window.location.protocol+'//'+window.location.host);return origin+(window.location.pathname||'')}})();" .
+						"var safeUrl=(function(){if(_fazConsentLog.pageUrl)return _fazConsentLog.pageUrl;try{var current=new URL(window.location.href);return current.origin+current.pathname+current.search}catch(err){var origin=window.location.origin||(window.location.protocol+'//'+window.location.host);return origin+(window.location.pathname||'')+(window.location.search||'')}})();" .
 						"fetch(_fazConsentLog.restUrl,{" .
 							"method:'POST'," .
 							// keepalive so the request survives the navigation that

@@ -71,9 +71,12 @@ namespace {
 	$logger = ( new \ReflectionClass( Consent_Logger::class ) )->newInstanceWithoutConstructor();
 	$method = new \ReflectionMethod( Consent_Logger::class, 'has_new_gpc_exception' );
 	$method->setAccessible( true );
+	// The row is handed in: the handler fetches it once and feeds both the
+	// status comparison and this check. The stub is left EMPTY so a version that
+	// re-queries on its own reads nothing and gets these cases wrong.
 	$is_new = function ( $consent_id, $categories, $stored_row ) use ( $logger, $method ) {
-		Controller::$row = $stored_row;
-		return (bool) $method->invoke( $logger, $consent_id, $categories );
+		Controller::$row = null;
+		return (bool) $method->invoke( $logger, $consent_id, $categories, $stored_row );
 	};
 
 	$row = function ( array $categories ) {
@@ -113,6 +116,26 @@ namespace {
 
 	// Near-miss keys must not be mistaken for exceptions.
 	gpcx_check( ! $is_new( 'abc', array( 'meta.gpc_exception' => 'yes', 'meta.age_affirmed' => 'yes' ), $row( array() ) ), 'other meta keys do not open the bypass' );
+
+	// One newest-row lookup per request, shared by both comparisons. The
+	// second, identical SELECT ran before the throttle verdict, so it was paid
+	// by exactly the replay traffic the early return exists to stop paying for.
+	$src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/frontend/modules/consent-logger/class-consent-logger.php' );
+	gpcx_check( 1 === substr_count( $src, 'get_log_by_consent_id(' ), 'the handler fetches the previous row exactly once' );
+
+	// The docblock of last_logged_status() sits on last_logged_status(): the
+	// helper inserted above it had split the two apart.
+	gpcx_check(
+		(bool) preg_match( '/@return string Previous status[^\n]*\n\s*\*\/\s*\n\s*private function last_logged_status\(/', $src ),
+		'last_logged_status() is directly preceded by its own docblock'
+	);
+
+	// The scan is bounded like the stored map: a crafted payload is not walked
+	// in full before any cap applies.
+	$flood = array();
+	for ( $i = 0; $i < 400; $i++ ) { $flood[ 'k' . $i ] = 'yes'; }
+	$flood['meta.gpc_exception.late'] = 'yes';
+	gpcx_check( ! $is_new( 'abc', $flood, $row( array() ) ), 'an exception past the 250th key does not open the bypass' );
 
 	echo "Passed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );

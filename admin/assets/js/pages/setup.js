@@ -30,6 +30,10 @@
 	var TOTAL_STEPS = 8;
 	var SCAN_STEP = 7;          // the step hosting the scan + payment suggestions
 	var TCF_STEP = 5;           // the step whose Next is gated on a valid CMP ID
+	// A warning toast stays up 6s (faz-admin.js); the redirect waits for it so
+	// an advisory notice (e.g. the cookie policy page was not created) is read.
+	var SUCCESS_REDIRECT_DELAY = 700;
+	var WARNING_REDIRECT_DELAY = 6000;
 
 	var root, steps, progressItems, backBtn, nextBtn, finishBtn;
 	var currentStep = 1;
@@ -58,6 +62,7 @@
 		bindScan();
 		bindTcfFields();
 		bindLanguageNote();
+		bindPolicyPage();
 		bindCacheInteractionNote();
 		bindCacheBootstrapRecommendation();
 		loadRecommendations();
@@ -92,6 +97,42 @@
 		};
 		select.addEventListener('change', sync);
 		sync();
+	}
+
+	// Review step: the optional cookie policy page. The box ships unticked; the
+	// "Cookie policy language" note is shown only while it is ticked and follows
+	// the language live. Each language option lists, in data-policy-laws, the
+	// laws for which a policy template ships in exactly that language: without
+	// one the box is disabled with an explanation. An option without the
+	// attribute is left to the server, which checks again on Finish.
+	function bindPolicyPage() {
+		var box = document.getElementById('faz-setup-create-cookie-page');
+		if (!box) { return; }
+		var select = document.getElementById('faz-setup-lang');
+		var note = document.getElementById('faz-setup-policy-language');
+		var unavailable = document.getElementById('faz-setup-policy-unavailable');
+		root.querySelectorAll('input[name="faz-setup-law"]').forEach(function (input) {
+			input.addEventListener('change', syncPolicyPage);
+		});
+		box.addEventListener('change', syncPolicyPage);
+		if (select) { select.addEventListener('change', syncPolicyPage); }
+		syncPolicyPage();
+
+		function syncPolicyPage() {
+			var opt = (select && select.selectedIndex >= 0) ? select.options[select.selectedIndex] : null;
+			var laws = opt ? opt.getAttribute('data-policy-laws') : null;
+			var available = !opt || laws === null || (' ' + laws + ' ').indexOf(' ' + selectedLaw() + ' ') !== -1;
+			if (!available) { box.checked = false; }
+			box.disabled = !available;
+			if (unavailable) { unavailable.hidden = available; }
+			if (note) {
+				var show = box.checked && !!opt;
+				note.hidden = !show;
+				note.textContent = show
+					? fazI18n('setup.policy_language', 'Cookie policy language: %s').replace('%s', textOf(opt))
+					: '';
+			}
+		}
 	}
 
 	// Banner-options step: Cache Compatibility Mode keeps every cached page
@@ -258,11 +299,6 @@
 
 		if (currentStep === TOTAL_STEPS) {
 			renderReview();
-			var language = document.getElementById('faz-setup-lang');
-			var policyLanguage = document.getElementById('faz-setup-policy-language');
-			if (language && policyLanguage) {
-				policyLanguage.textContent = fazI18n('setup.policy_language', 'Cookie policy language: %s').replace('%s', language.options[language.selectedIndex].textContent);
-			}
 		}
 
 		// Move focus to the newly-active step's heading so keyboard/screen-reader
@@ -849,18 +885,21 @@
 		payload.law = selectedLaw();
 
 		FAZ.post('settings/onboarding', payload).then(function (result) {
-			if (result && result.warning) {
-				// Keep the response contract forward-compatible with advisory notices.
+			// A warning rides on a SAVED setup (advisory notices from finish(),
+			// and every cookie-policy page failure): it is never an error, and
+			// the wizard stays locked because there is nothing left to retry.
+			var warning = !!(result && result.warning);
+			if (warning) {
 				FAZ.notify(result.warning, 'warning');
 			} else {
 				FAZ.notify(fazI18n('setup.finished', 'Setup complete. Your cookie banner is ready.'), 'success');
 			}
-			// Brief pause so the toast is visible before navigating.
+			// Pause so the toast can be read before navigating.
 			setTimeout(function () {
 				// Same-directory, constant admin target: no DOM-derived URL reaches a
 				// navigation sink (and custom WordPress admin paths keep working).
 				window.location.assign('admin.php?page=faz-cookie-manager');
-			}, 700);
+			}, warning ? WARNING_REDIRECT_DELAY : SUCCESS_REDIRECT_DELAY);
 		}).catch(function (err) {
 			finishing = false;
 			finishBtn.disabled = false;

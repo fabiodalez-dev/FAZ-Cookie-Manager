@@ -36,12 +36,30 @@ class Gpc_Exception_Audit {
 	const CARRIED = 'meta.gpc_exception_carried.';
 
 	/**
+	 * Most exceptions judged per row.
+	 *
+	 * Each one can cost an inventory lookup, and each one adds a verdict key to
+	 * a map the controller caps at 250 entries; the controller reserves this
+	 * many of them (250 - MAX_IDS for the client) so a verdict is never the
+	 * entry that gets cut. No real page offers fifty separate blocked embeds.
+	 */
+	const MAX_IDS = 50;
+
+	/**
+	 * category_is_sale_share() answers already given in this request.
+	 *
+	 * @var array<string,bool>
+	 */
+	private static $sale_share_memo = array();
+
+	/**
 	 * Add the server's verdict to a sanitised decision map.
 	 *
 	 * @param array  $clean      Sanitised categories map, as it will be stored.
 	 * @param array  $data       The log payload (`signal_gpc`, `url`, `consent_id`).
 	 * @param string $consent    Raw valid consent cookie for this request.
-	 * @param array  $previous   The previous row for this consent id, or array().
+	 * @param array  $previous   The newest earlier row for this consent id that
+	 *                           records any GPC-exception key, or array().
 	 * @return array The map with the verdict keys added.
 	 */
 	public static function decide( array $clean, array $data, $consent = '', array $previous = array() ) {
@@ -60,6 +78,11 @@ class Gpc_Exception_Audit {
 				$id = substr( $key, strlen( 'meta.gpc_exception.' ) );
 				if ( '' !== $id ) {
 					$ids[] = $id;
+					// Bounded: ids past MAX_IDS get no verdict key at all
+					// rather than an unbounded run of lookups.
+					if ( count( $ids ) >= self::MAX_IDS ) {
+						break;
+					}
 				}
 			}
 		}
@@ -68,18 +91,24 @@ class Gpc_Exception_Audit {
 		}
 
 		$carried_from_previous = self::previous_exceptions( $previous );
-		$url                   = self::request_page_url( $data );
+		$urls                  = self::request_page_urls( $data );
 
 		foreach ( $ids as $id ) {
 			// Already on record for this visitor: the runtime re-asserts the
 			// marker on later pages, and those pages need no placeholder of
 			// their own. Judging them as fresh clicks would mark every second
 			// page view unverified.
+			//
+			// The carried verdict keeps what the first one said. Writing 'yes'
+			// regardless turned an exception the server had judged unverified
+			// into an unremarkable "carried" one on the very next page. Only a
+			// prior 'no' carries as 'no': a legacy row that recorded just the
+			// client's claim ('') has nothing to carry against it.
 			if ( isset( $carried_from_previous[ $id ] ) ) {
-				$clean[ self::CARRIED . $id ] = 'yes';
+				$clean[ self::CARRIED . $id ] = 'no' === $carried_from_previous[ $id ] ? 'no' : 'yes';
 				continue;
 			}
-			$clean[ self::SERVED . $id ] = self::served( $id, $data, $consent, $url ) ? 'yes' : 'no';
+			$clean[ self::SERVED . $id ] = self::served( $id, $data, $consent, $urls ) ? 'yes' : 'no';
 		}
 
 		return $clean;
@@ -88,13 +117,13 @@ class Gpc_Exception_Audit {
 	/**
 	 * Whether every circumstance of a served exception holds.
 	 *
-	 * @param string $id      Service id.
-	 * @param array  $data    Log payload.
-	 * @param string $consent Raw consent cookie.
-	 * @param string $url     Normalised page URL.
+	 * @param string   $id      Service id.
+	 * @param array    $data    Log payload.
+	 * @param string   $consent Raw consent cookie.
+	 * @param string[] $urls    Candidate page URLs, in order; see request_page_urls().
 	 * @return bool
 	 */
-	private static function served( $id, array $data, $consent, $url ) {
+	private static function served( $id, array $data, $consent, array $urls ) {
 		// 1. The signal the exception is an exception TO must have been present.
 		if ( empty( $data['signal_gpc'] ) ) {
 			return false;
@@ -123,10 +152,17 @@ class Gpc_Exception_Audit {
 		// 4. The page must be on record as having offered that embed. This is
 		//    the fact the client cannot invent: the inventory is written during
 		//    render, from the server's own placeholder builder.
-		if ( '' === $url || ! class_exists( '\\FazCookie\\Frontend\\Includes\\Embed_Inventory' ) ) {
+		//    The first candidate with a row decides.
+		if ( empty( $urls ) || ! class_exists( '\\FazCookie\\Frontend\\Includes\\Embed_Inventory' ) ) {
 			return false;
 		}
-		$category = Embed_Inventory::page_category( $url, $id );
+		$category = '';
+		foreach ( $urls as $url ) {
+			$category = Embed_Inventory::page_category( $url, $id );
+			if ( '' !== $category ) {
+				break;
+			}
+		}
 		if ( '' === $category ) {
 			return false;
 		}
@@ -143,21 +179,30 @@ class Gpc_Exception_Audit {
 	 * @return bool
 	 */
 	private static function category_is_sale_share( $slug ) {
+		$slug = (string) $slug;
+		if ( isset( self::$sale_share_memo[ $slug ] ) ) {
+			return self::$sale_share_memo[ $slug ];
+		}
 		global $wpdb;
 		$table = $wpdb->prefix . 'faz_cookie_categories';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is plugin prefix + literal; slug is bound. Audit path: a cached answer could contradict the row being written.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is plugin prefix + literal; slug is bound. Audit path: a persistent cache could contradict the row being written; the memo above lives for this request only.
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT sell_personal_data, share_personal_data FROM {$table} WHERE slug = %s LIMIT 1", $slug ) );
-		if ( ! $row ) {
-			return false;
-		}
-		return ( (int) $row->sell_personal_data > 0 ) || ( (int) $row->share_personal_data > 0 );
+
+		self::$sale_share_memo[ $slug ] = $row
+			? ( ( (int) $row->sell_personal_data > 0 ) || ( (int) $row->share_personal_data > 0 ) )
+			: false;
+		return self::$sale_share_memo[ $slug ];
 	}
 
 	/**
-	 * Exceptions the previous row for this consent id already carried.
+	 * Exceptions the previous row already carried, with the verdict it gave.
+	 *
+	 * id => 'yes' | 'no' | ''. An explicit served verdict wins over a carried
+	 * one, and either wins over the bare client key, which records the claim but
+	 * no verdict ('' — a row written before the server judged anything).
 	 *
 	 * @param array $previous Previous log row.
-	 * @return array<string,bool>
+	 * @return array<string,string>
 	 */
 	private static function previous_exceptions( array $previous ) {
 		if ( empty( $previous['categories'] ) ) {
@@ -170,39 +215,80 @@ class Gpc_Exception_Audit {
 		if ( ! is_array( $stored ) ) {
 			return array();
 		}
-		$out = array();
-		foreach ( array_keys( $stored ) as $key ) {
+		// Lowest rank first; a higher rank overwrites whatever a lower one set.
+		$ranked = array(
+			'meta.gpc_exception.' => 0,
+			self::CARRIED         => 1,
+			self::SERVED          => 2,
+		);
+		$out  = array();
+		$rank = array();
+		foreach ( $stored as $key => $value ) {
 			$key = (string) $key;
-			foreach ( array( 'meta.gpc_exception.', self::SERVED, self::CARRIED ) as $prefix ) {
-				if ( 0 === strpos( $key, $prefix ) ) {
-					$id = substr( $key, strlen( $prefix ) );
-					if ( '' !== $id ) {
-						$out[ $id ] = true;
-					}
+			foreach ( $ranked as $prefix => $level ) {
+				if ( 0 !== strpos( $key, $prefix ) ) {
+					continue;
 				}
+				$id = substr( $key, strlen( $prefix ) );
+				if ( '' === $id || ( isset( $rank[ $id ] ) && $rank[ $id ] >= $level ) ) {
+					continue;
+				}
+				$rank[ $id ] = $level;
+				$out[ $id ]  = 0 === $level ? '' : ( 'no' === $value ? 'no' : 'yes' );
 			}
 		}
 		return $out;
 	}
 
 	/**
-	 * The page this consent post came from.
+	 * The pages this consent post may have come from, most trusted first.
 	 *
-	 * Prefers the browser-set Referer: a script can choose what to put in the
-	 * payload's `url`, but not what the browser sends in that header. Falls
-	 * back to the payload when the header is absent (referrer policies strip
-	 * it), which is no worse than judging on the payload alone.
+	 * Prefers the browser-set Referer, which a stray or careless script leaves
+	 * pointing at the page the visitor was really on. It is not proof: a script
+	 * on the site's own pages can pass `referrer` to fetch() and name any page
+	 * of the same origin, exactly as it can write any `url` into the payload.
+	 * Neither source makes a forged click distinguishable from a real one —
+	 * the record claims consistency, not authenticity (see the class docblock).
+	 * Falls back to the payload when the header is absent (referrer policies
+	 * strip it), which is no worse than judging on the payload alone.
+	 *
+	 * A Referer reduced to its bare origin (`Referrer-Policy: origin` or
+	 * `strict-origin`, some privacy extensions) names the home page whatever
+	 * page the visitor was on, so a genuine click anywhere else found no row.
+	 * The payload url is then offered as a second candidate — only after the
+	 * origin itself, only on the same host, and only when it names a deeper
+	 * path: it can add the one page the header could not name, never replace a
+	 * page the header did name.
 	 *
 	 * @param array $data Log payload.
-	 * @return string
+	 * @return string[]
 	 */
-	private static function request_page_url( array $data ) {
-		if ( ! empty( $_SERVER['HTTP_REFERER'] ) ) {
-			$referer = faz_normalize_page_url( sanitize_text_field( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) );
-			if ( '' !== $referer ) {
-				return $referer;
-			}
+	private static function request_page_urls( array $data ) {
+		$payload = isset( $data['url'] ) ? faz_normalize_page_url( (string) $data['url'] ) : '';
+		if ( empty( $_SERVER['HTTP_REFERER'] ) ) {
+			return '' === $payload ? array() : array( $payload );
 		}
-		return isset( $data['url'] ) ? faz_normalize_page_url( (string) $data['url'] ) : '';
+		$referer = faz_normalize_page_url( sanitize_text_field( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) );
+		if ( '' === $referer ) {
+			return '' === $payload ? array() : array( $payload );
+		}
+
+		$ref_parts = faz_parse_url( $referer );
+		$ref_path  = is_array( $ref_parts ) && isset( $ref_parts['path'] ) ? (string) $ref_parts['path'] : '';
+		$bare      = is_array( $ref_parts ) && ( '' === $ref_path || '/' === $ref_path ) && empty( $ref_parts['query'] );
+		if ( ! $bare || '' === $payload ) {
+			return array( $referer );
+		}
+
+		$pay_parts = faz_parse_url( $payload );
+		$pay_path  = is_array( $pay_parts ) && isset( $pay_parts['path'] ) ? (string) $pay_parts['path'] : '';
+		$same_host = is_array( $pay_parts )
+			&& isset( $ref_parts['host'], $pay_parts['host'] )
+			&& strtolower( (string) $ref_parts['host'] ) === strtolower( (string) $pay_parts['host'] )
+			&& ( isset( $ref_parts['port'] ) ? (int) $ref_parts['port'] : 0 ) === ( isset( $pay_parts['port'] ) ? (int) $pay_parts['port'] : 0 );
+		if ( ! $same_host || '' === $pay_path || '/' === $pay_path ) {
+			return array( $referer );
+		}
+		return array( $referer, $payload );
 	}
 }

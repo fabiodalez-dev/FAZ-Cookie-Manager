@@ -81,6 +81,22 @@ foreach ( (array) glob( FAZ_PLUGIN_BASEPATH . 'admin/modules/banners/includes/co
 		$faz_wiz_bundled[ $faz_wiz_code ] = true;
 	}
 }
+// Laws for which a cookie policy template ships in exactly each language, as
+// the space-separated data-policy-laws of its option. setup.js disables the
+// "create the cookie policy" box when the chosen law is missing from the list;
+// Policy_Page::validate() applies the same check again on Finish.
+$faz_wiz_policy_laws = array();
+if ( class_exists( '\\FazCookie\\Admin\\Modules\\Settings\\Includes\\Policy_Page' ) ) {
+	foreach ( $faz_wiz_languages as $faz_wiz_code ) {
+		$faz_wiz_laws = array();
+		foreach ( \FazCookie\Admin\Modules\Settings\Includes\Onboarding::LAWS as $faz_wiz_law ) {
+			if ( \FazCookie\Admin\Modules\Settings\Includes\Policy_Page::has_template( $faz_wiz_code, $faz_wiz_law ) ) {
+				$faz_wiz_laws[] = $faz_wiz_law;
+			}
+		}
+		$faz_wiz_policy_laws[ $faz_wiz_code ] = implode( ' ', $faz_wiz_laws );
+	}
+}
 $faz_wiz_langs_bundled = array();
 $faz_wiz_langs_other   = array();
 foreach ( $faz_wiz_languages as $faz_wiz_label => $faz_wiz_code ) {
@@ -232,12 +248,12 @@ $faz_setup_step_titles = array(
 					<select id="faz-setup-lang" class="faz-select faz-setup-select">
 						<optgroup label="<?php esc_attr_e( 'Banner translation included', 'faz-cookie-manager' ); ?>">
 							<?php foreach ( $faz_wiz_langs_bundled as $faz_lang_label => $faz_lang_code ) : ?>
-								<option value="<?php echo esc_attr( $faz_lang_code ); ?>"<?php selected( $faz_wiz_lang, $faz_lang_code ); ?>><?php echo esc_html( $faz_lang_label ); ?></option>
+								<option value="<?php echo esc_attr( $faz_lang_code ); ?>"<?php if ( isset( $faz_wiz_policy_laws[ $faz_lang_code ] ) ) : ?> data-policy-laws="<?php echo esc_attr( $faz_wiz_policy_laws[ $faz_lang_code ] ); ?>"<?php endif; ?><?php selected( $faz_wiz_lang, $faz_lang_code ); ?>><?php echo esc_html( $faz_lang_label ); ?></option>
 							<?php endforeach; ?>
 						</optgroup>
 						<optgroup label="<?php esc_attr_e( 'Shown in English until you translate it', 'faz-cookie-manager' ); ?>">
 							<?php foreach ( $faz_wiz_langs_other as $faz_lang_label => $faz_lang_code ) : ?>
-								<option value="<?php echo esc_attr( $faz_lang_code ); ?>" data-fallback="1"<?php selected( $faz_wiz_lang, $faz_lang_code ); ?>><?php echo esc_html( $faz_lang_label ); ?></option>
+								<option value="<?php echo esc_attr( $faz_lang_code ); ?>" data-fallback="1"<?php if ( isset( $faz_wiz_policy_laws[ $faz_lang_code ] ) ) : ?> data-policy-laws="<?php echo esc_attr( $faz_wiz_policy_laws[ $faz_lang_code ] ); ?>"<?php endif; ?><?php selected( $faz_wiz_lang, $faz_lang_code ); ?>><?php echo esc_html( $faz_lang_label ); ?></option>
 							<?php endforeach; ?>
 						</optgroup>
 					</select>
@@ -443,13 +459,14 @@ $faz_setup_step_titles = array(
 				<div class="faz-setup-policy">
 					<h3 class="faz-setup-subtitle"><?php esc_html_e( 'Cookie policy page', 'faz-cookie-manager' ); ?></h3>
 					<label class="faz-setup-toggle-row">
-						<input type="checkbox" id="faz-setup-create-cookie-page" checked>
+						<input type="checkbox" id="faz-setup-create-cookie-page">
 						<span class="faz-setup-toggle-body">
 							<span class="faz-setup-toggle-label"><?php esc_html_e( 'Create and publish the cookie policy when setup finishes', 'faz-cookie-manager' ); ?></span>
-							<span class="faz-setup-toggle-help"><?php esc_html_e( 'Includes the policy shortcode in the selected language. An existing generated page in that language is reused. Custom banner links are kept.', 'faz-cookie-manager' ); ?></span>
+							<span class="faz-setup-toggle-help"><?php esc_html_e( 'The page is published immediately, visible to visitors, from the standard template in the selected language. Fill in your company details on the Cookie Policy page, otherwise the published policy will be incomplete. An existing generated page in that language is reused and custom banner links are kept.', 'faz-cookie-manager' ); ?></span>
 						</span>
 					</label>
-					<p id="faz-setup-policy-language" class="faz-help" aria-live="polite"></p>
+					<p id="faz-setup-policy-unavailable" class="faz-setup-inline-note" hidden><?php esc_html_e( 'No cookie policy template ships in the selected language for this law, so the page cannot be created here. Write the policy on the Cookie Policy page instead.', 'faz-cookie-manager' ); ?></p>
+					<p id="faz-setup-policy-language" class="faz-help" aria-live="polite" hidden></p>
 					<p class="faz-help"><?php esc_html_e( 'Review your company details and policy text on the Cookie Policy page before using the banner on your live site.', 'faz-cookie-manager' ); ?></p>
 				</div>
 			</section>

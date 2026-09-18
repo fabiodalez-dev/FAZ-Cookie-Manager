@@ -407,11 +407,12 @@ and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
 = 1.32.0 =
-* Added: Publish a language-specific cookie policy page from the setup wizard. Repeated submissions reuse the page and unavailable translations are reported. Page-link fields now suggest published pages, with keyboard navigation and manual URL support.
+* Added: Publish a language-specific cookie policy page from the setup wizard (off by default). Repeated submissions reuse the page, languages without a template are unavailable, and a page that cannot be created no longer stops setup. Page-link fields now suggest published pages, with keyboard navigation and manual URL support.
 * Added: The consent log records whether the server would have served each GPC exception, so inconsistent markers can be identified after the fact (#285). A script on the page can write the same cookie values a real click writes, so the record claims consistency rather than authenticity.
-* Added: System Status lists the services blocked without a visible placeholder (#279) — they set no cookies and park plain requests, so before consent a stylesheet simply does not load and the symptom points at the theme or the cache instead of here.
+* Added: System Status lists the services that can be blocked without a visible placeholder (#279) — they set no cookies, and when a script or stylesheet of theirs is blocked before consent it simply does not load, so the symptom points at the theme or the cache instead of here.
 * Fixed: A GPC exception accepted within five minutes of saving preferences was never logged at all, because it does not change the consent status and the repeat throttle dropped it.
 * Fixed: The Dashboard no longer implies data will arrive when pageview tracking is off, and says that consent records are kept regardless.
+* Fixed: On sites with plain permalinks or query-string language URLs, consent-log rows recorded the home page; the parameters that identify the page are now kept.
 
 = 1.31.0 =
 * Fixed: Consent Logs no longer reports "Failed to load consent logs." on sites that have logs (#284): the page formatted dates with the WordPress locale (de_DE), which the browser rejects, and the error was mistaken for a failed request. The Dashboard and geo-routing timestamps shared the flaw.

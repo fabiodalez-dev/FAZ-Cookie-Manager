@@ -278,7 +278,7 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 				<?php
 				printf(
 					/* translators: %d: number of providers. */
-					esc_html__( 'These %d catalogued services set no cookies, so they appear in no cookie declaration, and may be blocked as plain requests rather than as embeds — no placeholder is shown. This is a catalogue of potential matches, not a report of what this site loads; a matching whitelist entry may also allow a request. When a request is blocked before consent, fonts can fall back or a control can look broken.', 'faz-cookie-manager' ),
+					esc_html__( 'These %d catalogued services declare no cookies, so they appear in no cookie declaration, and when blocked on a script or stylesheet pattern no placeholder is shown. This is a catalogue of potential matches, not a report of what this site loads; a matching whitelist entry may also allow a request. When a request is blocked before consent, fonts can fall back or a control can look broken.', 'faz-cookie-manager' ),
 					count( $faz_silent_providers )
 				);
 				?>

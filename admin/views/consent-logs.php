@@ -66,6 +66,14 @@ defined( 'ABSPATH' ) || exit;
 					</button>
 				</div>
 			</div>
+			<?php // What the GPC-exception pills mean. "Unverified" read as an accusation without this; it is the absence of corroboration, not evidence of forgery. ?>
+			<p id="faz-gpc-legend" class="faz-text-muted" style="margin:10px 0 0;font-size:12px;line-height:1.5;">
+				<strong><?php esc_html_e( 'GPC exceptions:', 'faz-cookie-manager' ); ?></strong>
+				<?php esc_html_e( 'a service the visitor accepted on its own blocked embed while their browser sent Global Privacy Control.', 'faz-cookie-manager' ); ?>
+				<?php esc_html_e( '"Verified" means the server found the circumstances such an exception needs: the signal, the grant in the consent cookie, and a placeholder for that service on the page.', 'faz-cookie-manager' ); ?>
+				<?php esc_html_e( '"Unverified" means the server could not corroborate them; it is not proof that the exception was forged.', 'faz-cookie-manager' ); ?>
+				<?php esc_html_e( '"Carried" means it was already on record for this visitor and keeps the verdict of that earlier row.', 'faz-cookie-manager' ); ?>
+			</p>
 		</div>
 	</div>
 

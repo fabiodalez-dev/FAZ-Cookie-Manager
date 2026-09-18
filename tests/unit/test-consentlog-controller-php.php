@@ -147,11 +147,24 @@ namespace {
 			return $q;
 		}
 		public function esc_like( $s ) { return $s; }
+		/** @var string[] Every get_row() query, for the previous-row plumbing cases. */
+		public $row_queries = array();
 		public function get_row( $q, $output = OBJECT ) {
+			$this->row_queries[] = $q;
+			// A `categories LIKE '%<needle>%'` filter is honoured, so the query
+			// that asks for the newest row RECORDING an exception really skips
+			// newer rows that do not.
+			$needle = null;
+			if ( preg_match( "/categories LIKE '%([^%']*)%'/", $q, $m ) ) {
+				$needle = stripslashes( $m[1] );
+			}
 			// Return the most recent row whose consent_id appears in the query.
 			$best = null;
 			foreach ( $this->rows as $row ) {
 				if ( false !== strpos( $q, "'" . addslashes( $row['consent_id'] ) . "'" ) ) {
+					if ( null !== $needle && false === strpos( (string) ( $row['categories'] ?? '' ), $needle ) ) {
+						continue;
+					}
 					$best = $row;
 				}
 			}
@@ -197,6 +210,10 @@ namespace {
 
 	$GLOBALS['wpdb'] = new FazTest_ConsentWPDB();
 
+	// The real normaliser, so the URL-minimisation assertions below run through
+	// the function production uses rather than the controller's fallback.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-utils.php';
+	require_once dirname( __DIR__, 2 ) . '/includes/class-gpc-exception-audit.php';
 	require_once dirname( __DIR__, 2 ) . '/admin/modules/consentlogs/includes/class-controller.php';
 	require_once dirname( __DIR__, 2 ) . '/admin/modules/consentlogs/api/class-api.php';
 
@@ -297,12 +314,19 @@ namespace {
 	$keys = array_keys( $lk );
 	eq( strlen( $keys[0] ), 190, 'over-length decision key truncated to 190 by shipped code' );
 
-	// 250-entry cap
+	// Entry cap: 250 in total, of which the server reserves MAX_IDS for its
+	// own verdict keys so a verdict is never the entry that gets cut.
 	$big = array();
 	for ( $i = 0; $i < 300; $i++ ) { $big[ 'k' . $i ] = 'yes'; }
 	$ctrl->log_consent( array( 'consent_id' => 'cid-bigmap', 'categories' => $big ) );
 	$bm = $ctrl->get_log_by_consent_id( 'cid-bigmap' )['categories'];
-	eq( count( $bm ), 250, '300 decisions capped at 250 by shipped code' );
+	eq( count( $bm ), 250 - \FazCookie\Includes\Gpc_Exception_Audit::MAX_IDS, '300 client decisions capped at 250 - MAX_IDS by shipped code' );
+
+	$gpc_big = array();
+	for ( $i = 0; $i < 300; $i++ ) { $gpc_big[ 'meta.gpc_exception.s' . $i ] = 'yes'; }
+	$ctrl->log_consent( array( 'consent_id' => 'cid-gpcbig', 'categories' => $gpc_big ) );
+	$gb = $ctrl->get_log_by_consent_id( 'cid-gpcbig' )['categories'];
+	ok( count( $gb ) <= 250, 'client keys plus server verdicts never exceed 250 entries' );
 
 	// ============================================================
 	// 3. DNSMPI scalar path stores '' (not '[]')
@@ -343,6 +367,50 @@ namespace {
 	eq( call_priv( $ctrl, 'sanitize_log_url', array( 'https://u:p@example.com/a/b?x=1#f' ) ),
 		'https://example.com/a/b', 'sanitize_log_url drops credentials, query and fragment' );
 	eq( $row['url'], 'https://example.com/checkout', 'logged row URL minimised (token query stripped)' );
+	// The log and the placeholder inventory must name a page the same way, or
+	// an exception on a plain-permalink page (?p=12) can never be matched.
+	eq( call_priv( $ctrl, 'sanitize_log_url', array( 'https://u:p@example.com/?p=12&utm_source=x&token=s#f' ) ),
+		'https://example.com/?p=12', 'sanitize_log_url keeps WordPress routing parameters and still drops the rest' );
+
+	// ============================================================
+	// 6b. Previous-row plumbing for the GPC-exception verdict
+	// ============================================================
+	echo "\n-- GPC exception: which earlier row the verdict is judged against --\n";
+	$w = $GLOBALS['wpdb'];
+
+	// No exception key in the payload: no previous-row query at all.
+	$w->row_queries = array();
+	$ctrl->log_consent( array( 'consent_id' => 'cid-plain', 'status' => 'accepted', 'categories' => array( 'analytics' => 'yes' ) ) );
+	eq( count( $w->row_queries ), 0, 'a row with no GPC exception costs no previous-row lookup' );
+
+	// 1st row: an exception the server cannot verify (no GPC signal).
+	$ctrl->log_consent( array( 'consent_id' => 'cid-gpcx', 'status' => 'partial', 'categories' => array( 'meta.gpc_exception.maps' => 'yes' ) ) );
+	$first = $ctrl->get_log_by_consent_id( 'cid-gpcx' )['categories'];
+	eq( $first['meta.gpc_exception_served.maps'] ?? null, 'no', 'first row: the exception is judged, unverified' );
+	// 2nd row: a later decision that records no exception at all.
+	$ctrl->log_consent( array( 'consent_id' => 'cid-gpcx', 'status' => 'rejected', 'categories' => array( 'analytics' => 'no' ) ) );
+	// 3rd row: the exception again. It must be carried from the 1st row — the
+	// newest one that RECORDS an exception — and carry its unverified verdict.
+	$w->row_queries = array();
+	$ctrl->log_consent( array( 'consent_id' => 'cid-gpcx', 'status' => 'partial', 'categories' => array( 'meta.gpc_exception.maps' => 'yes' ) ) );
+	$logged_queries = $w->row_queries;
+	$third = $ctrl->get_log_by_consent_id( 'cid-gpcx' )['categories'];
+	eq( $third['meta.gpc_exception_carried.maps'] ?? null, 'no', 'a later row carries the earlier unverified verdict past a row without exceptions' );
+	ok( ! isset( $third['meta.gpc_exception_served.maps'] ), 'and is not re-judged as a fresh serve' );
+	$prev_q = isset( $logged_queries[0] ) ? $logged_queries[0] : '';
+	ok( false !== strpos( $prev_q, 'categories LIKE' ) && false !== strpos( $prev_q, '"meta.gpc_exception' ), 'the previous-row query filters on a bound GPC-exception LIKE' );
+	ok( false !== strpos( $prev_q, 'ORDER BY created_at DESC, log_id DESC' ), 'and breaks same-second ties on log_id' );
+	eq( count( $logged_queries ), 1, 'exactly one previous-row query per exception-bearing row' );
+
+	// The lookup uses the id as stored, not as posted.
+	$ctrl->log_consent( array( 'consent_id' => '<i>cid-san</i>', 'status' => 'partial', 'categories' => array( 'meta.gpc_exception.maps' => 'yes' ) ) );
+	$ctrl->log_consent( array( 'consent_id' => '<i>cid-san</i>', 'status' => 'partial', 'categories' => array( 'meta.gpc_exception.maps' => 'yes' ) ) );
+	$san = $ctrl->get_log_by_consent_id( 'cid-san' )['categories'];
+	ok( isset( $san['meta.gpc_exception_carried.maps'] ), 'the previous row is looked up by the sanitised consent id' );
+
+	$w->row_queries = array();
+	$ctrl->get_log_by_consent_id( 'cid-gpcx' );
+	ok( isset( $w->row_queries[0] ) && false !== strpos( $w->row_queries[0], 'ORDER BY created_at DESC, log_id DESC' ), 'get_log_by_consent_id() breaks same-second ties on log_id too' );
 
 	// ============================================================
 	// 7. SQLite-portable legacy-UA migration (1.19.2)

@@ -1,5 +1,5 @@
 /**
- * Guided setup wizard (jsdom) — 52 behavioural regression checks.
+ * Guided setup wizard (jsdom) — 62 behavioural regression checks.
  *
  * Loads the real admin/assets/js/pages/setup.js and exercises navigation,
  * review rendering, the exact onboarding payload, duplicate-submit protection,
@@ -60,7 +60,7 @@ function markup() {
         </label>
       </section>
       <section class="faz-wizard-step" data-step="2" hidden>
-        <select id="faz-setup-lang"><option value="en" selected>English</option><option value="it">Italian</option></select>
+        <select id="faz-setup-lang"><option value="en" data-policy-laws="gdpr ccpa popia both" selected>English</option><option value="it" data-policy-laws="gdpr ccpa popia both">Italian</option><option value="cy" data-policy-laws="">Welsh</option></select>
       </section>
       <section class="faz-wizard-step" data-step="3" hidden>
         <label class="faz-setup-toggle-row">
@@ -95,8 +95,9 @@ function markup() {
         <div id="faz-setup-payments" hidden><div id="faz-setup-payments-list"></div></div>
       </section>
       <section class="faz-wizard-step" data-step="8" hidden>
-		<input type="checkbox" id="faz-setup-create-cookie-page" checked>
-		<p id="faz-setup-policy-language"></p>
+		<input type="checkbox" id="faz-setup-create-cookie-page">
+		<p id="faz-setup-policy-unavailable" hidden>No template</p>
+		<p id="faz-setup-policy-language" hidden></p>
         <ul id="faz-setup-review"
           data-label-law="Law"
           data-label-effect="Model"
@@ -183,7 +184,7 @@ async function flush() {
   await Promise.resolve();
 }
 
-console.log('guided setup wizard (52 checks)');
+console.log('guided setup wizard (62 checks)');
 
 // Navigation, selection, and review rendering (14 checks).
 {
@@ -241,8 +242,8 @@ console.log('guided setup wizard (52 checks)');
 
   check('15 Finish posts to the onboarding endpoint', app.calls.post[0]?.endpoint === 'settings/onboarding');
   const sent = app.calls.post[0]?.payload || {};
-	check('Finish explicitly requests the cookie page in the selected language', sent.create_cookie_page === true && sent.language === 'en');
-	check('Review states the cookie page language', document.getElementById('faz-setup-policy-language').textContent.includes('English'));
+	check('Finish does not request a cookie page unless the box is ticked', sent.create_cookie_page === false && sent.language === 'en');
+	check('Review hides the cookie page language while the box is unticked', document.getElementById('faz-setup-policy-language').hidden);
   check('16 Finish sends the law plus the structured option groups', sent.law === 'both'
     && sent.banner_control && sent.banner_control.per_service_consent === false
     && sent.gcm && sent.gcm.enabled === false
@@ -258,6 +259,56 @@ console.log('guided setup wizard (52 checks)');
   await flush();
   check('19 successful save emits the completion notice', app.calls.notify.some((item) => item.type === 'success'));
   check('20 successful save schedules the fixed dashboard redirect after 700ms', app.timers.some((timer) => timer.active && timer.delay === 700));
+}
+
+// Cookie policy page option (F023 / F028): unticked by default, the language
+// note follows the box and the language live, and a language without a shipped
+// template disables the box with an explanation (8 checks).
+{
+	const app = boot();
+	const { document, window } = app;
+	const change = (el) => el.dispatchEvent(new window.Event('change', { bubbles: true }));
+	const box = document.getElementById('faz-setup-create-cookie-page');
+	const note = document.getElementById('faz-setup-policy-language');
+	const unavailable = document.getElementById('faz-setup-policy-unavailable');
+	const lang = document.getElementById('faz-setup-lang');
+	check('policy page box ships unticked', box.checked === false);
+	clickNext(document, 7);
+	check('policy language note stays hidden on the review while unticked', note.hidden && note.textContent === '');
+	box.checked = true;
+	change(box);
+	check('ticking the box shows the note with the selected language', !note.hidden && note.textContent.includes('English'));
+	lang.value = 'it';
+	change(lang);
+	check('changing the language updates the note live', note.textContent.includes('Italian'));
+	lang.selectedIndex = -1;
+	change(lang);
+	check('no selected language hides the note instead of throwing', note.hidden);
+	lang.value = 'cy';
+	change(lang);
+	check('a language without a policy template disables the box and explains why', box.disabled && !box.checked && !unavailable.hidden && note.hidden);
+	lang.value = 'it';
+	change(lang);
+	check('a language with a template re-enables the box', !box.disabled && unavailable.hidden);
+	box.checked = true;
+	change(box);
+	document.getElementById('faz-setup-finish').click();
+	const payload = app.calls.post[0]?.payload || {};
+	check('ticked box requests the cookie page in the selected language', payload.create_cookie_page === true && payload.language === 'it');
+}
+
+// F001: a policy-page failure comes back as an advisory warning on a
+// successful save. It is shown as a warning, never an error, and the redirect
+// waits long enough for the toast to be read (2 checks).
+{
+	const app = boot({
+		post() { return Promise.resolve({ success: true, warning: 'Setup is complete, but the cookie policy page was not created.' }); },
+	});
+	clickNext(app.document, 7);
+	app.document.getElementById('faz-setup-finish').click();
+	await flush();
+	check('advisory warning is shown as a warning toast, not an error or success', app.calls.notify.length === 1 && app.calls.notify[0].type === 'warning');
+	check('warning redirect waits for the toast to be read', app.timers.some((timer) => timer.active && timer.delay === 6000) && !app.timers.some((timer) => timer.active && timer.delay === 700));
 }
 
 // Optional scan: shared-engine progress/completion, diagnostics failure, and
@@ -494,4 +545,4 @@ console.log('guided setup wizard (52 checks)');
 }
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
-process.exit(failed === 0 && passed === 52 ? 0 : 1);
+process.exit(failed === 0 && passed === 62 ? 0 : 1);

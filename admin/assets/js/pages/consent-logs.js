@@ -168,7 +168,32 @@
 				try { cats = JSON.parse(cats); } catch (_unused) { /* keep as string */ }
 			}
 			if (cats && typeof cats === 'object' && !Array.isArray(cats)) {
-				var catKeys = Object.keys(cats);
+				// One pill per GPC exception. The row stores the visitor's claim
+				// (meta.gpc_exception.<id>) AND the server's verdict on it
+				// (_served.<id> or _carried.<id>); painting both showed every
+				// audited exception twice. The verdict is the pill; the bare
+				// claim shows only when no verdict was recorded (rows written
+				// before verdicts existed). A served verdict outranks a carried
+				// one for the same id.
+				var gpcServed = {};
+				var gpcVerdict = {};
+				Object.keys(cats).forEach(function (k) {
+					if (k.indexOf('meta.gpc_exception_served.') === 0) {
+						gpcServed[k.slice('meta.gpc_exception_served.'.length)] = true;
+						gpcVerdict[k.slice('meta.gpc_exception_served.'.length)] = true;
+					} else if (k.indexOf('meta.gpc_exception_carried.') === 0) {
+						gpcVerdict[k.slice('meta.gpc_exception_carried.'.length)] = true;
+					}
+				});
+				var catKeys = Object.keys(cats).filter(function (k) {
+					if (k.indexOf('meta.gpc_exception.') === 0) {
+						return !gpcVerdict[k.slice('meta.gpc_exception.'.length)];
+					}
+					if (k.indexOf('meta.gpc_exception_carried.') === 0) {
+						return !gpcServed[k.slice('meta.gpc_exception_carried.'.length)];
+					}
+					return true;
+				});
 				catKeys.forEach(function (k, i) {
 					var catBadge = document.createElement('span');
 					if (k.indexOf('meta.') === 0) {
@@ -192,6 +217,7 @@
 							// and mangle the label.
 							metaLabel = fazI18n('consentLogs.metaGpcException', 'GPC exception: %s')
 								.replace('%s', function () { return metaKey.slice('gpc_exception.'.length); });
+							catBadge.title = fazI18n('consentLogs.metaGpcExceptionTitle', 'The visitor\'s browser recorded this exception to Global Privacy Control; the server recorded no verdict on it in this row.');
 						} else if (metaKey.indexOf('gpc_exception_served.') === 0) {
 							// The server records whether a GPC exception was actually
 							// honoured (verified) or not (unverified) for this service.
@@ -199,15 +225,28 @@
 							if (cats[k] === 'yes') {
 								metaLabel = fazI18n('consentLogs.metaGpcExceptionVerified', 'GPC exception: %s — verified')
 									.replace('%s', function () { return servedId; });
+								catBadge.title = fazI18n('consentLogs.metaGpcExceptionVerifiedTitle', 'The server found every circumstance this exception needs: the GPC signal, the grant in the consent cookie, and a blocked placeholder for this service on the page.');
 							} else {
 								metaLabel = fazI18n('consentLogs.metaGpcExceptionUnverified', 'GPC exception: %s — unverified')
 									.replace('%s', function () { return servedId; });
+								catBadge.title = fazI18n('consentLogs.metaGpcExceptionUnverifiedTitle', 'The server could not corroborate the circumstances this exception needs. This does not prove it was forged, only that it could not be confirmed.');
 								metaClass = 'faz-cat-no';
 							}
 						} else if (metaKey.indexOf('gpc_exception_carried.') === 0) {
-							// The GPC exception was carried over from a prior record.
-							metaLabel = fazI18n('consentLogs.metaGpcExceptionCarried', 'GPC exception: %s — carried')
-								.replace('%s', function () { return metaKey.slice('gpc_exception_carried.'.length); });
+							// Already on record for this visitor in an earlier row and
+							// not judged again; the value carries that row's verdict,
+							// so an unverified exception stays red on later pages.
+							var carriedId = metaKey.slice('gpc_exception_carried.'.length);
+							if (cats[k] === 'yes') {
+								metaLabel = fazI18n('consentLogs.metaGpcExceptionCarried', 'GPC exception: %s — carried')
+									.replace('%s', function () { return carriedId; });
+								catBadge.title = fazI18n('consentLogs.metaGpcExceptionCarriedTitle', 'Already recorded for this visitor in an earlier row, verified or written before verdicts existed; carried forward, not judged again.');
+							} else {
+								metaLabel = fazI18n('consentLogs.metaGpcExceptionCarriedUnverified', 'GPC exception: %s — carried, unverified')
+									.replace('%s', function () { return carriedId; });
+								catBadge.title = fazI18n('consentLogs.metaGpcExceptionCarriedUnverifiedTitle', 'Already recorded for this visitor in an earlier row the server could not corroborate; carried forward with that verdict, not judged again.');
+								metaClass = 'faz-cat-no';
+							}
 						} else if (metaKey === 'signal_only') {
 							// The record was created by GPC or a Do Not Sell request
 							// and the visitor never answered the banner.

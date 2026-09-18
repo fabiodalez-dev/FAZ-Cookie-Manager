@@ -36,10 +36,24 @@ if ( ! function_exists( 'faz_normalize_page_url' ) ) {
 	 * same page: the consent log stores it, and the placeholder inventory looks
 	 * it up to answer "did this page ever offer that embed". If the two spellings
 	 * drift, every exception reads as unverifiable, so the rule lives here once
-	 * rather than in each caller.
+	 * rather than in each caller. The scheme is kept in the returned string (it
+	 * is what an administrator reads in the log), but the inventory keys its
+	 * rows on this string with the scheme stripped — Embed_Inventory::key() —
+	 * because the rendering request and the logging request can see different
+	 * schemes behind a TLS-terminating proxy.
 	 *
 	 * Campaign and session parameters are dropped; WordPress routing parameters
 	 * are retained so distinct posts and language variants cannot share evidence.
+	 * The consent log stores its page URL through this function too, so the
+	 * routing parameters that tell two pages apart survive into the log row.
+	 *
+	 * Those retained parameters come from the request, so anyone can vary them:
+	 * `?lang=<anything>` on a site with no language plugin is a new string per
+	 * value. Never use the output directly as a persistence key without a
+	 * write-side cardinality gate — the embed inventory's flush() is the
+	 * reference (no rows for 404 / search pages, none for a routing parameter
+	 * WordPress did not parse). Keep this function identical for readers:
+	 * the gate belongs on the write side only.
 	 *
 	 * @param string $url URL to reduce.
 	 * @return string Normalised URL, or '' when nothing usable remains.

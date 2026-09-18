@@ -567,6 +567,12 @@ test.describe('Wizard policy pages and page-link search', () => {
       await page.locator('#faz-setup-next').click();
       await page.locator('#faz-setup-lang').selectOption('it');
       for (let n = 2; n < 8; n++) await page.locator('#faz-setup-next').click();
+      // The page is published straight from the template, so the box ships
+      // unticked and its language note appears only once it is ticked.
+      const createPage = page.locator('#faz-setup-create-cookie-page');
+      await expect(createPage).not.toBeChecked();
+      await expect(page.locator('#faz-setup-policy-language')).toBeHidden();
+      await createPage.check();
       await expect(page.locator('#faz-setup-policy-language')).toContainText('Italian');
       const responsePromise = page.waitForResponse(r => r.url().includes('settings/onboarding') && r.request().method() === 'POST');
       await page.locator('#faz-setup-finish').click();

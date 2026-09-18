@@ -40,10 +40,21 @@ namespace {
 	function wp_parse_url( $url ) { return parse_url( (string) $url ); }
 	function absint( $value ) { return abs( (int) $value ); }
 	function faz_parse_url( $url ) { return wp_parse_url( $url ); }
+	// A 404 and a search results page are ordinary pages for BLOCKING, but
+	// every one of them has its own URL, so recording them lets anyone mint
+	// rows by requesting URLs that do not exist. Controlled per case.
+	function is_404() { return ! empty( $GLOBALS['faz_test_is_404'] ); }
+	function is_search() { return ! empty( $GLOBALS['faz_test_is_search'] ); }
 
 	class FazTest_InventoryWPDB {
 		public $prefix = 'wp_';
 		public $queries = array();
+		/** Reads, kept apart so "no write happened" assertions stay exact. */
+		public $reads = array();
+		/** Arguments of every update()/insert(), for the key a row is stored under. */
+		public $writes = array();
+		/** What an existence probe answers: '1' = the page has rows, null = none. */
+		public $rows_exist = '1';
 		public function prepare( $query, ...$args ) {
 			foreach ( $args as $arg ) {
 				$query = preg_replace( '/%s/', "'" . (string) $arg . "'", $query, 1 );
@@ -51,10 +62,17 @@ namespace {
 			return $query;
 		}
 		public function query( $query ) { $this->queries[] = $query; return 1; }
+		public function get_var( $query ) {
+			$this->reads[] = $query;
+			if ( 0 === strpos( $query, 'SELECT category' ) ) {
+				return 'marketing';
+			}
+			return $this->rows_exist;
+		}
 		// Recorded like query() so a test can tell a refresh from a deletion:
 		// the whole point of this table's write path is which of the two happens.
-		public function update() { $this->queries[] = 'UPDATE ' . func_get_arg( 0 ); return 0; }
-		public function insert() { $this->queries[] = 'INSERT ' . func_get_arg( 0 ); return 1; }
+		public function update() { $this->queries[] = 'UPDATE ' . func_get_arg( 0 ); $this->writes[] = func_get_args(); return 0; }
+		public function insert() { $this->queries[] = 'INSERT ' . func_get_arg( 0 ); $this->writes[] = func_get_args(); return 1; }
 	}
 
 	$GLOBALS['wpdb'] = new FazTest_InventoryWPDB();
@@ -193,6 +211,177 @@ namespace {
 		false !== strpos( $source, "array( Embed_Inventory::class, 'begin' )" ),
 		'the frontend starts inventory observation even when a page has no embeds'
 	);
+
+
+	// ============================================================
+	// Page identity: one key for every spelling of the page.
+	// ============================================================
+	// The inventory is written from the rendering request and read from the
+	// consent-log request, and the two see the scheme differently behind a
+	// TLS-terminating proxy. Keying on the scheme-bearing URL made a page
+	// written as https:// invisible to a lookup spelled http://.
+	$reset = static function () {
+		$GLOBALS['wpdb']->queries    = array();
+		$GLOBALS['wpdb']->reads      = array();
+		$GLOBALS['wpdb']->writes     = array();
+		$GLOBALS['wpdb']->rows_exist = '1';
+		$GLOBALS['faz_test_transients'] = array();
+		$GLOBALS['faz_test_is_404']     = false;
+		$GLOBALS['faz_test_is_search']  = false;
+		unset( $_SERVER['HTTP_SEC_GPC'], $GLOBALS['wp'] );
+		$_SERVER['REQUEST_URI'] = '/page/?campaign=one';
+		$memo = new \ReflectionClass( Embed_Inventory::class );
+		if ( $memo->hasProperty( 'category_memo' ) ) {
+			$prop = $memo->getProperty( 'category_memo' );
+			$prop->setAccessible( true );
+			$prop->setValue( null, array() );
+		}
+	};
+	$schemeless = md5( 'example.test/page' );
+
+	$reset();
+	Embed_Inventory::note( 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	$stored_hash = isset( $GLOBALS['wpdb']->writes[0][2]['url_hash'] ) ? $GLOBALS['wpdb']->writes[0][2]['url_hash'] : '';
+	inventory_check( $schemeless === $stored_hash, 'a row is stored under the scheme-less page key' );
+	$inserted = end( $GLOBALS['wpdb']->writes );
+	inventory_check(
+		isset( $inserted[1]['url'] ) && 'https://example.test/page' === $inserted[1]['url'],
+		'the url column keeps the full scheme-bearing URL for the administrator'
+	);
+	inventory_check(
+		isset( $GLOBALS['faz_test_transients'][ 'faz_embinv_current_' . $schemeless ] ),
+		'the per-page write guard uses the same key'
+	);
+
+	$reset();
+	Embed_Inventory::page_category( 'http://example.test/page/', 'youtube' );
+	inventory_check(
+		isset( $GLOBALS['wpdb']->reads[0] ) && false !== strpos( $GLOBALS['wpdb']->reads[0], "'" . $schemeless . "'" ),
+		'an http:// lookup reaches the row an https:// render wrote'
+	);
+	$GLOBALS['wpdb']->reads = array();
+	Embed_Inventory::page_offered( 'http://example.test/page', 'youtube' );
+	inventory_check(
+		isset( $GLOBALS['wpdb']->reads[0] ) && false !== strpos( $GLOBALS['wpdb']->reads[0], "'" . $schemeless . "'" ),
+		'page_offered() uses the same key'
+	);
+
+	// The audit asks the same question for every exception in a payload:
+	// one query per (page, service) per request is enough.
+	$reset();
+	Embed_Inventory::page_category( 'https://example.test/page', 'youtube' );
+	Embed_Inventory::page_category( 'http://example.test/page/', 'youtube' );
+	inventory_check( 1 === count( $GLOBALS['wpdb']->reads ), 'page_category() answers a repeated lookup from a per-request memo' );
+
+	$reset();
+	$_SERVER['HTTP_SEC_GPC'] = '1';
+	Embed_Inventory::flush();
+	inventory_check(
+		1 === count( array_filter( $GLOBALS['wpdb']->queries, static function ( $q ) { return false !== strpos( $q, 'DELETE' ); } ) )
+			&& false !== strpos( implode( ' ', $GLOBALS['wpdb']->queries ), "'" . $schemeless . "'" ),
+		'an authoritative clear targets the scheme-less key'
+	);
+
+	// ============================================================
+	// Cardinality: URLs anyone can invent write nothing.
+	// ============================================================
+	$reset();
+	$GLOBALS['faz_test_is_404'] = true;
+	Embed_Inventory::note( 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	inventory_check( array() === $GLOBALS['wpdb']->queries, 'a 404 page records nothing' );
+
+	$reset();
+	$GLOBALS['faz_test_is_search'] = true;
+	Embed_Inventory::note( 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	inventory_check( array() === $GLOBALS['wpdb']->queries, 'a search results page records nothing' );
+
+	// ?lang=<junk> on a site with no language plugin renders the same page and
+	// would otherwise mint a new key per value.
+	$reset();
+	$_SERVER['REQUEST_URI'] = '/page/?lang=zz-junk';
+	$GLOBALS['wp']          = (object) array( 'query_vars' => array( 'pagename' => 'page' ) );
+	Embed_Inventory::note( 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	inventory_check( array() === $GLOBALS['wpdb']->queries, 'a routing parameter WordPress did not parse records nothing' );
+
+	$reset();
+	$_SERVER['REQUEST_URI'] = '/page/?lang=it';
+	$GLOBALS['wp']          = (object) array( 'query_vars' => array( 'pagename' => 'page', 'lang' => 'it' ) );
+	Embed_Inventory::note( 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	inventory_check( ! empty( $GLOBALS['wpdb']->queries ), 'a routing parameter WordPress did parse is recorded as usual' );
+
+	$reset();
+	$_SERVER['REQUEST_URI'] = '/page/?lang=it';
+	Embed_Inventory::note( 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	inventory_check( ! empty( $GLOBALS['wpdb']->queries ), 'without a WP object to consult, the parameter check does not block the write' );
+
+	// ============================================================
+	// An empty authoritative snapshot only clears a page that has rows.
+	// ============================================================
+	$reset();
+	$GLOBALS['wpdb']->rows_exist = null;
+	$_SERVER['HTTP_SEC_GPC']     = '1';
+	Embed_Inventory::flush();
+	inventory_check( array() === $GLOBALS['wpdb']->queries, 'an empty GPC snapshot of a page with no rows deletes nothing' );
+	inventory_check( array() === $GLOBALS['faz_test_transients'], 'and arms no write guard for it' );
+	inventory_check( 1 === count( $GLOBALS['wpdb']->reads ), 'one indexed existence probe decides it' );
+
+	// ============================================================
+	// Throttle convergence between the two visitor classes.
+	// ============================================================
+	// A snapshot already describes everything an observation of the same set
+	// could say; alternating GPC and non-GPC visitors used to write on every
+	// single visit because the two digests never matched.
+	$reset();
+	$_SERVER['HTTP_SEC_GPC'] = '1';
+	Embed_Inventory::note( 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	unset( $_SERVER['HTTP_SEC_GPC'] );
+	$GLOBALS['wpdb']->queries = array();
+	Embed_Inventory::note( 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	inventory_check( array() === $GLOBALS['wpdb']->queries, 'a non-GPC observation of the set a snapshot recorded writes nothing' );
+
+	// The reverse does not hold: an observation cannot vouch for absence.
+	$reset();
+	Embed_Inventory::note( 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	$GLOBALS['wpdb']->queries = array();
+	$_SERVER['HTTP_SEC_GPC']  = '1';
+	Embed_Inventory::note( 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	inventory_check(
+		0 < count( array_filter( $GLOBALS['wpdb']->queries, static function ( $q ) { return false !== strpos( $q, 'DELETE' ); } ) ),
+		'a GPC snapshot is still written after an observation of the same set'
+	);
+	$GLOBALS['wpdb']->queries = array();
+	Embed_Inventory::note( 'youtube', 'marketing' );
+	Embed_Inventory::flush();
+	inventory_check( array() === $GLOBALS['wpdb']->queries, 'and a repeat of that snapshot is short-circuited' );
+	$reset();
+
+	// Alternating visitors, the traffic every real page gets: only the first
+	// GPC flush writes; everything after it is short-circuited.
+	$reset();
+	$writes = array();
+	foreach ( array( true, false, true, false ) as $gpc ) {
+		if ( $gpc ) { $_SERVER['HTTP_SEC_GPC'] = '1'; } else { unset( $_SERVER['HTTP_SEC_GPC'] ); }
+		$GLOBALS['wpdb']->queries = array();
+		Embed_Inventory::note( 'youtube', 'marketing' );
+		Embed_Inventory::flush();
+		$writes[] = count( $GLOBALS['wpdb']->queries );
+	}
+	inventory_check( $writes[0] > 0 && 0 === $writes[1] + $writes[2] + $writes[3], 'alternating GPC and non-GPC visits of an unchanged page write once' );
+	$reset();
+
+	// The consent-log payload names its page with the same function.
+	$page_url = new \ReflectionMethod( Embed_Inventory::class, 'current_url' );
+	inventory_check( $page_url->isPublic(), 'current_url() is public so the page can bake its own identity into the payload' );
 
 	echo "\nPassed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );

@@ -149,7 +149,8 @@ class Cookie_Definitions {
 			return array(
 				'success' => false,
 				'count'   => 0,
-				'message' => sprintf( 'HTTP %d from GitHub', $code ),
+				/* translators: %d: HTTP status code returned by GitHub. */
+				'message' => sprintf( __( 'HTTP %d from GitHub', 'faz-cookie-manager' ), $code ),
 			);
 		}
 
@@ -160,13 +161,13 @@ class Cookie_Definitions {
 			return array(
 				'success' => false,
 				'count'   => 0,
-				'message' => 'Invalid JSON or empty dataset',
+				'message' => __( 'Invalid JSON or empty dataset', 'faz-cookie-manager' ),
 			);
 		}
 
 		$total_cookies = $this->count_definitions( $data );
 		if ( 0 === $total_cookies ) {
-			return array( 'success' => false, 'count' => 0, 'message' => 'No valid cookie definitions in response' );
+			return array( 'success' => false, 'count' => 0, 'message' => __( 'No valid cookie definitions in response', 'faz-cookie-manager' ) );
 		}
 
 		// Store raw definitions.
@@ -205,7 +206,8 @@ class Cookie_Definitions {
 		return array(
 			'success' => true,
 			'count'   => $total_cookies,
-			'message' => sprintf( 'Downloaded %d cookie definitions', $total_cookies ),
+			/* translators: %d: number of cookie definitions downloaded. */
+			'message' => sprintf( __( 'Downloaded %d cookie definitions', 'faz-cookie-manager' ), $total_cookies ),
 		);
 	}
 
