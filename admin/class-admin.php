@@ -110,6 +110,7 @@ class Admin {
 		add_action( 'admin_notices', array( $this, 'redundant_geo_routing_notice' ) );
 		add_action( 'admin_notices', array( $this, 'geo_enforcement_migration_notice' ) );
 		add_action( 'admin_notices', array( $this, 'functional_optout_migration_notice' ) );
+		add_action( 'admin_notices', array( $this, 'sourcebuster_marketing_notice' ) );
 		add_action( 'wp_ajax_faz_dismiss_unmatched', array( $this, 'ajax_dismiss_unmatched_vendors' ) );
 		add_action( 'wp_ajax_faz_disable_redundant_geo_routing', array( $this, 'ajax_disable_redundant_geo_routing' ) );
 		add_action( 'wp_ajax_faz_dismiss_redundant_geo_routing', array( $this, 'ajax_dismiss_redundant_geo_routing' ) );
@@ -2452,6 +2453,76 @@ class Admin {
 			'<p><a href="%s" class="button">%s</a></p>',
 			esc_url( $cookies_url ),
 			esc_html__( 'Open the cookie categories', 'faz-cookie-manager' )
+		);
+		echo '<a href="' . esc_url( $dismiss_url ) . '" aria-label="' . esc_attr__( 'Dismiss this notice', 'faz-cookie-manager' ) . '" style="position:absolute;top:0;right:0;padding:9px;text-decoration:none;color:#787c82">';
+		echo '<span class="dashicons dashicons-dismiss" aria-hidden="true"></span></a>';
+		echo '</div>';
+	}
+
+	/**
+	 * One-time notice: the Sourcebuster cookies now answer to Marketing.
+	 *
+	 * Armed by Activator::move_sourcebuster_to_marketing() when it moved rows,
+	 * or found rows an administrator had placed in another category. Both are
+	 * visitor-facing — they decide which consent keeps WooCommerce's order
+	 * attribution — so they are stated rather than left to a changelog.
+	 *
+	 * @return void
+	 */
+	public function sourcebuster_marketing_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$state = get_option( 'faz_sourcebuster_marketing_notice' );
+		if ( ! is_array( $state ) ) {
+			return;
+		}
+		if ( isset( $_GET['faz_dismiss_sourcebuster_marketing'] )
+			&& wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_faz_nonce'] ?? '' ) ), 'faz_dismiss_sourcebuster_marketing' ) ) {
+			delete_option( 'faz_sourcebuster_marketing_notice' );
+			return;
+		}
+		$moved = isset( $state['moved'] ) ? absint( $state['moved'] ) : 0;
+		$kept  = isset( $state['kept'] ) ? absint( $state['kept'] ) : 0;
+
+		$cookies_url = admin_url( 'admin.php?page=faz-cookie-manager-cookies' );
+		$dismiss_url = wp_nonce_url( add_query_arg( 'faz_dismiss_sourcebuster_marketing', '1' ), 'faz_dismiss_sourcebuster_marketing', '_faz_nonce' );
+
+		echo '<div class="notice notice-info" style="position:relative">';
+		echo '<p><strong>' . esc_html__( 'FAZ Cookie Manager — the Sourcebuster cookies (sbjs_*) now belong to Marketing', 'faz-cookie-manager' ) . '</strong></p>';
+		echo '<p>' . esc_html__( 'WooCommerce uses Sourcebuster to record where each visitor came from and links it to the order. WooCommerce asks for marketing consent for it, and FAZ now blocks it until Marketing is accepted. The cookies were classified as Analytics, so a visitor who accepted only Marketing had them deleted again and the order lost its source.', 'faz-cookie-manager' ) . '</p>';
+		if ( $moved > 0 ) {
+			echo '<p>' . esc_html(
+				sprintf(
+					/* translators: %d: number of cookies moved to the Marketing category. */
+					_n(
+						'This update moved %d Sourcebuster cookie from Analytics to Marketing. It had been classified by a scan, not by anyone here.',
+						'This update moved %d Sourcebuster cookies from Analytics to Marketing. They had been classified by a scan, not by anyone here.',
+						$moved,
+						'faz-cookie-manager'
+					),
+					$moved
+				)
+			) . '</p>';
+		}
+		if ( $kept > 0 ) {
+			echo '<p>' . esc_html(
+				sprintf(
+					/* translators: %d: number of cookies left in the category an administrator chose. */
+					_n(
+						'%d Sourcebuster cookie was saved by an administrator in another category, so it was left as it is. As long as it stays outside Marketing, a visitor needs to accept both categories for the order source to be kept.',
+						'%d Sourcebuster cookies were saved by an administrator in another category, so they were left as they are. As long as they stay outside Marketing, a visitor needs to accept both categories for the order source to be kept.',
+						$kept,
+						'faz-cookie-manager'
+					),
+					$kept
+				)
+			) . '</p>';
+		}
+		printf(
+			'<p><a href="%s" class="button">%s</a></p>',
+			esc_url( $cookies_url ),
+			esc_html__( 'Open the cookie list', 'faz-cookie-manager' )
 		);
 		echo '<a href="' . esc_url( $dismiss_url ) . '" aria-label="' . esc_attr__( 'Dismiss this notice', 'faz-cookie-manager' ) . '" style="position:absolute;top:0;right:0;padding:9px;text-decoration:none;color:#787c82">';
 		echo '<span class="dashicons dashicons-dismiss" aria-hidden="true"></span></a>';
