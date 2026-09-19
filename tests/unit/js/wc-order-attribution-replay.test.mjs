@@ -187,12 +187,18 @@ console.log('WooCommerce Order Attribution replay after consent (jsdom)');
 // 7. WooCommerce's setOrderTracking throwing must not break FAZ.
 {
   const w = loadFrontend();
-  w.wc_order_attribution = { params: { allowTracking: true }, setOrderTracking() { throw new Error('boom'); } };
+  let attempts = 0;
+  w.wc_order_attribution = {
+    params: { allowTracking: true },
+    setOrderTracking() { attempts += 1; throw new Error('boom'); },
+  };
   const clone = restore(w, SBJS_SRC);
   w.sbjs = { init() {} };
   let threw = false;
   try { fireLoad(w, clone); } catch (e) { threw = true; }
   eq('a throwing setOrderTracking is contained', threw, false);
+  // Without this, a replay that never ran at all would also "contain" nothing.
+  eq('…and the replay was actually attempted', attempts, 1);
 }
 
 // 8. Which consent unlocks sourcebuster. WooCommerce gates order attribution on
