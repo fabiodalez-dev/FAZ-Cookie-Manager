@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.9.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-09-19T02:06:24+00:00\n"
+"POT-Creation-Date: 2026-09-19T02:17:42+00:00\n"
 "PO-Revision-Date: 2026-04-10\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: German\n"
@@ -2063,8 +2063,8 @@ msgstr[1] ""
 #. translators: %d: number of cookies left in the category an administrator chose.
 #: admin/class-admin.php:2512
 #, php-format
-msgid "%d Sourcebuster cookie was saved by an administrator in another category, so it was left as it is. As long as it stays outside Marketing, a visitor needs to accept both categories for the order source to be kept."
-msgid_plural "%d Sourcebuster cookies were saved by an administrator in another category, so they were left as they are. As long as they stay outside Marketing, a visitor needs to accept both categories for the order source to be kept."
+msgid "%d Sourcebuster cookie was saved or imported in another category, so it was left as it is. WooCommerce asks for marketing consent for Sourcebuster, and FAZ removes a cookie whose category the visitor has not accepted: check that its category in the cookie list is the one you intend."
+msgid_plural "%d Sourcebuster cookies were saved or imported in another category, so they were left as they are. WooCommerce asks for marketing consent for Sourcebuster, and FAZ removes a cookie whose category the visitor has not accepted: check that their category in the cookie list is the one you intend."
 msgstr[0] ""
 msgstr[1] ""
 

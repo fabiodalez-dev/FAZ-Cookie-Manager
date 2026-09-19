@@ -2336,12 +2336,20 @@ class Activator {
 	 * because Analytics had not been accepted. Measured: seven cookies written,
 	 * gone within 200 ms. The script and its cookies must answer to one consent.
 	 *
-	 * A row is moved only when nobody ever saved it: Cookie_Controller writes
-	 * date_created and date_modified from the same value and every save through
-	 * the editor or the REST API advances date_modified — the same evidence
-	 * normalize_legacy_functional_optout_flags() relies on. A row an
-	 * administrator saved keeps whatever they chose; the notice then says that
-	 * WooCommerce needs Marketing, so the choice is an informed one.
+	 * A row is moved only when the scanner wrote it and nobody saved it since:
+	 * Cookie_Controller::create_item() has written date_created and
+	 * date_modified from the same real timestamp since 1.0.5, and every save
+	 * through the editor or the REST API advances date_modified — the evidence
+	 * normalize_legacy_functional_optout_flags() relies on too.
+	 *
+	 * Zero dates are NOT that evidence. The only writer that leaves them is the
+	 * settings import, which copies each row's category from the file and no
+	 * history with it, so an imported category may be another site's scan or
+	 * an administrator's deliberate choice, and nothing here can tell which.
+	 * Those rows are left alone, like a row an administrator saved, and both
+	 * are counted so the notice can say what their category now means. The
+	 * comparison is against a real date rather than the zero literal, which a
+	 * MySQL server in strict mode may refuse.
 	 *
 	 * Once per install (`faz_move_sourcebuster_marketing_done`), for the reason
 	 * the Functional migration gives: run_pending_migrations() replays the list
@@ -2378,7 +2386,7 @@ class Activator {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $cookies is $wpdb->prefix + literal (escaped via esc_sql); every value bound via prepare(); one-shot idempotent migration write.
 			$moved = $wpdb->query(
 				$wpdb->prepare(
-					'UPDATE `' . esc_sql( $cookies ) . '` SET category = %d WHERE name LIKE %s AND category = %d AND date_modified = date_created',
+					"UPDATE `" . esc_sql( $cookies ) . "` SET category = %d WHERE name LIKE %s AND category = %d AND date_modified = date_created AND date_created > '1970-01-01 00:00:00'",
 					$marketing,
 					$like,
 					$analytics
@@ -2390,8 +2398,8 @@ class Activator {
 				throw new \RuntimeException( 'FAZ: failed to move the Sourcebuster cookies to Marketing; migration will retry.' );
 			}
 		}
-		// Rows somebody saved in another category. Left alone, and counted so
-		// the notice can say that WooCommerce needs Marketing for them.
+		// Rows somebody saved or imported in another category. Left alone, and
+		// counted so the notice can say that WooCommerce needs Marketing.
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- same table and justification as above.
 		$kept = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM `' . esc_sql( $cookies ) . '` WHERE name LIKE %s AND category <> %d', $like, $marketing ) );
 

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-09-19T02:06:24+00:00\n"
+"POT-Creation-Date: 2026-09-19T02:17:42+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -2062,10 +2062,10 @@ msgstr[1] "Questo aggiornamento ha spostato %d cookie di Sourcebuster da Analyti
 #. translators: %d: number of cookies left in the category an administrator chose.
 #: admin/class-admin.php:2512
 #, php-format
-msgid "%d Sourcebuster cookie was saved by an administrator in another category, so it was left as it is. As long as it stays outside Marketing, a visitor needs to accept both categories for the order source to be kept."
-msgid_plural "%d Sourcebuster cookies were saved by an administrator in another category, so they were left as they are. As long as they stay outside Marketing, a visitor needs to accept both categories for the order source to be kept."
-msgstr[0] "%d cookie di Sourcebuster era stato salvato da un amministratore in un'altra categoria, quindi è stato lasciato com'era. Finché resta fuori da Marketing, un visitatore deve accettare entrambe le categorie perché la provenienza dell'ordine venga conservata."
-msgstr[1] "%d cookie di Sourcebuster erano stati salvati da un amministratore in un'altra categoria, quindi sono stati lasciati com'erano. Finché restano fuori da Marketing, un visitatore deve accettare entrambe le categorie perché la provenienza dell'ordine venga conservata."
+msgid "%d Sourcebuster cookie was saved or imported in another category, so it was left as it is. WooCommerce asks for marketing consent for Sourcebuster, and FAZ removes a cookie whose category the visitor has not accepted: check that its category in the cookie list is the one you intend."
+msgid_plural "%d Sourcebuster cookies were saved or imported in another category, so they were left as they are. WooCommerce asks for marketing consent for Sourcebuster, and FAZ removes a cookie whose category the visitor has not accepted: check that their category in the cookie list is the one you intend."
+msgstr[0] "%d cookie di Sourcebuster era stato salvato o importato in un'altra categoria, quindi è stato lasciato com'era. WooCommerce chiede il consenso marketing per Sourcebuster, e FAZ rimuove un cookie la cui categoria il visitatore non ha accettato: verifica che la sua categoria nell'elenco dei cookie sia quella che intendi."
+msgstr[1] "%d cookie di Sourcebuster erano stati salvati o importati in un'altra categoria, quindi sono stati lasciati com'erano. WooCommerce chiede il consenso marketing per Sourcebuster, e FAZ rimuove un cookie la cui categoria il visitatore non ha accettato: verifica che la loro categoria nell'elenco dei cookie sia quella che intendi."
 
 #: admin/class-admin.php:2525
 msgid "Open the cookie list"

@@ -10,9 +10,11 @@
  * and FAZ deleted them again because Analytics was not accepted. Measured on
  * the test site: seven cookies written, gone within 200 ms.
  *
- * What matters is the restraint. Only rows nobody ever saved are moved; a row
- * an administrator saved keeps their choice and is only counted, so the
- * notice can explain what that choice now means. And it runs once per site.
+ * What matters is the restraint. Only rows the scanner wrote and nobody saved
+ * since are moved. A row an administrator saved keeps their choice; so does an
+ * imported row (zero dates), whose category may have been somebody's choice
+ * on another site. Both are only counted, so the notice can explain what the
+ * category now means. And it runs once per site.
  *
  * The migration's SQL runs for real, against an in-memory SQLite database —
  * which is also the portability check (no MySQL-only syntax). LIKE carries
@@ -172,10 +174,13 @@ $db = sb_site(
 Activator::move_sourcebuster_to_marketing();
 sb_eq( sb_category( $db, 'sbjs_session' ), MARKETING, 'an unsaved sbjs_ row moves to Marketing' );
 sb_eq( sb_category( $db, 'sbjs_first' ), MARKETING, 'every unsaved sbjs_ row moves' );
-sb_eq( sb_category( $db, 'sbjs_udata' ), MARKETING, 'a row whose dates were never set counts as unsaved' );
+// Zero dates are what the settings import leaves: the category came from a
+// file, maybe another site's scan, maybe somebody's decision. Not evidence of
+// an untouched row, so it is kept and counted, never moved.
+sb_eq( sb_category( $db, 'sbjs_udata' ), ANALYTICS, 'an imported row (zero dates) keeps its category' );
 sb_eq( sb_category( $db, '_ga' ), ANALYTICS, 'another Analytics cookie is not touched' );
 sb_eq( sb_category( $db, 'sbjsx_other' ), ANALYTICS, 'the _ in sbjs_ is literal: sbjsx_other is not a Sourcebuster cookie' );
-sb_eq( get_option( 'faz_sourcebuster_marketing_notice' ), array( 'moved' => 3, 'kept' => 0 ), 'the notice is armed with what moved' );
+sb_eq( get_option( 'faz_sourcebuster_marketing_notice' ), array( 'moved' => 2, 'kept' => 1 ), 'the notice counts what moved and the imported row it left' );
 sb_eq( Cookie_Controller::$busts, 1, 'the cookie cache is busted, so the page stops declaring the old category' );
 sb_eq( get_option( 'faz_move_sourcebuster_marketing_done' ), 1, 'and the marker is written' );
 

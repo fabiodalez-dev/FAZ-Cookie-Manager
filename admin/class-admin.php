@@ -2463,7 +2463,7 @@ class Admin {
 	 * One-time notice: the Sourcebuster cookies now answer to Marketing.
 	 *
 	 * Armed by Activator::move_sourcebuster_to_marketing() when it moved rows,
-	 * or found rows an administrator had placed in another category. Both are
+	 * or found rows saved or imported in another category. Both are
 	 * visitor-facing — they decide which consent keeps WooCommerce's order
 	 * attribution — so they are stated rather than left to a changelog.
 	 *
@@ -2510,8 +2510,8 @@ class Admin {
 				sprintf(
 					/* translators: %d: number of cookies left in the category an administrator chose. */
 					_n(
-						'%d Sourcebuster cookie was saved by an administrator in another category, so it was left as it is. As long as it stays outside Marketing, a visitor needs to accept both categories for the order source to be kept.',
-						'%d Sourcebuster cookies were saved by an administrator in another category, so they were left as they are. As long as they stay outside Marketing, a visitor needs to accept both categories for the order source to be kept.',
+						'%d Sourcebuster cookie was saved or imported in another category, so it was left as it is. WooCommerce asks for marketing consent for Sourcebuster, and FAZ removes a cookie whose category the visitor has not accepted: check that its category in the cookie list is the one you intend.',
+						'%d Sourcebuster cookies were saved or imported in another category, so they were left as they are. WooCommerce asks for marketing consent for Sourcebuster, and FAZ removes a cookie whose category the visitor has not accepted: check that their category in the cookie list is the one you intend.',
 						$kept,
 						'faz-cookie-manager'
 					),
