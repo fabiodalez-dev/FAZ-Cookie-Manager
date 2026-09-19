@@ -1688,7 +1688,7 @@
     },
     "sourcebuster": {
         "label": "Sourcebuster",
-        "category": "analytics",
+        "category": "marketing",
         "patterns": [
             "sourcebuster-js"
         ],
