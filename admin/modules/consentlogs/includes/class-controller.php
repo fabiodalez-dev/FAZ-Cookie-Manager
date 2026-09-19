@@ -221,12 +221,24 @@ class Controller {
 	}
 
 	/**
-	 * Drop query string and fragment before persisting a consent log URL.
+	 * Reduce a consent-log URL to the page it identifies.
+	 *
+	 * Delegates to faz_normalize_page_url(), the one rule the placeholder
+	 * inventory also keys on: credentials, fragments and every non-routing
+	 * parameter (campaign, token, reset key, email) are dropped, while the
+	 * WordPress routing parameters survive. Dropping the whole query — what
+	 * this did before — recorded every plain-permalink and ?lang= page as the
+	 * home page, so the row could not say which page consent was given on.
+	 * The inline body below is the fallback for a load order in which the
+	 * utility is not yet defined; it keeps the old, stricter behaviour.
 	 *
 	 * @param string $url URL to sanitize.
 	 * @return string
 	 */
 	private function sanitize_log_url( $url ) {
+		if ( function_exists( 'faz_normalize_page_url' ) ) {
+			return faz_normalize_page_url( $url );
+		}
 		$url = esc_url_raw( (string) $url );
 		if ( '' === $url ) {
 			return '';
@@ -311,11 +323,17 @@ class Controller {
 		// arbitrary keys/values into the consent-log row. Cap the entry count,
 		// length-bound every key, and constrain values so the stored audit map
 		// stays well-formed regardless of what the client sends.
+		//
+		// The cap is on the STORED map: 250 entries in total, of which the
+		// server reserves Gpc_Exception_Audit::MAX_IDS for the verdict keys it
+		// appends below. Capping the client's map at 250 and appending after it
+		// let a row reach 250 + the number of exceptions.
 		if ( is_array( $categories ) || is_object( $categories ) ) {
-			$clean = array();
-			$count = 0;
+			$clean      = array();
+			$count      = 0;
+			$client_cap = 250 - ( class_exists( '\\FazCookie\\Includes\\Gpc_Exception_Audit' ) ? \FazCookie\Includes\Gpc_Exception_Audit::MAX_IDS : 50 );
 			foreach ( (array) $categories as $key => $value ) {
-				if ( $count >= 250 ) {
+				if ( $count >= $client_cap ) {
 					break;
 				}
 				$key = substr( sanitize_text_field( (string) $key ), 0, 190 );
@@ -332,6 +350,42 @@ class Controller {
 				$clean[ $key ] = $value;
 				++$count;
 			}
+
+			// A GPC exception in this map is the client's claim that the visitor
+			// clicked Accept on a blocked embed. The cookie cannot prove it —
+			// a page script can write the same pairs (#285) — so the server adds
+			// its own verdict: whether the circumstances it would have been
+			// minted in actually held. The client cannot write these keys; the
+			// audit strips them first.
+			//
+			// The earlier row it is judged against is fetched only when this
+			// map carries a client exception at all — one scan, the same prefix
+			// decide() collects on — so an ordinary consent post costs no extra
+			// query. It is the newest row that RECORDS an exception, not merely
+			// the newest row: one decision in between that carried none (a
+			// withdrawal, an AMP write) used to end the chain, and the next
+			// page's exception was then judged afresh as if it had never been
+			// seen. Looked up by the id as stored, not as posted.
+			if ( class_exists( '\\FazCookie\\Includes\\Gpc_Exception_Audit' ) ) {
+				$has_exception = false;
+				foreach ( array_keys( $clean ) as $clean_key ) {
+					if ( 0 === strpos( (string) $clean_key, 'meta.gpc_exception.' ) ) {
+						$has_exception = true;
+						break;
+					}
+				}
+				$previous = array();
+				if ( $has_exception && ! empty( $data['consent_id'] ) ) {
+					$previous = (array) $this->get_last_gpc_exception_row( $consent_id );
+				}
+				$clean = \FazCookie\Includes\Gpc_Exception_Audit::decide(
+					$clean,
+					$data,
+					function_exists( 'faz_get_valid_consent_cookie' ) ? (string) faz_get_valid_consent_cookie() : '',
+					$previous
+				);
+			}
+
 			$categories = wp_json_encode( $clean );
 		} else {
 			// A scalar value (e.g. a DNSMPI opt-out passes '' and the audit /
@@ -541,8 +595,20 @@ class Controller {
 		}
 
 		if ( ! empty( $args['status'] ) ) {
-			$where[]  = 'status = %s';
-			$values[] = $args['status'];
+			if ( 'gpc_exception' === $args['status'] ) {
+				// A pseudo-status, not a column value: rows that record an
+				// exception to a binding opt-out are the ones worth auditing,
+				// and they occur under every real status. The prefix matches
+				// both the client-written marker and the server's verdicts, so
+				// a row is listed whatever the verdict says.
+				$where[]  = '(categories LIKE %s OR categories LIKE %s OR categories LIKE %s)';
+				foreach ( array( 'meta.gpc_exception.', 'meta.gpc_exception_served.', 'meta.gpc_exception_carried.' ) as $prefix ) {
+					$values[] = '%' . $wpdb->esc_like( '"' . $prefix ) . '%';
+				}
+			} else {
+				$where[]  = 'status = %s';
+				$values[] = $args['status'];
+			}
 		}
 
 		$where_clause = implode( ' AND ', $where );
@@ -604,7 +670,10 @@ class Controller {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $consent_id is bound via prepare(%s). Caching would mask post-write reads from the same request.
 		$item  = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE consent_id = %s ORDER BY created_at DESC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				// log_id breaks ties: created_at has one-second resolution and
+				// a consent id can log twice in a second (the throttle lets a
+				// change through), so without it "newest" was arbitrary.
+				"SELECT * FROM {$table} WHERE consent_id = %s ORDER BY created_at DESC, log_id DESC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$consent_id
 			),
 			ARRAY_A
@@ -621,6 +690,43 @@ class Controller {
 			}
 		}
 
+		return $item;
+	}
+
+	/**
+	 * The newest row for a consent id that records any GPC-exception key.
+	 *
+	 * The row a GPC-exception verdict is carried from. The pattern matches the
+	 * client key and both server verdict keys (they share the quoted prefix),
+	 * so an earlier unverified verdict is found and carried rather than skipped.
+	 *
+	 * @param string $consent_id Sanitised consent id.
+	 * @return array|null The log record, categories decoded, or null.
+	 */
+	private function get_last_gpc_exception_row( $consent_id ) {
+		global $wpdb;
+
+		$table = $this->get_table_name();
+		$like  = '%' . $wpdb->esc_like( '"meta.gpc_exception' ) . '%';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $consent_id and the LIKE pattern are bound via prepare(%s). Read right before the row it informs is written: a cached answer could be stale.
+		$item = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE consent_id = %s AND categories LIKE %s ORDER BY created_at DESC, log_id DESC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$consent_id,
+				$like
+			),
+			ARRAY_A
+		);
+
+		if ( null === $item ) {
+			return null;
+		}
+		if ( ! empty( $item['categories'] ) && is_string( $item['categories'] ) ) {
+			$decoded = json_decode( $item['categories'], true );
+			if ( json_last_error() === JSON_ERROR_NONE ) {
+				$item['categories'] = $decoded;
+			}
+		}
 		return $item;
 	}
 
@@ -721,8 +827,20 @@ class Controller {
 		}
 
 		if ( ! empty( $args['status'] ) ) {
-			$where[]  = 'status = %s';
-			$values[] = $args['status'];
+			if ( 'gpc_exception' === $args['status'] ) {
+				// A pseudo-status, not a column value: rows that record an
+				// exception to a binding opt-out are the ones worth auditing,
+				// and they occur under every real status. The prefix matches
+				// both the client-written marker and the server's verdicts, so
+				// a row is listed whatever the verdict says.
+				$where[]  = '(categories LIKE %s OR categories LIKE %s OR categories LIKE %s)';
+				foreach ( array( 'meta.gpc_exception.', 'meta.gpc_exception_served.', 'meta.gpc_exception_carried.' ) as $prefix ) {
+					$values[] = '%' . $wpdb->esc_like( '"' . $prefix ) . '%';
+				}
+			} else {
+				$where[]  = 'status = %s';
+				$values[] = $args['status'];
+			}
 		}
 
 		$where_clause = implode( ' AND ', $where );

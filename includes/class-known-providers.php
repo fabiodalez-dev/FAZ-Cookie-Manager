@@ -122,4 +122,37 @@ class Known_Providers {
 		}
 		return $map;
 	}
+
+	/**
+	 * Providers that are blocked without leaving any visible trace.
+	 *
+	 * They declare no cookies, so they contribute no row to the cookie
+	 * declaration. That alone is not enough to call them silent: a provider
+	 * blocked as an embed (video, social, map, etc.) still renders a
+	 * placeholder via Placeholder_Builder, which is exactly the visible trace
+	 * this list warns about the absence of — so embed services are excluded
+	 * here even when, like Loom or Rumble, they declare no cookies. What
+	 * remains is parked as a plain script/stylesheet request: no placeholder,
+	 * and no row anywhere the cookie declaration, the banner, the preference
+	 * centre or the Cookie Policy would otherwise show it. Before consent the
+	 * page simply renders without them — fallback fonts, a control that
+	 * appears not to work — and the symptom points at the theme, the cache or
+	 * the CDN rather than here (#279, found while closing #253).
+	 *
+	 * @return array Providers, in catalogue order.
+	 */
+	public static function get_silent_providers() {
+		$check_embeds = class_exists( '\FazCookie\Frontend\Includes\Placeholder_Builder' );
+		$silent       = array();
+		foreach ( self::get_all() as $service_id => $service ) {
+			if ( empty( $service['cookies'] ) && ! empty( $service['patterns'] ) ) {
+				if ( $check_embeds && \FazCookie\Frontend\Includes\Placeholder_Builder::is_embed_service( $service_id ) ) {
+					continue;
+				}
+				$silent[] = $service;
+			}
+		}
+		return $silent;
+	}
+
 }

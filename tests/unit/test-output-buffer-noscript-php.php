@@ -98,6 +98,7 @@ namespace {
 		}
 	}
 
+	require_once dirname( __DIR__, 2 ) . '/frontend/includes/class-embed-inventory.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 
 	use FazCookie\Frontend\Frontend;

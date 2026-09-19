@@ -29,6 +29,7 @@ use FazCookie\Includes\Cookie_Policy_Shortcode;
 use FazCookie\Includes\Do_Not_Sell_Shortcode;
 use FazCookie\Includes\Cookie_Settings_Shortcode;
 use FazCookie\Frontend\Includes\Placeholder_Builder;
+use FazCookie\Frontend\Includes\Embed_Inventory;
 use FazCookie\Frontend\Includes\Geo_Runtime;
 /**
  * The public-facing functionality of the plugin.
@@ -221,6 +222,10 @@ class Frontend {
 		// scripts are actually allowed.
 		add_action( 'template_redirect', array( $this, 'shred_non_consented_cookies' ), 1 );
 		add_action( 'template_redirect', array( $this, 'start_output_buffer' ) );
+		// Register after the output-buffer flusher. Its shutdown callback can
+		// create placeholders, and the inventory must persist the final set —
+		// including an empty set when embeds were removed from this page.
+		add_action( 'template_redirect', array( Embed_Inventory::class, 'begin' ) );
 		// Optional server-cookie guard. Opening a dedicated buffer on init keeps
 		// headers pending until page, AJAX, REST and redirect callbacks have had a
 		// chance to emit Set-Cookie. The output callback then filters the final
@@ -807,13 +812,20 @@ class Frontend {
 						'token'          => $hmac_token,
 						'bannerSlug'     => $this->banner ? $this->banner->get_slug() : '',
 						'policyRevision' => isset( $faz_settings['general']['consent_revision'] ) ? max( 1, absint( $faz_settings['general']['consent_revision'] ) ) : 1,
+						// The page's identity as the placeholder inventory records
+						// it — the same function, for the same render — so the
+						// audit compares like with like. A browser-built URL kept
+						// only origin + path and dropped the routing parameters
+						// (?p=, ?lang=) the inventory keys on. It varies by page,
+						// never by visitor, so a cached copy stays correct.
+						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::current_url() : '',
 					)
 				);
 					$inline_js = "document.addEventListener('fazcookie_consent_update',function(e){" .
 						"var d=e.detail||{};" .
 						"if(!d.action||d.action==='init')return;" .
 						"if(typeof _fazConsentLog==='undefined')return;" .
-						"var safeUrl=(function(){try{var current=new URL(window.location.href);return current.origin+current.pathname}catch(err){var origin=window.location.origin||(window.location.protocol+'//'+window.location.host);return origin+(window.location.pathname||'')}})();" .
+						"var safeUrl=(function(){if(_fazConsentLog.pageUrl)return _fazConsentLog.pageUrl;try{var current=new URL(window.location.href);return current.origin+current.pathname+current.search}catch(err){var origin=window.location.origin||(window.location.protocol+'//'+window.location.host);return origin+(window.location.pathname||'')+(window.location.search||'')}})();" .
 						"fetch(_fazConsentLog.restUrl,{" .
 							"method:'POST'," .
 							// keepalive so the request survives the navigation that
@@ -3828,6 +3840,9 @@ class Frontend {
 		$html = $this->process_social_embeds( $html, $blocked_categories );
 		$html = $this->process_elementor_video_widgets( $html, $blocked_categories );
 
+		if ( ! $pcre_failed ) {
+			Embed_Inventory::complete_render();
+		}
 		return $html;
 	}
 

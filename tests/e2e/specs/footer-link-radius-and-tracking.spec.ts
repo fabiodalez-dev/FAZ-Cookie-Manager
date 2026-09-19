@@ -53,7 +53,7 @@ test('disabled pageview tracking displays unavailable metrics', async ({ page, l
       await expect(page.locator('#faz-stat-' + stat)).toHaveText('--');
     }
     await expect(page.locator('#faz-chart-empty')).toBeVisible();
-    await expect(page.locator('#faz-chart-empty')).toContainText('Pageview tracking is disabled');
+    await expect(page.locator('#faz-chart-empty')).toContainText('Pageview tracking is off, so nothing is being recorded');
     await page.locator('.faz-chart-filter-btn[data-days="30"]').click();
     await expect(page.locator('#faz-stat-pageviews')).toHaveText('--');
   } finally {

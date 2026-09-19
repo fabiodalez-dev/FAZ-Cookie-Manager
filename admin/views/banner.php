@@ -384,8 +384,9 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 						<input type="text" class="faz-input" id="faz-b-btn-readmore-label" placeholder="<?php esc_attr_e( 'Cookie Policy', 'faz-cookie-manager' ); ?>">
 					</div>
 					<div class="faz-form-group">
-						<label><?php esc_html_e( 'Cookie Policy URL', 'faz-cookie-manager' ); ?></label>
-						<input type="text" class="faz-input" id="faz-b-privacy-link" placeholder="/cookie-policy">
+						<label for="faz-b-privacy-link"><?php esc_html_e( 'Cookie Policy URL', 'faz-cookie-manager' ); ?></label>
+						<input type="text" class="faz-input" id="faz-b-privacy-link" data-faz-page-search placeholder="/cookie-policy">
+						<div class="faz-help"><?php esc_html_e( 'Type a page title to find its URL, or enter a link manually.', 'faz-cookie-manager' ); ?></div>
 						<div class="faz-help"><?php esc_html_e( 'Relative (/cookie-policy) or absolute (https://example.com/privacy). Default: /cookie-policy', 'faz-cookie-manager' ); ?></div>
 					</div>
 				</div>

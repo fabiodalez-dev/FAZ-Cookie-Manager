@@ -89,11 +89,16 @@ class Activator {
 	 */
 	public static function init() {
 		add_action( 'init', array( __CLASS__, 'check_version' ), 5 );
+		// Independently versioned schema: also upgrade when testing a branch
+		// whose release version has not been bumped yet.
+		add_action( 'init', array( '\FazCookie\Frontend\Includes\Embed_Inventory', 'maybe_create_table' ), 6 );
 		// Consolidate one-time migrations into a single admin_init callback
 		// to avoid 7 separate get_option() calls on every admin page load.
 		add_action( 'admin_init', array( __CLASS__, 'run_pending_migrations' ) );
 		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
+		add_action( 'faz_weekly_definitions_update', array( 'FazCookie\Includes\Cookie_Definitions', 'cron_update' ) );
+		add_action( 'faz_after_update_settings', array( 'FazCookie\Includes\Cookie_Definitions', 'schedule_updates' ) );
 		add_action( 'faz_scheduled_scan', array( __CLASS__, 'run_scheduled_scan' ) );
 		add_action( 'faz_after_update_settings', array( __CLASS__, 'reschedule_auto_scan' ) );
 		// F009: keep the IAB unmatched-vendors transient fresh on every
@@ -738,6 +743,7 @@ class Activator {
 			wp_schedule_event( time(), 'weekly', 'faz_weekly_gvl_update' );
 		}
 		self::schedule_auto_scan();
+		Cookie_Definitions::schedule_updates();
 	}
 
 	/**
@@ -824,6 +830,22 @@ class Activator {
 				}
 			}
 		);
+
+		// The placeholder inventory exists to corroborate consent-log rows, so
+		// it follows the consent-log window: once the row it could vouch for is
+		// gone, keeping a record of which pages carry which embeds serves no
+		// purpose. Housekeeping, not a compliance obligation — it stays silent.
+		if ( $retention > 0 ) {
+			self::run_cleanup_step(
+				'embed inventory retention',
+				false,
+				static function () use ( $retention ) {
+					if ( class_exists( '\\FazCookie\\Frontend\\Includes\\Embed_Inventory' ) ) {
+						\FazCookie\Frontend\Includes\Embed_Inventory::prune( $retention );
+					}
+				}
+			);
+		}
 
 		// Pageview analytics rows grow one-per-visit when tracking is enabled
 		// and previously had NO purge wired up at all, so the table (and every
@@ -1482,6 +1504,13 @@ class Activator {
 		// Pageviews table (standalone controller).
 		if ( class_exists( 'FazCookie\Admin\Modules\Pageviews\Includes\Controller' ) ) {
 			Pageviews_Controller::get_instance()->maybe_create_table();
+		}
+
+		// Placeholder inventory: which pages offer which blocked embed. Read
+		// when auditing a GPC exception, so it has to exist before the first
+		// one can be minted.
+		if ( class_exists( 'FazCookie\Frontend\Includes\Embed_Inventory' ) ) {
+			\FazCookie\Frontend\Includes\Embed_Inventory::maybe_create_table();
 		}
 	}
 

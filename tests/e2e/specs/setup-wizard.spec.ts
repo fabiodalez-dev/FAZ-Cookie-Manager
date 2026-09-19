@@ -35,13 +35,16 @@ function snapshot(): string {
     $o = new \\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings();
     $settings = get_option( 'faz_settings' );
     global $wpdb;
-    $row = $wpdb->get_row( "SELECT banner_id, settings FROM {$wpdb->prefix}faz_banners WHERE banner_default = 1 LIMIT 1" );
+    $row = $wpdb->get_row( "SELECT banner_id, settings, contents FROM {$wpdb->prefix}faz_banners WHERE banner_default = 1 LIMIT 1" );
     echo wp_json_encode( array(
 	  'settings'  => $settings,
 	  'gcm'       => get_option( 'faz_gcm_settings' ),
 	  'wplang'    => get_option( 'WPLANG', false ),
       'banner_id' => $row ? (int) $row->banner_id : 0,
       'banner'    => $row ? $row->settings : '',
+      'contents'  => $row ? $row->contents : '',
+      'policy_pages' => get_posts( array( 'post_type' => 'page', 'post_status' => 'any', 'meta_key' => '_faz_setup_policy_language', 'fields' => 'ids', 'posts_per_page' => -1 ) ),
+      'policy_options' => $wpdb->get_results( $wpdb->prepare("SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like('faz_setup_policy_page_') . '%'), OBJECT_K ),
     ) );
   `).trim();
 }
@@ -62,8 +65,14 @@ function restore(snap: string): void {
 	if ( false === $snap['wplang'] ) { delete_option( 'WPLANG' ); } else { update_option( 'WPLANG', $snap['wplang'] ); }
     if ( ! empty( $snap['banner_id'] ) && is_string( $snap['banner'] ) && '' !== $snap['banner'] ) {
       global $wpdb;
-      $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => $snap['banner'] ), array( 'banner_id' => (int) $snap['banner_id'] ), array( '%s' ), array( '%d' ) );
+      $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => $snap['banner'], 'contents' => $snap['contents'] ), array( 'banner_id' => (int) $snap['banner_id'] ), array( '%s', '%s' ), array( '%d' ) );
     }
+    $pages = get_posts( array( 'post_type' => 'page', 'post_status' => 'any', 'meta_key' => '_faz_setup_policy_language', 'fields' => 'ids', 'posts_per_page' => -1 ) );
+    foreach ( array_diff( $pages, $snap['policy_pages'] ) as $page_id ) { wp_delete_post( $page_id, true ); }
+    global $wpdb;
+    $keys = $wpdb->get_col( $wpdb->prepare("SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like('faz_setup_policy_page_') . '%') );
+    foreach ( $keys as $key ) { if ( ! isset($snap['policy_options'][$key]) ) { delete_option($key); } }
+    foreach ( $snap['policy_options'] as $key => $row ) { update_option($key, $row['option_value'], false); }
     \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
     faz_clear_banner_template_cache();
     echo 'restored';
@@ -545,6 +554,73 @@ test.describe('Guided setup wizard', () => {
     } finally {
       restore(snap);
     }
+  });
+});
+
+test.describe('Wizard policy pages and page-link search', () => {
+  test('publishes an Italian shortcode page and reuses it on retry', async ({ page, loginAsAdmin }) => {
+    const snap = snapshot();
+    try {
+      forceIncomplete();
+      await loginAsAdmin(page);
+      await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
+      await page.locator('#faz-setup-next').click();
+      await page.locator('#faz-setup-lang').selectOption('it');
+      for (let n = 2; n < 8; n++) await page.locator('#faz-setup-next').click();
+      // The page is published straight from the template, so the box ships
+      // unticked and its language note appears only once it is ticked.
+      const createPage = page.locator('#faz-setup-create-cookie-page');
+      await expect(createPage).not.toBeChecked();
+      await expect(page.locator('#faz-setup-policy-language')).toBeHidden();
+      await createPage.check();
+      await expect(page.locator('#faz-setup-policy-language')).toContainText('Italian');
+      const responsePromise = page.waitForResponse(r => r.url().includes('settings/onboarding') && r.request().method() === 'POST');
+      await page.locator('#faz-setup-finish').click();
+      const response = await responsePromise;
+      expect(response.status()).toBe(200);
+      const result = await response.json();
+      expect(result.cookie_page.language).toBe('it');
+      const id = Number(result.cookie_page.id);
+      expect(id).toBeGreaterThan(0);
+      const stored = JSON.parse(wpEval(`
+        $p = get_post(${id});
+        $b = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->get_active_banner();
+        echo wp_json_encode(array('status' => $p->post_status, 'content' => $p->post_content, 'link' => $b->get_contents('it')['notice']['elements']['privacyLink']));
+      `));
+      expect(stored.status).toBe('publish');
+      expect(stored.content).toContain('lang="it"');
+      expect(stored.link).toBe(result.cookie_page.url);
+      const repeat = wpEval(`wp_set_current_user(1); delete_option('faz_setup_policy_page_it_gdpr-strict'); echo wp_json_encode(\\FazCookie\\Admin\\Modules\\Settings\\Includes\\Policy_Page::ensure('it', 'gdpr'));`);
+      expect(JSON.parse(repeat).id).toBe(id);
+      await page.waitForURL(/page=faz-cookie-manager$/, { timeout: 15_000 });
+    } finally { restore(snap); }
+  });
+
+  test('privacy autocomplete selects a published page using the keyboard', async ({ page, loginAsAdmin }) => {
+    const ids: number[] = JSON.parse(wpEval(`
+      $ids = array();
+      foreach (array('publish', 'draft', 'protected') as $status) {
+        $ids[] = wp_insert_post(array('post_type'=>'page','post_status'=>$status === 'draft' ? 'draft' : 'publish','post_password'=>$status === 'protected' ? 'test-only' : '', 'post_title'=>'Privacy wizard search fixture ' . $status,'post_content'=>'Test fixture'));
+      }
+      echo wp_json_encode($ids);
+    `));
+    const id = ids[0];
+    try {
+      expect(id).toBeGreaterThan(0);
+      await loginAsAdmin(page);
+      await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookie-policy`, { waitUntil: 'domcontentloaded' });
+      const input = page.locator('#cp-privacy-policy-url');
+      await input.fill('Privacy wizard search');
+      const list = page.locator('#cp-privacy-policy-url-suggestions');
+      await expect(list).toBeVisible();
+      await expect(list.getByRole('option')).toHaveCount(1);
+      await input.press('ArrowDown');
+      await input.press('Enter');
+      await expect(input).toHaveValue(wpEval(`echo get_permalink(${id});`).trim());
+      await expect(list).toBeHidden();
+      await input.fill('https://external.example/privacy');
+      await expect(input).toHaveValue('https://external.example/privacy');
+    } finally { for (const fixtureId of ids) if (fixtureId > 0) wpEval(`wp_delete_post(${fixtureId}, true);`); }
   });
 });
 

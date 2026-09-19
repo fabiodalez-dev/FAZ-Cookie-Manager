@@ -149,7 +149,8 @@ class Cookie_Definitions {
 			return array(
 				'success' => false,
 				'count'   => 0,
-				'message' => sprintf( 'HTTP %d from GitHub', $code ),
+				/* translators: %d: HTTP status code returned by GitHub. */
+				'message' => sprintf( __( 'HTTP %d from GitHub', 'faz-cookie-manager' ), $code ),
 			);
 		}
 
@@ -160,11 +161,14 @@ class Cookie_Definitions {
 			return array(
 				'success' => false,
 				'count'   => 0,
-				'message' => 'Invalid JSON or empty dataset',
+				'message' => __( 'Invalid JSON or empty dataset', 'faz-cookie-manager' ),
 			);
 		}
 
 		$total_cookies = $this->count_definitions( $data );
+		if ( 0 === $total_cookies ) {
+			return array( 'success' => false, 'count' => 0, 'message' => __( 'No valid cookie definitions in response', 'faz-cookie-manager' ) );
+		}
 
 		// Store raw definitions.
 		update_option( self::OPTION_KEY, $data, false ); // autoload=false (large)
@@ -202,8 +206,37 @@ class Cookie_Definitions {
 		return array(
 			'success' => true,
 			'count'   => $total_cookies,
-			'message' => sprintf( 'Downloaded %d cookie definitions', $total_cookies ),
+			/* translators: %d: number of cookie definitions downloaded. */
+			'message' => sprintf( __( 'Downloaded %d cookie definitions', 'faz-cookie-manager' ), $total_cookies ),
 		);
+	}
+
+	/** Schedule outbound updates only after the administrator opts in. */
+	public static function schedule_updates() {
+		$settings = get_option( 'faz_settings', array() );
+		if ( empty( $settings['scanner']['auto_update_definitions'] ) ) {
+			if ( wp_next_scheduled( 'faz_weekly_definitions_update' ) ) {
+				wp_clear_scheduled_hook( 'faz_weekly_definitions_update' );
+			}
+			return;
+		}
+		if ( ! wp_next_scheduled( 'faz_weekly_definitions_update' ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'weekly', 'faz_weekly_definitions_update' );
+		}
+	}
+
+	/** Recheck permission at execution time, including for queued events. */
+	public static function cron_update() {
+		$settings = get_option( 'faz_settings', array() );
+		if ( empty( $settings['scanner']['auto_update_definitions'] ) ) {
+			return;
+		}
+		$result = self::get_instance()->update_definitions();
+		update_option( 'faz_definitions_refresh_status', array(
+			'at' => current_time( 'mysql' ),
+			'success' => ! empty( $result['success'] ),
+			'message' => $result['message'],
+		), false );
 	}
 
 	/**
@@ -593,7 +626,12 @@ class Cookie_Definitions {
 		$total_cookies = 0;
 		foreach ( $data as $entries ) {
 			if ( is_array( $entries ) ) {
-				$total_cookies += isset( $entries[0] ) ? count( $entries ) : 1;
+				$entry_list = isset( $entries[0] ) ? $entries : array( $entries );
+				foreach ( $entry_list as $entry ) {
+					if ( is_array( $entry ) && isset( $entry['cookie'] ) && is_string( $entry['cookie'] ) && '' !== trim( $entry['cookie'] ) ) {
+						++$total_cookies;
+					}
+				}
 			}
 		}
 

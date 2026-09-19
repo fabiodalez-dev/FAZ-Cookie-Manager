@@ -27,6 +27,90 @@ if ( ! function_exists( 'faz_parse_url' ) ) {
 			: parse_url( $url ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
 	}
 }
+if ( ! function_exists( 'faz_normalize_page_url' ) ) {
+	/**
+	 * Reduce a URL to the page it identifies.
+	 *
+	 * Scheme, host, port, path and routing query; no credentials, no fragment, and
+	 * no trailing slash. Two sides depend on producing the SAME string for the
+	 * same page: the consent log stores it, and the placeholder inventory looks
+	 * it up to answer "did this page ever offer that embed". If the two spellings
+	 * drift, every exception reads as unverifiable, so the rule lives here once
+	 * rather than in each caller. The scheme is kept in the returned string (it
+	 * is what an administrator reads in the log), but the inventory keys its
+	 * rows on this string with the scheme stripped — Embed_Inventory::key() —
+	 * because the rendering request and the logging request can see different
+	 * schemes behind a TLS-terminating proxy.
+	 *
+	 * Campaign and session parameters are dropped; WordPress routing parameters
+	 * are retained so distinct posts and language variants cannot share evidence.
+	 * The consent log stores its page URL through this function too, so the
+	 * routing parameters that tell two pages apart survive into the log row.
+	 *
+	 * Those retained parameters come from the request, so anyone can vary them:
+	 * `?lang=<anything>` on a site with no language plugin is a new string per
+	 * value. Never use the output directly as a persistence key without a
+	 * write-side cardinality gate — the embed inventory's flush() is the
+	 * reference (no rows for 404 / search pages, none for a routing parameter
+	 * WordPress did not parse). Keep this function identical for readers:
+	 * the gate belongs on the write side only.
+	 *
+	 * @param string $url URL to reduce.
+	 * @return string Normalised URL, or '' when nothing usable remains.
+	 */
+	function faz_normalize_page_url( $url ) {
+		$url = function_exists( 'esc_url_raw' ) ? esc_url_raw( (string) $url ) : (string) $url;
+		if ( '' === $url ) {
+			return '';
+		}
+
+		$parts = faz_parse_url( $url );
+		if ( false === $parts || ! is_array( $parts ) ) {
+			return '';
+		}
+
+		$normalized = '';
+		if ( ! empty( $parts['scheme'] ) ) {
+			$normalized .= $parts['scheme'] . '://';
+		}
+		// Deliberately omit user:pass — never persist credentials.
+		if ( ! empty( $parts['host'] ) ) {
+			$normalized .= $parts['host'];
+		}
+		if ( ! empty( $parts['port'] ) ) {
+			$normalized .= ':' . absint( $parts['port'] );
+		}
+		if ( ! empty( $parts['path'] ) ) {
+			$normalized .= $parts['path'];
+		}
+
+		// A deeper path is the same page with or without a trailing slash, and
+		// WordPress serves both. The home page is the case that bites: it
+		// arrives as "https://site" from a stored value and "https://site/"
+		// from a browser, so it is spelled one way — with the slash — rather
+		// than left to whichever form happened to reach us.
+		if ( '' !== $normalized ) {
+			$path = isset( $parts['path'] ) ? (string) $parts['path'] : '';
+			if ( '' === $path || '/' === $path ) {
+				$normalized = rtrim( $normalized, '/' ) . '/';
+			} else {
+				$normalized = rtrim( $normalized, '/' );
+			}
+		}
+
+		// Preserve WordPress routing parameters (plain permalinks, archives and
+		// language/AMP variants), never campaign or arbitrary session parameters.
+		if ( ! empty( $parts['query'] ) ) {
+			parse_str( $parts['query'], $query );
+			$route = array_intersect_key( $query, array_flip( array( 'p', 'page_id', 'attachment_id', 'name', 'pagename', 'post_type', 'cat', 'tag', 'taxonomy', 'term', 'author', 'year', 'monthnum', 'day', 'paged', 'page', 's', 'lang', 'amp', 'feed' ) ) );
+			ksort( $route );
+			if ( ! empty( $route ) ) {
+				$normalized .= '?' . http_build_query( $route, '', '&', PHP_QUERY_RFC3986 );
+			}
+		}
+		return $normalized;
+	}
+}
 if ( ! function_exists( 'faz_read_json_file' ) ) {
 	/**
 	 * Processes a json file from the specified path

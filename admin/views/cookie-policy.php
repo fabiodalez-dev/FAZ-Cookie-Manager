@@ -290,7 +290,8 @@ $faz_cp_bundled_language_names = array(
 				</div>
 				<div class="faz-form-group">
 					<label for="cp-privacy-policy-url"><?php esc_html_e( 'Separate Privacy Policy URL (required for POPIA)', 'faz-cookie-manager' ); ?></label>
-					<input type="url" id="cp-privacy-policy-url" name="privacy_policy_url" class="faz-input" placeholder="<?php echo esc_attr__( 'https://example.com/privacy', 'faz-cookie-manager' ); ?>">
+					<input type="url" id="cp-privacy-policy-url" name="privacy_policy_url" class="faz-input" data-faz-page-search placeholder="<?php echo esc_attr__( 'https://example.com/privacy', 'faz-cookie-manager' ); ?>">
+					<p class="faz-help"><?php esc_html_e( 'Type a page title to find its URL, or enter a link manually.', 'faz-cookie-manager' ); ?></p>
 				</div>
 			</div>
 		</div>

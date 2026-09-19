@@ -58,6 +58,14 @@ class Api extends Rest_Controller {
 	 * @return void
 	 */
 	public function register_routes() {
+		register_rest_route( $this->namespace, '/' . $this->rest_base . '/pages', array(
+			'methods'             => WP_REST_Server::READABLE,
+			'callback'            => array( $this, 'search_pages' ),
+			'permission_callback' => array( $this, 'get_items_permissions_check' ),
+			'args'                => array(
+				'search' => array( 'type' => 'string', 'required' => true, 'maxLength' => 100, 'sanitize_callback' => 'sanitize_text_field', 'validate_callback' => 'rest_validate_request_arg' ),
+			),
+		) );
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base,
@@ -200,6 +208,7 @@ class Api extends Rest_Controller {
 					'callback'            => array( $this, 'complete_onboarding' ),
 					'permission_callback' => array( $this, 'create_item_permissions_check' ),
 					'args'                => array(
+						'create_cookie_page' => array( 'type' => 'boolean', 'validate_callback' => 'rest_validate_request_arg' ),
 						'law'              => array(
 							'required'          => true,
 							'type'              => 'string',
@@ -298,6 +307,24 @@ class Api extends Rest_Controller {
 		);
 	}
 
+	/** Search published pages without exposing drafts or password-protected content. */
+	public function search_pages( $request ) {
+		$search = trim( (string) $request->get_param( 'search' ) );
+		if ( strlen( $search ) < 2 ) {
+			return rest_ensure_response( array() );
+		}
+		$query = new \WP_Query( array(
+			'post_type' => 'page', 'post_status' => 'publish', 'has_password' => false,
+			's' => $search, 'posts_per_page' => 10, 'no_found_rows' => true,
+			'orderby' => 'title', 'order' => 'ASC',
+		) );
+		$pages = array();
+		foreach ( $query->posts as $page ) {
+			$pages[] = array( 'id' => $page->ID, 'title' => wp_strip_all_tags( get_the_title( $page ) ), 'url' => get_permalink( $page ) );
+		}
+		return rest_ensure_response( $pages );
+	}
+
 	/**
 	 * Finish the guided setup wizard.
 	 *
@@ -307,6 +334,10 @@ class Api extends Rest_Controller {
 	 * visible + consent logging), and persists the onboarding completion flags.
 	 * All compliance-critical logic lives in the Onboarding helper so it can be
 	 * unit-tested directly.
+	 *
+	 * When create_cookie_page is true, the cookie policy page is created and
+	 * linked afterwards by Policy_Page::apply_to_setup(). That step is advisory:
+	 * its failures come back in the response's `warning`, never as an error.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 * @return WP_Error|WP_REST_Response
@@ -332,6 +363,12 @@ class Api extends Rest_Controller {
 
 		$onboarding = new Onboarding();
 		$result     = $onboarding->finish( $law, $options );
+		// The cookie-policy page is advisory: finish() errors are the only hard
+		// failures. Everything the policy step cannot do is reported through
+		// the result's warning, because the setup itself is already saved.
+		if ( ! is_wp_error( $result ) && true === $request->get_param( 'create_cookie_page' ) ) {
+			$result = \FazCookie\Admin\Modules\Settings\Includes\Policy_Page::apply_to_setup( $result, $options['language'] ?? '', $law );
+		}
 
 		return rest_ensure_response( $result );
 	}

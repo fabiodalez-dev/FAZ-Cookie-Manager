@@ -443,4 +443,104 @@
 
 	window.FAZ = FAZ;
 
+	// Shared page-link picker. The input remains editable for external URLs.
+	FAZ.pageSearch = function (input) {
+		if (!input || input.dataset.pageSearchBound) return;
+		input.dataset.pageSearchBound = '1';
+		var card = input.closest('.faz-card');
+		if (card) card.classList.add('faz-card-overflow-visible');
+		var labels = (window.fazConfig && window.fazConfig.i18n && window.fazConfig.i18n.pageSearch) || {};
+		var wrap = document.createElement('div');
+		wrap.className = 'faz-page-search';
+		input.parentNode.insertBefore(wrap, input);
+		wrap.appendChild(input);
+		var list = document.createElement('div');
+		list.id = input.id + '-suggestions';
+		list.className = 'faz-page-search-results';
+		list.setAttribute('role', 'listbox');
+		list.setAttribute('aria-label', labels.results || 'Matching pages');
+		list.hidden = true;
+		wrap.appendChild(list);
+		var status = document.createElement('div');
+		status.id = input.id + '-search-status';
+		status.className = 'faz-help';
+		status.setAttribute('role', 'status');
+		wrap.appendChild(status);
+		input.setAttribute('aria-describedby', ((input.getAttribute('aria-describedby') || '') + ' ' + status.id).trim());
+		input.setAttribute('role', 'combobox');
+		input.setAttribute('aria-autocomplete', 'list');
+		input.setAttribute('aria-controls', list.id);
+		input.setAttribute('aria-expanded', 'false');
+		input.setAttribute('autocomplete', 'off');
+		var timer, generation = 0, active = -1, pages = [];
+		function close() {
+			generation++;
+			clearTimeout(timer);
+			list.hidden = true;
+			active = -1;
+			input.setAttribute('aria-expanded', 'false');
+			input.removeAttribute('aria-activedescendant');
+		}
+		function choose(index) {
+			if (!pages[index]) return;
+			input.value = pages[index].url;
+			close();
+			status.textContent = '';
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+			input.dispatchEvent(new Event('change', { bubbles: true }));
+		}
+		input.addEventListener('input', function () {
+			close();
+			status.textContent = '';
+			var term = input.value.trim();
+			if (term.length < 2 || /^https?:\/\//i.test(term) || term.charAt(0) === '/') return;
+			var request = generation;
+			timer = setTimeout(function () {
+				status.textContent = labels.searching || 'Searching pages…';
+				FAZ.get('settings/pages', { search: term }).then(function (results) {
+					if (request !== generation) return;
+					pages = Array.isArray(results) ? results.filter(function (page) { return /^https?:\/\//i.test(page.url || ''); }) : [];
+					list.textContent = '';
+					pages.forEach(function (page, index) {
+						var option = document.createElement('button');
+						option.type = 'button';
+						option.tabIndex = -1;
+						option.id = list.id + '-' + index;
+						option.setAttribute('role', 'option');
+						option.setAttribute('aria-selected', 'false');
+						var title = document.createElement('strong');
+						title.textContent = page.title || page.url;
+						var url = document.createElement('span');
+						url.textContent = page.url;
+						option.appendChild(title);
+						option.appendChild(url);
+						option.addEventListener('mousedown', function (event) { event.preventDefault(); });
+						option.addEventListener('click', function () { choose(index); });
+						list.appendChild(option);
+					});
+					list.hidden = !pages.length;
+					input.setAttribute('aria-expanded', pages.length ? 'true' : 'false');
+					status.textContent = pages.length ? (labels.choose || 'Use the arrow keys and Enter to choose a page.') : (labels.empty || 'No published pages found. You can enter a URL manually.');
+				}).catch(function () {
+					if (request === generation) status.textContent = labels.failed || 'Page search is unavailable. You can enter a URL manually.';
+				});
+			}, 250);
+		});
+		input.addEventListener('keydown', function (event) {
+			if (event.key === 'Escape') { close(); status.textContent = ''; return; }
+			if (list.hidden) return;
+			if (event.key === 'Enter' && active >= 0) { event.preventDefault(); choose(active); return; }
+			if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+			event.preventDefault();
+			active = active < 0 ? (event.key === 'ArrowDown' ? 0 : pages.length - 1) : (active + (event.key === 'ArrowDown' ? 1 : -1) + pages.length) % pages.length;
+			Array.prototype.forEach.call(list.children, function (option, index) { option.setAttribute('aria-selected', index === active ? 'true' : 'false'); });
+			input.setAttribute('aria-activedescendant', list.children[active].id);
+			if (list.children[active].scrollIntoView) list.children[active].scrollIntoView({ block: 'nearest' });
+		});
+		input.addEventListener('blur', function () { close(); status.textContent = ''; });
+	};
+	FAZ.ready(function () {
+		document.querySelectorAll('[data-faz-page-search]').forEach(FAZ.pageSearch);
+	});
+
 })(window);

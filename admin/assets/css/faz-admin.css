@@ -2022,6 +2022,96 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 }
 
 /* ── Guided setup wizard ────────────────────────────────────── */
+#faz-setup {
+	display: grid;
+	grid-template-columns: 190px minmax(0, 760px);
+	gap: 32px;
+	justify-content: center;
+	align-items: start;
+}
+#faz-setup .faz-wizard-progress {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 6px;
+	padding-top: 24px;
+}
+#faz-setup .faz-wizard-progress-item { padding: 8px 0; }
+#faz-setup .faz-wizard-progress-item::after { display: none; }
+#faz-setup .faz-wizard-progress-label { white-space: normal; }
+#faz-setup .faz-setup-card { width: 100%; box-shadow: none; }
+#faz-setup .faz-setup-step-lead { max-width: 65ch; }
+#faz-setup .faz-setup-law-group { gap: 0; }
+#faz-setup .faz-setup-law-card {
+	border: 0;
+	border-bottom: 1px solid var(--faz-border);
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	padding: 18px 12px;
+}
+#faz-setup .faz-setup-law-card.is-selected { background: var(--faz-primary-soft); }
+#faz-setup .faz-setup-law-card:focus-within { outline: 2px solid var(--faz-primary); outline-offset: -2px; }
+#faz-setup .faz-setup-toggle-row {
+	border: 0;
+	border-bottom: 1px solid var(--faz-border);
+	border-radius: 0;
+	background: transparent;
+	padding: 12px 0;
+}
+#faz-setup .faz-setup-review { gap: 0; }
+#faz-setup .faz-setup-review-item {
+	border: 0;
+	border-bottom: 1px solid var(--faz-border);
+	border-radius: 0;
+	background: transparent;
+	padding: 10px 0;
+}
+#faz-setup .faz-setup-inline-note,
+#faz-setup .faz-setup-review-warning { border: 1px solid var(--faz-border); border-radius: 6px; padding: 10px 12px; }
+.faz-setup-policy { margin-top: 24px; border-top: 1px solid var(--faz-border); }
+
+/* Editable URL combobox, shared by banner and policy settings. */
+.faz-page-search { position: relative; width: 100%; }
+.faz-page-search-results {
+	position: absolute;
+	z-index: 20;
+	top: 100%;
+	left: 0;
+	right: 0;
+	max-height: 280px;
+	overflow-y: auto;
+	background: var(--faz-bg-secondary);
+	border: 1px solid var(--faz-border-hover);
+	border-radius: 6px;
+	box-shadow: var(--faz-shadow-md);
+}
+.faz-page-search-results button {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	width: 100%;
+	padding: 10px 12px;
+	border: 0;
+	border-bottom: 1px solid var(--faz-border);
+	background: transparent;
+	color: var(--faz-text);
+	text-align: start;
+	font: inherit;
+	cursor: pointer;
+	overflow-wrap: anywhere;
+}
+.faz-page-search-results button span { color: var(--faz-text-secondary); font-size: 12px; }
+.faz-page-search-results button:hover,
+.faz-page-search-results button[aria-selected="true"] { background: var(--faz-primary-light); }
+@media (max-width: 960px) {
+	#faz-setup { grid-template-columns: minmax(0, 760px); gap: 12px; }
+	#faz-setup .faz-wizard-progress { flex-direction: row; padding-top: 0; }
+	#faz-setup .faz-wizard-progress-item { flex-direction: column; padding: 0; text-align: center; }
+	#faz-setup .faz-wizard-progress-label { font-size: 11px; }
+}
+@media (min-width: 961px) {
+	#faz-setup .faz-wizard-progress-label { display: block; }
+}
 .faz-wizard-progress {
 	display: flex;
 	align-items: center;

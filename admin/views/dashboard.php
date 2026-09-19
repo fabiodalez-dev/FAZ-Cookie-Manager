@@ -91,9 +91,29 @@ $faz_tracking_enabled = isset( $faz_dashboard_settings['pageview_tracking'] ) &&
 			<div class="faz-card-body">
 				<div class="faz-chart-wrap">
 					<canvas id="faz-chart-pageviews" width="600" height="220" style="width:100%;height:220px;"></canvas>
+					<?php
+					/*
+					 * "No data yet" and "not measuring" are different facts, and
+					 * only one of them is about the visitors. Saying the tracking
+					 * is disabled is true but leaves the reader to work out that
+					 * the chart will therefore never fill, whatever their traffic —
+					 * the misreading that sent one site owner to the support forum
+					 * convinced the counter was broken. Say it outright, and offer
+					 * the setting rather than making them go looking for it.
+					 */
+					?>
 					<div id="faz-chart-empty" class="faz-chart-empty faz-hidden">
 						<span class="dashicons dashicons-chart-area"></span>
-						<p><?php echo wp_kses_post( ( $faz_tracking_enabled ? __( 'No pageview data yet.<br>Data will appear once visitors interact with your site.', 'faz-cookie-manager' ) : __( 'Pageview tracking is disabled.', 'faz-cookie-manager' ) ) ); ?></p>
+						<?php if ( $faz_tracking_enabled ) : ?>
+							<p><?php echo wp_kses_post( __( 'No pageview data yet.<br>Data will appear once visitors interact with your site.', 'faz-cookie-manager' ) ); ?></p>
+						<?php else : ?>
+							<p><?php echo wp_kses_post( __( 'Pageview tracking is off, so nothing is being recorded.<br>This chart will stay empty however many visitors arrive.', 'faz-cookie-manager' ) ); ?></p>
+							<p>
+								<a class="faz-btn faz-btn-sm faz-btn-secondary" href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-settings' ) ); ?>">
+									<?php esc_html_e( 'Turn on pageview tracking', 'faz-cookie-manager' ); ?>
+								</a>
+							</p>
+						<?php endif; ?>
 					</div>
 				</div>
 			</div>
@@ -106,9 +126,38 @@ $faz_tracking_enabled = isset( $faz_dashboard_settings['pageview_tracking'] ) &&
 			<div class="faz-card-body">
 				<div class="faz-chart-wrap">
 					<canvas id="faz-chart-consent" width="300" height="220" style="width:100%;height:220px;"></canvas>
+					<?php
+					/*
+					 * Same distinction as the pageview chart above, and the same
+					 * setting governs it: banner interactions are recorded by the
+					 * pageview tracker. Worth spelling out here because this panel
+					 * is the one an administrator reads as "nobody is answering my
+					 * banner" — a conclusion about visitors drawn from a fact
+					 * about instrumentation. The consent LOG is independent and
+					 * keeps recording either way, which is the part that matters
+					 * for accountability, so say that too rather than leave them
+					 * thinking consent evidence is off as well.
+					 */
+					?>
 					<div id="faz-consent-empty" class="faz-chart-empty faz-hidden">
 						<span class="dashicons dashicons-chart-pie"></span>
-						<p><?php echo wp_kses_post( ( $faz_tracking_enabled ? __( 'No consent data yet.<br>Data will appear once visitors respond to the banner.', 'faz-cookie-manager' ) : __( 'Banner interaction tracking is disabled.', 'faz-cookie-manager' ) ) ); ?></p>
+						<?php if ( $faz_tracking_enabled ) : ?>
+							<p><?php echo wp_kses_post( __( 'No consent data yet.<br>Data will appear once visitors respond to the banner.', 'faz-cookie-manager' ) ); ?></p>
+						<?php else : ?>
+							<?php if ( \FazCookie\Admin\Modules\Settings\Includes\Settings::get_instance()->get_consent_log_status() ) : ?>
+							<p><?php echo wp_kses_post( __( 'Banner interaction tracking is off, so these proportions are not being measured.<br>Consent records are kept regardless — see Consent Logs.', 'faz-cookie-manager' ) ); ?></p>
+							<?php else : ?>
+							<p><?php esc_html_e( 'Banner interaction tracking and consent logging are both off. No new consent records are being saved.', 'faz-cookie-manager' ); ?></p>
+							<?php endif; ?>
+							<p>
+								<a class="faz-btn faz-btn-sm faz-btn-secondary" href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-settings' ) ); ?>">
+									<?php esc_html_e( 'Turn on pageview tracking', 'faz-cookie-manager' ); ?>
+								</a>
+								<a class="faz-btn faz-btn-sm faz-btn-secondary" href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-consent-logs' ) ); ?>">
+									<?php esc_html_e( 'Open Consent Logs', 'faz-cookie-manager' ); ?>
+								</a>
+							</p>
+						<?php endif; ?>
 					</div>
 				</div>
 			</div>

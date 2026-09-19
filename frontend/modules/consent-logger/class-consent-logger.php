@@ -184,8 +184,26 @@ class Consent_Logger {
 			if ( ! in_array( $status, array( 'accepted', 'rejected', 'partial', 'dnsmpi_optout', 'dns_rescinded', 'pmp_grant' ), true ) ) {
 				$status = '';
 			}
-			$previous       = $this->last_logged_status( $sanitized_consent_id );
+			// One lookup of the newest row serves both comparisons below. They
+			// used to query it separately, and the second identical SELECT ran
+			// before the throttle verdict — paid by the replay traffic this
+			// block exists to stop charging for.
+			$previous_row   = Controller::get_instance()->get_log_by_consent_id( $sanitized_consent_id );
+			$previous       = $this->last_logged_status( $previous_row );
 			$status_changed = '' !== $status && $status !== $previous;
+
+			// A GPC exception minted from a blocked embed does not change the
+			// status — a visitor who saved preferences and then opened a map
+			// posts "partial" twice — so inside the 300s window the second post
+			// was dropped and the exception was never recorded at all. It is the
+			// single riskiest consent event this plugin writes (an exception to a
+			// binding opt-out), and the row that proves it existed is the whole
+			// point of logging it. Treat a NEW exception key as a change; the
+			// chg1/chgn caps below still bound how many land in a window, so this
+			// does not reopen the unthrottled write path they close.
+			if ( ! $status_changed && $this->has_new_gpc_exception( $sanitized_consent_id, $request->get_param( 'categories' ), $previous_row ) ) {
+				$status_changed = true;
+			}
 
 			// The window is ARMED unconditionally and its verdict ignored only for
 			// a status change. Skipping the call entirely — the first shape of this
@@ -252,22 +270,74 @@ class Consent_Logger {
 	}
 
 	/**
+	 * Whether this request carries a GPC exception the last row did not.
+	 *
+	 * Compares only the `meta.gpc_exception.<id>` keys: a repeat of an exception
+	 * already on record is a replay and stays throttled, while the first post
+	 * that carries a new one is the event itself. The value is ignored — the
+	 * server decides what an exception means at ingest; here the question is
+	 * only whether this row would record something the previous one did not.
+	 *
+	 * Only the keys the controller would actually store are read: a payload is
+	 * not walked past that cap, and an exception beyond it — which would never
+	 * be written — cannot open the bypass.
+	 *
+	 * @param string     $consent_id Sanitised consent id.
+	 * @param mixed      $categories The request's categories map.
+	 * @param array|null $previous   The newest row for this consent id, as
+	 *                               already fetched by the caller, or null.
+	 * @return bool
+	 */
+	private function has_new_gpc_exception( $consent_id, $categories, $previous = null ) {
+		if ( '' === $consent_id || ! is_array( $categories ) ) {
+			return false;
+		}
+		$cap      = 250 - ( class_exists( '\\FazCookie\\Includes\\Gpc_Exception_Audit' ) ? \FazCookie\Includes\Gpc_Exception_Audit::MAX_IDS : 50 );
+		$seen     = 0;
+		$incoming = array();
+		foreach ( array_keys( $categories ) as $key ) {
+			if ( ++$seen > $cap ) {
+				break;
+			}
+			$key = (string) $key;
+			if ( 0 === strpos( $key, 'meta.gpc_exception.' ) ) {
+				$incoming[ $key ] = true;
+			}
+		}
+		if ( empty( $incoming ) ) {
+			return false;
+		}
+		if ( ! is_array( $previous ) || empty( $previous['categories'] ) ) {
+			return true;
+		}
+		$stored = $previous['categories'];
+		if ( is_string( $stored ) ) {
+			$stored = json_decode( $stored, true );
+		}
+		if ( ! is_array( $stored ) ) {
+			return true;
+		}
+		foreach ( array_keys( $incoming ) as $key ) {
+			if ( ! array_key_exists( $key, $stored ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * The status of the most recent log row for a consent id, if any.
 	 *
 	 * Used only to tell a status CHANGE apart from a replay of the same status:
 	 * the first is the event accountability exists to record and must never be
-	 * throttled away, the second is what the throttle is for. Reuses the
-	 * controller's own newest-row lookup rather than adding a second query with
-	 * its own idea of "latest".
+	 * throttled away, the second is what the throttle is for. Reads the row the
+	 * caller fetched through the controller's own newest-row lookup, so there is
+	 * no second query with its own idea of "latest".
 	 *
-	 * @param string $consent_id Sanitised consent id.
+	 * @param array|null $previous Newest row for the consent id, or null.
 	 * @return string Previous status, or '' when nothing is recorded yet.
 	 */
-	private function last_logged_status( $consent_id ) {
-		if ( '' === $consent_id ) {
-			return '';
-		}
-		$previous = Controller::get_instance()->get_log_by_consent_id( $consent_id );
+	private function last_logged_status( $previous ) {
 		return ( is_array( $previous ) && isset( $previous['status'] ) )
 			? sanitize_key( (string) $previous['status'] )
 			: '';

@@ -1168,6 +1168,36 @@ namespace {
 		array( 'slug' => 'marketing', 'name' => 'Marketing', 'visibility' => 1 ),
 	);
 
+	// ── The log row says what the cookie it wrote says ─────────────────────
+	// An AMP accept under GPC keeps a service the visitor accepted on its own
+	// embed (svc.<id>:yes + gpcx.<id>:1) in the cookie, but logged only the
+	// purposes: the row claimed no exception while the cookie carried one. That
+	// row then ended the carry chain for the next classic page, whose exception
+	// was judged afresh, and reported every following post as a "new" exception.
+	$_SERVER                      = array( 'HTTP_AMP_SAME_ORIGIN' => 'true', 'HTTP_SEC_GPC' => '1' );
+	$_COOKIE['fazcookie-consent'] = 'consentid:amp-gpcx,consent:yes,action:yes,necessary:yes,gpc:1,svc.maps:yes,gpcx.maps:1,gpcx.ghost:1,rev:2';
+	$GLOBALS['faz_test_cookie']   = $_COOKIE['fazcookie-consent'];
+	Log_Controller::$rows         = array();
+	$bridge->handle_update( new Faz_AMP_Test_Request(
+		$base + array( 'consentStateValue' => 'accepted', 'purposeConsents' => array( 'analytics' => 1, 'marketing' => 1 ) ),
+		'/faz/v1/amp-consent/update'
+	) );
+	$faz_gpcx_row = end( Log_Controller::$rows );
+	$faz_gpcx_cat = is_array( $faz_gpcx_row ) && isset( $faz_gpcx_row['categories'] ) ? $faz_gpcx_row['categories'] : array();
+	amp_same( isset( $faz_gpcx_cat['meta.gpc_exception.maps'] ) ? $faz_gpcx_cat['meta.gpc_exception.maps'] : '', 'yes', 'an exception the AMP cookie preserves is recorded in its log row' );
+	amp_ok( ! isset( $faz_gpcx_cat['meta.gpc_exception.ghost'] ), 'a marker the cookie drops is not logged as an exception' );
+	unset( $_COOKIE['fazcookie-consent'] );
+	$_COOKIE['fazcookie-consent'] = 'consentid:amp-gpcx,consent:yes,action:yes,necessary:yes,gpc:1,svc.maps:yes,gpcx.maps:1,rev:2';
+	Log_Controller::$rows         = array();
+	$bridge->handle_update( new Faz_AMP_Test_Request(
+		$base + array( 'consentStateValue' => 'rejected', 'purposeConsents' => array() ),
+		'/faz/v1/amp-consent/update'
+	) );
+	$faz_gpcx_rej = end( Log_Controller::$rows );
+	amp_ok( is_array( $faz_gpcx_rej ) && ! isset( $faz_gpcx_rej['categories']['meta.gpc_exception.maps'] ), 'a reject, which withdraws the exception, logs none' );
+	unset( $_COOKIE['fazcookie-consent'] );
+	$_SERVER = array( 'HTTP_AMP_SAME_ORIGIN' => 'true' );
+
 	// ── A banner that never stored a lifetime ──────────────────────────────
 	// The two entry points must fall back to the SAME number. Frontend's classic
 	// path uses 180 (what gdpr.json ships and the wizard writes); the bridge used

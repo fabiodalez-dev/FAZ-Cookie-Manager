@@ -643,7 +643,7 @@ class AMP_Consent_Rest {
 			);
 		}
 
-		$this->maybe_log_consent( $state, $purposes, $context, $consent_id );
+		$this->maybe_log_consent( $state, $purposes, $context, $consent_id, $cookie_value );
 
 		$server_state = array(
 			'state'    => $state,
@@ -1452,9 +1452,22 @@ class AMP_Consent_Rest {
 	/**
 	 * Record AMP decisions through the existing local accountability store.
 	 *
+	 * The row records the GPC exceptions the cookie just written still
+	 * carries, as the classic logger does (meta.gpc_exception.<id>:yes for each
+	 * gpcx.<id>:1). build_cookie_value() deliberately preserves them on an
+	 * accept; logging only the purposes left a row that denied what the cookie
+	 * said, which ended the audit's carry chain for the next classic page and
+	 * made every following post look like a new exception to the throttle.
+	 * The server's own verdict keys are added by the controller, as for any row.
+	 *
+	 * @param string $state        'accepted' | 'rejected'.
+	 * @param array  $purposes     Purpose slug => bool.
+	 * @param array  $context      Resolved banner context.
+	 * @param string $consent_id   Consent id.
+	 * @param string $cookie_value The consent cookie this request wrote.
 	 * @return void
 	 */
-	private function maybe_log_consent( $state, $purposes, $context, $consent_id ) {
+	private function maybe_log_consent( $state, $purposes, $context, $consent_id, $cookie_value = '' ) {
 		$settings = get_option( 'faz_settings', array() );
 		if ( empty( $settings['consent_logs']['status'] ) ) {
 			return;
@@ -1462,6 +1475,14 @@ class AMP_Consent_Rest {
 		$categories = array( 'necessary' => 'yes' );
 		foreach ( $purposes as $purpose => $allowed ) {
 			$categories[ $purpose ] = $allowed ? 'yes' : 'no';
+		}
+		foreach ( self::parse_cookie_pairs( (string) $cookie_value ) as $key => $value ) {
+			if ( 0 === strpos( (string) $key, 'gpcx.' ) && '1' === (string) $value ) {
+				$id = substr( (string) $key, 5 );
+				if ( '' !== $id ) {
+					$categories[ 'meta.gpc_exception.' . $id ] = 'yes';
+				}
+			}
 		}
 		$allowed_count = count( array_filter( $purposes ) );
 		if ( empty( $purposes ) ) {

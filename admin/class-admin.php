@@ -767,6 +767,28 @@ class Admin {
 						// accepted on its own blocked embed while sending GPC.
 						/* translators: %s: service identifier, e.g. google-maps */
 						'metaGpcException'         => __( 'GPC exception: %s', 'faz-cookie-manager' ),
+						// Label for meta.gpc_exception_served.<id> = yes: the server
+						// confirmed the GPC exception was actually honoured.
+						/* translators: %s: service identifier, e.g. google-maps */
+						'metaGpcExceptionVerified' => __( 'GPC exception: %s — verified', 'faz-cookie-manager' ),
+						// Label for meta.gpc_exception_served.<id> = no: the server
+						// could not confirm the GPC exception was honoured.
+						/* translators: %s: service identifier, e.g. google-maps */
+						'metaGpcExceptionUnverified' => __( 'GPC exception: %s — unverified', 'faz-cookie-manager' ),
+						// Label for meta.gpc_exception_carried.<id>: the GPC exception
+						// was carried over from a prior record.
+						/* translators: %s: service identifier, e.g. google-maps */
+						'metaGpcExceptionCarried'  => __( 'GPC exception: %s — carried', 'faz-cookie-manager' ),
+						// Label for meta.gpc_exception_carried.<id> = no: carried
+						// from an earlier row whose verdict was unverified.
+						/* translators: %s: service identifier, e.g. google-maps */
+						'metaGpcExceptionCarriedUnverified' => __( 'GPC exception: %s — carried, unverified', 'faz-cookie-manager' ),
+						// Tooltips (title) explaining each GPC-exception pill state.
+						'metaGpcExceptionTitle'    => __( 'The visitor\'s browser recorded this exception to Global Privacy Control; the server recorded no verdict on it in this row.', 'faz-cookie-manager' ),
+						'metaGpcExceptionVerifiedTitle' => __( 'The server found every circumstance this exception needs: the GPC signal, the grant in the consent cookie, and a blocked placeholder for this service on the page.', 'faz-cookie-manager' ),
+						'metaGpcExceptionUnverifiedTitle' => __( 'The server could not corroborate the circumstances this exception needs. This does not prove it was forged, only that it could not be confirmed.', 'faz-cookie-manager' ),
+						'metaGpcExceptionCarriedTitle' => __( 'Already recorded for this visitor in an earlier row, verified or written before verdicts existed; carried forward, not judged again.', 'faz-cookie-manager' ),
+						'metaGpcExceptionCarriedUnverifiedTitle' => __( 'Already recorded for this visitor in an earlier row the server could not corroborate; carried forward with that verdict, not judged again.', 'faz-cookie-manager' ),
 						// Label for meta.signal_only: the record was created by a
 						// privacy signal and the visitor never answered the banner.
 						'metaSignalOnly'           => __( 'Privacy signal, banner unanswered', 'faz-cookie-manager' ),
@@ -860,8 +882,17 @@ class Admin {
 						/* translators: %d: number of days. */
 						'rangeLastNDays'           => __( 'Last %d Days', 'faz-cookie-manager' ),
 					),
+					'pageSearch' => array(
+						'results' => __( 'Matching pages', 'faz-cookie-manager' ),
+						'searching' => __( 'Searching pages…', 'faz-cookie-manager' ),
+						'choose' => __( 'Use the arrow keys and Enter to choose a page.', 'faz-cookie-manager' ),
+						'empty' => __( 'No published pages found. You can enter a URL manually.', 'faz-cookie-manager' ),
+						'failed' => __( 'Page search is unavailable. You can enter a URL manually.', 'faz-cookie-manager' ),
+					),
 					// Guided setup wizard (admin/assets/js/pages/setup.js).
 					'setup'                    => array(
+						/* translators: %s: selected language name. */
+						'policy_language' => __( 'Cookie policy language: %s', 'faz-cookie-manager' ),
 						'scan_starting'             => __( 'Starting scan…', 'faz-cookie-manager' ),
 						'scan_failed'               => __( 'The scan could not be started. You can skip this step or run a full scan on the Cookies page.', 'faz-cookie-manager' ),
 						'scan_failed_notify'        => __( 'Cookie scan could not be started.', 'faz-cookie-manager' ),

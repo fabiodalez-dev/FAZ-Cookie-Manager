@@ -1,0 +1,57 @@
+import { JSDOM } from 'jsdom';
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+
+const script = readFileSync(new URL('../../../admin/assets/js/faz-admin.js', import.meta.url), 'utf8');
+const dom = new JSDOM('<div class="faz-card"><label for="privacy">Privacy page</label><input id="privacy" data-faz-page-search></div>', { runScripts: 'outside-only' });
+const { window } = dom;
+const requests = [];
+window.wp = { apiFetch: (options) => new Promise((resolve, reject) => requests.push({ options, resolve, reject })) };
+window.eval(script);
+window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
+const input = window.document.getElementById('privacy');
+const list = window.document.getElementById('privacy-suggestions');
+const delay = () => new Promise(resolve => setTimeout(resolve, 280));
+const flush = () => new Promise(resolve => setTimeout(resolve, 0));
+function type(value) { input.value = value; input.dispatchEvent(new window.Event('input', { bubbles: true })); }
+function key(value) { input.dispatchEvent(new window.KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true })); }
+let checks = 0;
+function check(actual, expected) { assert.equal(actual, expected); checks++; }
+check(window.document.querySelector('.faz-card').classList.contains('faz-card-overflow-visible'), true);
+type('p'); await delay();
+check(requests.length, 0);
+type('pr'); type('pri'); await delay();
+check(requests.length, 1);
+check(requests[0].options.path, 'faz/v1/settings/pages?search=pri');
+requests[0].resolve([{ title: '<img src=x onerror=alert(1)> Privacy', url: 'https://example.test/privacy' }]); await flush();
+check(list.hidden, false);
+check(list.querySelector('img'), null);
+check(input.getAttribute('aria-expanded'), 'true');
+key('ArrowDown');
+check(input.getAttribute('aria-activedescendant'), list.firstChild.id);
+key('Enter');
+check(input.value, 'https://example.test/privacy');
+check(list.hidden, true);
+type('older'); await delay();
+type('newer'); await delay();
+requests[2].resolve([{ title: 'New', url: 'https://example.test/new' }]); await flush();
+requests[1].resolve([{ title: 'Old', url: 'https://example.test/old' }]); await flush();
+check(list.textContent.includes('Old'), false);
+key('Escape');
+check(list.hidden, true);
+type('empty'); await delay(); requests[3].resolve([]); await flush();
+check(window.document.querySelector('[role="status"]').textContent.includes('No published'), true);
+type('failure'); await delay(); requests[4].reject(new Error('offline')); await flush();
+check(window.document.querySelector('[role="status"]').textContent.includes('unavailable'), true);
+type('pending'); await delay(); input.dispatchEvent(new window.Event('blur'));
+requests[5].resolve([{ title: 'Late', url: 'https://example.test/late' }]); await flush();
+check(list.hidden, true);
+type('https://external.test/privacy'); await delay();
+check(requests.length, 6);
+type('mouse'); await delay(); requests[6].resolve([{ title: 'Mouse', url: 'https://example.test/mouse' }, { title: 'Last', url: 'https://example.test/last' }]); await flush();
+key('ArrowUp');
+check(input.getAttribute('aria-activedescendant'), list.lastChild.id);
+list.firstChild.click();
+check(input.value, 'https://example.test/mouse');
+window.close();
+console.log(`page-search: ${checks} passed, 0 failed`);
