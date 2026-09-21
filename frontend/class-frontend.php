@@ -3826,7 +3826,7 @@ class Frontend {
 		// filters and only ever reaches the page here, in the full-page buffer.
 		// Without this, such an embed is never detected at all.
 		$html = $this->process_social_embeds( $html, $blocked_categories );
-		$html = $this->process_elementor_video_widgets( $html, $blocked_categories );
+		$html = $this->process_elementor_video_widgets( $html, $blocked_categories, $providers );
 
 		return $html;
 	}
@@ -8566,7 +8566,7 @@ class Frontend {
 		// Hide Elementor video widgets (they render an EMPTY .elementor-video
 		// wrapper server-side and build the real iframe client-side from
 		// data-settings, so the generic <iframe> blocker above never sees one).
-		$content = $this->process_elementor_video_widgets( $content, $blocked_categories );
+		$content = $this->process_elementor_video_widgets( $content, $blocked_categories, $providers );
 
 		return $content;
 	}
@@ -9009,16 +9009,17 @@ class Frontend {
 	 *
 	 * @param string $content            HTML content.
 	 * @param array  $blocked_categories Blocked category slugs.
+	 * @param array  $providers          Provider match table.
 	 * @return string Modified content.
 	 */
-	private function process_elementor_video_widgets( $content, $blocked_categories ) {
+	private function process_elementor_video_widgets( $content, $blocked_categories, $providers = array() ) {
 		if ( false === stripos( $content, 'elementor-widget-video' ) ) {
 			return $content;
 		}
 
 		$result = preg_replace_callback(
 			'#<div\b(?=[^>]*\bclass\s*=\s*["\'][^"\']*\belementor-widget-video\b)(?=[^>]*\bdata-settings\s*=)([^>]*)>#i',
-			function ( $m ) use ( $blocked_categories ) {
+			function ( $m ) use ( $blocked_categories, $providers ) {
 				$attrs = $m[1];
 
 				// Skip if already processed.
@@ -9056,8 +9057,14 @@ class Frontend {
 					return '<div' . $attrs . '>'; // Self-hosted / unrecognised source - nothing to gate.
 				}
 
-				$known    = Known_Providers::get_all();
-				$category = isset( $known[ $service_id ]['category'] ) ? $known[ $service_id ]['category'] : 'marketing';
+				$category = '';
+				if ( ! empty( $providers ) ) {
+					$category = $this->match_script_to_provider( "src='" . esc_url_raw( $url ) . "'", '', $providers );
+				}
+				if ( ! $category ) {
+					$known    = Known_Providers::get_all();
+					$category = isset( $known[ $service_id ]['category'] ) ? $known[ $service_id ]['category'] : 'marketing';
+				}
 
 				$should_block = in_array( $category, $blocked_categories, true );
 
