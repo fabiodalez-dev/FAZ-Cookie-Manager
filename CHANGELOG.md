@@ -2,6 +2,11 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- Elementor Video widgets ignored the site's own blocking settings. The widget builds its iframe in the browser from its settings, so FAZ judges it separately, and that path took the category straight from the bundled provider catalogue, where YouTube is Marketing. A Script Blocking custom rule (say, YouTube as Necessary), the `faz_blocking_rules` filter, an entry in Script Blocking Exceptions and the `faz-skip` class all worked on a plain YouTube iframe and did nothing on the widget, which kept showing its placeholder. The widget now goes through the same rules as every other embed, and the catalogue is only the fallback when nothing else matches. Reported on the wordpress.org forum.
+
 ## [1.31.0] - 2026-09-11
 
 ### Fixed

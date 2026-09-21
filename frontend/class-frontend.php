@@ -9057,10 +9057,23 @@ class Frontend {
 					return '<div' . $attrs . '>'; // Self-hosted / unrecognised source - nothing to gate.
 				}
 
-				$category = '';
-				if ( ! empty( $providers ) ) {
-					$category = $this->match_script_to_provider( "src='" . esc_url_raw( $url ) . "'", '', $providers );
+				// The widget is judged by the same rules as every other embed.
+				// Its wrapper carries the classes (Elementor's Advanced → CSS
+				// Classes lands here, faz-skip included) and the id; the video
+				// URL lives in data-settings, so it is presented as a src of its
+				// own — once, for the whitelist and for the category below.
+				$src_attrs = 'src="' . esc_attr( $url ) . '"';
+				if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src_attrs, '' ) ) {
+					return '<div' . $attrs . '>';
 				}
+
+				// The category comes from the merged provider map — the saved
+				// cookie list, the catalogue, the admin's Script Blocking rules
+				// and the faz_blocking_rules filter — like a plain iframe to the
+				// same URL. Reading the catalogue alone made YouTube marketing
+				// here whatever the site had set. The catalogue remains the
+				// fallback when nothing in the map matches.
+				$category = $this->match_script_to_provider( $src_attrs, '', $providers );
 				if ( ! $category ) {
 					$known    = Known_Providers::get_all();
 					$category = isset( $known[ $service_id ]['category'] ) ? $known[ $service_id ]['category'] : 'marketing';
