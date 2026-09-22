@@ -5413,6 +5413,58 @@ function _fazIsAllowedScheme(url) {
     return scheme === 'http' || scheme === 'https';
 }
 
+/**
+ * Let libraries that were waiting on a restored script finish their own setup.
+ *
+ * A restored <script src> is a new element, so it downloads and runs AFTER the
+ * consent click that restored it has finished — while the consent events that
+ * other plugins react to are dispatched synchronously, inside that same click.
+ * A plugin that reacts to the event by calling into the library it depends on
+ * therefore finds the library missing, and nothing calls it again once the
+ * library arrives.
+ *
+ * WooCommerce Order Attribution is that case: its setOrderTracking(true) stores
+ * allowTracking and returns when window.sbjs (sourcebuster.js, blocked until
+ * consent) is not there yet. The landing page's UTM parameters are then never
+ * captured and the order is attributed to "Unknown".
+ *
+ * @param {HTMLScriptElement} clone The restored external script.
+ */
+function _fazWatchRestoredScript(clone) {
+    // Only a script that brings sourcebuster onto the page can have been waited
+    // on. When sbjs is already here, WooCommerce initialised it itself, and a
+    // second init would count an extra page view in sbjs_session.
+    var sbjsBefore = typeof window.sbjs !== 'undefined';
+    clone.addEventListener('load', function () {
+        if (!sbjsBefore) {
+            _fazReplayWooCommerceAttribution();
+        }
+    });
+}
+
+/**
+ * Re-run WooCommerce's own tracking call once sourcebuster.js exists.
+ *
+ * Replays a decision WooCommerce already made — never makes one: it acts only
+ * when wc_order_attribution.params.allowTracking is true, which WooCommerce
+ * sets from its wc_order_attribution_allow_tracking filter and, with the WP
+ * Consent API, from the visitor's marketing consent. Runs at most once per page.
+ */
+var _fazWcAttributionReplayed = false;
+function _fazReplayWooCommerceAttribution() {
+    if (_fazWcAttributionReplayed) return;
+    var wcoa = window.wc_order_attribution;
+    if (!wcoa || typeof wcoa.setOrderTracking !== 'function') return;
+    if (!wcoa.params || wcoa.params.allowTracking !== true) return;
+    if (typeof window.sbjs === 'undefined') return;
+    _fazWcAttributionReplayed = true;
+    try {
+        wcoa.setOrderTracking(true);
+    } catch (e) {
+        // A third-party failure must not interrupt the consent flow.
+    }
+}
+
 function _fazBuildRestoredScript(script, extraSkipAttributes) {
     var scriptSrc = script.getAttribute('src') || script.src;
     var clone = scriptSrc
@@ -5456,6 +5508,7 @@ function _fazBuildRestoredScript(script, extraSkipAttributes) {
             }
         } else {
             clone.src = scriptSrc;
+            _fazWatchRestoredScript(clone);
         }
     } else {
         var inlineText = script.textContent || '';
