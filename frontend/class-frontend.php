@@ -7363,7 +7363,10 @@ class Frontend {
 		if ( ! is_array( $excluded ) ) {
 			$excluded = array();
 		}
-		foreach ( array( '_fazConfig', '_fazCfg', '_fazGcm', '_fazTcfConfig', '_fazStaticConfig' ) as $needle ) {
+		// _fazConsentLog marks both the logger's localised data and its
+		// listener: delayed, the listener is not yet attached when the visitor
+		// makes the first choice, and that decision never reaches the log.
+		foreach ( array( '_fazConfig', '_fazCfg', '_fazGcm', '_fazTcfConfig', '_fazStaticConfig', '_fazConsentLog' ) as $needle ) {
 			if ( ! in_array( $needle, $excluded, true ) ) {
 				$excluded[] = $needle;
 			}
@@ -9187,7 +9190,11 @@ class Frontend {
 				if ( ! preg_match( '/\sdata-bricks-map-options\s*=/i', $attrs ) || false !== stripos( $attrs, 'data-faz-category' ) ) {
 					return $m[0];
 				}
-				$src = 'src="https://maps.googleapis.com/maps/api/js"';
+				// The widget stands for the API script Bricks enqueues for it, so
+				// it is judged as that tag: its handle id and its callback query
+				// included, so an exemption or rule written on either (as the
+				// Script Blocking screen shows the tag) covers the widget too.
+				$src = 'id="bricks-google-maps-js" src="https://maps.googleapis.com/maps/api/js?callback=bricksMap"';
 				if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src, '' ) ) {
 					return $m[0];
 				}

@@ -5444,11 +5444,8 @@ function _fazWatchRestoredScript(clone) {
     var sbjsBefore = typeof window.sbjs !== 'undefined';
     var attributionBefore = window.wc_order_attribution;
     clone.addEventListener('load', function () {
-        // A WooCommerce instance loaded after Sourcebuster initialises itself.
-        // Only an instance already waiting when we restored scripts needs replay.
-        if (!sbjsBefore && attributionBefore && window.wc_order_attribution === attributionBefore) {
-            _fazReplayWooCommerceAttribution();
-        }
+        if (sbjsBefore) return;
+        _fazReplayWooCommerceAttribution(attributionBefore);
     });
 }
 
@@ -5461,13 +5458,22 @@ function _fazWatchRestoredScript(clone) {
  * Consent API, from the visitor's marketing consent. Runs at most once per page.
  */
 var _fazWcAttributionReplayed = false;
-function _fazReplayWooCommerceAttribution() {
+function _fazReplayWooCommerceAttribution(attributionBefore) {
     if (_fazWcAttributionReplayed) return;
-    var wcoa = window.wc_order_attribution;
-    if (!wcoa || typeof wcoa.setOrderTracking !== 'function') return;
-    if (!wcoa.params || wcoa.params.allowTracking !== true) return;
     if (typeof window.sbjs === 'undefined') return;
+    // The first restored script to finish after sourcebuster exists decides,
+    // once for the page. From here on WooCommerce finds sbjs itself: a script
+    // of its own that runs later (an optimiser delaying order-attribution.js,
+    // or a consent change it hears) initialises it without help, and a second
+    // init would count an extra page view in sbjs_session.
     _fazWcAttributionReplayed = true;
+    var wcoa = window.wc_order_attribution;
+    // WooCommerce localises this object and order-attribution.js then adds
+    // setOrderTracking to that same object; it never replaces it. So a missing
+    // method means its script has not run yet and will initialise on its own,
+    // and a different object is not the one that was waiting.
+    if (!wcoa || wcoa !== attributionBefore || typeof wcoa.setOrderTracking !== 'function') return;
+    if (!wcoa.params || wcoa.params.allowTracking !== true) return;
     try {
         wcoa.setOrderTracking(true);
     } catch (e) {

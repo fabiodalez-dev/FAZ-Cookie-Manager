@@ -201,8 +201,30 @@ console.log('WooCommerce Order Attribution replay after consent (jsdom)');
   eq('…and the replay was actually attempted', attempts, 1);
 }
 
-// An optimiser may delay WooCommerce itself until after Sourcebuster. Its
-// first normal initialisation must not be repeated by another restored script.
+// An optimiser (WP Rocket Delay JS) may delay order-attribution.js until after
+// sourcebuster. The real shape: wp_localize_script has already created
+// wc_order_attribution with its params, and the delayed script later ADDS
+// setOrderTracking to that same object and runs its own init, which now finds
+// sbjs. Another restored script loading after that must not init a second time.
+{
+  const w = loadFrontend();
+  w.wc_order_attribution = { params: { allowTracking: true } };
+  const sb = restore(w, SBJS_SRC);
+  const other = restore(w, OTHER_SRC);
+  w.sbjs = { init() {} };
+  fireLoad(w, sb);
+  const calls = [];
+  w.wc_order_attribution.setOrderTracking = function (allow) {
+    this.params.allowTracking = allow;
+    calls.push({ allow, sbjsPresent: typeof w.sbjs !== 'undefined' });
+  };
+  w.wc_order_attribution.setOrderTracking(true);
+  fireLoad(w, other);
+  eq('WooCommerce delayed after sourcebuster (same localised object): its own init is not repeated', calls.length, 1);
+}
+
+// Same delay, but with no WooCommerce data on the page yet at restore time
+// (the localised data is delayed along with the script).
 {
   const w = loadFrontend();
   const sb = restore(w, SBJS_SRC);
@@ -212,7 +234,22 @@ console.log('WooCommerce Order Attribution replay after consent (jsdom)');
   const calls = installWooCommerce(w, true);
   w.wc_order_attribution.setOrderTracking(true);
   fireLoad(w, other);
-  eq('WooCommerce arrives after sourcebuster: its own initialisation is not replayed', calls.length, 1);
+  eq('WooCommerce data and script both arrive after sourcebuster: not replayed', calls.length, 1);
+}
+
+// WooCommerce had decided not to track when sourcebuster landed, then the
+// visitor's consent changed: WooCommerce's own listener initialises, since sbjs
+// exists by then. A later restored script must not add a second init.
+{
+  const w = loadFrontend();
+  const calls = installWooCommerce(w, false);
+  const sb = restore(w, SBJS_SRC);
+  const other = restore(w, OTHER_SRC);
+  w.sbjs = { init() {} };
+  fireLoad(w, sb);
+  w.wc_order_attribution.setOrderTracking(true);
+  fireLoad(w, other);
+  eq('allowTracking false at load, WooCommerce inits on a later consent change: no extra replay', calls.length, 1);
 }
 
 // The instance waiting at restore time is replaced before sourcebuster loads

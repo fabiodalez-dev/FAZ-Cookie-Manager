@@ -205,6 +205,7 @@ if ( ! function_exists( 'get_transient' ) ) {
 		return array(
 			'youtube'          => array( 'label' => 'YouTube', 'category' => 'marketing', 'patterns' => array( 'youtube.com/embed', 'youtube-nocookie.com/embed' ), 'cookies' => array( 'YSC', 'VISITOR_INFO1_LIVE' ) ),
 			'vimeo'            => array( 'label' => 'Vimeo', 'category' => 'marketing', 'patterns' => array( 'player.vimeo.com' ), 'cookies' => array( 'vuid' ) ),
+			'google-maps'      => array( 'label' => 'Google Maps', 'category' => 'functional', 'patterns' => array( 'maps.googleapis.com' ), 'cookies' => array() ),
 			'google-analytics' => array( 'label' => 'Google Analytics', 'category' => 'analytics', 'patterns' => array( 'google-analytics.com/analytics.js' ), 'cookies' => array( '_ga' ) ),
 			'a-necessary'      => array( 'label' => 'Necessary thing', 'category' => 'necessary', 'patterns' => array( 'needed.example.com' ), 'cookies' => array( 'need' ) ),
 			'old-thing'        => array( 'label' => 'Old', 'category' => 'social', 'patterns' => array( 'old.example.com' ), 'cookies' => array( 'oldc' ) ),
@@ -368,6 +369,20 @@ if ( ! function_exists( 'get_transient' ) ) {
 	$fe = faz_arrange( '', false );
 	$skip = str_replace( 'brxe-map', 'brxe-map faz-skip', $map );
 	assert_eq( faz_call( $fe, 'process_bricks_map_widgets', array( $skip, array( 'functional' ), array() ) ), $skip, 'Bricks: faz-skip is respected' );
+	// An exemption written on the API script's handle id, as the page shows it.
+	$fe = faz_arrange( '', false, array( 'bricks-google-maps' ) );
+	assert_eq( faz_call( $fe, 'process_bricks_map_widgets', array( $map, array( 'functional' ), array() ) ), $map, 'Bricks: an exemption on the script handle id covers the widget' );
+	// Per-service consent wins over the category, both ways.
+	$fe  = faz_arrange( 'consentid:x,consent:yes,action:yes,functional:yes,svc.google-maps:no', true );
+	$out = faz_call( $fe, 'process_bricks_map_widgets', array( $map, array(), array( 'maps.googleapis.com' => 'functional' ) ) );
+	assert_eq( faz_blocked( $out ), true, 'Bricks: svc.google-maps:no keeps the map blocked although Functional is accepted' );
+	$fe  = faz_arrange( 'consentid:x,consent:yes,action:yes,functional:no,svc.google-maps:yes', true );
+	$out = faz_call( $fe, 'process_bricks_map_widgets', array( $map, array( 'functional' ), array( 'maps.googleapis.com' => 'functional' ) ) );
+	assert_eq( $out, $map, 'Bricks: svc.google-maps:yes loads the map although Functional is denied' );
+	// WP Rocket Delay JS: every FAZ inline bootstrap stays out of the delay,
+	// the consent logger's data and listener included.
+	$rocket = faz_call( $fe, 'rocket_exclude_own_inline', array( array( 'other' ) ) );
+	assert_eq( count( array_intersect( array( '_fazConfig', '_fazStaticConfig', '_fazGcm', '_fazConsentLog', 'other' ), $rocket ) ), 5, 'Rocket: FAZ inline markers are excluded and existing entries kept' );
 	$leaflet = str_replace( 'data-bricks-map-options', 'data-bricks-leaflet-options', $map );
 	assert_eq( faz_call( $fe, 'process_bricks_map_widgets', array( $leaflet, array( 'functional' ), array() ) ), $leaflet, 'Bricks: Leaflet is not treated as Google Maps' );
 

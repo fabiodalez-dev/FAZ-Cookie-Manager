@@ -411,7 +411,7 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Fix: Bricks Google Maps widgets show consent placeholders and initialise after delayed scripts load. No artificial cookie record is needed to reveal a blocked map in per-service preferences.
 * Fix: Elementor Video widgets respect custom blocking categories, whitelist entries and faz-skip.
 * Fix: WooCommerce order attribution resumes when marketing consent restores Sourcebuster, without duplicate initialisation. Untouched scanned Sourcebuster cookies migrate from Analytics to Marketing; manually created, edited or imported classifications are preserved and flagged for review.
-* Fix: WP Rocket no longer delays FAZ's inline bootstrap; the runtime merges the loaded static configuration before blocking decisions.
+* Fix: WP Rocket no longer delays FAZ's inline bootstrap or its consent logger; the runtime merges the loaded static configuration before blocking decisions.
 * Added: Publish a language-specific cookie policy page from the setup wizard (off by default). Repeated submissions reuse the page, languages without a template are unavailable, and a page that cannot be created no longer stops setup. Page-link fields now suggest published pages, with keyboard navigation and manual URL support.
 * Added: The consent log records whether the server would have served each GPC exception, so inconsistent markers can be identified after the fact (#285). A script on the page can write the same cookie values a real click writes, so the record claims consistency rather than authenticity.
 * Added: System Status lists the services that can be blocked without a visible placeholder (#279) — they set no cookies, and when a script or stylesheet of theirs is blocked before consent it simply does not load, so the symptom points at the theme or the cache instead of here.
@@ -531,4 +531,4 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
 
 = Older versions =
-Older releases (1.18.1 and earlier) are listed in the full changelog on GitHub, linked at the top of this section.
+Older releases (1.24.0 and earlier) are listed in the full changelog on GitHub, linked at the top of this section.

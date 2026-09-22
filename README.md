@@ -618,7 +618,7 @@ Only the most recent release is listed here. The complete history is in [CHANGEL
 
 - Bricks Maps consent placeholders and delayed initialisation; Elementor Video respects custom blocking categories and exemptions.
 - WooCommerce attribution resumes after marketing consent restores Sourcebuster, with a migration for untouched scanner classifications and protection against duplicate initialisation.
-- WP Rocket compatibility keeps the static blocking configuration available at runtime startup.
+- WP Rocket compatibility keeps the static blocking configuration available at runtime startup, and the consent logger is no longer delayed.
 - **Added**: Language-aware cookie policy publication from the setup wizard and accessible page-link autocomplete in banner and Cookie Policy settings. The wizard now uses a compact step rail and simpler option rows.
 - **Added**: The consent log records whether the server would have served each GPC exception, so inconsistent markers can be identified after the fact (#285). A same-origin script can write the same cookie values a real click writes, and no token changes that, so the record claims consistency rather than authenticity.
 - **Added**: System Status lists the services blocked without a visible placeholder (#279) — they set no cookies and park plain requests, so before consent a stylesheet simply does not load and the symptom points at the theme or the cache instead of here.

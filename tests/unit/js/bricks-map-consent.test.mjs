@@ -94,6 +94,46 @@ script.dispatchEvent(new late.Event('load'));
 eq('delayed builder loads after Google: map is initialised', lateCalls, 1);
 late.close();
 
+// Retry guards. Each case starts from a released map (options restored,
+// visible) with Google and Bricks' initializer present, and fires the load of
+// Bricks' delayed map script.
+function released(options) {
+  const win = loadFrontend();
+  win._fazConfig._providersToBlock = [{ re: 'maps.googleapis.com', categories: ['functional'], fullPath: false }];
+  win.document.body.innerHTML = '<div id="map" data-script-id="map" class="brxe-map" data-bricks-map-options="{}"></div>';
+  if (options.accepted) {
+    win.fazcookie._fazConsentStore.set('functional', 'yes');
+    win.fazcookie._fazConsentStore.set('consent', 'yes');
+  }
+  win.google = { maps: {} };
+  win.bricksData = { googleMapInstances: options.instances || {} };
+  const counter = { calls: 0 };
+  win.bricksMap = options.builder ? options.builder(counter) : () => { counter.calls++; };
+  const tag = win.document.createElement('script');
+  tag.id = 'bricks-map-js';
+  win.document.body.appendChild(tag);
+  return { win, tag, counter };
+}
+{
+  const { win, tag, counter } = released({ accepted: true, instances: { map: {} } });
+  tag.dispatchEvent(new win.Event('load'));
+  eq('a map Bricks already initialised is not initialised again', counter.calls, 0);
+  win.close();
+}
+{
+  const { win, tag, counter } = released({ accepted: true, builder: (c) => () => { c.calls++; return new Promise(() => {}); } });
+  tag.dispatchEvent(new win.Event('load'));
+  tag.dispatchEvent(new win.Event('load'));
+  eq('a second trigger while the first initialisation is pending does not start another', counter.calls, 1);
+  win.close();
+}
+{
+  const { win, tag, counter } = released({ accepted: false });
+  tag.dispatchEvent(new win.Event('load'));
+  eq('no consent for Google Maps: the delayed initializer is not called', counter.calls, 0);
+  win.close();
+}
+
 const merged = loadFrontend({ _cookieCategoryMap: { test: 'functional' }, _block: '0' });
 eq('static configuration merged before runtime starts', merged._fazConfig._cookieCategoryMap.test, 'functional');
 eq('dynamic configuration keeps precedence', merged._fazConfig._block, '1');
