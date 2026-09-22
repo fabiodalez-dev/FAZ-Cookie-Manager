@@ -531,6 +531,35 @@ test.describe('GCM and IAB TCF behavior', () => {
     const originalBannerTemplate = JSON.parse(rawBannerTemplate) as { exists: boolean; value: unknown };
     const bannerTemplateB64 = Buffer.from(rawBannerTemplate, 'utf8').toString('base64');
 
+    // Whether euconsent-v2 survives a Reject depends on the selected vendors,
+    // which this test used to inherit from whatever the site happened to hold.
+    // TCF legitimate interest is established by default and extinguished only
+    // by an explicit Right to Object, so a selected vendor declaring LI
+    // purposes keeps the TC string meaningful and the cookie is kept on
+    // purpose (frontend/js/tcf-cmp.js::buildPurposeLI). Both states are pinned
+    // here: none selected below, one LI vendor at the end.
+    const rawVendors = wpEval(`
+      echo wp_json_encode( array(
+        'exists' => false !== get_option( 'faz_gvl_selected_vendors', false ),
+        'value'  => get_option( 'faz_gvl_selected_vendors', null ),
+      ) );
+    `);
+    const vendorsB64 = Buffer.from(rawVendors, 'utf8').toString('base64');
+    // A selected vendor that declares at least one LI purpose, or 0 when the
+    // Global Vendor List has not been downloaded on this site.
+    const liVendorId = Number(
+      (wpEval(`
+        $gvl = get_option( 'faz_gvl_data', array() );
+        $id  = 0;
+        if ( is_array( $gvl ) && ! empty( $gvl['vendors'] ) ) {
+          foreach ( $gvl['vendors'] as $vid => $v ) {
+            if ( ! empty( $v['legIntPurposes'] ) ) { $id = (int) $vid; break; }
+          }
+        }
+        echo $id;
+      `).trim().split('\n').pop() || '0').replace(/[^0-9]/g, '') || 0,
+    );
+
     // Use a fresh browser context so consent cookies from prior serial tests
     // cannot leak into this test's consent state.
     const freshContext = await browser.newContext();
@@ -554,6 +583,7 @@ test.describe('GCM and IAB TCF behavior', () => {
         if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
           \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
         }
+        update_option( 'faz_gvl_selected_vendors', array() );
         do_action( 'rest_api_init' );
         do_action( 'faz_after_update_settings', $s );
       `);
@@ -645,6 +675,45 @@ test.describe('GCM and IAB TCF behavior', () => {
       expect((await freshContext.cookies()).some(
         (cookie) => cookie.name === 'euconsent-v2',
       )).toBe(false);
+
+      // The other state: one selected vendor declaring LI purposes. Reject
+      // withdraws every consent, but LI is not consent — it ends only on a
+      // Right to Object — so the TC string still carries LI and the cookie is
+      // deliberately kept. Without this, a silent flip back to clearing it
+      // (which would drop valid LI signals) would go unnoticed.
+      test.skip(liVendorId === 0, 'the Global Vendor List is not downloaded on this site');
+      wpEval(`update_option( 'faz_gvl_selected_vendors', array( ${liVendorId} ) ); delete_option( 'faz_banner_template' );`);
+      const liContext = await browser.newContext();
+      try {
+        const liPage = await liContext.newPage();
+        await liPage.goto('/', { waitUntil: 'domcontentloaded' });
+        await expect(liPage.locator('[data-faz-tag="notice"]')).toBeVisible();
+        await liPage.evaluate(() => {
+          _fazStore._bannerConfig.behaviours.reloadBannerOnAccept = false;
+        });
+        expect(await clickFirstVisible(liPage, [
+          '[data-faz-tag="accept-button"] button',
+          '[data-faz-tag="accept-button"]',
+          '.faz-btn-accept',
+        ])).toBeTruthy();
+        await liPage.waitForFunction(() => document.cookie.includes('euconsent-v2='), undefined, { timeout: 5_000 });
+        await liPage.evaluate(() => {
+          if (typeof window.revisitFazConsent === 'function') window.revisitFazConsent();
+        });
+        await expect(liPage.locator('[data-faz-tag="notice"]')).toBeVisible();
+        expect(await clickFirstVisible(liPage, [
+          '[data-faz-tag="reject-button"] button',
+          '[data-faz-tag="reject-button"]',
+          '.faz-btn-reject',
+        ])).toBeTruthy();
+        await liPage.waitForTimeout(1_000);
+        expect((await liContext.cookies()).some(
+          (cookie) => cookie.name === 'euconsent-v2',
+        ), 'a selected LI vendor keeps the TC string after Reject').toBe(true);
+      } finally {
+        await liContext.clearCookies();
+        await liContext.close();
+      }
     } finally {
       await freshContext.clearCookies();
       await freshContext.close();
@@ -661,6 +730,12 @@ test.describe('GCM and IAB TCF behavior', () => {
         wp_cache_delete( 'faz_settings', 'options' );
         if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
           \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
+        }
+        $vendor_snapshot = json_decode( base64_decode( '${vendorsB64}' ), true );
+        if ( is_array( $vendor_snapshot ) && ! empty( $vendor_snapshot['exists'] ) ) {
+          update_option( 'faz_gvl_selected_vendors', $vendor_snapshot['value'] );
+        } else {
+          delete_option( 'faz_gvl_selected_vendors' );
         }
         do_action( 'rest_api_init' );
         do_action( 'faz_after_update_settings', $restored );
