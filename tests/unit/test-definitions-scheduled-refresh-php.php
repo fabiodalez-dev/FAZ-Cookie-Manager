@@ -1,6 +1,7 @@
 <?php
 /** Opt-in scheduling and preservation of the last usable definitions. */
 define( 'ABSPATH', __DIR__ . '/' );
+define( 'FAZ_PLUGIN_BASEPATH', dirname( __DIR__, 2 ) . '/' );
 define( 'HOUR_IN_SECONDS', 3600 );
 $options = array();
 $events = array();
@@ -55,6 +56,12 @@ $body = json_encode( array( 'platform' => array() ) );
 Definitions::cron_update();
 check_refresh( $original === $options[Definitions::OPTION_KEY] && false === $options['faz_definitions_refresh_status']['success'], 'valid JSON with zero definitions preserves the dataset and records failure' );
 check_refresh( 'No valid cookie definitions in response' === $options['faz_definitions_refresh_status']['message'], 'zero-definitions message is translatable' );
+foreach ( array( array( 'cookie' => array( '_bad' ) ), array( 'cookie' => '_bad', 'category' => array() ), array( 'cookie' => '_bad', 'description' => array() ) ) as $bad ) {
+	$body = json_encode( array( 'mixed' => array( array( 'cookie' => '_good', 'category' => 'Analytics' ), $bad ) ) );
+	Definitions::cron_update();
+	check_refresh( $original === $options[Definitions::OPTION_KEY] && false === $options['faz_definitions_refresh_status']['success'], 'a mixed valid/malformed payload never replaces the usable dataset' );
+}
+check_refresh( is_int( $options['faz_definitions_refresh_status']['at'] ), 'refresh status stores an absolute timestamp' );
 $body = json_encode( array( 'new' => array( array( 'cookie' => '_new', 'category' => 'Analytics' ) ) ) );
 Definitions::cron_update();
 check_refresh( isset( $options[Definitions::OPTION_KEY]['new'] ) && true === $options['faz_definitions_refresh_status']['success'], 'successful update replaces definitions and clears the failure verdict' );
@@ -87,6 +94,16 @@ check_refresh(
 	false !== strpos( $defs_source, "sprintf( __( 'Downloaded %d cookie definitions', 'faz-cookie-manager' )" ),
 	'success literal is wrapped in __() at the source'
 );
+
+// Previously stored malformed rows are ignored safely rather than crashing a lookup.
+$options[Definitions::OPTION_KEY] = array( 'mixed' => array( array( 'cookie' => '_good', 'category' => 'Analytics' ), array( 'cookie' => array( '_bad' ) ), array( 'cookie' => '_bad_category', 'category' => array() ) ) );
+$options[Definitions::META_KEY] = array( 'updated_at' => '2099-01-01 00:00:00', 'updated_at_gmt' => '2099-01-01 00:00:00' );
+$instance = Definitions::get_instance();
+foreach ( array( 'lookup', 'wildcards' ) as $field ) {
+	$property = new ReflectionProperty( Definitions::class, $field );
+	$property->setValue( $instance, null );
+}
+check_refresh( 'analytics' === $instance->lookup( '_good' )['category'] && false === $instance->lookup( '_bad_category' ), 'an old mixed dataset cannot crash lookups and its valid row remains usable' );
 
 // F024: the Cookies-page notice must format the stored current_time('mysql')
 // timestamp for the admin's locale via date_i18n(), and must not read into

@@ -321,9 +321,9 @@ class Embed_Inventory {
 	/**
 	 * Insert or refresh one (page, service) pair.
 	 *
-	 * UPDATE first, INSERT when it touched nothing: no ON DUPLICATE KEY, which
-	 * SQLite does not speak. This project has already shipped a purge that was
-	 * a permanent silent no-op on SQLite because it used MySQL-only syntax.
+	 * One atomic upsert avoids duplicate-key errors when concurrent renders
+	 * observe the same pair in the same second. WordPress's SQLite integration
+	 * translates ON DUPLICATE KEY UPDATE into ON CONFLICT DO UPDATE.
 	 *
 	 * @param string $url        Normalised page URL; the row is keyed by key()
 	 *                           of it and the full URL is kept for display.
@@ -337,38 +337,11 @@ class Embed_Inventory {
 		$now   = current_time( 'mysql' );
 		$hash  = self::key( $url );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- plugin-owned table; the transient above is the cache, and this write is what it guards.
-		$updated = $wpdb->update(
-			$table,
-			array(
-				'last_seen' => $now,
-				'category'  => $category,
-			),
-			array(
-				'url_hash'   => $hash,
-				'service_id' => $service_id,
-			),
-			array( '%s', '%s' ),
-			array( '%s', '%s' )
-		);
-
-		if ( $updated ) {
-			return;
-		}
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see above.
-		$wpdb->insert(
-			$table,
-			array(
-				'url_hash'   => $hash,
-				'service_id' => $service_id,
-				'category'   => $category,
-				'url'        => substr( $url, 0, 500 ),
-				'first_seen' => $now,
-				'last_seen'  => $now,
-			),
-			array( '%s', '%s', '%s', '%s', '%s', '%s' )
-		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- plugin-owned table from prefix + literal; values bound; transient guards repeat writes. WordPress SQLite translates this upsert.
+		$wpdb->query( $wpdb->prepare(
+			"INSERT INTO {$table} (url_hash, service_id, category, url, first_seen, last_seen) VALUES (%s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE category = %s, last_seen = %s",
+			$hash, $service_id, $category, substr( $url, 0, 500 ), $now, $now, $category, $now
+		) );
 	}
 
 	/**

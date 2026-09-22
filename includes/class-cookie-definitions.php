@@ -166,7 +166,7 @@ class Cookie_Definitions {
 		}
 
 		$total_cookies = $this->count_definitions( $data );
-		if ( 0 === $total_cookies ) {
+		if ( 0 === $total_cookies || ! $this->valid_definitions( $data ) ) {
 			return array( 'success' => false, 'count' => 0, 'message' => __( 'No valid cookie definitions in response', 'faz-cookie-manager' ) );
 		}
 
@@ -233,7 +233,7 @@ class Cookie_Definitions {
 		}
 		$result = self::get_instance()->update_definitions();
 		update_option( 'faz_definitions_refresh_status', array(
-			'at' => current_time( 'mysql' ),
+			'at' => time(),
 			'success' => ! empty( $result['success'] ),
 			'message' => $result['message'],
 		), false );
@@ -312,7 +312,7 @@ class Cookie_Definitions {
 			$entry_list = isset( $entries[0] ) ? $entries : array( $entries );
 
 			foreach ( $entry_list as $entry ) {
-				if ( ! is_array( $entry ) ) {
+				if ( ! $this->valid_definition( $entry ) ) {
 					continue;
 				}
 				$cookie_name = isset( $entry['cookie'] ) ? $entry['cookie'] : '';
@@ -614,6 +614,37 @@ class Cookie_Definitions {
 			false
 		);
 		return $meta;
+	}
+
+	/** Validate fields consumed by the lookup and admin display. */
+	private function valid_definition( $entry ) {
+		if ( ! is_array( $entry ) || ! isset( $entry['cookie'] ) || ! is_string( $entry['cookie'] ) || '' === trim( $entry['cookie'] ) ) {
+			return false;
+		}
+		foreach ( array( 'category', 'description', 'retentionPeriod', 'domain', 'dataController' ) as $field ) {
+			if ( isset( $entry[ $field ] ) && ! is_string( $entry[ $field ] ) ) {
+				return false;
+			}
+		}
+		return ! isset( $entry['wildcardMatch'] ) || is_scalar( $entry['wildcardMatch'] );
+	}
+
+	/** Reject the whole refresh rather than save a partially malformed dataset. */
+	private function valid_definitions( array $data ) {
+		foreach ( $data as $entries ) {
+			if ( ! is_array( $entries ) ) {
+				return false;
+			}
+			if ( empty( $entries ) ) {
+				continue;
+			}
+			foreach ( isset( $entries[0] ) ? $entries : array( $entries ) as $entry ) {
+				if ( ! $this->valid_definition( $entry ) ) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	/**

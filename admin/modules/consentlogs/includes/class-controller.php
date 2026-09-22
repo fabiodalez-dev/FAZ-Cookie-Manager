@@ -361,11 +361,9 @@ class Controller {
 			// The earlier row it is judged against is fetched only when this
 			// map carries a client exception at all — one scan, the same prefix
 			// decide() collects on — so an ordinary consent post costs no extra
-			// query. It is the newest row that RECORDS an exception, not merely
-			// the newest row: one decision in between that carried none (a
-			// withdrawal, an AMP write) used to end the chain, and the next
-			// page's exception was then judged afresh as if it had never been
-			// seen. Looked up by the id as stored, not as posted.
+			// query. Use the immediately preceding row: a decision without the
+			// exception is a boundary (including withdrawal), not a row to skip.
+			// Look up the id as stored, not as posted.
 			if ( class_exists( '\\FazCookie\\Includes\\Gpc_Exception_Audit' ) ) {
 				$has_exception = false;
 				foreach ( array_keys( $clean ) as $clean_key ) {
@@ -376,7 +374,7 @@ class Controller {
 				}
 				$previous = array();
 				if ( $has_exception && ! empty( $data['consent_id'] ) ) {
-					$previous = (array) $this->get_last_gpc_exception_row( $consent_id );
+					$previous = (array) $this->get_previous_consent_row( $consent_id );
 				}
 				$clean = \FazCookie\Includes\Gpc_Exception_Audit::decide(
 					$clean,
@@ -701,26 +699,23 @@ class Controller {
 	}
 
 	/**
-	 * The newest row for a consent id that records any GPC-exception key.
+	 * The immediately preceding decision for a consent id.
 	 *
-	 * The row a GPC-exception verdict is carried from. The pattern matches the
-	 * client key and both server verdict keys (they share the quoted prefix),
-	 * so an earlier unverified verdict is found and carried rather than skipped.
+	 * A decision without the exception breaks its carry chain. Searching past
+	 * that row would allow a revoked exception to inherit an older verdict.
 	 *
 	 * @param string $consent_id Sanitised consent id.
 	 * @return array|null The log record, categories decoded, or null.
 	 */
-	private function get_last_gpc_exception_row( $consent_id ) {
+	private function get_previous_consent_row( $consent_id ) {
 		global $wpdb;
 
 		$table = $this->get_table_name();
-		$like  = '%' . $wpdb->esc_like( '"meta.gpc_exception' ) . '%';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $consent_id and the LIKE pattern are bound via prepare(%s). Read right before the row it informs is written: a cached answer could be stale.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $consent_id is bound via prepare(%s). Read right before the row it informs is written: a cached answer could be stale.
 		$item = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE consent_id = %s AND categories LIKE %s ORDER BY created_at DESC, log_id DESC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$consent_id,
-				$like
+				"SELECT * FROM {$table} WHERE consent_id = %s ORDER BY created_at DESC, log_id DESC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$consent_id
 			),
 			ARRAY_A
 		);
