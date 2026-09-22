@@ -614,6 +614,8 @@ Only the most recent release is listed here. The complete history is in [CHANGEL
 
 ### 1.32.0 — 2026-09-22
 
+- GPC audit history stops at revocation; concurrent inventory writes and malformed definition feeds are handled safely.
+
 - Bricks Maps consent placeholders and delayed initialisation; Elementor Video respects custom blocking categories and exemptions.
 - WooCommerce attribution resumes after marketing consent restores Sourcebuster, with a migration for untouched scanner classifications and protection against duplicate initialisation.
 - WP Rocket compatibility keeps the static blocking configuration available at runtime startup.

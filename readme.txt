@@ -407,9 +407,10 @@ and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
 = 1.32.0 =
+* Fix: GPC audit verdicts stop at revocation. Concurrent embed inventory writes preserve their first observation; malformed definition feeds retain the last usable dataset.
 * Fix: Bricks Google Maps widgets show consent placeholders and initialise after delayed scripts load. No artificial cookie record is needed to reveal a blocked map in per-service preferences.
 * Fix: Elementor Video widgets respect custom blocking categories, whitelist entries and faz-skip.
-* Fix: WooCommerce order attribution resumes when marketing consent restores Sourcebuster, without duplicate initialisation. Untouched scanned Sourcebuster cookies migrate from Analytics to Marketing; manually edited/imported classifications are preserved and flagged for review.
+* Fix: WooCommerce order attribution resumes when marketing consent restores Sourcebuster, without duplicate initialisation. Untouched scanned Sourcebuster cookies migrate from Analytics to Marketing; manually created, edited or imported classifications are preserved and flagged for review.
 * Fix: WP Rocket no longer delays FAZ's inline bootstrap; the runtime merges the loaded static configuration before blocking decisions.
 * Added: Publish a language-specific cookie policy page from the setup wizard (off by default). Repeated submissions reuse the page, languages without a template are unavailable, and a page that cannot be created no longer stops setup. Page-link fields now suggest published pages, with keyboard navigation and manual URL support.
 * Added: The consent log records whether the server would have served each GPC exception, so inconsistent markers can be identified after the fact (#285). A script on the page can write the same cookie values a real click writes, so the record claims consistency rather than authenticity.
