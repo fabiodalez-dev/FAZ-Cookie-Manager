@@ -390,8 +390,10 @@ namespace {
 	$pdo->setAttribute( PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION );
 	$pdo->exec( 'CREATE TABLE wp_faz_embed_placeholders (url_hash TEXT, service_id TEXT, category TEXT, url TEXT, first_seen TEXT, last_seen TEXT, PRIMARY KEY (url_hash, service_id))' );
 	$store = new \ReflectionMethod( Embed_Inventory::class, 'store' );
-	// Private: PHP before 8.1 refuses invoke() without this.
-	$store->setAccessible( true );
+	// Private: PHP before 8.1 refuses invoke() without this; 8.5 deprecates it.
+	if ( PHP_VERSION_ID < 80100 ) {
+		$store->setAccessible( true );
+	}
 	foreach ( array( '2026-09-15 12:00:00', '2026-09-15 12:00:00', '2026-09-16 13:00:00' ) as $now ) {
 		$GLOBALS['inventory_now'] = $now;
 		$store->invoke( null, 'https://example.test/upsert', 'youtube', 'marketing' );
