@@ -250,8 +250,8 @@ if ( ! function_exists( 'get_transient' ) ) {
 	 * An Elementor Video widget wrapper as the page renders it: data-settings is
 	 * entity-encoded JSON carrying the source URL.
 	 */
-	function faz_widget( $url, $extra_class = '', $key = 'youtube_url' ) {
-		$settings = htmlspecialchars( json_encode( array( 'video_type' => 'youtube', $key => $url ) ), ENT_QUOTES, 'UTF-8' );
+	function faz_widget( $url, $extra_class = '', $key = 'youtube_url', array $extra = array() ) {
+		$settings = htmlspecialchars( json_encode( array_merge( array( 'video_type' => 'youtube', $key => $url ), $extra ) ), ENT_QUOTES, 'UTF-8' );
 		return '<div class="elementor-element elementor-widget elementor-widget-video' . ( '' !== $extra_class ? ' ' . $extra_class : '' ) . '" data-settings="' . $settings . '"><div class="elementor-video"></div></div>';
 	}
 	function faz_blocked( $html ) {
@@ -327,6 +327,29 @@ if ( ! function_exists( 'get_transient' ) ) {
 	$done = str_replace( 'data-settings=', 'data-faz-category="marketing" data-settings=', faz_widget( $yt ) );
 	$out  = faz_run( $fe, $done, array( 'marketing' ), $catalogue_map );
 	assert_eq( substr_count( $out, 'data-placeholder=' ), 0, 'EV8 a widget already processed is not processed twice' );
+
+	// 9. Rules written against the EMBED URL. The widget stores the URL as
+	//    typed (youtube.com/watch, vimeo.com/123) but the browser loads the
+	//    embed Elementor derives (youtube.com/embed/…, player.vimeo.com/video/…),
+	//    and those are the patterns the catalogue and a plain-iframe rule use.
+	$embed_rule = array( 'youtube.com/embed' => 'necessary', 'player.vimeo.com' => 'marketing' );
+	$out        = faz_run( $fe, faz_widget( $yt ), array( 'marketing' ), $embed_rule );
+	assert_eq( faz_blocked( $out ), false, 'EV9 a rule on youtube.com/embed reaches a widget storing a watch URL' );
+	$out = faz_run( $fe, faz_widget( 'https://youtu.be/NL2UmY9oKow' ), array( 'marketing' ), $embed_rule );
+	assert_eq( faz_blocked( $out ), false, 'EV9 …and one storing a youtu.be short link' );
+	$vimeo_rule = array( 'player.vimeo.com' => 'analytics', 'youtube.com/embed' => 'marketing' );
+	$out        = faz_run( $fe, faz_widget( 'https://vimeo.com/76979871', '', 'vimeo_url' ), array( 'analytics' ), $vimeo_rule );
+	assert_eq( faz_blocked( $out ) && 'analytics' === faz_category( $out ), true, 'EV9 a rule on player.vimeo.com decides a vimeo.com widget' );
+	$nocookie_rule = array( 'youtube-nocookie.com/embed' => 'functional', 'youtube.com/embed' => 'marketing' );
+	$out           = faz_run( $fe, faz_widget( $yt, '', 'youtube_url', array( 'yt_privacy' => 'yes' ) ), array( 'marketing' ), $nocookie_rule );
+	assert_eq( faz_blocked( $out ), false, 'EV9 privacy mode is judged on youtube-nocookie.com, the host it loads' );
+	$out = faz_run( $fe, faz_widget( $yt ), array( 'marketing' ), $nocookie_rule );
+	assert_eq( faz_blocked( $out ), true, 'EV9 …while the same widget without privacy mode stays on youtube.com' );
+
+	// 10. A whitelist entry for the embed host covers the widget too.
+	$fe_wl2 = faz_arrange( '', false, array( 'player.vimeo.com' ) );
+	$out    = faz_run( $fe_wl2, faz_widget( 'https://vimeo.com/76979871', '', 'vimeo_url' ), array( 'marketing' ), $catalogue_map );
+	assert_eq( faz_blocked( $out ), false, 'EV10 whitelisting player.vimeo.com lets a vimeo.com widget load' );
 
 	echo "\n";
 	echo "  Passed: {$tests_passed}\n";
