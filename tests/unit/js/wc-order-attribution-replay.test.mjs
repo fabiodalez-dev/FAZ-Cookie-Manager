@@ -215,6 +215,21 @@ console.log('WooCommerce Order Attribution replay after consent (jsdom)');
   eq('WooCommerce arrives after sourcebuster: its own initialisation is not replayed', calls.length, 1);
 }
 
+// The instance waiting at restore time is replaced before sourcebuster loads
+// (WooCommerce re-bootstrapped by an optimiser). The new instance initialises
+// itself; replaying on it would repeat that initialisation, and the old one is
+// no longer the page's. Neither is called.
+{
+  const w = loadFrontend();
+  const first = installWooCommerce(w, true);
+  const clone = restore(w, SBJS_SRC);
+  const second = installWooCommerce(w, true);
+  w.sbjs = { init() {} };
+  fireLoad(w, clone);
+  eq('instance replaced before load: the new instance is not replayed', second.length, 0);
+  eq('…nor the one it replaced', first.length, 0);
+}
+
 // 8. Which consent unlocks sourcebuster. WooCommerce gates order attribution on
 //    the WP Consent API's `marketing` category (WPConsentAPI::$consent_category);
 //    blocking the library under `analytics` meant a visitor who accepted only
