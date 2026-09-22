@@ -99,13 +99,19 @@ class Gpc_Exception_Audit {
 			// their own. Judging them as fresh clicks would mark every second
 			// page view unverified.
 			//
-			// The carried verdict keeps what the first one said. Writing 'yes'
-			// regardless turned an exception the server had judged unverified
-			// into an unremarkable "carried" one on the very next page. Only a
-			// prior 'no' carries as 'no': a legacy row that recorded just the
-			// client's claim ('') has nothing to carry against it.
-			if ( isset( $carried_from_previous[ $id ] ) ) {
-				$clean[ self::CARRIED . $id ] = 'no' === $carried_from_previous[ $id ] ? 'no' : 'yes';
+			// The carried verdict keeps what the first one said, verbatim:
+			// 'yes' or 'no' as stored. Writing 'yes' regardless turned an
+			// exception the server had judged unverified into an
+			// unremarkable "carried" one on the very next page, and mapping a
+			// legacy bare claim ('') to 'yes' did the same for exceptions
+			// never judged at all. A '' carries as '': recorded, still
+			// unjudged.
+			//
+			// The carry also requires the current cookie to still hold the
+			// pairs: after a withdrawal (or a forged re-assertion) they are
+			// gone, and the claim falls through to served() below.
+			if ( isset( $carried_from_previous[ $id ] ) && self::cookie_holds_exception( $id, $consent ) ) {
+				$clean[ self::CARRIED . $id ] = $carried_from_previous[ $id ];
 				continue;
 			}
 			$clean[ self::SERVED . $id ] = self::served( $id, $data, $consent, $urls ) ? 'yes' : 'no';
@@ -138,14 +144,7 @@ class Gpc_Exception_Audit {
 		// 3. The cookie this request carried must actually hold the grant AND
 		//    its marker. A log row claiming an exception the cookie does not
 		//    carry describes no state the runtime was ever in.
-		if ( '' === (string) $consent ) {
-			return false;
-		}
-		$quoted = preg_quote( $id, '/' );
-		if ( ! preg_match( '/(?:^|,)svc\.' . $quoted . ':yes(?=,|$)/', $consent ) ) {
-			return false;
-		}
-		if ( ! preg_match( '/(?:^|,)gpcx\.' . $quoted . ':1(?=,|$)/', $consent ) ) {
+		if ( ! self::cookie_holds_exception( $id, $consent ) ) {
 			return false;
 		}
 
@@ -170,6 +169,28 @@ class Gpc_Exception_Audit {
 		// 5. And that category must be one a GPC signal actually closes —
 		//    otherwise there was nothing to make an exception to.
 		return self::category_is_sale_share( $category );
+	}
+
+	/**
+	 * Whether the consent cookie carries both the grant and the marker for an id.
+	 *
+	 * Shared by served() and the carry gate in decide(): an exception already
+	 * on record may only be carried forward while the current request's cookie
+	 * still holds svc.<id>:yes + gpcx.<id>:1. After a withdrawal (or a forged
+	 * re-assertion) those pairs are gone, and the claim is judged as a fresh
+	 * one instead of inheriting the earlier verdict.
+	 *
+	 * @param string $id      Service id.
+	 * @param string $consent Raw consent cookie.
+	 * @return bool
+	 */
+	private static function cookie_holds_exception( $id, $consent ) {
+		if ( '' === (string) $consent ) {
+			return false;
+		}
+		$quoted = preg_quote( $id, '/' );
+		return (bool) preg_match( '/(?:^|,)svc\.' . $quoted . ':yes(?=,|$)/', $consent )
+			&& (bool) preg_match( '/(?:^|,)gpcx\.' . $quoted . ':1(?=,|$)/', $consent );
 	}
 
 	/**
@@ -234,7 +255,11 @@ class Gpc_Exception_Audit {
 					continue;
 				}
 				$rank[ $id ] = $level;
-				$out[ $id ]  = 0 === $level ? '' : ( 'no' === $value ? 'no' : 'yes' );
+				// The verdict carries verbatim: 'yes' or 'no' as stored, and ''
+				// for anything else — a bare client key (level 0) or a carried
+				// '' — so an exception the server never judged can never turn
+				// into 'yes' by passing through the chain (M-1).
+				$out[ $id ] = 0 === $level ? '' : ( ( 'yes' === $value || 'no' === $value ) ? $value : '' );
 			}
 		}
 		return $out;

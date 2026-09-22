@@ -71,6 +71,9 @@ namespace {
 	if ( ! function_exists( 'absint' ) ) {
 		function absint( $n ) { return abs( (int) $n ); }
 	}
+	if ( ! function_exists( 'wp_parse_args' ) ) {
+		function wp_parse_args( $args, $defaults = array() ) { return array_merge( $defaults, (array) $args ); }
+	}
 	if ( ! function_exists( 'esc_url_raw' ) ) {
 		function esc_url_raw( $u ) { return trim( (string) $u ); }
 	}
@@ -91,6 +94,11 @@ namespace {
 	}
 	if ( ! function_exists( 'current_time' ) ) {
 		function current_time( $type ) { return '2026-06-19 12:00:00'; }
+	}
+	if ( ! function_exists( 'faz_get_valid_consent_cookie' ) ) {
+		// The carry gate (I-1) consults the cookie the request carried; these
+		// tests drive it through a global to say what the runtime would send.
+		function faz_get_valid_consent_cookie() { return (string) ( $GLOBALS['faz_test_consent_cookie'] ?? '' ); }
 	}
 	if ( ! function_exists( 'get_option' ) ) {
 		function get_option( $k, $d = false ) { return $GLOBALS['__faz_options'][ $k ] ?? $d; }
@@ -391,6 +399,10 @@ namespace {
 	$ctrl->log_consent( array( 'consent_id' => 'cid-gpcx', 'status' => 'rejected', 'categories' => array( 'analytics' => 'no' ) ) );
 	// 3rd row: the exception again. It must be carried from the 1st row — the
 	// newest one that RECORDS an exception — and carry its unverified verdict.
+	// The carry gate (I-1) requires the current cookie to still hold the grant
+	// and its marker, which is what a later page view re-asserting the
+	// exception sends.
+	$GLOBALS['faz_test_consent_cookie'] = 'svc.maps:yes,gpcx.maps:1';
 	$w->row_queries = array();
 	$ctrl->log_consent( array( 'consent_id' => 'cid-gpcx', 'status' => 'partial', 'categories' => array( 'meta.gpc_exception.maps' => 'yes' ) ) );
 	$logged_queries = $w->row_queries;
@@ -403,6 +415,7 @@ namespace {
 	eq( count( $logged_queries ), 1, 'exactly one previous-row query per exception-bearing row' );
 
 	// The lookup uses the id as stored, not as posted.
+	$GLOBALS['faz_test_consent_cookie'] = 'svc.maps:yes,gpcx.maps:1';
 	$ctrl->log_consent( array( 'consent_id' => '<i>cid-san</i>', 'status' => 'partial', 'categories' => array( 'meta.gpc_exception.maps' => 'yes' ) ) );
 	$ctrl->log_consent( array( 'consent_id' => '<i>cid-san</i>', 'status' => 'partial', 'categories' => array( 'meta.gpc_exception.maps' => 'yes' ) ) );
 	$san = $ctrl->get_log_by_consent_id( 'cid-san' )['categories'];
@@ -411,6 +424,7 @@ namespace {
 	$w->row_queries = array();
 	$ctrl->get_log_by_consent_id( 'cid-gpcx' );
 	ok( isset( $w->row_queries[0] ) && false !== strpos( $w->row_queries[0], 'ORDER BY created_at DESC, log_id DESC' ), 'get_log_by_consent_id() breaks same-second ties on log_id too' );
+	$GLOBALS['faz_test_consent_cookie'] = '';
 
 	// ============================================================
 	// 7. SQLite-portable legacy-UA migration (1.19.2)
@@ -539,6 +553,33 @@ namespace {
 	restore_error_handler();
 	eq( $locked_result, false, 'the production drain returns on a non-removable buffer' );
 	eq( ob_get_level(), $base_level + 1, 'the locked buffer remains at the same level instead of causing an infinite loop' );
+
+	// The gpc_exception pseudo-status must filter identically in the list and
+	// the export: both build a WHERE by hand, and the audit is only useful if
+	// the rows it flags are exactly the rows either query returns. These
+	// assertions pin the clause through the public entry points so the shared
+	// helper both call sites now use cannot drift back apart (M-3).
+	echo "-- gpc_exception pseudo-status filter (M-3) --\n";
+	$GLOBALS['wpdb']->rows    = array();
+	$GLOBALS['wpdb']->queries = array();
+	$ctrl->get_logs( array( 'status' => 'gpc_exception' ) );
+	$gpc_logs_q = end( $GLOBALS['wpdb']->queries );
+	ok( is_string( $gpc_logs_q ) && false !== strpos( $gpc_logs_q, 'categories LIKE' ), 'get_logs: the pseudo-status filters on the categories map' );
+	ok( false !== strpos( $gpc_logs_q, '%\\"meta.gpc_exception.%' ), 'get_logs: ...matching the client-written marker prefix' );
+	ok( false !== strpos( $gpc_logs_q, '%\\"meta.gpc_exception_served.%' ), 'get_logs: ...and the served-verdict prefix' );
+	ok( false !== strpos( $gpc_logs_q, '%\\"meta.gpc_exception_carried.%' ), 'get_logs: ...and the carried-verdict prefix' );
+	ok( false === strpos( $gpc_logs_q, "status = 'gpc_exception'" ), 'get_logs: it is never treated as a real status column value' );
+
+	$GLOBALS['wpdb']->queries = array();
+	$stream = fopen( 'php://temp', 'r+' );
+	$ctrl->stream_csv( $stream, array( 'status' => 'gpc_exception' ) );
+	fclose( $stream );
+	$gpc_csv_q = end( $GLOBALS['wpdb']->queries );
+	ok( is_string( $gpc_csv_q ) && false !== strpos( $gpc_csv_q, 'categories LIKE' ), 'stream_csv: the export filters on the same categories map' );
+	ok( false !== strpos( $gpc_csv_q, '%\\"meta.gpc_exception.%' ), 'stream_csv: ...matching the client-written marker prefix' );
+	ok( false !== strpos( $gpc_csv_q, '%\\"meta.gpc_exception_served.%' ), 'stream_csv: ...and the served-verdict prefix' );
+	ok( false !== strpos( $gpc_csv_q, '%\\"meta.gpc_exception_carried.%' ), 'stream_csv: ...and the carried-verdict prefix' );
+	ok( false === strpos( $gpc_csv_q, "status = 'gpc_exception'" ), 'stream_csv: it is never treated as a real status column value either' );
 
 	// ---------- summary ----------
 	echo "\n--\nTests:  $run\nPassed: $pass\nFailed: $fail\n\n";

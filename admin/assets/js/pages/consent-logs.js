@@ -234,18 +234,25 @@
 							}
 						} else if (metaKey.indexOf('gpc_exception_carried.') === 0) {
 							// Already on record for this visitor in an earlier row and
-							// not judged again; the value carries that row's verdict,
-							// so an unverified exception stays red on later pages.
+							// not judged again; the value carries that row's verdict —
+							// 'yes', 'no', or '' for a legacy claim written before the
+							// server judged anything — so an unverified exception
+							// stays red on later pages and an unjudged one stays
+							// neutral, never inheriting a verdict it never got.
 							var carriedId = metaKey.slice('gpc_exception_carried.'.length);
 							if (cats[k] === 'yes') {
 								metaLabel = fazI18n('consentLogs.metaGpcExceptionCarried', 'GPC exception: %s — carried')
 									.replace('%s', function () { return carriedId; });
-								catBadge.title = fazI18n('consentLogs.metaGpcExceptionCarriedTitle', 'Already recorded for this visitor in an earlier row, verified or written before verdicts existed; carried forward, not judged again.');
-							} else {
+								catBadge.title = fazI18n('consentLogs.metaGpcExceptionCarriedTitle', 'Already recorded for this visitor in an earlier row and verified there; carried forward, not judged again.');
+							} else if (cats[k] === 'no') {
 								metaLabel = fazI18n('consentLogs.metaGpcExceptionCarriedUnverified', 'GPC exception: %s — carried, unverified')
 									.replace('%s', function () { return carriedId; });
 								catBadge.title = fazI18n('consentLogs.metaGpcExceptionCarriedUnverifiedTitle', 'Already recorded for this visitor in an earlier row the server could not corroborate; carried forward with that verdict, not judged again.');
 								metaClass = 'faz-cat-no';
+							} else {
+								metaLabel = fazI18n('consentLogs.metaGpcExceptionCarriedNeutral', 'GPC exception: %s — carried, not judged')
+									.replace('%s', function () { return carriedId; });
+								catBadge.title = fazI18n('consentLogs.metaGpcExceptionCarriedNeutralTitle', 'Already recorded for this visitor in an earlier row written before the server judged exceptions; carried forward with no verdict.');
 							}
 						} else if (metaKey === 'signal_only') {
 							// The record was created by GPC or a Do Not Sell request

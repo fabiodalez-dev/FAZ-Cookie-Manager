@@ -418,18 +418,78 @@ namespace {
 				'signal_gpc' => 1,
 				'url'        => 'https://example.test/c',
 			),
-			'', // irrelevant: the carried short-circuit never inspects the cookie
+			// The carry gate (I-1) requires the CURRENT cookie to still hold
+			// the pairs — an ordinary re-assertion the runtime wrote. Without
+			// them, a client re-assertion is judged as a fresh claim instead.
+			audit_consent( $id ),
 			$previous
 		);
+		// A verdict in the previous row carries that verdict; a bare client
+		// key (a row written before verdicts existed) carries '' — the claim
+		// stays on record but the server has never judged it (M-1).
+		$expected = 'meta.gpc_exception.' === $prefix ? '' : 'yes';
 		audit_check(
-			'yes' === ( $result[ $carried_key . $id ] ?? null ),
-			"5. carried=yes when the previous row already carries the service under prefix '{$prefix}'"
+			$expected === ( $result[ $carried_key . $id ] ?? null ),
+			"5. carried='{$expected}' when the previous row carries the service under prefix '{$prefix}' and the cookie still holds the pairs"
 		);
 		audit_check(
 			! isset( $result[ $served_key . $id ] ),
 			"5. no served key is added when the verdict is carried (prefix '{$prefix}')"
 		);
 	}
+
+	// ============================================================
+	// 5b. (I-1) a forged re-assertion after withdrawal must not come back
+	//     as carried=yes. The previous row recorded a served exception; the
+	//     visitor then withdrew (cookie pairs gone); a page script re-asserts
+	//     meta.gpc_exception.<id> with the pairs absent. Before the fix the
+	//     carried short-circuit answered yes from the previous row alone, so
+	//     the forged claim inherited the genuine verdict.
+	// ============================================================
+	audit_reset();
+	$id       = 'svc-withdraw';
+	$previous = array( 'categories' => array( $served_key . $id => 'yes' ) );
+	$result   = Gpc_Exception_Audit::decide(
+		array( 'meta.gpc_exception.' . $id => 'yes' ),
+		array(
+			'signal_gpc' => 1,
+			'url'        => 'https://example.test/c',
+		),
+		'', // withdrawal: no consent cookie at all
+		$previous
+	);
+	audit_check(
+		'yes' !== ( $result[ $carried_key . $id ] ?? null ),
+		'5b. a forged re-assertion after withdrawal does not inherit carried=yes from the previous row'
+	);
+	audit_check(
+		'no' === ( $result[ $served_key . $id ] ?? null ),
+		'5b. the forged re-assertion is judged as a fresh claim and reads served=no'
+	);
+	audit_check(
+		! isset( $result[ $carried_key . $id ] ),
+		'5b. no carried key is written for the forged re-assertion'
+	);
+
+	// 5c. The same re-assertion with only ONE pair missing is equally refused:
+	//     the grant without the gpcx marker describes no state the runtime
+	//     was ever in, so it may not ride the carry chain either.
+	audit_reset();
+	$id       = 'svc-halfwithdraw';
+	$previous = array( 'categories' => array( $served_key . $id => 'yes' ) );
+	$result   = Gpc_Exception_Audit::decide(
+		array( 'meta.gpc_exception.' . $id => 'yes' ),
+		array(
+			'signal_gpc' => 1,
+			'url'        => 'https://example.test/c',
+		),
+		audit_consent( $id, 'yes', null ), // svc grant present, gpcx marker gone
+		$previous
+	);
+	audit_check(
+		'yes' !== ( $result[ $carried_key . $id ] ?? null ) && 'no' === ( $result[ $served_key . $id ] ?? null ),
+		'5c. a re-assertion whose cookie lost only the gpcx marker is judged fresh, not carried'
+	);
 
 	// ============================================================
 	// 6. a map with no meta.gpc_exception.* key comes back untouched.
@@ -582,12 +642,14 @@ namespace {
 	// "carried" used to render the same whatever the first row concluded, so an
 	// exception the server had judged unverified turned into an innocuous
 	// "carried" one page later — laundering the verdict it was carrying.
+	// The carry gate (I-1) requires the current cookie to still hold the
+	// pairs; without them every case below would fall through to served().
 	$carry = function ( array $previous_categories ) use ( $carried_key ) {
 		audit_reset();
 		$result = Gpc_Exception_Audit::decide(
 			array( 'meta.gpc_exception.svc-f' => 'yes' ),
 			array( 'signal_gpc' => 1, 'url' => 'https://example.test/f' ),
-			'',
+			audit_consent( 'svc-f' ),
 			array( 'categories' => $previous_categories )
 		);
 		return isset( $result[ $carried_key . 'svc-f' ] ) ? $result[ $carried_key . 'svc-f' ] : null;
@@ -596,8 +658,9 @@ namespace {
 	audit_check( 'no' === $carry( array( $carried_key . 'svc-f' => 'no' ) ), '11b. carried from an unverified carry -> carried=no' );
 	audit_check( 'yes' === $carry( array( $served_key . 'svc-f' => 'yes' ) ), '11c. carried from a verified serve -> carried=yes' );
 	audit_check( 'yes' === $carry( array( $served_key . 'svc-f' => 'yes', $carried_key . 'svc-f' => 'no' ) ), '11d. an explicit served value wins over a carried one' );
-	audit_check( 'yes' === $carry( array( 'meta.gpc_exception.svc-f' => 'yes' ) ), '11e. a legacy row with only the client key does not turn red' );
+	audit_check( '' === $carry( array( 'meta.gpc_exception.svc-f' => 'yes' ) ), '11e. a legacy row with only the client key carries forward unjudged (empty verdict)' );
 	audit_check( 'yes' === $carry( array( 'meta.gpc_exception.svc-f' => 'yes', $carried_key . 'svc-f' => 'yes' ) ), '11f. a verdict wins over the bare client key' );
+	audit_check( '' === $carry( array( $carried_key . 'svc-f' => '' ) ), '11g. an unjudged carry stays unjudged on the next page, not yes' );
 
 	// ============================================================
 	// 12. The category flags are read once per request.

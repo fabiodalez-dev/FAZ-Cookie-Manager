@@ -783,12 +783,18 @@ class Admin {
 						// from an earlier row whose verdict was unverified.
 						/* translators: %s: service identifier, e.g. google-maps */
 						'metaGpcExceptionCarriedUnverified' => __( 'GPC exception: %s — carried, unverified', 'faz-cookie-manager' ),
+						// Label for meta.gpc_exception_carried.<id> = '': carried
+						// from an earlier row written before the server judged
+						// exceptions — recorded, but with no verdict either way.
+						/* translators: %s: service identifier, e.g. google-maps */
+						'metaGpcExceptionCarriedNeutral' => __( 'GPC exception: %s — carried, not judged', 'faz-cookie-manager' ),
 						// Tooltips (title) explaining each GPC-exception pill state.
 						'metaGpcExceptionTitle'    => __( 'The visitor\'s browser recorded this exception to Global Privacy Control; the server recorded no verdict on it in this row.', 'faz-cookie-manager' ),
 						'metaGpcExceptionVerifiedTitle' => __( 'The server found every circumstance this exception needs: the GPC signal, the grant in the consent cookie, and a blocked placeholder for this service on the page.', 'faz-cookie-manager' ),
 						'metaGpcExceptionUnverifiedTitle' => __( 'The server could not corroborate the circumstances this exception needs. This does not prove it was forged, only that it could not be confirmed.', 'faz-cookie-manager' ),
-						'metaGpcExceptionCarriedTitle' => __( 'Already recorded for this visitor in an earlier row, verified or written before verdicts existed; carried forward, not judged again.', 'faz-cookie-manager' ),
+						'metaGpcExceptionCarriedTitle' => __( 'Already recorded for this visitor in an earlier row and verified there; carried forward, not judged again.', 'faz-cookie-manager' ),
 						'metaGpcExceptionCarriedUnverifiedTitle' => __( 'Already recorded for this visitor in an earlier row the server could not corroborate; carried forward with that verdict, not judged again.', 'faz-cookie-manager' ),
+						'metaGpcExceptionCarriedNeutralTitle' => __( 'Already recorded for this visitor in an earlier row written before the server judged exceptions; carried forward with no verdict.', 'faz-cookie-manager' ),
 						// Label for meta.signal_only: the record was created by a
 						// privacy signal and the visitor never answered the banner.
 						'metaSignalOnly'           => __( 'Privacy signal, banner unanswered', 'faz-cookie-manager' ),
