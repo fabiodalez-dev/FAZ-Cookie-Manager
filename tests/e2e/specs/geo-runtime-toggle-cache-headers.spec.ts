@@ -42,7 +42,7 @@
  */
 
 import { test, expect } from '../fixtures/wp-fixture';
-import type { Browser } from '@playwright/test';
+import { request } from '@playwright/test';
 import { deleteOption, ensureFixturePlugin, setOption, wpEval } from '../utils/wp-env';
 
 const BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
@@ -58,10 +58,13 @@ const DEFER_OPTION = 'faz_e2e_geo_runtime_defer';
  * cache-buster keeps any upstream or Playwright-side reuse from answering with a
  * response captured under the previous setting.
  */
-async function anonHomeHeaders(browser: Browser, label: string): Promise<Record<string, string>> {
-  const ctx = await browser.newContext();
+async function anonHomeHeaders(label: string): Promise<Record<string, string>> {
+  // Only HTTP headers are needed. A browser context adds tracing/video teardown
+  // for a page we never open, and inherits the 15s UI action deadline. Give
+  // this anonymous HTTP probe its own bounded navigation-sized budget.
+  const ctx = await request.newContext({ timeout: 30_000, ignoreHTTPSErrors: true });
   try {
-    const res = await ctx.request.get(`${BASE}/?faz_e2e_cb=${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`, {
+    const res = await ctx.get(`${BASE}/?faz_e2e_cb=${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (geo-runtime-toggle-e2e)',
         'Cache-Control': 'no-cache',
@@ -71,7 +74,7 @@ async function anonHomeHeaders(browser: Browser, label: string): Promise<Record<
     expect(res.status(), `${label}: unexpected status ${res.status()}`).toBeLessThan(400);
     return res.headers();
   } finally {
-    await ctx.close();
+    await ctx.dispose();
   }
 }
 
@@ -115,7 +118,6 @@ test.describe('Geo-Targeting toggle drives the page-cache headers', () => {
   });
 
   test('GEO-CACHE-01: Geo-Targeting off leaves the page cacheable; on emits the cache-bust', async ({
-    browser,
     page,
     loginAsAdmin,
   }) => {
@@ -169,7 +171,7 @@ test.describe('Geo-Targeting toggle drives the page-cache headers', () => {
 
       // ── 1. Geo-Targeting OFF — the page must stay cacheable ──────────────
       await saveGeoTargeting(false);
-      const offHeaders = await anonHomeHeaders(browser, 'geo-off');
+      const offHeaders = await anonHomeHeaders('geo-off');
       // Use the FAZ-specific header as the negative proof. Generic no-store /
       // Pragma headers are not attributable here: another active test plugin
       // can start PHP's session, whose cache limiter emits those same values.
@@ -180,7 +182,7 @@ test.describe('Geo-Targeting toggle drives the page-cache headers', () => {
 
       // ── 2. Geo-Targeting ON — the cache-bust must come back ──────────────
       await saveGeoTargeting(true);
-      const onHeaders = await anonHomeHeaders(browser, 'geo-on');
+      const onHeaders = await anonHomeHeaders('geo-on');
       const onCacheControl = onHeaders['cache-control'] ?? '';
       expect(
         onHeaders['x-litespeed-cache-control'] ?? '',
