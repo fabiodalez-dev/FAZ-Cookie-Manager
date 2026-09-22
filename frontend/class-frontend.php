@@ -9077,23 +9077,25 @@ class Frontend {
 
 				// The widget is judged by the same rules as every other embed.
 				// Its wrapper carries the classes (Elementor's Advanced → CSS
-				// Classes lands here, faz-skip included) and the id; the video
-				// URL lives in data-settings, so it is presented as a src of its
-				// own — once, for the whitelist and for the category below.
-				$source_attrs = 'src="' . esc_attr( $url ) . '"';
-				// Elementor stores a watch/share URL, but requests an embed URL.
-				// Match the player first so the bundled template's /embed rules
-				// work for watch?v= and youtu.be widget settings too.
-				$embed_url = $url;
-				if ( 'youtube' === $service_id && preg_match( '~(?:youtu\.be/|youtube(?:-nocookie)?\.com/(?:(?:watch)?\?(?:[^#]*&)?v=|(?:embed|shorts|v)/))([a-zA-Z0-9_-]+)~i', $url, $video ) ) {
-					$private = ! empty( $settings['yt_privacy'] ) && 'no' !== $settings['yt_privacy'];
-					$embed_url = 'https://www.youtube' . ( $private ? '-nocookie' : '' ) . '.com/embed/' . $video[1];
-				} elseif ( 'vimeo' === $service_id && preg_match( '~vimeo\.com/(?:[^/?#]+/)*([0-9]+)(?:[/?#]|$)~i', $url, $video ) ) {
-					$embed_url = 'https://player.vimeo.com/video/' . $video[1];
+				// Classes lands here, faz-skip included) and the id. The video
+				// URL lives in data-settings as the editor typed it
+				// (youtube.com/watch?v=…, vimeo.com/123), while the browser
+				// loads the embed URL Elementor derives from it
+				// (youtube.com/embed/…, player.vimeo.com/video/…). A rule
+				// written for the plain iframe targets the latter, so both are
+				// presented as a src — the embed first, exactly as an iframe to
+				// it would be judged, then the stored URL.
+				$src_candidates = array();
+				foreach ( array_unique( array_filter( array( $this->elementor_video_embed_url( $service_id, $settings ), $url ) ) ) as $candidate ) {
+					$src_candidates[] = 'src="' . esc_attr( $candidate ) . '"';
 				}
-				$src_attrs = 'src="' . esc_attr( $embed_url ) . '"';
-				if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src_attrs, '' ) || $this->is_whitelisted( $source_attrs, '' ) ) {
+				if ( $this->is_whitelisted( $attrs, '' ) ) {
 					return '<div' . $attrs . '>';
+				}
+				foreach ( $src_candidates as $src_attrs ) {
+					if ( $this->is_whitelisted( $src_attrs, '' ) ) {
+						return '<div' . $attrs . '>';
+					}
 				}
 
 				// The category comes from the merged provider map — the saved
@@ -9102,9 +9104,12 @@ class Frontend {
 				// same URL. Reading the catalogue alone made YouTube marketing
 				// here whatever the site had set. The catalogue remains the
 				// fallback when nothing in the map matches.
-				$category = $this->match_script_to_provider( $src_attrs, '', $providers );
-				if ( ! $category && $embed_url !== $url ) {
-					$category = $this->match_script_to_provider( $source_attrs, '', $providers );
+				$category = false;
+				foreach ( $src_candidates as $src_attrs ) {
+					$category = $this->match_script_to_provider( $src_attrs, '', $providers );
+					if ( $category ) {
+						break;
+					}
 				}
 				if ( ! $category ) {
 					$known    = Known_Providers::get_all();
@@ -9136,6 +9141,30 @@ class Frontend {
 		);
 
 		return null !== $result ? $result : $content;
+	}
+
+	/**
+	 * The embed URL an Elementor Video widget loads in the browser.
+	 *
+	 * Elementor stores the URL as the editor typed it and builds the iframe
+	 * client-side from a fixed embed base per host. Only the base matters here:
+	 * provider patterns are host/path fragments, never video ids.
+	 *
+	 * @param string $service_id Service detected from the stored URL.
+	 * @param array  $settings   Decoded data-settings of the widget.
+	 * @return string Embed base URL, or '' when the host has none.
+	 */
+	private function elementor_video_embed_url( $service_id, array $settings ) {
+		switch ( $service_id ) {
+			case 'youtube':
+				$privacy = isset( $settings['yt_privacy'] ) && 'yes' === $settings['yt_privacy'];
+				return $privacy ? 'https://www.youtube-nocookie.com/embed/' : 'https://www.youtube.com/embed/';
+			case 'vimeo':
+				return 'https://player.vimeo.com/video/';
+			case 'dailymotion':
+				return 'https://www.dailymotion.com/embed/video/';
+		}
+		return '';
 	}
 
 	/**
