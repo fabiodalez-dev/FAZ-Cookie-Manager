@@ -209,7 +209,7 @@ defined( 'ABSPATH' ) || exit;
 				$faz_refresh_format = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
 				if ( is_int( $faz_refresh['at'] ) ) {
 					// New records retain an unambiguous instant, including across DST.
-					$faz_refresh_when = wp_date( $faz_refresh_format, $faz_refresh['at'] );
+					$faz_refresh_when = date_i18n( $faz_refresh_format, $faz_refresh['at'] + faz_site_utc_offset( $faz_refresh['at'] ) );
 				} else {
 					// Legacy records already contain the site's local wall-clock time.
 					$faz_refresh_ts = strtotime( (string) $faz_refresh['at'] );
