@@ -3838,7 +3838,7 @@ class Frontend {
 		// filters and only ever reaches the page here, in the full-page buffer.
 		// Without this, such an embed is never detected at all.
 		$html = $this->process_social_embeds( $html, $blocked_categories );
-		$html = $this->process_elementor_video_widgets( $html, $blocked_categories );
+		$html = $this->process_elementor_video_widgets( $html, $blocked_categories, $providers );
 
 		if ( ! $pcre_failed ) {
 			Embed_Inventory::complete_render();
@@ -8581,7 +8581,7 @@ class Frontend {
 		// Hide Elementor video widgets (they render an EMPTY .elementor-video
 		// wrapper server-side and build the real iframe client-side from
 		// data-settings, so the generic <iframe> blocker above never sees one).
-		$content = $this->process_elementor_video_widgets( $content, $blocked_categories );
+		$content = $this->process_elementor_video_widgets( $content, $blocked_categories, $providers );
 
 		return $content;
 	}
@@ -9024,16 +9024,17 @@ class Frontend {
 	 *
 	 * @param string $content            HTML content.
 	 * @param array  $blocked_categories Blocked category slugs.
+	 * @param array  $providers          Provider match table.
 	 * @return string Modified content.
 	 */
-	private function process_elementor_video_widgets( $content, $blocked_categories ) {
+	private function process_elementor_video_widgets( $content, $blocked_categories, $providers = array() ) {
 		if ( false === stripos( $content, 'elementor-widget-video' ) ) {
 			return $content;
 		}
 
 		$result = preg_replace_callback(
 			'#<div\b(?=[^>]*\bclass\s*=\s*["\'][^"\']*\belementor-widget-video\b)(?=[^>]*\bdata-settings\s*=)([^>]*)>#i',
-			function ( $m ) use ( $blocked_categories ) {
+			function ( $m ) use ( $blocked_categories, $providers ) {
 				$attrs = $m[1];
 
 				// Skip if already processed.
@@ -9071,8 +9072,27 @@ class Frontend {
 					return '<div' . $attrs . '>'; // Self-hosted / unrecognised source - nothing to gate.
 				}
 
-				$known    = Known_Providers::get_all();
-				$category = isset( $known[ $service_id ]['category'] ) ? $known[ $service_id ]['category'] : 'marketing';
+				// The widget is judged by the same rules as every other embed.
+				// Its wrapper carries the classes (Elementor's Advanced → CSS
+				// Classes lands here, faz-skip included) and the id; the video
+				// URL lives in data-settings, so it is presented as a src of its
+				// own — once, for the whitelist and for the category below.
+				$src_attrs = 'src="' . esc_attr( $url ) . '"';
+				if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src_attrs, '' ) ) {
+					return '<div' . $attrs . '>';
+				}
+
+				// The category comes from the merged provider map — the saved
+				// cookie list, the catalogue, the admin's Script Blocking rules
+				// and the faz_blocking_rules filter — like a plain iframe to the
+				// same URL. Reading the catalogue alone made YouTube marketing
+				// here whatever the site had set. The catalogue remains the
+				// fallback when nothing in the map matches.
+				$category = $this->match_script_to_provider( $src_attrs, '', $providers );
+				if ( ! $category ) {
+					$known    = Known_Providers::get_all();
+					$category = isset( $known[ $service_id ]['category'] ) ? $known[ $service_id ]['category'] : 'marketing';
+				}
 
 				$should_block = in_array( $category, $blocked_categories, true );
 
