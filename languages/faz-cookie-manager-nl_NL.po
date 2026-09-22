@@ -1163,14 +1163,12 @@ msgid "Last %d Days"
 msgstr "Laatste %d dagen"
 
 #: admin/class-admin.php:886
-#, fuzzy
 msgid "Matching pages"
-msgstr "Talen"
+msgstr ""
 
 #: admin/class-admin.php:887
-#, fuzzy
 msgid "Searching pages…"
-msgstr "Leveranciers zoeken…"
+msgstr ""
 
 #: admin/class-admin.php:888
 msgid "Use the arrow keys and Enter to choose a page."
@@ -1186,9 +1184,9 @@ msgstr ""
 
 #. translators: %s: selected language name.
 #: admin/class-admin.php:895
-#, fuzzy, php-format
+#, php-format
 msgid "Cookie policy language: %s"
-msgstr "Taal van cookiecategorie"
+msgstr ""
 
 #: admin/class-admin.php:896
 msgid "Starting scan…"
@@ -3660,24 +3658,21 @@ msgstr ""
 
 #. translators: %s: the reason the cookie policy page could not be created.
 #: admin/modules/settings/includes/class-policy-page.php:75
-#, fuzzy, php-format
+#, php-format
 msgid "Setup is complete, but the cookie policy page was not created: %s"
-msgstr "Installatie voltooid. Je cookiebanner is klaar."
+msgstr ""
 
 #: admin/modules/settings/includes/class-policy-page.php:79
-#, fuzzy
 msgid "The cookie policy page was created, but the banner could not be linked to it. Set the privacy link on the Cookie Banner page."
-msgstr "De cookiebanner kon niet worden aangemaakt. Probeer het opnieuw."
+msgstr ""
 
 #: admin/modules/settings/includes/class-policy-page.php:137
-#, fuzzy
 msgid "Cookie policy creation is already in progress. Please try again shortly."
-msgstr "Er wordt al een scan uitgevoerd, wacht totdat deze is voltooid."
+msgstr ""
 
 #: admin/modules/settings/includes/class-policy-page.php:162
-#, fuzzy
 msgid "The cookie policy page could not be created. Please try again."
-msgstr "De cookiebanner kon niet worden aangemaakt. Probeer het opnieuw."
+msgstr ""
 
 #: admin/modules/settings/includes/class-policy-page.php:181
 msgid "The cookie policy page is not public. Publish it without password protection in Pages, then link it from the Cookie Banner page."
@@ -4610,9 +4605,8 @@ msgid "Export CSV"
 msgstr "CSV exporteren"
 
 #: admin/views/consent-logs.php:71
-#, fuzzy
 msgid "GPC exceptions:"
-msgstr "GPC-uitzondering: %s"
+msgstr ""
 
 #: admin/views/consent-logs.php:72
 msgid "a service the visitor accepted on its own blocked embed while their browser sent Global Privacy Control."
@@ -6640,9 +6634,8 @@ msgid "Consent logging is kept on for accountability, and your cookie banner wil
 msgstr "Toestemmingsregistratie blijft aan voor verantwoording, en je cookiebanner wordt aan bezoekers getoond. Je kunt achteraf alles aanpassen op de pagina's Cookie Banner en Instellingen."
 
 #: admin/views/setup.php:460
-#, fuzzy
 msgid "Cookie policy page"
-msgstr "Cookiebeleid"
+msgstr ""
 
 #: admin/views/setup.php:464
 msgid "Create and publish the cookie policy when setup finishes"
@@ -7138,15 +7131,14 @@ msgid "Invalid JSON or empty dataset"
 msgstr ""
 
 #: includes/class-cookie-definitions.php:170
-#, fuzzy
 msgid "No valid cookie definitions in response"
-msgstr "Cookiedefinities bijgewerkt"
+msgstr ""
 
 #. translators: %d: number of cookie definitions downloaded.
 #: includes/class-cookie-definitions.php:210
-#, fuzzy, php-format
+#, php-format
 msgid "Downloaded %d cookie definitions"
-msgstr "Cookie-definities bijwerken"
+msgstr ""
 
 #: includes/class-cookie-policy-shortcode.php:69
 msgid "What Are Cookies"
@@ -7710,9 +7702,8 @@ msgid "Link"
 msgstr "Link"
 
 #: admin/class-admin.php:2492
-#, fuzzy
 msgid "FAZ Cookie Manager — the Sourcebuster cookies (sbjs_*) now belong to Marketing"
-msgstr "FAZ Cookie Manager — de categorie Functioneel is niet langer gemarkeerd als verkoop of delen"
+msgstr ""
 
 #: admin/class-admin.php:2493
 msgid "WooCommerce uses Sourcebuster to record where each visitor came from and links it to the order. WooCommerce asks for marketing consent for it, and FAZ now blocks it until Marketing is accepted. The cookies were classified as Analytics, so a visitor who accepted only Marketing had them deleted again and the order lost its source."
@@ -7735,9 +7726,8 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: admin/class-admin.php:2525
-#, fuzzy
 msgid "Open the cookie list"
-msgstr "Cookiecategorieën openen"
+msgstr ""
 
 #: admin/views/dashboard.php:96
 msgid "Pageview tracking is disabled."

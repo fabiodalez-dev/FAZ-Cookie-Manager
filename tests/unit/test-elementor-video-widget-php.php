@@ -328,6 +328,13 @@ if ( ! function_exists( 'get_transient' ) ) {
 	$out  = faz_run( $fe, $done, array( 'marketing' ), $catalogue_map );
 	assert_eq( substr_count( $out, 'data-placeholder=' ), 0, 'EV8 a widget already processed is not processed twice' );
 
+	$fe = faz_arrange( '', false );
+	$out = faz_run( $fe, faz_widget( $yt ), array( 'marketing' ), array( 'youtube.com/embed' => 'necessary' ) );
+	assert_eq( faz_blocked( $out ), false, 'YouTube watch URL uses the configured embed-path rule' );
+	$fe = faz_arrange( '', false );
+	$out = faz_run( $fe, faz_widget( 'https://youtu.be/NL2UmY9oKow' ), array( 'marketing' ), array( 'youtube.com/embed' => 'necessary', 'youtu.be' => 'marketing' ) );
+	assert_eq( faz_blocked( $out ), false, 'YouTube short URL follows the actual player rule before the source URL' );
+
 	// Bricks Maps uses a div and JavaScript options, not an iframe.
 	$map = '<div id="map" class="brxe-map" data-bricks-map-options="{&quot;zoom&quot;:12}"></div>';
 	$fe = faz_arrange( '', false );

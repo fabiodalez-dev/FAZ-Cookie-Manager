@@ -1163,14 +1163,12 @@ msgid "Last %d Days"
 msgstr "Posledních %d dní"
 
 #: admin/class-admin.php:886
-#, fuzzy
 msgid "Matching pages"
-msgstr "Jazyky"
+msgstr ""
 
 #: admin/class-admin.php:887
-#, fuzzy
 msgid "Searching pages…"
-msgstr "Hledat poskytovatele…"
+msgstr ""
 
 #: admin/class-admin.php:888
 msgid "Use the arrow keys and Enter to choose a page."
@@ -1186,9 +1184,9 @@ msgstr ""
 
 #. translators: %s: selected language name.
 #: admin/class-admin.php:895
-#, fuzzy, php-format
+#, php-format
 msgid "Cookie policy language: %s"
-msgstr "Jazyk kategorie cookie"
+msgstr ""
 
 #: admin/class-admin.php:896
 msgid "Starting scan…"
@@ -3667,24 +3665,21 @@ msgstr ""
 
 #. translators: %s: the reason the cookie policy page could not be created.
 #: admin/modules/settings/includes/class-policy-page.php:75
-#, fuzzy, php-format
+#, php-format
 msgid "Setup is complete, but the cookie policy page was not created: %s"
-msgstr "Nastavení je dokončeno. Váš banner s informacemi o souborech cookie je připraven."
+msgstr ""
 
 #: admin/modules/settings/includes/class-policy-page.php:79
-#, fuzzy
 msgid "The cookie policy page was created, but the banner could not be linked to it. Set the privacy link on the Cookie Banner page."
-msgstr "Banner s informacemi o souborech cookie se nepodařilo vytvořit. Zkuste to prosím znovu."
+msgstr ""
 
 #: admin/modules/settings/includes/class-policy-page.php:137
-#, fuzzy
 msgid "Cookie policy creation is already in progress. Please try again shortly."
-msgstr "Skenování již probíhá, počkejte prosím na jeho dokončení."
+msgstr ""
 
 #: admin/modules/settings/includes/class-policy-page.php:162
-#, fuzzy
 msgid "The cookie policy page could not be created. Please try again."
-msgstr "Banner s informacemi o souborech cookie se nepodařilo vytvořit. Zkuste to prosím znovu."
+msgstr ""
 
 #: admin/modules/settings/includes/class-policy-page.php:181
 msgid "The cookie policy page is not public. Publish it without password protection in Pages, then link it from the Cookie Banner page."
@@ -4617,9 +4612,8 @@ msgid "Export CSV"
 msgstr "Exportovat CSV"
 
 #: admin/views/consent-logs.php:71
-#, fuzzy
 msgid "GPC exceptions:"
-msgstr "Výjimka GPC: %s"
+msgstr ""
 
 #: admin/views/consent-logs.php:72
 msgid "a service the visitor accepted on its own blocked embed while their browser sent Global Privacy Control."
@@ -6647,9 +6641,8 @@ msgid "Consent logging is kept on for accountability, and your cookie banner wil
 msgstr "Záznamy o souhlasu se uchovávají z důvodu zajištění odpovědnosti a návštěvníkům se bude zobrazovat váš banner s informacemi o souborech cookie. Veškerá nastavení můžete následně upravit na stránkách Banner s informacemi o souborech cookie a Nastavení."
 
 #: admin/views/setup.php:460
-#, fuzzy
 msgid "Cookie policy page"
-msgstr "Zásady cookies"
+msgstr ""
 
 #: admin/views/setup.php:464
 msgid "Create and publish the cookie policy when setup finishes"
@@ -7145,15 +7138,14 @@ msgid "Invalid JSON or empty dataset"
 msgstr ""
 
 #: includes/class-cookie-definitions.php:170
-#, fuzzy
 msgid "No valid cookie definitions in response"
-msgstr "Definice cookies aktualizovány"
+msgstr ""
 
 #. translators: %d: number of cookie definitions downloaded.
 #: includes/class-cookie-definitions.php:210
-#, fuzzy, php-format
+#, php-format
 msgid "Downloaded %d cookie definitions"
-msgstr "Aktualizovat definice souborů cookie"
+msgstr ""
 
 #: includes/class-cookie-policy-shortcode.php:69
 msgid "What Are Cookies"
@@ -7719,9 +7711,8 @@ msgid "Link"
 msgstr "Odkaz"
 
 #: admin/class-admin.php:2492
-#, fuzzy
 msgid "FAZ Cookie Manager — the Sourcebuster cookies (sbjs_*) now belong to Marketing"
-msgstr "FAZ Cookie Manager — kategorie Funkční už není označena jako prodej nebo sdílení"
+msgstr ""
 
 #: admin/class-admin.php:2493
 msgid "WooCommerce uses Sourcebuster to record where each visitor came from and links it to the order. WooCommerce asks for marketing consent for it, and FAZ now blocks it until Marketing is accepted. The cookies were classified as Analytics, so a visitor who accepted only Marketing had them deleted again and the order lost its source."
@@ -7746,9 +7737,8 @@ msgstr[1] ""
 msgstr[2] ""
 
 #: admin/class-admin.php:2525
-#, fuzzy
 msgid "Open the cookie list"
-msgstr "Otevřít kategorie cookies"
+msgstr ""
 
 #: admin/views/dashboard.php:96
 msgid "Pageview tracking is disabled."
@@ -7856,7 +7846,6 @@ msgstr "Sledování interakcí s bannerem je vypnuto."
 #~ msgid "Show the cookie banner only to visitors from specific regions. Requires a MaxMind GeoLite2 database (configured below), or the Cloudflare CF-IPCountry header (trusted only when the faz_trust_cf_ipcountry_header filter is enabled by your developer). When the country cannot be resolved, the banner is shown to everyone (fail-open)."
 #~ msgstr "Zobrazit banner s informacemi o souborech cookie pouze návštěvníkům z určitých regionů. Vyžaduje databázi MaxMind GeoLite2 (nakonfigurovanou níže) nebo hlavičku Cloudflare CF-IPCountry (důvěryhodnou pouze v případě, že váš vývojář povolil filtr faz_trust_cf_ipcountry_header). Pokud nelze určit zemi, banner se zobrazí všem (režim \"fail-open\")."
 
-#, fuzzy
 #~ msgid "Keeps every rendered page identical for all visitors so full-page caches (WP Rocket, LiteSpeed, …) can never serve one visitor's consent state to another. Requires jurisdiction routing to be switched off first — while it is on, per-country consent rules win over caching."
 #~ msgstr "Zajišťuje, že každá vykreslená stránka je pro všechny návštěvníky identická, takže celostránkové mezipaměti (WP Rocket, LiteSpeed, …) nikdy nemohou jednomu návštěvníkovi zobrazit stav souhlasu jiného návštěvníka. Tuto funkci zapněte, pokud používáte plugin pro ukládání stránek do mezipaměti nebo CDN s ukládáním do mezipaměti."
 

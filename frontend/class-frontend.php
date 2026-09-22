@@ -9080,8 +9080,19 @@ class Frontend {
 				// Classes lands here, faz-skip included) and the id; the video
 				// URL lives in data-settings, so it is presented as a src of its
 				// own — once, for the whitelist and for the category below.
-				$src_attrs = 'src="' . esc_attr( $url ) . '"';
-				if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src_attrs, '' ) ) {
+				$source_attrs = 'src="' . esc_attr( $url ) . '"';
+				// Elementor stores a watch/share URL, but requests an embed URL.
+				// Match the player first so the bundled template's /embed rules
+				// work for watch?v= and youtu.be widget settings too.
+				$embed_url = $url;
+				if ( 'youtube' === $service_id && preg_match( '~(?:youtu\.be/|youtube(?:-nocookie)?\.com/(?:(?:watch)?\?(?:[^#]*&)?v=|(?:embed|shorts|v)/))([a-zA-Z0-9_-]+)~i', $url, $video ) ) {
+					$private = ! empty( $settings['yt_privacy'] ) && 'no' !== $settings['yt_privacy'];
+					$embed_url = 'https://www.youtube' . ( $private ? '-nocookie' : '' ) . '.com/embed/' . $video[1];
+				} elseif ( 'vimeo' === $service_id && preg_match( '~vimeo\.com/(?:[^/?#]+/)*([0-9]+)(?:[/?#]|$)~i', $url, $video ) ) {
+					$embed_url = 'https://player.vimeo.com/video/' . $video[1];
+				}
+				$src_attrs = 'src="' . esc_attr( $embed_url ) . '"';
+				if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src_attrs, '' ) || $this->is_whitelisted( $source_attrs, '' ) ) {
 					return '<div' . $attrs . '>';
 				}
 
@@ -9092,6 +9103,9 @@ class Frontend {
 				// here whatever the site had set. The catalogue remains the
 				// fallback when nothing in the map matches.
 				$category = $this->match_script_to_provider( $src_attrs, '', $providers );
+				if ( ! $category && $embed_url !== $url ) {
+					$category = $this->match_script_to_provider( $source_attrs, '', $providers );
+				}
 				if ( ! $category ) {
 					$known    = Known_Providers::get_all();
 					$category = isset( $known[ $service_id ]['category'] ) ? $known[ $service_id ]['category'] : 'marketing';
