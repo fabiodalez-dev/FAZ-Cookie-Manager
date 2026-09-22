@@ -201,6 +201,20 @@ console.log('WooCommerce Order Attribution replay after consent (jsdom)');
   eq('…and the replay was actually attempted', attempts, 1);
 }
 
+// An optimiser may delay WooCommerce itself until after Sourcebuster. Its
+// first normal initialisation must not be repeated by another restored script.
+{
+  const w = loadFrontend();
+  const sb = restore(w, SBJS_SRC);
+  const other = restore(w, OTHER_SRC);
+  w.sbjs = { init() {} };
+  fireLoad(w, sb);
+  const calls = installWooCommerce(w, true);
+  w.wc_order_attribution.setOrderTracking(true);
+  fireLoad(w, other);
+  eq('WooCommerce arrives after sourcebuster: its own initialisation is not replayed', calls.length, 1);
+}
+
 // 8. Which consent unlocks sourcebuster. WooCommerce gates order attribution on
 //    the WP Consent API's `marketing` category (WPConsentAPI::$consent_category);
 //    blocking the library under `analytics` meant a visitor who accepted only

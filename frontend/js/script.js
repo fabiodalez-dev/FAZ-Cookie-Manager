@@ -5435,8 +5435,11 @@ function _fazWatchRestoredScript(clone) {
     // on. When sbjs is already here, WooCommerce initialised it itself, and a
     // second init would count an extra page view in sbjs_session.
     var sbjsBefore = typeof window.sbjs !== 'undefined';
+    var attributionBefore = window.wc_order_attribution;
     clone.addEventListener('load', function () {
-        if (!sbjsBefore) {
+        // A WooCommerce instance loaded after Sourcebuster initialises itself.
+        // Only an instance already waiting when we restored scripts needs replay.
+        if (!sbjsBefore && attributionBefore && window.wc_order_attribution === attributionBefore) {
             _fazReplayWooCommerceAttribution();
         }
     });
