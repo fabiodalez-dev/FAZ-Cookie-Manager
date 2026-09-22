@@ -4,6 +4,13 @@
 if ( typeof window._fazConfig === 'undefined' && typeof window._fazCfg !== 'undefined' && window._fazCfg !== null ) {
     window._fazConfig = window._fazCfg;
 }
+// Optimisers may delay the small inline merge while the external configuration
+// and runtime are already available. Merge before any blocking decisions.
+if (window._fazConfig && window._fazStaticConfig) {
+    Object.keys(window._fazStaticConfig).forEach(function (key) {
+        if (!(key in window._fazConfig)) window._fazConfig[key] = window._fazStaticConfig[key];
+    });
+}
 const _fazStore = window._fazConfig;
 
 // Opt-out success message (US state laws / CCPA): after the visitor confirms an
@@ -5435,8 +5442,11 @@ function _fazWatchRestoredScript(clone) {
     // on. When sbjs is already here, WooCommerce initialised it itself, and a
     // second init would count an extra page view in sbjs_session.
     var sbjsBefore = typeof window.sbjs !== 'undefined';
+    var attributionBefore = window.wc_order_attribution;
     clone.addEventListener('load', function () {
-        if (!sbjsBefore) {
+        // A WooCommerce instance loaded after Sourcebuster initialises itself.
+        // Only an instance already waiting when we restored scripts needs replay.
+        if (!sbjsBefore && attributionBefore && window.wc_order_attribution === attributionBefore) {
             _fazReplayWooCommerceAttribution();
         }
     });
@@ -5857,10 +5867,40 @@ function _fazUnblockServerSide() {
             if (next && next.getAttribute("data-faz-category") === cat) {
                 next.classList.remove('faz-hidden');
                 next.removeAttribute("data-faz-category");
+                if (next.hasAttribute('data-faz-bricks-map-options')) {
+                    next.setAttribute('data-bricks-map-options', next.getAttribute('data-faz-bricks-map-options'));
+                    next.removeAttribute('data-faz-bricks-map-options');
+                    // If Google's callback already ran with no eligible containers,
+                    // initialise the newly released map using Bricks' own entrypoint.
+                    _fazInitConsentedBricksMaps();
+                }
             }
             placeholder.remove();
         });
 }
+
+// Bricks' Google callback can arrive before its WP Rocket-delayed initializer.
+// Retry only when both dependencies exist and a consented container needs it.
+var _fazBricksMapInitPending = false;
+function _fazInitConsentedBricksMaps() {
+    if (_fazBricksMapInitPending || !window.google || !window.google.maps || typeof window.bricksMap !== 'function') return;
+    var maps = document.querySelectorAll('.brxe-map[data-bricks-map-options]');
+    var needed = Array.prototype.some.call(maps, function (map) {
+        var instances = window.bricksData && window.bricksData.googleMapInstances;
+        return !map.classList.contains('faz-hidden') && !(instances && instances[map.getAttribute('data-script-id') || map.id]) &&
+            !_fazShouldBlockResource('', 'https://maps.googleapis.com/maps/api/js', 'google-maps');
+    });
+    if (!needed) return;
+    _fazBricksMapInitPending = true;
+    try {
+        Promise.resolve(window.bricksMap()).catch(function () {}).then(function () {
+            _fazBricksMapInitPending = false;
+        });
+    } catch (e) { _fazBricksMapInitPending = false; }
+}
+document.addEventListener('load', function (event) {
+    if (event.target && event.target.id === 'bricks-map-js') _fazInitConsentedBricksMaps();
+}, true);
 
 function _fazAddProviderToList(node, cleanedHostname) {
     const nodeCategory =

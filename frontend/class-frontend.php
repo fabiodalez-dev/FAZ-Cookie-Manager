@@ -293,6 +293,7 @@ class Frontend {
 			// WP Rocket exclude helpers — same intent.
 			add_filter( 'rocket_exclude_defer_js', array( $this, 'rocket_exclude_own_scripts' ) );
 			add_filter( 'rocket_delay_js_exclusions', array( $this, 'rocket_exclude_own_scripts' ) );
+			add_filter( 'rocket_delay_js_exclusions', array( $this, 'rocket_exclude_own_inline' ) );
 			add_filter( 'rocket_minify_excluded_external_js', array( $this, 'rocket_exclude_own_scripts' ) );
 			// `Load JavaScript deferred` wraps any matching inline <script> in a
 			// DOMContentLoaded callback. Our wp_localize_script payload emits a
@@ -3839,6 +3840,7 @@ class Frontend {
 		// Without this, such an embed is never detected at all.
 		$html = $this->process_social_embeds( $html, $blocked_categories );
 		$html = $this->process_elementor_video_widgets( $html, $blocked_categories, $providers );
+		$html = $this->process_bricks_map_widgets( $html, $blocked_categories, $providers );
 
 		if ( ! $pcre_failed ) {
 			Embed_Inventory::complete_render();
@@ -7361,7 +7363,7 @@ class Frontend {
 		if ( ! is_array( $excluded ) ) {
 			$excluded = array();
 		}
-		foreach ( array( '_fazConfig', '_fazCfg', '_fazGcm', '_fazTcfConfig' ) as $needle ) {
+		foreach ( array( '_fazConfig', '_fazCfg', '_fazGcm', '_fazTcfConfig', '_fazStaticConfig' ) as $needle ) {
 			if ( ! in_array( $needle, $excluded, true ) ) {
 				$excluded[] = $needle;
 			}
@@ -8582,6 +8584,7 @@ class Frontend {
 		// wrapper server-side and build the real iframe client-side from
 		// data-settings, so the generic <iframe> blocker above never sees one).
 		$content = $this->process_elementor_video_widgets( $content, $blocked_categories, $providers );
+		$content = $this->process_bricks_map_widgets( $content, $blocked_categories, $providers );
 
 		return $content;
 	}
@@ -9118,6 +9121,52 @@ class Frontend {
 			$content
 		);
 
+		return null !== $result ? $result : $content;
+	}
+
+	/**
+	 * Give Bricks' JavaScript Google Maps container the same consent UI as an iframe.
+	 * Keep its options inert until consent so Bricks cannot initialise it early.
+	 *
+	 * @param string $content HTML content.
+	 * @param array $blocked_categories Blocked category slugs.
+	 * @param array $providers Merged provider category map.
+	 * @return string
+	 */
+	private function process_bricks_map_widgets( $content, $blocked_categories, $providers ) {
+		if ( false === stripos( $content, 'data-bricks-map-options' ) ) {
+			return $content;
+		}
+		$result = preg_replace_callback(
+			'#<div\b(?=[^>]*\bclass\s*=\s*["\'][^"\']*\bbrxe-map\b)([^>]*)>#i',
+			function ( $m ) use ( $blocked_categories, $providers ) {
+				$attrs = $m[1];
+				if ( ! preg_match( '/\sdata-bricks-map-options\s*=/i', $attrs ) || false !== stripos( $attrs, 'data-faz-category' ) ) {
+					return $m[0];
+				}
+				$src = 'src="https://maps.googleapis.com/maps/api/js"';
+				if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src, '' ) ) {
+					return $m[0];
+				}
+				$category = $this->match_script_to_provider( $src, '', $providers );
+				if ( ! $category ) {
+					$known = Known_Providers::get_all();
+					$category = $known['google-maps']['category'] ?? 'functional';
+				}
+				$blocked = in_array( $category, $blocked_categories, true );
+				$consent = $this->get_service_consent();
+				if ( isset( $consent['google-maps'] ) ) {
+					$blocked = 'yes' !== $consent['google-maps'];
+				}
+				if ( ! $blocked ) {
+					return $m[0];
+				}
+				$attrs = preg_replace( '/\sdata-bricks-map-options\s*=/i', ' data-faz-bricks-map-options=', $attrs, 1 );
+				$widget = '<div' . $attrs . ' data-faz-category="' . esc_attr( $category ) . '" data-faz-service="google-maps">';
+				return Placeholder_Builder::build_social( 'google-maps', Placeholder_Builder::get_service_name( 'google-maps' ), $category ) . self::faz_add_hidden_class( $widget );
+			},
+			$content
+		);
 		return null !== $result ? $result : $content;
 	}
 

@@ -9,6 +9,8 @@
  *
  *   - exactly one pill per service id: a verdict suppresses the bare claim;
  *   - a carried 'no' paints red, labelled "carried, unverified";
+ *   - a carried '' (a legacy claim the server never judged) stays neutral,
+ *     labelled "carried, not judged" — never red, never plain "carried";
  *   - every GPC pill explains its state in a title;
  *   - the page carries a legend saying what "unverified" does and does not mean.
  *
@@ -62,11 +64,12 @@ const gpcPills = (pills) => pills.filter((p) => p.textContent.indexOf('GPC excep
 
 console.log('consent-log GPC exception pills (jsdom, shipped consent-logs.js)');
 
-const [served, servedNo, carriedYes, carriedNo, legacy, twoIds] = await render([
+const [served, servedNo, carriedYes, carriedNo, carriedEmpty, legacy, twoIds] = await render([
   row({ necessary: 'yes', 'meta.gpc_exception.maps': 'yes', 'meta.gpc_exception_served.maps': 'yes' }),
   row({ 'meta.gpc_exception.maps': 'yes', 'meta.gpc_exception_served.maps': 'no' }),
   row({ 'meta.gpc_exception.maps': 'yes', 'meta.gpc_exception_carried.maps': 'yes' }),
   row({ 'meta.gpc_exception.maps': 'yes', 'meta.gpc_exception_carried.maps': 'no' }),
+  row({ 'meta.gpc_exception.maps': 'yes', 'meta.gpc_exception_carried.maps': '' }),
   row({ 'meta.gpc_exception.maps': 'yes' }),
   row({ 'meta.gpc_exception.maps': 'yes', 'meta.gpc_exception_served.maps': 'yes', 'meta.gpc_exception.yt': 'yes' }),
 ]);
@@ -79,14 +82,17 @@ check('a carried yes stays neutral', !gpcPills(carriedYes)[0].classList.contains
 check('a carried no renders one pill', gpcPills(carriedNo).length === 1);
 check('a carried no is red', gpcPills(carriedNo)[0]?.classList.contains('faz-cat-no'));
 check('and says carried, unverified', /carried, unverified/.test(gpcPills(carriedNo)[0]?.textContent || ''));
+check('a carried empty verdict renders one pill', gpcPills(carriedEmpty).length === 1);
+check('and stays neutral, not red', !gpcPills(carriedEmpty)[0].classList.contains('faz-cat-no'));
+check('and says carried, not judged', /carried, not judged/.test(gpcPills(carriedEmpty)[0]?.textContent || ''));
 check('a legacy row with only the claim keeps its one pill', gpcPills(legacy).length === 1 && !gpcPills(legacy)[0].classList.contains('faz-cat-no'));
 check('ids are deduplicated independently', gpcPills(twoIds).length === 2);
 
-const all = [served, servedNo, carriedYes, carriedNo, legacy, twoIds].flatMap(gpcPills);
+const all = [served, servedNo, carriedYes, carriedNo, carriedEmpty, legacy, twoIds].flatMap(gpcPills);
 check('every GPC pill explains its state in a title', all.length > 0 && all.every((p) => typeof p.title === 'string' && p.title.length > 20));
-check('the four states carry four different explanations', new Set([
-  gpcPills(served)[0]?.title, gpcPills(servedNo)[0]?.title, gpcPills(carriedYes)[0]?.title, gpcPills(carriedNo)[0]?.title, gpcPills(legacy)[0]?.title,
-]).size === 5);
+check('the six states carry six different explanations', new Set([
+  gpcPills(served)[0]?.title, gpcPills(servedNo)[0]?.title, gpcPills(carriedYes)[0]?.title, gpcPills(carriedNo)[0]?.title, gpcPills(carriedEmpty)[0]?.title, gpcPills(legacy)[0]?.title,
+]).size === 6);
 
 // Labels and explanations are translatable: every key the page looks up with a
 // GPC prefix exists in the consentLogs i18n array.

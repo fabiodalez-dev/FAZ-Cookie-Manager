@@ -553,6 +553,24 @@ class Controller {
 	}
 
 	/**
+	 * Shared list/export status clause, including the GPC pseudo-status.
+	 *
+	 * @param string $status Requested filter.
+	 * @return array{0:string,1:array}
+	 */
+	private function status_filter( $status ) {
+		global $wpdb;
+		if ( 'gpc_exception' !== $status ) {
+			return array( 'status = %s', array( $status ) );
+		}
+		$values = array();
+		foreach ( array( 'meta.gpc_exception.', 'meta.gpc_exception_served.', 'meta.gpc_exception_carried.' ) as $prefix ) {
+			$values[] = '%' . $wpdb->esc_like( '"' . $prefix ) . '%';
+		}
+		return array( '(categories LIKE %s OR categories LIKE %s OR categories LIKE %s)', $values );
+	}
+
+	/**
 	 * Get paginated consent logs.
 	 *
 	 * @param array $args {
@@ -595,20 +613,9 @@ class Controller {
 		}
 
 		if ( ! empty( $args['status'] ) ) {
-			if ( 'gpc_exception' === $args['status'] ) {
-				// A pseudo-status, not a column value: rows that record an
-				// exception to a binding opt-out are the ones worth auditing,
-				// and they occur under every real status. The prefix matches
-				// both the client-written marker and the server's verdicts, so
-				// a row is listed whatever the verdict says.
-				$where[]  = '(categories LIKE %s OR categories LIKE %s OR categories LIKE %s)';
-				foreach ( array( 'meta.gpc_exception.', 'meta.gpc_exception_served.', 'meta.gpc_exception_carried.' ) as $prefix ) {
-					$values[] = '%' . $wpdb->esc_like( '"' . $prefix ) . '%';
-				}
-			} else {
-				$where[]  = 'status = %s';
-				$values[] = $args['status'];
-			}
+			list( $status_clause, $status_values ) = $this->status_filter( $args['status'] );
+			$where[] = $status_clause;
+			$values  = array_merge( $values, $status_values );
 		}
 
 		$where_clause = implode( ' AND ', $where );
@@ -827,20 +834,9 @@ class Controller {
 		}
 
 		if ( ! empty( $args['status'] ) ) {
-			if ( 'gpc_exception' === $args['status'] ) {
-				// A pseudo-status, not a column value: rows that record an
-				// exception to a binding opt-out are the ones worth auditing,
-				// and they occur under every real status. The prefix matches
-				// both the client-written marker and the server's verdicts, so
-				// a row is listed whatever the verdict says.
-				$where[]  = '(categories LIKE %s OR categories LIKE %s OR categories LIKE %s)';
-				foreach ( array( 'meta.gpc_exception.', 'meta.gpc_exception_served.', 'meta.gpc_exception_carried.' ) as $prefix ) {
-					$values[] = '%' . $wpdb->esc_like( '"' . $prefix ) . '%';
-				}
-			} else {
-				$where[]  = 'status = %s';
-				$values[] = $args['status'];
-			}
+			list( $status_clause, $status_values ) = $this->status_filter( $args['status'] );
+			$where[] = $status_clause;
+			$values  = array_merge( $values, $status_values );
 		}
 
 		$where_clause = implode( ' AND ', $where );

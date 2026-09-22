@@ -328,6 +328,26 @@ if ( ! function_exists( 'get_transient' ) ) {
 	$out  = faz_run( $fe, $done, array( 'marketing' ), $catalogue_map );
 	assert_eq( substr_count( $out, 'data-placeholder=' ), 0, 'EV8 a widget already processed is not processed twice' );
 
+	// Bricks Maps uses a div and JavaScript options, not an iframe.
+	$map = '<div id="map" class="brxe-map" data-bricks-map-options="{&quot;zoom&quot;:12}"></div>';
+	$fe = faz_arrange( '', false );
+	$out = faz_call( $fe, 'process_bricks_map_widgets', array( $map, array( 'functional' ), array( 'maps.googleapis.com' => 'functional' ) ) );
+	assert_eq( faz_blocked( $out ), true, 'Bricks: denied map has a visible placeholder' );
+	assert_eq( strpos( $out, ' data-bricks-map-options=' ), false, 'Bricks: builder options are inert before consent' );
+	assert_eq( strpos( $out, 'data-faz-bricks-map-options=' ) !== false, true, 'Bricks: options are preserved for restoration' );
+	assert_eq( faz_call( $fe, 'process_bricks_map_widgets', array( $out, array( 'functional' ), array() ) ), $out, 'Bricks: the second buffer pass is idempotent' );
+	$fe = faz_arrange( '', false );
+	assert_eq( faz_call( $fe, 'process_bricks_map_widgets', array( $map, array(), array( 'maps.googleapis.com' => 'functional' ) ) ), $map, 'Bricks: granted category stays intact' );
+	$fe = faz_arrange( '', false );
+	assert_eq( faz_call( $fe, 'process_bricks_map_widgets', array( $map, array( 'functional' ), array( 'maps.googleapis.com' => 'necessary' ) ) ), $map, 'Bricks: explicit Necessary rule wins' );
+	$fe = faz_arrange( '', false, array( 'maps.googleapis.com' ) );
+	assert_eq( faz_call( $fe, 'process_bricks_map_widgets', array( $map, array( 'functional' ), array() ) ), $map, 'Bricks: Maps whitelist is respected' );
+	$fe = faz_arrange( '', false );
+	$skip = str_replace( 'brxe-map', 'brxe-map faz-skip', $map );
+	assert_eq( faz_call( $fe, 'process_bricks_map_widgets', array( $skip, array( 'functional' ), array() ) ), $skip, 'Bricks: faz-skip is respected' );
+	$leaflet = str_replace( 'data-bricks-map-options', 'data-bricks-leaflet-options', $map );
+	assert_eq( faz_call( $fe, 'process_bricks_map_widgets', array( $leaflet, array( 'functional' ), array() ) ), $leaflet, 'Bricks: Leaflet is not treated as Google Maps' );
+
 	echo "\n";
 	echo "  Passed: {$tests_passed}\n";
 	echo "  Failed: {$tests_failed}\n\n";
