@@ -2415,7 +2415,7 @@ class Activator {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $cookies is $wpdb->prefix + literal (escaped via esc_sql); every value bound via prepare(); one-shot idempotent migration write.
 			$moved = $wpdb->query(
 				$wpdb->prepare(
-					"UPDATE `" . esc_sql( $cookies ) . "` SET category = %d WHERE name LIKE %s AND category = %d AND date_modified = date_created AND date_created > '1970-01-01 00:00:00'",
+					"UPDATE `" . esc_sql( $cookies ) . "` SET category = %d WHERE name LIKE %s AND category = %d AND discovered = 1 AND date_modified = date_created AND date_created > '1970-01-01 00:00:00'",
 					$marketing,
 					$like,
 					$analytics

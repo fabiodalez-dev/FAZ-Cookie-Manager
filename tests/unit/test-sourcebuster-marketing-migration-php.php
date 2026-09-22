@@ -140,14 +140,14 @@ function sb_site( array $rows, $with_marketing = true, $tables = true ) {
 	$db                          = new Faz_Sqlite_Wpdb();
 	if ( $tables ) {
 		$db->pdo->exec( 'CREATE TABLE wp_faz_cookie_categories (category_id INTEGER PRIMARY KEY, slug TEXT)' );
-		$db->pdo->exec( 'CREATE TABLE wp_faz_cookies (cookie_id INTEGER PRIMARY KEY, name TEXT, category INTEGER, date_created TEXT, date_modified TEXT)' );
+		$db->pdo->exec( 'CREATE TABLE wp_faz_cookies (cookie_id INTEGER PRIMARY KEY, name TEXT, category INTEGER, date_created TEXT, date_modified TEXT, discovered INTEGER)' );
 		$db->pdo->exec( "INSERT INTO wp_faz_cookie_categories VALUES (1,'necessary'),(3,'analytics')" );
 		if ( $with_marketing ) {
 			$db->pdo->exec( "INSERT INTO wp_faz_cookie_categories VALUES (7,'marketing')" );
 		}
-		$st = $db->pdo->prepare( 'INSERT INTO wp_faz_cookies (name, category, date_created, date_modified) VALUES (?,?,?,?)' );
+		$st = $db->pdo->prepare( 'INSERT INTO wp_faz_cookies (name, category, date_created, date_modified, discovered) VALUES (?,?,?,?,?)' );
 		foreach ( $rows as $row ) {
-			$st->execute( $row );
+			$st->execute( array_pad( $row, 5, 1 ) );
 		}
 	}
 	$GLOBALS['wpdb'] = $db;
@@ -198,6 +198,12 @@ sb_eq( sb_category( $db, 'sbjs_session' ), ANALYTICS, 'a row saved as Analytics 
 sb_eq( sb_category( $db, 'sbjs_first' ), NECESSARY, 'a row saved in any other category stays there' );
 sb_eq( sb_category( $db, 'sbjs_current' ), MARKETING, 'while its unsaved sibling still moves' );
 sb_eq( get_option( 'faz_sourcebuster_marketing_notice' ), array( 'moved' => 1, 'kept' => 2 ), 'the kept rows are counted, so the notice can explain them' );
+
+// A manual cookie is not scanner-owned even when its two dates are equal.
+$db = sb_site( array( array( 'sbjs_manual', ANALYTICS, SCANNED, SCANNED, 0 ) ) );
+Activator::move_sourcebuster_to_marketing();
+sb_eq( sb_category( $db, 'sbjs_manual' ), ANALYTICS, 'a newly created manual Sourcebuster row keeps its category' );
+sb_eq( get_option( 'faz_sourcebuster_marketing_notice' ), array( 'moved' => 0, 'kept' => 1 ), 'the manual row is reported as preserved' );
 
 // 3. Only kept rows: nothing moves, the cache is left alone, the notice still
 //    tells the administrator what their choice now means.
