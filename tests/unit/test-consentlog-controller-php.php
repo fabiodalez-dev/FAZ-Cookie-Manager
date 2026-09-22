@@ -395,10 +395,12 @@ namespace {
 	$ctrl->log_consent( array( 'consent_id' => 'cid-gpcx', 'status' => 'partial', 'categories' => array( 'meta.gpc_exception.maps' => 'yes' ) ) );
 	$first = $ctrl->get_log_by_consent_id( 'cid-gpcx' )['categories'];
 	eq( $first['meta.gpc_exception_served.maps'] ?? null, 'no', 'first row: the exception is judged, unverified' );
+	// Seed a verified prior verdict to exercise the dangerous carry case.
+	$w->rows[ $w->insert_id ]['categories'] = json_encode( array( 'meta.gpc_exception.maps' => 'yes', 'meta.gpc_exception_served.maps' => 'yes' ) );
 	// 2nd row: a later decision that records no exception at all.
 	$ctrl->log_consent( array( 'consent_id' => 'cid-gpcx', 'status' => 'rejected', 'categories' => array( 'analytics' => 'no' ) ) );
-	// 3rd row: the exception again. It must be carried from the 1st row — the
-	// newest one that RECORDS an exception — and carry its unverified verdict.
+	// 3rd row: the client restores the cookie pairs after a revocation.
+	// It must be judged afresh, never inherit the earlier verified verdict.
 	// The carry gate (I-1) requires the current cookie to still hold the grant
 	// and its marker, which is what a later page view re-asserting the
 	// exception sends.
@@ -407,10 +409,10 @@ namespace {
 	$ctrl->log_consent( array( 'consent_id' => 'cid-gpcx', 'status' => 'partial', 'categories' => array( 'meta.gpc_exception.maps' => 'yes' ) ) );
 	$logged_queries = $w->row_queries;
 	$third = $ctrl->get_log_by_consent_id( 'cid-gpcx' )['categories'];
-	eq( $third['meta.gpc_exception_carried.maps'] ?? null, 'no', 'a later row carries the earlier unverified verdict past a row without exceptions' );
-	ok( ! isset( $third['meta.gpc_exception_served.maps'] ), 'and is not re-judged as a fresh serve' );
+	eq( $third['meta.gpc_exception_served.maps'] ?? null, 'no', 'restored pairs after withdrawal are judged afresh without GPC or a current placeholder' );
+	ok( ! isset( $third['meta.gpc_exception_carried.maps'] ), 'the revoked verified verdict is not carried across the decision without an exception' );
 	$prev_q = isset( $logged_queries[0] ) ? $logged_queries[0] : '';
-	ok( false !== strpos( $prev_q, 'categories LIKE' ) && false !== strpos( $prev_q, '"meta.gpc_exception' ), 'the previous-row query filters on a bound GPC-exception LIKE' );
+	ok( false === strpos( $prev_q, 'categories LIKE' ), 'the previous-row query never skips an intervening revocation' );
 	ok( false !== strpos( $prev_q, 'ORDER BY created_at DESC, log_id DESC' ), 'and breaks same-second ties on log_id' );
 	eq( count( $logged_queries ), 1, 'exactly one previous-row query per exception-bearing row' );
 

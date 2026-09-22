@@ -206,13 +206,15 @@ defined( 'ABSPATH' ) || exit;
 			// key off a non-array silently returns null (or, on a string value,
 			// warns and reads a character), so confirm the shape first.
 			if ( is_array( $faz_refresh ) && ! empty( $faz_refresh['at'] ) ) :
-				// Stored via current_time( 'mysql' ), i.e. already the site's local
-				// time — format it with the site's own date/time formats rather than
-				// echoing the raw "Y-m-d H:i:s" string.
-				$faz_refresh_ts = strtotime( $faz_refresh['at'] );
-				$faz_refresh_when = $faz_refresh_ts
-					? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $faz_refresh_ts )
-					: $faz_refresh['at'];
+				$faz_refresh_format = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+				if ( is_int( $faz_refresh['at'] ) ) {
+					// New records retain an unambiguous instant, including across DST.
+					$faz_refresh_when = wp_date( $faz_refresh_format, $faz_refresh['at'] );
+				} else {
+					// Legacy records already contain the site's local wall-clock time.
+					$faz_refresh_ts = strtotime( (string) $faz_refresh['at'] );
+					$faz_refresh_when = $faz_refresh_ts ? date_i18n( $faz_refresh_format, $faz_refresh_ts ) : (string) $faz_refresh['at'];
+				}
 				?>
 				<p class="faz-help" role="status">
 					<?php esc_html_e( 'Last automatic definitions update attempt:', 'faz-cookie-manager' ); ?>

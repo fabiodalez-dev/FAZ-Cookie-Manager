@@ -35,7 +35,7 @@ namespace {
 		$GLOBALS['faz_test_transients'][ $key ] = $value;
 		return true;
 	}
-	function current_time( $type ) { return '2026-09-15 12:00:00'; }
+	function current_time( $type ) { return $GLOBALS['inventory_now'] ?? '2026-09-15 12:00:00'; }
 	function esc_url_raw( $url ) { return (string) $url; }
 	function wp_parse_url( $url ) { return parse_url( (string) $url ); }
 	function absint( $value ) { return abs( (int) $value ); }
@@ -56,6 +56,7 @@ namespace {
 		/** What an existence probe answers: '1' = the page has rows, null = none. */
 		public $rows_exist = '1';
 		public function prepare( $query, ...$args ) {
+			if ( 0 === strpos( $query, 'INSERT INTO' ) ) { $this->writes[] = $args; }
 			foreach ( $args as $arg ) {
 				$query = preg_replace( '/%s/', "'" . (string) $arg . "'", $query, 1 );
 			}
@@ -242,11 +243,11 @@ namespace {
 	$reset();
 	Embed_Inventory::note( 'youtube', 'marketing' );
 	Embed_Inventory::flush();
-	$stored_hash = isset( $GLOBALS['wpdb']->writes[0][2]['url_hash'] ) ? $GLOBALS['wpdb']->writes[0][2]['url_hash'] : '';
+	$stored_hash = isset( $GLOBALS['wpdb']->writes[0][0] ) ? $GLOBALS['wpdb']->writes[0][0] : '';
 	inventory_check( $schemeless === $stored_hash, 'a row is stored under the scheme-less page key' );
 	$inserted = end( $GLOBALS['wpdb']->writes );
 	inventory_check(
-		isset( $inserted[1]['url'] ) && 'https://example.test/page' === $inserted[1]['url'],
+		isset( $inserted[3] ) && 'https://example.test/page' === $inserted[3],
 		'the url column keeps the full scheme-bearing URL for the administrator'
 	);
 	inventory_check(
@@ -382,6 +383,23 @@ namespace {
 	// The consent-log payload names its page with the same function.
 	$page_url = new \ReflectionMethod( Embed_Inventory::class, 'current_url' );
 	inventory_check( $page_url->isPublic(), 'current_url() is public so the page can bake its own identity into the payload' );
+
+	// Execute the upsert twice in the same second and once later. The SQLite
+	// suffix below is the translation used by WordPress's database integration.
+	$pdo = new PDO( 'sqlite::memory:' );
+	$pdo->setAttribute( PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION );
+	$pdo->exec( 'CREATE TABLE wp_faz_embed_placeholders (url_hash TEXT, service_id TEXT, category TEXT, url TEXT, first_seen TEXT, last_seen TEXT, PRIMARY KEY (url_hash, service_id))' );
+	$store = new \ReflectionMethod( Embed_Inventory::class, 'store' );
+	foreach ( array( '2026-09-15 12:00:00', '2026-09-15 12:00:00', '2026-09-16 13:00:00' ) as $now ) {
+		$GLOBALS['inventory_now'] = $now;
+		$store->invoke( null, 'https://example.test/upsert', 'youtube', 'marketing' );
+		$sql = end( $GLOBALS['wpdb']->queries );
+		inventory_check( false !== strpos( $sql, 'ON DUPLICATE KEY UPDATE' ), 'each observation uses one atomic upsert' );
+		$pdo->exec( str_replace( 'ON DUPLICATE KEY UPDATE', 'ON CONFLICT (url_hash, service_id) DO UPDATE SET', $sql ) );
+	}
+	$row = $pdo->query( 'SELECT * FROM wp_faz_embed_placeholders' )->fetch( PDO::FETCH_ASSOC );
+	inventory_check( 1 === (int) $pdo->query( 'SELECT COUNT(*) FROM wp_faz_embed_placeholders' )->fetchColumn(), 'same-second observations keep exactly one row without a duplicate error' );
+	inventory_check( '2026-09-15 12:00:00' === $row['first_seen'] && '2026-09-16 13:00:00' === $row['last_seen'], 'refresh preserves first_seen and advances last_seen' );
 
 	echo "\nPassed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );
