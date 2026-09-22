@@ -98,6 +98,13 @@ VERSION="$(wp --path="$WP_DIR" plugin get faz-cookie-manager --field=version)"
 verify_http
 echo 'INSTALL PASSED'
 
+# The migration this gate exercises is the one the NEW version introduces. A
+# migration is one-time by design, so an older one — the legacy Functional
+# sale/share reset of 1.31.0, checked here for that release — no longer runs
+# when the previous version already applied it, and asserting on it would fail
+# for the right reason. Update the seed and the assertion below each time a
+# release adds a migration; unit tests keep covering the older ones.
+#
 # Start the upgrade on a second clean database state, so no new-version
 # migration markers can leak into the previous-version installation.
 wp --path="$WP_DIR" db reset --yes --quiet
@@ -111,7 +118,11 @@ $wpdb->insert($wpdb->prefix."faz_cookies", array("name"=>"faz_upgrade_probe","sl
 if (!$wpdb->insert_id) { throw new Exception("Probe insert failed"); }
 update_option("faz_audit_keep", array("value"=>"must survive"));
 $wpdb->query("UPDATE {$wpdb->prefix}faz_cookie_categories SET sell_personal_data=1, share_personal_data=1, date_modified=\"2026-09-01 00:00:00\" WHERE slug=\"functional\"");
-echo "UPGRADE: previous version ".FAZ_VERSION."; probe and intentional option inserted\n";
+$analytics = (int)$wpdb->get_var("SELECT category_id FROM {$wpdb->prefix}faz_cookie_categories WHERE slug=\"analytics\"");
+if (!$analytics) { throw new Exception("No analytics category to seed"); }
+$wpdb->insert($wpdb->prefix."faz_cookies", array("name"=>"sbjs_current","slug"=>"sbjs-current","domain"=>"probe.test","category"=>$analytics,"type"=>"HTTP","discovered"=>1,"date_created"=>"2026-09-01 00:00:00","date_modified"=>"2026-09-01 00:00:00"));
+$wpdb->insert($wpdb->prefix."faz_cookies", array("name"=>"sbjs_udata","slug"=>"sbjs-udata","domain"=>"probe.test","category"=>$analytics,"type"=>"HTTP","discovered"=>1,"date_created"=>"2026-09-01 00:00:00","date_modified"=>"2026-09-02 10:00:00"));
+echo "UPGRADE: previous version ".FAZ_VERSION."; probe, intentional option and two Sourcebuster rows inserted\n";
 '
 wp --path="$WP_DIR" option list --search='faz_*' --field=option_name > "$RUN_DIR/options-before.txt"
 : > "$WP_DIR/wp-content/debug.log"
@@ -125,11 +136,15 @@ $probe = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookies WH
 $cats = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookie_categories");
 $banners = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}faz_banners");
 if ($probe!==1 || $cats!==7 || $banners!==2 || get_option("faz_audit_keep")!==array("value"=>"must survive")) { throw new Exception("Upgrade lost data"); }
-$row = $wpdb->get_row("SELECT sell_personal_data, share_personal_data FROM {$wpdb->prefix}faz_cookie_categories WHERE slug=\"functional\"");
-if ((int)$row->sell_personal_data || (int)$row->share_personal_data || !get_option("faz_normalize_legacy_functional_optout_done") || !get_option("faz_functional_optout_notice")) { throw new Exception("Migration or notice missing"); }
-$wpdb->query("UPDATE {$wpdb->prefix}faz_cookie_categories SET sell_personal_data=1, share_personal_data=1 WHERE slug=\"functional\"");
-\FazCookie\Includes\Activator::normalize_legacy_functional_optout_flags();
-if ((int)$wpdb->get_var("SELECT sell_personal_data FROM {$wpdb->prefix}faz_cookie_categories WHERE slug=\"functional\"")!==1) { throw new Exception("Migration ran twice"); }
+$marketing = (int)$wpdb->get_var("SELECT category_id FROM {$wpdb->prefix}faz_cookie_categories WHERE slug=\"marketing\"");
+$analytics = (int)$wpdb->get_var("SELECT category_id FROM {$wpdb->prefix}faz_cookie_categories WHERE slug=\"analytics\"");
+$scanned = (int)$wpdb->get_var("SELECT category FROM {$wpdb->prefix}faz_cookies WHERE slug=\"sbjs-current\"");
+$edited = (int)$wpdb->get_var("SELECT category FROM {$wpdb->prefix}faz_cookies WHERE slug=\"sbjs-udata\"");
+$notice = get_option("faz_sourcebuster_marketing_notice");
+if ($scanned!==$marketing || $edited!==$analytics || !get_option("faz_move_sourcebuster_marketing_done") || !is_array($notice) || (int)$notice["moved"]<1 || (int)$notice["kept"]<1) { throw new Exception("Migration or notice missing"); }
+$wpdb->query($wpdb->prepare("UPDATE {$wpdb->prefix}faz_cookies SET category=%d WHERE slug=\"sbjs-current\"", $analytics));
+\FazCookie\Includes\Activator::move_sourcebuster_to_marketing();
+if ((int)$wpdb->get_var("SELECT category FROM {$wpdb->prefix}faz_cookies WHERE slug=\"sbjs-current\"")!==$analytics) { throw new Exception("Migration ran twice"); }
 echo "UPGRADE: ".FAZ_VERSION."; probe, categories, banners and custom option preserved; migration + notice + one-shot passed\n";
 '
 [[ "$(wp --path="$WP_DIR" plugin get faz-cookie-manager --field=version)" == "$VERSION" ]]
