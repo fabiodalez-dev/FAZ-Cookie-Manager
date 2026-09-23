@@ -25,6 +25,48 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Consent_Logger {
 
 	/**
+	 * How long one token value lasts before a new one is minted, in seconds.
+	 *
+	 * The token is not a secret — it ships inside cacheable HTML — so it does
+	 * not identify a visitor and rotating it faster buys nothing. What it
+	 * proves is that the page came from this installation, because only this
+	 * installation knows the salts wp_hash() uses.
+	 */
+	const TOKEN_BUCKET = 43200; // 12 * HOUR_IN_SECONDS.
+
+	/**
+	 * How far back a token is still accepted, in seconds, by default.
+	 *
+	 * A cached page carries the token that was current when it was stored, so
+	 * the window has to outlast the page cache, not the visit. Only the
+	 * current and previous bucket used to be accepted — 12 to 24 hours — while
+	 * LiteSpeed Cache ships a 604800-second (7 day) public TTL and WP Rocket
+	 * and W3TC defaults are measured in days too. From about a day after a
+	 * page was cached, every consent POST from it was rejected with a 403 and
+	 * the record was lost; the visitor saw a working banner, because the call
+	 * is fire-and-forget, so the only thing missing was the Art. 7(1)
+	 * accountability record. Reported with production figures in issue #292:
+	 * one site logged 57 consents and rejected 286 on the same day.
+	 *
+	 * Seven days matches the longest common cache default. A site that caches
+	 * for longer raises it through the faz_consent_token_max_age filter.
+	 */
+	const TOKEN_MAX_AGE = 604800; // 7 * DAY_IN_SECONDS.
+
+	/**
+	 * Upper bound for the filtered window, in seconds.
+	 *
+	 * A token older than a month says nothing useful about the page that
+	 * carried it, and the throttles below are what limit volume anyway.
+	 */
+	const TOKEN_MAX_AGE_LIMIT = 2592000; // 30 * DAY_IN_SECONDS.
+
+	/**
+	 * Option holding the rejected-token tally, so the silence is visible.
+	 */
+	const REJECTION_OPTION = 'faz_consent_token_rejections';
+
+	/**
 	 * Constructor - register hooks.
 	 */
 	public function __construct() {
@@ -99,6 +141,111 @@ class Consent_Logger {
 	}
 
 	/**
+	 * The token a page rendered right now carries.
+	 *
+	 * One place mints it and one place accepts it. They used to be two copies
+	 * of the same arithmetic, in two files, free to drift apart.
+	 *
+	 * @param int|null $at Unix timestamp, or null for now.
+	 * @return string
+	 */
+	public static function current_token( $at = null ) {
+		$at = null === $at ? time() : (int) $at;
+		return wp_hash( 'faz_consent_' . (string) (int) floor( $at / self::TOKEN_BUCKET ) );
+	}
+
+	/**
+	 * How far back a token is accepted, in seconds.
+	 *
+	 * Filter: faz_consent_token_max_age. A site whose page cache outlives the
+	 * default raises it to match; below one bucket is meaningless (the current
+	 * token would expire before the page it is printed on finishes loading)
+	 * and above TOKEN_MAX_AGE_LIMIT is refused.
+	 *
+	 * @return int
+	 */
+	public static function token_max_age() {
+		/**
+		 * Filters how long a consent-log origin token stays acceptable.
+		 *
+		 * @param int $max_age Seconds. Default 7 days.
+		 */
+		$max_age = (int) apply_filters( 'faz_consent_token_max_age', self::TOKEN_MAX_AGE );
+		if ( $max_age < self::TOKEN_BUCKET ) {
+			return self::TOKEN_BUCKET;
+		}
+		if ( $max_age > self::TOKEN_MAX_AGE_LIMIT ) {
+			return self::TOKEN_MAX_AGE_LIMIT;
+		}
+		return $max_age;
+	}
+
+	/**
+	 * Whether a token was minted by this site inside the accepted window.
+	 *
+	 * Widening the window does not weaken the control it provides. The token
+	 * says "this HTML came from this installation", which a third party cannot
+	 * forge at any age, and replay from another origin is stopped by
+	 * is_same_origin_request() rather than by the token's age.
+	 *
+	 * @param string   $token Token from the request.
+	 * @param int|null $at    Unix timestamp, or null for now.
+	 * @return bool
+	 */
+	public static function token_is_valid( $token, $at = null ) {
+		if ( ! is_string( $token ) || '' === $token ) {
+			return false;
+		}
+		$at      = null === $at ? time() : (int) $at;
+		$bucket  = (int) floor( $at / self::TOKEN_BUCKET );
+		$buckets = (int) ceil( self::token_max_age() / self::TOKEN_BUCKET );
+		for ( $i = 0; $i <= $buckets; $i++ ) {
+			if ( hash_equals( wp_hash( 'faz_consent_' . (string) ( $bucket - $i ) ), $token ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Count a rejected token, and say so in the error log once an hour.
+	 *
+	 * A consent log that stops recording without complaining is worse than one
+	 * that complains: nothing on the site looks broken, and the gap is only
+	 * discovered when the records are needed. System Status reads this tally.
+	 *
+	 * @return void
+	 */
+	private static function record_token_rejection() {
+		$now   = time();
+		$tally = get_option( self::REJECTION_OPTION, array() );
+		if ( ! is_array( $tally ) ) {
+			$tally = array();
+		}
+		$window_start = isset( $tally['since'] ) ? (int) $tally['since'] : 0;
+		// Keep a rolling 7-day tally: an old spike that a cache purge already
+		// fixed should not keep the warning on screen for ever.
+		if ( $window_start < $now - WEEK_IN_SECONDS ) {
+			$tally = array( 'since' => $now, 'count' => 0 );
+		}
+		$tally['count'] = isset( $tally['count'] ) ? (int) $tally['count'] + 1 : 1;
+		$tally['last']  = $now;
+		update_option( self::REJECTION_OPTION, $tally, false );
+
+		if ( ! get_transient( 'faz_consent_token_rejected_notice' ) ) {
+			set_transient( 'faz_consent_token_rejected_notice', 1, HOUR_IN_SECONDS );
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a consent record was refused; that belongs in the log whatever the site's debug settings.
+			error_log(
+				sprintf(
+					'FAZ Cookie Manager: refused a consent record because its origin token was older than %d seconds (%d refused in the last 7 days). A page cache serving HTML older than that window is the usual cause; raise it with the faz_consent_token_max_age filter or shorten the cache TTL.',
+					self::token_max_age(),
+					(int) $tally['count']
+				)
+			);
+		}
+	}
+
+	/**
 	 * Handle REST consent logging.
 	 *
 	 * @param \WP_REST_Request $request Full details about the request.
@@ -118,15 +265,13 @@ class Consent_Logger {
 			);
 		}
 
-		// Verify the cache-compatible, time-bucketed token. Accept the previous
-		// bucket as well so a page held by a normal full-page cache remains usable.
+		// Verify the cache-compatible, time-bucketed token, accepting every
+		// bucket inside the window below so a page held by a full-page cache
+		// keeps recording consent for as long as that cache serves it.
 		$token = $request->get_param( 'token' );
 		if ( ! empty( $token ) ) {
-			$current_bucket  = (string) floor( time() / ( 12 * HOUR_IN_SECONDS ) );
-			$previous_bucket = (string) ( floor( time() / ( 12 * HOUR_IN_SECONDS ) ) - 1 );
-			$valid = hash_equals( wp_hash( 'faz_consent_' . $current_bucket ), $token )
-				|| hash_equals( wp_hash( 'faz_consent_' . $previous_bucket ), $token );
-			if ( ! $valid ) {
+			if ( ! self::token_is_valid( $token ) ) {
+				self::record_token_rejection();
 				return new \WP_Error(
 					'invalid_token',
 					'Invalid origin token.',

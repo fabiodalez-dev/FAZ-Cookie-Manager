@@ -77,6 +77,32 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 			<table class="faz-status-table">
 				<tr><td><?php esc_html_e( 'Banner Enabled', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['banner_control']['status'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
 				<tr><td><?php esc_html_e( 'Consent Logging', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['consent_logs']['status'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<?php
+				// A consent record refused for a stale origin token leaves no
+				// trace a site owner would ever look at: the banner works, the
+				// visitor sees nothing, and only the accountability record is
+				// missing. Say it here, where the rest of the effective
+				// configuration is reported. Issue #292.
+				$faz_token_rejections = get_option( \FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger::REJECTION_OPTION, array() );
+				$faz_rejected_count   = is_array( $faz_token_rejections ) && ! empty( $faz_token_rejections['count'] ) ? (int) $faz_token_rejections['count'] : 0;
+				if ( $faz_rejected_count > 0 ) :
+					$faz_token_window_days = max( 1, (int) round( \FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger::token_max_age() / DAY_IN_SECONDS ) );
+					?>
+					<tr>
+						<td><?php esc_html_e( 'Consent Records Refused', 'faz-cookie-manager' ); ?></td>
+						<td>
+							<?php
+							printf(
+								/* translators: 1: number of refused consent records, 2: token window in days. */
+								esc_html( _n( '%1$d in the last 7 days — its page was older than the %2$d-day origin-token window, so the consent was not recorded.', '%1$d in the last 7 days — their pages were older than the %2$d-day origin-token window, so those consents were not recorded.', $faz_rejected_count, 'faz-cookie-manager' ) ),
+								esc_html( number_format_i18n( $faz_rejected_count ) ),
+								esc_html( number_format_i18n( $faz_token_window_days ) )
+							);
+							?>
+							<br><span class="faz-help"><?php esc_html_e( 'A full-page cache serving HTML for longer than that window is the usual cause. Either shorten the cache lifetime or raise the window with the faz_consent_token_max_age filter.', 'faz-cookie-manager' ); ?></span>
+						</td>
+					</tr>
+				<?php endif; ?>
 				<tr><td><?php esc_html_e( 'Google Consent Mode', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $gcm_settings['status'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
 				<tr><td><?php esc_html_e( 'IAB TCF v2.3', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['iab']['enabled'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
 				<tr><td><?php esc_html_e( 'Pageview Tracking', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['pageview_tracking'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>

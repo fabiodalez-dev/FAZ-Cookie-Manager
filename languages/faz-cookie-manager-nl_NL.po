@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-09-22T10:48:37+00:00\n"
+"POT-Creation-Date: 2026-09-23T23:41:05+00:00\n"
 "PO-Revision-Date: 2026-04-02 13:06+0200\n"
 "Last-Translator: Yannic van Veen (Yard Digital Agency)\n"
 "Language-Team: Dutch\n"
@@ -49,7 +49,7 @@ msgid "Cookie Banner"
 msgstr "Cookie Banner"
 
 #: admin/class-admin.php:233 admin/views/base.php:21
-#: frontend/class-frontend.php:2880
+#: frontend/class-frontend.php:2879
 #: frontend/modules/banner-rest/class-banner-rest.php:598
 msgid "Cookies"
 msgstr "Cookies"
@@ -60,7 +60,7 @@ msgid "Consent Logs"
 msgstr "Toestemmingslogs"
 
 #: admin/class-admin.php:243 admin/views/base.php:23
-#: admin/views/dashboard.php:243 admin/views/system-status.php:80
+#: admin/views/dashboard.php:243 admin/views/system-status.php:106
 msgid "Google Consent Mode"
 msgstr "Google Consent Mode"
 
@@ -160,7 +160,7 @@ msgstr "bijv. 1 jaar"
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:508
 #: admin/views/banner.php:788 admin/views/banner.php:836
 #: admin/views/cookies.php:66 admin/views/cookies.php:178
-#: admin/views/cookies.php:293
+#: admin/views/cookies.php:295
 #: frontend/modules/shortcodes/class-shortcodes.php:250
 #: includes/class-cookie-table-shortcode.php:228
 msgid "Description"
@@ -239,8 +239,8 @@ msgstr "Verwijderen"
 msgid "Delete stale"
 msgstr "Verouderde verwijderen"
 
-#: admin/class-admin.php:561 admin/views/cookies.php:258
-#: admin/views/system-status.php:131
+#: admin/class-admin.php:561 admin/views/cookies.php:260
+#: admin/views/system-status.php:157
 #: includes/class-cookie-table-shortcode.php:229
 msgid "Category"
 msgstr "Categorie"
@@ -1587,7 +1587,7 @@ msgstr "Statcounter"
 msgid "Hotjar"
 msgstr "Hotjar"
 
-#: admin/class-admin.php:1031 admin/views/system-status.php:104
+#: admin/class-admin.php:1031 admin/views/system-status.php:130
 msgid "Microsoft Clarity"
 msgstr "Microsoft Clarity"
 
@@ -1631,7 +1631,7 @@ msgstr "TikTok Pixel"
 msgid "LinkedIn Insight Tag"
 msgstr "LinkedIn Insight Tag"
 
-#: admin/class-admin.php:1043 admin/views/system-status.php:103
+#: admin/class-admin.php:1043 admin/views/system-status.php:129
 msgid "Microsoft UET"
 msgstr "Microsoft UET"
 
@@ -1941,7 +1941,7 @@ msgid "Banner Status"
 msgstr "Banner status"
 
 #: admin/class-admin.php:1604 admin/views/cookies.php:179
-#: admin/views/cookies.php:259
+#: admin/views/cookies.php:261
 msgid "Actions"
 msgstr "Acties"
 
@@ -2362,7 +2362,7 @@ msgid "Complete all fields required for the selected jurisdiction before saving 
 msgstr "Vul alle velden in die vereist zijn voor de gekozen jurisdictie voordat je het cookiebeleid opslaat of bekijkt."
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:505
-#: admin/views/system-status.php:130
+#: admin/views/system-status.php:156
 #: frontend/modules/shortcodes/class-shortcodes.php:246
 #: includes/class-cookie-table-shortcode.php:225
 msgid "Cookie"
@@ -3988,7 +3988,7 @@ msgstr "Taal:"
 msgid "Notice Title"
 msgstr "Mededeling titel"
 
-#: admin/views/banner.php:341 frontend/class-frontend.php:2875
+#: admin/views/banner.php:341 frontend/class-frontend.php:2874
 #: frontend/modules/banner-rest/class-banner-rest.php:593
 msgid "We value your privacy"
 msgstr "Wij hechten waarde aan je privacy"
@@ -4327,7 +4327,7 @@ msgstr "Opt-out-tekst (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Tekst voor het venster «Opt-outvoorkeuren» dat een bezoeker ziet na het klikken op de link «Do Not Sell or Share My Personal Information». Wordt alleen weergegeven op CCPA-/US State Laws-banners (en Beide). Volgt de hierboven geselecteerde taal."
 
-#: admin/views/banner.php:833 frontend/class-frontend.php:2877
+#: admin/views/banner.php:833 frontend/class-frontend.php:2876
 #: frontend/modules/banner-rest/class-banner-rest.php:595
 msgid "Opt-out Preferences"
 msgstr "Opt-outvoorkeuren"
@@ -5119,124 +5119,124 @@ msgstr "Cookie-definities"
 msgid "Update Definitions"
 msgstr "Update-definities"
 
-#: admin/views/cookies.php:218
+#: admin/views/cookies.php:220
 msgid "Last automatic definitions update attempt:"
 msgstr ""
 
-#: admin/views/cookies.php:220
+#: admin/views/cookies.php:222
 msgid "Successful"
 msgstr ""
 
-#: admin/views/cookies.php:220
+#: admin/views/cookies.php:222
 msgid "Failed; existing definitions retained."
 msgstr ""
 
-#: admin/views/cookies.php:224
+#: admin/views/cookies.php:226
 msgid "Cookie definitions are sourced from the <a href=\"https://github.com/fabiodalez-dev/Open-Cookie-Database\" target=\"_blank\" rel=\"noopener\">Open Cookie Database</a> (Apache-2.0 license). These definitions power the auto-categorize feature."
 msgstr "Cookie-definities zijn afkomstig van de <a href=\"https://github.com/fabiodalez-dev/Open-Cookie-Database\" target=\"_blank\" rel=\"noopener\">Open Cookie Database</a> (Apache-2.0 licentie). Deze definities vormen de basis voor de functie voor automatische categorisering."
 
-#: admin/views/cookies.php:225
+#: admin/views/cookies.php:227
 msgid "Loading status..."
 msgstr "Status laden..."
 
-#: admin/views/cookies.php:232
+#: admin/views/cookies.php:234
 msgid "Content Blocker Templates"
 msgstr "Sjablonen voor blokkeerregels"
 
-#: admin/views/cookies.php:235
+#: admin/views/cookies.php:237
 msgid "Pre-configured blocking rules for popular services. Click to add a template to your custom rules."
 msgstr "Vooraf geconfigureerde blokkeerregels voor populaire diensten. Klik om een sjabloon toe te voegen aan je aangepaste regels."
 
-#: admin/views/cookies.php:237
+#: admin/views/cookies.php:239
 msgid "Loading templates..."
 msgstr "Sjablonen laden..."
 
-#: admin/views/cookies.php:245
+#: admin/views/cookies.php:247
 msgid "Script Blocking — Custom Rules"
 msgstr "Scriptblokkering - Aangepaste regels"
 
-#: admin/views/cookies.php:247
+#: admin/views/cookies.php:249
 msgid "Save Rules"
 msgstr "Regels opslaan"
 
-#: admin/views/cookies.php:252
+#: admin/views/cookies.php:254
 msgid "Add custom URL patterns to block. Each pattern is matched against script/iframe src, inline code, and enqueued handle names. The plugin already blocks 143+ known services automatically."
 msgstr "Voeg aangepaste URL-patronen toe om te blokkeren. Elk patroon wordt vergeleken met script/iframe src, inline code en ingeroosterde handelnamen. De plugin blokkeert automatisch 143+ bekende diensten."
 
-#: admin/views/cookies.php:257
+#: admin/views/cookies.php:259
 msgid "URL Pattern"
 msgstr "URL-patroon"
 
 #. translators: Button to add a new custom script blocking rule
-#: admin/views/cookies.php:268
+#: admin/views/cookies.php:270
 msgid "+ Add Rule"
 msgstr "+ Regel toevoegen"
 
-#: admin/views/cookies.php:276
+#: admin/views/cookies.php:278
 msgid "Cookie Table Shortcode"
 msgstr "Shortcode voor Cookie-tabel"
 
-#: admin/views/cookies.php:279
+#: admin/views/cookies.php:281
 msgid "Use the following shortcode to display a table of all cookies on any page or post (e.g. your Cookie Policy page):"
 msgstr "Gebruik de volgende shortcode om een tabel met alle cookies op elke pagina of post weer te geven (bijv. je Cookiebeleidspagina):"
 
-#: admin/views/cookies.php:282 admin/views/cookies.php:330
+#: admin/views/cookies.php:284 admin/views/cookies.php:332
 msgid "Copy"
 msgstr "Kopiëren"
 
-#: admin/views/cookies.php:285
+#: admin/views/cookies.php:287
 msgid "Advanced options"
 msgstr "Geavanceerde opties"
 
-#: admin/views/cookies.php:287
+#: admin/views/cookies.php:289
 msgid "You can customize the shortcode with these attributes:"
 msgstr "Je kunt de shortcode aanpassen met deze attributen:"
 
-#: admin/views/cookies.php:291
+#: admin/views/cookies.php:293
 msgid "Attribute"
 msgstr "Attribuut"
 
-#: admin/views/cookies.php:292
+#: admin/views/cookies.php:294
 msgid "Default"
 msgstr "Standaard"
 
-#: admin/views/cookies.php:300
+#: admin/views/cookies.php:302
 msgid "Comma-separated list of columns. Available: <code>name</code>, <code>domain</code>, <code>duration</code>, <code>description</code>, <code>category</code>"
 msgstr "Kommagescheiden lijst van kolommen. Beschikbaar: <code>name</code>, <code>domain</code>, <code>duration</code>, <code>description</code>, <code>category</code>"
 
-#: admin/views/cookies.php:304
+#: admin/views/cookies.php:306
 msgid "(all)"
 msgstr "(alles)"
 
-#: admin/views/cookies.php:305
+#: admin/views/cookies.php:307
 msgid "Filter by category slug (e.g. <code>analytics</code>) or ID"
 msgstr "Filter op categorie slug (bijv. <code>analytics</code>) of ID"
 
-#: admin/views/cookies.php:309 includes/class-dsar-shortcode.php:433
+#: admin/views/cookies.php:311 includes/class-dsar-shortcode.php:433
 msgid "(none)"
 msgstr "(geen)"
 
-#: admin/views/cookies.php:310
+#: admin/views/cookies.php:312
 msgid "Optional heading text above the table"
 msgstr "Optionele koptekst boven de tabel"
 
-#: admin/views/cookies.php:314
+#: admin/views/cookies.php:316
 msgid "<strong>Example:</strong> <code>[faz_cookie_table columns=\"name,duration,description\" category=\"analytics\"]</code>"
 msgstr "<strong>Voorbeeld:</strong> <code>[faz_cookie_table columns=\"name,duration,description\" category=\"analytics\"]</code>"
 
-#: admin/views/cookies.php:315
+#: admin/views/cookies.php:317
 msgid "The legacy shortcode <code>[cookie_audit]</code> is also supported for backward compatibility."
 msgstr "De verouderde shortcode <code>[cookie_audit]</code> wordt ook ondersteund voor achterwaartse compatibiliteit."
 
-#: admin/views/cookies.php:324
+#: admin/views/cookies.php:326
 msgid "Cookie Policy Shortcode"
 msgstr "Cookiebeleid Shortcode"
 
-#: admin/views/cookies.php:327
+#: admin/views/cookies.php:329
 msgid "Use the following shortcode to display a complete cookie policy page:"
 msgstr "Gebruik de volgende shortcode om een volledige cookiebeleidspagina weer te geven:"
 
-#: admin/views/cookies.php:332
+#: admin/views/cookies.php:334
 msgid "Generates a complete cookie policy with sections: What Are Cookies, How We Use Cookies, Cookies We Use (table), How to Manage Cookies, and contact information. Customise with attributes: <code>site_name</code>, <code>contact</code>, <code>show_table</code>."
 msgstr "Genereert een volledig cookiebeleid met secties: Wat zijn cookies, Hoe we cookies gebruiken, Cookies die we gebruiken (tabel), Hoe je cookies kunt beheren, en contactinformatie. Pas aan met attributen: <code>site_name</code>, <code>contact</code>, <code>show_table</code>."
 
@@ -5760,7 +5760,7 @@ msgid "Loading banners…"
 msgstr "Banners laden…"
 
 #. translators: %d: minimum age in years.
-#: admin/views/settings.php:136 admin/views/system-status.php:101
+#: admin/views/settings.php:136 admin/views/system-status.php:127
 msgid "Cross-Domain Consent"
 msgstr "Cross-Domain Consent"
 
@@ -5784,7 +5784,7 @@ msgstr "Een per regel: https://shop.example.com"
 msgid "Full URLs of other sites that should receive consent state. Each site must also have FAZ Cookie Manager installed. One URL per line."
 msgstr "Volledige URL's van andere sites die toestand van toestemming moeten ontvangen. Elke site moet ook FAZ Cookie Manager geïnstalleerd hebben. Een URL per regel."
 
-#: admin/views/settings.php:157 admin/views/system-status.php:82
+#: admin/views/settings.php:157 admin/views/system-status.php:108
 msgid "Pageview Tracking"
 msgstr "Paginaweergave tracking"
 
@@ -6764,145 +6764,162 @@ msgstr "Banner Geactiveerd"
 msgid "Consent Logging"
 msgstr "Toestemmingsregistratie"
 
-#: admin/views/system-status.php:81
+#: admin/views/system-status.php:92
+#, fuzzy
+msgid "Consent Records Refused"
+msgstr "Consent Mode"
+
+#. translators: 1: number of refused consent records, 2: token window in days.
+#: admin/views/system-status.php:97
+#, php-format
+msgid "%1$d in the last 7 days — its page was older than the %2$d-day origin-token window, so the consent was not recorded."
+msgid_plural "%1$d in the last 7 days — their pages were older than the %2$d-day origin-token window, so those consents were not recorded."
+msgstr[0] ""
+msgstr[1] ""
+
+#: admin/views/system-status.php:102
+msgid "A full-page cache serving HTML for longer than that window is the usual cause. Either shorten the cache lifetime or raise the window with the faz_consent_token_max_age filter."
+msgstr ""
+
+#: admin/views/system-status.php:107
 msgid "IAB TCF v2.3"
 msgstr "IAB TCF v2.3"
 
-#: admin/views/system-status.php:83
+#: admin/views/system-status.php:109
 msgid "Auto Scan"
 msgstr "Automatische scan"
 
-#: admin/views/system-status.php:84
+#: admin/views/system-status.php:110
 msgid "Geo-Targeting"
 msgstr "Geo-doelgroep"
 
-#: admin/views/system-status.php:96
+#: admin/views/system-status.php:122
 msgid "Per-Service Consent"
 msgstr "Toestemming per service"
 
-#: admin/views/system-status.php:97
+#: admin/views/system-status.php:123
 msgid "Per-Cookie Consent"
 msgstr "Toestemming per cookie"
 
-#: admin/views/system-status.php:98
+#: admin/views/system-status.php:124
 msgid "Bot Detection"
 msgstr "Bot Detectie"
 
-#: admin/views/system-status.php:99
+#: admin/views/system-status.php:125
 msgid "GTM Data Layer"
 msgstr "GTM Data Layer"
 
-#: admin/views/system-status.php:100
+#: admin/views/system-status.php:126
 msgid "Age Gate"
 msgstr "Leeftijdscontrole"
 
 #. translators: %d: minimum age in years.
-#: admin/views/system-status.php:100
+#: admin/views/system-status.php:126
 #, php-format
 msgid "(min age %d)"
 msgstr "(min. leeftijd %d)"
 
-#: admin/views/system-status.php:102
+#: admin/views/system-status.php:128
 msgid "Ad-Blocker Compat"
 msgstr "Ad-Blocker Compat"
 
-#: admin/views/system-status.php:105
+#: admin/views/system-status.php:131
 msgid "PHP Set-Cookie Blocking"
 msgstr "PHP Set-Cookie-blokkering"
 
-#: admin/views/system-status.php:111
+#: admin/views/system-status.php:137
 msgid "Recently Blocked Server Cookies"
 msgstr "Recent geblokkeerde servercookies"
 
-#: admin/views/system-status.php:114
+#: admin/views/system-status.php:140
 msgid "No outgoing PHP Set-Cookie header has been blocked in the last 24 hours."
 msgstr "Er is de afgelopen 24 uur geen uitgaande PHP Set-Cookie-header geblokkeerd."
 
-#: admin/views/system-status.php:146
+#: admin/views/system-status.php:172
 msgid "Request Path"
 msgstr "Aanvraagpad"
 
-#: admin/views/system-status.php:147
+#: admin/views/system-status.php:173
 msgid "Blocked At"
 msgstr "Geblokkeerd op"
 
-#: admin/views/system-status.php:166
+#: admin/views/system-status.php:192
 msgid "Database"
 msgstr "Database"
 
-#: admin/views/system-status.php:172
+#: admin/views/system-status.php:198
 msgid "Table missing"
 msgstr "Tabel ontbreekt"
 
-#: admin/views/system-status.php:174
+#: admin/views/system-status.php:200
 msgid "rows"
 msgstr "rijen"
 
-#: admin/views/system-status.php:183
+#: admin/views/system-status.php:209
 msgid "Cron Jobs"
 msgstr "Cron Jobs"
 
-#: admin/views/system-status.php:185
+#: admin/views/system-status.php:211
 msgid "A hosting cron that runs wp-cron.php processes WordPress scheduled events, including FAZ scans and cleanup. WP-CLI is optional. DISABLE_WP_CRON only disables automatic spawning on page visits; it does not prevent your host from running scheduled events."
 msgstr "Een cronjob van de hosting die wp-cron.php uitvoert, verwerkt de geplande gebeurtenissen van WordPress, waaronder FAZ-scans en opschoning. WP-CLI is optioneel. DISABLE_WP_CRON schakelt alleen het automatisch starten bij paginabezoeken uit; het verhindert niet dat uw hostingpartij geplande gebeurtenissen uitvoert."
 
-#: admin/views/system-status.php:187
+#: admin/views/system-status.php:213
 msgid "cPanel setup without WP-CLI"
 msgstr "cPanel-configuratie zonder WP-CLI"
 
-#: admin/views/system-status.php:188
+#: admin/views/system-status.php:214
 msgid "If your host already runs wp-cron.php regularly, keep that job; do not create a duplicate. Otherwise, ask your host to add a Cron Job in cPanel every five minutes (minute: */5; all other schedule fields: *), using the command below. The host should confirm the curl path and that the request is not blocked by authentication or a firewall."
 msgstr "Als uw hostingpartij wp-cron.php al regelmatig uitvoert, behoud die taak dan en maak geen duplicaat aan. Vraag anders uw hostingpartij om in cPanel elke vijf minuten een cronjob toe te voegen (minuut: */5; alle overige planningsvelden: *), met het onderstaande commando. De hostingpartij moet het curl-pad bevestigen en controleren dat het verzoek niet wordt geblokkeerd door authenticatie of een firewall."
 
-#: admin/views/system-status.php:190
+#: admin/views/system-status.php:216
 msgid "No separate Rulesets schedule is needed for WordPress cron events. Check that overdue dates advance after a run. A next-run timestamp shows scheduling, not proof that the last run succeeded."
 msgstr "Voor WordPress-crongebeurtenissen is geen aparte planning van regelsets nodig. Controleer of achterstallige datums na een uitvoering opschuiven. Een tijdstempel voor de volgende uitvoering toont de planning aan, niet het bewijs dat de laatste uitvoering is geslaagd."
 
-#: admin/views/system-status.php:194
+#: admin/views/system-status.php:220
 msgid "Next Scheduled Scan"
 msgstr "Volgende geplande scan"
 
-#: admin/views/system-status.php:198
+#: admin/views/system-status.php:224
 msgid "Next Consent Log Cleanup"
 msgstr "Volgende toestemmingslogboek opschonen"
 
-#: admin/views/system-status.php:213
+#: admin/views/system-status.php:239
 msgid "Cookie definitions updated"
 msgstr "Cookiedefinities bijgewerkt"
 
 #. translators: %s: date the bundled snapshot's data was captured.
-#: admin/views/system-status.php:227
+#: admin/views/system-status.php:253
 #, php-format
 msgid "bundled data in use, captured %s"
 msgstr "meegeleverde gegevens in gebruik, vastgelegd op %s"
 
-#: admin/views/system-status.php:233
+#: admin/views/system-status.php:259
 msgid "never downloaded (bundled data in use)"
 msgstr "nooit gedownload (meegeleverde gegevens in gebruik)"
 
-#: admin/views/system-status.php:238
+#: admin/views/system-status.php:264
 msgid "IAB vendor list updated"
 msgstr "IAB-leverancierslijst bijgewerkt"
 
-#: admin/views/system-status.php:241
+#: admin/views/system-status.php:267
 msgid "never downloaded"
 msgstr "nooit gedownload"
 
-#: admin/views/system-status.php:275
+#: admin/views/system-status.php:301
 msgid "May be blocked without a visible placeholder"
 msgstr ""
 
 #. translators: %d: number of providers.
-#: admin/views/system-status.php:281
+#: admin/views/system-status.php:307
 #, php-format
 msgid "These %d catalogued services declare no cookies, so they appear in no cookie declaration, and when blocked on a script or stylesheet pattern no placeholder is shown. This is a catalogue of potential matches, not a report of what this site loads; a matching whitelist entry may also allow a request. When a request is blocked before consent, fonts can fall back or a control can look broken."
 msgstr ""
 
-#: admin/views/system-status.php:287
+#: admin/views/system-status.php:313
 msgid "Whitelisting a pattern in Settings → Script Blocking lets it load before consent. Google Fonts is deliberately not whitelisted: German courts have held that loading it from Google without consent is unlawful. Serving those fonts from your own server avoids both the block and the question."
 msgstr ""
 
-#: admin/views/system-status.php:305
+#: admin/views/system-status.php:331
 msgid "Active Plugins"
 msgstr "Actieve plugins"
 
@@ -6970,59 +6987,59 @@ msgid "Manage cookie preferences"
 msgstr "Beheer cookie-voorkeuren"
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:902
+#: frontend/class-frontend.php:901
 msgid "{name} enabled, disable {name}"
 msgstr "{name} ingeschakeld, {name} uitschakelen"
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:904
+#: frontend/class-frontend.php:903
 msgid "{name} disabled, enable {name}"
 msgstr "{name} uitgeschakeld, {name} inschakelen"
 
-#: frontend/class-frontend.php:2876
+#: frontend/class-frontend.php:2875
 #: frontend/modules/banner-rest/class-banner-rest.php:594
 msgid "Your cookie preferences have been saved."
 msgstr "Je cookievoorkeuren zijn opgeslagen."
 
-#: frontend/class-frontend.php:2878
+#: frontend/class-frontend.php:2877
 #: frontend/modules/banner-rest/class-banner-rest.php:596
 msgid "Customise Consent Preferences"
 msgstr "Toestemmingsvoorkeuren aanpassen"
 
-#: frontend/class-frontend.php:2879
+#: frontend/class-frontend.php:2878
 #: frontend/modules/banner-rest/class-banner-rest.php:597
 msgid "Service consent"
 msgstr "Servicetoestemming"
 
-#: frontend/class-frontend.php:2881
+#: frontend/class-frontend.php:2880
 #: frontend/modules/banner-rest/class-banner-rest.php:599
 msgid "Cookie consent"
 msgstr "Cookie-toestemming"
 
-#: frontend/class-frontend.php:2882
+#: frontend/class-frontend.php:2881
 #: frontend/modules/banner-rest/class-banner-rest.php:600
 msgid "Vendor consent"
 msgstr "Leverancierstoestemming"
 
-#: frontend/class-frontend.php:2883
+#: frontend/class-frontend.php:2882
 #: frontend/modules/banner-rest/class-banner-rest.php:601
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Deze cookies worden geplaatst door de ingesloten dienst op het eigen domein en worden beheerd door de insluiting hierboven toe te staan of te blokkeren — ze kunnen niet afzonderlijk worden verwijderd."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:2887
+#: frontend/class-frontend.php:2886
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Ik bevestig dat ik minstens %d jaar oud ben"
 
-#: frontend/class-frontend.php:2888
+#: frontend/class-frontend.php:2887
 #: frontend/modules/banner-rest/class-banner-rest.php:607
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Bevestig dat je de minimumleeftijd hebt om optionele cookies te accepteren."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:2895
+#: frontend/class-frontend.php:2894
 #: frontend/modules/banner-rest/class-banner-rest.php:609
 #, php-format
 msgid "Banner closes automatically in %d s..."
@@ -7060,13 +7077,13 @@ msgstr "Geen banner beschikbaar voor de vastgestelde jurisdictie."
 msgid "No active banner found."
 msgstr "Geen actieve banner gevonden."
 
-#: frontend/modules/consent-logger/class-consent-logger.php:116
+#: frontend/modules/consent-logger/class-consent-logger.php:263
 #: includes/class-do-not-sell-shortcode.php:220
 #: includes/class-do-not-sell-shortcode.php:278
 msgid "This request must originate from this website."
 msgstr "Dit verzoek moet afkomstig zijn van deze website."
 
-#: frontend/modules/consent-logger/class-consent-logger.php:264
+#: frontend/modules/consent-logger/class-consent-logger.php:409
 msgid "Failed to log consent."
 msgstr "Toestemming loggen mislukt."
 

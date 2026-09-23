@@ -798,12 +798,11 @@ class Frontend {
 			// Add consent logging if enabled.
 			$log_consent_on  = isset( $faz_settings['consent_logs']['status'] ) && true === $faz_settings['consent_logs']['status'];
 			if ( $log_consent_on ) {
-				// Generate a time-bucketed HMAC token to verify requests originate
-				// from pages rendered by this site. The bucket covers 12 hours to
-				// tolerate page caching. The token is NOT a secret (it's in the
-				// HTML source) but prevents casual spoofing from external origins.
-				$bucket    = (string) floor( time() / ( 12 * HOUR_IN_SECONDS ) );
-				$hmac_token = wp_hash( 'faz_consent_' . $bucket );
+				// A time-bucketed HMAC proving the page was rendered by this
+				// site. It is NOT a secret — it ships in the HTML — and the
+				// endpoint pairs it with a same-origin check. Minted by the
+				// logger that accepts it, so the two cannot drift apart.
+				$hmac_token = Consent_Logger::current_token();
 
 				wp_localize_script(
 					$script_handle,
