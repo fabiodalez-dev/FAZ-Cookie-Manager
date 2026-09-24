@@ -308,6 +308,47 @@ export function deleteOption(optionName: string): void {
   }
 }
 
+/**
+ * Clear FAZ's request throttles, whichever store they are in.
+ *
+ * `faz_throttle_request()` (includes/class-utils.php) uses `wp_cache_add()` in
+ * the `faz_throttle` group when a persistent object cache is present, and falls
+ * back to a transient only when it is not. A reset that deletes transient rows
+ * therefore clears nothing at all on a stack running Redis or Memcached: the
+ * throttle a previous case armed is still live, and the next case reads a
+ * rate-limited answer or a tally that never moved — failing, or worse passing,
+ * for a reason that has nothing to do with what it asserts. The suite runs
+ * green locally because this machine has no persistent object cache, which is
+ * exactly the kind of green that stops meaning anything on someone else's
+ * stack.
+ *
+ * The group flush is preferred and the whole-cache flush is the fallback, since
+ * `wp_cache_flush_group()` needs WP 6.1+ AND a drop-in that implements it.
+ * Flushing everything is acceptable here and only here: this runs against a
+ * disposable test site.
+ *
+ * Note for future migrations: several specs still clear throttles with a bare
+ * `DELETE FROM wp_options` of their own and carry this same blind spot. They
+ * can adopt this helper as they are touched.
+ */
+export function clearFazThrottles(): void {
+  wpEval(
+    "global $wpdb;" +
+    " $wpdb->query( \"DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient%faz_consent_%'" +
+    " OR option_name LIKE '_transient%faz_throttle%'" +
+    " OR option_name LIKE '_transient%faz_pv_%'" +
+    " OR option_name LIKE '_transient%faz_amp_consent%'\" );" +
+    " if ( function_exists( 'wp_using_ext_object_cache' ) && wp_using_ext_object_cache() ) {" +
+    "   $faz_flushed = false;" +
+    "   if ( function_exists( 'wp_cache_supports' ) && wp_cache_supports( 'flush_group' ) && function_exists( 'wp_cache_flush_group' ) ) {" +
+    "     $faz_flushed = (bool) wp_cache_flush_group( 'faz_throttle' );" +
+    "   }" +
+    "   if ( ! $faz_flushed ) { wp_cache_flush(); }" +
+    " }" +
+    " echo 'ok';",
+  );
+}
+
 function findPostIdBySlug(slug: string, postType: string): number | null {
   const raw = wp(['post', 'list', `--post_type=${postType}`, '--fields=ID,post_name', '--format=json']);
   const posts = JSON.parse(raw) as Array<{ ID: number; post_name: string }>;

@@ -18,6 +18,7 @@ use FazCookie\Admin\Modules\Banners\Includes\Banner;
 use FazCookie\Admin\Modules\Settings\Includes\Settings;
 use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
 use FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger;
+use FazCookie\Admin\Modules\Pageviews\Api\Api as Pageviews_Api;
 use FazCookie\Frontend\Modules\Banner_Rest\Banner_Rest;
 use FazCookie\Includes\Geolocation;
 use FazCookie\Includes\Ab_Test;
@@ -754,8 +755,11 @@ class Frontend {
 			// Pageview and banner interaction tracking (opt-in via Settings).
 			$pv_tracking = isset( $faz_settings['pageview_tracking'] ) && true === $faz_settings['pageview_tracking'];
 			if ( $pv_tracking ) {
-				$pv_bucket    = (string) floor( time() / ( 12 * HOUR_IN_SECONDS ) );
-				$pv_token     = wp_hash( 'faz_pageview_' . $pv_bucket );
+				// Minted by the class that accepts it, like the consent token
+				// above: two copies of the same bucket arithmetic in two files
+				// is what let the consent token's window and the endpoint's
+				// window drift apart in issue #292.
+				$pv_token = Pageviews_Api::current_token();
 
 				wp_localize_script(
 					$script_handle,
@@ -798,12 +802,11 @@ class Frontend {
 			// Add consent logging if enabled.
 			$log_consent_on  = isset( $faz_settings['consent_logs']['status'] ) && true === $faz_settings['consent_logs']['status'];
 			if ( $log_consent_on ) {
-				// Generate a time-bucketed HMAC token to verify requests originate
-				// from pages rendered by this site. The bucket covers 12 hours to
-				// tolerate page caching. The token is NOT a secret (it's in the
-				// HTML source) but prevents casual spoofing from external origins.
-				$bucket    = (string) floor( time() / ( 12 * HOUR_IN_SECONDS ) );
-				$hmac_token = wp_hash( 'faz_consent_' . $bucket );
+				// A time-bucketed HMAC proving the page was rendered by this
+				// site. It is NOT a secret — it ships in the HTML — and the
+				// endpoint pairs it with a same-origin check. Minted by the
+				// logger that accepts it, so the two cannot drift apart.
+				$hmac_token = Consent_Logger::current_token();
 
 				wp_localize_script(
 					$script_handle,

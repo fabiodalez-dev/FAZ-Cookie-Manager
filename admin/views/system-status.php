@@ -77,6 +77,89 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 			<table class="faz-status-table">
 				<tr><td><?php esc_html_e( 'Banner Enabled', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['banner_control']['status'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
 				<tr><td><?php esc_html_e( 'Consent Logging', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['consent_logs']['status'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<?php
+				// A refused consent record leaves no trace a site owner would
+				// ever look at: the banner works, the visitor sees nothing, and
+				// only the accountability record is missing. Say it here, where
+				// the rest of the effective configuration is reported, and say
+				// it even when the figure is zero — a row that appears only on
+				// bad news makes its own absence unreadable, so a site losing
+				// every record through a cause nothing counted looked exactly
+				// like a healthy one. Issue #292.
+				if ( ! empty( $settings['consent_logs']['status'] ) ) :
+					$faz_tally          = \FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger::rejection_tally();
+					$faz_refused        = (int) $faz_tally['count'];
+					$faz_tally_days     = (int) \FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger::REJECTION_WINDOW_DAYS;
+					$faz_token_days     = max( 1, (int) round( \FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger::token_max_age() / DAY_IN_SECONDS ) );
+					$faz_cause_labels   = array(
+						'stale_token'   => __( 'Stale origin token', 'faz-cookie-manager' ),
+						'cross_origin'  => __( 'No same-origin signal', 'faz-cookie-manager' ),
+						'missing_token' => __( 'No origin token', 'faz-cookie-manager' ),
+						'throttled'     => __( 'Rate-limited', 'faz-cookie-manager' ),
+						'write_failed'  => __( 'Database write failed', 'faz-cookie-manager' ),
+					);
+					?>
+					<tr>
+						<td><?php esc_html_e( 'Consent Records Refused', 'faz-cookie-manager' ); ?></td>
+						<td>
+							<?php
+							printf(
+								/* translators: 1: number of refused consent records, already formatted for the locale. 2: length of the reporting window, in days. */
+								esc_html( _n( '%1$s in the last %2$s days — a consent decision that was not recorded.', '%1$s in the last %2$s days — consent decisions that were not recorded.', $faz_refused, 'faz-cookie-manager' ) ),
+								esc_html( number_format_i18n( $faz_refused ) ),
+								esc_html( number_format_i18n( $faz_tally_days ) )
+							);
+
+							if ( $faz_refused > 0 && $faz_tally['last'] > 0 ) {
+								echo ' ';
+								printf(
+									/* translators: %s: human-readable time difference, e.g. "3 hours". */
+									esc_html__( 'Most recent: %s ago.', 'faz-cookie-manager' ),
+									esc_html( human_time_diff( (int) $faz_tally['last'] ) )
+								);
+							}
+
+							if ( ! empty( $faz_tally['causes'] ) ) {
+								echo '<div class="faz-status-detail">';
+								$faz_cause_lines = array();
+								foreach ( $faz_cause_labels as $faz_cause => $faz_label ) {
+									if ( empty( $faz_tally['causes'][ $faz_cause ] ) ) {
+										continue;
+									}
+									// Label and number, not a translatable "%1$s: %2$s" —
+									// a format string with no words in it gives a
+									// translator nothing to translate and one more
+									// string to carry.
+									$faz_cause_lines[] = esc_html( $faz_label ) . ': '
+										. esc_html( number_format_i18n( (int) $faz_tally['causes'][ $faz_cause ] ) );
+								}
+								echo wp_kses_post( implode( ' &middot; ', $faz_cause_lines ) );
+								echo '</div>';
+							}
+							?>
+							<div class="faz-help">
+							<?php
+							// Two different windows meet in this row and both
+							// are measured in days, so name each one. The tally
+							// window is fixed; the token window is filterable.
+							printf(
+								/* translators: %s: accepted token window, in days. */
+								esc_html__( 'A stale origin token means HTML was served from a cache older than the accepted token window, currently %s days: either shorten the cache lifetime or raise the window with the faz_consent_token_max_age filter. A token from another installation, or a malformed one, is refused the same way.', 'faz-cookie-manager' ),
+								esc_html( number_format_i18n( $faz_token_days ) )
+							);
+							echo ' ';
+							esc_html_e( 'A request with no same-origin signal, or no token at all, is normally automated traffic — but if that figure tracks your visitor numbers, your pages are being served on a host, scheme or port that differs from your WordPress Address: check that www and apex, http and https, and any non-default port all redirect to the canonical one. A database write failure is always a real visitor whose consent was lost.', 'faz-cookie-manager' );
+							echo ' ';
+							printf(
+								/* translators: %s: length of the reporting window, in days. */
+								esc_html__( 'This tally covers %s days whatever the token window is set to, and counts at most one refusal per visitor per cause every ten seconds, so it is a floor rather than an exact total.', 'faz-cookie-manager' ),
+								esc_html( number_format_i18n( $faz_tally_days ) )
+							);
+							?>
+							</div>
+						</td>
+					</tr>
+				<?php endif; ?>
 				<tr><td><?php esc_html_e( 'Google Consent Mode', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $gcm_settings['status'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
 				<tr><td><?php esc_html_e( 'IAB TCF v2.3', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['iab']['enabled'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
 				<tr><td><?php esc_html_e( 'Pageview Tracking', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['pageview_tracking'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
