@@ -2,6 +2,12 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- A script could be treated as a Google tag that Consent Mode governs — and so allowed to load before consent — because its URL merely contained one of the Google ad domains somewhere. The test was a substring search, so `https://tracker.example/pixel.js?redirect=doubleclick.net` passed it, and so did a look-alike host such as `doubleclick.net.evil.example`. On the one decision that says whether a tag may run before the visitor has answered the banner, a name appearing anywhere in the URL was taken as proof of whose tag it is. The three ad domains are now matched as hosts, against the host of the tag's URL: the domain itself or a subdomain of it, and nothing else. Real tags are unaffected, subdomains included; the inline Advanced Consent Mode bootstrap, which has no URL to read, still matches on its own code. The same change is made on both sides, in PHP and in the browser, because the two were documented as kept in sync and a substring match on one side with a host match on the other would have them disagreeing about the same tag.
+- A blocked image, iframe or stylesheet whose URL contained a colon outside the scheme — `/img/a.jpg?v=12:30` — stayed parked after consent and never loaded. The scheme check read everything before the first colon wherever it sat, so a perfectly ordinary relative URL was rejected as if it named an unknown scheme. A scheme is now read as a scheme, and whitespace and control characters are stripped before it is read, the way a browser strips them before deciding which scheme a URL names — so a scheme broken up by a tab or a newline is refused rather than mistaken for something harmless.
+
 ## [1.32.0] - 2026-09-22
 
 ### Added

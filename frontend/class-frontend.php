@@ -3972,22 +3972,70 @@ class Frontend {
 	 */
 	private function is_gcm_managed_script( $attrs, $content ) {
 		$ctx = $this->get_provider_match_context( $attrs, $content );
-		$hay = $ctx['haystack'];
+
+		// The three ad domains are matched as HOSTS, against the tag's URL.
+		// stripos() over the whole haystack answered yes for any tag that merely
+		// mentioned one of these names — a URL carrying `?redirect=doubleclick.net`,
+		// a look-alike host such as `doubleclick.net.evil.example`, a word in an
+		// inline comment — and answering yes here means "Consent Mode manages
+		// this tag, let it load before consent". That is the one decision on this
+		// path where a loose match lets a tracker run before the visitor has said
+		// anything, so it gets the strict test.
+		foreach ( preg_split( '/[\s,]+/', (string) $ctx['url'], -1, PREG_SPLIT_NO_EMPTY ) as $faz_candidate ) {
+			$faz_host = (string) \wp_parse_url( $faz_candidate, PHP_URL_HOST );
+			if ( '' === $faz_host ) {
+				continue;
+			}
+			$faz_host = strtolower( $faz_host );
+			foreach ( array( 'googleadservices.com', 'googlesyndication.com', 'doubleclick.net' ) as $faz_domain ) {
+				if ( $this->host_is_or_subdomain_of( $faz_host, $faz_domain ) ) {
+					return true;
+				}
+			}
+			if ( $this->host_is_or_subdomain_of( $faz_host, 'googletagmanager.com' )
+				&& false !== stripos( $faz_candidate, '/gtag/js' ) ) {
+				return true;
+			}
+		}
+
+		// Code fragments, not hosts, so these stay substring tests: an inline
+		// bootstrap has no URL to read, and the gtag.js reference inside a
+		// server-rendered loader is a string in a script body. Narrowing these
+		// to the URL would newly block the inline Advanced Consent Mode
+		// bootstrap (#165) that this method exists to leave running.
 		foreach ( array(
 			'googletagmanager.com/gtag/js',
 			"gtag('config'",
 			'gtag("config"',
 			"gtag('js'",
 			'gtag("js"',
-			'googleadservices.com',
-			'googlesyndication.com',
-			'doubleclick.net',
-		) as $needle ) {
-			if ( false !== stripos( $hay, $needle ) ) {
+		) as $faz_needle ) {
+			if ( false !== stripos( (string) $ctx['content'], $faz_needle ) ) {
 				return true;
 			}
 		}
+
 		return false;
+	}
+
+	/**
+	 * Whether a host is a domain itself or a subdomain of it.
+	 *
+	 * The dot is what does the work. Without it `notdoubleclick.net` and
+	 * `doubleclick.net.evil.example` both pass, which is the failure this
+	 * replaces. Mirrors _fazHostMatches() in frontend/js/script.js.
+	 *
+	 * @param string $host   Lowercased hostname.
+	 * @param string $domain Lowercased registrable domain.
+	 * @return bool
+	 */
+	private function host_is_or_subdomain_of( $host, $domain ) {
+		$host   = (string) $host;
+		$domain = (string) $domain;
+		if ( '' === $host || '' === $domain ) {
+			return false;
+		}
+		return $host === $domain || substr( $host, -( strlen( $domain ) + 1 ) ) === '.' . $domain;
 	}
 
 	/**

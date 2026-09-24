@@ -57,6 +57,19 @@ namespace {
 			return abs( (int) $v );
 		}
 	}
+	if ( ! function_exists( 'wp_parse_url' ) ) {
+		// WordPress's own wrapper, which is what the production code calls: it
+		// exists because PHP's parse_url() historically mis-read a
+		// protocol-relative "//host/path", and this method is handed exactly
+		// those.
+		function wp_parse_url( $url, $component = -1 ) {
+			$url = (string) $url;
+			if ( 0 === strpos( $url, '//' ) ) {
+				$url = 'placeholder:' . $url;
+			}
+			return parse_url( $url, $component );
+		}
+	}
 	if ( ! function_exists( 'wp_json_encode' ) ) {
 		function wp_json_encode( $data, $flags = 0 ) {
 			return json_encode( $data, $flags );
@@ -218,6 +231,21 @@ namespace {
 	eq( faz_managed( $fe, '', 'var x = "this mentions gtag( in a string";' ), false, 'bare gtag( reference → NOT managed' );
 	eq( faz_managed( $fe, ' src="https://googleads.g.doubleclick.net/pagead/x"', '' ), true, 'doubleclick.net → managed' );
 	eq( faz_managed( $fe, ' src="https://www.googleadservices.com/pagead/conversion.js"', '' ), true, 'googleadservices.com → managed' );
+
+	// Host, not substring. Every one of these answered "managed" before — and
+	// managed means "Consent Mode governs this tag, let it load before consent",
+	// so a loose match here is a tracker running before the visitor has said
+	// anything, on the one screen that promises the opposite.
+	eq( faz_managed( $fe, ' src="https://tracker.example/pixel.js?redirect=doubleclick.net"', '' ), false, 'the name in a query string → NOT managed' );
+	eq( faz_managed( $fe, ' src="https://doubleclick.net.evil.example/x.js"', '' ), false, 'a look-alike host that merely starts with it → NOT managed' );
+	eq( faz_managed( $fe, ' src="https://notdoubleclick.net/x.js"', '' ), false, 'a host that merely ends with it → NOT managed' );
+	eq( faz_managed( $fe, ' src="https://cdn.example/js?u=https%3A%2F%2Fgoogleadservices.com"', '' ), false, 'the name inside an encoded parameter → NOT managed' );
+	// And the real thing keeps working, subdomains included.
+	eq( faz_managed( $fe, ' src="https://stats.g.doubleclick.net/dc.js"', '' ), true, 'a genuine subdomain → managed' );
+	eq( faz_managed( $fe, ' src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"', '' ), true, 'a protocol-relative URL is still read as a host → managed' );
+	// The inline bootstrap has no URL to read, so it stays a code match: this is
+	// the shape Advanced Consent Mode (#165) exists to leave running.
+	eq( faz_managed( $fe, '', 'var s="https://www.googletagmanager.com/gtag/js?id=G-X";' ), true, 'an inline loader referencing gtag.js → still managed' );
 
 	// ---------- summary ----------
 	echo "\n";
