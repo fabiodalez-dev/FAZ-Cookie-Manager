@@ -214,6 +214,17 @@ namespace {
 		'and does not declare it required, so a request with no token at all reaches the handler that counts it'
 	);
 
+	// Both throttled sites, by count. The E2E suite drives the per-IP one for
+	// real, which is the branch a visitor can hit; the per-consent_id one needs
+	// two posts more than ten seconds apart to get past the IP gate first, and
+	// an eleven-second sleep in every CI run is a poor trade for a branch whose
+	// only risk is a missing call or a mistyped constant. That risk is what this
+	// counts — a direct record_refusal() call in a unit test cannot see either.
+	tok_check(
+		2 === substr_count( $logger_src, 'record_refusal( self::CAUSE_THROTTLED )' ),
+		'both throttled branches record the cause: the per-IP one and the per-consent_id one'
+	);
+
 	// 8. A refusal is recorded instead of passing in silence: a consent log
 	//    that stops recording without complaining is the part nobody notices.
 	//    The tally is seven per-day buckets, per cause. The anchored shape it

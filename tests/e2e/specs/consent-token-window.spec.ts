@@ -186,6 +186,47 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
     expect(cause, 'counted under missing_token rather than lost outside this class').toBe('1');
   });
 
+  test('a rate-limited consent is counted under throttled, not lost behind the 200', async ({ request, baseURL }) => {
+    // Nothing reached this cause before. The burst case above posts an INVALID
+    // token, so the handler returns at the token check — three steps before the
+    // throttle — and what it counts is stale_token. So a missing call or a wrong
+    // constant at either throttled site would not have failed anything, on the
+    // one branch whose whole point is that the caller is answered 200 and the
+    // record is dropped: fire-and-forget, so from the visitor's side a dropped
+    // record and a stored one look exactly alike.
+    wpEval(`delete_option( '${REJECTION_OPTION}' );`);
+    clearFazThrottles();
+
+    const valid = lastLine(wpEval(
+      'echo \\FazCookie\\Frontend\\Modules\\Consent_Logger\\Consent_Logger::current_token();',
+    )).trim();
+    const post = (consentId: string) =>
+      request.post(`${baseURL}/wp-json/faz/v1/consent`, {
+        headers: { Origin: baseURL as string, 'Sec-Fetch-Site': 'same-origin' },
+        data: {
+          token: valid,
+          consent_id: consentId,
+          status: 'accepted',
+          categories: { necessary: 'yes' },
+          url: `${baseURL}/`,
+        },
+      });
+
+    const first = await post(`e2e-token-thr-a-${Date.now()}`);
+    expect(first.status(), 'a valid token is accepted').toBe(200);
+    expect((await first.json()).throttled, 'and the first call is not throttled').toBeUndefined();
+
+    // Same address, inside the 10-second per-IP window.
+    const second = await post(`e2e-token-thr-b-${Date.now()}`);
+    expect(second.status(), 'a throttled caller is still answered 200').toBe(200);
+    expect((await second.json()).throttled, 'and told so in a body nothing reads').toBe(true);
+
+    const throttled = lastLine(wpEval(
+      `$t = \\FazCookie\\Frontend\\Modules\\Consent_Logger\\Consent_Logger::rejection_tally(); echo (int) ( $t['causes']['throttled'] ?? 0 );`,
+    )).replace(/\D/g, '');
+    expect(throttled, 'the dropped record is counted, and under throttled').toBe('1');
+  });
+
   test('System Status reports refused records by cause, and says so at zero too', async ({ page, baseURL, loginAsAdmin }) => {
     await loginAsAdmin(page);
     const statusUrl = `${baseURL}/wp-admin/admin.php?page=faz-cookie-manager-system-status`;

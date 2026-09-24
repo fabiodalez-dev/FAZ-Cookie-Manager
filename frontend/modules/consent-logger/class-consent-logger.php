@@ -418,6 +418,19 @@ class Consent_Logger {
 	 * many distinct visitors each refused once from stale cached HTML — is
 	 * unaffected, because each of them is its own client.
 	 *
+	 * Without a persistent object cache the claim is not atomic: the fallback in
+	 * faz_throttle_request() reads the transient and writes it as two separate
+	 * statements, so two requests landing in the same instant can both pass and
+	 * each write once. That is bounded and worth leaving alone. The loser is
+	 * throttled for the rest of the window, so the residue is a few extra writes
+	 * during a simultaneous burst from ONE address, against the one write per
+	 * request this gate replaced. Making it atomic means either wp_cache_add(),
+	 * which needs the persistent cache that would already have made it atomic,
+	 * or a raw INSERT IGNORE against the options table with an expiry sweep of
+	 * its own — a second transient implementation, adding writes to the path
+	 * this gate exists to protect. Same judgement, and the same reason, as the
+	 * read-modify-write race documented on rejection_tally().
+	 *
 	 * @param string $cause One of the CAUSE_* constants.
 	 * @return void
 	 */
