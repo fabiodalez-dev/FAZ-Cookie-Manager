@@ -5413,11 +5413,23 @@ function _fazUnblock() {
  */
 function _fazIsAllowedScheme(url) {
     if (!url || typeof url !== "string") return false;
-    var colonPos = url.indexOf(':');
-    if (colonPos < 0) return true;
-    if (url.indexOf('//') === 0) return true;
-    var scheme = url.substring(0, colonPos).toLowerCase();
-    return scheme === 'http' || scheme === 'https';
+    // Browsers strip whitespace and control characters before they read the
+    // scheme, so "java\tscript:alert(1)" loads as javascript:. Strip them here
+    // too, or the comparison below is made against a string the browser will
+    // never see.
+    var probe = url.replace(/[\u0000-\u0020]/g, '');
+    if (probe.indexOf('//') === 0) return true;
+    // A scheme is letters, digits, +, - and . before the first colon, and it
+    // has to come before any /, ? or #. The previous shape took everything
+    // before the FIRST colon wherever it sat, so a relative URL carrying a
+    // colon in its query or path — "/img/a.jpg?v=12:30" — was read as the
+    // scheme "/img/a.jpg?v=12" and refused. That is not a security failure but
+    // it is a real one: the resource stays parked after consent and nothing
+    // says why.
+    var scheme = /^([a-z][a-z0-9+.\-]*):/i.exec(probe);
+    if (!scheme) return true;
+    var name = scheme[1].toLowerCase();
+    return name === 'http' || name === 'https';
 }
 
 /**
@@ -6259,10 +6271,66 @@ function _fazIsDeferredPlaceholderType(type) {
 function _fazIsGcmManaged(u) {
     if (!u) return false;
     u = String(u).toLowerCase();
-    return u.indexOf('googletagmanager.com/gtag/js') > -1
-        || u.indexOf('googleadservices.com') > -1
-        || u.indexOf('googlesyndication.com') > -1
-        || u.indexOf('doubleclick.net') > -1;
+    // Host, not substring. A plain indexOf() answers yes for any URL that
+    // merely CONTAINS one of these names — `https://tracker.example/?r=doubleclick.net`,
+    // or a look-alike host like `doubleclick.net.evil.example` — and answering
+    // yes here means "Consent Mode manages this tag, let it load before
+    // consent". A substring match is the wrong test for the one question on
+    // this path that decides whether a tracker runs before the visitor has
+    // said anything. The gtag.js entry keeps a path, so it is matched on host
+    // plus path prefix.
+    var parts = _fazUrlParts(u);
+    if (!parts.host) return false;
+    if (_fazHostMatches(parts.host, 'googletagmanager.com')) {
+        // The PATH, not the URL. Searching the whole URL for '/gtag/js' would
+        // read `gtm.js?id=GTM-X&next=/gtag/js` as the tag library when it is
+        // the GTM container, which must stay blocked — and the container is
+        // the one thing this function has always been careful to exclude.
+        return parts.path.indexOf('/gtag/js') === 0;
+    }
+    return _fazHostMatches(parts.host, 'googleadservices.com')
+        || _fazHostMatches(parts.host, 'googlesyndication.com')
+        || _fazHostMatches(parts.host, 'doubleclick.net');
+}
+
+/**
+ * The host and path of a URL, or empty strings when there is none to read.
+ *
+ * Read with the browser's own parser rather than a regex, with the page's
+ * origin as the base so a relative URL resolves the way the element would have
+ * loaded it. Host and path are returned together because deciding whose tag a
+ * URL is takes both, and parsing it twice invites the two answers to come from
+ * two different readings. A URL that cannot be parsed has no host, and a caller
+ * asking "is this host mine" must get no for an answer, never a guess.
+ *
+ * @param {string} u URL, absolute, protocol-relative or relative.
+ * @returns {{host: string, path: string}} Lowercased hostname and path.
+ */
+function _fazUrlParts(u) {
+    if (!u) return { host: '', path: '' };
+    try {
+        var base = (typeof location !== 'undefined' && location.href) ? location.href : 'https://example.invalid/';
+        var parsed = new URL(String(u), base);
+        return { host: parsed.hostname.toLowerCase(), path: parsed.pathname || '' };
+    } catch (e) {
+        return { host: '', path: '' };
+    }
+}
+
+/**
+ * Whether `host` is `domain` itself or a subdomain of it.
+ *
+ * The dot is what does the work: without it `notdoubleclick.net` and
+ * `doubleclick.net.evil.example` both pass, which is the whole failure this
+ * replaces.
+ *
+ * @param {string} host   Lowercased hostname.
+ * @param {string} domain Lowercased registrable domain.
+ * @returns {boolean}
+ */
+function _fazHostMatches(host, domain) {
+    if (!host || !domain) return false;
+    return host === domain || host.slice(-(domain.length + 1)) === '.' + domain;
 }
 function _fazShouldChangeType(element, src, typeOverride) {
     if (element.classList && element.classList.contains('faz-skip')) return false;
