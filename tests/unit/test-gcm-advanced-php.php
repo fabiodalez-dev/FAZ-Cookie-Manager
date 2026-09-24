@@ -246,6 +246,10 @@ namespace {
 	// The inline bootstrap has no URL to read, so it stays a code match: this is
 	// the shape Advanced Consent Mode (#165) exists to leave running.
 	eq( faz_managed( $fe, '', 'var s="https://www.googletagmanager.com/gtag/js?id=G-X";' ), true, 'an inline loader referencing gtag.js → still managed' );
+	// The GTM container carrying the tag library's path as a parameter: the
+	// container has to stay blocked, which is the one exclusion this method has
+	// always made.
+	eq( faz_managed( $fe, ' src="https://www.googletagmanager.com/gtm.js?id=GTM-X&next=/gtag/js"', '' ), false, 'the container naming gtag/js in a parameter → NOT managed' );
 
 	// ---------- summary ----------
 	echo "\n";

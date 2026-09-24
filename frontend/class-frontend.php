@@ -3992,9 +3992,15 @@ class Frontend {
 					return true;
 				}
 			}
-			if ( $this->host_is_or_subdomain_of( $faz_host, 'googletagmanager.com' )
-				&& false !== stripos( $faz_candidate, '/gtag/js' ) ) {
-				return true;
+			// The PATH, not the whole URL: `gtm.js?id=GTM-X&next=/gtag/js` carries
+			// the string but loads the GTM container, which must stay blocked —
+			// and the container is the one thing this method has always been
+			// careful to exclude.
+			if ( $this->host_is_or_subdomain_of( $faz_host, 'googletagmanager.com' ) ) {
+				$faz_path = (string) \wp_parse_url( $faz_candidate, PHP_URL_PATH );
+				if ( 0 === stripos( $faz_path, '/gtag/js' ) ) {
+					return true;
+				}
 			}
 		}
 

@@ -94,6 +94,10 @@ eq('nor an encoded parameter', managed('https://cdn.example/js?u=https%3A%2F%2Fg
 // The GTM container stays blocked, which the path check is what preserves.
 eq('the GTM container is still not managed', managed('https://www.googletagmanager.com/gtm.js?id=GTM-X'), false);
 eq('an unrelated googletagmanager path is not managed', managed('https://www.googletagmanager.com/ns.html?id=GTM-X'), false);
+// The container carrying the tag library's path as a parameter. Searching the
+// whole URL for '/gtag/js' would let GTM through on its own host.
+eq('the container is not managed by naming gtag/js in a parameter', managed('https://www.googletagmanager.com/gtm.js?id=GTM-X&next=/gtag/js'), false);
+eq('nor by naming it in a fragment', managed('https://www.googletagmanager.com/gtm.js?id=GTM-X#/gtag/js'), false);
 eq('an empty URL is not managed', managed(''), false);
 
 console.log('\n_fazIsAllowedScheme — a scheme is a scheme, not "everything before a colon"\n');

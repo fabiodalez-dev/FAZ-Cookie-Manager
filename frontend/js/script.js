@@ -6279,34 +6279,41 @@ function _fazIsGcmManaged(u) {
     // this path that decides whether a tracker runs before the visitor has
     // said anything. The gtag.js entry keeps a path, so it is matched on host
     // plus path prefix.
-    var host = _fazUrlHost(u);
-    if (!host) return false;
-    if (_fazHostMatches(host, 'googletagmanager.com')) {
-        return u.indexOf('/gtag/js') > -1;
+    var parts = _fazUrlParts(u);
+    if (!parts.host) return false;
+    if (_fazHostMatches(parts.host, 'googletagmanager.com')) {
+        // The PATH, not the URL. Searching the whole URL for '/gtag/js' would
+        // read `gtm.js?id=GTM-X&next=/gtag/js` as the tag library when it is
+        // the GTM container, which must stay blocked — and the container is
+        // the one thing this function has always been careful to exclude.
+        return parts.path.indexOf('/gtag/js') === 0;
     }
-    return _fazHostMatches(host, 'googleadservices.com')
-        || _fazHostMatches(host, 'googlesyndication.com')
-        || _fazHostMatches(host, 'doubleclick.net');
+    return _fazHostMatches(parts.host, 'googleadservices.com')
+        || _fazHostMatches(parts.host, 'googlesyndication.com')
+        || _fazHostMatches(parts.host, 'doubleclick.net');
 }
 
 /**
- * The host of a URL, lowercased, or '' when there is none to read.
+ * The host and path of a URL, or empty strings when there is none to read.
  *
- * Written against the browser's own parser rather than a regex, with the
- * page's origin as the base so a relative URL resolves the way the element
- * would have loaded it. A URL that cannot be parsed has no host, and a caller
+ * Read with the browser's own parser rather than a regex, with the page's
+ * origin as the base so a relative URL resolves the way the element would have
+ * loaded it. Host and path are returned together because deciding whose tag a
+ * URL is takes both, and parsing it twice invites the two answers to come from
+ * two different readings. A URL that cannot be parsed has no host, and a caller
  * asking "is this host mine" must get no for an answer, never a guess.
  *
  * @param {string} u URL, absolute, protocol-relative or relative.
- * @returns {string} Lowercased hostname, or ''.
+ * @returns {{host: string, path: string}} Lowercased hostname and path.
  */
-function _fazUrlHost(u) {
-    if (!u) return '';
+function _fazUrlParts(u) {
+    if (!u) return { host: '', path: '' };
     try {
         var base = (typeof location !== 'undefined' && location.href) ? location.href : 'https://example.invalid/';
-        return new URL(String(u), base).hostname.toLowerCase();
+        var parsed = new URL(String(u), base);
+        return { host: parsed.hostname.toLowerCase(), path: parsed.pathname || '' };
     } catch (e) {
-        return '';
+        return { host: '', path: '' };
     }
 }
 
