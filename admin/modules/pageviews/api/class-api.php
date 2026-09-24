@@ -55,8 +55,8 @@ class Api extends Rest_Controller {
 	/**
 	 * How far back a pageview token is still accepted, in seconds, by default.
 	 *
-	 * This endpoint carried the same defect issue #292 reported against the
-	 * consent log, and carried it for the same reason: only the current bucket
+	 * Issue #296. This endpoint carried the same defect issue #292 reported
+	 * against the consent log, and carried it for the same reason: only the current bucket
 	 * and the previous one were accepted — 12 to 24 hours — while LiteSpeed
 	 * Cache ships a 604800-second public TTL and WP Rocket and W3TC defaults
 	 * are measured in days. From about a day after a page was cached every

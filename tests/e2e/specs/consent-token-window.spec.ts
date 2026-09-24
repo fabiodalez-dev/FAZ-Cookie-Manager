@@ -249,7 +249,7 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
 });
 
 /**
- * The same defect, in the second copy of the same arithmetic.
+ * The same defect, in the second copy of the same arithmetic (#296).
  *
  * The pageview endpoint accepted the current 12-hour bucket and the previous
  * one only, exactly as the consent log did, so events posted from cached HTML
@@ -259,7 +259,7 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
  * which cannot notice a window that is wrong at the boundary. This posts real
  * tokens at the real endpoint.
  */
-test.describe('the pageview origin token outlives the page cache too (#292)', () => {
+test.describe('the pageview origin token outlives the page cache too (#296)', () => {
   let pageviewsWereOn = false;
 
   /** A pageview token as a page cached `daysAgo` days ago would carry. */
