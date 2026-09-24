@@ -195,8 +195,13 @@ class Consent_Logger {
 	 *
 	 * Widening the window does not weaken the control it provides. The token
 	 * says "this HTML came from this installation", which a third party cannot
-	 * forge at any age, and replay from another origin is stopped by
-	 * is_same_origin_request() rather than by the token's age.
+	 * forge at any age; a shorter window would not have added a property, only
+	 * refused pages a cache was still serving. Replay of a leaked token by a
+	 * third-party PAGE is stopped by is_same_origin_request(), which reads
+	 * headers a browser will not let a script set — not by the token's age. A
+	 * client that is not a browser sets those headers itself, so neither the age
+	 * nor that check is what bounds it: the per-IP and per-consent_id throttles
+	 * are, and the refusal accounting carries a throttle of its own.
 	 *
 	 * @param string   $token Token from the request.
 	 * @param int|null $at    Unix timestamp, or null for now.
