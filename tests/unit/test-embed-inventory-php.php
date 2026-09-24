@@ -145,6 +145,14 @@ namespace {
 		} ) ),
 		'seeing one service of two refreshes it without deleting the other'
 	);
+	// And it is THAT service that was written. "At least one query, none of
+	// them a DELETE" also holds for a write about something else entirely.
+	inventory_check(
+		1 === count( array_filter( $queries, static function ( $q ) {
+			return false !== stripos( $q, 'google-maps' ) && ( false !== stripos( $q, 'INSERT' ) || false !== stripos( $q, 'UPDATE' ) );
+		} ) ),
+		'and the row written names the service that was observed'
+	);
 
 	// The observed digest has the same no-write guard as an authoritative snapshot.
 	$GLOBALS['wpdb']->queries = array();
