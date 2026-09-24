@@ -612,6 +612,14 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.32.1 — 2026-09-24
+
+- Consent records were silently refused on any site whose page cache holds HTML for more than a day: the origin token proving a consent POST came from a page this site rendered lasted 12 to 24 hours, while common cache defaults are measured in days (#292). The token is accepted for seven days now, `faz_consent_token_max_age` widens that window, and it is minted by the class that accepts it.
+- A refused record is no longer silent. System Status reports the count, the most recent occurrence and each of the five causes separately, with a zero state — the previous row was hidden below one refusal, truncated above 999, reset its window instead of rolling it, and counted only one cause of five.
+- The pageview endpoint carried the same defect in a second copy of the same arithmetic, so events posted from cached pages were refused and the Dashboard under-reported in silence (#296).
+- **Security**: a script whose URL merely contained one of the Google ad domains — in a query parameter, a path segment, or a look-alike host — was treated as a Consent-Mode-governed tag and allowed to load before consent. The three domains are matched as hosts now, on both the PHP and the browser side.
+- A blocked image, iframe or stylesheet whose URL carried a colon outside the scheme stayed parked after consent; "Copy status" keeps every column of the blocked Set-Cookie table and no longer runs sentences or list entries together.
+
 ### 1.32.0 — 2026-09-22
 
 - GPC audit history stops at revocation; concurrent inventory writes and malformed definition feeds are handled safely.

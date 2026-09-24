@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.32.0
+Stable tag: 1.32.1
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -405,6 +405,14 @@ The full changelog (every release back to 1.0.0) lives at:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
+
+= 1.32.1 =
+* Fix: Consent records were refused in silence on sites whose page cache holds HTML for more than a day. The origin token is accepted for seven days now, and the faz_consent_token_max_age filter widens the window for a longer-lived cache (#292).
+* Fix: A refused record is reported instead of lost. System Status shows the count, the most recent occurrence and all five causes separately, and the row appears even at zero. The figure was previously truncated above 999 and its window reset rather than rolled.
+* Fix: Pageview, banner-view and banner-choice events posted from cached pages were refused after about a day, so the Dashboard under-reported without saying so (#296).
+* Fix: A script whose URL merely contained a Google ad domain, in a parameter or a look-alike host, could load before consent. The domains are matched as hosts now.
+* Fix: A blocked image, iframe or stylesheet whose URL carried a colon outside the scheme stayed blocked after consent.
+* Fix: "Copy status" keeps every column of the blocked Set-Cookie table, and no longer runs sentences or list entries together.
 
 = 1.32.0 =
 * Fix: GPC audit verdicts stop at revocation. Concurrent embed inventory writes preserve their first observation; malformed definition feeds retain the last usable dataset.
