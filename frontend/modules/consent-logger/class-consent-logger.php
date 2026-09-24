@@ -208,65 +208,284 @@ class Consent_Logger {
 	}
 
 	/**
-	 * The refusal tally, as anything reading it should see it.
+	 * How many whole UTC days the refusal tally covers.
 	 *
-	 * The window has to be applied on the way OUT as well as on the way in:
-	 * rolling it over only when the next refusal arrives means a tally from a
-	 * cache problem fixed a fortnight ago keeps being reported as "in the last
-	 * 7 days" for as long as nothing is refused. One rule, read by the writer
-	 * below and by System Status.
+	 * Seven per-day counters, not one anchored total. The anchored shape it
+	 * replaces expired the whole tally once its first refusal aged out, so a
+	 * site refusing continuously saw the figure collapse from thousands to one
+	 * the instant the window rolled, and climb again — a sawtooth reported as
+	 * "the last 7 days". Per-day buckets make the claim true, cost seven
+	 * integers per cause, and keep the property the anchored shape got right:
+	 * a cause that stopped more than a week ago reads as zero without needing
+	 * a new refusal to roll it over, because every bucket has simply aged out.
 	 *
-	 * @return array{count:int,since:int,last:int}
+	 * The window is seven CALENDAR days in UTC, today included — not a
+	 * 168-hour sliding window. A per-day counter cannot express finer without
+	 * storing an event per refusal, which is not worth a diagnostic's while.
 	 */
-	public static function rejection_tally() {
-		$empty = array( 'count' => 0, 'since' => 0, 'last' => 0 );
-		$tally = get_option( self::REJECTION_OPTION, array() );
-		if ( ! is_array( $tally ) || empty( $tally['count'] ) ) {
-			return $empty;
-		}
-		$since = isset( $tally['since'] ) ? (int) $tally['since'] : 0;
-		if ( $since < time() - WEEK_IN_SECONDS ) {
-			return $empty;
-		}
+	const REJECTION_WINDOW_DAYS = 7;
+
+	/**
+	 * Why a consent record was refused.
+	 *
+	 * Counted separately because the causes call for different answers and
+	 * carry very different traffic. A stale token means the page cache
+	 * outlived the window and the lost records are real visitors'. A
+	 * cross-origin refusal is normally automated traffic, so folding it into
+	 * the same figure would make an alarming number out of noise and train
+	 * the administrator to ignore the row. A failed write is the gravest of
+	 * the five and the only one that is always a genuine consent: the visitor
+	 * answered, the row did not land, and the response was a 500 nobody sees
+	 * because the call is fire-and-forget.
+	 */
+	const CAUSE_STALE_TOKEN  = 'stale_token';
+	const CAUSE_CROSS_ORIGIN = 'cross_origin';
+	const CAUSE_MISSING_TOKEN = 'missing_token';
+	const CAUSE_THROTTLED    = 'throttled';
+	const CAUSE_WRITE_FAILED = 'write_failed';
+
+	/**
+	 * Every cause the tally knows, in the order System Status reports them.
+	 *
+	 * @return string[]
+	 */
+	public static function refusal_causes() {
 		return array(
-			'count' => (int) $tally['count'],
-			'since' => $since,
-			'last'  => isset( $tally['last'] ) ? (int) $tally['last'] : 0,
+			self::CAUSE_STALE_TOKEN,
+			self::CAUSE_CROSS_ORIGIN,
+			self::CAUSE_MISSING_TOKEN,
+			self::CAUSE_THROTTLED,
+			self::CAUSE_WRITE_FAILED,
 		);
 	}
 
 	/**
-	 * Count a rejected token, and say so in the error log once an hour.
+	 * The UTC day a timestamp belongs to, as an integer index.
+	 *
+	 * Integer arithmetic on purpose: no gmdate(), no timezone, nothing that
+	 * changes under DST or under the site's timezone setting.
+	 *
+	 * @param int $at Unix timestamp.
+	 * @return int
+	 */
+	private static function day_index( $at ) {
+		return (int) floor( (int) $at / DAY_IN_SECONDS );
+	}
+
+	/**
+	 * The refusal tally, as anything reading it should see it.
+	 *
+	 * The window is applied on the way OUT as well as on the way in: buckets
+	 * older than the window are dropped when the tally is read, so a cache
+	 * problem a purge fixed a fortnight ago stops being reported without
+	 * waiting for another refusal to roll it over. One rule, read by the
+	 * writer below and by System Status.
+	 *
+	 * @param int|null $at Unix timestamp, or null for now.
+	 * @return array{count:int,since:int,last:int,causes:array<string,int>}
+	 */
+	public static function rejection_tally( $at = null ) {
+		$at    = null === $at ? time() : (int) $at;
+		$empty = array( 'count' => 0, 'since' => 0, 'last' => 0, 'causes' => array() );
+		$tally = get_option( self::REJECTION_OPTION, array() );
+		if ( ! is_array( $tally ) ) {
+			return $empty;
+		}
+
+		$days = self::retained_days( $tally, $at );
+		if ( empty( $days ) ) {
+			return $empty;
+		}
+
+		$count  = 0;
+		$causes = array();
+		foreach ( $days as $counts ) {
+			foreach ( $counts as $cause => $n ) {
+				$n = max( 0, (int) $n );
+				if ( 0 === $n ) {
+					continue;
+				}
+				$count += $n;
+				$causes[ $cause ] = ( isset( $causes[ $cause ] ) ? $causes[ $cause ] : 0 ) + $n;
+			}
+		}
+		if ( 0 === $count ) {
+			return $empty;
+		}
+
+		$oldest = min( array_keys( $days ) );
+		$last   = isset( $tally['last'] ) ? (int) $tally['last'] : 0;
+
+		return array(
+			'count'  => $count,
+			'since'  => $oldest * DAY_IN_SECONDS,
+			// A 'last' from the future (clock skew between the web and database
+			// hosts) would read as a refusal that has not happened yet.
+			'last'   => min( $last, $at ),
+			'causes' => $causes,
+		);
+	}
+
+	/**
+	 * The day buckets still inside the window, normalised.
+	 *
+	 * Tolerates the flat {since,count,last} shape a site may already hold from
+	 * the first cut of this feature: it becomes one bucket, dated at its own
+	 * anchor, under the only cause that shape could ever have counted. Cheaper
+	 * than a migration and it cannot fatal on an admin page.
+	 *
+	 * @param array $tally Raw option value.
+	 * @param int   $at    Unix timestamp.
+	 * @return array<int,array<string,int>> Day index => cause => count.
+	 */
+	private static function retained_days( array $tally, $at ) {
+		$floor = self::day_index( $at ) - ( self::REJECTION_WINDOW_DAYS - 1 );
+
+		if ( ! isset( $tally['days'] ) || ! is_array( $tally['days'] ) ) {
+			// Legacy flat shape.
+			$legacy_count = isset( $tally['count'] ) ? (int) $tally['count'] : 0;
+			$legacy_since = isset( $tally['since'] ) ? (int) $tally['since'] : 0;
+			if ( $legacy_count < 1 || $legacy_since < 1 ) {
+				return array();
+			}
+			$day = self::day_index( $legacy_since );
+			if ( $day < $floor ) {
+				return array();
+			}
+			return array( $day => array( self::CAUSE_STALE_TOKEN => $legacy_count ) );
+		}
+
+		$known    = self::refusal_causes();
+		$retained = array();
+		foreach ( $tally['days'] as $day => $counts ) {
+			$day = (int) $day;
+			// A bucket dated in the future is skew, not data; keeping it would
+			// hold the tally open indefinitely.
+			if ( $day < $floor || $day > self::day_index( $at ) ) {
+				continue;
+			}
+			if ( ! is_array( $counts ) ) {
+				continue;
+			}
+			$clean = array();
+			foreach ( $counts as $cause => $n ) {
+				if ( ! in_array( (string) $cause, $known, true ) ) {
+					continue;
+				}
+				$n = max( 0, (int) $n );
+				if ( $n > 0 ) {
+					$clean[ (string) $cause ] = $n;
+				}
+			}
+			if ( ! empty( $clean ) ) {
+				$retained[ $day ] = $clean;
+			}
+		}
+		ksort( $retained );
+		return $retained;
+	}
+
+	/**
+	 * Count a refused consent record, and say so in the error log once an hour.
 	 *
 	 * A consent log that stops recording without complaining is worse than one
 	 * that complains: nothing on the site looks broken, and the gap is only
 	 * discovered when the records are needed. System Status reads this tally.
 	 *
+	 * The write is rate-limited per client per cause, and deliberately not on
+	 * the key the endpoint's own throttle uses — a junk token must never spend
+	 * the consent budget a real visitor needs moments later. The endpoint's
+	 * per-IP throttle runs AFTER the token check, so without a gate of its own
+	 * this accounting would hand any anonymous caller one guaranteed database
+	 * write per request, on the one route that has to stay reachable without
+	 * authentication. The cost is that a flood from a single address is counted
+	 * once per window rather than in full; the case this tally exists for —
+	 * many distinct visitors each refused once from stale cached HTML — is
+	 * unaffected, because each of them is its own client.
+	 *
+	 * @param string $cause One of the CAUSE_* constants.
 	 * @return void
 	 */
-	private static function record_token_rejection() {
-		$now = time();
-		// Rolling 7-day tally, through the same reader System Status uses: an
-		// expired one comes back at zero and this refusal starts a new window.
-		$tally = self::rejection_tally();
-		$tally = array(
-			'since' => $tally['count'] > 0 ? $tally['since'] : $now,
-			'count' => $tally['count'] + 1,
-			'last'  => $now,
+	private static function record_refusal( $cause ) {
+		$cause = (string) $cause;
+		if ( ! in_array( $cause, self::refusal_causes(), true ) ) {
+			return;
+		}
+
+		if ( function_exists( 'faz_throttle_request' )
+			&& faz_throttle_request( 'faz_consent_refusal_' . $cause, 10 ) ) {
+			return;
+		}
+
+		$now   = time();
+		$day   = self::day_index( $now );
+		$tally = get_option( self::REJECTION_OPTION, array() );
+		$tally = is_array( $tally ) ? $tally : array();
+		$days  = self::retained_days( $tally, $now );
+
+		if ( ! isset( $days[ $day ] ) ) {
+			$days[ $day ] = array();
+		}
+		$days[ $day ][ $cause ] = ( isset( $days[ $day ][ $cause ] ) ? (int) $days[ $day ][ $cause ] : 0 ) + 1;
+
+		update_option(
+			self::REJECTION_OPTION,
+			array( 'days' => $days, 'last' => $now ),
+			false
 		);
-		update_option( self::REJECTION_OPTION, $tally, false );
 
 		if ( ! get_transient( 'faz_consent_token_rejected_notice' ) ) {
 			set_transient( 'faz_consent_token_rejected_notice', 1, HOUR_IN_SECONDS );
+			$reported = self::rejection_tally( $now );
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a consent record was refused; that belongs in the log whatever the site's debug settings.
-			error_log(
-				sprintf(
-					'FAZ Cookie Manager: refused a consent record because its origin token was not valid (%d refused in the last 7 days; the accepted window is %d seconds). HTML served from a cache older than that window is the usual cause — raise it with the faz_consent_token_max_age filter or shorten the cache TTL — but a token from another installation or a malformed one is refused the same way.',
-					(int) $tally['count'],
-					self::token_max_age()
-				)
-			);
+			error_log( self::refusal_log_line( $cause, $reported ) );
 		}
+	}
+
+	/**
+	 * The error-log sentence for a refusal, naming its own cause.
+	 *
+	 * Not translated: it goes to the server log, which is read by whoever
+	 * administers the server rather than by the site's audience, and the
+	 * strings a translator has to carry are expensive enough already.
+	 *
+	 * @param string $cause    The cause that triggered this line.
+	 * @param array  $reported The tally as System Status will report it.
+	 * @return string
+	 */
+	private static function refusal_log_line( $cause, array $reported ) {
+		$causes = array();
+		foreach ( $reported['causes'] as $name => $n ) {
+			$causes[] = $name . '=' . (int) $n;
+		}
+
+		switch ( $cause ) {
+			case self::CAUSE_CROSS_ORIGIN:
+				$why = 'the request carried no same-origin signal. That is usually automated traffic, but if this figure tracks your visitor numbers your pages are being served on a host, scheme or port that differs from your WordPress Address (Settings -> General): check that www/apex, http/https and any non-default port all redirect to the canonical one.';
+				break;
+			case self::CAUSE_MISSING_TOKEN:
+				$why = 'the request carried no origin token at all, which the plugin\'s own frontend never does. Automated traffic is the usual source.';
+				break;
+			case self::CAUSE_THROTTLED:
+				$why = 'the request was rate-limited. Visitors sharing one outbound address can collide here.';
+				break;
+			case self::CAUSE_WRITE_FAILED:
+				$why = 'the record could not be written to the database. This one is always a real visitor\'s real consent — check the wp_faz_consent_logs table and the database error log.';
+				break;
+			default:
+				$why = sprintf(
+					'its origin token was not valid. HTML served from a cache older than the accepted window of %d seconds is the usual cause — raise it with the faz_consent_token_max_age filter or shorten the cache TTL — but a token from another installation or a malformed one is refused the same way.',
+					self::token_max_age()
+				);
+				break;
+		}
+
+		return sprintf(
+			'FAZ Cookie Manager: refused a consent record because %s (last %d days, per cause: %s). The count is rate-limited to one per client per cause every 10 seconds, so it is a floor rather than an exact total.',
+			$why,
+			self::REJECTION_WINDOW_DAYS,
+			$causes ? implode( ', ', $causes ) : 'none'
+		);
 	}
 
 	/**
@@ -282,6 +501,7 @@ class Consent_Logger {
 		// prevents a third-party page from replaying a leaked/current token to
 		// create arbitrary consent-log records in a visitor's context.
 		if ( ! $this->is_same_origin_request() ) {
+			self::record_refusal( self::CAUSE_CROSS_ORIGIN );
 			return new \WP_Error(
 				'cross_origin_request',
 				__( 'This request must originate from this website.', 'faz-cookie-manager' ),
@@ -295,7 +515,7 @@ class Consent_Logger {
 		$token = $request->get_param( 'token' );
 		if ( ! empty( $token ) ) {
 			if ( ! self::token_is_valid( $token ) ) {
-				self::record_token_rejection();
+				self::record_refusal( self::CAUSE_STALE_TOKEN );
 				return new \WP_Error(
 					'invalid_token',
 					'Invalid origin token.',
@@ -303,7 +523,12 @@ class Consent_Logger {
 				);
 			}
 		} else {
-			// No token = request not from a page rendered by this plugin.
+			// No token = request not from a page rendered by this plugin. The
+			// inline beacon returns before fetching when its localized object
+			// is absent, so this is reached by automated traffic rather than by
+			// a visitor — counted under its own cause so it cannot be mistaken
+			// for records a cache lost.
+			self::record_refusal( self::CAUSE_MISSING_TOKEN );
 			return new \WP_Error(
 				'missing_token',
 				'Origin token required.',
@@ -327,6 +552,10 @@ class Consent_Logger {
 		// throttles in the first place. Nothing below can clear an IP throttle,
 		// so returning here changes no outcome, only the price of reaching it.
 		if ( $is_ip_throttled ) {
+			// A dropped record is a dropped record even when the answer is 200:
+			// the fire-and-forget client never inspects it, so without counting
+			// this the loss is as invisible as the one issue #292 was about.
+			self::record_refusal( self::CAUSE_THROTTLED );
 			return rest_ensure_response( array( 'throttled' => true ) );
 		}
 
@@ -403,6 +632,7 @@ class Consent_Logger {
 			$is_consent_throttled = $status_changed ? false : $window_closed;
 		}
 		if ( $is_ip_throttled || $is_consent_throttled ) {
+			self::record_refusal( self::CAUSE_THROTTLED );
 			return rest_ensure_response( array( 'throttled' => true ) );
 		}
 
@@ -428,6 +658,9 @@ class Consent_Logger {
 		$result = Controller::get_instance()->log_consent( $data );
 
 		if ( false === $result ) {
+			// The gravest of the five: the visitor answered, the row did not
+			// land, and the 500 goes to a client that never looks at it.
+			self::record_refusal( self::CAUSE_WRITE_FAILED );
 			return new \WP_Error(
 				'consent_log_failed',
 				__( 'Failed to log consent.', 'faz-cookie-manager' ),

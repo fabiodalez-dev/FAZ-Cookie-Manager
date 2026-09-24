@@ -484,6 +484,23 @@ body[class*="faz-cookie-manager"] #wpbody-content {
 .faz-form-group .faz-help p:last-child {
 	margin-bottom: 0;
 }
+/* .faz-help was only ever styled inside a form group, so the same class used
+   anywhere else — the status table, and three pre-existing help paragraphs —
+   rendered at full body size and colour, indistinguishable from the primary
+   text it was meant to sit beneath. Style the class itself and let the form
+   group keep its own spacing. */
+.faz-help {
+	font-size: 12px;
+	color: var(--faz-text-secondary);
+	line-height: 1.55;
+}
+.faz-status-table .faz-help {
+	margin-top: 6px;
+}
+.faz-status-table .faz-status-detail {
+	margin-top: 4px;
+	color: var(--faz-text-secondary);
+}
 .faz-input,
 .faz-select,
 .faz-textarea {

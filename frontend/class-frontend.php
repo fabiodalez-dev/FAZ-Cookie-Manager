@@ -18,6 +18,7 @@ use FazCookie\Admin\Modules\Banners\Includes\Banner;
 use FazCookie\Admin\Modules\Settings\Includes\Settings;
 use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
 use FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger;
+use FazCookie\Admin\Modules\Pageviews\Api\Api as Pageviews_Api;
 use FazCookie\Frontend\Modules\Banner_Rest\Banner_Rest;
 use FazCookie\Includes\Geolocation;
 use FazCookie\Includes\Ab_Test;
@@ -754,8 +755,11 @@ class Frontend {
 			// Pageview and banner interaction tracking (opt-in via Settings).
 			$pv_tracking = isset( $faz_settings['pageview_tracking'] ) && true === $faz_settings['pageview_tracking'];
 			if ( $pv_tracking ) {
-				$pv_bucket    = (string) floor( time() / ( 12 * HOUR_IN_SECONDS ) );
-				$pv_token     = wp_hash( 'faz_pageview_' . $pv_bucket );
+				// Minted by the class that accepts it, like the consent token
+				// above: two copies of the same bucket arithmetic in two files
+				// is what let the consent token's window and the endpoint's
+				// window drift apart in issue #292.
+				$pv_token = Pageviews_Api::current_token();
 
 				wp_localize_script(
 					$script_handle,

@@ -74,6 +74,13 @@ namespace {
 	if ( ! function_exists( 'set_transient' ) ) {
 		function set_transient( $name, $value, $ttl = 0 ) { $GLOBALS['faz_transients'][ $name ] = $value; return true; }
 	}
+	// The refusal tally gates its own write on this, so the suite would fatal
+	// on an undefined function without it. Switchable, because the ceiling it
+	// adds is itself something to assert.
+	$GLOBALS['faz_throttled'] = false;
+	if ( ! function_exists( 'faz_throttle_request' ) ) {
+		function faz_throttle_request( $prefix = 'faz_throttle', $ttl = 1 ) { return (bool) $GLOBALS['faz_throttled']; }
+	}
 	if ( ! function_exists( 'sanitize_key' ) ) {
 		function sanitize_key( $key ) { return strtolower( preg_replace( '/[^a-z0-9_-]/i', '', (string) $key ) ); }
 	}
@@ -163,46 +170,159 @@ namespace {
 	$frontend = (string) file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' );
 	tok_check( false !== strpos( $frontend, 'Consent_Logger::current_token()' ), 'the frontend mints the token through the logger' );
 	tok_check( false === strpos( $frontend, "wp_hash( 'faz_consent_" ), 'and no longer hashes a bucket of its own' );
+	// The pageview endpoint carried the identical defect and the identical
+	// duplicated arithmetic; both are now single-sourced the same way.
+	tok_check( false === strpos( $frontend, "wp_hash( 'faz_pageview_" ), 'the pageview token is not hashed in the frontend either' );
+	$pv_api = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/pageviews/api/class-api.php' );
+	tok_check( false !== strpos( $pv_api, 'function token_is_valid' ), 'the pageview endpoint owns a windowed token check' );
+	tok_check( false === strpos( $pv_api, '12 * HOUR_IN_SECONDS ) )' ), 'and no longer accepts only two 12-hour buckets' );
+	tok_check( false !== strpos( $pv_api, 'faz_pageview_token_max_age' ), 'with its own filter for a longer-cached site' );
 
 	// 8. A refusal is recorded instead of passing in silence: a consent log
 	//    that stops recording without complaining is the part nobody notices.
+	//    The tally is seven per-day buckets, per cause. The anchored shape it
+	//    replaces expired wholesale once its first refusal aged out, so a site
+	//    refusing continuously watched the figure collapse from thousands to
+	//    one the instant the window rolled — a sawtooth reported as "the last
+	//    7 days". Every case below fails against that shape.
 	$GLOBALS['faz_options']    = array();
 	$GLOBALS['faz_transients'] = array();
-	$reject = new \ReflectionMethod( Consent_Logger::class, 'record_token_rejection' );
+	$GLOBALS['faz_throttled']  = false;
+	$reject = new \ReflectionMethod( Consent_Logger::class, 'record_refusal' );
 	if ( PHP_VERSION_ID < 80100 ) {
 		$reject->setAccessible( true );
 	}
-	$reject->invoke( null );
-	$reject->invoke( null );
-	$tally = get_option( Consent_Logger::REJECTION_OPTION, array() );
-	tok_check( is_array( $tally ) && 2 === (int) $tally['count'], 'each refusal is counted' );
-	tok_check( ! empty( $tally['since'] ) && ! empty( $tally['last'] ), 'with the window start and the last occurrence' );
+	$reject->invoke( null, Consent_Logger::CAUSE_STALE_TOKEN );
+	$reject->invoke( null, Consent_Logger::CAUSE_STALE_TOKEN );
+	$tally = Consent_Logger::rejection_tally();
+	tok_check( 2 === $tally['count'], 'each refusal is counted' );
+	tok_check( 2 === ( $tally['causes'][ Consent_Logger::CAUSE_STALE_TOKEN ] ?? 0 ), 'under the cause that produced it' );
+	tok_check( $tally['since'] > 0 && $tally['last'] > 0, 'with the window start and the last occurrence' );
 	tok_check( 1 === (int) get_transient( 'faz_consent_token_rejected_notice' ), 'and the error-log notice is throttled to one an hour' );
 
-	// A tally older than its 7-day window starts again rather than keeping a
-	// warning on screen for a cache problem that a purge already fixed. The
-	// window has to apply when the tally is READ as well: rolling it over only
-	// on the next refusal left System Status reporting a fortnight-old count as
-	// "in the last 7 days" for as long as nothing else was refused.
-	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = array( 'since' => time() - 8 * DAY_IN_SECONDS, 'count' => 900, 'last' => time() - 8 * DAY_IN_SECONDS );
-	$stale = Consent_Logger::rejection_tally();
-	tok_check( 0 === $stale['count'], 'an expired tally reads as zero, with no new refusal needed' );
-	$reject->invoke( null );
+	// Every discard path on the endpoint is counted, not just the stale token:
+	// a cross-origin refusal is reachable by a real browser on a site whose
+	// host, scheme or port differs from its WordPress Address, and a failed
+	// database write is always a genuine consent that was lost behind a 500 the
+	// fire-and-forget client never inspects.
+	$reject->invoke( null, Consent_Logger::CAUSE_CROSS_ORIGIN );
+	$reject->invoke( null, Consent_Logger::CAUSE_WRITE_FAILED );
 	$tally = Consent_Logger::rejection_tally();
-	tok_check( 1 === $tally['count'], 'and the next refusal starts a new window' );
-	tok_check( $tally['since'] >= time() - 5, 'dated from that refusal, not from the expired window' );
+	tok_check( 4 === $tally['count'], 'refusals from different causes add to the same total' );
+	tok_check( 1 === ( $tally['causes'][ Consent_Logger::CAUSE_CROSS_ORIGIN ] ?? 0 ), 'and a cross-origin refusal is counted separately' );
+	tok_check( 1 === ( $tally['causes'][ Consent_Logger::CAUSE_WRITE_FAILED ] ?? 0 ), 'as is a failed database write' );
+	$reject->invoke( null, 'not-a-cause' );
+	tok_check( 4 === Consent_Logger::rejection_tally()['count'], 'an unknown cause is ignored rather than stored' );
 
-	// A live tally is reported as it stands.
-	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = array( 'since' => time() - DAY_IN_SECONDS, 'count' => 7, 'last' => time() );
-	tok_check( 7 === Consent_Logger::rejection_tally()['count'], 'a tally inside the window is reported as it stands' );
+	// THE CASE THE ANCHORED SHAPE FAILED. Ten days of continuous refusals: the
+	// figure must be the trailing-window sum, never a count that restarted when
+	// the oldest day aged out.
+	$now  = time();
+	$day  = (int) floor( $now / DAY_IN_SECONDS );
+	$days = array();
+	for ( $i = 0; $i < 10; $i++ ) {
+		$days[ $day - $i ] = array( Consent_Logger::CAUSE_STALE_TOKEN => 300 );
+	}
+	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = array( 'days' => $days, 'last' => $now );
+	$rolling = Consent_Logger::rejection_tally( $now );
+	tok_check( 2100 === $rolling['count'], 'ten days of refusals report the trailing seven, not a reset counter' );
+	tok_check( 1 !== $rolling['count'], 'and never collapse to a single refusal at the boundary' );
+	tok_check( $rolling['since'] === ( $day - 6 ) * DAY_IN_SECONDS, 'dated from the oldest day still inside the window' );
+
+	// The property the anchored shape DID get right, which the buckets must
+	// keep: a cause that stopped over a week ago reads as zero on its own, with
+	// no new refusal needed to roll the window over.
+	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = array(
+		'days' => array( ( $day - 9 ) => array( Consent_Logger::CAUSE_STALE_TOKEN => 5000 ) ),
+		'last' => $now - 9 * DAY_IN_SECONDS,
+	);
+	tok_check( 0 === Consent_Logger::rejection_tally( $now )['count'], 'an expired tally reads as zero, with no new refusal needed' );
+	$reject->invoke( null, Consent_Logger::CAUSE_STALE_TOKEN );
+	tok_check( 1 === Consent_Logger::rejection_tally()['count'], 'and the next refusal starts from one' );
+
+	// A row from the first cut of this feature must not fatal or vanish.
+	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = array( 'since' => $now - DAY_IN_SECONDS, 'count' => 42, 'last' => $now );
+	$legacy = Consent_Logger::rejection_tally( $now );
+	tok_check( 42 === $legacy['count'], 'a legacy flat tally is still reported' );
+	tok_check( 42 === ( $legacy['causes'][ Consent_Logger::CAUSE_STALE_TOKEN ] ?? 0 ), 'attributed to the only cause that shape could hold' );
+	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = array( 'since' => $now - 9 * DAY_IN_SECONDS, 'count' => 900, 'last' => $now - 9 * DAY_IN_SECONDS );
+	tok_check( 0 === Consent_Logger::rejection_tally( $now )['count'], 'and an expired legacy tally still reads as zero' );
+
+	// Junk in the option must read as nothing rather than fatal, and a bucket
+	// dated in the future is skew, not data — keeping it would hold the tally
+	// open indefinitely.
 	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = 'not an array';
 	tok_check( 0 === Consent_Logger::rejection_tally()['count'], 'a corrupt option reads as zero' );
+	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = array( 'days' => array( ( $day + 3 ) => array( Consent_Logger::CAUSE_STALE_TOKEN => 9 ) ), 'last' => $now );
+	tok_check( 0 === Consent_Logger::rejection_tally( $now )['count'], 'a bucket dated in the future is not counted' );
+	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = array( 'days' => array( $day => array( Consent_Logger::CAUSE_STALE_TOKEN => -5 ) ), 'last' => $now );
+	tok_check( 0 === Consent_Logger::rejection_tally( $now )['count'], 'and a negative count cannot subtract from the total' );
+	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = array( 'days' => array( $day => array( Consent_Logger::CAUSE_STALE_TOKEN => 3 ) ), 'last' => $now + 5 * DAY_IN_SECONDS );
+	tok_check( Consent_Logger::rejection_tally( $now )['last'] <= $now, 'a last-seen timestamp from the future is clamped to now' );
+
+	// The write is rate-limited per client per cause. The endpoint's own per-IP
+	// throttle runs AFTER the token check, so without this any anonymous caller
+	// bought one guaranteed database write per request on the one route that has
+	// to stay reachable without authentication.
+	$GLOBALS['faz_options']   = array();
+	$GLOBALS['faz_throttled'] = false;
+	$reject->invoke( null, Consent_Logger::CAUSE_STALE_TOKEN );
+	$GLOBALS['faz_throttled'] = true;
+	$reject->invoke( null, Consent_Logger::CAUSE_STALE_TOKEN );
+	$reject->invoke( null, Consent_Logger::CAUSE_STALE_TOKEN );
+	tok_check( 1 === Consent_Logger::rejection_tally()['count'], 'a throttled client cannot drive the tally past one per window' );
+	$GLOBALS['faz_throttled'] = false;
+	$reject->invoke( null, Consent_Logger::CAUSE_STALE_TOKEN );
+	tok_check( 2 === Consent_Logger::rejection_tally()['count'], 'and counting resumes when the window reopens' );
+	$GLOBALS['faz_throttled'] = false;
 
 	// The view must not read the option itself: that is how the two copies of
 	// the 7-day rule came apart in the first place.
 	$view = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/views/system-status.php' );
 	tok_check( false !== strpos( $view, 'Consent_Logger::rejection_tally()' ), 'System Status reads the tally through the shared accessor' );
 	tok_check( false === strpos( $view, "get_option( \\FazCookie\\Frontend\\Modules\\Consent_Logger\\Consent_Logger::REJECTION_OPTION" ), 'and not through get_option()' );
+
+	// A count is printed, not cast. printf's %d applied to the grouped STRING
+	// number_format_i18n() returns stops at the thousands separator, so 2.002
+	// refused records rendered as "2" — a thousandfold understatement on the one
+	// row whose job is to report how many records were lost. Every %d in this
+	// view must be fed a raw integer, never a formatted one.
+	// Bounded look-back rather than a balanced-block match: the format string
+	// and its argument always sit within a few lines of each other, and a
+	// greedy printf-block regex silently swallows half the file and reports a
+	// false positive. Verified to flag both occurrences in the pre-fix view.
+	$faz_formatted_into_d = function ( $src, $look_back = 6 ) {
+		$lines = explode( "\n", $src );
+		$hits  = array();
+		foreach ( $lines as $i => $line ) {
+			if ( false === strpos( $line, 'number_format_i18n' ) ) {
+				continue;
+			}
+			for ( $j = max( 0, $i - $look_back ); $j < $i; $j++ ) {
+				$candidate = preg_replace( '#/\*.*?\*/#', '', $lines[ $j ] );
+				if ( preg_match( '/%\d*\$?d/', $candidate ) ) {
+					$hits[] = $j + 1;
+					break;
+				}
+			}
+		}
+		return $hits;
+	};
+	tok_check(
+		0 === count( $faz_formatted_into_d( $view ) ),
+		'no %d placeholder in System Status is fed a locale-formatted string'
+	);
+	// And the guard must be able to fail: it flags both offenders in the shape
+	// this fix replaced, so a green result means something.
+	tok_check(
+		2 === count( $faz_formatted_into_d( (string) file_get_contents( __DIR__ . '/fixtures/system-status-pre-1321.php' ) ) ),
+		'and the guard itself still flags the pre-fix shape'
+	);
+	tok_check( false !== strpos( $view, 'REJECTION_WINDOW_DAYS' ), 'the row names the tally window from the constant, not a literal' );
+	// The row has to appear at zero too: one that shows up only on bad news
+	// makes its own absence unreadable, and a site losing every record through a
+	// cause nothing counted looked exactly like a healthy one.
+	tok_check( false === strpos( $view, 'if ( $faz_rejected_count > 0 ) :' ), 'the row is no longer hidden when the tally is zero' );
 
 	echo "\nPassed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );

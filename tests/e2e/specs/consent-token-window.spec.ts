@@ -8,11 +8,13 @@
  * only casualty was the accountability record. Reported with production
  * figures in issue #292.
  *
- * Two halves here, both against the real stack: the endpoint accepts a token
- * minted five days ago and writes the row (the fix), and System Status reports
- * refusals when they happen instead of leaving the gap silent. The unit suite
- * (test-consent-token-window-php.php) pins the window arithmetic, the filter
- * and the clamps.
+ * Three parts here, all against the real stack: the endpoint accepts a token
+ * minted five days ago and writes the row (the fix), the refusal accounting is
+ * bounded so an anonymous caller cannot buy a database write per request, and
+ * System Status reports refusals — by cause, and at zero too, because a row
+ * that appears only on bad news makes its own absence unreadable. The unit
+ * suite (test-consent-token-window-php.php) pins the window arithmetic, the
+ * bucket shape, the filter and the clamps.
  */
 import { expect, test } from '../fixtures/wp-fixture';
 import { wpEval } from '../utils/wp-env';
@@ -29,6 +31,28 @@ function tokenAgedDays(daysAgo: number): string {
   return lastLine(wpEval(
     `echo wp_hash( 'faz_consent_' . (string) ( (int) floor( time() / 43200 ) - ${buckets} ) );`,
   )).trim();
+}
+
+/**
+ * Seed the tally directly, in the shape the writer persists.
+ *
+ * `days` is a map of UTC day index to per-cause counts. Written as an option
+ * rather than driven by request volume, because the write is rate-limited per
+ * client — a loop of POSTs from one address is counted once, which is the
+ * point of the throttle and would make a volume-driven fixture lie.
+ */
+function seedTally(days: Record<string, Record<string, number>>, lastOffset = 0): void {
+  const entries = Object.entries(days)
+    .map(([day, causes]) => {
+      const inner = Object.entries(causes)
+        .map(([cause, n]) => `'${cause}' => ${n}`)
+        .join(', ');
+      return `( (int) floor( time() / 86400 ) ${day} ) => array( ${inner} )`;
+    })
+    .join(', ');
+  wpEval(
+    `update_option( '${REJECTION_OPTION}', array( 'days' => array( ${entries} ), 'last' => time() ${lastOffset >= 0 ? '-' : '+'} ${Math.abs(lastOffset)} ), false );`,
+  );
 }
 
 function clearThrottles(): void {
@@ -74,35 +98,120 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
     expect((await expired.json()).code).toBe('invalid_token');
   });
 
-  test('System Status reports refused records instead of staying silent', async ({ page, baseURL, loginAsAdmin }) => {
-    await loginAsAdmin(page);
+  test('the refusal accounting is bounded, so a bogus token cannot buy a DB write per request', async ({ request, baseURL }) => {
+    // The endpoint's own per-IP throttle runs AFTER the token check, so without
+    // a gate of its own this accounting handed any anonymous caller one
+    // guaranteed option write per request — on the one route that has to stay
+    // reachable without authentication. The 403 itself must not change.
     wpEval(`delete_option( '${REJECTION_OPTION}' );`);
-    await page.goto(`${baseURL}/wp-admin/admin.php?page=faz-cookie-manager-system-status`, { waitUntil: 'domcontentloaded' });
-    await expect(
-      page.getByText('Consent Records Refused'),
-      'nothing is claimed when nothing was refused',
-    ).toHaveCount(0);
+    clearThrottles();
 
-    wpEval(
-      `update_option( '${REJECTION_OPTION}', array( 'since' => time() - 3600, 'count' => 42, 'last' => time() ) );`,
+    const bogus = 'not-a-token-at-all';
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      const res = await request.post(`${baseURL}/wp-json/faz/v1/consent`, {
+        headers: { Origin: baseURL as string, 'Sec-Fetch-Site': 'same-origin' },
+        data: { token: bogus, consent_id: `e2e-token-burst-${i}`, status: 'accepted', url: `${baseURL}/` },
+      });
+      statuses.push(res.status());
+    }
+    expect(statuses.every((s) => s === 403), 'every bogus token is still refused').toBe(true);
+
+    const counted = Number(
+      lastLine(wpEval(
+        `$t = \\FazCookie\\Frontend\\Modules\\Consent_Logger\\Consent_Logger::rejection_tally(); echo (int) $t['count'];`,
+      )).replace(/\D/g, '') || '0',
     );
-    await page.goto(`${baseURL}/wp-admin/admin.php?page=faz-cookie-manager-system-status`, { waitUntil: 'domcontentloaded' });
+    expect(counted, 'but a burst from one client is counted once, not six times').toBeLessThan(6);
+    expect(counted, 'and it is counted at least once — the signal is not silenced').toBeGreaterThan(0);
+  });
+
+  test('a cross-origin refusal is counted under its own cause', async ({ request, baseURL }) => {
+    // Reachable by a real browser whenever the page origin differs from the
+    // WordPress Address — a scheme or port mismatch, or a sandboxed iframe.
+    // WordPress echoes back any Origin in its CORS headers, so the preflight
+    // succeeds and the POST reaches PHP: this plugin refuses it, not the browser.
+    wpEval(`delete_option( '${REJECTION_OPTION}' );`);
+    clearThrottles();
+
+    const res = await request.post(`${baseURL}/wp-json/faz/v1/consent`, {
+      headers: { Origin: 'https://not-this-site.example', 'Sec-Fetch-Site': 'cross-site' },
+      data: { token: 'irrelevant', consent_id: `e2e-token-xorigin-${Date.now()}`, status: 'accepted' },
+    });
+    expect(res.status()).toBe(403);
+    expect((await res.json()).code).toBe('cross_origin_request');
+
+    const cause = lastLine(wpEval(
+      `$t = \\FazCookie\\Frontend\\Modules\\Consent_Logger\\Consent_Logger::rejection_tally(); echo (int) ( $t['causes']['cross_origin'] ?? 0 );`,
+    )).replace(/\D/g, '');
+    expect(cause, 'the refusal is counted, and under cross_origin rather than as a stale token').toBe('1');
+  });
+
+  test('System Status reports refused records by cause, and says so at zero too', async ({ page, baseURL, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    const statusUrl = `${baseURL}/wp-admin/admin.php?page=faz-cookie-manager-system-status`;
+
+    // Zero state. The row used to be hidden below one refusal, so a site losing
+    // every record through a cause nothing counted rendered a page identical to
+    // a healthy one: absence of signal read as good news.
+    wpEval(`delete_option( '${REJECTION_OPTION}' );`);
+    await page.goto(statusUrl, { waitUntil: 'domcontentloaded' });
     await expect(page.getByText('Consent Records Refused')).toHaveCount(1);
-    await expect(page.getByText('42 in the last 7 days', { exact: false })).toHaveCount(1);
     await expect(
-      page.getByText('faz_consent_token_max_age', { exact: false }),
-      'and it names the lever that fixes it',
+      page.getByText('0 in the last 7 days', { exact: false }),
+      'the row states zero rather than vanishing',
     ).toHaveCount(1);
 
-    // A tally whose window has passed is not reported as current, even though
-    // no refusal has arrived since to roll it over.
-    wpEval(
-      `update_option( '${REJECTION_OPTION}', array( 'since' => time() - 8 * 86400, 'count' => 900, 'last' => time() - 8 * 86400 ) );`,
-    );
-    await page.goto(`${baseURL}/wp-admin/admin.php?page=faz-cookie-manager-system-status`, { waitUntil: 'domcontentloaded' });
+    // A four-digit tally. printf's %d applied to the grouped string a locale
+    // formatter returns stopped at the thousands separator, so 2002 rendered as
+    // "2" — and the suite stayed green because every fixture was under 1000.
+    seedTally({ '- 1': { stale_token: 2002 } });
+    await page.goto(statusUrl, { waitUntil: 'domcontentloaded' });
+    const body = (await page.locator('#faz-system-status').innerText()).replace(/\u00a0/g, ' ');
+    expect(body, 'the full count is printed, not its first group').toMatch(/2[.,\s]002 in the last 7 days/);
+    expect(body, 'and it is not truncated to the leading group').not.toMatch(/\b2 in the last 7 days/);
+    expect(body, 'the cause is named').toContain('Stale origin token');
+    expect(body, 'and the lever that fixes it').toContain('faz_consent_token_max_age');
+
+    // Two causes, reported separately: folding automated traffic into the same
+    // figure as records a cache lost would make an alarming number out of noise.
+    seedTally({ '- 0': { stale_token: 5, cross_origin: 3, write_failed: 1 } });
+    await page.goto(statusUrl, { waitUntil: 'domcontentloaded' });
+    const split = await page.locator('#faz-system-status').innerText();
+    expect(split).toContain('Stale origin token');
+    expect(split).toContain('No same-origin signal');
+    expect(split).toContain('Database write failed');
+
+    // Ten days of continuous refusals report the trailing window, never a count
+    // that restarted when the oldest day aged out. The anchored shape this
+    // replaced collapsed from thousands to one at the boundary.
+    const tenDays: Record<string, Record<string, number>> = {};
+    for (let i = 0; i < 10; i += 1) {
+      tenDays[`- ${i}`] = { stale_token: 300 };
+    }
+    seedTally(tenDays);
+    await page.goto(statusUrl, { waitUntil: 'domcontentloaded' });
+    const rolling = (await page.locator('#faz-system-status').innerText()).replace(/\u00a0/g, ' ');
+    expect(rolling, 'seven days of the ten are reported').toMatch(/2[.,\s]100 in the last 7 days/);
+
+    // A tally whose buckets have all aged out reads as zero, without needing a
+    // new refusal to roll it over.
+    seedTally({ '- 9': { stale_token: 900 } }, 9 * 86400);
+    await page.goto(statusUrl, { waitUntil: 'domcontentloaded' });
     await expect(
-      page.getByText('Consent Records Refused'),
+      page.getByText('0 in the last 7 days', { exact: false }),
       'an expired tally is not reported as the last 7 days',
-    ).toHaveCount(0);
+    ).toHaveCount(1);
+
+    // A row left by the first cut of this feature must still be reported rather
+    // than silently dropped on upgrade.
+    wpEval(
+      `update_option( '${REJECTION_OPTION}', array( 'since' => time() - 3600, 'count' => 42, 'last' => time() ), false );`,
+    );
+    await page.goto(statusUrl, { waitUntil: 'domcontentloaded' });
+    await expect(
+      page.getByText('42 in the last 7 days', { exact: false }),
+      'a legacy flat tally survives the upgrade',
+    ).toHaveCount(1);
   });
 });

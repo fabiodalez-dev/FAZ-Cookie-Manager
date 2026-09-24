@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.9.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-09-24T05:21:36+00:00\n"
+"POT-Creation-Date: 2026-09-24T11:06:59+00:00\n"
 "PO-Revision-Date: 2026-04-10\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: German\n"
@@ -48,7 +48,7 @@ msgid "Cookie Banner"
 msgstr "Cookie-Banner"
 
 #: admin/class-admin.php:233 admin/views/base.php:21
-#: frontend/class-frontend.php:2879
+#: frontend/class-frontend.php:2883
 #: frontend/modules/banner-rest/class-banner-rest.php:598
 msgid "Cookies"
 msgstr "Cookies"
@@ -59,7 +59,7 @@ msgid "Consent Logs"
 msgstr "Einwilligungsprotokolle"
 
 #: admin/class-admin.php:243 admin/views/base.php:23
-#: admin/views/dashboard.php:243 admin/views/system-status.php:113
+#: admin/views/dashboard.php:243 admin/views/system-status.php:163
 msgid "Google Consent Mode"
 msgstr "Google Consent Mode"
 
@@ -239,7 +239,7 @@ msgid "Delete stale"
 msgstr "Veraltete löschen"
 
 #: admin/class-admin.php:561 admin/views/cookies.php:260
-#: admin/views/system-status.php:164
+#: admin/views/system-status.php:214
 #: includes/class-cookie-table-shortcode.php:229
 msgid "Category"
 msgstr "Kategorie"
@@ -1586,7 +1586,7 @@ msgstr "Statcounter"
 msgid "Hotjar"
 msgstr "Hotjar"
 
-#: admin/class-admin.php:1031 admin/views/system-status.php:137
+#: admin/class-admin.php:1031 admin/views/system-status.php:187
 msgid "Microsoft Clarity"
 msgstr "Microsoft Clarity"
 
@@ -1630,7 +1630,7 @@ msgstr "TikTok Pixel"
 msgid "LinkedIn Insight Tag"
 msgstr "LinkedIn Insight Tag"
 
-#: admin/class-admin.php:1043 admin/views/system-status.php:136
+#: admin/class-admin.php:1043 admin/views/system-status.php:186
 msgid "Microsoft UET"
 msgstr "Microsoft UET"
 
@@ -2280,7 +2280,7 @@ msgid "The date the banner was last modified, as GMT."
 msgstr "Das Datum der letzten Änderung des Banners, in GMT."
 
 #: admin/modules/consentlogs/api/class-api.php:99
-#: admin/modules/pageviews/api/class-api.php:321
+#: admin/modules/pageviews/api/class-api.php:412
 msgid "Number of days to look back."
 msgstr "Anzahl der Tage für die Rückschau."
 
@@ -2361,7 +2361,7 @@ msgid "Complete all fields required for the selected jurisdiction before saving 
 msgstr "Füllen Sie alle für die gewählte Rechtsordnung erforderlichen Felder aus, bevor Sie die Cookie-Richtlinie speichern oder in der Vorschau ansehen."
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:505
-#: admin/views/system-status.php:163
+#: admin/views/system-status.php:213
 #: frontend/modules/shortcodes/class-shortcodes.php:246
 #: includes/class-cookie-table-shortcode.php:225
 msgid "Cookie"
@@ -3394,11 +3394,11 @@ msgstr "GVL-Daten nicht verfügbar. Bitte zuerst die GVL aktualisieren."
 msgid "This endpoint is deprecated. Use the settings endpoint instead."
 msgstr "Dieser Endpunkt ist veraltet. Verwenden Sie stattdessen den Einstellungs-Endpunkt."
 
-#: admin/modules/pageviews/api/class-api.php:233
+#: admin/modules/pageviews/api/class-api.php:324
 msgid "Unknown event type."
 msgstr "Unbekannter Ereignistyp."
 
-#: admin/modules/pageviews/api/class-api.php:257
+#: admin/modules/pageviews/api/class-api.php:348
 msgid "Failed to record event."
 msgstr "Ereignis konnte nicht aufgezeichnet werden."
 
@@ -3987,7 +3987,7 @@ msgstr "Sprache:"
 msgid "Notice Title"
 msgstr "Hinweistitel"
 
-#: admin/views/banner.php:341 frontend/class-frontend.php:2874
+#: admin/views/banner.php:341 frontend/class-frontend.php:2878
 #: frontend/modules/banner-rest/class-banner-rest.php:593
 msgid "We value your privacy"
 msgstr "Wir schätzen Ihre Privatsphäre"
@@ -4326,7 +4326,7 @@ msgstr "Opt-out-Text (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Text für das Modal «Opt-out-Einstellungen», das ein Besucher nach dem Klick auf den Link «Do Not Sell or Share My Personal Information» sieht. Wird nur bei CCPA-/US-State-Laws-Bannern (und Beide) angezeigt. Folgt der oben ausgewählten Sprache."
 
-#: admin/views/banner.php:833 frontend/class-frontend.php:2876
+#: admin/views/banner.php:833 frontend/class-frontend.php:2880
 #: frontend/modules/banner-rest/class-banner-rest.php:595
 msgid "Opt-out Preferences"
 msgstr "Opt-out-Einstellungen"
@@ -5759,7 +5759,7 @@ msgid "Loading banners…"
 msgstr "Banner werden geladen…"
 
 #. translators: %d: minimum age in years.
-#: admin/views/settings.php:136 admin/views/system-status.php:134
+#: admin/views/settings.php:136 admin/views/system-status.php:184
 msgid "Cross-Domain Consent"
 msgstr "Domainübergreifende Einwilligung"
 
@@ -5783,7 +5783,7 @@ msgstr "Einer pro Zeile: https://shop.example.com"
 msgid "Full URLs of other sites that should receive consent state. Each site must also have FAZ Cookie Manager installed. One URL per line."
 msgstr "Vollständige URLs anderer Websites, die den Einwilligungsstatus erhalten sollen. Auf jeder Website muss FAZ Cookie Manager installiert sein. Eine URL pro Zeile."
 
-#: admin/views/settings.php:157 admin/views/system-status.php:115
+#: admin/views/settings.php:157 admin/views/system-status.php:165
 msgid "Pageview Tracking"
 msgstr "Seitenaufrufe-Tracking"
 
@@ -6763,164 +6763,199 @@ msgstr "Banner aktiviert"
 msgid "Consent Logging"
 msgstr "Einwilligungsprotokollierung"
 
-#: admin/views/system-status.php:92
-#, fuzzy
-msgid "Consent Records Refused"
-msgstr "Consent Mode"
+#: admin/views/system-status.php:95
+msgid "Stale origin token"
+msgstr ""
 
-#. translators: %d: number of refused consent records.
+#: admin/views/system-status.php:96
+msgid "No same-origin signal"
+msgstr ""
+
 #: admin/views/system-status.php:97
+msgid "No origin token"
+msgstr ""
+
+#: admin/views/system-status.php:98
+msgid "Rate-limited"
+msgstr ""
+
+#: admin/views/system-status.php:99
+msgid "Database write failed"
+msgstr ""
+
+#: admin/views/system-status.php:103
+msgid "Consent Records Refused"
+msgstr ""
+
+#. translators: 1: number of refused consent records, already formatted for the locale. 2: length of the reporting window, in days.
+#: admin/views/system-status.php:108
 #, php-format
-msgid "%d in the last 7 days — its origin token was not valid, so the consent was not recorded."
-msgid_plural "%d in the last 7 days — their origin tokens were not valid, so those consents were not recorded."
+msgid "%1$s in the last %2$s days — a consent decision that was not recorded."
+msgid_plural "%1$s in the last %2$s days — consent decisions that were not recorded."
 msgstr[0] ""
 msgstr[1] ""
 
-#. translators: %d: accepted token window, in days.
-#: admin/views/system-status.php:105
+#. translators: %s: human-readable time difference, e.g. "3 hours".
+#: admin/views/system-status.php:117
 #, php-format
-msgid "HTML served from a cache older than the accepted window of %d days is the usual cause: either shorten the cache lifetime or raise the window with the faz_consent_token_max_age filter. A token from another installation, or a malformed one, is refused the same way and counted here too."
+msgid "Most recent: %s ago."
 msgstr ""
 
-#: admin/views/system-status.php:114
+#. translators: %s: accepted token window, in days.
+#: admin/views/system-status.php:147
+#, php-format
+msgid "A stale origin token means HTML was served from a cache older than the accepted token window, currently %s days: either shorten the cache lifetime or raise the window with the faz_consent_token_max_age filter. A token from another installation, or a malformed one, is refused the same way."
+msgstr ""
+
+#: admin/views/system-status.php:151
+msgid "A request with no same-origin signal, or no token at all, is normally automated traffic — but if that figure tracks your visitor numbers, your pages are being served on a host, scheme or port that differs from your WordPress Address: check that www and apex, http and https, and any non-default port all redirect to the canonical one. A database write failure is always a real visitor whose consent was lost."
+msgstr ""
+
+#. translators: %s: length of the reporting window, in days.
+#: admin/views/system-status.php:155
+#, php-format
+msgid "This tally covers %s days whatever the token window is set to, and counts at most one refusal per visitor per cause every ten seconds, so it is a floor rather than an exact total."
+msgstr ""
+
+#: admin/views/system-status.php:164
 msgid "IAB TCF v2.3"
 msgstr "IAB TCF v2.3"
 
-#: admin/views/system-status.php:116
+#: admin/views/system-status.php:166
 msgid "Auto Scan"
 msgstr "Automatischer Scan"
 
-#: admin/views/system-status.php:117
+#: admin/views/system-status.php:167
 msgid "Geo-Targeting"
 msgstr "Geo-Targeting"
 
-#: admin/views/system-status.php:129
+#: admin/views/system-status.php:179
 msgid "Per-Service Consent"
 msgstr "Einwilligung pro Dienst"
 
-#: admin/views/system-status.php:130
+#: admin/views/system-status.php:180
 msgid "Per-Cookie Consent"
 msgstr "Einwilligung pro Cookie"
 
-#: admin/views/system-status.php:131
+#: admin/views/system-status.php:181
 msgid "Bot Detection"
 msgstr "Bot-Erkennung"
 
-#: admin/views/system-status.php:132
+#: admin/views/system-status.php:182
 msgid "GTM Data Layer"
 msgstr "GTM Data Layer"
 
-#: admin/views/system-status.php:133
+#: admin/views/system-status.php:183
 msgid "Age Gate"
 msgstr "Alterstor"
 
 #. translators: %d: minimum age in years.
-#: admin/views/system-status.php:133
+#: admin/views/system-status.php:183
 #, php-format
 msgid "(min age %d)"
 msgstr "(Mindestalter %d)"
 
-#: admin/views/system-status.php:135
+#: admin/views/system-status.php:185
 msgid "Ad-Blocker Compat"
 msgstr "Ad-Blocker-Kompatib."
 
-#: admin/views/system-status.php:138
+#: admin/views/system-status.php:188
 msgid "PHP Set-Cookie Blocking"
 msgstr "PHP-Set-Cookie-Blockierung"
 
-#: admin/views/system-status.php:144
+#: admin/views/system-status.php:194
 msgid "Recently Blocked Server Cookies"
 msgstr "Kürzlich blockierte Server-Cookies"
 
-#: admin/views/system-status.php:147
+#: admin/views/system-status.php:197
 msgid "No outgoing PHP Set-Cookie header has been blocked in the last 24 hours."
 msgstr "In den letzten 24 Stunden wurde kein ausgehender PHP-Set-Cookie-Header blockiert."
 
-#: admin/views/system-status.php:179
+#: admin/views/system-status.php:229
 msgid "Request Path"
 msgstr "Anfragepfad"
 
-#: admin/views/system-status.php:180
+#: admin/views/system-status.php:230
 msgid "Blocked At"
 msgstr "Blockiert am"
 
-#: admin/views/system-status.php:199
+#: admin/views/system-status.php:249
 msgid "Database"
 msgstr "Datenbank"
 
-#: admin/views/system-status.php:205
+#: admin/views/system-status.php:255
 msgid "Table missing"
 msgstr "Tabelle fehlt"
 
-#: admin/views/system-status.php:207
+#: admin/views/system-status.php:257
 msgid "rows"
 msgstr "Zeilen"
 
-#: admin/views/system-status.php:216
+#: admin/views/system-status.php:266
 msgid "Cron Jobs"
 msgstr "Cron-Jobs"
 
-#: admin/views/system-status.php:218
+#: admin/views/system-status.php:268
 msgid "A hosting cron that runs wp-cron.php processes WordPress scheduled events, including FAZ scans and cleanup. WP-CLI is optional. DISABLE_WP_CRON only disables automatic spawning on page visits; it does not prevent your host from running scheduled events."
 msgstr "Ein Cronjob des Hosters, der wp-cron.php ausführt, verarbeitet die geplanten Ereignisse von WordPress, einschließlich der FAZ-Prüfungen und der Bereinigung. WP-CLI ist optional. DISABLE_WP_CRON deaktiviert nur den automatischen Start bei Seitenaufrufen; es hindert Ihren Hoster nicht daran, geplante Ereignisse auszuführen."
 
-#: admin/views/system-status.php:220
+#: admin/views/system-status.php:270
 msgid "cPanel setup without WP-CLI"
 msgstr "cPanel-Einrichtung ohne WP-CLI"
 
-#: admin/views/system-status.php:221
+#: admin/views/system-status.php:271
 msgid "If your host already runs wp-cron.php regularly, keep that job; do not create a duplicate. Otherwise, ask your host to add a Cron Job in cPanel every five minutes (minute: */5; all other schedule fields: *), using the command below. The host should confirm the curl path and that the request is not blocked by authentication or a firewall."
 msgstr "Wenn Ihr Hoster wp-cron.php bereits regelmäßig ausführt, behalten Sie diesen Job bei und legen Sie keinen zweiten an. Andernfalls bitten Sie Ihren Hoster, in cPanel alle fünf Minuten einen Cron Job einzurichten (Minute: */5; alle übrigen Zeitplanfelder: *) und dabei den untenstehenden Befehl zu verwenden. Der Hoster sollte den curl-Pfad bestätigen und prüfen, dass die Anfrage nicht durch Authentifizierung oder eine Firewall blockiert wird."
 
-#: admin/views/system-status.php:223
+#: admin/views/system-status.php:273
 msgid "No separate Rulesets schedule is needed for WordPress cron events. Check that overdue dates advance after a run. A next-run timestamp shows scheduling, not proof that the last run succeeded."
 msgstr "Für WordPress-Cron-Ereignisse ist kein separater Zeitplan für Regelsätze erforderlich. Prüfen Sie, ob überfällige Termine nach einem Durchlauf weiterrücken. Ein Zeitstempel für den nächsten Lauf zeigt die Planung an, nicht den Nachweis, dass der letzte Lauf erfolgreich war."
 
-#: admin/views/system-status.php:227
+#: admin/views/system-status.php:277
 msgid "Next Scheduled Scan"
 msgstr "Nächster geplanter Scan"
 
-#: admin/views/system-status.php:231
+#: admin/views/system-status.php:281
 msgid "Next Consent Log Cleanup"
 msgstr "Nächste Bereinigung des Einwilligungsprotokolls"
 
-#: admin/views/system-status.php:246
+#: admin/views/system-status.php:296
 msgid "Cookie definitions updated"
 msgstr "Cookie-Definitionen aktualisiert"
 
 #. translators: %s: date the bundled snapshot's data was captured.
-#: admin/views/system-status.php:260
+#: admin/views/system-status.php:310
 #, php-format
 msgid "bundled data in use, captured %s"
 msgstr "gebündelte Daten in Verwendung, erfasst %s"
 
-#: admin/views/system-status.php:266
+#: admin/views/system-status.php:316
 msgid "never downloaded (bundled data in use)"
 msgstr "nie heruntergeladen (gebündelte Daten in Verwendung)"
 
-#: admin/views/system-status.php:271
+#: admin/views/system-status.php:321
 msgid "IAB vendor list updated"
 msgstr "IAB-Anbieterliste aktualisiert"
 
-#: admin/views/system-status.php:274
+#: admin/views/system-status.php:324
 msgid "never downloaded"
 msgstr "nie heruntergeladen"
 
-#: admin/views/system-status.php:308
+#: admin/views/system-status.php:358
 msgid "May be blocked without a visible placeholder"
 msgstr ""
 
 #. translators: %d: number of providers.
-#: admin/views/system-status.php:314
+#: admin/views/system-status.php:364
 #, php-format
 msgid "These %d catalogued services declare no cookies, so they appear in no cookie declaration, and when blocked on a script or stylesheet pattern no placeholder is shown. This is a catalogue of potential matches, not a report of what this site loads; a matching whitelist entry may also allow a request. When a request is blocked before consent, fonts can fall back or a control can look broken."
 msgstr ""
 
-#: admin/views/system-status.php:320
+#: admin/views/system-status.php:370
 msgid "Whitelisting a pattern in Settings → Script Blocking lets it load before consent. Google Fonts is deliberately not whitelisted: German courts have held that loading it from Google without consent is unlawful. Serving those fonts from your own server avoids both the block and the question."
 msgstr ""
 
-#: admin/views/system-status.php:338
+#: admin/views/system-status.php:388
 msgid "Active Plugins"
 msgstr "Aktive Plugins"
 
@@ -6988,59 +7023,59 @@ msgid "Manage cookie preferences"
 msgstr "Cookie-Einstellungen verwalten"
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:901
+#: frontend/class-frontend.php:905
 msgid "{name} enabled, disable {name}"
 msgstr "{name} aktiviert, {name} deaktivieren"
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:903
+#: frontend/class-frontend.php:907
 msgid "{name} disabled, enable {name}"
 msgstr "{name} deaktiviert, {name} aktivieren"
 
-#: frontend/class-frontend.php:2875
+#: frontend/class-frontend.php:2879
 #: frontend/modules/banner-rest/class-banner-rest.php:594
 msgid "Your cookie preferences have been saved."
 msgstr "Ihre Cookie-Einstellungen wurden gespeichert."
 
-#: frontend/class-frontend.php:2877
+#: frontend/class-frontend.php:2881
 #: frontend/modules/banner-rest/class-banner-rest.php:596
 msgid "Customise Consent Preferences"
 msgstr "Einwilligungseinstellungen anpassen"
 
-#: frontend/class-frontend.php:2878
+#: frontend/class-frontend.php:2882
 #: frontend/modules/banner-rest/class-banner-rest.php:597
 msgid "Service consent"
 msgstr "Dienst-Zustimmung"
 
-#: frontend/class-frontend.php:2880
+#: frontend/class-frontend.php:2884
 #: frontend/modules/banner-rest/class-banner-rest.php:599
 msgid "Cookie consent"
 msgstr "Cookie-Einwilligung"
 
-#: frontend/class-frontend.php:2881
+#: frontend/class-frontend.php:2885
 #: frontend/modules/banner-rest/class-banner-rest.php:600
 msgid "Vendor consent"
 msgstr "Anbieter-Einwilligung"
 
-#: frontend/class-frontend.php:2882
+#: frontend/class-frontend.php:2886
 #: frontend/modules/banner-rest/class-banner-rest.php:601
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Diese Cookies werden vom eingebetteten Dienst auf dessen eigener Domain gesetzt und über das Zulassen oder Blockieren der Einbettung oben gesteuert — einzeln können sie nicht entfernt werden."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:2886
+#: frontend/class-frontend.php:2890
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Ich bestätige, dass ich mindestens %d Jahre alt bin"
 
-#: frontend/class-frontend.php:2887
+#: frontend/class-frontend.php:2891
 #: frontend/modules/banner-rest/class-banner-rest.php:607
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Bitte bestätigen Sie, dass Sie das Mindestalter erreichen, um optionale Cookies zu akzeptieren."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:2894
+#: frontend/class-frontend.php:2898
 #: frontend/modules/banner-rest/class-banner-rest.php:609
 #, php-format
 msgid "Banner closes automatically in %d s..."
@@ -7078,13 +7113,13 @@ msgstr "Für die ermittelte Rechtsordnung ist kein Banner verfügbar."
 msgid "No active banner found."
 msgstr "Kein aktives Banner gefunden."
 
-#: frontend/modules/consent-logger/class-consent-logger.php:287
+#: frontend/modules/consent-logger/class-consent-logger.php:507
 #: includes/class-do-not-sell-shortcode.php:220
 #: includes/class-do-not-sell-shortcode.php:278
 msgid "This request must originate from this website."
 msgstr "Diese Anfrage muss von dieser Website stammen."
 
-#: frontend/modules/consent-logger/class-consent-logger.php:433
+#: frontend/modules/consent-logger/class-consent-logger.php:666
 msgid "Failed to log consent."
 msgstr "Einwilligung konnte nicht protokolliert werden."
 
