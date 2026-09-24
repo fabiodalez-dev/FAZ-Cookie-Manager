@@ -80,9 +80,24 @@
 
 			var table = card.querySelector( '.faz-status-table' );
 			if ( table ) {
+				// Most tables here are label/value pairs, and `label: value` is
+				// the right shape for those. One is not: the blocked Set-Cookie
+				// table has four data columns under a real <thead>, and reading
+				// only the first two dropped Request Path and Blocked At — the
+				// two columns an administrator checking that Set-Cookie blocking
+				// is not breaking checkout would have pasted the report FOR.
+				// Which shape a row needs is decided by the row itself, so a
+				// table added later is serialised by what it is rather than by
+				// what this builder assumed when it was written.
+				var headers = table.querySelectorAll( 'thead th' );
+				if ( headers.length > 2 ) {
+					text += Array.prototype.map.call( headers, flat ).join( ' | ' ) + '\n';
+				}
 				table.querySelectorAll( 'tr' ).forEach( function ( row ) {
 					var cells = row.querySelectorAll( 'td' );
-					if ( cells.length >= 2 ) {
+					if ( cells.length > 2 ) {
+						text += Array.prototype.map.call( cells, flat ).join( ' | ' ) + '\n';
+					} else if ( cells.length === 2 ) {
 						text += flat( cells[ 0 ] ) + ': ' + flat( cells[ 1 ] ) + '\n';
 					}
 				} );

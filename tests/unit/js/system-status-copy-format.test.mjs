@@ -86,6 +86,29 @@ function copiedText() {
           </div>
         </div>
         <div class="faz-card">
+          <div class="faz-card-header"><h3>Blocked Server Cookies</h3></div>
+          <div class="faz-card-body">
+            <table class="faz-status-table faz-status-table-data">
+              <thead>
+                <tr>
+                  <th scope="col">Cookie</th>
+                  <th scope="col">Category</th>
+                  <th scope="col">Request Path</th>
+                  <th scope="col">Blocked At</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>wordpress_test_cookie</code></td>
+                  <td>necessary</td>
+                  <td><code>/checkout/</code></td>
+                  <td>2026-09-24 11:02:03</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="faz-card">
           <div class="faz-card-header"><h3>Active Plugins</h3></div>
           <div class="faz-card-body">
             <div style="line-height:1.8;">
@@ -163,6 +186,26 @@ ok(
 ok(
   'a multi-line heading is flattened',
   lines.some((l) => l === 'Configuration')
+);
+
+// The four-column data table. `label: value` is right for a pair and wrong for
+// a table: reading only the first two cells dropped Request Path and Blocked At,
+// which are the two columns an administrator checking that Set-Cookie blocking
+// is not breaking checkout would have pasted the report for.
+ok(
+  'a data table keeps its column names',
+  lines.includes('Cookie | Category | Request Path | Blocked At'),
+  lines
+);
+ok(
+  'and every column of every row',
+  lines.includes('wordpress_test_cookie | necessary | /checkout/ | 2026-09-24 11:02:03'),
+  lines
+);
+ok(
+  'rather than the first two read as a label and a value',
+  !text.includes('wordpress_test_cookie: necessary'),
+  lines
 );
 
 // The list branch: <br> has to become a line break, not nothing.

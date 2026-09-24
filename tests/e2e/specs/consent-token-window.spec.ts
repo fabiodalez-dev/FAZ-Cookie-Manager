@@ -82,7 +82,7 @@ async function expectTally(page: Page, pattern: string, why: string): Promise<st
  */
 function clearThrottles(): void {
   wpEval(
-    'global $wpdb; $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE \'_transient%faz_consent_%\' OR option_name LIKE \'_transient%faz_throttle%\'" );',
+    'global $wpdb; $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE \'_transient%faz_consent_%\' OR option_name LIKE \'_transient%faz_throttle%\' OR option_name LIKE \'_transient%faz_pv_%\'" );',
   );
 }
 
@@ -257,5 +257,83 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
     );
     await page.goto(statusUrl, { waitUntil: 'domcontentloaded' });
     await expectTally(page, '42', 'a legacy flat tally survives the upgrade');
+  });
+});
+
+/**
+ * The same defect, in the second copy of the same arithmetic.
+ *
+ * The pageview endpoint accepted the current 12-hour bucket and the previous
+ * one only, exactly as the consent log did, so events posted from cached HTML
+ * older than about a day were refused — and unlike the consent path nothing
+ * counted or logged it: the Dashboard simply under-reported. The unit suite
+ * pins the source shape (one minting site, the filter, no two-bucket check),
+ * which cannot notice a window that is wrong at the boundary. This posts real
+ * tokens at the real endpoint.
+ */
+test.describe('the pageview origin token outlives the page cache too (#292)', () => {
+  let pageviewsWereOn = false;
+
+  /** A pageview token as a page cached `daysAgo` days ago would carry. */
+  function pageviewTokenAgedDays(daysAgo: number): string {
+    const buckets = Math.round((daysAgo * 24) / 12);
+    return lastLine(wpEval(
+      `echo wp_hash( 'faz_pageview_' . (string) ( (int) floor( time() / 43200 ) - ${buckets} ) );`,
+    )).trim();
+  }
+
+  test.beforeAll(() => {
+    pageviewsWereOn = lastLine(wpEval(
+      "$s = get_option( 'faz_settings', array() ); echo ! empty( $s['pageview_tracking'] ) ? 'on' : 'off';",
+    )).trim() === 'on';
+    if (!pageviewsWereOn) {
+      // The route is only registered when the feature is on, so without this
+      // every request below would be a 404 and the test would assert nothing.
+      wpEval("$s = get_option( 'faz_settings', array() ); $s['pageview_tracking'] = true; update_option( 'faz_settings', $s );");
+    }
+  });
+
+  test.afterAll(() => {
+    if (!pageviewsWereOn) {
+      wpEval("$s = get_option( 'faz_settings', array() ); $s['pageview_tracking'] = false; update_option( 'faz_settings', $s );");
+    }
+    wpEval(
+      'global $wpdb; $wpdb->query( "DELETE FROM {$wpdb->prefix}faz_pageviews WHERE page_title = \'faz-e2e-pv-token\'" );',
+    );
+  });
+
+  test('a five-day-old token still records the event, a nine-day-old one is refused', async ({ request, baseURL }) => {
+    const post = (token: string, eventType: string) =>
+      request.post(`${baseURL}/wp-json/faz/v1/pageviews`, {
+        headers: { 'Content-Type': 'application/json' },
+        data: {
+          token,
+          event_type: eventType,
+          page_url: `${baseURL}/?faz-e2e-pv-token=${Date.now()}`,
+          page_title: 'faz-e2e-pv-token',
+        },
+      });
+
+    // Distinct event types: the endpoint throttles one request per IP per event
+    // type per second, and a throttled call answers 200 without writing, which
+    // would make the accepted case pass for the wrong reason.
+    clearThrottles();
+    const cached = await post(pageviewTokenAgedDays(5), 'pageview');
+    expect(cached.status(), 'a page cached five days ago still counts its pageviews').toBe(200);
+    expect(
+      (await cached.json()).throttled,
+      'and it was not merely throttled, which would also answer 200',
+    ).toBeUndefined();
+
+    const rows = lastLine(wpEval(
+      'global $wpdb; echo (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_pageviews WHERE page_title = \'faz-e2e-pv-token\'" );',
+    )).replace(/\D/g, '');
+    expect(rows, 'the event is actually recorded, not just accepted').toBe('1');
+
+    // The window still ends here too: a cache allowance, not an open door.
+    clearThrottles();
+    const expired = await post(pageviewTokenAgedDays(9), 'banner_view');
+    expect(expired.status(), 'a token older than the window is refused').toBe(403);
+    expect((await expired.json()).code).toBe('invalid_token');
   });
 });
