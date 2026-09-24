@@ -17,34 +17,37 @@
 	}
 
 	/**
-	 * An element's text as one line.
+	 * The block boundaries a reader sees but `textContent` does not.
 	 *
-	 * textContent returns the template's own newlines and tabs — the browser
-	 * collapses whitespace when it PAINTS, not when it reads — so a cell
-	 * written across several source lines used to produce a ragged,
-	 * tab-indented continuation line with no `label:` prefix, breaking the
-	 * one-row-one-line shape every other row obeys. Collapsing here makes that
-	 * a property of the builder rather than a habit every future view author
-	 * has to remember.
+	 * A browser paints `<div>`, `<p>`, `<li>` and their kin on a line of their
+	 * own and collapses the whitespace around them. `textContent` does the
+	 * opposite on both counts: it returns the template's own newlines and tabs
+	 * verbatim, and returns nothing at all where the markup — rather than the
+	 * source formatting — created the break. So a cell written across several
+	 * source lines produced a ragged, tab-indented continuation with no `label:`
+	 * prefix; "…ago." followed immediately by the per-cause `<div>` produced
+	 * "ago.Stale origin token"; and the `<br>`-separated plugin list produced
+	 * "Akismet 5.3WooCommerce 9.1FAZ Cookie Manager 1.32.0" — all of it in the
+	 * snapshot people paste into bug reports.
 	 */
-	function flat( el ) {
-		return el ? el.textContent.replace( /\s+/g, ' ' ).trim() : '';
-	}
+	var BLOCK_TAGS = 'br,div,p,li,tr,dt,dd,section,header,footer,blockquote,pre,ul,ol,table,h1,h2,h3,h4,h5,h6';
 
 	/**
-	 * A `<br>`-separated block as real lines.
+	 * An element's text as the lines a reader would actually see.
 	 *
-	 * `<br>` contributes nothing to textContent, so the Active Plugins list
-	 * came out as one run-together string ("Akismet 5.3WooCommerce 9.1…") in
-	 * the snapshot people paste into bug reports.
+	 * Works on a clone: marks every block boundary with a newline, then collapses
+	 * each line's own whitespace and drops the empty ones. One rule serves both
+	 * shapes below, so a row added later inherits the format instead of depending
+	 * on how its markup happened to be indented.
 	 */
-	function lines( el ) {
+	function blocks( el ) {
 		if ( ! el ) {
-			return '';
+			return [];
 		}
 		var clone = el.cloneNode( true );
-		clone.querySelectorAll( 'br' ).forEach( function ( br ) {
-			br.parentNode.replaceChild( document.createTextNode( '\n' ), br );
+		clone.querySelectorAll( BLOCK_TAGS ).forEach( function ( node ) {
+			node.parentNode.insertBefore( document.createTextNode( '\n' ), node );
+			node.parentNode.insertBefore( document.createTextNode( '\n' ), node.nextSibling );
 		} );
 		return clone.textContent
 			.split( '\n' )
@@ -53,8 +56,17 @@
 			} )
 			.filter( function ( line ) {
 				return '' !== line;
-			} )
-			.join( '\n' );
+			} );
+	}
+
+	/** One row, one line: a block boundary becomes a single space. */
+	function flat( el ) {
+		return blocks( el ).join( ' ' );
+	}
+
+	/** A list: every entry on a line of its own. */
+	function lines( el ) {
+		return blocks( el ).join( '\n' );
 	}
 
 	btn.addEventListener( 'click', function () {

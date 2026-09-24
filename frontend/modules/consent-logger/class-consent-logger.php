@@ -97,9 +97,19 @@ class Consent_Logger {
 				'callback'            => array( $this, 'handle_rest_consent' ),
 				'permission_callback' => '__return_true',
 				'args'                => array(
+					// Deliberately NOT declared `required`. WordPress rejects a
+					// missing required arg in `has_valid_params()` — keyed on
+					// `null === $param`, so an empty string passes and an absent
+					// one does not — and answers 400 `rest_missing_callback_param`
+					// before the callback runs. The token would still be
+					// enforced, but by a gate that counts nothing: a request
+					// carrying no token at all would be refused where this class
+					// cannot see it, while System Status reported that very
+					// shape as counted. That is the silence issue #292 was
+					// about, one layer up. The handler refuses an absent token
+					// itself, with 403 `missing_token`, and records the cause.
 					'token' => array(
 						'type'              => 'string',
-						'required'          => true,
 						'sanitize_callback' => 'sanitize_text_field',
 					),
 					'consent_id' => array(
@@ -523,11 +533,13 @@ class Consent_Logger {
 				);
 			}
 		} else {
-			// No token = request not from a page rendered by this plugin. The
-			// inline beacon returns before fetching when its localized object
-			// is absent, so this is reached by automated traffic rather than by
-			// a visitor — counted under its own cause so it cannot be mistaken
-			// for records a cache lost.
+			// No token = request not from a page rendered by this plugin —
+			// either the parameter was absent (which is why the route does not
+			// declare it `required`; see `register_routes()`) or it arrived
+			// empty. The inline beacon returns before fetching when its
+			// localized object is absent, so this is reached by automated
+			// traffic rather than by a visitor — counted under its own cause so
+			// it cannot be mistaken for records a cache lost.
 			self::record_refusal( self::CAUSE_MISSING_TOKEN );
 			return new \WP_Error(
 				'missing_token',

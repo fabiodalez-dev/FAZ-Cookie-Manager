@@ -16,11 +16,13 @@
  * suite (test-consent-token-window-php.php) pins the window arithmetic, the
  * bucket shape, the filter and the clamps.
  */
+import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
 import { wpEval } from '../utils/wp-env';
 
 const REJECTION_OPTION = 'faz_consent_token_rejections';
 
+/** The last line of a `wp eval` run — WP-CLI may print notices before it. */
 function lastLine(out: string): string {
   return out.trim().split('\n').pop() || '';
 }
@@ -55,6 +57,29 @@ function seedTally(days: Record<string, Record<string, number>>, lastOffset = 0)
   );
 }
 
+/**
+ * The reported figure, matched at its own left edge.
+ *
+ * Substring matching cannot assert a count: "900 in the last 7 days" contains
+ * "0 in the last 7 days", so the case that proves an expired tally reads as
+ * zero passed against a bug reporting 900 — and "42" would have been satisfied
+ * by a residual "1042". Nothing that is a digit, a thousands separator or a
+ * decimal point may precede the number. Returns the page text so a caller can
+ * make further assertions on the same read.
+ */
+async function expectTally(page: Page, pattern: string, why: string): Promise<string> {
+  const body = (await page.locator('#faz-system-status').innerText()).replace(/\u00a0/g, ' ');
+  expect(body, why).toMatch(new RegExp(`(?:^|[^\\d.,])${pattern} in the last 7 days`));
+  return body;
+}
+
+/**
+ * Drop the per-IP and per-cause throttle transients.
+ *
+ * Every case here posts from one address, which is exactly what the throttles
+ * exist to limit; without this a later case would be answered from a window
+ * opened by an earlier one and would assert nothing.
+ */
 function clearThrottles(): void {
   wpEval(
     'global $wpdb; $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE \'_transient%faz_consent_%\' OR option_name LIKE \'_transient%faz_throttle%\'" );',
@@ -147,6 +172,32 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
     expect(cause, 'the refusal is counted, and under cross_origin rather than as a stale token').toBe('1');
   });
 
+  test('a request carrying no token at all is refused here, and counted', async ({ request, baseURL }) => {
+    // The route used to declare `token` as a required argument, so WordPress
+    // answered 400 rest_missing_callback_param from has_valid_params() — before
+    // the callback, and so before anything could count the loss. The gate was
+    // keyed on `null === $param`, which meant `token=""` reached the handler and
+    // an absent `token` did not: the one shape System Status names in this
+    // cause's copy, "no origin token at all", was the one shape it never saw.
+    wpEval(`delete_option( '${REJECTION_OPTION}' );`);
+    clearThrottles();
+
+    const res = await request.post(`${baseURL}/wp-json/faz/v1/consent`, {
+      headers: { Origin: baseURL as string, 'Sec-Fetch-Site': 'same-origin' },
+      data: { consent_id: `e2e-token-absent-${Date.now()}`, status: 'accepted', url: `${baseURL}/` },
+    });
+    expect(res.status(), 'refused by the handler, not by the REST argument validator').toBe(403);
+    expect(
+      (await res.json()).code,
+      'and with this plugin\'s own code, so the cause is knowable',
+    ).toBe('missing_token');
+
+    const cause = lastLine(wpEval(
+      `$t = \\FazCookie\\Frontend\\Modules\\Consent_Logger\\Consent_Logger::rejection_tally(); echo (int) ( $t['causes']['missing_token'] ?? 0 );`,
+    )).replace(/\D/g, '');
+    expect(cause, 'counted under missing_token rather than lost outside this class').toBe('1');
+  });
+
   test('System Status reports refused records by cause, and says so at zero too', async ({ page, baseURL, loginAsAdmin }) => {
     await loginAsAdmin(page);
     const statusUrl = `${baseURL}/wp-admin/admin.php?page=faz-cookie-manager-system-status`;
@@ -157,18 +208,14 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
     wpEval(`delete_option( '${REJECTION_OPTION}' );`);
     await page.goto(statusUrl, { waitUntil: 'domcontentloaded' });
     await expect(page.getByText('Consent Records Refused')).toHaveCount(1);
-    await expect(
-      page.getByText('0 in the last 7 days', { exact: false }),
-      'the row states zero rather than vanishing',
-    ).toHaveCount(1);
+    await expectTally(page, '0', 'the row states zero rather than vanishing');
 
     // A four-digit tally. printf's %d applied to the grouped string a locale
     // formatter returns stopped at the thousands separator, so 2002 rendered as
     // "2" — and the suite stayed green because every fixture was under 1000.
     seedTally({ '- 1': { stale_token: 2002 } });
     await page.goto(statusUrl, { waitUntil: 'domcontentloaded' });
-    const body = (await page.locator('#faz-system-status').innerText()).replace(/\u00a0/g, ' ');
-    expect(body, 'the full count is printed, not its first group').toMatch(/2[.,\s]002 in the last 7 days/);
+    const body = await expectTally(page, '2[.,\\s]002', 'the full count is printed, not its first group');
     expect(body, 'and it is not truncated to the leading group').not.toMatch(/\b2 in the last 7 days/);
     expect(body, 'the cause is named').toContain('Stale origin token');
     expect(body, 'and the lever that fixes it').toContain('faz_consent_token_max_age');
@@ -191,17 +238,17 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
     }
     seedTally(tenDays);
     await page.goto(statusUrl, { waitUntil: 'domcontentloaded' });
-    const rolling = (await page.locator('#faz-system-status').innerText()).replace(/\u00a0/g, ' ');
-    expect(rolling, 'seven days of the ten are reported').toMatch(/2[.,\s]100 in the last 7 days/);
+    const rolling = await expectTally(page, '2[.,\\s]100', 'seven days of the ten are reported');
+    expect(rolling, 'and not the whole ten').not.toMatch(/3[.,\s]000 in the last 7 days/);
 
     // A tally whose buckets have all aged out reads as zero, without needing a
     // new refusal to roll it over.
     seedTally({ '- 9': { stale_token: 900 } }, 9 * 86400);
     await page.goto(statusUrl, { waitUntil: 'domcontentloaded' });
-    await expect(
-      page.getByText('0 in the last 7 days', { exact: false }),
-      'an expired tally is not reported as the last 7 days',
-    ).toHaveCount(1);
+    const stale = await expectTally(page, '0', 'an expired tally reads as zero');
+    expect(stale, 'and the aged-out bucket is not reported as the last 7 days').not.toMatch(
+      /900 in the last 7 days/,
+    );
 
     // A row left by the first cut of this feature must still be reported rather
     // than silently dropped on upgrade.
@@ -209,9 +256,6 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
       `update_option( '${REJECTION_OPTION}', array( 'since' => time() - 3600, 'count' => 42, 'last' => time() ), false );`,
     );
     await page.goto(statusUrl, { waitUntil: 'domcontentloaded' });
-    await expect(
-      page.getByText('42 in the last 7 days', { exact: false }),
-      'a legacy flat tally survives the upgrade',
-    ).toHaveCount(1);
+    await expectTally(page, '42', 'a legacy flat tally survives the upgrade');
   });
 });

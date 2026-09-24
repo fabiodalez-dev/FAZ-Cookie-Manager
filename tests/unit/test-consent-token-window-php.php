@@ -54,6 +54,10 @@ namespace {
 	$GLOBALS['faz_transients'] = array();
 	$GLOBALS['faz_filters']    = array();
 
+	// The WordPress surface this class touches, as one-line doubles: each body
+	// IS its own description, so they carry no separate docblock — the same
+	// shape every standalone runner in tests/unit uses. Only the ones whose
+	// behaviour the assertions steer are commented, below.
 	if ( ! function_exists( 'wp_hash' ) ) {
 		function wp_hash( $data, $scheme = 'auth' ) { return hash_hmac( 'md5', (string) $data, $GLOBALS['faz_salt'] ); }
 	}
@@ -103,14 +107,30 @@ namespace {
 
 	$passed = 0;
 	$failed = 0;
+
+	/**
+	 * Record one assertion.
+	 *
+	 * @param mixed  $actual Truthy for a pass.
+	 * @param string $label  What the case proves, phrased as the property.
+	 */
 	function tok_check( $actual, $label ) {
 		global $passed, $failed;
 		if ( $actual ) { $passed++; echo "  [PASS] {$label}\n"; }
 		else { $failed++; echo "  [FAIL] {$label}\n"; }
 	}
+	/**
+	 * Pin the accepted token window through the public filter.
+	 *
+	 * Set through `apply_filters` rather than a constant, because the clamps are
+	 * applied to the filtered value and are part of what the cases assert.
+	 *
+	 * @param int $window Seconds a token stays acceptable.
+	 */
 	function tok_filter( $window ) {
 		$GLOBALS['faz_filters']['faz_consent_token_max_age'] = function ( $value ) use ( $window ) { return $window; };
 	}
+	/** Drop the filter, returning the window to the shipped default. */
 	function tok_unfilter() {
 		unset( $GLOBALS['faz_filters']['faz_consent_token_max_age'] );
 	}
@@ -177,6 +197,22 @@ namespace {
 	tok_check( false !== strpos( $pv_api, 'function token_is_valid' ), 'the pageview endpoint owns a windowed token check' );
 	tok_check( false === strpos( $pv_api, '12 * HOUR_IN_SECONDS ) )' ), 'and no longer accepts only two 12-hour buckets' );
 	tok_check( false !== strpos( $pv_api, 'faz_pageview_token_max_age' ), 'with its own filter for a longer-cached site' );
+
+	// 7b. The token argument must NOT be declared `required`. WordPress rejects
+	//     a missing required arg in has_valid_params() and answers 400 before
+	//     the callback — and the check is keyed on `null === $param`, so an
+	//     empty token reaches the handler while an absent one does not. The
+	//     token would still be enforced, but by a gate that counts nothing: the
+	//     one shape the "No origin token" cause names in its own copy is exactly
+	//     the shape that would never reach the code counting it. Restoring
+	//     `required` looks like tidying and silently re-opens that hole.
+	$logger_src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/frontend/modules/consent-logger/class-consent-logger.php' );
+	$token_arg  = preg_match( "/'token'\s*=>\s*array\((.*?)\),/s", $logger_src, $faz_m ) ? $faz_m[1] : '';
+	tok_check( '' !== $token_arg, 'the consent route declares a token argument' );
+	tok_check(
+		false === strpos( $token_arg, 'required' ),
+		'and does not declare it required, so a request with no token at all reaches the handler that counts it'
+	);
 
 	// 8. A refusal is recorded instead of passing in silence: a consent log
 	//    that stops recording without complaining is the part nobody notices.
@@ -322,7 +358,18 @@ namespace {
 	// The row has to appear at zero too: one that shows up only on bad news
 	// makes its own absence unreadable, and a site losing every record through a
 	// cause nothing counted looked exactly like a healthy one.
-	tok_check( false === strpos( $view, 'if ( $faz_rejected_count > 0 ) :' ), 'the row is no longer hidden when the tally is zero' );
+	// Matched by shape, not by the old variable's name: `$faz_rejected_count` no
+	// longer exists anywhere in the view, so a literal search for it could never
+	// fail, and re-wrapping the row in `if ( $faz_refused > 0 ) :` would have
+	// left this green. The alternative-syntax colon is what distinguishes a row
+	// guard from the inner `if ( $faz_refused > 0 && … ) {` that decides whether
+	// to add the "Most recent" sentence, which is legitimate.
+	$faz_row_guard = '/if\s*\(\s*\$faz_\w+\s*>\s*0\s*\)\s*:/';
+	tok_check( 0 === preg_match( $faz_row_guard, $view ), 'the row is no longer hidden when the tally is zero' );
+	tok_check(
+		1 === preg_match( $faz_row_guard, (string) file_get_contents( __DIR__ . '/fixtures/system-status-pre-1321.php' ) ),
+		'and that guard flags the pre-fix shape, so a green result means something'
+	);
 
 	echo "\nPassed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );

@@ -23,6 +23,13 @@ const SCRIPT_PATH = resolve(HERE, '../../../admin/assets/js/pages/system-status.
 
 let passed = 0;
 let failed = 0;
+/**
+ * Record one assertion, printing the observed value when it fails.
+ *
+ * @param {string}  label     The property being asserted.
+ * @param {boolean} condition Whether it holds.
+ * @param {*}       [detail]  Observed value, shown only on failure.
+ */
 function ok(label, condition, detail) {
   if (condition) {
     passed += 1;
@@ -36,20 +43,30 @@ function ok(label, condition, detail) {
   }
 }
 
-// The cell shape the PHP view actually emits: the opening tag is followed by a
-// newline and seven tabs, the help text sits in a nested element after a <br>,
-// and the closing tag is preceded by more indentation. Reproduced verbatim
-// rather than tidied, because tidy markup is exactly what would hide the bug.
+// The cell shape the PHP view actually emits. Reproduced verbatim rather than
+// tidied, because tidy markup is exactly what would hide the bug: the opening
+// tag is followed by a newline and seven tabs, the per-cause `<div>` is echoed
+// with NO whitespace before it (it is the next PHP statement after the sentence
+// it follows), the help text sits in a nested element on its own source line,
+// and the closing tag is preceded by more indentation.
 const REFUSED_CELL = [
   '',
-  '\t\t\t\t\t\t\t2.002 in the last 7 days — consent decisions that were not recorded. Most recent: 3 hours ago.',
-  '\t\t\t\t\t\t\t<div class="faz-status-detail">Stale origin token: 1.998 &middot; No same-origin signal: 4</div>',
+  '\t\t\t\t\t\t\t2.002 in the last 7 days — consent decisions that were not recorded. Most recent: 3 hours ago.<div class="faz-status-detail">Stale origin token: 1.998 &middot; No same-origin signal: 4</div>',
   '\t\t\t\t\t\t\t<div class="faz-help">',
   '\t\t\t\t\t\t\tA stale origin token means HTML was served from a cache older than the accepted token window.',
   '\t\t\t\t\t\t\t</div>',
   '\t\t\t\t\t\t',
 ].join('\n');
 
+/**
+ * Run the real page script against the fixture and return what it copied.
+ *
+ * The script is evaluated in jsdom rather than reimplemented, and the clipboard
+ * is stubbed to capture its argument — the copied string is the only output
+ * this feature has, so it is the only thing worth asserting on.
+ *
+ * @returns {string|null} The snapshot handed to navigator.clipboard.writeText.
+ */
 function copiedText() {
   const dom = new JSDOM(
     `<!DOCTYPE html><html><body>
@@ -117,6 +134,20 @@ ok('it keeps the per-cause breakdown', refused.includes('Stale origin token: 1.9
 ok(
   'and it keeps the help sentence rather than dropping it',
   refused.includes('accepted token window')
+);
+
+// The view echoes the per-cause <div> straight after "…ago.", with nothing
+// between them: a browser breaks the line there, textContent does not. Only the
+// markup says where one sentence stops and the next begins.
+ok(
+  'the sentence and the breakdown do not run together',
+  refused.includes('ago. Stale origin token'),
+  refused
+);
+ok(
+  'and nothing is glued to the end of that sentence',
+  !/ago\.\S/.test(refused),
+  refused
 );
 
 ok(
