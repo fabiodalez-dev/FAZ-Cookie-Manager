@@ -44,6 +44,101 @@ class Api extends Rest_Controller {
 	protected $rest_base = 'pageviews';
 
 	/**
+	 * How long one pageview token value lasts before a new one is minted.
+	 *
+	 * Same shape as the consent-log token: a keyed hash of a time bucket,
+	 * printed into cacheable HTML, proving only that the page came from this
+	 * installation.
+	 */
+	const TOKEN_BUCKET = 43200; // 12 * HOUR_IN_SECONDS.
+
+	/**
+	 * How far back a pageview token is still accepted, in seconds, by default.
+	 *
+	 * Issue #296. This endpoint carried the same defect issue #292 reported
+	 * against the consent log, and carried it for the same reason: only the current bucket
+	 * and the previous one were accepted — 12 to 24 hours — while LiteSpeed
+	 * Cache ships a 604800-second public TTL and WP Rocket and W3TC defaults
+	 * are measured in days. From about a day after a page was cached every
+	 * pageview, banner_view and banner_accept event posted from it was refused
+	 * with a 403, so the Dashboard's counters under-reported in silence and,
+	 * unlike the consent path, nothing counted or logged the loss.
+	 *
+	 * Analytics is not accountability, so the consequence was smaller — but it
+	 * was the same bug, and leaving a second copy of the arithmetic to be fixed
+	 * separately is what let the two drift apart in the first place.
+	 */
+	const TOKEN_MAX_AGE = 604800; // 7 * DAY_IN_SECONDS.
+
+	/**
+	 * Upper bound for the filtered window, in seconds.
+	 */
+	const TOKEN_MAX_AGE_LIMIT = 2592000; // 30 * DAY_IN_SECONDS.
+
+	/**
+	 * The current pageview origin token.
+	 *
+	 * Minted here, in the class that accepts it, so the frontend cannot hold a
+	 * second copy of the bucket arithmetic free to drift from this one.
+	 *
+	 * @param int|null $at Unix timestamp, or null for now.
+	 * @return string
+	 */
+	public static function current_token( $at = null ) {
+		$at = null === $at ? time() : (int) $at;
+		return wp_hash( 'faz_pageview_' . (string) (int) floor( $at / self::TOKEN_BUCKET ) );
+	}
+
+	/**
+	 * How far back a pageview token is accepted, in seconds.
+	 *
+	 * Filter: faz_pageview_token_max_age. Clamped to one bucket at the bottom
+	 * and to TOKEN_MAX_AGE_LIMIT at the top, exactly as the consent token is.
+	 *
+	 * @return int
+	 */
+	public static function token_max_age() {
+		/**
+		 * Filters how long a pageview origin token stays acceptable.
+		 *
+		 * @param int $max_age Seconds. Default 7 days.
+		 */
+		$max_age = (int) apply_filters( 'faz_pageview_token_max_age', self::TOKEN_MAX_AGE );
+		if ( $max_age < self::TOKEN_BUCKET ) {
+			return self::TOKEN_BUCKET;
+		}
+		if ( $max_age > self::TOKEN_MAX_AGE_LIMIT ) {
+			return self::TOKEN_MAX_AGE_LIMIT;
+		}
+		return $max_age;
+	}
+
+	/**
+	 * Whether a pageview token was minted by this site inside the window.
+	 *
+	 * @param string   $token Token from the request.
+	 * @param int|null $at    Unix timestamp, or null for now.
+	 * @return bool
+	 */
+	public static function token_is_valid( $token, $at = null ) {
+		if ( ! is_string( $token ) || '' === $token ) {
+			return false;
+		}
+		$at      = null === $at ? time() : (int) $at;
+		$bucket  = (int) floor( $at / self::TOKEN_BUCKET );
+		// One bucket more than the window divides into: a token minted at the
+		// very start of the oldest acceptable bucket is already up to a bucket
+		// old, so a bare floor() would refuse pages the window means to accept.
+		$buckets = (int) ceil( self::token_max_age() / self::TOKEN_BUCKET );
+		for ( $i = 0; $i <= $buckets; $i++ ) {
+			if ( hash_equals( wp_hash( 'faz_pageview_' . (string) ( $bucket - $i ) ), $token ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Constructor
 	 */
 	public function __construct() {
@@ -205,11 +300,7 @@ class Api extends Rest_Controller {
 		// embedded in the page. Prevents casual spoofing from external origins.
 		$token = $request->get_param( 'token' );
 		if ( ! empty( $token ) ) {
-			$current_bucket  = (string) floor( time() / ( 12 * HOUR_IN_SECONDS ) );
-			$previous_bucket = (string) ( floor( time() / ( 12 * HOUR_IN_SECONDS ) ) - 1 );
-			$valid = hash_equals( wp_hash( 'faz_pageview_' . $current_bucket ), $token )
-				|| hash_equals( wp_hash( 'faz_pageview_' . $previous_bucket ), $token );
-			if ( ! $valid ) {
+			if ( ! self::token_is_valid( $token ) ) {
 				return new WP_Error(
 					'invalid_token',
 					'Invalid origin token.',
