@@ -93,5 +93,16 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
       page.getByText('faz_consent_token_max_age', { exact: false }),
       'and it names the lever that fixes it',
     ).toHaveCount(1);
+
+    // A tally whose window has passed is not reported as current, even though
+    // no refusal has arrived since to roll it over.
+    wpEval(
+      `update_option( '${REJECTION_OPTION}', array( 'since' => time() - 8 * 86400, 'count' => 900, 'last' => time() - 8 * 86400 ) );`,
+    );
+    await page.goto(`${baseURL}/wp-admin/admin.php?page=faz-cookie-manager-system-status`, { waitUntil: 'domcontentloaded' });
+    await expect(
+      page.getByText('Consent Records Refused'),
+      'an expired tally is not reported as the last 7 days',
+    ).toHaveCount(0);
   });
 });

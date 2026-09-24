@@ -208,6 +208,34 @@ class Consent_Logger {
 	}
 
 	/**
+	 * The refusal tally, as anything reading it should see it.
+	 *
+	 * The window has to be applied on the way OUT as well as on the way in:
+	 * rolling it over only when the next refusal arrives means a tally from a
+	 * cache problem fixed a fortnight ago keeps being reported as "in the last
+	 * 7 days" for as long as nothing is refused. One rule, read by the writer
+	 * below and by System Status.
+	 *
+	 * @return array{count:int,since:int,last:int}
+	 */
+	public static function rejection_tally() {
+		$empty = array( 'count' => 0, 'since' => 0, 'last' => 0 );
+		$tally = get_option( self::REJECTION_OPTION, array() );
+		if ( ! is_array( $tally ) || empty( $tally['count'] ) ) {
+			return $empty;
+		}
+		$since = isset( $tally['since'] ) ? (int) $tally['since'] : 0;
+		if ( $since < time() - WEEK_IN_SECONDS ) {
+			return $empty;
+		}
+		return array(
+			'count' => (int) $tally['count'],
+			'since' => $since,
+			'last'  => isset( $tally['last'] ) ? (int) $tally['last'] : 0,
+		);
+	}
+
+	/**
 	 * Count a rejected token, and say so in the error log once an hour.
 	 *
 	 * A consent log that stops recording without complaining is worse than one
@@ -217,19 +245,15 @@ class Consent_Logger {
 	 * @return void
 	 */
 	private static function record_token_rejection() {
-		$now   = time();
-		$tally = get_option( self::REJECTION_OPTION, array() );
-		if ( ! is_array( $tally ) ) {
-			$tally = array();
-		}
-		$window_start = isset( $tally['since'] ) ? (int) $tally['since'] : 0;
-		// Keep a rolling 7-day tally: an old spike that a cache purge already
-		// fixed should not keep the warning on screen for ever.
-		if ( $window_start < $now - WEEK_IN_SECONDS ) {
-			$tally = array( 'since' => $now, 'count' => 0 );
-		}
-		$tally['count'] = isset( $tally['count'] ) ? (int) $tally['count'] + 1 : 1;
-		$tally['last']  = $now;
+		$now = time();
+		// Rolling 7-day tally, through the same reader System Status uses: an
+		// expired one comes back at zero and this refusal starts a new window.
+		$tally = self::rejection_tally();
+		$tally = array(
+			'since' => $tally['count'] > 0 ? $tally['since'] : $now,
+			'count' => $tally['count'] + 1,
+			'last'  => $now,
+		);
 		update_option( self::REJECTION_OPTION, $tally, false );
 
 		if ( ! get_transient( 'faz_consent_token_rejected_notice' ) ) {
@@ -237,9 +261,9 @@ class Consent_Logger {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a consent record was refused; that belongs in the log whatever the site's debug settings.
 			error_log(
 				sprintf(
-					'FAZ Cookie Manager: refused a consent record because its origin token was older than %d seconds (%d refused in the last 7 days). A page cache serving HTML older than that window is the usual cause; raise it with the faz_consent_token_max_age filter or shorten the cache TTL.',
-					self::token_max_age(),
-					(int) $tally['count']
+					'FAZ Cookie Manager: refused a consent record because its origin token was not valid (%d refused in the last 7 days; the accepted window is %d seconds). HTML served from a cache older than that window is the usual cause — raise it with the faz_consent_token_max_age filter or shorten the cache TTL — but a token from another installation or a malformed one is refused the same way.',
+					(int) $tally['count'],
+					self::token_max_age()
 				)
 			);
 		}

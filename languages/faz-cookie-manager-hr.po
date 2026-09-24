@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.12.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-09-23T23:41:05+00:00\n"
+"POT-Creation-Date: 2026-09-24T05:21:36+00:00\n"
 "PO-Revision-Date: 2026-04-20 00:00+0200\n"
 "Last-Translator: \n"
 "Language-Team: Croatian\n"
@@ -60,7 +60,7 @@ msgid "Consent Logs"
 msgstr "Zapisi privola"
 
 #: admin/class-admin.php:243 admin/views/base.php:23
-#: admin/views/dashboard.php:243 admin/views/system-status.php:106
+#: admin/views/dashboard.php:243 admin/views/system-status.php:113
 msgid "Google Consent Mode"
 msgstr "Google način pristanka"
 
@@ -240,7 +240,7 @@ msgid "Delete stale"
 msgstr "Izbriši zastarjele"
 
 #: admin/class-admin.php:561 admin/views/cookies.php:260
-#: admin/views/system-status.php:157
+#: admin/views/system-status.php:164
 #: includes/class-cookie-table-shortcode.php:229
 msgid "Category"
 msgstr "Kategorija"
@@ -1587,7 +1587,7 @@ msgstr "Statcounter"
 msgid "Hotjar"
 msgstr "Hotjar"
 
-#: admin/class-admin.php:1031 admin/views/system-status.php:130
+#: admin/class-admin.php:1031 admin/views/system-status.php:137
 msgid "Microsoft Clarity"
 msgstr "Microsoft Clarity"
 
@@ -1631,7 +1631,7 @@ msgstr "TikTok Pixel"
 msgid "LinkedIn Insight Tag"
 msgstr "LinkedIn Insight Tag"
 
-#: admin/class-admin.php:1043 admin/views/system-status.php:129
+#: admin/class-admin.php:1043 admin/views/system-status.php:136
 msgid "Microsoft UET"
 msgstr "Microsoft UET"
 
@@ -2364,7 +2364,7 @@ msgid "Complete all fields required for the selected jurisdiction before saving 
 msgstr "Ispunite sva polja obvezna za odabranu jurisdikciju prije spremanja ili pregleda pravila o kolačićima."
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:505
-#: admin/views/system-status.php:156
+#: admin/views/system-status.php:163
 #: frontend/modules/shortcodes/class-shortcodes.php:246
 #: includes/class-cookie-table-shortcode.php:225
 msgid "Cookie"
@@ -5762,7 +5762,7 @@ msgid "Loading banners…"
 msgstr "Učitavanje bannera…"
 
 #. translators: %d: minimum age in years.
-#: admin/views/settings.php:136 admin/views/system-status.php:127
+#: admin/views/settings.php:136 admin/views/system-status.php:134
 msgid "Cross-Domain Consent"
 msgstr "Privola između domena"
 
@@ -5786,7 +5786,7 @@ msgstr "Jedna po retku: https://shop.example.com"
 msgid "Full URLs of other sites that should receive consent state. Each site must also have FAZ Cookie Manager installed. One URL per line."
 msgstr "Puni URL-ovi drugih stranica koje trebaju primiti stanje privole. Svaka stranica također mora imati instaliran FAZ Cookie Manager. Jedan URL po retku."
 
-#: admin/views/settings.php:157 admin/views/system-status.php:108
+#: admin/views/settings.php:157 admin/views/system-status.php:115
 msgid "Pageview Tracking"
 msgstr "Praćenje pregleda stranica"
 
@@ -6771,158 +6771,160 @@ msgstr "Bilježenje privole"
 msgid "Consent Records Refused"
 msgstr "Način privole"
 
-#. translators: 1: number of refused consent records, 2: token window in days.
+#. translators: %d: number of refused consent records.
 #: admin/views/system-status.php:97
 #, php-format
-msgid "%1$d in the last 7 days — its page was older than the %2$d-day origin-token window, so the consent was not recorded."
-msgid_plural "%1$d in the last 7 days — their pages were older than the %2$d-day origin-token window, so those consents were not recorded."
+msgid "%d in the last 7 days — its origin token was not valid, so the consent was not recorded."
+msgid_plural "%d in the last 7 days — their origin tokens were not valid, so those consents were not recorded."
 msgstr[0] ""
 msgstr[1] ""
 msgstr[2] ""
 
-#: admin/views/system-status.php:102
-msgid "A full-page cache serving HTML for longer than that window is the usual cause. Either shorten the cache lifetime or raise the window with the faz_consent_token_max_age filter."
+#. translators: %d: accepted token window, in days.
+#: admin/views/system-status.php:105
+#, php-format
+msgid "HTML served from a cache older than the accepted window of %d days is the usual cause: either shorten the cache lifetime or raise the window with the faz_consent_token_max_age filter. A token from another installation, or a malformed one, is refused the same way and counted here too."
 msgstr ""
 
-#: admin/views/system-status.php:107
+#: admin/views/system-status.php:114
 msgid "IAB TCF v2.3"
 msgstr "IAB TCF v2.3"
 
-#: admin/views/system-status.php:109
+#: admin/views/system-status.php:116
 msgid "Auto Scan"
 msgstr "Automatsko skeniranje"
 
-#: admin/views/system-status.php:110
+#: admin/views/system-status.php:117
 msgid "Geo-Targeting"
 msgstr "Geo-ciljanje"
 
-#: admin/views/system-status.php:122
+#: admin/views/system-status.php:129
 msgid "Per-Service Consent"
 msgstr "Privola po usluzi"
 
-#: admin/views/system-status.php:123
+#: admin/views/system-status.php:130
 msgid "Per-Cookie Consent"
 msgstr "Privola po pojedinačnom kolačiću"
 
-#: admin/views/system-status.php:124
+#: admin/views/system-status.php:131
 msgid "Bot Detection"
 msgstr "Detekcija botova"
 
-#: admin/views/system-status.php:125
+#: admin/views/system-status.php:132
 msgid "GTM Data Layer"
 msgstr "GTM Data Layer"
 
-#: admin/views/system-status.php:126
+#: admin/views/system-status.php:133
 msgid "Age Gate"
 msgstr "Dobna provjera"
 
 #. translators: %d: minimum age in years.
-#: admin/views/system-status.php:126
+#: admin/views/system-status.php:133
 #, php-format
 msgid "(min age %d)"
 msgstr "(min. dob %d)"
 
-#: admin/views/system-status.php:128
+#: admin/views/system-status.php:135
 msgid "Ad-Blocker Compat"
 msgstr "Kompatibilnost s blokatorima oglasa"
 
-#: admin/views/system-status.php:131
+#: admin/views/system-status.php:138
 msgid "PHP Set-Cookie Blocking"
 msgstr "Blokiranje PHP Set-Cookie"
 
-#: admin/views/system-status.php:137
+#: admin/views/system-status.php:144
 msgid "Recently Blocked Server Cookies"
 msgstr "Nedavno blokirani kolačići poslužitelja"
 
-#: admin/views/system-status.php:140
+#: admin/views/system-status.php:147
 msgid "No outgoing PHP Set-Cookie header has been blocked in the last 24 hours."
 msgstr "Nijedno odlazno PHP Set-Cookie zaglavlje nije blokirano u posljednja 24 sata."
 
-#: admin/views/system-status.php:172
+#: admin/views/system-status.php:179
 msgid "Request Path"
 msgstr "Putanja zahtjeva"
 
-#: admin/views/system-status.php:173
+#: admin/views/system-status.php:180
 msgid "Blocked At"
 msgstr "Blokirano u"
 
-#: admin/views/system-status.php:192
+#: admin/views/system-status.php:199
 msgid "Database"
 msgstr "Baza podataka"
 
-#: admin/views/system-status.php:198
+#: admin/views/system-status.php:205
 msgid "Table missing"
 msgstr "Tablica nedostaje"
 
-#: admin/views/system-status.php:200
+#: admin/views/system-status.php:207
 msgid "rows"
 msgstr "redaka"
 
-#: admin/views/system-status.php:209
+#: admin/views/system-status.php:216
 msgid "Cron Jobs"
 msgstr "Cron poslovi"
 
-#: admin/views/system-status.php:211
+#: admin/views/system-status.php:218
 msgid "A hosting cron that runs wp-cron.php processes WordPress scheduled events, including FAZ scans and cleanup. WP-CLI is optional. DISABLE_WP_CRON only disables automatic spawning on page visits; it does not prevent your host from running scheduled events."
 msgstr "Cron zadatak kod davatelja usluge smještaja koji pokreće wp-cron.php obrađuje WordPressove zakazane događaje, uključujući FAZ skeniranja i čišćenje. WP-CLI nije obvezan. Konstanta DISABLE_WP_CRON isključuje samo automatsko pokretanje pri posjetima stranicama; ne sprječava davatelja usluge da izvodi zakazane događaje."
 
-#: admin/views/system-status.php:213
+#: admin/views/system-status.php:220
 msgid "cPanel setup without WP-CLI"
 msgstr "Postavljanje cPanela bez WP-CLI-ja"
 
-#: admin/views/system-status.php:214
+#: admin/views/system-status.php:221
 msgid "If your host already runs wp-cron.php regularly, keep that job; do not create a duplicate. Otherwise, ask your host to add a Cron Job in cPanel every five minutes (minute: */5; all other schedule fields: *), using the command below. The host should confirm the curl path and that the request is not blocked by authentication or a firewall."
 msgstr "Ako vaš davatelj usluge smještaja već redovito pokreće wp-cron.php, zadržite taj zadatak i nemojte stvarati duplikat. U protivnom zamolite davatelja usluge da u cPanelu doda Cron Job svakih pet minuta (minuta: */5; sva ostala polja rasporeda: *), koristeći naredbu u nastavku. Davatelj usluge trebao bi potvrditi putanju do curl-a i da zahtjev ne blokiraju autentifikacija ili vatrozid."
 
-#: admin/views/system-status.php:216
+#: admin/views/system-status.php:223
 msgid "No separate Rulesets schedule is needed for WordPress cron events. Check that overdue dates advance after a run. A next-run timestamp shows scheduling, not proof that the last run succeeded."
 msgstr "Za WordPressove cron događaje nije potreban zaseban raspored skupova pravila. Provjerite pomiču li se dospjeli datumi nakon izvođenja. Vremenska oznaka sljedećeg izvođenja pokazuje raspoređivanje, a ne dokaz da je posljednje izvođenje uspjelo."
 
-#: admin/views/system-status.php:220
+#: admin/views/system-status.php:227
 msgid "Next Scheduled Scan"
 msgstr "Sljedeće zakazano skeniranje"
 
-#: admin/views/system-status.php:224
+#: admin/views/system-status.php:231
 msgid "Next Consent Log Cleanup"
 msgstr "Sljedeće čišćenje zapisa privola"
 
-#: admin/views/system-status.php:239
+#: admin/views/system-status.php:246
 msgid "Cookie definitions updated"
 msgstr "Definicije kolačića ažurirane"
 
 #. translators: %s: date the bundled snapshot's data was captured.
-#: admin/views/system-status.php:253
+#: admin/views/system-status.php:260
 #, php-format
 msgid "bundled data in use, captured %s"
 msgstr "koriste se ugrađeni podaci, snimljeno %s"
 
-#: admin/views/system-status.php:259
+#: admin/views/system-status.php:266
 msgid "never downloaded (bundled data in use)"
 msgstr "nikada preuzeto (koriste se ugrađeni podaci)"
 
-#: admin/views/system-status.php:264
+#: admin/views/system-status.php:271
 msgid "IAB vendor list updated"
 msgstr "Popis IAB dobavljača ažuriran"
 
-#: admin/views/system-status.php:267
+#: admin/views/system-status.php:274
 msgid "never downloaded"
 msgstr "nikada preuzeto"
 
-#: admin/views/system-status.php:301
+#: admin/views/system-status.php:308
 msgid "May be blocked without a visible placeholder"
 msgstr ""
 
 #. translators: %d: number of providers.
-#: admin/views/system-status.php:307
+#: admin/views/system-status.php:314
 #, php-format
 msgid "These %d catalogued services declare no cookies, so they appear in no cookie declaration, and when blocked on a script or stylesheet pattern no placeholder is shown. This is a catalogue of potential matches, not a report of what this site loads; a matching whitelist entry may also allow a request. When a request is blocked before consent, fonts can fall back or a control can look broken."
 msgstr ""
 
-#: admin/views/system-status.php:313
+#: admin/views/system-status.php:320
 msgid "Whitelisting a pattern in Settings → Script Blocking lets it load before consent. Google Fonts is deliberately not whitelisted: German courts have held that loading it from Google without consent is unlawful. Serving those fonts from your own server avoids both the block and the question."
 msgstr ""
 
-#: admin/views/system-status.php:331
+#: admin/views/system-status.php:338
 msgid "Active Plugins"
 msgstr "Aktivni plugini"
 
@@ -7080,13 +7082,13 @@ msgstr "Za utvrđenu jurisdikciju nije dostupan nijedan banner."
 msgid "No active banner found."
 msgstr "Nije pronađen aktivni banner."
 
-#: frontend/modules/consent-logger/class-consent-logger.php:263
+#: frontend/modules/consent-logger/class-consent-logger.php:287
 #: includes/class-do-not-sell-shortcode.php:220
 #: includes/class-do-not-sell-shortcode.php:278
 msgid "This request must originate from this website."
 msgstr "Ovaj zahtjev mora potjecati s ove web stranice."
 
-#: frontend/modules/consent-logger/class-consent-logger.php:409
+#: frontend/modules/consent-logger/class-consent-logger.php:433
 msgid "Failed to log consent."
 msgstr "Bilježenje privole nije uspjelo."
 

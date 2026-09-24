@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-09-23T23:41:05+00:00\n"
+"POT-Creation-Date: 2026-09-24T05:21:36+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -60,7 +60,7 @@ msgid "Consent Logs"
 msgstr "Registri di consenso"
 
 #: admin/class-admin.php:243 admin/views/base.php:23
-#: admin/views/dashboard.php:243 admin/views/system-status.php:106
+#: admin/views/dashboard.php:243 admin/views/system-status.php:113
 msgid "Google Consent Mode"
 msgstr "Google Consent Mode"
 
@@ -240,7 +240,7 @@ msgid "Delete stale"
 msgstr "Elimina obsoleti"
 
 #: admin/class-admin.php:561 admin/views/cookies.php:260
-#: admin/views/system-status.php:157
+#: admin/views/system-status.php:164
 #: includes/class-cookie-table-shortcode.php:229
 msgid "Category"
 msgstr "Categoria"
@@ -1587,7 +1587,7 @@ msgstr "Statcounter"
 msgid "Hotjar"
 msgstr "Hotjar"
 
-#: admin/class-admin.php:1031 admin/views/system-status.php:130
+#: admin/class-admin.php:1031 admin/views/system-status.php:137
 msgid "Microsoft Clarity"
 msgstr "Microsoft Clarity"
 
@@ -1631,7 +1631,7 @@ msgstr "TikTok Pixel"
 msgid "LinkedIn Insight Tag"
 msgstr "LinkedIn Insight Tag"
 
-#: admin/class-admin.php:1043 admin/views/system-status.php:129
+#: admin/class-admin.php:1043 admin/views/system-status.php:136
 msgid "Microsoft UET"
 msgstr "Microsoft UET"
 
@@ -2362,7 +2362,7 @@ msgid "Complete all fields required for the selected jurisdiction before saving 
 msgstr "Compila tutti i campi richiesti dalla giurisdizione selezionata prima di salvare o di visualizzare l'anteprima della Cookie Policy."
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:505
-#: admin/views/system-status.php:156
+#: admin/views/system-status.php:163
 #: frontend/modules/shortcodes/class-shortcodes.php:246
 #: includes/class-cookie-table-shortcode.php:225
 msgid "Cookie"
@@ -5760,7 +5760,7 @@ msgid "Loading banners…"
 msgstr "Caricamento banner…"
 
 #. translators: %d: minimum age in years.
-#: admin/views/settings.php:136 admin/views/system-status.php:127
+#: admin/views/settings.php:136 admin/views/system-status.php:134
 msgid "Cross-Domain Consent"
 msgstr "Consenso cross-domain"
 
@@ -5784,7 +5784,7 @@ msgstr "Uno per riga: https://shop.example.com"
 msgid "Full URLs of other sites that should receive consent state. Each site must also have FAZ Cookie Manager installed. One URL per line."
 msgstr "URL completi di altri siti che devono ricevere lo stato del consenso. Ogni sito deve avere FAZ Cookie Manager installato. Un URL per riga."
 
-#: admin/views/settings.php:157 admin/views/system-status.php:108
+#: admin/views/settings.php:157 admin/views/system-status.php:115
 msgid "Pageview Tracking"
 msgstr "Tracciamento visualizzazioni pagina"
 
@@ -6768,157 +6768,159 @@ msgstr "Registrazione consensi"
 msgid "Consent Records Refused"
 msgstr "Registrazioni di consenso rifiutate"
 
-#. translators: 1: number of refused consent records, 2: token window in days.
+#. translators: %d: number of refused consent records.
 #: admin/views/system-status.php:97
 #, php-format
-msgid "%1$d in the last 7 days — its page was older than the %2$d-day origin-token window, so the consent was not recorded."
-msgid_plural "%1$d in the last 7 days — their pages were older than the %2$d-day origin-token window, so those consents were not recorded."
-msgstr[0] "%1$d negli ultimi 7 giorni: la pagina era più vecchia della finestra di %2$d giorni del token di origine, quindi il consenso non è stato registrato."
-msgstr[1] "%1$d negli ultimi 7 giorni: le pagine erano più vecchie della finestra di %2$d giorni del token di origine, quindi quei consensi non sono stati registrati."
+msgid "%d in the last 7 days — its origin token was not valid, so the consent was not recorded."
+msgid_plural "%d in the last 7 days — their origin tokens were not valid, so those consents were not recorded."
+msgstr[0] "%d negli ultimi 7 giorni: il token di origine non era valido, quindi il consenso non è stato registrato."
+msgstr[1] "%d negli ultimi 7 giorni: i token di origine non erano validi, quindi quei consensi non sono stati registrati."
 
-#: admin/views/system-status.php:102
-msgid "A full-page cache serving HTML for longer than that window is the usual cause. Either shorten the cache lifetime or raise the window with the faz_consent_token_max_age filter."
-msgstr "La causa più comune è una cache di pagina che serve l'HTML più a lungo di quella finestra. Si può accorciare la durata della cache oppure allargare la finestra con il filtro faz_consent_token_max_age."
+#. translators: %d: accepted token window, in days.
+#: admin/views/system-status.php:105
+#, php-format
+msgid "HTML served from a cache older than the accepted window of %d days is the usual cause: either shorten the cache lifetime or raise the window with the faz_consent_token_max_age filter. A token from another installation, or a malformed one, is refused the same way and counted here too."
+msgstr "La causa più comune è l'HTML servito da una cache più vecchia della finestra accettata di %d giorni: si può accorciare la durata della cache oppure allargare la finestra con il filtro faz_consent_token_max_age. Anche un token proveniente da un'altra installazione, o malformato, viene rifiutato allo stesso modo e conteggiato qui."
 
-#: admin/views/system-status.php:107
+#: admin/views/system-status.php:114
 msgid "IAB TCF v2.3"
 msgstr "IAB TCF v2.3"
 
-#: admin/views/system-status.php:109
+#: admin/views/system-status.php:116
 msgid "Auto Scan"
 msgstr "Scansione automatica"
 
-#: admin/views/system-status.php:110
+#: admin/views/system-status.php:117
 msgid "Geo-Targeting"
 msgstr "Geo-Targeting"
 
-#: admin/views/system-status.php:122
+#: admin/views/system-status.php:129
 msgid "Per-Service Consent"
 msgstr "Consenso per servizio"
 
-#: admin/views/system-status.php:123
+#: admin/views/system-status.php:130
 msgid "Per-Cookie Consent"
 msgstr "Consenso per singolo cookie"
 
-#: admin/views/system-status.php:124
+#: admin/views/system-status.php:131
 msgid "Bot Detection"
 msgstr "Rilevamento bot"
 
-#: admin/views/system-status.php:125
+#: admin/views/system-status.php:132
 msgid "GTM Data Layer"
 msgstr "GTM Data Layer"
 
-#: admin/views/system-status.php:126
+#: admin/views/system-status.php:133
 msgid "Age Gate"
 msgstr "Verifica dell'età"
 
 #. translators: %d: minimum age in years.
-#: admin/views/system-status.php:126
+#: admin/views/system-status.php:133
 #, php-format
 msgid "(min age %d)"
 msgstr "(età minima %d)"
 
-#: admin/views/system-status.php:128
+#: admin/views/system-status.php:135
 msgid "Ad-Blocker Compat"
 msgstr "Compat. Ad-Blocker"
 
-#: admin/views/system-status.php:131
+#: admin/views/system-status.php:138
 msgid "PHP Set-Cookie Blocking"
 msgstr "Blocco Set-Cookie PHP"
 
-#: admin/views/system-status.php:137
+#: admin/views/system-status.php:144
 msgid "Recently Blocked Server Cookies"
 msgstr "Cookie server bloccati di recente"
 
-#: admin/views/system-status.php:140
+#: admin/views/system-status.php:147
 msgid "No outgoing PHP Set-Cookie header has been blocked in the last 24 hours."
 msgstr "Nessun header Set-Cookie PHP in uscita è stato bloccato nelle ultime 24 ore."
 
-#: admin/views/system-status.php:172
+#: admin/views/system-status.php:179
 msgid "Request Path"
 msgstr "Percorso richiesta"
 
-#: admin/views/system-status.php:173
+#: admin/views/system-status.php:180
 msgid "Blocked At"
 msgstr "Bloccato il"
 
-#: admin/views/system-status.php:192
+#: admin/views/system-status.php:199
 msgid "Database"
 msgstr "Database"
 
-#: admin/views/system-status.php:198
+#: admin/views/system-status.php:205
 msgid "Table missing"
 msgstr "Tabella mancante"
 
-#: admin/views/system-status.php:200
+#: admin/views/system-status.php:207
 msgid "rows"
 msgstr "righe"
 
-#: admin/views/system-status.php:209
+#: admin/views/system-status.php:216
 msgid "Cron Jobs"
 msgstr "Cron Jobs"
 
-#: admin/views/system-status.php:211
+#: admin/views/system-status.php:218
 msgid "A hosting cron that runs wp-cron.php processes WordPress scheduled events, including FAZ scans and cleanup. WP-CLI is optional. DISABLE_WP_CRON only disables automatic spawning on page visits; it does not prevent your host from running scheduled events."
 msgstr "Un cron dell'hosting che esegue wp-cron.php elabora gli eventi pianificati di WordPress, comprese le scansioni e la pulizia di FAZ. WP-CLI è facoltativo. DISABLE_WP_CRON disattiva soltanto l'avvio automatico alle visite delle pagine; non impedisce al tuo hosting di eseguire gli eventi pianificati."
 
-#: admin/views/system-status.php:213
+#: admin/views/system-status.php:220
 msgid "cPanel setup without WP-CLI"
 msgstr "Configurazione cPanel senza WP-CLI"
 
-#: admin/views/system-status.php:214
+#: admin/views/system-status.php:221
 msgid "If your host already runs wp-cron.php regularly, keep that job; do not create a duplicate. Otherwise, ask your host to add a Cron Job in cPanel every five minutes (minute: */5; all other schedule fields: *), using the command below. The host should confirm the curl path and that the request is not blocked by authentication or a firewall."
 msgstr "Se il tuo hosting esegue già regolarmente wp-cron.php, mantieni quel job e non crearne un duplicato. Altrimenti, chiedi al tuo hosting di aggiungere un Cron Job in cPanel ogni cinque minuti (minuto: */5; tutti gli altri campi della pianificazione: *), usando il comando qui sotto. L'hosting dovrebbe confermare il percorso di curl e che la richiesta non sia bloccata da autenticazione o firewall."
 
-#: admin/views/system-status.php:216
+#: admin/views/system-status.php:223
 msgid "No separate Rulesets schedule is needed for WordPress cron events. Check that overdue dates advance after a run. A next-run timestamp shows scheduling, not proof that the last run succeeded."
 msgstr "Non serve una pianificazione separata dei Ruleset per gli eventi cron di WordPress. Verifica che le date scadute avanzino dopo un'esecuzione. Un timestamp di prossima esecuzione indica la pianificazione, non la prova che l'ultima esecuzione sia riuscita."
 
-#: admin/views/system-status.php:220
+#: admin/views/system-status.php:227
 msgid "Next Scheduled Scan"
 msgstr "Prossima scansione pianificata"
 
-#: admin/views/system-status.php:224
+#: admin/views/system-status.php:231
 msgid "Next Consent Log Cleanup"
 msgstr "Prossima pulizia log consensi"
 
-#: admin/views/system-status.php:239
+#: admin/views/system-status.php:246
 msgid "Cookie definitions updated"
 msgstr "Definizioni dei cookie aggiornate"
 
 #. translators: %s: date the bundled snapshot's data was captured.
-#: admin/views/system-status.php:253
+#: admin/views/system-status.php:260
 #, php-format
 msgid "bundled data in use, captured %s"
 msgstr "in uso i dati inclusi nel plugin, acquisiti il %s"
 
-#: admin/views/system-status.php:259
+#: admin/views/system-status.php:266
 msgid "never downloaded (bundled data in use)"
 msgstr "mai scaricate (in uso i dati inclusi nel plugin)"
 
-#: admin/views/system-status.php:264
+#: admin/views/system-status.php:271
 msgid "IAB vendor list updated"
 msgstr "Elenco fornitori IAB aggiornato"
 
-#: admin/views/system-status.php:267
+#: admin/views/system-status.php:274
 msgid "never downloaded"
 msgstr "mai scaricato"
 
-#: admin/views/system-status.php:301
+#: admin/views/system-status.php:308
 msgid "May be blocked without a visible placeholder"
 msgstr "Potrebbero essere bloccati senza un segnaposto visibile"
 
 #. translators: %d: number of providers.
-#: admin/views/system-status.php:307
+#: admin/views/system-status.php:314
 #, php-format
 msgid "These %d catalogued services declare no cookies, so they appear in no cookie declaration, and when blocked on a script or stylesheet pattern no placeholder is shown. This is a catalogue of potential matches, not a report of what this site loads; a matching whitelist entry may also allow a request. When a request is blocked before consent, fonts can fall back or a control can look broken."
 msgstr "Questi %d servizi presenti nel catalogo non dichiarano cookie, quindi non compaiono in alcuna dichiarazione dei cookie, e quando vengono bloccati su uno script o un foglio di stile non viene mostrato alcun segnaposto. Questo è un catalogo di potenziali corrispondenze, non un resoconto di ciò che il sito carica; inoltre, una voce corrispondente nella whitelist potrebbe consentire la richiesta. Quando una richiesta viene bloccata prima del consenso, i caratteri possono tornare a quelli predefiniti oppure un controllo può sembrare non funzionante."
 
-#: admin/views/system-status.php:313
+#: admin/views/system-status.php:320
 msgid "Whitelisting a pattern in Settings → Script Blocking lets it load before consent. Google Fonts is deliberately not whitelisted: German courts have held that loading it from Google without consent is unlawful. Serving those fonts from your own server avoids both the block and the question."
 msgstr "Inserire un pattern nella lista consentiti in Impostazioni → Blocco degli script ne permette il caricamento prima del consenso. Google Fonts non è nella lista per scelta: i tribunali tedeschi hanno stabilito che caricarlo dai server di Google senza consenso è illecito. Servire quei caratteri dal proprio server evita sia il blocco sia la questione."
 
-#: admin/views/system-status.php:331
+#: admin/views/system-status.php:338
 msgid "Active Plugins"
 msgstr "Plugin attivi"
 
@@ -7076,13 +7078,13 @@ msgstr "Nessun banner disponibile per la giurisdizione risolta."
 msgid "No active banner found."
 msgstr "Nessun banner attivo trovato."
 
-#: frontend/modules/consent-logger/class-consent-logger.php:263
+#: frontend/modules/consent-logger/class-consent-logger.php:287
 #: includes/class-do-not-sell-shortcode.php:220
 #: includes/class-do-not-sell-shortcode.php:278
 msgid "This request must originate from this website."
 msgstr "Questa richiesta deve provenire da questo sito web."
 
-#: frontend/modules/consent-logger/class-consent-logger.php:409
+#: frontend/modules/consent-logger/class-consent-logger.php:433
 msgid "Failed to log consent."
 msgstr "Registrazione del consenso non riuscita."
 

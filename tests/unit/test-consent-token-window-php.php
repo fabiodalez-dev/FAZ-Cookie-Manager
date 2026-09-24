@@ -180,11 +180,29 @@ namespace {
 	tok_check( 1 === (int) get_transient( 'faz_consent_token_rejected_notice' ), 'and the error-log notice is throttled to one an hour' );
 
 	// A tally older than its 7-day window starts again rather than keeping a
-	// warning on screen for a cache problem that a purge already fixed.
-	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = array( 'since' => time() - 8 * DAY_IN_SECONDS, 'count' => 900 );
+	// warning on screen for a cache problem that a purge already fixed. The
+	// window has to apply when the tally is READ as well: rolling it over only
+	// on the next refusal left System Status reporting a fortnight-old count as
+	// "in the last 7 days" for as long as nothing else was refused.
+	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = array( 'since' => time() - 8 * DAY_IN_SECONDS, 'count' => 900, 'last' => time() - 8 * DAY_IN_SECONDS );
+	$stale = Consent_Logger::rejection_tally();
+	tok_check( 0 === $stale['count'], 'an expired tally reads as zero, with no new refusal needed' );
 	$reject->invoke( null );
-	$tally = get_option( Consent_Logger::REJECTION_OPTION, array() );
-	tok_check( 1 === (int) $tally['count'], 'a tally older than seven days starts over' );
+	$tally = Consent_Logger::rejection_tally();
+	tok_check( 1 === $tally['count'], 'and the next refusal starts a new window' );
+	tok_check( $tally['since'] >= time() - 5, 'dated from that refusal, not from the expired window' );
+
+	// A live tally is reported as it stands.
+	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = array( 'since' => time() - DAY_IN_SECONDS, 'count' => 7, 'last' => time() );
+	tok_check( 7 === Consent_Logger::rejection_tally()['count'], 'a tally inside the window is reported as it stands' );
+	$GLOBALS['faz_options'][ Consent_Logger::REJECTION_OPTION ] = 'not an array';
+	tok_check( 0 === Consent_Logger::rejection_tally()['count'], 'a corrupt option reads as zero' );
+
+	// The view must not read the option itself: that is how the two copies of
+	// the 7-day rule came apart in the first place.
+	$view = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/views/system-status.php' );
+	tok_check( false !== strpos( $view, 'Consent_Logger::rejection_tally()' ), 'System Status reads the tally through the shared accessor' );
+	tok_check( false === strpos( $view, "get_option( \\FazCookie\\Frontend\\Modules\\Consent_Logger\\Consent_Logger::REJECTION_OPTION" ), 'and not through get_option()' );
 
 	echo "\nPassed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );
