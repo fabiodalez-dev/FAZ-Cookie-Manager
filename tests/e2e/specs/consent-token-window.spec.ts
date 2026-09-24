@@ -18,7 +18,7 @@
  */
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
-import { wpEval } from '../utils/wp-env';
+import { clearFazThrottles, wpEval } from '../utils/wp-env';
 
 const REJECTION_OPTION = 'faz_consent_token_rejections';
 
@@ -73,18 +73,6 @@ async function expectTally(page: Page, pattern: string, why: string): Promise<st
   return body;
 }
 
-/**
- * Drop the per-IP and per-cause throttle transients.
- *
- * Every case here posts from one address, which is exactly what the throttles
- * exist to limit; without this a later case would be answered from a window
- * opened by an earlier one and would assert nothing.
- */
-function clearThrottles(): void {
-  wpEval(
-    'global $wpdb; $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE \'_transient%faz_consent_%\' OR option_name LIKE \'_transient%faz_throttle%\' OR option_name LIKE \'_transient%faz_pv_%\'" );',
-  );
-}
 
 test.describe('consent-log origin token outlives the page cache (#292)', () => {
   test.afterAll(() => {
@@ -108,7 +96,7 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
       });
 
     const cachedId = `e2e-token-cached-${Date.now()}`;
-    clearThrottles();
+    clearFazThrottles();
     const cached = await post(tokenAgedDays(5), cachedId);
     expect(cached.status(), 'a page cached five days ago can still record consent').toBe(200);
     const rows = lastLine(wpEval(
@@ -117,7 +105,7 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
     expect(rows, 'and the row is actually written').toBe('1');
 
     // The window still ends: this is a cache allowance, not an open door.
-    clearThrottles();
+    clearFazThrottles();
     const expired = await post(tokenAgedDays(9), `e2e-token-expired-${Date.now()}`);
     expect(expired.status(), 'a token older than the window is still refused').toBe(403);
     expect((await expired.json()).code).toBe('invalid_token');
@@ -129,7 +117,7 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
     // guaranteed option write per request — on the one route that has to stay
     // reachable without authentication. The 403 itself must not change.
     wpEval(`delete_option( '${REJECTION_OPTION}' );`);
-    clearThrottles();
+    clearFazThrottles();
 
     const bogus = 'not-a-token-at-all';
     const statuses: number[] = [];
@@ -157,7 +145,7 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
     // WordPress echoes back any Origin in its CORS headers, so the preflight
     // succeeds and the POST reaches PHP: this plugin refuses it, not the browser.
     wpEval(`delete_option( '${REJECTION_OPTION}' );`);
-    clearThrottles();
+    clearFazThrottles();
 
     const res = await request.post(`${baseURL}/wp-json/faz/v1/consent`, {
       headers: { Origin: 'https://not-this-site.example', 'Sec-Fetch-Site': 'cross-site' },
@@ -180,7 +168,7 @@ test.describe('consent-log origin token outlives the page cache (#292)', () => {
     // an absent `token` did not: the one shape System Status names in this
     // cause's copy, "no origin token at all", was the one shape it never saw.
     wpEval(`delete_option( '${REJECTION_OPTION}' );`);
-    clearThrottles();
+    clearFazThrottles();
 
     const res = await request.post(`${baseURL}/wp-json/faz/v1/consent`, {
       headers: { Origin: baseURL as string, 'Sec-Fetch-Site': 'same-origin' },
@@ -317,7 +305,7 @@ test.describe('the pageview origin token outlives the page cache too (#292)', ()
     // Distinct event types: the endpoint throttles one request per IP per event
     // type per second, and a throttled call answers 200 without writing, which
     // would make the accepted case pass for the wrong reason.
-    clearThrottles();
+    clearFazThrottles();
     const cached = await post(pageviewTokenAgedDays(5), 'pageview');
     expect(cached.status(), 'a page cached five days ago still counts its pageviews').toBe(200);
     expect(
@@ -331,7 +319,7 @@ test.describe('the pageview origin token outlives the page cache too (#292)', ()
     expect(rows, 'the event is actually recorded, not just accepted').toBe('1');
 
     // The window still ends here too: a cache allowance, not an open door.
-    clearThrottles();
+    clearFazThrottles();
     const expired = await post(pageviewTokenAgedDays(9), 'banner_view');
     expect(expired.status(), 'a token older than the window is refused').toBe(403);
     expect((await expired.json()).code).toBe('invalid_token');
