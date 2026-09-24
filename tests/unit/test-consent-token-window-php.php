@@ -198,6 +198,30 @@ namespace {
 	tok_check( false === strpos( $pv_api, '12 * HOUR_IN_SECONDS ) )' ), 'and no longer accepts only two 12-hour buckets' );
 	tok_check( false !== strpos( $pv_api, 'faz_pageview_token_max_age' ), 'with its own filter for a longer-cached site' );
 
+	// And the pageview window is driven, not read. Every check above is source
+	// text, which cannot notice a window that is wrong at the boundary — the
+	// whole of the defect. The E2E suite posts real tokens at the real endpoint,
+	// but that needs a running WordPress; this runs everywhere, for free.
+	require_once __DIR__ . '/fixtures/rest-controller-stub.php';
+	require_once dirname( __DIR__, 2 ) . '/admin/modules/pageviews/api/class-api.php';
+	$pv_now   = 1780000000;
+	$pv_token = \FazCookie\Admin\Modules\Pageviews\Api\Api::current_token( $pv_now );
+	tok_check(
+		true === \FazCookie\Admin\Modules\Pageviews\Api\Api::token_is_valid( $pv_token, $pv_now ),
+		'a freshly minted pageview token is accepted'
+	);
+	// Two buckets on is where the old shape stopped: it accepted the current
+	// bucket and the previous one, so this is the assertion that fails if the
+	// pageview validator alone is put back to twelve hours.
+	tok_check(
+		true === \FazCookie\Admin\Modules\Pageviews\Api\Api::token_is_valid( $pv_token, $pv_now + 2 * \FazCookie\Admin\Modules\Pageviews\Api\Api::TOKEN_BUCKET ),
+		'and is still accepted a day later, which the two-bucket window refused'
+	);
+	tok_check(
+		false === \FazCookie\Admin\Modules\Pageviews\Api\Api::token_is_valid( $pv_token, $pv_now + 8 * DAY_IN_SECONDS ),
+		'while the window still ends: eight days on it is refused'
+	);
+
 	// 7b. The token argument must NOT be declared `required`. WordPress rejects
 	//     a missing required arg in has_valid_params() and answers 400 before
 	//     the callback — and the check is keyed on `null === $param`, so an
