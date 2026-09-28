@@ -322,7 +322,11 @@ if ( ! function_exists( 'get_transient' ) ) {
 	// C4b — provider fragments must not match inside unrelated hosts.
 	$fe = faz_arrange( 'necessary:yes,marketing:no,svc.youtube:yes' );
 	assert_eq( faz_call( $fe, 'check_per_service_blocking', array( ' src="https://notyoutube.com/embed/x" ', '' ) ), null, 'C4b notyoutube.com is not treated as youtube.com/embed for svc.* override' );
-	assert_eq( faz_call( $fe, 'match_script_to_provider', array( ' src="https://notyoutube.com/embed/x" ', '', array( 'youtube.com/embed' => 'marketing' ) ) ), false, 'C4c notyoutube.com is not treated as a YouTube provider match' );
+	// 4th argument: the categories blocked on this request. match_script_to_provider()
+	// takes them so it can let a blocked match win over an allowed one; the list is
+	// irrelevant to what C4c asserts (no match at all), but stating it keeps the call
+	// free of the admin category catalogue this harness does not stub.
+	assert_eq( faz_call( $fe, 'match_script_to_provider', array( ' src="https://notyoutube.com/embed/x" ', '', array( 'youtube.com/embed' => 'marketing' ), array( 'marketing' ) ) ), false, 'C4c notyoutube.com is not treated as a YouTube provider match' );
 
 	// C5 — per-service OFF → null even with svc tokens present in the cookie.
 	$fe = faz_arrange( 'necessary:yes,svc.youtube:no', false );

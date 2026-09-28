@@ -3910,7 +3910,7 @@ class Frontend {
 			return $full;
 		}
 
-		$matched_category = $this->match_script_to_provider( $attrs, $content, $providers );
+		$matched_category = $this->match_script_to_provider( $attrs, $content, $providers, $blocked_categories );
 		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
 			// Category is allowed — but per-service consent might still block it.
 			$svc_blocked = $this->check_per_service_blocking( $attrs, $content );
@@ -4066,7 +4066,7 @@ class Frontend {
 			return $full;
 		}
 
-		$matched_category = $this->match_script_to_provider( $attrs, '', $providers );
+		$matched_category = $this->match_script_to_provider( $attrs, '', $providers, $blocked_categories );
 		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
 			// Category allowed — but per-service might block.
 			$svc_blocked = $this->check_per_service_blocking( $attrs, '' );
@@ -4161,7 +4161,7 @@ class Frontend {
 		// Kept in its own variable: a content-level hit means the block as a
 		// whole is a tracking fallback, which the rewrite below uses to decide
 		// whether unmatched sibling tags travel with it.
-		$content_matched = $this->match_script_to_provider( '', $content, $providers );
+		$content_matched = $this->match_script_to_provider( '', $content, $providers, $blocked_categories );
 
 		// Pass 2 — URL-fragment patterns against each embedded resource's OWN
 		// tag attributes. The content-only call above carries no src haystack
@@ -4185,7 +4185,7 @@ class Frontend {
 				$whitelisted       = $this->is_whitelisted( $embedded_tag, '' );
 				$embedded_tags[]   = $embedded_tag;
 				$tag_whitelisted[] = $whitelisted;
-				$tag_categories[]  = $whitelisted ? '' : $this->match_script_to_provider( $embedded_tag, '', $providers );
+				$tag_categories[]  = $whitelisted ? '' : $this->match_script_to_provider( $embedded_tag, '', $providers, $blocked_categories );
 				$tag_svcs[]        = $whitelisted ? null : $this->check_per_service_blocking( $embedded_tag, '' );
 			}
 		}
@@ -4335,7 +4335,7 @@ class Frontend {
 			return $full;
 		}
 
-		$matched_category = $this->match_script_to_provider( $attrs, '', $providers );
+		$matched_category = $this->match_script_to_provider( $attrs, '', $providers, $blocked_categories );
 		$svc_blocked      = $this->check_per_service_blocking( $attrs, '' );
 
 		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
@@ -4414,7 +4414,7 @@ class Frontend {
 			return $full;
 		}
 
-		$matched_category = $this->match_script_to_provider( $attrs, '', $providers );
+		$matched_category = $this->match_script_to_provider( $attrs, '', $providers, $blocked_categories );
 		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
 			$svc_blocked = $this->check_per_service_blocking( $attrs, '' );
 			if ( true !== $svc_blocked ) {
@@ -5657,16 +5657,49 @@ class Frontend {
 		if ( empty( $this->providers ) ) {
 			$this->get_cookie_groups();
 		}
-		$map = array();
+		$map              = array();
+		$valid_categories = $this->get_valid_category_slugs();
+
 		// 1. Existing: url_pattern from cookie DB.
+		//
+		// A pattern whose category can NEVER be blocked does not belong in a
+		// blocking map. It cannot block anything, and because the matchers scan
+		// this map in insertion order, it can only shadow a pattern that comes
+		// after it — and section 1 comes before every other source.
+		//
+		// This is an invariant kept locally, not a fix for an observed leak: the
+		// two methods that populate $this->providers (get_cookies() and
+		// prepare_frontend_cookies()) both skip the `necessary` category before
+		// a url_pattern reaches this property, and both take the slug from a
+		// live category object, so today nothing invalid arrives here either.
+		// Asserting it anyway is deliberate. Section 2 has carried the same two
+		// checks since it was written, so without them section 1 reads as the
+		// looser of two sibling loops and invites the reader to work out which
+		// is right; and what this map governs — whether a tag may load before
+		// consent — should not depend on a guarantee made two files away by
+		// code that has no idea a blocking map exists.
+		//
+		// When a pattern does carry several categories (the same url_pattern
+		// declared under more than one, which IS reachable), the blockable one
+		// is what this map is being asked about, so prefer it rather than
+		// taking whichever happened to be first.
 		foreach ( $this->providers as $pattern => $cats ) {
-			if ( ! empty( $cats ) ) {
-				$map[ $pattern ] = $cats[0];
+			if ( empty( $cats ) ) {
+				continue;
+			}
+			foreach ( $cats as $candidate ) {
+				if ( 'necessary' === $candidate ) {
+					continue;
+				}
+				if ( ! in_array( $candidate, $valid_categories, true ) ) {
+					continue;
+				}
+				$map[ $pattern ] = $candidate;
+				break;
 			}
 		}
 
 		// 2. Known providers database.
-		$valid_categories = $this->get_valid_category_slugs();
 		$known_map        = Known_Providers::get_pattern_map();
 		foreach ( $known_map as $pattern => $category ) {
 			if ( 'necessary' === $category ) {
@@ -5866,12 +5899,15 @@ class Frontend {
 	/**
 	 * Check if a <script> tag (by src or inline content) matches a known provider.
 	 *
-	 * @param string $attrs   The tag's attribute string.
-	 * @param string $content The inline script content.
-	 * @param array  $providers Provider map from get_provider_category_map().
+	 * @param string     $attrs              The tag's attribute string.
+	 * @param string     $content            The inline script content.
+	 * @param array      $providers          Provider map from get_provider_category_map().
+	 * @param array|null $blocked_categories Categories blocked on this request, so a
+	 *                                       blocked match can win over an allowed one.
+	 *                                       Null falls back to get_blocked_categories().
 	 * @return string|false Matched category slug or false.
 	 */
-	private function match_script_to_provider( $attrs, $content, $providers ) {
+	private function match_script_to_provider( $attrs, $content, $providers, $blocked_categories = null ) {
 		$match_context = $this->get_provider_match_context( $attrs, $content );
 		$url                 = $match_context['url'];
 		$inline              = $match_context['content'];
@@ -5894,19 +5930,47 @@ class Frontend {
 		$url_lc    = strtolower( $url );
 		$inline_lc = null; // Lazily lowered — only decoded data: URI payloads need it.
 
+		// Same fail-closed rule as filter_script_loader_tag(): when more than
+		// one pattern matches a tag, a BLOCKED category decides and an allowed
+		// one is only a fallback. Every caller of this method treats a
+		// non-blocked category as "let it through", so returning the first match
+		// let a generic pattern in an allowed category release a tracker that a
+		// specific pattern classifies as blocked — in six call sites, and on the
+		// output-buffer layer that exists to catch what the tag filter misses.
+		// Both layers read the same ordered map, so without this they fail
+		// together rather than backing each other up.
+		//
+		// Cost: a tag whose only matches are in allowed categories now scans the
+		// rest of the map instead of returning early. Tags that match nothing
+		// already scanned it whole, and a tag that matches a blocked pattern
+		// still returns at once, so the extra work is confined to the minority
+		// of tags that match only allowed patterns.
+		// Passed in by every caller, which already holds the list for its own
+		// decision. Read as an argument rather than fetched here so this matcher
+		// keeps depending on nothing but its inputs: reaching for
+		// get_blocked_categories() from inside it pulled the admin category
+		// catalogue into a pure matching routine, and two standalone unit
+		// harnesses that legitimately stub only what their own path touches
+		// fatalled on the missing class. The fallback covers a future caller
+		// that forgets, and never runs today.
+		if ( null === $blocked_categories ) {
+			$blocked_categories = $this->get_blocked_categories();
+		}
+		$fallback_category = false;
+
 		foreach ( $meta as $m ) {
+			$matched = false;
 			// Patterns that look like URL fragments (contain '.' or '/') are designed
 			// to match tracker domains in src/href attributes.  Applying them to the
 			// inline text body causes false positives: config scripts that merely
 			// reference a tracker domain in their data (e.g. Rank Math's rankMath.links
 			// object contains youtu.be, facebook.com, etc.) would be incorrectly blocked.
 			if ( '' !== $url_lc && $this->provider_pattern_matches_lc( $url_lc, $m['lower'] ) ) {
-				return $m['category'];
-			}
-			if ( ! $m['is_url'] ) {
+				$matched = true;
+			} elseif ( ! $m['is_url'] ) {
 				// Code-signature patterns (fbq(, gtag, _ga …) match inline content.
 				if ( false !== stripos( $inline, $m['pattern'] ) ) {
-					return $m['category'];
+					$matched = true;
 				}
 			} elseif ( $is_data_uri_payload ) {
 				// URL-fragment patterns may also match decoded data: script payloads
@@ -5915,11 +5979,21 @@ class Frontend {
 					$inline_lc = strtolower( $inline );
 				}
 				if ( $this->provider_pattern_matches_lc( $inline_lc, $m['lower'] ) ) {
-					return $m['category'];
+					$matched = true;
 				}
 			}
+			if ( ! $matched ) {
+				continue;
+			}
+			if ( in_array( $m['category'], $blocked_categories, true ) ) {
+				return $m['category'];
+			}
+			if ( false === $fallback_category ) {
+				$fallback_category = $m['category'];
+			}
 		}
-		return false;
+
+		return $fallback_category;
 	}
 
 	/**
@@ -7470,30 +7544,58 @@ class Frontend {
 		}
 
 		$tag_src = '' !== (string) $src ? (string) $src : $this->extract_tag_attr( $tag, 'src' );
+		$blocked = $this->get_blocked_categories();
+
+		// Several patterns can match one script, and the order of this map is
+		// an accident of how it is assembled (cookie DB, then the provider
+		// database, then admin rules, then a filter) — not a policy. Stopping
+		// at the FIRST match therefore let the assembly order decide whether a
+		// tracker loads before consent: a generic pattern in a category the
+		// visitor allows won over a specific pattern that classifies the same
+		// script as blocked, and the script ran while the banner promised it
+		// would not.
+		//
+		// Fail closed instead: a matching pattern in a BLOCKED category decides
+		// immediately, an allowed one is only remembered in case nothing
+		// blocked matches. Whitelisting and per-service consent remain the ways
+		// to let a matched script through, both of which are explicit.
+		$matched_category = false;
 		foreach ( $providers as $pattern => $category ) {
 			if ( empty( $pattern ) ) {
 				continue;
 			}
 			// Match against the handle and script src only. Matching the full tag
 			// can false-positive on inline data snippets or unrelated attributes.
-			if ( false !== stripos( $handle, $pattern ) || false !== stripos( $tag_src, $pattern ) ) {
-				$blocked = $this->get_blocked_categories();
-				$should_block = in_array( $category, $blocked, true );
-
-				// Per-service consent override.
-				$svc_blocked = $this->check_per_service_blocking( $tag, '' );
-				if ( false === $svc_blocked ) {
-					$should_block = false; // Service explicitly allowed.
-				} elseif ( true === $svc_blocked ) {
-					$should_block = true;  // Service explicitly blocked.
-				}
-
-				if ( $should_block ) {
-					$tag = $this->block_script_tag_safely( $tag, $category, 'script handle ' . $handle );
-				}
+			if ( false === stripos( $handle, $pattern ) && false === stripos( $tag_src, $pattern ) ) {
+				continue;
+			}
+			if ( in_array( $category, $blocked, true ) ) {
+				$matched_category = $category;
 				break;
 			}
+			if ( false === $matched_category ) {
+				$matched_category = $category;
+			}
 		}
+
+		if ( false === $matched_category ) {
+			return $tag;
+		}
+
+		$should_block = in_array( $matched_category, $blocked, true );
+
+		// Per-service consent override.
+		$svc_blocked = $this->check_per_service_blocking( $tag, '' );
+		if ( false === $svc_blocked ) {
+			$should_block = false; // Service explicitly allowed.
+		} elseif ( true === $svc_blocked ) {
+			$should_block = true;  // Service explicitly blocked.
+		}
+
+		if ( $should_block ) {
+			$tag = $this->block_script_tag_safely( $tag, $matched_category, 'script handle ' . $handle );
+		}
+
 		return $tag;
 	}
 
@@ -9166,7 +9268,7 @@ class Frontend {
 				// fallback when nothing in the map matches.
 				$category = false;
 				foreach ( $src_candidates as $src_attrs ) {
-					$category = $this->match_script_to_provider( $src_attrs, '', $providers );
+					$category = $this->match_script_to_provider( $src_attrs, '', $providers, $blocked_categories );
 					if ( $category ) {
 						break;
 					}
@@ -9255,7 +9357,7 @@ class Frontend {
 				if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src, '' ) ) {
 					return $m[0];
 				}
-				$category = $this->match_script_to_provider( $src, '', $providers );
+				$category = $this->match_script_to_provider( $src, '', $providers, $blocked_categories );
 				if ( ! $category ) {
 					$known = Known_Providers::get_all();
 					$category = $known['google-maps']['category'] ?? 'functional';
