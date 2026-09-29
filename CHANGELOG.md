@@ -2,7 +2,7 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
-## [Unreleased]
+## [1.33.0] - 2026-09-29
 
 ### Added
 - Three HTML tag selectors in Settings for the banner title, preferences title and category titles. Choose H1–H6, paragraph, div or span; H2/H2/H3 remain the defaults. Dialog labels, category controls and the selected tags survive banner language changes.

@@ -612,6 +612,13 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.33.0 — 2026-09-29
+
+- A script restored after consent could run before the script it depends on had finished loading. Restoration now goes through one ordered queue: an external or module script is awaited before the next entry starts, explicitly asynchronous scripts stay asynchronous, a failed download releases the queue instead of stalling it, and consent is checked again before each entry runs. This is what let GTM4WP's WooCommerce script call `gtm4wp_read_json_from_node()` before the generic library defining it existed.
+- **Security**: a provider pattern whose category is allowed no longer exempts a script that a different matching pattern blocks. This held in both blocking layers and regardless of the provider map's order, and a pattern shared by several cookie categories now keeps a denied category rather than the first allowed one — so a tag could load before consent because an unrelated permitted pattern happened to match it first.
+- GTM4WP's two e-commerce scripts are recognised by filename in the provider catalogue and in the Google Tag Manager blocker template, so the HTML output buffer and the browser-side blocker see both even where WordPress gives them no enqueue handle. Existing whitelist entries and per-service consent decisions still take precedence.
+- The banner title, the preferences title and the category titles each take a configurable HTML tag — H1 to H6, paragraph, div or span, with H2/H2/H3 as the defaults — so the banner fits a page's heading outline instead of competing with it. Dialog labels, category controls and the chosen tags survive a banner language change.
+
 ### 1.32.1 — 2026-09-24
 
 - Consent records were silently refused on any site whose page cache holds HTML for more than a day: the origin token proving a consent POST came from a page this site rendered lasted 12 to 24 hours, while common cache defaults are measured in days (#292). The token is accepted for seven days now, `faz_consent_token_max_age` widens that window, and it is minted by the class that accepts it.

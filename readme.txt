@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.32.1
+Stable tag: 1.33.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -406,6 +406,12 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
+= 1.33.0 =
+* Added: Choose the HTML tag used for the banner title, the preferences title and the category titles — H1 to H6, paragraph, div or span, with H2/H2/H3 as defaults. The choice survives a banner language change.
+* Fix: A script restored after consent could run before the script it depends on had finished loading, so GTM4WP's WooCommerce script called into its generic library before that library existed. Restoration now uses one ordered queue, rechecks consent before each entry, and keeps explicitly asynchronous scripts asynchronous.
+* Fix: A provider pattern whose category is allowed no longer exempts a script that a different matching pattern blocks, in either blocking layer and whatever the order of the provider map. A pattern shared by several cookie categories keeps a denied category instead of the first allowed one.
+* Fix: GTM4WP's two e-commerce scripts are recognised by filename, so both are blocked where WordPress gives them no enqueue handle. Whitelist entries and per-service choices still apply.
+
 = 1.32.1 =
 * Fix: Consent records were refused in silence on sites whose page cache holds HTML for more than a day. The origin token is accepted for seven days now, and the faz_consent_token_max_age filter widens the window for a longer-lived cache (#292).
 * Fix: A refused record is reported instead of lost. System Status shows the count, the most recent occurrence and all five causes separately, and the row appears even at zero. The figure was previously truncated above 999 and its window reset rather than rolled.
@@ -520,23 +526,6 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Fixed: CSV export cannot loop forever on a locked output buffer, and multisite blog switches cannot reuse another site's Google Consent Mode settings.
 * Updated: the Czech catalogue is synchronized with the current source strings and compiled binary.
 
-= 1.25.0 =
-* Added: administrator-editable Cookie Policy sections, isolated by jurisdiction and language. Shipped text remains the empty textarea placeholder, authored Markdown keeps the normal placeholder substitution pipeline, and unbundled languages such as Slovak can be written against the reviewed jurisdiction fallback. A stored section-heading anchor disables stale overrides after scaffold drift instead of placing legal text under the wrong heading.
-* Added: POPIA (South Africa) jurisdiction - a conservative s.11(1)(a) consent-based setup preset (with explicit notice that POPIA also permits the s.11(1)(b)-(f) justifications), a ZA geo region, and Cookie Policy templates in every bundled language covering the Information Officer, data-subject rights under s.23-25, objection under s.11(3), and the PAIA s.25 30-day access window.
-* Added: guided first-run setup wizard (8 steps) - detects the environment (multilingual plugin, page cache, WooCommerce, existing consent data) and configures jurisdiction-correct defaults. First setup—or switching consent model—applies the expiry and notice controls shown in review; reopening without changing model preserves custom expiry and button visibility. Upgrading installs are treated as already onboarded and are never nagged.
-* Added: A/B testing of banner variants - run two or more active banners with a persistent random split and read the accept rate per variant on the Dashboard. Only active, independently compliant banners take part. Default off; skipped under Cache Compatibility Mode.
-* Added: inline age-appropriate consent gate (GDPR Art. 8) - an optional age-confirmation checkbox that gates only the accept path, never Reject, withdraw or close, so button weight stays equal. Self-declared affirmation only, not a substitute for the parental-consent verification Art. 8(2) requires. Default off.
-* Added: per-cookie Schrems II third-country transfer disclosure, shown in the preference-center declaration and the generated Cookie Policy. The wording names the fact and the safeguard the admin describes, and never asserts that the safeguard is legally sufficient. Default off.
-* Added: opt-in banner resilience against ad-block cosmetic filter lists - one deferred re-assert that keeps the mandatory notice visible, with no loop and no cookie wall. Default off.
-* Added: placeholder blocking for Smash Balloon Instagram Feed and the Elementor Video widget, contributed by @roboes (#190).
-* Added: the generated Cookie Policy text is now editable - one box per section, per jurisdiction and per language, on a collapsed "Policy text" card. An empty box keeps the reviewed shipped text; placeholders keep resolving inside your own wording. Languages the plugin ships no template for can be selected too, so a policy can be written in any language without editing plugin files. Each override remembers the heading it was written against and deactivates if a later release reorders the templates.
-* Changed: a jurisdiction="..." shortcode override no longer bypasses that jurisdiction's mandatory fields. It previously rendered even with those fields unset, on the reasoning that a degraded policy beat a blank page - the wrong trade for a legal document. Administrators now see the configuration notice; anonymous visitors receive nothing, so an incomplete policy is never published. If you use a shortcode override, fill in that jurisdiction's required fields.
-* Security: the consent dashboard widget is now gated on capability, and the CCPA opt-out endpoints enforce a strict same-origin (Fetch Metadata with Referer fallback) check.
-* Fixed: provider scripts whose blocking pattern ends on a separator were never blocked - the HubSpot tracker ran before consent (#196). A pattern such as js.hs-scripts.com/ already carries its own right-hand boundary, so demanding another separator after it meant js.hs-scripts.com/12345.js went unblocked. Twenty shipped provider definitions were affected; fixed in both the PHP and JavaScript matchers.
-* Fixed: a banner cached under a previous site address kept requesting assets from the old origin (#195) - an address change now drops the cache, and a render-time repair rewrites and persists a stale origin, which also covers a restored database that never fires the hook.
-* Fixed: the setup wizard's scan reported a fraction of the cookies the Cookies page found. The browser engine is now shared by both surfaces, retries public paths through the admin origin when home/admin hosts differ, and refuses to import misleading server-only findings when no page is observable. Wizard completion is atomic across banner/GCM/settings, preserves same-model customisations on re-entry, uses the site locale and jurisdiction-aligned geo defaults, and safely normalises false-like REST values.
-* Fixed: a blocked Cookie Policy save now names the offending field, opens its section and focuses it, instead of doing nothing; background scans under a web SAPI run through WP-Cron with honest counts; third-country transfer labels resolve in the banner or policy language rather than the ambient request locale.
-
 
 = Older versions =
-Older releases (1.24.0 and earlier) are listed in the full changelog on GitHub, linked at the top of this section.
+Older releases (1.25.0 and earlier) are listed in the full changelog on GitHub, linked at the top of this section.
