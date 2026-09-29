@@ -52,7 +52,7 @@ Questa è una prova delle risorse reali in ambiente controllato, non un test end
 
 - Suite unit completa: **187 suite superate, zero fallimenti**.
 - Suite browser consenso Chromium: **94 test superati** (scelta, blocco rete, revoca e ricaricamento).
-- Regressioni dedicate JavaScript: **25 asserzioni superate**; PHP/provider: **25 asserzioni superate**.
+- Regressioni dedicate JavaScript: **25 asserzioni superate**; PHP/provider: **37 asserzioni superate** dopo la review CodeRabbit, incluse la precedenza tra categorie dello stesso pattern, il caricamento del catalogo a cache vuota e il controllo dell’attributo `type` effettivo.
 - La prima serie di 16 asserzioni JavaScript produceva 8 fallimenti sul codice precedente; la riproduzione browser con i file GTM4WP reali conferma il ReferenceError prima della correzione.
 - Sintassi PHP/JavaScript e `git diff --check`: validi. ESLint: zero errori; warning nel file esistente.
 

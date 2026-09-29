@@ -182,7 +182,10 @@ namespace {
 	$woo_plain = '<script type="text/javascript" src="' . $dir . 'gtm4wp-woocommerce.js?ver=1.22.3" id="gtm4wp-woocommerce-js"></script>';
 
 	function is_blocked( $tag ) {
-		return false !== strpos( $tag, 'text/plain' ) && false !== strpos( $tag, 'data-faz-category' );
+		$document = new DOMDocument();
+		$document->loadHTML( $tag, LIBXML_NOERROR | LIBXML_NOWARNING );
+		$script = $document->getElementsByTagName( 'script' )->item( 0 );
+		return $script && 'text/plain' === $script->getAttribute( 'type' ) && $script->hasAttribute( 'data-faz-category' );
 	}
 
 	echo "\n  provider-map shadowing (GTM4WP, wordpress.org report)\n";
@@ -292,13 +295,14 @@ namespace {
 	// from code two files away.
 	echo "\n  C. patterns that can never block stay out of the map (invariant)\n";
 
-	function arrange_map( array $providers ) {
+	function arrange_map( array $providers, array $blocked = array( 'functional', 'analytics', 'marketing' ) ) {
 		$rc = new ReflectionClass( Frontend::class );
 		$fe = $rc->newInstanceWithoutConstructor();
 		setp( $fe, 'settings', new FazTest_Settings() );
 		setp( $fe, 'settings_option_cache', array() );
 		setp( $fe, 'provider_map_cache', null );
 		setp( $fe, 'providers', $providers );
+		setp( $fe, 'blocked_categories_cache', $blocked );
 		return $fe;
 	}
 
@@ -314,6 +318,30 @@ namespace {
 	$fe  = arrange_map( array( 'mixed' => array( 'necessary', 'marketing' ) ) );
 	$out = callm( $fe, 'get_provider_category_map' );
 	eq( isset( $out['mixed'] ) ? $out['mixed'] : null, 'marketing', 'C4 a pattern carrying both keeps the blockable category instead of being discarded' );
+
+
+	// Same pattern, different valid categories: map assembly must not lose a denial.
+	foreach ( array( array( 'functional', 'analytics' ), array( 'analytics', 'functional' ) ) as $categories ) {
+		$fe = arrange_map( array( 'shared.js' => $categories ), array( 'analytics' ) );
+		$out = callm( $fe, 'get_provider_category_map' );
+		eq( $out['shared.js'], 'analytics', 'C5 shared pattern prefers the denied category in either order' );
+		eq( callm( $fe, 'match_script_to_provider', array( ' src="https://example.test/shared.js"', '', $out, array( 'analytics' ) ) ), 'analytics', 'C6 assembled map retains the denial for resource matching' );
+	}
+	$fe = arrange_map( array( 'shared.js' => array( 'functional', 'analytics' ) ), array() );
+	$out = callm( $fe, 'get_provider_category_map' );
+	eq( $out['shared.js'], 'functional', 'C7 all-allowed categories retain the first valid fallback' );
+
+	$GLOBALS['__faz_known_pattern_map'] = $gtm_map;
+	$fe = arrange_map( array( 'unrelated' => array( 'necessary' ) ) );
+	$out = callm( $fe, 'get_provider_category_map' );
+	foreach ( array( 'gtm4wp-ecommerce-generic.js', 'gtm4wp-woocommerce.js', 'gtm4wp-ecommerce-generic.min.js', 'gtm4wp-woocommerce.min.js' ) as $filename ) {
+		eq( callm( $fe, 'match_script_to_provider', array( ' src="' . $dir . $filename . '?ver=1"', '', $out, array( 'analytics' ) ) ), 'analytics', 'C8 uncached map loads the catalogue pattern ' . $filename );
+	}
+	$GLOBALS['__faz_known_pattern_map'] = array();
+
+	eq( is_blocked( '<script type="text/javascript" data-faz-original-type="text/plain" data-faz-category="analytics"></script>' ), false, 'D1 executable type cannot masquerade as blocked via another attribute' );
+	eq( is_blocked( "<script type='text/plain' data-faz-category='analytics'></script>" ), true, 'D2 actual inert type and category marker are recognized' );
+	eq( is_blocked( '<script type="text/plain"></script>' ), false, 'D3 inert type alone is not a FAZ block' );
 
 	echo "\n  ────────────────────────────────────────────────────\n";
 	echo "  Passed: {$passed}; Failed: {$failed}\n\n";

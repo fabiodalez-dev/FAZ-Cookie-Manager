@@ -5660,45 +5660,41 @@ class Frontend {
 		if ( empty( $this->providers ) ) {
 			$this->get_cookie_groups();
 		}
-		$map              = array();
-		$valid_categories = $this->get_valid_category_slugs();
+		$map                = array();
+		$valid_categories   = $this->get_valid_category_slugs();
+		$blocked_categories = null;
 
-		// 1. Existing: url_pattern from cookie DB.
-		//
-		// A pattern whose category can NEVER be blocked does not belong in a
-		// blocking map. It cannot block anything, and because the matchers scan
-		// this map in insertion order, it can only shadow a pattern that comes
-		// after it — and section 1 comes before every other source.
-		//
-		// This is an invariant kept locally, not a fix for an observed leak: the
-		// two methods that populate $this->providers (get_cookies() and
-		// prepare_frontend_cookies()) both skip the `necessary` category before
-		// a url_pattern reaches this property, and both take the slug from a
-		// live category object, so today nothing invalid arrives here either.
-		// Asserting it anyway is deliberate. Section 2 has carried the same two
-		// checks since it was written, so without them section 1 reads as the
-		// looser of two sibling loops and invites the reader to work out which
-		// is right; and what this map governs — whether a tag may load before
-		// consent — should not depend on a guarantee made two files away by
-		// code that has no idea a blocking map exists.
-		//
-		// When a pattern does carry several categories (the same url_pattern
-		// declared under more than one, which IS reachable), the blockable one
-		// is what this map is being asked about, so prefer it rather than
-		// taking whichever happened to be first.
+		// 1. Cookie-DB patterns can belong to multiple categories. Keep the
+		// first valid non-necessary category as fallback, but never discard a
+		// denied category merely because an allowed one was listed first.
 		foreach ( $this->providers as $pattern => $cats ) {
 			if ( empty( $cats ) ) {
 				continue;
 			}
+			$selected = false;
 			foreach ( $cats as $candidate ) {
-				if ( 'necessary' === $candidate ) {
+				if ( 'necessary' === $candidate || ! in_array( $candidate, $valid_categories, true ) ) {
 					continue;
 				}
-				if ( ! in_array( $candidate, $valid_categories, true ) ) {
+				if ( false === $selected ) {
+					$selected = $candidate;
 					continue;
 				}
-				$map[ $pattern ] = $candidate;
-				break;
+				// Consent is only needed to choose between valid categories;
+				// single-category patterns retain their existing classification.
+				if ( null === $blocked_categories ) {
+					$blocked_categories = $this->get_blocked_categories();
+				}
+				if ( in_array( $selected, $blocked_categories, true ) ) {
+					break;
+				}
+				if ( in_array( $candidate, $blocked_categories, true ) ) {
+					$selected = $candidate;
+					break;
+				}
+			}
+			if ( false !== $selected ) {
+				$map[ $pattern ] = $selected;
 			}
 		}
 
