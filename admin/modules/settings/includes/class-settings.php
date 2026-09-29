@@ -128,6 +128,9 @@ class Settings extends Store {
 			'banner_control' => array(
 				'status'                 => true,
 				'excluded_pages'         => array(),
+				'banner_title_tag'       => 'h2',
+				'preference_title_tag'   => 'h2',
+				'category_title_tag'     => 'h3',
 				'subdomain_sharing'      => false,
 				'hide_from_bots'         => true,
 				'gtm_datalayer'          => false,
@@ -344,6 +347,10 @@ class Settings extends Store {
 		return array(
 			'selected',
 			'excluded_pages',
+			// Validate tag scalars even when malformed input supplies an array.
+			'banner_title_tag',
+			'preference_title_tag',
+			'category_title_tag',
 			'sites',
 			'custom_rules',
 			'target_regions',
@@ -491,6 +498,13 @@ class Settings extends Store {
 	 */
 	public static function sanitize_option( $option, $value, $group = '' ) {
 		switch ( $option ) {
+			case 'banner_title_tag':
+			case 'preference_title_tag':
+			case 'category_title_tag':
+				$allowed = array( 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span' );
+				$value   = is_string( $value ) ? strtolower( trim( $value ) ) : '';
+				$value   = in_array( $value, $allowed, true ) ? $value : ( 'category_title_tag' === $option ? 'h3' : 'h2' );
+				break;
 			case 'status':
 			case 'subdomain_sharing':
 			case 'uet_consent_mode':

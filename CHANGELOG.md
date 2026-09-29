@@ -2,6 +2,16 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Added
+- Three HTML tag selectors in Settings for the banner title, preferences title and category titles. Choose H1–H6, paragraph, div or span; H2/H2/H3 remain the defaults. Dialog labels, category controls and the selected tags survive banner language changes.
+
+### Fixed
+- Restored scripts now wait for preceding ordered scripts to load before executing dependent external or inline code. Repeated consent updates do not duplicate pending scripts, and consent is checked again before each queued script starts. Explicitly asynchronous scripts remain asynchronous; failed downloads release the queue. This prevents GTM4WP's WooCommerce script from calling `gtm4wp_read_json_from_node()` before its generic library is ready.
+- Added concrete GTM4WP e-commerce filenames to the provider catalogue and blocker template so the HTML output buffer and browser blocker recognise both scripts even without a WordPress enqueue handle. Existing whitelist and service-consent decisions still apply.
+- A permitted provider pattern no longer overrides another matching pattern whose category is blocked, regardless of provider-map order.
+
 ## [1.32.1] - 2026-09-24
 
 ### Fixed

@@ -283,6 +283,18 @@ namespace {
 	}
 
 
+	foreach ( array( 'banner_title_tag' => 'h2', 'preference_title_tag' => 'h2', 'category_title_tag' => 'h3' ) as $key => $default ) {
+		$tag_settings = Settings::sanitize( array( 'banner_control' => array( $key => array( 'bad' ) ) ), array( 'banner_control' => array( $key => $default ) ) );
+		faz_assert_same( $tag_settings['banner_control'][ $key ], $default, "$key rejects arrays through the full settings pipeline" );
+		foreach ( array( 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span' ) as $tag ) {
+			faz_assert_same( Settings::sanitize_option( $key, $tag, 'banner_control' ), $tag, "$key permits $tag" );
+		}
+		foreach ( array( 'script', 'img', '<h2>', 'div onclick=alert(1)', array(), null, 5 ) as $invalid ) {
+			faz_assert_same( Settings::sanitize_option( $key, $invalid, 'banner_control' ), $default, "$key falls back safely on invalid input" );
+		}
+		faz_assert_same( Settings::sanitize_option( $key, ' H4 ', 'banner_control' ), 'h4', "$key normalizes case and whitespace" );
+	}
+
 	echo "\n--\n";
 	echo "Tests:  $tests_run\n";
 	echo "Passed: $tests_passed\n";

@@ -901,6 +901,9 @@ class Frontend {
 				$a11y_handle,
 				'fazA11yConfig',
 				array(
+					'bannerTitleTag'     => $this->settings->get( 'banner_control', 'banner_title_tag' ),
+					'preferenceTitleTag' => $this->settings->get( 'banner_control', 'preference_title_tag' ),
+					'categoryTitleTag'   => $this->settings->get( 'banner_control', 'category_title_tag' ),
 					/* translators: {name} is replaced with the cookie category name (appears twice, do not translate {name}) */
 					'checkboxEnabled'  => __( '{name} enabled, disable {name}', 'faz-cookie-manager' ),
 					/* translators: {name} is replaced with the cookie category name (appears twice, do not translate {name}) */

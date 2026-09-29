@@ -173,6 +173,46 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 	</div>
 
+
+	<div class="faz-card">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Banner HTML Tags', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<p class="faz-help" id="faz-heading-tags-help"><?php esc_html_e( 'Choose how banner titles appear in the page structure. This applies to all banner languages. Heading tags help screen reader users navigate; paragraph, div and span remove heading semantics while keeping dialog labels and controls accessible.', 'faz-cookie-manager' ); ?></p>
+			<?php
+			$faz_heading_fields = array(
+				'banner_title_tag'     => __( 'Banner title', 'faz-cookie-manager' ),
+				'preference_title_tag' => __( 'Preferences title', 'faz-cookie-manager' ),
+				'category_title_tag'   => __( 'Category titles', 'faz-cookie-manager' ),
+			);
+			$faz_heading_options = array(
+				'h1'   => __( 'Heading 1 (H1)', 'faz-cookie-manager' ),
+				'h2'   => __( 'Heading 2 (H2)', 'faz-cookie-manager' ),
+				'h3'   => __( 'Heading 3 (H3)', 'faz-cookie-manager' ),
+				'h4'   => __( 'Heading 4 (H4)', 'faz-cookie-manager' ),
+				'h5'   => __( 'Heading 5 (H5)', 'faz-cookie-manager' ),
+				'h6'   => __( 'Heading 6 (H6)', 'faz-cookie-manager' ),
+				'p'    => __( 'Paragraph (p)', 'faz-cookie-manager' ),
+				'div'  => __( 'Text block (div)', 'faz-cookie-manager' ),
+				'span' => __( 'Inline text (span)', 'faz-cookie-manager' ),
+			);
+			foreach ( $faz_heading_fields as $faz_heading_key => $faz_heading_label ) :
+				$faz_heading_default = 'category_title_tag' === $faz_heading_key ? 'h3' : 'h2';
+				?>
+				<div class="faz-form-group">
+					<label for="faz-<?php echo esc_attr( $faz_heading_key ); ?>"><?php echo esc_html( $faz_heading_label ); ?></label>
+					<select id="faz-<?php echo esc_attr( $faz_heading_key ); ?>" class="faz-select" data-path="banner_control.<?php echo esc_attr( $faz_heading_key ); ?>" aria-describedby="faz-heading-tags-help" style="width:auto;max-width:280px;">
+						<?php foreach ( $faz_heading_options as $faz_heading_tag => $faz_heading_text ) : ?>
+							<option value="<?php echo esc_attr( $faz_heading_tag ); ?>" <?php selected( $faz_heading_default, $faz_heading_tag ); ?>><?php echo esc_html( $faz_heading_text ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</div>
+			<?php endforeach; ?>
+			<p class="faz-help"><?php esc_html_e( 'Defaults: H2 for the banner and preferences titles, H3 for category titles. Text size and colours remain controlled by the banner design.', 'faz-cookie-manager' ); ?></p>
+		</div>
+	</div>
+
 	<div class="faz-card">
 		<div class="faz-card-header">
 			<h3><?php esc_html_e( 'Script Blocking', 'faz-cookie-manager' ); ?></h3>

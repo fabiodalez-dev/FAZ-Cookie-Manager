@@ -89,5 +89,30 @@ window.document.body.appendChild(window.document.createElement('div'));
 await new Promise((resolvePromise) => window.setTimeout(resolvePromise, 0));
 check('same banner instance is not transformed twice', window.document.querySelectorAll('h3.faz-accordion-heading').length === 1);
 
+
+for (const tag of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'script', '<img>', null]) {
+  const testDom = new JSDOM(`<!doctype html><body>${bannerMarkup('custom')}</body>`, {runScripts:'outside-only', url:'https://example.test/'});
+  const w = testDom.window;
+  w.fazA11yConfig = {bannerTitleTag:tag, preferenceTitleTag:tag, categoryTitleTag:tag};
+  w._fazBannerLoaded = true;
+  const button = w.document.querySelector('[data-faz-tag="detail-category-title"]');
+  let clicks = 0;
+  button.addEventListener('click', () => clicks++);
+  w.eval(readFileSync(A11Y_PATH, 'utf8'));
+  const valid = ['h1','h2','h3','h4','h5','h6','p','div','span'].includes(tag);
+  check(`${tag}: banner tag validated`, w.document.getElementById('faz-banner-title').localName === (valid ? tag : 'h2'));
+  check(`${tag}: preference tag validated`, w.document.getElementById('faz-modal-title').localName === (valid ? tag : 'h2'));
+  check(`${tag}: category wrapper validated`, button.parentElement.localName === (valid ? tag : 'h3'));
+  check(`${tag}: heading role is not forced back onto plain text`, !w.document.getElementById('faz-banner-title').hasAttribute('role') && !w.document.getElementById('faz-modal-title').hasAttribute('aria-level'));
+  button.click();
+  check(`${tag}: original interactive control and listener preserved`, clicks === 1);
+  check(`${tag}: dialog name still references the title`, w.document.querySelector('.faz-consent-container').getAttribute('aria-labelledby') === 'faz-banner-title');
+  const replacement = w.document.createElement('div');
+  replacement.innerHTML = bannerMarkup('translated');
+  w.document.querySelector('.faz-consent-container').replaceWith(replacement.firstElementChild);
+  await new Promise(resolve => w.setTimeout(resolve, 0));
+  check(`${tag}: language replacement keeps custom tag`, w.document.getElementById('faz-banner-title').localName === (valid ? tag : 'h2'));
+  check(`${tag}: language replacement does not nest wrappers`, w.document.querySelectorAll('.faz-accordion-heading').length === 1);
+}
 console.log(`\n  a11y-banner-replacement: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

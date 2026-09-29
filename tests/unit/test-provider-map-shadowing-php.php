@@ -235,7 +235,7 @@ namespace {
 	// This layer does NOT match with a plain substring: provider_pattern_matches_lc()
 	// requires the pattern to sit on a separator boundary, and a hyphen is not one.
 	// So `gtm4wp` inside `gtm4wp-woocommerce.js` matches nothing here — the tag
-	// filter is the only layer that catches GTM4WP's handles, which is asserted
+	// filter is the only layer that catches those shorthand patterns, as asserted
 	// below so the difference between the two layers stays visible. The
 	// preference rule is therefore exercised on a URL where both patterns do sit
 	// on boundaries.
@@ -260,12 +260,26 @@ namespace {
 	eq( callm( $fe, 'match_script_to_provider', array( ' src="https://example.test/app.js" ', '', $map ) ), false,
 		'B4 no match still returns false' );
 
-	// Pins the boundary rule itself: this is why the reported tags were only ever
-	// the tag filter's business, and why a fix there alone would have been enough
-	// for THIS report but not for the class of defect.
+	// Pins the shorthand boundary rule. The real catalogue's explicit filenames
+	// are verified separately below; neither shorthand is sufficient by itself.
 	$fe = arrange( $map, $blocked );
 	eq( callm( $fe, 'match_script_to_provider', array( ' src="' . $dir . 'gtm4wp-woocommerce.js" ', '', $map ) ), false,
 		'B5 the real GTM4WP URL matches neither pattern in this layer (hyphen is not a boundary)' );
+
+	// The bundled catalogue now includes concrete filenames so the output
+	// buffer also catches scripts emitted without the WP enqueue filter.
+	$catalogue = json_decode( file_get_contents( dirname( __DIR__, 2 ) . '/includes/data/known-providers.json' ), true );
+	$template  = json_decode( file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/cookies/includes/blocker-templates/google-tag-manager.json' ), true );
+	$gtm_map = array_fill_keys( $catalogue['google-tag-manager']['patterns'], 'analytics' );
+	foreach ( array( 'gtm4wp-ecommerce-generic.js', 'gtm4wp-woocommerce.js', 'gtm4wp-ecommerce-generic.min.js', 'gtm4wp-woocommerce.min.js' ) as $filename ) {
+		$fe = arrange( $gtm_map, $blocked );
+		eq( callm( $fe, 'match_script_to_provider', array( ' src="' . $dir . $filename . '?ver=1" defer data-deferred="1" ', '', $gtm_map, $blocked ) ), 'analytics',
+			'B6 output buffer catches the concrete filename ' . $filename );
+		eq( in_array( $filename, $template['patterns'], true ), true, 'B7 blocker template also covers ' . $filename );
+	}
+	$fe = arrange( $gtm_map, $blocked );
+	eq( callm( $fe, 'match_script_to_provider', array( ' src="https://example.test/woocommerce.js" ', '', $gtm_map, $blocked ) ), false,
+		'B8 WooCommerce core remains unrelated to the GTM4WP patterns' );
 
 	// ===== Group C — the map itself =====
 	//

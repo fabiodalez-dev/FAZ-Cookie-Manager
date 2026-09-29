@@ -3,7 +3,7 @@
  *
  * Handles all accessibility improvements applied after the banner is injected into the DOM:
  *
- * Structural fixes (run first in init):
+ * Structural fixes (run first in init; title tags configurable, defaults below):
  *   - Banner title element replaced with <h2 id="faz-banner-title">
  *   - Modal title element replaced with <h2 id="faz-modal-title">
  *   - Accordion category buttons wrapped in <h3 class="faz-accordion-heading">
@@ -39,7 +39,7 @@
         // Structural fixes
         transformBannerTitle();
         transformModalTitle();
-        wrapAccordionButtonsInH3();
+        wrapAccordionButtons();
         addRoleSwitchToCheckboxes();
         addDescriptionWrapperId();
         // ARIA attribute and behavior fixes.
@@ -86,38 +86,45 @@
         node.parentNode.replaceChild( newEl, node );
     }
 
+    // Validate again in the browser so malformed/stale configuration cannot
+    // turn a title into an executable or interactive element.
+    function titleTag(key, fallback) {
+        var config = window.fazA11yConfig || {};
+        var tag = typeof config[key] === 'string' ? config[key].trim().toLowerCase() : '';
+        return /^(h[1-6]|p|div|span)$/.test(tag) ? tag : fallback;
+    }
+
     /**
-     * Replace <p data-faz-tag="title"> with <h2 id="faz-banner-title">.
-     * A real heading element is required so aria-labelledby on the banner
-     * container can reference it and screen readers announce it correctly.
+     * Give the banner title a stable id and configured tag (H2 by default).
+     * The tag is configurable; aria-labelledby works with any visible title.
      */
     function transformBannerTitle() {
         var node = document.querySelector( '[data-faz-tag="title"]' );
         if ( ! node ) return;
-        replaceTag( node, 'h2', { id: 'faz-banner-title', remove: [ 'role', 'aria-level' ] } );
+        replaceTag( node, titleTag('bannerTitleTag', 'h2'), { id: 'faz-banner-title', remove: [ 'role', 'aria-level' ] } );
     }
 
     /**
-     * Replace <span data-faz-tag="detail-title"> with <h2 id="faz-modal-title">.
-     * Same reasoning as the banner title — real heading, stable id for labelledby.
+     * Give the preferences title a stable id and configured tag (H2 by default).
+     * Keep a stable id for labelledby regardless of the configured tag.
      */
     function transformModalTitle() {
         var node = document.querySelector( '[data-faz-tag="detail-title"]' );
         if ( ! node ) return;
-        replaceTag( node, 'h2', { id: 'faz-modal-title', remove: [ 'role', 'aria-level' ] } );
+        replaceTag( node, titleTag('preferenceTitleTag', 'h2'), { id: 'faz-modal-title', remove: [ 'role', 'aria-level' ] } );
     }
 
     /**
-     * Wrap each accordion category button in an <h3> so category names appear
-     * in the page heading hierarchy and can be navigated by screen reader users.
+     * Wrap category buttons in the configured tag (H3 by default). Moving the
+     * existing button preserves its listeners, focus behaviour and ARIA state.
      */
-    function wrapAccordionButtonsInH3() {
+    function wrapAccordionButtons() {
         var buttons = document.querySelectorAll( '[data-faz-tag="detail-category-title"]' );
         buttons.forEach( function ( button ) {
-            var h3 = document.createElement( 'h3' );
-            h3.className = 'faz-accordion-heading';
-            button.parentNode.insertBefore( h3, button );
-            h3.appendChild( button );
+            var wrapper = document.createElement( titleTag('categoryTitleTag', 'h3') );
+            wrapper.className = 'faz-accordion-heading';
+            button.parentNode.insertBefore( wrapper, button );
+            wrapper.appendChild( button );
         } );
     }
 
