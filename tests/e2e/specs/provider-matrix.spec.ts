@@ -475,7 +475,20 @@ test.describe('Provider matrix scan and blocking', () => {
     await waitForCookie(page, '_fbp');
     await waitForCookie(page, '__stripe_mid');
 
-    expect(await blockedMatrixScriptCount(page)).toBe(0);
+    // Restoration is deliberately serialized: each external script waits for
+    // the previous one's load event, so dependent code cannot run before the
+    // library it needs — the GTM4WP case this ordering was built for. Draining
+    // the queue therefore takes roughly two seconds on this fixture, and the
+    // count climbs before it falls, because the mutation observer re-inserts
+    // the nodes it had parked. A single sample right after the first cookie
+    // appears measured the queue mid-drain rather than the contract, which is
+    // that every blocked script is eventually released.
+    await expect
+      .poll(() => blockedMatrixScriptCount(page), {
+        timeout: 15_000,
+        message: 'every blocked matrix script must be released after consent',
+      })
+      .toBe(0);
 
     const hits = readProviderMatrixHits();
     expect(hits['ga-monsterinsights']).toBeGreaterThanOrEqual(1);

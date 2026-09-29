@@ -99,20 +99,27 @@ test.describe('Settings reflection and secure script blocking', () => {
     ]);
     expect(accepted).toBeTruthy();
 
-    // After consent: verify the consent cookie is set and scripts are unblocked
-    await page.waitForTimeout(500);
+    // After consent: verify the consent cookie is set and scripts are unblocked.
+    // Restoration is serialized so that a dependent script never runs before
+    // the library it needs, which means the queue drains over time rather than
+    // at once. A fixed 500ms wait was shorter than the drain takes on a page
+    // with many blocked scripts, so it asserted on a half-finished queue and
+    // passed only because this page carries few of them.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              document.querySelectorAll(
+                'script[type="text/plain"][data-faz-category], script[type="javascript/blocked"][data-fazcookie]'
+              ).length
+          ),
+        { timeout: 15_000, message: 'no blocked script may remain after accepting all' }
+      )
+      .toBe(0);
 
-    const afterUnblockState = await page.evaluate(() => ({
-      // After accept, no scripts should remain with type="text/plain"
-      // or type="javascript/blocked" for non-necessary categories
-      blockedScripts: document.querySelectorAll(
-        'script[type="text/plain"][data-faz-category], script[type="javascript/blocked"][data-fazcookie]'
-      ).length,
-      consentSet: document.cookie.includes('fazcookie-consent'),
-    }));
-    // No blocked scripts should remain after accepting all
-    expect(afterUnblockState.blockedScripts).toBe(0);
-    expect(afterUnblockState.consentSet).toBe(true);
+    const consentSet = await page.evaluate(() => document.cookie.includes('fazcookie-consent'));
+    expect(consentSet).toBe(true);
   });
 
   test('data: base64 analytics scripts stay blocked before consent and execute after accept', async ({ page }) => {
