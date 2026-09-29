@@ -28,6 +28,11 @@
  *   6. A connected remote transport is refused by design: it cannot be told
  *      apart from one that only looks connected, and callers degrade to inline
  *      assets rather than risk a fatal per page view.
+ *   7. A transport already assigned to the global is refused without re-entering
+ *      the init branch — the case the reported host hits on its second call, and
+ *      the one the return-value check cannot see. The call count is asserted so
+ *      that a scenario which quietly re-ran the init cannot pass for the wrong
+ *      reason.
  *
  * Run: php tests/unit/test-filesystem-ftp-fatal-php.php
  *  or: bash scripts/run-unit-tests.sh
@@ -122,6 +127,7 @@ namespace {
 	 */
 	function WP_Filesystem( $args = false, $context = false ) {
 		global $wp_filesystem;
+		$GLOBALS['__faz_wpfs_calls']++;
 		switch ( $GLOBALS['__faz_fs_mode'] ) {
 			case 'ftp_broken':
 				$wp_filesystem = new \WP_Filesystem_FTPext_Double();
@@ -139,6 +145,7 @@ namespace {
 
 	$GLOBALS['__faz_options'] = array();
 	$GLOBALS['__faz_fs_mode'] = 'direct_ok';
+	$GLOBALS['__faz_wpfs_calls'] = 0;
 
 	// get_filesystem() require_once's wp-admin/includes/file.php from ABSPATH.
 	// Provide an empty one: the functions it would define are stubbed above, and
@@ -230,6 +237,51 @@ namespace {
 		$raised = true;
 	}
 	check( '6c. no raise on a connected remote transport either', ! $raised );
+	@unlink( $tmp ); // phpcs:ignore
+
+	// ---- 7. an object already assigned, so the init branch never runs ------
+	// reset_fs() nulls the global before every scenario above, which means none
+	// of them reaches the guard written for the case where $wp_filesystem was
+	// left unusable by an earlier attempt in this request or by another plugin.
+	// That is the branch the reported host actually hits on its second call, and
+	// it is reached without any WP_Filesystem() call of ours failing — so the
+	// return-value check cannot cover it. Asserting the call count is what makes
+	// the distinction visible: a scenario that silently re-entered the init
+	// branch would pass the null assertion for the wrong reason.
+	$GLOBALS['__faz_fs_mode']    = 'ftp_broken';
+	$GLOBALS['wp_filesystem']    = new \WP_Filesystem_FTPext_Double();
+	$GLOBALS['wp_filesystem']->errors->add( 'empty_hostname', 'FTP hostname is required' );
+	$GLOBALS['__faz_wpfs_calls'] = 0;
+	check( '7. a pre-assigned broken transport is refused', null === $fs->get_filesystem() );
+	check( '7b. without re-entering the init branch', 0 === $GLOBALS['__faz_wpfs_calls'] );
+
+	$GLOBALS['wp_filesystem'] = new \WP_Filesystem_FTPext_Double();
+	$GLOBALS['wp_filesystem']->errors->add( 'empty_hostname', 'FTP hostname is required' );
+	$raised = false;
+	$result = null;
+	try {
+		$result = $fs->put_contents( $tmp, 'payload' );
+	} catch ( \Throwable $e ) {
+		$raised = true;
+	}
+	check( '7c. and writing through it does not raise', ! $raised );
+	check( '7d. it reports failure', false === $result );
+	check( '7e. nothing was written', ! file_exists( $tmp ) );
+
+	// Same branch, but with no error recorded — another plugin may have left a
+	// perfectly quiet FTP object behind. Here only the method guard can refuse.
+	$GLOBALS['wp_filesystem']    = new \WP_Filesystem_FTPext_Double();
+	$GLOBALS['__faz_wpfs_calls'] = 0;
+	check( '7f. a quiet pre-assigned remote transport is refused too', null === $fs->get_filesystem() );
+	check( '7g. still without re-entering the init branch', 0 === $GLOBALS['__faz_wpfs_calls'] );
+	$GLOBALS['wp_filesystem'] = new \WP_Filesystem_FTPext_Double();
+	$raised = false;
+	try {
+		check( '7h. and its write reports failure', false === $fs->put_contents( $tmp, 'x' ) );
+	} catch ( \Throwable $e ) {
+		$raised = true;
+	}
+	check( '7i. with no raise', ! $raised );
 	@unlink( $tmp ); // phpcs:ignore
 
 	@unlink( ABSPATH . 'wp-admin/includes/file.php' ); // phpcs:ignore

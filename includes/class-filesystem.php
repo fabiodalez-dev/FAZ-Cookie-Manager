@@ -42,7 +42,8 @@ class Filesystem {
 	 * Get WP_Filesystem instance.
 	 *
 	 * @since 3.0.0
-	 * @return \WP_Filesystem_Base
+	 * @return \WP_Filesystem_Base|null Null when no usable filesystem is
+	 *                                  available; every caller must check.
 	 */
 	public function get_filesystem() {
 		global $wp_filesystem;
