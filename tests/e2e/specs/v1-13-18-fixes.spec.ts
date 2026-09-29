@@ -33,7 +33,8 @@ test.describe('1.13.18 — wp_localize_script payloads exempt from content-subst
     // config-key value (the trx_addons reproduction).
     const result = wpEval(`
       $tag = '<script id="trx-mock-js-extra">var TRX_MOCK_STORAGE = {"site_url":"http://example.test","animate_to_mc4wp_form_submitted":"1"};</script>';
-      $filtered = apply_filters( 'wp_inline_script_tag', $tag, 'trx-mock-js-extra', 'trx_mock' );
+      preg_match( '#<script[^>]*>(.*)</script>#s', $tag, $parts );
+      $filtered = wp_get_inline_script_tag( $parts[1], array( 'id' => 'trx-mock-js-extra' ) );
       $rewritten = ( false !== strpos( $filtered, 'type="text/plain"' ) || false !== strpos( $filtered, 'data-faz-category=' ) );
       echo $rewritten ? 'BLOCKED' : 'PASSTHROUGH';
     `).trim();
@@ -44,7 +45,8 @@ test.describe('1.13.18 — wp_localize_script payloads exempt from content-subst
   test('filter_inline_script_tag leaves a `-js-translations` payload intact even when its body contains a provider substring', () => {
     const result = wpEval(`
       $tag = '<script id="trx-mock-js-translations">( function( domain, translations ) { var localeData = translations.locale_data[ domain ] || translations.locale_data.messages; wp.i18n.setLocaleData( { "Sign up to mc4wp": [ "Iscriviti a mc4wp" ] }, "trx_mock" ); } )( "trx_mock", {"locale_data":{"trx_mock":{"":{}}}} );</script>';
-      $filtered = apply_filters( 'wp_inline_script_tag', $tag, 'trx-mock-js-translations', 'trx_mock' );
+      preg_match( '#<script[^>]*>(.*)</script>#s', $tag, $parts );
+      $filtered = wp_get_inline_script_tag( $parts[1], array( 'id' => 'trx-mock-js-translations' ) );
       $rewritten = ( false !== strpos( $filtered, 'type="text/plain"' ) || false !== strpos( $filtered, 'data-faz-category=' ) );
       echo $rewritten ? 'BLOCKED' : 'PASSTHROUGH';
     `).trim();
@@ -60,7 +62,8 @@ test.describe('1.13.18 — wp_localize_script payloads exempt from content-subst
     // content, and `-js-before` is NOT exempted.
     const result = wpEval(`
       $tag = '<script id="trx-mock-js-before">window.mc4wp = window.mc4wp || []; window.mc4wp.push({event:"x"});</script>';
-      $filtered = apply_filters( 'wp_inline_script_tag', $tag, 'trx-mock-js-before', 'trx_mock' );
+      preg_match( '#<script[^>]*>(.*)</script>#s', $tag, $parts );
+      $filtered = wp_get_inline_script_tag( $parts[1], array( 'id' => 'trx-mock-js-before' ) );
       $rewritten = ( false !== strpos( $filtered, 'type="text/plain"' ) && false !== strpos( $filtered, 'data-faz-category="marketing"' ) );
       echo $rewritten ? 'BLOCKED' : 'PASSTHROUGH';
     `).trim();
@@ -69,7 +72,7 @@ test.describe('1.13.18 — wp_localize_script payloads exempt from content-subst
   });
 
   test('process_script_tag (output-buffer fallback for WP < 5.7) leaves `-js-extra` payloads intact too', () => {
-    // The output-buffer path is hit on WP < 5.7 (no wp_inline_script_tag
+    // The output-buffer path is hit on WP < 5.7 (no wp_inline_script_attributes
     // filter) and as a defense-in-depth catch-all on every version for
     // scripts injected outside the WP enqueue system. Reflection: build
     // a (Frontend) instance and call its private process_script_tag()

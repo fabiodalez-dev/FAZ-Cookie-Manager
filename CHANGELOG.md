@@ -2,6 +2,13 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- Resources matching multiple consent categories remain blocked while any matching category is denied, including when the server attached a different, permitted category to the element. Explicit service choices and blocking exceptions still apply.
+- Dynamically blocked scripts and scripts inside placeholders now join the same restoration queue as server-blocked scripts, at their original document positions. Dependent code waits for preceding libraries; consent is checked again before each queued script starts.
+- WordPress inline scripts now use the actual `wp_inline_script_attributes` hook. The filter preserves nonces, module types, localised configuration and Consent Mode exemptions. Inline scripts and stylesheets also prefer a denied provider match over an earlier permitted match.
+
 ## [1.33.0] - 2026-09-29
 
 ### Added

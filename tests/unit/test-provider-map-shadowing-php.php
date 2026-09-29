@@ -343,6 +343,36 @@ namespace {
 	eq( is_blocked( "<script type='text/plain' data-faz-category='analytics'></script>" ), true, 'D2 actual inert type and category marker are recognized' );
 	eq( is_blocked( '<script type="text/plain"></script>' ), false, 'D3 inert type alone is not a FAZ block' );
 
+	foreach ( array( array( 'wrapper' => 'functional', 'tracker' => 'analytics' ), array( 'tracker' => 'analytics', 'wrapper' => 'functional' ) ) as $patterns ) {
+		$fe = arrange( $patterns, array( 'analytics' ) );
+		$attrs = array( 'id' => 'wrapper-tracker-js-before', 'nonce' => 'test-nonce', 'type' => 'module', 'data-test' => 'kept' );
+		$out = $fe->filter_inline_script_attributes( $attrs, 'window.test = 1;' );
+		eq( $out['type'], 'text/plain', 'E1 real inline attributes callback prefers denied category in either pattern order' );
+		eq( $out['data-faz-category'], 'analytics', 'E2 inline callback carries the denied category' );
+		eq( $out['data-faz-original-type'], 'module', 'E3 inline module type survives restoration' );
+		eq( $out['nonce'], 'test-nonce', 'E4 inline nonce is retained' );
+		eq( $out['data-test'], 'kept', 'E5 unrelated inline attributes are retained' );
+		$link = '<link rel="stylesheet" href="https://example.test/site.css">';
+		$out = $fe->filter_style_loader_tag( $link, 'wrapper-tracker', 'https://example.test/site.css', 'all' );
+		eq( strpos( $out, 'data-faz-href=' ) !== false && strpos( $out, 'data-faz-category="analytics"' ) !== false, true, 'E6 stylesheet handle cannot hide denied match behind allowed match' );
+	}
+	$fe = arrange( array( 'tracker' => 'analytics' ), array( 'analytics' ) );
+	foreach ( array( 'tracker-js-extra', 'tracker-js-translations', 'faz-cookie-manager-js-before', 'wc-settings-js-before' ) as $id ) {
+		$attrs = array( 'id' => $id );
+		eq( $fe->filter_inline_script_attributes( $attrs, 'tracker();' ), $attrs, 'E7 core configuration and translation data remain exempt: ' . $id );
+	}
+	foreach ( array( 'application/ld+json', 'importmap', 'litespeed/javascript' ) as $type ) {
+		$attrs = array( 'id' => 'tracker-js-before', 'type' => $type );
+		eq( $fe->filter_inline_script_attributes( $attrs, 'tracker();' ), $attrs, 'E8 non-executable payload left alone: ' . $type );
+	}
+	$attrs = array( 'id' => 'application-js-before' );
+	eq( $fe->filter_inline_script_attributes( $attrs, 'var s="</script>"; tracker();' )['type'], 'text/plain', 'E9 raw content after a closing-tag string is still classified' );
+	$fe = arrange( array( 'tracker' => 'analytics' ), array() );
+	eq( $fe->filter_inline_script_attributes( $attrs, 'tracker();' ), $attrs, 'E10 allowed inline category is unchanged' );
+	$fe = arrange( array( 'gtag(' => 'analytics' ), array( 'analytics' ) );
+	setp( $fe, 'gcm_settings', new class { public function is_advanced_mode() { return true; } } );
+	eq( $fe->filter_inline_script_attributes( $attrs, "gtag('config', 'G-TEST');" ), $attrs, 'E11 Advanced Consent Mode bootstrap remains allowed' );
+
 	echo "\n  ────────────────────────────────────────────────────\n";
 	echo "  Passed: {$passed}; Failed: {$failed}\n\n";
 

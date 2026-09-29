@@ -32,6 +32,7 @@ function loadFrontend() {
   const { window } = dom;
   window._fazConfig = {
     _block: '1',
+    _activeLaw: 'gdpr',
     _categories: [
       { slug: 'necessary', isNecessary: true },
       { slug: 'analytics', isNecessary: false },
@@ -177,6 +178,63 @@ function fixture(w) {
     w.document.body.innerHTML = '<div class="faz-placeholder" data-faz-category="analytics" data-faz-service="youtube"><template class="faz-placeholder-content"><script id="service-script" type="text/plain" data-faz-category="analytics">window.serviceReady=true;</script></template></div>';
     w._fazUnblockServerSide();
     check('template carries its explicit service grant to child scripts', w.document.getElementById('service-script')?.type === 'text/javascript');
+    w.close();
+}
+
+{
+    const w = loadFrontend();
+    w._fazConfig._categories.push({slug:'marketing', isNecessary:false});
+    w._fazConfig._providersToBlock = [{re:'shared.test/library.js', categories:['analytics','marketing']}];
+    w.fazcookie._fazConsentStore.set('marketing','no');
+    w.document.body.innerHTML='<script id="shared" type="text/plain" data-faz-category="analytics" src="https://shared.test/library.js"></script>';
+    w._fazUnblockServerSide();
+    check('granting one category cannot release a shared denied provider', w.document.getElementById('shared').type === 'text/plain');
+    w.fazcookie._fazConsentStore.set('marketing','yes');
+    w._fazUnblockServerSide();
+    check('all category grants release the shared provider', w.document.getElementById('shared').type === 'text/javascript');
+    w.close();
+}
+{
+    const w = loadFrontend();
+    w.document.body.innerHTML='<div class="faz-placeholder" data-faz-category="analytics"><template class="faz-placeholder-content"><script id="tpl-lib" type="text/plain" data-faz-category="analytics" src="https://example.test/lib.js"></script></template></div><script id="outside-inline" type="text/plain" data-faz-category="analytics">window.ready=true;</script>';
+    w._fazUnblockServerSide();
+    check('template library holds dependent inline outside its template', w.document.getElementById('outside-inline').type === 'text/plain');
+    w.document.getElementById('tpl-lib').dispatchEvent(new w.Event('load'));
+    check('outside inline resumes after template library', w.document.getElementById('outside-inline').type === 'text/javascript');
+    w.close();
+}
+{
+    const w = loadFrontend(), get = fixture(w);
+    const anchor = w.document.createComment('dynamic-position');
+    get('before').before(anchor);
+    const node = w.document.createElement('script');
+    node.id='dynamic'; node.type='javascript/blocked'; node.src='https://example.test/dynamic.js';
+    node.setAttribute('data-faz-category','analytics');
+    w._fazConfig._backupNodes.push({position:'body',node,anchor});
+    w._fazUnblock();
+    check('dynamic backup waits behind preceding server library', get('dynamic').type === 'text/plain');
+    get('generic').dispatchEvent(new w.Event('load'));
+    check('anchored dynamic script gets its original turn', get('dynamic').type === 'text/javascript' && get('before').type === 'text/plain');
+    w.fazcookie._fazConsentStore.set('analytics','no');
+    get('dynamic').dispatchEvent(new w.Event('load'));
+    check('withdrawal leaves later scripts inert across the mixed queue', get('woo').type === 'text/plain');
+    w.close();
+}
+
+for (const mode of ['service', 'url-whitelist', 'id-whitelist']) {
+    const w = loadFrontend();
+    w._fazConfig._categories.push({slug:'marketing', isNecessary:false});
+    w._fazConfig._providersToBlock = [{re:'shared.test/library.js', categories:['analytics','marketing']}];
+    w.fazcookie._fazConsentStore.set('marketing','no');
+    if (mode === 'service') {
+        w._fazConfig._perServiceConsent=true;
+        w._fazConfig._services=[{id:'example', category:'marketing', patterns:['shared.test/library.js']}];
+        w.fazcookie._fazConsentStore.set('svc.example','yes');
+    } else w._fazConfig._userWhitelist=[mode === 'url-whitelist' ? 'shared.test/library.js' : 'shared-library'];
+    w.document.body.innerHTML='<script id="shared-library" type="text/plain" data-faz-category="analytics" data-faz-service="example" src="https://shared.test/library.js"></script>';
+    w._fazUnblockServerSide();
+    check(`${mode}: explicit exception survives overlapping category denial`, w.document.getElementById('shared-library').type === 'text/javascript');
+    if (mode === 'service') check('restored script retains its service identity', w.document.getElementById('shared-library').getAttribute('data-faz-service') === 'example');
     w.close();
 }
 console.log(`${passed} passed, ${failed} failed`);

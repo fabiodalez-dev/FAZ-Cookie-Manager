@@ -348,14 +348,8 @@ class Frontend {
 			}
 		}
 
-		// WP 5.7+ exposes wp_inline_script_tag for inline scripts added via
-		// wp_add_inline_script(). Using this filter catches them BEFORE the
-		// output buffer, giving a cleaner block (the browser never sees the
-		// original script in the source). The OB remains active as a catch-all
-		// for scripts injected outside the WP enqueue system. On WP < 5.7
-		// the filter simply does not exist, so add_filter is a safe no-op
-		// and the OB handles everything.
-		add_filter( 'wp_inline_script_tag', array( $this, 'filter_inline_script_tag' ), 10, 3 );
+		// WordPress passes the attribute map and raw inline data (WP 5.7+).
+		add_filter( 'wp_inline_script_attributes', array( $this, 'filter_inline_script_attributes' ), 10, 2 );
 		add_action( 'send_headers', array( $this, 'send_geo_cache_headers' ), 0 );
 		add_action( 'send_headers', array( $this, 'send_vary_header' ) );
 
@@ -7599,83 +7593,112 @@ class Frontend {
 	}
 
 	/**
-	 * Filter inline scripts added via wp_add_inline_script() (WP 5.7+).
+	 * Gate inline scripts through the core WordPress attributes filter.
 	 *
-	 * The `wp_inline_script_tag` filter was introduced in WordPress 5.7.
-	 * On older versions the filter does not exist and the output buffer
-	 * catches inline scripts instead. When the filter IS available, it
-	 * provides a cleaner interception point: the browser never sees the
-	 * original script in the page source (vs. OB which replaces it after
-	 * the entire page is buffered).
+	 * Preserve nonce, id and all unrelated attributes; the tag is built by core
+	 * after this callback, so raw inline content need not be parsed as HTML.
 	 *
-	 * The filter signature changed across WP versions:
-	 *   WP 5.7-6.2: ( $tag, $id )           — 2 args
-	 *   WP 6.3+:    ( $tag, $id, $handle )   — 3 args (handle = enqueue handle)
+	 * @param array  $attributes Script attributes supplied by WordPress.
+	 * @param string $data       Raw inline script content.
+	 * @return array
+	 */
+	public function filter_inline_script_attributes( $attributes, $data ) {
+		$type = strtolower( trim( (string) ( $attributes['type'] ?? '' ) ) );
+		// Data blocks and optimiser placeholders are not executable JS.
+		if ( '' !== $type && 'module' !== $type && ! preg_match( '#^(?:(?:text|application)/(?:x-)?(?:java|ecma)script|text/(?:javascript1\.[0-5]|jscript|livescript))$#', $type ) ) {
+			return $attributes;
+		}
+		$id = (string) ( $attributes['id'] ?? '' );
+		$handle = preg_replace( '/-js-(?:before|after|extra|translations)$/', '', $id );
+		$attrs = '';
+		foreach ( $attributes as $name => $value ) {
+			if ( false === $value || null === $value ) {
+				continue;
+			}
+			$attrs .= ' ' . esc_attr( $name ) . '="' . esc_attr( true === $value ? '' : $value ) . '"';
+		}
+		$category = $this->inline_script_block_category( $attrs, $data, $id, (string) $handle );
+		if ( false === $category ) {
+			return $attributes;
+		}
+		if ( '' !== $type && 'text/javascript' !== $type && ! isset( $attributes['data-faz-original-type'] ) ) {
+			$attributes['data-faz-original-type'] = $attributes['type'];
+		}
+		$attributes['type'] = 'text/plain';
+		$attributes['data-faz-category'] = $category;
+		return $attributes;
+	}
+
+	/**
+	 * Compatibility wrapper for callers supplying a complete inline tag.
 	 *
-	 * We register with 3 args and default $handle to '' for WP < 6.3.
-	 *
-	 * @param string $tag    Full <script>…</script> tag with inline content.
-	 * @param string $id     The script ID attribute value.
-	 * @param string $handle The WP enqueue handle (WP 6.3+, '' otherwise).
-	 * @return string Modified tag (type="text/plain" + data-faz-category when blocked).
+	 * @param string $tag    Inline script markup.
+	 * @param string $id     Script element ID.
+	 * @param string $handle Optional enqueue handle.
+	 * @return string
 	 */
 	public function filter_inline_script_tag( $tag, $id, $handle = '' ) {
-		if ( is_admin() ) {
+		if ( ! preg_match( '/<script\b([^>]*)>(.*)<\/script>/si', $tag, $match ) ) {
 			return $tag;
+		}
+		$category = $this->inline_script_block_category( $match[1], $match[2], $id, $handle );
+		return false === $category ? $tag : $this->block_script_tag_safely( $tag, $category, 'inline script handle ' . $handle );
+	}
+
+	/**
+	 * Resolve all matching inline patterns before applying service overrides.
+	 *
+	 * @param string $attrs   Serialized attributes for whitelist/service matching.
+	 * @param string $content Raw JavaScript content.
+	 * @param string $id      Script ID.
+	 * @param string $handle  Enqueue handle inferred from the ID when available.
+	 * @return string|false Category to block, or false when allowed.
+	 */
+	private function inline_script_block_category( $attrs, $content, $id, $handle ) {
+		if ( is_admin() ) {
+			return false;
 		}
 		if ( ! $this->template ) {
-			return $tag;
+			return false;
 		}
 		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
-			return $tag;
+			return false;
 		}
 		if ( $this->is_strictly_necessary_script( $handle, $id ) ) {
-			return $tag;
+			return false;
 		}
 		// Guard: never block FAZ's own localize/translation/config inline scripts.
 		// wp_localize_script() emits a <script id="faz-cookie-manager-js-extra"> tag
 		// whose content includes category slugs like "analytics" — which would otherwise
 		// be matched by the provider pattern and blocked, preventing window._fazConfig
 		// from being defined and crashing the entire banner.
-		// The handle covers WP 6.3+; the ID-derived check covers WP 5.7-6.2
-		// and the output-buffer fallback's rendered IDs.
+		// Check both the inferred enqueue handle and the rendered script ID.
 		if ( $this->is_own_script_handle( $handle ) || $this->is_own_inline_script_id( $id ) ) {
-			return $tag;
+			return false;
 		}
 		// wp_localize_script / wp_set_script_translations payloads carry only
 		// config data or translation strings — never executable tracker code.
 		// See is_wp_localize_or_translations_inline_id() for the full rationale.
 		if ( $this->is_wp_localize_or_translations_inline_id( $id ) ) {
-			return $tag;
-		}
-		// Extract attributes and inline content separately so the whitelist
-		// only matches against attributes (same policy as the OB path in
-		// process_script_tag, which passes $attrs to is_whitelisted).
-		// Matching against the full $tag would let any inline script that
-		// mentions a whitelist token (e.g. "jquery", "wp-includes/") in its
-		// body bypass blocking — a false-positive risk for third-party
-		// analytics/marketing snippets.
-		$attrs   = '';
-		$content = '';
-		if ( preg_match( '/<script([^>]*)>(.*?)<\/script>/s', $tag, $match ) ) {
-			$attrs   = $match[1];
-			$content = $match[2];
+			return false;
 		}
 
 		// Never block our own inline scripts (match on attributes + handle only).
 		if ( $this->is_whitelisted( $attrs . ' ' . $handle . ' ' . $id, '' ) ) {
-			return $tag;
+			return false;
 		}
 		// Skip if already blocked by another mechanism.
 		if ( false !== strpos( $attrs, 'data-faz-category' ) ) {
-			return $tag;
+			return false;
 		}
 
 		$providers = $this->get_provider_category_map();
 		if ( empty( $providers ) ) {
-			return $tag;
+			return false;
 		}
 
+		$blocked = $this->get_blocked_categories();
+		$matched_category = false;
 		foreach ( $providers as $pattern => $category ) {
 			if ( empty( $pattern ) ) {
 				continue;
@@ -7703,23 +7726,30 @@ class Frontend {
 				continue;
 			}
 
-			$blocked      = $this->get_blocked_categories();
-			$should_block = in_array( $category, $blocked, true );
-
-			// Per-service consent override.
-			$svc_blocked = $this->check_per_service_blocking( $tag, $content );
-			if ( false === $svc_blocked ) {
-				$should_block = false;
-			} elseif ( true === $svc_blocked ) {
-				$should_block = true;
+			if ( false === $matched_category || in_array( $category, $blocked, true ) ) {
+				$matched_category = $category;
 			}
-
-			if ( $should_block ) {
-				$tag = $this->block_script_tag_safely( $tag, $category, 'inline script handle ' . $handle );
+			if ( in_array( $category, $blocked, true ) ) {
+				break;
 			}
-			break;
 		}
-		return $tag;
+		if ( false === $matched_category ) {
+			return false;
+		}
+		$should_block = in_array( $matched_category, $blocked, true );
+		$svc_blocked = $this->check_per_service_blocking( $attrs, $content );
+		if ( false === $svc_blocked ) {
+			$should_block = false;
+		} elseif ( true === $svc_blocked ) {
+			$should_block = true;
+		}
+		// Match the output-buffer exemption for Advanced Consent Mode, but an
+		// explicit service denial still wins over a cookieless bootstrap.
+		if ( true !== $svc_blocked && $this->gcm_settings && $this->gcm_settings->is_advanced_mode()
+			&& $this->is_gcm_managed_script( $attrs, $content ) ) {
+			return false;
+		}
+		return $should_block ? $matched_category : false;
 	}
 
 	/**
@@ -7752,29 +7782,30 @@ class Frontend {
 			return $tag;
 		}
 
+		$blocked = $this->get_blocked_categories();
+		$matched_category = false;
 		foreach ( $providers as $pattern => $category ) {
-			if ( empty( $pattern ) ) {
+			if ( empty( $pattern ) || ( false === stripos( $handle, $pattern ) && false === stripos( $href, $pattern ) ) ) {
 				continue;
 			}
-			if ( false !== stripos( $handle, $pattern ) || false !== stripos( $href, $pattern ) ) {
-				$blocked = $this->get_blocked_categories();
-				$should_block = in_array( $category, $blocked, true );
-
-				// Per-service consent override.
-				$svc_blocked = $this->check_per_service_blocking( $tag, '' );
-				if ( false === $svc_blocked ) {
-					$should_block = false;
-				} elseif ( true === $svc_blocked ) {
-					$should_block = true;
-				}
-
-				if ( $should_block ) {
-					$tag = self::block_link_tag_without_regex( $tag, $category );
-				}
+			if ( false === $matched_category || in_array( $category, $blocked, true ) ) {
+				$matched_category = $category;
+			}
+			if ( in_array( $category, $blocked, true ) ) {
 				break;
 			}
 		}
-		return $tag;
+		if ( false === $matched_category ) {
+			return $tag;
+		}
+		$should_block = in_array( $matched_category, $blocked, true );
+		$svc_blocked = $this->check_per_service_blocking( $tag, '' );
+		if ( false === $svc_blocked ) {
+			$should_block = false;
+		} elseif ( true === $svc_blocked ) {
+			$should_block = true;
+		}
+		return $should_block ? self::block_link_tag_without_regex( $tag, $matched_category ) : $tag;
 	}
 
 	/**

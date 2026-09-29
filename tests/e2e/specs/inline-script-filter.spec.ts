@@ -1,8 +1,8 @@
 /**
- * E2E: WP 5.7+ wp_inline_script_tag filter
+ * E2E: WP 5.7+ wp_inline_script_attributes filter
  *
  * Verifies that inline scripts matching a known provider are blocked via
- * the wp_inline_script_tag filter (when available) or by the output buffer
+ * the wp_inline_script_attributes filter (when available) or by the output buffer
  * fallback, and unblocked after consent.
  *
  * The test injects a Google Analytics inline script via a mu-plugin helper
