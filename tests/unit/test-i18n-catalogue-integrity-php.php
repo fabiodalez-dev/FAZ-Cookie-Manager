@@ -302,5 +302,146 @@ foreach ( $pos as $po ) {
 
 @unlink( $tmp );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. Every plainly translatable literal in the source exists in the POT.
+//
+// The msgcmp check above compares each catalogue AGAINST the POT, so it takes the
+// POT as the reference and cannot see the POT itself falling behind the code.
+// That is the drift it missed: a settings screen added fifteen translated strings,
+// `wp i18n make-pot` was never re-run, and the whole suite plus both workflows
+// stayed green while those labels shipped untranslatable in six locales. The
+// catalogues were perfectly consistent with a POT that was simply out of date.
+//
+// Read with PHP's own tokenizer rather than a regex over the file text. The first
+// cut of this check used a regex and reported two strings that were not drift at
+// all: one whose msgid carries an escaped backslash the regex compared in its
+// unescaped form, and one that was a `__( '...' )` example inside a docblock. A
+// check that cries wolf gets muted, so it is worth the extra pass — the tokenizer
+// never sees comments, and unquoting one token is exact where re-escaping a
+// string to match gettext's conventions is guesswork.
+//
+// Scope is still deliberately narrow: a call counts only when its argument list
+// is exactly ( single-quoted literal, this plugin's domain ). Concatenation,
+// double-quoted strings (which may interpolate), variables, _n() and _x()
+// (plural forms and msgctxt) are all skipped.
+if ( '' !== $pot_path ) {
+
+	/**
+	 * Turn a gettext msgid as written in a PO/POT file into the string it means.
+	 *
+	 * @param string $value Escaped msgid body, without the surrounding quotes.
+	 * @return string
+	 */
+	$pot_unescape = function ( $value ) {
+		return str_replace(
+			array( '\\\\', '\\"', '\\n', '\\t', '\\r' ),
+			array( '\\', '"', "\n", "\t", "\r" ),
+			$value
+		);
+	};
+
+	/**
+	 * Turn a single-quoted PHP literal token into the string it means. Only two
+	 * sequences are special inside single quotes, which is why single-quoted
+	 * calls are the only shape this check collects.
+	 *
+	 * @param string $token Literal token including its quotes.
+	 * @return string|null Decoded string, or null when the token is not single-quoted.
+	 */
+	$php_unquote = function ( $token ) {
+		if ( strlen( $token ) < 2 || "'" !== $token[0] || "'" !== substr( $token, -1 ) ) {
+			return null;
+		}
+		return str_replace( array( "\\\\", "\\'" ), array( '\\', "'" ), substr( $token, 1, -1 ) );
+	};
+
+	$pot_ids = array();
+	foreach ( explode( "\n", (string) @file_get_contents( $pot_path ) ) as $pot_line ) {
+		if ( 0 === strpos( $pot_line, 'msgid "' ) && '"' === substr( rtrim( $pot_line ), -1 ) ) {
+			$pot_ids[ $pot_unescape( substr( rtrim( $pot_line ), 7, -1 ) ) ] = true;
+		}
+	}
+
+	$php_files = array();
+	foreach ( array( 'admin', 'frontend', 'includes', 'integrations' ) as $root ) {
+		$dir = dirname( __DIR__, 2 ) . '/' . $root;
+		if ( ! is_dir( $dir ) ) {
+			continue;
+		}
+		$walker = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ) );
+		foreach ( $walker as $file ) {
+			if ( $file->isFile() && 'php' === strtolower( $file->getExtension() ) ) {
+				$php_files[] = $file->getPathname();
+			}
+		}
+	}
+	sort( $php_files );
+
+	$gettext_calls = array( '__', '_e', 'esc_html__', 'esc_html_e', 'esc_attr__', 'esc_attr_e' );
+	$absent        = array();
+	$seen          = 0;
+
+	foreach ( $php_files as $php_file ) {
+		$code = (string) @file_get_contents( $php_file );
+		if ( '' === $code || false === strpos( $code, $domain ) ) {
+			continue;
+		}
+		$tokens = @token_get_all( $code );
+		if ( ! is_array( $tokens ) ) {
+			continue;
+		}
+		$count = count( $tokens );
+		for ( $i = 0; $i < $count; $i++ ) {
+			$token = $tokens[ $i ];
+			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! in_array( $token[1], $gettext_calls, true ) ) {
+				continue;
+			}
+			// Collect the next four meaningful tokens: ( 'literal' , 'domain' ).
+			$want = array();
+			for ( $j = $i + 1; $j < $count && count( $want ) < 5; $j++ ) {
+				$next = $tokens[ $j ];
+				if ( is_array( $next ) && in_array( $next[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+					continue;
+				}
+				$want[] = $next;
+			}
+			if ( count( $want ) < 5 ) {
+				continue;
+			}
+			if ( '(' !== $want[0] || ',' !== $want[2] || ')' !== $want[4] ) {
+				continue;
+			}
+			if ( ! is_array( $want[1] ) || T_CONSTANT_ENCAPSED_STRING !== $want[1][0]
+				|| ! is_array( $want[3] ) || T_CONSTANT_ENCAPSED_STRING !== $want[3][0] ) {
+				continue;
+			}
+			$text = $php_unquote( $want[1][1] );
+			$dom  = $php_unquote( $want[3][1] );
+			if ( null === $text || $dom !== $domain || '' === $text ) {
+				continue;
+			}
+			++$seen;
+			if ( isset( $pot_ids[ $text ] ) ) {
+				continue;
+			}
+			$absent[ $text ] = str_replace( dirname( __DIR__, 2 ) . '/', '', $php_file ) . ':' . $want[1][2];
+		}
+	}
+
+	cat_eq( $seen > 100, true, "the source scan found translatable literals to check ({$seen})" );
+	cat_eq( count( $absent ), 0, 'every source literal is in the POT' );
+
+	if ( $absent ) {
+		foreach ( array_slice( $absent, 0, 5, true ) as $text => $where ) {
+			echo '        missing: ' . var_export( substr( $text, 0, 80 ), true ) . ' — ' . $where . "\n";
+		}
+		if ( count( $absent ) > 5 ) {
+			echo '        …and ' . ( count( $absent ) - 5 ) . " more\n";
+		}
+		echo '        fix: wp i18n make-pot . languages/' . basename( $pot_path ) . " --domain={$domain}\n";
+		echo "             then msgmerge --update --backup=off --no-wrap each .po, translate, msgfmt the .mo\n";
+	}
+}
+
 echo "\n" . ( $tests_run - $failed ) . "/{$tests_run} passed\n";
 exit( 0 === $failed ? 0 : 1 );
