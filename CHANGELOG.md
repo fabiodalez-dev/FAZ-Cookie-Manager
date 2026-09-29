@@ -2,13 +2,6 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
-## [Unreleased]
-
-### Fixed
-- Resources matching multiple consent categories remain blocked while any matching category is denied, including when the server attached a different, permitted category to the element. Explicit service choices and blocking exceptions still apply.
-- Dynamically blocked scripts and scripts inside placeholders now join the same restoration queue as server-blocked scripts, at their original document positions. Dependent code waits for preceding libraries; consent is checked again before each queued script starts.
-- WordPress inline scripts now use the actual `wp_inline_script_attributes` hook. The filter preserves nonces, module types, localised configuration and Consent Mode exemptions. Inline scripts and stylesheets also prefer a denied provider match over an earlier permitted match.
-
 ## [1.33.0] - 2026-09-29
 
 ### Added
@@ -18,6 +11,9 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 - Restored scripts now wait for preceding ordered scripts to load before executing dependent external or inline code. Repeated consent updates do not duplicate pending scripts, and consent is checked again before each queued script starts. Explicitly asynchronous scripts remain asynchronous; failed downloads release the queue. This prevents GTM4WP's WooCommerce script from calling `gtm4wp_read_json_from_node()` before its generic library is ready.
 - Added concrete GTM4WP e-commerce filenames to the provider catalogue and blocker template so the HTML output buffer and browser blocker recognise both scripts even without a WordPress enqueue handle. Existing whitelist and service-consent decisions still apply.
 - A permitted provider pattern no longer overrides another matching pattern whose category is blocked, regardless of provider-map order. Patterns shared by multiple cookie categories also retain a blocked category instead of the first allowed category.
+- Resources matching multiple consent categories remain blocked while any matching category is denied, including when the server attached a different, permitted category to the element. Explicit service choices and blocking exceptions still apply.
+- Dynamically blocked scripts and scripts inside placeholders now join the same restoration queue as server-blocked scripts, at their original document positions. Dependent code waits for preceding libraries; consent is checked again before each queued script starts.
+- WordPress inline scripts now use the actual `wp_inline_script_attributes` hook. The filter preserves nonces, module types, localised configuration and Consent Mode exemptions. Inline scripts and stylesheets also prefer a denied provider match over an earlier permitted match.
 
 ## [1.32.1] - 2026-09-24
 

@@ -411,6 +411,9 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Fix: A script restored after consent could run before the script it depends on had finished loading, so GTM4WP's WooCommerce script called into its generic library before that library existed. Restoration now uses one ordered queue, rechecks consent before each entry, and keeps explicitly asynchronous scripts asynchronous.
 * Fix: A provider pattern whose category is allowed no longer exempts a script that a different matching pattern blocks, in either blocking layer and whatever the order of the provider map. A pattern shared by several cookie categories keeps a denied category instead of the first allowed one.
 * Fix: GTM4WP's two e-commerce scripts are recognised by filename, so both are blocked where WordPress gives them no enqueue handle. Whitelist entries and per-service choices still apply.
+* Fix: A resource matching several consent categories stays blocked while any matching category is denied, including when the server attached a different, permitted category to that element. Per-service choices and blocking exceptions still apply.
+* Fix: Scripts blocked at runtime, and scripts inside a placeholder, join the same ordered restoration queue as server-blocked scripts and keep their original document positions, so dependent code waits for the libraries before it.
+* Fix: Inline scripts added with wp_add_inline_script() are gated on the hook WordPress actually provides, wp_inline_script_attributes. The previous registration named a filter that does not exist in core, so inline blocking rested entirely on the output-buffer fallback. Nonces, module types, localised configuration and Consent Mode exemptions are preserved.
 
 = 1.32.1 =
 * Fix: Consent records were refused in silence on sites whose page cache holds HTML for more than a day. The origin token is accepted for seven days now, and the faz_consent_token_max_age filter widens the window for a longer-lived cache (#292).
