@@ -105,6 +105,25 @@ echo 'INSTALL PASSED'
 # for the right reason. Update the seed and the assertion below each time a
 # release adds a migration; unit tests keep covering the older ones.
 #
+# 1.33.0 adds no migration of its own, so the newest one this gate can still
+# watch run is the Sourcebuster move of 1.32.0. Whether it runs depends entirely
+# on where the upgrade starts from: a one-shot that the previous version already
+# applied is correctly skipped, and asserting that it happens again fails for the
+# right reason. So decide here, from $PREVIOUS, which of the two contracts to
+# hold the upgrade to — the migration performing its move, or the one-shot
+# staying done and leaving the rows alone. Asserting nothing in the second case
+# would be worse than either: it is the case every existing 1.32.x install is in.
+if [ "$PREVIOUS" = "1.32.0" ] || [ "$(printf '%s\n' "$PREVIOUS" "1.32.0" | sort -V | head -1)" = "1.32.0" ]; then
+    SOURCEBUSTER_ALREADY_APPLIED=1
+else
+    SOURCEBUSTER_ALREADY_APPLIED=0
+fi
+if [ "$SOURCEBUSTER_ALREADY_APPLIED" = "1" ]; then
+    echo "UPGRADE: previous ${PREVIOUS} already applied the Sourcebuster one-shot; asserting it stays done and moves nothing"
+else
+    echo "UPGRADE: previous ${PREVIOUS} predates the Sourcebuster one-shot; asserting it runs and reports"
+fi
+
 # Start the upgrade on a second clean database state, so no new-version
 # migration markers can leak into the previous-version installation.
 wp --path="$WP_DIR" db reset --yes --quiet
@@ -130,7 +149,7 @@ wp --path="$WP_DIR" plugin install "$ZIP" --force --quiet
 visit_admin
 
 # shellcheck disable=SC2016 # PHP variables must reach wp eval literally.
-wp --path="$WP_DIR" eval '
+SOURCEBUSTER_ALREADY_APPLIED="$SOURCEBUSTER_ALREADY_APPLIED" wp --path="$WP_DIR" eval '
 global $wpdb;
 $probe = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookies WHERE slug=\"faz-upgrade-probe\"");
 $cats = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookie_categories");
@@ -141,7 +160,17 @@ $analytics = (int)$wpdb->get_var("SELECT category_id FROM {$wpdb->prefix}faz_coo
 $scanned = (int)$wpdb->get_var("SELECT category FROM {$wpdb->prefix}faz_cookies WHERE slug=\"sbjs-current\"");
 $edited = (int)$wpdb->get_var("SELECT category FROM {$wpdb->prefix}faz_cookies WHERE slug=\"sbjs-udata\"");
 $notice = get_option("faz_sourcebuster_marketing_notice");
-if ($scanned!==$marketing || $edited!==$analytics || !get_option("faz_move_sourcebuster_marketing_done") || !is_array($notice) || (int)$notice["moved"]<1 || (int)$notice["kept"]<1) { throw new Exception("Migration or notice missing"); }
+$already = (int) getenv("SOURCEBUSTER_ALREADY_APPLIED");
+if ($already) {
+    // The previous version already ran the one-shot. The contract is that it
+    // stays done and does NOT touch these rows again: a migration that re-ran
+    // would silently reclassify cookies an administrator may have since moved
+    // on purpose. This is the path every existing 1.32.x install takes.
+    if (!get_option("faz_move_sourcebuster_marketing_done")) { throw new Exception("One-shot marker lost on upgrade"); }
+    if ($scanned!==$analytics || $edited!==$analytics) { throw new Exception("An already-applied migration moved rows again"); }
+} elseif ($scanned!==$marketing || $edited!==$analytics || !get_option("faz_move_sourcebuster_marketing_done") || !is_array($notice) || (int)$notice["moved"]<1 || (int)$notice["kept"]<1) {
+    throw new Exception("Migration or notice missing");
+}
 $wpdb->query($wpdb->prepare("UPDATE {$wpdb->prefix}faz_cookies SET category=%d WHERE slug=\"sbjs-current\"", $analytics));
 \FazCookie\Includes\Activator::move_sourcebuster_to_marketing();
 if ((int)$wpdb->get_var("SELECT category FROM {$wpdb->prefix}faz_cookies WHERE slug=\"sbjs-current\"")!==$analytics) { throw new Exception("Migration ran twice"); }
