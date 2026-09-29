@@ -55,8 +55,43 @@ class Filesystem {
 
 			$creds = request_filesystem_credentials( site_url(), '', false, $context, null );
 
-			\WP_Filesystem( $creds, $context );
+			$connected = \WP_Filesystem( $creds, $context );
 			remove_filter( 'request_filesystem_credentials', array( $this, 'request_filesystem_credentials' ) );
+
+			// WP_Filesystem() assigns $wp_filesystem BEFORE it connects, and
+			// leaves the object in place when the connection fails. Ignoring
+			// the return value therefore hands back a live-looking object whose
+			// transport is dead: on a host where the PHP user does not own the
+			// files and the FTP extension is loaded, get_filesystem_method()
+			// picks 'ftpext', our credentials are `true` rather than a host and
+			// password, WP_Filesystem() returns false with `empty_hostname`,
+			// and the first write reaches ftp_fput( null ) — a TypeError, which
+			// is a fatal, not a falsy return, so no caller's fallback can catch
+			// it. That turned every frontend request needing a new asset into a
+			// 500 (#300).
+			if ( ! $connected ) {
+				return null;
+			}
+		}
+
+		// The global may also have been left unusable by an earlier attempt in
+		// this request, or by another plugin, in which case the branch above is
+		// skipped entirely. Validate the object itself rather than trusting how
+		// it got here.
+		if ( ! $wp_filesystem instanceof \WP_Filesystem_Base ) {
+			return null;
+		}
+		if ( ! empty( $wp_filesystem->errors ) && ! empty( $wp_filesystem->errors->errors ) ) {
+			return null;
+		}
+		// Only the direct transport can be trusted without performing I/O to
+		// prove it. A remote transport that is genuinely connected would work,
+		// but it cannot be told apart from one that merely looks connected, and
+		// the cost of being wrong is a fatal on every page view. Callers that
+		// write plugin assets already fall back to inlining them, so refusing
+		// here degrades output rather than breaking the site.
+		if ( 'direct' !== $wp_filesystem->method ) {
+			return null;
 		}
 
 		// Note: we no longer define `FS_CHMOD_DIR` / `FS_CHMOD_FILE` from
@@ -164,7 +199,11 @@ class Filesystem {
 	 * @return void
 	 */
 	public function delete( $file, $recursive = false, $type = false ) {
-		$this->get_filesystem()->delete( $file, $recursive, $type );
+		$file_system = $this->get_filesystem();
+		if ( ! $file_system instanceof \WP_Filesystem_Base ) {
+			return;
+		}
+		$file_system->delete( $file, $recursive, $type );
 	}
 
 	/**
@@ -176,7 +215,11 @@ class Filesystem {
 	 * @return bool $put_content returns false if file write is not successful.
 	 */
 	public function put_contents( $file_path, $style_data ) {
-		return $this->get_filesystem()->put_contents( $file_path, $style_data );
+		$file_system = $this->get_filesystem();
+		if ( ! $file_system instanceof \WP_Filesystem_Base ) {
+			return false;
+		}
+		return $file_system->put_contents( $file_path, $style_data );
 	}
 
 	/**
@@ -209,6 +252,16 @@ class Filesystem {
 	 */
 	public function abspath() {
 		$file_system = $this->get_filesystem();
+		// Behaviour deliberately unchanged beyond the null guard. The test
+		// below reads as "if any error was recorded", but `errors` is a WP_Error
+		// object that is always present, so it is always true and this method
+		// has only ever returned ABSPATH. Correcting it would start returning
+		// $file_system->abspath(), whose value feeds a str_replace() over file
+		// paths in get_contents() — a semantic change that does not belong in a
+		// fix for a fatal. Reported separately.
+		if ( ! $file_system instanceof \WP_Filesystem_Base ) {
+			return ABSPATH;
+		}
 		if ( $file_system->errors ) {
 			return ABSPATH;
 		}

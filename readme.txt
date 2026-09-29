@@ -407,6 +407,7 @@ and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
 = 1.33.0 =
+* Fix: A frontend request that had to write a new config or banner asset could answer 500 instead of rendering the page, on hosts where the PHP user does not own the files and the FTP extension is loaded (#300). The plugin discarded the result of WP_Filesystem(), which leaves an unconnected object in place when the connection fails, so the first write hit a fatal in ftp_fput() before the inline fallback could run. An unusable filesystem is now refused and writes report failure, so the banner falls back to inline assets instead of breaking the page.
 * Added: Choose the HTML tag used for the banner title, the preferences title and the category titles — H1 to H6, paragraph, div or span, with H2/H2/H3 as defaults. The choice survives a banner language change.
 * Fix: A script restored after consent could run before the script it depends on had finished loading, so GTM4WP's WooCommerce script called into its generic library before that library existed. Restoration now uses one ordered queue, rechecks consent before each entry, and keeps explicitly asynchronous scripts asynchronous.
 * Fix: A provider pattern whose category is allowed no longer exempts a script that a different matching pattern blocks, in either blocking layer and whatever the order of the provider map. A pattern shared by several cookie categories keeps a denied category instead of the first allowed one.
