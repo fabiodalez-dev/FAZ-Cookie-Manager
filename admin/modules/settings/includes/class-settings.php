@@ -131,6 +131,12 @@ class Settings extends Store {
 				'banner_title_tag'       => 'h2',
 				'preference_title_tag'   => 'h2',
 				'category_title_tag'     => 'h3',
+				// Phone layout. 'comfortable' is the shipped behaviour: below
+				// 440px the notice buttons stack into one full-width row each.
+				// 'compact' lays them out on a shared row so the banner stops
+				// claiming ~44% of a 390px viewport. Default is the existing
+				// behaviour, so no installed site changes appearance on update.
+				'mobile_layout'          => 'comfortable',
 				'subdomain_sharing'      => false,
 				'hide_from_bots'         => true,
 				'gtm_datalayer'          => false,
@@ -351,6 +357,7 @@ class Settings extends Store {
 			'banner_title_tag',
 			'preference_title_tag',
 			'category_title_tag',
+			'mobile_layout',
 			'sites',
 			'custom_rules',
 			'target_regions',
@@ -504,6 +511,13 @@ class Settings extends Store {
 				$allowed = array( 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span' );
 				$value   = is_string( $value ) ? strtolower( trim( $value ) ) : '';
 				$value   = in_array( $value, $allowed, true ) ? $value : ( 'category_title_tag' === $option ? 'h3' : 'h2' );
+				break;
+			case 'mobile_layout':
+				// Whitelist, never a pass-through: this value is interpolated
+				// into a CSS class name on the banner container, so an
+				// unchecked string would be an injection point.
+				$value = is_string( $value ) ? strtolower( trim( $value ) ) : '';
+				$value = in_array( $value, array( 'comfortable', 'compact' ), true ) ? $value : 'comfortable';
 				break;
 			case 'status':
 			case 'subdomain_sharing':

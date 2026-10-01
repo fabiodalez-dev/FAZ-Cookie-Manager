@@ -295,6 +295,28 @@ namespace {
 		faz_assert_same( Settings::sanitize_option( $key, ' H4 ', 'banner_control' ), 'h4', "$key normalizes case and whitespace" );
 	}
 
+	// Mobile layout. The stored value decides which CSS the frontend emits, so
+	// anything outside the two known layouts has to collapse to the default
+	// rather than reach the stylesheet.
+	faz_assert_same( Settings::sanitize_option( 'mobile_layout', 'compact', 'banner_control' ), 'compact', 'mobile_layout permits compact' );
+	faz_assert_same( Settings::sanitize_option( 'mobile_layout', 'comfortable', 'banner_control' ), 'comfortable', 'mobile_layout permits comfortable' );
+	faz_assert_same( Settings::sanitize_option( 'mobile_layout', ' COMPACT ', 'banner_control' ), 'compact', 'mobile_layout normalizes case and whitespace' );
+	foreach ( array( 'tiny', '', 'compact;}body{display:none', '<script>', array( 'compact' ), null, 0, true ) as $invalid ) {
+		faz_assert_same( Settings::sanitize_option( 'mobile_layout', $invalid, 'banner_control' ), 'comfortable', 'mobile_layout falls back to comfortable on invalid input' );
+	}
+	$ml = Settings::sanitize( array( 'banner_control' => array( 'mobile_layout' => array( 'compact' ) ) ), array( 'banner_control' => array( 'mobile_layout' => 'comfortable' ) ) );
+	faz_assert_same( $ml['banner_control']['mobile_layout'], 'comfortable', 'mobile_layout rejects arrays through the full settings pipeline' );
+	$ml2 = Settings::sanitize( array( 'banner_control' => array( 'mobile_layout' => 'compact' ) ), array( 'banner_control' => array( 'mobile_layout' => 'comfortable' ) ) );
+	faz_assert_same( $ml2['banner_control']['mobile_layout'], 'compact', 'mobile_layout survives the full settings pipeline' );
+	// The shipped default decides whether installed sites change appearance on
+	// update, so assert it on the real method rather than on a copy of the
+	// value. get_defaults() is an instance method and the instance needs no
+	// WordPress state, so reflection reaches it without booting anything.
+	$defaults_method = new \ReflectionMethod( Settings::class, 'get_defaults' );
+	$defaults_method->setAccessible( true );
+	$defaults = $defaults_method->invoke( $defaults_method->isStatic() ? null : ( new \ReflectionClass( Settings::class ) )->newInstanceWithoutConstructor() );
+	faz_assert_same( $defaults['banner_control']['mobile_layout'], 'comfortable', 'mobile_layout defaults to the shipped layout, so no site changes on update' );
+
 	echo "\n--\n";
 	echo "Tests:  $tests_run\n";
 	echo "Passed: $tests_passed\n";
