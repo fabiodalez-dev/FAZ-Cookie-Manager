@@ -6759,10 +6759,22 @@ class Frontend {
 	 */
 	public static function prepare_banner_styles( $raw_css ) {
 		$raw_css   = is_string( $raw_css ) ? $raw_css : '';
+		$layout    = self::get_mobile_layout();
 		// Keep an explicit pipeline revision in addition to FAZ_VERSION so a
 		// development deploy cannot reuse CSS assembled before utility rules were
 		// added. Release builds also invalidate through the version as usual.
-		$cache_key = 'faz_boosted_css_v2_' . FAZ_VERSION . '_' . md5( $raw_css );
+		//
+		// The mobile layout is part of the key because it changes the assembled
+		// CSS without changing $raw_css: keyed on the template alone, toggling
+		// the setting would keep serving the previously cached stylesheet for a
+		// day and the setting would look broken. It is a site-wide value, not a
+		// per-visitor one, so it stays safe under Cache Compatibility Mode.
+		// v4: the compact layout gained a full-width row for the Do-Not-Sell
+		// control. That rule is appended after $raw_css is hashed, so without
+		// this bump an install that had already cached v3 within this same
+		// plugin version would keep serving the stylesheet in which the control
+		// collapses — the revision is here for exactly this case.
+		$cache_key = 'faz_boosted_css_v4_' . FAZ_VERSION . '_' . $layout . '_' . md5( $raw_css );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
 			return $cached;
@@ -6826,10 +6838,129 @@ class Frontend {
 			. '.faz-cookie-settings-btn:focus-visible{'
 			. 'outline:2px solid var(--faz-accept-button-background-color,#1863dc);outline-offset:2px;'
 			. '}';
-		$css = $css_reset . $css . $css_fixes . $css_settings_btn;
+		$css = $css_reset . $css . $css_fixes . $css_settings_btn . self::compact_mobile_css( $layout );
 
 		set_transient( $cache_key, $css, DAY_IN_SECONDS );
 		return $css;
+	}
+
+	/**
+	 * Current phone layout for the consent notice.
+	 *
+	 * Static because prepare_banner_styles() is reached both from the frontend
+	 * render and from the banner REST endpoint, neither of which shares an
+	 * instance.
+	 *
+	 * @since 1.34.0
+	 * @return string Either 'comfortable' or 'compact'; never anything else.
+	 */
+	private static function get_mobile_layout() {
+		$settings = get_option( 'faz_settings', array() );
+		$value    = '';
+		if ( is_array( $settings ) && isset( $settings['banner_control']['mobile_layout'] ) ) {
+			$value = $settings['banner_control']['mobile_layout'];
+		}
+		$value = is_string( $value ) ? strtolower( trim( $value ) ) : '';
+
+		// Re-check here rather than trusting the stored value. The sanitiser
+		// already whitelists it on save, but this string decides which CSS is
+		// emitted, and a row written before the sanitiser existed - or by hand -
+		// must not reach the stylesheet.
+		return 'compact' === $value ? 'compact' : 'comfortable';
+	}
+
+	/**
+	 * Compact phone layout for the notice buttons.
+	 *
+	 * Below 440px the shipped templates give each notice button its own
+	 * full-width row, which on a 390x844 screen makes the notice 372px tall -
+	 * about 44% of the viewport, and past half of it on a 375x667 phone. Laying
+	 * the buttons out on a shared row brings the same notice to 244px (29%).
+	 *
+	 * Three constraints shape the rules below, and none of them is cosmetic:
+	 *
+	 * 1. `flex: 1 1 0` makes the accept and reject buttons exactly as wide as
+	 *    each other because the same layout pass sizes them, not because two
+	 *    widths were written to match. EDPB Guidelines 03/2022 require the
+	 *    accept and reject options to carry equal prominence, so equality has to
+	 *    survive translation into any language - which hardcoded widths do not.
+	 * 2. `min-height: 44px` keeps the tap target at the size a finger needs.
+	 *    Shrinking the buttons to fit is exactly the wrong trade.
+	 * 3. Under 360px three buttons no longer fit side by side. Accept and reject
+	 *    stay paired on their own row and "customise" - the longest label, and
+	 *    the one that takes no part in the equal-prominence comparison - drops
+	 *    to a row of its own. The pair that matters stays equal.
+	 *
+	 * Emitted AFTER boost_css_specificity(), so the selectors are written with
+	 * their `#faz-consent` prefix already in place and need no `!important`:
+	 * they are specificity 1-1-0 against the template's own 1-1-0 rules and win
+	 * on document order. Measured against a live 1.32.0 site at 320, 360, 375,
+	 * 390 and 430 CSS pixels.
+	 *
+	 * @since 1.34.0
+	 * @param string $layout Resolved layout, already whitelisted.
+	 * @return string CSS, or an empty string for the default layout.
+	 */
+	private static function compact_mobile_css( $layout ) {
+		if ( 'compact' !== $layout ) {
+			return '';
+		}
+
+		return '@media (max-width:440px){'
+			. '#faz-consent .faz-notice-btn-wrapper{'
+			. 'flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:12px;'
+			. '}'
+			. '#faz-consent .faz-notice-btn-wrapper .faz-btn{'
+			. 'flex:1 1 0;width:auto;min-width:0;margin:0;'
+			. 'min-height:44px;font-size:13px;padding:8px 4px;white-space:nowrap;'
+			. '}'
+			// Accept first, reject immediately beside it: the two compared
+			// options sit together and read as one pair.
+			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-accept{order:1;margin-top:0;}'
+			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-reject{order:2;}'
+			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-customize{order:3;}'
+			// The Do-Not-Sell control is a flex child of this same wrapper, and it
+			// is the one button here that carries no `order` of its own — not in
+			// the template's mobile rules either, so at order:0 it already sorts
+			// ahead of Accept. Stacked full-width that is only odd; on a single
+			// row it breaks. It would have to share the first line with the
+			// accept/reject pair, and at 360px their 40% bases leave it almost
+			// nothing to grow into: it collapses to a few pixels while the
+			// inherited `white-space:nowrap` spills its label across Accept.
+			//
+			// It is not one of the compared options — EDPB 03/2022 equal
+			// prominence governs accept against reject — so it takes a full-width
+			// row of its own, last, where it cannot compete with the pair and
+			// cannot be squeezed. This is reached in normal operation, not only
+			// by hand: Geo_Runtime turns donotSell on for a US visitor even when
+			// applicableLaw is 'gdpr', and class-template.php then keeps the
+			// button precisely because its status is true.
+			//
+			// Matched by data attribute because the two variants share nothing
+			// else: the shortcode emits either `.faz-btn.faz-btn-do-not-sell` or a
+			// bare `<a>` with no class at all.
+			//
+			// `white-space` is reset because the nowrap above is aimed at the
+			// three short labels sharing a tight row, where a wrap would make one
+			// button two lines tall and break the pair's symmetry. This control
+			// has the row to itself and the longest label of the four — "Do Not
+			// Sell or Share My Personal Information" does not fit 270px at 13px,
+			// so inheriting nowrap made it overflow its own full-width box. The
+			// label is statutory wording that cannot be shortened, so the box has
+			// to give.
+			. '#faz-consent .faz-notice-btn-wrapper [data-faz-tag="donotsell-button"]{'
+			. 'order:4;flex:1 1 100%;width:100%;white-space:normal;'
+			. '}'
+			. '}'
+			. '@media (max-width:360px){'
+			// 40% rather than calc(50% - 4px): the exact value lands on the
+			// width budget to the pixel, and one sub-pixel of rounding pushes
+			// the second button onto its own row. A basis under half leaves
+			// flex-grow to fill the row and cannot round into a wrap.
+			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-accept,'
+			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-reject{flex:1 1 40%;}'
+			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-customize{flex:1 1 100%;}'
+			. '}';
 	}
 
 	/**

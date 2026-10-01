@@ -215,6 +215,27 @@ defined( 'ABSPATH' ) || exit;
 
 	<div class="faz-card">
 		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Mobile Layout', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-form-group">
+				<label for="faz-mobile-layout"><?php esc_html_e( 'Banner layout on phones', 'faz-cookie-manager' ); ?></label>
+				<select id="faz-mobile-layout" class="faz-select" data-path="banner_control.mobile_layout" aria-describedby="faz-mobile-layout-help" style="width:auto;max-width:280px;">
+					<option value="comfortable" selected><?php esc_html_e( 'Comfortable (default) — buttons stacked', 'faz-cookie-manager' ); ?></option>
+					<option value="compact"><?php esc_html_e( 'Compact — buttons on one row', 'faz-cookie-manager' ); ?></option>
+				</select>
+				<div class="faz-help" id="faz-mobile-layout-help">
+					<?php esc_html_e( 'Below 440px the comfortable layout gives each button its own full-width row, which makes the banner about 44% of a 390px screen. The compact layout puts them on a shared row and brings the same banner to about 29%. Desktop is not affected.', 'faz-cookie-manager' ); ?>
+				</div>
+			</div>
+			<p class="faz-help">
+				<?php esc_html_e( 'Compact keeps every button at least 44px tall so it stays comfortable to tap, and keeps the accept and reject buttons exactly the same size as each other, as equal prominence requires. On screens narrower than 360px accept and reject stay side by side and the customise button moves to its own row.', 'faz-cookie-manager' ); ?>
+			</p>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header">
 			<h3><?php esc_html_e( 'Script Blocking', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
