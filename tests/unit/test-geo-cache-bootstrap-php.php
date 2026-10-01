@@ -182,6 +182,10 @@ namespace {
 		return $GLOBALS['faz_geo_bootstrap_multilingual'];
 	}
 
+	// The one predicate every cache-compat consumer now shares. Required as the
+	// REAL file rather than stubbed: a double here would be a second copy of
+	// the logic whose whole point is that there is only one.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-cache-compatibility.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 
 	use FazCookie\Admin\Modules\Banners\Includes\Controller;

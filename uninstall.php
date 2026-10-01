@@ -199,6 +199,13 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				// Visitor-check ledger and its replay-target pointer.
 				'faz_scan_visitor_check',
 				'faz_httponly_scan_target',
+				// Cached verdicts about this install's own capabilities: whether
+				// the GeoLite2 database actually resolves a country, and whether
+				// a persistent withdrawal link was found on the site's own pages.
+				// The faz_% catch-all below would sweep both; naming them keeps
+				// the explicit list complete, which is the only reason it exists.
+				'faz_geo_source_probe',
+				'faz_withdrawal_link_probe',
 			);
 			foreach ( $faz_options as $option_name ) {
 				delete_option( $option_name );

@@ -138,6 +138,14 @@ class Settings extends Store {
 				'per_service_consent'    => false,
 				'per_cookie_consent'     => false,
 				'cache_compatibility'    => false,
+				// How a visitor withdraws consent: FAZ's floating revisit widget
+				// ('widget', the default) or a persistent link the administrator
+				// placed in the site template ('footer_link'). The second only
+				// satisfies a rule set's standing-withdrawal requirement once the
+				// plugin has fetched its own pages and found the marker — see
+				// FazCookie\Includes\Withdrawal_Path. Default keeps every
+				// existing install exactly as it is.
+				'withdrawal_path'        => 'widget',
 				// Anti-adblock banner resilience. When enabled, a single
 				// deferred client-side check re-asserts the consent banner's
 				// visibility if an ad-block cosmetic filter list (e.g. EasyList
@@ -351,6 +359,12 @@ class Settings extends Store {
 			'banner_title_tag',
 			'preference_title_tag',
 			'category_title_tag',
+			// Same reason: a scalar whose default is a string. Without this
+			// entry an array-valued payload would recurse against the string
+			// default, store an empty array, and leave configured_path() casting
+			// an array to a string. The whitelist in sanitize_option() handles
+			// every shape and settles on 'widget'.
+			'withdrawal_path',
 			'sites',
 			'custom_rules',
 			'target_regions',
@@ -550,6 +564,16 @@ class Settings extends Store {
 				// banner-apply logic only ever reads one of these four values.
 				$allowed = array( '', 'gdpr', 'ccpa', 'both', 'popia' );
 				$value   = in_array( $value, $allowed, true ) ? $value : '';
+				break;
+			case 'withdrawal_path':
+				// Whitelist, never a pass-through. This value decides whether the
+				// runtime stops forcing the revisit widget on, so an unrecognised
+				// string must fall back to the route that is always present
+				// rather than to "some other route exists". Fail-closed: a
+				// visitor keeps a way to withdraw.
+				$value   = is_string( $value ) ? strtolower( trim( $value ) ) : '';
+				$allowed = array( 'widget', 'footer_link' );
+				$value   = in_array( $value, $allowed, true ) ? $value : 'widget';
 				break;
 			case 'scan_frequency':
 				$allowed = array( 'daily', 'weekly', 'monthly' );

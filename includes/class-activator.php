@@ -96,6 +96,12 @@ class Activator {
 		// to avoid 7 separate get_option() calls on every admin page load.
 		add_action( 'admin_init', array( __CLASS__, 'run_pending_migrations' ) );
 		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
+		// A footer withdrawal link lives in a theme or block template, so it can
+		// disappear with an edit the plugin never sees. Re-check it daily on the
+		// existing cleanup event — a new scheduled event would be one more thing
+		// to register, clear and reason about, for a check that is a no-op on
+		// every install still using the floating widget.
+		add_action( 'faz_daily_cleanup', array( 'FazCookie\Includes\Withdrawal_Path', 'cron_verify' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
 		add_action( 'faz_weekly_definitions_update', array( 'FazCookie\Includes\Cookie_Definitions', 'cron_update' ) );
 		add_action( 'faz_after_update_settings', array( 'FazCookie\Includes\Cookie_Definitions', 'schedule_updates' ) );

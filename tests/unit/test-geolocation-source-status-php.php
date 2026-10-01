@@ -96,6 +96,27 @@ namespace {
 		Geolocation::reset_runtime_cache();
 	}
 
+	/**
+	 * Replace the fixture database and drop PHP's stat cache for that path.
+	 *
+	 * is_valid_mmdb() sizes its tail read with filesize(), and filesize() is
+	 * memoised per request for the whole path — file_put_contents() does not
+	 * invalidate it. Without the clearstatcache() a replacement is read at the
+	 * PREVIOUS file's length: after the 24-byte "not a database" fixture, the
+	 * valid 2 KB one is measured as 24 bytes, falls under the marker length and
+	 * is rejected. The test would fail on a correct implementation, which is
+	 * the worst kind of failure to debug. reset_runtime_cache() cannot help —
+	 * it clears Geolocation's own memos, not PHP's.
+	 *
+	 * @param string $path     Fixture path.
+	 * @param string $contents New contents.
+	 * @return void
+	 */
+	function faz_write_db( $path, $contents ) {
+		file_put_contents( $path, $contents ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		clearstatcache( true, $path );
+	}
+
 	$db_dir   = ABSPATH . 'faz-cookie-manager/';
 	$db_path  = $db_dir . 'GeoLite2-Country.mmdb';
 	$marker   = "\xab\xcd\xefMaxMind.com";
@@ -131,12 +152,12 @@ namespace {
 	// Il controllo di formato è reale: is_valid_mmdb() cerca il marker nella coda
 	// del file. Un file qualunque col nome giusto non deve contare.
 	faz_reset();
-	file_put_contents( $db_path, 'questo non è un database' );
+	faz_write_db( $db_path, 'questo non è un database' );
 	Geolocation::reset_runtime_cache();
 	faz_is( Geolocation::has_country_source(), false, 'un file col nome giusto ma senza marker MMDB non conta' );
 
 	faz_reset();
-	file_put_contents( $db_path, str_repeat( 'x', 2048 ) . $marker );
+	faz_write_db( $db_path, str_repeat( 'x', 2048 ) . $marker );
 	Geolocation::reset_runtime_cache();
 	faz_is( Geolocation::has_country_source(), true, 'un file che supera il controllo di formato conta come sorgente' );
 
@@ -174,7 +195,7 @@ namespace {
 	// 'key_without_database' — le due cause mandano l'amministratore a fare
 	// cose diverse.
 	faz_reset();
-	file_put_contents( $db_path, str_repeat( 'x', 2048 ) . $marker );
+	faz_write_db( $db_path, str_repeat( 'x', 2048 ) . $marker );
 	Geolocation::reset_runtime_cache();
 	$GLOBALS['__faz_options']['faz_settings'] = array(
 		'geolocation' => array( 'maxmind_license_key' => 'chiave' ),
@@ -190,10 +211,28 @@ namespace {
 	faz_is( is_array( $probe ) && isset( $probe['fingerprint'] ), true, "l'esito della sonda viene memorizzato con un fingerprint" );
 	$first = $probe['fingerprint'];
 
-	// Lo stesso file deve dare lo stesso fingerprint...
+	// Lo stesso file deve dare lo stesso fingerprint, e il risultato memorizzato
+	// deve essere RIUSATO invece di risondare.
+	//
+	// Confrontare solo il fingerprint non lo dimostrava: una sonda nuova
+	// riscrive lo stesso fingerprint, quindi l'asserzione restava verde anche
+	// se il riuso sparisse. L'unico modo di distinguere le due cose è rendere
+	// il valore memorizzato DIVERSO da quello che una sonda produrrebbe: qui
+	// il database non risolve nulla, quindi una sonda dà sempre false. Se la
+	// chiamata restituisce true, quel true può venire solo dall'opzione.
+	$probe['working'] = true;
+	update_option( 'faz_geo_source_probe', $probe, false );
 	Geolocation::reset_runtime_cache();
-	Geolocation::source_status();
-	faz_is( get_option( 'faz_geo_source_probe' )['fingerprint'], $first, 'file invariato -> stesso fingerprint, nessuna nuova sonda' );
+	$reused = Geolocation::source_status();
+	faz_is( $reused['working'], true, 'file invariato -> il verdetto memorizzato viene riusato, nessuna nuova sonda' );
+	faz_is( $reused['reason'], 'probe_ok', 'il motivo segue il verdetto riusato' );
+	faz_is( get_option( 'faz_geo_source_probe' )['fingerprint'], $first, 'file invariato -> stesso fingerprint' );
+
+	// $force salta il riuso: la sonda rigira e il database rotto torna false.
+	// Senza questo caso il parametro non era coperto da nulla.
+	$forced = Geolocation::source_status( true );
+	faz_is( $forced['working'], false, 'force -> risonda il database non funzionante, il true memorizzato non vale' );
+	faz_is( $forced['reason'], 'probe_failed', 'force -> la causa torna alla sonda fallita' );
 
 	// ...e un file diverso uno nuovo, così una sostituzione del database non
 	// lascia in piedi un verdetto vecchio.
@@ -207,7 +246,7 @@ namespace {
 	// servirebbe un file di dimensione identica e stesso mtime al secondo. La
 	// seconda difesa è quella verificabile e la più robusta: extract_mmdb()
 	// cancella l'opzione della sonda dopo un download riuscito.
-	file_put_contents( $db_path, str_repeat( 'y', 4096 ) . $marker );
+	faz_write_db( $db_path, str_repeat( 'y', 4096 ) . $marker );
 	Geolocation::reset_runtime_cache();
 	Geolocation::source_status();
 	faz_is( get_option( 'faz_geo_source_probe' )['fingerprint'] !== $first, true, 'database sostituito -> fingerprint diverso, il verdetto vecchio non sopravvive' );

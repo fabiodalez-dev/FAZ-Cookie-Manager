@@ -1191,12 +1191,11 @@ class Frontend {
 	 * @return bool
 	 */
 	private function is_cache_compatibility_enabled() {
-		$settings = $this->get_faz_settings();
-		// A shared full-page cache cannot safely serve jurisdiction-specific law,
-		// defaults and mandatory controls. Runtime compliance therefore wins over
-		// this optimisation; the filter can still disable geo runtime entirely.
-		$geo_enabled = class_exists( Geo_Runtime::class ) && Geo_Runtime::is_enabled();
-		return ! $geo_enabled && ! empty( $settings['banner_control']['cache_compatibility'] );
+		// One predicate, shared with Amp_Consent, Banner_Rest,
+		// Translation_Compat and faz_current_language(). See
+		// FazCookie\Includes\Cache_Compatibility for why the three states
+		// matter and what the five copies used to disagree about.
+		return \FazCookie\Includes\Cache_Compatibility::is_active( $this->get_faz_settings() );
 	}
 
 	/**
@@ -1337,7 +1336,11 @@ class Frontend {
 
 		if ( null !== $runtime_ruleset ) {
 			$this->banner->set_settings(
-				Geo_Runtime::apply_ui_requirements( $runtime_ruleset, $this->banner->get_settings() )
+				Geo_Runtime::apply_ui_requirements(
+					$runtime_ruleset,
+					$this->banner->get_settings(),
+					\FazCookie\Includes\Withdrawal_Path::satisfies_revisit_requirement( $this->get_faz_settings() )
+				)
 			);
 		}
 

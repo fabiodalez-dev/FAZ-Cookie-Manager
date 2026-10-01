@@ -144,11 +144,19 @@ class Geo_Runtime {
 	 * The overlay only enables controls or equalises accept/reject presentation;
 	 * it never weakens a publisher's stricter choices.
 	 *
-	 * @param array|null $ruleset   Resolved ruleset, or null.
-	 * @param array      $properties Banner settings.
+	 * @param array|null $ruleset              Resolved ruleset, or null.
+	 * @param array      $properties           Banner settings.
+	 * @param bool       $withdrawal_satisfied Whether a verified withdrawal route
+	 *                                         other than the floating widget is
+	 *                                         in place. Passed in rather than
+	 *                                         read here so this method stays a
+	 *                                         pure function of its arguments, as
+	 *                                         the class contract promises, and so
+	 *                                         the caller decides when to pay for
+	 *                                         the option read.
 	 * @return array Modified settings.
 	 */
-	public static function apply_ui_requirements( $ruleset, $properties ) {
+	public static function apply_ui_requirements( $ruleset, $properties, $withdrawal_satisfied = false ) {
 		if ( null === $ruleset || ! is_array( $properties ) ) {
 			return $properties;
 		}
@@ -176,7 +184,19 @@ class Geo_Runtime {
 			$properties['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] = true;
 			$properties['config']['optoutPopup']['status'] = true;
 		}
-		if ( ! empty( $ui['revisit_widget_required'] ) ) {
+		// What this rule actually requires is a standing way to reopen choices
+		// and withdraw — not this specific widget. Forcing the widget on is how
+		// the plugin guarantees that when it is the only route it can see. Once
+		// a different route has been VERIFIED to be present (a persistent link
+		// in the site template, which the Garante's 2021 cookie guidelines
+		// contemplate explicitly), the guarantee already holds and forcing a
+		// second control on top of it only overrides a deliberate choice the
+		// administrator was entitled to make.
+		//
+		// $withdrawal_satisfied is false for every unverified, failed, stale or
+		// unreachable case, so this reads as "force it on unless something else
+		// has been proven to do the job".
+		if ( ! empty( $ui['revisit_widget_required'] ) && ! $withdrawal_satisfied ) {
 			$properties['config']['revisitConsent']['status'] = true;
 		}
 		if ( ! empty( $signals['gpc_honored'] ) || ! empty( $signals['gpc_required'] ) ) {

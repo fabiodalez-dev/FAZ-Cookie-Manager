@@ -63,4 +63,47 @@ test.describe('Geo "source not configured" notice clarity', () => {
     // The old confusing phrasing ("enable the <filter>") is gone.
     expect(text, 'no longer says "enable the" filter').not.toMatch(/enable the\s+faz_trust_cf_ipcountry_header/i);
   });
+
+  /**
+   * The notice above says the country targets "have no effect", and for a long
+   * while that was all it did: the fields stayed fully editable, so an
+   * administrator could tick regions, save successfully, and reasonably believe
+   * the site was targeting them. Explaining an effect and then offering to
+   * configure it anyway is the contradiction this asserts is gone.
+   *
+   * `inert` and not `disabled`, deliberately: FAZ.serializeForm() skips disabled
+   * fields and Settings::sanitize() substitutes the DEFAULT for any key the
+   * payload omits, so `disabled` would quietly wipe saved targeting on the next
+   * unrelated save. The class matters as much as the attribute — `inert` gives
+   * no visual cue whatsoever, so without the dimming the controls would look
+   * completely normal and silently ignore every click.
+   */
+  test('with no country source the targeting fields are inert, and still carry their dimming class', async ({ page, loginAsAdmin }) => {
+    const hasDb = wpEval('echo \\FazCookie\\Includes\\Geolocation::has_database() ? "yes" : "no";').trim();
+    test.skip(hasDb === 'yes', 'A GeoLite2 database is installed; the country-dependent fields are not inert');
+
+    await loginAsAdmin(page);
+    await page.goto('/wp-admin/admin.php?page=faz-cookie-manager-banner', { waitUntil: 'domcontentloaded' });
+    await page.click('button.faz-tab[data-tab="geo"]');
+
+    for (const heading of ['Region presets', 'Custom country list']) {
+      // Match the card HEADING, not any text in the card. A hasText filter picks
+      // the notice card instead: its own copy names the region presets and the
+      // custom country list, precisely so an administrator is told which fields
+      // were switched off.
+      const body = page
+        .locator(`#tab-geo .faz-card:has(.faz-card-header h3:text-is("${heading}"))`)
+        .locator('.faz-card-body');
+      await expect(body, `${heading}: the fields are inert`).toHaveAttribute('inert', /.*/);
+      await expect(body, `${heading}: and visibly dimmed, so the inertness is discoverable`).toHaveClass(/faz-inert-fields/);
+    }
+
+    // Priority and "default fallback" must NOT be inert: with no country at all,
+    // Controller::get_active_banner_for_country() still resolves the match-all
+    // bucket through pick_highest_priority_id(), so they keep deciding between
+    // match-all banners. Disabling them would be a plausible-looking mistake.
+    const priority = page.locator('#faz-b-geo-priority');
+    await expect(priority, 'Priority stays usable — it needs no country').toBeEditable();
+    await expect(page.locator('#faz-b-geo-default'), 'the default-fallback switch stays usable too').toBeEnabled();
+  });
 });

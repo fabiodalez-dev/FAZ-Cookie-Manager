@@ -180,6 +180,10 @@ namespace {
 	}
 	$GLOBALS['wpdb'] = new FazTest_WPDB();
 
+	// The one predicate every cache-compat consumer now shares. Required as the
+	// REAL file rather than stubbed: a double here would be a second copy of
+	// the logic whose whole point is that there is only one.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-cache-compatibility.php';
 	require_once dirname( __DIR__, 2 ) . '/admin/modules/settings/includes/class-settings.php';
 	require_once dirname( __DIR__, 2 ) . '/includes/class-i18n-helpers.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
@@ -607,6 +611,30 @@ namespace {
 	assert_eq( faz_wpml_language_in_url(), false, 'WPML parameter mode (type 3) → not URL-keyed (query strings unreliable in caches)' );
 	faz_current_language( true );
 	assert_eq( faz_current_language(), 'en', 'cache-compat ON + WPML parameter mode → language stays gated to the site default' );
+
+	// --- The gate must follow the MODE, not the saved flag ----------------
+	//
+	// Same install, same saved flag, same WPML parameter mode — only
+	// jurisdiction routing is switched on. Routing resolves per visitor, so
+	// nothing is being served from one shared cached page and there is nothing
+	// left for this gate to protect: the language must be resolved again.
+	//
+	// This is the bug the shared predicate fixes. faz_current_language() read
+	// the raw option while the render, AMP and REST seams all asked
+	// Geo_Runtime::is_enabled() first. With routing on, those three stood the
+	// mode down and this one did not, so the banner was served in the site
+	// default language for no reason the administrator could see or correct.
+	// Delete the Geo_Runtime check from Cache_Compatibility::state() and this
+	// assertion goes red while every other one here stays green.
+	\FazCookie\Frontend\Includes\Geo_Runtime::$enabled = true;
+	faz_current_language( true );
+	assert_eq( faz_current_language(), 'it', 'routing ON pauses cache-compat → WPML parameter-mode language is resolved again' );
+
+	// ...and switching routing back off restores the gate, with no second
+	// setting involved: the pause is reversible by construction.
+	\FazCookie\Frontend\Includes\Geo_Runtime::$enabled = false;
+	faz_current_language( true );
+	assert_eq( faz_current_language(), 'en', 'routing OFF resumes cache-compat → the gate is back, the saved flag never changed' );
 
 	$GLOBALS['faz_test_filters'] = array();
 

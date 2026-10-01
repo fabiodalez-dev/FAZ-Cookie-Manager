@@ -2601,6 +2601,24 @@
         ],
         "cookies": []
     },
+    "emailoctopus": {
+        "label": "EmailOctopus",
+        "category": "marketing",
+        "patterns": [
+            "emailoctopus.com",
+            "eocampaign1.com",
+            "eomail1.com",
+            "eomail2.com",
+            "eomail3.com",
+            "eomail4.com",
+            "eomail5.com",
+            "eomail6.com",
+            "eomail7.com",
+            "eomail8.com",
+            "eomail9.com"
+        ],
+        "cookies": []
+    },
     "campaign-monitor": {
         "label": "Campaign Monitor",
         "category": "marketing",
@@ -2664,6 +2682,15 @@
         "patterns": [
             "widget.reviews.io",
             "assets.reviews.io"
+        ],
+        "cookies": []
+    },
+    "trustindex": {
+        "label": "Trustindex",
+        "category": "functional",
+        "patterns": [
+            "cdn.trustindex.io",
+            "trustindex.io"
         ],
         "cookies": []
     },

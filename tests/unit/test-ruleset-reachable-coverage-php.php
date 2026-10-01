@@ -99,7 +99,12 @@ namespace {
 		'IE' => 'gdpr-ireland',
 		'DE' => 'gdpr-germany',
 		'GB' => 'gdpr-ireland',
-		'US' => 'ccpa-california',
+		// US maps to a FEDERAL set, never to California. Pointing the country
+		// index straight at 'ccpa-california' made the sub-national assertion
+		// below vacuous: California was reachable through the country map, so
+		// the test stayed green even with the us_regions branch deleted. The
+		// only path that can reach it now is load_us_regions().
+		'US' => 'us-federal-baseline',
 		'JP' => 'appi-japan',
 		'CA' => 'pipeda-canada',
 	);
@@ -117,6 +122,7 @@ namespace {
 		'fallback-gdpr-most-protective' => $req,
 		'gdpr-ireland'                  => $req,
 		'gdpr-germany'                  => $req,
+		'us-federal-baseline'           => $req,
 		'ccpa-california'               => $req,
 		'appi-japan'                    => $req,
 		'law25-quebec'                  => $req,
@@ -186,7 +192,11 @@ namespace {
 
 	$us     = array( 'geolocation' => array( 'default_behavior' => 'no_banner', 'target_regions' => array( 'us' ) ) );
 	$us_ids = $loader->reachable_ruleset_ids( 'routing', $us );
-	faz_is( in_array( 'ccpa-california', $us_ids, true ), true, 'target us -> la California è raggiungibile' );
+	faz_is( in_array( 'us-federal-baseline', $us_ids, true ), true, 'target us -> il set federale statunitense è raggiungibile' );
+	// CONTROLLO CHIAVE: questo id NON è nel country index, solo in us_regions.
+	// Diventa rosso se reachable_ruleset_ids() smette di leggere i regimi
+	// subnazionali statunitensi.
+	faz_is( in_array( 'ccpa-california', $us_ids, true ), true, 'target us -> la California entra solo attraverso us_regions' );
 	faz_is( in_array( 'law25-quebec', $us_ids, true ), false, 'target us -> il Quebec no' );
 
 	echo "\n\033[1mrequirement_coverage() rispetta l'insieme ricevuto\033[0m\n";
