@@ -11,8 +11,52 @@
 namespace FazCookie\Includes {
 	class Store {}
 	class Geolocation {
+		/**
+		 * Stands in for a usable local GeoLite2 database.
+		 *
+		 * @var bool
+		 */
+		public static $has_database = false;
+
 		public static function get_visitor_country() {
 			return 'US';
+		}
+
+		/**
+		 * Mirror of the real predicate, which moved out of Frontend in 1.34.0.
+		 *
+		 * The shape matters as much as the answer: these cases turn mod_geoip,
+		 * the PHP extension and the trust filters on and off one at a time, and
+		 * a double that returned a fixed value would quietly pass them all.
+		 */
+		public static function has_country_source() {
+			$has_source = false;
+			if ( \apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
+				$has_source = true;
+			}
+			if ( ! $has_source && \apply_filters( 'faz_trust_geoip_country_code', false ) ) {
+				$has_source = true;
+			}
+			if ( ! $has_source && self::mod_geoip_configured() ) {
+				$has_source = true;
+			}
+			if ( ! $has_source && \function_exists( 'geoip_country_code_by_name' ) ) {
+				$has_source = true;
+			}
+			if ( ! $has_source ) {
+				$has_source = (bool) self::$has_database;
+			}
+			return (bool) \apply_filters( 'faz_has_country_signal_source', $has_source );
+		}
+
+		public static function mod_geoip_configured() {
+			if ( \function_exists( 'apache_get_modules' ) ) {
+				$modules = \apache_get_modules();
+				if ( \is_array( $modules ) && \in_array( 'mod_geoip', $modules, true ) ) {
+					return true;
+				}
+			}
+			return ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] );
 		}
 	}
 	class Known_Providers {}

@@ -454,6 +454,52 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-label"><?php esc_html_e( 'Apply jurisdiction rules by visitor location', 'faz-cookie-manager' ); ?></span>
 				</label>
 				<div class="faz-help"><?php esc_html_e( 'Recommended and enabled by default. Detect each visitor\'s location to enforce the matching jurisdiction rules and mandatory controls, and optionally limit banner display to selected regions. Turning this off means the law saved on the active banner applies to every visitor; for example, a CCPA banner will no longer gain GDPR blocking for an EEA visitor. Location requires a MaxMind GeoLite2 database (configured below), or a trusted country signal such as Cloudflare CF-IPCountry.', 'faz-cookie-manager' ); ?></div>
+				<?php
+				// State of the feature, server-rendered, directly under the switch
+				// that turns it on. Everything this screen says about routing by
+				// country is true only when a country can actually be resolved;
+				// on an install where it cannot, one fallback rule set is applied
+				// to everyone and the routing options below do nothing. That was
+				// never stated anywhere the switch is, so an admin could enable
+				// "routing", see locked controls elsewhere citing jurisdictions,
+				// and never learn no routing was happening.
+				$faz_geo_state = class_exists( '\FazCookie\Frontend\Includes\Geo_Runtime' )
+					&& method_exists( '\FazCookie\Frontend\Includes\Geo_Runtime', 'current_state' )
+					? \FazCookie\Frontend\Includes\Geo_Runtime::current_state()
+					: array( 'mode' => 'off' );
+				$faz_geo_mode = isset( $faz_geo_state['mode'] ) ? (string) $faz_geo_state['mode'] : 'off';
+				if ( 'off' !== $faz_geo_mode ) :
+					$faz_geo_tone = ( 'routing' === $faz_geo_mode ) ? '#059669' : '#f59e0b';
+					?>
+					<div class="faz-help" role="status" style="margin-top:10px;padding:10px 12px;border-left:3px solid <?php echo esc_attr( $faz_geo_tone ); ?>;background:var(--faz-bg-secondary);border-radius:6px;">
+						<strong style="display:block;margin-bottom:.25rem;">
+							<?php
+							switch ( $faz_geo_mode ) {
+								case 'routing':
+									esc_html_e( 'Routing by country is active.', 'faz-cookie-manager' );
+									break;
+								case 'degraded':
+									esc_html_e( 'Routing by country is NOT active — the geo source is configured but not working.', 'faz-cookie-manager' );
+									break;
+								default:
+									esc_html_e( 'Routing by country is NOT active — no country source on this install.', 'faz-cookie-manager' );
+							}
+							?>
+						</strong>
+						<?php
+						switch ( $faz_geo_mode ) {
+							case 'routing':
+								esc_html_e( 'Each visitor receives the rule set for their own jurisdiction, and the targeting options below apply.', 'faz-cookie-manager' );
+								break;
+							case 'degraded':
+								esc_html_e( 'A MaxMind licence key is saved but no usable GeoLite2 database was found, so no visitor country can be resolved. Until it is repaired, every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Download the database again in the MaxMind section further down.', 'faz-cookie-manager' );
+								break;
+							default:
+								esc_html_e( 'Nothing here can resolve a visitor country, so every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Your banner is still protected — it is protected the same way for everyone. To route by country, add a MaxMind GeoLite2 licence key below and download the database, or have a developer enable a trusted country header.', 'faz-cookie-manager' );
+						}
+						?>
+					</div>
+				<?php endif; ?>
 			</div>
 			<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
 				<label class="faz-toggle">

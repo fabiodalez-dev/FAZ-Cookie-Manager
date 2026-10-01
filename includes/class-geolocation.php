@@ -537,6 +537,215 @@ class Geolocation {
 	}
 
 	/**
+	 * Whether this install has any source that could resolve a visitor country.
+	 *
+	 * Configuration, not resolution: it answers "could a lookup happen here",
+	 * never "did it succeed for this visitor". Cheap enough for the front end —
+	 * the only I/O is get_database_path(), which memoises per request.
+	 *
+	 * This used to live in Frontend as a private method while the admin asked a
+	 * different question a few files away (`! empty( maxmind_license_key ) ||
+	 * has_database()`). Two answers to one question is how a site ends up being
+	 * told geo-routing is configured while the resolver returns '' for every
+	 * visitor, so there is one predicate now and both callers use it.
+	 *
+	 * @since 1.34.0
+	 * @return bool
+	 */
+	public static function has_country_source() {
+		$has_source = false;
+
+		// The trust filters alone, NOT the headers being present on this
+		// request: a cache warmer reaching the origin directly carries neither,
+		// and answering "no source" for it would cache a page rendered for an
+		// unknown country and then serve it to a real visitor whose country the
+		// edge did identify.
+		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
+			$has_source = true;
+		}
+		if ( ! $has_source && apply_filters( 'faz_trust_geoip_country_code', false ) ) {
+			$has_source = true;
+		}
+		if ( ! $has_source && self::mod_geoip_configured() ) {
+			$has_source = true;
+		}
+		if ( ! $has_source && function_exists( 'geoip_country_code_by_name' ) ) {
+			$has_source = true;
+		}
+		// get_database_path() returns '' unless a GeoLite2 MMDB exists, is
+		// readable AND passes its format check, so a non-empty path is the same
+		// question as "can this install do a local lookup".
+		if ( ! $has_source ) {
+			try {
+				$has_source = ( '' !== (string) self::get_database_path() );
+			} catch ( \Throwable $e ) {
+				$has_source = false;
+			}
+		}
+
+		/**
+		 * Override the country-source detection.
+		 *
+		 * A publisher whose edge injects a country by another means can force
+		 * this true; one who knows their stack can never resolve a country can
+		 * force it false and keep their page cache.
+		 *
+		 * @since 1.30.0
+		 * @param bool $has_source Whether a country source was detected.
+		 */
+		return (bool) apply_filters( 'faz_has_country_signal_source', $has_source );
+	}
+
+	/**
+	 * Whether Apache mod_geoip looks configured on this install.
+	 *
+	 * @since 1.34.0
+	 * @return bool
+	 */
+	public static function mod_geoip_configured() {
+		if ( function_exists( 'apache_get_modules' ) ) {
+			$modules = apache_get_modules();
+			if ( is_array( $modules ) && in_array( 'mod_geoip', $modules, true ) ) {
+				return true;
+			}
+		}
+		return ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- presence test only.
+	}
+
+	/**
+	 * Describe the country source: which one, configured, and actually working.
+	 *
+	 * `configured` and `working` are deliberately separate. A saved MaxMind
+	 * licence key means someone intended country resolution; it does not mean a
+	 * database was ever downloaded, nor that the file survived. The admin used
+	 * to treat the key alone as proof and told sites with no database at all
+	 * that their geo source was configured.
+	 *
+	 * The probe performs a real lookup and is NEVER run from a front-end
+	 * request: the result is cached in a non-autoloaded option against a
+	 * fingerprint of the database file, so it is recomputed when the file
+	 * changes and otherwise read once per admin page.
+	 *
+	 * @since 1.34.0
+	 * @param bool $force Recompute even when a fresh cached result exists.
+	 * @return array{source:string,configured:bool,working:bool,reason:string}
+	 */
+	public static function source_status( $force = false ) {
+		$declared = apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			? 'cloudflare'
+			: ( apply_filters( 'faz_trust_geoip_country_code', false ) ? 'mod_geoip' : '' );
+		if ( '' !== $declared ) {
+			// A trust filter is a developer asserting the edge supplies the
+			// country. There is nothing here to probe — the header arrives on
+			// visitor requests, not on this one.
+			return array(
+				'source'     => $declared,
+				'configured' => true,
+				'working'    => true,
+				'reason'     => 'declared_by_filter',
+			);
+		}
+		if ( self::mod_geoip_configured() ) {
+			return array(
+				'source'     => 'mod_geoip',
+				'configured' => true,
+				'working'    => true,
+				'reason'     => 'module_present',
+			);
+		}
+		if ( function_exists( 'geoip_country_code_by_name' ) ) {
+			return array(
+				'source'     => 'php_geoip',
+				'configured' => true,
+				'working'    => true,
+				'reason'     => 'extension_loaded',
+			);
+		}
+
+		$path = '';
+		try {
+			$path = (string) self::get_database_path();
+		} catch ( \Throwable $e ) {
+			$path = '';
+		}
+		$settings = get_option( 'faz_settings', array() );
+		$has_key  = is_array( $settings ) && ! empty( $settings['geolocation']['maxmind_license_key'] );
+
+		if ( '' === $path ) {
+			return array(
+				'source'     => $has_key ? 'mmdb' : 'none',
+				'configured' => (bool) $has_key,
+				'working'    => false,
+				// The distinction the admin needs: a key with no database is a
+				// download that never happened or a file that was removed, not
+				// an unconfigured site.
+				'reason'     => $has_key ? 'key_without_database' : 'no_source',
+			);
+		}
+
+		$fingerprint = self::database_fingerprint( $path );
+		$cached      = get_option( 'faz_geo_source_probe', array() );
+		if (
+			! $force
+			&& is_array( $cached )
+			&& isset( $cached['fingerprint'], $cached['working'] )
+			&& $cached['fingerprint'] === $fingerprint
+		) {
+			return array(
+				'source'     => 'mmdb',
+				'configured' => true,
+				'working'    => (bool) $cached['working'],
+				'reason'     => (bool) $cached['working'] ? 'probe_ok' : 'probe_failed',
+			);
+		}
+
+		// Two fixed public addresses, and the assertion is only that SOME valid
+		// country comes back — never a specific one. Allocations move between
+		// countries, so asserting "8.8.8.8 is US" would turn a correct database
+		// into a reported failure the day that changes.
+		$working = false;
+		foreach ( array( '8.8.8.8', '1.1.1.1' ) as $probe_ip ) {
+			$code = self::lookup_mmdb( $probe_ip );
+			if ( is_string( $code ) && self::is_valid_country_code( $code ) && 'XX' !== $code ) {
+				$working = true;
+				break;
+			}
+		}
+		update_option(
+			'faz_geo_source_probe',
+			array(
+				'fingerprint' => $fingerprint,
+				'working'     => $working,
+				'checked_at'  => time(),
+			),
+			false
+		);
+
+		return array(
+			'source'     => 'mmdb',
+			'configured' => true,
+			'working'    => $working,
+			'reason'     => $working ? 'probe_ok' : 'probe_failed',
+		);
+	}
+
+	/**
+	 * Identity of the database file, so a changed file invalidates the probe.
+	 *
+	 * @since 1.34.0
+	 * @param string $path Absolute path to the MMDB file.
+	 * @return string
+	 */
+	private static function database_fingerprint( $path ) {
+		if ( '' === $path || ! @file_exists( $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
+			return '';
+		}
+		$size  = @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+		$mtime = @filemtime( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+		return md5( $path . '|' . (string) $size . '|' . (string) $mtime );
+	}
+
+	/**
 	 * Get the data directory for geolocation files.
 	 *
 	 * @return string Directory path with trailing slash.

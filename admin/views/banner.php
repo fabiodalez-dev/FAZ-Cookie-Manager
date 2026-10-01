@@ -34,12 +34,36 @@ $faz_geo_on = class_exists( '\FazCookie\Frontend\Includes\Geo_Runtime' )
 	&& \FazCookie\Frontend\Includes\Geo_Runtime::is_enabled();
 
 /**
+ * Which georouting state this install is in, so the copy below can describe
+ * what the runtime DOES rather than what the feature is called.
+ *
+ * On an install with no country source the runtime applies exactly one rule set
+ * — the most-protective fallback — to every visitor. The screens used to call
+ * that "jurisdiction routing" and count the requirement against all 47 rule
+ * sets, so an admin was told 47 jurisdictions demanded a control that one
+ * fallback demanded. The lock was real; only the reason given for it was not.
+ */
+$faz_geo_state = class_exists( '\FazCookie\Frontend\Includes\Geo_Runtime' )
+	&& method_exists( '\FazCookie\Frontend\Includes\Geo_Runtime', 'current_state' )
+	? \FazCookie\Frontend\Includes\Geo_Runtime::current_state()
+	: array(
+		'mode'       => $faz_geo_on ? 'baseline' : 'off',
+		'configured' => false,
+		'working'    => false,
+		'source'     => 'none',
+		'reason'     => '',
+	);
+$faz_geo_mode     = isset( $faz_geo_state['mode'] ) ? (string) $faz_geo_state['mode'] : 'off';
+$faz_geo_routing  = ( 'routing' === $faz_geo_mode );
+$faz_geo_baseline = ( 'baseline' === $faz_geo_mode || 'degraded' === $faz_geo_mode );
+
+/**
  * Resolve how much of the catalogue asserts a requirement.
  *
  * @param string|array $paths Dotted rule-set path(s); truthy in ANY counts.
  * @return array{all:bool,some:bool,required:int,total:int}
  */
-$faz_requirement = function ( $paths ) use ( $faz_geo_on ) {
+$faz_requirement = function ( $paths ) use ( $faz_geo_on, $faz_geo_mode ) {
 	$none = array(
 		'all'      => false,
 		'some'     => false,
@@ -49,8 +73,11 @@ $faz_requirement = function ( $paths ) use ( $faz_geo_on ) {
 	if ( ! $faz_geo_on || ! class_exists( '\FazCookie\Admin\Modules\Geo_Routing\Includes\Ruleset_Loader' ) ) {
 		return $none;
 	}
-	$coverage = \FazCookie\Admin\Modules\Geo_Routing\Includes\Ruleset_Loader::get_instance()
-		->requirement_coverage( $paths );
+	$faz_loader   = \FazCookie\Admin\Modules\Geo_Routing\Includes\Ruleset_Loader::get_instance();
+	$faz_reachable = method_exists( $faz_loader, 'reachable_ruleset_ids' )
+		? $faz_loader->reachable_ruleset_ids( $faz_geo_mode, get_option( 'faz_settings', array() ) )
+		: null;
+	$coverage = $faz_loader->requirement_coverage( $paths, $faz_reachable );
 	if ( empty( $coverage['total'] ) ) {
 		return $none;
 	}
@@ -689,7 +716,7 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 						<span><?php esc_html_e( 'Show Accept Button', 'faz-cookie-manager' ); ?></span>
 					</label>
 					<?php if ( $faz_buttons_locked ) : ?>
-						<p class="faz-help" id="faz-b-accept-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Equal prominence works both ways: the runtime keeps Accept and Reject on together, so neither can be hidden while the other stays. Their wording and colours are still yours.', 'faz-cookie-manager' ); ?></p>
+						<p class="faz-help" id="faz-b-accept-locked"><?php echo esc_html( $faz_geo_baseline ? __( 'Locked on. Every visitor is served the most-protective fallback rule set, because nothing on this site can resolve their country. Equal prominence works both ways: the runtime keeps Accept and Reject on together, so neither can be hidden while the other stays. Their wording and colours are still yours.', 'faz-cookie-manager' ) : __( 'Locked on while jurisdiction routing is active. Equal prominence works both ways: the runtime keeps Accept and Reject on together, so neither can be hidden while the other stays. Their wording and colours are still yours.', 'faz-cookie-manager' ) ); ?></p>
 					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
@@ -699,7 +726,7 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 						<span><?php esc_html_e( 'Show Reject Button', 'faz-cookie-manager' ); ?></span>
 					</label>
 					<?php if ( $faz_buttons_locked ) : ?>
-						<p class="faz-help" id="faz-b-reject-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Rule sets for the EU, UK, Switzerland and most other opt-in regimes require Reject to sit beside Accept with equal prominence, so the runtime keeps it visible for those visitors whatever this switch says. Styling both buttons more quietly is fine; hiding the refusal is not.', 'faz-cookie-manager' ); ?></p>
+						<p class="faz-help" id="faz-b-reject-locked"><?php echo esc_html( $faz_geo_baseline ? __( 'Locked on. Every visitor is served the most-protective fallback rule set, because nothing on this site can resolve their country, and it requires Reject to sit beside Accept with equal prominence. Styling both buttons more quietly is fine; hiding the refusal is not.', 'faz-cookie-manager' ) : __( 'Locked on while jurisdiction routing is active. Rule sets for the EU, UK, Switzerland and most other opt-in regimes require Reject to sit beside Accept with equal prominence, so the runtime keeps it visible for those visitors whatever this switch says. Styling both buttons more quietly is fine; hiding the refusal is not.', 'faz-cookie-manager' ) ); ?></p>
 					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
@@ -885,7 +912,7 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 						<span><?php esc_html_e( 'Show revisit consent widget', 'faz-cookie-manager' ); ?></span>
 					</label>
 					<?php if ( $faz_revisit_req['all'] ) : ?>
-						<p class="faz-help" id="faz-b-revisit-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Every shipped rule set requires a standing way to reopen and withdraw consent, so the runtime keeps this widget visible whatever this switch says — withdrawing has to stay as easy as giving. Its position, colours and icon below remain yours to change.', 'faz-cookie-manager' ); ?></p>
+						<p class="faz-help" id="faz-b-revisit-locked"><?php echo esc_html( $faz_geo_baseline ? __( 'Locked on. Every visitor is served the most-protective fallback rule set, because nothing on this site can resolve their country, and it requires a standing way to reopen and withdraw consent — withdrawing has to stay as easy as giving. The runtime keeps this widget visible whatever this switch says. Its position, colours and icon below remain yours to change.', 'faz-cookie-manager' ) : __( 'Locked on while jurisdiction routing is active. Every rule set that can reach a visitor here requires a standing way to reopen and withdraw consent, so the runtime keeps this widget visible whatever this switch says — withdrawing has to stay as easy as giving. Its position, colours and icon below remain yours to change.', 'faz-cookie-manager' ) ); ?></p>
 					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
@@ -967,15 +994,29 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 		// downloads + auto-updates the DB). The option key is maxmind_license_key
 		// — the value written by Settings → Geolocation (class-settings.php) — not
 		// maxmind_key, which the prior code checked and which is never set.
-		$faz_has_maxmind  = ! empty( $faz_geo_settings['geolocation']['maxmind_license_key'] )
-			|| \FazCookie\Includes\Geolocation::has_database();
-		$faz_has_cf       = (bool) apply_filters( 'faz_trust_cf_ipcountry_header', false );
+		//
+		// 1.34.0: this used to count a saved licence key as proof, so a site that
+		// had entered a key but never completed the download — or whose database
+		// was deleted afterwards — was told its geo source was configured while
+		// the resolver returned '' for every visitor. The key records an
+		// intention; only a working lookup records a capability. $faz_geo_state
+		// separates the two, and the notice now fires for both "never set up"
+		// and "set up but not working", with different wording.
+		$faz_has_cf      = (bool) apply_filters( 'faz_trust_cf_ipcountry_header', false );
+		$faz_geo_degraded = ( 'degraded' === $faz_geo_mode );
+		$faz_has_maxmind  = ! empty( $faz_geo_state['working'] );
 		if ( ! $faz_has_maxmind && ! $faz_has_cf ) :
 			?>
 			<div class="faz-card" style="border-left:3px solid #f59e0b;background:#fffbeb;">
 				<div class="faz-card-body" style="color:#78350f;">
 					<strong style="display:block;margin-bottom:.35rem;">
-						<span aria-hidden="true" style="margin-right:.3rem;">&#9888;</span><?php esc_html_e( 'Geo source not configured', 'faz-cookie-manager' ); ?>
+						<span aria-hidden="true" style="margin-right:.3rem;">&#9888;</span><?php
+						echo esc_html(
+							$faz_geo_degraded
+								? __( 'Geo source configured but not working', 'faz-cookie-manager' )
+								: __( 'Geo source not configured', 'faz-cookie-manager' )
+						);
+						?>
 					</strong>
 					<?php
 					echo wp_kses(

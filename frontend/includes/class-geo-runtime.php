@@ -28,6 +28,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Geo_Runtime {
 
 	/**
+	 * The four georouting states. See mode().
+	 *
+	 * @since 1.34.0
+	 */
+	const MODE_OFF      = 'off';
+	const MODE_BASELINE = 'baseline';
+	const MODE_ROUTING  = 'routing';
+	const MODE_DEGRADED = 'degraded';
+
+	/**
 	 * Per-request memo of resolved rulesets, keyed by the country used to
 	 * resolve them. `false` as a value means "resolved to none" (so we never
 	 * re-resolve), distinct from an absent key ("not yet resolved").
@@ -55,6 +65,75 @@ class Geo_Runtime {
 		 * @param array $settings Complete FAZ settings option.
 		 */
 		return (bool) apply_filters( 'faz_geo_ruleset_runtime', $enabled, $settings );
+	}
+
+	/**
+	 * Which of the four georouting states this install is actually in.
+	 *
+	 * The switch governs two different jobs — applying a jurisdiction's rules
+	 * (which always works, because an unresolved country falls back to
+	 * `fallback-gdpr-most-protective`) and routing by country (which needs a
+	 * country source). Every screen described the second, including on installs
+	 * that only ever do the first, so admins were told routing was active while
+	 * a single ruleset was being applied to everyone.
+	 *
+	 * Derived, never stored: no new option, no default to migrate, and no way
+	 * for a saved value to drift away from what the runtime does.
+	 *
+	 * - OFF      the switch is off, or an integrator's filter turned it off.
+	 * - BASELINE on, but nothing can resolve a country: one ruleset for all.
+	 * - ROUTING  on, a source is present and proven to work.
+	 * - DEGRADED on, a source is configured but not working — a licence key
+	 *            saved with no database, or a database that was removed. This
+	 *            behaves exactly like BASELINE; it is named apart because the
+	 *            admin needs to be told to repair it, not to configure it.
+	 *
+	 * @since 1.34.0
+	 * @param bool $enabled    Result of is_enabled().
+	 * @param bool $configured A country source is configured.
+	 * @param bool $working    That source resolves countries.
+	 * @return string One of 'off', 'baseline', 'routing', 'degraded'.
+	 */
+	public static function mode( $enabled, $configured, $working ) {
+		if ( ! $enabled ) {
+			return self::MODE_OFF;
+		}
+		if ( $configured && $working ) {
+			return self::MODE_ROUTING;
+		}
+		if ( $configured ) {
+			return self::MODE_DEGRADED;
+		}
+		return self::MODE_BASELINE;
+	}
+
+	/**
+	 * Resolve the current state from this install, for admin screens.
+	 *
+	 * Runs the source probe, so it must not be called from a front-end request;
+	 * the front end keeps using the cheap existence checks it always used.
+	 *
+	 * @since 1.34.0
+	 * @return array{mode:string,source:string,configured:bool,working:bool,reason:string}
+	 */
+	public static function current_state() {
+		$enabled = self::is_enabled();
+		$status  = class_exists( '\FazCookie\Includes\Geolocation' )
+			? \FazCookie\Includes\Geolocation::source_status()
+			: array(
+				'source'     => 'none',
+				'configured' => false,
+				'working'    => false,
+				'reason'     => 'no_source',
+			);
+
+		return array(
+			'mode'       => self::mode( $enabled, ! empty( $status['configured'] ), ! empty( $status['working'] ) ),
+			'source'     => isset( $status['source'] ) ? (string) $status['source'] : 'none',
+			'configured' => ! empty( $status['configured'] ),
+			'working'    => ! empty( $status['working'] ),
+			'reason'     => isset( $status['reason'] ) ? (string) $status['reason'] : '',
+		);
 	}
 
 	/**
