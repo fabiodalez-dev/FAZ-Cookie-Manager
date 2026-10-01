@@ -157,4 +157,136 @@ test.describe('Compact phone layout', () => {
       expect(button.height, `"${button.label}" must stay comfortable to tap`).toBeGreaterThanOrEqual(44);
     }
   });
+
+  /**
+   * The fourth control in this wrapper, and the only one with no `order` of its
+   * own: the Do-Not-Sell button. On a single row that is not cosmetic. At
+   * order:0 it sorts ahead of Accept, and with the pair holding a 40% basis
+   * each under 360px there is almost nothing left for it to grow into — it
+   * collapses to a few pixels while the inherited `white-space:nowrap` pushes
+   * its label across Accept.
+   *
+   * This is not a hand-built configuration. Geo_Runtime turns donotSell on for
+   * a US visitor even when applicableLaw stays 'gdpr', and class-template.php
+   * keeps the button precisely because its status is true — so after geo
+   * routing lands this is the ordinary rendering for part of the audience, and
+   * the one row where a US visitor's opt-out lives.
+   */
+  test('the Do-Not-Sell button takes a row of its own instead of collapsing beside the pair', async ({ page }) => {
+    const saved = wpEval(
+      `global $wpdb;$t=$wpdb->prefix.'faz_banners';` +
+        `echo base64_encode((string)$wpdb->get_var("SELECT settings FROM $t WHERE banner_default=1 LIMIT 1"));`,
+    ).trim().split('\n').pop() || '';
+
+    try {
+      // The supported combined mode: GDPR law, Do-Not-Sell on.
+      wpEval(
+        `global $wpdb;$t=$wpdb->prefix.'faz_banners';` +
+          `$row=$wpdb->get_row("SELECT banner_id, settings FROM $t WHERE banner_default=1 LIMIT 1");` +
+          `$s=json_decode($row->settings,true);` +
+          `$s['settings']['applicableLaw']='gdpr';` +
+          `$s['config']['notice']['elements']['buttons']['elements']['donotSell']['status']=true;` +
+          `$s['config']['notice']['elements']['buttons']['elements']['donotSell']['tag']='donotsell-button';` +
+          `$wpdb->update($t,array('settings'=>wp_json_encode($s)),array('banner_id'=>(int)$row->banner_id));` +
+          `\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();` +
+          `faz_clear_banner_template_cache();` +
+          // The assembled stylesheet is cached separately from the template, in
+          // a transient keyed on the plugin version, the layout and a hash of
+          // the TEMPLATE css — the compact rules are appended after that hash is
+          // taken. So editing them without bumping the pipeline revision leaves
+          // a stale stylesheet that this test would then measure, reporting an
+          // overflow or a collapse that the current code does not produce. Drop
+          // it here so a red means the CSS is wrong, not that it is old.
+          `global $wpdb;$wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '%faz_boosted_css%'");` +
+          `echo 'dns-on';`,
+      );
+
+      await setLayout('compact');
+      await page.context().clearCookies();
+      // 320px is the worst case: the <=360px rules are in force here.
+      await page.setViewportSize({ width: 320, height: 720 });
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('.faz-consent-container .faz-notice-btn-wrapper [data-faz-tag="donotsell-button"]', {
+        state: 'visible',
+        timeout: 20_000,
+      });
+
+      // Read EVERY flex child, not just `.faz-btn`: the shortcode emits the
+      // control either as a button carrying that class or as a bare <a> with no
+      // class at all, and the <a> variant is a flex item just the same.
+      const row = await page.evaluate(() => {
+        const wrapper = document.querySelector('.faz-consent-container .faz-notice-btn-wrapper');
+        if (!wrapper) return null;
+        // The CONTENT box, not the border box: the wrapper carries 24px of
+        // padding each side, so a child at flex-basis:100% is 48px narrower
+        // than the wrapper's own rect. Comparing against the rect would make a
+        // correctly full-width row look short.
+        const style = getComputedStyle(wrapper);
+        const inner =
+          wrapper.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        const children = [...wrapper.children]
+          .map((el) => {
+            const r = el.getBoundingClientRect();
+            return {
+              label: (el.textContent ?? '').trim().toLowerCase(),
+              dns: el.matches('[data-faz-tag="donotsell-button"]'),
+              width: Math.round(r.width),
+              height: Math.round(r.height),
+              top: Math.round(r.top),
+              right: Math.round(r.right),
+              left: Math.round(r.left),
+              overflowing: el.scrollWidth > el.clientWidth + 1,
+            };
+          })
+          .filter((c) => c.height > 0);
+        return { inner: Math.round(inner), children };
+      });
+
+      expect(row, 'the notice must render its button wrapper').not.toBeNull();
+      const dns = row!.children.find((c) => c.dns);
+      const accept = row!.children.find((c) => /accept/.test(c.label));
+      const reject = row!.children.find((c) => /reject|decline|refuse/.test(c.label));
+      expect(dns, 'the combined mode must render the Do-Not-Sell control').toBeTruthy();
+      expect(accept, 'the notice must still offer an accept button').toBeTruthy();
+      expect(reject, 'the notice must still offer a reject button').toBeTruthy();
+
+      // It must not be squeezed into the pair's row. This is the assertion that
+      // fails without the full-width rule: the control lands on the first row
+      // with a near-zero basis.
+      expect(dns!.top, 'the Do-Not-Sell control must not share the row with accept').not.toBe(accept!.top);
+      expect(dns!.top, 'the Do-Not-Sell control must not share the row with reject').not.toBe(reject!.top);
+
+      // A full row of its own, and last — behind the two options the
+      // equal-prominence rule actually compares.
+      expect(dns!.width, 'the Do-Not-Sell control must span the row').toBeGreaterThanOrEqual(row!.inner - 2);
+      expect(dns!.top, 'the Do-Not-Sell control must sit below the accept/reject pair').toBeGreaterThan(accept!.top);
+      for (const sibling of row!.children) {
+        if (sibling.dns) continue;
+        expect(dns!.top, `the Do-Not-Sell control must come after "${sibling.label}"`).toBeGreaterThanOrEqual(sibling.top);
+      }
+
+      // The collapse showed up as an overflowing nowrap label overlapping
+      // Accept, so assert both the absence of overflow and the absence of a
+      // horizontal overlap with the pair.
+      expect(dns!.overflowing, 'the Do-Not-Sell label must not overflow its box').toBe(false);
+      for (const partner of [accept!, reject!]) {
+        const overlaps = dns!.left < partner.right && partner.left < dns!.right && dns!.top === partner.top;
+        expect(overlaps, `the Do-Not-Sell control must not overlap "${partner.label}"`).toBe(false);
+      }
+    } finally {
+      // Put the banner back byte-for-byte, whatever happened above: a leaked
+      // Do-Not-Sell button changes the button count every later spec counts on.
+      if (saved) {
+        wpEval(
+          `global $wpdb;$t=$wpdb->prefix.'faz_banners';` +
+            `$row=$wpdb->get_row("SELECT banner_id FROM $t WHERE banner_default=1 LIMIT 1");` +
+            `$wpdb->update($t,array('settings'=>base64_decode('${saved}')),array('banner_id'=>(int)$row->banner_id));` +
+            `\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();` +
+            `faz_clear_banner_template_cache();` +
+            `echo 'restored';`,
+        );
+      }
+      await setLayout('comfortable');
+    }
+  });
 });

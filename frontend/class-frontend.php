@@ -6769,7 +6769,12 @@ class Frontend {
 		// the setting would keep serving the previously cached stylesheet for a
 		// day and the setting would look broken. It is a site-wide value, not a
 		// per-visitor one, so it stays safe under Cache Compatibility Mode.
-		$cache_key = 'faz_boosted_css_v3_' . FAZ_VERSION . '_' . $layout . '_' . md5( $raw_css );
+		// v4: the compact layout gained a full-width row for the Do-Not-Sell
+		// control. That rule is appended after $raw_css is hashed, so without
+		// this bump an install that had already cached v3 within this same
+		// plugin version would keep serving the stylesheet in which the control
+		// collapses — the revision is here for exactly this case.
+		$cache_key = 'faz_boosted_css_v4_' . FAZ_VERSION . '_' . $layout . '_' . md5( $raw_css );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
 			return $cached;
@@ -6914,6 +6919,38 @@ class Frontend {
 			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-accept{order:1;margin-top:0;}'
 			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-reject{order:2;}'
 			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-customize{order:3;}'
+			// The Do-Not-Sell control is a flex child of this same wrapper, and it
+			// is the one button here that carries no `order` of its own — not in
+			// the template's mobile rules either, so at order:0 it already sorts
+			// ahead of Accept. Stacked full-width that is only odd; on a single
+			// row it breaks. It would have to share the first line with the
+			// accept/reject pair, and at 360px their 40% bases leave it almost
+			// nothing to grow into: it collapses to a few pixels while the
+			// inherited `white-space:nowrap` spills its label across Accept.
+			//
+			// It is not one of the compared options — EDPB 03/2022 equal
+			// prominence governs accept against reject — so it takes a full-width
+			// row of its own, last, where it cannot compete with the pair and
+			// cannot be squeezed. This is reached in normal operation, not only
+			// by hand: Geo_Runtime turns donotSell on for a US visitor even when
+			// applicableLaw is 'gdpr', and class-template.php then keeps the
+			// button precisely because its status is true.
+			//
+			// Matched by data attribute because the two variants share nothing
+			// else: the shortcode emits either `.faz-btn.faz-btn-do-not-sell` or a
+			// bare `<a>` with no class at all.
+			//
+			// `white-space` is reset because the nowrap above is aimed at the
+			// three short labels sharing a tight row, where a wrap would make one
+			// button two lines tall and break the pair's symmetry. This control
+			// has the row to itself and the longest label of the four — "Do Not
+			// Sell or Share My Personal Information" does not fit 270px at 13px,
+			// so inheriting nowrap made it overflow its own full-width box. The
+			// label is statutory wording that cannot be shortened, so the box has
+			// to give.
+			. '#faz-consent .faz-notice-btn-wrapper [data-faz-tag="donotsell-button"]{'
+			. 'order:4;flex:1 1 100%;width:100%;white-space:normal;'
+			. '}'
 			. '}'
 			. '@media (max-width:360px){'
 			// 40% rather than calc(50% - 4px): the exact value lands on the

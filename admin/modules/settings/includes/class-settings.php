@@ -513,9 +513,13 @@ class Settings extends Store {
 				$value   = in_array( $value, $allowed, true ) ? $value : ( 'category_title_tag' === $option ? 'h3' : 'h2' );
 				break;
 			case 'mobile_layout':
-				// Whitelist, never a pass-through: this value is interpolated
-				// into a CSS class name on the banner container, so an
-				// unchecked string would be an injection point.
+				// Whitelist, never a pass-through. The value never reaches
+				// markup — it selects which stylesheet compact_mobile_css()
+				// returns and forms part of the banner-template cache key — so
+				// the risk is not injection but an unrecognised string becoming
+				// a third layout that nothing defines. Collapsing anything
+				// unexpected to 'comfortable' keeps the stored value inside the
+				// two layouts that exist.
 				$value = is_string( $value ) ? strtolower( trim( $value ) ) : '';
 				$value = in_array( $value, array( 'comfortable', 'compact' ), true ) ? $value : 'comfortable';
 				break;
