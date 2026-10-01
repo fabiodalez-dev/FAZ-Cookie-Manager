@@ -11,14 +11,32 @@ on:
         type: string
         description: Run name
 
+# Every run is dispatched against the default branch, so a single shared group
+# would make two reviews cancel each other. The group is keyed on the run name
+# the dispatcher passes — one group per pull request under review — so a fresh
+# review of the SAME pull request supersedes a stale one, while reviews of
+# different pull requests never collide. Without a run name the key falls back
+# to the run id, which is unique, so the group degrades to "cancel nothing".
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.name || github.run_id }}
+  cancel-in-progress: true
+
+# Read-only by default: no job may write to the repository unless it says so.
 permissions:
   contents: read
 
 jobs:
   pullfrog:
+    name: Pullfrog agent
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
+      # The action mints a short-lived OIDC token to prove this run's identity
+      # to Pullfrog's own token service, which is how a Router or subscription
+      # plan authenticates without a long-lived key stored in this repository.
+      # It grants nothing on the repository itself.
+      id-token: write  # OIDC identity for Pullfrog's token service only.
+      # Read the diff under review. Deliberately NOT `write`: the agent is
+      # review-only (see `push: disabled` below) and has no commit path.
       contents: read
     steps:
       - name: Checkout code
@@ -76,14 +94,14 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          
+
           # for Amazon Bedrock (https://docs.pullfrog.com/bedrock)
           # AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
           # AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           # AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           # AWS_REGION: us-east-1
           # BEDROCK_MODEL_ID: <bedrock-model-id>
-          
+
           # for Google Vertex AI (https://docs.pullfrog.com/vertex)
           # VERTEX_SERVICE_ACCOUNT_JSON: >-
           #   ${{ secrets.VERTEX_SERVICE_ACCOUNT_JSON }}
