@@ -2577,3 +2577,37 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 .faz-category-language-field {
 	margin-bottom: 12px;
 }
+
+/* ── Inert control groups ─────────────────────────────────────────────────
+   For controls whose effect depends on a capability this install does not
+   have — chiefly the geo-targeting fields on a site with no working country
+   source, where the screen already said "the targets you set below have no
+   effect" while leaving them fully editable.
+
+   The wrapper carries the `inert` attribute, which removes the subtree from
+   focus order and from hit-testing. Deliberately NOT the `disabled`
+   attribute: FAZ.serializeForm() skips disabled fields, and
+   Settings::sanitize() walks the DEFAULTS and substitutes a default for any
+   key the payload omits — so disabling these controls would quietly reset
+   the admin's saved targeting on the next unrelated save. `inert` blocks
+   interaction while keeping the values in the payload, so the configuration
+   survives and comes back the moment a country source starts working.
+
+   The explanation and its links must live OUTSIDE the wrapper: inert applies
+   to the whole subtree, links included.
+
+   pointer-events is a fallback for browsers predating `inert` (pre-2023);
+   there, keyboard focus still reaches the fields. Scoped to form controls so
+   it can never swallow a click on explanatory text. */
+.faz-inert-fields {
+	opacity: 0.55;
+}
+.faz-inert-fields input,
+.faz-inert-fields select,
+.faz-inert-fields textarea,
+.faz-inert-fields button {
+	pointer-events: none;
+}
+.faz-inert-fields label {
+	cursor: not-allowed;
+}

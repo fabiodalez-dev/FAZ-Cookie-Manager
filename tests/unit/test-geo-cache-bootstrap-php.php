@@ -11,8 +11,62 @@
 namespace FazCookie\Includes {
 	class Store {}
 	class Geolocation {
+		/**
+		 * Stands in for a usable local GeoLite2 database.
+		 *
+		 * @var bool
+		 */
+		public static $has_database = false;
+
 		public static function get_visitor_country() {
 			return 'US';
+		}
+
+		/**
+		 * Mirror of the real predicate, which moved out of Frontend in 1.34.0.
+		 *
+		 * This IS a duplicate, and a duplicate cannot fail when the original
+		 * changes. It is deliberate: this suite drives Frontend's cache-veto
+		 * branches, and standing up the real Geolocation here would drag in the
+		 * MMDB reader, the transient layer and the uploads directory to test
+		 * something that is not what these cases are about. The real predicate
+		 * is exercised directly by test-geolocation-source-status-php.php, which
+		 * loads includes/class-geolocation.php and drives it with files on disk.
+		 * If you change has_country_source(), that file is the one that fails —
+		 * and this double should be brought back into line by hand.
+		 *
+		 * The shape matters as much as the answer: these cases turn mod_geoip,
+		 * the PHP extension and the trust filters on and off one at a time, and
+		 * a double that returned a fixed value would quietly pass them all.
+		 */
+		public static function has_country_source() {
+			$has_source = false;
+			if ( \apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
+				$has_source = true;
+			}
+			if ( ! $has_source && \apply_filters( 'faz_trust_geoip_country_code', false ) ) {
+				$has_source = true;
+			}
+			if ( ! $has_source && self::mod_geoip_configured() ) {
+				$has_source = true;
+			}
+			if ( ! $has_source && \function_exists( 'geoip_country_code_by_name' ) ) {
+				$has_source = true;
+			}
+			if ( ! $has_source ) {
+				$has_source = (bool) self::$has_database;
+			}
+			return (bool) \apply_filters( 'faz_has_country_signal_source', $has_source );
+		}
+
+		public static function mod_geoip_configured() {
+			if ( \function_exists( 'apache_get_modules' ) ) {
+				$modules = \apache_get_modules();
+				if ( \is_array( $modules ) && \in_array( 'mod_geoip', $modules, true ) ) {
+					return true;
+				}
+			}
+			return ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] );
 		}
 	}
 	class Known_Providers {}
@@ -128,6 +182,10 @@ namespace {
 		return $GLOBALS['faz_geo_bootstrap_multilingual'];
 	}
 
+	// The one predicate every cache-compat consumer now shares. Required as the
+	// REAL file rather than stubbed: a double here would be a second copy of
+	// the logic whose whole point is that there is only one.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-cache-compatibility.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 
 	use FazCookie\Admin\Modules\Banners\Includes\Controller;

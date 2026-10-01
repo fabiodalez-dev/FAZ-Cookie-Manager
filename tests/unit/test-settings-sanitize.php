@@ -295,6 +295,32 @@ namespace {
 		faz_assert_same( Settings::sanitize_option( $key, ' H4 ', 'banner_control' ), 'h4', "$key normalizes case and whitespace" );
 	}
 
+	// --- banner_control.withdrawal_path -----------------------------------
+	//
+	// This value decides whether the runtime stops forcing the revisit widget
+	// on, so the direction of its fallback is the point: anything unrecognised
+	// must land on 'widget', the route the plugin renders itself, and never on
+	// 'footer_link', which would assert that some other route exists.
+	$wp_defaults = array( 'banner_control' => array( 'withdrawal_path' => 'widget' ) );
+	faz_assert_same( Settings::sanitize_option( 'withdrawal_path', 'footer_link', 'banner_control' ), 'footer_link', 'withdrawal_path permits footer_link' );
+	faz_assert_same( Settings::sanitize_option( 'withdrawal_path', 'widget', 'banner_control' ), 'widget', 'withdrawal_path permits widget' );
+	faz_assert_same( Settings::sanitize_option( 'withdrawal_path', ' FOOTER_LINK ', 'banner_control' ), 'footer_link', 'withdrawal_path normalises case and whitespace' );
+	foreach ( array( 'link', 'footer', 'none', '', '1', null, 5, true, array( 'footer_link' ) ) as $wp_invalid ) {
+		faz_assert_same(
+			Settings::sanitize_option( 'withdrawal_path', $wp_invalid, 'banner_control' ),
+			'widget',
+			'withdrawal_path falls back to widget on ' . var_export( $wp_invalid, true )
+		);
+	}
+	// Through the whole pipeline, where an array value would otherwise recurse
+	// against a string default and be stored as an empty array.
+	$wp_out = Settings::sanitize( array( 'banner_control' => array( 'withdrawal_path' => array( 'footer_link' ) ) ), $wp_defaults );
+	faz_assert_same( $wp_out['banner_control']['withdrawal_path'], 'widget', 'withdrawal_path rejects arrays through the full settings pipeline' );
+	$wp_kept = Settings::sanitize( array( 'banner_control' => array( 'withdrawal_path' => 'footer_link' ) ), $wp_defaults );
+	faz_assert_same( $wp_kept['banner_control']['withdrawal_path'], 'footer_link', 'withdrawal_path survives a full save' );
+	$wp_absent = Settings::sanitize( array( 'banner_control' => array() ), $wp_defaults );
+	faz_assert_same( $wp_absent['banner_control']['withdrawal_path'], 'widget', 'an upgrading install with no stored value gets the widget default' );
+
 	echo "\n--\n";
 	echo "Tests:  $tests_run\n";
 	echo "Passed: $tests_passed\n";

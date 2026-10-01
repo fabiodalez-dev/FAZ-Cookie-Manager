@@ -216,7 +216,11 @@ class Banner_Rest {
 
 		if ( null !== $runtime_ruleset ) {
 			$banner->set_settings(
-				Geo_Runtime::apply_ui_requirements( $runtime_ruleset, $banner->get_settings() )
+				Geo_Runtime::apply_ui_requirements(
+					$runtime_ruleset,
+					$banner->get_settings(),
+					\FazCookie\Includes\Withdrawal_Path::satisfies_revisit_requirement( $this->get_faz_settings() )
+				)
 			);
 		}
 
@@ -355,8 +359,8 @@ class Banner_Rest {
 	 * @return bool
 	 */
 	private function is_cache_compatibility_enabled() {
-		$settings = $this->get_faz_settings();
-		return ! Geo_Runtime::is_enabled() && ! empty( $settings['banner_control']['cache_compatibility'] );
+		// Shared predicate — see FazCookie\Includes\Cache_Compatibility.
+		return \FazCookie\Includes\Cache_Compatibility::is_active( $this->get_faz_settings() );
 	}
 
 	/**

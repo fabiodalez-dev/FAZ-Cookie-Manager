@@ -547,7 +547,13 @@ class Onboarding {
 			// banner split (Frontend::maybe_apply_ab_test skips under it). The
 			// wizard has no A/B surface, so on re-entry an admin with a running
 			// experiment would never learn why it stopped — say it.
-			if ( ! empty( $all['banner_control']['cache_compatibility'] )
+			//
+			// Only when the mode would actually be IN FORCE, though. With
+			// jurisdiction routing on it is itself paused, so the split keeps
+			// running and this warning would describe something that is not
+			// happening. Asking the shared predicate instead of the raw flag is
+			// what keeps the two statements consistent.
+			if ( \FazCookie\Includes\Cache_Compatibility::is_active( $all )
 				&& ! empty( $all['banner_control']['ab_test']['status'] ) ) {
 				$warnings[] = __( 'Cache Compatibility Mode pauses the running A/B banner test: variants are only split server-side, which this mode disables.', 'faz-cookie-manager' );
 			}

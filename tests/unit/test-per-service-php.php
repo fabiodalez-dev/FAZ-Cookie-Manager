@@ -137,6 +137,13 @@ namespace {
 	// Now load the real Frontend class. It only *defines* the Frontend class;
 	// the unrelated `use` aliases are not triggered unless a method body uses
 	// them, and we only exercise the four per-service helpers.
+	// Shared with Frontend, Amp_Consent, Banner_Rest and the language seams: the
+	// one predicate that decides whether Cache Compatibility Mode applies. The
+	// real file, not a double — a copy per suite is the thing it replaced.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-cache-compatibility.php';
+	// Asked by the jurisdiction overlay to know whether a verified withdrawal
+	// route other than the floating widget is in place.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-withdrawal-path.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 
 	use FazCookie\Frontend\Frontend;
