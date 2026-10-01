@@ -11,24 +11,73 @@ on:
         type: string
         description: Run name
 
+# Every run is dispatched against the default branch, so a single shared group
+# would make two reviews cancel each other. The group is keyed on the run name
+# the dispatcher passes — one group per pull request under review — so a fresh
+# review of the SAME pull request supersedes a stale one, while reviews of
+# different pull requests never collide. Without a run name the key falls back
+# to the run id, which is unique, so the group degrades to "cancel nothing".
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.name || github.run_id }}
+  cancel-in-progress: true
+
+# Read-only by default: no job may write to the repository unless it says so.
 permissions:
   contents: read
 
 jobs:
   pullfrog:
+    name: Pullfrog agent
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
+      # The action mints a short-lived OIDC token to prove this run's identity
+      # to Pullfrog's own token service, which is how a Router or subscription
+      # plan authenticates without a long-lived key stored in this repository.
+      # It grants nothing on the repository itself.
+      id-token: write  # OIDC identity for Pullfrog's token service only.
+      # Read the diff under review. Deliberately NOT `write`: the agent is
+      # review-only (see `push: disabled` below) and has no commit path.
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 1
+          # actions/checkout defaults to persist-credentials: true, which
+          # leaves the job's GITHUB_TOKEN in .git/config. That hands the agent
+          # a working push credential inside the very checkout it operates on,
+          # which contradicts `push: disabled` below — the token is a write
+          # path the input cannot close. Pinakes' own CI policy check refuses
+          # any checkout that persists credentials, and it was right to.
+          # Nothing here needs it: the agent reaches GitHub through the App's
+          # installation token, and these repositories are public, so an
+          # unauthenticated fetch works.
+          persist-credentials: false
       - name: Run agent
-        uses: pullfrog/pullfrog@v0
+        # Pinned to a commit SHA rather than the documented `@v0`, which is a
+        # tag that MOVES — it has already advanced through ninety v0.1.x
+        # releases. This is the one action here that runs an agent with access
+        # to the repository, so a mutable ref is the last place to accept one.
+        # Pullfrog's versioning page supports pinning and notes nothing is
+        # lost: the action fetches its steps from npm either way, so the agent
+        # still tracks patch releases without this file changing. Bump the SHA
+        # to update.
+        uses: pullfrog/pullfrog@0d318bef8c7cf7ae3f193ef32b2bc74e1d94b4d1 # v0.1.90
         with:
           prompt: ${{ inputs.prompt }}
+          # REVIEW ONLY. `push` defaults to `enabled`, which lets the agent
+          # push branches and open pull requests of its own. Every commit and
+          # pull request in this repository is authored by its maintainer, so
+          # the agent gets no write path: it reads the diff and comments. The
+          # input is declared in the action's action.yml and is not mentioned
+          # in the getting-started guide.
+          push: disabled
+          # Scrubs *_TOKEN / *_KEY / *_SECRET / *_PASSWORD / *_CREDENTIAL from
+          # the environment the agent's shell sees. Already the default for a
+          # public repository; set explicitly so that making this repository
+          # private some day cannot silently widen it — private repos default
+          # to `enabled`.
+          shell: restricted
         env:
           # add at least one provider API key
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -45,14 +94,14 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          
+
           # for Amazon Bedrock (https://docs.pullfrog.com/bedrock)
           # AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
           # AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           # AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           # AWS_REGION: us-east-1
           # BEDROCK_MODEL_ID: <bedrock-model-id>
-          
+
           # for Google Vertex AI (https://docs.pullfrog.com/vertex)
           # VERTEX_SERVICE_ACCOUNT_JSON: >-
           #   ${{ secrets.VERTEX_SERVICE_ACCOUNT_JSON }}
