@@ -22,13 +22,34 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 1
       - name: Run agent
-        uses: pullfrog/pullfrog@v0
+        # Pinned to a commit SHA rather than the documented `@v0`, which is a
+        # tag that MOVES — it has already advanced through ninety v0.1.x
+        # releases. This is the one action here that runs an agent with access
+        # to the repository, so a mutable ref is the last place to accept one.
+        # Pullfrog's versioning page supports pinning and notes nothing is
+        # lost: the action fetches its steps from npm either way, so the agent
+        # still tracks patch releases without this file changing. Bump the SHA
+        # to update.
+        uses: pullfrog/pullfrog@0d318bef8c7cf7ae3f193ef32b2bc74e1d94b4d1 # v0.1.90
         with:
           prompt: ${{ inputs.prompt }}
+          # REVIEW ONLY. `push` defaults to `enabled`, which lets the agent
+          # push branches and open pull requests of its own. Every commit and
+          # pull request in this repository is authored by its maintainer, so
+          # the agent gets no write path: it reads the diff and comments. The
+          # input is declared in the action's action.yml and is not mentioned
+          # in the getting-started guide.
+          push: disabled
+          # Scrubs *_TOKEN / *_KEY / *_SECRET / *_PASSWORD / *_CREDENTIAL from
+          # the environment the agent's shell sees. Already the default for a
+          # public repository; set explicitly so that making this repository
+          # private some day cannot silently widen it — private repos default
+          # to `enabled`.
+          shell: restricted
         env:
           # add at least one provider API key
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
