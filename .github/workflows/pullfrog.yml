@@ -25,6 +25,16 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 1
+          # actions/checkout defaults to persist-credentials: true, which
+          # leaves the job's GITHUB_TOKEN in .git/config. That hands the agent
+          # a working push credential inside the very checkout it operates on,
+          # which contradicts `push: disabled` below — the token is a write
+          # path the input cannot close. Pinakes' own CI policy check refuses
+          # any checkout that persists credentials, and it was right to.
+          # Nothing here needs it: the agent reaches GitHub through the App's
+          # installation token, and these repositories are public, so an
+          # unauthenticated fetch works.
+          persist-credentials: false
       - name: Run agent
         # Pinned to a commit SHA rather than the documented `@v0`, which is a
         # tag that MOVES — it has already advanced through ninety v0.1.x
