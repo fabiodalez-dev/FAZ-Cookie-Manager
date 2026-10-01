@@ -492,7 +492,16 @@ defined( 'ABSPATH' ) || exit;
 								esc_html_e( 'Each visitor receives the rule set for their own jurisdiction, and the targeting options below apply.', 'faz-cookie-manager' );
 								break;
 							case 'degraded':
-								esc_html_e( 'A MaxMind licence key is saved but no usable GeoLite2 database was found, so no visitor country can be resolved. Until it is repaired, every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Download the database again in the MaxMind section further down.', 'faz-cookie-manager' );
+								// Two different faults reach this state and they need
+								// different instructions. Saying "no database was
+								// found" to a site whose database exists but cannot
+								// resolve an address sends the admin to download a
+								// file they already have.
+								if ( 'probe_failed' === ( isset( $faz_geo_state['reason'] ) ? $faz_geo_state['reason'] : '' ) ) {
+									esc_html_e( 'A GeoLite2 database is installed but a test lookup returned no country, so it cannot be relied on — it may be truncated, corrupt or the wrong edition. Until it is repaired, every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Download the database again in the MaxMind section further down.', 'faz-cookie-manager' );
+								} else {
+									esc_html_e( 'A MaxMind licence key is saved but no usable GeoLite2 database was found, so no visitor country can be resolved. Until it is repaired, every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Download the database in the MaxMind section further down.', 'faz-cookie-manager' );
+								}
 								break;
 							default:
 								esc_html_e( 'Nothing here can resolve a visitor country, so every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Your banner is still protected — it is protected the same way for everyone. To route by country, add a MaxMind GeoLite2 licence key below and download the database, or have a developer enable a trusted country header.', 'faz-cookie-manager' );

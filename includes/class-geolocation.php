@@ -705,7 +705,19 @@ class Geolocation {
 		// into a reported failure the day that changes.
 		$working = false;
 		foreach ( array( '8.8.8.8', '1.1.1.1' ) as $probe_ip ) {
-			$code = self::lookup_mmdb( $probe_ip );
+			// \Throwable, not \Exception. lookup_mmdb() guards itself with a
+			// catch( \Exception ), which does not catch an \Error — and a
+			// truncated or wrong-format database makes the reader raise exactly
+			// that. This probe exists to REPORT that a database does not work, so
+			// it must not be the thing that takes the admin page down while doing
+			// so. Same shape as the ftp_fput() fatal fixed in 1.33.0: a fatal is
+			// not a falsy return, and a guard that only catches Exception cannot
+			// see it.
+			try {
+				$code = self::lookup_mmdb( $probe_ip );
+			} catch ( \Throwable $e ) {
+				$code = '';
+			}
 			if ( is_string( $code ) && self::is_valid_country_code( $code ) && 'XX' !== $code ) {
 				$working = true;
 				break;
@@ -740,6 +752,12 @@ class Geolocation {
 		if ( '' === $path || ! @file_exists( $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
 			return '';
 		}
+		// filesize()/filemtime() read PHP's per-request stat cache. extract_mmdb()
+		// replaces the active database with rename() inside a single request, so
+		// without this the fingerprint can describe the file that was there before
+		// the download — and the stale probe verdict then persists until the file
+		// changes AGAIN. Dropping the entry for this one path is enough.
+		clearstatcache( true, $path );
 		$size  = @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
 		$mtime = @filemtime( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
 		return md5( $path . '|' . (string) $size . '|' . (string) $mtime );
@@ -959,6 +977,12 @@ class Geolocation {
 			// Every memo may contain an answer from the database we just replaced,
 			// including country/region results resolved earlier in this request.
 			self::reset_runtime_cache();
+			// The source probe is PERSISTED, not a memo, so resetting the
+			// request-scoped caches does not reach it. Two databases can share a
+			// size and a second-resolution mtime, which would let a stale
+			// "not working" verdict survive a successful download; deleting the
+			// row makes the next admin page re-probe the file installed now.
+			delete_option( 'faz_geo_source_probe' );
 
 			return true;
 		} catch ( \Exception $e ) {

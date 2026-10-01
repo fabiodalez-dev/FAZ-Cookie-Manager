@@ -37,11 +37,13 @@ namespace FazCookie\Admin\Modules\Geo_Routing\Includes {
 		public function load_index() {
 			return $this->index;
 		}
+		public $us_regions = array();
+		public $regions    = array();
 		public function load_us_regions() {
-			return array();
+			return $this->us_regions;
 		}
 		public function load_regions() {
-			return array();
+			return $this->regions;
 		}
 	}
 }
@@ -99,6 +101,17 @@ namespace {
 		'GB' => 'gdpr-ireland',
 		'US' => 'ccpa-california',
 		'JP' => 'appi-japan',
+		'CA' => 'pipeda-canada',
+	);
+	// Sub-national regimes: Quebec rides on Canada, California on the US. The
+	// `_comment` key is the one the real index carries and the loader must skip.
+	$loader->regions    = array(
+		'_comment' => 'ignored',
+		'CA-QC'    => 'law25-quebec',
+	);
+	$loader->us_regions = array(
+		'_comment' => 'ignored',
+		'US-CA'    => 'ccpa-california',
 	);
 	$loader->catalogue = array(
 		'fallback-gdpr-most-protective' => $req,
@@ -106,6 +119,8 @@ namespace {
 		'gdpr-germany'                  => $req,
 		'ccpa-california'               => $req,
 		'appi-japan'                    => $req,
+		'law25-quebec'                  => $req,
+		'pipeda-canada'                 => $req,
 	);
 
 	echo "\n\033[1mreachable_ruleset_ids() — quali set possono raggiungere un visitatore\033[0m\n";
@@ -129,9 +144,10 @@ namespace {
 	// banner si nasconde. Con show_banner un visitatore statunitense riceve
 	// davvero il set statunitense, quindi l'intero catalogo è raggiungibile.
 	$show = array( 'geolocation' => array( 'default_behavior' => 'show_banner', 'target_regions' => array( 'eu', 'uk' ) ) );
+	$catalogue_size = count( $loader->catalogue );
 	faz_is(
 		count( $loader->reachable_ruleset_ids( 'routing', $show ) ),
-		5,
+		$catalogue_size,
 		'routing + show_banner -> tutto il catalogo, anche con target eu/uk'
 	);
 
@@ -150,13 +166,34 @@ namespace {
 
 	// Targeting illeggibile: meglio sovrastimare un requisito che nasconderne uno.
 	$empty = array( 'geolocation' => array( 'default_behavior' => 'no_banner', 'target_regions' => array() ) );
-	faz_is( count( $loader->reachable_ruleset_ids( 'routing', $empty ) ), 5, 'no_banner senza regioni -> tutto il catalogo (fail-safe)' );
+	faz_is( count( $loader->reachable_ruleset_ids( 'routing', $empty ) ), $catalogue_size, 'no_banner senza regioni -> tutto il catalogo (fail-safe)' );
+
+	echo "\n\033[1mRegimi subnazionali: seguono il paese che li contiene\033[0m\n";
+
+	// Il ramo subnazionale di reachable_ruleset_ids() non era coperto da nulla:
+	// i due accessori restituivano sempre array vuoti, quindi il ciclo non
+	// girava mai e rimuoverlo non avrebbe fatto fallire alcun test.
+	$ca     = array( 'geolocation' => array( 'default_behavior' => 'no_banner', 'target_regions' => array( 'ca' ) ) );
+	$ca_ids = $loader->reachable_ruleset_ids( 'routing', $ca );
+	faz_is( in_array( 'pipeda-canada', $ca_ids, true ), true, 'target ca -> il set federale canadese è raggiungibile' );
+	faz_is( in_array( 'law25-quebec', $ca_ids, true ), true, 'target ca -> anche il Quebec, regime subnazionale di CA' );
+	faz_is( in_array( 'ccpa-california', $ca_ids, true ), false, 'target ca -> la California NON entra: US non è nel target' );
+
+	// La direzione opposta, perché i casi sopra passerebbero anche se il ciclo
+	// aggiungesse tutto indiscriminatamente.
+	$eu_only = $loader->reachable_ruleset_ids( 'routing', $hide );
+	faz_is( in_array( 'law25-quebec', $eu_only, true ), false, 'target eu -> il Quebec non è raggiungibile' );
+
+	$us     = array( 'geolocation' => array( 'default_behavior' => 'no_banner', 'target_regions' => array( 'us' ) ) );
+	$us_ids = $loader->reachable_ruleset_ids( 'routing', $us );
+	faz_is( in_array( 'ccpa-california', $us_ids, true ), true, 'target us -> la California è raggiungibile' );
+	faz_is( in_array( 'law25-quebec', $us_ids, true ), false, 'target us -> il Quebec no' );
 
 	echo "\n\033[1mrequirement_coverage() rispetta l'insieme ricevuto\033[0m\n";
 
 	$all = $loader->requirement_coverage( 'ui.revisit_widget_required' );
-	faz_is( $all['total'], 5, 'senza insieme -> conta tutto il catalogo' );
-	faz_is( $all['required'], 5, 'tutti i set del doppio pretendono il widget' );
+	faz_is( $all['total'], $catalogue_size, 'senza insieme -> conta tutto il catalogo' );
+	faz_is( $all['required'], $catalogue_size, 'tutti i set del doppio pretendono il widget' );
 
 	$base = $loader->requirement_coverage( 'ui.revisit_widget_required', $loader->reachable_ruleset_ids( 'baseline' ) );
 	// CONTROLLO CHIAVE: se il restringimento sparisce, qui torna 5 e il test
@@ -168,7 +205,7 @@ namespace {
 
 	// La memoizzazione non deve servire la risposta di un insieme a un altro.
 	$again = $loader->requirement_coverage( 'ui.revisit_widget_required' );
-	faz_is( $again['total'], 5, 'la memo non contamina insiemi diversi' );
+	faz_is( $again['total'], $catalogue_size, 'la memo non contamina insiemi diversi' );
 
 	echo "\n--\n";
 	echo "Tests:  $run\n";

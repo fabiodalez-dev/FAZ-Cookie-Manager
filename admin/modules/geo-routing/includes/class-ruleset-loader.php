@@ -225,30 +225,6 @@ class Ruleset_Loader {
 	}
 
 	/**
-	 * Count how many shipped rule sets assert a given requirement.
-	 *
-	 * The admin uses this to tell an administrator, truthfully, whether a
-	 * control the runtime overrides is overridden for EVERY visitor or only
-	 * for some — the two cases warrant different treatment, and the
-	 * difference is a fact about the catalogue, not a judgement.
-	 *
-	 * Counting it here rather than writing the number into a sentence is
-	 * deliberate. That number was hand-written twice and wrong both times,
-	 * in opposite directions, because the catalogue directory also holds
-	 * `_index.json` and `index.php` and every manual tally counted the
-	 * intruders differently. A number that is read from the files cannot
-	 * drift away from them, and the 48th rule set will not silently make
-	 * the admin copy a lie.
-	 *
-	 * @param string|array $paths One or more dotted paths into a rule set
-	 *                            (e.g. `ui.equal_weight_buttons`). A rule set
-	 *                            counts when ANY path holds a truthy value,
-	 *                            which is what an "or" requirement such as
-	 *                            gpc_honored / gpc_required needs.
-	 * @return array{required:int,total:int} Matching rule sets, and the size
-	 *                                       of the catalogue.
-	 */
-	/**
 	 * The rule sets that can actually reach a visitor on this install.
 	 *
 	 * The admin used to describe every requirement against the whole catalogue:
@@ -360,6 +336,36 @@ class Ruleset_Loader {
 		return empty( $reachable ) ? $all : $reachable;
 	}
 
+	/**
+	 * Count how many rule sets assert a given requirement.
+	 *
+	 * The admin uses this to tell an administrator, truthfully, whether a
+	 * control the runtime overrides is overridden for EVERY visitor it can
+	 * reach or only for some — the two cases warrant different treatment, and
+	 * the difference is a fact about the catalogue, not a judgement.
+	 *
+	 * Counting it here rather than writing the number into a sentence is
+	 * deliberate. That number was hand-written twice and wrong both times,
+	 * in opposite directions, because the catalogue directory also holds
+	 * `_index.json` and `index.php` and every manual tally counted the
+	 * intruders differently. A number that is read from the files cannot
+	 * drift away from them, and the 48th rule set will not silently make
+	 * the admin copy a lie.
+	 *
+	 * @param string|array $paths One or more dotted paths into a rule set
+	 *                            (e.g. `ui.equal_weight_buttons`). A rule set
+	 *                            counts when ANY path holds a truthy value,
+	 *                            which is what an "or" requirement such as
+	 *                            gpc_honored / gpc_required needs.
+	 * @param array|null   $ids   Rule sets to count over, normally from
+	 *                            reachable_ruleset_ids(). Null counts the whole
+	 *                            catalogue, which is what the admin did for
+	 *                            every state before 1.34.0 — and why a site
+	 *                            applying one rule set was told that 47
+	 *                            jurisdictions demanded a control.
+	 * @return array{required:int,total:int} Matching rule sets, and the size
+	 *                                       of the counted set.
+	 */
 	public function requirement_coverage( $paths, $ids = null ) {
 		$paths = array_values( array_filter( (array) $paths, 'is_string' ) );
 		if ( empty( $paths ) ) {

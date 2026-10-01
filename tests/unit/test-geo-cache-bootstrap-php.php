@@ -25,6 +25,16 @@ namespace FazCookie\Includes {
 		/**
 		 * Mirror of the real predicate, which moved out of Frontend in 1.34.0.
 		 *
+		 * This IS a duplicate, and a duplicate cannot fail when the original
+		 * changes. It is deliberate: this suite drives Frontend's cache-veto
+		 * branches, and standing up the real Geolocation here would drag in the
+		 * MMDB reader, the transient layer and the uploads directory to test
+		 * something that is not what these cases are about. The real predicate
+		 * is exercised directly by test-geolocation-source-status-php.php, which
+		 * loads includes/class-geolocation.php and drives it with files on disk.
+		 * If you change has_country_source(), that file is the one that fails —
+		 * and this double should be brought back into line by hand.
+		 *
 		 * The shape matters as much as the answer: these cases turn mod_geoip,
 		 * the PHP extension and the trust filters on and off one at a time, and
 		 * a double that returned a fixed value would quietly pass them all.
