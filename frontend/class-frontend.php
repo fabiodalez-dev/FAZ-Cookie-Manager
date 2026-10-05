@@ -2230,8 +2230,28 @@ class Frontend {
 		// that must appear inline so the renderer finds it synchronously.
 		// phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- inert HTML template (type=text/template is non-executable); see comment above.
 		echo '<script id="fazBannerTemplate" type="text/template">';
-		echo wp_kses( $html, faz_allowed_html() );
+		echo self::escape_template_end_tags( wp_kses( $html, faz_allowed_html() ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already through wp_kses(); only `</` is rewritten.
 		echo '</script>';
+	}
+
+	/**
+	 * Write every `</` in the banner template as `<\/`.
+	 *
+	 * The template travels inside a <script type="text/template">. HTML5 ends
+	 * that element only at `</script`, but an HTML4 parser — libxml, i.e. PHP's
+	 * DOMDocument::loadHTML() — ends a script at any `</` followed by a letter
+	 * and then throws the stray end tags away. Optimisation plugins that
+	 * rewrite the whole page through DOMDocument (WPSpeed's image optimiser,
+	 * on by default) therefore delivered the template with every closing tag
+	 * removed: the browser nested the whole banner inside the title and the
+	 * consent bar rendered 0 px tall, with no buttons. `<\/` is plain text to
+	 * both parsers; _fazReadBannerTemplate() in script.js turns it back.
+	 *
+	 * @param string $html Sanitised template markup.
+	 * @return string
+	 */
+	public static function escape_template_end_tags( $html ) {
+		return str_replace( '</', '<\/', (string) $html );
 	}
 
 	/**
