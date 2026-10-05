@@ -119,6 +119,16 @@ class Frontend {
 	const ENFORCEABLE_WILDCARD_MIN_LENGTH = 6;
 
 	/**
+	 * _fazConfig keys moved out of the inline config into the content-hashed
+	 * static file (window._fazStaticConfig). Each one is the same for every
+	 * visitor of a page type, so inlining it re-sent it with every HTML
+	 * response and kept it out of the browser cache. `_serviceCatalogue` is
+	 * the bulk of the config once per-service consent is on (~43 KB for ~330
+	 * services against ~12 KB for everything else). #310
+	 */
+	const STATIC_CONFIG_KEYS = array( '_providersToBlock', '_cookieCategoryMap', '_serviceCatalogue' );
+
+	/**
 	 * Per-request cache for blocked categories and provider map.
 	 *
 	 * @var array|null
@@ -445,9 +455,10 @@ class Frontend {
 			$alt_asset     = ! empty( $faz_settings['banner_control']['alternative_asset_path'] );
 			$script_handle = $alt_asset ? 'faz-fw' : $this->plugin_name;
 
-			// Offload the static bulk of _fazConfig (~60 KB of provider block
-			// patterns + cookie-category map, identical for every visitor of a
-			// given page type) into a content-hashed, browser-cacheable .js
+			// Offload the static bulk of _fazConfig (provider block patterns,
+			// cookie-category map and, with per-service consent, the ~43 KB
+			// service catalogue — all identical for every visitor of a given
+			// page type) into a content-hashed, browser-cacheable .js
 			// file instead of re-inlining it into every HTML response. The
 			// file defines window._fazStaticConfig; a "before" inline snippet
 			// merges it back into _fazConfig ahead of script.js execution, so
@@ -458,7 +469,7 @@ class Frontend {
 			$static_deps = array();
 			if ( ! $alt_asset && apply_filters( 'faz_external_static_assets', true ) ) {
 				$static_config = array();
-				foreach ( array( '_providersToBlock', '_cookieCategoryMap' ) as $static_key ) {
+				foreach ( self::STATIC_CONFIG_KEYS as $static_key ) {
 					if ( isset( $store_data[ $static_key ] ) ) {
 						$static_config[ $static_key ] = $store_data[ $static_key ];
 					}
