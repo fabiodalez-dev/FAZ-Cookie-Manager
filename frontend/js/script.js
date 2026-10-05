@@ -2007,12 +2007,38 @@ function _fazDomReady(callback) {
     if (typeof document === 'undefined') {
         return;
     }
-    if (document.readyState === 'complete' || /** DOMContentLoaded + Images/Styles/etc loaded, so we call directly. */
-        document.readyState === 'interactive' /** DOMContentLoaded fires at this point, so we call directly. */
+    if (document.readyState === 'complete' || /** DOMContentLoaded + Images/Styles/etc loaded. */
+        document.readyState === 'interactive' /** DOMContentLoaded fires at this point. */
     ) {
-        return void callback();
+        // Already parsed: the script arrived late — `defer`/`async`, merged into
+        // a combined bundle (WPSpeed, Autoptimize, WP Rocket), or replayed by a
+        // "delay JS" feature. Calling back synchronously would run the whole
+        // init in the middle of this file's evaluation, before the `const`/`let`
+        // declarations below this point exist: _fazAttachFocusLoop then threw
+        // "Cannot access '_fazFocusLoopHandlers' before initialization" and the
+        // banner rendered half-decorated. A microtask runs as soon as the file
+        // has finished evaluating — the same order as the DOMContentLoaded path.
+        return void Promise.resolve().then(callback);
     } /** DOMContentLoaded has not fired yet, delay callback until then. */
     document.addEventListener('DOMContentLoaded', callback);
+}
+
+/**
+ * Read the banner template markup.
+ *
+ * The server escapes every `</` in the template as `<\/` (see
+ * Frontend::banner_html()), so that an HTML4 parser that rewrites the page —
+ * PHP's DOMDocument::loadHTML(), used by image optimisers such as WPSpeed's —
+ * cannot read the closing tags as the end of the <script> element and drop
+ * them. Browsers keep `<\/` as literal text inside a script, so it is undone
+ * here. Content written client-side (the geo bootstrap) is not escaped, which
+ * the replacement leaves untouched.
+ *
+ * @param {Element} template #fazBannerTemplate.
+ * @returns {string}
+ */
+function _fazReadBannerTemplate(template) {
+    return String(template.innerHTML || '').replace(/<\\\//g, '</');
 }
 
 /**
@@ -2874,7 +2900,7 @@ function _fazRenderBanner() {
     // when the banner template cache is empty. Without this check the next
     // line throws "Cannot read properties of null (reading 'innerHTML')".
     if (!template) return;
-    const templateHtml = template.innerHTML;
+    const templateHtml = _fazReadBannerTemplate(template);
     const doc = new DOMParser().parseFromString(templateHtml, 'text/html');
     _fazSetFooterShadow(doc);
     // Insert parsed DOM nodes instead of re-serializing to HTML string.
