@@ -430,3 +430,29 @@ if ( ! function_exists( 'faz_asset_suffix' ) ) {
 		return file_exists( $path ) ? '.min' : '';
 	}
 }
+
+if ( ! function_exists( 'faz_load_shortcode_assets_everywhere' ) ) {
+	/**
+	 * Whether a shortcode's frontend asset should load on every page.
+	 *
+	 * The DSAR form JS, the Do-Not-Sell form JS and the Cookie Policy CSS are
+	 * enqueued by their shortcode callbacks, i.e. only where the shortcode is
+	 * rendered (#308). A page builder that injects the shortcode HTML
+	 * client-side after page load never runs the callback, so such a site can
+	 * return true here to load the asset everywhere, as before 1.34.0.
+	 *
+	 * @since 1.34.0
+	 * @param string $asset One of 'dsar', 'dnsmpi', 'cookie_policy'.
+	 * @return bool
+	 */
+	function faz_load_shortcode_assets_everywhere( $asset ) {
+		/**
+		 * Filter: load a shortcode's frontend asset on every frontend page.
+		 *
+		 * @since 1.34.0
+		 * @param bool   $everywhere Default false.
+		 * @param string $asset      'dsar', 'dnsmpi' or 'cookie_policy'.
+		 */
+		return (bool) apply_filters( 'faz_load_shortcode_assets_everywhere', false, (string) $asset );
+	}
+}
