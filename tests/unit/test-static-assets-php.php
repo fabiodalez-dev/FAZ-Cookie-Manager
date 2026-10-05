@@ -308,6 +308,22 @@ namespace {
 	// portable, so assert the guard directly: an unreadable mtime keeps the file.
 	assert_true( false === @filemtime( faz_assets_dir() . 'definitely-absent.css' ), 'filemtime returns false for a missing file' );
 
+	// ---------- #310: what goes into the static file ----------
+
+	// The service catalogue is the bulk of _fazConfig with per-service consent
+	// (~43 KB of ~55 KB) and is the same for every visitor: inlined, it was
+	// re-sent with every HTML response and never browser-cached.
+	assert_true( in_array( '_serviceCatalogue', Frontend::STATIC_CONFIG_KEYS, true ), '_serviceCatalogue is offloaded to the static config file (#310)' );
+	assert_true( in_array( '_providersToBlock', Frontend::STATIC_CONFIG_KEYS, true ), '_providersToBlock stays offloaded' );
+	assert_true( in_array( '_cookieCategoryMap', Frontend::STATIC_CONFIG_KEYS, true ), '_cookieCategoryMap stays offloaded' );
+	// Per-visitor or per-request values must never land in a shared, immutably
+	// cached file.
+	foreach ( array( '_categories', '_activeLaw', '_consentRevision', '_ipData', '_runtimeGeo', '_language' ) as $dynamic_key ) {
+		assert_true( ! in_array( $dynamic_key, Frontend::STATIC_CONFIG_KEYS, true ), "{$dynamic_key} stays inline" );
+	}
+	$enqueue_source = file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' ); // phpcs:ignore
+	assert_true( false !== strpos( $enqueue_source, 'foreach ( self::STATIC_CONFIG_KEYS as $static_key )' ), 'enqueue_scripts() offloads exactly STATIC_CONFIG_KEYS' );
+
 	// ---------- cleanup + result ----------
 
 	foreach ( (array) glob( faz_assets_dir() . '*' ) as $leftover ) {
