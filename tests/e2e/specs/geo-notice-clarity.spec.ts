@@ -21,6 +21,32 @@ import { WP_PATH, wpEval } from '../utils/wp-env';
 const FIXTURE_SRC = fileURLToPath(new URL('../fixtures/faz-e2e-force-no-geo.php', import.meta.url));
 const MU_DEST = WP_PATH ? join(WP_PATH, 'wp-content', 'mu-plugins', 'faz-e2e-force-no-geo.php') : '';
 
+/**
+ * The geo source state exactly as the banner editor reads it.
+ *
+ * banner.php decides whether to show the notice, and whether to make the
+ * country fields inert, from Geo_Runtime::current_state()['working'] — and picks
+ * the "configured but not working" heading when the mode is `degraded`. The spec
+ * used to ask Geolocation::has_database() instead, which is a different
+ * question: a database that fails its probe exists but does not work (notice
+ * shown, different heading), and a working source that is not a database (the
+ * PHP GeoIP extension, a faz_visitor_country callback) hides the notice with no
+ * database at all. Asking the same predicate as the screen keeps the skip and
+ * the assertion about the same thing.
+ *
+ * Runs with the fixture mu-plugin installed (beforeAll), so the Cloudflare trust
+ * filter is forced off here exactly as it is for the admin request.
+ */
+function geoSourceState(): 'working' | 'degraded' | 'none' {
+  const out = wpEval(
+    '$s = class_exists( "\\FazCookie\\Frontend\\Includes\\Geo_Runtime" )'
+      + ' ? \\FazCookie\\Frontend\\Includes\\Geo_Runtime::current_state()'
+      + ' : array( "working" => false, "mode" => "off" );'
+      + ' echo ! empty( $s["working"] ) ? "working" : ( ( isset( $s["mode"] ) && "degraded" === $s["mode"] ) ? "degraded" : "none" );',
+  ).trim();
+  return out === 'working' || out === 'degraded' ? out : 'none';
+}
+
 test.describe('Geo "source not configured" notice clarity', () => {
   test.skip(!WP_PATH, 'WP_PATH is required to install the no-geo-source fixture mu-plugin');
 
@@ -35,11 +61,14 @@ test.describe('Geo "source not configured" notice clarity', () => {
   });
 
   test('presents faz_trust_cf_ipcountry_header as a developer filter, not a UI setting', async ({ page, loginAsAdmin }) => {
-    // A real downloaded GeoLite2 DB would hide the notice regardless of the
-    // mu-plugin (has_database() reads the filesystem). Skip rather than fail in
-    // that rare environment; assert in the common (no-DB) case.
-    const hasDb = wpEval('echo \\FazCookie\\Includes\\Geolocation::has_database() ? "yes" : "no";').trim();
-    test.skip(hasDb === 'yes', 'A GeoLite2 database is installed; the "not configured" notice cannot render');
+    // A working country source (a GeoLite2 database that resolves, the PHP
+    // GeoIP extension, a country filter) hides the notice regardless of the
+    // mu-plugin; a configured-but-broken one shows it under the "configured but
+    // not working" heading instead. Skip rather than fail in those rarer
+    // environments; assert in the common (no source) case.
+    const geo = geoSourceState();
+    test.skip(geo === 'working', 'A working country source exists; the notice cannot render');
+    test.skip(geo === 'degraded', 'The geo source is configured but not working; the notice renders under its other heading');
 
     await loginAsAdmin(page);
     await page.goto('/wp-admin/admin.php?page=faz-cookie-manager-banner', { waitUntil: 'domcontentloaded' });
@@ -79,8 +108,8 @@ test.describe('Geo "source not configured" notice clarity', () => {
    * completely normal and silently ignore every click.
    */
   test('with no country source the targeting fields are inert, and still carry their dimming class', async ({ page, loginAsAdmin }) => {
-    const hasDb = wpEval('echo \\FazCookie\\Includes\\Geolocation::has_database() ? "yes" : "no";').trim();
-    test.skip(hasDb === 'yes', 'A GeoLite2 database is installed; the country-dependent fields are not inert');
+    // Inert exactly when banner.php sees no working source — degraded included.
+    test.skip(geoSourceState() === 'working', 'A working country source exists; the country-dependent fields are not inert');
 
     await loginAsAdmin(page);
     await page.goto('/wp-admin/admin.php?page=faz-cookie-manager-banner', { waitUntil: 'domcontentloaded' });
