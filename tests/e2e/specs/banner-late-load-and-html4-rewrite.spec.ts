@@ -52,7 +52,10 @@ async function expectWorkingBanner(page: Page, errors: string[]): Promise<void> 
   expect(errors.join('\n')).not.toMatch(/banner render step failed/);
 }
 
-test.describe.serial('Banner under page optimisers (WPSpeed report)', () => {
+// Not serial: the two tests are independent (the rewriter fixture only acts on
+// requests carrying ?faz_html4_rewrite=1, and the first test restores the
+// active plugin list in `finally`), so a failure in one must not skip the other.
+test.describe('Banner under page optimisers (WPSpeed report)', () => {
   test('a DOMDocument (HTML4) rewrite of the page keeps the banner template intact', async ({ page }) => {
     test.setTimeout(90_000);
     const originalActive = listActivePluginFiles();
@@ -75,7 +78,8 @@ test.describe.serial('Banner under page optimisers (WPSpeed report)', () => {
     test.setTimeout(90_000);
     await page.context().clearCookies();
     let deferred = false;
-    await page.route(/127\.0\.0\.1:9998\/\?faz_defer=/, async (route) => {
+    // Match on the query marker only, so the test works whatever WP_BASE_URL is.
+    await page.route((url) => /[?&]faz_defer=/.test(url.search), async (route) => {
       const resp = await route.fetch();
       const body = (await resp.text()).replace(
         /<script([^>]*\bid=["']faz-cookie-manager-js["'][^>]*)>/i,
@@ -87,6 +91,9 @@ test.describe.serial('Banner under page optimisers (WPSpeed report)', () => {
       await route.fulfill({ response: resp, body });
     });
     const errors = captureRuntimeErrors(page);
+    // `load`, not the usual `domcontentloaded`: this test is about script.js
+    // running late, so it waits until the deferred script has certainly
+    // executed (and its microtask-scheduled init has started) before checking.
     await page.goto(`${WP_BASE}/?faz_defer=${Date.now()}`, { waitUntil: 'load' });
     expect(deferred, 'the route found the script.js tag').toBe(true);
     await expectWorkingBanner(page, errors);
