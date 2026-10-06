@@ -595,6 +595,15 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 | `faz_current_language` | Override detected language |
 | `faz_language_map` | Add language code normalization mappings |
 | `faz_registered_admin_menus` | Register additional admin menu items |
+| `faz_load_shortcode_assets_everywhere` | Load a shortcode's frontend asset on every page (see below) |
+
+#### `faz_load_shortcode_assets_everywhere`
+
+Since 1.34.0 the DSAR form JS (`[faz_dsar_form]`), the Do-Not-Sell form JS (`[faz_do_not_sell]`) and the Cookie Policy CSS (`[faz_cookie_policy_complete]`) load only on pages where their shortcode is rendered. If a page builder injects the shortcode markup client-side (AJAX popups, load-more, Bricks client-side render, swup/Barba page transitions), the shortcode callback never runs on that page and the asset is missing. Return `true` for the asset you need (`'dsar'`, `'dnsmpi'` or `'cookie_policy'`) to load it everywhere, as before 1.34.0:
+
+```php
+add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $asset ) { return 'dsar' === $asset ? true : $everywhere; }, 10, 2 );
+```
 
 ### Actions
 

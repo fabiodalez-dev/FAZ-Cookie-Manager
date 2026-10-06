@@ -474,6 +474,30 @@ test.describe('Per-service consent — canonical suite (25)', () => {
     await ctx.close();
   });
 
+  test('24b. the _serviceCatalogue ships in the cached config-*.js, not in the inline config (#310)', async ({ browser }) => {
+    const ctx = await browser.newContext(); const page = await ctx.newPage();
+    await page.goto(staticUrl, { waitUntil: 'domcontentloaded' }); await fazReady(page);
+    const found = await page.evaluate(() => {
+      const extra = document.getElementById('faz-cookie-manager-js-extra');
+      const file = document.querySelector<HTMLScriptElement>('script[src*="/faz-cookie-manager/assets/config-"]');
+      const c = (window as unknown as { _fazConfig?: { _serviceCatalogue?: Record<string, unknown> } })._fazConfig?._serviceCatalogue;
+      return {
+        inline: extra ? extra.textContent || '' : null,
+        src: file ? file.src : null,
+        runtimeKeys: c && typeof c === 'object' ? Object.keys(c).length : 0,
+      };
+    });
+    expect(found.inline, 'the wp_localize_script payload is printed').not.toBeNull();
+    expect(found.inline!).toContain('_fazConfig');
+    expect(found.inline!, 'the catalogue is not re-inlined into every HTML response').not.toContain('_serviceCatalogue');
+    expect(found.src, 'the content-hashed static config file is enqueued').not.toBeNull();
+    const body = await (await ctx.request.get(found.src!)).text();
+    expect(body).toContain('window._fazStaticConfig=');
+    expect(body).toContain('"_serviceCatalogue"');
+    expect(found.runtimeKeys, 'the catalogue is merged back into _fazConfig at runtime').toBeGreaterThan(0);
+    await ctx.close();
+  });
+
   test('25. multi-service deny-wins: an explicit svc.*:no is honoured even alongside an allowed sibling', async ({ browser }) => {
     const ctx = await browser.newContext();
     // marketing allowed, but youtube explicitly denied → youtube blocked, vimeo runs.

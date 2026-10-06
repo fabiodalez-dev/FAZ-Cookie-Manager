@@ -308,6 +308,71 @@ namespace {
 	// portable, so assert the guard directly: an unreadable mtime keeps the file.
 	assert_true( false === @filemtime( faz_assets_dir() . 'definitely-absent.css' ), 'filemtime returns false for a missing file' );
 
+	// ---------- #310: what goes into the static file ----------
+
+	// The service catalogue is the bulk of _fazConfig with per-service consent
+	// (~43 KB of ~55 KB) and is the same for every visitor: inlined, it was
+	// re-sent with every HTML response and never browser-cached.
+	assert_true( in_array( '_serviceCatalogue', Frontend::STATIC_CONFIG_KEYS, true ), '_serviceCatalogue is offloaded to the static config file (#310)' );
+	assert_true( in_array( '_providersToBlock', Frontend::STATIC_CONFIG_KEYS, true ), '_providersToBlock stays offloaded' );
+	assert_true( in_array( '_cookieCategoryMap', Frontend::STATIC_CONFIG_KEYS, true ), '_cookieCategoryMap stays offloaded' );
+	// Per-visitor or per-request values must never land in a shared, immutably
+	// cached file.
+	foreach ( array( '_categories', '_activeLaw', '_consentRevision', '_ipData', '_runtimeGeo', '_language' ) as $dynamic_key ) {
+		assert_true( ! in_array( $dynamic_key, Frontend::STATIC_CONFIG_KEYS, true ), "{$dynamic_key} stays inline" );
+	}
+
+	// Behaviour of the split itself, on a store shaped like a real per-service
+	// page: the catalogue and the provider/cookie maps go to the static file,
+	// everything per-visitor stays in the inline wp_localize_script payload.
+	$catalogue = array(
+		'youtube' => array( 'category' => 'marketing', 'cookies' => array( 'VISITOR_INFO1_LIVE' ) ),
+		'vimeo'   => array( 'category' => 'marketing', 'cookies' => array( 'vuid' ) ),
+	);
+	$store     = array(
+		'_categories'        => array( array( 'slug' => 'necessary' ), array( 'slug' => 'marketing' ) ),
+		'_activeLaw'         => 'gdpr',
+		'_consentRevision'   => 3,
+		'_perServiceConsent' => 'yes',
+		'_services'          => array( array( 'id' => 'youtube' ) ),
+		'_providersToBlock'  => array( array( 're' => 'youtube.com', 'categories' => array( 'marketing' ) ) ),
+		'_cookieCategoryMap' => array( 'vuid' => 'marketing' ),
+		'_serviceCatalogue'  => $catalogue,
+	);
+	$split     = Frontend::split_static_config( $store );
+	assert_true( array( 'static', 'inline' ) === array_keys( $split ), 'split returns exactly {static, inline}' );
+	assert_true( isset( $split['static']['_serviceCatalogue'] ) && $catalogue === $split['static']['_serviceCatalogue'], '_serviceCatalogue lands in the static payload, unchanged' );
+	assert_true( ! array_key_exists( '_serviceCatalogue', $split['inline'] ), '_serviceCatalogue is not in the inline payload' );
+	assert_true( array( '_providersToBlock', '_cookieCategoryMap', '_serviceCatalogue' ) === array_keys( $split['static'] ), 'static payload holds only STATIC_CONFIG_KEYS' );
+	foreach ( array( '_categories', '_activeLaw', '_consentRevision', '_perServiceConsent', '_services' ) as $dynamic_key ) {
+		assert_true( array_key_exists( $dynamic_key, $split['inline'] ) && $store[ $dynamic_key ] === $split['inline'][ $dynamic_key ], "{$dynamic_key} kept inline, unchanged" );
+		assert_true( ! array_key_exists( $dynamic_key, $split['static'] ), "{$dynamic_key} never reaches the shared static file" );
+	}
+	assert_true( count( $store ) === count( $split['static'] ) + count( $split['inline'] ), 'no key lost or duplicated by the split' );
+
+	// Per-service consent off: no catalogue in the store, nothing invented.
+	$no_catalogue = $store;
+	unset( $no_catalogue['_serviceCatalogue'] );
+	$split_off = Frontend::split_static_config( $no_catalogue );
+	assert_true( ! array_key_exists( '_serviceCatalogue', $split_off['static'] ), 'absent catalogue is not invented in the static payload' );
+	assert_true( array( '_providersToBlock', '_cookieCategoryMap' ) === array_keys( $split_off['static'] ), 'provider and cookie maps still offloaded without the catalogue' );
+
+	// Nothing static at all: empty static payload, so enqueue_scripts() keeps
+	// the whole store inline (it only writes config-*.js for a non-empty one).
+	$split_none = Frontend::split_static_config( array( '_activeLaw' => 'gdpr' ) );
+	assert_true( array() === $split_none['static'] && array( '_activeLaw' => 'gdpr' ) === $split_none['inline'], 'store without static keys stays entirely inline' );
+
+	// enqueue_scripts() must use this split, and must swap in the inline
+	// remainder only once the static file was actually provided.
+	$enqueue_source = file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' ); // phpcs:ignore
+	$enqueue_start  = strpos( $enqueue_source, 'public function enqueue_scripts()' );
+	$enqueue_body   = false !== $enqueue_start ? substr( $enqueue_source, $enqueue_start, 12000 ) : '';
+	$split_call     = strpos( $enqueue_body, 'self::split_static_config( $store_data )' );
+	$url_guard      = strpos( $enqueue_body, "if ( '' !== \$static_url )" );
+	$inline_swap    = strpos( $enqueue_body, "\$store_data    = \$split['inline'];" );
+	assert_true( false !== $split_call, 'enqueue_scripts() splits the store with split_static_config()' );
+	assert_true( false !== $url_guard && false !== $inline_swap && $inline_swap > $url_guard, 'the inline remainder replaces the store only after the static file URL is confirmed' );
+
 	// ---------- cleanup + result ----------
 
 	foreach ( (array) glob( faz_assets_dir() . '*' ) as $leftover ) {
