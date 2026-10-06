@@ -69,21 +69,25 @@ class Cookie_Policy_Generator {
 		add_shortcode( self::SHORTCODE, array( $this, 'render_shortcode' ) );
 		// Also register the REST endpoints.
 		Cookie_Policy_Api::get_instance()->init();
-		// Enqueue the frontend CSS only on pages that actually use the shortcode.
+		// Policy CSS: in <head> where the shortcode is known, else from the callback.
 		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue_frontend_assets' ) );
 	}
 
 	/**
-	 * Frontend asset enqueue for the Cookie Policy Generator.
+	 * Load the policy CSS in <head> on the pages that show the policy.
 	 *
-	 * The shortcode is valid in widgets, blocks, page-builder elements,
-	 * and template parts where `has_shortcode($post->post_content, ...)`
-	 * cannot see it (Elementor/Bricks/Beaver Builder store their content
-	 * outside `post_content`; widget areas live in their own option). To
-	 * avoid unstyled policies in those legitimate placements we just
-	 * enqueue the CSS on every frontend pageview — the file is tiny
-	 * (~30 lines of resets, ~1 KB) and inherits everything else from
-	 * the host theme, so the wasted bytes are negligible.
+	 * It used to be enqueued on every frontend page, because the shortcode
+	 * also lives in widgets, blocks, builder elements and template parts that
+	 * `has_shortcode( $post->post_content, ... )` cannot see. That made a
+	 * render-blocking ~8 KB stylesheet part of every page of every site to
+	 * style one page (#308). Now:
+	 *   - a singular page whose content holds the shortcode (the page the
+	 *     setup wizard creates, or any page the owner pasted it into) gets it
+	 *     in <head>, so the policy never paints unstyled;
+	 *   - every other placement gets it from render_shortcode(), which
+	 *     WordPress prints with the footer scripts;
+	 *   - `faz_load_shortcode_assets_everywhere` restores the old behaviour
+	 *     for builders that inject the policy client-side.
 	 *
 	 * @return void
 	 */
@@ -91,6 +95,32 @@ class Cookie_Policy_Generator {
 		if ( is_admin() ) {
 			return;
 		}
+		if ( faz_load_shortcode_assets_everywhere( 'cookie_policy' ) || $this->queried_post_has_shortcode() ) {
+			$this->enqueue_frontend_style();
+		}
+	}
+
+	/**
+	 * Whether the main queried post's content carries the policy shortcode.
+	 *
+	 * @return bool
+	 */
+	private function queried_post_has_shortcode() {
+		if ( ! is_singular() ) {
+			return false;
+		}
+		$post = get_queried_object();
+		return $post instanceof \WP_Post
+			&& is_string( $post->post_content )
+			&& has_shortcode( $post->post_content, self::SHORTCODE );
+	}
+
+	/**
+	 * Enqueue the policy stylesheet. Safe to call more than once.
+	 *
+	 * @return void
+	 */
+	private function enqueue_frontend_style() {
 		wp_enqueue_style(
 			'faz-cookie-policy',
 			// Not plugins_url(), which resolves its scheme through is_ssl() and so
@@ -144,6 +174,11 @@ class Cookie_Policy_Generator {
 		// whitespace regardless of encoding.
 		foreach ( array( 'lang', 'jurisdiction' ) as $faz_attr_key ) {
 			$atts[ $faz_attr_key ] = preg_replace( '/[^A-Za-z0-9_-]/', '', (string) $atts[ $faz_attr_key ] );
+		}
+		// Already in <head> on the pages maybe_enqueue_frontend_assets()
+		// recognises; anywhere else WordPress prints it with the footer.
+		if ( ! is_admin() ) {
+			$this->enqueue_frontend_style();
 		}
 		return Renderer::render( $atts );
 	}

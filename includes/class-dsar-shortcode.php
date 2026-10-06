@@ -38,10 +38,11 @@ class DSAR_Shortcode {
 		add_action( 'init', array( $this, 'register_post_type' ) );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_submit' ) );
 		add_action( 'wp_ajax_nopriv_' . self::AJAX_ACTION, array( $this, 'handle_submit' ) );
-		// Enqueue the submit handler early so it runs even when a page builder
-		// (e.g. Bricks) renders the shortcode HTML client-side after page load.
-		// Inline <script> tags injected via innerHTML are silently ignored by
-		// browsers, so the handler must live in a separately-enqueued file.
+		// The shortcode callback enqueues the handler wherever the form is
+		// rendered server-side (posts, widgets, templates, builder elements);
+		// this hook only covers forms injected client-side after page load.
+		// The handler stays a separate file either way: an inline <script>
+		// injected via innerHTML is silently ignored by browsers.
 		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue_assets' ) );
 		add_action( 'faz_after_activate', array( $this, 'assign_capabilities' ) );
 	}
@@ -80,24 +81,24 @@ class DSAR_Shortcode {
 	}
 
 	/**
-	 * Enqueue the DSAR form JS on every frontend page.
+	 * Load the DSAR form JS on pages that do not render the shortcode.
 	 *
-	 * The submit handler is attached directly to each .faz-dsar-form element
-	 * (not via document-level delegation), with a MutationObserver to cover
-	 * forms injected into the DOM after script execution. When the page
-	 * contains no .faz-dsar-form element the script is a no-op, so the cost
-	 * on non-DSAR pages is a single HTTP request for a ~1 KB file.
-	 *
-	 * Unconditional enqueue is intentional: page builders (e.g. Bricks) may
-	 * render the shortcode HTML client-side after page load. In that scenario
-	 * has_shortcode($post->post_content, ...) is unreliable because the current
-	 * post may be a builder template rather than the actual page post.
+	 * render() enqueues the handler itself, and WordPress prints it in the
+	 * footer, so every server-side placement — post content, widgets, block
+	 * and builder templates — gets it without help. It used to be enqueued on
+	 * every frontend page as well, for builders (e.g. Bricks) that inject the
+	 * form HTML client-side after load, where the shortcode callback never
+	 * runs: that cost a request and an inline config on every page of every
+	 * site, form or not (#308). Such a site can opt back in through
+	 * `faz_load_shortcode_assets_everywhere`.
 	 */
 	public function maybe_enqueue_assets() {
 		if ( is_admin() ) {
 			return;
 		}
-		$this->enqueue_dsar_assets();
+		if ( faz_load_shortcode_assets_everywhere( 'dsar' ) ) {
+			$this->enqueue_dsar_assets();
+		}
 	}
 
 	/**
@@ -106,8 +107,7 @@ class DSAR_Shortcode {
 	 */
 	private function enqueue_dsar_assets() {
 		if ( ! wp_script_is( 'faz-dsar-form', 'registered' ) ) {
-			// Prefer the minified build (~3.6 KB vs ~8.6 KB) — this script is
-			// deliberately loaded on every frontend page (see load_assets()).
+			// Prefer the minified build (~3.6 KB vs ~8.6 KB).
 			$suffix = faz_asset_suffix( 'frontend/js/faz-dsar' );
 			wp_register_script(
 				'faz-dsar-form',

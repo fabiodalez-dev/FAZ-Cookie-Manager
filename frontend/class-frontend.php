@@ -119,6 +119,16 @@ class Frontend {
 	const ENFORCEABLE_WILDCARD_MIN_LENGTH = 6;
 
 	/**
+	 * _fazConfig keys moved out of the inline config into the content-hashed
+	 * static file (window._fazStaticConfig). Each one is the same for every
+	 * visitor of a page type, so inlining it re-sent it with every HTML
+	 * response and kept it out of the browser cache. `_serviceCatalogue` is
+	 * the bulk of the config once per-service consent is on (~43 KB for ~330
+	 * services against ~12 KB for everything else). #310
+	 */
+	const STATIC_CONFIG_KEYS = array( '_providersToBlock', '_cookieCategoryMap', '_serviceCatalogue' );
+
+	/**
 	 * Per-request cache for blocked categories and provider map.
 	 *
 	 * @var array|null
@@ -379,6 +389,32 @@ class Frontend {
 	}
 
 	/**
+	 * Split the store data into the static payload (STATIC_CONFIG_KEYS, the
+	 * same for every visitor of a page type, written to the content-hashed
+	 * config-*.js file) and the inline remainder (per-visitor and per-request
+	 * keys, printed into the page). Keys absent from the store are skipped;
+	 * nothing else is transformed. The caller uses 'inline' only once the
+	 * static file has actually been provided, otherwise the full store stays
+	 * inline. #310
+	 *
+	 * @param array $store_data Full _fazConfig store.
+	 * @return array{static: array, inline: array}
+	 */
+	public static function split_static_config( array $store_data ) {
+		$static_config = array();
+		foreach ( self::STATIC_CONFIG_KEYS as $static_key ) {
+			if ( isset( $store_data[ $static_key ] ) ) {
+				$static_config[ $static_key ] = $store_data[ $static_key ];
+				unset( $store_data[ $static_key ] );
+			}
+		}
+		return array(
+			'static' => $static_config,
+			'inline' => $store_data,
+		);
+	}
+
+	/**
 	 * Enqeue front end scripts
 	 *
 	 * @return void
@@ -445,9 +481,10 @@ class Frontend {
 			$alt_asset     = ! empty( $faz_settings['banner_control']['alternative_asset_path'] );
 			$script_handle = $alt_asset ? 'faz-fw' : $this->plugin_name;
 
-			// Offload the static bulk of _fazConfig (~60 KB of provider block
-			// patterns + cookie-category map, identical for every visitor of a
-			// given page type) into a content-hashed, browser-cacheable .js
+			// Offload the static bulk of _fazConfig (provider block patterns,
+			// cookie-category map and, with per-service consent, the ~43 KB
+			// service catalogue — all identical for every visitor of a given
+			// page type) into a content-hashed, browser-cacheable .js
 			// file instead of re-inlining it into every HTML response. The
 			// file defines window._fazStaticConfig; a "before" inline snippet
 			// merges it back into _fazConfig ahead of script.js execution, so
@@ -457,13 +494,9 @@ class Frontend {
 			$store_data  = $this->get_store_data();
 			$static_deps = array();
 			if ( ! $alt_asset && apply_filters( 'faz_external_static_assets', true ) ) {
-				$static_config = array();
-				foreach ( array( '_providersToBlock', '_cookieCategoryMap' ) as $static_key ) {
-					if ( isset( $store_data[ $static_key ] ) ) {
-						$static_config[ $static_key ] = $store_data[ $static_key ];
-					}
-				}
-				$static_json = ! empty( $static_config ) ? wp_json_encode( $static_config ) : false;
+				$split         = self::split_static_config( $store_data );
+				$static_config = $split['static'];
+				$static_json   = ! empty( $static_config ) ? wp_json_encode( $static_config ) : false;
 				if ( false !== $static_json && '' !== $static_json ) {
 					$static_url = $this->get_static_asset_url(
 						'config-' . md5( $static_json ) . '.js',
@@ -473,9 +506,7 @@ class Frontend {
 						$static_handle = $this->plugin_name . '-static-config';
 						wp_enqueue_script( $static_handle, $static_url, array(), null, false );
 						$static_deps[] = $static_handle;
-						foreach ( array_keys( $static_config ) as $static_key ) {
-							unset( $store_data[ $static_key ] );
-						}
+						$store_data    = $split['inline'];
 					}
 				}
 			}
