@@ -154,6 +154,47 @@ namespace {
 
 		// 360px: accept/reject paired, customise on a row of its own.
 		faz_mcss_assert( false !== strpos( $m360, '.faz-btn-reject{flex:1 1 40%;}' ) && false !== strpos( $m360, '.faz-btn-customize{flex:1 1 100%;}' ), "{$type}: at 360px and below customise takes its own row and the pair stays together" );
+
+		// The Do-Not-Sell control. It is the fourth item in this wrapper and the
+		// one the compared-pair rules do not describe, so every property below
+		// is load-bearing rather than decorative.
+		//
+		// Reached in ordinary operation, not only by hand: Geo_Runtime turns
+		// donotSell on for a US visitor while applicableLaw stays 'gdpr', and
+		// class-template.php keeps the button precisely because its status is
+		// true. For that visitor this row IS the opt-out.
+		$dns = array();
+		preg_match( '/#faz-consent \.faz-notice-btn-wrapper \[data-faz-tag="donotsell-button"\]\{([^}]*)\}/', $m440, $dns );
+		faz_mcss_assert( ! empty( $dns ), "{$type}: compact describes the Do-Not-Sell control" );
+		$dns_body = isset( $dns[1] ) ? $dns[1] : '';
+
+		// Without a full basis it shares the row with the pair, and at 360px
+		// their 40% bases leave it almost nothing to grow into: it collapsed to
+		// a few pixels wide.
+		faz_mcss_assert( false !== strpos( $dns_body, 'flex:1 1 100%' ), "{$type}: the Do-Not-Sell control takes a full row, not a share of the pair's" );
+		faz_mcss_assert( false !== strpos( $dns_body, 'width:100%' ), "{$type}: the Do-Not-Sell row spans the wrapper" );
+		// "Do Not Sell or Share My Personal Information" is statutory wording
+		// that cannot be shortened, and it does not fit one line on a phone.
+		faz_mcss_assert( false !== strpos( $dns_body, 'white-space:normal' ), "{$type}: the statutory Do-Not-Sell label is allowed to wrap" );
+		// A link, not one of the compared buttons: the template draws it
+		// left-aligned and borderless, which the centred flex box would undo.
+		faz_mcss_assert( false !== strpos( $dns_body, 'display:block' ), "{$type}: the Do-Not-Sell control keeps its link look, not the button box" );
+
+		// Matched by data attribute on purpose. The shortcode emits either
+		// `.faz-btn.faz-btn-do-not-sell` or a bare <a> with no class at all, and
+		// the attribute is the only thing both variants carry: narrowing this
+		// selector to the class would silently drop the link variant, which is a
+		// flex item just the same.
+		faz_mcss_assert( false === strpos( $m440, '.faz-btn-do-not-sell{' ), "{$type}: the Do-Not-Sell rule matches the attribute, so the <a> variant is covered too" );
+
+		// Source order, not specificity, decides this one. Both selectors are
+		// 1-1-0 (#faz-consent + .faz-notice-btn-wrapper + one class/attribute),
+		// so the generic `.faz-btn{flex:1 1 0}` above wins unless the
+		// Do-Not-Sell rule comes after it. Reordering the block would restore
+		// the collapse with no visible change to either rule.
+		$generic_at = strpos( $m440, '#faz-consent .faz-notice-btn-wrapper .faz-btn{' );
+		$dns_at     = strpos( $m440, '#faz-consent .faz-notice-btn-wrapper [data-faz-tag="donotsell-button"]{' );
+		faz_mcss_assert( false !== $generic_at && false !== $dns_at && $dns_at > $generic_at, "{$type}: the Do-Not-Sell rule comes after the generic button rule it overrides" );
 	}
 
 	// The template does draw that chevron with an absolute ::after anchored to
