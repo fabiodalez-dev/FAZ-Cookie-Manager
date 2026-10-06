@@ -1072,6 +1072,22 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 							'code' => array(),
 						)
 					);
+					if ( 'module_untrusted' === ( isset( $faz_geo_state['reason'] ) ? (string) $faz_geo_state['reason'] : '' ) ) :
+						?>
+						<p style="margin:.5rem 0 0;">
+							<?php
+							echo wp_kses(
+								sprintf(
+									/* translators: %s: the add_filter() code snippet for faz_trust_geoip_country_code. */
+									__( 'Apache mod_geoip is present on this server, but its value is not used until a developer adds %s — it is off by default because, on a misconfigured server, a request header can fill the same variable.', 'faz-cookie-manager' ),
+									"<code>add_filter( 'faz_trust_geoip_country_code', '__return_true' );</code>"
+								),
+								array( 'code' => array() )
+							);
+							?>
+						</p>
+						<?php
+					endif;
 					?>
 				</div>
 			</div>

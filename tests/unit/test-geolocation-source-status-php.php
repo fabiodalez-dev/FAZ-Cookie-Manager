@@ -30,6 +30,10 @@ namespace {
 	function apply_filters( $tag, $value ) {
 		return isset( $GLOBALS['__faz_filters'][ $tag ] ) ? $GLOBALS['__faz_filters'][ $tag ] : $value;
 	}
+	// Presence of a callback, as WordPress answers it: any tag a test has set.
+	function has_filter( $tag ) {
+		return array_key_exists( $tag, $GLOBALS['__faz_filters'] );
+	}
 	function faz_set_filter( $tag, $value ) {
 		$GLOBALS['__faz_filters'][ $tag ] = $value;
 	}
@@ -189,6 +193,70 @@ namespace {
 	$cf = Geolocation::source_status();
 	faz_is( $cf['source'], 'cloudflare', 'il filtro dichiara la sorgente' );
 	faz_is( $cf['working'], true, "una dichiarazione dello sviluppatore non si sonda: l'intestazione arriva al visitatore" );
+
+	echo "\n\033[1msource_status() — 'funzionante' vuol dire ciò che il resolver usa davvero\033[0m\n";
+
+	// mod_geoip caricato ma senza il filtro di fiducia: detect_country() NON
+	// legge GEOIP_COUNTRY_CODE. Dirlo "funzionante" mandava l'admin via convinto
+	// di avere il routing per paese mentre ogni visitatore riceveva il fallback.
+	faz_reset();
+	@unlink( $db_path );
+	Geolocation::reset_runtime_cache();
+	$_SERVER['GEOIP_COUNTRY_CODE'] = 'IT';
+	$untrusted = Geolocation::source_status();
+	faz_is( $untrusted['source'], 'mod_geoip', 'mod_geoip presente -> la sorgente è riconosciuta' );
+	faz_is( $untrusted['configured'], true, 'mod_geoip presente -> configurato' );
+	faz_is( $untrusted['working'], false, 'mod_geoip SENZA filtro di fiducia -> NON funzionante: il resolver lo ignora' );
+	faz_is( $untrusted['reason'], 'module_untrusted', 'causa propria, distinta da no_source e key_without_database' );
+
+	// Anche con una chiave MaxMind salvata la causa più vicina resta il modulo:
+	// basta una riga di filtro, non un download.
+	$GLOBALS['__faz_options']['faz_settings'] = array(
+		'geolocation' => array( 'maxmind_license_key' => 'chiave' ),
+	);
+	faz_is( Geolocation::source_status()['reason'], 'module_untrusted', 'mod_geoip non fidato + chiave senza database -> module_untrusted' );
+
+	// Con il filtro di fiducia il modulo è usato davvero.
+	faz_reset();
+	$_SERVER['GEOIP_COUNTRY_CODE'] = 'IT';
+	faz_set_filter( 'faz_trust_geoip_country_code', true );
+	$trusted = Geolocation::source_status();
+	faz_is( $trusted['working'], true, 'mod_geoip CON filtro di fiducia -> funzionante' );
+	faz_is( $trusted['reason'], 'declared_by_filter', 'causa: dichiarato dallo sviluppatore' );
+	unset( $_SERVER['GEOIP_COUNTRY_CODE'] );
+
+	// faz_visitor_country è l'ultima parola di get_visitor_country(): un
+	// callback lì è una sorgente anche se tutto il resto manca.
+	faz_reset();
+	@unlink( $db_path );
+	Geolocation::reset_runtime_cache();
+	faz_set_filter( 'faz_visitor_country', 'IT' );
+	$by_filter = Geolocation::source_status();
+	faz_is( $by_filter['working'], true, 'callback su faz_visitor_country -> funzionante, senza database né intestazioni' );
+	faz_is( $by_filter['source'], 'filter', 'sorgente: filtro' );
+	faz_is( $by_filter['reason'], 'country_filter', 'causa propria: country_filter' );
+
+	// ...e vince anche sul modulo non fidato.
+	$_SERVER['GEOIP_COUNTRY_CODE'] = 'IT';
+	faz_is( Geolocation::source_status()['reason'], 'country_filter', 'faz_visitor_country + mod_geoip non fidato -> conta il filtro' );
+	unset( $_SERVER['GEOIP_COUNTRY_CODE'] );
+
+	// faz_has_country_signal_source forzato a true: "il paese lo inietta il mio edge".
+	faz_reset();
+	@unlink( $db_path );
+	Geolocation::reset_runtime_cache();
+	faz_set_filter( 'faz_has_country_signal_source', true );
+	$forced_signal = Geolocation::source_status();
+	faz_is( $forced_signal['working'], true, 'faz_has_country_signal_source forzato a true -> funzionante' );
+	faz_is( $forced_signal['reason'], 'signal_forced_by_filter', 'causa propria: signal_forced_by_filter' );
+
+	// Forzato a false non spegne nulla nel resolver: tiene solo la cache. Su
+	// un sito senza sorgenti il verdetto resta quello naturale.
+	faz_reset();
+	@unlink( $db_path );
+	Geolocation::reset_runtime_cache();
+	faz_set_filter( 'faz_has_country_signal_source', false );
+	faz_is( Geolocation::source_status()['reason'], 'no_source', 'faz_has_country_signal_source a false, nessuna sorgente -> no_source' );
 
 	// Database presente ma inutilizzabile per il lookup: il file supera il
 	// controllo di formato e la sonda fallisce. Deve essere 'probe_failed', NON

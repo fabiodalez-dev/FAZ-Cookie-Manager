@@ -626,6 +626,23 @@ class Geolocation {
 	 * fingerprint of the database file, so it is recomputed when the file
 	 * changes and otherwise read once per admin page.
 	 *
+	 * `working` must mean what the resolver will actually do, so this follows
+	 * get_visitor_country() / detect_country() and not the mere presence of a
+	 * signal. Two consequences:
+	 *
+	 *  - mod_geoip is only USED when `faz_trust_geoip_country_code` is on
+	 *    (default off: a misconfigured fastcgi_param can let a request header
+	 *    pollute GEOIP_COUNTRY_CODE). A loaded module without that filter is
+	 *    therefore reported as configured but NOT working, with its own reason
+	 *    (`module_untrusted`), because the fix is a one-line filter rather than
+	 *    a download — and calling it "working" told an administrator their
+	 *    site was routing by country while every visitor got the fallback.
+	 *  - A site that supplies the country itself is working even though none of
+	 *    the built-in sources is: `faz_visitor_country` is the resolver's last
+	 *    word (`country_filter`), and `faz_has_country_signal_source` forced
+	 *    true is the documented way to say an edge injects the country by other
+	 *    means (`signal_forced_by_filter`).
+	 *
 	 * @since 1.34.0
 	 * @param bool $force Recompute even when a fresh cached result exists.
 	 * @return array{source:string,configured:bool,working:bool,reason:string}
@@ -645,14 +662,50 @@ class Geolocation {
 				'reason'     => 'declared_by_filter',
 			);
 		}
-		if ( self::mod_geoip_configured() ) {
+		// get_visitor_country() passes every resolved value — including '' —
+		// through this filter and routes on whatever comes back, so a callback
+		// on it is a country source in its own right, whatever else is missing.
+		// Presence is all that can be checked from here: the visitor's request,
+		// not this admin one, is what the callback answers.
+		if ( function_exists( 'has_filter' ) && has_filter( 'faz_visitor_country' ) ) {
 			return array(
-				'source'     => 'mod_geoip',
+				'source'     => 'filter',
 				'configured' => true,
 				'working'    => true,
-				'reason'     => 'module_present',
+				'reason'     => 'country_filter',
 			);
 		}
+
+		$status = self::detected_status( $force );
+		if ( $status['working'] ) {
+			return $status;
+		}
+
+		// Forced true by the integrator: "my edge injects a country by another
+		// means". Asked with false as the input, so only a callback that ASSERTS
+		// a source counts — one that merely passes the value through does not.
+		// Forced false is not consulted: it keeps the page cache, it does not
+		// stop detect_country() from resolving.
+		if ( (bool) apply_filters( 'faz_has_country_signal_source', false ) ) {
+			return array(
+				'source'     => 'filter',
+				'configured' => true,
+				'working'    => true,
+				'reason'     => 'signal_forced_by_filter',
+			);
+		}
+
+		return $status;
+	}
+
+	/**
+	 * The built-in sources detect_country() consults without a trust filter.
+	 *
+	 * @since 1.34.0
+	 * @param bool $force Recompute the MMDB probe even when a cached result exists.
+	 * @return array{source:string,configured:bool,working:bool,reason:string}
+	 */
+	private static function detected_status( $force ) {
 		if ( function_exists( 'geoip_country_code_by_name' ) ) {
 			return array(
 				'source'     => 'php_geoip',
@@ -672,6 +725,17 @@ class Geolocation {
 		$has_key  = is_array( $settings ) && ! empty( $settings['geolocation']['maxmind_license_key'] );
 
 		if ( '' === $path ) {
+			// mod_geoip is on the server but detect_country() ignores it until
+			// `faz_trust_geoip_country_code` is enabled. Configured, because the
+			// signal is there; not working, because nothing reads it.
+			if ( self::mod_geoip_configured() ) {
+				return array(
+					'source'     => 'mod_geoip',
+					'configured' => true,
+					'working'    => false,
+					'reason'     => 'module_untrusted',
+				);
+			}
 			return array(
 				'source'     => $has_key ? 'mmdb' : 'none',
 				'configured' => (bool) $has_key,

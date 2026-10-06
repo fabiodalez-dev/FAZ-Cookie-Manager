@@ -569,8 +569,24 @@ defined( 'ABSPATH' ) || exit;
 								// found" to a site whose database exists but cannot
 								// resolve an address sends the admin to download a
 								// file they already have.
-								if ( 'probe_failed' === ( isset( $faz_geo_state['reason'] ) ? $faz_geo_state['reason'] : '' ) ) {
+								$faz_geo_reason = isset( $faz_geo_state['reason'] ) ? (string) $faz_geo_state['reason'] : '';
+								if ( 'probe_failed' === $faz_geo_reason ) {
 									esc_html_e( 'A GeoLite2 database is installed but a test lookup returned no country, so it cannot be relied on — it may be truncated, corrupt or the wrong edition. Until it is repaired, every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Download the database again in the MaxMind section further down.', 'faz-cookie-manager' );
+								} elseif ( 'module_untrusted' === $faz_geo_reason ) {
+									// The module being loaded is not the resolver
+									// using it: detect_country() reads its value only
+									// behind the trust filter, so a request header
+									// cannot steer routing on a misconfigured server.
+									// Saying "routing is active" here sent the admin
+									// away believing a fallback was a per-country rule.
+									echo wp_kses(
+										sprintf(
+											/* translators: %s: the faz_trust_geoip_country_code filter name. */
+											esc_html__( 'Apache mod_geoip is present on this server, but its country value is ignored until a developer enables the %s code filter — it is off by default because, on a misconfigured server, a request header can fill the same variable. Until then every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Alternatively, download a MaxMind GeoLite2 database in the section further down.', 'faz-cookie-manager' ),
+											'<code>faz_trust_geoip_country_code</code>'
+										),
+										array( 'code' => array() )
+									);
 								} else {
 									esc_html_e( 'A MaxMind licence key is saved but no usable GeoLite2 database was found, so no visitor country can be resolved. Until it is repaired, every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Download the database in the MaxMind section further down.', 'faz-cookie-manager' );
 								}
