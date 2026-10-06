@@ -233,6 +233,37 @@ namespace {
 		'<footer style="display: none"><a data-faz-open-preferences>Preferences</a></footer>',
 		'<footer><a style="visibility:hidden" data-faz-open-preferences>Preferences</a></footer>',
 	);
+	// `disabled` where the HTML spec gives it no effect. These are USABLE: the
+	// attribute is defined only on form controls and never disables a link, so
+	// the element still renders and script.js still binds to it. Rejecting them
+	// reported a perfectly good footer route as `marker_missing`, and the
+	// administrator saw verification fail with nothing visible to fix. The
+	// browser side asks `:disabled`, which agrees with every case below.
+	$disabled_without_effect = array(
+		'<footer disabled><a data-faz-open-preferences>Preferences</a></footer>',
+		'<div disabled><a data-faz-open-preferences>Preferences</a></div>',
+		'<form disabled><a data-faz-open-preferences>Preferences</a></form>',
+		// `disabled` on the link itself is just as meaningless.
+		'<footer><a disabled data-faz-open-preferences>Preferences</a></footer>',
+		// A fieldset's disabled state exempts its FIRST <legend>.
+		'<fieldset disabled><legend><button data-faz-open-preferences>Preferences</button></legend></fieldset>',
+		// A form control outside any disabled fieldset is unaffected.
+		'<fieldset disabled><button>Other</button></fieldset><button data-faz-open-preferences>Preferences</button>',
+	);
+	foreach ( $disabled_without_effect as $html ) {
+		faz_is( Withdrawal_Path::body_has_marker( $html ), true, 'disabled with no effect keeps the route usable: ' . $html );
+	}
+	// ...but a fieldset DOES disable a form control outside its first legend,
+	// including one nested deeper, and a second <legend> is not exempt.
+	$disabled_with_effect = array(
+		'<fieldset disabled><legend>Title</legend><button data-faz-open-preferences>Preferences</button></fieldset>',
+		'<fieldset disabled><div><button data-faz-open-preferences>Preferences</button></div></fieldset>',
+		'<fieldset disabled><legend>First</legend><legend><button data-faz-open-preferences>Preferences</button></legend></fieldset>',
+	);
+	foreach ( $disabled_with_effect as $html ) {
+		faz_is( Withdrawal_Path::body_has_marker( $html ), false, 'a disabled fieldset does disable its form controls: ' . $html );
+	}
+
 	foreach ( $unusable_controls as $html ) {
 		faz_is( Withdrawal_Path::body_has_marker( $html ), false, 'unusable withdrawal control: ' . $html );
 		foreach ( $urls as $u ) {

@@ -457,15 +457,27 @@ namespace {
 		faz_geo_bootstrap_same( $translation->get_translatepress_language( 'en' ), 'en', 'TranslatePress filter preserves bootstrap shell language' );
 		faz_geo_bootstrap_same( $translation->get_weglot_language( 'en' ), 'en', 'Weglot filter preserves bootstrap shell language' );
 	}
-	if ( ! function_exists( 'weglot_get_current_language' ) ) {
-		function weglot_get_current_language() { return $GLOBALS['faz_test_visitor_language']; }
-	}
-	faz_geo_bootstrap_same( $translation->get_weglot_language( 'en' ), 'en', 'Weglot visitor cookie cannot change the bootstrap shell language' );
 	// URL-based WPML language remains safe even on the shared bootstrap shell.
+	//
+	// This case runs BEFORE the Weglot mock is defined, and the order is the
+	// assertion. faz_current_language() consults Weglot before WPML, and a PHP
+	// function definition is permanent: once weglot_get_current_language()
+	// exists, every later call resolves through it. With this case after the
+	// mock, 'fr' came from Weglot and the WPML branch never executed — the
+	// assertion passed without ever reaching the code it names. The predicate
+	// is asserted too, so the negotiation type is pinned rather than inferred
+	// from the resolved language.
 	unset( $GLOBALS['faz_geo_bootstrap_filters']['wpml_setting'] );
 	add_filter( 'wpml_setting', static function ( $value, $name = '' ) { return 'language_negotiation_type' === $name ? 1 : $value; } );
 	faz_current_language( true );
+	faz_geo_bootstrap_same( function_exists( 'weglot_get_current_language' ), false, 'premise: no Weglot source exists yet, so WPML is the one that answers' );
+	faz_geo_bootstrap_same( faz_wpml_language_in_url(), true, 'negotiation type 1 puts the WPML language in the URL' );
 	faz_geo_bootstrap_same( faz_current_language(), 'fr', 'URL-based WPML language remains available in the shared shell' );
+	if ( ! function_exists( 'weglot_get_current_language' ) ) {
+		function weglot_get_current_language() { return $GLOBALS['faz_test_visitor_language']; }
+	}
+	faz_current_language( true );
+	faz_geo_bootstrap_same( $translation->get_weglot_language( 'en' ), 'en', 'Weglot visitor cookie cannot change the bootstrap shell language' );
 	// Unsupported dimensions and AMP keep the cache veto, so language can vary.
 	foreach ( array( 'iab', 'amp' ) as $excluded ) {
 		$excluded_settings = $language_settings;

@@ -79,6 +79,51 @@ test('footer removal and restoration update the fallback', async ({page}) => {
   await expect(fallback).toBeHidden();
 });
 
+/**
+ * The case a DOM observer and a resize listener both miss.
+ *
+ * Cache plugins defer CSS: a `media="print"` sheet swapped on load, critical
+ * CSS followed by the full sheet, a `<link>` injected into `<head>`. The sheet
+ * applies AFTER the first usability check — which runs from _fazRemoveBanner()
+ * at init — and applying it mutates nothing and resizes nothing. Without a
+ * `load` listener the widget stayed hidden and the visitor had no withdrawal
+ * route at all, which is the one outcome this fallback exists to prevent.
+ *
+ * The response is delayed on purpose. The <link> insertion is itself a
+ * mutation, so without the delay the observer's animation frame could happen
+ * to run after the sheet had already applied, and the test would pass without
+ * the listener it is meant to cover.
+ */
+test('a stylesheet that loads after init brings the fallback back', async ({page}) => {
+  await boot(page, '<div id="footer-controls"><button data-faz-open-preferences>Preferences</button></div>');
+  const fallback = page.locator('[data-faz-tag="revisit-consent"]');
+  await expect(fallback).toBeHidden();
+  await page.route('https://withdrawal.example.test/late.css', async (route: any) => {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await route.fulfill({contentType:'text/css', body:'#footer-controls{display:none}'});
+  });
+  await page.evaluate(() => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/late.css';
+    document.head.appendChild(link);
+  });
+  await expect(fallback).toBeVisible();
+});
+
+/** A <style> injected into <head> — invisible to a body-rooted observer. */
+test('a late style element in the head brings the fallback back', async ({page}) => {
+  await boot(page, '<div id="footer-controls"><button data-faz-open-preferences>Preferences</button></div>');
+  const fallback = page.locator('[data-faz-tag="revisit-consent"]');
+  await expect(fallback).toBeHidden();
+  await page.evaluate(() => {
+    const style = document.createElement('style');
+    style.textContent = '#footer-controls{display:none}';
+    document.head.appendChild(style);
+  });
+  await expect(fallback).toBeVisible();
+});
+
 test('theme visibility and viewport changes retain a usable route', async ({page}) => {
   await page.setViewportSize({width:1000,height:800});
   await boot(page, '<div id="footer-controls" class="mobile-hidden"><button data-faz-open-preferences>Preferences</button></div>');

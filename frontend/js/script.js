@@ -2647,7 +2647,16 @@ function _fazShowRevisit() {
 /** Check the actual visitor page, including theme CSS and disabled ancestors. */
 function _fazHasUsableWithdrawalControl() {
     return Array.from(document.querySelectorAll('[data-faz-open-preferences]')).some(function (control) {
-        if (control.closest('template,noscript,[hidden],[inert],[disabled]') || control.matches(':disabled')) return false;
+        // `:disabled` rather than an `[disabled]` ancestor, and the difference
+        // is not cosmetic: `disabled` is defined only on form controls and
+        // never disables a link, so `<footer disabled>` is not a disabled
+        // state — the attribute is ignored and the marked <a> inside still
+        // works. Matching it as fatal showed the fallback widget over a footer
+        // route that was perfectly usable. `:disabled` asks the browser the
+        // real question, and it already accounts for an ancestor
+        // `<fieldset disabled>` and for the exemption of its first `<legend>`.
+        // Withdrawal_Path::is_disabled() mirrors this on the server.
+        if (control.closest('template,noscript,[hidden],[inert]') || control.matches(':disabled')) return false;
         // Off-screen footer links remain usable by scrolling; only require a
         // rendered box, not intersection with the current viewport.
         if (!Array.from(control.getClientRects()).some(function (rect) { return rect.width > 0 && rect.height > 0; })) return false;
@@ -2681,11 +2690,30 @@ function _fazWatchWithdrawalControl() {
         });
     };
     _fazWithdrawalObserver = new MutationObserver(refresh);
-    _fazWithdrawalObserver.observe(document.body, {
+    // documentElement, not body: a theme or cache plugin injects its late
+    // <style> into <head>, which a body-rooted observer never sees.
+    _fazWithdrawalObserver.observe(document.documentElement, {
         subtree: true, childList: true, attributes: true,
-        attributeFilter: ['hidden', 'inert', 'disabled', 'class', 'style', 'data-faz-open-preferences']
+        attributeFilter: ['hidden', 'inert', 'disabled', 'class', 'style', 'media', 'data-faz-open-preferences']
     });
     window.addEventListener('resize', refresh);
+    // A stylesheet that finishes loading AFTER the first check can hide the
+    // footer control without mutating the DOM and without a resize, and the
+    // first check runs from _fazRemoveBanner() at init — usually before that
+    // CSS has applied. Without this the widget stayed hidden and the visitor
+    // was left with no withdrawal route at all, which is the precise case this
+    // fallback exists for. Common sources are the deferred-CSS tricks cache
+    // plugins use: `media="print"` swapped on load, critical CSS followed by
+    // the full sheet, or a <link> injected into <head>.
+    //
+    // Capturing on `document`, because `load` on a <link> does not bubble. The
+    // capture phase also runs BEFORE the link's own onload handler performs a
+    // media swap, and refresh() defers to the next animation frame, so the
+    // re-check reads the styles the swap produced rather than the ones before it.
+    document.addEventListener('load', function (event) {
+        var target = event.target;
+        if (target && 'LINK' === target.tagName) refresh();
+    }, true);
 }
 function _fazSetPreferenceAction(tagName = false) {
     _fazStore._preferenceOriginTag = tagName;

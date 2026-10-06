@@ -364,22 +364,92 @@ class Withdrawal_Path {
 		}
 		$xpath = new \DOMXPath( $document );
 		foreach ( $xpath->query( '//*[@' . self::MARKER . ']' ) as $control ) {
-			$usable = true;
-			for ( $element = $control; $element instanceof \DOMElement; $element = $element->parentNode ) {
-				if (
-					in_array( strtolower( $element->tagName ), array( 'template', 'noscript', 'script', 'style', 'head' ), true )
-					|| $element->hasAttribute( 'hidden' )
-					|| $element->hasAttribute( 'inert' )
-					|| $element->hasAttribute( 'disabled' )
-					|| preg_match( '/(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*(?:hidden|collapse)|content-visibility\s*:\s*hidden)\s*(?:!important\s*)?(?:;|$)/i', $element->getAttribute( 'style' ) )
-				) {
-					$usable = false;
+			if ( self::control_is_usable( $control ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether this marked element is a route the visitor can actually take.
+	 *
+	 * `hidden`, `inert` and the hiding declarations apply to any element, so
+	 * they are rejected anywhere in the ancestor chain. `disabled` does not:
+	 * see is_disabled().
+	 *
+	 * @param \DOMElement $control Element carrying the marker.
+	 * @return bool
+	 */
+	private static function control_is_usable( $control ) {
+		if ( self::is_disabled( $control ) ) {
+			return false;
+		}
+		for ( $element = $control; $element instanceof \DOMElement; $element = $element->parentNode ) {
+			if (
+				in_array( strtolower( $element->tagName ), array( 'template', 'noscript', 'script', 'style', 'head' ), true )
+				|| $element->hasAttribute( 'hidden' )
+				|| $element->hasAttribute( 'inert' )
+				|| preg_match( '/(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*(?:hidden|collapse)|content-visibility\s*:\s*hidden)\s*(?:!important\s*)?(?:;|$)/i', $element->getAttribute( 'style' ) )
+			) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether `disabled` actually disables this control, per the HTML spec.
+	 *
+	 * The attribute is not a generic "switch this subtree off": it is defined
+	 * only on form controls, and it never applies to a link. `<footer disabled>`,
+	 * `<div disabled>` and `<form disabled>` are not disabled states at all —
+	 * the attribute is simply ignored, the element still renders, and a marked
+	 * `<a>` inside it keeps receiving the script.js handler. Treating any
+	 * `disabled` ancestor as fatal rejected those pages, so a footer route the
+	 * visitor could use was reported `marker_missing` and the administrator saw
+	 * verification fail for no reason they could see.
+	 *
+	 * So: the attribute counts on the control itself only when the control is a
+	 * form control, and it counts on an ancestor only for `<fieldset>`, whose
+	 * `disabled` state does propagate — to descendant form controls, and with
+	 * the elements inside its FIRST `<legend>` exempted. This mirrors the CSS
+	 * `:disabled` pseudo-class, which is what the browser side asks, so the two
+	 * answers cannot diverge.
+	 *
+	 * @param \DOMElement $control Element carrying the marker.
+	 * @return bool
+	 */
+	private static function is_disabled( $control ) {
+		$form_controls = array( 'button', 'input', 'select', 'textarea', 'optgroup', 'option', 'fieldset' );
+		if ( ! in_array( strtolower( $control->tagName ), $form_controls, true ) ) {
+			return false;
+		}
+		if ( $control->hasAttribute( 'disabled' ) ) {
+			return true;
+		}
+		for ( $element = $control->parentNode; $element instanceof \DOMElement; $element = $element->parentNode ) {
+			if ( 'fieldset' !== strtolower( $element->tagName ) || ! $element->hasAttribute( 'disabled' ) ) {
+				continue;
+			}
+			// Everything inside the fieldset's first <legend> stays enabled, so
+			// the control is only disabled when it is not in that subtree.
+			$first_legend = null;
+			foreach ( $element->childNodes as $child ) {
+				if ( $child instanceof \DOMElement && 'legend' === strtolower( $child->tagName ) ) {
+					$first_legend = $child;
 					break;
 				}
 			}
-			if ( $usable ) {
+			if ( null === $first_legend ) {
 				return true;
 			}
+			for ( $ancestor = $control; $ancestor instanceof \DOMElement; $ancestor = $ancestor->parentNode ) {
+				if ( $ancestor === $first_legend ) {
+					continue 2;
+				}
+			}
+			return true;
 		}
 		return false;
 	}
