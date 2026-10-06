@@ -343,6 +343,12 @@ Categories are the right granularity on most sites, and while **Per-service cons
 
 `getFazConsent().services` gives the same answer keyed by service id instead of cookie name, and is empty when per-service consent is off. Both apply the resolution the blocker and the cookie shredder use: a per-cookie override wins over the per-service choice, which wins over the category, and the most restrictive answer wins when several services declare the same cookie.
 
+= The DSAR or Do-Not-Sell form, or the Cookie Policy styling, stopped working inside a popup or a page loaded by AJAX =
+
+Since 1.34.0 the DSAR form script, the Do-Not-Sell form script and the Cookie Policy stylesheet load only on pages where their shortcode is rendered by WordPress. If your page builder injects the shortcode markup in the browser after the page has loaded (AJAX popups, "load more" buttons, Bricks client-side rendering, swup or Barba page transitions), the asset is not on that page. Return `true` from the `faz_load_shortcode_assets_everywhere` filter for the asset you need -- `'dsar'`, `'dnsmpi'` or `'cookie_policy'` -- to load it on every page, as before:
+
+`add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $asset ) { return 'dsar' === $asset ? true : $everywhere; }, 10, 2 );`
+
 == Screenshots ==
 
 1. **Cookie consent banner on the frontend** -- GDPR-ready banner in the bottom-left corner with "Customize", "Reject All" and equal-weight "Accept All" buttons. Shown only on the first visit until the visitor makes a choice.
