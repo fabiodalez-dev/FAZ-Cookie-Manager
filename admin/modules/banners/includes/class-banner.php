@@ -33,6 +33,13 @@ class Banner extends Store {
 	private $controller;
 
 	/**
+	 * Runtime-only footer fallback flag; never part of the saved banner row.
+	 *
+	 * @var bool
+	 */
+	private $verified_withdrawal_alternative = false;
+
+	/**
 	 * Data array, with defaults.
 	 *
 	 * @var array
@@ -155,6 +162,7 @@ class Banner extends Store {
 	public function set_settings( $data ) {
 		$key = 'settings';
 		if ( array_key_exists( $key, $this->data ) ) {
+			$this->verified_withdrawal_alternative = ! empty( $data['config']['revisitConsent']['verifiedAlternative'] );
 			$default_type       = self::get_default_config_type( $data );
 			$data               = self::sanitize_settings( array( $this, 'sanitize_option' ), $data, $this->controller->get_default_configs( $default_type ) );
 			$this->data[ $key ] = $data;
@@ -270,6 +278,9 @@ class Banner extends Store {
 			if ( is_array( $settings ) ) {
 				$default_type = self::get_default_config_type( $settings );
 				$settings     = self::sanitize_settings( array( $this, 'sanitize_option' ), $settings, $this->controller->get_default_configs( $default_type ) );
+				if ( $this->verified_withdrawal_alternative ) {
+					$settings['config']['revisitConsent']['verifiedAlternative'] = true;
+				}
 			}
 		}
 		return $settings;

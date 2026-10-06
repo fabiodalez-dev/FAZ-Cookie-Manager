@@ -199,6 +199,15 @@ class Geo_Runtime {
 		if ( ! empty( $ui['revisit_widget_required'] ) && ! $withdrawal_satisfied ) {
 			$properties['config']['revisitConsent']['status'] = true;
 		}
+		// Keep a hidden fallback in the template when a verified footer replaces
+		// the widget. Only the browser can check the theme's CSS, viewport and
+		// later DOM changes; verification cannot prove those remain usable.
+		if ( isset( $properties['config']['revisitConsent'] ) && is_array( $properties['config']['revisitConsent'] ) ) {
+			$properties['config']['revisitConsent']['verifiedAlternative'] =
+				! empty( $ui['revisit_widget_required'] )
+				&& $withdrawal_satisfied
+				&& empty( $properties['config']['revisitConsent']['status'] );
+		}
 		if ( ! empty( $signals['gpc_honored'] ) || ! empty( $signals['gpc_required'] ) ) {
 			$properties['behaviours']['respectGPC']['status'] = true;
 			$properties['config']['optoutPopup']['elements']['gpcOption']['status'] = true;

@@ -667,11 +667,41 @@ class Controller extends Base_Controller {
 	 * @return Banner|false
 	 */
 	public function get_active_banner_for_law( $law, $country = '' ) {
+		$winner_id = $this->get_active_banner_id_for_law( $law, $country );
+		if ( null === $winner_id ) {
+			return false;
+		}
+		$winner = new Banner( $winner_id );
+		$winner->set_language( faz_current_language() );
+		return $winner;
+	}
+
+	/**
+	 * Check banner availability without resolving a visitor's language.
+	 *
+	 * The bootstrap readiness check is also used by language resolution, so
+	 * building a localized banner here would recurse into that same check.
+	 *
+	 * @param string $law     'gdpr' or 'ccpa'.
+	 * @param string $country Visitor country, or '' for a global banner.
+	 * @return bool
+	 */
+	public function has_active_banner_for_law( $law, $country = '' ) {
+		return null !== $this->get_active_banner_id_for_law( $law, $country );
+	}
+
+	/**
+	 * Select an active banner ID without loading its contents or language.
+	 *
+	 * @param string $law     'gdpr' or 'ccpa'.
+	 * @param string $country Visitor country, or ''.
+	 * @return int|null
+	 */
+	private function get_active_banner_id_for_law( $law, $country ) {
 		$law          = ( 'ccpa' === $law ) ? 'ccpa' : 'gdpr';
 		$items        = $this->get_items();
-		$current_lang = faz_current_language();
 		if ( empty( $items ) || ! is_array( $items ) ) {
-			return false;
+			return null;
 		}
 
 		$country = is_string( $country ) ? strtoupper( trim( $country ) ) : '';
@@ -732,13 +762,7 @@ class Controller extends Base_Controller {
 			$winner_id = $default_id;
 		}
 
-		if ( null === $winner_id ) {
-			return false;
-		}
-
-		$winner = new Banner( $winner_id );
-		$winner->set_language( $current_lang );
-		return $winner;
+		return $winner_id;
 	}
 
 	/**

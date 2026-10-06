@@ -848,11 +848,12 @@ class AMP_Consent {
 					return false;
 				}
 			}
+			// Normal-page footer probes only prove a script.js trigger, not
+			// an AMP tap action. Keep the native post-consent control.
 			$banner->set_settings(
 				Geo_Runtime::apply_ui_requirements(
 					$ruleset,
-					$banner->get_settings(),
-					\FazCookie\Includes\Withdrawal_Path::satisfies_revisit_requirement( $this->get_faz_settings() )
+					$banner->get_settings()
 				)
 			);
 		}

@@ -219,9 +219,35 @@ namespace {
 	// il lucchetto del widget si apriva.
 	$inline_bundle = '<html><head><script id="faz-inline">var s="[data-faz-open-preferences],.faz-cookie-settings-btn";document.addEventListener("click",function(e){e.target.closest(s);});</script></head><body><footer><a href="/privacy">Privacy</a></footer></body></html>';
 	faz_is( Withdrawal_Path::body_has_marker( $inline_bundle ), false, 'marker solo dentro uno <script> inline -> NON verificato' );
+	faz_is( Withdrawal_Path::body_has_marker( '<script>"data-faz-open-preferences"</script>' ), false, 'only raw text leaves no document to parse' );
 	faz_is( Withdrawal_Path::body_has_marker( '<body><!-- <a data-faz-open-preferences="1">Cookie</a> --><p>x</p></body>' ), false, 'marker solo in un commento HTML -> NON verificato' );
 	faz_is( Withdrawal_Path::body_has_marker( '<body><noscript><a href="#faz-consent" data-faz-open-preferences="1">Cookie</a></noscript></body>' ), false, 'marker solo in <noscript> -> NON verificato: senza script.js il link non fa nulla' );
 	faz_is( Withdrawal_Path::body_has_marker( '<body><template><button data-faz-open-preferences="1">Cookie</button></template></body>' ), false, 'marker solo in un <template> inerte -> NON verificato' );
+	$unusable_controls = array(
+		'<button disabled data-faz-open-preferences>Preferences</button>',
+		'<button data-faz-open-preferences disabled="false">Preferences</button>',
+		'<footer hidden><button data-faz-open-preferences>Preferences</button></footer>',
+		'<footer inert><a data-faz-open-preferences>Preferences</a></footer>',
+		'<fieldset disabled><button data-faz-open-preferences>Preferences</button></fieldset>',
+		'<template><template><p>inner</p></template><button data-faz-open-preferences>Preferences</button></template>',
+		'<footer style="display: none"><a data-faz-open-preferences>Preferences</a></footer>',
+		'<footer><a style="visibility:hidden" data-faz-open-preferences>Preferences</a></footer>',
+	);
+	foreach ( $unusable_controls as $html ) {
+		faz_is( Withdrawal_Path::body_has_marker( $html ), false, 'unusable withdrawal control: ' . $html );
+		foreach ( $urls as $u ) {
+			$GLOBALS['__faz_responses'][ $u ] = array( 'code' => 200, 'body' => $html );
+		}
+		$unusable_probe = Withdrawal_Path::verify();
+		faz_is( $unusable_probe['status'], 'failed', 'unusable control cannot verify the footer route' );
+		$overlay = Geo_Runtime::apply_ui_requirements(
+			array( 'ui' => array( 'revisit_widget_required' => true ) ),
+			array( 'config' => array( 'revisitConsent' => array( 'status' => false ) ) ),
+			Withdrawal_Path::satisfies_revisit_requirement( faz_settings_with( 'footer_link' ) )
+		);
+		faz_is( $overlay['config']['revisitConsent']['status'], true, 'unusable control leaves the revisit widget on' );
+	}
+	faz_is( Withdrawal_Path::body_has_marker( '<footer hidden><a data-faz-open-preferences>Hidden</a></footer><footer><a data-faz-open-preferences>Visible</a></footer>' ), true, 'a usable sibling is not hidden by the earlier hidden ancestor' );
 	faz_is( Withdrawal_Path::body_has_marker( '<body><style>[data-faz-open-preferences]{color:red}</style></body>' ), false, 'marker solo in un selettore CSS -> NON verificato' );
 	faz_is( Withdrawal_Path::body_has_marker( '<body><code>&lt;a data-faz-open-preferences="1"&gt;</code></body>' ), false, 'snippet mostrato come testo con entità -> NON verificato' );
 	faz_is( Withdrawal_Path::body_has_marker( '<body><a title="usa data-faz-open-preferences nel footer" href="/x">x</a></body>' ), false, 'marker dentro il VALORE di un altro attributo -> NON verificato' );
@@ -264,6 +290,52 @@ namespace {
 	// una scelta legittima dell'amministratore.
 	$not_forced = Geo_Runtime::apply_ui_requirements( $ruleset, array(), true );
 	faz_is( isset( $not_forced['config']['revisitConsent']['status'] ), false, 'rotta verificata -> il runtime NON tocca il widget' );
+	$footer_fallback = Geo_Runtime::apply_ui_requirements( $ruleset, array( 'config' => array( 'revisitConsent' => array( 'status' => false ) ) ), true );
+	faz_is( $footer_fallback['config']['revisitConsent']['status'], false, 'verified footer preserves the disabled widget baseline' );
+	faz_is( $footer_fallback['config']['revisitConsent']['verifiedAlternative'], true, 'verified footer retains a hidden browser fallback' );
+	$amp_fallback = Geo_Runtime::apply_ui_requirements( $ruleset, $footer_fallback );
+	faz_is( $amp_fallback['config']['revisitConsent']['status'], true, 'without an alternative the native widget is enabled' );
+	faz_is( $amp_fallback['config']['revisitConsent']['verifiedAlternative'], false, 'the normal-page alternative cannot leak into AMP' );
+
+	// Exercise the real PHP template filter: a disabled widget normally
+	// disappears, but a verified footer must retain its hidden fallback.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-utils.php';
+	require_once dirname( __DIR__, 2 ) . '/includes/class-store.php';
+	require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/class-banner.php';
+	require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/class-template.php';
+	function do_shortcode( $html ) { return $html; }
+	function faz_sanitize_bool( $value ) { return filter_var( $value, FILTER_VALIDATE_BOOLEAN ); }
+	function faz_sanitize_text( $value ) { return is_array( $value ) ? array_map( 'faz_sanitize_text', $value ) : trim( (string) $value ); }
+	$model = ( new \ReflectionClass( '\FazCookie\Admin\Modules\Banners\Includes\Banner' ) )->newInstanceWithoutConstructor();
+	$controller_property = new \ReflectionProperty( $model, 'controller' );
+	$controller_property->setAccessible( true );
+	$controller_property->setValue( $model, new class {
+		public function get_default_configs( $type ) {
+			return array( 'config' => array( 'revisitConsent' => array( 'tag' => 'revisit-consent', 'status' => false ) ) );
+		}
+	} );
+	$model->set_settings( $footer_fallback );
+	faz_is( $model->get_settings()['config']['revisitConsent']['verifiedAlternative'], true, 'real Banner sanitization preserves the runtime fallback flag' );
+	$model_data = new \ReflectionProperty( $model, 'data' );
+	$model_data->setAccessible( true );
+	faz_is( isset( $model_data->getValue( $model )['settings']['config']['revisitConsent']['verifiedAlternative'] ), false, 'the runtime flag is excluded from data that is persisted' );
+	$model->set_settings( array( 'config' => array( 'revisitConsent' => array( 'status' => true ) ) ) );
+	faz_is( isset( $model->get_settings()['config']['revisitConsent']['verifiedAlternative'] ), false, 'a later overlay can clear the runtime fallback flag' );
+	$prepare_html = new \ReflectionMethod( '\FazCookie\Admin\Modules\Banners\Includes\Template', 'prepare_html' );
+	$prepare_html->setAccessible( true );
+	foreach ( array( false, true ) as $retain_fallback ) {
+		$template = ( new \ReflectionClass( '\FazCookie\Admin\Modules\Banners\Includes\Template' ) )->newInstanceWithoutConstructor();
+		foreach ( array(
+			'template' => array( 'html' => '<div class="faz-btn-revisit-wrapper faz-revisit-hide" data-faz-tag="revisit-consent"><button>Preferences</button></div><div class="faz-consent-container">Banner</div>' ),
+			'properties' => array( 'config' => array( 'revisitConsent' => array( 'tag' => 'revisit-consent', 'status' => false, 'verifiedAlternative' => $retain_fallback ) ) ),
+		) as $property_name => $value ) {
+			$property = new \ReflectionProperty( $template, $property_name );
+			$property->setAccessible( true );
+			$property->setValue( $template, $value );
+		}
+		$html = $prepare_html->invoke( $template );
+		faz_is( false !== strpos( $html, 'data-faz-tag="revisit-consent"' ), $retain_fallback, 'PHP template retains the disabled widget only as a verified-footer fallback' );
+	}
 
 	// E il resto dell'overlay non cambia: il terzo parametro riguarda solo
 	// questo requisito.

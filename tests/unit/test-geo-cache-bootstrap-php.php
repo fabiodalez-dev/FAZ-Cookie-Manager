@@ -121,8 +121,8 @@ namespace FazCookie\Admin\Modules\Banners\Includes {
 			return new self();
 		}
 
-		public function get_active_banner_for_law( $law, $country = '' ) {
-			return self::$strict_banner && 'gdpr' === $law && '' === $country ? (object) array( 'slug' => 'strict' ) : false;
+		public function has_active_banner_for_law( $law, $country = '' ) {
+			return self::$strict_banner && 'gdpr' === $law && '' === $country;
 		}
 
 		public function has_country_dependent_banners() {
@@ -192,6 +192,7 @@ namespace {
 	use FazCookie\Admin\Modules\Geo_Routing\Includes\Ruleset_Loader;
 	use FazCookie\Frontend\Frontend;
 	use FazCookie\Frontend\Includes\Geo_Runtime;
+	use FazCookie\Includes\Geolocation;
 
 	class Faz_Geo_Bootstrap_Frontend extends Frontend {
 		protected function is_banner_disabled_by_settings() {
@@ -426,6 +427,56 @@ namespace {
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $cache_compat, 'is_cache_compatibility_enabled' ), true, 'Cache Compatibility Mode activates only after geo runtime is disabled' );
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $cache_compat, 'is_geo_bootstrap_cache_active' ), false, 'Cache Compatibility Mode excludes the strict-shell bootstrap' );
 	faz_geo_bootstrap_same( Frontend::get_geo_bootstrap_status( array() )['reason'], 'enforcement_disabled', 'admin readiness reports that enforcement is disabled' );
+
+	// With routing and a country source, the bootstrap still permits shared
+	// caching. Visitor-only WPML / translation state must not enter that shell.
+	faz_geo_bootstrap_reset();
+	require_once dirname( __DIR__, 2 ) . '/includes/class-i18n-helpers.php';
+	require_once dirname( __DIR__, 2 ) . '/frontend/class-translation-compat.php';
+	function faz_sanitize_text( $value ) { return is_array( $value ) ? array_map( 'faz_sanitize_text', $value ) : trim( (string) $value ); }
+	define( 'ICL_LANGUAGE_CODE', 'en' );
+	$language_settings = array(
+		'banner_control' => array( 'cache_compatibility' => true ),
+		'geolocation'    => array( 'geo_targeting' => true, 'cache_geo_bootstrap' => true ),
+		'languages'      => array( 'default' => 'en', 'selected' => array( 'en', 'it', 'fr' ) ),
+	);
+	$GLOBALS['faz_geo_bootstrap_options']['faz_settings'] = $language_settings;
+	Geolocation::$has_database = true;
+	add_filter( 'wpml_setting', static function ( $value, $name = '' ) { return 'language_negotiation_type' === $name ? 3 : $value; } );
+	add_filter( 'wpml_current_language', static function () { return $GLOBALS['faz_test_visitor_language']; } );
+	$translation = ( new \ReflectionClass( '\\FazCookie\\Frontend\\Translation_Compat' ) )->newInstanceWithoutConstructor();
+	$language_shell = faz_geo_bootstrap_frontend( $language_settings );
+	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $language_shell, 'is_geo_bootstrap_cache_active' ), true, 'routing shell bootstrap is active with cache compatibility paused' );
+	faz_geo_bootstrap_same( $language_shell->flying_press_is_cacheable( true ), true, 'routing shell remains cacheable with a country source' );
+	faz_geo_bootstrap_same( \FazCookie\Includes\Cache_Compatibility::is_shared_cache_render(), true, 'language gate agrees with the cacheable bootstrap shell' );
+	foreach ( array( 'it', 'fr' ) as $visitor_language ) {
+		$GLOBALS['faz_test_visitor_language'] = $visitor_language;
+		$GLOBALS['TRP_LANGUAGE'] = $visitor_language . '_XX';
+		faz_current_language( true );
+		faz_geo_bootstrap_same( faz_current_language(), 'en', 'bootstrap shell ignores visitor-only language ' . $visitor_language );
+		faz_geo_bootstrap_same( $translation->get_translatepress_language( 'en' ), 'en', 'TranslatePress filter preserves bootstrap shell language' );
+		faz_geo_bootstrap_same( $translation->get_weglot_language( 'en' ), 'en', 'Weglot filter preserves bootstrap shell language' );
+	}
+	if ( ! function_exists( 'weglot_get_current_language' ) ) {
+		function weglot_get_current_language() { return $GLOBALS['faz_test_visitor_language']; }
+	}
+	faz_geo_bootstrap_same( $translation->get_weglot_language( 'en' ), 'en', 'Weglot visitor cookie cannot change the bootstrap shell language' );
+	// URL-based WPML language remains safe even on the shared bootstrap shell.
+	unset( $GLOBALS['faz_geo_bootstrap_filters']['wpml_setting'] );
+	add_filter( 'wpml_setting', static function ( $value, $name = '' ) { return 'language_negotiation_type' === $name ? 1 : $value; } );
+	faz_current_language( true );
+	faz_geo_bootstrap_same( faz_current_language(), 'fr', 'URL-based WPML language remains available in the shared shell' );
+	// Unsupported dimensions and AMP keep the cache veto, so language can vary.
+	foreach ( array( 'iab', 'amp' ) as $excluded ) {
+		$excluded_settings = $language_settings;
+		if ( 'iab' === $excluded ) { $excluded_settings['iab']['enabled'] = true; }
+		else { add_filter( 'faz_is_amp_request', '__return_true' ); }
+		$GLOBALS['faz_geo_bootstrap_options']['faz_settings'] = $excluded_settings;
+		faz_geo_bootstrap_same( \FazCookie\Includes\Cache_Compatibility::is_shared_cache_render(), false, $excluded . ' cannot share the bootstrap shell' );
+		$GLOBALS['faz_test_visitor_language'] = 'it';
+		faz_current_language( true );
+		faz_geo_bootstrap_same( faz_current_language(), 'it', $excluded . ' retains visitor language on uncached pages' );
+	}
 
 	echo "\n" . ( 0 === $failed ? "ALL PASS ({$passed})\n" : "FAILED: {$failed}, passed: {$passed}\n" );
 	exit( 0 === $failed ? 0 : 1 );

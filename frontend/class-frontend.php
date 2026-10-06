@@ -1924,11 +1924,11 @@ class Frontend {
 			if ( $controller->has_country_dependent_banners() ) {
 				return array( 'requested' => true, 'active' => false, 'reason' => 'country_banners' );
 			}
-			$strict_banner = $controller->get_active_banner_for_law( 'gdpr', '' );
+			$has_strict_banner = $controller->has_active_banner_for_law( 'gdpr', '' );
 		} catch ( \Throwable $e ) {
 			return array( 'requested' => true, 'active' => false, 'reason' => 'missing_gdpr_banner' );
 		}
-		if ( false === $strict_banner ) {
+		if ( ! $has_strict_banner ) {
 			return array( 'requested' => true, 'active' => false, 'reason' => 'missing_gdpr_banner' );
 		}
 		if ( apply_filters( 'faz_country_dependent_banner_output', false, $settings ) ) {

@@ -917,7 +917,8 @@ ref._fazRandomString = function (length, allChars = true) {
 function _fazRemoveBanner() {
     _fazHideBanner();
     _fazRemoveCookieWall();
-    if (_fazStore._bannerConfig.config.revisitConsent.status === true) {
+    if (_fazStore._bannerConfig.config.revisitConsent.status === true ||
+        _fazStore._bannerConfig.config.revisitConsent.verifiedAlternative === true) {
         _fazShowRevisit();
     }
 }
@@ -2630,11 +2631,61 @@ function _fazGetRevisit() {
     return revisit && revisit || false;
 }
 function _fazHideRevisit() {    const revisit = _fazGetRevisit();
-    revisit && revisit.classList.add('faz-revisit-hide')
+    if (revisit && !revisit.classList.contains('faz-revisit-hide')) revisit.classList.add('faz-revisit-hide');
 }
 function _fazShowRevisit() {
     const revisit = _fazGetRevisit();
-    revisit && revisit.classList.remove('faz-revisit-hide')
+    if (!revisit) return;
+    const config = _fazStore._bannerConfig.config.revisitConsent;
+    if (config.verifiedAlternative === true && _fazHasUsableWithdrawalControl()) {
+        _fazHideRevisit();
+        return;
+    }
+    if (revisit.classList.contains('faz-revisit-hide')) revisit.classList.remove('faz-revisit-hide');
+}
+
+/** Check the actual visitor page, including theme CSS and disabled ancestors. */
+function _fazHasUsableWithdrawalControl() {
+    return Array.from(document.querySelectorAll('[data-faz-open-preferences]')).some(function (control) {
+        if (control.closest('template,noscript,[hidden],[inert],[disabled]') || control.matches(':disabled')) return false;
+        // Off-screen footer links remain usable by scrolling; only require a
+        // rendered box, not intersection with the current viewport.
+        if (!Array.from(control.getClientRects()).some(function (rect) { return rect.width > 0 && rect.height > 0; })) return false;
+        for (var node = control; node && node.nodeType === 1; node = node.parentElement) {
+            var style = window.getComputedStyle(node);
+            if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' ||
+                style.contentVisibility === 'hidden' || style.opacity === '0' || style.pointerEvents === 'none') return false;
+        }
+        return true;
+    });
+}
+
+var _fazWithdrawalObserver = null;
+function _fazWatchWithdrawalControl() {
+    var config = _fazStore._bannerConfig.config && _fazStore._bannerConfig.config.revisitConsent;
+    if (!config || config.verifiedAlternative !== true || _fazWithdrawalObserver || !document.body) return;
+    var pending = false;
+    var refresh = function () {
+        if (pending) return;
+        pending = true;
+        window.requestAnimationFrame(function () {
+            pending = false;
+            var banner = _fazGetBanner();
+            // Do not expose the fallback while the consent notice or its
+            // preference panel is open. Their normal close path handles it.
+            if (banner && !banner.classList.contains('faz-hide')) return;
+            var detail = _fazGetElementByTag('detail');
+            var optout = _fazGetElementByTag('optout-popup');
+            if ([detail, optout].some(function (panel) { return panel && panel.closest('.faz-modal-open'); })) return;
+            if (_fazStore._bannerConfig.config.revisitConsent.verifiedAlternative === true) _fazShowRevisit();
+        });
+    };
+    _fazWithdrawalObserver = new MutationObserver(refresh);
+    _fazWithdrawalObserver.observe(document.body, {
+        subtree: true, childList: true, attributes: true,
+        attributeFilter: ['hidden', 'inert', 'disabled', 'class', 'style', 'data-faz-open-preferences']
+    });
+    window.addEventListener('resize', refresh);
 }
 function _fazSetPreferenceAction(tagName = false) {
     _fazStore._preferenceOriginTag = tagName;
@@ -2921,6 +2972,7 @@ function _fazRenderBanner() {
     // duplicating the preference center. See _fazReRenderVisibleBanner().
     _fazRenderedNodes = Array.prototype.slice.call(fragment.childNodes);
     document.body.insertBefore(fragment, document.body.firstChild);
+    _fazWatchWithdrawalControl();
     if (_fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1) _fazToggleAriaExpandStatus("=settings-button", "false");
     // Run each decoration helper in isolation: the banner template is already
     // in the DOM at this point, so a single helper throwing (e.g. a fragile

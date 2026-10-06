@@ -28,8 +28,8 @@
  *
  * The two language seams ask is_shared_cache_render() rather than is_active().
  * Pausing stops the mode constraining the render; it does not stop the page
- * being cached on an install where routing has no country source, and a
- * language read from visitor state must never reach a shared cached page.
+ * being cached when routing has no country source or uses a strict-shell
+ * bootstrap. Language read from visitor state must never reach a shared page.
  *
  * Deliberately NOT memoised. Every caller already paid for
  * Geo_Runtime::is_enabled() on each call, the option is served from
@@ -148,8 +148,9 @@ class Cache_Compatibility {
 	 *
 	 *   off                          false — nothing was promised.
 	 *   active                       true.
+	 *   paused, bootstrap active     true  — normal pages share a strict shell.
 	 *   paused, no country source    true  — the page is still cacheable.
-	 *   paused, country source       false — the routing veto keeps the page
+	 *   paused, source, no bootstrap false — the routing veto keeps the page
 	 *                                        out of the shared cache, so
 	 *                                        per-visitor language is safe.
 	 *
@@ -170,6 +171,20 @@ class Cache_Compatibility {
 			return true;
 		}
 
+		// The strict-shell bootstrap keeps normal pages in the shared cache
+		// even when routing has a country source. Read the same readiness gate
+		// as Frontend, including its request-specific AMP exclusion. Readiness
+		// checks banner availability without consulting visitor language.
+		if (
+			class_exists( '\FazCookie\Frontend\Frontend' )
+			&& false === apply_filters( 'faz_is_amp_request', false )
+		) {
+			$bootstrap = \FazCookie\Frontend\Frontend::get_geo_bootstrap_status( $settings );
+			if ( ! empty( $bootstrap['active'] ) ) {
+				return true;
+			}
+		}
+
 		if (
 			! class_exists( '\FazCookie\Includes\Geolocation' )
 			|| ! method_exists( '\FazCookie\Includes\Geolocation', 'has_country_source' )
@@ -177,7 +192,7 @@ class Cache_Compatibility {
 			return true;
 		}
 
-		// The same predicate the Frontend veto uses, including its
+		// With the bootstrap excluded, use the Frontend veto's predicate and
 		// `faz_has_country_signal_source` override, so this answer and the
 		// cache headers the page is sent with cannot disagree.
 		return ! \FazCookie\Includes\Geolocation::has_country_source();

@@ -331,6 +331,8 @@ class Withdrawal_Path {
 	 * the attribute works for the visitor and must verify too. `<noscript>` is
 	 * excluded deliberately — the control only works through script.js, so a
 	 * link that exists only when scripts do not run is not a usable route.
+	 * The DOM ancestor check also rejects disabled, hidden and inert controls;
+	 * the browser retains a fallback for visibility set by external theme CSS.
 	 *
 	 * @param string $html Response body.
 	 * @return bool
@@ -340,25 +342,53 @@ class Withdrawal_Path {
 			return false;
 		}
 
+		// Parsing the ancestor chain also keeps nested templates inert. A
+		// substring/regex match cannot establish that a control is usable.
+		if ( ! class_exists( '\DOMDocument' ) ) {
+			return false;
+		}
 		$markup = self::strip_non_markup( $html );
-
-		// The attribute must sit in a tag, preceded by whitespace and followed
-		// by whitespace, `=`, `/` or the end of the tag — so neither
-		// `data-faz-open-preferences-extra` nor a value that merely CONTAINS the
-		// marker counts. Quoted attribute values are consumed whole, so a marker
-		// inside `title="... data-faz-open-preferences ..."` cannot match either.
-		$pattern = '#<[a-z][a-z0-9:-]*(?:\s(?:[^>"\']|"[^"]*"|\'[^\']*\')*?)?\s'
-			. preg_quote( self::MARKER, '#' )
-			. '(?=[\s=/>])#i';
-
-		return 1 === preg_match( $pattern, $markup );
+		if ( '' === trim( $markup ) ) {
+			return false;
+		}
+		$document = new \DOMDocument();
+		$previous = libxml_use_internal_errors( true );
+		try {
+			$loaded = $document->loadHTML( $markup, LIBXML_NONET );
+		} finally {
+			libxml_clear_errors();
+			libxml_use_internal_errors( $previous );
+		}
+		if ( ! $loaded ) {
+			return false;
+		}
+		$xpath = new \DOMXPath( $document );
+		foreach ( $xpath->query( '//*[@' . self::MARKER . ']' ) as $control ) {
+			$usable = true;
+			for ( $element = $control; $element instanceof \DOMElement; $element = $element->parentNode ) {
+				if (
+					in_array( strtolower( $element->tagName ), array( 'template', 'noscript', 'script', 'style', 'head' ), true )
+					|| $element->hasAttribute( 'hidden' )
+					|| $element->hasAttribute( 'inert' )
+					|| $element->hasAttribute( 'disabled' )
+					|| preg_match( '/(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*(?:hidden|collapse)|content-visibility\s*:\s*hidden)\s*(?:!important\s*)?(?:;|$)/i', $element->getAttribute( 'style' ) )
+				) {
+					$usable = false;
+					break;
+				}
+			}
+			if ( $usable ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
 	 * Remove the parts of a document whose content is not clickable markup.
 	 *
 	 * Comments, and the raw-text / inert elements (`script`, `style`,
-	 * `template`, `noscript`, `textarea`, `title`, `iframe`, `noembed`,
+	 * `noscript`, `textarea`, `title`, `iframe`, `noembed`,
 	 * `noframes`, `xmp`, `plaintext`). Scanned left to right with plain string
 	 * searches rather than one large lazy regex: an inline bundle is easily
 	 * a few hundred kilobytes, and a lazy `.*?` across it is exactly where
@@ -373,7 +403,9 @@ class Withdrawal_Path {
 	 * @return string
 	 */
 	private static function strip_non_markup( $html ) {
-		$opener = '#<!--|<(script|style|template|noscript|textarea|title|iframe|noembed|noframes|xmp|plaintext)\b[^>]*>#i';
+		// Keep template markup for the DOM ancestor check: templates can nest,
+		// unlike raw-text elements, so the first closing tag is not their end.
+		$opener = '#<!--|<(script|style|noscript|textarea|title|iframe|noembed|noframes|xmp|plaintext)\b[^>]*>#i';
 		$length = strlen( $html );
 		$offset = 0;
 		$kept   = '';

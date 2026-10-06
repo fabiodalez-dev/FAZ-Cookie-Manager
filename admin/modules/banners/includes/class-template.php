@@ -555,6 +555,9 @@ class Template {
 				}
 				$preview = $this->is_preview();
 				$enabled = isset( $config['status'] ) && false === $preview ? $config['status'] : true;
+				if ( 'revisit-consent' === $tag && ! empty( $properties['config']['revisitConsent']['verifiedAlternative'] ) ) {
+					$enabled = true; // Hidden fallback; script.js checks the live footer.
+				}
 
 				// Category toggles are required for GDPR granular consent — never remove.
 				if ( false === $enabled && 'detail-category-toggle' !== $tag ) {
@@ -708,6 +711,8 @@ class Template {
 					'law'            => isset( $settings['applicableLaw'] ) ? $settings['applicableLaw'] : 'gdpr',
 					'do_not_sell'    => $do_not_sell,
 					'optout_popup'   => ! empty( $config['optoutPopup']['status'] ),
+					'revisit_status' => isset( $config['revisitConsent']['status'] ) ? (bool) $config['revisitConsent']['status'] : true,
+					'revisit_alternative' => ! empty( $config['revisitConsent']['verifiedAlternative'] ),
 					// Toggling per-service / per-cookie consent changes the
 					// preference-center structure, so it must invalidate the cache.
 					'per_service'    => ! empty( $banner_control['per_service_consent'] ),

@@ -267,6 +267,8 @@ function faz_sig_for_version( $version, $base_settings, $desc_md5, $build_locale
 				'law'            => $base_settings['applicableLaw'],
 				'do_not_sell'    => false,
 				'optout_popup'   => false,
+				'revisit_status' => true,
+				'revisit_alternative' => false,
 				'per_service'    => false,
 				'per_cookie'     => false,
 				'description'    => $desc_md5,
@@ -326,6 +328,21 @@ $rehit = new Faz_Test_Template();
 $rehit->faz_setup( new Faz_Test_Banner(), array( 'settings' => $base_settings, 'config' => array() ) );
 $rehit->load();
 faz_ok( 0 === $rehit->generated && 1 === $rehit->set_called, '15 after update() the flipped layout is cached -> next load() is a hit' );
+
+// Withdrawal verification changes the available markup without saving the
+// banner row. A stale cache must not discard the hidden fallback control.
+$widget_off = array( 'revisitConsent' => array( 'status' => false ) );
+$widget_fallback = array( 'revisitConsent' => array( 'status' => false, 'verifiedAlternative' => true ) );
+$off_signature = faz_make_template( $base_settings, $widget_off )->faz_signature();
+$fallback_template = faz_make_template( $base_settings, $widget_fallback );
+faz_ok( $off_signature !== $fallback_template->faz_signature(), 'verified alternative invalidates a template with no revisit control' );
+faz_ok( $sig_base !== $off_signature, 'disabling the native widget invalidates its markup' );
+$GLOBALS['faz_test_options']['faz_banner_template'] = array();
+$without_fallback = faz_make_template( $base_settings, $widget_off );
+$without_fallback->load();
+$without_fallback->update();
+$fallback_template->load();
+faz_ok( 1 === $fallback_template->generated, 'verification regenerates a cached template to retain a fallback' );
 
 // ---------- Result ----------
 echo "\n" . ( 0 === $faz_fail ? "ALL PASS ($faz_pass)\n" : "FAILED: $faz_fail, passed: $faz_pass\n" );

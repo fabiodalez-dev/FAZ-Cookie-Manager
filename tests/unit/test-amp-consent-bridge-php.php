@@ -78,14 +78,17 @@ namespace {
 		public $slug = 'main-banner';
 		public $law = 'gdpr';
 		public $expiry = 90;
+		public $properties = null;
 		public function get_slug() { return $this->slug; }
 		public function get_law() { return $this->law; }
 		public function get_settings() {
+			if ( null !== $this->properties ) { return $this->properties; }
 			return array(
 				'settings' => array( 'applicableLaw' => $this->law, 'consentExpiry' => array( 'value' => $this->expiry ), 'ruleSet' => array() ),
 				'config'   => array(),
 			);
 		}
+		public function set_settings( $settings ) { $this->properties = $settings; }
 		public function get_contents() {
 			return array(
 				'en' => array(
@@ -208,6 +211,15 @@ namespace FazCookie\Includes {
 	}
 }
 
+namespace FazCookie\Admin\Modules\Geo_Routing {
+	class Geo_Routing {
+		public static function get_instance() { return new self(); }
+		public function get_visitor_context( $unused, $country, $region ) {
+			return array( 'ruleset' => array( 'model' => 'opt-in', 'ui' => array( 'revisit_widget_required' => true ) ) );
+		}
+	}
+}
+
 namespace FazCookie\Admin\Modules\Banners\Includes {
 	class Controller {
 		public static $banner;
@@ -260,6 +272,7 @@ namespace {
 	// Asked by the jurisdiction overlay to know whether a verified withdrawal
 	// route other than the floating widget is in place.
 	require_once dirname( __DIR__, 2 ) . '/includes/class-withdrawal-path.php';
+	require_once dirname( __DIR__, 2 ) . '/frontend/includes/class-geo-runtime.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-amp-consent.php';
 
 	use FazCookie\Frontend\AMP_Consent;
@@ -1264,6 +1277,25 @@ namespace {
 	$faz_selfclosed = $amp->apply_component_blocking( '<amp-ad width="1" data-block-on-consent/>' );
 	amp_same( substr_count( $faz_selfclosed, 'data-block-on-consent' ), 1, 'a self-closed tag keeps exactly one blocking attribute' );
 	amp_same( $faz_selfclosed, '<amp-ad width="1" data-block-on-consent/>', 'and the publisher policy is preserved verbatim' );
+
+	// A normal-page footer probe cannot prove that an AMP template has a
+	// working AMP action. The native postPromptUI must remain available.
+	$GLOBALS['faz_test_options']['faz_settings']['geolocation']['geo_targeting'] = true;
+	$GLOBALS['faz_test_options']['faz_settings']['banner_control']['withdrawal_path'] = 'footer_link';
+	$GLOBALS['faz_test_options']['faz_withdrawal_link_probe'] = array( 'status' => 'verified', 'checked' => time() );
+	$banner->properties = array(
+		'settings' => array( 'applicableLaw' => 'gdpr', 'ruleSet' => array() ),
+		'config'   => array( 'revisitConsent' => array( 'status' => false ) ),
+	);
+	Banner_Controller::$banner = $banner;
+	amp_same( \FazCookie\Includes\Withdrawal_Path::satisfies_revisit_requirement(), true, 'the normal footer verification is valid' );
+	$amp = ( new ReflectionClass( AMP_Consent::class ) )->newInstanceWithoutConstructor();
+	$faz_render_guard->setValue( null, false );
+	ob_start();
+	$amp->output_amp_consent();
+	$amp_footer_html = ob_get_clean();
+	amp_ok( false !== strpos( $amp_footer_html, '"postPromptUI":"faz-amp-post-consent"' ), 'verified normal footer does not remove AMP postPromptUI' );
+	amp_ok( false !== strpos( $amp_footer_html, 'on="tap:faz-amp-consent.prompt"' ), 'AMP still renders a native reopen action' );
 
 	echo "Passed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );
