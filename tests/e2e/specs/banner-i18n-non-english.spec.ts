@@ -68,7 +68,15 @@ test.describe('Banner i18n — non-English locale renders translated copy', () =
     // no page cache masks the freshly-regenerated template.
     const res = await request.get(`/?faz_i18n_e2e=${Date.now()}`);
     expect(res.ok()).toBeTruthy();
-    const html = await res.text();
+    // Undo the banner template's end-tag escaping before scanning, exactly as
+    // _fazReadBannerTemplate() does in the browser. Since 1.34.0 the server
+    // writes `</` as `<\/` inside #fazBannerTemplate so that an HTML4 page
+    // rewriter (WPSpeed's image optimiser parses through DOMDocument, and
+    // libxml ends a <script> at any `</` + letter) cannot truncate it. Scanning
+    // the raw body for `</` therefore walks straight past the whole template:
+    // the title's own `<\/p>` sits 22 characters away, the first unescaped
+    // `</` more than 22,000, so every field read back as the entire banner.
+    const html = (await res.text()).replace(/<\\\//g, '</');
 
     // String-scan (no dynamic RegExp → no ReDoS surface): find the tagged
     // element's opening `>` and read up to the next closing tag.
