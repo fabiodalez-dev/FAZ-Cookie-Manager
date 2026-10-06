@@ -92,6 +92,13 @@ namespace {
 	// Load the real Placeholder_Builder so is_third_party_service() resolves it
 	// (the class_exists guard would otherwise degrade the flag to false).
 	require_once dirname( __DIR__, 2 ) . '/frontend/includes/class-placeholder-builder.php';
+	// Shared with Frontend, Amp_Consent, Banner_Rest and the language seams: the
+	// one predicate that decides whether Cache Compatibility Mode applies. The
+	// real file, not a double — a copy per suite is the thing it replaced.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-cache-compatibility.php';
+	// Asked by the jurisdiction overlay to know whether a verified withdrawal
+	// route other than the floating widget is in place.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-withdrawal-path.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 	use FazCookie\Frontend\Frontend;
 

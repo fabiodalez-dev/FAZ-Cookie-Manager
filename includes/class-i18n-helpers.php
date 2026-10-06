@@ -207,11 +207,24 @@ if ( ! function_exists( 'faz_current_language' ) ) {
 		// values here would vary the cached banner store (language, category
 		// names, GVL/TCF) across visitors sharing the same cached URL. Under
 		// cache-compat we therefore consult only URL-stable sources and
-		// otherwise fall back to the site default. Read the option directly —
-		// this is a procedural helper with no access to
-		// Frontend::is_cache_compatibility_enabled().
-		$faz_settings        = get_option( 'faz_settings', array() );
-		$cache_compatibility = is_array( $faz_settings ) && ! empty( $faz_settings['banner_control']['cache_compatibility'] );
+		// otherwise fall back to the site default.
+		//
+		// This used to read the raw option, with a comment saying a procedural
+		// helper had no access to Frontend::is_cache_compatibility_enabled().
+		// That was the gap: the render seam stands the mode down while
+		// jurisdiction routing is on and this one did not, so with routing
+		// enabled and the flag saved the whole stack resolved per visitor while
+		// the language alone stayed frozen on the site default. The predicate
+		// now lives in a static the procedural helpers can reach, and the two
+		// cannot drift apart again.
+		//
+		// It asks is_shared_cache_render(), not is_active(): while routing
+		// pauses the mode on an install with no country source, the page is
+		// still served from the shared cache (nothing varies by country, so
+		// nothing vetoes it), and the language must stay pinned for exactly
+		// the reason above. Only a page the routing veto keeps out of the cache
+		// may resolve the language per visitor.
+		$cache_compatibility = \FazCookie\Includes\Cache_Compatibility::is_shared_cache_render();
 
 		if ( faz_i18n_is_multilingual() ) {
 			// If the plugin used is Polylang.

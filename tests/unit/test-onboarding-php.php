@@ -89,6 +89,12 @@ namespace {
 		}
 	}
 
+	// The REAL predicate, not a double: apply_options() asks it whether Cache
+	// Compatibility Mode would actually be in force before warning that it
+	// pauses the A/B split. It needs nothing but get_option() and an optional
+	// Geo_Runtime, which is absent here — so routing is off and the mode is
+	// active, which is the combination this suite's assertions describe.
+	require_once __DIR__ . '/../../includes/class-cache-compatibility.php';
 	require_once __DIR__ . '/../../admin/modules/settings/includes/class-settings.php';
 	require_once __DIR__ . '/../../admin/modules/settings/includes/class-onboarding.php';
 

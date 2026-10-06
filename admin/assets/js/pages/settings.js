@@ -59,6 +59,8 @@
 		if (gvlBtn) gvlBtn.addEventListener('click', updateGvl);
 		var invalidateBtn = document.getElementById('faz-invalidate-consents');
 		if (invalidateBtn) invalidateBtn.addEventListener('click', invalidateConsents);
+		var withdrawalBtn = document.getElementById('faz-withdrawal-verify');
+		if (withdrawalBtn) withdrawalBtn.addEventListener('click', verifyWithdrawalLink);
 		var bootstrapToggle = form.querySelector('input[data-path="geolocation.cache_geo_bootstrap"]');
 		if (bootstrapToggle) {
 			bootstrapToggle.addEventListener('change', function () {
@@ -72,6 +74,51 @@
 			});
 		}
 	});
+
+	/**
+	 * Ask the server to fetch the site's own pages and look for a withdrawal
+	 * link. Deliberately a button and not something that runs on save: it makes
+	 * several outbound HTTP requests, and an administrator saving an unrelated
+	 * setting should not pay for them — nor be told their footer link vanished
+	 * because a firewall happened to answer slowly at that moment.
+	 */
+	function verifyWithdrawalLink() {
+		var btn = document.getElementById('faz-withdrawal-verify');
+		var status = document.getElementById('faz-withdrawal-status');
+		FAZ.btnLoading(btn, true);
+		if (status) {
+			status.textContent = fazI18n('settings.withdrawalChecking', 'Loading your pages and looking for the link…');
+		}
+		FAZ.post('settings/withdrawal-link/verify').then(function (data) {
+			FAZ.btnLoading(btn, false);
+			var message = (data && data.message) ? data.message : '';
+			var ok = !!(data && data.verified);
+			if (status) {
+				status.textContent = message;
+				status.style.borderLeftColor = ok ? '#059669' : '#f59e0b';
+			}
+			// Keep the save-time warning in step with what just happened, so an
+			// admin who verifies and then saves is not warned about a state the
+			// page is still showing from before the check.
+			var pathSelect = document.getElementById('faz-withdrawal-path');
+			if (pathSelect) pathSelect.setAttribute('data-faz-verified', ok ? '1' : '0');
+			if (message) {
+				// A failed check is information, not an error: the admin asked a
+				// question and got a usable answer.
+				FAZ.notify(message, ok ? 'success' : 'warning');
+			}
+		}).catch(function (err) {
+			FAZ.btnLoading(btn, false);
+			var failed = (err && err.message)
+				? err.message
+				: fazI18n('settings.withdrawalCheckFailed', 'The check could not be run.');
+			if (status) {
+				status.textContent = failed;
+				status.style.borderLeftColor = '#dc2626';
+			}
+			FAZ.notify(failed, 'error');
+		});
+	}
 
 	/**
 	 * Bump the server-side consent revision. Returning visitors with a stored
@@ -505,6 +552,28 @@
 	 * @param {Object} current Sanitized settings-shaped payload being saved.
 	 * @return {string[]} Localized warning messages.
 	 */
+	/**
+	 * Whether Cache Compatibility Mode is SAVED but standing down.
+	 *
+	 * The client mirror of Cache_Compatibility::state() on the server: the mode
+	 * has three states, and the warnings below must describe the one the site is
+	 * actually in. Routing on means the mode is paused, so anything it would
+	 * otherwise suppress — the A/B split, bot-specific output — keeps running.
+	 *
+	 * Mirrored rather than fetched because these warnings are assembled from the
+	 * in-flight form state, before the save, so there is no server answer to ask
+	 * for yet. If the server-side rule changes, this changes with it.
+	 *
+	 * @param {Object} current In-flight settings payload.
+	 * @returns {boolean} True when the mode is saved on but paused.
+	 */
+	function cacheCompatPaused(current) {
+		if (!current || !current.banner_control || !current.banner_control.cache_compatibility) {
+			return false;
+		}
+		return !!(current.geolocation && current.geolocation.geo_targeting);
+	}
+
 	function collectSaveWarnings(current) {
 		var saveWarnings = [];
 		var abTestWarnings = [];
@@ -535,7 +604,12 @@
 					'A/B testing needs at least 2 selected banner variants to run.'
 				));
 			}
-			if (current.banner_control.cache_compatibility) {
+			// Only when the mode would actually be IN FORCE. It is paused while
+			// jurisdiction routing is on, and the split keeps running — warning
+			// that the test is disabled would send the admin looking for a
+			// problem that is not there. Mirrors Cache_Compatibility::is_active()
+			// on the server and the paused notice on the settings screen.
+			if (current.banner_control.cache_compatibility && !cacheCompatPaused(current)) {
 				abTestWarnings.push(fazI18n(
 					'settings.abTestWarnCache',
 					'A/B testing is disabled while Cache Compatibility Mode is on.'
@@ -545,11 +619,25 @@
 
 		abTestWarnings.forEach(function (w) { saveWarnings.push(w); });
 
+		// Choosing the footer link without a passing check saves fine — the
+		// server simply keeps forcing the revisit widget on, which is the
+		// fail-closed direction. Silently, though, it looks like the setting did
+		// nothing. Say what will actually happen.
+		if (current.banner_control && current.banner_control.withdrawal_path === 'footer_link') {
+			var pathEl = document.getElementById('faz-withdrawal-path');
+			if (!pathEl || pathEl.getAttribute('data-faz-verified') !== '1') {
+				saveWarnings.push(fazI18n(
+					'settings.withdrawalUnverified',
+					'The footer link has not been verified, so the revisit widget stays forced on. Use "Check my site for a withdrawal link" to confirm the link is there.'
+				));
+			}
+		}
+
 		// Cache Compatibility Mode may be stored alongside Geo-Targeting, but it
 		// is inert while that UI toggle keeps the jurisdiction runtime enabled.
 		// Say so rather than letting the success toast imply both run together.
 		if (current.banner_control && current.banner_control.cache_compatibility) {
-			var geoOn = !!(current.geolocation && current.geolocation.geo_targeting);
+			var geoOn = cacheCompatPaused(current);
 			if (geoOn) {
 					saveWarnings.push(fazI18n(
 						'settings.cacheCompatWarnGeo',

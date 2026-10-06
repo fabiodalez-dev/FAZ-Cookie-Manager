@@ -225,12 +225,124 @@ class Ruleset_Loader {
 	}
 
 	/**
-	 * Count how many shipped rule sets assert a given requirement.
+	 * The rule sets that can actually reach a visitor on this install.
+	 *
+	 * The admin used to describe every requirement against the whole catalogue:
+	 * "every included rule set requires this", counting 47 of them on a site
+	 * where exactly one is ever applied. The number was not wrong by accident —
+	 * it answered a different question from the one the sentence asked.
+	 *
+	 * Note what does NOT narrow this: `target_regions`. It does not choose which
+	 * rule set applies, it chooses when the banner is hidden
+	 * (`is_geo_banner_disabled()`), so under the default `show_banner` a visitor
+	 * from anywhere still receives their own region's rule set and the whole
+	 * catalogue is genuinely reachable. It narrows the set only under
+	 * `no_banner`, where visitors outside the targeted regions see nothing at
+	 * all. Filtering by it unconditionally would hide real requirements.
+	 *
+	 * The fallback is always included: an unknown country, a VPN, or a failed
+	 * lookup resolves to it even on a fully routed install.
+	 *
+	 * @since 1.34.0
+	 * @param string $mode     One of the Geo_Runtime::MODE_* values.
+	 * @param array  $settings The `faz_settings` option.
+	 * @return array List of ruleset ids. Empty when georouting is off.
+	 */
+	public function reachable_ruleset_ids( $mode, $settings = array() ) {
+		$fallback = 'fallback-gdpr-most-protective';
+
+		if ( 'off' === $mode ) {
+			return array();
+		}
+		// Baseline and degraded behave identically at runtime: no country can be
+		// resolved, so every visitor gets the fallback and nothing else.
+		if ( 'routing' !== $mode ) {
+			return array( $fallback );
+		}
+
+		$all = $this->list_all();
+		$geo = ( is_array( $settings ) && isset( $settings['geolocation'] ) && is_array( $settings['geolocation'] ) )
+			? $settings['geolocation']
+			: array();
+
+		$behavior = isset( $geo['default_behavior'] ) ? (string) $geo['default_behavior'] : 'show_banner';
+		if ( 'no_banner' !== $behavior ) {
+			return $all;
+		}
+
+		// Under no_banner only the targeted regions see a banner at all, so only
+		// their rule sets can reach anyone. When the targeting cannot be read,
+		// fall back to the whole catalogue: over-reporting a requirement is a
+		// cosmetic inaccuracy, under-reporting one hides a legal obligation.
+		$regions = isset( $geo['target_regions'] ) && is_array( $geo['target_regions'] ) ? $geo['target_regions'] : array();
+		if ( empty( $regions ) ) {
+			return $all;
+		}
+
+		// Map through the countries each region contains, not through the ruleset
+		// NAMES. Matching ids by substring looks reasonable and is quietly wrong:
+		// the EU rule sets are called gdpr-ireland, gdpr-germany and so on, so a
+		// target of 'eu' matches none of them and every GDPR requirement would
+		// vanish from the count — under-reporting a legal obligation, which is
+		// the one direction this must never fail in. faz_country_in_regions()
+		// and the country→ruleset index are the authoritative pair, and they are
+		// the same ones the runtime routes with.
+		// load_index() already returns the country map itself, not a wrapper —
+		// reading $index['countries'] from it silently yielded nothing and sent
+		// every call down the fail-safe, reporting the whole catalogue as
+		// reachable. The sub-national maps have their own accessors.
+		$map = $this->load_index();
+		if ( empty( $map ) || ! function_exists( 'faz_country_in_regions' ) ) {
+			return $all;
+		}
+
+		$reachable = array( $fallback );
+		foreach ( $map as $country => $ruleset_id ) {
+			if ( ! is_string( $ruleset_id ) || '' === $ruleset_id ) {
+				continue;
+			}
+			if ( faz_country_in_regions( $country, $regions ) ) {
+				$reachable[] = $ruleset_id;
+			}
+		}
+
+		// Sub-national regimes ride on their country being targeted: a visitor
+		// routed to Quebec's Law 25 is in Canada, so Quebec is reachable exactly
+		// when CA is.
+		$subnational = array();
+		if ( method_exists( $this, 'load_us_regions' ) ) {
+			$subnational = array_merge( $subnational, (array) $this->load_us_regions() );
+		}
+		if ( method_exists( $this, 'load_regions' ) ) {
+			$subnational = array_merge( $subnational, (array) $this->load_regions() );
+		}
+		foreach ( $subnational as $code => $ruleset_id ) {
+			if ( ! is_string( $ruleset_id ) || '' === $ruleset_id || 0 === strpos( (string) $code, '_' ) ) {
+				continue;
+			}
+			if ( faz_country_in_regions( strtoupper( substr( (string) $code, 0, 2 ) ), $regions ) ) {
+				$reachable[] = $ruleset_id;
+			}
+		}
+
+		$reachable = array_values( array_unique( array_filter( $reachable, 'is_string' ) ) );
+		// Keep only ids the catalogue holds, so a stale index entry cannot
+		// inflate the count with a rule set that does not exist.
+		$reachable = array_values( array_intersect( $reachable, array_merge( $all, array( $fallback ) ) ) );
+
+		// Nothing matched at all means the targeting could not be interpreted,
+		// not that no rule set applies. Over-reporting a requirement is
+		// cosmetic; under-reporting one hides a legal obligation.
+		return empty( $reachable ) ? $all : $reachable;
+	}
+
+	/**
+	 * Count how many rule sets assert a given requirement.
 	 *
 	 * The admin uses this to tell an administrator, truthfully, whether a
-	 * control the runtime overrides is overridden for EVERY visitor or only
-	 * for some — the two cases warrant different treatment, and the
-	 * difference is a fact about the catalogue, not a judgement.
+	 * control the runtime overrides is overridden for EVERY visitor it can
+	 * reach or only for some — the two cases warrant different treatment, and
+	 * the difference is a fact about the catalogue, not a judgement.
 	 *
 	 * Counting it here rather than writing the number into a sentence is
 	 * deliberate. That number was hand-written twice and wrong both times,
@@ -245,10 +357,16 @@ class Ruleset_Loader {
 	 *                            counts when ANY path holds a truthy value,
 	 *                            which is what an "or" requirement such as
 	 *                            gpc_honored / gpc_required needs.
+	 * @param array|null   $ids   Rule sets to count over, normally from
+	 *                            reachable_ruleset_ids(). Null counts the whole
+	 *                            catalogue, which is what the admin did for
+	 *                            every state before 1.34.0 — and why a site
+	 *                            applying one rule set was told that 47
+	 *                            jurisdictions demanded a control.
 	 * @return array{required:int,total:int} Matching rule sets, and the size
-	 *                                       of the catalogue.
+	 *                                       of the counted set.
 	 */
-	public function requirement_coverage( $paths ) {
+	public function requirement_coverage( $paths, $ids = null ) {
 		$paths = array_values( array_filter( (array) $paths, 'is_string' ) );
 		if ( empty( $paths ) ) {
 			return array(
@@ -257,12 +375,17 @@ class Ruleset_Loader {
 			);
 		}
 
-		$memo_key = implode( '|', $paths );
+		// The id set is part of the key. Without it the first caller's answer —
+		// typically the whole catalogue — would be handed to every later caller
+		// asking about a narrower set, which is the bug this parameter exists to
+		// fix rather than introduce.
+		$scope_key = ( null === $ids ) ? '*' : implode( ',', $ids );
+		$memo_key  = implode( '|', $paths ) . '#' . md5( $scope_key );
 		if ( isset( $this->coverage_cache[ $memo_key ] ) ) {
 			return $this->coverage_cache[ $memo_key ];
 		}
 
-		$ids      = $this->list_all();
+		$ids      = ( null === $ids ) ? $this->list_all() : array_values( array_unique( array_filter( (array) $ids, 'is_string' ) ) );
 		$required = 0;
 
 		foreach ( $ids as $id ) {

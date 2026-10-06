@@ -46,19 +46,31 @@ class Translation_Compat {
 	}
 
 	/**
-	 * Whether Cache Compatibility Mode is active.
+	 * Whether Cache Compatibility Mode is in force for this request.
 	 *
-	 * When on, the rendered HTML must be visitor-invariant, so the cookie/
+	 * When it is, the rendered HTML must be visitor-invariant, so the cookie/
 	 * session-based TranslatePress/Weglot language must NOT override the
 	 * URL/default-resolved language on the `faz_current_language` filter —
 	 * otherwise the shared cached banner store (and its per-language template
 	 * cache key) would be poisoned across visitors. (#158)
 	 *
+	 * This used to read the raw option, which made it the odd one out: the
+	 * render, AMP and REST seams all stand the mode down while jurisdiction
+	 * routing is on, and this one did not. The result was visible on a
+	 * multilingual site with routing enabled and the flag saved — every other
+	 * decision was made per visitor while the language stayed pinned to the
+	 * site default, so the banner appeared in the wrong language with nothing
+	 * in the admin to explain it. The shared predicate settles it once.
+	 *
+	 * The predicate is is_shared_cache_render(), not is_active(): a mode
+	 * paused by routing on an install with no country source still has its
+	 * pages served from the shared cache, so the cookie language must stay
+	 * out of them. Same answer faz_current_language() uses.
+	 *
 	 * @return bool
 	 */
 	private function is_cache_compatibility_enabled() {
-		$settings = get_option( 'faz_settings', array() );
-		return is_array( $settings ) && ! empty( $settings['banner_control']['cache_compatibility'] );
+		return \FazCookie\Includes\Cache_Compatibility::is_shared_cache_render();
 	}
 
 	/**

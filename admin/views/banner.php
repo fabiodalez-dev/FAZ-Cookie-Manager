@@ -34,12 +34,36 @@ $faz_geo_on = class_exists( '\FazCookie\Frontend\Includes\Geo_Runtime' )
 	&& \FazCookie\Frontend\Includes\Geo_Runtime::is_enabled();
 
 /**
+ * Which georouting state this install is in, so the copy below can describe
+ * what the runtime DOES rather than what the feature is called.
+ *
+ * On an install with no country source the runtime applies exactly one rule set
+ * — the most-protective fallback — to every visitor. The screens used to call
+ * that "jurisdiction routing" and count the requirement against all 47 rule
+ * sets, so an admin was told 47 jurisdictions demanded a control that one
+ * fallback demanded. The lock was real; only the reason given for it was not.
+ */
+$faz_geo_state = class_exists( '\FazCookie\Frontend\Includes\Geo_Runtime' )
+	&& method_exists( '\FazCookie\Frontend\Includes\Geo_Runtime', 'current_state' )
+	? \FazCookie\Frontend\Includes\Geo_Runtime::current_state()
+	: array(
+		'mode'       => $faz_geo_on ? 'baseline' : 'off',
+		'configured' => false,
+		'working'    => false,
+		'source'     => 'none',
+		'reason'     => '',
+	);
+$faz_geo_mode     = isset( $faz_geo_state['mode'] ) ? (string) $faz_geo_state['mode'] : 'off';
+$faz_geo_routing  = ( 'routing' === $faz_geo_mode );
+$faz_geo_baseline = ( 'baseline' === $faz_geo_mode || 'degraded' === $faz_geo_mode );
+
+/**
  * Resolve how much of the catalogue asserts a requirement.
  *
  * @param string|array $paths Dotted rule-set path(s); truthy in ANY counts.
  * @return array{all:bool,some:bool,required:int,total:int}
  */
-$faz_requirement = function ( $paths ) use ( $faz_geo_on ) {
+$faz_requirement = function ( $paths ) use ( $faz_geo_on, $faz_geo_mode ) {
 	$none = array(
 		'all'      => false,
 		'some'     => false,
@@ -49,8 +73,11 @@ $faz_requirement = function ( $paths ) use ( $faz_geo_on ) {
 	if ( ! $faz_geo_on || ! class_exists( '\FazCookie\Admin\Modules\Geo_Routing\Includes\Ruleset_Loader' ) ) {
 		return $none;
 	}
-	$coverage = \FazCookie\Admin\Modules\Geo_Routing\Includes\Ruleset_Loader::get_instance()
-		->requirement_coverage( $paths );
+	$faz_loader   = \FazCookie\Admin\Modules\Geo_Routing\Includes\Ruleset_Loader::get_instance();
+	$faz_reachable = method_exists( $faz_loader, 'reachable_ruleset_ids' )
+		? $faz_loader->reachable_ruleset_ids( $faz_geo_mode, get_option( 'faz_settings', array() ) )
+		: null;
+	$coverage = $faz_loader->requirement_coverage( $paths, $faz_reachable );
 	if ( empty( $coverage['total'] ) ) {
 		return $none;
 	}
@@ -65,6 +92,21 @@ $faz_requirement = function ( $paths ) use ( $faz_geo_on ) {
 $faz_equal_weight = $faz_requirement( 'ui.equal_weight_buttons' );
 $faz_revisit_req  = $faz_requirement( 'ui.revisit_widget_required' );
 $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
+
+// What `ui.revisit_widget_required` asks for is a standing way to reopen and
+// withdraw consent — not this particular widget. Locking the widget on is how
+// the plugin guarantees that while the widget is the only route it can see.
+// When a different route has been verified to exist, the guarantee already
+// holds, and keeping the lock would override a choice the administrator was
+// entitled to make: it is what stopped an admin who had deliberately put
+// `[faz_cookie_settings type="link"]` in the footer from turning the floating
+// one off.
+//
+// Same predicate the runtime overlay asks, so the lock shown here and the
+// overlay the visitor receives cannot disagree.
+$faz_withdrawal_elsewhere = class_exists( '\FazCookie\Includes\Withdrawal_Path' )
+	&& \FazCookie\Includes\Withdrawal_Path::satisfies_revisit_requirement();
+$faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsewhere );
 ?>
 
 <div id="faz-banner">
@@ -689,7 +731,7 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 						<span><?php esc_html_e( 'Show Accept Button', 'faz-cookie-manager' ); ?></span>
 					</label>
 					<?php if ( $faz_buttons_locked ) : ?>
-						<p class="faz-help" id="faz-b-accept-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Equal prominence works both ways: the runtime keeps Accept and Reject on together, so neither can be hidden while the other stays. Their wording and colours are still yours.', 'faz-cookie-manager' ); ?></p>
+						<p class="faz-help" id="faz-b-accept-locked"><?php echo esc_html( $faz_geo_baseline ? __( 'Locked on. Every visitor is served the most-protective fallback rule set, because nothing on this site can resolve their country. Equal prominence works both ways: the runtime keeps Accept and Reject on together, so neither can be hidden while the other stays. Their wording and colours are still yours.', 'faz-cookie-manager' ) : __( 'Locked on while jurisdiction routing is active. Equal prominence works both ways: the runtime keeps Accept and Reject on together, so neither can be hidden while the other stays. Their wording and colours are still yours.', 'faz-cookie-manager' ) ); ?></p>
 					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
@@ -699,7 +741,7 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 						<span><?php esc_html_e( 'Show Reject Button', 'faz-cookie-manager' ); ?></span>
 					</label>
 					<?php if ( $faz_buttons_locked ) : ?>
-						<p class="faz-help" id="faz-b-reject-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Rule sets for the EU, UK, Switzerland and most other opt-in regimes require Reject to sit beside Accept with equal prominence, so the runtime keeps it visible for those visitors whatever this switch says. Styling both buttons more quietly is fine; hiding the refusal is not.', 'faz-cookie-manager' ); ?></p>
+						<p class="faz-help" id="faz-b-reject-locked"><?php echo esc_html( $faz_geo_baseline ? __( 'Locked on. Every visitor is served the most-protective fallback rule set, because nothing on this site can resolve their country, and it requires Reject to sit beside Accept with equal prominence. Styling both buttons more quietly is fine; hiding the refusal is not.', 'faz-cookie-manager' ) : __( 'Locked on while jurisdiction routing is active. Rule sets for the EU, UK, Switzerland and most other opt-in regimes require Reject to sit beside Accept with equal prominence, so the runtime keeps it visible for those visitors whatever this switch says. Styling both buttons more quietly is fine; hiding the refusal is not.', 'faz-cookie-manager' ) ); ?></p>
 					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
@@ -880,12 +922,17 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 			<div class="faz-card-body">
 				<div class="faz-form-group">
 					<label class="faz-toggle" id="faz-b-revisit-toggle">
-						<input type="checkbox"<?php checked( $faz_revisit_req['all'] ); ?><?php disabled( $faz_revisit_req['all'] ); ?><?php echo $faz_revisit_req['all'] ? ' data-faz-runtime-locked="1" aria-describedby="faz-b-revisit-locked"' : ''; ?>>
+						<input type="checkbox"<?php checked( $faz_revisit_locked ); ?><?php disabled( $faz_revisit_locked ); ?><?php echo $faz_revisit_locked ? ' data-faz-runtime-locked="1" aria-describedby="faz-b-revisit-locked"' : ''; ?>>
 						<span class="faz-toggle-track"></span>
 						<span><?php esc_html_e( 'Show revisit consent widget', 'faz-cookie-manager' ); ?></span>
 					</label>
-					<?php if ( $faz_revisit_req['all'] ) : ?>
-						<p class="faz-help" id="faz-b-revisit-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Every shipped rule set requires a standing way to reopen and withdraw consent, so the runtime keeps this widget visible whatever this switch says — withdrawing has to stay as easy as giving. Its position, colours and icon below remain yours to change.', 'faz-cookie-manager' ); ?></p>
+					<?php if ( ! $faz_revisit_locked && $faz_revisit_req['all'] ) : ?>
+						<p class="faz-help" style="border-left:3px solid #059669;padding-left:10px;">
+							<?php esc_html_e( 'Rule sets that can reach your visitors require a standing way to reopen and withdraw consent, and this switch would normally be locked on for that reason. It is unlocked because your site was checked and a persistent consent-preferences link was found on every page, which satisfies the same requirement. Turn the widget off here if you prefer to rely on that link alone. If the link is ever removed, the requirement is no longer met and this switch locks again.', 'faz-cookie-manager' ); ?>
+						</p>
+					<?php endif; ?>
+					<?php if ( $faz_revisit_locked ) : ?>
+						<p class="faz-help" id="faz-b-revisit-locked"><?php echo esc_html( $faz_geo_baseline ? __( 'Locked on. Every visitor is served the most-protective fallback rule set, because nothing on this site can resolve their country, and it requires a standing way to reopen and withdraw consent — withdrawing has to stay as easy as giving. The runtime keeps this widget visible whatever this switch says. Its position, colours and icon below remain yours to change. To use a footer link instead, add one and have it verified under Settings » Banner Control » How visitors withdraw consent — once it checks out, this switch unlocks.', 'faz-cookie-manager' ) : __( 'Locked on while jurisdiction routing is active. Every rule set that can reach a visitor here requires a standing way to reopen and withdraw consent, so the runtime keeps this widget visible whatever this switch says — withdrawing has to stay as easy as giving. Its position, colours and icon below remain yours to change. To use a footer link instead, add one and have it verified under Settings » Banner Control » How visitors withdraw consent — once it checks out, this switch unlocks.', 'faz-cookie-manager' ) ); ?></p>
 					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
@@ -905,7 +952,7 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 					<p style="margin:0 0 8px;font-size:13px;"><?php esc_html_e( 'Place this shortcode in a Shortcode block in your footer, page or post to reopen consent preferences:', 'faz-cookie-manager' ); ?></p>
 					<code style="display:inline-block;font-size:14px;padding:8px 12px;background:var(--faz-bg);border:1px solid var(--faz-border);border-radius:var(--faz-radius);user-select:all;">[faz_cookie_settings]</code>
 					<p><code style="user-select:all;">[faz_cookie_settings type="link" text="Cookie preferences"]</code></p>
-					<p class="faz-help"><?php esc_html_e( 'The link uses your theme’s link styling. To use it instead of the floating widget, add it to a persistent footer on every page and turn off “Show revisit consent widget” above. When jurisdiction routing locks that switch on, the widget remains visible alongside the link.', 'faz-cookie-manager' ); ?></p>
+					<p class="faz-help"><?php esc_html_e( 'The link uses your theme’s link styling. To use it instead of the floating widget, add it to a persistent footer on every page and turn off “Show revisit consent widget” above. When jurisdiction routing locks that switch on, go to Settings » Banner Control » How visitors withdraw consent and run the check: the plugin loads your own pages, and once it finds the link on every one of them the switch unlocks and the widget stops being forced on.', 'faz-cookie-manager' ); ?></p>
 					<p class="faz-help"><?php esc_html_e( 'For a custom HTML link, use the data-faz-open-preferences attribute. Standard navigation menu labels do not process shortcodes.', 'faz-cookie-manager' ); ?></p>
 					<code style="user-select:all;">&lt;a href="#faz-consent" data-faz-open-preferences="1" aria-haspopup="dialog"&gt;Cookie preferences&lt;/a&gt;</code>
 					<div class="faz-help"><?php echo wp_kses_post( __( 'Optional attributes: <code>text=&quot;Manage cookies&quot;</code> (custom label) and <code>class=&quot;my-button&quot;</code> (extra CSS classes). The button automatically inherits your banner&#39;s primary button colours. <strong>It needs the banner runtime to work, so place it on a page where the banner is active</strong> — pages added to the banner exclusion list don\'t load the consent runtime, so the button won\'t open the preferences there.', 'faz-cookie-manager' ) ); ?></div>
@@ -967,21 +1014,55 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 		// downloads + auto-updates the DB). The option key is maxmind_license_key
 		// — the value written by Settings → Geolocation (class-settings.php) — not
 		// maxmind_key, which the prior code checked and which is never set.
-		$faz_has_maxmind  = ! empty( $faz_geo_settings['geolocation']['maxmind_license_key'] )
-			|| \FazCookie\Includes\Geolocation::has_database();
-		$faz_has_cf       = (bool) apply_filters( 'faz_trust_cf_ipcountry_header', false );
+		//
+		// 1.34.0: this used to count a saved licence key as proof, so a site that
+		// had entered a key but never completed the download — or whose database
+		// was deleted afterwards — was told its geo source was configured while
+		// the resolver returned '' for every visitor. The key records an
+		// intention; only a working lookup records a capability. $faz_geo_state
+		// separates the two, and the notice now fires for both "never set up"
+		// and "set up but not working", with different wording.
+		$faz_has_cf      = (bool) apply_filters( 'faz_trust_cf_ipcountry_header', false );
+		$faz_geo_degraded = ( 'degraded' === $faz_geo_mode );
+		$faz_has_maxmind  = ! empty( $faz_geo_state['working'] );
+
+		// Country-dependent fields on this tab are switched off when nothing can
+		// resolve a country, because without one they genuinely cannot act: the
+		// picker receives '' and falls straight through to the match-all /
+		// default row. The same condition drives the notice below, deliberately —
+		// a screen that explains an effect and then lets you configure it anyway
+		// is the shape this whole change is removing.
+		//
+		// Scoped to Region presets and the custom country list, and NOT to
+		// Priority or "default fallback". Those two keep working with no country
+		// at all: Controller::get_active_banner_for_country() resolves the
+		// match-all bucket through pick_highest_priority_id() as well, so on a
+		// site with two match-all banners priority still decides the winner.
+		// Disabling them would be a plausible-looking mistake.
+		//
+		// Inert, not disabled — see the .faz-inert-fields comment in
+		// faz-admin.css for why `disabled` would silently discard saved values.
+		$faz_banner_geo_inert = ( ! $faz_has_maxmind && ! $faz_has_cf )
+			? ' inert class="faz-card-body faz-inert-fields" aria-describedby="faz-b-geo-inert"'
+			: ' class="faz-card-body"';
 		if ( ! $faz_has_maxmind && ! $faz_has_cf ) :
 			?>
 			<div class="faz-card" style="border-left:3px solid #f59e0b;background:#fffbeb;">
-				<div class="faz-card-body" style="color:#78350f;">
+				<div class="faz-card-body" id="faz-b-geo-inert" style="color:#78350f;">
 					<strong style="display:block;margin-bottom:.35rem;">
-						<span aria-hidden="true" style="margin-right:.3rem;">&#9888;</span><?php esc_html_e( 'Geo source not configured', 'faz-cookie-manager' ); ?>
+						<span aria-hidden="true" style="margin-right:.3rem;">&#9888;</span><?php
+						echo esc_html(
+							$faz_geo_degraded
+								? __( 'Geo source configured but not working', 'faz-cookie-manager' )
+								: __( 'Geo source not configured', 'faz-cookie-manager' )
+						);
+						?>
 					</strong>
 					<?php
 					echo wp_kses(
 						sprintf(
 							/* translators: %1$s: Settings -> Geolocation link, %2$s: the faz_trust_cf_ipcountry_header filter name, %3$s: the add_filter() code snippet. */
-							__( 'No country signal is available on this install. Multi-banner geo-routing will resolve every visitor to "unknown" and fall back to your match-all / default banner. The usual fix is to configure %1$s with a free MaxMind GeoLite2 license key. If your site sits behind Cloudflare instead, the %2$s filter is available — note this is a developer code filter, NOT a setting in this screen: a developer adds %3$s in your theme or a code-snippets plugin. Without one of these, the targets you set below have no effect.', 'faz-cookie-manager' ),
+							__( 'No country signal is available on this install. Multi-banner geo-routing will resolve every visitor to "unknown" and fall back to your match-all / default banner. The usual fix is to configure %1$s with a free MaxMind GeoLite2 license key. If your site sits behind Cloudflare instead, the %2$s filter is available — note this is a developer code filter, NOT a setting in this screen: a developer adds %3$s in your theme or a code-snippets plugin. Until one of these works, the region presets and custom country list below are switched off rather than merely ineffective — anything already saved there is kept untouched and becomes editable again the moment a country can be resolved. Priority and &#8220;default fallback&#8221; stay editable: they decide between your match-all banners and do not need a country.', 'faz-cookie-manager' ),
 							'<a href="' . esc_url( admin_url( 'admin.php?page=faz-cookie-manager-settings#tab-geolocation' ) ) . '">' . esc_html__( 'Settings &raquo; Geolocation', 'faz-cookie-manager' ) . '</a>',
 							'<code>faz_trust_cf_ipcountry_header</code>',
 							"<code>add_filter( 'faz_trust_cf_ipcountry_header', '__return_true' );</code>"
@@ -991,6 +1072,22 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 							'code' => array(),
 						)
 					);
+					if ( 'module_untrusted' === ( isset( $faz_geo_state['reason'] ) ? (string) $faz_geo_state['reason'] : '' ) ) :
+						?>
+						<p style="margin:.5rem 0 0;">
+							<?php
+							echo wp_kses(
+								sprintf(
+									/* translators: %s: the add_filter() code snippet for faz_trust_geoip_country_code. */
+									__( 'Apache mod_geoip is present on this server, but its value is not used until a developer adds %s — it is off by default because, on a misconfigured server, a request header can fill the same variable.', 'faz-cookie-manager' ),
+									"<code>add_filter( 'faz_trust_geoip_country_code', '__return_true' );</code>"
+								),
+								array( 'code' => array() )
+							);
+							?>
+						</p>
+						<?php
+					endif;
 					?>
 				</div>
 			</div>
@@ -1040,7 +1137,7 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 
 		<div class="faz-card">
 			<div class="faz-card-header"><h3><?php esc_html_e( 'Region presets', 'faz-cookie-manager' ); ?></h3></div>
-			<div class="faz-card-body">
+			<div<?php echo $faz_banner_geo_inert; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- one of two fixed literals chosen above, no user input. ?>>
 				<fieldset style="border:0;padding:0;margin:0;">
 					<legend class="faz-help" style="margin-bottom:1rem;padding:0;">
 						<?php esc_html_e( 'Tick the regions where this banner should be shown. A visitor from any country in the selected regions sees this banner. Leave all unchecked to make this banner match every visitor (fallback / single-banner installs).', 'faz-cookie-manager' ); ?>
@@ -1061,7 +1158,7 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 
 		<div class="faz-card">
 			<div class="faz-card-header"><h3><?php esc_html_e( 'Custom country list', 'faz-cookie-manager' ); ?></h3></div>
-			<div class="faz-card-body">
+			<div<?php echo $faz_banner_geo_inert; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- one of two fixed literals chosen above, no user input. ?>>
 				<div class="faz-form-group">
 					<label for="faz-b-geo-custom"><?php esc_html_e( 'Additional ISO-3166 alpha-2 country codes', 'faz-cookie-manager' ); ?></label>
 					<input type="text" class="faz-input" id="faz-b-geo-custom" placeholder="<?php esc_attr_e( 'e.g. NZ, SG, KR', 'faz-cookie-manager' ); ?>" style="max-width:480px;">
@@ -1076,7 +1173,7 @@ $faz_settings_req = $faz_requirement( 'ui.sensitive_separate_optin' );
 				<div class="faz-form-group">
 					<label for="faz-b-geo-priority"><?php esc_html_e( 'Priority', 'faz-cookie-manager' ); ?></label>
 					<input type="number" class="faz-input faz-input-sm" id="faz-b-geo-priority" min="0" max="9999" step="1" value="0" style="width:140px;">
-					<div class="faz-help"><?php esc_html_e( 'Tie-breaker when multiple banners target the same country. Higher wins. Default 0.', 'faz-cookie-manager' ); ?></div>
+					<div class="faz-help"><?php esc_html_e( 'Tie-breaker when several banners are candidates for the same visitor. Higher wins. Default 0. This applies to banners targeting the same country AND to banners with no targeting at all, so it still decides between your match-all banners on a site that cannot resolve a country.', 'faz-cookie-manager' ); ?></div>
 				</div>
 				<div class="faz-form-group">
 					<label class="faz-toggle" id="faz-b-geo-default-toggle">

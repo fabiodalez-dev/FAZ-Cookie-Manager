@@ -105,6 +105,51 @@ defined( 'ABSPATH' ) || exit;
 				</label>
 				<div class="faz-help"><?php esc_html_e( 'Scope the consent cookie to your registrable domain (e.g. .example.com) so it is shared across www, shop, app, etc. Recommended only when all subdomains belong to you and are covered by the same privacy policy. Public-suffix-aware for multi-level TLDs (.co.uk, .com.au).', 'faz-cookie-manager' ); ?></div>
 			</div>
+			<?php
+			// Which route satisfies a jurisdiction's standing-withdrawal
+			// requirement. The floating widget always does, because the plugin
+			// renders it. A link in the site template can too — the Garante's
+			// 2021 cookie guidelines contemplate a link to a dedicated area
+			// explicitly — but the plugin cannot see a theme's footer, so that
+			// claim is checked by fetching the site's own pages rather than
+			// taken on trust. Until it checks out, the banner screen keeps the
+			// revisit widget locked on and the visitor keeps a way out.
+			$faz_withdrawal = class_exists( '\FazCookie\Includes\Withdrawal_Path' )
+				? \FazCookie\Includes\Withdrawal_Path::state()
+				: array( 'path' => 'widget', 'satisfied' => false, 'status' => 'never', 'checked' => 0, 'stale' => false, 'found' => array() );
+			?>
+			<div class="faz-form-group">
+				<label for="faz-withdrawal-path"><?php esc_html_e( 'How visitors withdraw consent', 'faz-cookie-manager' ); ?></label>
+				<?php // The save-time warning needs to know whether the check passed; the client has no other way to find out before a reload. ?>
+				<select class="faz-select" id="faz-withdrawal-path" data-path="banner_control.withdrawal_path" data-faz-verified="<?php echo $faz_withdrawal['satisfied'] ? '1' : '0'; ?>" style="width:auto;max-width:420px;">
+					<option value="widget"><?php esc_html_e( 'The floating revisit widget (recommended)', 'faz-cookie-manager' ); ?></option>
+					<option value="footer_link"><?php esc_html_e( 'A persistent link in my site template', 'faz-cookie-manager' ); ?></option>
+				</select>
+				<div class="faz-help"><?php echo wp_kses_post( __( 'Withdrawing consent has to stay as easy as giving it, so most jurisdictions require a standing way to reopen the choices. The floating widget provides one and needs nothing from you. If you would rather use a link in your footer, place <code>[faz_cookie_settings type="link"]</code> there, check it below, and the revisit widget stops being forced on. Until the check passes the widget stays locked on, so a visitor is never left without a route.', 'faz-cookie-manager' ) ); ?></div>
+				<p style="margin:10px 0 0;">
+					<button class="faz-btn faz-btn-secondary" id="faz-withdrawal-verify" type="button"><?php esc_html_e( 'Check my site for a withdrawal link', 'faz-cookie-manager' ); ?></button>
+				</p>
+				<div id="faz-withdrawal-status" role="status" aria-live="polite" aria-atomic="true" style="margin-top:10px;padding:10px 12px;border-radius:6px;background:var(--faz-bg-secondary);border-left:3px solid <?php echo esc_attr( $faz_withdrawal['satisfied'] ? '#059669' : '#f59e0b' ); ?>;">
+					<?php
+					if ( 'widget' === $faz_withdrawal['path'] && 'verified' !== $faz_withdrawal['status'] ) {
+						esc_html_e( 'Not checked. The floating widget is providing the withdrawal route, so no check is needed.', 'faz-cookie-manager' );
+					} elseif ( $faz_withdrawal['satisfied'] ) {
+						printf(
+							/* translators: %1$s: number of pages checked, %2$s: human-readable time since the check. */
+							esc_html( _n( 'Verified on %1$s page, %2$s ago. The revisit widget is no longer forced on.', 'Verified on %1$s pages, %2$s ago. The revisit widget is no longer forced on.', count( $faz_withdrawal['found'] ), 'faz-cookie-manager' ) ),
+							esc_html( number_format_i18n( count( $faz_withdrawal['found'] ) ) ),
+							esc_html( human_time_diff( $faz_withdrawal['checked'] ) )
+						);
+					} elseif ( ! empty( $faz_withdrawal['stale'] ) ) {
+						esc_html_e( 'The last check passed, but it is too old to rely on — a template edit could have removed the link since. The revisit widget is forced on again until you check once more.', 'faz-cookie-manager' );
+					} elseif ( 'failed' === $faz_withdrawal['status'] ) {
+						esc_html_e( 'The last check did not find a withdrawal link on every page. The revisit widget stays forced on.', 'faz-cookie-manager' );
+					} else {
+						esc_html_e( 'Never checked. Choosing the footer link has no effect until a check passes.', 'faz-cookie-manager' );
+					}
+					?>
+				</div>
+			</div>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="banner_control.cache_compatibility">
@@ -112,6 +157,33 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-label"><?php esc_html_e( 'Cache compatibility mode', 'faz-cookie-manager' ); ?></span>
 				</label>
 				<div class="faz-help"><?php echo wp_kses_post( __( 'Keep a visitor-invariant page fully cacheable when jurisdiction enforcement is off and one banner law applies to everyone. When per-country enforcement is on, use the Cache-safe jurisdiction bootstrap under Jurisdiction &amp; Geo-routing instead. Developers can override the runtime with the <code>faz_geo_ruleset_runtime</code> filter. When this compatibility mode is active, it also pauses server-side A/B splitting and bot-specific output.', 'faz-cookie-manager' ) ); ?></div>
+				<?php
+				// The mode has three states and the switch only showed two. With
+				// jurisdiction routing on, the runtime has been standing this mode
+				// down for a while — correctly, since per-country enforcement
+				// cannot be served from one shared cached page — but the screen
+				// still presented it as on, so an administrator could reasonably
+				// believe their pages were being cached when they were not, and
+				// had no way to find out from here. Say which state it is in.
+				if ( class_exists( '\FazCookie\Includes\Cache_Compatibility' )
+					&& \FazCookie\Includes\Cache_Compatibility::is_paused() ) :
+					?>
+					<div class="faz-help" role="status" style="margin-top:10px;padding:10px 12px;border-left:3px solid #f59e0b;background:var(--faz-bg-secondary);border-radius:6px;">
+						<strong style="display:block;margin-bottom:.25rem;">
+							<span aria-hidden="true" style="margin-right:.3rem;">&#9888;</span><?php esc_html_e( 'Saved, but paused while jurisdiction routing is active.', 'faz-cookie-manager' ); ?>
+						</strong>
+						<?php
+						echo wp_kses(
+							sprintf(
+								/* translators: %s: the name of the jurisdiction-routing switch, as shown in this screen. */
+								__( 'Each visitor is being resolved to their own jurisdiction, which one shared cached page cannot represent, so this optimisation stands down and the normal cache bypass applies. Nothing here was changed: your choice is still saved and resumes by itself the moment %s is switched off. Server-side A/B splitting and bot-specific output keep running in the meantime. For a cacheable setup that keeps per-country enforcement, use the <strong>Cache-safe jurisdiction bootstrap</strong> below instead.', 'faz-cookie-manager' ),
+								'<strong>' . esc_html__( 'Apply jurisdiction rules by visitor location', 'faz-cookie-manager' ) . '</strong>'
+							),
+							array( 'strong' => array() )
+						);
+						?>
+					</div>
+				<?php endif; ?>
 			</div>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
@@ -475,6 +547,77 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-label"><?php esc_html_e( 'Apply jurisdiction rules by visitor location', 'faz-cookie-manager' ); ?></span>
 				</label>
 				<div class="faz-help"><?php esc_html_e( 'Recommended and enabled by default. Detect each visitor\'s location to enforce the matching jurisdiction rules and mandatory controls, and optionally limit banner display to selected regions. Turning this off means the law saved on the active banner applies to every visitor; for example, a CCPA banner will no longer gain GDPR blocking for an EEA visitor. Location requires a MaxMind GeoLite2 database (configured below), or a trusted country signal such as Cloudflare CF-IPCountry.', 'faz-cookie-manager' ); ?></div>
+				<?php
+				// State of the feature, server-rendered, directly under the switch
+				// that turns it on. Everything this screen says about routing by
+				// country is true only when a country can actually be resolved;
+				// on an install where it cannot, one fallback rule set is applied
+				// to everyone and the routing options below do nothing. That was
+				// never stated anywhere the switch is, so an admin could enable
+				// "routing", see locked controls elsewhere citing jurisdictions,
+				// and never learn no routing was happening.
+				$faz_geo_state = class_exists( '\FazCookie\Frontend\Includes\Geo_Runtime' )
+					&& method_exists( '\FazCookie\Frontend\Includes\Geo_Runtime', 'current_state' )
+					? \FazCookie\Frontend\Includes\Geo_Runtime::current_state()
+					: array( 'mode' => 'off' );
+				$faz_geo_mode = isset( $faz_geo_state['mode'] ) ? (string) $faz_geo_state['mode'] : 'off';
+				if ( 'off' !== $faz_geo_mode ) :
+					$faz_geo_tone = ( 'routing' === $faz_geo_mode ) ? '#059669' : '#f59e0b';
+					?>
+					<div class="faz-help" role="status" style="margin-top:10px;padding:10px 12px;border-left:3px solid <?php echo esc_attr( $faz_geo_tone ); ?>;background:var(--faz-bg-secondary);border-radius:6px;">
+						<strong style="display:block;margin-bottom:.25rem;">
+							<?php
+							switch ( $faz_geo_mode ) {
+								case 'routing':
+									esc_html_e( 'Routing by country is active.', 'faz-cookie-manager' );
+									break;
+								case 'degraded':
+									esc_html_e( 'Routing by country is NOT active — the geo source is configured but not working.', 'faz-cookie-manager' );
+									break;
+								default:
+									esc_html_e( 'Routing by country is NOT active — no country source on this install.', 'faz-cookie-manager' );
+							}
+							?>
+						</strong>
+						<?php
+						switch ( $faz_geo_mode ) {
+							case 'routing':
+								esc_html_e( 'Each visitor receives the rule set for their own jurisdiction, and the targeting options below apply.', 'faz-cookie-manager' );
+								break;
+							case 'degraded':
+								// Two different faults reach this state and they need
+								// different instructions. Saying "no database was
+								// found" to a site whose database exists but cannot
+								// resolve an address sends the admin to download a
+								// file they already have.
+								$faz_geo_reason = isset( $faz_geo_state['reason'] ) ? (string) $faz_geo_state['reason'] : '';
+								if ( 'probe_failed' === $faz_geo_reason ) {
+									esc_html_e( 'A GeoLite2 database is installed but a test lookup returned no country, so it cannot be relied on — it may be truncated, corrupt or the wrong edition. Until it is repaired, every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Download the database again in the MaxMind section further down.', 'faz-cookie-manager' );
+								} elseif ( 'module_untrusted' === $faz_geo_reason ) {
+									// The module being loaded is not the resolver
+									// using it: detect_country() reads its value only
+									// behind the trust filter, so a request header
+									// cannot steer routing on a misconfigured server.
+									// Saying "routing is active" here sent the admin
+									// away believing a fallback was a per-country rule.
+									echo wp_kses(
+										sprintf(
+											/* translators: %s: the faz_trust_geoip_country_code filter name. */
+											esc_html__( 'Apache mod_geoip is present on this server, but its country value is ignored until a developer enables the %s code filter — it is off by default because, on a misconfigured server, a request header can fill the same variable. Until then every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Alternatively, download a MaxMind GeoLite2 database in the section further down.', 'faz-cookie-manager' ),
+											'<code>faz_trust_geoip_country_code</code>'
+										),
+										array( 'code' => array() )
+									);
+								} else {
+									esc_html_e( 'A MaxMind licence key is saved but no usable GeoLite2 database was found, so no visitor country can be resolved. Until it is repaired, every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Download the database in the MaxMind section further down.', 'faz-cookie-manager' );
+								}
+								break;
+							default:
+								esc_html_e( 'Nothing here can resolve a visitor country, so every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Your banner is still protected — it is protected the same way for everyone. To route by country, add a MaxMind GeoLite2 licence key below and download the database, or have a developer enable a trusted country header.', 'faz-cookie-manager' );
+						}
+						?>
+					</div>
+				<?php endif; ?>
 			</div>
 			<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
 				<label class="faz-toggle">
@@ -488,7 +631,47 @@ defined( 'ABSPATH' ) || exit;
 				</div>
 				<div class="faz-help"><?php esc_html_e( 'Currently excluded: AMP, IAB TCF, country-based language fallback, country-targeted banner rows, hiding the banner outside selected regions, and custom country-dependent output. Excluded configurations remain protected but bypass full-page caching.', 'faz-cookie-manager' ); ?></div>
 			</div>
-			<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
+			<?php
+			// These two controls decide what happens to a visitor from OUTSIDE
+			// the target regions, and is_geo_banner_disabled() only reaches that
+			// decision once a country has been resolved: with no country, it
+			// returns false and shows the banner to everyone. So on an install
+			// with no working country source they do nothing at all — which the
+			// status row above already says, in words, while leaving them fully
+			// editable. An administrator could tick regions, choose "Hide
+			// banner", save successfully, and reasonably conclude the site was
+			// hiding the banner outside the EU. Make the screen behave the way it
+			// reads.
+			//
+			// Inert, not disabled: see the .faz-inert-fields comment in
+			// faz-admin.css. In short, FAZ.serializeForm() skips disabled fields
+			// and Settings::sanitize() substitutes the DEFAULT for any key the
+			// payload omits, so `disabled` here would quietly wipe saved
+			// targeting on the next unrelated save — the opposite of what an
+			// administrator would expect from a greyed-out field.
+			// The class goes in the EXISTING class attribute, not in a second one.
+			// Appending ` class="faz-inert-fields"` to a tag that already carries
+			// class="faz-form-group" produces two class attributes, and the HTML
+			// parser keeps the first and discards the second — so `inert` applied
+			// (the fields stopped responding) while the dimming silently did not.
+			// A control that looks completely normal and ignores every click is
+			// worse than either alternative. Caught by reading the rendered DOM,
+			// which is the only place a duplicate attribute shows up at all.
+			$faz_geo_targets_inert = empty( $faz_geo_state['working'] );
+			$faz_geo_inert_class   = $faz_geo_targets_inert ? ' faz-inert-fields' : '';
+			$faz_geo_inert_attrs   = $faz_geo_targets_inert
+				? ' inert aria-describedby="faz-geo-targets-inert"'
+				: '';
+			if ( $faz_geo_targets_inert ) :
+				?>
+				<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
+					<div id="faz-geo-targets-inert" class="faz-help" role="status" style="padding:10px 12px;border-left:3px solid #f59e0b;background:var(--faz-bg-secondary);border-radius:6px;">
+						<strong style="display:block;margin-bottom:.25rem;"><?php esc_html_e( 'The two settings below are switched off because nothing here can resolve a visitor country.', 'faz-cookie-manager' ); ?></strong>
+						<?php esc_html_e( 'Choosing regions or hiding the banner outside them both need a country to compare against, so with no source they would change nothing. Anything you already saved is kept exactly as it is and becomes editable again — and takes effect — as soon as a country source works. Set one up in the MaxMind section below.', 'faz-cookie-manager' ); ?>
+					</div>
+				</div>
+			<?php endif; ?>
+			<div class="faz-form-group<?php echo esc_attr( $faz_geo_inert_class ); ?>" data-show-if="geolocation.geo_targeting"<?php echo $faz_geo_inert_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- fixed literal chosen above, no user input. ?>>
 				<label><?php esc_html_e( 'Target Regions', 'faz-cookie-manager' ); ?></label>
 				<div id="faz-geo-regions" style="display:flex;flex-wrap:wrap;gap:8px;">
 					<?php
@@ -513,7 +696,7 @@ defined( 'ABSPATH' ) || exit;
 				</div>
 				<div class="faz-help"><?php esc_html_e( 'Select which regions should see the cookie banner. Visitors from other regions will not see it (if "Hide banner" is selected below).', 'faz-cookie-manager' ); ?></div>
 			</div>
-			<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
+			<div class="faz-form-group<?php echo esc_attr( $faz_geo_inert_class ); ?>" data-show-if="geolocation.geo_targeting"<?php echo $faz_geo_inert_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- fixed literal chosen above, no user input. ?>>
 				<label><?php esc_html_e( 'Non-target visitors', 'faz-cookie-manager' ); ?></label>
 				<select class="faz-select" data-path="geolocation.default_behavior" style="width:auto;max-width:280px;">
 					<option value="show_banner"><?php esc_html_e( 'Show banner anyway (safest)', 'faz-cookie-manager' ); ?></option>

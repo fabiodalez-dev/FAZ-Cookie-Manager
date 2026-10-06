@@ -35,19 +35,26 @@ class Do_Not_Sell_Shortcode {
 		add_action( 'wp_ajax_nopriv_' . self::AJAX_ACTION, array( $this, 'handle_optout' ) );
 		add_action( 'wp_ajax_' . self::RESCIND_ACTION, array( $this, 'handle_rescind' ) );
 		add_action( 'wp_ajax_nopriv_' . self::RESCIND_ACTION, array( $this, 'handle_rescind' ) );
-		// Enqueue the submit handler unconditionally: page builders may inject
-		// shortcode HTML client-side, so has_shortcode() is unreliable.
+		// render() enqueues the handler; this hook only covers forms a page
+		// builder injects client-side (see maybe_enqueue_assets()).
 		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue_assets' ) );
 	}
 
 	/**
-	 * Enqueue DNSMPI assets on every frontend page.
+	 * Load the DNSMPI form JS on pages that do not render the shortcode.
+	 *
+	 * render() enqueues it wherever the form is rendered server-side, so a
+	 * site that never shows the opt-out form — most of them, CCPA or not —
+	 * no longer loads it on every page (#308). Builders that inject the form
+	 * client-side can opt back in through `faz_load_shortcode_assets_everywhere`.
 	 */
 	public function maybe_enqueue_assets() {
 		if ( is_admin() ) {
 			return;
 		}
-		$this->enqueue_dnsmpi_assets();
+		if ( faz_load_shortcode_assets_everywhere( 'dnsmpi' ) ) {
+			$this->enqueue_dnsmpi_assets();
+		}
 	}
 
 	/**
@@ -55,8 +62,7 @@ class Do_Not_Sell_Shortcode {
 	 */
 	private function enqueue_dnsmpi_assets() {
 		if ( ! wp_script_is( 'faz-dnsmpi-form', 'registered' ) ) {
-			// Prefer the minified build (~2.3 KB vs ~5.7 KB) — this script is
-			// deliberately loaded on every frontend page (see load_assets()).
+			// Prefer the minified build (~2.3 KB vs ~5.7 KB).
 			$suffix = faz_asset_suffix( 'frontend/js/faz-dnsmpi' );
 			wp_register_script(
 				'faz-dnsmpi-form',

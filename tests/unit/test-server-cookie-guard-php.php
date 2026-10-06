@@ -138,6 +138,10 @@ namespace {
 	function faz_get_cookie_domain() { return ''; }
 	function faz_is_front_end_request() { return (bool) $GLOBALS['faz_is_front_end']; }
 
+	// The one predicate every cache-compat consumer now shares. Required as the
+	// REAL file rather than stubbed: a double here would be a second copy of
+	// the logic whose whole point is that there is only one.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-cache-compatibility.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 
 	use FazCookie\Frontend\Frontend;

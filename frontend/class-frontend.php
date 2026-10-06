@@ -119,6 +119,16 @@ class Frontend {
 	const ENFORCEABLE_WILDCARD_MIN_LENGTH = 6;
 
 	/**
+	 * _fazConfig keys moved out of the inline config into the content-hashed
+	 * static file (window._fazStaticConfig). Each one is the same for every
+	 * visitor of a page type, so inlining it re-sent it with every HTML
+	 * response and kept it out of the browser cache. `_serviceCatalogue` is
+	 * the bulk of the config once per-service consent is on (~43 KB for ~330
+	 * services against ~12 KB for everything else). #310
+	 */
+	const STATIC_CONFIG_KEYS = array( '_providersToBlock', '_cookieCategoryMap', '_serviceCatalogue' );
+
+	/**
 	 * Per-request cache for blocked categories and provider map.
 	 *
 	 * @var array|null
@@ -379,6 +389,32 @@ class Frontend {
 	}
 
 	/**
+	 * Split the store data into the static payload (STATIC_CONFIG_KEYS, the
+	 * same for every visitor of a page type, written to the content-hashed
+	 * config-*.js file) and the inline remainder (per-visitor and per-request
+	 * keys, printed into the page). Keys absent from the store are skipped;
+	 * nothing else is transformed. The caller uses 'inline' only once the
+	 * static file has actually been provided, otherwise the full store stays
+	 * inline. #310
+	 *
+	 * @param array $store_data Full _fazConfig store.
+	 * @return array{static: array, inline: array}
+	 */
+	public static function split_static_config( array $store_data ) {
+		$static_config = array();
+		foreach ( self::STATIC_CONFIG_KEYS as $static_key ) {
+			if ( isset( $store_data[ $static_key ] ) ) {
+				$static_config[ $static_key ] = $store_data[ $static_key ];
+				unset( $store_data[ $static_key ] );
+			}
+		}
+		return array(
+			'static' => $static_config,
+			'inline' => $store_data,
+		);
+	}
+
+	/**
 	 * Enqeue front end scripts
 	 *
 	 * @return void
@@ -445,9 +481,10 @@ class Frontend {
 			$alt_asset     = ! empty( $faz_settings['banner_control']['alternative_asset_path'] );
 			$script_handle = $alt_asset ? 'faz-fw' : $this->plugin_name;
 
-			// Offload the static bulk of _fazConfig (~60 KB of provider block
-			// patterns + cookie-category map, identical for every visitor of a
-			// given page type) into a content-hashed, browser-cacheable .js
+			// Offload the static bulk of _fazConfig (provider block patterns,
+			// cookie-category map and, with per-service consent, the ~43 KB
+			// service catalogue — all identical for every visitor of a given
+			// page type) into a content-hashed, browser-cacheable .js
 			// file instead of re-inlining it into every HTML response. The
 			// file defines window._fazStaticConfig; a "before" inline snippet
 			// merges it back into _fazConfig ahead of script.js execution, so
@@ -457,13 +494,9 @@ class Frontend {
 			$store_data  = $this->get_store_data();
 			$static_deps = array();
 			if ( ! $alt_asset && apply_filters( 'faz_external_static_assets', true ) ) {
-				$static_config = array();
-				foreach ( array( '_providersToBlock', '_cookieCategoryMap' ) as $static_key ) {
-					if ( isset( $store_data[ $static_key ] ) ) {
-						$static_config[ $static_key ] = $store_data[ $static_key ];
-					}
-				}
-				$static_json = ! empty( $static_config ) ? wp_json_encode( $static_config ) : false;
+				$split         = self::split_static_config( $store_data );
+				$static_config = $split['static'];
+				$static_json   = ! empty( $static_config ) ? wp_json_encode( $static_config ) : false;
 				if ( false !== $static_json && '' !== $static_json ) {
 					$static_url = $this->get_static_asset_url(
 						'config-' . md5( $static_json ) . '.js',
@@ -473,9 +506,7 @@ class Frontend {
 						$static_handle = $this->plugin_name . '-static-config';
 						wp_enqueue_script( $static_handle, $static_url, array(), null, false );
 						$static_deps[] = $static_handle;
-						foreach ( array_keys( $static_config ) as $static_key ) {
-							unset( $store_data[ $static_key ] );
-						}
+						$store_data    = $split['inline'];
 					}
 				}
 			}
@@ -945,6 +976,16 @@ class Frontend {
 	 * containing ad-blocker keywords. Every FAZ frontend bundle must therefore
 	 * use the same delivery path, not just the main and accessibility bundles.
 	 *
+	 * Known limit: an inline bundle is exposed to page rewriters that parse
+	 * the document as HTML4 (DOMDocument::loadHTML(), e.g. WPSpeed's image
+	 * optimiser). libxml ends a <script> at the first `</` followed by a
+	 * letter, so a `</` inside the bundle's string literals truncates the
+	 * script. The banner template escapes `</` as `<\/` for this reason
+	 * (escape_template_end_tags()), but that is not done here on purpose:
+	 * rewriting `</` in JavaScript source would corrupt regex literals and
+	 * other code where `<\/` is not equivalent. A site that combines this
+	 * option with such a rewriter should leave this option off.
+	 *
 	 * @param string $handle        Script handle.
 	 * @param string $relative_path Path relative to frontend/.
 	 * @param array  $dependencies  Script dependencies.
@@ -1191,12 +1232,11 @@ class Frontend {
 	 * @return bool
 	 */
 	private function is_cache_compatibility_enabled() {
-		$settings = $this->get_faz_settings();
-		// A shared full-page cache cannot safely serve jurisdiction-specific law,
-		// defaults and mandatory controls. Runtime compliance therefore wins over
-		// this optimisation; the filter can still disable geo runtime entirely.
-		$geo_enabled = class_exists( Geo_Runtime::class ) && Geo_Runtime::is_enabled();
-		return ! $geo_enabled && ! empty( $settings['banner_control']['cache_compatibility'] );
+		// One predicate, shared with Amp_Consent, Banner_Rest,
+		// Translation_Compat and faz_current_language(). See
+		// FazCookie\Includes\Cache_Compatibility for why the three states
+		// matter and what the five copies used to disagree about.
+		return \FazCookie\Includes\Cache_Compatibility::is_active( $this->get_faz_settings() );
 	}
 
 	/**
@@ -1337,7 +1377,11 @@ class Frontend {
 
 		if ( null !== $runtime_ruleset ) {
 			$this->banner->set_settings(
-				Geo_Runtime::apply_ui_requirements( $runtime_ruleset, $this->banner->get_settings() )
+				Geo_Runtime::apply_ui_requirements(
+					$runtime_ruleset,
+					$this->banner->get_settings(),
+					\FazCookie\Includes\Withdrawal_Path::satisfies_revisit_requirement( $this->get_faz_settings() )
+				)
 			);
 		}
 
@@ -1677,61 +1721,14 @@ class Frontend {
 	 * @return bool True when at least one country source is available.
 	 */
 	private function has_country_signal_source() {
-		$has_source = false;
-
-		// The trust filter alone, NOT the header being present on this request.
-		// Requiring the header made the answer depend on who is asking: a cache
-		// warmer or any request that reaches the origin without passing through
-		// Cloudflare carries no CF-IPCountry, would have been told "no source",
-		// and its un-vetoed response would then be served from cache to a real
-		// visitor whose country the header DID identify — handing them the
-		// fallback ruleset and banner. That is precisely the leak the veto
-		// exists to stop, and the docblock above already says this predicate is
-		// about a source being CONFIGURED rather than resolved; the CF branch
-		// was the one place that did not honour it.
-		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
-			$has_source = true;
-		}
-		// mod_geoip had the SAME defect, three lines below the fix — and the
-		// comment above claimed CF was "the one place", which is how it survived
-		// a review. GEOIP_COUNTRY_CODE is set by Apache from REMOTE_ADDR, so a
-		// cache warmer hitting from localhost carries none: the presence test
-		// answered "no source", the response was cached without the veto, and a
-		// real visitor was then served a page rendered for country ''. On an
-		// install whose only source is mod_geoip that is the whole audience.
-		//
-		// Configuration, not resolution: the module being loaded is the signal.
-		// apache_get_modules() is unavailable under PHP-FPM, so fall back to the
-		// header — on a warmer request that leaves the veto OFF exactly as
-		// before, never weaker, and the filter is the explicit override.
-		if ( ! $has_source && $this->mod_geoip_configured() ) {
-			$has_source = true;
-		}
-		if ( ! $has_source && function_exists( 'geoip_country_code_by_name' ) ) {
-			$has_source = true;
-		}
-		// get_database_path() already returns '' unless a GeoLite2 MMDB exists,
-		// is readable AND passes its format check, so presence of a path is the
-		// same question as "can this install do a local lookup".
-		if ( ! $has_source && class_exists( '\FazCookie\Includes\Geolocation' )
-			&& method_exists( '\FazCookie\Includes\Geolocation', 'get_database_path' ) ) {
-			try {
-				$has_source = ( '' !== (string) \FazCookie\Includes\Geolocation::get_database_path() );
-			} catch ( \Throwable $e ) {
-				$has_source = false;
-			}
-		}
-
-		/**
-		 * Override the country-source detection.
-		 *
-		 * A publisher whose edge injects a country by another means can force
-		 * this true; one who knows their stack can never resolve a country can
-		 * force it false and keep their page cache.
-		 *
-		 * @param bool $has_source Whether a country source was detected.
-		 */
-		return (bool) apply_filters( 'faz_has_country_signal_source', $has_source );
+		// One predicate, in Geolocation. The body that used to live here was
+		// duplicated by a DIFFERENT test in the admin (a saved licence key was
+		// treated as proof a database existed), so a site with no database at
+		// all was told its geo source was configured while this method — the
+		// one the resolver's behaviour actually follows — said otherwise.
+		// Keeping the wrapper preserves the private call sites and the
+		// `faz_has_country_signal_source` filter contract.
+		return \FazCookie\Includes\Geolocation::has_country_source();
 	}
 
 	/**
@@ -1801,13 +1798,7 @@ class Frontend {
 	 * @return bool
 	 */
 	private function mod_geoip_configured() {
-		if ( function_exists( 'apache_get_modules' ) ) {
-			$modules = apache_get_modules();
-			if ( is_array( $modules ) && in_array( 'mod_geoip', $modules, true ) ) {
-				return true;
-			}
-		}
-		return ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- presence test only.
+		return \FazCookie\Includes\Geolocation::mod_geoip_configured();
 	}
 
 	/**
@@ -2219,8 +2210,28 @@ class Frontend {
 		// that must appear inline so the renderer finds it synchronously.
 		// phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- inert HTML template (type=text/template is non-executable); see comment above.
 		echo '<script id="fazBannerTemplate" type="text/template">';
-		echo wp_kses( $html, faz_allowed_html() );
+		echo self::escape_template_end_tags( wp_kses( $html, faz_allowed_html() ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already through wp_kses(); only `</` is rewritten.
 		echo '</script>';
+	}
+
+	/**
+	 * Write every `</` in the banner template as `<\/`.
+	 *
+	 * The template travels inside a <script type="text/template">. HTML5 ends
+	 * that element only at `</script`, but an HTML4 parser — libxml, i.e. PHP's
+	 * DOMDocument::loadHTML() — ends a script at any `</` followed by a letter
+	 * and then throws the stray end tags away. Optimisation plugins that
+	 * rewrite the whole page through DOMDocument (WPSpeed's image optimiser,
+	 * on by default) therefore delivered the template with every closing tag
+	 * removed: the browser nested the whole banner inside the title and the
+	 * consent bar rendered 0 px tall, with no buttons. `<\/` is plain text to
+	 * both parsers; _fazReadBannerTemplate() in script.js turns it back.
+	 *
+	 * @param string $html Sanitised template markup.
+	 * @return string
+	 */
+	public static function escape_template_end_tags( $html ) {
+		return str_replace( '</', '<\/', (string) $html );
 	}
 
 	/**
