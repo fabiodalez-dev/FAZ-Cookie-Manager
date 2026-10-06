@@ -34,6 +34,10 @@ namespace {
     // This is the validated-cookie input boundary, NOT the parser under test.
     function faz_get_valid_consent_cookie() { return $GLOBALS['intent_cookie']; }
     require dirname( __DIR__, 2 ) . '/frontend/includes/class-geo-runtime.php';
+    // Shared cache-compat predicate + the verified-withdrawal-route predicate
+    // the jurisdiction overlay asks. Real files, not doubles.
+    require dirname( __DIR__, 2 ) . '/includes/class-cache-compatibility.php';
+    require dirname( __DIR__, 2 ) . '/includes/class-withdrawal-path.php';
     require dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
     use FazCookie\Frontend\Frontend;
     use FazCookie\Frontend\Includes\Geo_Runtime;

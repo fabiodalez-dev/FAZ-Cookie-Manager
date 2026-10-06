@@ -190,6 +190,20 @@ class Api extends Rest_Controller {
 		);
 		register_rest_route(
 			$this->namespace,
+			'/' . $this->rest_base . '/withdrawal-link/verify',
+			array(
+				array(
+					// CREATABLE, not READABLE: this performs outbound HTTP
+					// requests and writes an option. A GET that does both would
+					// be fetched by link prefetchers and cached by proxies.
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'verify_withdrawal_link' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+				),
+			)
+		);
+		register_rest_route(
+			$this->namespace,
 			'/' . $this->rest_base . '/invalidate-consents',
 			array(
 				array(
@@ -1105,6 +1119,48 @@ class Api extends Rest_Controller {
 			'success'  => true,
 			'imported' => $imported,
 		) );
+	}
+
+	/**
+	 * Check whether a persistent withdrawal link is present on the site.
+	 *
+	 * Fetches the site's own pages as an anonymous visitor and looks for the
+	 * marker every FAZ preference-reopening control carries. The reason this
+	 * exists at all: a footer link is a legitimate way to satisfy a rule set's
+	 * standing-withdrawal requirement, but unlike the floating widget the
+	 * plugin does not render it and so cannot otherwise know it is there. An
+	 * administrator's assurance is not evidence; a fetch is.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response
+	 */
+	public function verify_withdrawal_link( $request ) {
+		unset( $request );
+
+		\FazCookie\Includes\Withdrawal_Path::verify();
+		$state = \FazCookie\Includes\Withdrawal_Path::state();
+
+		$messages = array(
+			'marker_on_every_page' => __( 'Found a consent-preferences link on every page checked. You can now choose the footer link as the withdrawal route.', 'faz-cookie-manager' ),
+			'marker_missing'       => __( 'No consent-preferences link was found on at least one of the pages checked. Add the shortcode to a part of your template that appears on every page — a footer widget area or block template — and check again.', 'faz-cookie-manager' ),
+			'request_failed'       => __( 'Could not load your own pages to check them. This is usually a loopback restriction, a firewall, or HTTP authentication on a staging site — it says nothing about your link. Fix the connection or keep using the floating widget.', 'faz-cookie-manager' ),
+			'no_urls'             => __( 'No published page was found to check.', 'faz-cookie-manager' ),
+		);
+		$message = isset( $messages[ $state['reason'] ] )
+			? $messages[ $state['reason'] ]
+			: sprintf(
+				/* translators: %s: HTTP status code returned by the site. */
+				__( 'A page returned HTTP %s instead of loading, so the check could not be completed.', 'faz-cookie-manager' ),
+				preg_replace( '/[^0-9]/', '', $state['reason'] )
+			);
+
+		return rest_ensure_response(
+			array(
+				'verified' => ( 'verified' === $state['status'] ),
+				'state'    => $state,
+				'message'  => $message,
+			)
+		);
 	}
 
 	/**

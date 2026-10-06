@@ -50,6 +50,17 @@ function litespeedInstalled(): boolean {
   }
 }
 
+/** audit-lab switch: forces the jurisdiction runtime OFF on the clean URL. */
+const GEO_RUNTIME_OFF_OPTION = 'faz_e2e_geo_runtime_off';
+
+function deleteOptionQuietly(name: string): void {
+  try {
+    wpEval(`delete_option( '${name}' );`);
+  } catch {
+    /* best-effort */
+  }
+}
+
 /** WPML negotiation mode the fixture reports: 1 = directory, 2 = domain, 3 = parameter. */
 function setNegotiation(mode: 1 | 2 | 3): void {
   setOption('faz_e2e_wpml_negotiation', String(mode));
@@ -142,6 +153,7 @@ test.afterAll(() => {
         delete_option( 'faz_e2e_wpml_negotiation' );
         delete_option( 'faz_e2e_ls_purge_count' );
         delete_option( 'faz_e2e_wpml_emulate' );
+        delete_option( 'faz_e2e_geo_runtime_off' );
       `);
     } catch {
       /* best-effort */
@@ -187,11 +199,43 @@ test.describe('WPML + LiteSpeed + Cache Compatibility Mode (wp.org report)', () 
     // Mode on, an Italian visitor still gets the English banner — because a
     // ?lang= URL parameter is not a reliable cache key, so the language is
     // deliberately gated to the site default to keep the render cacheable.
+    //
+    // The mode only constrains the render while it is ACTIVE, i.e. while the
+    // jurisdiction runtime is off. The audit-lab fixture forces the runtime on
+    // for the whole suite, which pauses the mode (see test 02b), so turn the
+    // runtime off here to observe the pinned language.
+    setOption(GEO_RUNTIME_OFF_OPTION, '1');
     setCacheCompat(true);
     setNegotiation(3);
     const { lang, urlSafe } = await langProbe(request, 'it');
     expect(lang).toBe('en');
     expect(urlSafe).toBe('0');
+  });
+
+  test('02b cache-compat paused by country routing + WPML parameter mode → the visitor\'s language resolves (IT), uncached', async ({
+    request,
+  }) => {
+    // With the jurisdiction runtime on and a country source available, the
+    // mode stands down and the routing veto keeps the page out of every shared
+    // cache. A language read from ?lang= can then be honoured safely — and the
+    // headers must prove the page is not cacheable, or the Italian render
+    // would be served to everyone behind the cache.
+    deleteOptionQuietly(GEO_RUNTIME_OFF_OPTION);
+    setCacheCompat(true);
+    setNegotiation(3);
+    const paused = wpEval(`
+      echo \\FazCookie\\Includes\\Cache_Compatibility::is_paused() ? '1' : '0';
+      echo \\FazCookie\\Includes\\Geolocation::has_country_source() ? '1' : '0';
+    `).trim();
+    test.skip(paused !== '11', `needs a paused mode with a country source (got is_paused/has_country_source = ${paused})`);
+
+    const resp = await request.get(`${WP_BASE}/?wpmllang=it`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (FAZ-E2E WPML)' },
+    });
+    const headers = resp.headers();
+    expect((headers['x-faz-current-language'] ?? '').toLowerCase()).toBe('it');
+    expect(headers['x-litespeed-cache-control'] ?? '', 'LiteSpeed must not cache the per-visitor render').toContain('no-cache');
+    expect(headers['cache-control'] ?? '', 'browsers and proxies must not cache it either').toContain('no-store');
   });
 
   test('03 [fix] cache-compat ON + WPML directory mode → the visitor\'s language resolves (IT)', async ({

@@ -88,6 +88,10 @@ namespace {
 		}
 	}
 
+	// The one predicate every cache-compat consumer now shares. Required as the
+	// REAL file rather than stubbed: a double here would be a second copy of
+	// the logic whose whole point is that there is only one.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-cache-compatibility.php';
 	require_once dirname( __DIR__, 2 ) . '/includes/class-i18n-helpers.php';
 
 	$tests_run = $tests_passed = $tests_failed = 0;
