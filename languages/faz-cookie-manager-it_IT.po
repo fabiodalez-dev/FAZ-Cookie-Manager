@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-01T06:43:53+00:00\n"
+"POT-Creation-Date: 2026-10-06T03:51:41+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -5885,8 +5885,8 @@ msgid "Below 440px the comfortable layout gives each button its own full-width r
 msgstr "Sotto i 440px il layout comodo assegna a ogni pulsante una riga intera, e questo porta il banner a occupare circa il 44% di uno schermo da 390px. Il layout compatto li dispone su una riga condivisa e riduce lo stesso banner a circa il 29%. Il desktop non viene modificato."
 
 #: admin/views/settings.php:232
-msgid "Compact keeps every button at least 44px tall so it stays comfortable to tap, and keeps the accept and reject buttons exactly the same size as each other, as equal prominence requires. On screens narrower than 360px accept and reject stay side by side and the customise button moves to its own row."
-msgstr "Il layout compatto mantiene ogni pulsante alto almeno 44px, perché resti comodo da toccare, e mantiene i pulsanti di accettazione e rifiuto esattamente della stessa dimensione, come richiede la parità di evidenza. Sugli schermi più stretti di 360px accettazione e rifiuto restano affiancati e il pulsante di personalizzazione passa a una riga propria."
+msgid "Compact keeps every button at least 44px tall so it stays comfortable to tap, and keeps the accept and reject buttons exactly the same size as each other, as equal prominence requires. On screens 360px wide or narrower, accept and reject stay side by side and the customise button moves to a row of its own."
+msgstr "Il layout compatto mantiene ogni pulsante alto almeno 44px, perché resti comodo da toccare, e mantiene i pulsanti di accettazione e rifiuto esattamente della stessa dimensione, come richiede la parità di evidenza. Sugli schermi larghi 360px o meno, accettazione e rifiuto restano affiancati e il pulsante di personalizzazione passa a una riga propria."
 
 #: admin/views/settings.php:239
 msgid "Script Blocking"

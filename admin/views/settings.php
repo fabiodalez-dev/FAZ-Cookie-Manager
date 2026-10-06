@@ -229,7 +229,7 @@ defined( 'ABSPATH' ) || exit;
 				</div>
 			</div>
 			<p class="faz-help">
-				<?php esc_html_e( 'Compact keeps every button at least 44px tall so it stays comfortable to tap, and keeps the accept and reject buttons exactly the same size as each other, as equal prominence requires. On screens narrower than 360px accept and reject stay side by side and the customise button moves to its own row.', 'faz-cookie-manager' ); ?>
+				<?php esc_html_e( 'Compact keeps every button at least 44px tall so it stays comfortable to tap, and keeps the accept and reject buttons exactly the same size as each other, as equal prominence requires. On screens 360px wide or narrower, accept and reject stay side by side and the customise button moves to a row of its own.', 'faz-cookie-manager' ); ?>
 			</p>
 		</div>
 	</div>

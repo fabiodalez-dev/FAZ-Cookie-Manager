@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-01T06:43:53+00:00\n"
+"POT-Creation-Date: 2026-10-06T03:51:41+00:00\n"
 "PO-Revision-Date: 2026-08-01 13:45+0200\n"
 "Last-Translator: \n"
 "Language-Team: Czech\n"
@@ -5906,7 +5906,7 @@ msgid "Below 440px the comfortable layout gives each button its own full-width r
 msgstr ""
 
 #: admin/views/settings.php:232
-msgid "Compact keeps every button at least 44px tall so it stays comfortable to tap, and keeps the accept and reject buttons exactly the same size as each other, as equal prominence requires. On screens narrower than 360px accept and reject stay side by side and the customise button moves to its own row."
+msgid "Compact keeps every button at least 44px tall so it stays comfortable to tap, and keeps the accept and reject buttons exactly the same size as each other, as equal prominence requires. On screens 360px wide or narrower, accept and reject stay side by side and the customise button moves to a row of its own."
 msgstr ""
 
 #: admin/views/settings.php:239

@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-01T06:43:53+00:00\n"
+"POT-Creation-Date: 2026-10-06T03:51:41+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
@@ -5635,7 +5635,7 @@ msgid "Below 440px the comfortable layout gives each button its own full-width r
 msgstr ""
 
 #: admin/views/settings.php:232
-msgid "Compact keeps every button at least 44px tall so it stays comfortable to tap, and keeps the accept and reject buttons exactly the same size as each other, as equal prominence requires. On screens narrower than 360px accept and reject stay side by side and the customise button moves to its own row."
+msgid "Compact keeps every button at least 44px tall so it stays comfortable to tap, and keeps the accept and reject buttons exactly the same size as each other, as equal prominence requires. On screens 360px wide or narrower, accept and reject stay side by side and the customise button moves to a row of its own."
 msgstr ""
 
 #: admin/views/settings.php:239
