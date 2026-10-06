@@ -945,6 +945,16 @@ class Frontend {
 	 * containing ad-blocker keywords. Every FAZ frontend bundle must therefore
 	 * use the same delivery path, not just the main and accessibility bundles.
 	 *
+	 * Known limit: an inline bundle is exposed to page rewriters that parse
+	 * the document as HTML4 (DOMDocument::loadHTML(), e.g. WPSpeed's image
+	 * optimiser). libxml ends a <script> at the first `</` followed by a
+	 * letter, so a `</` inside the bundle's string literals truncates the
+	 * script. The banner template escapes `</` as `<\/` for this reason
+	 * (escape_template_end_tags()), but that is not done here on purpose:
+	 * rewriting `</` in JavaScript source would corrupt regex literals and
+	 * other code where `<\/` is not equivalent. A site that combines this
+	 * option with such a rewriter should leave this option off.
+	 *
 	 * @param string $handle        Script handle.
 	 * @param string $relative_path Path relative to frontend/.
 	 * @param array  $dependencies  Script dependencies.
