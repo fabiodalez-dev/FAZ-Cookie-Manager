@@ -6774,7 +6774,9 @@ class Frontend {
 		// this bump an install that had already cached v3 within this same
 		// plugin version would keep serving the stylesheet in which the control
 		// collapses — the revision is here for exactly this case.
-		$cache_key = 'faz_boosted_css_v4_' . FAZ_VERSION . '_' . $layout . '_' . md5( $raw_css );
+		// v5: the compact labels wrap instead of clipping, the buttons follow
+		// DOM order and the classic chevron keeps its padding. Same reason.
+		$cache_key = 'faz_boosted_css_v5_' . FAZ_VERSION . '_' . $layout . '_' . md5( $raw_css );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
 			return $cached;
@@ -6877,25 +6879,43 @@ class Frontend {
 	 * about 44% of the viewport, and past half of it on a 375x667 phone. Laying
 	 * the buttons out on a shared row brings the same notice to 244px (29%).
 	 *
-	 * Three constraints shape the rules below, and none of them is cosmetic:
+	 * Five constraints shape the rules below, and none of them is cosmetic:
 	 *
 	 * 1. `flex: 1 1 0` makes the accept and reject buttons exactly as wide as
 	 *    each other because the same layout pass sizes them, not because two
 	 *    widths were written to match. EDPB Guidelines 03/2022 require the
 	 *    accept and reject options to carry equal prominence, so equality has to
 	 *    survive translation into any language - which hardcoded widths do not.
-	 * 2. `min-height: 44px` keeps the tap target at the size a finger needs.
+	 * 2. Labels wrap instead of being cut. Three buttons on a 361-440px row get
+	 *    about 100px each, and translated labels do not fit that on one line
+	 *    ("Az összes elfogadása", "Alles accepteren"). With `nowrap` the accept
+	 *    label was clipped while the shorter reject label was not - two boxes of
+	 *    equal size that no longer looked equal. Wrapping keeps every word
+	 *    visible, and `align-items: stretch` on the row gives every button the
+	 *    height of the tallest one, so a two-line accept never stands taller
+	 *    than a one-line reject.
+	 * 3. `min-height: 44px` keeps the tap target at the size a finger needs.
 	 *    Shrinking the buttons to fit is exactly the wrong trade.
-	 * 3. Under 360px three buttons no longer fit side by side. Accept and reject
-	 *    stay paired on their own row and "customise" - the longest label, and
-	 *    the one that takes no part in the equal-prominence comparison - drops
-	 *    to a row of its own. The pair that matters stays equal.
+	 * 4. Visual order is DOM order. Every template writes the buttons as
+	 *    [customise][reject][accept], and the template's own phone rules
+	 *    reorder them with `order`, which moves the boxes but not the Tab
+	 *    sequence: on a single row that made keyboard focus run right to left
+	 *    (WCAG 2.4.3). Stacked one per row the mismatch is only odd; side by side
+	 *    it is backwards. Rewriting the DOM would change every other layout, so
+	 *    compact resets `order` instead and lets the markup decide. Accept and
+	 *    reject stay adjacent either way, which is what keeps them reading as
+	 *    one pair of equal options.
+	 * 5. Under 360px three buttons no longer fit side by side. Accept and reject
+	 *    stay paired on their own row and "customise" - the one control that
+	 *    takes no part in the equal-prominence comparison - takes a row of its
+	 *    own. Since it comes first in the markup, that row sits above the pair.
 	 *
 	 * Emitted AFTER boost_css_specificity(), so the selectors are written with
 	 * their `#faz-consent` prefix already in place and need no `!important`:
-	 * they are specificity 1-1-0 against the template's own 1-1-0 rules and win
-	 * on document order. Measured against a live 1.32.0 site at 320, 360, 375,
-	 * 390 and 430 CSS pixels.
+	 * `#faz-consent .faz-notice-btn-wrapper .faz-btn` is specificity 1-2-0, equal
+	 * to the template's boosted `.faz-notice-btn-wrapper .faz-btn-*` phone rules
+	 * and above its 1-1-0 ones, and wins the ties on document order. The RTL and
+	 * classic rules below carry the extra class those template rules carry.
 	 *
 	 * @since 1.34.0
 	 * @param string $layout Resolved layout, already whitelisted.
@@ -6907,26 +6927,50 @@ class Frontend {
 		}
 
 		return '@media (max-width:440px){'
+			// `stretch`, not the templates' `center`: every button in a row takes
+			// the height of the tallest, so a label that wraps to two lines makes
+			// its partner two lines tall as well instead of standing out.
 			. '#faz-consent .faz-notice-btn-wrapper{'
-			. 'flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:12px;'
+			. 'flex-direction:row;flex-wrap:wrap;align-items:stretch;gap:8px;margin-top:12px;'
 			. '}'
+			// `order:0` hands the sequence back to the markup (constraint 4). It
+			// also overrides the `.faz-btn-accept{margin-top:16px}` the box and
+			// banner templates give the button they used to sort first.
+			//
+			// inline-flex centres a wrapped label vertically in a stretched box
+			// for both variants the shortcode can emit: a <button> centres its
+			// content natively, a link-type <a> does not.
+			//
+			// `overflow-wrap:break-word` only breaks inside a word that cannot fit
+			// the box on its own line (a long compound), never ordinary text.
 			. '#faz-consent .faz-notice-btn-wrapper .faz-btn{'
-			. 'flex:1 1 0;width:auto;min-width:0;margin:0;'
-			. 'min-height:44px;font-size:13px;padding:8px 4px;white-space:nowrap;'
+			. 'order:0;flex:1 1 0;width:auto;min-width:0;margin:0;'
+			. 'display:inline-flex;align-items:center;justify-content:center;'
+			. 'min-height:44px;font-size:13px;line-height:1.25;padding:8px 6px;'
+			. 'white-space:normal;overflow-wrap:break-word;word-break:normal;hyphens:auto;'
 			. '}'
-			// Accept first, reject immediately beside it: the two compared
-			// options sit together and read as one pair.
-			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-accept{order:1;margin-top:0;}'
-			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-reject{order:2;}'
-			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-customize{order:3;}'
-			// The Do-Not-Sell control is a flex child of this same wrapper, and it
-			// is the one button here that carries no `order` of its own — not in
-			// the template's mobile rules either, so at order:0 it already sorts
-			// ahead of Accept. Stacked full-width that is only odd; on a single
-			// row it breaks. It would have to share the first line with the
-			// accept/reject pair, and at 360px their 40% bases leave it almost
-			// nothing to grow into: it collapses to a few pixels while the
-			// inherited `white-space:nowrap` spills its label across Accept.
+			// The classic template's RTL phone rule gives reject alone an 8px
+			// end margin (1-3-0, so the reset above does not reach it). The row
+			// already has its gap; drop it so the spacing stays symmetric.
+			. '#faz-consent .faz-rtl .faz-notice-btn-wrapper .faz-btn-reject{margin-right:0;}'
+			// The classic template - also used for Full-width + Pushdown - draws
+			// the customise chevron as an absolutely positioned ::after 12px
+			// from the end of the button and relies on the 28px end padding it
+			// sets on desktop to keep the label clear of it. With the padding
+			// above the chevron sat on the label ("Personalizz▾"), so the end
+			// padding is restored for that template only, and the chevron is
+			// centred vertically because the stretched button is no longer the
+			// 40px it was positioned for. Customise is not one of the compared
+			// options, so the extra padding cannot unbalance accept and reject.
+			. '#faz-consent.faz-classic-top .faz-notice-btn-wrapper .faz-btn-customize,'
+			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn-customize{padding-right:28px;}'
+			. '#faz-consent.faz-classic-top .faz-notice-btn-wrapper .faz-btn-customize::after,'
+			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn-customize::after{top:calc(50% - 3px);}'
+			// The Do-Not-Sell control is a flex child of this same wrapper, last
+			// in the markup. On a single row it would have to share the first
+			// line with the accept/reject pair, and at 360px their 40% bases
+			// leave it almost nothing to grow into: it collapses to a few pixels
+			// while its label spills across Accept.
 			//
 			// It is not one of the compared options — EDPB 03/2022 equal
 			// prominence governs accept against reject — so it takes a full-width
@@ -6938,18 +6982,13 @@ class Frontend {
 			//
 			// Matched by data attribute because the two variants share nothing
 			// else: the shortcode emits either `.faz-btn.faz-btn-do-not-sell` or a
-			// bare `<a>` with no class at all.
-			//
-			// `white-space` is reset because the nowrap above is aimed at the
-			// three short labels sharing a tight row, where a wrap would make one
-			// button two lines tall and break the pair's symmetry. This control
-			// has the row to itself and the longest label of the four — "Do Not
-			// Sell or Share My Personal Information" does not fit 270px at 13px,
-			// so inheriting nowrap made it overflow its own full-width box. The
-			// label is statutory wording that cannot be shortened, so the box has
-			// to give.
+			// bare `<a>` with no class at all. `display:block` keeps the
+			// template's left-aligned link look instead of the centred flex box
+			// the compared buttons use. The label - "Do Not Sell or Share My
+			// Personal Information" - is statutory wording that cannot be
+			// shortened, so it wraps like the others.
 			. '#faz-consent .faz-notice-btn-wrapper [data-faz-tag="donotsell-button"]{'
-			. 'order:4;flex:1 1 100%;width:100%;white-space:normal;'
+			. 'flex:1 1 100%;width:100%;display:block;white-space:normal;'
 			. '}'
 			. '}'
 			. '@media (max-width:360px){'
