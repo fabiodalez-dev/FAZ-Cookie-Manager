@@ -211,6 +211,47 @@ namespace {
 	$state                                  = Withdrawal_Path::verify();
 	faz_is( $state['reason'], 'http_503', 'il codice HTTP finisce nella causa, così il messaggio può dirlo' );
 
+	echo "\n\033[1mbody_has_marker() — conta solo l'attributo su un elemento vero\033[0m\n";
+
+	// IL difetto: con "alternative asset path" il bundle script.min.js viene
+	// stampato inline, e contiene il selettore come TESTO. Una ricerca per
+	// sottostringa lo prendeva per un link, e su una pagina senza alcun link
+	// il lucchetto del widget si apriva.
+	$inline_bundle = '<html><head><script id="faz-inline">var s="[data-faz-open-preferences],.faz-cookie-settings-btn";document.addEventListener("click",function(e){e.target.closest(s);});</script></head><body><footer><a href="/privacy">Privacy</a></footer></body></html>';
+	faz_is( Withdrawal_Path::body_has_marker( $inline_bundle ), false, 'marker solo dentro uno <script> inline -> NON verificato' );
+	faz_is( Withdrawal_Path::body_has_marker( '<body><!-- <a data-faz-open-preferences="1">Cookie</a> --><p>x</p></body>' ), false, 'marker solo in un commento HTML -> NON verificato' );
+	faz_is( Withdrawal_Path::body_has_marker( '<body><noscript><a href="#faz-consent" data-faz-open-preferences="1">Cookie</a></noscript></body>' ), false, 'marker solo in <noscript> -> NON verificato: senza script.js il link non fa nulla' );
+	faz_is( Withdrawal_Path::body_has_marker( '<body><template><button data-faz-open-preferences="1">Cookie</button></template></body>' ), false, 'marker solo in un <template> inerte -> NON verificato' );
+	faz_is( Withdrawal_Path::body_has_marker( '<body><style>[data-faz-open-preferences]{color:red}</style></body>' ), false, 'marker solo in un selettore CSS -> NON verificato' );
+	faz_is( Withdrawal_Path::body_has_marker( '<body><code>&lt;a data-faz-open-preferences="1"&gt;</code></body>' ), false, 'snippet mostrato come testo con entità -> NON verificato' );
+	faz_is( Withdrawal_Path::body_has_marker( '<body><a title="usa data-faz-open-preferences nel footer" href="/x">x</a></body>' ), false, 'marker dentro il VALORE di un altro attributo -> NON verificato' );
+	faz_is( Withdrawal_Path::body_has_marker( '<body><a data-faz-open-preferences-extra="1">x</a></body>' ), false, 'attributo con nome più lungo -> NON verificato' );
+	// Uno <script> che non si chiude inghiotte il resto del documento, come
+	// fa il browser: il link dopo non è markup.
+	faz_is( Withdrawal_Path::body_has_marker( '<body><script>var a=1;<a data-faz-open-preferences="1">x</a></body>' ), false, '<script> mai chiuso -> il resto è testo, NON verificato' );
+
+	faz_is( Withdrawal_Path::body_has_marker( faz_page_with_link() ), true, '<a data-faz-open-preferences="1"> vero -> verificato' );
+	faz_is( Withdrawal_Path::body_has_marker( '<footer><button type="button" class="faz-cookie-settings-btn" data-faz-open-preferences="1" aria-haspopup="dialog">Manage consent preferences</button></footer>' ), true, 'il <button> emesso dallo shortcode -> verificato' );
+	faz_is( Withdrawal_Path::body_has_marker( "<footer><a href='#faz-consent' data-faz-open-preferences='1'>x</a></footer>" ), true, 'valore tra apici singoli -> verificato' );
+	faz_is( Withdrawal_Path::body_has_marker( '<footer><a href="#faz-consent" data-faz-open-preferences>x</a></footer>' ), true, 'attributo booleano senza valore -> verificato' );
+	faz_is( Withdrawal_Path::body_has_marker( '<FOOTER><A HREF="#faz-consent" DATA-FAZ-OPEN-PREFERENCES="1">x</A></FOOTER>' ), true, 'tag e attributo in maiuscolo -> verificato (HTML non distingue)' );
+	faz_is( Withdrawal_Path::body_has_marker( "<footer><li\n  class=\"x\"\n  data-faz-open-preferences=\"1\">x</li></footer>" ), true, 'qualunque elemento, attributo su un\'altra riga -> verificato (script.js usa closest())' );
+	faz_is( Withdrawal_Path::body_has_marker( '<a title="a > b" data-faz-open-preferences="1">x</a>' ), true, 'un ">" dentro un valore tra virgolette non spezza il tag' );
+	faz_is( Withdrawal_Path::body_has_marker( '<span data-faz-open-preferences/>' ), true, 'elemento auto-chiuso -> verificato' );
+	faz_is( Withdrawal_Path::body_has_marker( $inline_bundle . '<footer><a data-faz-open-preferences="1">x</a></footer>' ), true, 'bundle inline PIÙ un link vero -> verificato: lo script non nasconde il link' );
+
+	// E attraverso verify(): una pagina il cui unico "marker" è il bundle inline
+	// deve far fallire la verifica, con la causa giusta.
+	$GLOBALS['__faz_options']   = array();
+	$GLOBALS['__faz_responses'] = array();
+	foreach ( Withdrawal_Path::probe_urls() as $u ) {
+		$GLOBALS['__faz_responses'][ $u ] = array( 'code' => 200, 'body' => $inline_bundle );
+	}
+	$state = Withdrawal_Path::verify();
+	faz_is( $state['status'], 'failed', 'verify(): solo bundle inline su ogni pagina -> fallito' );
+	faz_is( $state['reason'], 'marker_missing', 'verify(): causa marker_missing' );
+	faz_is( Withdrawal_Path::satisfies_revisit_requirement( faz_settings_with( 'footer_link' ) ), false, 'verify(): il lucchetto del widget resta chiuso' );
+
 	echo "\n\033[1mapply_ui_requirements() — il widget si forza solo se nient'altro lo fa\033[0m\n";
 
 	$ruleset = array( 'ui' => array( 'revisit_widget_required' => true ) );

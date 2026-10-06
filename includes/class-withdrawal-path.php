@@ -301,7 +301,7 @@ class Withdrawal_Path {
 			}
 
 			$body = (string) wp_remote_retrieve_body( $response );
-			if ( false === strpos( $body, self::MARKER ) ) {
+			if ( ! self::body_has_marker( $body ) ) {
 				return self::record( 'failed', 'marker_missing', $urls, $found );
 			}
 
@@ -309,6 +309,100 @@ class Withdrawal_Path {
 		}
 
 		return self::record( 'verified', 'marker_on_every_page', $urls, $found );
+	}
+
+	/**
+	 * Whether a fetched page carries the marker on a real element.
+	 *
+	 * A substring search over the whole response is not evidence of a link.
+	 * The marker also appears as TEXT in places a visitor can never click:
+	 * with "alternative asset path" on, the whole of script.min.js is printed
+	 * inline, and it contains the selector `[data-faz-open-preferences]`; a
+	 * theme can leave the snippet in an HTML comment; a `<template>` or a
+	 * `<noscript>` block can hold it. Any of those used to satisfy the check on
+	 * a page with no link at all, which lifted the widget lock and could leave
+	 * the visitor with no way to withdraw — the one outcome this class exists
+	 * to prevent.
+	 *
+	 * So the marker counts only as an ATTRIBUTE of an element tag, after the
+	 * regions whose content is not clickable markup have been removed. Any
+	 * element, not just `<a>` or `<button>`: script.js binds its handler with
+	 * `closest('[data-faz-open-preferences]')`, so a `<span>` or `<li>` carrying
+	 * the attribute works for the visitor and must verify too. `<noscript>` is
+	 * excluded deliberately — the control only works through script.js, so a
+	 * link that exists only when scripts do not run is not a usable route.
+	 *
+	 * @param string $html Response body.
+	 * @return bool
+	 */
+	public static function body_has_marker( $html ) {
+		if ( ! is_string( $html ) || false === stripos( $html, self::MARKER ) ) {
+			return false;
+		}
+
+		$markup = self::strip_non_markup( $html );
+
+		// The attribute must sit in a tag, preceded by whitespace and followed
+		// by whitespace, `=`, `/` or the end of the tag — so neither
+		// `data-faz-open-preferences-extra` nor a value that merely CONTAINS the
+		// marker counts. Quoted attribute values are consumed whole, so a marker
+		// inside `title="... data-faz-open-preferences ..."` cannot match either.
+		$pattern = '#<[a-z][a-z0-9:-]*(?:\s(?:[^>"\']|"[^"]*"|\'[^\']*\')*?)?\s'
+			. preg_quote( self::MARKER, '#' )
+			. '(?=[\s=/>])#i';
+
+		return 1 === preg_match( $pattern, $markup );
+	}
+
+	/**
+	 * Remove the parts of a document whose content is not clickable markup.
+	 *
+	 * Comments, and the raw-text / inert elements (`script`, `style`,
+	 * `template`, `noscript`, `textarea`, `title`, `iframe`, `noembed`,
+	 * `noframes`, `xmp`, `plaintext`). Scanned left to right with plain string
+	 * searches rather than one large lazy regex: an inline bundle is easily
+	 * a few hundred kilobytes, and a lazy `.*?` across it is exactly where
+	 * PCRE's backtracking limit is reached — preg_replace() then returns null,
+	 * and the safest reading of null would be "no marker" anyway.
+	 *
+	 * An element that is opened and never closed swallows the rest of the
+	 * document. That is the browser's behaviour for these elements, and it is
+	 * the fail-closed direction here.
+	 *
+	 * @param string $html Response body.
+	 * @return string
+	 */
+	private static function strip_non_markup( $html ) {
+		$opener = '#<!--|<(script|style|template|noscript|textarea|title|iframe|noembed|noframes|xmp|plaintext)\b[^>]*>#i';
+		$length = strlen( $html );
+		$offset = 0;
+		$kept   = '';
+
+		while ( $offset < $length ) {
+			if ( 1 !== preg_match( $opener, $html, $match, PREG_OFFSET_CAPTURE, $offset ) ) {
+				$kept .= substr( $html, $offset );
+				break;
+			}
+			$start = $match[0][1];
+			$kept .= substr( $html, $offset, $start - $offset );
+			$after = $start + strlen( $match[0][0] );
+
+			if ( '<!--' === $match[0][0] ) {
+				$end    = strpos( $html, '-->', $after );
+				$offset = ( false === $end ) ? $length : $end + 3;
+				continue;
+			}
+
+			$end = stripos( $html, '</' . $match[1][0], $after );
+			if ( false === $end ) {
+				$offset = $length;
+				continue;
+			}
+			$close  = strpos( $html, '>', $end );
+			$offset = ( false === $close ) ? $length : $close + 1;
+		}
+
+		return $kept;
 	}
 
 	/**
