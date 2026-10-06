@@ -131,6 +131,12 @@ class Settings extends Store {
 				'banner_title_tag'       => 'h2',
 				'preference_title_tag'   => 'h2',
 				'category_title_tag'     => 'h3',
+				// Phone layout. 'comfortable' is the shipped behaviour: below
+				// 440px the notice buttons stack into one full-width row each.
+				// 'compact' lays them out on a shared row so the banner stops
+				// claiming ~44% of a 390px viewport. Default is the existing
+				// behaviour, so no installed site changes appearance on update.
+				'mobile_layout'          => 'comfortable',
 				'subdomain_sharing'      => false,
 				'hide_from_bots'         => true,
 				'gtm_datalayer'          => false,
@@ -359,11 +365,13 @@ class Settings extends Store {
 			'banner_title_tag',
 			'preference_title_tag',
 			'category_title_tag',
-			// Same reason: a scalar whose default is a string. Without this
-			// entry an array-valued payload would recurse against the string
-			// default, store an empty array, and leave configured_path() casting
-			// an array to a string. The whitelist in sanitize_option() handles
-			// every shape and settles on 'widget'.
+			// Same reason, for two more scalars whose default is a string.
+			// Without an entry here an array-valued payload would recurse against
+			// the string default and store an empty array, which then reaches a
+			// reader expecting a string — configured_path() was casting an array.
+			// The whitelists in sanitize_option() handle every shape and settle on
+			// 'comfortable' for the layout and 'widget' for the withdrawal path.
+			'mobile_layout',
 			'withdrawal_path',
 			'sites',
 			'custom_rules',
@@ -518,6 +526,17 @@ class Settings extends Store {
 				$allowed = array( 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span' );
 				$value   = is_string( $value ) ? strtolower( trim( $value ) ) : '';
 				$value   = in_array( $value, $allowed, true ) ? $value : ( 'category_title_tag' === $option ? 'h3' : 'h2' );
+				break;
+			case 'mobile_layout':
+				// Whitelist, never a pass-through. The value never reaches
+				// markup — it selects which stylesheet compact_mobile_css()
+				// returns and forms part of the banner-template cache key — so
+				// the risk is not injection but an unrecognised string becoming
+				// a third layout that nothing defines. Collapsing anything
+				// unexpected to 'comfortable' keeps the stored value inside the
+				// two layouts that exist.
+				$value = is_string( $value ) ? strtolower( trim( $value ) ) : '';
+				$value = in_array( $value, array( 'comfortable', 'compact' ), true ) ? $value : 'comfortable';
 				break;
 			case 'status':
 			case 'subdomain_sharing':
