@@ -53,7 +53,12 @@ ref._fazConsentStore = new Map();
 // Build marker — bump when shipping behavioural changes to this file. Lets
 // `fazcookie._diag().build` reveal at a glance whether a cache (CDN / optimizer)
 // is serving a stale bundle after a plugin update. #auto-show-hardening
-const _FAZ_BUILD = '1.33.0+shared-consent-restore';
+// Diagnostic only: nothing compares it against the server. The cache buster is
+// the `?ver=` on the enqueued script, which follows FAZ_VERSION, so a change
+// that couples this file to new server output (like the `<\/` escape in the
+// banner template, which an older script.js does not undo) only reaches
+// visitors safely once FAZ_VERSION is bumped at release.
+const _FAZ_BUILD = '1.33.0+html4-template-escape';
 
 /**
  * One-call frontend self-diagnosis for support: paste
