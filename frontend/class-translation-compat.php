@@ -62,10 +62,15 @@ class Translation_Compat {
 	 * site default, so the banner appeared in the wrong language with nothing
 	 * in the admin to explain it. The shared predicate settles it once.
 	 *
+	 * The predicate is is_shared_cache_render(), not is_active(): a mode
+	 * paused by routing on an install with no country source still has its
+	 * pages served from the shared cache, so the cookie language must stay
+	 * out of them. Same answer faz_current_language() uses.
+	 *
 	 * @return bool
 	 */
 	private function is_cache_compatibility_enabled() {
-		return \FazCookie\Includes\Cache_Compatibility::is_active();
+		return \FazCookie\Includes\Cache_Compatibility::is_shared_cache_render();
 	}
 
 	/**

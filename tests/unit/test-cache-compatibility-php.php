@@ -32,8 +32,15 @@ namespace FazCookie\Includes {
 	class Store {}
 	class Geolocation {
 		public static $visitorCountry = '';
+		// Whether a country source exists. Read by
+		// Cache_Compatibility::is_shared_cache_render() — the same predicate
+		// the Frontend routing veto asks.
+		public static $hasSource = false;
 		public static function get_visitor_country() {
 			return self::$visitorCountry;
+		}
+		public static function has_country_source() {
+			return self::$hasSource;
 		}
 	}
 	class Known_Providers {
@@ -189,6 +196,7 @@ namespace {
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-amp-consent.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/modules/banner-rest/class-banner-rest.php';
+	require_once dirname( __DIR__, 2 ) . '/frontend/class-translation-compat.php';
 
 	use FazCookie\Admin\Modules\Settings\Includes\Settings;
 	use FazCookie\Admin\Modules\Banners\Includes\Controller;
@@ -626,9 +634,25 @@ namespace {
 	// default language for no reason the administrator could see or correct.
 	// Delete the Geo_Runtime check from Cache_Compatibility::state() and this
 	// assertion goes red while every other one here stays green.
+	//
+	// ...but ONLY where the paused mode really takes the page out of the
+	// shared cache. Routing vetoes the cache only when a country source
+	// exists; without one every visitor gets the same fallback and the page
+	// stays cacheable, so the language must stay pinned there.
 	\FazCookie\Frontend\Includes\Geo_Runtime::$enabled = true;
+	\FazCookie\Includes\Geolocation::$hasSource         = true;
 	faz_current_language( true );
-	assert_eq( faz_current_language(), 'it', 'routing ON pauses cache-compat → WPML parameter-mode language is resolved again' );
+	assert_eq( faz_current_language(), 'it', 'routing ON + country source pauses cache-compat → WPML parameter-mode language is resolved again' );
+
+	// The guarantee the pause must not release: routing on, no country
+	// source (baseline). Nothing vetoes the page cache, so a ?lang= language
+	// resolved here would be frozen into a page served to everyone behind a
+	// cache that ignores query strings. Swap is_shared_cache_render() back to
+	// is_active() in faz_current_language() and this assertion goes red.
+	\FazCookie\Includes\Geolocation::$hasSource = false;
+	faz_current_language( true );
+	assert_eq( faz_current_language(), 'en', 'routing ON + NO country source (baseline) → page still cacheable, WPML parameter mode stays gated' );
+	\FazCookie\Includes\Geolocation::$hasSource = true;
 
 	// ...and switching routing back off restores the gate, with no second
 	// setting involved: the pause is reversible by construction.
@@ -637,6 +661,47 @@ namespace {
 	assert_eq( faz_current_language(), 'en', 'routing OFF resumes cache-compat → the gate is back, the saved flag never changed' );
 
 	$GLOBALS['faz_test_filters'] = array();
+
+	// --- The shared-cache predicate itself: the four states ----------------
+	echo "\nCache_Compatibility::is_shared_cache_render()\n";
+	$faz_cc_on  = array( 'banner_control' => array( 'cache_compatibility' => true ) );
+	$faz_cc_off = array( 'banner_control' => array( 'cache_compatibility' => false ) );
+
+	\FazCookie\Frontend\Includes\Geo_Runtime::$enabled = false;
+	\FazCookie\Includes\Geolocation::$hasSource         = true;
+	assert_eq( \FazCookie\Includes\Cache_Compatibility::is_shared_cache_render( $faz_cc_off ), false, 'off → false (nothing was promised)' );
+	assert_eq( \FazCookie\Includes\Cache_Compatibility::is_shared_cache_render( $faz_cc_on ), true, 'active → true' );
+	\FazCookie\Frontend\Includes\Geo_Runtime::$enabled = true;
+	assert_eq( \FazCookie\Includes\Cache_Compatibility::is_paused( $faz_cc_on ), true, 'routing ON + flag saved → paused' );
+	assert_eq( \FazCookie\Includes\Cache_Compatibility::is_shared_cache_render( $faz_cc_on ), false, 'paused + country source → false (the routing veto keeps the page out of the cache)' );
+	\FazCookie\Includes\Geolocation::$hasSource = false;
+	assert_eq( \FazCookie\Includes\Cache_Compatibility::is_shared_cache_render( $faz_cc_on ), true, 'paused + NO country source → true (page still cacheable)' );
+	assert_eq( \FazCookie\Includes\Cache_Compatibility::is_shared_cache_render( $faz_cc_off ), false, 'routing ON, flag NOT saved → false' );
+
+	// --- Translation_Compat: the second call site -------------------------
+	//
+	// Same predicate through the TranslatePress / Weglot `faz_current_language`
+	// filter callbacks. Built without the constructor so no hooks register.
+	echo "\nTranslation_Compat — cookie/session language under a paused mode\n";
+	$GLOBALS['faz_test_options']['faz_settings'] = $faz_cc_on;
+	$faz_tc        = ( new ReflectionClass( '\FazCookie\Frontend\Translation_Compat' ) )->newInstanceWithoutConstructor();
+	$GLOBALS['TRP_LANGUAGE'] = 'it_IT';
+
+	\FazCookie\Frontend\Includes\Geo_Runtime::$enabled = true;
+	\FazCookie\Includes\Geolocation::$hasSource         = false;
+	assert_eq( $faz_tc->get_translatepress_language( 'en' ), 'en', 'paused + NO country source → TranslatePress language does not override the cacheable one' );
+
+	\FazCookie\Includes\Geolocation::$hasSource = true;
+	assert_eq( $faz_tc->get_translatepress_language( 'en' ), 'it', 'paused + country source → page is not shared, TranslatePress language is honoured' );
+
+	\FazCookie\Frontend\Includes\Geo_Runtime::$enabled = false;
+	assert_eq( $faz_tc->get_translatepress_language( 'en' ), 'en', 'active → TranslatePress language does not override the cacheable one' );
+
+	$GLOBALS['faz_test_options']['faz_settings'] = $faz_cc_off;
+	assert_eq( $faz_tc->get_translatepress_language( 'en' ), 'it', 'off → TranslatePress language is honoured' );
+
+	unset( $GLOBALS['TRP_LANGUAGE'] );
+	\FazCookie\Includes\Geolocation::$hasSource = false;
 
 	echo "\n";
 	if ( $tests_failed > 0 ) {

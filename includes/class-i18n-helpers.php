@@ -217,7 +217,14 @@ if ( ! function_exists( 'faz_current_language' ) ) {
 		// the language alone stayed frozen on the site default. The predicate
 		// now lives in a static the procedural helpers can reach, and the two
 		// cannot drift apart again.
-		$cache_compatibility = \FazCookie\Includes\Cache_Compatibility::is_active();
+		//
+		// It asks is_shared_cache_render(), not is_active(): while routing
+		// pauses the mode on an install with no country source, the page is
+		// still served from the shared cache (nothing varies by country, so
+		// nothing vetoes it), and the language must stay pinned for exactly
+		// the reason above. Only a page the routing veto keeps out of the cache
+		// may resolve the language per visitor.
+		$cache_compatibility = \FazCookie\Includes\Cache_Compatibility::is_shared_cache_render();
 
 		if ( faz_i18n_is_multilingual() ) {
 			// If the plugin used is Polylang.

@@ -26,6 +26,11 @@
  * which is exactly the gap this fills: a static the procedural helpers can
  * reach.
  *
+ * The two language seams ask is_shared_cache_render() rather than is_active().
+ * Pausing stops the mode constraining the render; it does not stop the page
+ * being cached on an install where routing has no country source, and a
+ * language read from visitor state must never reach a shared cached page.
+ *
  * Deliberately NOT memoised. Every caller already paid for
  * Geo_Runtime::is_enabled() on each call, the option is served from
  * WordPress's own cache, and a per-request memo would need a reset hook that
@@ -124,6 +129,58 @@ class Cache_Compatibility {
 	 */
 	public static function is_active( $settings = null ) {
 		return self::STATE_ACTIVE === self::state( $settings );
+	}
+
+	/**
+	 * Whether a page rendered now can be served to other visitors from one
+	 * shared full-page cache entry, given the saved setting.
+	 *
+	 * This is the question visitor-state language resolution must ask, and it
+	 * is NOT the same as is_active(). A paused mode stops constraining the
+	 * render, but pausing does not by itself stop the page being cached:
+	 * Frontend::is_country_dependent_output() vetoes the cache for routing
+	 * only when a country source exists, because without one every visitor
+	 * gets the same fallback rule set and the page is invariant. So in the
+	 * baseline and degraded modes a paused site still serves its pages from
+	 * the cache the administrator turned this mode on for — and a language
+	 * read from visitor state (WPML's ?lang= parameter, a TranslatePress or
+	 * Weglot cookie) would be frozen into a page other visitors receive.
+	 *
+	 *   off                          false — nothing was promised.
+	 *   active                       true.
+	 *   paused, no country source    true  — the page is still cacheable.
+	 *   paused, country source       false — the routing veto keeps the page
+	 *                                        out of the shared cache, so
+	 *                                        per-visitor language is safe.
+	 *
+	 * When the answer cannot be established (the Geolocation class is not
+	 * loaded), it is true: pinning the language to the URL or the site default
+	 * costs a visitor their preferred language for one view; the opposite
+	 * mistake serves one visitor's language to everyone behind the cache.
+	 *
+	 * @param array|null $settings Settings to read, or null to load them.
+	 * @return bool
+	 */
+	public static function is_shared_cache_render( $settings = null ) {
+		$state = self::state( $settings );
+		if ( self::STATE_OFF === $state ) {
+			return false;
+		}
+		if ( self::STATE_ACTIVE === $state ) {
+			return true;
+		}
+
+		if (
+			! class_exists( '\FazCookie\Includes\Geolocation' )
+			|| ! method_exists( '\FazCookie\Includes\Geolocation', 'has_country_source' )
+		) {
+			return true;
+		}
+
+		// The same predicate the Frontend veto uses, including its
+		// `faz_has_country_signal_source` override, so this answer and the
+		// cache headers the page is sent with cannot disagree.
+		return ! \FazCookie\Includes\Geolocation::has_country_source();
 	}
 
 	/**
