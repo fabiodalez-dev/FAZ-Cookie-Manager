@@ -81,7 +81,17 @@ jobs:
         env:
           # add at least one provider API key
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Falls back to PULLFROG_OAUTH_FALLBACK when no repository-level
+          # CLAUDE_CODE_OAUTH_TOKEN is set. Without this the only credential
+          # the agent ever saw was the one Pullfrog holds at account scope,
+          # which shares its rate limit with interactive Claude Code use in
+          # this repository: an afternoon of local work left every review
+          # failing with `429 ... would exceed your account's rate limit` and
+          # `no other model or provider was selected`, because the second
+          # token existed as a repository secret but was never passed in.
+          # A review that cannot run is indistinguishable from a review that
+          # found nothing, which is the failure mode worth spending a line on.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.PULLFROG_OAUTH_FALLBACK }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_GENERATIVE_AI_API_KEY:
             ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
