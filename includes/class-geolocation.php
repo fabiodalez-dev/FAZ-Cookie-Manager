@@ -622,7 +622,7 @@ class Geolocation {
 	 * that their geo source was configured.
 	 *
 	 * The probe performs a real lookup and is NEVER run from a front-end
-	 * request: the result is cached in a non-autoloaded option against a
+	 * request: the MMDB result is cached in a non-autoloaded option against a
 	 * fingerprint of the database file, so it is recomputed when the file
 	 * changes and otherwise read once per admin page.
 	 *
@@ -706,13 +706,32 @@ class Geolocation {
 	 * @return array{source:string,configured:bool,working:bool,reason:string}
 	 */
 	private static function detected_status( $force ) {
+		$php_geoip_status = null;
 		if ( function_exists( 'geoip_country_code_by_name' ) ) {
-			return array(
+			// Loading the extension does not install its database. Probe local
+			// lookups just as we do for MMDB, and keep trying MMDB if they fail.
+			$working = false;
+			foreach ( array( '8.8.8.8', '1.1.1.1' ) as $probe_ip ) {
+				try {
+					$code = @geoip_country_code_by_name( $probe_ip ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- optional extension warns when its database is absent.
+				} catch ( \Throwable $e ) {
+					$code = false;
+				}
+				$code = is_string( $code ) ? strtoupper( $code ) : '';
+				if ( self::is_valid_country_code( $code ) && 'XX' !== $code ) {
+					$working = true;
+					break;
+				}
+			}
+			$php_geoip_status = array(
 				'source'     => 'php_geoip',
 				'configured' => true,
-				'working'    => true,
-				'reason'     => 'extension_loaded',
+				'working'    => $working,
+				'reason'     => $working ? 'probe_ok' : 'php_geoip_probe_failed',
 			);
+			if ( $working ) {
+				return $php_geoip_status;
+			}
 		}
 
 		$path = '';
@@ -725,6 +744,9 @@ class Geolocation {
 		$has_key  = is_array( $settings ) && ! empty( $settings['geolocation']['maxmind_license_key'] );
 
 		if ( '' === $path ) {
+			if ( null !== $php_geoip_status ) {
+				return $php_geoip_status;
+			}
 			// mod_geoip is on the server but detect_country() ignores it until
 			// `faz_trust_geoip_country_code` is enabled. Configured, because the
 			// signal is there; not working, because nothing reads it.

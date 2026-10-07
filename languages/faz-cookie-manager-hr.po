@@ -8151,3 +8151,7 @@ msgstr "Poveznica"
 
 #~ msgid "Geo-routing disabled. The CDN cache should start filling again within minutes of organic traffic."
 #~ msgstr "Geo-usmjeravanje je onemogućeno. CDN predmemorija trebala bi se početi puniti u roku od nekoliko minuta od organskog prometa."
+
+#: admin/views/settings.php:597
+msgid "The PHP GeoIP extension is installed, but test lookups returned no country. Repair its database or download a MaxMind GeoLite2 database below. Until a source works, every visitor receives the most-protective fallback rule set and the targeting options have no effect."
+msgstr ""

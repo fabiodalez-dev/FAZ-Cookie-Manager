@@ -22,6 +22,9 @@ async function boot(page: any, footer: string) {
   await page.goto('https://withdrawal.example.test/');
   await page.evaluate(() => {
     const w = window as any;
+    // This fixture drives the withdrawal helpers directly. Prevent the full
+    // async init from racing them when the bundle is loaded after DOM ready.
+    w.fazcookie = { _fazInitDone:true };
     w._fazConfig = {
       _activeLaw:'gdpr', _categories:[], _services:[], _providersToBlock:[],
       _cookieCategoryMap:{}, _whitelistedCookiePatterns:[], _userWhitelist:[],
@@ -29,14 +32,10 @@ async function boot(page: any, footer: string) {
         behaviours:{}, config:{revisitConsent:{status:false,verifiedAlternative:true,position:'bottom-left'}}},
       i18n:{}
     };
-    const add = document.addEventListener.bind(document);
-    w.restoreListener = () => { document.addEventListener = add; };
-    document.addEventListener = ((type: string, ...args: any[]) => type === 'DOMContentLoaded' ? undefined : (add as any)(type, ...args)) as any;
   });
   await page.addScriptTag({content:source});
   await page.evaluate(() => {
     const w = window as any;
-    w.restoreListener();
     w._fazRegisterShortcodeTriggers();
     w._fazRegisterListeners();
     w._fazWatchWithdrawalControl();
@@ -78,6 +77,39 @@ test('footer removal and restoration update the fallback', async ({page}) => {
   await page.locator('footer').evaluate(el => { el.innerHTML='<button data-faz-open-preferences>Preferences</button>'; });
   await expect(fallback).toBeHidden();
 });
+
+for (const attribute of ['aria-hidden', 'data-state']) {
+  test(`${attribute} theme styles update the withdrawal fallback`, async ({page}) => {
+    await boot(page, '<div id="footer-controls"><button data-faz-open-preferences>Preferences</button></div>');
+    const hiddenValue = attribute === 'aria-hidden' ? 'true' : 'hidden';
+    await page.addStyleTag({content:`#footer-controls[${attribute}="${hiddenValue}"]{display:none}`});
+    const fallback = page.locator('[data-faz-tag="revisit-consent"]');
+    const controls = page.locator('#footer-controls');
+    await expect(fallback).toBeHidden();
+    await controls.evaluate((el, {attr, value}) => el.setAttribute(attr, value), {attr:attribute, value:hiddenValue});
+    await expect(fallback).toBeVisible();
+    await controls.evaluate((el, attr) => el.removeAttribute(attr), attribute);
+    await expect(fallback).toBeHidden();
+  });
+}
+
+for (const motion of ['transition', 'animation']) {
+  test(`a completed CSS ${motion} updates the withdrawal fallback`, async ({page}) => {
+    await boot(page, '<div id="footer-controls"><button data-faz-open-preferences>Preferences</button></div>');
+    await page.addStyleTag({content: motion === 'transition'
+      ? '#footer-controls{transition:opacity 300ms linear} #footer-controls.fading{opacity:0}'
+      : '@keyframes hide-footer{from{opacity:1}to{opacity:0}} #footer-controls.fading{animation:hide-footer 300ms linear forwards}'});
+    const fallback = page.locator('[data-faz-tag="revisit-consent"]');
+    const controls = page.locator('#footer-controls');
+    await expect(fallback).toBeHidden();
+    await controls.evaluate(el => el.classList.add('fading'));
+    await expect(controls).toHaveCSS('opacity', '0');
+    await expect(fallback).toBeVisible();
+    // The fallback must still reopen consent after the theme hides the link.
+    await fallback.locator('button').click();
+    await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
+  });
+}
 
 /**
  * The case a DOM observer and a resize listener both miss.
