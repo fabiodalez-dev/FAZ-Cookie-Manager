@@ -319,6 +319,65 @@ namespace {
 	Geolocation::source_status();
 	faz_is( get_option( 'faz_geo_source_probe' )['fingerprint'] !== $first, true, 'database sostituito -> fingerprint diverso, il verdetto vecchio non sopravvive' );
 
+	// Define the optional extension only after the absence tests above have
+	// run: PHP registers a conditional function when this branch is reached.
+	if ( ! function_exists( 'geoip_country_code_by_name' ) ) {
+		function geoip_country_code_by_name( $ip ) {
+			$GLOBALS['__faz_geoip_calls'][] = $ip;
+			$result = $GLOBALS['__faz_geoip_results'][ $ip ] ?? false;
+			if ( $result instanceof \Throwable ) {
+				throw $result;
+			}
+			return $result;
+		}
+	}
+	$GLOBALS['__faz_geoip_calls']   = array();
+	$GLOBALS['__faz_geoip_results'] = array();
+	faz_reset();
+	@unlink( $db_path );
+	Geolocation::reset_runtime_cache();
+	$GLOBALS['__faz_options']['faz_settings'] = array( 'geolocation' => array( 'geo_targeting' => true ) );
+	require_once __DIR__ . '/../../frontend/includes/class-geo-runtime.php';
+
+	echo "\nPHP GeoIP: extension availability is not a successful lookup\n";
+	faz_is( Geolocation::has_country_source(), true, 'the frontend still detects the installed extension conservatively' );
+	faz_is( $GLOBALS['__faz_geoip_calls'], array(), 'the frontend existence check does not probe countries' );
+	faz_is( Geolocation::get_visitor_country(), '', 'failed extension lookups resolve no visitor country' );
+	$status = Geolocation::source_status();
+	faz_is( $status['configured'], true, 'installed extension remains configured when its database does not work' );
+	faz_is( $status['working'], false, 'failed extension lookups are not reported as working' );
+	faz_is( $status['reason'], 'php_geoip_probe_failed', 'the extension failure has its own repair instruction' );
+	faz_is( \FazCookie\Frontend\Includes\Geo_Runtime::current_state()['mode'], 'degraded', 'failed extension lookups report degraded rather than routing' );
+
+	foreach ( array( 'XX', 'invalid', new \Error( 'database unavailable' ) ) as $result ) {
+		$GLOBALS['__faz_geoip_results'] = array( '8.8.8.8' => $result, '1.1.1.1' => $result );
+		faz_is( Geolocation::source_status()['working'], false, 'unknown, invalid and throwing lookups do not establish capability' );
+	}
+
+	$GLOBALS['__faz_geoip_results'] = array( '1.1.1.1' => 'it' );
+	$GLOBALS['__faz_geoip_calls']   = array();
+	$status = Geolocation::source_status();
+	faz_is( $status['source'], 'php_geoip', 'a successful extension lookup selects the extension' );
+	faz_is( $status['working'], true, 'the second probe can prove the extension works' );
+	faz_is( $GLOBALS['__faz_geoip_calls'], array( '8.8.8.8', '1.1.1.1' ), 'try both public addresses when the first has no result' );
+	faz_is( \FazCookie\Frontend\Includes\Geo_Runtime::current_state()['mode'], 'routing', 'a working extension enables the routing status' );
+
+	$GLOBALS['__faz_geoip_results'] = array();
+	faz_write_db( $db_path, str_repeat( 'z', 2048 ) . $marker );
+	Geolocation::reset_runtime_cache();
+	$status = Geolocation::source_status( true );
+	faz_is( $status['source'], 'mmdb', 'failed extension lookups still reach the MMDB probe' );
+	faz_is( $status['working'], false, 'a broken MMDB is not masked by an installed extension' );
+	faz_is( $status['reason'], 'probe_failed', 'report the MMDB repair when that database also fails' );
+
+	// The existing cache contract is independent of the extension: a saved
+	// verdict for this same file must still be used after extension failure.
+	$probe = get_option( 'faz_geo_source_probe', array() );
+	$probe['working'] = true;
+	update_option( 'faz_geo_source_probe', $probe, false );
+	faz_is( Geolocation::source_status()['working'], true, 'a cached working MMDB verdict remains available after extension failure' );
+	faz_is( Geolocation::source_status( true )['working'], false, 'force still rechecks the MMDB after extension failure' );
+
 	@unlink( $db_path );
 	@rmdir( $db_dir );
 	@rmdir( rtrim( ABSPATH, '/' ) );

@@ -585,7 +585,7 @@ defined( 'ABSPATH' ) || exit;
 								esc_html_e( 'Each visitor receives the rule set for their own jurisdiction, and the targeting options below apply.', 'faz-cookie-manager' );
 								break;
 							case 'degraded':
-								// Two different faults reach this state and they need
+								// Different faults reach this state and they need
 								// different instructions. Saying "no database was
 								// found" to a site whose database exists but cannot
 								// resolve an address sends the admin to download a
@@ -593,6 +593,8 @@ defined( 'ABSPATH' ) || exit;
 								$faz_geo_reason = isset( $faz_geo_state['reason'] ) ? (string) $faz_geo_state['reason'] : '';
 								if ( 'probe_failed' === $faz_geo_reason ) {
 									esc_html_e( 'A GeoLite2 database is installed but a test lookup returned no country, so it cannot be relied on — it may be truncated, corrupt or the wrong edition. Until it is repaired, every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Download the database again in the MaxMind section further down.', 'faz-cookie-manager' );
+								} elseif ( 'php_geoip_probe_failed' === $faz_geo_reason ) {
+									esc_html_e( 'The PHP GeoIP extension is installed, but test lookups returned no country. Repair its database or download a MaxMind GeoLite2 database below. Until a source works, every visitor receives the most-protective fallback rule set and the targeting options have no effect.', 'faz-cookie-manager' );
 								} elseif ( 'module_untrusted' === $faz_geo_reason ) {
 									// The module being loaded is not the resolver
 									// using it: detect_country() reads its value only
