@@ -2690,13 +2690,19 @@ function _fazWatchWithdrawalControl() {
         });
     };
     _fazWithdrawalObserver = new MutationObserver(refresh);
-    // documentElement, not body: a theme or cache plugin injects its late
-    // <style> into <head>, which a body-rooted observer never sees.
+    // Theme CSS can hide a control through any attribute selector (ARIA,
+    // data-state, id, or a closed <details>), so do not restrict attributes.
+    // Observe the head too, where themes and cache plugins add late styles.
     _fazWithdrawalObserver.observe(document.documentElement, {
-        subtree: true, childList: true, attributes: true,
-        attributeFilter: ['hidden', 'inert', 'disabled', 'class', 'style', 'media', 'data-faz-open-preferences']
+        subtree: true, childList: true, attributes: true
     });
     window.addEventListener('resize', refresh);
+    // The mutation's first frame can still see a usable control partway
+    // through a fade. Recheck when CSS motion finishes or is cancelled;
+    // those computed-style changes do not create another DOM mutation.
+    ['transitionend', 'transitioncancel', 'animationend', 'animationcancel'].forEach(function (eventName) {
+        document.addEventListener(eventName, refresh, true);
+    });
     // A stylesheet that finishes loading AFTER the first check can hide the
     // footer control without mutating the DOM and without a resize, and the
     // first check runs from _fazRemoveBanner() at init — usually before that

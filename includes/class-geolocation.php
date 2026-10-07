@@ -341,11 +341,15 @@ class Geolocation {
 		// 3. PHP GeoIP extension.
 		if ( function_exists( 'geoip_country_code_by_name' ) ) {
 			$code = @geoip_country_code_by_name( $ip ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
-			if ( $code ) {
-				$code = strtoupper( $code );
-				if ( self::is_valid_country_code( $code ) ) {
-					$votes['php_geoip'] = $code;
-				}
+			// 'XX' is the "unknown / anonymous proxy" sentinel, and the
+			// extension outranks MMDB in the priority order below. Accepting it
+			// as a vote would let a database-less extension bury a real MMDB
+			// answer: get_visitor_country() turns the winning 'XX' back into ''
+			// and the visitor is routed as ungeolocated. Same exclusion the
+			// CF-IPCountry and mod_geoip branches above already apply.
+			$code = is_string( $code ) ? strtoupper( $code ) : '';
+			if ( self::is_valid_country_code( $code ) && 'XX' !== $code ) {
+				$votes['php_geoip'] = $code;
 			}
 		}
 
@@ -622,7 +626,7 @@ class Geolocation {
 	 * that their geo source was configured.
 	 *
 	 * The probe performs a real lookup and is NEVER run from a front-end
-	 * request: the result is cached in a non-autoloaded option against a
+	 * request: the MMDB result is cached in a non-autoloaded option against a
 	 * fingerprint of the database file, so it is recomputed when the file
 	 * changes and otherwise read once per admin page.
 	 *
@@ -706,13 +710,32 @@ class Geolocation {
 	 * @return array{source:string,configured:bool,working:bool,reason:string}
 	 */
 	private static function detected_status( $force ) {
+		$php_geoip_status = null;
 		if ( function_exists( 'geoip_country_code_by_name' ) ) {
-			return array(
+			// Loading the extension does not install its database. Probe local
+			// lookups just as we do for MMDB, and keep trying MMDB if they fail.
+			$working = false;
+			foreach ( array( '8.8.8.8', '1.1.1.1' ) as $probe_ip ) {
+				try {
+					$code = @geoip_country_code_by_name( $probe_ip ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- optional extension warns when its database is absent.
+				} catch ( \Throwable $e ) {
+					$code = false;
+				}
+				$code = is_string( $code ) ? strtoupper( $code ) : '';
+				if ( self::is_valid_country_code( $code ) && 'XX' !== $code ) {
+					$working = true;
+					break;
+				}
+			}
+			$php_geoip_status = array(
 				'source'     => 'php_geoip',
 				'configured' => true,
-				'working'    => true,
-				'reason'     => 'extension_loaded',
+				'working'    => $working,
+				'reason'     => $working ? 'probe_ok' : 'php_geoip_probe_failed',
 			);
+			if ( $working ) {
+				return $php_geoip_status;
+			}
 		}
 
 		$path = '';
@@ -728,6 +751,13 @@ class Geolocation {
 			// mod_geoip is on the server but detect_country() ignores it until
 			// `faz_trust_geoip_country_code` is enabled. Configured, because the
 			// signal is there; not working, because nothing reads it.
+			//
+			// This is checked BEFORE the failed extension on purpose. Both
+			// sources are present and both are unusable, so the question is
+			// which repair to put in front of the admin: enabling one filter,
+			// or installing a GeoIP database (or buying a MaxMind key). The
+			// cheapest fix wins. Without mod_geoip the extension failure is
+			// still reported, with its own instruction.
 			if ( self::mod_geoip_configured() ) {
 				return array(
 					'source'     => 'mod_geoip',
@@ -735,6 +765,9 @@ class Geolocation {
 					'working'    => false,
 					'reason'     => 'module_untrusted',
 				);
+			}
+			if ( null !== $php_geoip_status ) {
+				return $php_geoip_status;
 			}
 			return array(
 				'source'     => $has_key ? 'mmdb' : 'none',

@@ -623,6 +623,8 @@ Only the most recent release is listed here. The complete history is in [CHANGEL
 
 ### 1.34.1 — 2026-10-07
 
+- The withdrawal fallback widget reappears when theme attributes or CSS transitions and animations hide the footer link after consent.
+- PHP GeoIP status requires a successful lookup and still checks the MMDB source when the extension's database fails. The admin reports the failure with repair instructions.
 - A footer reopen link could be verified on the strength of a marker no visitor can click, leaving the site with no usable way to withdraw consent. The verifier strips raw-text regions (`<script>`, `<style>`, `<title>`, `<textarea>`…) before looking for the marker, but ended a region at the first `</` plus the element's name — so `</titlex>` closed `<title>` and everything after it was handed back as live markup. A marker in inert text then passed verification, the plugin stopped rendering its own revisit widget, and the visitor was left with no way to withdraw consent. Raw-text regions now end only where HTML ends them: the name followed by tab, line feed, form feed, carriage return, space, `/` or `>`. The set is spelled out rather than written as a whitespace class, because PCRE counts the vertical tab as whitespace and HTML does not.
 
 ### 1.34.0 — 2026-10-06
