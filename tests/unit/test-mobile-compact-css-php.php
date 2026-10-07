@@ -176,7 +176,10 @@ namespace {
 		// also matches `min-width:100%` and `max-width:100%`, and neither of
 		// those makes the row span the wrapper — so the plain substring check
 		// could not have caught that regression.
-		faz_mcss_assert( 1 === preg_match( '/(?:^|;)width:100%/', $dns_body ), "{$type}: the Do-Not-Sell row spans the wrapper" );
+		// Bounded on both sides: `width:100%junk` is an invalid value a browser
+		// discards, so without the trailing boundary the test could pass on a
+		// rule that sets no usable width at all.
+		faz_mcss_assert( 1 === preg_match( '/(?:^|;)width:100%(?=;|$)/', $dns_body ), "{$type}: the Do-Not-Sell row spans the wrapper" );
 		// "Do Not Sell or Share My Personal Information" is statutory wording
 		// that cannot be shortened, and it does not fit one line on a phone.
 		faz_mcss_assert( false !== strpos( $dns_body, 'white-space:normal' ), "{$type}: the statutory Do-Not-Sell label is allowed to wrap" );

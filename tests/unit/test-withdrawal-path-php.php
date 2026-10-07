@@ -240,6 +240,10 @@ namespace {
 		'<style>#a{color:red} /* </stylex> */ <a data-faz-open-preferences>fake</a></style><footer>none</footer>',
 		'<script>var s = "</scriptx>"; <a data-faz-open-preferences>fake</a></script><footer>none</footer>',
 		'<textarea>paste </textareax> here <a data-faz-open-preferences>fake</a></textarea><footer>none</footer>',
+		// Vertical tab. PCRE's \s matches it, HTML's whitespace set does not,
+		// so `</title\x0B>` must NOT close the region: a browser keeps reading
+		// title text, and anything after it has to stay inert here too.
+		"<title>t </title\x0B> <a data-faz-open-preferences>fake</a></title><footer>none</footer>",
 	);
 	foreach ( $raw_text_boundaries as $markup ) {
 		faz_is( Withdrawal_Path::body_has_marker( $markup ), false, 'marker oltre una finta chiusura di testo grezzo -> NON verificato' );

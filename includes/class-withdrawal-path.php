@@ -502,9 +502,13 @@ class Withdrawal_Path {
 			// route is believed, this plugin hides its own widget and the
 			// visitor is left with no way to withdraw consent. That is the
 			// fail-open this class documents itself as not doing. HTML5 ends a
-			// raw-text element only when the name is followed by whitespace,
-			// `/` or `>`, so that is what is matched here.
-			$close_pattern = '#</' . preg_quote( $match[1][0], '#' ) . '(?=[\s/>])#i';
+			// raw-text element only when the name is followed by tab, LF, FF,
+			// CR, space, `/` or `>`. The set is spelled out rather than written
+			// `\s`, because PCRE's `\s` also matches the vertical tab, which
+			// HTML does not treat as whitespace: `</title\x0B>` would close the
+			// region here while a browser keeps it as title text, which is the
+			// same fail-open with a less likely input.
+			$close_pattern = '#</' . preg_quote( $match[1][0], '#' ) . '(?=[\t\n\f\r />])#i';
 			if ( 1 !== preg_match( $close_pattern, $html, $close_match, PREG_OFFSET_CAPTURE, $after ) ) {
 				$offset = $length;
 				continue;
