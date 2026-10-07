@@ -223,6 +223,35 @@ namespace {
 	faz_is( Withdrawal_Path::body_has_marker( '<body><!-- <a data-faz-open-preferences="1">Cookie</a> --><p>x</p></body>' ), false, 'marker solo in un commento HTML -> NON verificato' );
 	faz_is( Withdrawal_Path::body_has_marker( '<body><noscript><a href="#faz-consent" data-faz-open-preferences="1">Cookie</a></noscript></body>' ), false, 'marker solo in <noscript> -> NON verificato: senza script.js il link non fa nulla' );
 	faz_is( Withdrawal_Path::body_has_marker( '<body><template><button data-faz-open-preferences="1">Cookie</button></template></body>' ), false, 'marker solo in un <template> inerte -> NON verificato' );
+	// Raw-text regions must end where the element's name ends, not at the first
+	// string that merely starts with it. `</titlex>` does not close <title>, and
+	// a browser renders everything after it as the title's text — so a marker
+	// there is inert. Closing the region early would hand that inert text back
+	// as live markup, verify a footer route that does not exist, and leave the
+	// visitor with no way to withdraw consent: fail-open, in the one class whose
+	// contract is to fail closed.
+	// Each case puts a REAL element carrying the marker after the fake closing
+	// tag: that is what makes the assertion bite. With the marker only in loose
+	// text the DOM parser finds no attribute and the test would pass either way
+	// — green, and worthless. Confirmed by running all four against the old
+	// substring search: every one of them goes red.
+	$raw_text_boundaries = array(
+		'<title>Writing </titlex> more <a data-faz-open-preferences>fake</a></title><footer>none</footer>',
+		'<style>#a{color:red} /* </stylex> */ <a data-faz-open-preferences>fake</a></style><footer>none</footer>',
+		'<script>var s = "</scriptx>"; <a data-faz-open-preferences>fake</a></script><footer>none</footer>',
+		'<textarea>paste </textareax> here <a data-faz-open-preferences>fake</a></textarea><footer>none</footer>',
+	);
+	foreach ( $raw_text_boundaries as $markup ) {
+		faz_is( Withdrawal_Path::body_has_marker( $markup ), false, 'marker oltre una finta chiusura di testo grezzo -> NON verificato' );
+	}
+	// E il tag di chiusura vero continua a chiudere: la correzione non deve
+	// rendere la regione infinita, o ogni marker reale dopo di essa sparirebbe.
+	faz_is(
+		Withdrawal_Path::body_has_marker( '<title>t</title><footer><a href="#faz-consent" data-faz-open-preferences>Cookie</a></footer>' ),
+		true,
+		'dopo la chiusura vera il markup torna a contare'
+	);
+
 	$unusable_controls = array(
 		'<button disabled data-faz-open-preferences>Preferences</button>',
 		'<button data-faz-open-preferences disabled="false">Preferences</button>',

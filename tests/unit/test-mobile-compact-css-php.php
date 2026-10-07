@@ -172,7 +172,11 @@ namespace {
 		// their 40% bases leave it almost nothing to grow into: it collapsed to
 		// a few pixels wide.
 		faz_mcss_assert( false !== strpos( $dns_body, 'flex:1 1 100%' ), "{$type}: the Do-Not-Sell control takes a full row, not a share of the pair's" );
-		faz_mcss_assert( false !== strpos( $dns_body, 'width:100%' ), "{$type}: the Do-Not-Sell row spans the wrapper" );
+		// Anchored to a declaration boundary, not a substring: `width:100%`
+		// also matches `min-width:100%` and `max-width:100%`, and neither of
+		// those makes the row span the wrapper — so the plain substring check
+		// could not have caught that regression.
+		faz_mcss_assert( 1 === preg_match( '/(?:^|;)width:100%/', $dns_body ), "{$type}: the Do-Not-Sell row spans the wrapper" );
 		// "Do Not Sell or Share My Personal Information" is statutory wording
 		// that cannot be shortened, and it does not fit one line on a phone.
 		faz_mcss_assert( false !== strpos( $dns_body, 'white-space:normal' ), "{$type}: the statutory Do-Not-Sell label is allowed to wrap" );

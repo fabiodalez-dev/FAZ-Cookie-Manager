@@ -495,11 +495,21 @@ class Withdrawal_Path {
 				continue;
 			}
 
-			$end = stripos( $html, '</' . $match[1][0], $after );
-			if ( false === $end ) {
+			// The end tag has to end where the name ends. A plain substring
+			// search closes the raw-text region at `</titlex>` or `</styles>`
+			// too, and everything after it is then treated as live markup — so
+			// a marker sitting in inert text passes verification, the footer
+			// route is believed, this plugin hides its own widget and the
+			// visitor is left with no way to withdraw consent. That is the
+			// fail-open this class documents itself as not doing. HTML5 ends a
+			// raw-text element only when the name is followed by whitespace,
+			// `/` or `>`, so that is what is matched here.
+			$close_pattern = '#</' . preg_quote( $match[1][0], '#' ) . '(?=[\s/>])#i';
+			if ( 1 !== preg_match( $close_pattern, $html, $close_match, PREG_OFFSET_CAPTURE, $after ) ) {
 				$offset = $length;
 				continue;
 			}
+			$end    = $close_match[0][1];
 			$close  = strpos( $html, '>', $end );
 			$offset = ( false === $close ) ? $length : $close + 1;
 		}
