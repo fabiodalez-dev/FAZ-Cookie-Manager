@@ -29,6 +29,59 @@ jobs:
   pullfrog:
     name: Pullfrog agent
     runs-on: ubuntu-latest
+    env:
+      # A second subscription token, used only when the run with the first one
+      # fails (its rate limit is per account, so a busy week can exhaust it).
+      # Empty when the secret is not set: then there is no second run.
+      HAS_OAUTH_FALLBACK: ${{ secrets.PULLFROG_OAUTH_FALLBACK != '' }}
+      # add at least one provider API key
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GOOGLE_GENERATIVE_AI_API_KEY:
+        ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
+      KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
+      META_MODEL_API_KEY: ${{ secrets.META_MODEL_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+
+      # for Amazon Bedrock (https://docs.pullfrog.com/bedrock)
+      # AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+      # AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      # AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      # AWS_REGION: us-east-1
+      # BEDROCK_MODEL_ID: <bedrock-model-id>
+
+      # for Google Vertex AI (https://docs.pullfrog.com/vertex)
+      # VERTEX_SERVICE_ACCOUNT_JSON: >-
+      #   ${{ secrets.VERTEX_SERVICE_ACCOUNT_JSON }}
+      # GOOGLE_CLOUD_PROJECT: my-project
+      # VERTEX_LOCATION: global
+      # VERTEX_MODEL_ID: <vertex-model-id>
+
+      # for Azure OpenAI (https://docs.pullfrog.com/azure)
+      # AZURE_RESOURCE_NAME is the <name> in https://<name>.openai.azure.com
+      # AZURE_DEPLOYMENT is your deployment's name, not the model it serves
+      # AZURE_RESOURCE_NAME: my-resource
+      # AZURE_API_KEY: ${{ secrets.AZURE_API_KEY }}
+      # AZURE_DEPLOYMENT: <deployment-name>
+      # both limits are required — set them to the real limits of that model
+      # AZURE_CONTEXT: "400000"
+      # AZURE_MAX_OUTPUT: "128000"
+
+      # for any OpenAI-compatible endpoint — LiteLLM, Cloudflare AI Gateway,
+      # self-hosted vLLM (https://docs.pullfrog.com/openai-compatible)
+      # OPENAI_COMPATIBLE_BASE_URL: https://litellm.example.com/v1
+      # OPENAI_COMPATIBLE_API_KEY: ${{ secrets.OPENAI_COMPATIBLE_API_KEY }}
+      # OPENAI_COMPATIBLE_MODEL: <model-id>
+      # both limits are required — set them to the real limits of that model
+      # OPENAI_COMPATIBLE_CONTEXT: "128000"
+      # OPENAI_COMPATIBLE_MAX_OUTPUT: "16384"
     permissions:
       # The action mints a short-lived OIDC token to prove this run's identity
       # to Pullfrog's own token service, which is how a Router or subscription
@@ -54,6 +107,8 @@ jobs:
           # unauthenticated fetch works.
           persist-credentials: false
       - name: Run agent
+        id: agent
+        continue-on-error: true
         # Pinned to a commit SHA rather than the documented `@v0`, which is a
         # tag that MOVES — it has already advanced through ninety v0.1.x
         # releases. This is the one action here that runs an agent with access
@@ -78,52 +133,22 @@ jobs:
           # private some day cannot silently widen it — private repos default
           # to `enabled`.
           shell: restricted
+
+      - name: Run agent with the fallback subscription token
+        id: agent_fallback
+        if: steps.agent.outcome == 'failure' && env.HAS_OAUTH_FALLBACK == 'true'
+        uses: pullfrog/pullfrog@0d318bef8c7cf7ae3f193ef32b2bc74e1d94b4d1 # v0.1.90
+        with:
+          prompt: ${{ inputs.prompt }}
+          push: disabled
+          shell: restricted
         env:
-          # add at least one provider API key
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_GENERATIVE_AI_API_KEY:
-            ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
-          KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
-          META_MODEL_API_KEY: ${{ secrets.META_MODEL_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-
-          # for Amazon Bedrock (https://docs.pullfrog.com/bedrock)
-          # AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
-          # AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          # AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          # AWS_REGION: us-east-1
-          # BEDROCK_MODEL_ID: <bedrock-model-id>
-
-          # for Google Vertex AI (https://docs.pullfrog.com/vertex)
-          # VERTEX_SERVICE_ACCOUNT_JSON: >-
-          #   ${{ secrets.VERTEX_SERVICE_ACCOUNT_JSON }}
-          # GOOGLE_CLOUD_PROJECT: my-project
-          # VERTEX_LOCATION: global
-          # VERTEX_MODEL_ID: <vertex-model-id>
-
-          # for Azure OpenAI (https://docs.pullfrog.com/azure)
-          # AZURE_RESOURCE_NAME is the <name> in https://<name>.openai.azure.com
-          # AZURE_DEPLOYMENT is your deployment's name, not the model it serves
-          # AZURE_RESOURCE_NAME: my-resource
-          # AZURE_API_KEY: ${{ secrets.AZURE_API_KEY }}
-          # AZURE_DEPLOYMENT: <deployment-name>
-          # both limits are required — set them to the real limits of that model
-          # AZURE_CONTEXT: "400000"
-          # AZURE_MAX_OUTPUT: "128000"
-
-          # for any OpenAI-compatible endpoint — LiteLLM, Cloudflare AI Gateway,
-          # self-hosted vLLM (https://docs.pullfrog.com/openai-compatible)
-          # OPENAI_COMPATIBLE_BASE_URL: https://litellm.example.com/v1
-          # OPENAI_COMPATIBLE_API_KEY: ${{ secrets.OPENAI_COMPATIBLE_API_KEY }}
-          # OPENAI_COMPATIBLE_MODEL: <model-id>
-          # both limits are required — set them to the real limits of that model
-          # OPENAI_COMPATIBLE_CONTEXT: "128000"
-          # OPENAI_COMPATIBLE_MAX_OUTPUT: "16384"
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.PULLFROG_OAUTH_FALLBACK }}
+      # The first run's failure was held back by continue-on-error; when the
+      # fallback did not save it, the check reports it. The review is not a
+      # required check, so a red run never blocks a merge.
+      - name: Fail when no run succeeded
+        if: steps.agent.outcome == 'failure' && steps.agent_fallback.outcome != 'success'
+        run: |
+          echo "::error::The agent failed with the primary credential, and the fallback failed too or is not configured."
+          exit 1
