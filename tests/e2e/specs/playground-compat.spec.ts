@@ -108,7 +108,7 @@ test.describe('Playground compatibility (online — RUN_PLAYGROUND_TEST=1 to ena
   // WASM cold-start can run past Playwright's default 30s test timeout.
   test.setTimeout(180_000);
 
-  test('faz-cookie-manager activates on Playground without fatal errors and renders the admin dashboard', async ({ browser }) => {
+  test('faz-cookie-manager activates on Playground without fatal errors and renders the admin dashboard', async ({ browser, browserName }) => {
     // Own context, with the browser's REAL user agent — this is the whole
     // reason this test could not run unattended, and it is not about headless.
     //
@@ -133,9 +133,18 @@ test.describe('Playground compatibility (online — RUN_PLAYGROUND_TEST=1 to ena
     // around browser.version() states the version actually running (148 here),
     // which is the opposite of spoofing: the pinned string is the one that
     // lies, and it is what the filter objects to.
+    //
+    // Chromium only. playwright.config.ts honours FAZ_E2E_BROWSERS, and under
+    // the firefox or webkit project browser.version() returns a Gecko or
+    // WebKit version — pouring that into a "Chrome/…" string would forge
+    // exactly the kind of user agent this change exists to stop sending.
+    // Explicit `undefined` is not a no-op: it still overrides the project's
+    // device user agent, so the other engines send their own native one.
     const context = await browser.newContext({
       ignoreHTTPSErrors: true,
-      userAgent: `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${browser.version()} Safari/537.36`,
+      userAgent: browserName === 'chromium'
+        ? `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${browser.version()} Safari/537.36`
+        : undefined,
     });
     const page = await context.newPage();
 

@@ -248,9 +248,15 @@ echo "Remaining manual steps — these are not automatable:"
 # and the only cases that still warrant a new Application Password are a real
 # exposure or a new machine. Rotating on a calendar costs a re-authentication
 # mid-publish and buys nothing.
-echo "  • Smoke-test in Playground — now automated and headless, ~12s:"
-echo "      RUN_PLAYGROUND_TEST=1 npx playwright test -c tests/e2e/playwright.config.ts \\"
-echo "        tests/e2e/specs/playground-compat.spec.ts --retries=0"
+# The command is automated but not self-contained: the config's globalSetup
+# logs into the local test site and asserts its prerequisites before any
+# browser opens, so nginx + the faz-test stack must be up, and the -c path is
+# relative to the repo. Say both, rather than printing a line that fails at the
+# login step with an error that looks like Playground's fault.
+echo "  • Smoke-test in Playground — automated and headless, ~12s."
+echo "    Needs the local e2e stack up (nginx on 127.0.0.1:9998), since globalSetup logs in first:"
+echo "      cd ${PLUGIN_SRC} && RUN_PLAYGROUND_TEST=1 npx playwright test \\"
+echo "        -c tests/e2e/playwright.config.ts tests/e2e/specs/playground-compat.spec.ts --retries=0"
 echo "  • Eyeball https://wordpress.org/plugins/${SLUG}/ once the directory page updates."
 echo "  • Read the FAZ post back on https://fabiodalez.it/category/faz/ — it is public the moment it is created."
 echo
