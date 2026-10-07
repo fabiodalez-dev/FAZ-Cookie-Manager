@@ -23,6 +23,12 @@ namespace {
 	if ( ! defined( 'ABSPATH' ) ) {
 		define( 'ABSPATH', $faz_tmp );
 	}
+	// get_country() caches a resolved country via set_transient(), which is the
+	// only place this constant is read. No earlier test ever resolved one, so
+	// the omission stayed invisible until a test asserted on a real country.
+	if ( ! defined( 'HOUR_IN_SECONDS' ) ) {
+		define( 'HOUR_IN_SECONDS', 3600 );
+	}
 
 	$GLOBALS['__faz_filters'] = array();
 	$GLOBALS['__faz_options'] = array();
@@ -353,6 +359,41 @@ namespace {
 		$GLOBALS['__faz_geoip_results'] = array( '8.8.8.8' => $result, '1.1.1.1' => $result );
 		faz_is( Geolocation::source_status()['working'], false, 'unknown, invalid and throwing lookups do not establish capability' );
 	}
+
+	// An 'XX' from the extension must not be cast as a vote. The extension
+	// outranks MMDB in the priority order, so the sentinel would both bury a
+	// real MMDB answer AND count as a second opinion in the disagreement
+	// check — which, with consensus required, discards an otherwise valid
+	// country. Read through get_country(), not get_visitor_country(): the
+	// latter answers from the CF header before detect_country() is reached,
+	// so it would pass either way and prove nothing.
+	faz_reset();
+	$GLOBALS['__faz_geoip_results'] = array( '203.0.113.7' => 'XX' );
+	faz_set_filter( 'faz_trust_cf_ipcountry_header', true );
+	faz_set_filter( 'faz_country_detection_consensus', true );
+	$_SERVER['HTTP_CF_IPCOUNTRY'] = 'IT';
+	Geolocation::reset_runtime_cache();
+	faz_is( Geolocation::get_country(), 'IT', "un 'XX' dall'estensione non vota e non fa scattare il consenso" );
+	$GLOBALS['__faz_geoip_results'] = array( '203.0.113.7' => 'FR' );
+	Geolocation::reset_runtime_cache();
+	faz_is( Geolocation::get_country(), '', 'un vero disaccordo fra due fonti fa ancora scattare il consenso' );
+	unset( $_SERVER['HTTP_CF_IPCOUNTRY'] );
+	faz_reset();
+	$GLOBALS['__faz_options']['faz_settings'] = array( 'geolocation' => array( 'geo_targeting' => true ) );
+
+	// Estensione rotta e nessun MMDB: se c'è anche mod_geoip, la riparazione da
+	// indicare è la sua — abilitare un filtro, non installare un database o
+	// comprare una chiave MaxMind. Senza mod_geoip resta la causa dell'estensione.
+	$GLOBALS['__faz_geoip_results'] = array();
+	Geolocation::reset_runtime_cache();
+	faz_is( Geolocation::source_status()['reason'], 'php_geoip_probe_failed', "senza mod_geoip l'estensione rotta resta la causa riportata" );
+	$_SERVER['GEOIP_COUNTRY_CODE'] = 'IT';
+	Geolocation::reset_runtime_cache();
+	$shadowed = Geolocation::source_status();
+	faz_is( $shadowed['source'], 'mod_geoip', "estensione rotta + mod_geoip -> si nomina la sorgente riparabile" );
+	faz_is( $shadowed['reason'], 'module_untrusted', 'la riparazione più economica non resta nascosta dietro l\'estensione' );
+	faz_is( $shadowed['working'], false, 'resta non funzionante: nessuno legge quell\'intestazione senza il filtro' );
+	unset( $_SERVER['GEOIP_COUNTRY_CODE'] );
 
 	$GLOBALS['__faz_geoip_results'] = array( '1.1.1.1' => 'it' );
 	$GLOBALS['__faz_geoip_calls']   = array();

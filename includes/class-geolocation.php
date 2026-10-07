@@ -341,11 +341,15 @@ class Geolocation {
 		// 3. PHP GeoIP extension.
 		if ( function_exists( 'geoip_country_code_by_name' ) ) {
 			$code = @geoip_country_code_by_name( $ip ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
-			if ( $code ) {
-				$code = strtoupper( $code );
-				if ( self::is_valid_country_code( $code ) ) {
-					$votes['php_geoip'] = $code;
-				}
+			// 'XX' is the "unknown / anonymous proxy" sentinel, and the
+			// extension outranks MMDB in the priority order below. Accepting it
+			// as a vote would let a database-less extension bury a real MMDB
+			// answer: get_visitor_country() turns the winning 'XX' back into ''
+			// and the visitor is routed as ungeolocated. Same exclusion the
+			// CF-IPCountry and mod_geoip branches above already apply.
+			$code = is_string( $code ) ? strtoupper( $code ) : '';
+			if ( self::is_valid_country_code( $code ) && 'XX' !== $code ) {
+				$votes['php_geoip'] = $code;
 			}
 		}
 
@@ -744,12 +748,16 @@ class Geolocation {
 		$has_key  = is_array( $settings ) && ! empty( $settings['geolocation']['maxmind_license_key'] );
 
 		if ( '' === $path ) {
-			if ( null !== $php_geoip_status ) {
-				return $php_geoip_status;
-			}
 			// mod_geoip is on the server but detect_country() ignores it until
 			// `faz_trust_geoip_country_code` is enabled. Configured, because the
 			// signal is there; not working, because nothing reads it.
+			//
+			// This is checked BEFORE the failed extension on purpose. Both
+			// sources are present and both are unusable, so the question is
+			// which repair to put in front of the admin: enabling one filter,
+			// or installing a GeoIP database (or buying a MaxMind key). The
+			// cheapest fix wins. Without mod_geoip the extension failure is
+			// still reported, with its own instruction.
 			if ( self::mod_geoip_configured() ) {
 				return array(
 					'source'     => 'mod_geoip',
@@ -757,6 +765,9 @@ class Geolocation {
 					'working'    => false,
 					'reason'     => 'module_untrusted',
 				);
+			}
+			if ( null !== $php_geoip_status ) {
+				return $php_geoip_status;
 			}
 			return array(
 				'source'     => $has_key ? 'mmdb' : 'none',
