@@ -621,6 +621,10 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.34.1 — 2026-10-07
+
+- A footer reopen link could be verified on the strength of a marker no visitor can click, leaving the site with no usable way to withdraw consent. The verifier strips raw-text regions (`<script>`, `<style>`, `<title>`, `<textarea>`…) before looking for the marker, but ended a region at the first `</` plus the element's name — so `</titlex>` closed `<title>` and everything after it was handed back as live markup. A marker in inert text then passed verification, the plugin stopped rendering its own revisit widget, and the visitor was left with no way to withdraw consent. Raw-text regions now end only where HTML ends them: the name followed by tab, line feed, form feed, carriage return, space, `/` or `>`. The set is spelled out rather than written as a whitespace class, because PCRE counts the vertical tab as whitespace and HTML does not.
+
 ### 1.34.0 — 2026-10-06
 
 - The banner did not render at all with WPSpeed by JExtensions active, for two independent reasons. Its image optimiser rewrites the page through `DOMDocument::loadHTML()`, and libxml's HTML4 parser ends a `<script>` at any `</` followed by a letter and discards the stray end tags — so the banner template arrived with every closing tag removed, the browser nested the whole banner inside the title, and the consent bar rendered 0 px tall with no buttons. The server now writes `</` as `<\/` inside the template, which both parsers keep as text, and the browser turns it back. Separately, WPSpeed combines and defers the scripts: with the document already parsed, initialisation ran synchronously from the middle of the file, before later `const` declarations existed. Any deferred, async, combined or delayed load hit this; the callback now runs in a microtask, in the same order as the DOMContentLoaded path.

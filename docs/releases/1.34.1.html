@@ -1,0 +1,27 @@
+<p>FAZ Cookie Manager 1.34.1 è una correttiva, e correttiva di qualcosa che la 1.34.0 aveva appena finito di sistemare. Vale la pena raccontarla proprio per questo: il difetto non stava nel codice nuovo, stava in una riga di contorno che nessuno — me compreso — aveva guardato con la stessa attenzione.</p>
+
+<h2>Cosa è andato storto</h2>
+
+<p>Quando il plugin trova nel piè di pagina un controllo per riaprire le preferenze, smette di disegnare il proprio widget. Prima di fidarsi, però, deve togliere di mezzo le zone della pagina che <em>sembrano</em> markup e non lo sono: il contenuto di <code>&lt;script&gt;</code>, <code>&lt;style&gt;</code>, <code>&lt;title&gt;</code>, <code>&lt;textarea&gt;</code>. Lì dentro un <code>&lt;a data-faz-open-preferences&gt;</code> è testo, non un collegamento: il browser lo scrive, non lo rende cliccabile.</p>
+
+<p>Per sapere dove finisce una di quelle zone, il codice cercava <code>&lt;/</code> seguito dal nome dell'elemento. Sembra ovvio, e non lo è: quella ricerca trova anche un nome <em>più lungo</em>. <code>&lt;/titlex&gt;</code> chiudeva <code>&lt;title&gt;</code>, <code>&lt;/stylex&gt;</code> chiudeva <code>&lt;style&gt;</code>. Da lì in poi il testo inerte tornava a contare come markup vero, e un marker che stava lì superava la verifica.</p>
+
+<p>La catena è questa, ed è il motivo per cui ho preparato una correttiva invece di aspettare: il plugin crede che il piè di pagina abbia un controllo valido, quindi nasconde il proprio widget, e il visitatore si ritrova <strong>senza alcun modo di revocare il consenso</strong>. È esattamente l'esito che quella verifica esiste per impedire, nella classe che dichiara di fallire in sicurezza. Falliva nella direzione opposta.</p>
+
+<h2>La parte che mi ha insegnato di più</h2>
+
+<p>Avevo scritto quattro casi di prova, uno per tipo di elemento. Passavano tutti. Poi ho fatto la controprova — rimettere il codice difettoso e pretendere che i test diventino rossi — e ne è diventato rosso <strong>uno solo su quattro</strong>.</p>
+
+<p>Gli altri tre passavano per la ragione sbagliata: avevo messo il marker in testo libero, e il parser non trova un attributo nel testo libero, quindi l'asserzione era vera comunque. Tre test verdi che non vincolavano niente, scritti da me, mentre stavo correggendo un difetto nato proprio da un controllo che sembrava esserci. Li ho riscritti mettendo un elemento vero dopo la falsa chiusura: ora la controprova li fa diventare rossi tutti e quattro.</p>
+
+<h2>E poi il tabulatore verticale</h2>
+
+<p>La prima correzione diceva «il nome deve essere seguito da uno spazio bianco», scritto con la classe <code>\s</code> delle espressioni regolari. Due revisori, indipendentemente, hanno notato la stessa cosa: <code>\s</code> comprende il <strong>tabulatore verticale</strong>, e HTML no. Quindi <code>&lt;/title\x0B&gt;</code> avrebbe continuato a chiudere la zona nel mio codice mentre il browser tira dritto — lo stesso buco, solo con un input più raro.</p>
+
+<p>Ora l'insieme dei caratteri è scritto per esteso, com'è nello standard: tabulazione, avanzamento riga, avanzamento pagina, ritorno a capo, spazio, <code>/</code> e <code>&gt;</code>. Nessuna scorciatoia che vale «quasi».</p>
+
+<h2>Come l'ho trovato</h2>
+
+<p>Non l'ho trovato io, e vale la pena dirlo. È emerso perché mi è stato chiesto se avessi verificato che tutti i rilievi delle revisioni fossero stati chiusi, comprese le modifiche finite nella release. Non l'avevo fatto: avevo controllato a fondo l'ultima richiesta di modifica e dato per buone le precedenti perché erano state integrate. Dare per buono non è verificare. Controllandole una per una, tre avevano un rilievo ancora aperto, e uno era questo.</p>
+
+<p>Aggiornare è consigliato a chi usa il collegamento nel piè di pagina al posto del widget. Chi tiene il widget — l'impostazione predefinita — non è toccato da questo difetto.</p>

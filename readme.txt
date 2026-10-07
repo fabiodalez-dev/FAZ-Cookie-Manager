@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.34.0
+Stable tag: 1.34.1
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -412,6 +412,9 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
+= 1.34.1 =
+* Fixed: A reopen link in the footer could be accepted as valid on the strength of text no visitor can click, so the plugin hid its own revisit widget and the site was left with no usable way to withdraw consent. The check removes script, style, title and textarea regions before looking for the link, but it ended those regions at the first tag whose name merely started the same way — `</titlex>` closed `<title>` — and treated the text after it as real markup. Those regions now end exactly where HTML says they do.
+
 = 1.34.0 =
 * Fixed: The banner did not render at all with WPSpeed by JExtensions active, for two separate reasons. Its image optimiser rewrites the page through an HTML4 parser that truncates the banner template at the first closing tag, leaving a 0 px consent bar with no buttons; and because it combines and defers the scripts, initialisation ran before part of the file existed and died halfway. The template is now written so both parsers keep it intact, and initialisation runs in the same order whether the script is deferred, async, combined or delayed.
 * Fixed: A reopen link verified in the footer could leave a visitor with no way to withdraw consent. Verification was a text match, so a control inside a template, hidden, inert or hidden by an inline style counted as usable. The markup is now parsed, `disabled` is judged as the HTML specification defines it — never on a link, inherited only from a `<fieldset disabled>` — and the plugin's own widget reveals itself in the browser whenever no usable control is present, including when the theme hides the footer, a breakpoint drops it, or a stylesheet finishes loading after the page.
@@ -497,9 +500,6 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Fixed: WooCommerce look-alike scripts are blockable again. The three strictly-necessary handles were also reaching the general whitelist, which matches by token prefix against id and class, so names like `wc-settings-tracker-js` were being exempted from consent blocking.
 * Fixed: Croatian translations load again — the catalogue shipped under a locale WordPress does not have — and ten further invalid country-to-locale mappings are corrected.
 * Fixed: admin controls that the jurisdiction runtime overrides now say so instead of silently doing nothing, and preference-centre colours reach every rendered element including the audit table and the "Always Active" label.
-
-= 1.27.1 =
-* Fixed: WooCommerce block checkout could show "You must be logged in to checkout" to guests. The plugin was holding back WooCommerce's own `wc-settings` script, which publishes the `wcSettings` object the block checkout reads to learn whether guest checkout is allowed. With it inert the block fell back to its most restrictive default. `wc-settings`, `wc-blocks-middleware` and `wc-mini-cart-block-frontend` are now treated as strictly necessary and are never held back — they carry configuration only, set no cookies and are not a tracking surface. Reported on the support forum; reproduced and fixed with a regression test that fails if the handle is ever neutralised again.
 
 
 = Older versions =

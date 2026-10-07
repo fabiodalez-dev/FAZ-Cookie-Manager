@@ -2,6 +2,11 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.34.1] - 2026-10-07
+
+### Fixed
+- A footer reopen link could be verified on the strength of a marker that no visitor can click, leaving the site with no usable way to withdraw consent. The verifier removes raw-text regions — `<script>`, `<style>`, `<title>`, `<textarea>` and the rest — before looking for the marker, and it found the end of one by searching for `</` plus the element's name. That also matches a longer name, so `</titlex>` ended `<title>` and `</stylex>` ended `<style>`. Everything after the false end was handed back as live markup, and a marker sitting in inert text — text a browser paints as the title, never as an element — passed verification. The plugin then believed the footer route, stopped rendering its own revisit widget, and left the visitor with no way to withdraw consent: the exact outcome this verification exists to prevent, in the one class whose stated contract is to fail closed. A raw-text element now ends only where HTML says it does, with the element's name followed by tab, line feed, form feed, carriage return, space, `/` or `>`. The set is spelled out rather than written as a whitespace class, because PCRE counts the vertical tab as whitespace and HTML does not — `</title\x0B>` would otherwise have kept the same hole open for a rarer input.
+
 ## [1.34.0] - 2026-10-06
 
 ### Added
