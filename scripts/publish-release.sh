@@ -242,8 +242,15 @@ rm -f "${PLUGIN_SRC}/.release-notes-${VERSION}.md"
 echo
 bold "Published ${VERSION}."
 echo "Remaining manual steps — these are not automatable:"
-echo "  • Revoke and regenerate the SVN Application Password on wordpress.org."
-echo "  • Smoke-test in Playground: https://playground.wordpress.net/?plugin=${SLUG}"
+# No credential rotation here, deliberately. svn commits through the macOS
+# Keychain: no password in argv, in the environment or in any log, so nothing
+# was exposed and there is nothing to rotate. release.md §6a has the evidence,
+# and the only cases that still warrant a new Application Password are a real
+# exposure or a new machine. Rotating on a calendar costs a re-authentication
+# mid-publish and buys nothing.
+echo "  • Smoke-test in Playground — now automated and headless, ~12s:"
+echo "      RUN_PLAYGROUND_TEST=1 npx playwright test -c tests/e2e/playwright.config.ts \\"
+echo "        tests/e2e/specs/playground-compat.spec.ts --retries=0"
 echo "  • Eyeball https://wordpress.org/plugins/${SLUG}/ once the directory page updates."
 echo "  • Read the FAZ post back on https://fabiodalez.it/category/faz/ — it is public the moment it is created."
 echo

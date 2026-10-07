@@ -315,6 +315,7 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
   let snapshotFazVersion = '';
   let snapshotRemoveDataOnUninstall = false;
   let snapshotCookieScriptsMapPresent = false;
+
   let originalActivePluginFilesBefore: string[] = [];
 
   test.beforeAll(() => {
@@ -333,6 +334,19 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
       echo ! empty( $s['general']['remove_data_on_uninstall'] ) ? '1' : '0';
     `).trim() === '1';
     snapshotCookieScriptsMapPresent = wpEval(`echo false !== get_transient( 'faz_cookie_scripts_map' ) ? '1' : '0';`).trim() === '1';
+    // Copy aside the options this describe destroys on purpose and nothing can
+    // rebuild: the Global Vendor List is a network download, and GCM's status
+    // is off by default, so Activator::install() restores neither. The copies
+    // live under an `e2ebak_` prefix precisely because uninstall.php sweeps
+    // `faz_%` — a backup inside the blast radius is not a backup. The values
+    // stay in the database the whole time: the GVL is megabytes, and routing it
+    // through wp eval's argv would be slow and truncation-prone.
+    wpEval(`
+      foreach ( array( 'faz_gvl_data', 'faz_gvl_meta', 'faz_gvl_purposes', 'faz_gvl_selected_vendors', 'faz_gcm_settings' ) as $name ) {
+        $value = get_option( $name, null );
+        if ( null !== $value ) { update_option( 'e2ebak_' . $name, $value, false ); }
+      }
+    `);
   });
 
   test.afterAll(() => {
@@ -403,6 +417,23 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
       if ( ! isset( $s['general'] ) || ! is_array( $s['general'] ) ) { $s['general'] = array(); }
       $s['general']['remove_data_on_uninstall'] = ${snapshotRemoveDataOnUninstall ? 'true' : 'false'};
       update_option( 'faz_settings', $s );
+    `);
+    // Put back what the uninstall test deleted and nothing else can rebuild.
+    // Without this the NEXT full run starts without a Global Vendor List and
+    // gcm-tcf.spec.ts skips itself with "the Global Vendor List is not
+    // downloaded on this site" — a skip the suite inflicted on itself, which
+    // reads like a missing prerequisite and costs a manual recovery. Restoring
+    // from the local copy keeps the suite independent of vendor-list.consensu.org
+    // being reachable. Only missing options are written back, so a later test
+    // that legitimately changed one keeps its value.
+    wpEval(`
+      foreach ( array( 'faz_gvl_data', 'faz_gvl_meta', 'faz_gvl_purposes', 'faz_gvl_selected_vendors', 'faz_gcm_settings' ) as $name ) {
+        $backup = get_option( 'e2ebak_' . $name, null );
+        if ( null !== $backup && false === get_option( $name, false ) ) {
+          update_option( $name, $backup, false );
+        }
+        delete_option( 'e2ebak_' . $name );
+      }
     `);
     restoreActivePluginFiles(originalActivePluginFilesBefore);
   });

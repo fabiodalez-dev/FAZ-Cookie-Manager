@@ -108,7 +108,38 @@ test.describe('Playground compatibility (online — RUN_PLAYGROUND_TEST=1 to ena
   // WASM cold-start can run past Playwright's default 30s test timeout.
   test.setTimeout(180_000);
 
-  test('faz-cookie-manager activates on Playground without fatal errors and renders the admin dashboard', async ({ page }) => {
+  test('faz-cookie-manager activates on Playground without fatal errors and renders the admin dashboard', async ({ browser }) => {
+    // Own context, with the browser's REAL user agent — this is the whole
+    // reason this test could not run unattended, and it is not about headless.
+    //
+    // playwright.config.ts applies devices['Desktop Chrome'], which pins a
+    // FIXED user agent string: with Playwright 1.5x that is Chrome/145, while
+    // the Chromium actually shipped alongside it reports 148. A bot filter in
+    // front of playground.wordpress.net reads that as a stale or forged Chrome
+    // and answers with a "Confirm you are human" interstitial, so WordPress
+    // WASM never boots and the assertion below reports "no frame ever rendered
+    // #wpadminbar" — which points at this plugin and is the wrong diagnosis.
+    //
+    // Measured, same machine, same URL, seconds apart: real UA
+    // (HeadlessChrome/148.0.7778.96) -> no interstitial; devices['Desktop
+    // Chrome'] UA (Chrome/145.0.7632.6) -> interstitial, deterministically.
+    // Headless is irrelevant: both modes pass with the real UA and both fail
+    // with the pinned one. The pinned UA is the variable, so this context does
+    // not pin one. Everything else in `use` is irrelevant to Playground, which
+    // is a third-party site rather than the site under test.
+    // The override has to be explicit. Playwright applies the device's user
+    // agent when it LAUNCHES the browser, so a plain browser.newContext()
+    // inherits Chrome/145 too — measured, not assumed. Rebuilding the string
+    // around browser.version() states the version actually running (148 here),
+    // which is the opposite of spoofing: the pinned string is the one that
+    // lies, and it is what the filter objects to.
+    const context = await browser.newContext({
+      ignoreHTTPSErrors: true,
+      userAgent: `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${browser.version()} Safari/537.36`,
+    });
+    const page = await context.newPage();
+
+    try {
     // Capture console errors so a `wp_salt()` undefined fatal would surface
     // here rather than just stalling the page silently.
     const consoleErrors: string[] = [];
@@ -118,6 +149,7 @@ test.describe('Playground compatibility (online — RUN_PLAYGROUND_TEST=1 to ena
     });
 
     await page.goto(PLAYGROUND_URL, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+
 
     // Playground renders its UI in nested iframes — the actual WordPress
     // admin lands inside `wp-playground` → an inner iframe with the WP UI.
@@ -135,6 +167,13 @@ test.describe('Playground compatibility (online — RUN_PLAYGROUND_TEST=1 to ena
     // was painted and the admin bar was on screen, one frame below where the
     // assertion was looking. Searching page.frames(), which is flat across all
     // depths, is indifferent to the nesting Playground happens to use.
+    // The bot wall is checked INSIDE this loop, not once after the goto: it is
+    // painted after DOMContentLoaded, so a single early check sees a blank page
+    // and reports nothing. Whatever the obstacle, the message has to name it —
+    // "no frame ever rendered #wpadminbar" reads as a plugin failure, and a
+    // gate that never reached WordPress must not implicate the plugin it never
+    // loaded. That wrong diagnosis cost a manual gate run on 1.33.0 and 1.34.0.
+    let botWall = false;
     const adminFrameHandle = await (async () => {
       const deadline = Date.now() + 120_000;
       while (Date.now() < deadline) {
@@ -144,10 +183,21 @@ test.describe('Playground compatibility (online — RUN_PLAYGROUND_TEST=1 to ena
             return frame;
           }
         }
+        const text = await page.evaluate(() => document.body?.innerText || '').catch(() => '');
+        if (/confirm you are human|not a robot/i.test(text)) {
+          botWall = true;
+          return null;
+        }
         await page.waitForTimeout(2_000);
       }
       return null;
     })();
+    expect(
+      botWall,
+      'playground.wordpress.net served a bot interstitial, so WordPress never booted and this '
+      + 'run says NOTHING about the plugin. Known cause: a user agent naming an old Chrome. '
+      + 'Check that the userAgent override above still reports the running browser version.',
+    ).toBe(false);
     expect(adminFrameHandle, 'no frame ever rendered #wpadminbar').not.toBeNull();
     const adminFrame = adminFrameHandle!;
 
@@ -211,5 +261,8 @@ test.describe('Playground compatibility (online — RUN_PLAYGROUND_TEST=1 to ena
     const bodyText = await page.locator('body').textContent();
     expect(bodyText ?? '', 'Playground body must not contain a PHP fatal').not.toMatch(/Fatal error.*wp_salt/i);
     expect(consoleErrors.filter((e) => /fatal|undefined function|uncaught/i.test(e)), 'no console-level fatals').toEqual([]);
+    } finally {
+      await context.close();
+    }
   });
 });
