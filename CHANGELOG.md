@@ -2,6 +2,11 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.34.2] - 2026-10-09
+
+### Fixed
+- The generated configuration and banner runtime no longer make render-blocking JavaScript requests. Both use ordered `defer` loading; a small inline bootstrap holds dynamic scripts and network calls until the runtime can apply consent. Google Consent Mode defaults and the TCF command stub remain synchronous. The static configuration is merged when the runtime executes, and a failed configuration download keeps pending resources blocked.
+
 ## [1.34.1] - 2026-10-07
 
 ### Fixed

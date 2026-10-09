@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.34.1
+Stable tag: 1.34.2
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -411,6 +411,10 @@ The full changelog (every release back to 1.0.0) lives at:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
+
+= 1.34.2 =
+* Fixed: The generated configuration and main banner JavaScript load with ordered defer, removing their render-blocking requests. A small inline bootstrap protects dynamic scripts and requests until the full consent runtime is ready.
+* Fixed: Google Consent Mode defaults and the TCF command stub remain available before page scripts; a failed configuration download keeps pending resources blocked.
 
 = 1.34.1 =
 * Fixed: The withdrawal fallback widget reappears when theme attributes or CSS transitions and animations hide the footer link after consent.
