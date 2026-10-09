@@ -73,6 +73,9 @@ class Frontend {
 	 */
 	private $version;
 
+	/** External consent scripts that must execute in order without blocking parsing. */
+	private $deferred_script_handles = array();
+
 	/**
 	 * Banner object
 	 *
@@ -253,6 +256,7 @@ class Frontend {
 		add_filter( 'rest_pre_echo_response', array( $this, 'filter_server_cookies_before_rest_echo' ), PHP_INT_MAX, 3 );
 		add_filter( 'wp_redirect', array( $this, 'filter_server_cookies_before_redirect' ), PHP_INT_MAX, 2 );
 		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
+		add_filter( 'script_loader_tag', array( $this, 'defer_runtime_script_tag' ), 25, 2 );
 		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
 
 		// Auto-exclusion from cache/optimization plugins' defer + delay +
@@ -486,10 +490,9 @@ class Frontend {
 			// service catalogue — all identical for every visitor of a given
 			// page type) into a content-hashed, browser-cacheable .js
 			// file instead of re-inlining it into every HTML response. The
-			// file defines window._fazStaticConfig; a "before" inline snippet
-			// merges it back into _fazConfig ahead of script.js execution, so
-			// the frontend bundle needs no changes. Server-side blocking is
-			// unaffected either way; if the static file cannot be provided the
+			// file defines window._fazStaticConfig; script.js merges it back
+			// into _fazConfig at the start of its deferred execution. Server-side
+			// blocking is unaffected either way; if the static file cannot be provided the
 			// full config stays inline exactly as before.
 			$store_data  = $this->get_store_data();
 			$static_deps = array();
@@ -504,9 +507,10 @@ class Frontend {
 					);
 					if ( '' !== $static_url ) {
 						$static_handle = $this->plugin_name . '-static-config';
-						wp_enqueue_script( $static_handle, $static_url, array(), null, false );
+						$this->enqueue_deferred_script( $static_handle, $static_url, array(), null, false );
 						$static_deps[] = $static_handle;
 						$store_data    = $split['inline'];
+						$store_data['_staticConfigRequired'] = true;
 					}
 				}
 			}
@@ -516,11 +520,10 @@ class Frontend {
 			} else {
 				/**
 				 * Opt-in: load the main banner bundle in the footer instead of
-				 * render-blocking in <head>. Default false — loading in <head>
-				 * shows the banner (and arms the client-side interceptors)
-				 * before page scripts run. Sites that accept a later banner
-				 * paint in exchange for faster first render can return true;
-				 * server-side blocking is unaffected by the position.
+				 * the head. External bundles use defer in either position;
+				 * the inline bootstrap protects dynamic resources until they
+				 * execute. Default false keeps the bootstrap in the head,
+				 * before page scripts run. Server-side blocking is unaffected.
 				 *
 				 * Ignored when Google Consent Mode or the IAB TCF CMP is active.
 				 * Both of those declare this handle as a dependency and must
@@ -557,20 +560,17 @@ class Frontend {
 				 * @param bool $in_footer Effective position (true = footer).
 				 */
 				do_action( 'faz_main_script_effective_in_footer', $in_footer );
-				wp_enqueue_script( $script_handle, faz_frontend_url() . 'js/script' . $suffix . '.js', $static_deps, $this->version, $in_footer );
+				$this->enqueue_deferred_script( $script_handle, faz_frontend_url() . 'js/script' . $suffix . '.js', $static_deps, $this->version, $in_footer );
 			}
 
 			wp_localize_script( $script_handle, '_fazConfig', $store_data );
 
-			if ( ! empty( $static_deps ) ) {
-				// Runs in the "before" bucket: after the _fazConfig data blob,
-				// after the static-config file's own tag (it is a dependency),
-				// and before script.js executes.
-				wp_add_inline_script(
-					$script_handle,
-					'if(window._fazStaticConfig&&typeof _fazConfig!=="undefined"){for(var _fazK in window._fazStaticConfig){if(!(_fazK in _fazConfig)){_fazConfig[_fazK]=window._fazStaticConfig[_fazK];}}}',
-					'before'
-				);
+			if ( ! $alt_asset ) {
+				// The full config is merged by script.js after its deferred static
+				// dependency executes. Inline "before" code runs while parsing and
+				// must never depend on a deferred external file being available.
+				$bootstrap_path = plugin_dir_path( __FILE__ ) . 'js/bootstrap' . $this->get_script_suffix( 'js/bootstrap' ) . '.js';
+				wp_add_inline_script( $script_handle, file_get_contents( $bootstrap_path ), 'before' );
 			}
 
 			// Pre-initialise window.dataLayer so third-party trackers that emit
@@ -675,11 +675,11 @@ class Frontend {
 				wp_add_inline_script( $script_handle, 'var _fazGcm = ' . $gcm_json . ';', 'before' );
 				$gcm_suffix = $this->get_script_suffix( 'js/gcm' );
 				$gcm_handle = $script_handle . '-gcm';
-				if ( $alt_asset ) {
-					$this->enqueue_inline_bundle( $gcm_handle, 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), false );
-				} else {
-					wp_enqueue_script( $gcm_handle, faz_frontend_url() . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
-				}
+				// Basic mode also needs its baseline before page-level Google
+				// snippets. This small bridge is self-contained (it reads the
+				// inline config and consent cookie), so keep it synchronous and
+				// inline while the config/main/TCF downloads remain deferred.
+				$this->enqueue_inline_bundle( $gcm_handle, 'js/gcm' . $gcm_suffix . '.js', $alt_asset ? array( $script_handle ) : array(), false );
 			}
 
 			// IAB TCF v2.3 CMP stub (when IAB is enabled AND a valid CMP ID is set).
@@ -700,7 +700,7 @@ class Frontend {
 				if ( $alt_asset ) {
 					$this->enqueue_inline_bundle( $tcf_handle, 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), false );
 				} else {
-					wp_enqueue_script( $tcf_handle, faz_frontend_url() . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
+					$this->enqueue_deferred_script( $tcf_handle, faz_frontend_url() . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
 				}
 
 				// PublisherCC: use admin setting, fall back to site locale.
@@ -908,7 +908,7 @@ class Frontend {
 						"})" .
 					"}).catch(function(){});" .
 				"});";
-				wp_add_inline_script( $script_handle, $inline_js );
+				wp_add_inline_script( $script_handle, $inline_js, 'before' );
 			}
 
 			// Enqueue the native a11y module that runs after fazcookie_banner_loaded.
@@ -919,7 +919,7 @@ class Frontend {
 			if ( $alt_asset ) {
 				$this->enqueue_inline_bundle( $a11y_handle, 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), true );
 			} else {
-				wp_enqueue_script( $a11y_handle, faz_frontend_url() . 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), $this->version, true );
+				$this->enqueue_deferred_script( $a11y_handle, faz_frontend_url() . 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), $this->version, true );
 			}
 			// Pass translatable checkbox label templates — {name} is replaced in JS.
 			wp_localize_script(
@@ -943,7 +943,7 @@ class Frontend {
 			if ( $alt_asset ) {
 				$this->enqueue_inline_bundle( $handle, 'js/wca' . $wca_suffix . '.js', array( $script_handle ), false );
 			} else {
-				wp_register_script( $handle, faz_frontend_url() . 'js/wca' . $wca_suffix . '.js', array( $script_handle ), $this->version, false );
+				$this->enqueue_deferred_script( $handle, faz_frontend_url() . 'js/wca' . $wca_suffix . '.js', array( $script_handle ), $this->version, false );
 			}
 			if ( true === $this->is_gsk_enabled() ) {
 				wp_add_inline_script( $handle, 'var _fazGsk = true;', 'before' );
@@ -958,7 +958,7 @@ class Frontend {
 			if ( $alt_asset ) {
 				$this->enqueue_inline_bundle( $ms_handle, 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), false );
 			} else {
-				wp_enqueue_script( $ms_handle, faz_frontend_url() . 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), $this->version, false );
+				$this->enqueue_deferred_script( $ms_handle, faz_frontend_url() . 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), $this->version, false );
 			}
 			if ( $ms_uet ) {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftUET = true;', 'before' );
@@ -967,6 +967,38 @@ class Frontend {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftClarity = true;', 'before' );
 			}
 		}
+	}
+
+	/** Keep the dependency chain ordered and non-blocking on WP 5.0+ too. */
+	private function enqueue_deferred_script( $handle, $src, $dependencies, $version, $in_footer ) {
+		$this->deferred_script_handles[ $handle ] = true;
+		wp_enqueue_script( $handle, $src, $dependencies, $version, $in_footer );
+		wp_script_add_data( $handle, 'strategy', 'defer' );
+	}
+
+	/**
+	 * WP added native strategies in 6.3; older supported versions still need
+	 * the attribute. Touch only the external tag, never inline bootstraps.
+	 */
+	public function defer_runtime_script_tag( $tag, $handle ) {
+		global $wp_version;
+		// Modern core can deliberately remove defer when a third-party
+		// synchronous script depends on this handle. Respect that decision.
+		if ( isset( $wp_version ) && version_compare( $wp_version, '6.3', '>=' ) ) {
+			return $tag;
+		}
+		if ( is_admin() || empty( $this->deferred_script_handles[ $handle ] ) ) {
+			return $tag;
+		}
+		return preg_replace_callback( '#<script\b([^>]*)>#i', function ( $match ) {
+			$attributes = $match[1];
+			if ( ! preg_match( '/(?:^|\s)src\s*=/i', $attributes ) || preg_match( '/\btype\s*=\s*[\'"]text\/plain/i', $attributes ) ) {
+				return $match[0];
+			}
+			// An async rewrite would lose the config -> runtime -> bridge order.
+			$attributes = preg_replace( '/\s+(?:async|defer)(?:\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+))?(?=\s|$)/i', '', $attributes );
+			return '<script defer' . $attributes . '>';
+		}, $tag );
 	}
 
 	/**
@@ -7298,8 +7330,9 @@ class Frontend {
 
 	/**
 	 * Inject opt-out hints into our own `<script>` tags so cache /
-	 * optimisation plugins leave them alone. A deferred or delayed
-	 * consent banner defeats the plugin's purpose: the banner (and the
+	 * optimisation plugins preserve our loading order. Native defer is
+	 * protected by the inline bootstrap; delaying until user interaction
+	 * would prevent the runtime from taking over. The banner (and the
 	 * `_fazCreateElementBackup` interceptor that blocks third-party
 	 * trackers pre-consent) must run at page load, not at first user
 	 * interaction — otherwise ads and analytics scripts released by the

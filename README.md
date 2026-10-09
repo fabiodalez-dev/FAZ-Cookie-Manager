@@ -621,6 +621,11 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.34.2 — 2026-10-09
+
+- Configuration and banner runtime load with ordered `defer`, removing their render-blocking JavaScript requests. A small inline bootstrap holds dynamic resources until the full runtime can apply consent.
+- Consent Mode defaults and the TCF command stub stay synchronous; a failed configuration download keeps pending resources blocked.
+
 ### 1.34.1 — 2026-10-07
 
 - A footer reopen link could be verified on the strength of a marker no visitor can click, leaving the site with no usable way to withdraw consent. The verifier strips raw-text regions (`<script>`, `<style>`, `<title>`, `<textarea>`…) before looking for the marker, but ended a region at the first `</` plus the element's name — so `</titlex>` closed `<title>` and everything after it was handed back as live markup. A marker in inert text then passed verification, the plugin stopped rendering its own revisit widget, and the visitor was left with no way to withdraw consent. Raw-text regions now end only where HTML ends them: the name followed by tab, line feed, form feed, carriage return, space, `/` or `>`. The set is spelled out rather than written as a whitespace class, because PCRE counts the vertical tab as whitespace and HTML does not.
