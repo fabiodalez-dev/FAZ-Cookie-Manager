@@ -622,12 +622,10 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
-### 1.34.2 — 2026-10-09
+### 1.34.1 — 2026-10-10
 
 - Configuration and banner runtime load with ordered `defer`, removing their render-blocking JavaScript requests. A small inline bootstrap holds dynamic resources until the full runtime can apply consent.
-- Consent Mode defaults and the TCF command stub stay synchronous; a failed configuration download keeps pending resources blocked.
-
-### 1.34.1 — 2026-10-07
+- Consent Mode defaults and the TCF command stub stay synchronous; a failed configuration download keeps pending resources blocked. A runtime that cannot load at all releases same-origin requests and keeps third-party resources parked, instead of holding the whole page's JavaScript.
 
 - The withdrawal fallback widget reappears when theme attributes or CSS transitions and animations hide the footer link after consent.
 - PHP GeoIP status requires a successful lookup and still checks the MMDB source when the extension's database fails. The admin reports the failure with repair instructions.

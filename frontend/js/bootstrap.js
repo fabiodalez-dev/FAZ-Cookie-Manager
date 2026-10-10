@@ -8,17 +8,37 @@
     'use strict';
     if (w._fazBootstrap || !w._fazConfig || !w._fazConfig._block) return;
     var queue = [], undo = [], scripts = [], pending = true, handoffs = [], staged = new WeakMap();
+    // Parents that already have a held insertion. A later sibling with no
+    // resource of its own must queue behind them, or it lands first and the
+    // sibling order inverts: appendChild(liWithImg) then appendChild(liText)
+    // used to render liText above liWithImg.
+    var waiting = new WeakSet();
+    function local(url) {
+        var value = String(url == null ? '' : url);
+        if (!value || value.charAt(0) === '#') return true;
+        try { return new URL(value, d.baseURI).origin === w.location.origin; }
+        catch (e) { return false; }
+    }
+    function marks(node) {
+        if (!node || !node.nodeType) return [];
+        return resources(node).map(function (el) {
+            return el.getAttribute('src') || el.getAttribute('href') || el.getAttribute('srcset') || '';
+        }).filter(function (value) { return value !== ''; });
+    }
     function hold(el, name, value, replay) {
         if (!pending) return replay();
         var values = staged.get(el) || {}, key = name.toLowerCase();
         var record = { value: String(value) };
         values[key] = record;
         staged.set(el, values);
-        queue.push(function () {
-            if (values[key] === record) {
-                delete values[key];
-                replay();
-            }
+        queue.push(function (policy) {
+            if (values[key] !== record) return;
+            delete values[key];
+            if (allowed(policy, record.value)) return replay();
+            // Refused: keep the URL where the runtime's own parking attributes
+            // live instead of dropping it, so a later runtime (or a reload)
+            // can still restore the resource once consent allows it.
+            if (policy && policy.park) policy.park(el, key, record.value);
         });
     }
     function replace(obj, name, fn) {
@@ -50,9 +70,21 @@
         replace(Node.prototype, name, function (original) {
             return function () {
                 var self = this, args = Array.prototype.slice.call(arguments);
-                if (!resources(args[0]).length && !(self.nodeName === 'STYLE' && cssURL(args[0] && args[0].textContent))) return original.apply(self, args);
+                var carries = resources(args[0]).length || (self.nodeName === 'STYLE' && cssURL(args[0] && args[0].textContent));
+                if (!carries && !waiting.has(self)) return original.apply(self, args);
+                waiting.add(self);
                 queue.push(function (policy) {
                     prepare(args[0], policy);
+                    // The reference node may have moved or been removed while
+                    // this insertion waited. Replaying against it throws, and
+                    // the node would be dropped with only a console warning,
+                    // so fall back to appending into the same parent.
+                    var ref = args[1];
+                    if (name !== 'appendChild' && ref && ref.parentNode !== self) {
+                        if (name === 'replaceChild') Node.prototype.appendChild.call(self, args[0]);
+                        else Node.prototype.insertBefore.call(self, args[0], null);
+                        return;
+                    }
                     self[name].apply(self, args);
                 });
                 return name === 'replaceChild' ? args[1] : args[0];
@@ -77,12 +109,17 @@
     replace(Element.prototype, 'insertAdjacentElement', function (original) {
         return function (position, node) {
             var el = this;
-            if (!resources(node).length) return original.call(el, position, node);
+            if (!resources(node).length && !waiting.has(el)) return original.call(el, position, node);
+            waiting.add(el);
             queue.push(function (policy) { prepare(node, policy); el.insertAdjacentElement(position, node); });
             return node;
         };
     });
     function cssURL(value) { return /url\s*\(|@import/i.test(String(value || '')); }
+    // During a normal handoff the runtime's permanent interceptors decide what
+    // may load, so everything replays. During a safety release there are no
+    // such interceptors and no provider rules, so only same-origin work runs.
+    function allowed(policy, url) { return !policy || !policy.sameOriginOnly || local(url); }
     // Preserve the runtime's CSS enforcement during its download too. Plain
     // layout/style changes keep their synchronous semantics.
     function holdCSS(proto, prop, eligible) {
@@ -112,6 +149,45 @@
         holdCSS(w.CharacterData && CharacterData.prototype, prop, function (node) { return node.parentNode && node.parentNode.nodeName === 'STYLE'; });
     });
     holdCSS(Element.prototype, 'innerHTML', function (el, value) { return /<style\b/i.test(String(value)); });
+    // The runtime gates these too when aggressive CSS-URL blocking is on, so
+    // leaving them open here would reopen during the download exactly what it
+    // closes afterwards. insertAdjacentElement was already held; the HTML and
+    // character-data routes to the same <style> text were not.
+    replace(Element.prototype, 'insertAdjacentHTML', function (original) {
+        return function (position, html) {
+            var el = this, markup = String(html == null ? '' : html);
+            if (!/<style\b/i.test(markup) || !cssURL(markup)) return original.call(el, position, markup);
+            queue.push(function () { el.insertAdjacentHTML(position, markup); });
+        };
+    });
+    function inStyle(node) { return !!(node && node.parentNode && node.parentNode.nodeName === 'STYLE'); }
+    ['appendData', 'insertData', 'replaceData'].forEach(function (name) {
+        var proto = w.CharacterData && CharacterData.prototype;
+        if (!proto || typeof proto[name] !== 'function') return;
+        replace(proto, name, function (original) {
+            return function () {
+                var node = this, args = Array.prototype.slice.call(arguments);
+                if (!inStyle(node) || !args.some(function (a) { return cssURL(a); })) return original.apply(node, args);
+                queue.push(function () { node[name].apply(node, args); });
+            };
+        });
+    });
+    if (w.CharacterData && typeof CharacterData.prototype.replaceWith === 'function') {
+        replace(CharacterData.prototype, 'replaceWith', function (original) {
+            return function () {
+                var node = this, args = Array.prototype.slice.call(arguments);
+                if (!inStyle(node) || !args.some(function (a) { return cssURL(typeof a === 'string' ? a : a && a.textContent); })) return original.apply(node, args);
+                queue.push(function () { node.replaceWith.apply(node, args); });
+            };
+        });
+    }
+    replace(Element.prototype, 'insertAdjacentText', function (original) {
+        return function (position, text) {
+            var el = this;
+            if (el.nodeName !== 'STYLE' || !cssURL(text)) return original.call(el, position, text);
+            queue.push(function () { el.insertAdjacentText(position, text); });
+        };
+    });
     ['insertRule', 'replace', 'replaceSync'].forEach(function (name) {
         var proto = w.CSSStyleSheet && CSSStyleSheet.prototype;
         if (!proto || typeof proto[name] !== 'function') return;
@@ -192,14 +268,28 @@
     });
     if (w.fetch) replace(w, 'fetch', function () {
         return function (input, init) {
+            var target = input && input.url ? input.url : input;
             return new Promise(function (resolve, reject) {
-                queue.push(function () { w.fetch(input, init).then(resolve, reject); });
+                queue.push(function (policy) {
+                    // Resolve with an empty 200 rather than rejecting, matching
+                    // what the runtime's own fetch gate returns. A rejection
+                    // here would surface as an unhandled promise rejection in
+                    // callers that never expected to be blocked.
+                    if (!allowed(policy, target)) {
+                        return resolve(typeof w.Response === 'function'
+                            ? new w.Response('', { status: 200, statusText: 'Blocked by consent' })
+                            : { ok: true, status: 200, statusText: 'Blocked by consent' });
+                    }
+                    w.fetch(input, init).then(resolve, reject);
+                });
             });
         };
     });
     if (w.navigator.sendBeacon) replace(w.navigator, 'sendBeacon', function () {
         return function (url, data) {
-            queue.push(function () { w.navigator.sendBeacon(url, data); });
+            queue.push(function (policy) {
+                if (allowed(policy, url)) w.navigator.sendBeacon(url, data);
+            });
             return true;
         };
     });
@@ -223,12 +313,16 @@
             // A synchronous request cannot be suspended while JS is executing.
             // Fail closed instead of silently turning it into an async request.
             if (state && state.sync) {
-                if (String(state.url).indexOf('//') === -1) return original.call(xhr, body);
+                // Same-origin requests cannot reach a third-party endpoint, so
+                // they proceed. Matching on '//' instead treated every absolute
+                // URL as remote and threw on a site's own `https://host/api`.
+                if (local(state.url)) return original.call(xhr, body);
                 throw new DOMException('Consent runtime is loading', 'InvalidStateError');
             }
             queue.push(function (policy) {
                 if (state && state.cancelled) return;
-                xhr._fazBlocked = !!(state && policy.url(state.url));
+                if (!allowed(policy, state && state.url)) return;
+                xhr._fazBlocked = !!(state && policy.url && policy.url(state.url));
                 xhr.send(body);
             });
         };
@@ -265,8 +359,8 @@
                     return true;
                 }
             });
-            queue.push(function () {
-                if (closed) return;
+            queue.push(function (policy) {
+                if (closed || !allowed(policy, url)) return;
                 socket = protocols === undefined ? new w.WebSocket(url) : new w.WebSocket(url, protocols);
                 if (target.binaryType) socket.binaryType = target.binaryType;
                 ['open', 'message', 'error', 'close'].forEach(function (type) {
@@ -284,6 +378,55 @@
         Object.setPrototypeOf(PendingSocket, Original);
         return PendingSocket;
     });
+    // Move a cross-origin URL out of the live attribute and into the parking
+    // attribute the runtime already understands, so the element exists for
+    // layout while the request stays unmade.
+    function park(el) {
+        (attrs[el.nodeName] || []).forEach(function (prop) {
+            var value = el.getAttribute(prop);
+            if (!value || local(value)) return;
+            el.setAttribute(el.nodeName === 'LINK' && prop === 'href' ? 'data-faz-href' : 'data-faz-src', value);
+            el.removeAttribute(prop);
+        });
+    }
+    // The runtime never arrived: blocked by a filter list (the plugin path
+    // contains "cookie"), a 404, or an exception while it evaluated. Holding
+    // the queue forever would take the whole site's first-party JavaScript
+    // down with the trackers — same-origin fetch/XHR, cart fragments, AJAX
+    // forms, lazy loaders — so release what cannot reach a third party and
+    // keep parking what can. Third-party tracking is cross-origin by
+    // definition, and server-side blocking is untouched either way.
+    var safety = {
+        sameOriginOnly: true,
+        script: function (el) {
+            var src = el.getAttribute('src');
+            if (!src || local(src)) return;
+            if (!el.hasAttribute('data-faz-original-type') && el.getAttribute('type')) el.setAttribute('data-faz-original-type', el.getAttribute('type'));
+            el.setAttribute('type', 'javascript/blocked');
+            park(el);
+        },
+        node: function (el) {
+            if (el.nodeName === 'SCRIPT') return safety.script(el);
+            park(el);
+        },
+        park: function (el, attr, value) {
+            el.setAttribute(el.nodeName === 'LINK' && attr === 'href' ? 'data-faz-href' : 'data-faz-src', value);
+        },
+        url: function (url) { return !local(url); }
+    };
+    function releaseSafely() {
+        if (!pending) return;
+        w.console.warn('[FAZ Cookie Manager] Consent runtime did not load; releasing same-origin requests only and keeping third-party resources parked.');
+        // Restore the native APIs first, or every replayed assignment would be
+        // caught by this bootstrap's own interceptors and held a second time.
+        while (undo.length) undo.pop()();
+        w._fazBootstrap.finish(safety);
+    }
+    // Deferred scripts always run before DOMContentLoaded, so still pending at
+    // that point means the runtime is not coming.
+    if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', releaseSafely);
+    else Promise.resolve().then(releaseSafely);
+
     w._fazBootstrap = {
         start: function () {
             // No other page JS runs during the synchronous runtime evaluation.
