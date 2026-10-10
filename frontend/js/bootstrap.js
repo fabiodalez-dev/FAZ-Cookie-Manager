@@ -79,6 +79,7 @@
                     // this insertion waited. Replaying against it throws, and
                     // the node would be dropped with only a console warning,
                     // so fall back to appending into the same parent.
+                    if (self.nodeName === 'STYLE' && !allowedCss(policy, args[0] && args[0].textContent)) return;
                     var ref = args[1];
                     if (name !== 'appendChild' && ref && ref.parentNode !== self) {
                         if (name === 'replaceChild') Node.prototype.appendChild.call(self, args[0]);
@@ -99,6 +100,7 @@
                     var self = this, args = Array.prototype.slice.call(arguments);
                     if (!args.some(function (n) { return resources(n).length || (self.nodeName === 'STYLE' && cssURL(typeof n === 'string' ? n : n && n.textContent)); })) return original.apply(self, args);
                     queue.push(function (policy) {
+                        if (self.nodeName === 'STYLE' && !args.every(function (n) { return allowedCss(policy, typeof n === 'string' ? n : n && n.textContent); })) return;
                         args.forEach(function (n) { prepare(n, policy); });
                         self[name].apply(self, args);
                     });
@@ -120,6 +122,19 @@
     // may load, so everything replays. During a safety release there are no
     // such interceptors and no provider rules, so only same-origin work runs.
     function allowed(policy, url) { return !policy || !policy.sameOriginOnly || local(url); }
+    // A style block can carry several URLs; one cross-origin url() is enough to
+    // make the whole assignment a third-party request, so the text is admitted
+    // only when every URL in it is same-origin.
+    function cssLocal(value) {
+        var ok = true;
+        String(value || '').replace(/url\s*\(\s*['"]?([^'")]+)['"]?\s*\)|@import\s+['"]([^'"]+)['"]/gi, function (m, a, b) {
+            var u = a || b || '';
+            if (u && !local(u)) ok = false;
+            return m;
+        });
+        return ok;
+    }
+    function allowedCss(policy, value) { return !policy || !policy.sameOriginOnly || cssLocal(value); }
     // Preserve the runtime's CSS enforcement during its download too. Plain
     // layout/style changes keep their synchronous semantics.
     function holdCSS(proto, prop, eligible) {
@@ -134,7 +149,7 @@
             set: function (value) {
                 var el = this;
                 if (!eligible(el, value) || !cssURL(value)) return desc.set.call(el, value);
-                queue.push(function () { el[prop] = value; });
+                queue.push(function (policy) { if (allowedCss(policy, value)) el[prop] = value; });
             }
         });
         undo.push(function () {
@@ -157,7 +172,7 @@
         return function (position, html) {
             var el = this, markup = String(html == null ? '' : html);
             if (!/<style\b/i.test(markup) || !cssURL(markup)) return original.call(el, position, markup);
-            queue.push(function () { el.insertAdjacentHTML(position, markup); });
+            queue.push(function (policy) { if (allowedCss(policy, markup)) el.insertAdjacentHTML(position, markup); });
         };
     });
     function inStyle(node) { return !!(node && node.parentNode && node.parentNode.nodeName === 'STYLE'); }
@@ -168,7 +183,7 @@
             return function () {
                 var node = this, args = Array.prototype.slice.call(arguments);
                 if (!inStyle(node) || !args.some(function (a) { return cssURL(a); })) return original.apply(node, args);
-                queue.push(function () { node[name].apply(node, args); });
+                queue.push(function (policy) { if (args.every(function (a) { return allowedCss(policy, a); })) node[name].apply(node, args); });
             };
         });
     });
@@ -177,7 +192,7 @@
             return function () {
                 var node = this, args = Array.prototype.slice.call(arguments);
                 if (!inStyle(node) || !args.some(function (a) { return cssURL(typeof a === 'string' ? a : a && a.textContent); })) return original.apply(node, args);
-                queue.push(function () { node.replaceWith.apply(node, args); });
+                queue.push(function (policy) { if (args.every(function (a) { return allowedCss(policy, typeof a === 'string' ? a : a && a.textContent); })) node.replaceWith.apply(node, args); });
             };
         });
     }
@@ -185,7 +200,7 @@
         return function (position, text) {
             var el = this;
             if (el.nodeName !== 'STYLE' || !cssURL(text)) return original.call(el, position, text);
-            queue.push(function () { el.insertAdjacentText(position, text); });
+            queue.push(function (policy) { if (allowedCss(policy, text)) el.insertAdjacentText(position, text); });
         };
     });
     ['insertRule', 'replace', 'replaceSync'].forEach(function (name) {
@@ -196,9 +211,12 @@
                 var sheet = this, args = Array.prototype.slice.call(arguments);
                 if (!cssURL(args[0])) return original.apply(sheet, args);
                 if (name === 'replace') return new Promise(function (resolve, reject) {
-                    queue.push(function () { sheet.replace.apply(sheet, args).then(resolve, reject); });
+                    queue.push(function (policy) {
+                        if (!allowedCss(policy, args[0])) return resolve();
+                        sheet.replace.apply(sheet, args).then(resolve, reject);
+                    });
                 });
-                queue.push(function () { sheet[name].apply(sheet, args); });
+                queue.push(function (policy) { if (allowedCss(policy, args[0])) sheet[name].apply(sheet, args); });
                 return name === 'insertRule' ? (args[1] || 0) : undefined;
             };
         });
@@ -399,7 +417,9 @@
     var safety = {
         sameOriginOnly: true,
         script: function (el) {
-            var src = el.getAttribute('src');
+            // The URL may already sit in data-faz-src: a staged src is parked by
+            // its own queued task, which runs before this insertion replays.
+            var src = el.getAttribute('src') || el.getAttribute('data-faz-src');
             if (!src || local(src)) return;
             if (!el.hasAttribute('data-faz-original-type') && el.getAttribute('type')) el.setAttribute('data-faz-original-type', el.getAttribute('type'));
             el.setAttribute('type', 'javascript/blocked');

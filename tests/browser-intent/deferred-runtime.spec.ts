@@ -66,8 +66,30 @@ for (const consent of ['no', 'yes', 'missing']) {
     release();
     await page.waitForLoadState('domcontentloaded');
     if (consent === 'missing') {
-      expect(requests).toEqual([]);
-      expect(await page.evaluate(() => (window as any).fetchDone)).toBe(false);
+      // The runtime cannot arrive: /config.js 404s and _staticConfigRequired
+      // keeps _fazStore null, so nothing calls start()/finish(). Holding the
+      // queue forever would take the site's own JavaScript down with the
+      // trackers, so the bootstrap releases same-origin work at
+      // DOMContentLoaded and keeps third-party resources parked.
+      await expect.poll(() => page.evaluate(() => (window as any).essentialOnload)).toBe(true);
+      expect(requests).toEqual(['essential']);
+      // The cross-origin fetch resolves with the same empty 200 the runtime's
+      // own gate returns — a rejection would surface as an unhandled rejection
+      // in callers that never expected to be blocked — but no request is made.
+      expect(await page.evaluate(() => (window as any).fetchDone)).toBe(true);
+      // Third-party resources keep their URL in the parking attribute and lose
+      // the live one, so nothing is requested and nothing is lost. They stay
+      // parked for the rest of this page view: restoring them needs the
+      // provider rules that never arrived, and a reload hands the decision
+      // back to server-side blocking.
+      expect(await page.evaluate(() => Array.from(document.querySelectorAll('script,iframe,img'))
+        .filter((el) => (el.getAttribute('src') || '').includes('tracker.example.test')).length)).toBe(0);
+      expect(await page.evaluate(() => Array.from(document.querySelectorAll('script,iframe'))
+        .map((el) => el.getAttribute('data-faz-src'))
+        .filter((v) => (v || '').includes('tracker.example.test')).sort())).toEqual([
+          'https://tracker.example.test/frame',
+          'https://tracker.example.test/script.js',
+        ]);
       expect(errors).toEqual([]);
       return;
     }
