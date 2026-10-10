@@ -223,6 +223,43 @@ console.log('\nbootstrap: CSS that a regex would miss and an engine would fetch'
   eq('and the safety release does not apply it either', style.textContent, '');
 }
 
+// deleteData adds no text at all — it was handed a length — yet removing what
+// split a URL makes it valid. The route was not intercepted before.
+{
+  const { window, document } = boot({ seed: '<style id="seed">.p{background-image:url(https:/*x*/ /tracker.test/a.png)}</style>' });
+  const node = document.getElementById('seed').firstChild;
+  const before = node.data;
+  node.deleteData(node.data.indexOf('/*'), 7);
+  eq('a deletion that would reveal a URL is held', node.data, before);
+  runtimeHandoff(window);
+  ok('and it applies once the runtime takes over', node.data !== before);
+}
+
+// A URL spelled across the boundary: neither the element's text nor the
+// fragment contains "url(" on its own, so judging either side alone missed it.
+{
+  const { window, document } = boot({ seed: '<style id="seed">.p{background-image:u</style>' });
+  const node = document.getElementById('seed').firstChild;
+  node.appendData('rl(https://tracker.test/a.png)}');
+  ok('a URL split across element and fragment is held',
+    node.data.indexOf('tracker.test') === -1);
+  runtimeHandoff(window);
+  ok('and it applies at handoff', node.data.indexOf('tracker.test') !== -1);
+}
+
+// The same split, through a route that cannot compute a resulting string the
+// way the character-data methods do: here the element's own text is the only
+// place the first half of the URL exists.
+{
+  const { window, document } = boot({ seed: '<style id="seed">.p{background-image:u</style>' });
+  const style = document.getElementById('seed');
+  style.insertAdjacentText('beforeend', 'rl(https://tracker.test/x.png)}');
+  ok('insertAdjacentText completing a URL from the element text is held',
+    style.textContent.indexOf('tracker.test') === -1);
+  runtimeHandoff(window);
+  ok('and it applies at handoff', style.textContent.indexOf('tracker.test') !== -1);
+}
+
 console.log('\nhandoff: the policy matches URLs the way the runtime does');
 
 // The policy handed to finish() used to match the raw URL string, while the
