@@ -56,8 +56,8 @@ const code = readFileSync(BOOTSTRAP_PATH, 'utf8');
 
 // A fresh document per case: the bootstrap patches prototypes, so leaking one
 // instance into the next would make later cases pass for the wrong reason.
-function boot({ ready = 'loading' } = {}) {
-  const dom = new JSDOM('<!DOCTYPE html><html><body><ul id="list"></ul></body></html>', {
+function boot({ ready = 'loading', seed = '' } = {}) {
+  const dom = new JSDOM(`<!DOCTYPE html><html><head>${seed}</head><body><ul id="list"></ul></body></html>`, {
     runScripts: 'outside-only',
     url: SITE,
   });
@@ -189,6 +189,38 @@ console.log('\nbootstrap: the runtime never arrives (safety release)');
   const released = document.querySelector('img');
   eq('the cross-origin image is parked, not loaded', released.getAttribute('src'), null);
   eq('its URL is kept where the runtime looks for it', released.getAttribute('data-faz-src'), 'https://tracker.test/pixel.gif');
+}
+
+console.log('\nbootstrap: CSS that a regex would miss and an engine would fetch');
+
+// A fragment can complete a URL that neither half contains. Validating the
+// argument instead of the resulting text let that through.
+{
+  // The partial URL is in the document before the bootstrap installs, so the
+  // text node really is inside <style> when appendData runs — building it with
+  // appendChild would be held itself and the hook under test never reached.
+  const { window, document } = boot({ seed: '<style id="seed">.p{background-image:url(https://tracker.test</style>' });
+  const node = document.getElementById('seed').firstChild;
+  // Carries no URL of its own, yet completes one already in the node.
+  node.appendData('/pixel.png)}');
+  ok('a fragment that completes a cross-origin URL is held, not applied',
+    node.data.indexOf('/pixel.png') === -1);
+  runtimeHandoff(window);
+  ok('and it is applied once the runtime takes over', node.data.indexOf('/pixel.png') !== -1);
+}
+
+// The release rule for CSS is "could this fetch anything", not "is the URL I
+// managed to parse same-origin": escapes and comments hide URLs from a regex
+// while the engine still resolves them.
+{
+  const { window, document } = boot();
+  const style = document.createElement('style');
+  document.head.appendChild(style);
+  style.textContent = '.p{background-image:u\\72 l(https://tracker.test/a.png)}';
+  eq('style text with a CSS escape is held', style.textContent, '');
+  window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
+  await new Promise((r) => setTimeout(r, 0));
+  eq('and the safety release does not apply it either', style.textContent, '');
 }
 
 console.log('\nhandoff: the policy matches URLs the way the runtime does');
