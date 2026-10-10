@@ -70,7 +70,7 @@
         replace(Node.prototype, name, function (original) {
             return function () {
                 var self = this, args = Array.prototype.slice.call(arguments);
-                var carries = resources(args[0]).length || (self.nodeName === 'STYLE' && cssURL(args[0] && args[0].textContent));
+                var carries = resources(args[0]).length || (self.nodeName === 'STYLE' && styleHold(self, args[0] && args[0].textContent));
                 if (!carries && !waiting.has(self)) return original.apply(self, args);
                 waiting.add(self);
                 queue.push(function (policy) {
@@ -98,7 +98,7 @@
             replace(proto, name, function (original) {
                 return function () {
                     var self = this, args = Array.prototype.slice.call(arguments);
-                    if (!args.some(function (n) { return resources(n).length || (self.nodeName === 'STYLE' && cssURL(typeof n === 'string' ? n : n && n.textContent)); })) return original.apply(self, args);
+                    if (!args.some(function (n) { return resources(n).length || (self.nodeName === 'STYLE' && styleHold(self, typeof n === 'string' ? n : n && n.textContent)); })) return original.apply(self, args);
                     queue.push(function (policy) {
                         if (self.nodeName === 'STYLE' && !args.every(function (n) { return allowedCss(policy, typeof n === 'string' ? n : n && n.textContent); })) return;
                         args.forEach(function (n) { prepare(n, policy); });
@@ -152,7 +152,8 @@
             configurable: true, enumerable: desc.enumerable, get: desc.get,
             set: function (value) {
                 var el = this;
-                if (!eligible(el, value) || !cssURL(value)) return desc.set.call(el, value);
+                var context = el && el.nodeName === 'STYLE' ? null : (el && el.parentNode);
+                if (!eligible(el, value) || !cssURL(String(((context && context.textContent) || '')) + String(value == null ? '' : value))) return desc.set.call(el, value);
                 queue.push(function (policy) { if (allowedCss(policy, value)) el[prop] = value; });
             }
         });
@@ -180,6 +181,15 @@
         };
     });
     function inStyle(node) { return !!(node && node.parentNode && node.parentNode.nodeName === 'STYLE'); }
+    // One rule for every route into a <style>: judge the element's current text
+    // together with whatever is being added. A fragment can complete a URL the
+    // element already half-holds (`url(https://t` + `/x.png)`), a deletion can
+    // reveal one by removing what split it, and a URL can be spelled across the
+    // boundary (`...:u` + `rl(https://…)`) so neither side alone shows a sign.
+    // Concatenating catches all three without parsing anything.
+    function styleHold(el, extra) {
+        return cssURL(String((el && el.textContent) || '') + String(extra == null ? '' : extra));
+    }
     // The resulting text is what the engine parses, not the fragment handed in.
     // A node already holding `background-image:url(https://tracker` plus an
     // appendData('.test/x)') completes a cross-origin URL while neither half
@@ -190,18 +200,22 @@
         var offset = Number(args[0]) || 0;
         if (name === 'insertData') return text.slice(0, offset) + String(args[1] == null ? '' : args[1]) + text.slice(offset);
         var count = Number(args[1]) || 0;
+        if (name === 'deleteData') return text.slice(0, offset) + text.slice(offset + count);
         return text.slice(0, offset) + String(args[2] == null ? '' : args[2]) + text.slice(offset + count);
     }
-    ['appendData', 'insertData', 'replaceData'].forEach(function (name) {
+    ['appendData', 'insertData', 'replaceData', 'deleteData'].forEach(function (name) {
         var proto = w.CharacterData && CharacterData.prototype;
         if (!proto || typeof proto[name] !== 'function') return;
         replace(proto, name, function (original) {
             return function () {
                 var node = this, args = Array.prototype.slice.call(arguments);
                 if (!inStyle(node)) return original.apply(node, args);
+                // deleteData is here because removing text can reveal a URL:
+                // `url(https:/*x*/ /t.test/a.png)` becomes valid once the
+                // comment goes, and the fragment it was handed is a length.
                 var result = dataResult(name, node.data, args);
-                if (!cssURL(result)) return original.apply(node, args);
-                queue.push(function (policy) { if (allowedCss(policy, result)) node[name].apply(node, args); });
+                if (!styleHold(node.parentNode, result)) return original.apply(node, args);
+                queue.push(function (policy) { if (allowedCss(policy, result) && allowedCss(policy, node.parentNode && node.parentNode.textContent)) node[name].apply(node, args); });
             };
         });
     });
@@ -209,7 +223,7 @@
         replace(CharacterData.prototype, 'replaceWith', function (original) {
             return function () {
                 var node = this, args = Array.prototype.slice.call(arguments);
-                if (!inStyle(node) || !args.some(function (a) { return cssURL(typeof a === 'string' ? a : a && a.textContent); })) return original.apply(node, args);
+                if (!inStyle(node) || !args.some(function (a) { return styleHold(node.parentNode, typeof a === 'string' ? a : a && a.textContent); })) return original.apply(node, args);
                 queue.push(function (policy) { if (args.every(function (a) { return allowedCss(policy, typeof a === 'string' ? a : a && a.textContent); })) node.replaceWith.apply(node, args); });
             };
         });
@@ -217,7 +231,7 @@
     replace(Element.prototype, 'insertAdjacentText', function (original) {
         return function (position, text) {
             var el = this;
-            if (el.nodeName !== 'STYLE' || !cssURL(text)) return original.call(el, position, text);
+            if (el.nodeName !== 'STYLE' || !styleHold(el, text)) return original.call(el, position, text);
             queue.push(function (policy) { if (allowedCss(policy, text)) el.insertAdjacentText(position, text); });
         };
     });
