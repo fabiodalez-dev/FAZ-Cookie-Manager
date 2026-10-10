@@ -11,7 +11,11 @@ if (window._fazConfig && window._fazStaticConfig) {
         if (!(key in window._fazConfig)) window._fazConfig[key] = window._fazStaticConfig[key];
     });
 }
-const _fazStore = window._fazConfig;
+// A failed static dependency must never release the bootstrap without its
+// provider rules. Keep resources parked and let a reload retry the asset.
+const _fazStaticConfigMissing = window._fazConfig && window._fazConfig._staticConfigRequired && !window._fazStaticConfig;
+const _fazStore = _fazStaticConfigMissing ? null : window._fazConfig;
+if (_fazStore && window._fazBootstrap) window._fazBootstrap.start();
 
 // Opt-out success message (US state laws / CCPA): after the visitor confirms an
 // opt-out, the popup shows a confirmation message and auto-closes after a short
@@ -24,7 +28,7 @@ if ( ! _fazStore ) {
     // JS-defer plugin scoped the localize block inside a DOMContentLoaded
     // callback instead of emitting it at global scope), abort gracefully so
     // the rest of the page continues to work.
-    console.warn( '[FAZ Cookie Manager] _fazConfig is not defined — banner disabled. If you use a JS optimisation plugin (WP Rocket, LiteSpeed, etc.), exclude _fazConfig from deferral.' );
+    console.warn( _fazStaticConfigMissing ? '[FAZ Cookie Manager] Static configuration failed to load — resources remain blocked. Reload the page to retry.' : '[FAZ Cookie Manager] _fazConfig is not defined — banner disabled. If you use a JS optimisation plugin (WP Rocket, LiteSpeed, etc.), exclude _fazConfig from deferral.' );
     // Expose a no-op stub so any external callers (GTM, etc.) do not crash.
     window.fazcookie = window.fazcookie || {};
 } else {
@@ -58,7 +62,7 @@ ref._fazConsentStore = new Map();
 // that couples this file to new server output (like the `<\/` escape in the
 // banner template, which an older script.js does not undo) only reaches
 // visitors safely once FAZ_VERSION is bumped at release.
-const _FAZ_BUILD = '1.33.0+html4-escape+provider-memo';
+const _FAZ_BUILD = '1.34.1+deferred-bootstrap';
 
 /**
  * One-call frontend self-diagnosis for support: paste
@@ -5176,7 +5180,9 @@ function _fazRestoreConstructableSheets() {
 
 const _fazCreateElementBackup = document.createElement;
 document.createElement = (...args) => {
-    const createdElement = _fazCreateElementBackup.call(document, ...args);
+    return _fazGuardScriptElement(_fazCreateElementBackup.call(document, ...args));
+};
+function _fazGuardScriptElement(createdElement) {
     if (createdElement.nodeName.toLowerCase() !== "script") return createdElement;
     const originalSetAttribute = createdElement.setAttribute.bind(createdElement);
 
@@ -5288,7 +5294,7 @@ document.createElement = (...args) => {
         }
     };
     return createdElement;
-};
+}
 
 function _fazMutationObserver(mutations) {
     // Collect every <script>/<iframe> introduced by this batch of mutations.
@@ -6649,6 +6655,31 @@ function _fazShouldChangeType(element, src, typeOverride) {
 }
 
 /**
+ * Extract a clean hostname+path from a URL string for provider matching.
+ * Handles the https, http, wss and ws URL schemes.
+ * Returns empty string on failure (non-blocking).
+ *
+ * At module scope because the bootstrap handoff matches URLs with the very
+ * same rule as the network interceptors below. Matching the raw string there
+ * instead meant a first-party request whose query carried a blocked domain —
+ * /wp-json/x?return=https://www.facebook.com/ — was refused before consent and
+ * allowed after it.
+ */
+function _fazExtractEndpoint(url) {
+    if (!url || typeof url !== "string") return "";
+    try {
+        var full = url.startsWith("//") ? window.location.protocol + url : url;
+        // Normalise WebSocket schemes to https so URL() can parse them.
+        full = full.replace(/^wss?:\/\//i, 'https://');
+        if (!/^https?:\/\//i.test(full)) return "";
+        var u = new URL(full);
+        return _fazCleanHostName(u.hostname + u.pathname);
+    } catch (e) {
+        return "";
+    }
+}
+
+/**
  * Network-level consent enforcement.
  *
  * Wraps navigator.sendBeacon, fetch, XMLHttpRequest.open, and WebSocket to block
@@ -6657,24 +6688,6 @@ function _fazShouldChangeType(element, src, typeOverride) {
  * the consent plugin can be prevented from phoning home.
  */
 (function _fazNetworkInterceptors() {
-    /**
-     * Extract a clean hostname+path from a URL string for provider matching.
-     * Handles the https, http, wss and ws URL schemes.
-     * Returns empty string on failure (non-blocking).
-     */
-    function _fazExtractEndpoint(url) {
-        if (!url || typeof url !== "string") return "";
-        try {
-            var full = url.startsWith("//") ? window.location.protocol + url : url;
-            // Normalise WebSocket schemes to https so URL() can parse them.
-            full = full.replace(/^wss?:\/\//i, 'https://');
-            if (!/^https?:\/\//i.test(full)) return "";
-            var u = new URL(full);
-            return _fazCleanHostName(u.hostname + u.pathname);
-        } catch (e) {
-            return "";
-        }
-    }
 
     // --- sendBeacon ---
     if (navigator.sendBeacon) {
@@ -9011,5 +9024,24 @@ document.addEventListener('click', function (event) {
         } catch (_pe) { /* placeholder injection is best-effort */ }
     }
 }, true /* capture phase — beats the page-builder listener */);
+
+// Drain the bootstrap only after every permanent interceptor is installed.
+if (window._fazBootstrap) window._fazBootstrap.finish({
+    script: _fazGuardScriptElement,
+    node: function (node) {
+        if (node.nodeName === 'SCRIPT' && _fazShouldChangeType(node)) {
+            var type = node.getAttribute('type');
+            if (type && type !== 'javascript/blocked') node.setAttribute('data-faz-original-type', type);
+            node.setAttribute('type', 'javascript/blocked');
+        } else {
+            _fazParkResourceElementIfBlocked(node);
+        }
+    },
+    url: function (url) {
+        var endpoint = _fazExtractEndpoint(String(url));
+        if (!endpoint) return false;
+        return !_fazIsUserWhitelisted(String(url)) && _fazShouldBlockProvider(endpoint);
+    }
+});
 
 } // end: if ( _fazStore ) — null-safety guard for deferred _fazConfig

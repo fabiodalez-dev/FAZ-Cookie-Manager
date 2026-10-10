@@ -413,6 +413,8 @@ and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
 = 1.34.1 =
+* Fixed: The generated configuration and main banner JavaScript load with ordered defer, removing their render-blocking requests. A small inline bootstrap protects dynamic scripts and requests until the full consent runtime is ready.
+* Fixed: Google Consent Mode defaults and the TCF command stub remain available before page scripts; a failed configuration download keeps pending resources blocked. If the runtime cannot load at all, same-origin requests are released while third-party resources stay blocked, so the site keeps working.
 * Fixed: A reopen link in the footer could be accepted as valid on the strength of text no visitor can click, so the plugin hid its own revisit widget and the site was left with no usable way to withdraw consent. The check removes script, style, title and textarea regions before looking for the link, but it ended those regions at the first tag whose name merely started the same way — `</titlex>` closed `<title>` — and treated the text after it as real markup. Those regions now end exactly where HTML says they do.
 
 = 1.34.0 =
