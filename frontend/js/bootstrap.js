@@ -117,24 +117,28 @@
             return node;
         };
     });
-    function cssURL(value) { return /url\s*\(|@import/i.test(String(value || '')); }
+    // Deliberately broad. Deciding this wrong in one direction only delays a
+    // stylesheet; wrong in the other it lets a request out before consent. So
+    // it answers "could this text fetch anything", not "does it contain a URL
+    // I can parse": url(), @import, image-set(), src(), and any CSS escape or
+    // comment, which can spell a property the browser understands and a regex
+    // does not. Holding more costs a replay; holding less costs a leak.
+    function cssURL(value) {
+        return /url|@import|image-set|src\s*\(|\\|\/\*/i.test(String(value || ''));
+    }
     // During a normal handoff the runtime's permanent interceptors decide what
     // may load, so everything replays. During a safety release there are no
     // such interceptors and no provider rules, so only same-origin work runs.
     function allowed(policy, url) { return !policy || !policy.sameOriginOnly || local(url); }
-    // A style block can carry several URLs; one cross-origin url() is enough to
-    // make the whole assignment a third-party request, so the text is admitted
-    // only when every URL in it is same-origin.
-    function cssLocal(value) {
-        var ok = true;
-        String(value || '').replace(/url\s*\(\s*['"]?([^'")]+)['"]?\s*\)|@import\s+['"]([^'"]+)['"]/gi, function (m, a, b) {
-            var u = a || b || '';
-            if (u && !local(u)) ok = false;
-            return m;
-        });
-        return ok;
-    }
-    function allowedCss(policy, value) { return !policy || !policy.sameOriginOnly || cssLocal(value); }
+    // CSS is not released by origin, because judging that means re-implementing
+    // the browser's CSS parser: escapes, comments and image-set() can hide a
+    // URL from any regex while the engine still fetches it, and the two
+    // disagreeing is a bypass. During a safety release no style text that could
+    // fetch anything is applied at all. The cost is a stylesheet that stays
+    // parked for that page view, which only happens when the runtime is already
+    // broken; the benefit is that no parser of ours stands between a visitor
+    // and a third-party request.
+    function allowedCss(policy, value) { return !policy || !policy.sameOriginOnly || !cssURL(value); }
     // Preserve the runtime's CSS enforcement during its download too. Plain
     // layout/style changes keep their synchronous semantics.
     function holdCSS(proto, prop, eligible) {
@@ -176,14 +180,28 @@
         };
     });
     function inStyle(node) { return !!(node && node.parentNode && node.parentNode.nodeName === 'STYLE'); }
+    // The resulting text is what the engine parses, not the fragment handed in.
+    // A node already holding `background-image:url(https://tracker` plus an
+    // appendData('.test/x)') completes a cross-origin URL while neither half
+    // contains one, so checking the argument alone was a bypass.
+    function dataResult(name, current, args) {
+        var text = String(current == null ? '' : current);
+        if (name === 'appendData') return text + String(args[0] == null ? '' : args[0]);
+        var offset = Number(args[0]) || 0;
+        if (name === 'insertData') return text.slice(0, offset) + String(args[1] == null ? '' : args[1]) + text.slice(offset);
+        var count = Number(args[1]) || 0;
+        return text.slice(0, offset) + String(args[2] == null ? '' : args[2]) + text.slice(offset + count);
+    }
     ['appendData', 'insertData', 'replaceData'].forEach(function (name) {
         var proto = w.CharacterData && CharacterData.prototype;
         if (!proto || typeof proto[name] !== 'function') return;
         replace(proto, name, function (original) {
             return function () {
                 var node = this, args = Array.prototype.slice.call(arguments);
-                if (!inStyle(node) || !args.some(function (a) { return cssURL(a); })) return original.apply(node, args);
-                queue.push(function (policy) { if (args.every(function (a) { return allowedCss(policy, a); })) node[name].apply(node, args); });
+                if (!inStyle(node)) return original.apply(node, args);
+                var result = dataResult(name, node.data, args);
+                if (!cssURL(result)) return original.apply(node, args);
+                queue.push(function (policy) { if (allowedCss(policy, result)) node[name].apply(node, args); });
             };
         });
     });
