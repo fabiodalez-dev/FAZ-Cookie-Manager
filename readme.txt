@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.34.2
+Stable tag: 1.34.1
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -412,14 +412,12 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
-= 1.34.2 =
-* Fixed: The generated configuration and main banner JavaScript load with ordered defer, removing their render-blocking requests. A small inline bootstrap protects dynamic scripts and requests until the full consent runtime is ready.
-* Fixed: Google Consent Mode defaults and the TCF command stub remain available before page scripts; a failed configuration download keeps pending resources blocked.
-
 = 1.34.1 =
 * Fixed: The withdrawal fallback widget reappears when theme attributes or CSS transitions and animations hide the footer link after consent.
 * Fixed: PHP GeoIP status requires a successful lookup, checks MMDB after extension failures, and explains how to repair a failing source.
 * Fixed: The consent banner disappeared on sites with a full-page cache and came back when the cache was turned off. Hiding the banner from search-engine crawlers is on by default, which makes the page different for a crawler than for a person — and a cache does not distinguish the two, so the first crawler to visit a page left a copy with no banner that was then served to everyone, with tracking scripts unblocked. Link previews from WhatsApp, Telegram, Discord, X and Pinterest count as crawlers too, so simply sharing a page could do it. The banner is now hidden from a crawler only on a response that is also kept out of every cache, and if that is not possible the banner is shown instead. AMP pages are covered as well, and updating the plugin clears the caches, so an affected site is fixed as soon as it updates.
+* Fixed: The generated configuration and main banner JavaScript load with ordered defer, removing their render-blocking requests. A small inline bootstrap protects dynamic scripts and requests until the full consent runtime is ready.
+* Fixed: Google Consent Mode defaults and the TCF command stub remain available before page scripts; a failed configuration download keeps pending resources blocked. If the runtime cannot load at all, same-origin requests are released while third-party resources stay blocked, so the site keeps working.
 * Fixed: A reopen link in the footer could be accepted as valid on the strength of text no visitor can click, so the plugin hid its own revisit widget and the site was left with no usable way to withdraw consent. The check removes script, style, title and textarea regions before looking for the link, but it ended those regions at the first tag whose name merely started the same way — `</titlex>` closed `<title>` — and treated the text after it as real markup. Those regions now end exactly where HTML says they do.
 
 = 1.34.0 =
