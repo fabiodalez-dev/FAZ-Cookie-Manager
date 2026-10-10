@@ -62,7 +62,7 @@ ref._fazConsentStore = new Map();
 // that couples this file to new server output (like the `<\/` escape in the
 // banner template, which an older script.js does not undo) only reaches
 // visitors safely once FAZ_VERSION is bumped at release.
-const _FAZ_BUILD = '1.34.2+deferred-bootstrap';
+const _FAZ_BUILD = '1.34.1+deferred-bootstrap';
 
 /**
  * One-call frontend self-diagnosis for support: paste
@@ -6655,6 +6655,31 @@ function _fazShouldChangeType(element, src, typeOverride) {
 }
 
 /**
+ * Extract a clean hostname+path from a URL string for provider matching.
+ * Handles the https, http, wss and ws URL schemes.
+ * Returns empty string on failure (non-blocking).
+ *
+ * At module scope because the bootstrap handoff matches URLs with the very
+ * same rule as the network interceptors below. Matching the raw string there
+ * instead meant a first-party request whose query carried a blocked domain —
+ * /wp-json/x?return=https://www.facebook.com/ — was refused before consent and
+ * allowed after it.
+ */
+function _fazExtractEndpoint(url) {
+    if (!url || typeof url !== "string") return "";
+    try {
+        var full = url.startsWith("//") ? window.location.protocol + url : url;
+        // Normalise WebSocket schemes to https so URL() can parse them.
+        full = full.replace(/^wss?:\/\//i, 'https://');
+        if (!/^https?:\/\//i.test(full)) return "";
+        var u = new URL(full);
+        return _fazCleanHostName(u.hostname + u.pathname);
+    } catch (e) {
+        return "";
+    }
+}
+
+/**
  * Network-level consent enforcement.
  *
  * Wraps navigator.sendBeacon, fetch, XMLHttpRequest.open, and WebSocket to block
@@ -6663,24 +6688,6 @@ function _fazShouldChangeType(element, src, typeOverride) {
  * the consent plugin can be prevented from phoning home.
  */
 (function _fazNetworkInterceptors() {
-    /**
-     * Extract a clean hostname+path from a URL string for provider matching.
-     * Handles the https, http, wss and ws URL schemes.
-     * Returns empty string on failure (non-blocking).
-     */
-    function _fazExtractEndpoint(url) {
-        if (!url || typeof url !== "string") return "";
-        try {
-            var full = url.startsWith("//") ? window.location.protocol + url : url;
-            // Normalise WebSocket schemes to https so URL() can parse them.
-            full = full.replace(/^wss?:\/\//i, 'https://');
-            if (!/^https?:\/\//i.test(full)) return "";
-            var u = new URL(full);
-            return _fazCleanHostName(u.hostname + u.pathname);
-        } catch (e) {
-            return "";
-        }
-    }
 
     // --- sendBeacon ---
     if (navigator.sendBeacon) {
@@ -9031,7 +9038,9 @@ if (window._fazBootstrap) window._fazBootstrap.finish({
         }
     },
     url: function (url) {
-        return !_fazIsUserWhitelisted(String(url)) && _fazShouldBlockProvider(String(url));
+        var endpoint = _fazExtractEndpoint(String(url));
+        if (!endpoint) return false;
+        return !_fazIsUserWhitelisted(String(url)) && _fazShouldBlockProvider(endpoint);
     }
 });
 

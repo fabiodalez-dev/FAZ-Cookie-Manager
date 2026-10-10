@@ -76,6 +76,9 @@ class Frontend {
 	/** External consent scripts that must execute in order without blocking parsing. */
 	private $deferred_script_handles = array();
 
+	/** Inline bootstrap source, '' when unavailable. Null until first read. */
+	private $bootstrap_js = null;
+
 	/**
 	 * Banner object
 	 *
@@ -569,8 +572,10 @@ class Frontend {
 				// The full config is merged by script.js after its deferred static
 				// dependency executes. Inline "before" code runs while parsing and
 				// must never depend on a deferred external file being available.
-				$bootstrap_path = plugin_dir_path( __FILE__ ) . 'js/bootstrap' . $this->get_script_suffix( 'js/bootstrap' ) . '.js';
-				wp_add_inline_script( $script_handle, file_get_contents( $bootstrap_path ), 'before' );
+				$bootstrap_js = $this->deferred_bootstrap_js();
+				if ( '' !== $bootstrap_js ) {
+					wp_add_inline_script( $script_handle, $bootstrap_js, 'before' );
+				}
 			}
 
 			// Pre-initialise window.dataLayer so third-party trackers that emit
@@ -971,9 +976,38 @@ class Frontend {
 
 	/** Keep the dependency chain ordered and non-blocking on WP 5.0+ too. */
 	private function enqueue_deferred_script( $handle, $src, $dependencies, $version, $in_footer ) {
-		$this->deferred_script_handles[ $handle ] = true;
 		wp_enqueue_script( $handle, $src, $dependencies, $version, $in_footer );
+		// Deferring is only safe while the inline bootstrap holds dynamic
+		// resources for the download window. Without it the runtime would
+		// arrive after the page's own scripts with nothing in between, so the
+		// request stays synchronous — slower, never unprotected.
+		if ( '' === $this->deferred_bootstrap_js() ) {
+			return;
+		}
+		$this->deferred_script_handles[ $handle ] = true;
 		wp_script_add_data( $handle, 'strategy', 'defer' );
+	}
+
+	/**
+	 * Inline bootstrap source, or '' when it cannot be read.
+	 *
+	 * file_get_contents() returns false on a missing or unreadable file, and
+	 * WP_Scripts::add_inline_script() opens with `if ( ! $data ) return false;`
+	 * — so passing that straight through emitted no bootstrap, raised no
+	 * notice, and left the deferred runtime arriving with nothing holding
+	 * dynamic resources in the meantime. Read it once, through one accessor,
+	 * so the decision to defer and the protection that makes deferring safe
+	 * can never disagree.
+	 *
+	 * @return string JavaScript source, or '' when unavailable.
+	 */
+	private function deferred_bootstrap_js() {
+		if ( null === $this->bootstrap_js ) {
+			$path = plugin_dir_path( __FILE__ ) . 'js/bootstrap' . $this->get_script_suffix( 'js/bootstrap' ) . '.js';
+			$code = is_readable( $path ) ? file_get_contents( $path ) : false; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local plugin asset, not a remote request.
+			$this->bootstrap_js = ( is_string( $code ) && '' !== trim( $code ) ) ? $code : '';
+		}
+		return $this->bootstrap_js;
 	}
 
 	/**

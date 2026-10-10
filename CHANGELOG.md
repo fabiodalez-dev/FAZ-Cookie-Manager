@@ -2,14 +2,10 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
-## [1.34.2] - 2026-10-09
+## [1.34.1] - 2026-10-10
 
 ### Fixed
-- The generated configuration and banner runtime no longer make render-blocking JavaScript requests. Both use ordered `defer` loading; a small inline bootstrap holds dynamic scripts and network calls until the runtime can apply consent. Google Consent Mode defaults and the TCF command stub remain synchronous. The static configuration is merged when the runtime executes, and a failed configuration download keeps pending resources blocked.
-
-## [1.34.1] - 2026-10-07
-
-### Fixed
+- The generated configuration and banner runtime no longer make render-blocking JavaScript requests. Both use ordered `defer` loading; a small inline bootstrap holds dynamic scripts and network calls until the runtime can apply consent. Google Consent Mode defaults and the TCF command stub remain synchronous. The static configuration is merged when the runtime executes, and a failed configuration download keeps pending resources blocked. When the runtime cannot arrive at all — a filter list that matches the plugin path, a missing file, an error while it evaluates — same-origin requests are released and third-party resources stay parked, so a blocked runtime no longer takes the site's own JavaScript down with the trackers.
 - A footer reopen link could be verified on the strength of a marker that no visitor can click, leaving the site with no usable way to withdraw consent. The verifier removes raw-text regions — `<script>`, `<style>`, `<title>`, `<textarea>` and the rest — before looking for the marker, and it found the end of one by searching for `</` plus the element's name. That also matches a longer name, so `</titlex>` ended `<title>` and `</stylex>` ended `<style>`. Everything after the false end was handed back as live markup, and a marker sitting in inert text — text a browser paints as the title, never as an element — passed verification. The plugin then believed the footer route, stopped rendering its own revisit widget, and left the visitor with no way to withdraw consent: the exact outcome this verification exists to prevent, in the one class whose stated contract is to fail closed. A raw-text element now ends only where HTML says it does, with the element's name followed by tab, line feed, form feed, carriage return, space, `/` or `>`. The set is spelled out rather than written as a whitespace class, because PCRE counts the vertical tab as whitespace and HTML does not — `</title\x0B>` would otherwise have kept the same hole open for a rarer input.
 
 ## [1.34.0] - 2026-10-06

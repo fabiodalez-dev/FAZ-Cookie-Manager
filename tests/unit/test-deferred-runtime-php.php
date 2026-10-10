@@ -8,7 +8,17 @@ function wp_enqueue_script( $handle, $src, $deps, $ver, $footer ) {
 function wp_script_add_data( $handle, $key, $value ) {
     $GLOBALS['faz_defer_data'][ $handle ][ $key ] = $value;
 }
+function wp_add_inline_script( $handle, $data, $position = 'after' ) {
+    if ( ! $data ) { return false; }
+    $GLOBALS['faz_defer_inline'][ $handle ][ $position ][] = $data;
+    return true;
+}
+function plugin_dir_path( $file ) { return $GLOBALS['faz_defer_dir']; }
+function faz_asset_suffix( $asset ) { return ''; }
 require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
+// The real bootstrap asset, so "deferring is safe" is proven against the file
+// that actually ships rather than against a fixture.
+$GLOBALS['faz_defer_dir'] = dirname( __DIR__, 2 ) . '/frontend/';
 $frontend = ( new ReflectionClass( \FazCookie\Frontend\Frontend::class ) )->newInstanceWithoutConstructor();
 $enqueue = new ReflectionMethod( $frontend, 'enqueue_deferred_script' );
 $enqueue->setAccessible( true );
@@ -39,4 +49,32 @@ check_defer( $foreign === $frontend->defer_runtime_script_tag( $foreign, 'faz-co
 $GLOBALS['faz_defer_admin'] = false;
 $GLOBALS['wp_version'] = '6.3';
 check_defer( $foreign === $frontend->defer_runtime_script_tag( $foreign, 'faz-cookie-manager' ), 'respect native dependency fallback on modern WP' );
+
+// Without a readable bootstrap, deferring would leave the runtime arriving
+// after the page's own scripts with nothing holding dynamic resources in
+// between. file_get_contents() returns false there and
+// WP_Scripts::add_inline_script() drops a falsy payload silently, so the old
+// code emitted no bootstrap and deferred anyway — a pre-consent window that
+// raised no error. Deferring must switch itself off instead.
+$GLOBALS['faz_defer_dir']     = dirname( __DIR__, 2 ) . '/frontend/does-not-exist/';
+$GLOBALS['faz_defer_scripts'] = array();
+$GLOBALS['faz_defer_data']    = array();
+$bare = ( new ReflectionClass( \FazCookie\Frontend\Frontend::class ) )->newInstanceWithoutConstructor();
+$bare_enqueue = new ReflectionMethod( $bare, 'enqueue_deferred_script' );
+$bare_enqueue->setAccessible( true );
+$bare_enqueue->invoke( $bare, 'faz-cookie-manager', '/script.js', array(), 'test', false );
+check_defer( isset( $GLOBALS['faz_defer_scripts']['faz-cookie-manager'] ), 'the script is still enqueued without the bootstrap' );
+check_defer( ! isset( $GLOBALS['faz_defer_data']['faz-cookie-manager']['strategy'] ), 'no bootstrap -> no defer strategy' );
+$untouched = '<script src="/script.js" id="faz-cookie-manager-js"></script>';
+check_defer( $untouched === $bare->defer_runtime_script_tag( $untouched, 'faz-cookie-manager' ), 'no bootstrap -> the old-WP fallback adds no defer either' );
+
+$readable = new ReflectionMethod( $bare, 'deferred_bootstrap_js' );
+$readable->setAccessible( true );
+check_defer( '' === $readable->invoke( $bare ), 'an unreadable bootstrap reads as empty, never as false' );
+$GLOBALS['faz_defer_dir'] = dirname( __DIR__, 2 ) . '/frontend/';
+$present = ( new ReflectionClass( \FazCookie\Frontend\Frontend::class ) )->newInstanceWithoutConstructor();
+$present_js = new ReflectionMethod( $present, 'deferred_bootstrap_js' );
+$present_js->setAccessible( true );
+check_defer( false !== strpos( $present_js->invoke( $present ), '_fazBootstrap' ), 'the shipped bootstrap is found and carries the handoff' );
+
 echo "ALL PASS ({$passed})\n";
