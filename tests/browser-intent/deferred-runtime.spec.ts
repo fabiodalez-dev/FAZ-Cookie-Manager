@@ -271,13 +271,49 @@ for (const consent of ['no', 'yes', 'missing']) {
 // must therefore be withdrawn rather than trusted — an unwrapped sink may cost
 // a request, never a consent decision. Needs a real parser: jsdom has already
 // closed its own, where write() reopens the document instead.
-test('a written resource element withdraws the parser exemption', async ({ page }) => {
+const WRITES = [
+  {
+    label: 'a plain document.write of an image',
+    code: `document.write('<img id="written" src="https://tracker.example.test/written.gif" alt="">');`,
+    withdraws: true,
+  },
+  {
+    label: 'a write split across calls, through Document.prototype',
+    // Both halves of what a per-call string test cannot do. write()
+    // concatenates successive calls into one input stream, so `<im` +
+    // `g src=…` builds an image no per-call regex sees; and going through the
+    // prototype skips any wrapper installed on the document instance. Either
+    // alone was enough to keep the exemption and leave the element unexamined.
+    code: `Document.prototype.write.call(document, '<im');`
+      + `Document.prototype.write.call(document, 'g id="written" src="https://tracker.example.test/split.gif" alt="">');`,
+    withdraws: true,
+  },
+  {
+    label: 'the <image> parser alias',
+    // The parser turns <image src> into an <img>. A tag-name list does not.
+    code: `document.write('<image id="written" src="https://tracker.example.test/alias.gif" alt="">');`,
+    withdraws: true,
+  },
+  {
+    label: 'a script-only write (the legacy tag)',
+    // The other direction, and the one that costs rather than leaks:
+    // withdrawing here would park every static resource after the write and
+    // gain nothing, because guard() declines every SCRIPT — a parser-built
+    // script has started its request before any observer is notified.
+    code: `document.write('<script src="/essential.js"><\/script>');`,
+    withdraws: false,
+  },
+];
+for (const write of WRITES) {
+test(`the parser exemption and ${write.label}`, async ({ page }) => {
+  const cdn: string[] = [];
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
   await page.route('https://defer.example.test/**', async route => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/config.js') { await gate; return route.fulfill({ contentType:'text/javascript', body:'window._fazStaticConfig={_providersToBlock:[{re:"tracker.example.test",categories:["analytics"]}],_cookieCategoryMap:{},_serviceCatalogue:{}};' }); }
     if (path === '/runtime.js') return route.fulfill({ contentType:'text/javascript', body:runtime });
+    if (path === '/essential.js') return route.fulfill({ contentType:'text/javascript', body:'window.essentialLoaded=true;' });
     const config = {_block:'1',_staticConfigRequired:true,_activeLaw:'gdpr',_categories:[{slug:'necessary',isNecessary:true},{slug:'analytics',isNecessary:false}],_services:[],_userWhitelist:[],_perServiceConsent:false,_perCookieConsent:false,i18n:{}};
     return route.fulfill({ contentType:'text/html', body:`<!doctype html><html><head>
       <script>window.nativeGetAttr=Element.prototype.getAttribute;window._fazConfig=${JSON.stringify(config)};</script>
@@ -286,31 +322,46 @@ test('a written resource element withdraws the parser exemption', async ({ page 
       <script defer src="/runtime.js"></script>
       </head><body><p id="paint">rendered</p>
       <img id="before-write" src="https://cdn.example.test/before.jpg" alt="">
-      <script>document.write('<img id="written" src="https://tracker.example.test/written.gif" alt="">');</script>
+      <script>${write.code}</script>
       <img id="after-write" src="https://cdn.example.test/after.jpg" alt="">
       </body></html>` });
   });
-  await page.route('https://cdn.example.test/**', route => route.fulfill({ contentType:'image/gif', body:'' }));
+  await page.route('https://cdn.example.test/**', route => {
+    cdn.push(new URL(route.request().url()).pathname);
+    return route.fulfill({ contentType:'image/gif', body:'' });
+  });
   await page.route('https://tracker.example.test/**', route => route.fulfill({ contentType:'image/gif', body:'' }));
   await page.goto('https://defer.example.test/', {waitUntil:'commit'});
   await expect(page.locator('#paint')).toBeVisible();
-  await expect.poll(() => page.evaluate(() => {
-    const native = (window as any).nativeGetAttr;
-    return ['written', 'after-write'].every((id) => {
-      const el = document.getElementById(id);
-      return !!el && !native.call(el, 'src') && !!native.call(el, 'data-faz-src');
-    });
-  }), { message: 'after a written resource element every insertion is judged again' }).toBe(true);
+  const liveSrc = (id: string) => page.evaluate((target) => {
+    const el = document.getElementById(target);
+    return el ? (window as any).nativeGetAttr.call(el, 'src') : 'MISSING';
+  }, id);
+  if (write.withdraws) {
+    await expect.poll(() => page.evaluate(() => {
+      const native = (window as any).nativeGetAttr;
+      return ['written', 'after-write'].every((id) => {
+        const el = document.getElementById(id);
+        return !!el && !native.call(el, 'src') && !!native.call(el, 'data-faz-src');
+      });
+    }), { message: 'the written element and everything after it are judged again' }).toBe(true);
+  } else {
+    // Nothing is withdrawn, so the static image after the write is left alone
+    // and fetched once — the regression this exemption exists to prevent.
+    expect(await liveSrc('after-write')).toBe('https://cdn.example.test/after.jpg');
+    expect(await page.evaluate(() => (window as any).nativeGetAttr.call(document.getElementById('after-write')!, 'data-faz-src'))).toBe(null);
+  }
   // The element the parser had already placed BEFORE the write keeps the
-  // exemption: withdrawing it cannot act backwards, and that resource was
-  // already fetched.
-  expect(await page.evaluate(() => (window as any).nativeGetAttr.call(document.getElementById('before-write')!, 'src')))
-    .toBe('https://cdn.example.test/before.jpg');
+  // exemption either way: withdrawing cannot act backwards, and that resource
+  // was already fetched.
+  expect(await liveSrc('before-write')).toBe('https://cdn.example.test/before.jpg');
   release();
   await page.waitForLoadState('domcontentloaded');
-  // And the runtime hands back what the write cost: cdn.example.test is in no
-  // blocked category, so the price of the withdrawal is a second fetch, never
-  // a resource lost for the page view.
-  await expect.poll(() => page.evaluate(() => (window as any).nativeGetAttr.call(document.getElementById('after-write')!, 'src')))
-    .toBe('https://cdn.example.test/after.jpg');
+  // And the runtime hands back what a withdrawal cost: cdn.example.test is in
+  // no blocked category, so the price is a second fetch at worst, never a
+  // resource lost for the page view.
+  await expect.poll(() => liveSrc('after-write')).toBe('https://cdn.example.test/after.jpg');
+  expect(cdn.filter((path) => path === '/before.jpg')).toEqual(['/before.jpg']);
+  if (!write.withdraws) expect(cdn.filter((path) => path === '/after.jpg')).toEqual(['/after.jpg']);
 });
+}

@@ -297,23 +297,68 @@
     // document.write hands markup to the parser's input stream instead of
     // building nodes, so there is nothing to tag when the call returns — and
     // from that moment an insertion by the parser and one this page wrote are
-    // indistinguishable. So stop distinguishing: as soon as written markup
-    // carries a resource element, the parser exemption is withdrawn for the
-    // rest of the page view and every insertion is judged again, which is
-    // where this file started. The cost lands only on a page that writes
-    // resource markup during parsing, and on that page enforcement is worth
-    // more than the second fetch it reintroduces; a page that does not write
-    // keeps its static markup untouched. Failing this way round is the whole
-    // point: an unwrapped sink must cost a request, never a consent decision.
-    var WRITTEN_RESOURCE = /<\s*(script|iframe|img|source|link|video|audio|embed|object|track|input)\b/i;
+    // indistinguishable. So stop distinguishing: the parser exemption is
+    // withdrawn for the rest of the page view and every insertion is judged
+    // again, which is where this file started. The cost lands only on a page
+    // that writes markup while parsing — a pattern browsers themselves now
+    // penalise — and there enforcement is worth more than the second fetch it
+    // reintroduces; every page that does not write keeps its static markup
+    // untouched. Failing this way round is the whole point: an unwrapped sink
+    // must cost a request, never a consent decision.
+    //
+    // What is NOT asked is "does this markup contain a resource element". A
+    // denylist of tag names has to be complete to be safe, and it never is:
+    // <image> is a parser alias for <img>, and <frame>, <portal> and whatever
+    // ships next are on nobody's list. Worse, write() concatenates its
+    // arguments and successive calls into one input stream, so `<im` +
+    // `g src=x>` builds an image that no per-call test ever sees whole. Both
+    // of those fail open. This file already learned that lesson on the CSS
+    // side, where the rule is written out: judge the text the engine will
+    // parse, never the fragment handed in.
+    //
+    // So the question is inverted into one that fails closed. Keep the whole
+    // written stream, and withdraw the exemption unless that stream is
+    // PROVABLY nothing but script elements and whitespace. Proving an absence
+    // needs no list: anything left after the script blocks and comments come
+    // out — down to a single "<" — withdraws. An unterminated tag at the end
+    // is left pending instead, because the tokenizer discards one at EOF and
+    // the next write re-tests the whole buffer anyway.
+    //
+    // Script-only earns that one exception on its merits. guard() declines
+    // every SCRIPT — a parser-built script has started its request before any
+    // observer is notified — so withdrawing for the legacy
+    // document.write('<script src=…>') tag would park every static resource
+    // after it and gain exactly nothing. Markup written by that script, if it
+    // writes any, comes back through this same wrapper.
+    //
+    // document.open() withdraws unconditionally: it discards the document and
+    // replaces documentElement, so the static markup this exemption is about
+    // no longer exists.
+    var written = '';
     var wrote = false;
-    ['write', 'writeln'].forEach(function (name) {
-        if (typeof d[name] !== 'function') return;
-        replace(d, name, function (original) {
+    function noteWrite(args) {
+        if (wrote) return;
+        written += Array.prototype.join.call(args, '');
+        var rest = written
+            .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
+            // A script still open swallows the rest: inside it, markup is text.
+            .replace(/<script\b[^>]*>[\s\S]*$/i, '')
+            .replace(/<!--[\s\S]*?(-->|$)/g, '')
+            .replace(/<[^>]*$/, '');
+        if (rest.indexOf('<') !== -1) wrote = true;
+    }
+    ['write', 'writeln', 'open'].forEach(function (name) {
+        // On Document.prototype, not on the document. An instance wrapper is
+        // skipped by Document.prototype.write.call(document, …), which is one
+        // property lookup away and is exactly how a wrapper-aware snippet gets
+        // around a gate like this one.
+        var host = w.Document && Document.prototype && typeof Document.prototype[name] === 'function'
+            ? Document.prototype : (typeof d[name] === 'function' ? d : null);
+        if (!host) return;
+        replace(host, name, function (original) {
             return function () {
-                for (var i = 0; !wrote && i < arguments.length; i++) {
-                    if (WRITTEN_RESOURCE.test(String(arguments[i]))) wrote = true;
-                }
+                if (name === 'open') wrote = true;
+                else noteWrite(arguments);
                 return original.apply(this, arguments);
             };
         });
@@ -325,10 +370,22 @@
         if (!sunk) return true;
         // Something wrote markup the parser swallowed: no node here can be
         // attributed any more, so judge them all.
-        if (wrote) return true;
-        // Parsing finished: the parser inserts nothing more, so every record
-        // from here on is a script's doing.
-        if (d.readyState !== 'loading') return true;
+        if (wrote) return true;  // see the write/open wrappers above
+        // And that is the whole question. Deliberately NOT "is the document
+        // still parsing": a MutationObserver callback is a microtask, and the
+        // task that finishes parsing sets readyState to 'interactive' BEFORE
+        // the checkpoint that delivers its records — so records for the tail
+        // of the document arrive with readyState already flipped. Firefox and
+        // WebKit finish the remaining markup in one task where Chromium
+        // yields, which is how a static image after a document.write came back
+        // parked on two engines out of three. Reading a phase at delivery time
+        // cannot answer a question about insertion time.
+        //
+        // It is also unnecessary. Every API that inserts a node is wrapped and
+        // decides with the policy itself, and every HTML sink tags what it
+        // builds, so an UNTAGGED insertion is the parser's — or a replay of an
+        // insertion a wrapper already judged. There is nothing left for a
+        // phase check to catch.
         return sunk.has(node);
     }
     // Delay dynamic insertions, retaining the actual nodes and their listeners.
@@ -663,7 +720,9 @@
             };
         });
     });
-    replace(d, 'createElement', function (original) {
+    // Document.prototype, for the reason the write wrappers give: an instance
+    // wrapper is one property lookup away from being skipped.
+    replace(w.Document && Document.prototype && typeof Document.prototype.createElement === 'function' ? Document.prototype : d, 'createElement', function (original) {
         return function () {
             var el = original.apply(this, arguments);
             if (el.nodeName === 'SCRIPT') scripts.push(el);
@@ -1069,7 +1128,12 @@
             }
         });
         try {
-            observer.observe(d.documentElement, {
+            // The DOCUMENT, not documentElement. document.open() replaces
+            // documentElement, and an observer left watching the old one is
+            // attached to a detached node: no records, no error, no
+            // enforcement for the rest of the page view. Observing the
+            // document survives that.
+            observer.observe(d, {
                 childList: true, subtree: true,
                 attributes: true,
                 attributeFilter: ['src', 'srcset', 'href', 'imagesrcset', 'data', 'poster']
