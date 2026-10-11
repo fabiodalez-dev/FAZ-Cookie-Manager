@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.12.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-06T06:21:15+00:00\n"
+"POT-Creation-Date: 2026-10-11T20:44:25+00:00\n"
 "PO-Revision-Date: 2026-04-20 00:00+0200\n"
 "Last-Translator: \n"
 "Language-Team: Croatian\n"
@@ -4725,7 +4725,7 @@ msgstr ""
 msgid "\"Carried\" means it was already on record for this visitor and keeps the verdict of that earlier row."
 msgstr ""
 
-#: admin/views/consent-logs.php:86
+#: admin/views/consent-logs.php:86 includes/class-dsar-admin.php:356
 msgid "Date"
 msgstr "Datum"
 
@@ -4733,7 +4733,8 @@ msgstr "Datum"
 msgid "Consent ID"
 msgstr "ID privole"
 
-#: admin/views/consent-logs.php:88 includes/class-utils.php:802
+#: admin/views/consent-logs.php:88 includes/class-dsar-admin.php:128
+#: includes/class-dsar-admin.php:361 includes/class-utils.php:802
 msgid "Status"
 msgstr "Status"
 
@@ -5168,8 +5169,8 @@ msgstr "Obriši odabrano"
 msgid "Select all cookies"
 msgstr "Odaberi sve kolačiće"
 
-#: admin/views/cookies.php:175 includes/class-dsar-shortcode.php:127
-#: includes/class-utils.php:786
+#: admin/views/cookies.php:175 includes/class-dsar-admin.php:122
+#: includes/class-dsar-shortcode.php:205 includes/class-utils.php:786
 msgid "Name"
 msgstr "Naziv"
 
@@ -5274,7 +5275,7 @@ msgstr "(sve)"
 msgid "Filter by category slug (e.g. <code>analytics</code>) or ID"
 msgstr "Filtriraj prema slugu kategorije (npr. <code>analytics</code>) ili ID-u"
 
-#: admin/views/cookies.php:311 includes/class-dsar-shortcode.php:433
+#: admin/views/cookies.php:311 includes/class-dsar-shortcode.php:873
 msgid "(none)"
 msgstr "(nijedno)"
 
@@ -7451,19 +7452,19 @@ msgstr "Jednom tjedno (FAZ)"
 msgid "Once Monthly (FAZ)"
 msgstr "Jednom mjesečno (FAZ)"
 
-#: includes/class-cli.php:429
+#: includes/class-cli.php:437
 msgid "Cookie Consent (FAZ Cookie Manager)"
 msgstr "Privola za kolačiće (FAZ Cookie Manager)"
 
-#: includes/class-cli.php:430
+#: includes/class-cli.php:438
 msgid "This site uses the FAZ Cookie Manager plugin to collect and manage cookie consent. When you interact with the cookie banner, we record your consent choice (accepted, rejected, or partial), a hashed version of your IP address, your browser user agent, and the page URL where consent was given. This data is stored locally on our server and retained for the period configured in the plugin settings (default: 12 months)."
 msgstr "Ova stranica koristi plugin FAZ Cookie Manager za prikupljanje i upravljanje privolama za kolačiće. Kada koristite banner za kolačiće, bilježimo vaš odabir privole (prihvaćeno, odbijeno ili djelomično), hashiranu verziju vaše IP adrese, korisnički agent vašeg preglednika i URL stranice na kojoj je privola dana. Ti se podaci pohranjuju lokalno na našem poslužitelju i čuvaju tijekom razdoblja konfiguriranog u postavkama plugina (zadano: 12 mjeseci)."
 
-#: includes/class-cli.php:431
+#: includes/class-cli.php:439
 msgid "You can change your cookie preferences at any time using the cookie icon in the bottom corner of the page."
 msgstr "Svoje postavke kolačića možete promijeniti u bilo kojem trenutku pomoću ikone kolačića u donjem kutu stranice."
 
-#: includes/class-cli.php:444 includes/class-cli.php:453
+#: includes/class-cli.php:452 includes/class-cli.php:461
 msgid "FAZ Cookie Manager — Consent Logs & Privacy Requests"
 msgstr "FAZ Cookie Manager — zapisi privola i zahtjevi za privatnost"
 
@@ -7618,7 +7619,7 @@ msgid "Your opt-out has been withdrawn. You may submit a new request at any time
 msgstr "Vaša odjava je povučena. Možete poslati novi zahtjev u bilo kojem trenutku."
 
 #: includes/class-do-not-sell-shortcode.php:82
-#: includes/class-dsar-shortcode.php:124
+#: includes/class-dsar-shortcode.php:202
 msgid "An error occurred. Please try again."
 msgstr "Došlo je do pogreške. Pokušajte ponovo."
 
@@ -7648,7 +7649,7 @@ msgstr "Kao stanovnik SAD-a u državi s primjenjivim zakonima o privatnosti, ima
 
 #: includes/class-do-not-sell-shortcode.php:215
 #: includes/class-do-not-sell-shortcode.php:277
-#: includes/class-dsar-shortcode.php:280
+#: includes/class-dsar-shortcode.php:364
 msgid "Invalid security token. Please refresh the page and try again."
 msgstr "Nevažeći sigurnosni token. Osvježite stranicu i pokušajte ponovo."
 
@@ -7658,7 +7659,7 @@ msgstr "Već ste se odjavili. Nećemo prodavati ni dijeliti vaše osobne podatke
 
 #: includes/class-do-not-sell-shortcode.php:245
 #: includes/class-do-not-sell-shortcode.php:296
-#: includes/class-dsar-shortcode.php:335
+#: includes/class-dsar-shortcode.php:428
 msgid "Too many requests. Please wait 1 minute before submitting again."
 msgstr "Previše zahtjeva. Pričekajte 1 minutu prije ponovnog slanja."
 
@@ -7686,112 +7687,265 @@ msgstr ""
 "\n"
 "Nikakva radnja nije potrebna, osim ako ne prodajete ili dijelite osobne podatke — u tom slučaju trebate osigurati da su podaci ovog korisnika isključeni iz svake prodaje ili dijeljenja."
 
-#: includes/class-dsar-shortcode.php:125
-msgid "Please fill in all required fields."
-msgstr "Ispunite sva obavezna polja."
-
-#: includes/class-dsar-shortcode.php:126 includes/class-dsar-shortcode.php:305
-msgid "Please enter a valid email address."
-msgstr "Unesite valjanu adresu e-pošte."
-
-#: includes/class-dsar-shortcode.php:128 includes/class-utils.php:790
-msgid "Email"
-msgstr "E-pošta"
-
-#: includes/class-dsar-shortcode.php:129 includes/class-utils.php:794
-msgid "Request type"
-msgstr "Vrsta zahtjeva"
-
-#: includes/class-dsar-shortcode.php:143
+#: includes/class-dsar-admin.php:59 includes/class-dsar-shortcode.php:221
 msgid "Data Requests"
 msgstr "Zahtjevi za podatke"
 
-#: includes/class-dsar-shortcode.php:175
+#: includes/class-dsar-admin.php:94
+msgid "Request details"
+msgstr ""
+
+#: includes/class-dsar-admin.php:102
+msgid "Handle this request"
+msgstr ""
+
+#: includes/class-dsar-admin.php:123 includes/class-dsar-shortcode.php:206
+#: includes/class-utils.php:790
+msgid "Email"
+msgstr "E-pošta"
+
+#: includes/class-dsar-admin.php:126 includes/class-dsar-shortcode.php:207
+#: includes/class-utils.php:794
+msgid "Request type"
+msgstr "Vrsta zahtjeva"
+
+#: includes/class-dsar-admin.php:127 includes/class-utils.php:806
+msgid "Submitted"
+msgstr "Poslano"
+
+#: includes/class-dsar-admin.php:142
+msgid "Additional information from the requester"
+msgstr ""
+
+#: includes/class-dsar-admin.php:144
+msgid "(none provided)"
+msgstr ""
+
+#: includes/class-dsar-admin.php:151
+msgid "These values are stored exactly as submitted and cannot be edited here: the record is the audit trail of what the data subject asked for."
+msgstr ""
+
+#: includes/class-dsar-admin.php:168
+msgid "This record has no valid email address, so it cannot be turned into a WordPress privacy request."
+msgstr ""
+
+#: includes/class-dsar-admin.php:176
+msgid "A WordPress privacy request has already been created for this address. Finish it from the core tool:"
+msgstr ""
+
+#: includes/class-dsar-admin.php:184
+msgid "Create the matching WordPress privacy request. The data subject receives a confirmation link first — WordPress verifies the address before any data is exported or erased."
+msgstr ""
+
+#: includes/class-dsar-admin.php:188
+msgid "Create erasure request"
+msgstr ""
+
+#: includes/class-dsar-admin.php:189
+msgid "Create export request"
+msgstr ""
+
+#: includes/class-dsar-admin.php:199
+msgid "WordPress has no automated flow for this right: handle it by replying to the requester. An export request is still useful to see what data the site holds about them."
+msgstr ""
+
+#: includes/class-dsar-admin.php:205
+msgid "Reopen request"
+msgstr ""
+
+#: includes/class-dsar-admin.php:207
+msgid "Mark as completed"
+msgstr ""
+
+#: includes/class-dsar-admin.php:209
+msgid "GDPR Article 12 gives you one month to respond."
+msgstr ""
+
+#: includes/class-dsar-admin.php:224
+msgid "Request not found."
+msgstr ""
+
+#: includes/class-dsar-admin.php:228
+msgid "You are not allowed to handle data subject requests."
+msgstr ""
+
+#: includes/class-dsar-admin.php:243
+msgid "You are not allowed to create privacy requests."
+msgstr ""
+
+#: includes/class-dsar-admin.php:312
+msgid "Erasure request created. WordPress has emailed the requester a confirmation link; once they confirm, erase their data from Tools → Erase Personal Data."
+msgstr ""
+
+#: includes/class-dsar-admin.php:317
+msgid "Export request created. WordPress has emailed the requester a confirmation link; once they confirm, send their data from Tools → Export Personal Data."
+msgstr ""
+
+#: includes/class-dsar-admin.php:322
+msgid "WordPress already has an unconfirmed privacy request for this address, so a second one was not created."
+msgstr ""
+
+#: includes/class-dsar-admin.php:325
+msgid "Request marked as completed."
+msgstr ""
+
+#: includes/class-dsar-admin.php:326
+msgid "Request reopened."
+msgstr ""
+
+#: includes/class-dsar-admin.php:327
+msgid "The request could not be processed."
+msgstr ""
+
+#: includes/class-dsar-admin.php:359
+msgid "Requester"
+msgstr ""
+
+#: includes/class-dsar-admin.php:360
+msgid "Right invoked"
+msgstr ""
+
+#: includes/class-dsar-admin.php:410
+msgid "Awaiting action"
+msgstr ""
+
+#: includes/class-dsar-admin.php:411
+msgid "Sent to the WordPress privacy tools"
+msgstr ""
+
+#: includes/class-dsar-admin.php:412
+msgid "Completed"
+msgstr ""
+
+#: includes/class-dsar-admin.php:480
+msgid "Open Tools → Erase Personal Data"
+msgstr ""
+
+#: includes/class-dsar-admin.php:481
+msgid "Open Tools → Export Personal Data"
+msgstr ""
+
+#: includes/class-dsar-shortcode.php:203
+msgid "Please fill in all required fields."
+msgstr "Ispunite sva obavezna polja."
+
+#: includes/class-dsar-shortcode.php:204 includes/class-dsar-shortcode.php:389
+msgid "Please enter a valid email address."
+msgstr "Unesite valjanu adresu e-pošte."
+
+#: includes/class-dsar-shortcode.php:259
 msgid "Send Request"
 msgstr "Pošalji zahtjev"
 
-#: includes/class-dsar-shortcode.php:209
+#: includes/class-dsar-shortcode.php:293
 msgid "Right of Access (Article 15) — receive a copy of my data"
 msgstr "Pravo pristupa (članak 15) — primiti kopiju mojih podataka"
 
-#: includes/class-dsar-shortcode.php:210
+#: includes/class-dsar-shortcode.php:294
 msgid "Right to Erasure (Article 17) — delete my data"
 msgstr "Pravo na brisanje (članak 17) — izbriši moje podatke"
 
-#: includes/class-dsar-shortcode.php:211
+#: includes/class-dsar-shortcode.php:295
 msgid "Right to Data Portability (Article 20) — export my data"
 msgstr "Pravo na prenosivost podataka (članak 20) — izvezi moje podatke"
 
-#: includes/class-dsar-shortcode.php:212
+#: includes/class-dsar-shortcode.php:296
 msgid "Right to Rectification (Article 16) — correct my data"
 msgstr "Pravo na ispravak (članak 16) — ispraviti moje podatke"
 
-#: includes/class-dsar-shortcode.php:213
+#: includes/class-dsar-shortcode.php:297
 msgid "Right to Restrict Processing (Article 18)"
 msgstr "Pravo na ograničenje obrade (članak 18)"
 
-#: includes/class-dsar-shortcode.php:214
+#: includes/class-dsar-shortcode.php:298
 msgid "Right to Object (Article 21) — object to processing"
 msgstr "Pravo na prigovor (članak 21) — prigovoriti obradi"
 
-#: includes/class-dsar-shortcode.php:220
+#: includes/class-dsar-shortcode.php:304
 msgid "Fields marked with * are required."
 msgstr "Polja označena s * su obavezna."
 
-#: includes/class-dsar-shortcode.php:236
+#: includes/class-dsar-shortcode.php:320
 msgid "Full Name"
 msgstr "Puno ime"
 
-#: includes/class-dsar-shortcode.php:241
+#: includes/class-dsar-shortcode.php:325
 msgid "Email Address"
 msgstr "Adresa e-pošte"
 
-#: includes/class-dsar-shortcode.php:246
+#: includes/class-dsar-shortcode.php:330
 msgid "Request Type"
 msgstr "Vrsta zahtjeva"
 
-#: includes/class-dsar-shortcode.php:248
+#: includes/class-dsar-shortcode.php:332
 msgid "— Select a request type —"
 msgstr "— Odaberite vrstu zahtjeva —"
 
-#: includes/class-dsar-shortcode.php:256
+#: includes/class-dsar-shortcode.php:340
 msgid "Additional Information"
 msgstr "Dodatne informacije"
 
-#: includes/class-dsar-shortcode.php:257
+#: includes/class-dsar-shortcode.php:341
 msgid "Optional: provide any additional context to help us identify your data."
 msgstr "Neobavezno: navedite dodatni kontekst koji nam pomaže identificirati vaše podatke."
 
-#: includes/class-dsar-shortcode.php:286
+#: includes/class-dsar-shortcode.php:370 includes/class-dsar-shortcode.php:515
 msgid "Submission rejected."
 msgstr "Podnošenje odbijeno."
 
-#: includes/class-dsar-shortcode.php:300
+#: includes/class-dsar-shortcode.php:384
 msgid "Please enter your full name."
 msgstr "Unesite svoje puno ime."
 
-#: includes/class-dsar-shortcode.php:312
-msgid "Too many requests. Please wait 1 hour before submitting again."
-msgstr "Previše zahtjeva. Pričekajte 1 sat prije ponovnog slanja."
-
-#: includes/class-dsar-shortcode.php:317
+#: includes/class-dsar-shortcode.php:394
 msgid "Please select a valid request type."
 msgstr "Odaberi valjanu vrstu zahtjeva."
 
-#: includes/class-dsar-shortcode.php:323
+#: includes/class-dsar-shortcode.php:400
 msgid "Your message is too long. Please limit it to 5,000 characters."
 msgstr "Vaša poruka je predugacka. Ograničite je na 5.000 znakova."
 
-#: includes/class-dsar-shortcode.php:352
+#: includes/class-dsar-shortcode.php:449
 msgid "We could not record your request due to a server error. Please try again."
 msgstr "Nismo mogli zabilježiti vaš zahtjev zbog greške poslužitelja. Pokušajte ponovo."
 
-#: includes/class-dsar-shortcode.php:367
+#: includes/class-dsar-shortcode.php:472
 msgid "Your request has been received. We will respond within 30 days as required by law."
 msgstr "Vaš zahtjev je zaprimljen. Odgovorit ćemo u roku od 30 dana kako zahtijeva zakon."
 
+#: includes/class-dsar-shortcode.php:523
+msgid "Too many requests. Please wait 1 hour before submitting again."
+msgstr "Previše zahtjeva. Pričekajte 1 sat prije ponovnog slanja."
+
+#: includes/class-dsar-shortcode.php:536
+msgid "This form has reached its daily limit for security reasons. Your request still matters: please email us directly to exercise your rights, and we will respond within the statutory deadline."
+msgstr ""
+
+#: includes/class-dsar-shortcode.php:545
+msgid "Too many requests from this connection. Please try again tomorrow, or email us directly to exercise your rights."
+msgstr ""
+
+#. translators: %s: site name
+#: includes/class-dsar-shortcode.php:752
+#, php-format
+msgid "[%s] Data requests are arriving faster than they can be emailed"
+msgstr ""
+
+#. translators: 1: site name, 2: requests in the last 24 hours, 3: the per-request mail ceiling, 4: requests awaiting action, 5: admin URL of the stored requests list
+#: includes/class-dsar-shortcode.php:755
+#, php-format
+msgid ""
+"%1$s has received %2$d data subject requests in the last 24 hours, past the %3$d after which they are no longer emailed one by one. They are still being recorded: %4$d are awaiting action.\n"
+"\n"
+"Review them here: %5$s\n"
+"\n"
+"This usually means the form is being targeted by automated submissions. Install a form-protection plugin (ALTCHA / OpenPorte, Turnstile, hCaptcha) and hook it into the faz_dsar_pre_submit filter, so the genuine requests are emailed individually again.\n"
+"\n"
+"You will get this summary at most once an hour while it lasts."
+msgstr ""
+
 #. translators: 1: site name, 2: name, 3: email, 4: request type, 5: date, 6: message
-#: includes/class-dsar-shortcode.php:427
+#: includes/class-dsar-shortcode.php:867
 #, php-format
 msgid ""
 "New data subject request received on %1$s.\n"
@@ -7819,25 +7973,25 @@ msgstr ""
 "Morate odgovoriti u roku od 30 dana (GDPR čl. 12). Odgovorite izravno na adresu e-pošte podnositelja zahtjeva."
 
 #. translators: %s: admin URL to the request post
-#: includes/class-dsar-shortcode.php:439
+#: includes/class-dsar-shortcode.php:879
 #, php-format
-msgid "View logged request: %s"
-msgstr "Prikaži zabilježeni zahtjev: %s"
+msgid "Open the request to handle it (you can turn it into a WordPress erasure or export request from there): %s"
+msgstr ""
 
 #. translators: 1: site name, 2: request type
-#: includes/class-dsar-shortcode.php:451
+#: includes/class-dsar-shortcode.php:891
 #, php-format
 msgid "[%1$s] Data Subject Request: %2$s"
 msgstr "[%1$s] Zahtjev ispitanika: %2$s"
 
 #. translators: %s: site name
-#: includes/class-dsar-shortcode.php:467
+#: includes/class-dsar-shortcode.php:907
 #, php-format
 msgid "[%s] We received your data request"
 msgstr "[%s] Primili smo vaš zahtjev za podatke"
 
 #. translators: 1: first name, 2: site name, 3: human-readable request type (e.g. "Right of Access (Art. 15 GDPR)")
-#: includes/class-dsar-shortcode.php:470
+#: includes/class-dsar-shortcode.php:910
 #, php-format
 msgid ""
 "Dear %1$s,\n"
@@ -7862,27 +8016,27 @@ msgstr ""
 "Hvala,\n"
 "Tim %2$s"
 
-#: includes/class-dsar-shortcode.php:486
+#: includes/class-dsar-shortcode.php:926
 msgid "Right of Access (Art. 15 GDPR)"
 msgstr "Pravo pristupa (čl. 15 GDPR)"
 
-#: includes/class-dsar-shortcode.php:487
+#: includes/class-dsar-shortcode.php:927
 msgid "Right to Erasure (Art. 17 GDPR)"
 msgstr "Pravo na brisanje (čl. 17 GDPR)"
 
-#: includes/class-dsar-shortcode.php:488
+#: includes/class-dsar-shortcode.php:928
 msgid "Right to Data Portability (Art. 20 GDPR)"
 msgstr "Pravo na prenosivost podataka (čl. 20 GDPR)"
 
-#: includes/class-dsar-shortcode.php:489
+#: includes/class-dsar-shortcode.php:929
 msgid "Right to Rectification (Art. 16 GDPR)"
 msgstr "Pravo na ispravak (čl. 16 GDPR)"
 
-#: includes/class-dsar-shortcode.php:490
+#: includes/class-dsar-shortcode.php:930
 msgid "Right to Restrict Processing (Art. 18 GDPR)"
 msgstr "Pravo na ograničenje obrade (čl. 18 GDPR)"
 
-#: includes/class-dsar-shortcode.php:491
+#: includes/class-dsar-shortcode.php:931
 msgid "Right to Object (Art. 21 GDPR)"
 msgstr "Pravo na prigovor (čl. 21 GDPR)"
 
@@ -7963,10 +8117,6 @@ msgstr "Zahtjevi za privatnost (FAZ Cookie Manager)"
 #: includes/class-utils.php:798
 msgid "Message"
 msgstr "Poruka"
-
-#: includes/class-utils.php:806
-msgid "Submitted"
-msgstr "Poslano"
 
 #: includes/class-utils.php:847
 msgid "FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses; they auto-purge after the configured retention period."
@@ -8049,6 +8199,10 @@ msgstr "Gumb"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Poveznica"
+
+#, php-format
+#~ msgid "View logged request: %s"
+#~ msgstr "Prikaži zabilježeni zahtjev: %s"
 
 #~ msgid "Locked on while jurisdiction routing is active. Every shipped rule set requires a standing way to reopen and withdraw consent, so the runtime keeps this widget visible whatever this switch says — withdrawing has to stay as easy as giving. Its position, colours and icon below remain yours to change."
 #~ msgstr "Zaključano uključeno dok je usmjeravanje prema jurisdikciji aktivno. Svaki isporučeni skup pravila zahtijeva stalni način ponovnog otvaranja i povlačenja privole, pa sustav u stvarnom vremenu drži ovaj widget vidljivim bez obzira na ovaj prekidač — povlačenje mora ostati jednako lako kao i davanje. Njegov položaj, boje i ikona u nastavku ostaju vaš izbor."

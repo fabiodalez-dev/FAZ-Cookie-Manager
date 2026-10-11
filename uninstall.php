@@ -206,6 +206,11 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				// the explicit list complete, which is the only reason it exists.
 				'faz_geo_source_probe',
 				'faz_withdrawal_link_probe',
+				// The DSAR form's site-wide submission counter. An option and
+				// not a transient (it must survive an object-cache flush, see
+				// DSAR_Shortcode::site_count()), so the _transient_faz% sweep
+				// above does not reach it.
+				'faz_dsar_rl_cnt_all',
 			);
 			foreach ( $faz_options as $option_name ) {
 				delete_option( $option_name );

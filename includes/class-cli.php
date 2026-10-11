@@ -18,6 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 use FazCookie\Includes\Loader;
 use FazCookie\Includes\I18n;
+use FazCookie\Includes\DSAR_Admin;
 use FazCookie\Includes\DSAR_Shortcode;
 use FazCookie\Admin\Admin;
 use FazCookie\Frontend\Frontend;
@@ -172,6 +173,13 @@ class CLI {
 		// admin requests so post.php?post=…&action=edit edit links for stored
 		// DSAR requests resolve to a registered post type.
 		new DSAR_Shortcode();
+
+		// The stored-request screen: list columns, read-only detail box and the
+		// one-click bridge into WordPress's own privacy tools. Admin-only, so it
+		// is not instantiated on frontend requests.
+		if ( is_admin() ) {
+			new DSAR_Admin();
+		}
 
 		// Invalidate the frontend-output caches on every cookie / category /
 		// settings write, registered UNCONDITIONALLY here — the plugin's single

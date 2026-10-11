@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-06T06:21:15+00:00\n"
+"POT-Creation-Date: 2026-10-11T20:44:25+00:00\n"
 "PO-Revision-Date: 2026-04-02 13:06+0200\n"
 "Last-Translator: Yannic van Veen (Yard Digital Agency)\n"
 "Language-Team: Dutch\n"
@@ -4723,7 +4723,7 @@ msgstr ""
 msgid "\"Carried\" means it was already on record for this visitor and keeps the verdict of that earlier row."
 msgstr ""
 
-#: admin/views/consent-logs.php:86
+#: admin/views/consent-logs.php:86 includes/class-dsar-admin.php:356
 msgid "Date"
 msgstr "Datum"
 
@@ -4731,7 +4731,8 @@ msgstr "Datum"
 msgid "Consent ID"
 msgstr "Toestemmings-ID"
 
-#: admin/views/consent-logs.php:88 includes/class-utils.php:802
+#: admin/views/consent-logs.php:88 includes/class-dsar-admin.php:128
+#: includes/class-dsar-admin.php:361 includes/class-utils.php:802
 msgid "Status"
 msgstr "Status"
 
@@ -5166,8 +5167,8 @@ msgstr "Verwijder geselecteerde"
 msgid "Select all cookies"
 msgstr "Selecteer alle cookies"
 
-#: admin/views/cookies.php:175 includes/class-dsar-shortcode.php:127
-#: includes/class-utils.php:786
+#: admin/views/cookies.php:175 includes/class-dsar-admin.php:122
+#: includes/class-dsar-shortcode.php:205 includes/class-utils.php:786
 msgid "Name"
 msgstr "Naam"
 
@@ -5272,7 +5273,7 @@ msgstr "(alles)"
 msgid "Filter by category slug (e.g. <code>analytics</code>) or ID"
 msgstr "Filter op categorie slug (bijv. <code>analytics</code>) of ID"
 
-#: admin/views/cookies.php:311 includes/class-dsar-shortcode.php:433
+#: admin/views/cookies.php:311 includes/class-dsar-shortcode.php:873
 msgid "(none)"
 msgstr "(geen)"
 
@@ -7447,19 +7448,19 @@ msgstr "Een keer per week (FAZ)"
 msgid "Once Monthly (FAZ)"
 msgstr "Een keer per maand (FAZ)"
 
-#: includes/class-cli.php:429
+#: includes/class-cli.php:437
 msgid "Cookie Consent (FAZ Cookie Manager)"
 msgstr "Cookie Toestemming (FAZ Cookie Manager)"
 
-#: includes/class-cli.php:430
+#: includes/class-cli.php:438
 msgid "This site uses the FAZ Cookie Manager plugin to collect and manage cookie consent. When you interact with the cookie banner, we record your consent choice (accepted, rejected, or partial), a hashed version of your IP address, your browser user agent, and the page URL where consent was given. This data is stored locally on our server and retained for the period configured in the plugin settings (default: 12 months)."
 msgstr "Deze site gebruikt de FAZ Cookie Manager plugin om cookie toestemming te verzamelen en te beheren. Wanneer je interactie hebt met de cookie banner, registreren we je keuze (geaccepteerd, geweigerd of gedeeltelijk), een gehashte versie van je IP-adres, je browser user agent en de URL van de pagina waar de toestemming is gegeven. Deze gegevens worden lokaal op onze server opgeslagen en behouden voor de periode die is geconfigureerd in de plugin instellingen (standaard: 12 maanden)."
 
-#: includes/class-cli.php:431
+#: includes/class-cli.php:439
 msgid "You can change your cookie preferences at any time using the cookie icon in the bottom corner of the page."
 msgstr "Je kunt je cookie voorkeuren op elk moment wijzigen met behulp van het cookie icoon in de rechterbenedenhoek van de pagina."
 
-#: includes/class-cli.php:444 includes/class-cli.php:453
+#: includes/class-cli.php:452 includes/class-cli.php:461
 msgid "FAZ Cookie Manager — Consent Logs & Privacy Requests"
 msgstr "FAZ Cookie Manager — Toestemmingslogs & privacyverzoeken"
 
@@ -7614,7 +7615,7 @@ msgid "Your opt-out has been withdrawn. You may submit a new request at any time
 msgstr "Uw opt-out is ingetrokken. U kunt op elk moment een nieuw verzoek indienen."
 
 #: includes/class-do-not-sell-shortcode.php:82
-#: includes/class-dsar-shortcode.php:124
+#: includes/class-dsar-shortcode.php:202
 msgid "An error occurred. Please try again."
 msgstr "Er is een fout opgetreden. Probeer het opnieuw."
 
@@ -7644,7 +7645,7 @@ msgstr "Als inwoner van een Amerikaanse staat met toepasselijke privacywetten he
 
 #: includes/class-do-not-sell-shortcode.php:215
 #: includes/class-do-not-sell-shortcode.php:277
-#: includes/class-dsar-shortcode.php:280
+#: includes/class-dsar-shortcode.php:364
 msgid "Invalid security token. Please refresh the page and try again."
 msgstr "Ongeldig beveiligingstoken. Vernieuw de pagina en probeer het opnieuw."
 
@@ -7654,7 +7655,7 @@ msgstr "U heeft zich al afgemeld. Wij zullen uw persoonlijke gegevens niet verko
 
 #: includes/class-do-not-sell-shortcode.php:245
 #: includes/class-do-not-sell-shortcode.php:296
-#: includes/class-dsar-shortcode.php:335
+#: includes/class-dsar-shortcode.php:428
 msgid "Too many requests. Please wait 1 minute before submitting again."
 msgstr "Te veel verzoeken. Wacht 1 minuut voordat u opnieuw indient."
 
@@ -7682,112 +7683,265 @@ msgstr ""
 "\n"
 "Er is geen actie vereist, tenzij u persoonsgegevens verkoopt of deelt. In dat geval dient u ervoor te zorgen dat de gegevens van deze gebruiker zijn uitgesloten van elke verkoop of deling."
 
-#: includes/class-dsar-shortcode.php:125
-msgid "Please fill in all required fields."
-msgstr "Vul alle verplichte velden in."
-
-#: includes/class-dsar-shortcode.php:126 includes/class-dsar-shortcode.php:305
-msgid "Please enter a valid email address."
-msgstr "Voer een geldig e-mailadres in."
-
-#: includes/class-dsar-shortcode.php:128 includes/class-utils.php:790
-msgid "Email"
-msgstr "E-mail"
-
-#: includes/class-dsar-shortcode.php:129 includes/class-utils.php:794
-msgid "Request type"
-msgstr "Aanvraagtype"
-
-#: includes/class-dsar-shortcode.php:143
+#: includes/class-dsar-admin.php:59 includes/class-dsar-shortcode.php:221
 msgid "Data Requests"
 msgstr "Gegevensverzoeken"
 
-#: includes/class-dsar-shortcode.php:175
+#: includes/class-dsar-admin.php:94
+msgid "Request details"
+msgstr ""
+
+#: includes/class-dsar-admin.php:102
+msgid "Handle this request"
+msgstr ""
+
+#: includes/class-dsar-admin.php:123 includes/class-dsar-shortcode.php:206
+#: includes/class-utils.php:790
+msgid "Email"
+msgstr "E-mail"
+
+#: includes/class-dsar-admin.php:126 includes/class-dsar-shortcode.php:207
+#: includes/class-utils.php:794
+msgid "Request type"
+msgstr "Aanvraagtype"
+
+#: includes/class-dsar-admin.php:127 includes/class-utils.php:806
+msgid "Submitted"
+msgstr "Ingediend"
+
+#: includes/class-dsar-admin.php:142
+msgid "Additional information from the requester"
+msgstr ""
+
+#: includes/class-dsar-admin.php:144
+msgid "(none provided)"
+msgstr ""
+
+#: includes/class-dsar-admin.php:151
+msgid "These values are stored exactly as submitted and cannot be edited here: the record is the audit trail of what the data subject asked for."
+msgstr ""
+
+#: includes/class-dsar-admin.php:168
+msgid "This record has no valid email address, so it cannot be turned into a WordPress privacy request."
+msgstr ""
+
+#: includes/class-dsar-admin.php:176
+msgid "A WordPress privacy request has already been created for this address. Finish it from the core tool:"
+msgstr ""
+
+#: includes/class-dsar-admin.php:184
+msgid "Create the matching WordPress privacy request. The data subject receives a confirmation link first — WordPress verifies the address before any data is exported or erased."
+msgstr ""
+
+#: includes/class-dsar-admin.php:188
+msgid "Create erasure request"
+msgstr ""
+
+#: includes/class-dsar-admin.php:189
+msgid "Create export request"
+msgstr ""
+
+#: includes/class-dsar-admin.php:199
+msgid "WordPress has no automated flow for this right: handle it by replying to the requester. An export request is still useful to see what data the site holds about them."
+msgstr ""
+
+#: includes/class-dsar-admin.php:205
+msgid "Reopen request"
+msgstr ""
+
+#: includes/class-dsar-admin.php:207
+msgid "Mark as completed"
+msgstr ""
+
+#: includes/class-dsar-admin.php:209
+msgid "GDPR Article 12 gives you one month to respond."
+msgstr ""
+
+#: includes/class-dsar-admin.php:224
+msgid "Request not found."
+msgstr ""
+
+#: includes/class-dsar-admin.php:228
+msgid "You are not allowed to handle data subject requests."
+msgstr ""
+
+#: includes/class-dsar-admin.php:243
+msgid "You are not allowed to create privacy requests."
+msgstr ""
+
+#: includes/class-dsar-admin.php:312
+msgid "Erasure request created. WordPress has emailed the requester a confirmation link; once they confirm, erase their data from Tools → Erase Personal Data."
+msgstr ""
+
+#: includes/class-dsar-admin.php:317
+msgid "Export request created. WordPress has emailed the requester a confirmation link; once they confirm, send their data from Tools → Export Personal Data."
+msgstr ""
+
+#: includes/class-dsar-admin.php:322
+msgid "WordPress already has an unconfirmed privacy request for this address, so a second one was not created."
+msgstr ""
+
+#: includes/class-dsar-admin.php:325
+msgid "Request marked as completed."
+msgstr ""
+
+#: includes/class-dsar-admin.php:326
+msgid "Request reopened."
+msgstr ""
+
+#: includes/class-dsar-admin.php:327
+msgid "The request could not be processed."
+msgstr ""
+
+#: includes/class-dsar-admin.php:359
+msgid "Requester"
+msgstr ""
+
+#: includes/class-dsar-admin.php:360
+msgid "Right invoked"
+msgstr ""
+
+#: includes/class-dsar-admin.php:410
+msgid "Awaiting action"
+msgstr ""
+
+#: includes/class-dsar-admin.php:411
+msgid "Sent to the WordPress privacy tools"
+msgstr ""
+
+#: includes/class-dsar-admin.php:412
+msgid "Completed"
+msgstr ""
+
+#: includes/class-dsar-admin.php:480
+msgid "Open Tools → Erase Personal Data"
+msgstr ""
+
+#: includes/class-dsar-admin.php:481
+msgid "Open Tools → Export Personal Data"
+msgstr ""
+
+#: includes/class-dsar-shortcode.php:203
+msgid "Please fill in all required fields."
+msgstr "Vul alle verplichte velden in."
+
+#: includes/class-dsar-shortcode.php:204 includes/class-dsar-shortcode.php:389
+msgid "Please enter a valid email address."
+msgstr "Voer een geldig e-mailadres in."
+
+#: includes/class-dsar-shortcode.php:259
 msgid "Send Request"
 msgstr "Verzoek verzenden"
 
-#: includes/class-dsar-shortcode.php:209
+#: includes/class-dsar-shortcode.php:293
 msgid "Right of Access (Article 15) — receive a copy of my data"
 msgstr "Recht op inzage (artikel 15) — een kopie van mijn gegevens ontvangen"
 
-#: includes/class-dsar-shortcode.php:210
+#: includes/class-dsar-shortcode.php:294
 msgid "Right to Erasure (Article 17) — delete my data"
 msgstr "Recht op verwijdering (artikel 17) — mijn gegevens verwijderen"
 
-#: includes/class-dsar-shortcode.php:211
+#: includes/class-dsar-shortcode.php:295
 msgid "Right to Data Portability (Article 20) — export my data"
 msgstr "Recht op gegevensoverdraagbaarheid (artikel 20) — mijn gegevens exporteren"
 
-#: includes/class-dsar-shortcode.php:212
+#: includes/class-dsar-shortcode.php:296
 msgid "Right to Rectification (Article 16) — correct my data"
 msgstr "Recht op rectificatie (artikel 16) — mijn gegevens corrigeren"
 
-#: includes/class-dsar-shortcode.php:213
+#: includes/class-dsar-shortcode.php:297
 msgid "Right to Restrict Processing (Article 18)"
 msgstr "Recht op beperking van de verwerking (artikel 18)"
 
-#: includes/class-dsar-shortcode.php:214
+#: includes/class-dsar-shortcode.php:298
 msgid "Right to Object (Article 21) — object to processing"
 msgstr "Recht van bezwaar (artikel 21) — bezwaar maken tegen verwerking"
 
-#: includes/class-dsar-shortcode.php:220
+#: includes/class-dsar-shortcode.php:304
 msgid "Fields marked with * are required."
 msgstr "Velden gemarkeerd met * zijn verplicht."
 
-#: includes/class-dsar-shortcode.php:236
+#: includes/class-dsar-shortcode.php:320
 msgid "Full Name"
 msgstr "Volledige naam"
 
-#: includes/class-dsar-shortcode.php:241
+#: includes/class-dsar-shortcode.php:325
 msgid "Email Address"
 msgstr "E-mailadres"
 
-#: includes/class-dsar-shortcode.php:246
+#: includes/class-dsar-shortcode.php:330
 msgid "Request Type"
 msgstr "Aanvraagtype"
 
-#: includes/class-dsar-shortcode.php:248
+#: includes/class-dsar-shortcode.php:332
 msgid "— Select a request type —"
 msgstr "— Selecteer een verzoektype —"
 
-#: includes/class-dsar-shortcode.php:256
+#: includes/class-dsar-shortcode.php:340
 msgid "Additional Information"
 msgstr "Aanvullende informatie"
 
-#: includes/class-dsar-shortcode.php:257
+#: includes/class-dsar-shortcode.php:341
 msgid "Optional: provide any additional context to help us identify your data."
 msgstr "Optioneel: geef aanvullende context om ons te helpen uw gegevens te identificeren."
 
-#: includes/class-dsar-shortcode.php:286
+#: includes/class-dsar-shortcode.php:370 includes/class-dsar-shortcode.php:515
 msgid "Submission rejected."
 msgstr "Indiening geweigerd."
 
-#: includes/class-dsar-shortcode.php:300
+#: includes/class-dsar-shortcode.php:384
 msgid "Please enter your full name."
 msgstr "Voer uw volledige naam in."
 
-#: includes/class-dsar-shortcode.php:312
-msgid "Too many requests. Please wait 1 hour before submitting again."
-msgstr "Te veel verzoeken. Wacht 1 uur voordat u opnieuw indient."
-
-#: includes/class-dsar-shortcode.php:317
+#: includes/class-dsar-shortcode.php:394
 msgid "Please select a valid request type."
 msgstr "Selecteer een geldig aanvraagtype."
 
-#: includes/class-dsar-shortcode.php:323
+#: includes/class-dsar-shortcode.php:400
 msgid "Your message is too long. Please limit it to 5,000 characters."
 msgstr "Uw bericht is te lang. Beperk het tot 5.000 tekens."
 
-#: includes/class-dsar-shortcode.php:352
+#: includes/class-dsar-shortcode.php:449
 msgid "We could not record your request due to a server error. Please try again."
 msgstr "We konden uw verzoek niet registreren vanwege een serverfout. Probeer het opnieuw."
 
-#: includes/class-dsar-shortcode.php:367
+#: includes/class-dsar-shortcode.php:472
 msgid "Your request has been received. We will respond within 30 days as required by law."
 msgstr "Uw verzoek is ontvangen. We zullen binnen 30 dagen reageren zoals wettelijk vereist."
 
+#: includes/class-dsar-shortcode.php:523
+msgid "Too many requests. Please wait 1 hour before submitting again."
+msgstr "Te veel verzoeken. Wacht 1 uur voordat u opnieuw indient."
+
+#: includes/class-dsar-shortcode.php:536
+msgid "This form has reached its daily limit for security reasons. Your request still matters: please email us directly to exercise your rights, and we will respond within the statutory deadline."
+msgstr ""
+
+#: includes/class-dsar-shortcode.php:545
+msgid "Too many requests from this connection. Please try again tomorrow, or email us directly to exercise your rights."
+msgstr ""
+
+#. translators: %s: site name
+#: includes/class-dsar-shortcode.php:752
+#, php-format
+msgid "[%s] Data requests are arriving faster than they can be emailed"
+msgstr ""
+
+#. translators: 1: site name, 2: requests in the last 24 hours, 3: the per-request mail ceiling, 4: requests awaiting action, 5: admin URL of the stored requests list
+#: includes/class-dsar-shortcode.php:755
+#, php-format
+msgid ""
+"%1$s has received %2$d data subject requests in the last 24 hours, past the %3$d after which they are no longer emailed one by one. They are still being recorded: %4$d are awaiting action.\n"
+"\n"
+"Review them here: %5$s\n"
+"\n"
+"This usually means the form is being targeted by automated submissions. Install a form-protection plugin (ALTCHA / OpenPorte, Turnstile, hCaptcha) and hook it into the faz_dsar_pre_submit filter, so the genuine requests are emailed individually again.\n"
+"\n"
+"You will get this summary at most once an hour while it lasts."
+msgstr ""
+
 #. translators: 1: site name, 2: name, 3: email, 4: request type, 5: date, 6: message
-#: includes/class-dsar-shortcode.php:427
+#: includes/class-dsar-shortcode.php:867
 #, php-format
 msgid ""
 "New data subject request received on %1$s.\n"
@@ -7815,25 +7969,25 @@ msgstr ""
 "U moet binnen 30 dagen reageren (AVG Art. 12). Reageer rechtstreeks op het e-mailadres van de verzoeker."
 
 #. translators: %s: admin URL to the request post
-#: includes/class-dsar-shortcode.php:439
+#: includes/class-dsar-shortcode.php:879
 #, php-format
-msgid "View logged request: %s"
-msgstr "Gelogd verzoek bekijken: %s"
+msgid "Open the request to handle it (you can turn it into a WordPress erasure or export request from there): %s"
+msgstr ""
 
 #. translators: 1: site name, 2: request type
-#: includes/class-dsar-shortcode.php:451
+#: includes/class-dsar-shortcode.php:891
 #, php-format
 msgid "[%1$s] Data Subject Request: %2$s"
 msgstr "[%1$s] Verzoek van betrokkene: %2$s"
 
 #. translators: %s: site name
-#: includes/class-dsar-shortcode.php:467
+#: includes/class-dsar-shortcode.php:907
 #, php-format
 msgid "[%s] We received your data request"
 msgstr "[%s] We hebben uw gegevensverzoek ontvangen"
 
 #. translators: 1: first name, 2: site name, 3: human-readable request type (e.g. "Right of Access (Art. 15 GDPR)")
-#: includes/class-dsar-shortcode.php:470
+#: includes/class-dsar-shortcode.php:910
 #, php-format
 msgid ""
 "Dear %1$s,\n"
@@ -7858,27 +8012,27 @@ msgstr ""
 "Met vriendelijke groeten,\n"
 "Het team van %2$s"
 
-#: includes/class-dsar-shortcode.php:486
+#: includes/class-dsar-shortcode.php:926
 msgid "Right of Access (Art. 15 GDPR)"
 msgstr "Recht op inzage (Art. 15 AVG)"
 
-#: includes/class-dsar-shortcode.php:487
+#: includes/class-dsar-shortcode.php:927
 msgid "Right to Erasure (Art. 17 GDPR)"
 msgstr "Recht op verwijdering (Art. 17 AVG)"
 
-#: includes/class-dsar-shortcode.php:488
+#: includes/class-dsar-shortcode.php:928
 msgid "Right to Data Portability (Art. 20 GDPR)"
 msgstr "Recht op gegevensoverdraagbaarheid (Art. 20 AVG)"
 
-#: includes/class-dsar-shortcode.php:489
+#: includes/class-dsar-shortcode.php:929
 msgid "Right to Rectification (Art. 16 GDPR)"
 msgstr "Recht op rectificatie (Art. 16 AVG)"
 
-#: includes/class-dsar-shortcode.php:490
+#: includes/class-dsar-shortcode.php:930
 msgid "Right to Restrict Processing (Art. 18 GDPR)"
 msgstr "Recht op beperking van de verwerking (Art. 18 AVG)"
 
-#: includes/class-dsar-shortcode.php:491
+#: includes/class-dsar-shortcode.php:931
 msgid "Right to Object (Art. 21 GDPR)"
 msgstr "Recht van bezwaar (Art. 21 AVG)"
 
@@ -7960,10 +8114,6 @@ msgstr "Privacyverzoeken (FAZ Cookie Manager)"
 msgid "Message"
 msgstr "Bericht"
 
-#: includes/class-utils.php:806
-msgid "Submitted"
-msgstr "Ingediend"
-
 #: includes/class-utils.php:847
 msgid "FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses; they auto-purge after the configured retention period."
 msgstr "Toestemmingslogs van FAZ Cookie Manager gebruiken geanonimiseerde IP-hashes en kunnen niet worden gekoppeld aan e-mailadressen; ze worden automatisch opgeruimd na de geconfigureerde bewaartermijn."
@@ -8043,6 +8193,10 @@ msgstr "Knop"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Link"
+
+#, php-format
+#~ msgid "View logged request: %s"
+#~ msgstr "Gelogd verzoek bekijken: %s"
 
 #~ msgid "Locked on while jurisdiction routing is active. Every shipped rule set requires a standing way to reopen and withdraw consent, so the runtime keeps this widget visible whatever this switch says — withdrawing has to stay as easy as giving. Its position, colours and icon below remain yours to change."
 #~ msgstr "Vergrendeld aan zolang jurisdictieroutering actief is. Elke meegeleverde regelset vereist een permanente manier om toestemming opnieuw te openen en in te trekken, dus houdt de runtime deze widget zichtbaar, ongeacht wat deze schakelaar zegt — intrekken moet net zo makkelijk blijven als geven. De positie, kleuren en het pictogram hieronder blijven voor jou aanpasbaar."
