@@ -596,6 +596,7 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 | `faz_language_map` | Add language code normalization mappings |
 | `faz_registered_admin_menus` | Register additional admin menu items |
 | `faz_load_shortcode_assets_everywhere` | Load a shortcode's frontend asset on every page (see below) |
+| `faz_bot_render_cache_veto` | Return `false` to keep the page cacheable when "Hide banner from search engine bots" is on. The banner then renders for crawlers too: hiding it and keeping the response cacheable cannot both be had, because a cache that does not key on the User-Agent hands the crawler's banner-less copy to the next human visitor |
 
 #### `faz_load_shortcode_assets_everywhere`
 
