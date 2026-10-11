@@ -69,8 +69,12 @@ function boot({ ready = 'loading', seed = '' } = {}) {
     fetched.push(String(input && input.url ? input.url : input));
     return Promise.resolve({ ok: true });
   };
+  // Captured BEFORE the bootstrap patches the prototype. Its shimmed
+  // getAttribute answers with the staged value, so only the native one can
+  // tell whether the attribute actually reached the element.
+  const nativeGetAttribute = window.Element.prototype.getAttribute;
   window.eval(code);
-  return { window, document: window.document, fetched, dom };
+  return { window, document: window.document, fetched, dom, nativeGetAttribute };
 }
 
 // The handoff the real runtime performs once its own interceptors are in place.
@@ -87,13 +91,18 @@ console.log('\nbootstrap: what is held while the runtime downloads');
 
 // 1 — a cross-origin src is held but reads back as applied.
 {
-  const { window, document } = boot();
+  const { window, document, nativeGetAttribute } = boot();
   const img = document.createElement('img');
   img.src = 'https://tracker.test/pixel.gif';
   eq('held img src reads back through the getter', img.src, 'https://tracker.test/pixel.gif');
-  eq('the attribute is not on the element yet', img.getAttribute('src'), 'https://tracker.test/pixel.gif');
+  eq('the attribute is not on the element yet', nativeGetAttribute.call(img, 'src'), null);
   ok('hasAttribute reports the staged value', img.hasAttribute('src'));
   runtimeHandoff(window);
+  // The same native probe, now that the handoff has applied the attribute: it
+  // answers differently on either side of the hold, so neither reading is a
+  // constant that would pass whatever the bootstrap did.
+  eq('and the native attribute appears once the runtime takes over',
+    nativeGetAttribute.call(img, 'src'), 'https://tracker.test/pixel.gif');
 }
 
 // 2 — sibling order survives the hold.
@@ -221,6 +230,33 @@ console.log('\nbootstrap: CSS that a regex would miss and an engine would fetch'
   window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
   await new Promise((r) => setTimeout(r, 0));
   eq('and the safety release does not apply it either', style.textContent, '');
+}
+
+// A ")" is legal inside a quoted CSS URL, so url("…/a)b") is one URL and not a
+// closed url() followed by junk. Every regex that parses the URL out of the
+// text stops at that paren, reads a prefix, and judges the remainder by it —
+// which is why the release rule asks whether the text could fetch at all.
+// Routed through insertRule, the CSSOM path that carries no element text.
+{
+  const { window, document } = boot();
+  const style = document.createElement('style');
+  document.head.appendChild(style);
+  const sheet = style.sheet;
+  sheet.insertRule('.p{background-image:url("https://tracker.test/a)b")}', 0);
+  eq('a quoted URL containing ")" is held', sheet.cssRules.length, 0);
+  runtimeHandoff(window);
+  eq('and the normal handoff applies it', sheet.cssRules.length, 1);
+}
+
+{
+  const { window, document } = boot();
+  const style = document.createElement('style');
+  document.head.appendChild(style);
+  const sheet = style.sheet;
+  sheet.insertRule('.p{background-image:url("https://tracker.test/a)b")}', 0);
+  window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
+  await new Promise((r) => setTimeout(r, 0));
+  eq('the safety release does not apply it either', sheet.cssRules.length, 0);
 }
 
 // deleteData adds no text at all — it was handed a length — yet removing what
