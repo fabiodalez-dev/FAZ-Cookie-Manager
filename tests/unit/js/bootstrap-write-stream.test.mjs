@@ -11,12 +11,17 @@
  * exemption is withdrawn unless the written stream is PROVABLY nothing but
  * script elements, comments and text.
  *
- * Proving an absence is the only safe shape here: a list of resource tags has
- * to be complete to be sound, and it never is. But the proof has to agree with
- * the tokenizer, and that is what these cases pin. Every "expected: true" row
- * below is a case where a regex-based version of this predicate said "no
- * resource markup" while the parser built an <img> — a consent bypass, each one
- * either found in review or by the probe that replaced it.
+ * Every hand-written version of that proof disagreed with the tokenizer
+ * somewhere, and every disagreement was a consent bypass: `</script foo>` and
+ * `</script/>` close script text, `--!>` and `<!-->` close comments, a comment
+ * before a <script> wins over it, `<image>` becomes an <img>, and an end tag
+ * split across two writes is still one end tag. So the predicate now asks the
+ * engine's own parser, on an inert DOMParser document that fetches nothing,
+ * and adds exactly one rule the parser cannot answer from a buffer: a tag left
+ * unterminated at the end, which a string parse discards at EOF but the real
+ * input stream completes.
+ *
+ * Every "withdraws" row below is a bypass that existed.
  *
  * The predicate is block-scoped inside the bootstrap IIFE, so it is extracted
  * by source markers and evaluated on its own. If the markers move, this test
@@ -25,6 +30,7 @@
  * Run: node tests/unit/js/bootstrap-write-stream.test.mjs
  */
 
+import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -46,7 +52,7 @@ function eq(label, actual, expected) {
   }
 }
 
-const OPEN = '    var wrote = false;\n    var inScript = false;';
+const OPEN = "    var wrote = false;\n    var written = '';";
 const CLOSE = "    ['write', 'writeln', 'open'].forEach";
 const from = SOURCE.indexOf(OPEN);
 const to = SOURCE.indexOf(CLOSE);
@@ -57,10 +63,18 @@ if (from === -1 || to === -1 || to < from) {
 const body = SOURCE.slice(from, to);
 eq('premise: the extracted slice is the predicate', /function noteWrite\(/.test(body), true);
 
-// A fresh scanner per case: the flag and the carried tail are state.
+const RESOURCES = /var RESOURCES = '([^']+)'/.exec(SOURCE);
+eq('premise: the resource element list was found', !!RESOURCES, true);
+
+// The predicate reads `w` (for DOMParser) and the file's RESOURCES list from
+// its enclosing scope, so both are injected. jsdom supplies the parser, which
+// is the point: the test exercises the real tokenizer, not a model of it.
+const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'http://site.test/' });
+
+// A fresh one per case: the flag and the accumulated stream are state.
 function scanner() {
   // eslint-disable-next-line no-new-func
-  return new Function(`${body}; return { note: noteWrite, withdrew: function () { return wrote; } };`)();
+  return new Function('w', 'RESOURCES', `${body}; return { note: noteWrite, withdrew: function () { return wrote; } };`)(dom.window, RESOURCES[1]);
 }
 
 // [calls, withdraws, label] — one call is one write(), its array the arguments.
@@ -74,6 +88,7 @@ const CASES = [
   [[['3 < 5 and 7 > 2']], false, 'a < that cannot start a tag is text'],
   [[['<!doctype html>']], false, 'a doctype is not an element'],
   [[['<scri'], ['pt src="/x.js"></script>']], false, 'a <script tag split across two calls'],
+  [[['<script>a</scr'], ['ipt>']], false, 'an end tag split across two calls, with nothing after it'],
   // Each of these was a bypass.
   [[['<script>x</script foo><img src=t>']], true, '</script foo> ends the script for the tokenizer'],
   [[['<script></script x><img src=t>']], true, '</script x> ends it too'],
@@ -86,11 +101,33 @@ const CASES = [
   [[['<im'], ['g src=x>']], true, 'a tag split across two calls'],
   [[['<im', 'g src=x>']], true, 'a tag split across two arguments of one call'],
   [[['<image src=x>']], true, 'the <image> alias the parser turns into <img>'],
-  [[['<frame src=x>']], true, '<frame>, which no tag list had'],
-  [[['<svg><image href=x></svg>']], true, 'an svg image'],
-  [[['<p>plain</p>']], true, 'any other element at all'],
+  // Corrected BY the parser: <frame> outside a frameset is dropped in body
+  // insertion mode, so nothing is built and nothing fetches. A hand-written
+  // predicate withdrew here for nothing.
+  [[['<frame src=x>']], false, 'a <frame> in body context, which the parser drops'],
+  // An SVG <image href> is outside the element set this file and the runtime's
+  // observer guard at all, so the exemption is irrelevant to it: it was never
+  // judged before this change either. Recorded as the limit it is.
+  [[['<svg><image href=x></svg>']], false, 'an svg image (outside the guarded element set — known limit)'],
+  // Markup with nothing to judge does not withdraw: the predicate asks the
+  // backstop's own element list, so a written <p> changes nothing about what
+  // the backstop would have done.
+  [[['<p>plain</p>']], false, 'an element that fetches nothing'],
   [[['<!x><img src=t>']], true, 'a bogus comment followed by an image'],
+  [[['<div id=x>'], ['<img src=t>']], true, 'plain markup first, a resource in the next call'],
+  // Five ways to put a hand-rolled scanner into a false "inside a script"
+  // state, after which it read everything as script text. All five are moot
+  // against the engine's parser, which is the argument for asking it.
+  [[['<!x<script><img src=t>']], true, 'a <script> inside a bogus <! comment'],
+  [[['<?x<script><img src=t>']], true, 'a <script> inside a bogus <? comment'],
+  [[['</ <script><img src=t>']], true, 'a <script> inside a bogus </ comment'],
+  [[['<!--!><script>--><img src=t>']], true, 'a comment end that overlaps its own opener'],
+  [[["</script x='>'<script>'><img src=t>"]], true, 'a quoted > inside an end tag'],
   [[['<script src="/a.js"></script>'], ['<im'], ['g src=x>']], true, 'a script first and a resource three calls later'],
+  [[['<script>x</scr'], ['ipt><img src=t>']], true, 'an end tag split across two writes is still one end tag'],
+  [[['<video src=x>']], true, 'a video'],
+  [[['<object data=x>']], true, 'an object'],
+  [[['<link rel=stylesheet href=x>']], true, 'a stylesheet link'],
 ];
 
 console.log('\nthe written stream is judged the way the tokenizer reads it');
