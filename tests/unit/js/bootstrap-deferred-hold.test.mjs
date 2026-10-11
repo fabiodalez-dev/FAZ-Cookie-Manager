@@ -648,6 +648,24 @@ console.log('\nbootstrap: markup that never passes through a setter');
 }
 
 {
+  // The exemption must not be an allowlist that fails open on the one sink
+  // nobody wrapped. document.write is that sink: its markup goes to the
+  // parser's input stream, so there are no nodes to tag when it returns, and
+  // the answer is to stop claiming the distinction at all — one written
+  // resource element and every insertion is judged again.
+  //
+  // That contract cannot be exercised here: jsdom has already closed the
+  // parser, so write() reopens the document and replaces documentElement,
+  // which detaches the observer and would make this pass for the wrong
+  // reason. It is pinned in tests/browser-intent/deferred-runtime.spec.ts
+  // against a real parser instead. What IS checkable here is that the wrapper
+  // is installed on both names, because the flag it sets is the whole gate.
+  const { window, document } = boot();
+  ok('document.write is wrapped', document.write !== window.Document.prototype.write);
+  ok('document.writeln is wrapped', document.writeln !== window.Document.prototype.writeln);
+}
+
+{
   // And the parser exemption must not become a bypass for a script sink used
   // while the document is still parsing — an inline script in the server HTML
   // is exactly that, and it is the common case in this window.

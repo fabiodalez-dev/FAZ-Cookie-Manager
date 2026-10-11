@@ -214,11 +214,14 @@
     // produced. Once parsing is over the parser is no longer a source of
     // insertions at all, and everything is script activity again.
     //
-    // Known gap: document.write/writeln during parsing. It hands markup to the
-    // parser's input stream rather than building nodes, so there is nothing to
-    // tag when the call returns. Its dominant payload is a <script src>, which
-    // guard() declines for the same reason the parser case exists; a resource
-    // element written that way is covered by nothing here until parsing ends.
+    // One thing this must not become is an allowlist of known sinks that fails
+    // open on the one nobody wrapped. Every API that inserts a node is held
+    // further down — appendChild, insertBefore, replaceChild, append, prepend,
+    // before, after, replaceWith, replaceChildren, insertAdjacentElement,
+    // insertAdjacentHTML — so a node that reaches the document through any of
+    // them never depended on this backstop in the first place. What is left is
+    // document.write, handled below by withdrawing the exemption rather than
+    // by trusting it.
     var sunk = typeof w.WeakSet === 'function' ? new w.WeakSet() : null;
     function tag(node) {
         if (!sunk || !node) return node;
@@ -291,11 +294,38 @@
     tagSink(w.Range && Range.prototype, 'createContextualFragment', function (original, args) {
         return tag(original.apply(this, args));
     });
+    // document.write hands markup to the parser's input stream instead of
+    // building nodes, so there is nothing to tag when the call returns — and
+    // from that moment an insertion by the parser and one this page wrote are
+    // indistinguishable. So stop distinguishing: as soon as written markup
+    // carries a resource element, the parser exemption is withdrawn for the
+    // rest of the page view and every insertion is judged again, which is
+    // where this file started. The cost lands only on a page that writes
+    // resource markup during parsing, and on that page enforcement is worth
+    // more than the second fetch it reintroduces; a page that does not write
+    // keeps its static markup untouched. Failing this way round is the whole
+    // point: an unwrapped sink must cost a request, never a consent decision.
+    var WRITTEN_RESOURCE = /<\s*(script|iframe|img|source|link|video|audio|embed|object|track|input)\b/i;
+    var wrote = false;
+    ['write', 'writeln'].forEach(function (name) {
+        if (typeof d[name] !== 'function') return;
+        replace(d, name, function (original) {
+            return function () {
+                for (var i = 0; !wrote && i < arguments.length; i++) {
+                    if (WRITTEN_RESOURCE.test(String(arguments[i]))) wrote = true;
+                }
+                return original.apply(this, arguments);
+            };
+        });
+    });
     function fromScript(node) {
         // No WeakSet (and therefore no tags): keep the broader behaviour rather
         // than silently dropping the backstop. Costs a double fetch on an
         // engine that predates 2015; losing enforcement would cost consent.
         if (!sunk) return true;
+        // Something wrote markup the parser swallowed: no node here can be
+        // attributed any more, so judge them all.
+        if (wrote) return true;
         // Parsing finished: the parser inserts nothing more, so every record
         // from here on is a script's doing.
         if (d.readyState !== 'loading') return true;

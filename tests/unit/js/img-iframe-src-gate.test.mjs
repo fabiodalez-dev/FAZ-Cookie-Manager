@@ -680,6 +680,22 @@ w.eval('_fazUnblockServerSide()');
 eq('SA7e: a denied category keeps the wider set parked', parkedDenied.getAttribute('src'), null);
 eq('SA7e: and keeps its URL', parkedDenied.getAttribute('data-faz-src'), YT);
 resetConsent();
+// SA7f — <object data> is the one key here whose restore is an HTML sink, not a
+// resource fetch: a data:text/html payload there runs in this origin. CodeQL
+// flagged the pass for exactly that reason. Only absolute http(s) is restored.
+const objHtml = w.document.createElement('object');
+native.call(objHtml, 'data-faz-data', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==');
+native.call(objHtml, 'data-faz-category', 'functional');
+w.document.body.appendChild(objHtml);
+const objJs = w.document.createElement('object');
+native.call(objJs, 'data-faz-data', 'javascript:alert(1)');
+native.call(objJs, 'data-faz-category', 'functional');
+w.document.body.appendChild(objJs);
+setConsent({ functional: 'yes' });
+w.eval('_fazUnblockServerSide()');
+eq('SA7f: a data:text/html object is never restored', objHtml.getAttribute('data'), null);
+eq('SA7f: nor a javascript: one', objJs.getAttribute('data'), null);
+resetConsent();
 // SA8 (review low) — srcset PROPERTY setter is gated (img.srcset = blocked parks).
 const saProp = w.document.createElement('img');
 saProp.srcset = GFONT + ' 2x';

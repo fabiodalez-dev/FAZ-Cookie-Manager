@@ -6058,8 +6058,18 @@ function _fazUnblockServerSide() {
             var cat = el.getAttribute("data-faz-category");
             var parked = el.getAttribute("data-faz-data");
             if (_fazShouldBlockResource(cat, parked, el.getAttribute("data-faz-service") || "")) return;
-            if (!_fazIsAllowedScheme(parked)) return;
-            el.setAttribute("data", parked);
+            // The one restore on this page that is an HTML sink rather than a
+            // resource fetch: <object data> can load a document, and a
+            // data:text/html payload there would run in this origin. So the
+            // value is resolved through the URL parser and admitted only as
+            // http(s) — stricter than _fazIsAllowedScheme, which lets a
+            // relative URL through, and free of cost here because the only
+            // thing that parks this key is the bootstrap and it parks nothing
+            // that is not absolute and cross-origin.
+            var resolved;
+            try { resolved = new URL(parked, document.baseURI); } catch (e) { return; }
+            if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') return;
+            el.setAttribute("data", resolved.href);
             if (!el.getAttribute("data")) return; // gate re-parked it — stay parked, recoverable
             el.removeAttribute("data-faz-data");
         });

@@ -263,3 +263,54 @@ for (const consent of ['no', 'yes', 'missing']) {
     expect(errors).toEqual([]);
   });
 }
+
+// document.write is the one markup sink the bootstrap cannot tag: its argument
+// goes to the parser's input stream, so there are no nodes to mark when the
+// call returns, and from that point an insertion by the parser and one the page
+// wrote are indistinguishable. The exemption that keeps server markup untouched
+// must therefore be withdrawn rather than trusted — an unwrapped sink may cost
+// a request, never a consent decision. Needs a real parser: jsdom has already
+// closed its own, where write() reopens the document instead.
+test('a written resource element withdraws the parser exemption', async ({ page }) => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('https://defer.example.test/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/config.js') { await gate; return route.fulfill({ contentType:'text/javascript', body:'window._fazStaticConfig={_providersToBlock:[{re:"tracker.example.test",categories:["analytics"]}],_cookieCategoryMap:{},_serviceCatalogue:{}};' }); }
+    if (path === '/runtime.js') return route.fulfill({ contentType:'text/javascript', body:runtime });
+    const config = {_block:'1',_staticConfigRequired:true,_activeLaw:'gdpr',_categories:[{slug:'necessary',isNecessary:true},{slug:'analytics',isNecessary:false}],_services:[],_userWhitelist:[],_perServiceConsent:false,_perCookieConsent:false,i18n:{}};
+    return route.fulfill({ contentType:'text/html', body:`<!doctype html><html><head>
+      <script>window.nativeGetAttr=Element.prototype.getAttribute;window._fazConfig=${JSON.stringify(config)};</script>
+      <script defer src="/config.js"></script>
+      <script>${bootstrap}</script>
+      <script defer src="/runtime.js"></script>
+      </head><body><p id="paint">rendered</p>
+      <img id="before-write" src="https://cdn.example.test/before.jpg" alt="">
+      <script>document.write('<img id="written" src="https://tracker.example.test/written.gif" alt="">');</script>
+      <img id="after-write" src="https://cdn.example.test/after.jpg" alt="">
+      </body></html>` });
+  });
+  await page.route('https://cdn.example.test/**', route => route.fulfill({ contentType:'image/gif', body:'' }));
+  await page.route('https://tracker.example.test/**', route => route.fulfill({ contentType:'image/gif', body:'' }));
+  await page.goto('https://defer.example.test/', {waitUntil:'commit'});
+  await expect(page.locator('#paint')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const native = (window as any).nativeGetAttr;
+    return ['written', 'after-write'].every((id) => {
+      const el = document.getElementById(id);
+      return !!el && !native.call(el, 'src') && !!native.call(el, 'data-faz-src');
+    });
+  }), { message: 'after a written resource element every insertion is judged again' }).toBe(true);
+  // The element the parser had already placed BEFORE the write keeps the
+  // exemption: withdrawing it cannot act backwards, and that resource was
+  // already fetched.
+  expect(await page.evaluate(() => (window as any).nativeGetAttr.call(document.getElementById('before-write')!, 'src')))
+    .toBe('https://cdn.example.test/before.jpg');
+  release();
+  await page.waitForLoadState('domcontentloaded');
+  // And the runtime hands back what the write cost: cdn.example.test is in no
+  // blocked category, so the price of the withdrawal is a second fetch, never
+  // a resource lost for the page view.
+  await expect.poll(() => page.evaluate(() => (window as any).nativeGetAttr.call(document.getElementById('after-write')!, 'src')))
+    .toBe('https://cdn.example.test/after.jpg');
+});
