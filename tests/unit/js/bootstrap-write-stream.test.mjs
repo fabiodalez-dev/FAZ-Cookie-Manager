@@ -52,8 +52,8 @@ function eq(label, actual, expected) {
   }
 }
 
-const OPEN = "    var wrote = false;\n    var written = '';";
-const CLOSE = "    ['write', 'writeln', 'open'].forEach";
+const OPEN = '/* write-predicate:start';
+const CLOSE = '/* write-predicate:end */';
 const from = SOURCE.indexOf(OPEN);
 const to = SOURCE.indexOf(CLOSE);
 if (from === -1 || to === -1 || to < from) {
@@ -84,7 +84,12 @@ const CASES = [
   [[['<script>var a="<img src=x>";</script>']], false, 'markup inside a script body is text, not markup'],
   [[['<script src="a>b" x=">"><img src=t></script>']], false, 'a > inside a quoted attribute value does not end the tag'],
   [[['<!-- <img src=x> -->']], false, 'a commented-out image is not an image'],
-  [[['<!-- unterminated <img src=x>']], false, 'a comment with no end runs past the written text'],
+  // Used to keep the exemption on the argument that the comment swallows
+  // whatever follows. It does — in the real stream the page's own bytes close
+  // it, and from that point this file cannot reason about the write at all.
+  // So it withdraws now, which is also what makes the two-write cases above
+  // safe.
+  [[['<!-- unterminated <img src=x>']], true, 'a comment with no end leaves the stream inside it'],
   [[['3 < 5 and 7 > 2']], false, 'a < that cannot start a tag is text'],
   [[['<!doctype html>']], false, 'a doctype is not an element'],
   [[['<scri'], ['pt src="/x.js"></script>']], false, 'a <script tag split across two calls'],
@@ -118,6 +123,16 @@ const CASES = [
   // Five ways to put a hand-rolled scanner into a false "inside a script"
   // state, after which it read everything as script text. All five are moot
   // against the engine's parser, which is the argument for asking it.
+  // Writes from different scripts are NOT contiguous: the server's markup sits
+  // between them. Joining them put a later resource inside a state the page's
+  // own bytes had already closed, and it went unexamined.
+  [[['<!--'], ['<iframe src="https://tracker.test/f.html"></iframe>']], true, 'a resource written after a comment the page closed'],
+  [[['<template>'], ['<iframe src="https://tracker.test/f.html"></iframe>']], true, 'a resource written after a <template> the page closed'],
+  [[['<!--']], true, 'a write that leaves the stream inside a comment'],
+  [[['<template>']], true, 'a write that leaves it inside a template'],
+  [[['<textarea>']], true, 'a write that leaves it inside RCDATA'],
+  [[['<xmp>']], true, 'a write that leaves it inside raw text'],
+  [[['<div>']], false, 'a write that leaves the stream in no special state'],
   [[['<!x<script><img src=t>']], true, 'a <script> inside a bogus <! comment'],
   [[['<?x<script><img src=t>']], true, 'a <script> inside a bogus <? comment'],
   [[['</ <script><img src=t>']], true, 'a <script> inside a bogus </ comment'],
