@@ -441,6 +441,16 @@ class Frontend {
 		if ( apply_filters( 'faz_is_amp_request', false ) ) {
 			return;
 		}
+		// This gate must stay ABOVE the bot gate below. Both only return, so
+		// the order was once immaterial; it stopped being so when the bot gate
+		// gained a side effect. On a page where the banner is off by settings
+		// or excluded by path, the render does not vary by User-Agent at all,
+		// so vetoing the page cache there would spend the cache for nothing —
+		// the same over-reach case 8b guards against for hide_from_bots: false.
+		// send_geo_cache_headers() orders these two the same way.
+		if ( $this->is_banner_disabled_by_settings() ) {
+			return;
+		}
 		// Skip banner for search engine bots (configurable via Settings).
 		//
 		// bot_suppression_applies() answers both halves of that question: the
@@ -452,9 +462,6 @@ class Frontend {
 		// never suppress (#158, gooloo.de); every other full-page cache gets a
 		// no-store veto instead (kalabron.com, LiteSpeed).
 		if ( $this->bot_suppression_applies() ) {
-			return;
-		}
-		if ( $this->is_banner_disabled_by_settings() ) {
 			return;
 		}
 
@@ -1886,7 +1893,7 @@ class Frontend {
 			 * favour of the cache, and FAZ then stops hiding the banner from
 			 * crawlers at all rather than risk hiding it from visitors.
 			 *
-			 * @since 1.34.2
+			 * @since 1.34.1
 			 * @param bool $veto Default true (hide from bots, bypass the cache).
 			 */
 			&& (bool) apply_filters( 'faz_bot_render_cache_veto', true )

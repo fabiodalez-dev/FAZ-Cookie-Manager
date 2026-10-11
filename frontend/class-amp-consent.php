@@ -180,7 +180,7 @@ class AMP_Consent {
 	 * installed the consent UI renders. Cache Compatibility Mode needs an
 	 * invariant document and never suppresses — the gate it was missing.
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 * @return bool
 	 */
 	private function bot_suppression_applies() {
@@ -228,9 +228,6 @@ class AMP_Consent {
 		if ( empty( $settings['banner_control']['status'] ) ) {
 			return true;
 		}
-		if ( $this->bot_suppression_applies() ) {
-			return true;
-		}
 		$excluded = isset( $settings['banner_control']['excluded_pages'] ) && is_array( $settings['banner_control']['excluded_pages'] )
 			? $settings['banner_control']['excluded_pages'] : array();
 		$current_id   = function_exists( 'get_the_ID' ) ? absint( get_the_ID() ) : 0;
@@ -247,6 +244,14 @@ class AMP_Consent {
 				&& faz_path_matches_pattern( trim( $exclusion ), $current_path ) ) {
 				return true;
 			}
+		}
+		// Last, because it is the only gate here with a side effect: it vetoes
+		// the page cache for the crawler-only render. A page the banner never
+		// reaches (status off, or excluded by id/path) does not vary by
+		// User-Agent, so it must reach this point and keep its cache entry.
+		// Frontend::enqueue_scripts() orders these the same way.
+		if ( $this->bot_suppression_applies() ) {
+			return true;
 		}
 		return false;
 	}
