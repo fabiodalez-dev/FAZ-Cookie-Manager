@@ -295,6 +295,15 @@ const WRITES = [
     withdraws: true,
   },
   {
+    label: 'a script closed by </script foo>',
+    // The tokenizer ends script text at `</script` followed by whitespace, `/`
+    // or `>`. A check that demanded the `>` read this as more script text and
+    // let the image through.
+    code: `document.write('<script>window.ran=1;<\\/script foo>'`
+      + ` + '<img id="written" src="https://tracker.example.test/endtag.gif" alt="">');`,
+    withdraws: true,
+  },
+  {
     label: 'a script-only write (the legacy tag)',
     // The other direction, and the one that costs rather than leaks:
     // withdrawing here would park every static resource after the write and
