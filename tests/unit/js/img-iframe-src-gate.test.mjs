@@ -628,6 +628,58 @@ w.eval('_fazUnblockServerSide()');
 eq('SA7: parked <source> src restored after consent', saSrc.getAttribute('src'), OSM);
 eq('SA7b: data-faz-src cleared on <source> after restore', saSrc.getAttribute('data-faz-src'), null);
 resetConsent();
+// SA7c (review major) — everything the DEFERRED BOOTSTRAP can park has to be
+// restorable from the same keys. bootstrap.js parks video, audio, embed, track,
+// input[type=image], object[data] and the poster frame of a media element,
+// because its element list is this runtime's own; the restore pass covered only
+// img, source, iframe and link. A resource held during the download window and
+// then consented to therefore stayed dead for the rest of the page view. The
+// parks below are written natively, which is exactly how the bootstrap leaves
+// them for this runtime to find.
+const native = w.Element.prototype.setAttribute;
+const parkedByBootstrap = {};
+['video', 'audio', 'embed', 'track'].forEach(function (tag) {
+  const el = w.document.createElement(tag);
+  native.call(el, 'data-faz-src', OSM);
+  native.call(el, 'data-faz-category', 'functional');
+  w.document.body.appendChild(el);
+  parkedByBootstrap[tag] = el;
+});
+const parkedInput = w.document.createElement('input');
+native.call(parkedInput, 'type', 'image');
+native.call(parkedInput, 'data-faz-src', OSM);
+native.call(parkedInput, 'data-faz-category', 'functional');
+w.document.body.appendChild(parkedInput);
+const parkedObject = w.document.createElement('object');
+native.call(parkedObject, 'data-faz-data', OSM);
+native.call(parkedObject, 'data-faz-category', 'functional');
+w.document.body.appendChild(parkedObject);
+const parkedPoster = w.document.createElement('video');
+native.call(parkedPoster, 'data-faz-poster', OSM);
+native.call(parkedPoster, 'data-faz-category', 'functional');
+w.document.body.appendChild(parkedPoster);
+setConsent({ functional: 'yes' });
+w.eval('_fazUnblockServerSide()');
+['video', 'audio', 'embed', 'track'].forEach(function (tag) {
+  eq('SA7c: parked <' + tag + '> src restored after consent', parkedByBootstrap[tag].getAttribute('src'), OSM);
+});
+eq('SA7c: parked input[type=image] src restored after consent', parkedInput.getAttribute('src'), OSM);
+eq('SA7c: parked object[data] restored after consent', parkedObject.getAttribute('data'), OSM);
+eq('SA7c: parked poster restored after consent', parkedPoster.getAttribute('poster'), OSM);
+eq('SA7d: data-faz-data cleared after restore', parkedObject.getAttribute('data-faz-data'), null);
+eq('SA7d: data-faz-poster cleared after restore', parkedPoster.getAttribute('data-faz-poster'), null);
+resetConsent();
+// A park whose category is still denied must stay parked — the restore widens
+// the element set, never the consent rule.
+const parkedDenied = w.document.createElement('video');
+native.call(parkedDenied, 'data-faz-src', YT);
+native.call(parkedDenied, 'data-faz-category', 'marketing');
+w.document.body.appendChild(parkedDenied);
+setConsent({ functional: 'yes' });
+w.eval('_fazUnblockServerSide()');
+eq('SA7e: a denied category keeps the wider set parked', parkedDenied.getAttribute('src'), null);
+eq('SA7e: and keeps its URL', parkedDenied.getAttribute('data-faz-src'), YT);
+resetConsent();
 // SA8 (review low) — srcset PROPERTY setter is gated (img.srcset = blocked parks).
 const saProp = w.document.createElement('img');
 saProp.srcset = GFONT + ' 2x';

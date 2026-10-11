@@ -73,8 +73,13 @@ function boot({ ready = 'loading', seed = '' } = {}) {
   // getAttribute answers with the staged value, so only the native one can
   // tell whether the attribute actually reached the element.
   const nativeGetAttribute = window.Element.prototype.getAttribute;
+  // The parser builds an element and inserts it without touching any wrapper.
+  // These two natives, captured before the patching, are the only way to
+  // reproduce that from a test: everything else in the window is gated.
+  const nativeSetAttribute = window.Element.prototype.setAttribute;
+  const nativeAppendChild = window.Node.prototype.appendChild;
   window.eval(code);
-  return { window, document: window.document, fetched, dom, nativeGetAttribute };
+  return { window, document: window.document, fetched, dom, nativeGetAttribute, nativeSetAttribute, nativeAppendChild };
 }
 
 // The handoff the real runtime performs once its own interceptors are in place.
@@ -607,6 +612,56 @@ console.log('\nbootstrap: markup that never passes through a setter');
   eq('embed is parked', document.querySelector('embed').getAttribute('src'), null);
   eq('object[data] is parked', document.querySelector('object').getAttribute('data'), null);
   eq('input[type=image] is parked', document.querySelector('input').getAttribute('src'), null);
+}
+
+{
+  // The other half of the same question: what the SERVER rendered.
+  //
+  // The observer is armed in <head>, so it also sees every node the parser
+  // builds from the page's own HTML. Judging those by origin — all this file
+  // can do — stripped the src off a static CDN image until the handoff, which
+  // fetched it twice and took the LCP element down with it, and blocked
+  // nothing: the parser had already started that request. The server-side
+  // blocker is the authority for server markup and had already rewritten
+  // whatever needed blocking.
+  const { window, document, nativeGetAttribute, nativeSetAttribute, nativeAppendChild } = boot();
+  const hero = document.createElement('img');
+  nativeSetAttribute.call(hero, 'src', 'https://cdn.test/hero.jpg');
+  nativeAppendChild.call(document.getElementById('list'), hero);
+  await new Promise((r) => setTimeout(r, 0));
+  eq('a parser-built cross-origin img keeps its src',
+    nativeGetAttribute.call(hero, 'src'), 'https://cdn.test/hero.jpg');
+  eq('and is not parked', nativeGetAttribute.call(hero, 'data-faz-src'), null);
+
+  // Not a blanket exemption for untagged insertions: it holds only while the
+  // parser can still be the one inserting. Once parsing is over, every record
+  // is a script's doing again and the backstop applies to all of them —
+  // including sinks nobody wrapped.
+  Object.defineProperty(document, 'readyState', { value: 'interactive', configurable: true });
+  const late = document.createElement('img');
+  nativeSetAttribute.call(late, 'src', 'https://tracker.test/late.gif');
+  nativeAppendChild.call(document.getElementById('list'), late);
+  await new Promise((r) => setTimeout(r, 0));
+  eq('the same insertion after parsing is parked',
+    nativeGetAttribute.call(late, 'src'), null);
+  eq('with its URL kept', nativeGetAttribute.call(late, 'data-faz-src'), 'https://tracker.test/late.gif');
+}
+
+{
+  // And the parser exemption must not become a bypass for a script sink used
+  // while the document is still parsing — an inline script in the server HTML
+  // is exactly that, and it is the common case in this window.
+  const { window, document, nativeGetAttribute } = boot();
+  eq('premise: the document is parsing', document.readyState, 'loading');
+  document.getElementById('list').innerHTML = '<img src="https://tracker.test/sink.gif">';
+  const frag = document.createRange().createContextualFragment('<img src="https://tracker.test/range.gif">');
+  document.body.appendChild(frag);
+  await new Promise((r) => setTimeout(r, 0));
+  eq('innerHTML during parsing is still judged',
+    nativeGetAttribute.call(document.querySelector('#list img'), 'src'), null);
+  const ranged = Array.prototype.slice.call(document.querySelectorAll('img'))
+    .filter((el) => nativeGetAttribute.call(el, 'data-faz-src') === 'https://tracker.test/range.gif');
+  eq('createContextualFragment during parsing is still judged', ranged.length, 1);
 }
 
 console.log('\nbootstrap: the safety release is not the end of enforcement');
