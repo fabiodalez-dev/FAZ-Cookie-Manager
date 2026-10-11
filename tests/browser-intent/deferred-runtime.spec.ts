@@ -26,7 +26,7 @@ for (const consent of ['no', 'yes', 'missing']) {
       }
       const config = {_block:'1',_staticConfigRequired:true,_aggressiveCssUrlBlocking:true,_activeLaw:'gdpr',_categories:[{slug:'necessary',isNecessary:true},{slug:'analytics',isNecessary:false}],_services:[],_userWhitelist:[],_perServiceConsent:false,_perCookieConsent:false,i18n:{}};
       return route.fulfill({ contentType:'text/html', body:`<!doctype html><html><head>
-        <script>window._fazConfig=${JSON.stringify(config)};</script>
+        <script>window.nativeGetAttr=Element.prototype.getAttribute;window._fazConfig=${JSON.stringify(config)};</script>
         <script defer src="/config.js"></script>
         <script>${bootstrap}</script>
         <script defer src="/runtime.js"></script>
@@ -46,8 +46,29 @@ for (const consent of ['no', 'yes', 'missing']) {
           var image=new Image();image.src='https://tracker.example.test/pixel.gif';
           var frame=document.createElement('iframe');frame.src='https://tracker.example.test/frame';document.head.append(frame);
           var essential=document.createElement('script');essential.src='/essential.js';essential.onload=function(){window.essentialOnload=true;};document.head.appendChild(essential);
+          // A candidate LIST whose first entry is relative: resolving the whole
+          // string as one URL reads it as same-origin and never looks at the
+          // tracker entry, which is the bug the runtime already fixed.
+          var ss=window.ssProbe=new Image();ss.id='ss';ss.srcset='/local.png 1x, https://tracker.example.test/srcset.gif 2x';document.head.appendChild(ss);
         </script>
-        </head><body><div class="probe">CSS resource probe</div><p id="paint">Page rendered while consent downloads</p></body></html>` });
+        </head><body><div class="probe">CSS resource probe</div><p id="paint">Page rendered while consent downloads</p>
+        <div id="markup-host"></div>
+        <script>
+          // Markup routes, driven from the body where the container is really
+          // attached. These never pass through a setter this file can wrap: the
+          // parser builds the nodes. Before the runtime was deferred, its own
+          // MutationObserver covered them — armed in <head>, ahead of every page
+          // script — and deferring armed it after the document had parsed, so
+          // the whole download window lost the only coverage they ever had.
+          var host=document.getElementById('markup-host');
+          var mk=document.createElement('div');host.appendChild(mk);
+          mk.innerHTML='<img id="ih" src="https://tracker.example.test/innerhtml.gif"><iframe id="ihf" src="https://tracker.example.test/innerhtml-frame"></iframe>';
+          var iah=document.createElement('div');host.appendChild(iah);
+          iah.insertAdjacentHTML('beforeend','<img id="iahimg" src="https://tracker.example.test/iah.gif">');
+          var oh=document.createElement('div');host.appendChild(oh);
+          oh.outerHTML='<div id="ohw"><img id="ohimg" src="https://tracker.example.test/outerhtml.gif"></div>';
+        </script>
+        </body></html>` });
     });
     await page.routeWebSocket('wss://tracker.example.test/**', () => {requests.push('socket');});
     await page.route('https://tracker.example.test/**', async route => {
@@ -56,7 +77,45 @@ for (const consent of ['no', 'yes', 'missing']) {
     });
     await page.goto('https://defer.example.test/', {waitUntil:'commit'});
     await expect(page.locator('#paint')).toBeVisible();
-    expect(requests).toEqual([]);
+    // The setter routes are a synchronous guarantee: the assignment is
+    // intercepted before the engine ever sees a URL, so nothing may be
+    // requested. The markup routes are not, and cannot be — the only gate
+    // available to a parser-built node is an asynchronous observer, which is
+    // exactly what script.js has always used and documents as best-effort
+    // against the first fetch. So they are judged on the state they end in,
+    // below, not on winning a race.
+    const MARKUP = ['/innerhtml.gif', '/innerhtml-frame', '/iah.gif', '/outerhtml.gif'];
+    // Treated as one set everywhere below, because which member of it reaches
+    // the network is a property of the engine's scheduler, not of this plugin.
+    expect(requests.filter((path) => !MARKUP.includes(path))).toEqual([]);
+    // And the one route no observer can ever win: an <iframe> navigates
+    // synchronously on insertion, while an <img> queues its load and the
+    // observer notification gets there first. That is measured against the
+    // previous release, not asserted away — before this runtime was deferred
+    // the same differential leaked /innerhtml-frame too, because the protection
+    // there was also an observer. Parity is the goal; a synchronous guarantee
+    // for parser-built markup is not available to a client-side gate at all.
+    // What IS guaranteed: every one of them is parked under the attribute the
+    // runtime restores from, instead of being left live and unexamined. That
+    // last state was the permanent half of the regression — nothing re-reads an
+    // already-present node, so there was no placeholder, no per-service reveal
+    // and no re-evaluation when consent changed.
+    await expect.poll(() => page.evaluate(() => {
+      const ids = ['ih', 'ihf', 'iahimg', 'ohimg'];
+      return ids.every((id) => {
+        const el = document.getElementById(id);
+        return !!el && !el.getAttribute('src') && !!el.getAttribute('data-faz-src') && !!el.getAttribute('data-faz-category');
+      });
+    })).toBe(true);
+    // The list is held by the setter route, so during the window it is simply
+    // not on the element at all — neither applied nor parked. Parking is what
+    // the safety release does with it, asserted in the `missing` branch below.
+    // Read through the retained reference, not by id — document.head already
+    // carries a held insertion, so every later append to it queues behind that
+    // one and this element is still detached — and through the NATIVE accessor,
+    // because the bootstrap's getAttribute deliberately answers with the staged
+    // value so libraries can read back what they just set.
+    expect(await page.evaluate(() => (window as any).nativeGetAttr.call((window as any).ssProbe, 'srcset'))).toBe(null);
     expect(await page.evaluate(() => (window as any).inlineCfgRead)).toBe(true);
     expect(await page.evaluate(() => (window as any).earlyURL)).toBe('https://tracker.example.test/script.js');
     expect(await page.evaluate(() => (window as any).earlyAttr)).toBe('https://tracker.example.test/script.js');
@@ -72,7 +131,14 @@ for (const consent of ['no', 'yes', 'missing']) {
       // trackers, so the bootstrap releases same-origin work at
       // DOMContentLoaded and keeps third-party resources parked.
       await expect.poll(() => page.evaluate(() => (window as any).essentialOnload)).toBe(true);
-      expect(requests).toEqual(['essential']);
+      // Same split as before the release: the setter routes may request nothing,
+      // the parser-built nodes are allowed to have raced the observer, and
+      // nothing else may appear. Which of them wins that race is engine
+      // dependent — Chromium queues an image load and the observer notification
+      // gets there first, WebKit starts it synchronously and it does not — so
+      // the race is measured, not asserted away, and the end state is what this
+      // gate pins.
+      expect(requests.filter((path) => !MARKUP.includes(path))).toEqual(['essential']);
       // The cross-origin fetch resolves with the same empty 200 the runtime's
       // own gate returns — a rejection would surface as an unhandled rejection
       // in callers that never expected to be blocked — but no request is made.
@@ -84,12 +150,54 @@ for (const consent of ['no', 'yes', 'missing']) {
       // back to server-side blocking.
       expect(await page.evaluate(() => Array.from(document.querySelectorAll('script,iframe,img'))
         .filter((el) => (el.getAttribute('src') || '').includes('tracker.example.test')).length)).toBe(0);
-      expect(await page.evaluate(() => Array.from(document.querySelectorAll('script,iframe'))
+      expect(await page.evaluate(() => Array.from(document.querySelectorAll('script,iframe,img'))
         .map((el) => el.getAttribute('data-faz-src'))
         .filter((v) => (v || '').includes('tracker.example.test')).sort())).toEqual([
           'https://tracker.example.test/frame',
+          'https://tracker.example.test/iah.gif',
+          'https://tracker.example.test/innerhtml-frame',
+          'https://tracker.example.test/innerhtml.gif',
+          'https://tracker.example.test/outerhtml.gif',
           'https://tracker.example.test/script.js',
         ]);
+      // The detached probes (new Image(), the removeAttribute'd one) are not in
+      // the document and so are not in the list above; the held pixel is
+      // asserted through its own reference.
+      expect(await page.evaluate(() => (window as any).nativeGetAttr.call((window as any).ssProbe, 'data-faz-srcset')))
+        .toBe('/local.png 1x, https://tracker.example.test/srcset.gif 2x');
+      // The permanent half of the regression, and the part that mattered more
+      // than the extra request: a markup-injected node used to stay live and
+      // unexamined for the whole page view — no placeholder, no per-service
+      // reveal, no re-evaluation when consent changed. None is left live now.
+      expect(await page.evaluate(() => Array.from(document.querySelectorAll('img,iframe,script,video,audio,embed,object,input'))
+        .map((el) => el.getAttribute('src') || el.getAttribute('data') || '')
+        .filter((v) => v.includes('tracker.example.test')))).toEqual([]);
+      // Everything the bootstrap parks carries a category, because every
+      // runtime restore selector requires one. Without it a resource that was
+      // merely delayed is dead for the rest of the page view, even on full
+      // consent — a leak traded for silent destruction.
+      expect(await page.evaluate(() => Array.from(document.querySelectorAll('[data-faz-src]'))
+        .every((el) => !!el.getAttribute('data-faz-category')))).toBe(true);
+      // The release is not the end of enforcement: a cross-origin assignment
+      // made after DOMContentLoaded is still parked, which is what the warning
+      // printed on this path claims.
+      expect(await page.evaluate(() => {
+        const late = document.createElement('img');
+        document.body.appendChild(late);
+        late.src = 'https://tracker.example.test/after-release.gif';
+        return [late.getAttribute('src'), late.getAttribute('data-faz-src')];
+      })).toEqual([null, 'https://tracker.example.test/after-release.gif']);
+      expect(requests).not.toContain('/after-release.gif');
+      expect(await page.evaluate(() => document.documentElement.className.includes('faz-consent-runtime-missing'))).toBe(true);
+      // The candidate list is parked in its own key, which the runtime restores
+      // by re-reading every candidate — not in data-faz-src, where it would be
+      // read back as one URL.
+      expect(await page.evaluate(() => {
+        const el = (window as any).ssProbe as HTMLImageElement;
+        const native = (window as any).nativeGetAttr;
+        return [native.call(el, 'srcset'), native.call(el, 'data-faz-srcset')];
+      })).toEqual([null, '/local.png 1x, https://tracker.example.test/srcset.gif 2x']);
+      expect(requests).not.toContain('/srcset.gif');
       expect(errors).toEqual([]);
       return;
     }
@@ -99,7 +207,16 @@ for (const consent of ['no', 'yes', 'missing']) {
       const response=await (window as any).retainedFetch('https://tracker.example.test/retained');return response.status;
     })).toBe(200);
     expect(await page.evaluate(() => (window as any)._fazConfig._providersToBlock.length)).toBe(1);
-    if (consent === 'no') expect(requests).toEqual(['essential']);
+    if (consent === 'no') {
+      // Same split as above: the setter routes may request nothing, the
+      // parser-built iframe is allowed to have raced the observer, and nothing
+      // else may appear. Listing them rather than filtering loosely, so a new
+      // leak on any other route still fails this gate.
+      expect(requests.filter((path) => !MARKUP.includes(path))).toEqual(['essential']);
+      expect(await page.evaluate(() => Array.from(document.querySelectorAll('img,iframe'))
+        .map((el) => el.getAttribute('src') || '')
+        .filter((v) => v.includes('tracker.example.test')))).toEqual([]);
+    }
     else {
       await expect.poll(() => requests.includes('/script.js')) .toBe(true);
       expect(requests).toContain('/fetch');

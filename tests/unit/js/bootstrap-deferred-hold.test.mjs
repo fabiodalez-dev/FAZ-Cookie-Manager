@@ -296,6 +296,505 @@ console.log('\nbootstrap: CSS that a regex would miss and an engine would fetch'
   ok('and it applies at handoff', style.textContent.indexOf('tracker.test') !== -1);
 }
 
+console.log('\nbootstrap: hold and release judge the same text (six style routes)');
+
+// The hold rule concatenated the element's existing text with the incoming
+// fragment; the release rule judged the fragment alone. So a fragment that
+// completes a URL the <style> already half-holds passed the release check and
+// was fetched. Six routes had that shape, and no existing case could see any of
+// them: every cross-boundary test above stops at runtimeHandoff, where the
+// policy sets no sameOriginOnly and the release check is unconditionally true.
+// These dispatch DOMContentLoaded instead, which is the only path where the
+// release rule does anything.
+const SPLIT_SEED = '<style id="seed">.p{background-image:u</style>';
+
+async function release(window) {
+  window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
+  await new Promise((r) => setTimeout(r, 0));
+}
+
+// Route 1 — appendChild of a text node into the <style>.
+{
+  const { window, document } = boot({ seed: SPLIT_SEED });
+  const style = document.getElementById('seed');
+  style.appendChild(document.createTextNode('rl(https://tracker.test/a1.png)}'));
+  await release(window);
+  ok('appendChild: the safety release does not complete the URL',
+    style.textContent.indexOf('tracker.test') === -1);
+}
+
+// Route 2 — the ParentNode mixin, one argument.
+{
+  const { window, document } = boot({ seed: SPLIT_SEED });
+  const style = document.getElementById('seed');
+  style.append('rl(https://tracker.test/a2.png)}');
+  await release(window);
+  ok('append: the safety release does not complete the URL',
+    style.textContent.indexOf('tracker.test') === -1);
+}
+
+// Route 3 — insertAdjacentText.
+{
+  const { window, document } = boot({ seed: SPLIT_SEED });
+  const style = document.getElementById('seed');
+  style.insertAdjacentText('beforeend', 'rl(https://tracker.test/a3.png)}');
+  await release(window);
+  ok('insertAdjacentText: the safety release does not complete the URL',
+    style.textContent.indexOf('tracker.test') === -1);
+}
+
+// Route 4 — the character-data setter.
+{
+  const { window, document } = boot({ seed: SPLIT_SEED });
+  const style = document.getElementById('seed');
+  const node = style.firstChild;
+  node.data = '.p{background-image:url(https://tracker.test/a4.png)}';
+  await release(window);
+  ok('the data setter: the safety release does not apply the URL',
+    style.textContent.indexOf('tracker.test') === -1);
+}
+
+// Route 5 — appendData, whose release used to ask about the fragment.
+{
+  const { window, document } = boot({ seed: SPLIT_SEED });
+  const style = document.getElementById('seed');
+  style.firstChild.appendData('rl(https://tracker.test/a5.png)}');
+  await release(window);
+  ok('appendData: the safety release does not complete the URL',
+    style.textContent.indexOf('tracker.test') === -1);
+}
+
+// Route 6 — CharacterData.replaceWith, previously released per argument.
+{
+  const { window, document } = boot({ seed: '<style id="seed">x</style>' });
+  const style = document.getElementById('seed');
+  style.firstChild.replaceWith('.p{background-image:url(https://tracker.test/a6.png)}');
+  await release(window);
+  ok('CharacterData.replaceWith: the safety release does not apply the URL',
+    style.textContent.indexOf('tracker.test') === -1);
+}
+
+// Two gaps that do not need a failed runtime at all: they leak during the
+// ordinary hold window, which makes them worse than the six above.
+{
+  // Judging each argument separately: neither half carries "url(" alone.
+  const { window, document } = boot();
+  const style = document.createElement('style');
+  document.head.appendChild(style);
+  style.append('.q{background-image:u', 'rl(https://tracker.test/b1.png)}');
+  ok('a URL split across two arguments of one append is held',
+    style.textContent.indexOf('tracker.test') === -1);
+  runtimeHandoff(window);
+  ok('and it applies at handoff', style.textContent.indexOf('tracker.test') !== -1);
+}
+
+{
+  // prepend inserts in FRONT, so the junction that matters is
+  // fragment + existing text — the opposite order from append.
+  const { window, document } = boot({ seed: '<style id="seed">l(https://tracker.test/b2.png)}</style>' });
+  const style = document.getElementById('seed');
+  style.prepend('.p{background-image:ur');
+  ok('prepend completing a URL from the front is held',
+    style.textContent.indexOf('background-image') === -1);
+  runtimeHandoff(window);
+  ok('and it applies at handoff', style.textContent.indexOf('background-image') !== -1);
+}
+
+{
+  // CharacterData.before/after was unpatched: only replaceWith had a block.
+  const { window, document } = boot({ seed: SPLIT_SEED });
+  const style = document.getElementById('seed');
+  style.firstChild.after('rl(https://tracker.test/b3.png)}');
+  ok('a sibling inserted after the text node inside <style> is held',
+    style.textContent.indexOf('tracker.test') === -1);
+  runtimeHandoff(window);
+  ok('and it applies at handoff', style.textContent.indexOf('tracker.test') !== -1);
+}
+
+{
+  // Removing the node that split a URL reveals it — the same reason deleteData
+  // is intercepted. Built with splitText, which is not an intercepted route, so
+  // the three text nodes exist before the method under test is called.
+  const { window, document } = boot({ seed: '<style id="seed">.p{background-image:url(https:/*x*/ /tracker.test/b4.png)}</style>' });
+  const style = document.getElementById('seed');
+  const head = style.firstChild;
+  const at = head.data.indexOf('/*x*/');
+  const middle = head.splitText(at);
+  middle.splitText(5);
+  eq('premise: the style now holds three text nodes', style.childNodes.length, 3);
+  const before = style.textContent;
+  style.removeChild(middle);
+  eq('removing the comment node that split the URL is held', style.textContent, before);
+  runtimeHandoff(window);
+  ok('and the removal applies at handoff', style.textContent !== before);
+}
+
+{
+  // The other error direction. before/after/replaceWith insert SIBLINGS, so a
+  // string placed after the <style> tag never becomes CSS and must not be held:
+  // testing the element itself held it, which delayed ordinary page content.
+  const { window, document } = boot();
+  const style = document.createElement('style');
+  document.head.appendChild(style);
+  style.after('url(https://tracker.test/not-css.png)');
+  ok('text placed AFTER a <style> tag is not CSS and is not held',
+    document.head.textContent.indexOf('not-css.png') !== -1);
+}
+
+console.log('\nbootstrap: srcset and imagesrcset are candidate lists, not URLs');
+
+// Resolving the whole list as one URL answers about the FIRST candidate only —
+// commas and spaces percent-encode into the path — so a list beginning with a
+// relative URL read as same-origin and the tracker candidate was released.
+{
+  const { window, document } = boot();
+  const img = document.createElement('img');
+  document.body.appendChild(img);
+  img.srcset = '/local.png 1x, https://tracker.test/px.png 2x';
+  await release(window);
+  eq('a list with a cross-origin candidate is not applied', img.getAttribute('srcset'), null);
+  eq('it is parked under the key the runtime restores lists from',
+    img.getAttribute('data-faz-srcset'), '/local.png 1x, https://tracker.test/px.png 2x');
+  ok('and not under the single-URL key', img.getAttribute('data-faz-src') === null);
+}
+
+{
+  const { window, document } = boot();
+  const img = document.createElement('img');
+  document.body.appendChild(img);
+  img.srcset = '/a.png 1x, /b.png 2x';
+  await release(window);
+  eq('an all-same-origin list is released intact', img.getAttribute('srcset'), '/a.png 1x, /b.png 2x');
+}
+
+{
+  const { window, document } = boot();
+  const source = document.createElement('source');
+  document.body.appendChild(source);
+  source.setAttribute('srcset', '/local.png 1x, https://tracker.test/px.png 2x');
+  await release(window);
+  eq('setAttribute("srcset") with a remote candidate is parked', source.getAttribute('srcset'), null);
+  ok('under its own list key', source.getAttribute('data-faz-srcset') !== null);
+}
+
+{
+  const { window, document } = boot();
+  const link = document.createElement('link');
+  link.setAttribute('rel', 'preload');
+  document.head.appendChild(link);
+  link.setAttribute('imagesrcset', '/local.png 1x, https://tracker.test/px.png 2x');
+  await release(window);
+  eq('imagesrcset with a remote candidate is parked', link.getAttribute('imagesrcset'), null);
+  ok('under data-faz-imagesrcset', link.getAttribute('data-faz-imagesrcset') !== null);
+}
+
+console.log('\nbootstrap: what is parked has to be restorable');
+
+// Every runtime restore selector requires BOTH the parking attribute and a
+// category: img[data-faz-src][data-faz-category], link[data-faz-href]
+// [data-faz-category]. Parking without one, or collapsing two attributes onto
+// one key, turned a delayed resource into a dead one.
+{
+  const { window, document } = boot();
+  const img = document.createElement('img');
+  document.body.appendChild(img);
+  img.src = 'https://tracker.test/one.gif';
+  img.srcset = '/local.png 1x, https://tracker.test/two.gif 2x';
+  await release(window);
+  eq('src keeps its own key', img.getAttribute('data-faz-src'), 'https://tracker.test/one.gif');
+  ok('srcset does not overwrite it', img.getAttribute('data-faz-srcset') !== null);
+  ok('and the src park carries a category the restore pass can select on',
+    !!img.getAttribute('data-faz-category'));
+  ok('while the list carries its own, so the two cannot collide',
+    !!img.getAttribute('data-faz-srcset-category'));
+}
+
+{
+  const { window, document } = boot();
+  const link = document.createElement('link');
+  link.setAttribute('rel', 'stylesheet');
+  document.head.appendChild(link);
+  link.href = 'https://tracker.test/a.css';
+  await release(window);
+  eq('a parked link uses data-faz-href', link.getAttribute('data-faz-href'), 'https://tracker.test/a.css');
+  ok('and carries a category', !!link.getAttribute('data-faz-category'));
+}
+
+// The normal handoff is where the category can be real: only the runtime has
+// provider rules, so the bootstrap asks it.
+{
+  const { window, document } = boot();
+  const img = document.createElement('img');
+  document.body.appendChild(img);
+  img.src = 'https://tracker.test/named.gif';
+  window._fazBootstrap.start();
+  window._fazBootstrap.finish({
+    script: function () {},
+    node: function () {},
+    url: function () { return true; },
+    sameOriginOnly: true,
+    park: null,
+    category: function () { return 'analytics'; }
+  });
+  eq('the runtime names the category for a resource it refuses',
+    img.getAttribute('data-faz-category'), 'analytics');
+}
+
+console.log('\nbootstrap: markup that never passes through a setter');
+
+// innerHTML, outerHTML, insertAdjacentHTML and document.write reach the parser,
+// not a setter, so no wrapper in this file can see them. Before the runtime was
+// deferred its own MutationObserver covered them, armed in <head>; deferring it
+// armed it after the document had parsed and left the whole download window
+// with no coverage at all. The backstop here asks the same question of the DOM.
+{
+  const { window, document } = boot();
+  document.getElementById('list').innerHTML = '<img src="https://tracker.test/innerhtml.gif">';
+  await new Promise((r) => setTimeout(r, 0));
+  const img = document.querySelector('#list img');
+  ok('premise: the element really was created', !!img);
+  eq('an img injected through innerHTML has no live src', img.getAttribute('src'), null);
+  eq('its URL is parked where the runtime looks', img.getAttribute('data-faz-src'), 'https://tracker.test/innerhtml.gif');
+  ok('and it carries a category', !!img.getAttribute('data-faz-category'));
+}
+
+{
+  const { window, document } = boot();
+  document.getElementById('list').insertAdjacentHTML('beforeend', '<iframe src="https://tracker.test/iah.html"></iframe>');
+  await new Promise((r) => setTimeout(r, 0));
+  const frame = document.querySelector('#list iframe');
+  ok('premise: the iframe really was created', !!frame);
+  eq('an iframe injected through insertAdjacentHTML has no live src', frame.getAttribute('src'), null);
+  ok('it is parked', !!frame.getAttribute('data-faz-src'));
+  ok('and hidden, as the runtime hides a parked frame', frame.classList.contains('faz-hidden'));
+}
+
+{
+  const { window, document } = boot();
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  host.outerHTML = '<div id="replaced"><img src="https://tracker.test/outerhtml.gif"></div>';
+  await new Promise((r) => setTimeout(r, 0));
+  const img = document.querySelector('#replaced img');
+  ok('premise: the replacement really happened', !!img);
+  eq('an img injected through outerHTML has no live src', img.getAttribute('src'), null);
+}
+
+{
+  // Same-origin markup is untouched: the backstop must not hold the site's own
+  // images, or it would be a page-wide regression dressed up as a fix.
+  const { window, document } = boot();
+  document.getElementById('list').innerHTML = '<img src="/local.gif">';
+  await new Promise((r) => setTimeout(r, 0));
+  const img = document.querySelector('#list img');
+  eq('a same-origin img injected through innerHTML keeps its src', img.getAttribute('src'), '/local.gif');
+  eq('and is not parked', img.getAttribute('data-faz-src'), null);
+}
+
+{
+  // The wider element set the observer covers for free, and which the setter
+  // list had no entry for at all.
+  const { window, document } = boot();
+  document.getElementById('list').innerHTML =
+    '<video src="https://tracker.test/v.mp4"></video>'
+    + '<audio src="https://tracker.test/a.mp3"></audio>'
+    + '<embed src="https://tracker.test/e.swf">'
+    + '<object data="https://tracker.test/o.bin"></object>'
+    + '<input type="image" src="https://tracker.test/i.gif">';
+  await new Promise((r) => setTimeout(r, 0));
+  eq('video is parked', document.querySelector('video').getAttribute('src'), null);
+  eq('audio is parked', document.querySelector('audio').getAttribute('src'), null);
+  eq('embed is parked', document.querySelector('embed').getAttribute('src'), null);
+  eq('object[data] is parked', document.querySelector('object').getAttribute('data'), null);
+  eq('input[type=image] is parked', document.querySelector('input').getAttribute('src'), null);
+}
+
+console.log('\nbootstrap: the safety release is not the end of enforcement');
+
+// The release used to restore every native API and install nothing in its
+// place, so from DOMContentLoaded on there was no client-side enforcement at
+// all — while the warning it printed said third-party resources stayed parked.
+{
+  const { window, document, fetched } = boot();
+  await release(window);
+
+  const late = document.createElement('img');
+  document.body.appendChild(late);
+  late.src = 'https://tracker.test/after-release.gif';
+  eq('a cross-origin src assigned AFTER the release is still not applied', late.getAttribute('src'), null);
+  eq('it is parked instead', late.getAttribute('data-faz-src'), 'https://tracker.test/after-release.gif');
+
+  const ours = document.createElement('img');
+  document.body.appendChild(ours);
+  ours.src = '/local-after-release.gif';
+  eq('a same-origin src assigned after the release goes through', ours.getAttribute('src'), '/local-after-release.gif');
+
+  const before = fetched.length;
+  window.fetch('https://tracker.test/after-release');
+  window.fetch(SITE + 'wp-json/after-release');
+  await new Promise((r) => setTimeout(r, 0));
+  eq('one of the two late requests was sent', fetched.length, before + 1);
+  ok('and it is the first-party one', fetched[fetched.length - 1].indexOf('wp-json/after-release') !== -1);
+}
+
+console.log('\nbootstrap: API contracts the wrappers must not break');
+
+// CSSStyleSheet.replace() resolves with the sheet, and callers chain on it.
+{
+  const { window, document } = boot();
+  const sheet = new window.CSSStyleSheet();
+  const promise = sheet.replace('.p{background-image:url(https://tracker.test/r.png)}');
+  await release(window);
+  const resolved = await promise;
+  eq('a refused replace() still resolves with the sheet', resolved, sheet);
+}
+
+// data:, blob: and about: make no network request; judging them by origin
+// called them remote ("null") and refused a site's own inline SVG.
+{
+  const { window } = boot();
+  const xhr = new window.XMLHttpRequest();
+  xhr.open('GET', 'data:text/plain,hello', false);
+  let threw = '';
+  try { xhr.send(); } catch (e) { threw = e.name || 'threw'; }
+  ok('a synchronous data: XHR is not refused as cross-origin', threw !== 'InvalidStateError');
+}
+
+// A ws:// URL never equals an http(s) origin, so a same-origin socket was
+// always refused while fetch and XHR let the identical host through.
+{
+  const sockets = [];
+  const dom = new JSDOM('<!DOCTYPE html><html><head></head><body></body></html>', { runScripts: 'outside-only', url: SITE });
+  const { window } = dom;
+  Object.defineProperty(window.document, 'readyState', { value: 'loading', configurable: true });
+  window._fazConfig = { _block: true };
+  window.WebSocket = function (url) { sockets.push(String(url)); };
+  window.WebSocket.prototype = { addEventListener: function () {}, close: function () {}, send: function () {} };
+  window.eval(code);
+  new window.WebSocket('ws://site.test/live');
+  new window.WebSocket('wss://tracker.test/live');
+  eq('no socket connected while held', sockets.length, 0);
+  window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
+  await new Promise((r) => setTimeout(r, 0));
+  eq('the same-origin socket connects on release', sockets.length, 1);
+  ok('and it is the first-party one', sockets[0].indexOf('site.test') !== -1);
+}
+
+// An inline <script> with no src and no FAZ blocking attribute is deliberately
+// not held: an inline script's one guarantee is that it has run by the time
+// appendChild returns, and nothing here — nor in the runtime, whose gate keys on
+// those same attributes — can read a body and tell a tracker snippet from a page
+// builder's configuration. Holding it broke reading back an inline
+// configuration on the very next line, an ordinary pattern.
+{
+  const { window, document } = boot();
+  const inline = document.createElement('script');
+  inline.textContent = 'window.__fazInlineRan = true;';
+  document.body.appendChild(inline);
+  ok('a plain inline script still runs synchronously on insertion',
+    document.body.contains(inline));
+  // One carrying the plugin's own category marker IS held, because then the
+  // runtime's script gate has something to decide on.
+  const tagged = document.createElement('script');
+  tagged.setAttribute('data-faz-category', 'marketing');
+  tagged.textContent = 'window.__fazTaggedRan = true;';
+  document.body.appendChild(tagged);
+  ok('a category-tagged inline script is held', !document.body.contains(tagged));
+  const seen = [];
+  window._fazBootstrap.start();
+  window._fazBootstrap.finish({
+    script: function (el) { seen.push(el.nodeName); return el; },
+    node: function (el) { seen.push('node:' + el.nodeName); },
+    url: function () { return false; }
+  });
+  ok('and it reaches the handoff policy', seen.length > 0);
+}
+
+// A second handoff must say so rather than return in silence: a drain that did
+// nothing looks exactly like a drain that worked.
+{
+  const { window } = boot();
+  const warnings = [];
+  window.console.warn = function () { warnings.push(Array.prototype.join.call(arguments, ' ')); };
+  runtimeHandoff(window);
+  window._fazBootstrap.finish({ script: function () {}, node: function () {}, url: function () { return false; } });
+  ok('a repeated handoff is reported', warnings.some((line) => line.indexOf('already drained') !== -1));
+}
+
+console.log('\nbootstrap: same-origin is decided by the URL parser, not by a prefix');
+
+// A scheme allowlist matched on the raw string put this check and the engine's
+// URL parser into disagreement, and the disagreement was exploitable:
+// `blob:https://tracker.example/uuid` BEGINS with an allowed scheme while its
+// resolved origin is a third party, so the string test called it same-origin and
+// the safety release let it through. Decided on the resolved origin now.
+{
+  const { window, document } = boot();
+  const img = document.createElement('img');
+  document.body.appendChild(img);
+  img.src = 'blob:https://tracker.test/abcd';
+  await release(window);
+  eq('a blob: URL carrying a third-party origin is not applied', img.getAttribute('src'), null);
+  eq('it is parked', img.getAttribute('data-faz-src'), 'blob:https://tracker.test/abcd');
+}
+
+{
+  // The other direction: a genuine same-origin blob — what URL.createObjectURL
+  // hands back — must still be released, or a site's own object URLs break.
+  const { window, document } = boot();
+  const img = document.createElement('img');
+  document.body.appendChild(img);
+  img.src = 'blob:' + SITE + 'abcd';
+  await release(window);
+  eq('a same-origin blob: URL is released', img.getAttribute('src'), 'blob:' + SITE + 'abcd');
+}
+
+{
+  // `javascript:` runs code rather than fetching and its resolved origin is
+  // "null", so it has no business in a "makes no network request" allowlist.
+  // It stays held, which is what this file did before the list was added.
+  const { window, document } = boot();
+  const frame = document.createElement('iframe');
+  document.body.appendChild(frame);
+  frame.src = 'javascript:void 0';
+  await release(window);
+  eq('a javascript: URL is not released by the safety policy', frame.getAttribute('src'), null);
+}
+
+{
+  // data: and about: carry no network destination at all. Judging them by
+  // origin called them remote ("null") and refused a site's own inline SVG.
+  const { window, document } = boot();
+  const a = document.createElement('img');
+  const b = document.createElement('iframe');
+  document.body.appendChild(a);
+  document.body.appendChild(b);
+  a.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+  b.src = 'about:blank';
+  await release(window);
+  eq('a data: URL is released', a.getAttribute('src'), 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
+  eq('about:blank is released', b.getAttribute('src'), 'about:blank');
+}
+
+console.log('\nbootstrap: a consent-tagged inline script never runs without consent');
+
+// The script gate read a URL to decide, so an inline script had none and the
+// check returned early — the script then replayed and executed on the safety
+// release, with no consent decision anywhere. On the one route where the
+// publisher said explicitly that the code is gated, that is a bypass.
+// Reproduced in Chromium before the fix.
+{
+  const { window, document } = boot();
+  const tagged = document.createElement('script');
+  tagged.setAttribute('data-faz-category', 'marketing');
+  tagged.textContent = 'window.__fazTaggedRan = true;';
+  document.body.appendChild(tagged);
+  await release(window);
+  eq('it is stamped inert rather than executed', tagged.getAttribute('type'), 'javascript/blocked');
+  ok('and marked as ours, so the restore pass can re-enable it later',
+    tagged.getAttribute('data-faz-blocked-by-us') === '1');
+}
+
 console.log('\nhandoff: the policy matches URLs the way the runtime does');
 
 // The policy handed to finish() used to match the raw URL string, while the
