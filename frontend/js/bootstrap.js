@@ -334,36 +334,47 @@
     // document.open() withdraws unconditionally: it discards the document and
     // replaces documentElement, so the static markup this exemption is about
     // no longer exists.
+    /* write-predicate:start — sliced out and run against the engine's own
+       tokenizer by tests/unit/js/bootstrap-write-stream.test.mjs and
+       tests/browser-intent/write-stream-differential.spec.ts. Both fail loudly
+       if these markers move; keep them around the predicate and nothing else,
+       and note that the slice is evaluated with only `w` and `RESOURCES` in
+       scope. */
     var wrote = false;
-    var written = '';
+    // A sentinel element, to ask the parser one question it cannot be asked
+    // directly: after this text, is the stream still inside something that
+    // swallows markup? If the sentinel comes back as an element the state is
+    // closed; if it was eaten as comment text, raw text, an attribute or
+    // template content, it is not. No list of such constructs is needed, which
+    // is the point — <!--, <template>, <textarea>, <title>, <style>, <xmp>,
+    // <plaintext> and an unfinished tag all answer the same way.
+    var PROBE = '<faz-probe-open></faz-probe-open>';
     function noteWrite(args) {
         if (wrote) return;
         // No DOMParser, no distinction: withdraw and be done.
         if (typeof w.DOMParser !== 'function') { wrote = true; return; }
-        // The STREAM, not the call. write() concatenates its arguments and
-        // successive calls into one input stream, so a tag — or a `</script`
-        // end tag — can straddle either boundary and only the whole buffer
-        // reads the same way the parser does.
-        written += Array.prototype.join.call(args, '');
-        // And the answer comes from the engine's own parser, because every
-        // hand-written version of this predicate disagreed with it somewhere:
-        // `</script foo>` and `</script/>` close script text, `--!>` and
-        // `<!-->` close comments, a comment before a <script> wins over it,
-        // `<image>` becomes an <img>. Those were five separate bypasses in two
-        // regex passes and a hand-rolled scan. A DOMParser document is inert —
-        // it fetches nothing — so asking it costs nothing but the parse, and
-        // it cannot be in disagreement with itself.
+        // Each call on its OWN, deliberately. Joining successive writes into
+        // one buffer was wrong in both directions, because writes from
+        // different scripts are not contiguous in the real stream — the
+        // server's markup sits between them. A `write('<!--')` followed later
+        // by `write('<iframe src=tracker>')` read as one string puts the iframe
+        // inside a comment that the page's own `-->` had already closed, and
+        // the iframe went unexamined and navigated. Judging each call by itself
+        // cannot make that mistake, and the state a call LEAVES open is handled
+        // below instead of being guessed at.
+        var text = Array.prototype.join.call(args, '');
         var doc;
-        try { doc = new w.DOMParser().parseFromString(written, 'text/html'); }
+        try { doc = new w.DOMParser().parseFromString(text, 'text/html'); }
         catch (e) { wrote = true; return; }
         // Asked with the backstop's OWN element list, so the two cannot drift:
         // the question is not "is this markup" but "could it have introduced
         // something the backstop would otherwise have judged". A written <p> or
         // <div> introduces nothing to judge, and the server's markup around it
         // stays the server's. The one thing outside that list in both places is
-        // an SVG <image href>, which neither this file nor the runtime's own
-        // observer has ever guarded — a pre-existing limit of the element set,
-        // not something this predicate can close on its own.
+        // an SVG <image href>, which neither this file, nor the runtime's
+        // observer, nor the server-side pass has ever guarded — a limit of the
+        // element set, measured in write-stream-differential.spec.ts, not
+        // something this predicate can close on its own.
         var found = doc.querySelectorAll(RESOURCES);
         for (var i = 0; i < found.length; i++) {
             // SCRIPT is the one exception, and it is the dominant payload of
@@ -374,25 +385,26 @@
             // Markup that script writes comes back through this wrapper.
             if (found[i].nodeName !== 'SCRIPT') { wrote = true; return; }
         }
-        // One thing the parser cannot answer from a buffer: a tag left
-        // unterminated at its end. Parsing a string ends at EOF, where the
-        // tokenizer discards it — but written text is not at EOF. It sits at
-        // the insertion point with the rest of the network stream behind it,
-        // so the page's own next `>` closes the tag and the element is built.
-        // `write('<img src=x alt=""')` is a real image. So an unterminated tail
-        // withdraws unless nothing it can grow into fetches anything: a prefix
-        // of `<script`, whose only resource-fetching completion is <script>
-        // itself, or a `<!` form, which can only become a doctype or a comment.
-        var open = /<[^>]*$/.exec(written);
-        if (!open) return;
-        var head = open[0].toLowerCase();
-        // An END tag can never build an element, whatever it grows into — and
-        // `</scr` is how `<script>a</script>` looks when the end tag is split
-        // across two writes, which is ordinary.
-        if (head.indexOf('</') === 0) return;
-        if ('<script'.indexOf(head) === 0 || '<!--'.indexOf(head) === 0 || head === '<!') return;
+        // Nothing to judge in the text itself. But if it leaves the stream
+        // inside a swallowing state, the page's own bytes close that state —
+        // and from there this file can no longer reason about what the write
+        // did, because a string parse ends at EOF where the real stream does
+        // not. So withdraw, unless nothing the tail can grow into fetches
+        // anything: a prefix of `<script`, whose only resource-fetching
+        // completion is <script> itself, or any `</` end tag, which builds no
+        // element at all. `write('<img src=x alt=""')` is a real image and
+        // withdraws; `write('<script>x</scr')` is an end tag mid-split and
+        // does not.
+        var probe;
+        try { probe = new w.DOMParser().parseFromString(text + PROBE, 'text/html'); }
+        catch (e) { wrote = true; return; }
+        if (probe.querySelector('faz-probe-open')) return;
+        var open = /<[^>]*$/.exec(text);
+        var head = open ? open[0].toLowerCase() : '';
+        if (head.indexOf('</') === 0 || ('<script'.indexOf(head) === 0 && head !== '')) return;
         wrote = true;
     }
+    /* write-predicate:end */
     ['write', 'writeln', 'open'].forEach(function (name) {
         // On Document.prototype, not on the document. An instance wrapper is
         // skipped by Document.prototype.write.call(document, …), which is one
