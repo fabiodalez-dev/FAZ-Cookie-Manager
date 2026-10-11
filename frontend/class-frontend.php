@@ -80,6 +80,15 @@ class Frontend {
 	private $bootstrap_js = null;
 
 	/**
+	 * Whether the inline bootstrap is being attached to a head handle on this
+	 * request. Nothing in the chain may be deferred unless it is: see
+	 * enqueue_deferred_script().
+	 *
+	 * @var bool
+	 */
+	private $bootstrap_emitted = false;
+
+	/**
 	 * Banner object
 	 *
 	 * @var object
@@ -274,6 +283,8 @@ class Frontend {
 		add_filter( 'wp_redirect', array( $this, 'filter_server_cookies_before_redirect' ), PHP_INT_MAX, 2 );
 		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
 		add_filter( 'script_loader_tag', array( $this, 'defer_runtime_script_tag' ), 25, 2 );
+		// After every enqueue hook has run, before anything is printed.
+		add_action( 'wp_print_scripts', array( $this, 'warn_on_undeferred_handles' ), PHP_INT_MAX );
 		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
 
 		// Auto-exclusion from cache/optimization plugins' defer + delay +
@@ -294,6 +305,16 @@ class Frontend {
 			// `text/plain`.
 			add_filter( 'script_loader_tag', array( $this, 'tag_own_scripts_nooptimize' ), 20, 2 );
 
+			// On a handle this plugin defers itself, `data-no-defer="1"` and the
+			// LiteSpeed defer-exclusion below read like a contradiction and are
+			// not one: they say "do not APPLY YOUR deferral to this", which is
+			// exactly what protects the ordering this plugin chose. An optimizer
+			// that re-deferred or delayed these handles would either duplicate
+			// the attribute or, with "delay until interaction", hold the consent
+			// runtime until the first click — by which point the scripts a click
+			// releases have already fired. The one thing none of these hints must
+			// do is remove a defer that is already there, and none of them does.
+			//
 			// LiteSpeed Cache pattern-based exclude lists
 			// (belt-and-suspenders in case the tag attribute ever gets
 			// stripped by a future LS release).
@@ -502,6 +523,46 @@ class Frontend {
 			$alt_asset     = ! empty( $faz_settings['banner_control']['alternative_asset_path'] );
 			$script_handle = $alt_asset ? 'faz-fw' : $this->plugin_name;
 
+			/**
+			 * Opt-in: load the main banner bundle in the footer instead of the
+			 * head. External bundles use defer in either position; the inline
+			 * bootstrap protects dynamic resources until they execute. Default
+			 * false keeps the bootstrap in the head, before page scripts run.
+			 * Server-side blocking is unaffected.
+			 *
+			 * Ignored when Google Consent Mode or the IAB TCF CMP is active.
+			 * Both declare this handle as a dependency and must themselves load
+			 * in <head> — GCM has to emit `consent default` and the TCF stub has
+			 * to define `__tcfapi` before any ad script runs, and moving them
+			 * later is a compliance regression, not a tuning choice.
+			 * WP_Scripts::set_group then pulls a dependency back into the head
+			 * group, so honouring the filter while either is enabled produced no
+			 * footer move at all: the option read as supported and silently did
+			 * nothing on exactly the installs most likely to want it. Now the
+			 * constraint is explicit, and `faz_main_script_effective_in_footer`
+			 * reports what was actually applied.
+			 *
+			 * Resolved HERE, before the first deferred enqueue, because whether
+			 * the bootstrap reaches the head is what decides if deferring any
+			 * handle in this chain is safe — including the configuration file,
+			 * which is enqueued before the main handle exists.
+			 *
+			 * @since 1.26.0
+			 * @param bool $in_footer Default false (head).
+			 */
+			$in_footer = (bool) apply_filters( 'faz_main_script_in_footer', false );
+			if ( $in_footer && ! $alt_asset ) {
+				$gcm_active = is_object( $this->gcm_settings ) && true === $this->gcm_settings->is_gcm_enabled();
+				$tcf_active = (bool) $this->settings->get( 'iab', 'enabled' )
+					&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2;
+				if ( $gcm_active || $tcf_active ) {
+					$in_footer = false;
+				}
+			}
+			// Alternative-asset mode inlines every bundle and attaches no
+			// bootstrap, so nothing in that mode is deferred either way.
+			$this->bootstrap_emitted = ! $alt_asset && ! $in_footer && '' !== $this->deferred_bootstrap_js();
+
 			// Offload the static bulk of _fazConfig (provider block patterns,
 			// cookie-category map and, with per-service consent, the ~43 KB
 			// service catalogue — all identical for every visitor of a given
@@ -536,38 +597,6 @@ class Frontend {
 				$this->enqueue_inline_bundle( $script_handle, 'js/script' . $suffix . '.js', array(), false );
 			} else {
 				/**
-				 * Opt-in: load the main banner bundle in the footer instead of
-				 * the head. External bundles use defer in either position;
-				 * the inline bootstrap protects dynamic resources until they
-				 * execute. Default false keeps the bootstrap in the head,
-				 * before page scripts run. Server-side blocking is unaffected.
-				 *
-				 * Ignored when Google Consent Mode or the IAB TCF CMP is active.
-				 * Both of those declare this handle as a dependency and must
-				 * themselves load in <head> — GCM has to emit `consent default`
-				 * and the TCF stub has to define `__tcfapi` before any ad script
-				 * runs, and moving them later is a compliance regression, not a
-				 * tuning choice. WP_Scripts::set_group then pulls a dependency
-				 * back into the head group, so honouring the filter here while
-				 * either is enabled produced no footer move at all: the option
-				 * read as supported and silently did nothing on exactly the
-				 * installs most likely to want it. Now the constraint is
-				 * explicit, and `faz_main_script_effective_in_footer` reports
-				 * what was actually applied.
-				 *
-				 * @since 1.26.0
-				 * @param bool $in_footer Default false (head).
-				 */
-				$in_footer = (bool) apply_filters( 'faz_main_script_in_footer', false );
-				if ( $in_footer ) {
-					$gcm_active = is_object( $this->gcm_settings ) && true === $this->gcm_settings->is_gcm_enabled();
-					$tcf_active = (bool) $this->settings->get( 'iab', 'enabled' )
-						&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2;
-					if ( $gcm_active || $tcf_active ) {
-						$in_footer = false;
-					}
-				}
-				/**
 				 * The position actually used, after the GCM/TCF constraint above.
 				 *
 				 * Read-only signal for diagnostics and for anyone who needs to
@@ -587,9 +616,13 @@ class Frontend {
 				// dependency executes. Inline "before" code runs while parsing and
 				// must never depend on a deferred external file being available.
 				$bootstrap_js = $this->deferred_bootstrap_js();
-				if ( '' !== $bootstrap_js ) {
-					wp_add_inline_script( $script_handle, $bootstrap_js, 'before' );
-				}
+				$attached     = '' !== $bootstrap_js
+					&& false !== wp_add_inline_script( $script_handle, $bootstrap_js, 'before' );
+				// The verdict above was a prediction; this is what happened.
+				// wp_add_inline_script() returns false on an empty payload or an
+				// unregistered handle, and a silent false is how a deferred
+				// runtime ends up with nothing holding its window.
+				$this->note_bootstrap_emission( $attached, ! $in_footer );
 			}
 
 			// Pre-initialise window.dataLayer so third-party trackers that emit
@@ -695,9 +728,29 @@ class Frontend {
 				$gcm_suffix = $this->get_script_suffix( 'js/gcm' );
 				$gcm_handle = $script_handle . '-gcm';
 				// Basic mode also needs its baseline before page-level Google
-				// snippets. This small bridge is self-contained (it reads the
-				// inline config and consent cookie), so keep it synchronous and
-				// inline while the config/main/TCF downloads remain deferred.
+				// snippets. This small bridge is self-contained and must stay
+				// synchronous while the config/main/TCF downloads are deferred.
+				//
+				// "Self-contained" is the load-bearing claim, so it is spelled
+				// out: gcm.js reads `window._fazConfig` (localized, printed in
+				// the data bucket ahead of every inline below it), the inline
+				// `var _fazGcm` above, and the `fazcookie-consent` cookie. It
+				// touches nothing script.js creates — no `window.fazcookie`, no
+				// merged static configuration — and its consent wiring is a
+				// `fazcookie_consent_update` listener, which is ordering-free by
+				// construction. Add a dependency on anything script.js defines
+				// and this bundle has to move back behind the deferred runtime,
+				// which puts the `consent default` baseline after the page's own
+				// Google snippets: a compliance regression, not a tuning choice.
+				//
+				// The dependency on $script_handle is dropped in non-alt mode for
+				// a second, separate reason: enqueue_inline_bundle() attaches its
+				// code in the default 'after' position, and
+				// WP_Scripts::filter_eligible_strategies() clears the strategy of
+				// any handle with an 'after' inline AND of everything it depends
+				// on. Re-adding array( $script_handle ) here would therefore
+				// un-defer the entire chain silently. warn_on_undeferred_handles()
+				// reports it under WP_DEBUG if it ever happens again.
 				$this->enqueue_inline_bundle( $gcm_handle, 'js/gcm' . $gcm_suffix . '.js', $alt_asset ? array( $script_handle ) : array(), false );
 			}
 
@@ -927,6 +980,16 @@ class Frontend {
 						"})" .
 					"}).catch(function(){});" .
 				"});";
+				// 'before', not the default 'after', and both halves of that
+				// matter. An 'after' inline makes WordPress drop the defer
+				// strategy for this handle and for the configuration file it
+				// depends on, which would revert the whole non-blocking chain
+				// without a word. And it is safe here because this snippet
+				// depends on nothing script.js defines: it registers a
+				// `fazcookie_consent_update` listener and reads `_fazConsentLog`,
+				// which wp_localize_script() prints in the data bucket above it.
+				// The listener only ever fires long after the runtime has
+				// executed, so running at parse time costs nothing.
 				wp_add_inline_script( $script_handle, $inline_js, 'before' );
 			}
 
@@ -988,18 +1051,107 @@ class Frontend {
 		}
 	}
 
-	/** Keep the dependency chain ordered and non-blocking on WP 5.0+ too. */
+	/**
+	 * Keep the dependency chain ordered and non-blocking on WP 5.0+ too.
+	 *
+	 * What a visitor experiences, since "non-blocking" is not free. A `defer`
+	 * script is fetched during parsing and executed before DOMContentLoaded, so
+	 * the banner's first paint moves from "as soon as the head script runs" to
+	 * "once the document has parsed" — later, but still before the load event
+	 * and still on the same page view, never after a navigation. It does not
+	 * move the layout: the notice container is `position: fixed`, so it is
+	 * outside the flow wherever it appears, and the anti-FOUC rule in
+	 * insert_styles() keeps it invisible until the runtime has positioned it
+	 * rather than painting it unstyled first. Embeds the server blocked keep
+	 * their placeholder throughout, because that markup and the banner
+	 * stylesheet are both in the HTML and neither is deferred. What a visitor
+	 * can see during the window is a third-party resource some script is trying
+	 * to insert dynamically: it is held, so the space is empty until the handoff.
+	 * That is the trade this release makes, and it is the same trade the hold
+	 * has always made — the alternative is letting the request out first.
+	 *
+	 * Deferring is only safe while the inline bootstrap is holding dynamic
+	 * resources for the download window; without it the runtime arrives after
+	 * the page's own scripts with nothing in between. So the gate is not "can
+	 * the bootstrap be read" — it is "was the bootstrap actually attached, in
+	 * the head, for this request". Those were two different conditions
+	 * evaluated in two places: the emission is separately guarded by the
+	 * alternative-asset branch and by wp_add_inline_script() succeeding, and a
+	 * handle whose chain runs in the footer gets no head-time protection at
+	 * all. One flag, set by the one call site that emits it, now answers for
+	 * both. Falling back to a synchronous request is slower and never
+	 * unprotected.
+	 */
 	private function enqueue_deferred_script( $handle, $src, $dependencies, $version, $in_footer ) {
 		wp_enqueue_script( $handle, $src, $dependencies, $version, $in_footer );
-		// Deferring is only safe while the inline bootstrap holds dynamic
-		// resources for the download window. Without it the runtime would
-		// arrive after the page's own scripts with nothing in between, so the
-		// request stays synchronous — slower, never unprotected.
-		if ( '' === $this->deferred_bootstrap_js() ) {
+		if ( ! $this->bootstrap_emitted ) {
 			return;
 		}
 		$this->deferred_script_handles[ $handle ] = true;
 		wp_script_add_data( $handle, 'strategy', 'defer' );
+	}
+
+	/**
+	 * Report a deferred handle that an 'after' inline has quietly un-deferred.
+	 *
+	 * WP_Scripts::filter_eligible_strategies() returns an empty strategy set for
+	 * any handle carrying an inline script in the default 'after' position, and
+	 * it recurses into dependents — so one
+	 * `wp_add_inline_script( $handle, $code )` without an explicit 'before'
+	 * anywhere in this chain forces the whole chain back to blocking. Nothing
+	 * errors, nothing logs, and the only visible effect is that the request is
+	 * render-blocking again. That is the single easiest way to revert this
+	 * release by accident, from inside the plugin or from a site's own hook, so
+	 * it gets named out loud under WP_DEBUG instead of being left to a profiler.
+	 *
+	 * Diagnostic only: it changes nothing, because an 'after' inline is a
+	 * legitimate thing for a site to add and losing defer is the safe direction.
+	 *
+	 * @return void
+	 */
+	public function warn_on_undeferred_handles() {
+		if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG || empty( $this->deferred_script_handles ) ) {
+			return;
+		}
+		$scripts = wp_scripts();
+		foreach ( array_keys( $this->deferred_script_handles ) as $handle ) {
+			if ( ! isset( $scripts->registered[ $handle ] ) ) {
+				continue;
+			}
+			$extra = $scripts->registered[ $handle ]->extra;
+			if ( empty( $extra['after'] ) ) {
+				continue;
+			}
+			error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				'FAZ Cookie Manager: the script handle "' . $handle . '" carries an inline script in the "after" position, '
+				. 'which makes WordPress drop the defer strategy for it and for everything that depends on it. '
+				. 'Pass "before" as the third argument to wp_add_inline_script() to keep the consent runtime non-blocking.'
+			);
+		}
+	}
+
+	/**
+	 * Record that the inline bootstrap was attached to a head handle.
+	 *
+	 * Called from the one place that attaches it. A WP_DEBUG breadcrumb when it
+	 * could not be attached, because the silent version of this failure is
+	 * exactly the regression the docblock above describes: a deferred runtime
+	 * with nothing holding the window, visible only as a performance change.
+	 *
+	 * @param bool $attached Whether wp_add_inline_script() accepted the code.
+	 * @param bool $in_head  Whether the carrying handle prints in the head.
+	 * @return void
+	 */
+	private function note_bootstrap_emission( $attached, $in_head ) {
+		$this->bootstrap_emitted = (bool) $attached && (bool) $in_head;
+		if ( $this->bootstrap_emitted || ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+			return;
+		}
+		error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			'FAZ Cookie Manager: the inline consent bootstrap was not emitted in <head> ('
+			. ( $attached ? 'the carrying script prints in the footer' : 'frontend/js/bootstrap.js is missing or unreadable' )
+			. '), so the consent runtime and the generated configuration stay synchronous for this request.'
+		);
 	}
 
 	/**
@@ -1031,14 +1183,25 @@ class Frontend {
 	public function defer_runtime_script_tag( $tag, $handle ) {
 		global $wp_version;
 		// Modern core can deliberately remove defer when a third-party
-		// synchronous script depends on this handle. Respect that decision.
+		// synchronous script depends on this handle, or when a handle printing
+		// in the head has a blocking dependent. Respect that decision rather
+		// than re-applying the attribute behind its back: core knows the
+		// dependency graph and this filter does not, and losing defer is the
+		// safe direction — a synchronous runtime is slower, never unprotected.
+		//
+		// The reverse assumption is the one that has to hold, and it is enforced
+		// where the strategy is requested, not here: `strategy => defer` is only
+		// ever set when the inline bootstrap is actually being attached to a
+		// head handle on this request (see enqueue_deferred_script()). So on
+		// 6.3+ either core defers and the bootstrap is holding the window, or
+		// core does not defer and there is no window to hold.
 		if ( isset( $wp_version ) && version_compare( $wp_version, '6.3', '>=' ) ) {
 			return $tag;
 		}
 		if ( is_admin() || empty( $this->deferred_script_handles[ $handle ] ) ) {
 			return $tag;
 		}
-		return preg_replace_callback( '#<script\b([^>]*)>#i', function ( $match ) {
+		$new_tag = preg_replace_callback( '#<script\b([^>]*)>#i', function ( $match ) {
 			$attributes = $match[1];
 			if ( ! preg_match( '/(?:^|\s)src\s*=/i', $attributes ) || preg_match( '/\btype\s*=\s*[\'"]text\/plain/i', $attributes ) ) {
 				return $match[0];
@@ -1047,6 +1210,11 @@ class Frontend {
 			$attributes = preg_replace( '/\s+(?:async|defer)(?:\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+))?(?=\s|$)/i', '', $attributes );
 			return '<script defer' . $attributes . '>';
 		}, $tag );
+		// PCRE failure returns null, and this composite tag carries the whole
+		// inline bootstrap plus the runtime's <script src>. Returning null from
+		// a tag filter drops all of it from the page — the consent banner with
+		// it. Same guard tag_own_scripts_nooptimize() already uses.
+		return is_string( $new_tag ) ? $new_tag : $tag;
 	}
 
 	/**

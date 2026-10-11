@@ -597,6 +597,19 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 | `faz_registered_admin_menus` | Register additional admin menu items |
 | `faz_load_shortcode_assets_everywhere` | Load a shortcode's frontend asset on every page (see below) |
 | `faz_bot_render_cache_veto` | Return `false` to keep the page cacheable when "Hide banner from search engine bots" is on. The banner then renders for crawlers too: hiding it and keeping the response cacheable cannot both be had, because a cache that does not key on the User-Agent hands the crawler's banner-less copy to the next human visitor |
+| `faz_main_script_in_footer` | Load the banner runtime in the footer instead of the head. Ignored while Consent Mode or the TCF CMP is active, because both have to emit their baseline before any ad script; `faz_main_script_effective_in_footer` reports what was actually applied |
+| `faz_external_static_assets` | Return `false` to keep the generated configuration and banner stylesheet inline instead of serving them as content-hashed files from the uploads directory |
+| `faz_auto_exclude_cache_plugins` | Return `false` to stop the plugin excluding its own assets from cache-plugin defer/delay/combine/minify features |
+
+#### `faz-consent-runtime-missing`
+
+Not a hook but a hook point. If the banner runtime never loads — an ad-blocker or filter-list rule matching the `cookie` segment in the plugin path, a 404 after a partial update, a minify plugin that mangled the bundle — the inline bootstrap releases same-origin requests, keeps every third-party resource parked for the rest of the page view, and adds this class to `<html>`. Embeds blocked server-side keep their placeholder and their consent call-to-action throughout; what goes blank is a third-party resource some script tried to insert dynamically, and there is no banner to reach. A theme can style on the class to say so:
+
+```css
+html.faz-consent-runtime-missing .my-consent-fallback { display: block; }
+```
+
+The browser console carries the diagnosis and the likely causes. `window._fazBootstrap.released` is `true` in the same state.
 
 #### `faz_load_shortcode_assets_everywhere`
 
@@ -624,8 +637,11 @@ Only the most recent release is listed here. The complete history is in [CHANGEL
 
 ### 1.34.1 — 2026-10-10
 
-- Configuration and banner runtime load with ordered `defer`, removing their render-blocking JavaScript requests. A small inline bootstrap holds dynamic resources until the full runtime can apply consent.
-- Consent Mode defaults and the TCF command stub stay synchronous; a failed configuration download keeps pending resources blocked. A runtime that cannot load at all releases same-origin requests and keeps third-party resources parked, instead of holding the whole page's JavaScript.
+- Configuration and banner runtime load with ordered `defer`, removing their render-blocking JavaScript requests. A small inline bootstrap protects dynamic resources until the full runtime can apply consent, and deferring is requested only when that bootstrap is actually attached to a `<head>` handle on the request at hand.
+- Assignments are held synchronously: `src`, `srcset`, `href`, `imagesrcset`, `data` and `poster` across script, iframe, img, source, link, video, audio, embed, object, track and `input[type=image]`, plus `fetch`, `sendBeacon`, `XMLHttpRequest`, `WebSocket` and every route into a `<style>`. Markup built by the parser — `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write` — is caught by a `MutationObserver` on the document, the same best-effort mechanism the runtime has always used for it, and the runtime now sweeps the already-parsed document before arming its own.
+- Hold and release judge the same text on every route into a `<style>`, arguments are judged as the sequence they form, and `srcset`/`imagesrcset` are treated as candidate lists rather than single URLs.
+- Everything the bootstrap parks is restorable: each attribute keeps its own parking key and carries the category the runtime resolves for it.
+- Consent Mode defaults and the TCF command stub stay synchronous. A runtime that cannot load at all releases same-origin requests, keeps third-party resources parked for the rest of the page view — the interceptors stay in place rather than being uninstalled — and marks the document `faz-consent-runtime-missing`.
 
 - The withdrawal fallback widget reappears when theme attributes or CSS transitions and animations hide the footer link after consent.
 - PHP GeoIP status requires a successful lookup and still checks the MMDB source when the extension's database fails. The admin reports the failure with repair instructions.

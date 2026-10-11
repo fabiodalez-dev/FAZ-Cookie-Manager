@@ -20,6 +20,16 @@ require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 // that actually ships rather than against a fixture.
 $GLOBALS['faz_defer_dir'] = dirname( __DIR__, 2 ) . '/frontend/';
 $frontend = ( new ReflectionClass( \FazCookie\Frontend\Frontend::class ) )->newInstanceWithoutConstructor();
+// The gate is no longer "is the bootstrap file readable" but "was the bootstrap
+// attached to a head handle on this request" — a readable file that is never
+// emitted, or emitted onto a footer handle, protects nothing. enqueue_scripts()
+// resolves that before the first deferred enqueue; set it here the same way.
+function faz_defer_emitted( $object, $value ) {
+    $flag = new ReflectionProperty( \FazCookie\Frontend\Frontend::class, 'bootstrap_emitted' );
+    $flag->setAccessible( true );
+    $flag->setValue( $object, $value );
+}
+faz_defer_emitted( $frontend, true );
 $enqueue = new ReflectionMethod( $frontend, 'enqueue_deferred_script' );
 $enqueue->setAccessible( true );
 $enqueue->invoke( $frontend, 'faz-cookie-manager-static-config', '/config.js', array(), null, false );
@@ -71,6 +81,43 @@ check_defer( $untouched === $bare->defer_runtime_script_tag( $untouched, 'faz-co
 $readable = new ReflectionMethod( $bare, 'deferred_bootstrap_js' );
 $readable->setAccessible( true );
 check_defer( '' === $readable->invoke( $bare ), 'an unreadable bootstrap reads as empty, never as false' );
+
+// The emission verdict, which is what the defer gate now reads. A readable file
+// is necessary and not sufficient: alternative-asset mode attaches no
+// bootstrap, a footer-positioned chain attaches it after the head scripts have
+// already run, and wp_add_inline_script() can refuse the payload outright. Each
+// of those used to end in a deferred runtime with nothing holding its window,
+// and in silence.
+$GLOBALS['faz_defer_dir'] = dirname( __DIR__, 2 ) . '/frontend/';
+$note = new ReflectionMethod( \FazCookie\Frontend\Frontend::class, 'note_bootstrap_emission' );
+$note->setAccessible( true );
+$flag = new ReflectionProperty( \FazCookie\Frontend\Frontend::class, 'bootstrap_emitted' );
+$flag->setAccessible( true );
+
+$verdicts = array(
+    array( true, true, true, 'attached in the head -> emitted' ),
+    array( true, false, false, 'attached but printing in the footer -> not emitted' ),
+    array( false, true, false, 'not attached, head or not -> not emitted' ),
+    array( false, false, false, 'neither -> not emitted' ),
+);
+foreach ( $verdicts as $case ) {
+    $subject = ( new ReflectionClass( \FazCookie\Frontend\Frontend::class ) )->newInstanceWithoutConstructor();
+    $note->invoke( $subject, $case[0], $case[1] );
+    check_defer( $case[2] === $flag->getValue( $subject ), $case[3] );
+}
+
+// And the gate consumes it: the same handle defers or does not, on that flag
+// alone, with the shipped bootstrap readable in both runs.
+foreach ( array( true, false ) as $emitted ) {
+    $GLOBALS['faz_defer_data'] = array();
+    $subject = ( new ReflectionClass( \FazCookie\Frontend\Frontend::class ) )->newInstanceWithoutConstructor();
+    faz_defer_emitted( $subject, $emitted );
+    $gate = new ReflectionMethod( $subject, 'enqueue_deferred_script' );
+    $gate->setAccessible( true );
+    $gate->invoke( $subject, 'faz-cookie-manager', '/script.js', array(), 'test', false );
+    $deferred = isset( $GLOBALS['faz_defer_data']['faz-cookie-manager']['strategy'] );
+    check_defer( $emitted === $deferred, $emitted ? 'emitted -> defer' : 'not emitted -> stay synchronous' );
+}
 $GLOBALS['faz_defer_dir'] = dirname( __DIR__, 2 ) . '/frontend/';
 $present = ( new ReflectionClass( \FazCookie\Frontend\Frontend::class ) )->newInstanceWithoutConstructor();
 $present_js = new ReflectionMethod( $present, 'deferred_bootstrap_js' );
