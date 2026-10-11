@@ -366,6 +366,27 @@ test.describe('Cache Compatibility Mode (issue #158)', () => {
     const botVetoOff = await fetchAs(GOOGLEBOT, '&faz_e2e_bot_veto=off');
     expect(hasFazScript(botVetoOff.html), 'veto declined => render invariant, banner present').toBe(true);
     expect(botVetoOff.headers['cache-control'] ?? '', 'veto declined => cache preserved').not.toContain('no-store');
+
+    // banner_control.status OFF with hide_from_bots still ON. Nobody gets a
+    // banner, so there is nothing for the User-Agent to vary and nothing to
+    // protect: the page must keep its cache entry. This pins the ORDER of the
+    // two gates, not their logic — both only return, and for a while the bot
+    // gate ran first, which vetoed the cache of every banner-less page a
+    // crawler happened to touch.
+    await postSettings(admin, nonce, {
+      banner_control: { ...originalBannerControl, status: false, hide_from_bots: true, cache_compatibility: false },
+      iab: { ...originalIab, enabled: false },
+    });
+    const botBannerOff = await fetchAs(GOOGLEBOT);
+    expect(hasFazScript(botBannerOff.html), 'banner off => no runtime for anyone').toBe(false);
+    expect(
+      botBannerOff.headers['cache-control'] ?? '',
+      'banner off => render is invariant => cache must be preserved'
+    ).not.toContain('no-store');
+    expect(
+      botBannerOff.headers['x-litespeed-cache-control'] ?? '',
+      'and LSCache must not be told to skip it either'
+    ).not.toContain('no-cache');
   });
 
   test('9. cache-compat ON keeps TCF config country-invariant and conservative (#158)', async ({ browser }) => {
