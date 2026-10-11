@@ -288,6 +288,86 @@ test.describe('Cache Compatibility Mode (issue #158)', () => {
     expect(hasFazScript(await fetchAsBot()), 'bot render WITH cache-compat must include FAZ').toBe(true);
   });
 
+  // The other half of #158, and the kalabron.com report (o2switch: LiteSpeed Web
+  // ADC in front of LiteSpeed Cache). Test 8 above calls the cache-compat-OFF bot
+  // skip "safe because the page is not cached" — which is only true of a site
+  // with no page cache. On that site the Googlebot response came back without
+  // #fazBannerTemplate, without script.min.js and without the banner stylesheet,
+  // under `x-litespeed-cache-control: public,max-age=14400`: a banner-less copy,
+  // declared cacheable for four hours, stored under a key that does not include
+  // the User-Agent. Every human served from it got no consent notice at all.
+  //
+  // Hiding the banner from a crawler and keeping the response cacheable cannot
+  // both be true, so the plugin now does the first only together with a no-store
+  // veto. These three cases pin the pairing from both ends.
+  test('8b. a crawler-only render is vetoed out of every shared page cache (kalabron.com)', async ({ browser }) => {
+    const GOOGLEBOT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
+    const HUMAN = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+    const hasFazScript = (html: string) => /faz-cookie-manager\/frontend\/js\/script(\.min)?\.js/.test(html);
+
+    const fetchAs = async (ua: string, extraQuery = ''): Promise<{ headers: Record<string, string>; html: string }> => {
+      const ctx = await browser.newContext({ userAgent: ua });
+      try {
+        const res = await ctx.request.get(`${BASE}/?${RUNTIME_DISABLED_PARAM}${extraQuery}`, {
+          headers: { 'User-Agent': ua },
+        });
+        expect(res.status()).toBeLessThan(400);
+        return { headers: res.headers(), html: await res.text() };
+      } finally {
+        await ctx.close();
+      }
+    };
+
+    // cache-compat OFF + hide_from_bots ON — the variant render, the one that
+    // used to be cached. IAB off and the geo runtime disabled, so the country
+    // veto is NOT in play: whatever no-store appears here can only come from the
+    // crawler branch.
+    await postSettings(admin, nonce, {
+      banner_control: { ...originalBannerControl, status: true, hide_from_bots: true, cache_compatibility: false },
+      iab: { ...originalIab, enabled: false },
+    });
+
+    const human = await fetchAs(HUMAN);
+    expect(hasFazScript(human.html), 'human render must carry the banner').toBe(true);
+    expect(
+      human.headers['cache-control'] ?? '',
+      'the human render must stay cacheable — the veto is for the variant copy only'
+    ).not.toContain('no-store');
+
+    const bot = await fetchAs(GOOGLEBOT);
+    expect(hasFazScript(bot.html), 'the crawler render still skips FAZ (hide_from_bots honoured)').toBe(false);
+    expect(bot.html, 'and carries no banner template either').not.toContain('fazBannerTemplate');
+    // The three directives that actually decide the matter: `no-store` for the
+    // generic caches, `X-LiteSpeed-Cache-Control: no-cache` for LSCache and the
+    // ADC in front of it (LSCache ignores response-side Cache-Control), and
+    // `Vary: User-Agent` for any CDN that keys on it.
+    expect(bot.headers['cache-control'] ?? '', 'crawler render must be no-store').toContain('no-store');
+    expect(bot.headers['x-litespeed-cache-control'] ?? '', 'LSCache/ADC need their own directive').toContain('no-cache');
+    expect(bot.headers.vary ?? '', 'the render varies by User-Agent and must say so').toContain('User-Agent');
+
+    // hide_from_bots OFF: nothing varies, so nothing is vetoed and the crawler
+    // sees what a visitor sees. This is the guard against over-reach — the veto
+    // must cost the publisher their cache only when the render really differs.
+    await postSettings(admin, nonce, {
+      banner_control: { ...originalBannerControl, status: true, hide_from_bots: false, cache_compatibility: false },
+      iab: { ...originalIab, enabled: false },
+    });
+    const botNoHide = await fetchAs(GOOGLEBOT);
+    expect(hasFazScript(botNoHide.html), 'with hide_from_bots off the crawler gets the banner').toBe(true);
+    expect(botNoHide.headers['cache-control'] ?? '', 'and the response stays cacheable').not.toContain('no-store');
+
+    // `faz_bot_render_cache_veto` => false: the publisher chooses the cache. The
+    // plugin must then drop the suppression rather than keep both, because a
+    // cacheable banner-less copy is the defect itself.
+    await postSettings(admin, nonce, {
+      banner_control: { ...originalBannerControl, status: true, hide_from_bots: true, cache_compatibility: false },
+      iab: { ...originalIab, enabled: false },
+    });
+    const botVetoOff = await fetchAs(GOOGLEBOT, '&faz_e2e_bot_veto=off');
+    expect(hasFazScript(botVetoOff.html), 'veto declined => render invariant, banner present').toBe(true);
+    expect(botVetoOff.headers['cache-control'] ?? '', 'veto declined => cache preserved').not.toContain('no-store');
+  });
+
   test('9. cache-compat ON keeps TCF config country-invariant and conservative (#158)', async ({ browser }) => {
     const readTcfConfig = async (country: string): Promise<Record<string, unknown>> => {
       const html = await anonHtml(browser, `/?faz_e2e_trust_cf=1&faz_e2e_cf_country=${country}`);

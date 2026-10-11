@@ -78,6 +78,16 @@ final class Faz_E2E_Audit_Lab {
 			add_filter( 'faz_geo_ruleset_runtime', $faz_e2e_runtime ? '__return_true' : '__return_false', PHP_INT_MAX );
 		}
 
+		// `faz_bot_render_cache_veto` lever. The plugin pairs hiding the banner
+		// from crawlers with a no-store veto on the response, because a cache
+		// that ignores the User-Agent would otherwise hand the crawler's
+		// banner-less copy to human visitors. A publisher who would rather keep
+		// the cache returns false here, and the banner then renders for
+		// crawlers too. Both sides need coverage, so expose the filter.
+		if ( isset( $_GET['faz_e2e_bot_veto'] ) && 'off' === $_GET['faz_e2e_bot_veto'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			add_filter( 'faz_bot_render_cache_veto', '__return_false', PHP_INT_MAX );
+		}
+
 		// Force the unwritable-uploads branch of the banner CSS enqueue for one
 		// request. Without this the inline-<style> fallback is unreachable from a
 		// test: the only other way in is to make wp-content/uploads unwritable,

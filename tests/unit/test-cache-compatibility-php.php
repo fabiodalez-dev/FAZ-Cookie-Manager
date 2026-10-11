@@ -465,6 +465,11 @@ namespace {
 	// ---------------------------------------------------------------------
 	echo "\nFrontend::flying_press_is_cacheable() (issue #125)\n";
 
+	if ( ! function_exists( 'faz_is_bot' ) ) {
+		function faz_is_bot() {
+			return ! empty( $GLOBALS['faz_test_is_bot'] );
+		}
+	}
 	if ( ! function_exists( 'is_admin' ) ) {
 		function is_admin() {
 			return ! empty( $GLOBALS['faz_test_is_admin'] );
@@ -566,6 +571,64 @@ namespace {
 		'admin request → no veto'
 	);
 	$GLOBALS['faz_test_is_admin'] = false;
+
+	// ---------------------------------------------------------------------
+	// Crawler-variant render (kalabron.com, o2switch/LiteSpeed): hide_from_bots
+	// makes the HTML depend on the User-Agent, and no page cache keys on it, so
+	// the first crawler to warm a URL used to leave a banner-less copy for every
+	// human visitor. Suppression is now paired with a cache veto, which for
+	// FlyingPress means this filter — the only channel it honours.
+	//
+	// faz_is_bot() is a seam here, like is_admin() above: bot detection has its
+	// own coverage, and what needs pinning is the pairing — that the veto fires
+	// in exactly the cases where the render actually differs, and nowhere else.
+	// ---------------------------------------------------------------------
+	echo "\nFrontend::flying_press_is_cacheable() — crawler-variant render\n";
+
+	$bot_on  = array( 'banner_control' => array( 'cache_compatibility' => false, 'hide_from_bots' => true ) );
+	$bot_off = array( 'banner_control' => array( 'cache_compatibility' => false, 'hide_from_bots' => false ) );
+
+	$GLOBALS['faz_test_is_bot'] = true;
+	assert_eq(
+		faz_fp_frontend( $bot_on )->flying_press_is_cacheable( true ),
+		false,
+		'crawler + hide_from_bots ON → FlyingPress caching vetoed'
+	);
+	assert_eq(
+		faz_fp_frontend( array( 'banner_control' => array( 'cache_compatibility' => false ) ) )->flying_press_is_cacheable( true ),
+		false,
+		'absent hide_from_bots key defaults to ON → still vetoed'
+	);
+	assert_eq(
+		faz_fp_frontend( $bot_off )->flying_press_is_cacheable( true ),
+		true,
+		'crawler + hide_from_bots OFF → render is invariant, page stays cacheable'
+	);
+	assert_eq(
+		faz_fp_frontend( array( 'banner_control' => array( 'cache_compatibility' => true, 'hide_from_bots' => true ) ) )->flying_press_is_cacheable( true ),
+		true,
+		'Cache Compatibility Mode ON → crawler sees the banner, page stays cacheable'
+	);
+	assert_eq(
+		faz_fp_frontend( $bot_on, true )->flying_press_is_cacheable( true ),
+		true,
+		'banner disabled by settings → nothing varies, no veto'
+	);
+
+	$GLOBALS['faz_test_filters']['faz_bot_render_cache_veto'] = array( function () { return false; } );
+	assert_eq(
+		faz_fp_frontend( $bot_on )->flying_press_is_cacheable( true ),
+		true,
+		'faz_bot_render_cache_veto false → publisher keeps the cache, banner renders for crawlers'
+	);
+	unset( $GLOBALS['faz_test_filters']['faz_bot_render_cache_veto'] );
+
+	$GLOBALS['faz_test_is_bot'] = false;
+	assert_eq(
+		faz_fp_frontend( $bot_on )->flying_press_is_cacheable( true ),
+		true,
+		'human visitor → hide_from_bots changes nothing, no veto'
+	);
 
 	// --- WPML URL-negotiation exception: resolving the WPML language IS
 	// cache-safe even under Cache Compatibility Mode when WPML encodes the
