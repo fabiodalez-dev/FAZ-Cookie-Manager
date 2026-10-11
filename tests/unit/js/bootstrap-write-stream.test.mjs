@@ -133,6 +133,14 @@ const CASES = [
   [[['<textarea>']], true, 'a write that leaves it inside RCDATA'],
   [[['<xmp>']], true, 'a write that leaves it inside raw text'],
   [[['<div>']], false, 'a write that leaves the stream in no special state'],
+  // A safe tail does not excuse the state before it: these end in a harmless
+  // `<scr` while the stream is inside RCDATA, raw text or a comment, and the
+  // sentinel is applied to the part before the tail rather than skipped.
+  [[['<textarea> <scr']], true, 'a script prefix with RCDATA still open before it'],
+  [[['<xmp> <scr']], true, 'a script prefix with raw text still open before it'],
+  [[['<!-- a > b <scr']], true, 'a script prefix with a comment still open before it'],
+  [[['<p> <scr']], false, 'a script prefix with nothing open before it'],
+  [[['<script>x</scr']], false, 'an end-tag prefix inside the script it closes'],
   [[['<!x<script><img src=t>']], true, 'a <script> inside a bogus <! comment'],
   [[['<?x<script><img src=t>']], true, 'a <script> inside a bogus <? comment'],
   [[['</ <script><img src=t>']], true, 'a <script> inside a bogus </ comment'],

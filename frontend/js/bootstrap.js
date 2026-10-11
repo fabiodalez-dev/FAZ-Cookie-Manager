@@ -425,10 +425,14 @@
                 var done = /[\s/]/.test(named[2]);
                 if (done ? name !== 'script' : !onlyScript(name)) { wrote = true; return; }
             }
-            // Stopping inside a tag makes the sentinel below meaningless — it
-            // would be absorbed into that tag — and the rule just applied has
-            // already judged this case.
-            return;
+            // The tail is safe in itself, but the text BEFORE it may still
+            // have left a swallowing state — `<textarea> <scr` ends in a
+            // harmless script prefix while the stream is inside RCDATA. The
+            // sentinel cannot be appended to a text that stops inside a tag
+            // (it would be absorbed into it), so it is appended to the part
+            // before that tag instead. Returning here outright was a fail-open
+            // early exit: it skipped the check below entirely.
+            text = text.slice(0, text.length - open[0].length);
         }
         // Second, a state that swallows what follows: a comment, raw text,
         // RCDATA, template content. The page's bytes close it, and from there

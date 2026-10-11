@@ -30,24 +30,34 @@ const RESOURCES = /var RESOURCES = '([^']+)'/.exec(SOURCE);
 const OPEN = '/* write-predicate:start';
 const CLOSE = '/* write-predicate:end */';
 
-// Outside the element set this plugin guards ANYWHERE — server-side blocking,
-// the runtime's own observer, and the bootstrap all work from the same list, so
-// the exemption is irrelevant to these two and withdrawing would cost without
-// protecting.
+// Rows where something fetches and the exemption survives, each with the
+// reason it is not a predicate bug. The predicate asks "could this write have
+// introduced something the backstop would otherwise have judged" — so a
+// resource the plugin does not guard ANYWHERE is correctly not a reason to
+// withdraw: withdrawing would park the page's static markup without protecting
+// the thing that fetched.
 //
-//   script      — deliberate, and the dominant payload of this API. A
-//                 parser-built script has started its request before any
-//                 observer is notified, which is why guard() declines every
-//                 SCRIPT; withdrawing here would park every static resource
-//                 after a legacy document.write('<script src=…>') and gain
-//                 nothing.
-//   svg <image> — a pre-existing gap in the element set, measured here rather
-//                 than assumed away: it really does fetch. Neither
-//                 _fazParkResourceElementIfBlocked (img/iframe/source/link) nor
-//                 the server-side pass (#<(?:img|iframe)\b#i) has ever covered
-//                 it, so closing it means widening the element set across PHP
-//                 and both JS files, not adjusting this predicate.
-const UNGUARDED = ['<script src=URL></script>', '<svg><image href=URL></svg>'];
+// The guarded set is one list in three places — RESOURCES in bootstrap.js,
+// _fazParkResourceElementIfBlocked in script.js (img/iframe/source/link), and
+// the server-side pass in class-frontend.php (#<(?:img|iframe)\b#i) — and
+// everything below is outside all three. Widening it is a change to those
+// three places, not to this predicate, which is why these are recorded here,
+// at the point where they were measured, instead of being withdrawn around.
+const UNGUARDED: Array<[string, string]> = [
+  ['<script src=URL></script>',
+    'deliberate: guard() declines every SCRIPT, because a parser-built script has started its '
+    + 'request before any observer is notified. Withdrawing here would park every static resource '
+    + "after a legacy document.write('<script src=…>') and gain nothing."],
+  ['<svg><image href=URL></svg>',
+    'SVG <image> is not in the guarded element set, in any of the three places. It fetches.'],
+  ['<svg><image xlink:href=URL></svg>',
+    'the same element through the legacy namespaced attribute.'],
+  ['<body background=URL>',
+    'the legacy `background` presentation attribute fetches an image, and no part of the plugin '
+    + 'looks at it — not the element list, not the server-side pass.'],
+  ['<table background=URL></table>',
+    'the same attribute on a table.'],
+];
 
 const WRITES = [
   '<img src=URL>',
@@ -75,6 +85,18 @@ const WRITES = [
   '<script src=URL></script>',
   '<p>plain</p>',
   '<div><img src=URL></div>',
+  // Legacy presentation attributes that still fetch, and other shapes whose
+  // answer is worth measuring rather than assuming.
+  '<body background=URL>',
+  '<table background=URL></table>',
+  '<td background=URL>',
+  '<svg><image xlink:href=URL></svg>',
+  '<link rel=preload as=image href=URL>',
+  '<link rel=dns-prefetch href=URL>',
+  '<audio src=URL></audio>',
+  '<video><source src=URL></video>',
+  '<iframe srcdoc="<img src=URL>"></iframe>',
+  '<base href=URL><img src=rel.gif>',
 ];
 
 test('no written markup fetches while the parser exemption survives', async ({ page }) => {
@@ -110,7 +132,8 @@ test('no written markup fetches while the parser exemption survives', async ({ p
       return scan.withdrew() as boolean;
     }, { body: predicate, res: RESOURCES![1], text: markup });
     observed.push(`fetched=${fetched} withdrew=${withdrew} ${WRITES[i]}`);
-    if (fetched && !withdrew && !UNGUARDED.includes(WRITES[i])) bypasses.push(WRITES[i]);
+    const named = UNGUARDED.find(([shape]) => shape === WRITES[i]);
+    if (fetched && !withdrew && !named) bypasses.push(WRITES[i]);
     await page.unrouteAll();
   }
   // Printed on failure AND on success: the safe-direction rows (a <source>
@@ -121,5 +144,13 @@ test('no written markup fetches while the parser exemption survives', async ({ p
   expect(bypasses, 'written markup that fetches while the exemption survives').toEqual([]);
   // And the named exceptions must keep being exceptions for the stated reason:
   // if one starts withdrawing, the element set changed and this list is stale.
-  expect(UNGUARDED.every((c) => WRITES.includes(c)), 'UNGUARDED lists a case that is not in the matrix').toBe(true);
+  expect(UNGUARDED.every(([shape]) => WRITES.includes(shape)),
+    'UNGUARDED lists a shape that is not in the matrix').toBe(true);
+  // And an exception that stopped being one means the guarded set changed and
+  // this list is stale — which is the only way these limits get revisited.
+  const stale = UNGUARDED.filter(([shape]) => {
+    const row = observed.find((line) => line.endsWith(` ${shape}`));
+    return !!row && !row.startsWith('fetched=true withdrew=false');
+  }).map(([shape]) => shape);
+  expect(stale, 'UNGUARDED rows that no longer behave as documented').toEqual([]);
 });
