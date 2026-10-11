@@ -349,6 +349,16 @@
     // is the point — <!--, <template>, <textarea>, <title>, <style>, <xmp>,
     // <plaintext> and an unfinished tag all answer the same way.
     var PROBE = '<faz-probe-open></faz-probe-open>';
+    // Is `prefix` the beginning of no guarded tag but <script>? The <script>
+    // exception is the reason this predicate is not simply "any write
+    // withdraws", so the prefix that claims it has to be unambiguous.
+    function onlyScript(prefix) {
+        var tags = RESOURCES.split(',');
+        for (var t = 0; t < tags.length; t++) {
+            if (tags[t] !== 'script' && tags[t].indexOf(prefix) === 0) return false;
+        }
+        return 'script'.indexOf(prefix) === 0;
+    }
     function noteWrite(args) {
         if (wrote) return;
         // No DOMParser, no distinction: withdraw and be done.
@@ -385,23 +395,58 @@
             // Markup that script writes comes back through this wrapper.
             if (found[i].nodeName !== 'SCRIPT') { wrote = true; return; }
         }
-        // Nothing to judge in the text itself. But if it leaves the stream
-        // inside a swallowing state, the page's own bytes close that state —
-        // and from there this file can no longer reason about what the write
-        // did, because a string parse ends at EOF where the real stream does
-        // not. So withdraw, unless nothing the tail can grow into fetches
-        // anything: a prefix of `<script`, whose only resource-fetching
-        // completion is <script> itself, or any `</` end tag, which builds no
-        // element at all. `write('<img src=x alt=""')` is a real image and
-        // withdraws; `write('<script>x</scr')` is an end tag mid-split and
-        // does not.
+        // Nothing to judge in the text itself. Two things are left, and both
+        // are about where the text STOPS, because a string parse ends at EOF
+        // and the real stream does not: the page's own bytes follow this text
+        // at the insertion point.
+        //
+        // First, markup the text leaves half-written. Everything after the
+        // last `>` that could still begin markup — a `<` before a letter, `/`,
+        // `!` or `?`, or a `<` at the very end — is a tag the page's next
+        // bytes will finish. `write('<img src=x alt=""')` is a real image, and
+        // so is `write('<')` followed by `write('img src=x>')`: fifty-one
+        // splits of a resource tag got past a version of this check that
+        // treated a bare `<` as a prefix of `<script`. A `<` before anything
+        // else is literal text to the tokenizer and is left alone, so
+        // `write('5 < 10')` costs nothing.
+        var trailer = text.slice(text.lastIndexOf('>') + 1);
+        var open = /<(?=[a-z/!?])[^>]*$|<$/i.exec(trailer);
+        if (open) {
+            var head = open[0];
+            // An end tag builds no element whatever it grows into, so `</scr`
+            // — which is how write('<script>x</scr') ends — is safe.
+            if (head.charAt(1) !== '/') {
+                // Otherwise the tag name decides, and it has to be
+                // unambiguous: `<s` can still become <source>, and `<` can
+                // become anything. Derived from the guarded list itself, so it
+                // cannot drift from what the backstop would have judged.
+                var named = /^<([a-z0-9]*)(.?)/i.exec(head);
+                var name = named[1].toLowerCase();
+                var done = /[\s/]/.test(named[2]);
+                if (done ? name !== 'script' : !onlyScript(name)) { wrote = true; return; }
+            }
+            // Stopping inside a tag makes the sentinel below meaningless — it
+            // would be absorbed into that tag — and the rule just applied has
+            // already judged this case.
+            return;
+        }
+        // Second, a state that swallows what follows: a comment, raw text,
+        // RCDATA, template content. The page's bytes close it, and from there
+        // this file cannot reason about the write at all. Asked with a sentinel
+        // element rather than a list of such constructs, because a list is what
+        // has been wrong four times on this surface.
         var probe;
         try { probe = new w.DOMParser().parseFromString(text + PROBE, 'text/html'); }
         catch (e) { wrote = true; return; }
         if (probe.querySelector('faz-probe-open')) return;
-        var open = /<[^>]*$/.exec(text);
-        var head = open ? open[0].toLowerCase() : '';
-        if (head.indexOf('</') === 0 || ('<script'.indexOf(head) === 0 && head !== '')) return;
+        // Swallowed — with one acceptable exception, asked of the parser the
+        // same way. An open <script> element swallows the page's bytes as
+        // script TEXT, which fetches nothing, and a later write is judged on
+        // its own; write('<script src=x>') + write('</script>') is an ordinary
+        // pair and must not cost the exemption.
+        var scripts = probe.querySelectorAll('script');
+        var tail = scripts.length ? scripts[scripts.length - 1] : null;
+        if (tail && String(tail.textContent).indexOf('faz-probe-open') !== -1) return;
         wrote = true;
     }
     /* write-predicate:end */

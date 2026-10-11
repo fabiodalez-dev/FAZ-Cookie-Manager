@@ -152,6 +152,61 @@ for (const [calls, withdraws, label] of CASES) {
   eq(`${withdraws ? 'withdraws' : 'keeps the exemption'}: ${label}`, scan.withdrew(), withdraws);
 }
 
+// Exhaustive, because the hand-written rows above missed this class entirely.
+// A resource tag written in pieces is still a resource tag: the parser's input
+// stream does not care where one write ended and the next began. Fifty-one
+// splits of a single <img> survived a version of this predicate that treated a
+// bare `<` as a prefix of `<script` — and the `<` was always the first piece.
+console.log('\nno split of a resource tag survives, at any cut point');
+const SPLIT = [
+  '<img src="https://t/x.gif">',
+  '<iframe src="https://t/f.html"></iframe>',
+  '<link rel=stylesheet href="https://t/s.css">',
+  '<object data="https://t/o.bin"></object>',
+  '<source src="https://t/v.mp4">',
+  '<video poster="https://t/p.jpg"></video>',
+];
+const survived = [];
+for (const tag of SPLIT) {
+  for (let i = 1; i < tag.length; i++) {
+    const scan = scanner();
+    scan.note([tag.slice(0, i)]);
+    scan.note([tag.slice(i)]);
+    if (!scan.withdrew()) survived.push(`${tag} @${i}`);
+  }
+  // And in three pieces, every pair of cut points.
+  for (let i = 1; i < tag.length; i++) {
+    for (let j = i + 1; j < tag.length; j++) {
+      const scan = scanner();
+      scan.note([tag.slice(0, i)]);
+      scan.note([tag.slice(i, j)]);
+      scan.note([tag.slice(j)]);
+      if (!scan.withdrew()) survived.push(`${tag} @${i}/${j}`);
+    }
+  }
+}
+eq(`every two- and three-way split of six resource tags withdraws (${SPLIT.length} tags)`, survived.join(' | '), '');
+
+// The cost side of the same rule, stated so it cannot regress silently into a
+// leak. A bare `<` or `<s` can still become <img> or <source>, so a <script>
+// tag split at those points withdraws and parks static resources after it for
+// nothing. That is the trade this predicate makes: ambiguity costs a request,
+// never a consent decision.
+console.log('\nthe cost of that rule, where it falls');
+const AMBIGUOUS = ['<', '<s'];
+for (const prefix of AMBIGUOUS) {
+  const scan = scanner();
+  scan.note([prefix]);
+  eq(`a write ending in ${JSON.stringify(prefix)} withdraws, because it can still become a resource tag`,
+    scan.withdrew(), true);
+}
+for (const prefix of ['<sc', '<scri', '<script']) {
+  const scan = scanner();
+  scan.note([prefix]);
+  eq(`a write ending in ${JSON.stringify(prefix)} keeps it, because only <script> completes it`,
+    scan.withdrew(), false);
+}
+
 console.log('');
 console.log(`bootstrap-write-stream: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
