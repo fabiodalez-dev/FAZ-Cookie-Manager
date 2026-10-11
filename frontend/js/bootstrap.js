@@ -334,18 +334,76 @@
     // document.open() withdraws unconditionally: it discards the document and
     // replaces documentElement, so the static markup this exemption is about
     // no longer exists.
-    var written = '';
     var wrote = false;
+    var inScript = false;
+    var tail = '';
     function noteWrite(args) {
         if (wrote) return;
-        written += Array.prototype.join.call(args, '');
-        var rest = written
-            .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
-            // A script still open swallows the rest: inside it, markup is text.
-            .replace(/<script\b[^>]*>[\s\S]*$/i, '')
-            .replace(/<!--[\s\S]*?(-->|$)/g, '')
-            .replace(/<[^>]*$/, '');
-        if (rest.indexOf('<') !== -1) wrote = true;
+        // The stream, not the call: write() concatenates its arguments and
+        // successive calls, so `tail` carries whatever the previous call left
+        // unfinished and a tag can straddle either boundary unharmed. Only an
+        // unfinished tag is ever carried, so this cannot grow.
+        var text = tail + Array.prototype.join.call(args, '');
+        tail = '';
+        var i = 0;
+        while (i < text.length) {
+            if (inScript) {
+                // The tokenizer ends script text at `</script` followed by
+                // whitespace, `/` or `>` — NOT at `</script>` alone. A regex
+                // demanding the `>` reads `</script foo>` as more script text
+                // and swallows the real markup after it.
+                var end = /<\/script[\s/>]/i.exec(text.slice(i));
+                if (!end) return;
+                var from = i + end.index;
+                var shut = text.indexOf('>', from);
+                if (shut === -1) { tail = text.slice(from); return; }
+                inScript = false;
+                i = shut + 1;
+                continue;
+            }
+            var lt = text.indexOf('<', i);
+            if (lt === -1) return;
+            var rest = text.slice(lt);
+            if (rest.indexOf('<!--') === 0) {
+                // The tokenizer ends a comment at `-->` OR `--!>`, and treats
+                // `<!-->` and `<!--->` as complete comments — which this
+                // matches by position. Searching for `-->` alone read
+                // `<!-- x --!><img src=…>` as a comment running to the end of
+                // the stream and let the image through.
+                var close = /--!?>/.exec(rest);
+                if (!close) return;
+                i = lt + close.index + close[0].length;
+                continue;
+            }
+            var tag = /^<\/?[a-z][^>]*>/i.exec(rest);
+            if (!tag) {
+                // A `<` that cannot start a tag at all is text to the parser,
+                // so step over it.
+                if (rest.indexOf('>') === -1) {
+                    // An unfinished tag. It is NOT discarded: this text sits at
+                    // the insertion point and the rest of the network stream
+                    // follows it, so the page's own next `>` closes the tag and
+                    // the element is built — `write('<img src=x alt=""')` is a
+                    // real image. Carry it only when nothing it can grow into
+                    // fetches anything: a prefix of `<script`, whose only
+                    // resource-fetching completion is <script> itself, and a
+                    // `<!` form, which becomes a doctype or a comment. Anything
+                    // else withdraws.
+                    var head = rest.toLowerCase();
+                    if ('<script'.indexOf(head) === 0 || '<!--'.indexOf(head) === 0 || head === '<!') {
+                        tail = rest;
+                        return;
+                    }
+                    wrote = true;
+                    return;
+                }
+                i = lt + 1;
+                continue;
+            }
+            if (/^<script\b/i.test(tag[0])) { inScript = true; i = lt + tag[0].length; continue; }
+            wrote = true;
+            return;
+        }
     }
     ['write', 'writeln', 'open'].forEach(function (name) {
         // On Document.prototype, not on the document. An instance wrapper is
@@ -371,6 +429,8 @@
         // Something wrote markup the parser swallowed: no node here can be
         // attributed any more, so judge them all.
         if (wrote) return true;  // see the write/open wrappers above
+        // Past the parser: nothing here is the server's any more.
+        if (parsed) return true;
         // And that is the whole question. Deliberately NOT "is the document
         // still parsing": a MutationObserver callback is a microtask, and the
         // task that finishes parsing sets readyState to 'interactive' BEFORE
@@ -381,11 +441,12 @@
         // parked on two engines out of three. Reading a phase at delivery time
         // cannot answer a question about insertion time.
         //
-        // It is also unnecessary. Every API that inserts a node is wrapped and
-        // decides with the policy itself, and every HTML sink tags what it
-        // builds, so an UNTAGGED insertion is the parser's — or a replay of an
-        // insertion a wrapper already judged. There is nothing left for a
-        // phase check to catch.
+        // What makes the remaining exemption safe is not a phase at all: every
+        // API that inserts a node is wrapped and decides with the policy
+        // itself — Node, ParentNode, insertAdjacentElement, Range — and every
+        // HTML sink tags what it builds, so while the parser is running an
+        // UNTAGGED insertion is the parser's or a replay of one a wrapper
+        // already judged.
         return sunk.has(node);
     }
     // Delay dynamic insertions, retaining the actual nodes and their listeners.
@@ -478,6 +539,23 @@
             return child;
         };
     });
+    // Range.insertNode and Range.surroundContents put a node in the document
+    // without touching Node or ParentNode, so they were the one insertion
+    // route that reached the DOM unjudged — and the only reason the backstop
+    // can treat an untagged insertion as the parser's is that no such route
+    // exists. Held like insertAdjacentElement, which has the same shape.
+    if (w.Range && Range.prototype) {
+        ['insertNode', 'surroundContents'].forEach(function (name) {
+            if (typeof Range.prototype[name] !== 'function') return;
+            replace(Range.prototype, name, function (original) {
+                return function (node) {
+                    var range = this;
+                    if (!resources(node).length) return original.call(range, node);
+                    defer(function (policy) { prepare(node, policy); original.call(range, node); });
+                };
+            });
+        });
+    }
     replace(Element.prototype, 'insertAdjacentElement', function (original) {
         return function (position, node) {
             var el = this;
@@ -1108,8 +1186,17 @@
         });
     }
     var observer = null;
+    // Set once the parser can no longer be inserting, which is NOT the same as
+    // reading d.readyState inside the callback: the task that finishes parsing
+    // flips readyState before the checkpoint that delivers its records, so the
+    // tail of the document arrives with the phase already changed, and which
+    // records land on which side of it differs by engine. This flag flips in a
+    // listener that first drains the queue itself, so the boundary is drawn by
+    // this file instead of by the scheduler.
+    var parsed = false;
     if (typeof w.MutationObserver === 'function') {
-        observer = new w.MutationObserver(function (records) {
+        observer = new w.MutationObserver(function (records) { observed(records); });
+        function observed(records) {
             for (var i = 0; i < records.length; i++) {
                 var record = records[i];
                 // Unconditional, including while parsing: the parser sets a
@@ -1126,7 +1213,7 @@
                     resources(node).forEach(guard);
                 }
             }
-        });
+        }
         try {
             // The DOCUMENT, not documentElement. document.open() replaces
             // documentElement, and an observer left watching the old one is
@@ -1143,6 +1230,20 @@
         // takes over there. On the safety path it stays, because nothing else
         // will ever watch this document.
         if (observer) handoffs.push(function () { observer.disconnect(); });
+        // Capture phase and registered here, so it runs before any other
+        // DOMContentLoaded listener: drain whatever the parser left queued and
+        // judge it under the exemption, THEN withdraw the exemption for good.
+        // After this point an untagged insertion cannot be the parser's, and
+        // anything that is neither tagged nor wrapped is judged rather than
+        // trusted.
+        if (observer && d.readyState === 'loading') {
+            d.addEventListener('DOMContentLoaded', function () {
+                try { observed(observer.takeRecords()); } catch (e) { /* nothing left to drain */ }
+                parsed = true;
+            }, true);
+        } else {
+            parsed = true;
+        }
     }
     function releaseSafely() {
         if (!pending || immediate) return;

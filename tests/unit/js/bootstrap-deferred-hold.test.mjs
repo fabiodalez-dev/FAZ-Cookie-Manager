@@ -692,6 +692,34 @@ console.log('\nbootstrap: markup that never passes through a setter');
   eq('createContextualFragment during parsing is still judged', ranged.length, 1);
 }
 
+{
+  // Range.insertNode and Range.surroundContents reach the document without
+  // touching Node or ParentNode, so they were the one insertion route that
+  // arrived unjudged — and the exemption for untagged insertions is sound only
+  // because no such route exists.
+  const { window, document, nativeSetAttribute, nativeGetAttribute } = boot();
+  const img = document.createElement('img');
+  nativeSetAttribute.call(img, 'src', 'https://tracker.test/range.gif');
+  const range = document.createRange();
+  range.selectNodeContents(document.getElementById('list'));
+  range.insertNode(img);
+  eq('a resource inserted through Range.insertNode is held out of the document', img.parentNode, null);
+  await release(window);
+  eq('and parked on the safety release', nativeGetAttribute.call(img, 'data-faz-src'), 'https://tracker.test/range.gif');
+  eq('with no live src', nativeGetAttribute.call(img, 'src'), null);
+}
+
+{
+  // A Range insertion carrying nothing to judge keeps its synchronous
+  // semantics, as every other wrapper here does.
+  const { window, document } = boot();
+  const plain = document.createElement('span');
+  const range = document.createRange();
+  range.selectNodeContents(document.getElementById('list'));
+  range.insertNode(plain);
+  eq('a Range insertion with no resource is not held', plain.parentNode && plain.parentNode.id, 'list');
+}
+
 console.log('\nbootstrap: the safety release is not the end of enforcement');
 
 // The release used to restore every native API and install nothing in its
