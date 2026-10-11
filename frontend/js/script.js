@@ -6010,8 +6010,22 @@ function _fazUnblockServerSide() {
             delete link.dataset.fazLightboxPlaceholder;
         });
 
-    // 3. Images (tracking pixels inside noscript tags that JS can see).
-    document.querySelectorAll('img[data-faz-src][data-faz-category], source[data-faz-src][data-faz-category]')
+    // 3. Images (tracking pixels inside noscript tags that JS can see), plus
+    // every other element that fetches through a plain `src`.
+    //
+    // video, audio, embed, track and input[type=image] are here because the
+    // deferred bootstrap parks them: its element list is the one the runtime's
+    // own observer uses, so whatever it can park must be restorable from the
+    // same keys, or a resource held during the download window would stay dead
+    // for the rest of the page view even after the visitor consents. Restoring
+    // needs no per-tag branch — `el.src` is the right IDL attribute on all of
+    // them, and the gate below re-parks anything still blocked.
+    document.querySelectorAll(
+        'img[data-faz-src][data-faz-category], source[data-faz-src][data-faz-category],'
+        + ' video[data-faz-src][data-faz-category], audio[data-faz-src][data-faz-category],'
+        + ' embed[data-faz-src][data-faz-category], track[data-faz-src][data-faz-category],'
+        + ' input[data-faz-src][data-faz-category]'
+    )
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
             var imgSrc = el.getAttribute("data-faz-src");
@@ -6033,6 +6047,32 @@ function _fazUnblockServerSide() {
             el.setAttribute("srcset", srcset);
             el.removeAttribute("data-faz-srcset");
             el.removeAttribute("data-faz-srcset-category");
+        });
+
+    // 3c. <object data> and the poster frame of a media element. Both are
+    // parked under their own keys (data-faz-data, data-faz-poster) because
+    // neither is a `src`, and neither had a restore pass at all: the bootstrap
+    // could park them and nothing could ever hand them back.
+    document.querySelectorAll('object[data-faz-data][data-faz-category]')
+        .forEach(function (el) {
+            var cat = el.getAttribute("data-faz-category");
+            var parked = el.getAttribute("data-faz-data");
+            if (_fazShouldBlockResource(cat, parked, el.getAttribute("data-faz-service") || "")) return;
+            if (!_fazIsAllowedScheme(parked)) return;
+            el.setAttribute("data", parked);
+            if (!el.getAttribute("data")) return; // gate re-parked it — stay parked, recoverable
+            el.removeAttribute("data-faz-data");
+        });
+
+    document.querySelectorAll('[data-faz-poster][data-faz-category]')
+        .forEach(function (el) {
+            var cat = el.getAttribute("data-faz-category");
+            var parked = el.getAttribute("data-faz-poster");
+            if (_fazShouldBlockResource(cat, parked, el.getAttribute("data-faz-service") || "")) return;
+            if (!_fazIsAllowedScheme(parked)) return;
+            el.setAttribute("poster", parked);
+            if (!el.getAttribute("poster")) return; // gate re-parked it — stay parked, recoverable
+            el.removeAttribute("data-faz-poster");
         });
 
     // 4. Stylesheets.

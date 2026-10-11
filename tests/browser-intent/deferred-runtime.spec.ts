@@ -7,7 +7,7 @@ const runtime = readFileSync(new URL('../../frontend/js/script.min.js', import.m
 
 for (const consent of ['no', 'yes', 'missing']) {
   test(`deferred runtime protects early resources: analytics=${consent}`, async ({ page, context }) => {
-    const requests: string[] = [], errors: string[] = [];
+    const requests: string[] = [], errors: string[] = [], cdn: string[] = [];
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     if (consent === 'yes') await context.addCookies([{ name:'fazcookie-consent', value:'consent:yes,action:all,necessary:yes,analytics:yes', domain:'defer.example.test', path:'/' }]);
@@ -52,6 +52,15 @@ for (const consent of ['no', 'yes', 'missing']) {
           var ss=window.ssProbe=new Image();ss.id='ss';ss.srcset='/local.png 1x, https://tracker.example.test/srcset.gif 2x';document.head.appendChild(ss);
         </script>
         </head><body><div class="probe">CSS resource probe</div><p id="paint">Page rendered while consent downloads</p>
+        <!-- Server-rendered cross-origin resources: the other half of what the
+             DOM backstop sees, since the observer is armed in <head> and the
+             parser keeps building the body after it. These passed the
+             server-side blocker, which is the authority for server markup, and
+             the parser had already started their requests before any observer
+             was notified. Parking them buys nothing and costs the LCP element
+             plus a second fetch of the same bytes. -->
+        <img id="static-hero" src="https://cdn.example.test/hero.jpg" alt="">
+        <iframe id="static-frame" src="https://cdn.example.test/embed"></iframe>
         <div id="markup-host"></div>
         <script>
           // Markup routes, driven from the body where the container is really
@@ -69,6 +78,10 @@ for (const consent of ['no', 'yes', 'missing']) {
           oh.outerHTML='<div id="ohw"><img id="ohimg" src="https://tracker.example.test/outerhtml.gif"></div>';
         </script>
         </body></html>` });
+    });
+    await page.route('https://cdn.example.test/**', async route => {
+      cdn.push(new URL(route.request().url()).pathname);
+      await route.fulfill({ contentType: route.request().resourceType()==='document'?'text/html':'image/gif', body:'' });
     });
     await page.routeWebSocket('wss://tracker.example.test/**', () => {requests.push('socket');});
     await page.route('https://tracker.example.test/**', async route => {
@@ -107,6 +120,19 @@ for (const consent of ['no', 'yes', 'missing']) {
         return !!el && !el.getAttribute('src') && !!el.getAttribute('data-faz-src') && !!el.getAttribute('data-faz-category');
       });
     })).toBe(true);
+    // And the server's own markup is left exactly as it was sent. Read through
+    // the native accessor: the bootstrap's getAttribute answers with the staged
+    // value, so the shimmed one cannot tell "never touched" from "staged".
+    expect(await page.evaluate(() => {
+      const native = (window as any).nativeGetAttr;
+      return ['static-hero', 'static-frame'].map((id) => {
+        const el = document.getElementById(id)!;
+        return [native.call(el, 'src'), native.call(el, 'data-faz-src')];
+      });
+    })).toEqual([
+      ['https://cdn.example.test/hero.jpg', null],
+      ['https://cdn.example.test/embed', null],
+    ]);
     // The list is held by the setter route, so during the window it is simply
     // not on the element at all — neither applied nor parked. Parking is what
     // the safety release does with it, asserted in the `missing` branch below.
@@ -124,6 +150,16 @@ for (const consent of ['no', 'yes', 'missing']) {
     expect(await page.evaluate(() => document.readyState)).toBe('interactive');
     release();
     await page.waitForLoadState('domcontentloaded');
+    // Across the handoff too, on all three paths. A parked static resource
+    // would come back here as a second fetch of a file the browser already
+    // had — the measurable half of the defect — and, if the runtime never
+    // arrived, as an element left blank for the whole page view.
+    expect(await page.evaluate(() => {
+      const native = (window as any).nativeGetAttr;
+      return ['static-hero', 'static-frame'].map((id) => native.call(document.getElementById(id)!, 'src'));
+    })).toEqual(['https://cdn.example.test/hero.jpg', 'https://cdn.example.test/embed']);
+    expect(cdn.filter((path) => path === '/hero.jpg')).toEqual(['/hero.jpg']);
+    expect(cdn.filter((path) => path === '/embed')).toEqual(['/embed']);
     if (consent === 'missing') {
       // The runtime cannot arrive: /config.js 404s and _staticConfigRequired
       // keeps _fazStore null, so nothing calls start()/finish(). Holding the

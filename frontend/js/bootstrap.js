@@ -197,6 +197,110 @@
     function prepare(node, policy) {
         resources(node).forEach(function (el) { policy.node(el); });
     }
+    // Which insertions the DOM backstop further down has any business judging.
+    //
+    // A MutationObserver cannot tell a parser insertion from a script one, and
+    // that difference decides everything. Markup a script injects during the
+    // download window reached no gate above and is the whole reason the
+    // backstop exists. Markup the SERVER rendered already passed the
+    // server-side blocker, which is the authority for it: whatever had to be
+    // blocked was rewritten before the HTML left PHP, and what remains is what
+    // the server allowed. Parking that buys nothing — the parser had already
+    // started the request before any observer was notified — and costs a
+    // second fetch of the same file plus, on a CDN-hosted page, the LCP
+    // element, which is the opposite of what this PR is for.
+    //
+    // So: while the document is parsing, judge only what a script sink
+    // produced. Once parsing is over the parser is no longer a source of
+    // insertions at all, and everything is script activity again.
+    //
+    // Known gap: document.write/writeln during parsing. It hands markup to the
+    // parser's input stream rather than building nodes, so there is nothing to
+    // tag when the call returns. Its dominant payload is a <script src>, which
+    // guard() declines for the same reason the parser case exists; a resource
+    // element written that way is covered by nothing here until parsing ends.
+    var sunk = typeof w.WeakSet === 'function' ? new w.WeakSet() : null;
+    function tag(node) {
+        if (!sunk || !node) return node;
+        if (node.nodeType === 1) sunk.add(node);
+        var kids = node.querySelectorAll ? node.querySelectorAll('*') : [];
+        for (var i = 0; i < kids.length; i++) sunk.add(kids[i]);
+        return node;
+    }
+    // Tag a method's or setter's output so the backstop still sees it. Stacks
+    // on top of any wrapper already installed for the same name: `undo` drains
+    // LIFO, so the layers come off in the order they went on.
+    function tagSink(obj, name, run) {
+        if (!obj || !sunk) return;
+        var own = Object.getOwnPropertyDescriptor(obj, name);
+        var owner = obj;
+        while (owner && !Object.getOwnPropertyDescriptor(owner, name)) owner = Object.getPrototypeOf(owner);
+        var desc = owner && Object.getOwnPropertyDescriptor(owner, name);
+        if (!desc) return;
+        var restore = function () {
+            if (own) Object.defineProperty(obj, name, own);
+            else delete obj[name];
+        };
+        if (desc.set) {
+            if (!desc.configurable) return;
+            Object.defineProperty(obj, name, {
+                configurable: true, enumerable: desc.enumerable, get: desc.get,
+                set: function (value) { run.call(this, desc.set, value); }
+            });
+            undo.push(restore);
+            return;
+        }
+        if (typeof desc.value !== 'function') return;
+        var original = desc.value;
+        obj[name] = function () { return run.call(this, original, arguments); };
+        undo.push(restore);
+    }
+    // innerHTML and setHTMLUnsafe replace the subtree: tag what is there after.
+    tagSink(Element.prototype, 'innerHTML', function (set, value) {
+        set.call(this, value);
+        tag(this);
+    });
+    ['setHTMLUnsafe', 'setHTML'].forEach(function (name) {
+        tagSink(Element.prototype, name, function (original, args) {
+            var out = original.apply(this, args);
+            tag(this);
+            return out;
+        });
+    });
+    // outerHTML detaches the element, so the new nodes are the parent's
+    // children between the old element's two neighbours. Bound the walk by
+    // them instead of tagging every sibling: over-tagging would park the
+    // server's markup next door, which is the defect this guard removes.
+    tagSink(Element.prototype, 'outerHTML', function (set, value) {
+        var parent = this.parentNode, prev = this.previousSibling, next = this.nextSibling;
+        set.call(this, value);
+        if (!parent) return;
+        var node = prev ? prev.nextSibling : parent.firstChild;
+        while (node && node !== next) { tag(node); node = node.nextSibling; }
+    });
+    tagSink(Element.prototype, 'insertAdjacentHTML', function (original, args) {
+        var parent = args[0] && /^after/i.test(String(args[0])) ? this.parentNode : this;
+        var out = original.apply(this, args);
+        // Cheap and sufficient: the four positions all land inside `this` or
+        // its parent, and tagging that subtree cannot reach the rest of the
+        // document. A sibling tagged along with it is judged by origin only,
+        // which is what it would have been judged by anyway.
+        tag(parent || this);
+        return out;
+    });
+    tagSink(w.Range && Range.prototype, 'createContextualFragment', function (original, args) {
+        return tag(original.apply(this, args));
+    });
+    function fromScript(node) {
+        // No WeakSet (and therefore no tags): keep the broader behaviour rather
+        // than silently dropping the backstop. Costs a double fetch on an
+        // engine that predates 2015; losing enforcement would cost consent.
+        if (!sunk) return true;
+        // Parsing finished: the parser inserts nothing more, so every record
+        // from here on is a script's doing.
+        if (d.readyState !== 'loading') return true;
+        return sunk.has(node);
+    }
     // Delay dynamic insertions, retaining the actual nodes and their listeners.
     ['appendChild', 'insertBefore', 'replaceChild'].forEach(function (name) {
         replace(Node.prototype, name, function (original) {
@@ -919,10 +1023,17 @@
         observer = new w.MutationObserver(function (records) {
             for (var i = 0; i < records.length; i++) {
                 var record = records[i];
+                // Unconditional, including while parsing: the parser sets a
+                // resource's attributes before it inserts the element, so it
+                // never produces an attribute record. One of these is a script
+                // rewriting a URL — exactly what must not slip through.
                 if (record.type === 'attributes') { guard(record.target); continue; }
                 for (var j = 0; j < record.addedNodes.length; j++) {
                     var node = record.addedNodes[j];
                     if (!node || node.nodeType !== 1) continue;
+                    // Server-rendered markup is the server-side blocker's to
+                    // judge, and it already did. See fromScript() above.
+                    if (!fromScript(node)) continue;
                     resources(node).forEach(guard);
                 }
             }
