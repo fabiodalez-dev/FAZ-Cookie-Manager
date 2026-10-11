@@ -183,6 +183,20 @@ class Frontend {
 	 * @var bool
 	 */
 	private $faz_law_fallback_suppress = false;
+
+	/**
+	 * Per-request memo for is_bot_variant_render() (null = not yet computed).
+	 *
+	 * @var bool|null
+	 */
+	private $bot_variant_render = null;
+
+	/**
+	 * Whether the page-cache veto for a User-Agent-variant render is in force.
+	 *
+	 * @var bool
+	 */
+	private $bot_variance_cache_vetoed = false;
 	/**
 	 * Per-request memo for is_geo_bootstrap_cache_active() (null = not yet
 	 * computed). The readiness check touches banner/ruleset storage, so every
@@ -429,23 +443,16 @@ class Frontend {
 		}
 		// Skip banner for search engine bots (configurable via Settings).
 		//
-		// MUST be suppressed under Cache Compatibility Mode: the page is then
-		// full-page cached and the render has to be visitor-invariant. A bot
-		// request (incl. the cache-warming crawler) would otherwise generate a
-		// banner-less copy that LiteSpeed/WP Rocket caches and serves to every
-		// human visitor — leaving the banner permanently hidden and trackers
-		// unblocked (the server-rendered container stays, but script.min.js /
-		// _fazConfig that reveal it and block scripts are never enqueued).
-		// Reported on gooloo.de after enabling Cache Compatibility Mode. (#158)
-		// The jurisdiction bootstrap full-page-caches a strict shell too, so the
-		// same invariance requirement applies there.
-		if ( ! $this->is_cache_compatibility_enabled() && ! $this->is_geo_bootstrap_cache_active() ) {
-			$bot_settings = $this->get_faz_settings();
-			if ( ! isset( $bot_settings['banner_control']['hide_from_bots'] ) || ! empty( $bot_settings['banner_control']['hide_from_bots'] ) ) {
-				if ( faz_is_bot() ) {
-					return;
-				}
-			}
+		// bot_suppression_applies() answers both halves of that question: the
+		// setting, and whether this response can be kept out of the shared page
+		// cache. A banner-less copy that a cache is free to store is handed to
+		// every later human visitor — banner permanently hidden, trackers
+		// unblocked, nothing on the page to reveal it. Cache Compatibility Mode
+		// and the cached jurisdiction shell need an invariant render and so
+		// never suppress (#158, gooloo.de); every other full-page cache gets a
+		// no-store veto instead (kalabron.com, LiteSpeed).
+		if ( $this->bot_suppression_applies() ) {
+			return;
 		}
 		if ( $this->is_banner_disabled_by_settings() ) {
 			return;
@@ -1830,6 +1837,137 @@ class Frontend {
 	}
 
 	/**
+	 * Whether `hide_from_bots` is effectively enabled for this request.
+	 *
+	 * A missing key counts as enabled: that is the historical behaviour and it
+	 * matches Settings::get_defaults(), where `hide_from_bots` is true.
+	 *
+	 * @return bool
+	 */
+	private function hide_from_bots_enabled() {
+		$settings = $this->get_faz_settings();
+		return ! isset( $settings['banner_control']['hide_from_bots'] )
+			|| ! empty( $settings['banner_control']['hide_from_bots'] );
+	}
+
+	/**
+	 * Whether this response's banner render varies by User-Agent.
+	 *
+	 * True only when `hide_from_bots` actually changes the output for the
+	 * caller at hand — the setting is on and the request is a known crawler.
+	 * Cache Compatibility Mode and the cached jurisdiction shell both require a
+	 * visitor-invariant render, so under either one the answer is always false
+	 * and the crawler sees exactly what a human sees.
+	 *
+	 * faz_is_bot() is tested first on purpose: it is a substring scan over one
+	 * request header, while the two cache predicates below read settings and
+	 * banner storage. This runs on `send_headers` for every front-end request,
+	 * and for all but a few per cent of them the cheap test ends it.
+	 *
+	 * @return bool
+	 */
+	private function is_bot_variant_render() {
+		if ( null !== $this->bot_variant_render ) {
+			return $this->bot_variant_render;
+		}
+		// `function_exists` + leading `\`: this predicate is reachable from
+		// `flying_press_is_cacheable`, which can fire on bootstraps where
+		// includes/class-utils.php has not been loaded, and an unqualified call
+		// would resolve inside FazCookie\Frontend first. Same guard the AMP
+		// consent class uses.
+		$variant = function_exists( 'faz_is_bot' ) && \faz_is_bot()
+			/**
+			 * Whether a crawler-only render may be kept out of shared caches.
+			 *
+			 * The two things `hide_from_bots` wants — a banner-less copy for
+			 * crawlers, and a page the cache can keep — cannot both be had: a
+			 * cache that does not vary by User-Agent will hand the crawler's
+			 * copy to the next human. Returning false here resolves that in
+			 * favour of the cache, and FAZ then stops hiding the banner from
+			 * crawlers at all rather than risk hiding it from visitors.
+			 *
+			 * @since 1.34.2
+			 * @param bool $veto Default true (hide from bots, bypass the cache).
+			 */
+			&& (bool) apply_filters( 'faz_bot_render_cache_veto', true )
+			&& $this->hide_from_bots_enabled()
+			&& ! $this->is_cache_compatibility_enabled()
+			&& ! $this->is_geo_bootstrap_cache_active();
+
+		$this->bot_variant_render = $variant;
+		return $variant;
+	}
+
+	/**
+	 * Keep a User-Agent-variant render out of every shared page cache.
+	 *
+	 * `hide_from_bots` makes the rendered HTML depend on the User-Agent: a
+	 * crawler receives no banner container, no banner stylesheet and no
+	 * runtime. Nothing in the response ever said so, and no page cache varies
+	 * by User-Agent, so the first crawler to warm a URL stored a banner-less
+	 * copy that the cache then served to every human visitor — no consent UI,
+	 * trackers unblocked, and nothing on the page to reveal it.
+	 *
+	 * Reported on kalabron.com (o2switch: LiteSpeed Web ADC in front of
+	 * LiteSpeed Cache), where the banner vanished whenever LiteSpeed was
+	 * enabled and came back the moment the host turned it off. A request with a
+	 * Googlebot User-Agent returned the page with no `#fazBannerTemplate`, no
+	 * `script.min.js` and no banner CSS — under
+	 * `x-litespeed-cache-control: public,max-age=14400`, i.e. explicitly
+	 * cacheable for four hours and keyed without the User-Agent.
+	 *
+	 * This is the country-variance hazard one dimension over, so it gets the
+	 * same answer and the same header set as send_geo_cache_headers().
+	 *
+	 * @return bool Whether the veto is in force for this request.
+	 */
+	private function veto_page_cache_for_bot_variance() {
+		if ( $this->bot_variance_cache_vetoed ) {
+			return true;
+		}
+		// LSCache decides cacheability from this action and the request-time
+		// header, not from a response-side `Cache-Control: no-store` (see the
+		// rest_pre_dispatch note in faz-cookie-manager.php). Fire it either way:
+		// it only records intent, which LSCWP applies when it buffers output.
+		do_action( 'litespeed_control_set_nocache', 'FAZ Cookie Manager crawler-only banner render' );
+		if ( headers_sent() ) {
+			// Output has already started, so the directive the edge cache reads
+			// can no longer be set. Report the veto as absent: the caller then
+			// renders the banner instead, which costs a crawler a few KB of
+			// markup. The other direction costs a human their consent notice.
+			return false;
+		}
+		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+		header( 'Pragma: no-cache' );
+		header( 'X-LiteSpeed-Cache-Control: no-cache' );
+		header( 'Vary: User-Agent', false );
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		if ( ! defined( 'DONOTCACHEOBJECT' ) ) {
+			define( 'DONOTCACHEOBJECT', true );
+		}
+		$this->bot_variance_cache_vetoed = true;
+		return true;
+	}
+
+	/**
+	 * Whether the banner may actually be withheld from this crawler.
+	 *
+	 * Suppression and the cache veto are one decision, not two: the render may
+	 * only differ for a crawler if this response is also kept out of the shared
+	 * cache. When the veto cannot be installed, the banner renders.
+	 *
+	 * @return bool
+	 */
+	private function bot_suppression_applies() {
+		if ( ! $this->is_bot_variant_render() ) {
+			return false;
+		}
+		return $this->veto_page_cache_for_bot_variance();
+	}
+
+	/**
 	 * Whether the opt-in cache-safe jurisdiction bootstrap is active.
 	 *
 	 * The cached HTML is always the most-protective GDPR shell. script.js makes
@@ -1995,6 +2133,15 @@ class Frontend {
 		if ( $this->is_banner_disabled_by_settings() ) {
 			return $is_cacheable;
 		}
+		// FlyingPress reads neither DONOTCACHEPAGE nor `Cache-Control: no-store`,
+		// so the crawler veto has to be spoken in its own language too. Asked as
+		// the plain variance question rather than through
+		// bot_suppression_applies(): this filter runs while output is being
+		// assembled, when the header half of the veto is no longer available,
+		// and returning false here IS the veto.
+		if ( $this->is_bot_variant_render() ) {
+			return false;
+		}
 		if ( $this->is_country_dependent_output() ) {
 			// The jurisdiction bootstrap renders one strict, visitor-invariant
 			// document and resolves the live law through a no-store REST request
@@ -2032,6 +2179,13 @@ class Frontend {
 		if ( $this->is_banner_disabled_by_settings() ) {
 			return;
 		}
+		// Install the crawler veto here, while nothing has been sent yet. It is
+		// independent of the country dimension below: a site with one global
+		// banner and no geo targeting still renders differently for a crawler,
+		// and that difference is exactly what a User-Agent-blind page cache
+		// freezes for everyone. Resolving it on `send_headers` also means the
+		// verdict is already memoised by the time wp_head asks.
+		$this->bot_suppression_applies();
 		if ( ! $this->is_country_dependent_output() || headers_sent() ) {
 			return;
 		}
@@ -3413,18 +3567,11 @@ class Frontend {
 		// hide_from_bots: mirror the enqueue_scripts() gate so a crawler gets
 		// no banner container markup or placeholder CSS either — the setting
 		// promises "cleaner HTML to crawlers", and skipping only the script
-		// left the full (visually hidden) container in the bot's copy. Same
-		// Cache Compatibility guard as the enqueue gate: under full-page
-		// caching the render must stay visitor-invariant, or a bot-warmed
-		// cache copy would hide the banner from every human visitor. (#158)
-		// Same requirement under the cached jurisdiction shell.
-		if ( ! $this->is_cache_compatibility_enabled() && ! $this->is_geo_bootstrap_cache_active() ) {
-			$bot_settings = $this->get_faz_settings();
-			if ( ! isset( $bot_settings['banner_control']['hide_from_bots'] ) || ! empty( $bot_settings['banner_control']['hide_from_bots'] ) ) {
-				if ( faz_is_bot() ) {
-					return true;
-				}
-			}
+		// left the full (visually hidden) container in the bot's copy. The
+		// shared predicate carries the cache conditions; see
+		// veto_page_cache_for_bot_variance().
+		if ( $this->bot_suppression_applies() ) {
+			return true;
 		}
 
 		// Runtime geo-routing opt-in fallback with no matching banner: keep
