@@ -34,6 +34,53 @@ class DSAR_Shortcode {
 	const MESSAGE_MAX_LENGTH = 5000;
 
 	/**
+	 * Default minimum seconds between a form being rendered and submitted.
+	 *
+	 * The nonce is not a per-submission cost. For an anonymous visitor
+	 * WordPress derives it from uid 0 and an empty session token, so a single
+	 * nonce scraped once from a public page is valid site-wide, from every
+	 * source address, for 12 to 24 hours; a script that posts straight to
+	 * `admin-ajax.php` pays for it once and then submits as fast as the server
+	 * will answer. The dwell time is the cost the nonce is not: the form is
+	 * stamped with the moment it was issued, the stamp is signed, and a
+	 * submission that arrives sooner than this is refused.
+	 *
+	 * Three seconds, because the only thing that must never happen is refusing
+	 * a data subject. A person typing a name, an email address and picking a
+	 * request type cannot beat it; a person whose browser autofills all three
+	 * and who clicks immediately might, and is told to submit again in a
+	 * moment, which the next attempt satisfies by the passage of time alone.
+	 * A script posting straight to the endpoint beats it always.
+	 *
+	 * Filter: `faz_dsar_min_dwell_seconds` (0 disables it).
+	 */
+	const MIN_DWELL_SECONDS = 3;
+
+	/**
+	 * Default leading hex zeros required of the proof-of-work hash.
+	 *
+	 * Four, i.e. one accepted hash in 65,536 — about 71,000 attempts on average.
+	 * Measured with the shipped solver in headless Chromium: mean 254 ms from
+	 * click to request, median 268 ms, worst of eight runs 495 ms. On an
+	 * emulated low-end phone (Pixel 5 viewport, 4x CPU throttling) the same
+	 * runs give mean 890 ms, worst 1,879 ms. The numbers come from
+	 * `tests/unit/js/dsar-antibot-pow.test.mjs`, which runs the real
+	 * `frontend/js/faz-dsar.js` and verifies every answer it produces.
+	 *
+	 * The count of attempts is geometrically distributed, so the tail is long:
+	 * the client therefore carries a wall-clock budget and GIVES UP rather than
+	 * freezing a form, and giving up means the submission is sent without an
+	 * answer — which the server accepts. The worst case of the cost is a bot
+	 * that got in for free, never a data subject who could not submit.
+	 *
+	 * Filter: `faz_dsar_pow_difficulty`, clamped to 1-6. Six is about 16
+	 * million hashes and would take a slow phone the better part of a minute:
+	 * the clamp is there so a well-meant "make it harder" cannot turn into a
+	 * denial.
+	 */
+	const POW_DIFFICULTY = 4;
+
+	/**
 	 * Default cap on accepted requests per client IP per 24 hours.
 	 *
 	 * The 60-second lock below only spaces submissions out; on its own it lets
@@ -112,6 +159,9 @@ class DSAR_Shortcode {
 		// injected via innerHTML is silently ignored by browsers.
 		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue_assets' ) );
 		add_action( 'faz_after_activate', array( $this, 'assign_capabilities' ) );
+		// Starts the clock the unstamped-submission grace window is measured
+		// against (see stampless_still_possible()).
+		add_action( 'faz_after_activate', array( $this, 'record_stamp_epoch' ) );
 		// Keep the pending count honest however a record appears or leaves —
 		// the form, WP-CLI, an import, the trash. It is memoised for five
 		// minutes because it is rendered on every admin page load, and a count
@@ -318,6 +368,12 @@ class DSAR_Shortcode {
 
 		$nonce = wp_create_nonce( self::AJAX_ACTION );
 		$id    = 'faz-dsar-' . wp_rand( 1000, 9999 );
+		// Everything the server needs to price this submission, signed so the
+		// client cannot rewrite it: the issue time (dwell), the randomised
+		// honeypot field name, and the proof-of-work challenge when it is on.
+		// Nothing is stored server-side — the signature is what makes the
+		// values trustworthy when they come back.
+		$stamp = self::issue_stamp();
 
 		$request_types = array(
 			'access'      => __( 'Right of Access (Article 15) — receive a copy of my data', 'faz-cookie-manager' ),
@@ -340,10 +396,36 @@ class DSAR_Shortcode {
 			>
 				<input type="hidden" name="action" value="<?php echo esc_attr( self::AJAX_ACTION ); ?>">
 				<input type="hidden" name="nonce"  value="<?php echo esc_attr( $nonce ); ?>">
+				<?php if ( '' !== $stamp['sig'] ) : ?>
+					<input type="hidden" name="faz_dsar_t" value="<?php echo esc_attr( $stamp['t'] ); ?>">
+					<input type="hidden" name="faz_dsar_s" value="<?php echo esc_attr( $stamp['sig'] ); ?>">
+				<?php endif; ?>
+				<?php if ( '' !== $stamp['salt'] ) : ?>
+					<?php
+					// Proof-of-work challenge (opt-in, see pow_enabled()). The
+					// difficulty travels in the open because it travels signed:
+					// lowering it invalidates the stamp. `faz_pow_n` is filled
+					// in by frontend/js/faz-dsar.js and stays empty when
+					// JavaScript is off, which the server accepts — a puzzle
+					// that can refuse a data subject is not an option here.
+					?>
+					<input type="hidden" name="faz_pow_salt" value="<?php echo esc_attr( $stamp['salt'] ); ?>">
+					<input type="hidden" name="faz_pow_diff" value="<?php echo esc_attr( $stamp['diff'] ); ?>">
+					<input type="hidden" name="faz_pow_n" value="">
+				<?php endif; ?>
 
-				<!-- Honeypot field — bots fill it, humans don't -->
+				<?php
+				// Honeypot — bots fill it, humans don't. The field NAME is
+				// per-render and derived from the signed stamp above
+				// (honeypot_field()), because a field called `faz_hp_name` on
+				// every site forever is a field a scripted client simply omits,
+				// at zero cost. The server recomputes the name from the stamp,
+				// so there is no per-visitor state to keep, and a submission
+				// that carries a verified stamp but not this field did not come
+				// from the markup that stamp was issued with.
+				?>
 				<div class="faz-dsar-honeypot" aria-hidden="true">
-					<input type="text" name="faz_hp_name" tabindex="-1" autocomplete="off" aria-hidden="true">
+					<input type="text" name="<?php echo esc_attr( $stamp['hp'] ); ?>" tabindex="-1" autocomplete="off" aria-hidden="true">
 				</div>
 
 				<div class="faz-dsar-field">
@@ -395,13 +477,14 @@ class DSAR_Shortcode {
 			return;
 		}
 
-		// Honeypot check.
-		if ( ! empty( $_POST['faz_hp_name'] ) ) {
-			wp_send_json_error( __( 'Submission rejected.', 'faz-cookie-manager' ) );
-			return;
-		}
+		// The honeypot used to be checked here, against a field name hardcoded
+		// into every copy of the plugin. It now lives in check_antibot(),
+		// reached through guard_submission() below, together with the dwell
+		// time and the proof-of-work answer: all three read the same signed
+		// stamp, and a check that reads half a stamp is a check that can be
+		// told half a story.
 
-		$name        = isset( $_POST['dsar_name'] ) ? sanitize_text_field( wp_unslash( $_POST['dsar_name'] ) ) : '';
+		$name     = isset( $_POST['dsar_name'] ) ? sanitize_text_field( wp_unslash( $_POST['dsar_name'] ) ) : '';
 		$email       = isset( $_POST['dsar_email'] ) ? sanitize_email( wp_unslash( $_POST['dsar_email'] ) ) : '';
 		$type        = isset( $_POST['dsar_type'] ) ? sanitize_key( wp_unslash( $_POST['dsar_type'] ) ) : '';
 		$message     = isset( $_POST['dsar_message'] ) ? sanitize_textarea_field( wp_unslash( $_POST['dsar_message'] ) ) : '';
@@ -507,25 +590,19 @@ class DSAR_Shortcode {
 	/**
 	 * Decide whether a submission may be accepted.
 	 *
-	 * Three layers, cheapest first:
+	 * Four layers, cheapest first:
 	 *
-	 * 1. `faz_dsar_pre_submit` — the integration point for a third-party
-	 *    protection plugin (ALTCHA / OpenPorte, Turnstile, hCaptcha, Akismet…).
-	 *    Those plugins gate the forms they know — Contact Form 7, WPForms,
-	 *    Gravity — and this form is a plugin-specific `wp_ajax` action, so
-	 *    without a hook they cannot see it at all. Return a `WP_Error` to
-	 *    reject; its message is shown to the visitor verbatim. The raw payload
-	 *    (including any challenge token the protection plugin added to the
-	 *    form) is in `$_POST`, so a gate can read its own field directly:
-	 *
-	 *        add_filter( 'faz_dsar_pre_submit', function ( $verdict ) {
-	 *            return my_captcha_is_valid() ? $verdict : new WP_Error(
-	 *                'captcha', __( 'Please complete the verification.' )
-	 *            );
-	 *        } );
-	 *
-	 * 2. One submission per email address per hour.
-	 * 3. Cumulative 24-hour ceilings, per IP and site-wide.
+	 * 1. The built-in anti-bot checks — randomised honeypot, signed minimum
+	 *    dwell time, optional proof of work. See check_antibot(), which also
+	 *    states why every one of them fails OPEN.
+	 * 2. `faz_dsar_pre_submit` — the integration point for a third-party
+	 *    protection plugin (ALTCHA / OpenPorte, Turnstile, hCaptcha). Those
+	 *    plugins gate the forms they know — Contact Form 7, WPForms, Gravity —
+	 *    and this form is a plugin-specific `wp_ajax` action, so without a hook
+	 *    they cannot see it at all. Recipes are in the filter's own docblock a
+	 *    few lines below.
+	 * 3. One submission per email address per hour.
+	 * 4. Cumulative 24-hour ceilings, per IP and site-wide.
 	 *
 	 * The 60-second per-IP lock is NOT here: it is acquired by the caller,
 	 * which owns releasing it.
@@ -538,6 +615,82 @@ class DSAR_Shortcode {
 		$context = is_array( $context ) ? $context : array();
 		$email   = isset( $context['email'] ) ? (string) $context['email'] : '';
 
+		$antibot = $this->check_antibot( $context );
+		if ( is_wp_error( $antibot ) ) {
+			return $antibot;
+		}
+
+		/**
+		 * Gate a DSAR submission with your own verification.
+		 *
+		 * Return a `WP_Error` to refuse it — its message is shown to the
+		 * visitor verbatim — or leave the incoming value alone to accept. The
+		 * raw payload is still in `$_POST`, so a gate reads its own challenge
+		 * field directly; `$context` carries the sanitized name, email, type
+		 * and message, for a gate that scores the content.
+		 *
+		 * This exists because a cookie-consent plugin has no business shipping
+		 * three vendor integrations: three APIs would be three maintenance
+		 * treadmills and three entries in the readme's External Services
+		 * section, and the plugin itself must make no outbound call. The
+		 * verification request therefore belongs in YOUR snippet (a
+		 * site-specific plugin, or your theme's functions.php), which is also
+		 * where the vendor's secret key belongs. Five lines each:
+		 *
+		 * Cloudflare Turnstile — add the widget to the page with
+		 * `<div class="cf-turnstile" data-sitekey="…"></div>` plus Cloudflare's
+		 * script, and verify the token it writes into `cf-turnstile-response`:
+		 *
+		 *     add_filter( 'faz_dsar_pre_submit', function ( $verdict ) {
+		 *         $token = isset( $_POST['cf-turnstile-response'] ) ? sanitize_text_field( wp_unslash( $_POST['cf-turnstile-response'] ) ) : '';
+		 *         $res   = wp_remote_post( 'https://challenges.cloudflare.com/turnstile/v0/siteverify', array( 'body' => array( 'secret' => TURNSTILE_SECRET, 'response' => $token, 'remoteip' => faz_resolve_client_ip() ) ) );
+		 *         if ( is_wp_error( $res ) ) { return $verdict; } // verification unreachable: let the data subject through
+		 *         $ok = ! empty( json_decode( wp_remote_retrieve_body( $res ), true )['success'] );
+		 *         return $ok ? $verdict : new WP_Error( 'turnstile', __( 'Please complete the verification and submit again.' ) );
+		 *     } );
+		 *
+		 * hCaptcha — same shape, different endpoint and field:
+		 *
+		 *     add_filter( 'faz_dsar_pre_submit', function ( $verdict ) {
+		 *         $token = isset( $_POST['h-captcha-response'] ) ? sanitize_text_field( wp_unslash( $_POST['h-captcha-response'] ) ) : '';
+		 *         $res   = wp_remote_post( 'https://api.hcaptcha.com/siteverify', array( 'body' => array( 'secret' => HCAPTCHA_SECRET, 'response' => $token ) ) );
+		 *         if ( is_wp_error( $res ) ) { return $verdict; }
+		 *         $ok = ! empty( json_decode( wp_remote_retrieve_body( $res ), true )['success'] );
+		 *         return $ok ? $verdict : new WP_Error( 'hcaptcha', __( 'Please complete the verification and submit again.' ) );
+		 *     } );
+		 *
+		 * A hosted ALTCHA (the mechanism behind OpenPorte) — the widget posts
+		 * its solution in `altcha`, and the ALTCHA server verifies it:
+		 *
+		 *     add_filter( 'faz_dsar_pre_submit', function ( $verdict ) {
+		 *         $payload = isset( $_POST['altcha'] ) ? sanitize_text_field( wp_unslash( $_POST['altcha'] ) ) : '';
+		 *         $res     = wp_remote_post( 'https://eu.altcha.org/api/v1/challenge/verify', array( 'headers' => array( 'Authorization' => 'Bearer ' . ALTCHA_API_KEY, 'Content-Type' => 'application/json' ), 'body' => wp_json_encode( array( 'payload' => $payload ) ) ) );
+		 *         if ( is_wp_error( $res ) ) { return $verdict; }
+		 *         $ok = 200 === (int) wp_remote_retrieve_response_code( $res );
+		 *         return $ok ? $verdict : new WP_Error( 'altcha', __( 'Please complete the verification and submit again.' ) );
+		 *     } );
+		 *
+		 * Note the identical third line in all three. A verification service
+		 * that is down, rate-limited or blocked by the host's egress rules must
+		 * not become a refusal: this form exercises GDPR Art. 15-22 and Art.
+		 * 12(2) obliges the controller to FACILITATE that, so an unreachable
+		 * gate lets the submission through. It is also why none of these
+		 * recipes uses a visual puzzle setting that a screen-reader user, an
+		 * old phone or a keyboard-only visitor could fail to solve.
+		 *
+		 * Akismet is deliberately absent, and that absence is the
+		 * recommendation. The body of this form is a named person's identity
+		 * plus the fact that they are exercising a data-protection right;
+		 * sending it to a third-party classifier is a processing decision with
+		 * its own legal basis, its own record in the Art. 30 register and its
+		 * own line in the privacy policy. A cookie-consent plugin must not make
+		 * that decision on the controller's behalf. A controller who has mapped
+		 * it can of course call Akismet from this very filter.
+		 *
+		 * @since 1.34.1
+		 * @param null|\WP_Error $verdict Null to accept; a WP_Error to refuse.
+		 * @param array          $context Sanitized submission fields.
+		 */
 		$verdict = apply_filters( 'faz_dsar_pre_submit', null, $context );
 		if ( is_wp_error( $verdict ) ) {
 			$message = $verdict->get_error_message();
@@ -588,6 +741,525 @@ class DSAR_Shortcode {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Issue the signed stamp a rendered form carries.
+	 *
+	 * Three facts travel with the form and come back with the submission: when
+	 * it was issued, what its honeypot field is called, and — when the
+	 * proof-of-work gate is on — which challenge it must answer. All three are
+	 * covered by one HMAC over `wp_salt()`, which is what makes them usable
+	 * without keeping a row per visitor: the server recomputes the signature
+	 * from the posted values and either they are the ones it issued or they are
+	 * not. No challenge table, no session, no cookie, nothing to clean up, and
+	 * nothing a page cache can get wrong beyond serving an older stamp, which
+	 * is a case the age window already handles.
+	 *
+	 * @since 1.34.2
+	 * @return array {
+	 *     @type int    $t    Issue timestamp.
+	 *     @type string $sig  Signature over t + salt + difficulty.
+	 *     @type string $hp   Honeypot field name for this render.
+	 *     @type string $salt Proof-of-work salt, '' when the gate is off.
+	 *     @type int    $diff Required leading hex zeros, 0 when the gate is off.
+	 * }
+	 */
+	public static function issue_stamp() {
+		$t    = time();
+		$salt = '';
+		$diff = 0;
+		$sig  = '';
+
+		if ( '' !== self::stamp_secret() ) {
+			if ( self::pow_enabled() ) {
+				// Unpredictable per render: a salt a client could guess ahead
+				// of time is a challenge it could pre-solve, which is the whole
+				// cost gone. wp_generate_password() is seeded from
+				// random_bytes().
+				$salt = \wp_generate_password( 16, false, false );
+				$diff = self::pow_difficulty();
+			}
+			$sig = self::stamp_signature( $t, $salt, $diff );
+		}
+
+		return array(
+			't'    => $t,
+			'sig'  => $sig,
+			'hp'   => self::honeypot_field( $t ),
+			'salt' => $salt,
+			'diff' => $diff,
+		);
+	}
+
+	/**
+	 * The key everything on this form is signed and keyed with.
+	 *
+	 * `wp_salt()` is pluggable and always present in a loaded WordPress, so in
+	 * production this is simply `wp_salt()`. The guard is for the paths where
+	 * this class runs with WordPress only partly in place — the standalone unit
+	 * harnesses do exactly that — and it returns '' instead of throwing.
+	 *
+	 * Everything downstream reads '' as "this install does not stamp": no stamp
+	 * is rendered, none is verified, and the unstamped-submission rule stands
+	 * aside, so the form keeps working and keeps accepting requests. A fatal
+	 * raised while rendering a public page would take that page down with it,
+	 * which is a worse outcome than any amount of spam — and on this form it
+	 * would also be an outright denial of Art. 15-22.
+	 *
+	 * The leading backslash is not decoration. This file lives in
+	 * `FazCookie\Includes`, and PHP resolves an unqualified call against the
+	 * current namespace before the global one, so `wp_salt()` here means
+	 * `FazCookie\Includes\wp_salt()` — undefined. It is the same mistake as
+	 * issues #85 and #9.
+	 *
+	 * @since 1.34.2
+	 * @return string The salt, or '' when WordPress has not provided one.
+	 */
+	private static function stamp_secret() {
+		return function_exists( 'wp_salt' ) ? (string) \wp_salt() : '';
+	}
+
+	/**
+	 * Sign the facts a form carries.
+	 *
+	 * Truncated to 32 hex characters (128 bits), which is far past anything
+	 * forgeable and keeps the markup small.
+	 *
+	 * @since 1.34.2
+	 * @param int    $t    Issue timestamp.
+	 * @param string $salt Proof-of-work salt, or ''.
+	 * @param int    $diff Proof-of-work difficulty, or 0.
+	 * @return string Signature, or '' when this install cannot sign.
+	 */
+	private static function stamp_signature( $t, $salt, $diff ) {
+		$secret = self::stamp_secret();
+		if ( '' === $secret ) {
+			return '';
+		}
+		return substr(
+			hash_hmac( 'sha256', 'faz_dsar_stamp|' . (int) $t . '|' . $salt . '|' . (int) $diff, $secret ),
+			0,
+			32
+		);
+	}
+
+	/**
+	 * The honeypot field name for a given issue time.
+	 *
+	 * Derived, not stored: the same timestamp always yields the same name, so
+	 * the server can recompute what it rendered without remembering anything
+	 * about the visitor. Keyed on `wp_salt()`, so the name cannot be predicted
+	 * from another site or from the timestamp alone.
+	 *
+	 * Falls back to the original static name on an install that cannot sign
+	 * (see stamp_secret()), so the field is still rendered and a filled one is
+	 * still refused — the derived name is a cost raised against a bot, not a
+	 * precondition for the form working.
+	 *
+	 * @since 1.34.2
+	 * @param int $t Issue timestamp.
+	 * @return string
+	 */
+	private static function honeypot_field( $t ) {
+		$secret = self::stamp_secret();
+		if ( '' === $secret ) {
+			return 'faz_hp_name';
+		}
+		return 'faz_hp_' . substr( hash_hmac( 'sha256', 'faz_dsar_hp|' . (int) $t, $secret ), 0, 12 );
+	}
+
+	/**
+	 * Whether the proof-of-work gate is switched on.
+	 *
+	 * Default FALSE, so no site changes behaviour on update. Deliberately a
+	 * filter and not a setting: the switch belongs with the rest of this form's
+	 * knobs (`faz_dsar_max_per_ip_per_day`, `faz_dsar_min_dwell_seconds`, the
+	 * proxy filters), all of which are filters, and a checkbox would cost a
+	 * settings key, a sanitiser entry, a view, admin JS and a translated label
+	 * — for a control a site touches once, if ever, and only while it is being
+	 * targeted. One line in a snippet:
+	 *
+	 *     add_filter( 'faz_dsar_pow_enabled', '__return_true' );
+	 *
+	 * @since 1.34.2
+	 * @return bool
+	 */
+	public static function pow_enabled() {
+		/**
+		 * Switch on the self-contained proof-of-work gate for the DSAR form.
+		 *
+		 * @since 1.34.2
+		 * @param bool $enabled Default false.
+		 */
+		return (bool) \apply_filters( 'faz_dsar_pow_enabled', false );
+	}
+
+	/**
+	 * Required leading hex zeros, clamped to a range a phone can still clear.
+	 *
+	 * @since 1.34.2
+	 * @return int
+	 */
+	public static function pow_difficulty() {
+		/**
+		 * Difficulty of the DSAR proof of work, in leading hex zeros.
+		 *
+		 * @since 1.34.2
+		 * @param int $difficulty Default 4 (one hash in 65,536).
+		 */
+		$diff = (int) \apply_filters( 'faz_dsar_pow_difficulty', self::POW_DIFFICULTY );
+		return max( 1, min( 6, $diff ) );
+	}
+
+	/**
+	 * How long a stamped form stays submittable.
+	 *
+	 * 24 hours, which is deliberately NOT tighter than the nonce rendered
+	 * beside it: WordPress accepts an anonymous nonce for 12 to 24 hours, so on
+	 * a page served from cache for longer than that the nonce is what fails
+	 * first, with its own "refresh the page" message, and this window never
+	 * becomes a second, earlier expiry that an admin would have to discover.
+	 * Its job is only to stop a scraped stamp from being replayable forever on
+	 * a site that has raised `nonce_life`.
+	 *
+	 * @since 1.34.2
+	 * @return int Seconds; 0 disables the upper bound.
+	 */
+	private function max_form_age() {
+		return $this->cap( 'faz_dsar_max_form_age', DAY_IN_SECONDS );
+	}
+
+	/**
+	 * Read and verify the stamp on the current submission.
+	 *
+	 * @since 1.34.2
+	 * @return array|null|false Verified stamp (t, salt, diff); null when the
+	 *                          submission carries no stamp at all; false when
+	 *                          it carries one that does not verify.
+	 */
+	private function verified_stamp() {
+		if ( '' === self::stamp_secret() ) {
+			// Nothing was signed, so nothing can be verified. Reported as "no
+			// stamp", which the caller accepts.
+			return null;
+		}
+
+		$t_raw = isset( $_POST['faz_dsar_t'] ) ? trim( (string) \wp_unslash( $_POST['faz_dsar_t'] ) ) : '';
+		$sig   = isset( $_POST['faz_dsar_s'] ) ? trim( (string) \wp_unslash( $_POST['faz_dsar_s'] ) ) : '';
+
+		if ( '' === $t_raw || '' === $sig ) {
+			return null;
+		}
+
+		$t = (int) $t_raw;
+		// The salt and the difficulty are read back from the request and then
+		// CHECKED by the signature, which is the point: a client that lowers
+		// the difficulty or swaps in a pre-solved salt invalidates the stamp,
+		// so there is nothing to keep server-side to stop it.
+		$salt = isset( $_POST['faz_pow_salt'] ) ? trim( (string) \wp_unslash( $_POST['faz_pow_salt'] ) ) : '';
+		$salt = preg_replace( '/[^A-Za-z0-9]/', '', $salt );
+		$diff = isset( $_POST['faz_pow_diff'] ) ? (int) $_POST['faz_pow_diff'] : 0;
+
+		if ( ! hash_equals( self::stamp_signature( $t, $salt, $diff ), $sig ) ) {
+			return false;
+		}
+
+		return array(
+			't'    => $t,
+			'salt' => $salt,
+			'diff' => $diff,
+		);
+	}
+
+	/**
+	 * Whether a submission with no stamp can still be a genuine one.
+	 *
+	 * It can, for a bounded while after this version starts running, and the
+	 * bound is not a guess. The nonce was already verified before this code
+	 * runs, and WordPress accepts a nonce for at most `nonce_life` (24 hours by
+	 * default); a nonce is created when the page is RENDERED, including a page
+	 * that was then cached. So a valid nonce means "this markup was rendered
+	 * less than nonce_life ago". Once this version has been live for longer
+	 * than that, every renderable form carries a stamp, and a submission
+	 * without one did not come from a form this site served.
+	 *
+	 * Inside the window the opposite is true: a page cached before the update
+	 * holds a pre-stamp form with a nonce that still verifies, and refusing it
+	 * would deny Art. 15-22 requests for as long as that cache lives. So the
+	 * window exists, it is generous (nonce_life plus a day), and it closes by
+	 * itself.
+	 *
+	 * The epoch is recorded by `record_stamp_epoch()` on activation and on
+	 * every version bump. If it is missing — an install where that hook never
+	 * ran — this returns true: an unknown epoch is not grounds for refusing a
+	 * data subject.
+	 *
+	 * @since 1.34.2
+	 * @return bool
+	 */
+	private function stampless_still_possible() {
+		if ( '' === self::stamp_secret() ) {
+			// This install issues no stamps, so no submission can carry one.
+			return true;
+		}
+
+		$since = (int) \get_option( 'faz_dsar_stamped_since', 0 );
+		if ( $since <= 0 ) {
+			return true;
+		}
+		// Core's own filter, read rather than redefined: a site that lengthens
+		// nonce life lengthens this window with it, because the premise above
+		// is exactly "the nonce proves the render is recent".
+		$nonce_life = (int) \apply_filters( 'nonce_life', DAY_IN_SECONDS );
+		$window     = max( DAY_IN_SECONDS, $nonce_life ) + DAY_IN_SECONDS;
+		return time() < ( $since + $window );
+	}
+
+	/**
+	 * Note when this version — the one that stamps forms — started running.
+	 *
+	 * Hooked to `faz_after_activate`, which fires on activation and on every
+	 * version bump, so the grace window above restarts whenever the rendering
+	 * code could have changed. Written with add_option so an existing epoch is
+	 * never pushed forward by a later activation of the same version.
+	 *
+	 * @since 1.34.2
+	 */
+	public function record_stamp_epoch() {
+		\add_option( 'faz_dsar_stamped_since', time(), '', 'yes' );
+	}
+
+	/**
+	 * The built-in anti-bot layer: honeypot, dwell time, proof of work.
+	 *
+	 * EVERY check here fails open toward the data subject, and that is not a
+	 * concession, it is the requirement. This form is how a person exercises
+	 * GDPR Art. 15-22, and Art. 12(2) obliges the controller to facilitate
+	 * that; a gate that refuses a genuine request is not an inconvenience, it
+	 * is a denial of a right. So the shape is the same one `guard_submission()`
+	 * already uses for the per-IP ceiling, which skips rather than refuses when
+	 * `faz_client_ip_identifies_visitor()` cannot name a visitor: when a check
+	 * cannot be evaluated, it does not run.
+	 *
+	 * Concretely:
+	 *
+	 * - No stamp at all? Accept while a form rendered by an earlier version can
+	 *   still be sitting in a page cache, because refusing it would deny
+	 *   requests for as long as that cache lives. Once it cannot — the nonce
+	 *   already verified, and a valid nonce means the markup is recent, see
+	 *   stampless_still_possible() — refuse. That window closes on its own, and
+	 *   it is the only reason the dwell check below cannot be skipped by simply
+	 *   omitting two fields.
+	 * - A stamp that does not verify? Refuse, with "reload the page". This is
+	 *   the one case that cannot be an honest client: the signature covers
+	 *   values this server issued. It is also recoverable in one click, and if
+	 *   `wp_salt()` ever did change, the nonce checked before this would have
+	 *   failed first with the same instruction.
+	 * - Too fast? Refuse, with "submit again in a moment" — which the next
+	 *   attempt satisfies by the passage of time, needing nothing from the
+	 *   visitor but patience. Too old? "Reload the page".
+	 * - Proof of work enabled but no answer? Accept. That is a browser with
+	 *   JavaScript off, and it is also a script that chose not to solve — the
+	 *   two are indistinguishable from the server and the tie must be broken in
+	 *   the data subject's favour. What the gate does buy is this: a client that
+	 *   DOES run the form's JavaScript (which is most spam tooling, since the
+	 *   form only posts through `fetch`) pays real CPU per submission, and a
+	 *   client that fakes an answer is refused. The teeth against a bare
+	 *   straight-to-endpoint post are the dwell time above, not this.
+	 *
+	 * @since 1.34.2
+	 * @param array $context Sanitized submission fields.
+	 * @return true|\WP_Error
+	 */
+	public function check_antibot( $context ) {
+		$stamp = $this->verified_stamp();
+
+		if ( false === $stamp ) {
+			return $this->reject( 'faz_dsar_stamp', $this->stale_form_message(), $context );
+		}
+
+		if ( null === $stamp ) {
+			// An unstamped submission is the one case where fail-open and
+			// "the dwell time must actually cost something" pull against each
+			// other: if omitting two fields were always enough to skip the
+			// dwell check, the check would be decorative, and the reported
+			// spam chain posts straight to this endpoint. The tie is broken by
+			// time, not by guessing — see stampless_still_possible(): while a
+			// form rendered by an earlier version can still be in a page
+			// cache, an unstamped submission is accepted; once it cannot be,
+			// it is refused.
+			if ( $this->stampless_still_possible() ) {
+				// The only check left is the original static honeypot, kept
+				// exactly for this path. Its absence proves nothing here —
+				// there is no stamp to say what the markup contained — so only
+				// a FILLED field refuses.
+				if ( ! empty( $_POST['faz_hp_name'] ) ) {
+					return $this->reject( 'faz_dsar_honeypot', __( 'Submission rejected.', 'faz-cookie-manager' ), $context );
+				}
+				return true;
+			}
+			return $this->reject( 'faz_dsar_stamp', $this->stale_form_message(), $context );
+		}
+
+		$age = time() - $stamp['t'];
+		$min = $this->cap( 'faz_dsar_min_dwell_seconds', self::MIN_DWELL_SECONDS );
+		$max = $this->max_form_age();
+
+		// A negative age means the stamp is dated in the future, which this
+		// server signed and only a clock moved backwards can explain. Skip the
+		// lower bound rather than refuse an hour of genuine requests over it.
+		if ( $min > 0 && $age >= 0 && $age < $min ) {
+			return $this->reject(
+				'faz_dsar_too_fast',
+				__( 'Please wait a moment and submit the form again.', 'faz-cookie-manager' ),
+				$context
+			);
+		}
+
+		if ( $max > 0 && $age > $max ) {
+			return $this->reject( 'faz_dsar_stale', $this->stale_form_message(), $context );
+		}
+
+		$hp = self::honeypot_field( $stamp['t'] );
+		if ( ! empty( $_POST[ $hp ] ) ) {
+			return $this->reject( 'faz_dsar_honeypot', __( 'Submission rejected.', 'faz-cookie-manager' ), $context );
+		}
+
+		/**
+		 * Whether a missing honeypot field refuses the submission.
+		 *
+		 * Default true, and sound because the stamp verified: the markup that
+		 * stamp was issued with DID contain this field, and a text input is
+		 * submitted — empty — by every browser that posts the form it sits in,
+		 * whether or not JavaScript runs. A submission that omits it therefore
+		 * did not come from that markup. The filter exists for the one way this
+		 * can be wrong on a real site: a front end that strips hidden inputs,
+		 * an optimiser that drops `aria-hidden` blocks, or a builder that
+		 * rebuilds the form. If data requests start being refused with
+		 * `faz_dsar_honeypot` and nobody is attacking the site, set this false.
+		 *
+		 * @since 1.34.2
+		 * @param bool $reject Default true.
+		 */
+		if ( ! isset( $_POST[ $hp ] ) && (bool) \apply_filters( 'faz_dsar_reject_missing_honeypot', true ) ) {
+			return $this->reject( 'faz_dsar_honeypot', __( 'Submission rejected.', 'faz-cookie-manager' ), $context );
+		}
+
+		return $this->check_pow( $stamp, $context );
+	}
+
+	/**
+	 * Verify the proof of work, if this form carried a challenge.
+	 *
+	 * ALTCHA's model, self-hosted: the server names a salt and a difficulty,
+	 * the client searches for an integer whose `SHA-256(salt + n)` begins with
+	 * that many hex zeros, and the server spends ONE hash checking it. No third
+	 * party, no API key, no asset from a CDN, nothing stored per challenge —
+	 * the salt is trusted because the stamp it travelled in is signed.
+	 *
+	 * Note what drives this: the salt and difficulty from the SIGNED stamp, not
+	 * `pow_enabled()`. A site that switches the gate off mid-flood does not
+	 * thereby start ignoring answers to challenges it already issued, and a
+	 * site that switches it on does not refuse the forms rendered before.
+	 *
+	 * @since 1.34.2
+	 * @param array $stamp   Verified stamp.
+	 * @param array $context Sanitized submission fields.
+	 * @return true|\WP_Error
+	 */
+	private function check_pow( $stamp, $context ) {
+		if ( '' === $stamp['salt'] || $stamp['diff'] < 1 ) {
+			return true;
+		}
+
+		$answer = isset( $_POST['faz_pow_n'] ) ? trim( (string) \wp_unslash( $_POST['faz_pow_n'] ) ) : '';
+
+		if ( '' === $answer ) {
+			/**
+			 * Fires when a challenged submission arrives with no answer.
+			 *
+			 * The submission is ACCEPTED — see check_antibot() — because this
+			 * is what a browser with JavaScript disabled looks like. The action
+			 * is here so a site that wants to know can count them.
+			 *
+			 * @since 1.34.2
+			 * @param array $context Sanitized submission fields.
+			 */
+			\do_action( 'faz_dsar_pow_unanswered', $context );
+			return true;
+		}
+
+		// Bounded before hashing: the length cap is what keeps a megabyte of
+		// digits from being handed to hash() on every request.
+		if ( ! preg_match( '/^[0-9]{1,20}$/', $answer ) ) {
+			return $this->reject( 'faz_dsar_pow', __( 'Submission rejected.', 'faz-cookie-manager' ), $context );
+		}
+
+		$hash = hash( 'sha256', $stamp['salt'] . $answer );
+		if ( 0 !== strncmp( $hash, str_repeat( '0', (int) $stamp['diff'] ), (int) $stamp['diff'] ) ) {
+			return $this->reject( 'faz_dsar_pow', __( 'Submission rejected.', 'faz-cookie-manager' ), $context );
+		}
+
+		// One accepted answer per challenge. A correct answer is worth CPU, so
+		// replaying it across hundreds of submissions would buy back exactly
+		// the cost the gate charges. The marker is written when a submission is
+		// ACCEPTED (record_submission()) and taken back if it could not be
+		// stored (release_submission()), so a visitor who is refused by a later
+		// layer — the hourly email limit, say — can correct and resubmit the
+		// same form instead of meeting a replay refusal they cannot act on.
+		if ( false !== \get_transient( self::pow_spend_key( $stamp['salt'] ) ) ) {
+			return $this->reject( 'faz_dsar_pow_replay', $this->stale_form_message(), $context );
+		}
+
+		return true;
+	}
+
+	/**
+	 * Transient key marking a proof-of-work challenge as spent.
+	 *
+	 * Under the shared `faz_dsar_rl_` prefix, like every other throttle key on
+	 * this form, so a reset clears it with the rest.
+	 *
+	 * @since 1.34.2
+	 * @param string $salt Challenge salt.
+	 * @return string
+	 */
+	private static function pow_spend_key( $salt ) {
+		return 'faz_dsar_rl_pow_' . substr( hash_hmac( 'sha256', $salt, self::stamp_secret() ), 0, 16 );
+	}
+
+	/**
+	 * Mark this submission's challenge as spent, if it carried one.
+	 *
+	 * @since 1.34.2
+	 * @param bool $spent True to spend, false to give it back.
+	 */
+	private function set_pow_spent( $spent ) {
+		$stamp = $this->verified_stamp();
+		if ( ! is_array( $stamp ) || '' === $stamp['salt'] ) {
+			return;
+		}
+		$key = self::pow_spend_key( $stamp['salt'] );
+		if ( $spent ) {
+			\set_transient( $key, 1, max( MINUTE_IN_SECONDS, $this->max_form_age() ) );
+		} else {
+			\delete_transient( $key );
+		}
+	}
+
+	/**
+	 * The one message for "this form is no longer the one I issued".
+	 *
+	 * Shared by the forged stamp, the expired stamp and the replayed challenge,
+	 * because they are one situation for the visitor and have one remedy, and
+	 * because telling a bot which of the three it tripped is free information.
+	 *
+	 * @since 1.34.2
+	 * @return string
+	 */
+	private function stale_form_message() {
+		return __( 'This form has expired. Please reload the page and submit it again.', 'faz-cookie-manager' );
 	}
 
 	/**
@@ -687,6 +1359,11 @@ class DSAR_Shortcode {
 		set_transient( $this->email_rl_key( $email ), 1, HOUR_IN_SECONDS );
 		$this->site_bump();
 		$this->ip_bump();
+		// A proof-of-work challenge is a slot like any other, and this is the
+		// moment it is taken: not when the answer was checked, because a
+		// submission refused by a later layer must still be correctable and
+		// resubmittable on the same form.
+		$this->set_pow_spent( true );
 	}
 
 	/**
@@ -701,6 +1378,11 @@ class DSAR_Shortcode {
 	 */
 	public function release_submission( $email ) {
 		delete_transient( $this->email_rl_key( $email ) );
+		// The challenge goes back with it: the request was not stored, the
+		// visitor is being told to try again, and the form they still have open
+		// carries this salt. Making them reload to earn a new one would be a
+		// cost charged for our own database error.
+		$this->set_pow_spent( false );
 	}
 
 	/**
@@ -768,7 +1450,7 @@ class DSAR_Shortcode {
 
 	/** Transient key for the per-email hourly throttle. */
 	private function email_rl_key( $email ) {
-		return 'faz_dsar_rl_em_' . substr( hash_hmac( 'sha256', strtolower( $email ), wp_salt() ), 0, 16 );
+		return 'faz_dsar_rl_em_' . substr( hash_hmac( 'sha256', strtolower( $email ), \wp_salt() ), 0, 16 );
 	}
 
 	/**
