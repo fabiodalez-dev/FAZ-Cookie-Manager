@@ -148,17 +148,6 @@ class Geolocation {
 	}
 
 	/**
-	 * Resolve the visitor country with the public filter contract applied.
-	 *
-	 * This is the country signal used for banner selection. It intentionally
-	 * re-validates after `faz_visitor_country` so test fixtures and trusted
-	 * deployments can override the value without letting malformed output route
-	 * into an arbitrary banner bucket.
-	 *
-	 * @since 1.14.0
-	 * @return string Upper-case ISO 3166-1 alpha-2 country code, or empty string.
-	 */
-	/**
 	 * Whether this request may assert a Cloudflare header.
 	 *
 	 * Fails CLOSED when the shared predicate is unavailable: it is the only
@@ -176,6 +165,17 @@ class Geolocation {
 		return (bool) \faz_peer_is_cloudflare();
 	}
 
+	/**
+	 * Resolve the visitor country with the public filter contract applied.
+	 *
+	 * This is the country signal used for banner selection. It intentionally
+	 * re-validates after `faz_visitor_country` so test fixtures and trusted
+	 * deployments can override the value without letting malformed output route
+	 * into an arbitrary banner bucket.
+	 *
+	 * @since 1.14.0
+	 * @return string Upper-case ISO 3166-1 alpha-2 country code, or empty string.
+	 */
 	public static function get_visitor_country() {
 		$country = '';
 		if (
@@ -584,6 +584,14 @@ class Geolocation {
 		// and answering "no source" for it would cache a page rendered for an
 		// unknown country and then serve it to a real visitor whose country the
 		// edge did identify.
+		// Deliberately NOT cf_peer_is_trusted() here, even though the resolvers
+		// require it. That check answers "may THIS request assert the header";
+		// this function answers "is a country source configured for this site",
+		// and the two differ exactly where it matters — see the paragraph
+		// above. A review round asked for parity and it would be the wrong
+		// parity: a warmer would be told "no source", the page would be cached
+		// as country-unknown, and real visitors whose country the edge did
+		// identify would be served it.
 		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
 			$has_source = true;
 		}
@@ -672,6 +680,11 @@ class Geolocation {
 	 * @return array{source:string,configured:bool,working:bool,reason:string}
 	 */
 	public static function source_status( $force = false ) {
+		// Site-level, like has_country_source(): what the operator declared,
+		// not whether the request in hand may assert it. A status that flipped
+		// to "not configured" on a WP-CLI or cache-warmer request — neither of
+		// which carries the header — would be reporting the context it was
+		// asked from, not the configuration.
 		$declared = apply_filters( 'faz_trust_cf_ipcountry_header', false )
 			? 'cloudflare'
 			: ( apply_filters( 'faz_trust_geoip_country_code', false ) ? 'mod_geoip' : '' );

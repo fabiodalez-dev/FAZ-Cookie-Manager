@@ -585,7 +585,39 @@ if ( ! function_exists( 'faz_peer_is_cloudflare' ) ) {
 		if ( '' === $remote_addr || ! filter_var( $remote_addr, FILTER_VALIDATE_IP ) ) {
 			return false;
 		}
-		return faz_ip_in_cidr_list( $remote_addr, faz_cloudflare_proxy_cidrs() );
+		if ( faz_ip_in_cidr_list( $remote_addr, faz_cloudflare_proxy_cidrs() ) ) {
+			return true;
+		}
+
+		// The web server may have done this already. nginx's real_ip module
+		// with `real_ip_header CF-Connecting-IP` and Apache's mod_remoteip
+		// REPLACE REMOTE_ADDR with the address that header carries, so on a
+		// correctly configured Cloudflare origin the peer we see is the
+		// visitor, not the edge, and the range test above can never match.
+		// Rejecting those sites would take the country away from exactly the
+		// deployments that set this up properly.
+		//
+		// The signal is the equality: REMOTE_ADDR identical to
+		// CF-Connecting-IP means something between Cloudflare and PHP already
+		// trusted that header enough to rewrite the peer with it, and only an
+		// operator who configured it does that.
+		//
+		// What this does NOT prove: on an origin that is still reachable
+		// directly, a client can send `CF-Connecting-IP: <its own address>`
+		// and satisfy the equality. It gains no address it did not already
+		// have, but it does get past this check — which is why the opt-in
+		// filter is still required alongside it and still defaults to false.
+		// A reachable origin is not something a plugin can fix; it is the
+		// reason the opt-in exists.
+		if ( ! empty( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			$cf_ip = trim( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) );
+			if ( '' !== $cf_ip && 0 === strcasecmp( $cf_ip, $remote_addr ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 }
 

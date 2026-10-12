@@ -168,6 +168,25 @@ assert_eq(
 );
 unset( $GLOBALS['_faz_test_filters']['faz_trusted_proxy_cidrs'] );
 
+// A properly configured Cloudflare origin may not look like one. nginx's
+// real_ip module and Apache's mod_remoteip REPLACE REMOTE_ADDR with the
+// address CF-Connecting-IP carries, so the peer PHP sees is the visitor and no
+// range test can match it. The equality is the signal that something already
+// trusted the header enough to rewrite the peer with it.
+$_SERVER = array(
+	'REMOTE_ADDR'           => '203.0.113.90',
+	'HTTP_CF_CONNECTING_IP' => '203.0.113.90',
+);
+assert_true( $peer_is_cf->invoke( $detector ), 'a REMOTE_ADDR the web server rewrote from CF-Connecting-IP counts as a Cloudflare peer' );
+
+// Not equal: the header names someone else, so nothing rewrote the peer and
+// there is nothing vouching for it.
+$_SERVER = array(
+	'REMOTE_ADDR'           => '203.0.113.90',
+	'HTTP_CF_CONNECTING_IP' => '8.8.8.8',
+);
+assert_false( $peer_is_cf->invoke( $detector ), 'a CF-Connecting-IP naming a different address does not make the peer Cloudflare' );
+
 // The retired geo-only filter grants nothing any more.
 $GLOBALS['_faz_test_filters']['faz_geo_trusted_proxy_cidrs'] = function ( $cidrs ) {
 	return array_merge( (array) $cidrs, array( '10.0.0.0/8' ) );

@@ -78,7 +78,13 @@ namespace {
 		$ip = '' !== $remote_addr
 			? $remote_addr
 			: ( isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '' );
-		return 0 === strpos( (string) $ip, '162.158.' );
+		if ( 0 === strpos( (string) $ip, '162.158.' ) ) {
+			return true;
+		}
+		// Mirrors the second half of the real predicate: a REMOTE_ADDR the web
+		// server already rewrote from CF-Connecting-IP.
+		return ! empty( $_SERVER['HTTP_CF_CONNECTING_IP'] )
+			&& 0 === strcasecmp( (string) $_SERVER['HTTP_CF_CONNECTING_IP'], (string) $ip );
 	}
 	function sanitize_text_field( $v ) {
 		return is_string( $v ) ? trim( $v ) : '';
