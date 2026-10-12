@@ -601,6 +601,7 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 | `faz_loopback_proxy_header` | Which header a loopback reverse proxy writes — unset by default (see below) |
 | `faz_trust_proxy_headers` | Opt in to trusting forwarded headers from any peer |
 | `faz_trusted_proxies` | Scope that opt-in to specific peer CIDRs / IPs |
+| `faz_remote_addr_rewritten_by_cloudflare` | Assert that the web server already rewrote `REMOTE_ADDR` from `CF-Connecting-IP` (nginx `real_ip_header`, Apache `mod_remoteip`) **and** that the origin is unreachable except through Cloudflare. Needed only on such a setup, where the peer PHP sees is the visitor and no Cloudflare range can match |
 | `faz_bot_render_cache_veto` | Return `false` to keep the page cacheable when "Hide banner from search engine bots" is on. The banner then renders for crawlers too: hiding it and keeping the response cacheable cannot both be had, because a cache that does not key on the User-Agent hands the crawler's banner-less copy to the next human visitor |
 | `faz_main_script_in_footer` | Load the banner runtime in the footer instead of the head. Ignored while Consent Mode or the TCF CMP is active, because both have to emit their baseline before any ad script; `faz_main_script_effective_in_footer` reports what was actually applied |
 | `faz_external_static_assets` | Return `false` to keep the generated configuration and banner stylesheet inline instead of serving them as content-hashed files from the uploads directory |

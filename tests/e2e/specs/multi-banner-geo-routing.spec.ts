@@ -764,22 +764,35 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
     // private networks, etc.). Routing on "XX" would create a phantom geo
     // bucket — treat it the same as no signal.
     const result = wpEval(`
-      $_SERVER['HTTP_CF_IPCOUNTRY'] = 'XX';
       // A Cloudflare peer, so this test fails for the reason it claims: with
       // an ordinary peer the header would be discarded by the trust gate and
-      // the empty result would prove nothing about the "XX" handling.
+      // the result would prove nothing about the "XX" handling.
       $_SERVER['REMOTE_ADDR'] = '162.158.42.42';
       $closure = function() { return true; };
       add_filter( 'faz_trust_cf_ipcountry_header', $closure, 10 );
+
+      // Baseline with the SAME peer and no header: whatever the fallback
+      // chain resolves for this address, it is not the thing under test.
+      // Asserting a bare '' would make this test depend on MaxMind being
+      // unreachable, and it would fail on a box where it is not even though
+      // "XX" was handled correctly.
+      unset( $_SERVER['HTTP_CF_IPCOUNTRY'] );
+      \\FazCookie\\Includes\\Geolocation::reset_runtime_cache();
+      $baseline = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
+
+      $_SERVER['HTTP_CF_IPCOUNTRY'] = 'XX';
+      \\FazCookie\\Includes\\Geolocation::reset_runtime_cache();
       $resolved = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
+
       remove_filter( 'faz_trust_cf_ipcountry_header', $closure, 10 );
       unset( $_SERVER['HTTP_CF_IPCOUNTRY'], $_SERVER['REMOTE_ADDR'] );
-      echo var_export( $resolved, true );
+      echo wp_json_encode( array( 'baseline' => $baseline, 'resolved' => $resolved ) );
     `).trim();
 
-    // The MaxMind / ip-api.com fallback is unreachable on the local test stack,
-    // so "XX" collapsing to no signal must produce an empty string here.
-    expect(result, "CF-IPCountry='XX' is treated as no signal").toBe("''");
+    const data = JSON.parse(result);
+    // The contract is "XX carries no signal", i.e. indistinguishable from the
+    // header being absent — not "the answer is empty".
+    expect(data.resolved, "CF-IPCountry='XX' is treated as no signal at all").toBe(data.baseline);
   });
 
   test('GEO-23: is_country_dependent_output returns true when at least one active banner targets a country', () => {

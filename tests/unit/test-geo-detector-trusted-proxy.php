@@ -177,15 +177,28 @@ $_SERVER = array(
 	'REMOTE_ADDR'           => '203.0.113.90',
 	'HTTP_CF_CONNECTING_IP' => '203.0.113.90',
 );
-assert_true( $peer_is_cf->invoke( $detector ), 'a REMOTE_ADDR the web server rewrote from CF-Connecting-IP counts as a Cloudflare peer' );
 
-// Not equal: the header names someone else, so nothing rewrote the peer and
-// there is nothing vouching for it.
+// The equality on its OWN proves nothing — a client reaching the origin
+// directly can send its own address in the header and satisfy it — so by
+// default it is refused.
+assert_false( $peer_is_cf->invoke( $detector ), 'the equality alone does not make the peer Cloudflare: a direct client can forge it' );
+
+// It takes a second, separate assertion from the operator: not "read the
+// country header" but "my server already rewrote the peer from it, and the
+// origin is not reachable any other way".
+$GLOBALS['_faz_test_filters']['faz_remote_addr_rewritten_by_cloudflare'] = function () {
+	return true;
+};
+assert_true( $peer_is_cf->invoke( $detector ), 'with the operator assertion, a rewritten REMOTE_ADDR counts as a Cloudflare peer' );
+
+// Even then the addresses have to match: a header naming someone else means
+// nothing rewrote this peer.
 $_SERVER = array(
 	'REMOTE_ADDR'           => '203.0.113.90',
 	'HTTP_CF_CONNECTING_IP' => '8.8.8.8',
 );
 assert_false( $peer_is_cf->invoke( $detector ), 'a CF-Connecting-IP naming a different address does not make the peer Cloudflare' );
+unset( $GLOBALS['_faz_test_filters']['faz_remote_addr_rewritten_by_cloudflare'] );
 
 // The retired geo-only filter grants nothing any more.
 $GLOBALS['_faz_test_filters']['faz_geo_trusted_proxy_cidrs'] = function ( $cidrs ) {
