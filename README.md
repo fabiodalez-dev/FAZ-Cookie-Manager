@@ -647,6 +647,33 @@ add_filter( 'faz_trusted_proxies', function () { return array( '10.0.0.0/8' ); }
 ```
 
 Where no per-visitor address can be resolved, the DSAR per-IP ceiling is **skipped** rather than applied to everybody at once (the site-wide ceilings, the 60-second lock and the one-per-email-per-hour limit still bound a flood), and the hourly digest says so. `faz_dsar_max_per_ip_per_day` changes that ceiling and accepts `0` to switch it off.
+
+### Gating the data request form
+
+`[faz_dsar_form]` posts to a plugin-specific `wp_ajax` action, which is why ALTCHA/OpenPorte, Turnstile, hCaptcha and Akismet never see it however well they are configured: they protect the forms they know — Contact Form 7, WPForms, Gravity. Three things stand between that form and a bot, and all three fail **open** toward the data subject, because the form exercises GDPR Art. 15-22 and Art. 12(2) obliges the controller to facilitate it. A protection that breaks must not become a refusal.
+
+| Filter | Default | What it does |
+|---|---|---|
+| `faz_dsar_min_dwell_seconds` | `3` | Refuse a submission that arrives sooner than this after the form was rendered. The form carries a signed issue time, so a forged timestamp breaks the signature |
+| `faz_dsar_max_form_age` | `DAY_IN_SECONDS` | Refuse a form older than this. The visitor is told to reload |
+| `faz_dsar_pow_enabled` | `false` | Turn on the proof-of-work challenge |
+| `faz_dsar_pow_difficulty` | `4` | Leading hex zeros required of `SHA-256(salt + n)`, clamped to 1–6 |
+| `faz_dsar_reject_missing_honeypot` | `true` | Return `false` if a front end strips hidden inputs from your markup |
+| `faz_dsar_pre_submit` | — | Return a `WP_Error` to refuse; its message is shown to the visitor verbatim |
+
+The honeypot field's name is derived per render from the form's stamped time, so a script cannot learn it once and omit it thereafter.
+
+**Proof of work** is off by default. Switched on, the server signs a salt and a difficulty, the browser searches for an integer whose `SHA-256` starts with that many zeros, and the server verifies a single hash — ALTCHA's model, self-hosted. No third-party service, no API key, no cookie, no outbound request, and no puzzle: a visual captcha here would deny the right to anyone using a screen reader or an old phone. At the default difficulty it measures 254 ms in a desktop browser and 890 ms on an emulated low-end phone with the CPU throttled four times; the client gives up after two seconds and submits anyway.
+
+```php
+add_filter( 'faz_dsar_pow_enabled', '__return_true' );
+```
+
+No answer at all is **accepted** — JavaScript off and a client that chose not to solve are indistinguishable server-side, so the tie goes to the data subject. Only a wrong, malformed or replayed answer is refused, one accepted answer per challenge, and the claim is returned if a later layer refuses the same submission, so a visitor who mistyped their address can fix it and resubmit the same form.
+
+**To use a service you already run**, hook `faz_dsar_pre_submit` and verify inside your own snippet — the plugin itself makes no outbound call, so nothing is added to its External Services declaration. The filter's PHPDoc in `includes/class-dsar-shortcode.php` carries five-line recipes for Cloudflare Turnstile, hCaptcha and hosted ALTCHA, each one failing open on a transport error.
+
+Akismet is deliberately not integrated. The body of a submission here is a named person's identity plus the fact that they are exercising a right; sending it to a classifier is a processing decision the controller has to map and disclose, and a cookie-consent plugin should not make it on their behalf.
 | `faz_bot_render_cache_veto` | Return `false` to keep the page cacheable when "Hide banner from search engine bots" is on. The banner then renders for crawlers too: hiding it and keeping the response cacheable cannot both be had, because a cache that does not key on the User-Agent hands the crawler's banner-less copy to the next human visitor |
 | `faz_main_script_in_footer` | Load the banner runtime in the footer instead of the head. Ignored while Consent Mode or the TCF CMP is active, because both have to emit their baseline before any ad script; `faz_main_script_effective_in_footer` reports what was actually applied |
 | `faz_external_static_assets` | Return `false` to keep the generated configuration and banner stylesheet inline instead of serving them as content-hashed files from the uploads directory |
