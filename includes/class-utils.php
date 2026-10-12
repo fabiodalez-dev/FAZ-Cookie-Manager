@@ -553,6 +553,42 @@ if ( ! function_exists( 'faz_cloudflare_proxy_cidrs' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_peer_is_cloudflare' ) ) {
+	/**
+	 * Whether the request arrived from one of Cloudflare's own published edges.
+	 *
+	 * The one predicate for "may this request assert a Cloudflare header".
+	 * `CF-Connecting-IP`, `CF-IPCountry` and `CF-Region-Code` are written by
+	 * Cloudflare's edge and by nothing else, so each of them is only worth
+	 * reading when the peer is Cloudflare — and that question has to be
+	 * answered the same way everywhere, which is why it lives here and not in
+	 * the three classes that ask it.
+	 *
+	 * Reads the SHIPPED list and never the filtered view. An administrator who
+	 * adds a range for their own CDN is telling the plugin which peer is
+	 * infrastructure, not which headers that peer invents; granting a header
+	 * CDN never writes on the strength of that range is how a visitor behind it
+	 * ends up choosing their own country. Widening trust for an operator's own
+	 * edge is `faz_trusted_proxy_cidrs` plus `faz_proxy_forwarded_header`.
+	 *
+	 * @since 1.34.1
+	 * @param string $remote_addr Peer address; read from REMOTE_ADDR when empty.
+	 * @return bool
+	 */
+	function faz_peer_is_cloudflare( $remote_addr = '' ) {
+		if ( '' === $remote_addr ) {
+			$remote_addr = ! empty( $_SERVER['REMOTE_ADDR'] )
+				// phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+				? (string) $_SERVER['REMOTE_ADDR']
+				: '';
+		}
+		if ( '' === $remote_addr || ! filter_var( $remote_addr, FILTER_VALIDATE_IP ) ) {
+			return false;
+		}
+		return faz_ip_in_cidr_list( $remote_addr, faz_cloudflare_proxy_cidrs() );
+	}
+}
+
 if ( ! function_exists( 'faz_trusted_proxy_cidrs' ) ) {
 	/**
 	 * The reverse-proxy ranges whose forwarded header may be read at all.

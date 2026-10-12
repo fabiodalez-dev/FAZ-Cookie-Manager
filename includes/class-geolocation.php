@@ -158,10 +158,29 @@ class Geolocation {
 	 * @since 1.14.0
 	 * @return string Upper-case ISO 3166-1 alpha-2 country code, or empty string.
 	 */
+	/**
+	 * Whether this request may assert a Cloudflare header.
+	 *
+	 * Fails CLOSED when the shared predicate is unavailable: it is the only
+	 * thing that proves the peer is Cloudflare, and a header nothing vouches
+	 * for is a value the visitor chose. The leading `\` is the house rule for
+	 * global helpers called from inside this namespace.
+	 *
+	 * @since 1.34.1
+	 * @return bool
+	 */
+	private static function cf_peer_is_trusted() {
+		if ( ! function_exists( 'faz_peer_is_cloudflare' ) ) {
+			return false;
+		}
+		return (bool) \faz_peer_is_cloudflare();
+	}
+
 	public static function get_visitor_country() {
 		$country = '';
 		if (
 			apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			&& self::cf_peer_is_trusted()
 			&& isset( $_SERVER['HTTP_CF_IPCOUNTRY'] )
 		) {
 			$code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) );
@@ -206,6 +225,7 @@ class Geolocation {
 
 		if (
 			apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			&& self::cf_peer_is_trusted()
 			&& ! empty( $_SERVER['HTTP_CF_REGION_CODE'] )
 			&& ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] )
 		) {
@@ -315,7 +335,7 @@ class Geolocation {
 		$votes = array();
 
 		// 1. Cloudflare CF-IPCountry header.
-		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) && ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) {
+		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) && self::cf_peer_is_trusted() && ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) {
 			$code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) );
 			if ( self::is_valid_country_code( $code ) && 'XX' !== $code ) {
 				$votes['cf']  = $code;

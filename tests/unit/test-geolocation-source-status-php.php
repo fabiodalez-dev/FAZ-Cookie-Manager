@@ -69,6 +69,17 @@ namespace {
 	function faz_resolve_client_ip() {
 		return '203.0.113.7';
 	}
+	// Mirrors includes/class-utils.php: only Cloudflare's own edges may assert
+	// a CF-* header, because Cloudflare is what writes one. Stubbed against a
+	// real shipped range so this file can exercise BOTH sides of the gate
+	// without pulling in the whole helpers file — a stub returning true would
+	// hide the thing the gate exists to do.
+	function faz_peer_is_cloudflare( $remote_addr = '' ) {
+		$ip = '' !== $remote_addr
+			? $remote_addr
+			: ( isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '' );
+		return 0 === strpos( (string) $ip, '162.158.' );
+	}
 	function sanitize_text_field( $v ) {
 		return is_string( $v ) ? trim( $v ) : '';
 	}
@@ -372,12 +383,21 @@ namespace {
 	faz_set_filter( 'faz_trust_cf_ipcountry_header', true );
 	faz_set_filter( 'faz_country_detection_consensus', true );
 	$_SERVER['HTTP_CF_IPCOUNTRY'] = 'IT';
+	// The opt-in filter is half the gate. The other half is the peer: a
+	// CF-IPCountry that did not arrive from Cloudflare was written by whoever
+	// sent the request, so without a Cloudflare peer the header does not vote
+	// and only the extension's 'XX' is left — which is no vote either.
+	$_SERVER['REMOTE_ADDR'] = '203.0.113.99';
+	Geolocation::reset_runtime_cache();
+	faz_is( Geolocation::get_country(), '', 'un CF-IPCountry da un peer non Cloudflare non vota, per quanto si sia dato l\'opt-in' );
+
+	$_SERVER['REMOTE_ADDR'] = '162.158.42.42';
 	Geolocation::reset_runtime_cache();
 	faz_is( Geolocation::get_country(), 'IT', "un 'XX' dall'estensione non vota e non fa scattare il consenso" );
 	$GLOBALS['__faz_geoip_results'] = array( '203.0.113.7' => 'FR' );
 	Geolocation::reset_runtime_cache();
 	faz_is( Geolocation::get_country(), '', 'un vero disaccordo fra due fonti fa ancora scattare il consenso' );
-	unset( $_SERVER['HTTP_CF_IPCOUNTRY'] );
+	unset( $_SERVER['HTTP_CF_IPCOUNTRY'], $_SERVER['REMOTE_ADDR'] );
 	faz_reset();
 	$GLOBALS['__faz_options']['faz_settings'] = array( 'geolocation' => array( 'geo_targeting' => true ) );
 

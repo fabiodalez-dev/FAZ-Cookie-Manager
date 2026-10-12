@@ -197,30 +197,21 @@ class Geo_Detector {
 	/**
 	 * Whether REMOTE_ADDR is one of Cloudflare's own published edges.
 	 *
-	 * Reads the SHIPPED list, never the filtered view: the two headers gated on
-	 * this — `CF-Connecting-IP` and `CF-IPCountry` — are written by Cloudflare
-	 * and by nothing else, so a range an administrator added for a different
-	 * CDN must never make either of them authoritative. Widening trust for an
-	 * operator's own edge is `faz_trusted_proxy_cidrs` plus a named header, in
-	 * `faz_forwarded_client_ip()`.
+	 * Delegates to `faz_peer_is_cloudflare()`, which is the one place this
+	 * question is answered — `Geolocation` asks it too, and two copies of a
+	 * trust predicate is how the sibling path keeps missing the fix.
 	 *
 	 * @since 1.34.1
 	 * @return bool
 	 */
 	private function peer_is_cloudflare() {
-		$remote_addr = ! empty( $_SERVER['REMOTE_ADDR'] )
-			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-			? (string) $_SERVER['REMOTE_ADDR']
-			: '';
-		if ( '' === $remote_addr || ! function_exists( 'faz_cloudflare_proxy_cidrs' ) ) {
+		// Fails CLOSED when the shared predicate is unavailable: it is the only
+		// thing that proves the peer, and an unvouched header is a value the
+		// visitor chose.
+		if ( ! function_exists( 'faz_peer_is_cloudflare' ) ) {
 			return false;
 		}
-		foreach ( (array) \faz_cloudflare_proxy_cidrs() as $cidr ) {
-			if ( is_string( $cidr ) && $this->ip_in_cidr( $remote_addr, $cidr ) ) {
-				return true;
-			}
-		}
-		return false;
+		return (bool) \faz_peer_is_cloudflare();
 	}
 
 	/**
