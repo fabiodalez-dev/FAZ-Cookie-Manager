@@ -73,6 +73,21 @@ class Frontend {
 	 */
 	private $version;
 
+	/** External consent scripts that must execute in order without blocking parsing. */
+	private $deferred_script_handles = array();
+
+	/** Inline bootstrap source, '' when unavailable. Null until first read. */
+	private $bootstrap_js = null;
+
+	/**
+	 * Whether the inline bootstrap is being attached to a head handle on this
+	 * request. Nothing in the chain may be deferred unless it is: see
+	 * enqueue_deferred_script().
+	 *
+	 * @var bool
+	 */
+	private $bootstrap_emitted = false;
+
 	/**
 	 * Banner object
 	 *
@@ -183,6 +198,20 @@ class Frontend {
 	 * @var bool
 	 */
 	private $faz_law_fallback_suppress = false;
+
+	/**
+	 * Per-request memo for is_bot_variant_render() (null = not yet computed).
+	 *
+	 * @var bool|null
+	 */
+	private $bot_variant_render = null;
+
+	/**
+	 * Whether the page-cache veto for a User-Agent-variant render is in force.
+	 *
+	 * @var bool
+	 */
+	private $bot_variance_cache_vetoed = false;
 	/**
 	 * Per-request memo for is_geo_bootstrap_cache_active() (null = not yet
 	 * computed). The readiness check touches banner/ruleset storage, so every
@@ -253,6 +282,9 @@ class Frontend {
 		add_filter( 'rest_pre_echo_response', array( $this, 'filter_server_cookies_before_rest_echo' ), PHP_INT_MAX, 3 );
 		add_filter( 'wp_redirect', array( $this, 'filter_server_cookies_before_redirect' ), PHP_INT_MAX, 2 );
 		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
+		add_filter( 'script_loader_tag', array( $this, 'defer_runtime_script_tag' ), 25, 2 );
+		// After every enqueue hook has run, before anything is printed.
+		add_action( 'wp_print_scripts', array( $this, 'warn_on_undeferred_handles' ), PHP_INT_MAX );
 		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
 
 		// Auto-exclusion from cache/optimization plugins' defer + delay +
@@ -273,6 +305,16 @@ class Frontend {
 			// `text/plain`.
 			add_filter( 'script_loader_tag', array( $this, 'tag_own_scripts_nooptimize' ), 20, 2 );
 
+			// On a handle this plugin defers itself, `data-no-defer="1"` and the
+			// LiteSpeed defer-exclusion below read like a contradiction and are
+			// not one: they say "do not APPLY YOUR deferral to this", which is
+			// exactly what protects the ordering this plugin chose. An optimizer
+			// that re-deferred or delayed these handles would either duplicate
+			// the attribute or, with "delay until interaction", hold the consent
+			// runtime until the first click — by which point the scripts a click
+			// releases have already fired. The one thing none of these hints must
+			// do is remove a defer that is already there, and none of them does.
+			//
 			// LiteSpeed Cache pattern-based exclude lists
 			// (belt-and-suspenders in case the tag attribute ever gets
 			// stripped by a future LS release).
@@ -427,27 +469,27 @@ class Frontend {
 		if ( apply_filters( 'faz_is_amp_request', false ) ) {
 			return;
 		}
+		// This gate must stay ABOVE the bot gate below. Both only return, so
+		// the order was once immaterial; it stopped being so when the bot gate
+		// gained a side effect. On a page where the banner is off by settings
+		// or excluded by path, the render does not vary by User-Agent at all,
+		// so vetoing the page cache there would spend the cache for nothing —
+		// the same over-reach case 8b guards against for hide_from_bots: false.
+		// send_geo_cache_headers() orders these two the same way.
+		if ( $this->is_banner_disabled_by_settings() ) {
+			return;
+		}
 		// Skip banner for search engine bots (configurable via Settings).
 		//
-		// MUST be suppressed under Cache Compatibility Mode: the page is then
-		// full-page cached and the render has to be visitor-invariant. A bot
-		// request (incl. the cache-warming crawler) would otherwise generate a
-		// banner-less copy that LiteSpeed/WP Rocket caches and serves to every
-		// human visitor — leaving the banner permanently hidden and trackers
-		// unblocked (the server-rendered container stays, but script.min.js /
-		// _fazConfig that reveal it and block scripts are never enqueued).
-		// Reported on gooloo.de after enabling Cache Compatibility Mode. (#158)
-		// The jurisdiction bootstrap full-page-caches a strict shell too, so the
-		// same invariance requirement applies there.
-		if ( ! $this->is_cache_compatibility_enabled() && ! $this->is_geo_bootstrap_cache_active() ) {
-			$bot_settings = $this->get_faz_settings();
-			if ( ! isset( $bot_settings['banner_control']['hide_from_bots'] ) || ! empty( $bot_settings['banner_control']['hide_from_bots'] ) ) {
-				if ( faz_is_bot() ) {
-					return;
-				}
-			}
-		}
-		if ( $this->is_banner_disabled_by_settings() ) {
+		// bot_suppression_applies() answers both halves of that question: the
+		// setting, and whether this response can be kept out of the shared page
+		// cache. A banner-less copy that a cache is free to store is handed to
+		// every later human visitor — banner permanently hidden, trackers
+		// unblocked, nothing on the page to reveal it. Cache Compatibility Mode
+		// and the cached jurisdiction shell need an invariant render and so
+		// never suppress (#158, gooloo.de); every other full-page cache gets a
+		// no-store veto instead (kalabron.com, LiteSpeed).
+		if ( $this->bot_suppression_applies() ) {
 			return;
 		}
 
@@ -481,15 +523,54 @@ class Frontend {
 			$alt_asset     = ! empty( $faz_settings['banner_control']['alternative_asset_path'] );
 			$script_handle = $alt_asset ? 'faz-fw' : $this->plugin_name;
 
+			/**
+			 * Opt-in: load the main banner bundle in the footer instead of the
+			 * head. External bundles use defer in either position; the inline
+			 * bootstrap protects dynamic resources until they execute. Default
+			 * false keeps the bootstrap in the head, before page scripts run.
+			 * Server-side blocking is unaffected.
+			 *
+			 * Ignored when Google Consent Mode or the IAB TCF CMP is active.
+			 * Both declare this handle as a dependency and must themselves load
+			 * in <head> — GCM has to emit `consent default` and the TCF stub has
+			 * to define `__tcfapi` before any ad script runs, and moving them
+			 * later is a compliance regression, not a tuning choice.
+			 * WP_Scripts::set_group then pulls a dependency back into the head
+			 * group, so honouring the filter while either is enabled produced no
+			 * footer move at all: the option read as supported and silently did
+			 * nothing on exactly the installs most likely to want it. Now the
+			 * constraint is explicit, and `faz_main_script_effective_in_footer`
+			 * reports what was actually applied.
+			 *
+			 * Resolved HERE, before the first deferred enqueue, because whether
+			 * the bootstrap reaches the head is what decides if deferring any
+			 * handle in this chain is safe — including the configuration file,
+			 * which is enqueued before the main handle exists.
+			 *
+			 * @since 1.26.0
+			 * @param bool $in_footer Default false (head).
+			 */
+			$in_footer = (bool) apply_filters( 'faz_main_script_in_footer', false );
+			if ( $in_footer && ! $alt_asset ) {
+				$gcm_active = is_object( $this->gcm_settings ) && true === $this->gcm_settings->is_gcm_enabled();
+				$tcf_active = (bool) $this->settings->get( 'iab', 'enabled' )
+					&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2;
+				if ( $gcm_active || $tcf_active ) {
+					$in_footer = false;
+				}
+			}
+			// Alternative-asset mode inlines every bundle and attaches no
+			// bootstrap, so nothing in that mode is deferred either way.
+			$this->bootstrap_emitted = ! $alt_asset && ! $in_footer && '' !== $this->deferred_bootstrap_js();
+
 			// Offload the static bulk of _fazConfig (provider block patterns,
 			// cookie-category map and, with per-service consent, the ~43 KB
 			// service catalogue — all identical for every visitor of a given
 			// page type) into a content-hashed, browser-cacheable .js
 			// file instead of re-inlining it into every HTML response. The
-			// file defines window._fazStaticConfig; a "before" inline snippet
-			// merges it back into _fazConfig ahead of script.js execution, so
-			// the frontend bundle needs no changes. Server-side blocking is
-			// unaffected either way; if the static file cannot be provided the
+			// file defines window._fazStaticConfig; script.js merges it back
+			// into _fazConfig at the start of its deferred execution. Server-side
+			// blocking is unaffected either way; if the static file cannot be provided the
 			// full config stays inline exactly as before.
 			$store_data  = $this->get_store_data();
 			$static_deps = array();
@@ -504,9 +585,10 @@ class Frontend {
 					);
 					if ( '' !== $static_url ) {
 						$static_handle = $this->plugin_name . '-static-config';
-						wp_enqueue_script( $static_handle, $static_url, array(), null, false );
+						$this->enqueue_deferred_script( $static_handle, $static_url, array(), null, false );
 						$static_deps[] = $static_handle;
 						$store_data    = $split['inline'];
+						$store_data['_staticConfigRequired'] = true;
 					}
 				}
 			}
@@ -514,39 +596,6 @@ class Frontend {
 			if ( $alt_asset ) {
 				$this->enqueue_inline_bundle( $script_handle, 'js/script' . $suffix . '.js', array(), false );
 			} else {
-				/**
-				 * Opt-in: load the main banner bundle in the footer instead of
-				 * render-blocking in <head>. Default false — loading in <head>
-				 * shows the banner (and arms the client-side interceptors)
-				 * before page scripts run. Sites that accept a later banner
-				 * paint in exchange for faster first render can return true;
-				 * server-side blocking is unaffected by the position.
-				 *
-				 * Ignored when Google Consent Mode or the IAB TCF CMP is active.
-				 * Both of those declare this handle as a dependency and must
-				 * themselves load in <head> — GCM has to emit `consent default`
-				 * and the TCF stub has to define `__tcfapi` before any ad script
-				 * runs, and moving them later is a compliance regression, not a
-				 * tuning choice. WP_Scripts::set_group then pulls a dependency
-				 * back into the head group, so honouring the filter here while
-				 * either is enabled produced no footer move at all: the option
-				 * read as supported and silently did nothing on exactly the
-				 * installs most likely to want it. Now the constraint is
-				 * explicit, and `faz_main_script_effective_in_footer` reports
-				 * what was actually applied.
-				 *
-				 * @since 1.26.0
-				 * @param bool $in_footer Default false (head).
-				 */
-				$in_footer = (bool) apply_filters( 'faz_main_script_in_footer', false );
-				if ( $in_footer ) {
-					$gcm_active = is_object( $this->gcm_settings ) && true === $this->gcm_settings->is_gcm_enabled();
-					$tcf_active = (bool) $this->settings->get( 'iab', 'enabled' )
-						&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2;
-					if ( $gcm_active || $tcf_active ) {
-						$in_footer = false;
-					}
-				}
 				/**
 				 * The position actually used, after the GCM/TCF constraint above.
 				 *
@@ -557,20 +606,23 @@ class Frontend {
 				 * @param bool $in_footer Effective position (true = footer).
 				 */
 				do_action( 'faz_main_script_effective_in_footer', $in_footer );
-				wp_enqueue_script( $script_handle, faz_frontend_url() . 'js/script' . $suffix . '.js', $static_deps, $this->version, $in_footer );
+				$this->enqueue_deferred_script( $script_handle, faz_frontend_url() . 'js/script' . $suffix . '.js', $static_deps, $this->version, $in_footer );
 			}
 
 			wp_localize_script( $script_handle, '_fazConfig', $store_data );
 
-			if ( ! empty( $static_deps ) ) {
-				// Runs in the "before" bucket: after the _fazConfig data blob,
-				// after the static-config file's own tag (it is a dependency),
-				// and before script.js executes.
-				wp_add_inline_script(
-					$script_handle,
-					'if(window._fazStaticConfig&&typeof _fazConfig!=="undefined"){for(var _fazK in window._fazStaticConfig){if(!(_fazK in _fazConfig)){_fazConfig[_fazK]=window._fazStaticConfig[_fazK];}}}',
-					'before'
-				);
+			if ( ! $alt_asset ) {
+				// The full config is merged by script.js after its deferred static
+				// dependency executes. Inline "before" code runs while parsing and
+				// must never depend on a deferred external file being available.
+				$bootstrap_js = $this->deferred_bootstrap_js();
+				$attached     = '' !== $bootstrap_js
+					&& false !== wp_add_inline_script( $script_handle, $bootstrap_js, 'before' );
+				// The verdict above was a prediction; this is what happened.
+				// wp_add_inline_script() returns false on an empty payload or an
+				// unregistered handle, and a silent false is how a deferred
+				// runtime ends up with nothing holding its window.
+				$this->note_bootstrap_emission( $attached, ! $in_footer );
 			}
 
 			// Pre-initialise window.dataLayer so third-party trackers that emit
@@ -675,11 +727,31 @@ class Frontend {
 				wp_add_inline_script( $script_handle, 'var _fazGcm = ' . $gcm_json . ';', 'before' );
 				$gcm_suffix = $this->get_script_suffix( 'js/gcm' );
 				$gcm_handle = $script_handle . '-gcm';
-				if ( $alt_asset ) {
-					$this->enqueue_inline_bundle( $gcm_handle, 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), false );
-				} else {
-					wp_enqueue_script( $gcm_handle, faz_frontend_url() . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
-				}
+				// Basic mode also needs its baseline before page-level Google
+				// snippets. This small bridge is self-contained and must stay
+				// synchronous while the config/main/TCF downloads are deferred.
+				//
+				// "Self-contained" is the load-bearing claim, so it is spelled
+				// out: gcm.js reads `window._fazConfig` (localized, printed in
+				// the data bucket ahead of every inline below it), the inline
+				// `var _fazGcm` above, and the `fazcookie-consent` cookie. It
+				// touches nothing script.js creates — no `window.fazcookie`, no
+				// merged static configuration — and its consent wiring is a
+				// `fazcookie_consent_update` listener, which is ordering-free by
+				// construction. Add a dependency on anything script.js defines
+				// and this bundle has to move back behind the deferred runtime,
+				// which puts the `consent default` baseline after the page's own
+				// Google snippets: a compliance regression, not a tuning choice.
+				//
+				// The dependency on $script_handle is dropped in non-alt mode for
+				// a second, separate reason: enqueue_inline_bundle() attaches its
+				// code in the default 'after' position, and
+				// WP_Scripts::filter_eligible_strategies() clears the strategy of
+				// any handle with an 'after' inline AND of everything it depends
+				// on. Re-adding array( $script_handle ) here would therefore
+				// un-defer the entire chain silently. warn_on_undeferred_handles()
+				// reports it under WP_DEBUG if it ever happens again.
+				$this->enqueue_inline_bundle( $gcm_handle, 'js/gcm' . $gcm_suffix . '.js', $alt_asset ? array( $script_handle ) : array(), false );
 			}
 
 			// IAB TCF v2.3 CMP stub (when IAB is enabled AND a valid CMP ID is set).
@@ -700,7 +772,7 @@ class Frontend {
 				if ( $alt_asset ) {
 					$this->enqueue_inline_bundle( $tcf_handle, 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), false );
 				} else {
-					wp_enqueue_script( $tcf_handle, faz_frontend_url() . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
+					$this->enqueue_deferred_script( $tcf_handle, faz_frontend_url() . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
 				}
 
 				// PublisherCC: use admin setting, fall back to site locale.
@@ -908,7 +980,17 @@ class Frontend {
 						"})" .
 					"}).catch(function(){});" .
 				"});";
-				wp_add_inline_script( $script_handle, $inline_js );
+				// 'before', not the default 'after', and both halves of that
+				// matter. An 'after' inline makes WordPress drop the defer
+				// strategy for this handle and for the configuration file it
+				// depends on, which would revert the whole non-blocking chain
+				// without a word. And it is safe here because this snippet
+				// depends on nothing script.js defines: it registers a
+				// `fazcookie_consent_update` listener and reads `_fazConsentLog`,
+				// which wp_localize_script() prints in the data bucket above it.
+				// The listener only ever fires long after the runtime has
+				// executed, so running at parse time costs nothing.
+				wp_add_inline_script( $script_handle, $inline_js, 'before' );
 			}
 
 			// Enqueue the native a11y module that runs after fazcookie_banner_loaded.
@@ -919,7 +1001,7 @@ class Frontend {
 			if ( $alt_asset ) {
 				$this->enqueue_inline_bundle( $a11y_handle, 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), true );
 			} else {
-				wp_enqueue_script( $a11y_handle, faz_frontend_url() . 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), $this->version, true );
+				$this->enqueue_deferred_script( $a11y_handle, faz_frontend_url() . 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), $this->version, true );
 			}
 			// Pass translatable checkbox label templates — {name} is replaced in JS.
 			wp_localize_script(
@@ -943,7 +1025,7 @@ class Frontend {
 			if ( $alt_asset ) {
 				$this->enqueue_inline_bundle( $handle, 'js/wca' . $wca_suffix . '.js', array( $script_handle ), false );
 			} else {
-				wp_register_script( $handle, faz_frontend_url() . 'js/wca' . $wca_suffix . '.js', array( $script_handle ), $this->version, false );
+				$this->enqueue_deferred_script( $handle, faz_frontend_url() . 'js/wca' . $wca_suffix . '.js', array( $script_handle ), $this->version, false );
 			}
 			if ( true === $this->is_gsk_enabled() ) {
 				wp_add_inline_script( $handle, 'var _fazGsk = true;', 'before' );
@@ -958,7 +1040,7 @@ class Frontend {
 			if ( $alt_asset ) {
 				$this->enqueue_inline_bundle( $ms_handle, 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), false );
 			} else {
-				wp_enqueue_script( $ms_handle, faz_frontend_url() . 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), $this->version, false );
+				$this->enqueue_deferred_script( $ms_handle, faz_frontend_url() . 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), $this->version, false );
 			}
 			if ( $ms_uet ) {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftUET = true;', 'before' );
@@ -967,6 +1049,172 @@ class Frontend {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftClarity = true;', 'before' );
 			}
 		}
+	}
+
+	/**
+	 * Keep the dependency chain ordered and non-blocking on WP 5.0+ too.
+	 *
+	 * What a visitor experiences, since "non-blocking" is not free. A `defer`
+	 * script is fetched during parsing and executed before DOMContentLoaded, so
+	 * the banner's first paint moves from "as soon as the head script runs" to
+	 * "once the document has parsed" — later, but still before the load event
+	 * and still on the same page view, never after a navigation. It does not
+	 * move the layout: the notice container is `position: fixed`, so it is
+	 * outside the flow wherever it appears, and the anti-FOUC rule in
+	 * insert_styles() keeps it invisible until the runtime has positioned it
+	 * rather than painting it unstyled first. Embeds the server blocked keep
+	 * their placeholder throughout, because that markup and the banner
+	 * stylesheet are both in the HTML and neither is deferred. What a visitor
+	 * can see during the window is a third-party resource some script is trying
+	 * to insert dynamically: it is held, so the space is empty until the handoff.
+	 * That is the trade this release makes, and it is the same trade the hold
+	 * has always made — the alternative is letting the request out first.
+	 *
+	 * Deferring is only safe while the inline bootstrap is holding dynamic
+	 * resources for the download window; without it the runtime arrives after
+	 * the page's own scripts with nothing in between. So the gate is not "can
+	 * the bootstrap be read" — it is "was the bootstrap actually attached, in
+	 * the head, for this request". Those were two different conditions
+	 * evaluated in two places: the emission is separately guarded by the
+	 * alternative-asset branch and by wp_add_inline_script() succeeding, and a
+	 * handle whose chain runs in the footer gets no head-time protection at
+	 * all. One flag, set by the one call site that emits it, now answers for
+	 * both. Falling back to a synchronous request is slower and never
+	 * unprotected.
+	 */
+	private function enqueue_deferred_script( $handle, $src, $dependencies, $version, $in_footer ) {
+		wp_enqueue_script( $handle, $src, $dependencies, $version, $in_footer );
+		if ( ! $this->bootstrap_emitted ) {
+			return;
+		}
+		$this->deferred_script_handles[ $handle ] = true;
+		wp_script_add_data( $handle, 'strategy', 'defer' );
+	}
+
+	/**
+	 * Report a deferred handle that an 'after' inline has quietly un-deferred.
+	 *
+	 * WP_Scripts::filter_eligible_strategies() returns an empty strategy set for
+	 * any handle carrying an inline script in the default 'after' position, and
+	 * it recurses into dependents — so one
+	 * `wp_add_inline_script( $handle, $code )` without an explicit 'before'
+	 * anywhere in this chain forces the whole chain back to blocking. Nothing
+	 * errors, nothing logs, and the only visible effect is that the request is
+	 * render-blocking again. That is the single easiest way to revert this
+	 * release by accident, from inside the plugin or from a site's own hook, so
+	 * it gets named out loud under WP_DEBUG instead of being left to a profiler.
+	 *
+	 * Diagnostic only: it changes nothing, because an 'after' inline is a
+	 * legitimate thing for a site to add and losing defer is the safe direction.
+	 *
+	 * @return void
+	 */
+	public function warn_on_undeferred_handles() {
+		if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG || empty( $this->deferred_script_handles ) ) {
+			return;
+		}
+		$scripts = wp_scripts();
+		foreach ( array_keys( $this->deferred_script_handles ) as $handle ) {
+			if ( ! isset( $scripts->registered[ $handle ] ) ) {
+				continue;
+			}
+			$extra = $scripts->registered[ $handle ]->extra;
+			if ( empty( $extra['after'] ) ) {
+				continue;
+			}
+			error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				'FAZ Cookie Manager: the script handle "' . $handle . '" carries an inline script in the "after" position, '
+				. 'which makes WordPress drop the defer strategy for it and for everything that depends on it. '
+				. 'Pass "before" as the third argument to wp_add_inline_script() to keep the consent runtime non-blocking.'
+			);
+		}
+	}
+
+	/**
+	 * Record that the inline bootstrap was attached to a head handle.
+	 *
+	 * Called from the one place that attaches it. A WP_DEBUG breadcrumb when it
+	 * could not be attached, because the silent version of this failure is
+	 * exactly the regression the docblock above describes: a deferred runtime
+	 * with nothing holding the window, visible only as a performance change.
+	 *
+	 * @param bool $attached Whether wp_add_inline_script() accepted the code.
+	 * @param bool $in_head  Whether the carrying handle prints in the head.
+	 * @return void
+	 */
+	private function note_bootstrap_emission( $attached, $in_head ) {
+		$this->bootstrap_emitted = (bool) $attached && (bool) $in_head;
+		if ( $this->bootstrap_emitted || ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+			return;
+		}
+		error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			'FAZ Cookie Manager: the inline consent bootstrap was not emitted in <head> ('
+			. ( $attached ? 'the carrying script prints in the footer' : 'frontend/js/bootstrap.js is missing or unreadable' )
+			. '), so the consent runtime and the generated configuration stay synchronous for this request.'
+		);
+	}
+
+	/**
+	 * Inline bootstrap source, or '' when it cannot be read.
+	 *
+	 * file_get_contents() returns false on a missing or unreadable file, and
+	 * WP_Scripts::add_inline_script() opens with `if ( ! $data ) return false;`
+	 * — so passing that straight through emitted no bootstrap, raised no
+	 * notice, and left the deferred runtime arriving with nothing holding
+	 * dynamic resources in the meantime. Read it once, through one accessor,
+	 * so the decision to defer and the protection that makes deferring safe
+	 * can never disagree.
+	 *
+	 * @return string JavaScript source, or '' when unavailable.
+	 */
+	private function deferred_bootstrap_js() {
+		if ( null === $this->bootstrap_js ) {
+			$path = plugin_dir_path( __FILE__ ) . 'js/bootstrap' . $this->get_script_suffix( 'js/bootstrap' ) . '.js';
+			$code = is_readable( $path ) ? file_get_contents( $path ) : false; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local plugin asset, not a remote request.
+			$this->bootstrap_js = ( is_string( $code ) && '' !== trim( $code ) ) ? $code : '';
+		}
+		return $this->bootstrap_js;
+	}
+
+	/**
+	 * WP added native strategies in 6.3; older supported versions still need
+	 * the attribute. Touch only the external tag, never inline bootstraps.
+	 */
+	public function defer_runtime_script_tag( $tag, $handle ) {
+		global $wp_version;
+		// Modern core can deliberately remove defer when a third-party
+		// synchronous script depends on this handle, or when a handle printing
+		// in the head has a blocking dependent. Respect that decision rather
+		// than re-applying the attribute behind its back: core knows the
+		// dependency graph and this filter does not, and losing defer is the
+		// safe direction — a synchronous runtime is slower, never unprotected.
+		//
+		// The reverse assumption is the one that has to hold, and it is enforced
+		// where the strategy is requested, not here: `strategy => defer` is only
+		// ever set when the inline bootstrap is actually being attached to a
+		// head handle on this request (see enqueue_deferred_script()). So on
+		// 6.3+ either core defers and the bootstrap is holding the window, or
+		// core does not defer and there is no window to hold.
+		if ( isset( $wp_version ) && version_compare( $wp_version, '6.3', '>=' ) ) {
+			return $tag;
+		}
+		if ( is_admin() || empty( $this->deferred_script_handles[ $handle ] ) ) {
+			return $tag;
+		}
+		$new_tag = preg_replace_callback( '#<script\b([^>]*)>#i', function ( $match ) {
+			$attributes = $match[1];
+			if ( ! preg_match( '/(?:^|\s)src\s*=/i', $attributes ) || preg_match( '/\btype\s*=\s*[\'"]text\/plain/i', $attributes ) ) {
+				return $match[0];
+			}
+			// An async rewrite would lose the config -> runtime -> bridge order.
+			$attributes = preg_replace( '/\s+(?:async|defer)(?:\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+))?(?=\s|$)/i', '', $attributes );
+			return '<script defer' . $attributes . '>';
+		}, $tag );
+		// PCRE failure returns null, and this composite tag carries the whole
+		// inline bootstrap plus the runtime's <script src>. Returning null from
+		// a tag filter drops all of it from the page — the consent banner with
+		// it. Same guard tag_own_scripts_nooptimize() already uses.
+		return is_string( $new_tag ) ? $new_tag : $tag;
 	}
 
 	/**
@@ -1830,6 +2078,137 @@ class Frontend {
 	}
 
 	/**
+	 * Whether `hide_from_bots` is effectively enabled for this request.
+	 *
+	 * A missing key counts as enabled: that is the historical behaviour and it
+	 * matches Settings::get_defaults(), where `hide_from_bots` is true.
+	 *
+	 * @return bool
+	 */
+	private function hide_from_bots_enabled() {
+		$settings = $this->get_faz_settings();
+		return ! isset( $settings['banner_control']['hide_from_bots'] )
+			|| ! empty( $settings['banner_control']['hide_from_bots'] );
+	}
+
+	/**
+	 * Whether this response's banner render varies by User-Agent.
+	 *
+	 * True only when `hide_from_bots` actually changes the output for the
+	 * caller at hand — the setting is on and the request is a known crawler.
+	 * Cache Compatibility Mode and the cached jurisdiction shell both require a
+	 * visitor-invariant render, so under either one the answer is always false
+	 * and the crawler sees exactly what a human sees.
+	 *
+	 * faz_is_bot() is tested first on purpose: it is a substring scan over one
+	 * request header, while the two cache predicates below read settings and
+	 * banner storage. This runs on `send_headers` for every front-end request,
+	 * and for all but a few per cent of them the cheap test ends it.
+	 *
+	 * @return bool
+	 */
+	private function is_bot_variant_render() {
+		if ( null !== $this->bot_variant_render ) {
+			return $this->bot_variant_render;
+		}
+		// `function_exists` + leading `\`: this predicate is reachable from
+		// `flying_press_is_cacheable`, which can fire on bootstraps where
+		// includes/class-utils.php has not been loaded, and an unqualified call
+		// would resolve inside FazCookie\Frontend first. Same guard the AMP
+		// consent class uses.
+		$variant = function_exists( 'faz_is_bot' ) && \faz_is_bot()
+			/**
+			 * Whether a crawler-only render may be kept out of shared caches.
+			 *
+			 * The two things `hide_from_bots` wants — a banner-less copy for
+			 * crawlers, and a page the cache can keep — cannot both be had: a
+			 * cache that does not vary by User-Agent will hand the crawler's
+			 * copy to the next human. Returning false here resolves that in
+			 * favour of the cache, and FAZ then stops hiding the banner from
+			 * crawlers at all rather than risk hiding it from visitors.
+			 *
+			 * @since 1.34.1
+			 * @param bool $veto Default true (hide from bots, bypass the cache).
+			 */
+			&& (bool) apply_filters( 'faz_bot_render_cache_veto', true )
+			&& $this->hide_from_bots_enabled()
+			&& ! $this->is_cache_compatibility_enabled()
+			&& ! $this->is_geo_bootstrap_cache_active();
+
+		$this->bot_variant_render = $variant;
+		return $variant;
+	}
+
+	/**
+	 * Keep a User-Agent-variant render out of every shared page cache.
+	 *
+	 * `hide_from_bots` makes the rendered HTML depend on the User-Agent: a
+	 * crawler receives no banner container, no banner stylesheet and no
+	 * runtime. Nothing in the response ever said so, and no page cache varies
+	 * by User-Agent, so the first crawler to warm a URL stored a banner-less
+	 * copy that the cache then served to every human visitor — no consent UI,
+	 * trackers unblocked, and nothing on the page to reveal it.
+	 *
+	 * Reported on kalabron.com (o2switch: LiteSpeed Web ADC in front of
+	 * LiteSpeed Cache), where the banner vanished whenever LiteSpeed was
+	 * enabled and came back the moment the host turned it off. A request with a
+	 * Googlebot User-Agent returned the page with no `#fazBannerTemplate`, no
+	 * `script.min.js` and no banner CSS — under
+	 * `x-litespeed-cache-control: public,max-age=14400`, i.e. explicitly
+	 * cacheable for four hours and keyed without the User-Agent.
+	 *
+	 * This is the country-variance hazard one dimension over, so it gets the
+	 * same answer and the same header set as send_geo_cache_headers().
+	 *
+	 * @return bool Whether the veto is in force for this request.
+	 */
+	private function veto_page_cache_for_bot_variance() {
+		if ( $this->bot_variance_cache_vetoed ) {
+			return true;
+		}
+		// LSCache decides cacheability from this action and the request-time
+		// header, not from a response-side `Cache-Control: no-store` (see the
+		// rest_pre_dispatch note in faz-cookie-manager.php). Fire it either way:
+		// it only records intent, which LSCWP applies when it buffers output.
+		do_action( 'litespeed_control_set_nocache', 'FAZ Cookie Manager crawler-only banner render' );
+		if ( headers_sent() ) {
+			// Output has already started, so the directive the edge cache reads
+			// can no longer be set. Report the veto as absent: the caller then
+			// renders the banner instead, which costs a crawler a few KB of
+			// markup. The other direction costs a human their consent notice.
+			return false;
+		}
+		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+		header( 'Pragma: no-cache' );
+		header( 'X-LiteSpeed-Cache-Control: no-cache' );
+		header( 'Vary: User-Agent', false );
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		if ( ! defined( 'DONOTCACHEOBJECT' ) ) {
+			define( 'DONOTCACHEOBJECT', true );
+		}
+		$this->bot_variance_cache_vetoed = true;
+		return true;
+	}
+
+	/**
+	 * Whether the banner may actually be withheld from this crawler.
+	 *
+	 * Suppression and the cache veto are one decision, not two: the render may
+	 * only differ for a crawler if this response is also kept out of the shared
+	 * cache. When the veto cannot be installed, the banner renders.
+	 *
+	 * @return bool
+	 */
+	private function bot_suppression_applies() {
+		if ( ! $this->is_bot_variant_render() ) {
+			return false;
+		}
+		return $this->veto_page_cache_for_bot_variance();
+	}
+
+	/**
 	 * Whether the opt-in cache-safe jurisdiction bootstrap is active.
 	 *
 	 * The cached HTML is always the most-protective GDPR shell. script.js makes
@@ -1995,6 +2374,15 @@ class Frontend {
 		if ( $this->is_banner_disabled_by_settings() ) {
 			return $is_cacheable;
 		}
+		// FlyingPress reads neither DONOTCACHEPAGE nor `Cache-Control: no-store`,
+		// so the crawler veto has to be spoken in its own language too. Asked as
+		// the plain variance question rather than through
+		// bot_suppression_applies(): this filter runs while output is being
+		// assembled, when the header half of the veto is no longer available,
+		// and returning false here IS the veto.
+		if ( $this->is_bot_variant_render() ) {
+			return false;
+		}
 		if ( $this->is_country_dependent_output() ) {
 			// The jurisdiction bootstrap renders one strict, visitor-invariant
 			// document and resolves the live law through a no-store REST request
@@ -2032,6 +2420,13 @@ class Frontend {
 		if ( $this->is_banner_disabled_by_settings() ) {
 			return;
 		}
+		// Install the crawler veto here, while nothing has been sent yet. It is
+		// independent of the country dimension below: a site with one global
+		// banner and no geo targeting still renders differently for a crawler,
+		// and that difference is exactly what a User-Agent-blind page cache
+		// freezes for everyone. Resolving it on `send_headers` also means the
+		// verdict is already memoised by the time wp_head asks.
+		$this->bot_suppression_applies();
 		if ( ! $this->is_country_dependent_output() || headers_sent() ) {
 			return;
 		}
@@ -3413,18 +3808,11 @@ class Frontend {
 		// hide_from_bots: mirror the enqueue_scripts() gate so a crawler gets
 		// no banner container markup or placeholder CSS either — the setting
 		// promises "cleaner HTML to crawlers", and skipping only the script
-		// left the full (visually hidden) container in the bot's copy. Same
-		// Cache Compatibility guard as the enqueue gate: under full-page
-		// caching the render must stay visitor-invariant, or a bot-warmed
-		// cache copy would hide the banner from every human visitor. (#158)
-		// Same requirement under the cached jurisdiction shell.
-		if ( ! $this->is_cache_compatibility_enabled() && ! $this->is_geo_bootstrap_cache_active() ) {
-			$bot_settings = $this->get_faz_settings();
-			if ( ! isset( $bot_settings['banner_control']['hide_from_bots'] ) || ! empty( $bot_settings['banner_control']['hide_from_bots'] ) ) {
-				if ( faz_is_bot() ) {
-					return true;
-				}
-			}
+		// left the full (visually hidden) container in the bot's copy. The
+		// shared predicate carries the cache conditions; see
+		// veto_page_cache_for_bot_variance().
+		if ( $this->bot_suppression_applies() ) {
+			return true;
 		}
 
 		// Runtime geo-routing opt-in fallback with no matching banner: keep
@@ -7298,8 +7686,9 @@ class Frontend {
 
 	/**
 	 * Inject opt-out hints into our own `<script>` tags so cache /
-	 * optimisation plugins leave them alone. A deferred or delayed
-	 * consent banner defeats the plugin's purpose: the banner (and the
+	 * optimisation plugins preserve our loading order. Native defer is
+	 * protected by the inline bootstrap; delaying until user interaction
+	 * would prevent the runtime from taking over. The banner (and the
 	 * `_fazCreateElementBackup` interceptor that blocks third-party
 	 * trackers pre-consent) must run at page load, not at first user
 	 * interaction — otherwise ads and analytics scripts released by the

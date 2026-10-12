@@ -11,7 +11,11 @@ if (window._fazConfig && window._fazStaticConfig) {
         if (!(key in window._fazConfig)) window._fazConfig[key] = window._fazStaticConfig[key];
     });
 }
-const _fazStore = window._fazConfig;
+// A failed static dependency must never release the bootstrap without its
+// provider rules. Keep resources parked and let a reload retry the asset.
+const _fazStaticConfigMissing = window._fazConfig && window._fazConfig._staticConfigRequired && !window._fazStaticConfig;
+const _fazStore = _fazStaticConfigMissing ? null : window._fazConfig;
+if (_fazStore && window._fazBootstrap) window._fazBootstrap.start();
 
 // Opt-out success message (US state laws / CCPA): after the visitor confirms an
 // opt-out, the popup shows a confirmation message and auto-closes after a short
@@ -24,7 +28,14 @@ if ( ! _fazStore ) {
     // JS-defer plugin scoped the localize block inside a DOMContentLoaded
     // callback instead of emitting it at global scope), abort gracefully so
     // the rest of the page continues to work.
-    console.warn( '[FAZ Cookie Manager] _fazConfig is not defined — banner disabled. If you use a JS optimisation plugin (WP Rocket, LiteSpeed, etc.), exclude _fazConfig from deferral.' );
+    // Precision matters here: the bootstrap's own DOMContentLoaded fallback is
+    // what runs next, and it releases SAME-ORIGIN work while keeping everything
+    // cross-origin parked for the rest of the page view. Saying "resources
+    // remain blocked" without that distinction described a state the code does
+    // not produce, and the banner is gone for this page view either way.
+    console.warn( _fazStaticConfigMissing
+        ? '[FAZ Cookie Manager] The static configuration file failed to load, so the provider rules this runtime needs are missing and the consent banner is disabled for this page view. Third-party resources stay parked and same-origin requests are released; reload to retry. Check the Network tab for frontend/js/config-*.js under wp-content/uploads.'
+        : '[FAZ Cookie Manager] _fazConfig is not defined — banner disabled. If you use a JS optimisation plugin (WP Rocket, LiteSpeed, etc.), exclude _fazConfig from deferral.' );
     // Expose a no-op stub so any external callers (GTM, etc.) do not crash.
     window.fazcookie = window.fazcookie || {};
 } else {
@@ -58,7 +69,14 @@ ref._fazConsentStore = new Map();
 // that couples this file to new server output (like the `<\/` escape in the
 // banner template, which an older script.js does not undo) only reaches
 // visitors safely once FAZ_VERSION is bumped at release.
-const _FAZ_BUILD = '1.33.0+html4-escape+provider-memo';
+// The suffix after the version is deliberate and is NOT a version bump: the
+// `?ver=` cache buster follows FAZ_VERSION, which this string cannot change. It
+// exists so a support session can see at a glance that a cache is serving the
+// pre-deferral bundle. A stale bundle is survivable now — it simply never calls
+// _fazBootstrap.start()/finish(), the bootstrap's DOMContentLoaded fallback
+// takes over, and the fallback no longer uninstalls anything, so the stale
+// runtime's own gates stay in place instead of being wiped.
+const _FAZ_BUILD = '1.34.1+deferred-bootstrap';
 
 /**
  * One-call frontend self-diagnosis for support: paste
@@ -2690,13 +2708,19 @@ function _fazWatchWithdrawalControl() {
         });
     };
     _fazWithdrawalObserver = new MutationObserver(refresh);
-    // documentElement, not body: a theme or cache plugin injects its late
-    // <style> into <head>, which a body-rooted observer never sees.
+    // Theme CSS can hide a control through any attribute selector (ARIA,
+    // data-state, id, or a closed <details>), so do not restrict attributes.
+    // Observe the head too, where themes and cache plugins add late styles.
     _fazWithdrawalObserver.observe(document.documentElement, {
-        subtree: true, childList: true, attributes: true,
-        attributeFilter: ['hidden', 'inert', 'disabled', 'class', 'style', 'media', 'data-faz-open-preferences']
+        subtree: true, childList: true, attributes: true
     });
     window.addEventListener('resize', refresh);
+    // The mutation's first frame can still see a usable control partway
+    // through a fade. Recheck when CSS motion finishes or is cancelled;
+    // those computed-style changes do not create another DOM mutation.
+    ['transitionend', 'transitioncancel', 'animationend', 'animationcancel'].forEach(function (eventName) {
+        document.addEventListener(eventName, refresh, true);
+    });
     // A stylesheet that finishes loading AFTER the first check can hide the
     // footer control without mutating the DOM and without a resize, and the
     // first check runs from _fazRemoveBanner() at init — usually before that
@@ -5176,7 +5200,9 @@ function _fazRestoreConstructableSheets() {
 
 const _fazCreateElementBackup = document.createElement;
 document.createElement = (...args) => {
-    const createdElement = _fazCreateElementBackup.call(document, ...args);
+    return _fazGuardScriptElement(_fazCreateElementBackup.call(document, ...args));
+};
+function _fazGuardScriptElement(createdElement) {
     if (createdElement.nodeName.toLowerCase() !== "script") return createdElement;
     const originalSetAttribute = createdElement.setAttribute.bind(createdElement);
 
@@ -5288,7 +5314,7 @@ document.createElement = (...args) => {
         }
     };
     return createdElement;
-};
+}
 
 function _fazMutationObserver(mutations) {
     // Collect every <script>/<iframe> introduced by this batch of mutations.
@@ -5984,8 +6010,22 @@ function _fazUnblockServerSide() {
             delete link.dataset.fazLightboxPlaceholder;
         });
 
-    // 3. Images (tracking pixels inside noscript tags that JS can see).
-    document.querySelectorAll('img[data-faz-src][data-faz-category], source[data-faz-src][data-faz-category]')
+    // 3. Images (tracking pixels inside noscript tags that JS can see), plus
+    // every other element that fetches through a plain `src`.
+    //
+    // video, audio, embed, track and input[type=image] are here because the
+    // deferred bootstrap parks them: its element list is the one the runtime's
+    // own observer uses, so whatever it can park must be restorable from the
+    // same keys, or a resource held during the download window would stay dead
+    // for the rest of the page view even after the visitor consents. Restoring
+    // needs no per-tag branch — `el.src` is the right IDL attribute on all of
+    // them, and the gate below re-parks anything still blocked.
+    document.querySelectorAll(
+        'img[data-faz-src][data-faz-category], source[data-faz-src][data-faz-category],'
+        + ' video[data-faz-src][data-faz-category], audio[data-faz-src][data-faz-category],'
+        + ' embed[data-faz-src][data-faz-category], track[data-faz-src][data-faz-category],'
+        + ' input[data-faz-src][data-faz-category]'
+    )
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
             var imgSrc = el.getAttribute("data-faz-src");
@@ -6007,6 +6047,42 @@ function _fazUnblockServerSide() {
             el.setAttribute("srcset", srcset);
             el.removeAttribute("data-faz-srcset");
             el.removeAttribute("data-faz-srcset-category");
+        });
+
+    // 3c. <object data> and the poster frame of a media element. Both are
+    // parked under their own keys (data-faz-data, data-faz-poster) because
+    // neither is a `src`, and neither had a restore pass at all: the bootstrap
+    // could park them and nothing could ever hand them back.
+    document.querySelectorAll('object[data-faz-data][data-faz-category]')
+        .forEach(function (el) {
+            var cat = el.getAttribute("data-faz-category");
+            var parked = el.getAttribute("data-faz-data");
+            if (_fazShouldBlockResource(cat, parked, el.getAttribute("data-faz-service") || "")) return;
+            // The one restore on this page that is an HTML sink rather than a
+            // resource fetch: <object data> can load a document, and a
+            // data:text/html payload there would run in this origin. So the
+            // value is resolved through the URL parser and admitted only as
+            // http(s) — stricter than _fazIsAllowedScheme, which lets a
+            // relative URL through, and free of cost here because the only
+            // thing that parks this key is the bootstrap and it parks nothing
+            // that is not absolute and cross-origin.
+            var resolved;
+            try { resolved = new URL(parked, document.baseURI); } catch (e) { return; }
+            if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') return;
+            el.setAttribute("data", resolved.href);
+            if (!el.getAttribute("data")) return; // gate re-parked it — stay parked, recoverable
+            el.removeAttribute("data-faz-data");
+        });
+
+    document.querySelectorAll('[data-faz-poster][data-faz-category]')
+        .forEach(function (el) {
+            var cat = el.getAttribute("data-faz-category");
+            var parked = el.getAttribute("data-faz-poster");
+            if (_fazShouldBlockResource(cat, parked, el.getAttribute("data-faz-service") || "")) return;
+            if (!_fazIsAllowedScheme(parked)) return;
+            el.setAttribute("poster", parked);
+            if (!el.getAttribute("poster")) return; // gate re-parked it — stay parked, recoverable
+            el.removeAttribute("data-faz-poster");
         });
 
     // 4. Stylesheets.
@@ -6125,6 +6201,38 @@ function _fazAddProviderToList(node, cleanedHostname) {
         provider.isOverridden = true;
     } else if (!provider.categories.includes(categoryName))
         provider.categories.push(categoryName);
+}
+
+// Sweep what is already in the document before arming the observer.
+//
+// A MutationObserver has no retroactive view, and this runtime now arrives
+// deferred — so every resource element the parser produced before this line ran
+// is invisible to the observer that follows. While the bootstrap was
+// downloading its own observer parked what it could see, but the bootstrap has
+// no provider rules: it can only judge an origin. Anything it waved through, and
+// anything that landed before it installed, would otherwise stay live and
+// unparked for the whole page view, with no placeholder, no per-service reveal
+// and no re-evaluation on a consent change. That is a permanent exposure, not a
+// delayed one, which is why it is worth one querySelectorAll at startup.
+//
+// _fazParkResourceElementIfBlocked is idempotent — it skips an element that
+// already carries the parking attribute — so a node the bootstrap parked is left
+// exactly as it is.
+try {
+    document
+        .querySelectorAll('img[src],img[srcset],source[src],source[srcset],iframe[src],link[href],link[imagesrcset]')
+        .forEach(_fazParkResourceElementIfBlocked);
+    // Scripts are deliberately NOT swept. A parser-inserted <script src> has
+    // already been fetched and executed by the time this deferred bundle runs,
+    // so stamping its type changes nothing it could still prevent — while
+    // marking it as blocked-by-us puts it into the restore machinery's path for
+    // no reason. Measured: it broke restoring an allowed analytics script after
+    // a preference save. Scripts keep the coverage they have: the server-side
+    // blocker for parsed markup, and createElement + the src setter +
+    // setAttribute + the handoff list for anything created at runtime.
+} catch (_sweepError) {
+    // A sweep that throws must not stop the observer from being installed.
+    if (window.console && console.warn) console.warn('[FAZ Cookie Manager] Startup resource sweep failed', _sweepError);
 }
 
 const _nodeListObserver = new MutationObserver(_fazMutationObserver);
@@ -6649,6 +6757,38 @@ function _fazShouldChangeType(element, src, typeOverride) {
 }
 
 /**
+ * Extract a clean hostname+path from a URL string for provider matching.
+ * Handles the https, http, wss and ws URL schemes.
+ * Returns empty string on failure (non-blocking).
+ *
+ * At module scope because the bootstrap handoff matches URLs with the very
+ * same rule as the network interceptors below. Matching the raw string there
+ * instead meant a first-party request whose query carried a blocked domain —
+ * /wp-json/x?return=https://www.facebook.com/ — was refused before consent and
+ * allowed after it.
+ */
+// Module scope, deliberately: the bootstrap handoff policy and the runtime's own
+// interceptors have to match URLs by the same rule, and the policy object is
+// built at the very end of the `if (_fazStore)` block. It calls
+// _fazCleanHostName, which is declared inside that block — a block-level
+// function declaration, so the binding exists from block entry and this is safe
+// for every caller that runs after the block has been entered. There is no
+// caller outside it, and adding one would need the helper moved out too.
+function _fazExtractEndpoint(url) {
+    if (!url || typeof url !== "string") return "";
+    try {
+        var full = url.startsWith("//") ? window.location.protocol + url : url;
+        // Normalise WebSocket schemes to https so URL() can parse them.
+        full = full.replace(/^wss?:\/\//i, 'https://');
+        if (!/^https?:\/\//i.test(full)) return "";
+        var u = new URL(full);
+        return _fazCleanHostName(u.hostname + u.pathname);
+    } catch (e) {
+        return "";
+    }
+}
+
+/**
  * Network-level consent enforcement.
  *
  * Wraps navigator.sendBeacon, fetch, XMLHttpRequest.open, and WebSocket to block
@@ -6657,24 +6797,6 @@ function _fazShouldChangeType(element, src, typeOverride) {
  * the consent plugin can be prevented from phoning home.
  */
 (function _fazNetworkInterceptors() {
-    /**
-     * Extract a clean hostname+path from a URL string for provider matching.
-     * Handles the https, http, wss and ws URL schemes.
-     * Returns empty string on failure (non-blocking).
-     */
-    function _fazExtractEndpoint(url) {
-        if (!url || typeof url !== "string") return "";
-        try {
-            var full = url.startsWith("//") ? window.location.protocol + url : url;
-            // Normalise WebSocket schemes to https so URL() can parse them.
-            full = full.replace(/^wss?:\/\//i, 'https://');
-            if (!/^https?:\/\//i.test(full)) return "";
-            var u = new URL(full);
-            return _fazCleanHostName(u.hostname + u.pathname);
-        } catch (e) {
-            return "";
-        }
-    }
 
     // --- sendBeacon ---
     if (navigator.sendBeacon) {
@@ -9011,5 +9133,40 @@ document.addEventListener('click', function (event) {
         } catch (_pe) { /* placeholder injection is best-effort */ }
     }
 }, true /* capture phase — beats the page-builder listener */);
+
+// Drain the bootstrap only after every permanent interceptor is installed.
+if (window._fazBootstrap) window._fazBootstrap.finish({
+    script: _fazGuardScriptElement,
+    node: function (node) {
+        if (node.nodeName === 'SCRIPT' && _fazShouldChangeType(node)) {
+            // Same stamp rememberOriginalType() writes, and for the same two
+            // reasons: data-faz-original-type is only written when there is
+            // nothing saved yet — writing it unconditionally overwrote the real
+            // original with "javascript/blocked" on a second pass — and
+            // data-faz-blocked-by-us is what the src/type setters and the
+            // mutation observer read to tell our block from a third party's.
+            // Without it a script blocked here was never unblocked again.
+            var type = node.getAttribute('type');
+            if (type && type !== 'javascript/blocked' && !node.getAttribute('data-faz-original-type')) {
+                node.setAttribute('data-faz-original-type', type);
+            }
+            node.setAttribute('data-faz-blocked-by-us', '1');
+            node.setAttribute('type', 'javascript/blocked');
+        } else {
+            _fazParkResourceElementIfBlocked(node);
+        }
+    },
+    url: function (url) {
+        var endpoint = _fazExtractEndpoint(String(url));
+        if (!endpoint) return false;
+        return !_fazIsUserWhitelisted(String(url)) && _fazShouldBlockProvider(endpoint);
+    },
+    // The bootstrap parks a cross-origin URL before this runtime exists and
+    // therefore cannot name its category, while every restore selector requires
+    // one. This is the answer to that: the same resolution the parser backstop
+    // uses, so an element parked during the download is restored on exactly the
+    // consent that would have released it had it arrived a moment later.
+    category: function (url) { return _fazImgCategory(String(url)); }
+});
 
 } // end: if ( _fazStore ) — null-safety guard for deferred _fazConfig

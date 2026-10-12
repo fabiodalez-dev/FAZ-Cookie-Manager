@@ -20,6 +20,14 @@
 
 <p>Ora l'insieme dei caratteri è scritto per esteso, com'è nello standard: tabulazione, avanzamento riga, avanzamento pagina, ritorno a capo, spazio, <code>/</code> e <code>&gt;</code>. Nessuna scorciatoia che vale «quasi».</p>
 
+<h2>Due difetti della stessa famiglia, trovati rivedendo il resto</h2>
+
+<p>Rileggendo il lavoro della 1.34.0 ne sono usciti altri due, e hanno la stessa forma: qualcosa che si dichiara funzionante senza esserlo.</p>
+
+<p>Il primo riguarda l'estensione <strong>PHP GeoIP</strong>. Il plugin la considerava funzionante nel momento stesso in cui la funzione esisteva. Ma caricare un'estensione non installa il suo database: un sito con l'estensione e senza dati si sentiva dire che la fonte geografica era a posto, mentre ogni interrogazione tornava vuota. È esattamente la confusione fra «configurato» e «funzionante» che la 1.34.0 aveva risolto per il database MaxMind, rimasta viva nel ramo appena sopra. Adesso fa due interrogazioni di prova su indirizzi noti, e se falliscono prosegue verso il database MaxMind invece di fermarsi alla prima fonte che semplicemente esiste. Il pannello ha un messaggio suo per questo caso, perché dire «scarica il database MaxMind» a chi ha un problema nell'estensione manda a riparare la cosa sbagliata.</p>
+
+<p>Il secondo riguarda il widget di revoca. La sorveglianza guardava un elenco di attributi: quelli a cui avevo pensato io. Ma un tema può nascondere un controllo con qualunque selettore di attributo — uno stato ARIA, un <code>data-</code> qualsiasi, un <code>&lt;details&gt;</code> che si chiude — e nessuno di quelli era osservato. L'elenco è stato tolto. E c'era un secondo buco, più sottile: durante una dissolvenza il primo fotogramma vede ancora un controllo utilizzabile, e la fine di un'animazione non produce un'altra mutazione del DOM, quindi il controllo non veniva più rifatto. Ora si rifà anche quando una transizione o un'animazione finisce o viene annullata.</p>
+
 <h2>Come l'ho trovato</h2>
 
 <p>Non l'ho trovato io, e vale la pena dirlo. È emerso perché mi è stato chiesto se avessi verificato che tutti i rilievi delle revisioni fossero stati chiusi, comprese le modifiche finite nella release. Non l'avevo fatto: avevo controllato a fondo l'ultima richiesta di modifica e dato per buone le precedenti perché erano state integrate. Dare per buono non è verificare. Controllandole una per una, tre avevano un rilievo ancora aperto, e uno era questo.</p>
