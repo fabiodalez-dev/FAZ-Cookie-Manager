@@ -298,46 +298,6 @@ class Geo_Detector {
 	}
 
 	/**
-	 * Cloudflare published proxy IP ranges (https://www.cloudflare.com/ips/).
-	 * Static list as of 2026 — refresh annually. Any request whose REMOTE_ADDR
-	 * is NOT in this list is treated as direct (CF-Connecting-IP ignored)
-	 * because that header is set by Cloudflare's edge and is forgeable when
-	 * the origin is directly reachable.
-	 *
-	 * @var string[]
-	 */
-	private static $cf_ranges_v4 = array(
-		'173.245.48.0/20',
-		'103.21.244.0/22',
-		'103.22.200.0/22',
-		'103.31.4.0/22',
-		'141.101.64.0/18',
-		'108.162.192.0/18',
-		'190.93.240.0/20',
-		'188.114.96.0/20',
-		'197.234.240.0/22',
-		'198.41.128.0/17',
-		'162.158.0.0/15',
-		'104.16.0.0/13',
-		'104.24.0.0/14',
-		'172.64.0.0/13',
-		'131.0.72.0/22',
-	);
-
-	/**
-	 * @var string[]
-	 */
-	private static $cf_ranges_v6 = array(
-		'2400:cb00::/32',
-		'2606:4700::/32',
-		'2803:f800::/32',
-		'2405:b500::/32',
-		'2405:8100::/32',
-		'2a06:98c0::/29',
-		'2c0f:f248::/32',
-	);
-
-	/**
 	 * Best-effort client IP resolution.
 	 *
 	 * Security: CF-Connecting-IP is set by Cloudflare's edge — but only when
@@ -371,19 +331,35 @@ class Geo_Detector {
 	/**
 	 * Whether REMOTE_ADDR is in a trusted proxy CIDR range.
 	 *
+	 * The ranges themselves are Cloudflare's published proxy IP ranges
+	 * (https://www.cloudflare.com/ips/), static as of 2026 — refresh annually.
+	 * Since 1.34.1 they live in ONE place, `faz_trusted_proxy_cidrs()` in
+	 * includes/class-utils.php, which `faz_resolve_client_ip()` reads as well:
+	 * two copies meant two resolvers could attribute the same request to two
+	 * different addresses, and only one of them would be refreshed.
+	 *
+	 * Any request whose REMOTE_ADDR is NOT in the list is treated as direct
+	 * (CF-Connecting-IP ignored), because that header is set by Cloudflare's
+	 * edge and is forgeable when the origin is directly reachable.
+	 *
 	 * @param string $ip REMOTE_ADDR.
 	 * @return bool
 	 */
 	private function is_trusted_proxy( $ip ) {
-		$cidrs = array_merge( self::$cf_ranges_v4, self::$cf_ranges_v6 );
+		$cidrs = function_exists( 'faz_trusted_proxy_cidrs' ) ? (array) \faz_trusted_proxy_cidrs() : array();
 		/**
 		 * Extend the trusted-proxy allowlist (e.g., for other CDNs, custom edges).
 		 *
 		 * Accept CIDR notation (e.g., "203.0.113.0/24" or "2001:db8::/32").
 		 * Each entry must be a string; non-string entries are ignored.
 		 *
+		 * Kept as a geo-specific extension point on top of the shared list, so
+		 * a site that added its own edge here keeps exactly the trust it
+		 * configured; `faz_trusted_proxy_cidrs` is the one to use to widen the
+		 * trust for the whole plugin.
+		 *
 		 * @since 1.15.0
-		 * @param string[] $cidrs Default = Cloudflare public proxy ranges.
+		 * @param string[] $cidrs Default = Cloudflare public proxy ranges (shared list).
 		 */
 		$cidrs = (array) apply_filters( 'faz_geo_trusted_proxy_cidrs', $cidrs );
 

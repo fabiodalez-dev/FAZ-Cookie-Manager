@@ -504,14 +504,355 @@ if ( ! function_exists( 'faz_ip_in_cidr_list' ) ) {
 		return false;
 	}
 }
+if ( ! function_exists( 'faz_cloudflare_proxy_cidrs' ) ) {
+	/**
+	 * Cloudflare's published proxy IP ranges — the shipped list, unfiltered.
+	 *
+	 * https://www.cloudflare.com/ips/, static as of 2026 — REFRESH ANNUALLY.
+	 * This is the plugin's single copy of the list.
+	 *
+	 * Deliberately NOT filterable, and deliberately separate from
+	 * `faz_trusted_proxy_cidrs()`. `CF-Connecting-IP` may be believed only from
+	 * a peer that actually is Cloudflare, because Cloudflare is what overwrites
+	 * that header; from anywhere else it is a client-supplied string. Were the
+	 * CF binding read off the filtered list instead, an admin who added their
+	 * own CDN's ranges would also have made `CF-Connecting-IP` authoritative
+	 * from that CDN — a header it never writes, so one the visitor still
+	 * controls. Hence a private copy here and a filtered view next door.
+	 *
+	 * @since 1.34.1
+	 * @return string[] CIDR ranges, IPv4 first then IPv6.
+	 */
+	function faz_cloudflare_proxy_cidrs() {
+		return array(
+			// IPv4.
+			'173.245.48.0/20',
+			'103.21.244.0/22',
+			'103.22.200.0/22',
+			'103.31.4.0/22',
+			'141.101.64.0/18',
+			'108.162.192.0/18',
+			'190.93.240.0/20',
+			'188.114.96.0/20',
+			'197.234.240.0/22',
+			'198.41.128.0/17',
+			'162.158.0.0/15',
+			'104.16.0.0/13',
+			'104.24.0.0/14',
+			'172.64.0.0/13',
+			'131.0.72.0/22',
+			// IPv6.
+			'2400:cb00::/32',
+			'2606:4700::/32',
+			'2803:f800::/32',
+			'2405:b500::/32',
+			'2405:8100::/32',
+			'2a06:98c0::/29',
+			'2c0f:f248::/32',
+		);
+	}
+}
+
+if ( ! function_exists( 'faz_trusted_proxy_cidrs' ) ) {
+	/**
+	 * The reverse-proxy ranges whose forwarded header may be read at all.
+	 *
+	 * The shipped Cloudflare ranges (faz_cloudflare_proxy_cidrs()) plus
+	 * whatever the `faz_trusted_proxy_cidrs` filter adds. `Geo_Detector::
+	 * is_trusted_proxy()` reads this same function, so the two resolvers cannot
+	 * attribute the same request to two different addresses.
+	 *
+	 * Membership here answers one question only — "is this peer infrastructure
+	 * rather than a visitor?" — and it does NOT say which header that peer
+	 * writes. That second question is answered per peer kind in
+	 * `faz_forwarded_client_ip()`: a Cloudflare peer by `CF-Connecting-IP`, an
+	 * admin-added peer by `faz_proxy_forwarded_header` (`X-Forwarded-For` by
+	 * default), a loopback peer by `faz_loopback_proxy_header` (unset by
+	 * default). Adding a range is therefore necessary but not always
+	 * sufficient: it is the whole configuration for a CDN that appends to
+	 * `X-Forwarded-For`, and half of it for one that writes some other header.
+	 *
+	 * A request whose REMOTE_ADDR is NOT in this list, and is not loopback, is
+	 * treated as direct: CF-Connecting-IP / X-Forwarded-For / X-Real-IP are
+	 * ignored, because those are set by an edge and anyone who can reach the
+	 * origin directly can forge them.
+	 *
+	 * @since 1.34.1
+	 * @return string[] CIDR ranges, IPv4 first then IPv6.
+	 */
+	function faz_trusted_proxy_cidrs() {
+		/**
+		 * Extend (or replace) the shipped trusted-proxy ranges.
+		 *
+		 * Add the published edge ranges of another CDN here to have the plugin
+		 * recognise it as infrastructure rather than as a visitor, without
+		 * opting into the unscoped `faz_trust_proxy_headers` trust. CIDRs and
+		 * bare IPs are both accepted; non-string entries are ignored by the
+		 * matcher.
+		 *
+		 * This filter alone does not choose a header. A peer matched only here
+		 * is read through `faz_proxy_forwarded_header`, which defaults to
+		 * `HTTP_X_FORWARDED_FOR` and is walked from the right — correct for any
+		 * CDN that appends to that chain. A CDN that writes its own header
+		 * instead (`True-Client-IP`, `Fastly-Client-IP`, …) needs both filters:
+		 * this one to trust the peer, that one to name the header. The shipped
+		 * `CF-Connecting-IP` binding is NOT extended by adding a range, by
+		 * design — see faz_cloudflare_proxy_cidrs().
+		 *
+		 * @since 1.34.1
+		 * @param string[] $cidrs Default = Cloudflare's published proxy ranges.
+		 */
+		return (array) apply_filters( 'faz_trusted_proxy_cidrs', faz_cloudflare_proxy_cidrs() );
+	}
+}
+
+if ( ! function_exists( 'faz_ip_is_private_or_local' ) ) {
+	/**
+	 * Whether an address is loopback, link-local, RFC1918/ULA or reserved.
+	 *
+	 * Such an address cannot identify a visitor arriving from the internet: it
+	 * is either the machine itself or something inside the private network.
+	 *
+	 * @since 1.34.1
+	 * @param string $ip Address to test.
+	 * @return bool False for a syntactically invalid address — ask
+	 *              `filter_var()` separately when that distinction matters.
+	 */
+	function faz_ip_is_private_or_local( $ip ) {
+		if ( ! filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+			return false;
+		}
+		return ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE );
+	}
+}
+
+if ( ! function_exists( 'faz_ip_is_loopback' ) ) {
+	/**
+	 * Whether an address is the loopback interface (127.0.0.0/8 or ::1).
+	 *
+	 * The one private class a remote client can never present as REMOTE_ADDR:
+	 * a packet from the internet cannot arrive with a loopback source address,
+	 * so a loopback peer is a reverse proxy or cache on this same host.
+	 *
+	 * Deliberately NOT the whole of RFC1918: on a LAN-hosted or containerised
+	 * site a visitor's own peer address can be 10.x/172.16.x/192.168.x, which
+	 * would make the visitor the "proxy" and leave them free to forge the
+	 * forwarded header. Those topologies stay behind the explicit
+	 * `faz_trust_proxy_headers` / `faz_trusted_proxies` opt-in.
+	 *
+	 * @since 1.34.1
+	 * @param string $ip Address to test.
+	 * @return bool
+	 */
+	function faz_ip_is_loopback( $ip ) {
+		return faz_ip_in_cidr_list( (string) $ip, array( '127.0.0.0/8', '::1/128' ) );
+	}
+}
+
+if ( ! function_exists( 'faz_remote_addr_is_trusted_proxy' ) ) {
+	/**
+	 * Whether the TCP peer in front of us is infrastructure, not a visitor.
+	 *
+	 * True in two cases, and only these two:
+	 *   1. The address is inside the trusted-proxy ranges — the shipped
+	 *      Cloudflare list plus anything `faz_trusted_proxy_cidrs` adds.
+	 *   2. The address is loopback — a reverse proxy, a cache or a load
+	 *      balancer on this same host. See faz_ip_is_loopback() for why the
+	 *      rest of RFC1918 is deliberately NOT included.
+	 *
+	 * Also used to recognise known hops while walking an X-Forwarded-For
+	 * chain, which is the same question asked of a different address.
+	 *
+	 * @since 1.34.1
+	 * @param string $remote_addr The REMOTE_ADDR value, or one chain entry.
+	 * @return bool
+	 */
+	function faz_remote_addr_is_trusted_proxy( $remote_addr ) {
+		$remote_addr = (string) $remote_addr;
+		if ( '' === $remote_addr || ! filter_var( $remote_addr, FILTER_VALIDATE_IP ) ) {
+			return false;
+		}
+		if ( faz_ip_is_loopback( $remote_addr ) ) {
+			return true;
+		}
+		return faz_ip_in_cidr_list( $remote_addr, faz_trusted_proxy_cidrs() );
+	}
+}
+
+if ( ! function_exists( 'faz_forwarded_client_ip' ) ) {
+	/**
+	 * The client address a verified proxy forwarded, or '' when there is none.
+	 *
+	 * Callers must first satisfy themselves that the peer is a proxy at all
+	 * (faz_remote_addr_is_trusted_proxy()); this helper decides which header
+	 * may be believed and which entry of it is the client.
+	 *
+	 * Three rules, all of them load-bearing:
+	 *
+	 * 1. Each header is bound to the proxy that actually sets it, and the kind
+	 *    of peer in front decides which single header may be read. There are
+	 *    three peer kinds and each gets exactly one header:
+	 *      - a peer in the SHIPPED Cloudflare ranges
+	 *        (faz_cloudflare_proxy_cidrs(), never the filtered list) is read on
+	 *        `CF-Connecting-IP`, because Cloudflare OVERWRITES that header;
+	 *        from anywhere else it is just another client-supplied string;
+	 *      - a peer matching a range an admin added through
+	 *        `faz_trusted_proxy_cidrs` is read on `faz_proxy_forwarded_header`,
+	 *        `HTTP_X_FORWARDED_FOR` by default and walked from the right, which
+	 *        is what every CDN that appends to that chain produces;
+	 *      - a loopback peer is read on `faz_loopback_proxy_header`, which is
+	 *        UNSET by default and so reads nothing until the site names the
+	 *        header its local proxy writes.
+	 *    Treating the headers as interchangeable let a client pick which one
+	 *    was authoritative, which is the whole exploit.
+	 * 2. There is NO fallback between headers. If the selected header yields
+	 *    nothing usable, this returns '' and the caller keeps REMOTE_ADDR.
+	 *    Falling through to a second header hands the choice back to whoever
+	 *    sent the request.
+	 * 3. The selected chain is walked from the RIGHT. A proxy APPENDS the peer
+	 *    it saw rather than rewriting the header, so everything the client sent
+	 *    stays on the left: taking the leftmost entry is taking a value the
+	 *    client controls, which is a fresh throttle bucket per request and a
+	 *    poisoned ip_hash. Known hops (trusted ranges, loopback) are stepped
+	 *    over; the first entry that is not a known hop must be a valid public
+	 *    address, and if it is not — private, reserved, malformed — the walk
+	 *    stops rather than guessing further left.
+	 *
+	 * @since 1.34.1
+	 * @param string $remote_addr The REMOTE_ADDR value (the actual TCP peer).
+	 * @return string Public client address, or '' when none can be vouched for.
+	 */
+	function faz_forwarded_client_ip( $remote_addr = '' ) {
+		$remote_addr = (string) $remote_addr;
+		if ( '' === $remote_addr || ! filter_var( $remote_addr, FILTER_VALIDATE_IP ) ) {
+			return '';
+		}
+
+		// Peer kind 1 — a Cloudflare edge: one header, no alternatives, no
+		// fallback. Matched against the SHIPPED list and not the filtered one,
+		// so a range an admin added for their own CDN can never make
+		// CF-Connecting-IP authoritative from a peer that never writes it.
+		if ( faz_ip_in_cidr_list( $remote_addr, faz_cloudflare_proxy_cidrs() ) ) {
+			if ( empty( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+				return '';
+			}
+			$cf_ip = trim( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			return filter_var( $cf_ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ? $cf_ip : '';
+		}
+
+		if ( faz_ip_is_loopback( $remote_addr ) ) {
+			// Peer kind 2 — a reverse proxy, cache or load balancer on this
+			// same host.
+			/**
+			 * The one forwarded header a loopback reverse proxy is known to write.
+			 *
+			 * UNSET by default, deliberately, and so nothing is read from a
+			 * loopback peer until the site names a header. The precondition for
+			 * guessing wrong is the common case, not an exotic one: nginx's own
+			 * convention is `proxy_set_header X-Real-IP $remote_addr;` with
+			 * nothing managing X-Forwarded-For at all, and a header the local
+			 * proxy does not itself write arrives from the client untouched. A
+			 * default of `HTTP_X_FORWARDED_FOR` would therefore have let a
+			 * visitor on such a host name their own address — a fresh per-IP
+			 * throttle key per request and a poisoned consent-log ip_hash —
+			 * which is worse than resolving to the peer address and skipping
+			 * the per-IP ceiling, the behaviour an unconfigured site now gets.
+			 *
+			 * Name the header the local proxy writes, and only that one:
+			 * `HTTP_X_FORWARDED_FOR` for `proxy_set_header X-Forwarded-For
+			 * $proxy_add_x_forwarded_for;`, `HTTP_X_REAL_IP` for
+			 * `proxy_set_header X-Real-IP $remote_addr;`. Exactly one header is
+			 * read, and there is no fallback to another.
+			 *
+			 * @since 1.34.1
+			 * @param string $header The `$_SERVER` key to read. Default '' (read nothing).
+			 */
+			$header = (string) apply_filters( 'faz_loopback_proxy_header', '' );
+		} elseif ( faz_ip_in_cidr_list( $remote_addr, faz_trusted_proxy_cidrs() ) ) {
+			// Peer kind 3 — a range an admin added through
+			// `faz_trusted_proxy_cidrs`. The shipped CF binding above does not
+			// apply: this peer is not Cloudflare and does not write
+			// CF-Connecting-IP, so it is read through a named header instead.
+			/**
+			 * The forwarded header a non-Cloudflare trusted proxy writes.
+			 *
+			 * Applies to a peer matched by a range added through
+			 * `faz_trusted_proxy_cidrs`. `HTTP_X_FORWARDED_FOR` by default,
+			 * walked from the right, which is correct for every CDN or load
+			 * balancer that APPENDS the peer it saw to that chain. Point it at
+			 * `HTTP_TRUE_CLIENT_IP`, `HTTP_FASTLY_CLIENT_IP` or whatever single
+			 * header your edge overwrites if it uses one of its own.
+			 *
+			 * Exactly one header is read, and there is no fallback to another:
+			 * a fallback would let the visitor decide which header was
+			 * authoritative by sending the other one.
+			 *
+			 * @since 1.34.1
+			 * @param string $header      The `$_SERVER` key to read.
+			 * @param string $remote_addr The peer address being read through.
+			 */
+			$header = (string) apply_filters( 'faz_proxy_forwarded_header', 'HTTP_X_FORWARDED_FOR', $remote_addr );
+		} else {
+			// Not a peer kind this function knows how to read.
+			return '';
+		}
+
+		if ( '' === $header || empty( $_SERVER[ $header ] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			return '';
+		}
+
+		$chain = explode( ',', sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		foreach ( array_reverse( $chain ) as $hop ) {
+			$hop = trim( (string) $hop );
+			if ( faz_remote_addr_is_trusted_proxy( $hop ) ) {
+				// A hop we already know about — keep walking left.
+				continue;
+			}
+			if ( filter_var( $hop, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+				return $hop;
+			}
+			// Not a known hop and not a usable public address: stop here.
+			// Anything further left was supplied by whoever sent this.
+			break;
+		}
+
+		return '';
+	}
+}
+
 if ( ! function_exists( 'faz_resolve_client_ip' ) ) {
 	/**
 	 * Resolve the client IP address with proxy awareness.
 	 *
-	 * Checks common proxy headers before falling back to REMOTE_ADDR.
-	 * Proxy headers (X-Forwarded-For, X-Real-IP, CF-Connecting-IP) are
-	 * client-controlled and can be spoofed. Private/reserved ranges are
-	 * rejected to mitigate trivial bypasses.
+	 * Two paths, in this order:
+	 *
+	 * 1. `faz_trust_proxy_headers` — the explicit opt-in, unchanged since
+	 *    1.1.0 and scoped by `faz_trusted_proxies` since 1.17.2. A site
+	 *    already using those filters behaves exactly as it did.
+	 * 2. Since 1.34.1, a trusted-peer path through faz_forwarded_client_ip(),
+	 *    which binds each header to the proxy kind that sets it and walks a
+	 *    chain from the right. ONE topology resolves with no configuration at
+	 *    all: a peer in the shipped Cloudflare ranges, read on
+	 *    `CF-Connecting-IP`. Another CDN takes a range in
+	 *    `faz_trusted_proxy_cidrs` (and `faz_proxy_forwarded_header` if it
+	 *    writes something other than X-Forwarded-For). A loopback peer takes
+	 *    `faz_loopback_proxy_header`, which is unset by default, so until the
+	 *    site names the header its local proxy writes nothing is read and the
+	 *    peer address stands. Every per-IP key in this plugin — the DSAR
+	 *    ceilings, the 60-second locks, the consent-log ip_hash, the geo lookup
+	 *    — assumed this value identified ONE visitor, and behind an
+	 *    unconfigured Cloudflare it was the edge's own address, shared by every
+	 *    visitor of the site.
+	 *
+	 * A forwarded header arriving from a public peer that is NOT in the
+	 * allowlist is still ignored, and so is one arriving from a trusted peer
+	 * whose header has not been named; the resolved address stays REMOTE_ADDR:
+	 * those headers are forgeable by anyone who can reach the origin, and
+	 * trusting them unconditionally would hand an attacker a fresh key per
+	 * request for every per-IP throttle in the plugin. The rest of RFC1918 is
+	 * not a verified proxy either (faz_ip_is_loopback() says why), so a
+	 * LAN-hosted or containerised site keeps using its peer address unless it
+	 * opts in through path 1.
 	 *
 	 * @since 1.1.0
 	 * @return string Client IP address, or empty string if unavailable.
@@ -554,6 +895,12 @@ if ( ! function_exists( 'faz_resolve_client_ip' ) ) {
 				// cannot be vouched for, so fall back to the real peer address.
 				return $remote_addr;
 			}
+			// Deliberately NOT faz_forwarded_client_ip(): this path keeps the
+			// semantics it has had since 1.1.0, leftmost entry first, because a
+			// site that opted in may be relying on exactly that reading, and
+			// scoping it is what `faz_trusted_proxies` is for. The stricter
+			// parser governs the new default path below, which no site asked
+			// for and must therefore not be fooled by a forged header.
 			$headers = array(
 				'HTTP_CF_CONNECTING_IP', // Cloudflare.
 				'HTTP_X_FORWARDED_FOR',  // Generic reverse proxy.
@@ -562,16 +909,72 @@ if ( ! function_exists( 'faz_resolve_client_ip' ) ) {
 			foreach ( $headers as $header ) {
 				if ( ! empty( $_SERVER[ $header ] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 					// Header may contain comma-separated IPs (e.g. X-Forwarded-For chain) — take the first.
-					$ip = strtok( sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ), ',' );
-					$ip = trim( $ip );
+					$ip = strtok( sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ), ',' ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+					$ip = trim( (string) $ip );
 					if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
 						return $ip;
 					}
 				}
 			}
+
+			return $remote_addr;
+		}
+
+		// Default path: the peer is verifiably a proxy, so the address it
+		// forwards is the visitor. Without this every visitor behind that
+		// proxy shares one key.
+		if ( faz_remote_addr_is_trusted_proxy( $remote_addr ) ) {
+			$forwarded = faz_forwarded_client_ip( $remote_addr );
+			if ( '' !== $forwarded ) {
+				return $forwarded;
+			}
 		}
 
 		return $remote_addr;
+	}
+}
+
+if ( ! function_exists( 'faz_client_ip_identifies_visitor' ) ) {
+	/**
+	 * Whether the resolved client address identifies one visitor.
+	 *
+	 * A per-IP ceiling may only be applied when it does. Behind a proxy whose
+	 * forwarded header could not be read, every visitor of the site resolves to
+	 * the same address, and a ceiling keyed on it stops being "five requests
+	 * per visitor" and becomes "five requests for the whole site" — which, on
+	 * the DSAR form, is a 24-hour denial of other people's Art. 15-22 requests.
+	 * `faz_throttle_request()` already states the policy for the same
+	 * situation: skip the throttle rather than collapse every unidentified
+	 * caller into one bucket.
+	 *
+	 * The rule is concrete, never a guess:
+	 *   FALSE when the resolved value is empty, the `no-ip` literal, not a
+	 *   valid address, loopback/RFC1918/ULA/reserved, or inside the
+	 *   trusted-proxy ranges — shipped or added through
+	 *   `faz_trusted_proxy_cidrs` — which means the forwarded value was
+	 *   missing or unusable and what came back is the edge's own address.
+	 *   TRUE otherwise — including an unknown CDN's edge, which is
+	 *   indistinguishable from a direct public visitor and must not be guessed
+	 *   at: treating "a forwarded header is present" as the test would silently
+	 *   delete the ceiling on every host with mod_remoteip/realip configured,
+	 *   where REMOTE_ADDR is already the real visitor and the header is still
+	 *   there.
+	 *
+	 * @since 1.34.1
+	 * @return bool
+	 */
+	function faz_client_ip_identifies_visitor() {
+		$ip = (string) faz_resolve_client_ip();
+		if ( '' === $ip || 'no-ip' === $ip ) {
+			return false;
+		}
+		if ( ! filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+			return false;
+		}
+		if ( faz_ip_is_private_or_local( $ip ) ) {
+			return false;
+		}
+		return ! faz_ip_in_cidr_list( $ip, faz_trusted_proxy_cidrs() );
 	}
 }
 

@@ -32,6 +32,33 @@ trait IP_Hasher {
 	}
 
 	/**
+	 * Whether the hash above identifies ONE visitor.
+	 *
+	 * `hash_ip()` is a hash of whatever `faz_resolve_client_ip()` returned, and
+	 * that is not always a visitor: behind a proxy whose forwarded header
+	 * cannot be read it is the proxy's own address, and the 'no-ip' literal a
+	 * few lines up groups every request that has no address at all. A key is
+	 * still the right key for a lock measured in seconds; it is NOT a safe
+	 * basis for a ceiling measured in hours, because one shared bucket turns a
+	 * per-visitor limit into a site-wide denial. Callers that run such a
+	 * ceiling must ask this first.
+	 *
+	 * The judgment lives in `faz_client_ip_identifies_visitor()` so that both
+	 * shortcodes using this trait make it identically and from one place. When
+	 * the helper is unavailable (a harness that stubs only the resolver), the
+	 * historical answer is kept: apply the ceiling.
+	 *
+	 * @since 1.34.1
+	 * @return bool
+	 */
+	private function ip_identifies_visitor() {
+		if ( function_exists( 'faz_client_ip_identifies_visitor' ) ) {
+			return (bool) \faz_client_ip_identifies_visitor();
+		}
+		return true;
+	}
+
+	/**
 	 * Debug-only public accessor for `hash_ip()`.
 	 *
 	 * Exposed exclusively under `WP_DEBUG` for E2E regression coverage so

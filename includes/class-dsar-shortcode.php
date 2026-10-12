@@ -39,7 +39,37 @@ class DSAR_Shortcode {
 	 * The 60-second lock below only spaces submissions out; on its own it lets
 	 * a bot submit once a minute forever, which is exactly the "chain of spam
 	 * submissions" shape reported from the field. This is the cumulative
-	 * ceiling. Filter: `faz_dsar_max_per_ip_per_day`.
+	 * ceiling. Filter: `faz_dsar_max_per_ip_per_day` (0 disables it).
+	 *
+	 * IT ASSUMES THE CLIENT ADDRESS IDENTIFIES ONE VISITOR, and that assumption
+	 * is not free. Behind a CDN or a reverse proxy whose forwarded header
+	 * cannot be read, `faz_resolve_client_ip()` returns the proxy's own
+	 * address: every visitor of the site then shares one counter and five
+	 * submissions close the form for everybody for 24 hours — the site-wide
+	 * denial of Art. 15-22 requests that MAX_PER_DAY below is written to avoid,
+	 * reproduced at 5 instead of 500. So when the address cannot be shown to
+	 * identify a visitor (`faz_client_ip_identifies_visitor()`), this layer is
+	 * SKIPPED rather than applied: the site-wide ceilings, the 60-second lock
+	 * and the one-per-email-per-hour limit still bound a flood, which costs the
+	 * database rows the hard ceiling allows instead of everybody's rights. It
+	 * is the same policy `faz_throttle_request()` already states for the same
+	 * situation — skip, never collapse into one bucket.
+	 *
+	 * Since 1.34.1 the resolver recognises a Cloudflare edge by itself, and
+	 * every other topology once the site declares it — one filter each, and
+	 * which one depends on the topology, not on taste. Another CDN: its
+	 * published edge ranges in `faz_trusted_proxy_cidrs`, plus
+	 * `faz_proxy_forwarded_header` when that edge overwrites a header of its
+	 * own rather than appending to `X-Forwarded-For`. A reverse proxy on the
+	 * same host: `faz_loopback_proxy_header`, naming the one header that proxy
+	 * writes — unset by default, so a loopback peer reads nothing until it is
+	 * named, which is why an unconfigured one lands here. A load balancer of
+	 * one's own: `faz_trust_proxy_headers` scoped with `faz_trusted_proxies`.
+	 * Adding a range alone does NOT give this ceiling a key when the edge
+	 * writes some other header, which is the mistake the notices below are
+	 * careful not to suggest. A skipped layer is reported in the hourly digest,
+	 * and a refusal sends its own notice: a ceiling that denies a right must
+	 * not deny it unseen.
 	 */
 	const MAX_PER_IP_PER_DAY = 5;
 
@@ -538,16 +568,101 @@ class DSAR_Shortcode {
 			);
 		}
 
+		// The per-IP layer applies only where the key is one visitor's. Where
+		// it is a proxy's, applying it would refuse unrelated data subjects for
+		// 24 hours (see MAX_PER_IP_PER_DAY), so the layer steps aside and the
+		// ceilings above keep bounding the flood. The condition is recorded for
+		// the digest, because an admin cannot configure what nobody told them.
 		$ip_cap = $this->cap( 'faz_dsar_max_per_ip_per_day', self::MAX_PER_IP_PER_DAY );
-		if ( $ip_cap > 0 && $this->ip_count() >= $ip_cap ) {
-			return $this->reject(
-				'faz_dsar_ip_throttled',
-				__( 'Too many requests from this connection. Please try again tomorrow, or email us directly to exercise your rights.', 'faz-cookie-manager' ),
-				$context
-			);
+		if ( $ip_cap > 0 ) {
+			if ( ! $this->ip_identifies_visitor() ) {
+				$this->note_ip_layer_skipped();
+			} elseif ( $this->ip_count() >= $ip_cap ) {
+				$this->announce_ip_throttled( $ip_cap );
+				return $this->reject(
+					'faz_dsar_ip_throttled',
+					__( 'Too many requests from this connection. Please try again tomorrow, or email us directly to exercise your rights.', 'faz-cookie-manager' ),
+					$context
+				);
+			}
 		}
 
 		return true;
+	}
+
+	/**
+	 * Record that the per-IP ceiling could not be applied to this request.
+	 *
+	 * Not a refusal and not an error: the request goes through. It is a fact
+	 * about the site's topology — the resolved client address is a proxy's, or
+	 * missing — that the admin needs in order to declare that topology
+	 * (`faz_loopback_proxy_header` for a proxy on the same host,
+	 * `faz_trusted_proxy_cidrs` with `faz_proxy_forwarded_header` for another
+	 * CDN, `faz_trust_proxy_headers` with `faz_trusted_proxies` for a load
+	 * balancer of their own) and get the ceiling back. It rides the hourly
+	 * digest rather than a mail of its own, because
+	 * on an affected site it is true of EVERY request and a mail per request
+	 * would be the flood.
+	 *
+	 * Stored for a full window under the shared `faz_dsar_rl_` prefix, so a
+	 * reset clears it with the rest of the throttles.
+	 *
+	 * @since 1.34.1
+	 */
+	private function note_ip_layer_skipped() {
+		set_transient( 'faz_dsar_rl_ip_unidentified', 1, DAY_IN_SECONDS );
+
+		/**
+		 * Fires when the per-IP ceiling is skipped for lack of a per-visitor address.
+		 *
+		 * @since 1.34.1
+		 */
+		do_action( 'faz_dsar_ip_layer_skipped' );
+	}
+
+	/**
+	 * Tell the admin that the per-IP ceiling is refusing submissions.
+	 *
+	 * `announce_suppressed()` cannot carry this: it is keyed to the per-request
+	 * MAIL ceiling and is reachable only once a request has been stored
+	 * successfully — which is precisely what did not happen here. Without this
+	 * notice, five submissions could close the form for 24 hours with nothing
+	 * sent and nothing shown anywhere, the only trace being the
+	 * `faz_dsar_rejected` action, which has no in-plugin consumer.
+	 *
+	 * Hourly, under its own transient and the shared prefix, for the same
+	 * reason as the digest: one mail at the moment a ceiling tripped is the
+	 * easiest thing in the world to bury, and a mail per refusal would hand the
+	 * flood a second amplifier.
+	 *
+	 * @since 1.34.1
+	 * @param int $cap The per-IP ceiling that was reached.
+	 */
+	private function announce_ip_throttled( $cap ) {
+		$notice_key = 'faz_dsar_rl_ip_notice';
+		if ( false !== get_transient( $notice_key ) ) {
+			return;
+		}
+		set_transient( $notice_key, 1, HOUR_IN_SECONDS );
+
+		$admin_email = (string) get_option( 'admin_email' );
+		if ( ! is_email( $admin_email ) ) {
+			return;
+		}
+		$site_name = get_bloginfo( 'name' );
+
+		wp_mail(
+			$admin_email,
+			/* translators: %s: site name */
+			sprintf( __( '[%s] A data request was refused by the per-connection limit', 'faz-cookie-manager' ), $site_name ),
+			sprintf(
+				/* translators: 1: site name, 2: the per-IP ceiling, 3: admin URL of the stored requests list */
+				__( "%1\$s refused a data subject request: the connection it came from had already sent %2\$d in the last 24 hours.\n\nIf that is a flood, nothing needs doing — the visitor was given an email fallback and the limit resets 24 hours after the first request in the window.\n\nIf genuine requests are being refused, the usual cause is that every visitor resolves to the same address because the site sits behind a proxy whose forwarded header the plugin has not been told to read. What restores a per-visitor key depends on which proxy it is, and one line is enough:\n\n- A reverse proxy or cache on the same WordPress host, reached over loopback (nginx, Varnish): set faz_loopback_proxy_header to the one header that proxy writes — HTTP_X_FORWARDED_FOR if its config says proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for, HTTP_X_REAL_IP if it says proxy_set_header X-Real-IP \$remote_addr. Nothing is read from a loopback proxy until this is named, because a header it does not write arrives from the visitor untouched.\n\n- Any other front end the plugin sees over a private address — a proxy in a separate container (REMOTE_ADDR like 172.17.0.3), a load balancer on the LAN — or a CDN other than Cloudflare: add that peer's own range to faz_trusted_proxy_cidrs, for example 172.17.0.0/16 for a Docker bridge or the CDN's published edge ranges. faz_loopback_proxy_header will not reach it: it applies to loopback peers only. Adding the range is the whole change if the front end appends to X-Forwarded-For. If it overwrites a header of its own instead (True-Client-IP, Fastly-Client-IP), also set faz_proxy_forwarded_header to that header — the range alone will not do it.\n\n- Cloudflare: already handled, nothing to set.\n\n- Last resort, for a front end that overwrites the forwarded header rather than appending to it: enable faz_trust_proxy_headers and scope it with faz_trusted_proxies. This path reads the leftmost entry of the chain, so on a front end that appends it would hand the visitor control of the value — prefer faz_trusted_proxy_cidrs above, which reads the chain from the right.\n\nfaz_dsar_max_per_ip_per_day changes the ceiling, and 0 switches it off.\n\nStored requests: %3\$s\n\nYou will get this notice at most once an hour.", 'faz-cookie-manager' ),
+				$site_name,
+				(int) $cap,
+				admin_url( 'edit.php?post_type=' . self::POST_TYPE )
+			)
+		);
 	}
 
 	/**
@@ -767,6 +882,12 @@ class DSAR_Shortcode {
 	 * for all the ones that were not sent, and it names the gate the site is
 	 * missing.
 	 *
+	 * It also reports the one thing an admin cannot otherwise see: that the
+	 * per-connection ceiling is not in force because no per-visitor address can
+	 * be resolved (see note_ip_layer_skipped()). That is the layer which would
+	 * normally stop a flood from one source, so a digest that did not mention
+	 * it would be describing half the situation.
+	 *
 	 * @since 1.34.1
 	 * @param int $cap The per-request mail ceiling that was passed.
 	 */
@@ -785,19 +906,25 @@ class DSAR_Shortcode {
 		$in_window = $this->site_count();
 		$pending   = self::pending_count();
 
+		$body = sprintf(
+			/* translators: 1: site name, 2: requests in the last 24 hours, 3: the per-request mail ceiling, 4: requests awaiting action, 5: admin URL of the stored requests list */
+			__( "%1\$s has received %2\$d data subject requests in the last 24 hours, past the %3\$d after which they are no longer emailed one by one. They are still being recorded: %4\$d are awaiting action.\n\nReview them here: %5\$s\n\nThis usually means the form is being targeted by automated submissions. Install a form-protection plugin (ALTCHA / OpenPorte, Turnstile, hCaptcha) and hook it into the faz_dsar_pre_submit filter, so the genuine requests are emailed individually again.\n\nYou will get this summary at most once an hour while it lasts.", 'faz-cookie-manager' ),
+			$site_name,
+			$in_window,
+			$cap,
+			$pending,
+			admin_url( 'edit.php?post_type=' . self::POST_TYPE )
+		);
+
+		if ( false !== get_transient( 'faz_dsar_rl_ip_unidentified' ) ) {
+			$body .= "\n\n" . __( "One limit is not helping here: the per-connection ceiling is switched off on this site because every visitor resolves to the same address, which happens behind a proxy whose forwarded header the plugin has not been told to read. It is deliberately skipped rather than applied, since applying it would refuse unrelated people's requests for 24 hours. What gets it back depends on which proxy sits in front, and it is one line either way: for a reverse proxy or cache on this same host, reached over loopback, set faz_loopback_proxy_header to the single header that proxy writes (HTTP_X_FORWARDED_FOR for proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for, HTTP_X_REAL_IP for proxy_set_header X-Real-IP \$remote_addr) — nothing is read from it until that header is named, because one it does not write arrives from the visitor untouched; for any front end the plugin sees over a private address instead, such as a proxy in a separate container or a load balancer on the LAN, and for a CDN other than Cloudflare, add that peer's own range to faz_trusted_proxy_cidrs (172.17.0.0/16 for a Docker bridge, or the CDN's published edge ranges), since faz_loopback_proxy_header applies to loopback peers only, and if that front end overwrites a header of its own rather than appending to X-Forwarded-For, also name it in faz_proxy_forwarded_header, because the range alone will not do it; faz_trust_proxy_headers with faz_trusted_proxies remains available but reads the leftmost entry of the chain, so prefer the range above, which reads it from the right. Cloudflare needs nothing.", 'faz-cookie-manager' );
+		}
+
 		wp_mail(
 			$admin_email,
 			/* translators: %s: site name */
 			sprintf( __( '[%s] Data requests are arriving faster than they can be emailed', 'faz-cookie-manager' ), $site_name ),
-			sprintf(
-				/* translators: 1: site name, 2: requests in the last 24 hours, 3: the per-request mail ceiling, 4: requests awaiting action, 5: admin URL of the stored requests list */
-				__( "%1\$s has received %2\$d data subject requests in the last 24 hours, past the %3\$d after which they are no longer emailed one by one. They are still being recorded: %4\$d are awaiting action.\n\nReview them here: %5\$s\n\nThis usually means the form is being targeted by automated submissions. Install a form-protection plugin (ALTCHA / OpenPorte, Turnstile, hCaptcha) and hook it into the faz_dsar_pre_submit filter, so the genuine requests are emailed individually again.\n\nYou will get this summary at most once an hour while it lasts.", 'faz-cookie-manager' ),
-				$site_name,
-				$in_window,
-				$cap,
-				$pending,
-				admin_url( 'edit.php?post_type=' . self::POST_TYPE )
-			)
+			$body
 		);
 	}
 

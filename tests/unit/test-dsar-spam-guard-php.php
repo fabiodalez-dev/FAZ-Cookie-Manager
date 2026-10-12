@@ -100,8 +100,20 @@ namespace {
 	function wp_salt( $scheme = 'auth' ) {
 		return 'unit-test-salt-' . $scheme;
 	}
+	// The resolver is stubbed — these tests are about what the guard does with
+	// the address, not about how it is found. Everything downstream of it
+	// (faz_client_ip_identifies_visitor() and the trusted-proxy helpers) is the
+	// REAL implementation, loaded from includes/class-utils.php below: the
+	// verdict "this address identifies one visitor" is exactly what gates the
+	// per-IP ceiling, so stubbing it would test the stub.
 	function faz_resolve_client_ip() {
 		return $GLOBALS['__faz_ip'];
+	}
+	function sanitize_text_field( $value ) {
+		return trim( preg_replace( '/[\r\n\t\0\x0B]+/', '', (string) $value ) );
+	}
+	function wp_unslash( $value ) {
+		return $value;
 	}
 	function is_email( $email ) {
 		return (bool) filter_var( $email, FILTER_VALIDATE_EMAIL );
@@ -165,6 +177,11 @@ namespace {
 		return true;
 	}
 
+	// Real helpers: faz_client_ip_identifies_visitor(), faz_trusted_proxy_cidrs(),
+	// faz_remote_addr_is_trusted_proxy(), faz_forwarded_client_ip(). The stubbed
+	// faz_resolve_client_ip() above is declared first, so the function_exists
+	// guard in this file leaves it in place.
+	require_once __DIR__ . '/../../includes/class-utils.php';
 	require_once __DIR__ . '/../../includes/class-ip-hasher.php';
 	require_once __DIR__ . '/../../includes/class-dsar-shortcode.php';
 
@@ -358,6 +375,12 @@ namespace {
 
 	echo "— per-IP 24-hour ceiling\n";
 
+	// NOTE on what the fixed address below means. Holding ONE address across
+	// several different email addresses is the attacker this ceiling exists for
+	// — and it is also, on the wrong topology, every visitor of a site behind a
+	// proxy. The two cases are told apart by the address itself: 203.0.113.7 is
+	// a public address that identifies one client, so the ceiling applies here.
+	// Section 3b below covers the other half, which this section cannot see.
 	reset_state();
 	$cap = FazCookie\Includes\DSAR_Shortcode::MAX_PER_IP_PER_DAY;
 	for ( $i = 0; $i < $cap; $i++ ) {
@@ -374,6 +397,253 @@ namespace {
 
 	$GLOBALS['__faz_ip'] = '198.51.100.9';
 	assert_eq( $dsar->guard_submission( ctx( 'elsewhere@example.test' ) ), true, 'another address is unaffected' );
+
+	// ── 3b. The ceiling needs a key that is ONE visitor's ───────────────────
+
+	echo "— the per-IP ceiling only applies where the address identifies a visitor\n";
+
+	// The ceiling above is keyed on faz_resolve_client_ip(). Behind a CDN or a
+	// reverse proxy whose forwarded header cannot be read, that is the PROXY's
+	// address and every visitor shares it: five submissions would then refuse
+	// everybody else's Art. 15-22 request for 24 hours, which is the site-wide
+	// denial the design explicitly rejects at 500 and must not reintroduce at
+	// 5. So where the address cannot be shown to identify a visitor the layer
+	// is skipped, and the site-wide ceilings bound the flood instead.
+
+	// 172.70.100.5 is inside Cloudflare's published ranges (172.64.0.0/13):
+	// what comes back when CF-Connecting-IP was missing or unusable.
+	foreach ( array(
+		'a Cloudflare edge address' => '172.70.100.5',
+		'an RFC1918 peer'           => '10.0.0.5',
+		'a loopback peer'           => '127.0.0.1',
+		'no address at all'         => '',
+	) as $what => $shared_ip ) {
+		reset_state();
+		$GLOBALS['__faz_ip'] = $shared_ip;
+		$subjects            = 12; // More than twice MAX_PER_IP_PER_DAY.
+		$refused             = 0;
+		for ( $i = 0; $i < $subjects; $i++ ) {
+			if ( is_wp_error( $dsar->guard_submission( ctx( "shared$i@example.test" ) ) ) ) {
+				++$refused;
+			}
+			$dsar->record_submission( "shared$i@example.test" );
+			$GLOBALS['__faz_now'] += HOUR_IN_SECONDS + 1;
+		}
+		assert_eq( $refused, 0, "$subjects distinct subjects behind $what are all accepted" );
+	}
+
+	// …while a real attacker on one real public address is still capped. This
+	// is the reported spam chain, and the reason the ceiling exists at all.
+	reset_state();
+	$GLOBALS['__faz_ip'] = '203.0.113.7';
+	$refused             = 0;
+	for ( $i = 0; $i < 12; $i++ ) {
+		if ( is_wp_error( $dsar->guard_submission( ctx( "flood$i@example.test" ) ) ) ) {
+			++$refused;
+		}
+		$dsar->record_submission( "flood$i@example.test" );
+		$GLOBALS['__faz_now'] += HOUR_IN_SECONDS + 1;
+	}
+	assert_eq( $refused, 12 - $cap, 'one public address is still capped at MAX_PER_IP_PER_DAY' );
+
+	// Only the site-wide ceiling bounds the unidentifiable case — which is the
+	// trade: 500 rows a day instead of closing the form at 5.
+	reset_state();
+	$GLOBALS['__faz_ip'] = '172.70.100.5';
+	add_filter(
+		'faz_dsar_max_stored_per_day',
+		function () {
+			return 3;
+		}
+	);
+	for ( $i = 0; $i < 3; $i++ ) {
+		assert_eq( $dsar->guard_submission( ctx( "w$i@example.test" ) ), true, 'submission ' . ( $i + 1 ) . ' under the hard ceiling is accepted behind a shared address' );
+		$dsar->record_submission( "w$i@example.test" );
+		$GLOBALS['__faz_now'] += HOUR_IN_SECONDS + 1;
+	}
+	$verdict = $dsar->guard_submission( ctx( 'bounded@example.test' ) );
+	check( is_wp_error( $verdict ), 'the site-wide ceiling is what eventually bounds a shared address' );
+	assert_eq( err_code( $verdict ), 'faz_dsar_site_throttled', 'and it is the site ceiling that says so, not the per-IP one' );
+
+	// A skipped layer must not be invisible: the admin has a filter to set and
+	// no way to discover it otherwise.
+	reset_state();
+	$GLOBALS['__faz_ip'] = '172.70.100.5';
+	$dsar->guard_submission( ctx( 'quiet@example.test' ) );
+	$skipped = false;
+	foreach ( $GLOBALS['__faz_fired'] as $entry ) {
+		if ( 'faz_dsar_ip_layer_skipped' === $entry[0] ) {
+			$skipped = true;
+		}
+	}
+	check( $skipped, 'skipping the layer fires faz_dsar_ip_layer_skipped' );
+	check( false !== get_transient( 'faz_dsar_rl_ip_unidentified' ), 'and records the condition for the digest' );
+	foreach ( array_keys( $GLOBALS['__faz_transients'] ) as $k ) {
+		check( 0 === strpos( $k, 'faz_dsar_rl_' ), "the recorded condition key $k shares the resettable prefix" );
+	}
+	assert_eq( count( $GLOBALS['__faz_mail'] ), 0, 'and it does not mail once per request' );
+
+	// It rides the hourly digest instead.
+	for ( $i = 0; $i < 60; $i++ ) {
+		$dsar->record_submission( "q$i@example.test" );
+	}
+	$dsar->announce_suppressed( 50 );
+	assert_eq( count( $GLOBALS['__faz_mail'] ), 1, 'the digest still goes out' );
+	check( false !== strpos( $GLOBALS['__faz_mail'][0]['body'], 'faz_trusted_proxy_cidrs' ), 'and names the filter that gives the ceiling a per-visitor key' );
+
+	// A refusal, on the other hand, must announce itself: announce_suppressed()
+	// is keyed to the MAIL ceiling and is only reachable once a request has
+	// been stored, so it cannot carry this.
+	reset_state();
+	$GLOBALS['__faz_ip'] = '203.0.113.7';
+	for ( $i = 0; $i < $cap; $i++ ) {
+		$dsar->record_submission( "n$i@example.test" );
+	}
+	$GLOBALS['__faz_mail'] = array();
+	$verdict               = $dsar->guard_submission( ctx( 'refused@example.test' ) );
+	assert_eq( err_code( $verdict ), 'faz_dsar_ip_throttled', 'the ceiling refuses an identified address' );
+	assert_eq( count( $GLOBALS['__faz_mail'] ), 1, 'and the admin is told that it refused' );
+	$ip_body = $GLOBALS['__faz_mail'][0]['body'];
+	check( false !== strpos( $ip_body, 'faz_dsar_max_per_ip_per_day' ), 'the notice names the ceiling filter' );
+	check( false !== strpos( $ip_body, 'faz_trust_proxy_headers' ), 'and the proxy filters to configure' );
+	check( false !== strpos( $ip_body, 'faz_trusted_proxy_cidrs' ), 'including the shared range list' );
+	$dsar->guard_submission( ctx( 'refused2@example.test' ) );
+	assert_eq( count( $GLOBALS['__faz_mail'] ), 1, 'at most one such notice per hour' );
+	$GLOBALS['__faz_now'] += HOUR_IN_SECONDS + 1;
+	$dsar->guard_submission( ctx( 'refused3@example.test' ) );
+	assert_eq( count( $GLOBALS['__faz_mail'] ), 2, 'and it comes back the next hour while refusals last' );
+	foreach ( array_keys( $GLOBALS['__faz_transients'] ) as $k ) {
+		check( 0 === strpos( $k, 'faz_dsar_rl_' ), "the notice key $k shares the resettable prefix" );
+	}
+
+	// ── 3c. Which forwarded value may be believed ───────────────────────────
+
+	echo "— forwarded headers: the resolved address is not the client's to choose\n";
+
+	// These exercise the REAL helpers behind faz_resolve_client_ip() (the
+	// resolver itself stays stubbed above, since the sections around this one
+	// drive it by $GLOBALS['__faz_ip']). Both bugs they pin were real: a
+	// leftmost X-Forwarded-For entry is whatever the client sent, because a
+	// proxy APPENDS to that header, and an nginx that writes X-Real-IP never
+	// touches X-Forwarded-For at all, so reading XFF there reads the client.
+	//
+	// resolved() is the resolver's DEFAULT path, reproduced from its two real
+	// halves in the order it calls them, because the resolver itself is stubbed
+	// at the top of this file for the sections around this one. Both judgments
+	// it composes — "is this peer infrastructure?" and "does it forward a
+	// client address that may be believed?" — are the shipped implementations,
+	// as is faz_client_ip_identifies_visitor() below.
+	$resolved = function ( $remote_addr ) {
+		if ( faz_remote_addr_is_trusted_proxy( $remote_addr ) ) {
+			$forwarded = faz_forwarded_client_ip( $remote_addr );
+			if ( '' !== $forwarded ) {
+				return $forwarded;
+			}
+		}
+		return $remote_addr;
+	};
+
+	// An UNCONFIGURED loopback peer reads nothing. This is the default, and it
+	// has to be: nginx's own convention is `proxy_set_header X-Real-IP
+	// $remote_addr;` with nothing managing X-Forwarded-For, so on that host —
+	// which is this repo's own faz-test — an X-Forwarded-For default would have
+	// read a header written by nobody but the visitor. The visitor would then
+	// have been naming their own throttle key and their own consent-log
+	// ip_hash, which is worse than the shared key the per-IP ceiling is being
+	// fixed for: a shared key costs the ceiling, a chosen key costs the ceiling
+	// AND poisons the log.
+	$_SERVER             = array( 'REMOTE_ADDR' => '127.0.0.1', 'HTTP_X_FORWARDED_FOR' => '1.2.3.4' );
+	$GLOBALS['__faz_ip'] = $resolved( '127.0.0.1' );
+	assert_eq( faz_forwarded_client_ip( '127.0.0.1' ), '', 'an unconfigured loopback peer reads no header at all' );
+	assert_eq( $GLOBALS['__faz_ip'], '127.0.0.1', 'so it resolves to the peer address, not to the address the client sent' );
+	check( ! faz_client_ip_identifies_visitor(), 'and that address does not identify a visitor, so the per-IP ceiling is skipped rather than chosen' );
+
+	// Self-appending a plausible trusted hop does not help either: the walk
+	// never starts, because no header was named.
+	$_SERVER             = array( 'REMOTE_ADDR' => '127.0.0.1', 'HTTP_X_FORWARDED_FOR' => '9.9.9.9, 172.70.1.1' );
+	$GLOBALS['__faz_ip'] = $resolved( '127.0.0.1' );
+	check( '9.9.9.9' !== faz_forwarded_client_ip( '127.0.0.1' ), 'a forged trusted-looking tail does not promote the client entry' );
+	assert_eq( $GLOBALS['__faz_ip'], '127.0.0.1', 'the unconfigured peer address still stands' );
+	check( ! faz_client_ip_identifies_visitor(), 'and still does not identify a visitor' );
+
+	// Named header, nginx recipe 1: `proxy_set_header X-Forwarded-For
+	// $proxy_add_x_forwarded_for;`. The proxy appends, so the client's own
+	// entries stay to the LEFT and the rightmost hop is the one it saw.
+	add_filter(
+		'faz_loopback_proxy_header',
+		function () {
+			return 'HTTP_X_FORWARDED_FOR';
+		}
+	);
+	$_SERVER = array( 'REMOTE_ADDR' => '127.0.0.1', 'HTTP_X_FORWARDED_FOR' => '1.2.3.4, 198.51.100.77' );
+	assert_eq( faz_forwarded_client_ip( '127.0.0.1' ), '198.51.100.77', 'the chain is walked from the right, not the left' );
+	assert_eq( $resolved( '127.0.0.1' ), '198.51.100.77', 'and that is what the peer resolves to once its header is named' );
+	$_SERVER = array( 'REMOTE_ADDR' => '127.0.0.1', 'HTTP_X_FORWARDED_FOR' => '1.2.3.4, garbage' );
+	assert_eq( faz_forwarded_client_ip( '127.0.0.1' ), '', 'an unusable rightmost hop stops the walk instead of trusting the left' );
+	$GLOBALS['__faz_filters']['faz_loopback_proxy_header'] = array();
+
+	// Named header, nginx recipe 2: X-Real-IP is the header it writes,
+	// X-Forwarded-For is the client's.
+	add_filter(
+		'faz_loopback_proxy_header',
+		function () {
+			return 'HTTP_X_REAL_IP';
+		}
+	);
+	$_SERVER = array( 'REMOTE_ADDR' => '127.0.0.1', 'HTTP_X_FORWARDED_FOR' => '1.2.3.4', 'HTTP_X_REAL_IP' => '198.51.100.90' );
+	assert_eq( faz_forwarded_client_ip( '127.0.0.1' ), '198.51.100.90', 'the named header is used and the forged X-Forwarded-For ignored' );
+	$_SERVER = array( 'REMOTE_ADDR' => '127.0.0.1', 'HTTP_X_FORWARDED_FOR' => '1.2.3.4' );
+	assert_eq( faz_forwarded_client_ip( '127.0.0.1' ), '', 'with the named header absent there is no fallback to the forged one' );
+	$GLOBALS['__faz_filters']['faz_loopback_proxy_header'] = array();
+
+	// Cloudflare: CF-Connecting-IP only, and only from inside its ranges.
+	$_SERVER = array( 'REMOTE_ADDR' => '172.70.100.5', 'HTTP_X_REAL_IP' => '1.2.3.4' );
+	assert_eq( faz_forwarded_client_ip( '172.70.100.5' ), '', 'a CF edge does not hand over a forged X-Real-IP' );
+	$_SERVER = array( 'REMOTE_ADDR' => '172.70.100.5', 'HTTP_CF_CONNECTING_IP' => '198.51.100.91' );
+	assert_eq( faz_forwarded_client_ip( '172.70.100.5' ), '198.51.100.91', 'a CF edge is believed on CF-Connecting-IP' );
+	$_SERVER = array( 'REMOTE_ADDR' => '203.0.113.99', 'HTTP_CF_CONNECTING_IP' => '8.8.8.8' );
+	check( ! faz_remote_addr_is_trusted_proxy( '203.0.113.99' ), 'a public peer outside the ranges is not a proxy' );
+
+	// A range an admin added for their own CDN: it must actually do something,
+	// and that something must not be "believe Cloudflare's header from a peer
+	// that is not Cloudflare".
+	add_filter(
+		'faz_trusted_proxy_cidrs',
+		function ( $cidrs ) {
+			return array_merge( (array) $cidrs, array( '203.0.113.0/24' ) );
+		}
+	);
+	check( faz_remote_addr_is_trusted_proxy( '203.0.113.9' ), 'an admin-added range makes its peer infrastructure' );
+	$_SERVER             = array( 'REMOTE_ADDR' => '203.0.113.9', 'HTTP_X_FORWARDED_FOR' => '198.51.100.5' );
+	$GLOBALS['__faz_ip'] = $resolved( '203.0.113.9' );
+	assert_eq( faz_forwarded_client_ip( '203.0.113.9' ), '198.51.100.5', 'and its X-Forwarded-For is read, so adding the range is not a no-op' );
+	assert_eq( $GLOBALS['__faz_ip'], '198.51.100.5', 'the resolved address is the forwarded client' );
+	check( faz_client_ip_identifies_visitor(), 'which identifies a visitor, so the per-IP ceiling applies again' );
+
+	// The same chain shape as the forged one above, but from a peer that really
+	// does append: the rightmost non-hop entry is the client.
+	$_SERVER = array( 'REMOTE_ADDR' => '203.0.113.9', 'HTTP_X_FORWARDED_FOR' => '198.51.100.5, 203.0.113.9' );
+	assert_eq( faz_forwarded_client_ip( '203.0.113.9' ), '198.51.100.5', 'its own hop in the chain is stepped over' );
+
+	// CF-Connecting-IP is bound to the SHIPPED ranges, not to the filtered
+	// list: an admin-added range must never make a header that CDN does not
+	// write authoritative.
+	$_SERVER             = array( 'REMOTE_ADDR' => '203.0.113.9', 'HTTP_CF_CONNECTING_IP' => '8.8.8.8' );
+	$GLOBALS['__faz_ip'] = $resolved( '203.0.113.9' );
+	assert_eq( faz_forwarded_client_ip( '203.0.113.9' ), '', 'CF-Connecting-IP is ignored from a peer matching only an admin-added range' );
+	assert_eq( $GLOBALS['__faz_ip'], '203.0.113.9', 'so that request resolves to the edge, not to the address it claimed' );
+	check( ! faz_client_ip_identifies_visitor(), 'and the edge address does not identify a visitor' );
+	check( ! faz_ip_in_cidr_list( '203.0.113.9', faz_cloudflare_proxy_cidrs() ), 'the shipped Cloudflare list is not widened by the filter' );
+	$GLOBALS['__faz_filters']['faz_trusted_proxy_cidrs'] = array();
+
+	// An RFC1918 peer is NOT a verified proxy: on a LAN-hosted or
+	// containerised site the visitor's own peer address can be private, which
+	// would make the visitor the proxy and the header theirs to write.
+	check( ! faz_remote_addr_is_trusted_proxy( '10.0.0.5' ), 'an RFC1918 peer is not a verified proxy' );
+	check( faz_remote_addr_is_trusted_proxy( '127.0.0.1' ), 'loopback is' );
+	check( faz_remote_addr_is_trusted_proxy( '172.70.100.5' ), 'and so is a shipped trusted-proxy range' );
+	$_SERVER = array();
+	reset_state();
 
 	// ── 4. The window is fixed, not rolling ──────────────────────────────────
 

@@ -50,6 +50,10 @@ class WP_Error {
 	public function get_error_message() { return ''; }
 }
 
+// The Cloudflare ranges live in one place since 1.34.1 — faz_trusted_proxy_cidrs()
+// in includes/class-utils.php, which faz_resolve_client_ip() reads as well. The
+// detector reads that shared list, so the helpers file has to be loaded here too.
+require_once dirname( __DIR__, 2 ) . '/includes/class-utils.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/geo-routing/includes/class-secrets.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/geo-routing/includes/class-ipinfo-client.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/geo-routing/includes/class-geo-detector.php';
