@@ -589,51 +589,48 @@ if ( ! function_exists( 'faz_peer_is_cloudflare' ) ) {
 			return true;
 		}
 
-		// The web server may have done this already. nginx's real_ip module
-		// with `real_ip_header CF-Connecting-IP` and Apache's mod_remoteip
-		// REPLACE REMOTE_ADDR with the address that header carries, so on such
-		// an origin the peer we see is the visitor, not the edge, and the range
-		// test above can never match. Rejecting those sites would take the
-		// country away from deployments that set this up properly.
+		// Many Cloudflare origins do not look like one, and the ones that follow
+		// Cloudflare's own advice look least like it. nginx's real_ip module
+		// with `real_ip_header CF-Connecting-IP`, Apache's mod_remoteip, and
+		// most managed hosts RESTORE the visitor's address at the origin, so
+		// REMOTE_ADDR is the visitor — or 127.0.0.1 behind a loopback proxy —
+		// and never an edge. The range test above can never match there.
 		//
-		// But the equality alone is not proof, and must not be treated as any:
-		// a client reaching the origin directly can send
-		// `CF-Connecting-IP: <its own address>` and satisfy it. It gains no
-		// address it did not already have — it gains this check, and with it
-		// the country the gate above was built to stop it choosing.
+		// There is nothing left for this function to verify on such a site:
+		// the peer has already been rewritten, and whether that rewrite can be
+		// trusted is a fact about the network, not about the request. Only the
+		// operator knows it, so only the operator can assert it.
 		//
-		// So it takes a SECOND assertion from the operator, separate from
-		// `faz_trust_cf_ipcountry_header` because it says something different:
-		// not "read Cloudflare's country header" but "my web server has
-		// already rewritten REMOTE_ADDR from that header, and it only does so
-		// for Cloudflare's ranges". Only the operator knows that, and a site
-		// that merely wanted the country header read never gets the bypass.
-		if ( ! empty( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-			/**
-			 * Whether the web server rewrites REMOTE_ADDR from `CF-Connecting-IP`.
-			 *
-			 * Return true ONLY when both of these hold:
-			 *
-			 * - the server is configured to rewrite the peer from that header
-			 *   for Cloudflare's ranges and nothing else (nginx `real_ip_header
-			 *   CF-Connecting-IP` with `set_real_ip_from` limited to those
-			 *   ranges, or Apache `mod_remoteip` with `RemoteIPTrustedProxy`);
-			 * - the origin is NOT reachable except through Cloudflare.
-			 *
-			 * Without the second, a client can reach the origin directly, send
-			 * its own address in the header, and satisfy the equality this
-			 * filter unlocks.
-			 *
-			 * @since 1.34.1
-			 * @param bool $rewritten Default false.
-			 */
-			if ( (bool) apply_filters( 'faz_remote_addr_rewritten_by_cloudflare', false ) ) {
-				// phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-				$cf_ip = trim( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) );
-				if ( '' !== $cf_ip && 0 === strcasecmp( $cf_ip, $remote_addr ) ) {
-					return true;
-				}
-			}
+		// Note what is NOT required: that `CF-Connecting-IP` still be present,
+		// nor that it equal REMOTE_ADDR. An earlier revision demanded both and
+		// was wrong twice over. mod_remoteip REMOVES the header once it has
+		// consumed it — and a single-valued `CF-Connecting-IP` always is — so
+		// the requirement made this unreachable on exactly the Apache origins
+		// it names, and unreachable behind a loopback proxy that does not pass
+		// the header on. The equality was no safeguard either: a client
+		// reaching the origin directly can send its own address and satisfy
+		// it, which is why it was already gated behind this same filter.
+		/**
+		 * Whether the visitor's address is restored at the origin for Cloudflare.
+		 *
+		 * Return true ONLY when both of these hold:
+		 *
+		 * - the web server, or the host, rewrites `REMOTE_ADDR` from
+		 *   `CF-Connecting-IP` for Cloudflare's ranges and nothing else
+		 *   (nginx `real_ip_header` with `set_real_ip_from` limited to those
+		 *   ranges, Apache `mod_remoteip` with `RemoteIPTrustedProxy`, or the
+		 *   equivalent your host documents);
+		 * - the origin is NOT reachable except through Cloudflare.
+		 *
+		 * The second is the one that matters and the one no plugin can check.
+		 * Without it a client reaches the origin directly and dictates
+		 * `CF-IPCountry`, which is the whole reason this defaults to false.
+		 *
+		 * @since 1.34.1
+		 * @param bool $restored Default false.
+		 */
+		if ( (bool) apply_filters( 'faz_remote_addr_rewritten_by_cloudflare', false ) ) {
+			return true;
 		}
 
 		return false;

@@ -173,32 +173,27 @@ unset( $GLOBALS['_faz_test_filters']['faz_trusted_proxy_cidrs'] );
 // address CF-Connecting-IP carries, so the peer PHP sees is the visitor and no
 // range test can match it. The equality is the signal that something already
 // trusted the header enough to rewrite the peer with it.
-$_SERVER = array(
-	'REMOTE_ADDR'           => '203.0.113.90',
-	'HTTP_CF_CONNECTING_IP' => '203.0.113.90',
-);
+// A Cloudflare origin that restores the visitor's address does not look like
+// one: nginx real_ip, Apache mod_remoteip and most managed hosts leave
+// REMOTE_ADDR as the visitor, or as 127.0.0.1 behind a loopback proxy. No
+// range test can match, so it takes the operator's assertion — and nothing
+// else, because mod_remoteip REMOVES the header once it has consumed it.
+$_SERVER = array( 'REMOTE_ADDR' => '203.0.113.90' );
+assert_false( $peer_is_cf->invoke( $detector ), 'a restored visitor address is not a Cloudflare peer on its own' );
 
-// The equality on its OWN proves nothing — a client reaching the origin
-// directly can send its own address in the header and satisfy it — so by
-// default it is refused.
-assert_false( $peer_is_cf->invoke( $detector ), 'the equality alone does not make the peer Cloudflare: a direct client can forge it' );
-
-// It takes a second, separate assertion from the operator: not "read the
-// country header" but "my server already rewrote the peer from it, and the
-// origin is not reachable any other way".
 $GLOBALS['_faz_test_filters']['faz_remote_addr_rewritten_by_cloudflare'] = function () {
 	return true;
 };
-assert_true( $peer_is_cf->invoke( $detector ), 'with the operator assertion, a rewritten REMOTE_ADDR counts as a Cloudflare peer' );
+assert_true( $peer_is_cf->invoke( $detector ), 'with the operator assertion it is, with no CF-Connecting-IP present at all' );
 
-// Even then the addresses have to match: a header naming someone else means
-// nothing rewrote this peer.
-$_SERVER = array(
-	'REMOTE_ADDR'           => '203.0.113.90',
-	'HTTP_CF_CONNECTING_IP' => '8.8.8.8',
-);
-assert_false( $peer_is_cf->invoke( $detector ), 'a CF-Connecting-IP naming a different address does not make the peer Cloudflare' );
+// The Apache case the earlier revision made unreachable: the header is gone,
+// consumed by mod_remoteip, and the site must still resolve its country.
+$_SERVER = array( 'REMOTE_ADDR' => '127.0.0.1' );
+assert_true( $peer_is_cf->invoke( $detector ), 'and behind a loopback proxy, where the header never arrives' );
 unset( $GLOBALS['_faz_test_filters']['faz_remote_addr_rewritten_by_cloudflare'] );
+
+// Without the assertion, a loopback peer is just a loopback peer.
+assert_false( $peer_is_cf->invoke( $detector ), 'and without it, a loopback peer asserts nothing' );
 
 // The retired geo-only filter grants nothing any more.
 $GLOBALS['_faz_test_filters']['faz_geo_trusted_proxy_cidrs'] = function ( $cidrs ) {
