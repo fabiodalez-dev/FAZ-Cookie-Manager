@@ -40,6 +40,15 @@ function apply_filters( $hook, $val ) {
 	}
 	return $val;
 }
+// faz_forwarded_client_ip() sanitises the forwarded header before parsing it.
+// Mirrors WordPress: strip tags, then collapse whitespace — NOT a no-op stub,
+// because a stub that passed the value through unchanged would hide a header
+// whose content only survives sanitising by accident.
+function sanitize_text_field( $str ) {
+	$str = strip_tags( (string) $str );
+	return trim( preg_replace( '/[\r\n\t ]+/', ' ', $str ) );
+}
+function wp_unslash( $v ) { return is_string( $v ) ? stripslashes( $v ) : $v; }
 function wp_remote_get( $url, $args = array() ) { return new WP_Error( 'stub', 'no HTTP' ); }
 function wp_remote_retrieve_response_code( $r ) { return 0; }
 function wp_remote_retrieve_body( $r ) { return ''; }
@@ -77,7 +86,7 @@ $detector = new Geo_Detector();
 $ref      = new ReflectionClass( $detector );
 
 $ip_in_cidr      = $ref->getMethod( 'ip_in_cidr' );      $ip_in_cidr->setAccessible( true );
-$is_trusted      = $ref->getMethod( 'is_trusted_proxy' ); $is_trusted->setAccessible( true );
+$peer_is_cf      = $ref->getMethod( 'peer_is_cloudflare' ); $peer_is_cf->setAccessible( true );
 $resolve_client  = $ref->getMethod( 'resolve_client_ip' );$resolve_client->setAccessible( true );
 
 // ---------- ip_in_cidr() ----------
@@ -113,24 +122,65 @@ assert_false( $ip_in_cidr->invoke( $detector, '8.8.8.8',      '104.16.0.0/-1' ),
 assert_false( $ip_in_cidr->invoke( $detector, '2606:4700::1', '104.16.0.0/13' ),  'v6 IP vs v4 CIDR → false' );
 assert_false( $ip_in_cidr->invoke( $detector, '8.8.8.8',      '2606:4700::/32' ), 'v4 IP vs v6 CIDR → false' );
 
-// ---------- is_trusted_proxy() ----------
+// ---------- peer_is_cloudflare() ----------
+// The SHIPPED list, which no filter can widen: the two headers gated on this
+// are written by Cloudflare and by nothing else.
 
-assert_true(  $is_trusted->invoke( $detector, '104.16.5.10' ),  '104.16.5.10 (CF) is trusted proxy' );
-assert_true(  $is_trusted->invoke( $detector, '162.158.1.1' ),  '162.158.1.1 (CF) is trusted proxy' );
-assert_true(  $is_trusted->invoke( $detector, '2606:4700::1' ), 'CF v6 is trusted proxy' );
-assert_false( $is_trusted->invoke( $detector, '8.8.8.8' ),       'Google DNS is NOT trusted proxy' );
-assert_false( $is_trusted->invoke( $detector, '1.1.1.1' ),       'CF DNS 1.1.1.1 NOT in proxy ranges' );
-assert_false( $is_trusted->invoke( $detector, '192.0.2.99' ),    'TEST-NET-1 is NOT trusted proxy' );
-
-// Filter extensibility — operator adds a custom proxy
-$GLOBALS['_faz_test_filters']['faz_geo_trusted_proxy_cidrs'] = function( $cidrs ) {
-	return array_merge( $cidrs, array( '10.0.0.0/8' ) );
+$cf_peer = function ( $ip ) use ( $peer_is_cf, $detector ) {
+	$_SERVER = array( 'REMOTE_ADDR' => $ip );
+	return $peer_is_cf->invoke( $detector );
 };
-$d2 = new Geo_Detector();
-$ref2 = new ReflectionClass( $d2 );
-$is_trusted2 = $ref2->getMethod( 'is_trusted_proxy' ); $is_trusted2->setAccessible( true );
-assert_true(  $is_trusted2->invoke( $d2, '10.5.5.5' ),    'Custom CIDR via faz_geo_trusted_proxy_cidrs filter accepted' );
-assert_true(  $is_trusted2->invoke( $d2, '104.16.5.10' ), 'Default CF ranges still active alongside filter' );
+
+assert_true(  $cf_peer( '104.16.5.10' ),  '104.16.5.10 (CF) is a Cloudflare peer' );
+assert_true(  $cf_peer( '162.158.1.1' ),  '162.158.1.1 (CF) is a Cloudflare peer' );
+assert_true(  $cf_peer( '2606:4700::1' ), 'CF v6 is a Cloudflare peer' );
+assert_false( $cf_peer( '8.8.8.8' ),      'Google DNS is NOT a Cloudflare peer' );
+assert_false( $cf_peer( '1.1.1.1' ),      'CF DNS 1.1.1.1 is not a proxy range' );
+assert_false( $cf_peer( '192.0.2.99' ),   'TEST-NET-1 is NOT a Cloudflare peer' );
+assert_false( $cf_peer( '' ),             'no REMOTE_ADDR is not a Cloudflare peer' );
+
+// The finding this closes: an administrator who adds their OWN CDN range must
+// not thereby make CF-Connecting-IP authoritative, because that CDN does not
+// write it — the visitor behind it would, and would then choose the country
+// and VPN state the detector reports.
+$GLOBALS['_faz_test_filters']['faz_trusted_proxy_cidrs'] = function ( $cidrs ) {
+	return array_merge( (array) $cidrs, array( '198.51.100.0/24' ) );
+};
+assert_false( $cf_peer( '198.51.100.7' ), 'a range added through faz_trusted_proxy_cidrs is NOT a Cloudflare peer' );
+$_SERVER = array(
+	'REMOTE_ADDR'           => '198.51.100.7',  // the operator's own edge
+	'HTTP_CF_CONNECTING_IP' => '8.8.8.8',       // forged by the visitor behind it
+);
+assert_eq(
+	$resolve_client->invoke( $detector ),
+	'198.51.100.7',
+	'and a forged CF-Connecting-IP from that peer is ignored'
+);
+// Through the header that peer DOES write, the same visitor resolves normally.
+$_SERVER = array(
+	'REMOTE_ADDR'          => '198.51.100.7',
+	'HTTP_X_FORWARDED_FOR' => '203.0.113.90',
+);
+assert_eq(
+	$resolve_client->invoke( $detector ),
+	'203.0.113.90',
+	'while the named forwarded header from that peer still resolves the visitor'
+);
+unset( $GLOBALS['_faz_test_filters']['faz_trusted_proxy_cidrs'] );
+
+// The retired geo-only filter grants nothing any more.
+$GLOBALS['_faz_test_filters']['faz_geo_trusted_proxy_cidrs'] = function ( $cidrs ) {
+	return array_merge( (array) $cidrs, array( '10.0.0.0/8' ) );
+};
+$_SERVER = array(
+	'REMOTE_ADDR'           => '10.5.5.5',
+	'HTTP_CF_CONNECTING_IP' => '8.8.8.8',
+);
+assert_eq(
+	$resolve_client->invoke( $detector ),
+	'10.5.5.5',
+	'faz_geo_trusted_proxy_cidrs no longer grants CF-Connecting-IP trust'
+);
 unset( $GLOBALS['_faz_test_filters']['faz_geo_trusted_proxy_cidrs'] );
 
 // ---------- resolve_client_ip() — the security-critical assembler ----------

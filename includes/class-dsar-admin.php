@@ -488,13 +488,17 @@ class DSAR_Admin {
 	 */
 	public static function core_tool_url( $action, $email ) {
 		$page = 'remove_personal_data' === $action ? 'remove_personal_data' : 'export_personal_data';
-		// Raw address, not rawurlencode()'d: add_query_arg() encodes values
-		// itself, so pre-encoding here produced %2540 in the tool's search box
-		// instead of the address.
+		// Encoded here, because add_query_arg() does NOT encode the values it
+		// is given: it urlencode_deep()s only the query string already on the
+		// URL, merges the new pairs after that, and hands the result to
+		// build_query(), which is _http_build_query( …, $urlencode = false ).
+		// So a raw address went out verbatim, and an alias — jane+gdpr@…, the
+		// everyday shape of an address someone gives a website — arrived at the
+		// core tool with the "+" read back as a space, which matches nothing.
 		return add_query_arg(
 			array(
 				'page' => $page,
-				's'    => $email,
+				's'    => rawurlencode( $email ),
 			),
 			admin_url( 'tools.php' )
 		);

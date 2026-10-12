@@ -41,9 +41,19 @@ namespace {
 	function admin_url( $path = '' ) {
 		return 'https://example.test/wp-admin/' . $path;
 	}
+	// Mirrors WordPress: add_query_arg() urlencode_deep()s only the query
+	// string already present on the URL, then merges the new pairs and runs
+	// build_query(), which is _http_build_query( …, $urlencode = false ). The
+	// values it is handed are therefore NOT encoded. A stub built on
+	// http_build_query() encodes them, which is how a missing rawurlencode()
+	// in core_tool_url() passed its own test for a while.
 	function add_query_arg( $args, $url = '' ) {
-		$sep = false === strpos( $url, '?' ) ? '?' : '&';
-		return $url . $sep . http_build_query( $args );
+		$sep  = false === strpos( $url, '?' ) ? '?' : '&';
+		$pairs = array();
+		foreach ( (array) $args as $k => $v ) {
+			$pairs[] = $k . '=' . $v;
+		}
+		return $url . $sep . implode( '&', $pairs );
 	}
 	function wp_nonce_url( $url, $action ) {
 		$GLOBALS['__faz_nonces'][] = $action;

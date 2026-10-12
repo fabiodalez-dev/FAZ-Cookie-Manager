@@ -251,15 +251,24 @@ class AMP_Consent {
 		// User-Agent, so it must reach this point and keep its cache entry.
 		// Frontend::enqueue_scripts() orders these the same way.
 		//
-		// Not "excluded by id": Frontend::send_geo_cache_headers() runs on
-		// `send_headers`, which WP fires from WP::send_headers() after
-		// parse_request() but before query_posts(). get_the_ID() is false
-		// there, so the numeric entries of excluded_pages never match and a
-		// page excluded by ID still takes the veto. The cost is one crawler
-		// response that could have been cached, so the hook stays where it is:
-		// moving it to template_redirect would change when headers are sent,
-		// and resolving the ID with url_to_postid() would add a query to every
-		// front-end request. Stated rather than silently implied.
+		// "Excluded by path", and not by id, on part of the version range this
+		// plugin supports — which is worth spelling out because WordPress
+		// changed the answer. Frontend::send_geo_cache_headers() runs on
+		// `send_headers`, and WP::main() reordered in 6.1: up to 6.0 it fired
+		// send_headers() BEFORE query_posts(), so get_the_ID() was false there
+		// and the numeric entries of excluded_pages could never match; from
+		// 6.1 query_posts(), handle_404() and register_globals() all run first,
+		// so on a parsed request the ID is available and a numeric exclusion
+		// does match. `Requires at least` is 5.0, so both orders are live in
+		// the field.
+		//
+		// Either way this call stays last and the hook stays put. On 6.1+ the
+		// veto is simply correct. On 6.0 and earlier a page excluded by ID
+		// still takes it, and the cost is one crawler response that could have
+		// been cached — cheaper than the alternatives, which are moving the
+		// hook to template_redirect (changing when headers are sent) or
+		// resolving the ID with url_to_postid() (a query on every front-end
+		// request). Stated rather than silently implied.
 		if ( $this->bot_suppression_applies() ) {
 			return true;
 		}

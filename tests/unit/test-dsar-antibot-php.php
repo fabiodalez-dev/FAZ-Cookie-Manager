@@ -50,7 +50,7 @@ namespace {
 	define( 'MINUTE_IN_SECONDS', 60 );
 	define( 'DAY_IN_SECONDS', 86400 );
 	define( 'FAZ_PLUGIN_URL', 'https://example.test/wp-content/plugins/faz-cookie-manager/' );
-	define( 'FAZ_VERSION', '1.34.2' );
+	define( 'FAZ_VERSION', '1.34.1' );
 
 	$GLOBALS['__faz_now']        = 1760000000;
 	$GLOBALS['__faz_ip']         = '203.0.113.7';
@@ -678,21 +678,27 @@ namespace {
 	$_POST                 = browser_post( $stamp, array( 'faz_pow_n' => $foreign ) );
 	assert_eq( err_code( $dsar->guard_submission( ctx() ) ), 'faz_dsar_pow', "an answer for another salt is refused" );
 
-	// Replay of a proof-of-work ANSWER: one accepted answer per challenge,
-	// charged when the submission is accepted, not when the answer is checked.
-	// This is the gate's only single-use claim, and it lives on the opt-in
-	// path — see the stamp block below for why the stamp carries none.
+	// A proof-of-work answer is NOT single-use either, and the reason is the
+	// gate's own fail-open rule: no answer at all is accepted, so a script
+	// never has to solve the challenge — it omits the field. A claim on the
+	// answer could only ever fire on an honest browser that ran the solver,
+	// and on a cached page it would spend the one shared salt for everybody.
 	reset_state();
 	enable_pow( 3 );
 	$stamp                 = FazCookie\Includes\DSAR_Shortcode::issue_stamp();
 	$GLOBALS['__faz_now'] += 8;
 	$answer                = solve_pow( $stamp['salt'], $stamp['diff'] );
 	$_POST                 = browser_post( $stamp, array( 'faz_pow_n' => $answer ) );
-	assert_eq( $dsar->guard_submission( ctx( 'first@example.test' ) ), true, 'the first use of an answer is accepted' );
+	assert_eq( $dsar->guard_submission( ctx( 'first@example.test' ) ), true, 'a solved challenge is accepted' );
 	$dsar->record_submission( 'first@example.test' );
 	$verdict = $dsar->guard_submission( ctx( 'second@example.test' ) );
-	assert_eq( err_code( $verdict ), 'faz_dsar_pow_replay', 'replaying a solved answer is refused' );
-	check( false !== strpos( err_msg( $verdict ), 'reload' ), 'and the remedy is a fresh challenge' );
+	assert_eq( $verdict, true, 'and a second subject answering the same cached challenge is accepted too' );
+
+	// The omission that makes the claim pointless, stated as a test so nobody
+	// re-adds one: the same form with no answer at all goes through.
+	$_POST = browser_post( $stamp );
+	unset( $_POST['faz_pow_n'] );
+	assert_eq( $dsar->guard_submission( ctx( 'noscript@example.test' ) ), true, 'while omitting the answer entirely is accepted by design' );
 
 	// The stamp, by contrast, is NOT single-use, and these are the properties
 	// that make it impossible to spend without denying the right the form
@@ -762,7 +768,9 @@ namespace {
 			++$pow_keys;
 		}
 	}
-	assert_eq( $pow_keys, 1, 'the spent challenge is recorded exactly once' );
+	// Nothing is written per challenge any more: an answer is not spendable
+	// without denying the honest clients that are the only ones who send one.
+	assert_eq( $pow_keys, 0, 'an accepted challenge writes no per-challenge key' );
 	$keys = implode( ' ', array_keys( $GLOBALS['__faz_transients'] ) );
 	check( false === strpos( $keys, $stamp['salt'] ), 'and the salt itself is not readable from the key' );
 

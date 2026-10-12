@@ -756,7 +756,7 @@ class DSAR_Shortcode {
 	 * nothing a page cache can get wrong beyond serving an older stamp, which
 	 * is a case the age window already handles.
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 * @return array {
 	 *     @type int    $t    Issue timestamp.
 	 *     @type string $sig  Signature over t + salt + difficulty.
@@ -813,7 +813,7 @@ class DSAR_Shortcode {
 	 * `FazCookie\Includes\wp_salt()` — undefined. It is the same mistake as
 	 * issues #85 and #9.
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 * @return string The salt, or '' when WordPress has not provided one.
 	 */
 	private static function stamp_secret() {
@@ -826,7 +826,7 @@ class DSAR_Shortcode {
 	 * Truncated to 32 hex characters (128 bits), which is far past anything
 	 * forgeable and keeps the markup small.
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 * @param int    $t    Issue timestamp.
 	 * @param string $salt Proof-of-work salt, or ''.
 	 * @param int    $diff Proof-of-work difficulty, or 0.
@@ -857,7 +857,7 @@ class DSAR_Shortcode {
 	 * still refused — the derived name is a cost raised against a bot, not a
 	 * precondition for the form working.
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 * @param int $t Issue timestamp.
 	 * @return string
 	 */
@@ -882,14 +882,14 @@ class DSAR_Shortcode {
 	 *
 	 *     add_filter( 'faz_dsar_pow_enabled', '__return_true' );
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 * @return bool
 	 */
 	public static function pow_enabled() {
 		/**
 		 * Switch on the self-contained proof-of-work gate for the DSAR form.
 		 *
-		 * @since 1.34.2
+		 * @since 1.34.1
 		 * @param bool $enabled Default false.
 		 */
 		return (bool) \apply_filters( 'faz_dsar_pow_enabled', false );
@@ -898,14 +898,14 @@ class DSAR_Shortcode {
 	/**
 	 * Required leading hex zeros, clamped to a range a phone can still clear.
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 * @return int
 	 */
 	public static function pow_difficulty() {
 		/**
 		 * Difficulty of the DSAR proof of work, in leading hex zeros.
 		 *
-		 * @since 1.34.2
+		 * @since 1.34.1
 		 * @param int $difficulty Default 4 (one hash in 65,536).
 		 */
 		$diff = (int) \apply_filters( 'faz_dsar_pow_difficulty', self::POW_DIFFICULTY );
@@ -923,7 +923,7 @@ class DSAR_Shortcode {
 	 * Its job is only to stop a scraped stamp from being replayable forever on
 	 * a site that has raised `nonce_life`.
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 * @return int Seconds; 0 disables the upper bound.
 	 */
 	private function max_form_age() {
@@ -933,7 +933,7 @@ class DSAR_Shortcode {
 	/**
 	 * Read and verify the stamp on the current submission.
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 * @return array|null|false Verified stamp (t, salt, diff); null when the
 	 *                          submission carries no stamp at all; false when
 	 *                          it carries one that does not verify.
@@ -995,7 +995,7 @@ class DSAR_Shortcode {
 	 * ran — this returns true: an unknown epoch is not grounds for refusing a
 	 * data subject.
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 * @return bool
 	 */
 	private function stampless_still_possible() {
@@ -1024,7 +1024,7 @@ class DSAR_Shortcode {
 	 * code could have changed. Written with add_option so an existing epoch is
 	 * never pushed forward by a later activation of the same version.
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 */
 	public function record_stamp_epoch() {
 		\add_option( 'faz_dsar_stamped_since', time(), '', 'yes' );
@@ -1068,7 +1068,7 @@ class DSAR_Shortcode {
 	 *   client that fakes an answer is refused. The teeth against a bare
 	 *   straight-to-endpoint post are the dwell time above, not this.
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 * @param array $context Sanitized submission fields.
 	 * @return true|\WP_Error
 	 */
@@ -1160,7 +1160,7 @@ class DSAR_Shortcode {
 		 * rebuilds the form. If data requests start being refused with
 		 * `faz_dsar_honeypot` and nobody is attacking the site, set this false.
 		 *
-		 * @since 1.34.2
+		 * @since 1.34.1
 		 * @param bool $reject Default true.
 		 */
 		if ( ! isset( $_POST[ $hp ] ) && (bool) \apply_filters( 'faz_dsar_reject_missing_honeypot', true ) ) {
@@ -1184,7 +1184,7 @@ class DSAR_Shortcode {
 	 * thereby start ignoring answers to challenges it already issued, and a
 	 * site that switches it on does not refuse the forms rendered before.
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 * @param array $stamp   Verified stamp.
 	 * @param array $context Sanitized submission fields.
 	 * @return true|\WP_Error
@@ -1204,7 +1204,7 @@ class DSAR_Shortcode {
 			 * is what a browser with JavaScript disabled looks like. The action
 			 * is here so a site that wants to know can count them.
 			 *
-			 * @since 1.34.2
+			 * @since 1.34.1
 			 * @param array $context Sanitized submission fields.
 			 */
 			\do_action( 'faz_dsar_pow_unanswered', $context );
@@ -1222,76 +1222,25 @@ class DSAR_Shortcode {
 			return $this->reject( 'faz_dsar_pow', __( 'Submission rejected.', 'faz-cookie-manager' ), $context );
 		}
 
-		// One accepted answer per challenge. A correct answer is worth CPU, so
-		// replaying it across hundreds of submissions would buy back exactly
-		// the cost the gate charges. The marker is written when a submission is
-		// ACCEPTED (record_submission()) and taken back if it could not be
-		// stored (release_submission()), so a visitor who is refused by a later
-		// layer — the hourly email limit, say — can correct and resubmit the
-		// same form instead of meeting a replay refusal they cannot act on.
+		// A correct answer is NOT spent, and that is not an oversight. Look at
+		// what the gate does twenty lines up: no answer at all is accepted,
+		// because a client with JavaScript off and a client that chose not to
+		// solve are indistinguishable here and the tie goes to the data subject.
+		// So a script never needs to solve this, let alone replay a solution —
+		// it omits `faz_pow_n` and walks through. A single-use claim therefore
+		// cannot deter the only client it would be aimed at; the one thing it
+		// reliably does is fire on an honest browser that DID run the solver.
 		//
-		// This is the one single-use claim in the gate, and it is confined to
-		// the opt-in path for a reason — the stamp carries none, see
-		// check_antibot(). Two bounds apply, both only where an admin turned
-		// the proof of work ON:
-		//
-		// - The salt is random per render, so two visitors never collide on
-		//   it — unless a full-page cache hands them one copy of the markup.
-		//   There the first accepted submission spends the salt for everyone
-		//   until the cache turns over. A site enabling this gate must exclude
-		//   the page carrying the form from full-page caching; the symptom if
-		//   it does not is data subjects meeting `faz_dsar_pow_replay` on a
-		//   form that a reload does not refresh.
-		// - Reading the marker and writing it are not one operation.
-		//   WordPress has no compare-and-set, and the options-table idiom that
-		//   would supply one leaks a row per form, so submissions that land
-		//   inside that window can share an answer. The per-IP and site-wide
-		//   ceilings still bound the total either way.
-		if ( false !== \get_transient( self::pow_spend_key( $stamp['salt'] ) ) ) {
-			return $this->reject( 'faz_dsar_pow_replay', $this->stale_form_message(), $context );
-		}
+		// And it fires hard: the salt is rendered into the page, so a full-page
+		// cache hands one challenge to every visitor, the first accepted
+		// submission would spend it, and everyone after would be told to reload
+		// a page that reloading does not change. Zero deterrence against a bot,
+		// a site-wide denial against people exercising Art. 15-22. The cost of
+		// this gate is paid per render by whoever answers it, and that is all it
+		// was ever able to charge — see check_antibot() for the same conclusion
+		// reached about the stamp.
 
 		return true;
-	}
-
-	/**
-	 * Transient key marking a proof-of-work challenge as spent.
-	 *
-	 * Under the shared `faz_dsar_rl_` prefix, like every other throttle key on
-	 * this form, so a reset clears it with the rest.
-	 *
-	 * @since 1.34.2
-	 * @param string $salt Challenge salt.
-	 * @return string
-	 */
-	private static function pow_spend_key( $salt ) {
-		return 'faz_dsar_rl_pow_' . substr( hash_hmac( 'sha256', $salt, self::stamp_secret() ), 0, 16 );
-	}
-
-	/**
-	 * Mark this submission's challenge as spent, if it carried one.
-	 *
-	 * @since 1.34.2
-	 * @param bool $spent True to spend, false to give it back.
-	 */
-	private function set_pow_spent( $spent ) {
-		$stamp = $this->verified_stamp();
-		if ( ! is_array( $stamp ) ) {
-			return;
-		}
-		$ttl = max( MINUTE_IN_SECONDS, $this->max_form_age() );
-
-		if ( '' === $stamp['salt'] ) {
-			// No challenge was attached, so there is nothing to spend. The
-			// stamp itself is never spent — see check_antibot().
-			return;
-		}
-		$key = self::pow_spend_key( $stamp['salt'] );
-		if ( $spent ) {
-			\set_transient( $key, 1, $ttl );
-		} else {
-			\delete_transient( $key );
-		}
 	}
 
 	/**
@@ -1301,7 +1250,7 @@ class DSAR_Shortcode {
 	 * because they are one situation for the visitor and have one remedy, and
 	 * because telling a bot which of the three it tripped is free information.
 	 *
-	 * @since 1.34.2
+	 * @since 1.34.1
 	 * @return string
 	 */
 	private function stale_form_message() {
@@ -1405,11 +1354,6 @@ class DSAR_Shortcode {
 		set_transient( $this->email_rl_key( $email ), 1, HOUR_IN_SECONDS );
 		$this->site_bump();
 		$this->ip_bump();
-		// A proof-of-work challenge is a slot like any other, and this is the
-		// moment it is taken: not when the answer was checked, because a
-		// submission refused by a later layer must still be correctable and
-		// resubmittable on the same form.
-		$this->set_pow_spent( true );
 	}
 
 	/**
@@ -1424,11 +1368,6 @@ class DSAR_Shortcode {
 	 */
 	public function release_submission( $email ) {
 		delete_transient( $this->email_rl_key( $email ) );
-		// The challenge goes back with it: the request was not stored, the
-		// visitor is being told to try again, and the form they still have open
-		// carries this salt. Making them reload to earn a new one would be a
-		// cost charged for our own database error.
-		$this->set_pow_spent( false );
 	}
 
 	/**

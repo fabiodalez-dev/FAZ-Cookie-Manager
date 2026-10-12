@@ -145,14 +145,15 @@ class Geo_Detector {
 	/**
 	 * Read CF-IPCountry header from $_SERVER.
 	 *
-	 * Trust gate: only honour the header when the request actually transits a
-	 * known proxy edge OR the operator has explicitly opted in via the legacy
-	 * `faz_trust_cf_ipcountry_header` filter (kept for parity with the
-	 * pre-Geo_Detector `FazCookie\Includes\Geolocation` contract). Without
-	 * this gate a client that reaches the origin directly can spoof
-	 * `CF-IPCountry: DE` and steer the resolver as `cf_header` — see
-	 * `is_trusted_proxy()` for the CIDR allowlist (Cloudflare ranges plus
-	 * `faz_geo_trusted_proxy_cidrs` extensions).
+	 * Trust gate, BOTH halves required: the operator has opted in through the
+	 * legacy `faz_trust_cf_ipcountry_header` filter (default false, kept for
+	 * parity with the pre-Geo_Detector `FazCookie\Includes\Geolocation`
+	 * contract) AND the request arrived from one of Cloudflare's own shipped
+	 * ranges. The opt-in alone is not enough and used to be: `CF-IPCountry` is
+	 * written by Cloudflare's edge, so a client reaching the origin directly
+	 * could send `CF-IPCountry: DE` and steer the resolver as `cf_header`. The
+	 * peer check reads `faz_cloudflare_proxy_cidrs()`, which no filter can
+	 * widen, for the same reason the address resolver does.
 	 *
 	 * @return string Country code (uppercase) or empty.
 	 */
@@ -187,7 +188,39 @@ class Geo_Detector {
 	 * @return bool
 	 */
 	private function cf_header_is_trusted() {
-		return (bool) apply_filters( 'faz_trust_cf_ipcountry_header', false );
+		if ( ! (bool) apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
+			return false;
+		}
+		return $this->peer_is_cloudflare();
+	}
+
+	/**
+	 * Whether REMOTE_ADDR is one of Cloudflare's own published edges.
+	 *
+	 * Reads the SHIPPED list, never the filtered view: the two headers gated on
+	 * this — `CF-Connecting-IP` and `CF-IPCountry` — are written by Cloudflare
+	 * and by nothing else, so a range an administrator added for a different
+	 * CDN must never make either of them authoritative. Widening trust for an
+	 * operator's own edge is `faz_trusted_proxy_cidrs` plus a named header, in
+	 * `faz_forwarded_client_ip()`.
+	 *
+	 * @since 1.34.1
+	 * @return bool
+	 */
+	private function peer_is_cloudflare() {
+		$remote_addr = ! empty( $_SERVER['REMOTE_ADDR'] )
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			? (string) $_SERVER['REMOTE_ADDR']
+			: '';
+		if ( '' === $remote_addr || ! function_exists( 'faz_cloudflare_proxy_cidrs' ) ) {
+			return false;
+		}
+		foreach ( (array) \faz_cloudflare_proxy_cidrs() as $cidr ) {
+			if ( is_string( $cidr ) && $this->ip_in_cidr( $remote_addr, $cidr ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -298,17 +331,31 @@ class Geo_Detector {
 	}
 
 	/**
-	 * Best-effort client IP resolution.
+	 * The visitor's address, resolved by the one resolver that does this.
 	 *
-	 * Security: CF-Connecting-IP is set by Cloudflare's edge — but only when
-	 * the request actually transits Cloudflare. On any deployment where the
-	 * origin is directly reachable, an attacker can spoof the header to bypass
-	 * the VPN gate downstream. We validate REMOTE_ADDR against Cloudflare's
-	 * published proxy IP ranges before trusting the header. Operators behind
-	 * other CDNs/proxies can extend the allowlist via the
-	 * `faz_geo_trusted_proxy_cidrs` filter.
+	 * This used to read `CF-Connecting-IP` for any peer inside a CIDR
+	 * allowlist that two filters could widen. That was the bug: `CF-Connecting-IP`
+	 * is written by Cloudflare's edge and by nothing else, so trusting it from
+	 * a range an administrator added for their OWN CDN let a visitor behind that
+	 * CDN send the header themselves and choose the country and VPN state this
+	 * detector reports — and with them the ruleset applied. It also meant two
+	 * resolvers could attribute one request to two different addresses, since
+	 * `faz_resolve_client_ip()` resolved the client while this resolved the edge.
 	 *
-	 * @return string Cleartext IP.
+	 * Both are fixed the same way: delegate. `faz_forwarded_client_ip()` binds
+	 * each header to the kind of peer that writes it — `CF-Connecting-IP` only
+	 * from the SHIPPED Cloudflare ranges, which no filter can extend, and an
+	 * administrator's own range through a named forwarded header instead. Its
+	 * empty return means "no per-visitor address could be established", and the
+	 * honest answer then is the peer itself.
+	 *
+	 * BREAKING, deliberately: `faz_geo_trusted_proxy_cidrs` is gone. Its only
+	 * effect was to grant `CF-Connecting-IP` trust to a peer that never writes
+	 * it, which is the vulnerability rather than a feature. A site that needs
+	 * its own edge trusted adds the range to `faz_trusted_proxy_cidrs` and names
+	 * the header it writes with `faz_proxy_forwarded_header`.
+	 *
+	 * @return string Cleartext IP, or '' when there is no REMOTE_ADDR at all.
 	 */
 	private function resolve_client_ip() {
 		$remote_addr = ! empty( $_SERVER['REMOTE_ADDR'] )
@@ -316,59 +363,13 @@ class Geo_Detector {
 			? (string) $_SERVER['REMOTE_ADDR']
 			: '';
 
-		if ( ! empty( $_SERVER['HTTP_CF_CONNECTING_IP'] ) && '' !== $remote_addr && $this->is_trusted_proxy( $remote_addr ) ) {
-			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-			$cf_ip = trim( (string) $_SERVER['HTTP_CF_CONNECTING_IP'] );
-			// Only accept syntactically valid IPs to avoid downstream surprises.
-			if ( false !== filter_var( $cf_ip, FILTER_VALIDATE_IP ) ) {
-				return $cf_ip;
-			}
+		if ( '' === $remote_addr || ! function_exists( 'faz_forwarded_client_ip' ) ) {
+			return $remote_addr;
 		}
 
-		return $remote_addr;
-	}
+		$forwarded = (string) \faz_forwarded_client_ip( $remote_addr );
 
-	/**
-	 * Whether REMOTE_ADDR is in a trusted proxy CIDR range.
-	 *
-	 * The ranges themselves are Cloudflare's published proxy IP ranges
-	 * (https://www.cloudflare.com/ips/), static as of 2026 — refresh annually.
-	 * Since 1.34.1 they live in ONE place, `faz_trusted_proxy_cidrs()` in
-	 * includes/class-utils.php, which `faz_resolve_client_ip()` reads as well:
-	 * two copies meant two resolvers could attribute the same request to two
-	 * different addresses, and only one of them would be refreshed.
-	 *
-	 * Any request whose REMOTE_ADDR is NOT in the list is treated as direct
-	 * (CF-Connecting-IP ignored), because that header is set by Cloudflare's
-	 * edge and is forgeable when the origin is directly reachable.
-	 *
-	 * @param string $ip REMOTE_ADDR.
-	 * @return bool
-	 */
-	private function is_trusted_proxy( $ip ) {
-		$cidrs = function_exists( 'faz_trusted_proxy_cidrs' ) ? (array) \faz_trusted_proxy_cidrs() : array();
-		/**
-		 * Extend the trusted-proxy allowlist (e.g., for other CDNs, custom edges).
-		 *
-		 * Accept CIDR notation (e.g., "203.0.113.0/24" or "2001:db8::/32").
-		 * Each entry must be a string; non-string entries are ignored.
-		 *
-		 * Kept as a geo-specific extension point on top of the shared list, so
-		 * a site that added its own edge here keeps exactly the trust it
-		 * configured; `faz_trusted_proxy_cidrs` is the one to use to widen the
-		 * trust for the whole plugin.
-		 *
-		 * @since 1.15.0
-		 * @param string[] $cidrs Default = Cloudflare public proxy ranges (shared list).
-		 */
-		$cidrs = (array) apply_filters( 'faz_geo_trusted_proxy_cidrs', $cidrs );
-
-		foreach ( $cidrs as $cidr ) {
-			if ( is_string( $cidr ) && $this->ip_in_cidr( $ip, $cidr ) ) {
-				return true;
-			}
-		}
-		return false;
+		return '' !== $forwarded ? $forwarded : $remote_addr;
 	}
 
 	/**

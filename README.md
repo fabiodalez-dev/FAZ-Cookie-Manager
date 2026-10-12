@@ -601,6 +601,10 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 | `faz_loopback_proxy_header` | Which header a loopback reverse proxy writes — unset by default (see below) |
 | `faz_trust_proxy_headers` | Opt in to trusting forwarded headers from any peer |
 | `faz_trusted_proxies` | Scope that opt-in to specific peer CIDRs / IPs |
+| `faz_bot_render_cache_veto` | Return `false` to keep the page cacheable when "Hide banner from search engine bots" is on. The banner then renders for crawlers too: hiding it and keeping the response cacheable cannot both be had, because a cache that does not key on the User-Agent hands the crawler's banner-less copy to the next human visitor |
+| `faz_main_script_in_footer` | Load the banner runtime in the footer instead of the head. Ignored while Consent Mode or the TCF CMP is active, because both have to emit their baseline before any ad script; `faz_main_script_effective_in_footer` reports what was actually applied |
+| `faz_external_static_assets` | Return `false` to keep the generated configuration and banner stylesheet inline instead of serving them as content-hashed files from the uploads directory |
+| `faz_auto_exclude_cache_plugins` | Return `false` to stop the plugin excluding its own assets from cache-plugin defer/delay/combine/minify features |
 
 #### Resolving the visitor's address behind a proxy
 
@@ -671,17 +675,13 @@ The honeypot field's name is derived per render from the form's stamped time, so
 add_filter( 'faz_dsar_pow_enabled', '__return_true' );
 ```
 
-No answer at all is **accepted** — JavaScript off and a client that chose not to solve are indistinguishable server-side, so the tie goes to the data subject. Only a wrong, malformed or replayed answer is refused, one accepted answer per challenge, and the claim is returned if a later layer refuses the same submission, so a visitor who mistyped their address can fix it and resubmit the same form.
+No answer at all is **accepted** — JavaScript off and a client that chose not to solve are indistinguishable server-side, so the tie goes to the data subject. Only a wrong or malformed answer is refused.
 
-That single-use claim is the one in the whole gate, and it carries a requirement: **exclude the page carrying the form from full-page caching before switching this on.** The salt is random per render, so visitors never collide on it — unless a cache hands them one copy, and then the first accepted submission spends it for everyone until the cache turns over. The symptom is data subjects meeting a "reload the page" refusal that reloading does not fix. Nothing below the proof of work has this property, which is why it is confined to the opt-in path.
+That acceptance is also why **an answer is not single-use**, and it is worth following the logic before adding one. Since omitting `faz_pow_n` is accepted, a script never has to solve the challenge, let alone reuse a solution — so a single-use claim cannot deter the only client it would be aimed at. What it can do is fire on an honest browser that *did* run the solver: the salt is rendered into the page, a full-page cache hands one challenge to every visitor, and the first accepted submission would spend it for all of them. Zero deterrence, a site-wide denial. The cost this gate charges is paid per render by whoever answers it, and that is all it was ever able to charge.
 
 **To use a service you already run**, hook `faz_dsar_pre_submit` and verify inside your own snippet — the plugin itself makes no outbound call, so nothing is added to its External Services declaration. The filter's PHPDoc in `includes/class-dsar-shortcode.php` carries five-line recipes for Cloudflare Turnstile, hCaptcha and hosted ALTCHA, each one failing open on a transport error.
 
 Akismet is deliberately not integrated. The body of a submission here is a named person's identity plus the fact that they are exercising a right; sending it to a classifier is a processing decision the controller has to map and disclose, and a cookie-consent plugin should not make it on their behalf.
-| `faz_bot_render_cache_veto` | Return `false` to keep the page cacheable when "Hide banner from search engine bots" is on. The banner then renders for crawlers too: hiding it and keeping the response cacheable cannot both be had, because a cache that does not key on the User-Agent hands the crawler's banner-less copy to the next human visitor |
-| `faz_main_script_in_footer` | Load the banner runtime in the footer instead of the head. Ignored while Consent Mode or the TCF CMP is active, because both have to emit their baseline before any ad script; `faz_main_script_effective_in_footer` reports what was actually applied |
-| `faz_external_static_assets` | Return `false` to keep the generated configuration and banner stylesheet inline instead of serving them as content-hashed files from the uploads directory |
-| `faz_auto_exclude_cache_plugins` | Return `false` to stop the plugin excluding its own assets from cache-plugin defer/delay/combine/minify features |
 
 #### `faz-consent-runtime-missing`
 
