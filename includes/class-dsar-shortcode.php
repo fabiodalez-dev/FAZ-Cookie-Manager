@@ -969,6 +969,7 @@ class DSAR_Shortcode {
 			't'    => $t,
 			'salt' => $salt,
 			'diff' => $diff,
+			'sig'  => $sig,
 		);
 	}
 
@@ -1126,6 +1127,17 @@ class DSAR_Shortcode {
 			return $this->reject( 'faz_dsar_honeypot', __( 'Submission rejected.', 'faz-cookie-manager' ), $context );
 		}
 
+		// One submission per rendered form. The stamp is a bearer token
+		// otherwise: it binds to nothing about the visitor, so a client that
+		// fetched the form once could replay it for max_form_age and satisfy
+		// the dwell check every time. See stamp_spend_key(). The marker is
+		// taken in record_submission() and handed back in
+		// release_submission(), so a visitor refused by a later layer can fix
+		// a typo and resubmit the form they still have open.
+		if ( false !== \get_transient( self::stamp_spend_key( $stamp['sig'] ) ) ) {
+			return $this->reject( 'faz_dsar_stamp_replay', $this->stale_form_message(), $context );
+		}
+
 		/**
 		 * Whether a missing honeypot field refuses the submission.
 		 *
@@ -1230,6 +1242,31 @@ class DSAR_Shortcode {
 	}
 
 	/**
+	 * Transient key marking one stamp as already used.
+	 *
+	 * Keyed on the stamp's own signature, which is already an HMAC over the
+	 * issue time, the salt and the difficulty — so one key per rendered form
+	 * and nothing about the visitor in it.
+	 *
+	 * Without this the dwell time is a cost paid once. The stamp carries no
+	 * per-visitor binding, so a client that fetches the form once holds a
+	 * bearer token good for `faz_dsar_max_form_age` (a day by default) that
+	 * satisfies both the dwell check and the honeypot's name. The proof of
+	 * work already refuses a replayed answer, but it is OFF by default, and on
+	 * that default the dwell check was decorative against exactly the
+	 * scripted client it was added for. Spending the stamp forces one form
+	 * fetch per submission, which costs a script a round trip per attempt and
+	 * costs a person nothing.
+	 *
+	 * @since 1.34.1
+	 * @param string $sig The stamp signature, as verified.
+	 * @return string
+	 */
+	private static function stamp_spend_key( $sig ) {
+		return 'faz_dsar_rl_stamp_' . substr( hash_hmac( 'sha256', $sig, self::stamp_secret() ), 0, 16 );
+	}
+
+	/**
 	 * Mark this submission's challenge as spent, if it carried one.
 	 *
 	 * @since 1.34.2
@@ -1237,12 +1274,29 @@ class DSAR_Shortcode {
 	 */
 	private function set_pow_spent( $spent ) {
 		$stamp = $this->verified_stamp();
-		if ( ! is_array( $stamp ) || '' === $stamp['salt'] ) {
+		if ( ! is_array( $stamp ) ) {
+			return;
+		}
+		$ttl = max( MINUTE_IN_SECONDS, $this->max_form_age() );
+
+		// The stamp itself is spent whether or not a challenge was attached,
+		// because it is the stamp — not the challenge — that the dwell check
+		// and the honeypot name hang off, and the challenge is off by default.
+		if ( '' !== $stamp['sig'] ) {
+			$stamp_key = self::stamp_spend_key( $stamp['sig'] );
+			if ( $spent ) {
+				\set_transient( $stamp_key, 1, $ttl );
+			} else {
+				\delete_transient( $stamp_key );
+			}
+		}
+
+		if ( '' === $stamp['salt'] ) {
 			return;
 		}
 		$key = self::pow_spend_key( $stamp['salt'] );
 		if ( $spent ) {
-			\set_transient( $key, 1, max( MINUTE_IN_SECONDS, $this->max_form_age() ) );
+			\set_transient( $key, 1, $ttl );
 		} else {
 			\delete_transient( $key );
 		}

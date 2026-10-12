@@ -689,8 +689,48 @@ namespace {
 	assert_eq( $dsar->guard_submission( ctx( 'first@example.test' ) ), true, 'the first use of an answer is accepted' );
 	$dsar->record_submission( 'first@example.test' );
 	$verdict = $dsar->guard_submission( ctx( 'second@example.test' ) );
-	assert_eq( err_code( $verdict ), 'faz_dsar_pow_replay', 'replaying it for a second submission is refused' );
+	// Refused as a replayed STAMP, not a replayed answer: the stamp check is
+	// earlier and broader, and the signature covers the salt, so replaying one
+	// form trips the stamp first. The pow_replay branch stays in the code as
+	// defence in depth for anything that reaches check_pow() with a stamp that
+	// has not been spent.
+	assert_eq( err_code( $verdict ), 'faz_dsar_stamp_replay', 'replaying the form for a second submission is refused' );
 	check( false !== strpos( err_msg( $verdict ), 'reload' ), 'and the remedy is a fresh challenge' );
+
+	// The finding this closes: with proof of work OFF — the default — the
+	// stamp was a bearer token good for max_form_age, so one scraped form
+	// satisfied the dwell check for a day and the gate was decorative against
+	// exactly the scripted client it exists for.
+	reset_state();
+	$stamp                 = FazCookie\Includes\DSAR_Shortcode::issue_stamp();
+	$GLOBALS['__faz_now'] += 8;
+	$_POST                 = browser_post( $stamp );
+	assert_eq( $dsar->guard_submission( ctx( 'one@example.test' ) ), true, 'with the PoW off the first submission is accepted' );
+	$dsar->record_submission( 'one@example.test' );
+	$verdict = $dsar->guard_submission( ctx( 'two@example.test' ) );
+	assert_eq( err_code( $verdict ), 'faz_dsar_stamp_replay', 'and replaying that same stamp is refused with the PoW off too' );
+
+	// Waiting does not launder it: the stamp stays spent for as long as it
+	// would have stayed valid.
+	$GLOBALS['__faz_now'] += 3600;
+	$verdict               = $dsar->guard_submission( ctx( 'three@example.test' ) );
+	assert_eq( err_code( $verdict ), 'faz_dsar_stamp_replay', 'and an hour later it is still refused' );
+
+	// A fresh form is the remedy, and it costs one fetch per submission.
+	$fresh                 = FazCookie\Includes\DSAR_Shortcode::issue_stamp();
+	$GLOBALS['__faz_now'] += 8;
+	$_POST                 = browser_post( $fresh );
+	assert_eq( $dsar->guard_submission( ctx( 'four@example.test' ) ), true, 'while a newly rendered form is accepted' );
+
+	// And the give-back applies to the stamp as well, so a visitor refused by
+	// a later layer can still fix a typo on the form they have open.
+	reset_state();
+	$stamp                 = FazCookie\Includes\DSAR_Shortcode::issue_stamp();
+	$GLOBALS['__faz_now'] += 8;
+	$_POST                 = browser_post( $stamp );
+	$dsar->record_submission( 'typo@example.test' );
+	$dsar->release_submission( 'typo@example.test' );
+	assert_eq( $dsar->guard_submission( ctx( 'typo@example.test' ) ), true, 'a released stamp is usable again on the same form' );
 
 	// A visitor refused by a LATER layer must be able to correct and resubmit
 	// the form they still have open, so the challenge is only spent on a

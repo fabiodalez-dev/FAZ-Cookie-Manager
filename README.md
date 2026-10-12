@@ -656,6 +656,7 @@ Where no per-visitor address can be resolved, the DSAR per-IP ceiling is **skipp
 |---|---|---|
 | `faz_dsar_min_dwell_seconds` | `3` | Refuse a submission that arrives sooner than this after the form was rendered. The form carries a signed issue time, so a forged timestamp breaks the signature |
 | `faz_dsar_max_form_age` | `DAY_IN_SECONDS` | Refuse a form older than this. The visitor is told to reload |
+| — | — | A stamp is good for **one** submission. It binds to nothing about the visitor, so without that it would be a bearer token for the whole window above; the claim is returned if a later layer refuses the same submission |
 | `faz_dsar_pow_enabled` | `false` | Turn on the proof-of-work challenge |
 | `faz_dsar_pow_difficulty` | `4` | Leading hex zeros required of `SHA-256(salt + n)`, clamped to 1–6 |
 | `faz_dsar_reject_missing_honeypot` | `true` | Return `false` if a front end strips hidden inputs from your markup |
