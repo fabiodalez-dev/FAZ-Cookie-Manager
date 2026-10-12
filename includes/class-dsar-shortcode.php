@@ -969,7 +969,6 @@ class DSAR_Shortcode {
 			't'    => $t,
 			'salt' => $salt,
 			'diff' => $diff,
-			'sig'  => $sig,
 		);
 	}
 
@@ -1127,16 +1126,26 @@ class DSAR_Shortcode {
 			return $this->reject( 'faz_dsar_honeypot', __( 'Submission rejected.', 'faz-cookie-manager' ), $context );
 		}
 
-		// One submission per rendered form. The stamp is a bearer token
-		// otherwise: it binds to nothing about the visitor, so a client that
-		// fetched the form once could replay it for max_form_age and satisfy
-		// the dwell check every time. See stamp_spend_key(). The marker is
-		// taken in record_submission() and handed back in
-		// release_submission(), so a visitor refused by a later layer can fix
-		// a typo and resubmit the form they still have open.
-		if ( false !== \get_transient( self::stamp_spend_key( $stamp['sig'] ) ) ) {
-			return $this->reject( 'faz_dsar_stamp_replay', $this->stale_form_message(), $context );
-		}
+		// There is deliberately NO "one submission per rendered form" check
+		// here, and the reason is worth keeping: this stamp cannot be made
+		// single-use without denying the right it exists to serve.
+		//
+		// It is rendered into the page body, so every visitor served the same
+		// cached HTML carries the SAME stamp. And with the proof of work off —
+		// the default — the signature covers an empty salt and a zero
+		// difficulty, so it is a function of the issue second alone and even
+		// uncached renders collide inside that second. Spending it on first use
+		// therefore refuses the second DATA SUBJECT, not the second attempt: on
+		// a full-page-cached site one submission locks the form for everyone
+		// until the cache turns over. That trades an Art. 12(2) failure for a
+		// replay worth one GET to an attacker, who is still bounded by the
+		// per-email, per-IP and site-wide ceilings — those, not the stamp, are
+		// what cap how many requests one client can file.
+		//
+		// A site that wants a genuinely per-visitor gate hangs one on
+		// `faz_dsar_pre_submit` (see its PHPDoc): Turnstile and hCaptcha mint a
+		// token per visitor and verify it server-side, which is the property a
+		// stamp baked into cacheable markup can never have.
 
 		/**
 		 * Whether a missing honeypot field refuses the submission.
@@ -1220,6 +1229,24 @@ class DSAR_Shortcode {
 		// stored (release_submission()), so a visitor who is refused by a later
 		// layer — the hourly email limit, say — can correct and resubmit the
 		// same form instead of meeting a replay refusal they cannot act on.
+		//
+		// This is the one single-use claim in the gate, and it is confined to
+		// the opt-in path for a reason — the stamp carries none, see
+		// check_antibot(). Two bounds apply, both only where an admin turned
+		// the proof of work ON:
+		//
+		// - The salt is random per render, so two visitors never collide on
+		//   it — unless a full-page cache hands them one copy of the markup.
+		//   There the first accepted submission spends the salt for everyone
+		//   until the cache turns over. A site enabling this gate must exclude
+		//   the page carrying the form from full-page caching; the symptom if
+		//   it does not is data subjects meeting `faz_dsar_pow_replay` on a
+		//   form that a reload does not refresh.
+		// - Reading the marker and writing it are not one operation.
+		//   WordPress has no compare-and-set, and the options-table idiom that
+		//   would supply one leaks a row per form, so submissions that land
+		//   inside that window can share an answer. The per-IP and site-wide
+		//   ceilings still bound the total either way.
 		if ( false !== \get_transient( self::pow_spend_key( $stamp['salt'] ) ) ) {
 			return $this->reject( 'faz_dsar_pow_replay', $this->stale_form_message(), $context );
 		}
@@ -1242,31 +1269,6 @@ class DSAR_Shortcode {
 	}
 
 	/**
-	 * Transient key marking one stamp as already used.
-	 *
-	 * Keyed on the stamp's own signature, which is already an HMAC over the
-	 * issue time, the salt and the difficulty — so one key per rendered form
-	 * and nothing about the visitor in it.
-	 *
-	 * Without this the dwell time is a cost paid once. The stamp carries no
-	 * per-visitor binding, so a client that fetches the form once holds a
-	 * bearer token good for `faz_dsar_max_form_age` (a day by default) that
-	 * satisfies both the dwell check and the honeypot's name. The proof of
-	 * work already refuses a replayed answer, but it is OFF by default, and on
-	 * that default the dwell check was decorative against exactly the
-	 * scripted client it was added for. Spending the stamp forces one form
-	 * fetch per submission, which costs a script a round trip per attempt and
-	 * costs a person nothing.
-	 *
-	 * @since 1.34.1
-	 * @param string $sig The stamp signature, as verified.
-	 * @return string
-	 */
-	private static function stamp_spend_key( $sig ) {
-		return 'faz_dsar_rl_stamp_' . substr( hash_hmac( 'sha256', $sig, self::stamp_secret() ), 0, 16 );
-	}
-
-	/**
 	 * Mark this submission's challenge as spent, if it carried one.
 	 *
 	 * @since 1.34.2
@@ -1279,19 +1281,9 @@ class DSAR_Shortcode {
 		}
 		$ttl = max( MINUTE_IN_SECONDS, $this->max_form_age() );
 
-		// The stamp itself is spent whether or not a challenge was attached,
-		// because it is the stamp — not the challenge — that the dwell check
-		// and the honeypot name hang off, and the challenge is off by default.
-		if ( '' !== $stamp['sig'] ) {
-			$stamp_key = self::stamp_spend_key( $stamp['sig'] );
-			if ( $spent ) {
-				\set_transient( $stamp_key, 1, $ttl );
-			} else {
-				\delete_transient( $stamp_key );
-			}
-		}
-
 		if ( '' === $stamp['salt'] ) {
+			// No challenge was attached, so there is nothing to spend. The
+			// stamp itself is never spent — see check_antibot().
 			return;
 		}
 		$key = self::pow_spend_key( $stamp['salt'] );

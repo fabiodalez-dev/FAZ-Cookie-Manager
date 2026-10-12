@@ -656,13 +656,14 @@ Where no per-visitor address can be resolved, the DSAR per-IP ceiling is **skipp
 |---|---|---|
 | `faz_dsar_min_dwell_seconds` | `3` | Refuse a submission that arrives sooner than this after the form was rendered. The form carries a signed issue time, so a forged timestamp breaks the signature |
 | `faz_dsar_max_form_age` | `DAY_IN_SECONDS` | Refuse a form older than this. The visitor is told to reload |
-| — | — | A stamp is good for **one** submission. It binds to nothing about the visitor, so without that it would be a bearer token for the whole window above; the claim is returned if a later layer refuses the same submission |
 | `faz_dsar_pow_enabled` | `false` | Turn on the proof-of-work challenge |
 | `faz_dsar_pow_difficulty` | `4` | Leading hex zeros required of `SHA-256(salt + n)`, clamped to 1–6 |
 | `faz_dsar_reject_missing_honeypot` | `true` | Return `false` if a front end strips hidden inputs from your markup |
 | `faz_dsar_pre_submit` | — | Return a `WP_Error` to refuse; its message is shown to the visitor verbatim |
 
 The honeypot field's name is derived per render from the form's stamped time, so a script cannot learn it once and omit it thereafter.
+
+**The stamp is deliberately not single-use**, and the reason is worth stating because the opposite looks like an obvious hardening. It binds to nothing per-visitor: with proof of work off it is a function of the issue second alone, so two forms rendered in the same second are identical, and a full-page cache hands one copy of the markup to every visitor for its whole lifetime. Spending it on first use would therefore refuse the second *data subject*, not the second attempt — on a cached site the first submission would shut the form for everyone until the cache turned over, which is the Art. 12(2) failure these gates exist to avoid, traded for a replay worth one HTTP request to an attacker. What bounds a scripted client is the ceilings (per address, per IP, site-wide), and what gives a genuinely per-visitor gate is `faz_dsar_pre_submit` with Turnstile, hCaptcha or hosted ALTCHA, each of which mints a token per visitor.
 
 **Proof of work** is off by default. Switched on, the server signs a salt and a difficulty, the browser searches for an integer whose `SHA-256` starts with that many zeros, and the server verifies a single hash — ALTCHA's model, self-hosted. No third-party service, no API key, no cookie, no outbound request, and no puzzle: a visual captcha here would deny the right to anyone using a screen reader or an old phone. At the default difficulty it measures 254 ms in a desktop browser and 890 ms on an emulated low-end phone with the CPU throttled four times; the client gives up after two seconds and submits anyway.
 
@@ -671,6 +672,8 @@ add_filter( 'faz_dsar_pow_enabled', '__return_true' );
 ```
 
 No answer at all is **accepted** — JavaScript off and a client that chose not to solve are indistinguishable server-side, so the tie goes to the data subject. Only a wrong, malformed or replayed answer is refused, one accepted answer per challenge, and the claim is returned if a later layer refuses the same submission, so a visitor who mistyped their address can fix it and resubmit the same form.
+
+That single-use claim is the one in the whole gate, and it carries a requirement: **exclude the page carrying the form from full-page caching before switching this on.** The salt is random per render, so visitors never collide on it — unless a cache hands them one copy, and then the first accepted submission spends it for everyone until the cache turns over. The symptom is data subjects meeting a "reload the page" refusal that reloading does not fix. Nothing below the proof of work has this property, which is why it is confined to the opt-in path.
 
 **To use a service you already run**, hook `faz_dsar_pre_submit` and verify inside your own snippet — the plugin itself makes no outbound call, so nothing is added to its External Services declaration. The filter's PHPDoc in `includes/class-dsar-shortcode.php` carries five-line recipes for Cloudflare Turnstile, hCaptcha and hosted ALTCHA, each one failing open on a transport error.
 
