@@ -117,12 +117,19 @@ class DSAR_Admin {
 		$email   = (string) get_post_meta( $post->ID, '_dsar_email', true );
 		$type    = (string) get_post_meta( $post->ID, '_dsar_type', true );
 		$message = (string) get_post_meta( $post->ID, '_dsar_message', true );
+		// An honoured erasure blanks the name, the address and the message in
+		// place (faz_privacy_eraser()). Saying so beats three empty cells, which
+		// read as a broken record rather than an erased one.
+		$erased  = 'erased' === self::get_status( $post->ID );
+		$blanked = '<em>' . esc_html__( '(erased)', 'faz-cookie-manager' ) . '</em>';
 
 		$rows = array(
-			__( 'Name', 'faz-cookie-manager')         => esc_html( $name ),
+			__( 'Name', 'faz-cookie-manager')         => '' !== $name
+				? esc_html( $name )
+				: ( $erased ? $blanked : '&mdash;' ),
 			__( 'Email', 'faz-cookie-manager' )       => $email
 				? '<a href="' . esc_url( 'mailto:' . $email ) . '">' . esc_html( $email ) . '</a>'
-				: '&mdash;',
+				: ( $erased ? $blanked : '&mdash;' ),
 			__( 'Request type', 'faz-cookie-manager' ) => esc_html( DSAR_Shortcode::get_type_label( $type ) ),
 			__( 'Submitted', 'faz-cookie-manager' )    => esc_html( get_post_time( 'Y-m-d H:i', false, $post ) ),
 			__( 'Status', 'faz-cookie-manager' )       => esc_html( self::status_label( self::get_status( $post->ID ) ) ),
@@ -140,7 +147,9 @@ class DSAR_Admin {
 			</tbody>
 		</table>
 		<p><strong><?php esc_html_e( 'Additional information from the requester', 'faz-cookie-manager' ); ?></strong></p>
-		<?php if ( '' === trim( $message ) ) : ?>
+		<?php if ( '' === trim( $message ) && $erased ) : ?>
+			<p><em><?php esc_html_e( '(erased)', 'faz-cookie-manager' ); ?></em></p>
+		<?php elseif ( '' === trim( $message ) ) : ?>
 			<p><em><?php esc_html_e( '(none provided)', 'faz-cookie-manager' ); ?></em></p>
 		<?php else : ?>
 			<div style="padding:10px;background:#f6f7f7;border-left:4px solid #c3c4c7;white-space:pre-wrap;">
@@ -150,6 +159,11 @@ class DSAR_Admin {
 		<p class="description">
 			<?php esc_html_e( 'These values are stored exactly as submitted and cannot be edited here: the record is the audit trail of what the data subject asked for.', 'faz-cookie-manager' ); ?>
 		</p>
+		<?php if ( $erased ) : ?>
+			<p class="description">
+				<?php esc_html_e( 'This request was erased: the name, the address and the message are gone. What is kept is the right invoked and the date, so you can still show that the request was received and answered (GDPR Art. 5(2)). Erasure matches the email address rather than one request, so every stored request from that address was erased together with this one.', 'faz-cookie-manager' ); ?>
+			</p>
+		<?php endif; ?>
 		<?php
 	}
 
@@ -165,6 +179,14 @@ class DSAR_Admin {
 		$request_id = (int) get_post_meta( $post->ID, '_dsar_core_request_id', true );
 
 		if ( ! is_email( $email ) ) {
+			// Two different situations, and telling them apart matters: an
+			// honoured erasure deliberately removed the address, and reading
+			// "this record has no valid email address" there suggests a broken
+			// submission the administrator should go and fix.
+			if ( 'erased' === $status ) {
+				echo '<p>' . esc_html__( 'The personal data in this request has been erased, so there is no address left to create a WordPress privacy request for. The dated record of the request is kept on purpose, to show that it was received and answered.', 'faz-cookie-manager' ) . '</p>';
+				return;
+			}
 			echo '<p>' . esc_html__( 'This record has no valid email address, so it cannot be turned into a WordPress privacy request.', 'faz-cookie-manager' ) . '</p>';
 			return;
 		}
@@ -415,6 +437,10 @@ class DSAR_Admin {
 			'pending'   => __( 'Awaiting action', 'faz-cookie-manager' ),
 			'forwarded' => __( 'Sent to the WordPress privacy tools', 'faz-cookie-manager' ),
 			'completed' => __( 'Completed', 'faz-cookie-manager' ),
+			// Written by faz_privacy_eraser() when an erasure is honoured: the
+			// name, address and message are gone, the dated trace of the request
+			// stays. Without an entry here the screen printed the raw key.
+			'erased'    => __( 'Personal data erased — record kept for accountability', 'faz-cookie-manager' ),
 		);
 		return isset( $labels[ $status ] ) ? $labels[ $status ] : $status;
 	}

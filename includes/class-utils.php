@@ -1180,6 +1180,16 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 				)
 			);
 			foreach ( $query->posts as $post_id ) {
+				// A record whose erasure has already been honoured keeps a dated,
+				// non-identifying trace and NO address (see faz_privacy_eraser()).
+				// It cannot match the meta_query above, so this is defence in
+				// depth — but it is the line that guarantees an erased request is
+				// never exported back out, and that nothing derived from the
+				// address can leak through this exporter.
+				$record_email = (string) get_post_meta( $post_id, '_dsar_email', true );
+				if ( '' === $record_email ) {
+					continue;
+				}
 				$export_items[] = array(
 					'group_id'    => 'faz_dsar_requests',
 					'group_label' => __( 'Privacy requests (FAZ Cookie Manager)', 'faz-cookie-manager' ),
@@ -1191,7 +1201,7 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 						),
 						array(
 							'name'  => __( 'Email', 'faz-cookie-manager' ),
-							'value' => (string) get_post_meta( $post_id, '_dsar_email', true ),
+							'value' => $record_email,
 						),
 						array(
 							'name'  => __( 'Request type', 'faz-cookie-manager' ),
@@ -1224,24 +1234,47 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 
 if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 	/**
-	 * Erase personal data (consent logs) for WordPress privacy tools.
+	 * Erase personal data (consent logs, stored DSAR requests) for WordPress
+	 * privacy tools.
 	 *
 	 * Consent logs use one-way IP hashing (SHA-256 + salt). We cannot
 	 * identify which records belong to a specific email address.
 	 * Records are auto-purged after the configured retention period.
 	 *
+	 * Stored DSAR requests (post_type faz_dsar) DO carry the requester's name,
+	 * address and free text, and are REDACTED here rather than deleted: the
+	 * personal data goes, a dated record that the request existed and which
+	 * right was invoked stays. Deleting the record outright destroyed the only
+	 * evidence that the request was received and answered (GDPR Art. 5(2)
+	 * accountability, Art. 12(3)) — and the admin screen tells the
+	 * administrator that this record IS that audit trail. Keeping a
+	 * non-identifying trace is also the position WordPress itself takes: core
+	 * does not delete its own `user_request` post when an erasure completes, it
+	 * flips it to `request-completed`. Art. 17(3)(b)-(e) is the ground for it.
+	 *
+	 * Nothing derived from the address is kept — no hash, keyed or otherwise. A
+	 * salted but deterministic HMAC of an email is still pseudonymous personal
+	 * data, re-identifiable by anyone holding the salt and a candidate address,
+	 * so storing one would contradict the erasure this function performs. It is
+	 * also unnecessary: DELETING `_dsar_email` is precisely what takes the
+	 * record out of the `_dsar_email = $email` match set, which is what keeps
+	 * the drain loop terminating and makes a second erasure for the same
+	 * address a no-op.
+	 *
 	 * @since 1.5.0
+	 * @since 1.34.1 DSAR records are redacted in place instead of force-deleted.
 	 * @param string $email_address The user's email address.
 	 * @param int    $page          Page number for batched erasures.
 	 * @return array Erasure result conforming to the WP privacy eraser format.
 	 */
 	function faz_privacy_eraser( $email_address, $page = 1 ) {
-		$email         = sanitize_email( (string) $email_address );
-		$page          = max( 1, (int) $page );
-		$per_page      = 20;
-		$items_removed = 0;
-		$messages      = array();
-		$done          = true;
+		$email          = sanitize_email( (string) $email_address );
+		$page           = max( 1, (int) $page );
+		$per_page       = 20;
+		$items_removed  = 0;
+		$items_retained = false;
+		$messages       = array();
+		$done           = true;
 
 		// Consent logs use one-way IP hashing and cannot be linked to an email,
 		// so there is nothing to erase there (they auto-purge by retention). DSAR
@@ -1252,12 +1285,22 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 		if ( is_email( $email ) && post_type_exists( 'faz_dsar' ) ) {
 			// IMPORTANT: always read the FIRST batch, never `paged => $page`.
 			// WordPress calls the eraser repeatedly, incrementing $page, but each
-			// call here DELETES the records it finds — so the matching set shrinks
-			// underneath the offset. Paging forward (page 2, 3, …) would skip the
-			// records that slid into the earlier offsets and leave them behind
-			// (e.g. 25 records / 20-per-page → page 1 deletes 20, page 2 offsets
-			// past the remaining 5 and reports done, orphaning them). Reading
-			// page 1 every time drains the set deterministically.
+			// call here removes the records it finds FROM THE MATCH SET — so the
+			// set shrinks underneath the offset. Paging forward (page 2, 3, …)
+			// would skip the records that slid into the earlier offsets and leave
+			// them behind (e.g. 25 records / 20-per-page → page 1 handles 20,
+			// page 2 offsets past the remaining 5 and reports done, orphaning
+			// them). Reading page 1 every time drains the set deterministically.
+			//
+			// Since the records are redacted rather than deleted, what keeps the
+			// set shrinking is DELETING `_dsar_email` below: the meta_query is
+			// `_dsar_email = $email`, so a redacted record no longer matches and
+			// `$found` falls under `$per_page` exactly as it did when the records
+			// were destroyed. Do NOT turn this into a skip or an exemption that
+			// leaves `_dsar_email` in place: `$found` would stick at `$per_page`,
+			// `$done` would never be true, and core's erasure AJAX loop would run
+			// unbounded — a hang on the administrator's erase screen, worse than
+			// the problem being fixed.
 			$query = new WP_Query(
 				array(
 					'post_type'      => 'faz_dsar',
@@ -1276,15 +1319,125 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 					),
 				)
 			);
-			$found = count( $query->posts );
+			$found      = count( $query->posts );
+			$redacted   = 0;
+			$unanswered = 0;
+			$deleted    = 0;
 			foreach ( $query->posts as $post_id ) {
-				if ( wp_delete_post( (int) $post_id, true ) ) {
-					$items_removed++;
+				$post_id = (int) $post_id;
+
+				/**
+				 * Whether to keep a dated, non-identifying record of an erased request.
+				 *
+				 * True (the default) redacts the stored request in place: the
+				 * name, the address and the free-text message go, the right
+				 * invoked and the submission date stay, so the controller can
+				 * still show that the request was received and answered.
+				 * Returning false restores the pre-1.34.1 behaviour and force-
+				 * deletes the record, audit trail included.
+				 *
+				 * @since 1.34.1
+				 * @param bool   $retain  Default true.
+				 * @param int    $post_id DSAR record ID.
+				 * @param string $email   Address being erased.
+				 */
+				if ( ! apply_filters( 'faz_dsar_erasure_retain_record', true, $post_id, $email ) ) {
+					if ( wp_delete_post( $post_id, true ) ) {
+						$deleted++;
+						$items_removed++;
+					}
+					continue;
+				}
+
+				// Read before redacting: the status says whether this request had
+				// been answered, the type and date survive into the new title.
+				$status = (string) get_post_meta( $post_id, '_dsar_status', true );
+				$type   = (string) get_post_meta( $post_id, '_dsar_type', true );
+
+				delete_post_meta( $post_id, '_dsar_name' );
+				delete_post_meta( $post_id, '_dsar_message' );
+				// Last of the three, and the one that matters to the loop above:
+				// this is what removes the record from the match set.
+				delete_post_meta( $post_id, '_dsar_email' );
+				update_post_meta( $post_id, '_dsar_status', 'erased' );
+				update_post_meta( $post_id, '_dsar_erased_at', current_time( 'mysql', true ) );
+
+				// The title was `[<Label>] <name> — <date>`: the requester's name
+				// is personal data and must not survive on the list screen or in
+				// the posts table. The right invoked and the date do survive, so
+				// the screen stays usable. post_content and the excerpt need no
+				// treatment — DSAR_Shortcode::store_request() writes neither.
+				$label = class_exists( '\FazCookie\Includes\DSAR_Shortcode' )
+					? \FazCookie\Includes\DSAR_Shortcode::get_type_label( $type )
+					: $type;
+				$date  = substr( (string) get_post_field( 'post_date', $post_id ), 0, 10 );
+				wp_update_post(
+					array(
+						'ID'         => $post_id,
+						'post_title' => '' !== $date
+							? sprintf( '[%s] %s', $label, $date )
+							: sprintf( '[%s]', $label ),
+						// The slug too, and not as a nicety: store_request()
+						// never sets post_name, and `private` is not one of the
+						// statuses wp_insert_post() skips slug generation for, so
+						// every stored request carries a post_name derived from
+						// the old title — `erasure-jane-doe-2026-06-16`. Blanking
+						// it here makes wp_insert_post() regenerate it from the
+						// redacted title; leaving it would have kept the
+						// requester's name in wp_posts after an "erasure".
+						'post_name'  => '',
+					)
+				);
+
+				$redacted++;
+				$items_removed++;
+				$items_retained = true;
+				if ( ! in_array( $status, array( 'completed', 'erased' ), true ) ) {
+					$unanswered++;
 				}
 			}
-			if ( $items_removed > 0 ) {
+
+			if ( $redacted > 0 ) {
+				$messages[] = sprintf(
+					/* translators: %d: number of privacy-request records redacted. */
+					_n(
+						'Erased the personal data in %d FAZ Cookie Manager privacy request. A dated record of the request itself — the right invoked and the date, with no name, address or message — is kept to demonstrate compliance (GDPR Art. 5(2) accountability, Art. 17(3)(b)-(e)), the same position WordPress takes by keeping its own privacy-request records.',
+						'Erased the personal data in %d FAZ Cookie Manager privacy requests. A dated record of each request itself — the right invoked and the date, with no name, address or message — is kept to demonstrate compliance (GDPR Art. 5(2) accountability, Art. 17(3)(b)-(e)), the same position WordPress takes by keeping its own privacy-request records.',
+						$redacted,
+						'faz-cookie-manager'
+					),
+					$redacted
+				);
+				if ( $unanswered > 0 ) {
+					// An erasure matches the ADDRESS, not one request. Every
+					// stored request from this address is redacted, including an
+					// access or rectification request still waiting for an
+					// answer — skipping those is not available (it would leave
+					// their `_dsar_email` in place and break the drain above), so
+					// the administrator is told instead of finding out later.
+					$messages[] = sprintf(
+						/* translators: %d: number of erased privacy requests that had not been answered yet. */
+						_n(
+							'%d of those requests had not been answered yet: an erasure matches the email address rather than a single request, so every stored request from this address was erased — including rights that were still awaiting a reply.',
+							'%d of those requests had not been answered yet: an erasure matches the email address rather than a single request, so every stored request from this address was erased — including rights that were still awaiting a reply.',
+							$unanswered,
+							'faz-cookie-manager'
+						),
+						$unanswered
+					);
+				}
+			}
+			if ( $deleted > 0 ) {
 				/* translators: %d: number of privacy-request records deleted. */
-				$messages[] = sprintf( _n( 'Deleted %d FAZ Cookie Manager privacy request.', 'Deleted %d FAZ Cookie Manager privacy requests.', $items_removed, 'faz-cookie-manager' ), $items_removed );
+				$messages[] = sprintf( _n( 'Deleted %d FAZ Cookie Manager privacy request.', 'Deleted %d FAZ Cookie Manager privacy requests.', $deleted, 'faz-cookie-manager' ), $deleted );
+			}
+			if ( $redacted > 0 && class_exists( '\FazCookie\Includes\DSAR_Shortcode' ) ) {
+				// A redaction changes `_dsar_status` without a post transition or
+				// a delete, so neither `transition_post_status` nor
+				// `before_delete_post` fires: without this the menu badge keeps
+				// counting a request that is no longer pending for up to five
+				// minutes, disagreeing with the list screen next to it.
+				\FazCookie\Includes\DSAR_Shortcode::flush_pending_count();
 			}
 			// Not done while this batch was full — there may be more to drain on
 			// the next call (which again reads the new first page).
@@ -1293,7 +1446,11 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 
 		return array(
 			'items_removed'  => $items_removed,
-			'items_retained' => false,
+			// True once a record has been redacted rather than destroyed. Core
+			// shows this to the administrator and in the completion email, so
+			// reporting false while keeping a record would be the inverse of the
+			// accountability problem this redaction solves.
+			'items_retained' => $items_retained,
 			'messages'       => $messages,
 			'done'           => $done,
 		);

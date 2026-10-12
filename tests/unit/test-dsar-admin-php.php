@@ -222,7 +222,14 @@ namespace {
 	$GLOBALS['__faz_meta'][7] = array( '_dsar_status' => '' );
 	assert_eq( DSAR_Admin::get_status( 7 ), 'pending', 'an empty status reads as pending' );
 
-	foreach ( array( 'pending', 'forwarded', 'completed' ) as $status ) {
+	// `erased` is written by faz_privacy_eraser() when an erasure is honoured:
+	// the record is redacted in place instead of destroyed, so the vocabulary the
+	// eraser writes and the vocabulary this screen can render must stay the same
+	// set. Without the label the screen printed the raw key.
+	$GLOBALS['__faz_meta'][7] = array( '_dsar_status' => 'erased' );
+	assert_eq( DSAR_Admin::get_status( 7 ), 'erased', 'an erased record reports the erased status' );
+
+	foreach ( array( 'pending', 'forwarded', 'completed', 'erased' ) as $status ) {
 		check( DSAR_Admin::status_label( $status ) !== $status, "$status has a human-readable label" );
 	}
 	assert_eq( DSAR_Admin::status_label( 'something-else' ), 'something-else', 'an unknown status is shown as-is rather than blanked' );
