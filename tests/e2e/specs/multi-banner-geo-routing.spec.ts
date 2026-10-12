@@ -735,19 +735,28 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
       // First: filter OFF → header must be ignored, result identical to baseline.
       $off = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
 
-      // Then: filter ON → header consumed.
+      // The opt-in is only half the gate: the request also has to have come
+      // from Cloudflare, because Cloudflare is what writes this header. With
+      // the filter ON but an ordinary peer, the header is still a value the
+      // visitor chose, so it must not steer anything.
       $closure = function() { return true; };
       add_filter( 'faz_trust_cf_ipcountry_header', $closure, 10 );
+      $_SERVER['REMOTE_ADDR'] = '203.0.113.99';
+      $on_direct = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
+
+      // Both halves: a published Cloudflare edge plus the opt-in → consumed.
+      $_SERVER['REMOTE_ADDR'] = '162.158.42.42';
       $on = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
       remove_filter( 'faz_trust_cf_ipcountry_header', $closure, 10 );
 
-      unset( $_SERVER['HTTP_CF_IPCOUNTRY'] );
-      echo wp_json_encode( array( 'baseline' => $baseline, 'off' => $off, 'on' => $on ) );
+      unset( $_SERVER['HTTP_CF_IPCOUNTRY'], $_SERVER['REMOTE_ADDR'] );
+      echo wp_json_encode( array( 'baseline' => $baseline, 'off' => $off, 'on' => $on, 'on_direct' => $on_direct ) );
     `).trim();
 
     const data = JSON.parse(result);
-    expect(data.on, 'with trust filter ON, CF-IPCountry header steers the result').toBe('DE');
+    expect(data.on, 'with the trust filter ON and a Cloudflare peer, CF-IPCountry steers the result').toBe('DE');
     expect(data.off, 'with trust filter OFF, CF-IPCountry header must NOT alter the resolved country (spoof-safe by default)').toBe(data.baseline);
+    expect(data.on_direct, 'with the trust filter ON but a direct peer, the header is still ignored — the opt-in does not say who sent it').toBe(data.baseline);
   });
 
   test('GEO-22: Geolocation::get_visitor_country rejects the Cloudflare "XX" placeholder', () => {
@@ -756,11 +765,15 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
     // bucket — treat it the same as no signal.
     const result = wpEval(`
       $_SERVER['HTTP_CF_IPCOUNTRY'] = 'XX';
+      // A Cloudflare peer, so this test fails for the reason it claims: with
+      // an ordinary peer the header would be discarded by the trust gate and
+      // the empty result would prove nothing about the "XX" handling.
+      $_SERVER['REMOTE_ADDR'] = '162.158.42.42';
       $closure = function() { return true; };
       add_filter( 'faz_trust_cf_ipcountry_header', $closure, 10 );
       $resolved = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
       remove_filter( 'faz_trust_cf_ipcountry_header', $closure, 10 );
-      unset( $_SERVER['HTTP_CF_IPCOUNTRY'] );
+      unset( $_SERVER['HTTP_CF_IPCOUNTRY'], $_SERVER['REMOTE_ADDR'] );
       echo var_export( $resolved, true );
     `).trim();
 

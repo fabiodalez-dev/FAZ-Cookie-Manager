@@ -153,6 +153,10 @@ test.describe('PR104 — #110 Geolocation multi-source consensus', () => {
   test('detect_country() collects votes from every enabled source and the consensus filter blocks on disagreement', () => {
     const raw = wpEval(`
       // Opt into both header-trusting filters so CF and GEOIP votes are collected.
+      // The CF vote needs the peer as well as the opt-in: CF-IPCountry is
+      // written by Cloudflare's edge, so it is only read when the request came
+      // from one. 162.158.0.0/15 is one of Cloudflare's published ranges.
+      $_SERVER['REMOTE_ADDR'] = '162.158.42.42';
       $opt_cf = function () { return true; };
       $opt_geoip = function () { return true; };
       add_filter( 'faz_trust_cf_ipcountry_header', $opt_cf );
