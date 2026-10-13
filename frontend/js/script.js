@@ -4477,6 +4477,9 @@ function _fazGateResourceSetAttribute(proto, opts) {
                     if (markupCat) {
                         native.call(this, opts.markupParkAttr, String(value));
                         native.call(this, "data-faz-category", markupCat);
+                        // A parked srcdoc frame is an empty frame in the layout
+                        // exactly like a parked-src one; hide it the same way.
+                        if (opts.hideOnPark && this.classList) this.classList.add("faz-hidden");
                         return;
                     }
                 }
@@ -4533,12 +4536,82 @@ _fazGateResourceSetAttribute(window.HTMLSourceElement && HTMLSourceElement.proto
         urlAttr: "background", parkAttr: "data-faz-background", hideOnPark: false, srcset: false
     });
 });
-["SVGImageElement", "SVGUseElement", "SVGScriptElement"].forEach(function (name) {
+// <feImage href> fetches exactly as <image href> does; jsdom has no interface
+// for it, so its gate is a no-op there and the sweep below is what the tests
+// exercise. Known limit, shared with the bootstrap and listed in its header:
+// `image.href.baseVal = url` writes through SVGAnimatedString and reaches the
+// engine with neither of these two APIs called. It is not interceptable
+// without wrapping the `href` GETTER to hand out a proxy object, which this
+// file does not do; libraries write SVG URLs through setAttribute and
+// setAttributeNS, which are gated here.
+["SVGImageElement", "SVGUseElement", "SVGScriptElement", "SVGFEImageElement"].forEach(function (name) {
     _fazGateResourceSetAttribute(window[name] && window[name].prototype, {
         urlAttr: "href", urlAltAttr: "xlink:href", parkAttr: "data-faz-href",
         hideOnPark: false, srcset: false, ns: true
     });
 });
+
+/**
+ * The IDL route for a MARKUP attribute: `iframe.srcdoc = html`. The
+ * setAttribute gate above judges srcdoc, but a property assignment never calls
+ * setAttribute, and the deferred bootstrap replays a held `srcdoc` as exactly
+ * that assignment on this prototype at handoff — so without this gate a frame
+ * assigned after it was appended, or found by id in server markup, was applied
+ * live under a refusing policy. Same judgement as the attribute route: the
+ * markup is a document, parked whole when it names a blocked provider.
+ */
+function _fazGateSrcdocSetter(proto) {
+    if (!proto) return;
+    var desc = Object.getOwnPropertyDescriptor(proto, "srcdoc");
+    if (!desc || typeof desc.set !== "function" || typeof desc.get !== "function" || desc.configurable === false) return;
+    var nativeSet = desc.set, nativeGet = desc.get;
+    Object.defineProperty(proto, "srcdoc", {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: function () { return nativeGet.call(this); },
+        set: function (val) {
+            try {
+                var cat = _fazMarkupBlockedCategory(this, val);
+                if (cat) {
+                    this.setAttribute("data-faz-srcdoc", String(val));
+                    this.setAttribute("data-faz-category", cat);
+                    if (this.classList) this.classList.add("faz-hidden");
+                    return; // park the document; the engine never parses it
+                }
+            } catch (e) { /* fall through to the native setter on any error */ }
+            nativeSet.call(this, val);
+        }
+    });
+}
+_fazGateSrcdocSetter(window.HTMLIFrameElement && HTMLIFrameElement.prototype);
+
+/**
+ * The IDL route for the legacy `background` attribute: `document.body.background
+ * = url`. Only <body> reflects it as a property; the setAttribute gate above
+ * covers the attribute route on every element that honours it.
+ */
+function _fazGateBackgroundSetter(proto) {
+    if (!proto) return;
+    var desc = Object.getOwnPropertyDescriptor(proto, "background");
+    if (!desc || typeof desc.set !== "function" || typeof desc.get !== "function" || desc.configurable === false) return;
+    var nativeSet = desc.set, nativeGet = desc.get;
+    Object.defineProperty(proto, "background", {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: function () { return nativeGet.call(this); },
+        set: function (val) {
+            try {
+                if (_fazImgShouldBlock(this, val)) {
+                    this.setAttribute("data-faz-background", String(val));
+                    this.setAttribute("data-faz-category", _fazImgCategory(String(val)));
+                    return;
+                }
+            } catch (e) { /* fall through to the native setter on any error */ }
+            nativeSet.call(this, val);
+        }
+    });
+}
+_fazGateBackgroundSetter(window.HTMLBodyElement && HTMLBodyElement.prototype);
 
 // srcset PROPERTY setter (img.srcset = …) — the sibling of the .src/.href property
 // gates. Without it, a runtime `.srcset` assignment writes the attribute directly
@@ -4595,6 +4668,7 @@ function _fazParkResourceElementIfBlocked(el) {
                     el.setAttribute("data-faz-srcdoc", doc);
                     el.setAttribute("data-faz-category", docCat);
                     el.removeAttribute("srcdoc");
+                    if (el.classList) el.classList.add("faz-hidden");
                 }
             }
             var ss = el.getAttribute("srcset");
@@ -4602,7 +4676,7 @@ function _fazParkResourceElementIfBlocked(el) {
                 var c = _fazSrcsetBlockedCategory(el, ss);
                 if (c) { el.setAttribute("data-faz-srcset", ss); el.setAttribute("data-faz-srcset-category", c); el.removeAttribute("srcset"); }
             }
-        } else if (tag === "image" || tag === "use" || (tag === "script" && el.namespaceURI === "http://www.w3.org/2000/svg")) {
+        } else if (tag === "image" || tag === "use" || tag === "feimage" || (tag === "script" && el.namespaceURI === "http://www.w3.org/2000/svg")) {
             // Parser-built SVG, which is the common case: an inline <svg> in the
             // page's own HTML, or markup a script wrote. Both spellings are read
             // and both are removed, so nothing is left for the engine to resolve.
@@ -6169,7 +6243,7 @@ function _fazUnblockServerSide() {
     // restore branch, and `href` is honoured by every engine in the support
     // matrix. Using el.src here would write an expando and leave the element
     // parked forever, which is how a delayed resource becomes a dead one.
-    document.querySelectorAll('image[data-faz-href][data-faz-category], use[data-faz-href][data-faz-category], script[data-faz-href][data-faz-category]')
+    document.querySelectorAll('image[data-faz-href][data-faz-category], use[data-faz-href][data-faz-category], feImage[data-faz-href][data-faz-category], script[data-faz-href][data-faz-category]')
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
             var href = el.getAttribute("data-faz-href");
@@ -6189,6 +6263,7 @@ function _fazUnblockServerSide() {
             el.setAttribute("srcdoc", doc);
             if (!el.getAttribute("srcdoc")) return; // the gate re-parked it
             el.removeAttribute("data-faz-srcdoc");
+            el.classList.remove("faz-hidden");
         });
 
     // 3a-ter. The legacy `background` attribute, on whatever element carried it.
@@ -6387,7 +6462,7 @@ function _fazAddProviderToList(node, cleanedHostname) {
 // exactly as it is.
 try {
     document
-        .querySelectorAll('img[src],img[srcset],source[src],source[srcset],iframe[src],link[href],link[imagesrcset]')
+        .querySelectorAll('img[src],img[srcset],source[src],source[srcset],iframe[src],iframe[srcdoc],link[href],link[imagesrcset],image,use,feImage,[background]')
         .forEach(_fazParkResourceElementIfBlocked);
     // Scripts are deliberately NOT swept. A parser-inserted <script src> has
     // already been fetched and executed by the time this deferred bundle runs,

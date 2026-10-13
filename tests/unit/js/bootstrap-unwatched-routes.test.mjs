@@ -188,5 +188,113 @@ console.log('\nbootstrap: the SVG filter image and the background property');
   eq('a same-origin body.background is released by the safety policy', nativeGetAttribute.call(document.body, 'background'), '/paper.png');
 }
 
+console.log('\nruntime: the srcdoc and background IDL routes');
+
+const DOC = '<p>hi</p><img src="https://tracker.test/in-doc.png">';
+
+// 5 — iframe.srcdoc = markup, assigned before the frame is appended.
+{
+  const w = runtimeOnly();
+  const f = w.document.createElement('iframe');
+  f.srcdoc = DOC;
+  eq('a srcdoc naming a blocked provider is not applied', f.getAttribute('srcdoc'), null);
+  eq('it is parked whole', f.getAttribute('data-faz-srcdoc'), DOC);
+  eq('under the provider category', f.getAttribute('data-faz-category'), 'marketing');
+  ok('and the frame is hidden like a parked-src frame', f.classList.contains('faz-hidden'));
+  w.document.body.appendChild(f);
+  eq('appending it afterwards changes nothing', f.getAttribute('srcdoc'), null);
+}
+// 5b — the other order: appended first, assigned after.
+{
+  const w = runtimeOnly();
+  const g = w.document.createElement('iframe');
+  w.document.body.appendChild(g);
+  g.srcdoc = DOC;
+  eq('assigned after append: still not applied', g.getAttribute('srcdoc'), null);
+  eq('and parked', g.getAttribute('data-faz-srcdoc'), DOC);
+}
+// 5c — a server-rendered frame found by id once the runtime is up.
+{
+  const w = runtimeOnly({ body: '<iframe id="server"></iframe>' });
+  const el = w.document.getElementById('server');
+  el.srcdoc = DOC;
+  eq('a server-rendered frame assigned by id: not applied', el.getAttribute('srcdoc'), null);
+  eq('and parked', el.getAttribute('data-faz-srcdoc'), DOC);
+}
+// 5d — the other error direction.
+{
+  const w = runtimeOnly();
+  const f = w.document.createElement('iframe');
+  f.srcdoc = '<p>first-party</p><img src="/local.png">';
+  eq('a srcdoc naming nothing blocked is applied', f.getAttribute('srcdoc'), '<p>first-party</p><img src="/local.png">');
+  eq('and not parked', f.getAttribute('data-faz-srcdoc'), null);
+}
+
+// 6 — document.body.background through the property.
+{
+  const w = runtimeOnly();
+  w.document.body.background = 'https://tile.openstreetmap.org/1/1/1.png';
+  eq('body.background to a blocked provider is not applied', w.document.body.getAttribute('background'), null);
+  eq('it is parked', w.document.body.getAttribute('data-faz-background'), 'https://tile.openstreetmap.org/1/1/1.png');
+  eq('under the provider category', w.document.body.getAttribute('data-faz-category'), 'functional');
+  w.document.body.background = '/paper.png';
+  eq('a first-party one is applied', w.document.body.getAttribute('background'), '/paper.png');
+}
+
+console.log('\nhandoff: a srcdoc held by the bootstrap meets the runtime gate');
+
+// 7 — the bootstrap replays `el.srcdoc = value` on the live setter at handoff.
+{
+  const { window, document, nativeGetAttribute } = boot();
+  const f = document.createElement('iframe');
+  f.srcdoc = DOC;
+  document.body.appendChild(f);
+  const g = document.createElement('iframe');
+  document.body.appendChild(g);
+  g.srcdoc = DOC;
+  eq('premise: both are held during the window', nativeGetAttribute.call(f, 'srcdoc') || nativeGetAttribute.call(g, 'srcdoc'), null);
+  loadRuntime(window);
+  eq('after the handoff the first is not applied', nativeGetAttribute.call(f, 'srcdoc'), null);
+  eq('but parked', nativeGetAttribute.call(f, 'data-faz-srcdoc'), DOC);
+  eq('the second is not applied either', nativeGetAttribute.call(g, 'srcdoc'), null);
+  eq('and parked', nativeGetAttribute.call(g, 'data-faz-srcdoc'), DOC);
+  eq('under the category the runtime names', nativeGetAttribute.call(g, 'data-faz-category'), 'marketing');
+}
+
+console.log('\nruntime: parked is restorable');
+
+// 8 — feImage: swept at startup, restored on consent.
+{
+  const w = runtimeOnly({ body: '<svg><filter><feImage href="https://tracker.test/fe.png"/></filter></svg>' });
+  const fe = w.document.querySelector('feImage');
+  eq('a parsed feImage is parked by the startup sweep', fe.getAttribute('data-faz-href'), 'https://tracker.test/fe.png');
+  eq('with no live href', fe.getAttribute('href'), null);
+  consent(w, { marketing: 'yes' });
+  w.eval('_fazUnblockServerSide()');
+  eq('and restored as href on consent', fe.getAttribute('href'), 'https://tracker.test/fe.png');
+  eq('with the parked name gone', fe.getAttribute('data-faz-href'), null);
+}
+// 8b — both spellings on one <image>: parked once, restored as href.
+{
+  const w = runtimeOnly({ body: '<svg><image href="https://tracker.test/a.png" xlink:href="https://tracker.test/a.png"/></svg>' });
+  const img = w.document.querySelector('image');
+  eq('href is removed', img.getAttribute('href'), null);
+  eq('xlink:href is removed', img.getAttribute('xlink:href'), null);
+  eq('one parked attribute', img.getAttribute('data-faz-href'), 'https://tracker.test/a.png');
+  consent(w, { marketing: 'yes' });
+  w.eval('_fazUnblockServerSide()');
+  eq('restored as the SVG2 href', img.getAttribute('href'), 'https://tracker.test/a.png');
+}
+// 8c — a parked srcdoc frame comes back visible.
+{
+  const w = runtimeOnly({ body: '<iframe id="p" class="faz-hidden" data-faz-category="marketing" data-faz-srcdoc="&lt;p&gt;x&lt;/p&gt;&lt;img src=&quot;https://tracker.test/d.png&quot;&gt;"></iframe>' });
+  const el = w.document.getElementById('p');
+  consent(w, { marketing: 'yes' });
+  w.eval('_fazUnblockServerSide()');
+  eq('srcdoc is restored on consent', el.getAttribute('srcdoc'), '<p>x</p><img src="https://tracker.test/d.png">');
+  eq('the parked name is gone', el.getAttribute('data-faz-srcdoc'), null);
+  ok('and the frame is visible again', !el.classList.contains('faz-hidden'));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
