@@ -4440,7 +4440,22 @@ function _fazSrcsetBlockedCategory(el, srcset) {
 // srcdoc, which the engine parses into a document of its own that no gate here
 // can reach once it exists.
 function _fazMarkupUrls(markup) {
-    var found = String(markup == null ? "" : markup).match(/(?:https?:)?\/\/[^\s"'<>)]+/gi);
+    var text = String(markup == null ? "" : markup);
+    // The document the engine builds from this markup decodes character
+    // references, and a script inside it reads `\/` as `/`; a search for a
+    // literal `//` saw neither `https:&#x2F;&#x2F;` nor `https:\/\/`. A
+    // <textarea> decodes the references the way the parser does (RCDATA:
+    // tags stay text), twice for a doubly-encoded one.
+    try {
+        var area = document.createElement("textarea");
+        for (var pass = 0; pass < 2; pass++) {
+            area.innerHTML = text;
+            if (area.value === text) break;
+            text = area.value;
+        }
+    } catch (e) { /* search the raw text */ }
+    text = text.replace(/\\\//g, "/");
+    var found = text.match(/(?:https?:)?\/\/[^\s"'<>)]+/gi);
     return found || [];
 }
 function _fazMarkupBlockedCategory(el, markup) {
@@ -4508,8 +4523,13 @@ function _fazGateResourceSetAttribute(proto, opts) {
         enumerable: true,
         value: function (ns, name, value) {
             try {
-                var n = String(name == null ? "" : name).toLowerCase();
-                if ((n === opts.urlAttr || n === "xlink:" + opts.urlAttr) && _fazImgShouldBlock(this, value)) {
+                // The namespace and the LOCAL name are the attribute; the
+                // prefix is the caller's choice. Comparing the qualified name
+                // let `setAttributeNS(XLINK, 'p:href', url)` through.
+                var qname = String(name == null ? "" : name);
+                var local = qname.slice(qname.indexOf(":") + 1).toLowerCase();
+                var nsStr = ns == null ? "" : String(ns);
+                if (local === opts.urlAttr && (nsStr === "" || nsStr === "http://www.w3.org/1999/xlink") && _fazImgShouldBlock(this, value)) {
                     native.call(this, opts.parkAttr, String(value));
                     native.call(this, "data-faz-category", _fazImgCategory(String(value)));
                     return;
@@ -4680,7 +4700,11 @@ function _fazParkResourceElementIfBlocked(el) {
             // Parser-built SVG, which is the common case: an inline <svg> in the
             // page's own HTML, or markup a script wrote. Both spellings are read
             // and both are removed, so nothing is left for the engine to resolve.
-            var svgHref = el.getAttribute("href") || el.getAttribute("xlink:href");
+            // Read through the namespace as well: a legacy href written under
+            // another prefix (`p:href` on the xlink namespace) is the same
+            // attribute and is not spelled `xlink:href` in the DOM.
+            var svgHref = el.getAttribute("href") || el.getAttribute("xlink:href")
+                || (typeof el.getAttributeNS === "function" ? el.getAttributeNS("http://www.w3.org/1999/xlink", "href") : null);
             if (svgHref && !el.getAttribute("data-faz-href") && _fazImgShouldBlock(el, svgHref)) {
                 el.setAttribute("data-faz-href", svgHref);
                 el.setAttribute("data-faz-category", _fazImgCategory(svgHref));
@@ -5700,11 +5724,18 @@ function _fazMutationObserver(mutations) {
             var tag = (n.nodeName || '').toLowerCase();
             if (tag === 'script' || tag === 'iframe') {
                 if (_fazInsideNoscript(n)) continue;
+                // A srcdoc has no src for the loop below to judge; park it here.
+                if (tag === 'iframe' && n.hasAttribute && n.hasAttribute('srcdoc')) _fazParkResourceElementIfBlocked(n);
                 nodesToProcess.push(n);
             } else {
                 // img/link/source that entered via parsed markup never hit the
                 // property setter or setAttribute, so park them here (best-effort).
-                if (tag === 'img' || tag === 'link' || tag === 'source') {
+                // The SVG namespace and the legacy `background` attribute fetch
+                // the same way and were missing from this set, so markup built
+                // after the handoff (`div.innerHTML = '<svg><image href=…>'`)
+                // fetched while the <img> next to it was parked.
+                if (tag === 'img' || tag === 'link' || tag === 'source' || tag === 'image' || tag === 'use' || tag === 'feimage'
+                    || (n.hasAttribute && n.hasAttribute('background'))) {
                     if (!_fazInsideNoscript(n)) _fazParkResourceElementIfBlocked(n);
                 }
                 if (typeof n.querySelectorAll === 'function') {
@@ -5715,7 +5746,7 @@ function _fazMutationObserver(mutations) {
                         if (_fazInsideNoscript(nested[ni])) continue;
                         nodesToProcess.push(nested[ni]);
                     }
-                    var nestedRes = n.querySelectorAll('img[src], img[srcset], link[href], source[src], source[srcset]');
+                    var nestedRes = n.querySelectorAll('img[src], img[srcset], link[href], source[src], source[srcset], image, use, feImage, [background], iframe[srcdoc]');
                     for (var ri = 0; ri < nestedRes.length; ri++) {
                         if (_fazInsideNoscript(nestedRes[ri])) continue;
                         _fazParkResourceElementIfBlocked(nestedRes[ri]);
@@ -6378,6 +6409,13 @@ function _fazUnblockServerSide() {
         });
 
     // 3a-quater. An iframe's srcdoc, parked whole.
+    //
+    // Order note: a frame the server parked with BOTH src and srcdoc has its
+    // src restored first (2b above) and its srcdoc here. Chromium replaces
+    // the pending navigation when srcdoc is set before the src fetch starts,
+    // so no double load was observed; other engines are not guaranteed to,
+    // and consent has already been given by this point, so the worst case is
+    // one extra request to a provider the visitor just allowed.
     document.querySelectorAll('iframe[data-faz-srcdoc][data-faz-category]')
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");

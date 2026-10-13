@@ -199,5 +199,87 @@ console.log('\ncss: the URL is judged on host and path, as policy.url judges it'
   eq('so a style carrying the decoy is left live and unparked', s.getAttribute('data-faz-css'), null);
 }
 
+console.log('\nroutes: the xlink namespace under another prefix');
+
+// 3 — the gate keys on namespace + local name. jsdom has no SVGImageElement,
+// so the real gate function is installed on SVGElement.prototype here.
+{
+  const w = runtime();
+  w.eval('_fazGateResourceSetAttribute(SVGElement.prototype, { urlAttr: "href", urlAltAttr: "xlink:href", parkAttr: "data-faz-href", hideOnPark: false, srcset: false, ns: true })');
+  const img = w.document.createElementNS(SVG_NS, 'image');
+  img.setAttributeNS(XLINK_NS, 'p:href', 'https://tracker.test/p.svg');
+  eq('setAttributeNS(xlink, "p:href"): the namespaced attribute is not written', img.getAttributeNS(XLINK_NS, 'href'), null);
+  eq('it is parked', img.getAttribute('data-faz-href'), 'https://tracker.test/p.svg');
+  const plain = w.document.createElementNS(SVG_NS, 'image');
+  plain.setAttributeNS(null, 'href', 'https://tracker.test/n.svg');
+  eq('setAttributeNS(null, "href") is the SVG2 attribute and is gated too', plain.getAttribute('href'), null);
+  eq('and parked', plain.getAttribute('data-faz-href'), 'https://tracker.test/n.svg');
+  const local = w.document.createElementNS(SVG_NS, 'image');
+  local.setAttributeNS(XLINK_NS, 'p:href', '/local.svg');
+  eq('a same-origin one under the prefix is written', local.getAttributeNS(XLINK_NS, 'href'), '/local.svg');
+}
+// 3b — the sweep reads the attribute through its namespace, whatever prefix.
+{
+  const w = runtime();
+  const img = w.document.createElementNS(SVG_NS, 'image');
+  img.setAttributeNS(XLINK_NS, 'p:href', 'https://tracker.test/s.svg'); // no gate on jsdom's SVGElement
+  w.document.body.appendChild(img);
+  w.eval('_fazParkResourceElementIfBlocked')(img);
+  eq('the sweep removes a prefixed xlink:href', img.getAttributeNS(XLINK_NS, 'href'), null);
+  eq('and parks it', img.getAttribute('data-faz-href'), 'https://tracker.test/s.svg');
+  consent(w, { marketing: 'yes' });
+  w.eval('_fazUnblockServerSide()');
+  eq('restored as the SVG2 href on consent', img.getAttribute('href'), 'https://tracker.test/s.svg');
+}
+
+console.log('\nroutes: markup built after the handoff');
+
+// 4 — the observer's element set.
+{
+  const w = runtime({ body: '<div id="h"></div>' });
+  const h = w.document.getElementById('h');
+  h.innerHTML = '<svg><image id="i" href="https://tracker.test/c.svg"/><use id="u" href="https://tracker.test/s.svg#i"/><feImage id="f" href="https://tracker.test/f.png"/></svg>'
+    + '<table id="t" background="https://tracker.test/b.png"><tr><td>x</td></tr></table>'
+    + '<iframe id="d" srcdoc="<img src=&quot;https://tracker.test/d.png&quot;>"></iframe>'
+    + '<img id="m" src="https://tracker.test/i.png">';
+  await tick();
+  const byId = (id) => w.document.getElementById(id);
+  eq('control: a sibling <img> is parked', byId('m').getAttribute('data-faz-src'), 'https://tracker.test/i.png');
+  eq('an SVG <image> built from markup has no live href', byId('i').getAttribute('href'), null);
+  eq('and is parked', byId('i').getAttribute('data-faz-href'), 'https://tracker.test/c.svg');
+  eq('<use> likewise', byId('u').getAttribute('data-faz-href'), 'https://tracker.test/s.svg#i');
+  eq('<feImage> likewise', byId('f').getAttribute('data-faz-href'), 'https://tracker.test/f.png');
+  eq('a [background] element is parked', byId('t').getAttribute('data-faz-background'), 'https://tracker.test/b.png');
+  eq('with no live background', byId('t').getAttribute('background'), null);
+  eq('an <iframe srcdoc> is parked', byId('d').getAttribute('data-faz-srcdoc'), '<img src="https://tracker.test/d.png">');
+  eq('with no live srcdoc', byId('d').getAttribute('srcdoc'), null);
+}
+// 4b — the same, nested in a wrapper the page builder inserts.
+{
+  const w = runtime({ body: '<div id="h"></div>' });
+  const wrap = w.document.createElement('div');
+  wrap.innerHTML = '<p><svg><image id="n" href="https://tracker.test/n.svg"/></svg></p>';
+  w.document.getElementById('h').appendChild(wrap);
+  await tick();
+  eq('an SVG image inside an inserted wrapper is parked', w.document.getElementById('n').getAttribute('data-faz-href'), 'https://tracker.test/n.svg');
+}
+
+console.log('\nroutes: a srcdoc URL spelled through entities or escaped slashes');
+
+// 5 — the markup is searched after decoding.
+{
+  const w = runtime();
+  const a = w.document.createElement('iframe');
+  a.srcdoc = '<img src="https:&#x2F;&#x2F;tracker.test/p.png">';
+  eq('an entity-encoded // is seen', a.getAttribute('srcdoc'), null);
+  eq('and the document parked', a.getAttribute('data-faz-srcdoc'), '<img src="https:&#x2F;&#x2F;tracker.test/p.png">');
+  const b = w.document.createElement('iframe');
+  b.srcdoc = '<script>var u="https:\\/\\/tracker.test/x.js";</script>';
+  eq('a JSON-escaped // is seen', b.getAttribute('srcdoc'), null);
+  const c = w.document.createElement('iframe');
+  c.srcdoc = '<p>https:&#x2F;&#x2F;site.test/own</p>';
+  eq('control: a same-origin URL through entities is applied', c.getAttribute('srcdoc'), '<p>https:&#x2F;&#x2F;site.test/own</p>');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
