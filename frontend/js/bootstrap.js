@@ -12,6 +12,17 @@
  * the rest of the page view, because the interceptors are never uninstalled on
  * that path. Nothing third-party is released without a consent decision; some
  * first-party work is.
+ *
+ * Known limits, shared with the runtime:
+ *   - a same-origin URL that REDIRECTS to a third party is released, because
+ *     nothing on the client can see where a URL lands before requesting it
+ *     (see local() below); server-side blocking is where that is answered;
+ *   - an SVG `href` written through the animated attribute object,
+ *     `image.href.baseVal = url`, reaches the engine without a setter or
+ *     setAttribute on the element: SVGAnimatedString.baseVal is not
+ *     interceptable without wrapping the `href` GETTER to hand out a proxy,
+ *     which neither file does. Libraries write SVG URLs through
+ *     setAttribute/setAttributeNS, which both files gate.
  */
 (function (w, d) {
     'use strict';
@@ -194,7 +205,9 @@
     // and friends, and listing those TAGS would hold every table on the page
     // and make every written one cost the parser exemption. The attribute is
     // the thing that fetches, so the attribute is what the selector asks for.
-    var RESOURCES = 'script,iframe,img,source,link,video,audio,embed,object,track,input,image,use,[background]';
+    // `feImage` is spelled as the SVG namespace spells it: a type selector is
+    // case-sensitive outside the HTML namespace, so `feimage` matches nothing.
+    var RESOURCES = 'script,iframe,img,source,link,video,audio,embed,object,track,input,image,use,feImage,[background]';
     // Keyed on the LOCAL name, uppercased. nodeName is uppercase only for HTML
     // elements; for every other namespace it is the name as written, so
     // `attrs[el.nodeName]` was undefined for every SVG element — and that one
@@ -212,7 +225,7 @@
     // <th>, and enumerating them would be a list to forget something from.
     function heldAttrs(el) {
         var list = attrs[tagKey(el)] || [];
-        if (nativeHas.call(el, 'background') || (staged.get(el) || {}).background) {
+        if (list.indexOf('background') === -1 && (nativeHas.call(el, 'background') || (staged.get(el) || {}).background)) {
             return list.concat(['background']);
         }
         return list;
@@ -1180,24 +1193,39 @@
     // own, which no gate on this side can reach, so the unit of judgement is
     // the whole attribute and the question is whether the markup names anything
     // cross-origin.
+    //
+    // `background` is listed on the elements that reflect it so that the IDL
+    // route — `document.body.background = url` — is held like every other
+    // reflected URL. Only <body> reflects it as a property in any engine; the
+    // table parts are listed for the attribute gate and the DOM backstop, which
+    // key on this map too, and their missing descriptor is skipped below.
     var attrs = {
         SCRIPT: ['src', 'href', 'xlink:href'], IFRAME: ['src', 'srcdoc'], IMG: ['src', 'srcset'], SOURCE: ['src', 'srcset'],
         LINK: ['href', 'imageSrcset'], VIDEO: ['src', 'poster'], AUDIO: ['src'],
         EMBED: ['src'], OBJECT: ['data'], TRACK: ['src'], INPUT: ['src'],
+        BODY: ['background'], TABLE: ['background'], TR: ['background'], TD: ['background'], TH: ['background'],
         // SVG. <script> is in the list above with href for the same reason:
-        // in that namespace a script's URL is an href, and it runs.
-        IMAGE: ['href', 'xlink:href'], USE: ['href', 'xlink:href']
+        // in that namespace a script's URL is an href, and it runs. <feImage>
+        // fetches through href exactly as <image> does; its key is the local
+        // name uppercased, which is what tagKey() answers for it.
+        IMAGE: ['href', 'xlink:href'], USE: ['href', 'xlink:href'], FEIMAGE: ['href', 'xlink:href']
     };
+    var installedSetters = [];
     Object.keys(attrs).forEach(function (tag) {
         var constructors = {
             SCRIPT: 'HTMLScriptElement', IFRAME: 'HTMLIFrameElement', IMG: 'HTMLImageElement',
             SOURCE: 'HTMLSourceElement', LINK: 'HTMLLinkElement', VIDEO: 'HTMLVideoElement',
             AUDIO: 'HTMLAudioElement', EMBED: 'HTMLEmbedElement', OBJECT: 'HTMLObjectElement',
-            TRACK: 'HTMLTrackElement', INPUT: 'HTMLInputElement'
+            TRACK: 'HTMLTrackElement', INPUT: 'HTMLInputElement', BODY: 'HTMLBodyElement',
+            TABLE: 'HTMLTableElement', TR: 'HTMLTableRowElement', TD: 'HTMLTableCellElement', TH: 'HTMLTableCellElement'
         };
         var proto = w[constructors[tag]] && w[constructors[tag]].prototype;
         if (!proto) return;
         attrs[tag].forEach(function (prop) {
+            // TD and TH share one interface: install each setter once per
+            // prototype, or the second pass would wrap the first.
+            if (installedSetters.some(function (s) { return s.proto === proto && s.prop === prop; })) return;
+            installedSetters.push({ proto: proto, prop: prop });
             // `src` on <video>/<audio> is declared on HTMLMediaElement, not on
             // the element's own prototype, so an own-property lookup found
             // nothing and those two setters were silently left open. Walk up for
