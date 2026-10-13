@@ -231,12 +231,14 @@
     // are fetched when a matching element is first rendered, which is a frame
     // away, not a microtask — so emptying the sheet here stops them.
     //
-    // Restored by this file rather than handed over parked: the runtime adopts a
-    // parked original only when the live text is the NEUTRALIZED form of it
+    // Emptied here, not handed over in that state: the runtime adopts a parked
+    // original only when the live text is the NEUTRALIZED form of it
     // (_fazPrimeStyleCssMarkers, script.js), and an emptied element does not
-    // match, so handing it over would turn a delayed stylesheet into a dead one
-    // — the exact trade parkTarget() below refuses to make. Handing back a live
-    // <style> lets the runtime's own CSS gate judge it with real consent.
+    // match, so leaving it like this would turn a delayed stylesheet into a
+    // dead one — the exact trade parkTarget() below refuses to make. The task
+    // below delivers it at the handoff through deliverCss(): judged by the
+    // runtime's rules, it lands either live or in the runtime's own parked
+    // form, which the runtime then manages as its own.
     //
     // `judge` is the question asked of the text, and it depends on who wrote
     // the sheet. One a script sink built — tagged, so the whole string was in
@@ -264,18 +266,31 @@
         // here, not the restore path: the task below holds the text itself.
         if (encoded) setAttr(el, 'data-faz-css', encoded);
         defer(function (policy) {
-            if (!allowedCss(policy, text)) return;
-            // Through the PROPERTY, not the captured native setter. By the time
-            // this runs the handoff has uninstalled this file's gate and
-            // installed the runtime's (_fazGateStyleTextSetter), so an
-            // assignment is judged by it with real consent, while a native
-            // write would be invisible to it. Measured in a real browser: the
-            // native write handed back a live third-party background-image and
-            // the runtime never saw it — a leak traded for a leak. The clear
-            // above still uses the native, because there the gate to avoid is
-            // this file's own, which would defer the clear and do nothing.
-            el.textContent = text;
-            dropAttr(el, 'data-faz-css');
+            // The page may have written the sheet while it waited. A live text
+            // that is no longer the emptied form is the page's: it is left
+            // alone, and the marker this function wrote goes with it, or the
+            // restore pass would later put the old text back over the new. A
+            // marker that is no longer this one belongs to whoever wrote it.
+            var live = String(el.textContent == null ? '' : el.textContent);
+            var mine = attr(el, 'data-faz-css') === (encoded || null);
+            if (live !== '') {
+                if (mine) dropAttr(el, 'data-faz-css');
+                return;
+            }
+            if (!mine) return;
+            deliverCss(policy, el, null, 'replaceChildren', [text], function () {
+                // The marker goes BEFORE the write, not after it. The write
+                // goes through the PROPERTY, and by now that is the runtime's
+                // setter (_fazGateStyleTextSetter): when it neutralises the
+                // text it rewrites data-faz-css itself and owns it from then
+                // on — dropping it afterwards deleted the runtime's marker and
+                // the restore pass never found the sheet again. The clear
+                // above still uses the native, because there the gate to avoid
+                // is this file's own, which would defer the clear and do
+                // nothing.
+                dropAttr(el, 'data-faz-css');
+                el.textContent = text;
+            });
         });
     }
     // Which insertions the DOM backstop further down has any business judging.

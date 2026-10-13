@@ -56,7 +56,7 @@ const code = readFileSync(BOOTSTRAP_PATH, 'utf8');
 
 // A fresh document per case: the bootstrap patches prototypes, so leaking one
 // instance into the next would make later cases pass for the wrong reason.
-function boot({ ready = 'loading', seed = '' } = {}) {
+function boot({ ready = 'loading', seed = '', holdDcl = false } = {}) {
   const dom = new JSDOM(`<!DOCTYPE html><html><head>${seed}</head><body><ul id="list"></ul></body></html>`, {
     runScripts: 'outside-only',
     url: SITE,
@@ -84,6 +84,17 @@ function boot({ ready = 'loading', seed = '' } = {}) {
     open: window.Document.prototype.open,
     createElement: window.Document.prototype.createElement,
   };
+  if (holdDcl) {
+    // jsdom fires its own DOMContentLoaded on the microtask queue, which is
+    // also where the observer delivers its records — so by the time a backstop
+    // park exists the safety release has already decided, and a handoff after
+    // it is ignored by design. A case that needs the HANDOFF side of a backstop
+    // park silences jsdom's event here, before the bootstrap registers its own
+    // listeners; the one release() dispatches is marked and let through.
+    window.document.addEventListener('DOMContentLoaded', function (event) {
+      if (!event.__fromTest) event.stopImmediatePropagation();
+    }, true);
+  }
   window.eval(code);
   return { window, document: window.document, fetched, dom, nativeGetAttribute, nativeSetAttribute, nativeAppendChild, nativeDocument };
 }
@@ -352,7 +363,9 @@ console.log('\nbootstrap: hold and release judge the same text (six style routes
 const SPLIT_SEED = '<style id="seed">.p{background-image:u</style>';
 
 async function release(window) {
-  window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
+  const event = new window.Event('DOMContentLoaded');
+  event.__fromTest = true;
+  window.document.dispatchEvent(event);
   await new Promise((r) => setTimeout(r, 0));
 }
 
@@ -937,6 +950,93 @@ console.log('\nbootstrap: the backstop covers stylesheets and shadow trees too')
   eq('the safety release leaves it parked', sheet.textContent, '');
   ok('with the original still recoverable from the attribute',
     !!nativeGetAttribute.call(sheet, 'data-faz-css'));
+}
+
+// The handoff side of a backstop park. The restore task wrote the text through
+// the live property — the runtime's own setter by then — and dropped the
+// marker AFTER the write. With consent refused the runtime's setter neutralises
+// the text and rewrites data-faz-css as its own; the drop then deleted the
+// runtime's marker, and _fazUnblockServerSide never found the sheet again on a
+// later accept. The marker now survives a refusing handoff.
+const BACKSTOP_CSS = '.a{background-image:url(https://tracker.test/n3.png)}';
+const INERT = 'url("data:application/octet-stream,")';
+// Park a sheet the way the backstop does: a tagged fragment inserted natively,
+// delivered on the microtask queue.
+async function backstopPark(document, nativeAppendChild, id, css) {
+  const frag = document.createRange().createContextualFragment('<style id="' + id + '">' + css + '</style>');
+  nativeAppendChild.call(document.head, frag);
+  await Promise.resolve();
+  await Promise.resolve();
+  return document.getElementById(id);
+}
+// The runtime's textContent gate on HTMLStyleElement.prototype, reduced to
+// what matters here: a blocked URL is neutralised and the marker rewritten,
+// anything else is written natively with the marker removed. Installed between
+// start() and finish(), where the real runtime installs its own.
+function installRuntimeStyleGate(window, blocked = /tracker\.test/) {
+  const desc = Object.getOwnPropertyDescriptor(window.Node.prototype, 'textContent');
+  Object.defineProperty(window.HTMLStyleElement.prototype, 'textContent', {
+    configurable: true,
+    get: desc.get,
+    set: function (value) {
+      const css = String(value == null ? '' : value);
+      if (blocked.test(css)) {
+        desc.set.call(this, css.replace(/url\([^)]*\)/g, INERT));
+        this.setAttribute('data-faz-css', Buffer.from(css, 'utf8').toString('base64'));
+        this.setAttribute('data-faz-category', 'marketing');
+        return;
+      }
+      desc.set.call(this, css);
+      this.removeAttribute('data-faz-css');
+    },
+  });
+}
+function refusingHandoffWithGate(window) {
+  window._fazBootstrap.start();
+  installRuntimeStyleGate(window);
+  window._fazBootstrap.finish({
+    script: function () {},
+    node: function () {},
+    url: function (url) { return /tracker\.test/.test(String(url)); },
+    category: function () { return 'marketing'; },
+  });
+}
+
+{
+  const { window, document, nativeAppendChild } = boot({ holdDcl: true });
+  const sheet = await backstopPark(document, nativeAppendChild, 'refused', BACKSTOP_CSS);
+  eq('premise: the backstop parked it', sheet.textContent, '');
+  refusingHandoffWithGate(window);
+  ok('after a refusing handoff the tracker URL is not live', sheet.textContent.indexOf('tracker.test') === -1);
+  eq('and data-faz-css is still on the sheet, decoding to the original', parkedCss(sheet), BACKSTOP_CSS);
+  eq('with the category the restore selectors need', sheet.getAttribute('data-faz-category'), 'marketing');
+}
+
+{
+  // The other direction with the same gate in place: allowed CSS comes back
+  // live and the marker is gone.
+  const { window, document, nativeAppendChild } = boot({ holdDcl: true });
+  const sheet = await backstopPark(document, nativeAppendChild, 'allowed', '.b{background-image:url(https://cdn.test/n4.png)}');
+  eq('premise: the backstop parked it', sheet.textContent, '');
+  refusingHandoffWithGate(window);
+  eq('an allowed sheet is live after the handoff', sheet.textContent, '.b{background-image:url(https://cdn.test/n4.png)}');
+  eq('with no marker left on it', sheet.getAttribute('data-faz-css'), null);
+}
+
+// The restore task wrote the parked text unconditionally. If the page rewrote
+// the sheet with safe text while the park waited, the handoff put the old text
+// back over the new one — and left a marker that a later restore pass would
+// have used to resurrect the old text once more.
+{
+  const { window, document, nativeAppendChild } = boot({ holdDcl: true });
+  const sheet = await backstopPark(document, nativeAppendChild, 'rewritten', BACKSTOP_CSS);
+  eq('premise: the backstop parked it', sheet.textContent, '');
+  // Through the gated setter, as a page would: safe text, applied at once.
+  sheet.textContent = '.x{color:blue}';
+  eq('premise: the page rewrote it while the park waited', sheet.textContent, '.x{color:blue}');
+  runtimeHandoff(window);
+  eq("the handoff leaves the page's text alone", sheet.textContent, '.x{color:blue}');
+  eq('and takes its stale marker with it', sheet.getAttribute('data-faz-css'), null);
 }
 
 {
