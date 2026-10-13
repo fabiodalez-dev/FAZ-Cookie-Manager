@@ -318,7 +318,7 @@ namespace {
 	$out = faz_ob_run( $fe, '<html><body><iframe srcdoc="<img src=&quot;https://cdn.tracker.test/pixel.png&quot;>"></iframe></body></html>' );
 	assert_true( false !== strpos( $out, 'data-faz-srcdoc=' ), 'a srcdoc naming a blocked provider is parked' );
 	assert_true( false !== strpos( $out, 'data-faz-category="marketing"' ), 'with its category' );
-	assert_true( false === strpos( $out, ' srcdoc="' ), 'and the live attribute is gone' );
+	assert_true( ! preg_match( '/(?<![\w-])srcdoc=/i', $out ), 'and the live attribute is gone' );
 	assert_true( '"<img src=&quot;https://cdn.tracker.test/pixel.png&quot;>"' === faz_raw_attr( $out, 'data-faz-srcdoc' ), 'the parked value is the original byte-for-byte: no pass rewrote inside it' );
 	assert_true( '<img src="https://cdn.tracker.test/pixel.png">' === faz_decode_attr( faz_raw_attr( $out, 'data-faz-srcdoc' ) ), 'and decodes to the document the engine would have parsed' );
 	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'exactly one category on the tag' );
@@ -349,7 +349,7 @@ namespace {
 		$fe  = faz_ob_frontend( $providers, $blocked );
 		$out = faz_ob_run( $fe, '<html><body><iframe srcdoc="' . $doc . '"></iframe></body></html>' );
 		assert_true( '"' . $doc . '"' === faz_raw_attr( $out, 'data-faz-srcdoc' ), $label . ': parked verbatim' );
-		assert_true( false === strpos( $out, ' srcdoc="' ), $label . ': not left live' );
+		assert_true( ! preg_match( '/(?<![\w-])srcdoc=/i', $out ), $label . ': not left live' );
 		assert_true( 1 === substr_count( $out, 'data-faz-category=' ), $label . ': one category' );
 	}
 
@@ -428,7 +428,7 @@ namespace {
 	$out = faz_ob_run( $fe, '<html><body><iframe data-faz-srcdoc="x" srcdoc="<img src=https://cdn.tracker.test/p.png>"></iframe></body></html>' );
 	assert_true( false !== strpos( $out, 'data-faz-srcdoc="x"' ), 'the parked token survives byte-for-byte' );
 	assert_true( false !== strpos( $out, 'data-faz-srcdoc="<img src=https://cdn.tracker.test/p.png>"' ), 'and the live one is parked, byte-for-byte' );
-	assert_true( false === strpos( $out, ' srcdoc="' ), 'nothing is left live' );
+	assert_true( ! preg_match( '/(?<![\w-])srcdoc=/i', $out ), 'nothing is left live' );
 	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'with one category' );
 
 	// A megabyte of attribute value with no closing quote must neither
@@ -450,8 +450,9 @@ namespace {
 	assert_true( false === strpos( $logged, 'PCRE error' ), 'and does not trip the PCRE limit, which would skip blocking for the whole page' );
 	// Read as the engine reads it: the value runs to the NEXT quote, which is
 	// the one opening the pixel's src, so the pixel is text inside an allowed
-	// srcdoc and the whole thing comes back byte-identical.
-	assert_true( $out === $tail, 'and the tag is read as the engine reads it: byte-identical' );
+	// srcdoc: the token comes back verbatim and nothing is parked. The name
+	// glued after that closing quote gains one space, by design.
+	assert_true( '"' . str_repeat( 'a', 1048576 ) . '></iframe><img src="' === faz_raw_attr( $out, 'srcdoc' ) && false === strpos( $out, 'data-faz-' ), 'and the tag is read as the engine reads it: srcdoc verbatim, nothing parked' );
 
 	echo "\n-- a > inside a quoted value, before the resource attribute --\n";
 
@@ -646,12 +647,49 @@ namespace {
 	// srcdoc, so every one of them goes with it.
 	$fe  = faz_ob_frontend( $providers, $blocked );
 	$out = faz_ob_run( $fe, '<html><body><iframe srcdoc="<img src=&quot;https://cdn.tracker.test/p.png&quot;>" srcdoc="<img src=&quot;https://cdn.tracker.test/q.png&quot;>"></iframe></body></html>' );
-	assert_true( false === strpos( $out, ' srcdoc="' ), 'no srcdoc is left live' );
+	assert_true( ! preg_match( '/(?<![\w-])srcdoc=/i', $out ), 'no srcdoc is left live' );
 	assert_true( false !== strpos( $out, 'data-faz-srcdoc="<img src=&quot;https://cdn.tracker.test/p.png&quot;>"' ) && false !== strpos( $out, 'data-faz-srcdoc="<img src=&quot;https://cdn.tracker.test/q.png&quot;>"' ), 'both are parked verbatim, the first one first' );
 	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'with one category' );
 	$fe  = faz_ob_frontend( $providers, $blocked );
 	$html = '<html><body><iframe srcdoc="<p>a</p>" srcdoc="<img src=&quot;https://unknown.example/x.png&quot;>"></iframe></body></html>';
 	assert_true( faz_ob_run( $fe, $html ) === $html, 'two allowed srcdoc tokens come back byte-identical' );
+
+	echo "\n-- A1: a src glued to the srcdoc token --\n";
+
+	// The marker replaced the srcdoc token with nothing around it, so a src
+	// glued to the closing quote became part of the marker's own token and
+	// was never renamed: srcdoc parked, src live, and with srcdoc gone the
+	// frame navigated to the tracker in all three engines.
+	$doc = '<img src=&quot;https://cdn.tracker.test/pixel.png&quot;>';
+	foreach ( array(
+		'double-quoted srcdoc, glued src' => '<iframe srcdoc="' . $doc . '"src="https://cdn.tracker.test/f"></iframe>',
+		'single-quoted srcdoc, glued src' => "<iframe srcdoc='" . $doc . "'src=\"https://cdn.tracker.test/f\"></iframe>",
+		'slash between them'              => '<iframe srcdoc="' . $doc . '"/src="https://cdn.tracker.test/f"></iframe>',
+		'glued unquoted src'              => '<iframe srcdoc="' . $doc . '"src=https://cdn.tracker.test/f></iframe>',
+	) as $label => $tag ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><body>' . $tag . '</body></html>' );
+		$own = str_replace( 'data-faz-srcdoc=' . faz_raw_attr( $out, 'data-faz-srcdoc' ), '', $out );
+		assert_true( null !== faz_raw_attr( $out, 'data-faz-src' ), $label . ': src is parked' );
+		assert_true( ! preg_match( '/(?<![\w-])src=/i', $own ), $label . ': and not left live' );
+		assert_true( ! preg_match( '/(?<![\w-])srcdoc=/i', $out ), $label . ': srcdoc not left live' );
+		assert_true( 1 === substr_count( $out, 'data-faz-category=' ), $label . ': one category' );
+	}
+
+	echo "\n-- M2: special-scheme URLs inside a srcdoc --\n";
+
+	foreach ( array( 'https:/cdn.tracker.test/p', 'https:cdn.tracker.test/p' ) as $url ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><iframe srcdoc="<img src=&quot;' . $url . '&quot;>"></iframe></html>' );
+		assert_true( false !== strpos( $out, 'data-faz-srcdoc=' ), $url . ' inside a srcdoc is judged as the engine resolves it' );
+	}
+
+	echo "\n-- M4: a stashed token that is not a live srcdoc --\n";
+
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><iframe data-faz-srcdoc="x" src="https://cdn.tracker.test/f"></iframe></body></html>' );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/f"' ), 'with no live srcdoc the src is not inert and is parked' );
+	assert_true( false !== strpos( $out, 'data-faz-srcdoc="x"' ), 'and the stashed token comes back' );
 
 	// ---------- result ----------
 

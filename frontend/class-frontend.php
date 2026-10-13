@@ -4120,7 +4120,7 @@ class Frontend {
 		// cannot know: with a fixed marker, a paragraph that spelled
 		// `__FAZ_SRCDOC_STASH_0__` received the srcdoc token as live markup.
 		$stash_nonce   = $this->stash_nonce();
-		$srcdoc_marker = '__FAZ_SRCDOC_STASH_' . $stash_nonce . '_';
+		$srcdoc_marker = '__FAZ_SRCDOC_' . $stash_nonce . '_';
 		$srcdoc_stash  = array();
 		if ( false !== stripos( $html, 'srcdoc' ) ) {
 			$result = preg_replace_callback(
@@ -4607,7 +4607,7 @@ class Frontend {
 		// stripped it, so the srcdoc never came back. A parked srcdoc already
 		// took src with it. The marker carries the request nonce, so the page
 		// cannot spell it.
-		if ( '' !== $srcdoc_marker && false !== stripos( $attrs, $srcdoc_marker ) ) {
+		if ( '' !== $srcdoc_marker && false !== strpos( $attrs, $srcdoc_marker . 'LIVE_' ) ) {
 			return $full;
 		}
 
@@ -5114,13 +5114,25 @@ class Frontend {
 			}
 		}
 
+		// The marker names its kind: LIVE for a `srcdoc` token, KEPT for an
+		// already-parked data-faz-srcdoc. The iframe pass skips a frame only
+		// on a LIVE one, because only a live srcdoc makes src inert.
 		$rest = $attrs;
 		foreach ( $tokens as $i => $token ) {
-			$tokens[ $i ]['marker'] = $marker_prefix . count( $stash ) . '__';
+			$tokens[ $i ]['marker'] = $marker_prefix . ( 'srcdoc' === $token['key'] ? 'LIVE_' : 'KEPT_' ) . count( $stash ) . '__';
 			$stash[ $tokens[ $i ]['marker'] ] = substr( $attrs, $token['offset'], $token['length'] );
 		}
 		for ( $i = count( $tokens ) - 1; $i >= 0; $i-- ) {
-			$rest = substr_replace( $rest, $tokens[ $i ]['marker'], $tokens[ $i ]['offset'], $tokens[ $i ]['length'] );
+			// Padded where the token was glued to its neighbour: the marker is
+			// name characters, and `srcdoc="…"src=…` with the marker dropped
+			// in bare became ONE token, so the src was never renamed and the
+			// frame navigated to it once its srcdoc was gone.
+			$at     = $tokens[ $i ]['offset'];
+			$end    = $at + $tokens[ $i ]['length'];
+			$before = $at > 0 ? $rest[ $at - 1 ] : ' ';
+			$after  = $end < strlen( $rest ) ? $rest[ $end ] : ' ';
+			$marker = ( ctype_space( $before ) || '/' === $before ? '' : ' ' ) . $tokens[ $i ]['marker'] . ( ctype_space( $after ) || '/' === $after ? '' : ' ' );
+			$rest   = substr_replace( $rest, $marker, $at, $tokens[ $i ]['length'] );
 		}
 		if ( null === $doc ) {
 			return '<iframe' . $rest . $close . '>';
@@ -5152,7 +5164,9 @@ class Frontend {
 				$markup = $decoded;
 			}
 			$markup = str_replace( array( "\t", "\n", "\r" ), '', $markup );
-			if ( preg_match_all( '#(?:https?:)?//[^\s"\'<>)]+#i', $markup, $found ) ) {
+			// `https:/host` and `https:host` are special-scheme URLs the engine
+			// resolves to `https://host`; the normaliser gives them their slashes.
+			if ( preg_match_all( '#(?:https?:(?://|/?)|//)[^\s"\'<>)]+#i', $markup, $found ) ) {
 				foreach ( $found[0] as $url ) {
 					$category = $this->match_script_to_provider( ' src="' . $this->normalize_resource_url( $url ) . '"', '', $providers, $blocked_categories );
 					if ( $category && in_array( $category, $blocked_categories, true ) ) {
@@ -5299,6 +5313,9 @@ class Frontend {
 			$value = $decoded;
 		}
 		$value = str_replace( array( "\t", "\n", "\r" ), '', $value );
+		// A special scheme takes exactly two slashes whatever was written:
+		// `https:/host` and `https:host` resolve to `https://host`.
+		$value = preg_replace( '#^(\s*https?:)/*#i', '$1//', $value );
 		if ( preg_match( '#^(\s*(?:[a-z][a-z0-9+.\-]*:)?//)([^/?\#\s]+)(.*)$#is', $value, $p ) ) {
 			$value = $p[1] . rawurldecode( $p[2] ) . $p[3];
 		}
