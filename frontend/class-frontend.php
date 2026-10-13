@@ -4089,6 +4089,68 @@ class Frontend {
 			}
 		}
 
+		// 1-bis. The SVG namespace. <image> is an <img> by another name and
+		// <use href="https://x/sprite.svg#icon"> fetches an external document,
+		// both through `href` or its legacy spelling `xlink:href` — attributes
+		// no pass here had ever looked at, so an SVG tracking pixel in server
+		// markup went out before consent. Measured per engine in
+		// tests/browser-intent/write-stream-differential.spec.ts, which printed
+		// it as an accepted limit of the element set until this pass.
+		if ( false !== stripos( $html, '<image' ) || false !== stripos( $html, '<use' ) ) {
+			$result = preg_replace_callback(
+				'#<(image|use)\b([^>]*?)(/?)>#is',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_svg_href_tag( $m, $providers, $blocked_categories );
+				},
+				$html
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
+		}
+
+		// 1-ter. The legacy `background` presentation attribute. It fetches an
+		// image on <body> and on every table part, and no pass here looked at
+		// it — measured fetching in all three engines by
+		// tests/browser-intent/write-stream-differential.spec.ts.
+		if ( false !== stripos( $html, 'background=' ) ) {
+			$result = preg_replace_callback(
+				'#<(body|table|thead|tbody|tfoot|tr|td|th)\b([^>]*\sbackground\s*=[^>]*)>#is',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_background_attr_tag( $m, $providers, $blocked_categories );
+				},
+				$html
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
+		}
+
+		// 1-quater. An <iframe srcdoc="…"> carries a whole document in an
+		// attribute, and the engine parses it into a browsing context nothing on
+		// either side can intercept once it exists. So it is judged whole: if
+		// the markup names a blocked provider, the attribute is parked. The
+		// attribute regex below walks quoted values rather than stopping at the
+		// first `>`, because srcdoc markup is full of them.
+		if ( false !== stripos( $html, 'srcdoc' ) ) {
+			$result = preg_replace_callback(
+				'#<iframe((?:[^>"\']|"[^"]*"|\'[^\']*\')*)>#is',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories );
+				},
+				$html
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
+		}
+
 		// 2. Block <iframe> tags (YouTube, Facebook, Maps, etc.).
 		if ( false !== stripos( $html, '<iframe' ) ) {
 			$result = preg_replace_callback(
@@ -4777,6 +4839,161 @@ class Frontend {
 			$metadata .= ' data-faz-srcset-category="' . esc_attr( $matched_category ) . '"';
 		}
 		return '<img' . $metadata . $with_src . '>';
+	}
+
+	/**
+	 * Process an SVG <image> / <use> tag for a blocked href.
+	 *
+	 * Both spellings — `href` and the legacy `xlink:href` — park into ONE
+	 * attribute, `data-faz-href`, which is what the client's restore pass reads.
+	 * One parked name means one restore branch; two would be two branches that
+	 * can disagree, and a resource a restore pass cannot select is not delayed,
+	 * it is dead.
+	 *
+	 * @param array $m                  Regex match: tag name, attributes, closing slash.
+	 * @param array $providers          Provider-to-category map.
+	 * @param array $blocked_categories Currently blocked category slugs.
+	 * @return string
+	 */
+	private function process_svg_href_tag( $m, $providers, $blocked_categories ) {
+		$tag   = strtolower( isset( $m[1] ) ? $m[1] : '' );
+		$attrs = isset( $m[2] ) ? $m[2] : '';
+		$close = isset( $m[3] ) ? $m[3] : '';
+		$full  = isset( $m[0] ) ? $m[0] : '';
+
+		if ( false !== strpos( $attrs, 'data-faz-href' ) ) {
+			return $full;
+		}
+		if ( $this->is_whitelisted( $attrs, '' ) ) {
+			return $full;
+		}
+
+		$matched_category = $this->match_script_to_provider( $attrs, '', $providers, $blocked_categories );
+		$svc_blocked      = $this->check_per_service_blocking( $attrs, '' );
+
+		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
+			if ( true !== $svc_blocked ) {
+				return $full;
+			}
+			if ( ! $matched_category ) {
+				$matched_category = 'functional';
+			}
+		} elseif ( false === $svc_blocked ) {
+			return $full;
+		}
+
+		$parked = preg_replace( '/(^|\s)(?:xlink:)?href\s*=\s*/i', '$1data-faz-href=', $attrs, 1 );
+		if ( null === $parked ) {
+			return $full; // PCRE failure — never ship a half-rewritten tag.
+		}
+		if ( $parked === $attrs ) {
+			return $full; // Nothing fetchable to park.
+		}
+
+		// Metadata BEFORE the captured attributes, for the same reason as
+		// process_img_tag(): a self-closing tag keeps its slash inside $attrs.
+		return '<' . $tag . ' data-faz-category="' . esc_attr( $matched_category ) . '"' . $parked . $close . '>';
+	}
+
+	/**
+	 * Process the legacy `background` presentation attribute.
+	 *
+	 * Obsolete in the spec, still honoured by every engine, and a one-attribute
+	 * tracking pixel on a <body> or a <td> is as much a request as an <img>.
+	 * Parked into data-faz-background, which the client's restore pass reads.
+	 *
+	 * @param array $m                  Regex match: tag name, attributes.
+	 * @param array $providers          Provider-to-category map.
+	 * @param array $blocked_categories Currently blocked category slugs.
+	 * @return string
+	 */
+	private function process_background_attr_tag( $m, $providers, $blocked_categories ) {
+		$tag   = strtolower( isset( $m[1] ) ? $m[1] : '' );
+		$attrs = isset( $m[2] ) ? $m[2] : '';
+		$full  = isset( $m[0] ) ? $m[0] : '';
+
+		if ( false !== strpos( $attrs, 'data-faz-background' ) ) {
+			return $full;
+		}
+		if ( $this->is_whitelisted( $attrs, '' ) ) {
+			return $full;
+		}
+
+		$matched_category = $this->match_script_to_provider( $attrs, '', $providers, $blocked_categories );
+		$svc_blocked      = $this->check_per_service_blocking( $attrs, '' );
+
+		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
+			if ( true !== $svc_blocked ) {
+				return $full;
+			}
+			if ( ! $matched_category ) {
+				$matched_category = 'functional';
+			}
+		} elseif ( false === $svc_blocked ) {
+			return $full;
+		}
+
+		$parked = preg_replace( '/(^|\s)background\s*=\s*/i', '$1data-faz-background=', $attrs, 1 );
+		if ( null === $parked || $parked === $attrs ) {
+			return $full;
+		}
+
+		return '<' . $tag . ' data-faz-category="' . esc_attr( $matched_category ) . '"' . $parked . '>';
+	}
+
+	/**
+	 * Park an <iframe srcdoc> whose markup names a blocked provider.
+	 *
+	 * The attribute is a document, so the unit of judgement is the whole
+	 * attribute: the sub-document's resources are fetched by a parser that no
+	 * gate on either side of the plugin can reach once the context exists.
+	 * Every absolute URL the markup names is matched through the ordinary
+	 * provider matcher, and the first blocked one decides.
+	 *
+	 * @param array $m                  Regex match: the iframe's attributes.
+	 * @param array $providers          Provider-to-category map.
+	 * @param array $blocked_categories Currently blocked category slugs.
+	 * @return string
+	 */
+	private function process_iframe_srcdoc_tag( $m, $providers, $blocked_categories ) {
+		$attrs = isset( $m[1] ) ? $m[1] : '';
+		$full  = isset( $m[0] ) ? $m[0] : '';
+
+		if ( ! preg_match( '/(^|\s)srcdoc\s*=/i', $attrs ) ) {
+			return $full;
+		}
+		if ( false !== strpos( $attrs, 'data-faz-srcdoc' ) ) {
+			return $full;
+		}
+		if ( $this->is_whitelisted( $attrs, '' ) ) {
+			return $full;
+		}
+
+		$markup = $this->extract_tag_attr( $attrs, 'srcdoc' );
+		if ( '' === $markup ) {
+			return $full;
+		}
+
+		$matched_category = '';
+		if ( preg_match_all( '#(?:https?:)?//[^\s"\'<>)]+#i', $markup, $found ) ) {
+			foreach ( $found[0] as $url ) {
+				$category = $this->match_script_to_provider( ' src="' . $url . '"', '', $providers, $blocked_categories );
+				if ( $category && in_array( $category, $blocked_categories, true ) ) {
+					$matched_category = $category;
+					break;
+				}
+			}
+		}
+		if ( '' === $matched_category ) {
+			return $full;
+		}
+
+		$parked = preg_replace( '/(^|\s)srcdoc\s*=\s*/i', '$1data-faz-srcdoc=', $attrs, 1 );
+		if ( null === $parked || $parked === $attrs ) {
+			return $full;
+		}
+
+		return '<iframe data-faz-category="' . esc_attr( $matched_category ) . '"' . $parked . '>';
 	}
 
 	private function process_link_tag( $m, $providers, $blocked_categories ) {
@@ -5923,6 +6140,13 @@ class Frontend {
 		$url = $this->extract_tag_attr( $attrs, 'src' );
 		if ( '' === $url ) {
 			$url = $this->extract_tag_attr( $attrs, 'href' );
+		}
+		if ( '' === $url ) {
+			// The legacy `background` presentation attribute carries a URL that
+			// the CSS-less engine still fetches. Last in the chain because it is
+			// only ever the URL when there is no src and no href, so no existing
+			// caller's answer changes.
+			$url = $this->extract_tag_attr( $attrs, 'background' );
 		}
 		// srcset / imagesrcset are matched IN ADDITION to src, never as a mere
 		// fallback: a responsive image can pair a perfectly innocent src with a

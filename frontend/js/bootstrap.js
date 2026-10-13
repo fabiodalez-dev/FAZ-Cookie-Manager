@@ -135,9 +135,20 @@
         }).filter(function (url) { return url !== ''; });
     }
     function isList(key) { return key === 'srcset' || key === 'imagesrcset'; }
+    // Every absolute or protocol-relative URL a string names. Deliberately
+    // broad and deliberately not a parser: the question is "could this markup
+    // reach a third party", and a sub-document's own resources are beyond
+    // anything this file can intercept once it is parsed.
+    function urlsIn(value) {
+        var found = String(value == null ? '' : value).match(/(?:https?:)?\/\/[^\s"'<>)]+/gi);
+        return found || [];
+    }
     // A list is same-origin only when EVERY candidate is: the browser picks one
     // by viewport and pixel ratio, so a single remote entry is a request.
     function localValue(key, value) {
+        // srcdoc carries a document, so "is this same-origin" is asked of every
+        // URL the document names. One remote reference is a request.
+        if (key === 'srcdoc') return urlsIn(value).every(local);
         if (!isList(key)) return local(value);
         var list = candidates(value);
         return !list.length || list.every(local);
@@ -174,7 +185,38 @@
     // way img and iframe do, and the runtime's own observer walks the DOM rather
     // than an element allowlist, so leaving them out gave the hold window a
     // narrower surface than the window it opened.
-    var RESOURCES = 'script,iframe,img,source,link,video,audio,embed,object,track,input';
+    // `image` and `use` are the SVG namespace's own fetching elements: <image>
+    // is an <img> by another name, and <use href="https://x/sprite.svg#icon">
+    // fetches an external document. A CSS type selector with no namespace
+    // matches any namespace, so one list still covers both trees.
+    // `[background]` is an attribute selector on purpose. The legacy
+    // presentation attribute fetches an image from <body>, <table>, <tr>, <td>
+    // and friends, and listing those TAGS would hold every table on the page
+    // and make every written one cost the parser exemption. The attribute is
+    // the thing that fetches, so the attribute is what the selector asks for.
+    var RESOURCES = 'script,iframe,img,source,link,video,audio,embed,object,track,input,image,use,[background]';
+    // Keyed on the LOCAL name, uppercased. nodeName is uppercase only for HTML
+    // elements; for every other namespace it is the name as written, so
+    // `attrs[el.nodeName]` was undefined for every SVG element — and that one
+    // lookup is what both the attribute gate and the DOM backstop are built on.
+    // Measured before this: setAttribute('href', tracker) on an <svg><image>
+    // applied live, and the backstop parked neither it nor an SVG
+    // <script href>, which EXECUTES rather than merely fetching.
+    function tagKey(el) {
+        if (!el || el.nodeType !== 1) return '';
+        return String(el.localName || el.nodeName).toUpperCase();
+    }
+    // The URL attributes to hold on THIS element: the per-tag list, plus the
+    // legacy `background`, which belongs to no tag in particular — it is
+    // honoured on <body>, <table>, <thead>, <tbody>, <tfoot>, <tr>, <td> and
+    // <th>, and enumerating them would be a list to forget something from.
+    function heldAttrs(el) {
+        var list = attrs[tagKey(el)] || [];
+        if (nativeHas.call(el, 'background') || (staged.get(el) || {}).background) {
+            return list.concat(['background']);
+        }
+        return list;
+    }
     function resources(node) {
         if (!node || !node.querySelectorAll) return [];
         var found = Array.prototype.slice.call(node.querySelectorAll(RESOURCES));
@@ -182,7 +224,8 @@
         return found.filter(function (el) {
             // An INPUT only fetches as type=image; every other input would be
             // held for nothing.
-            if (el.nodeName === 'INPUT') return String(attr(el, 'type') || '').toLowerCase() === 'image';
+            if (nativeHas.call(el, 'background')) return true;
+            if (tagKey(el) === 'INPUT') return String(attr(el, 'type') || '').toLowerCase() === 'image';
             // An inline <script> carrying no src and none of the plugin's own
             // blocking attributes is deliberately NOT held, and the reason is
             // worth stating because the opposite looks safer than it is.
@@ -196,7 +239,8 @@
             // breaks a same-origin inline configuration read on the next line,
             // which is an ordinary pattern. An inline third-party snippet is a
             // pre-existing gap in both files, to be closed in both or neither.
-            return el.nodeName !== 'SCRIPT' || nativeHas.call(el, 'src') || nativeHas.call(el, 'data-faz-category')
+            return tagKey(el) !== 'SCRIPT' || nativeHas.call(el, 'src') || nativeHas.call(el, 'href')
+                || nativeHas.call(el, 'xlink:href') || nativeHas.call(el, 'data-faz-category')
                 || nativeHas.call(el, 'data-fazcookie') || nativeHas.call(el, 'data-faz-service');
         });
     }
@@ -1123,20 +1167,26 @@
     replace(w.Document && Document.prototype && typeof Document.prototype.createElement === 'function' ? Document.prototype : d, 'createElement', function (original) {
         return function () {
             var el = original.apply(this, arguments);
-            if (el.nodeName === 'SCRIPT') scripts.push(el);
+            if (tagKey(el) === 'SCRIPT') scripts.push(el);
             return el;
         };
     });
     // Detached images can fetch before insertion. Hold URL assignments too;
     // replay uses the runtime's own property/setAttribute interceptors.
-    // `srcdoc` is deliberately absent: the runtime does not gate it either, and
-    // closing it here alone would hold an iframe for the download and then free
-    // it the moment the runtime lands — the inverse asymmetry. It belongs in
-    // both files or neither.
+    //
+    // `srcdoc` is in the list now, and it used to be deliberately absent with
+    // the note "it belongs in both files or neither" — so it went into both.
+    // Its value is MARKUP, not a URL: the iframe parses it as a document of its
+    // own, which no gate on this side can reach, so the unit of judgement is
+    // the whole attribute and the question is whether the markup names anything
+    // cross-origin.
     var attrs = {
-        SCRIPT: ['src'], IFRAME: ['src'], IMG: ['src', 'srcset'], SOURCE: ['src', 'srcset'],
+        SCRIPT: ['src', 'href', 'xlink:href'], IFRAME: ['src', 'srcdoc'], IMG: ['src', 'srcset'], SOURCE: ['src', 'srcset'],
         LINK: ['href', 'imageSrcset'], VIDEO: ['src', 'poster'], AUDIO: ['src'],
-        EMBED: ['src'], OBJECT: ['data'], TRACK: ['src'], INPUT: ['src']
+        EMBED: ['src'], OBJECT: ['data'], TRACK: ['src'], INPUT: ['src'],
+        // SVG. <script> is in the list above with href for the same reason:
+        // in that namespace a script's URL is an href, and it runs.
+        IMAGE: ['href', 'xlink:href'], USE: ['href', 'xlink:href']
     };
     Object.keys(attrs).forEach(function (tag) {
         var constructors = {
@@ -1180,12 +1230,26 @@
     });
     replace(Element.prototype, 'setAttribute', function (original) {
         return function (name, value) {
-            var el = this, key = String(name).toLowerCase(), held = attrs[el.nodeName];
-            if (held && held.some(function (p) { return p.toLowerCase() === key; })) {
+            var el = this, key = String(name).toLowerCase(), held = attrs[tagKey(el)];
+            if (key === 'background' || (held && held.some(function (p) { return p.toLowerCase() === key; }))) {
                 hold(el, key, value, function () { el.setAttribute(name, value); });
                 return;
             }
             return original.call(el, name, value);
+        };
+    });
+    // setAttributeNS is the only way to write a namespaced attribute, and
+    // `image.setAttributeNS(XLINK, 'xlink:href', url)` is how every SVG library
+    // writes the legacy spelling. The qualified name is the key the map above
+    // uses, so the gate is the same one.
+    replace(Element.prototype, 'setAttributeNS', function (original) {
+        return function (ns, name, value) {
+            var el = this, key = String(name).toLowerCase(), held = attrs[tagKey(el)];
+            if (held && held.some(function (p) { return p.toLowerCase() === key; })) {
+                hold(el, key, value, function () { el.setAttributeNS(ns, name, value); });
+                return;
+            }
+            return original.call(el, ns, name, value);
         };
     });
     replace(Element.prototype, 'getAttribute', function (original) {
@@ -1351,8 +1415,16 @@
         if (key === 'srcset') return { value: 'data-faz-srcset', category: 'data-faz-srcset-category' };
         if (key === 'imagesrcset') return { value: 'data-faz-imagesrcset', category: '' };
         if (key === 'href' && nodeName === 'LINK') return { value: 'data-faz-href', category: 'data-faz-category' };
+        // SVG <image>/<use>/<script>. Both spellings park into ONE attribute and
+        // are restored as the SVG2 `href`, which every engine in the support
+        // matrix honours — keeping two parked spellings would mean two restore
+        // branches that can disagree, which is how a parked resource becomes a
+        // dead one.
+        if (key === 'href' || key === 'xlink:href') return { value: 'data-faz-href', category: 'data-faz-category' };
         if (key === 'data' && nodeName === 'OBJECT') return { value: 'data-faz-data', category: 'data-faz-category' };
         if (key === 'poster') return { value: 'data-faz-poster', category: 'data-faz-category' };
+        if (key === 'background') return { value: 'data-faz-background', category: 'data-faz-category' };
+        if (key === 'srcdoc') return { value: 'data-faz-srcdoc', category: 'data-faz-category' };
         return { value: 'data-faz-src', category: 'data-faz-category' };
     }
     // The bootstrap has no provider rules, so it cannot name the category a URL
@@ -1374,7 +1446,7 @@
     }
     function parkAttribute(el, key, value, policy) {
         if (!el || el.nodeType !== 1) return;
-        var target = parkTarget(el.nodeName, key);
+        var target = parkTarget(tagKey(el), key);
         setAttr(el, target.value, value);
         // A list restores by re-reading every candidate, so it carries no
         // category of its own; writing one there would collide with a src/href
@@ -1385,7 +1457,7 @@
         if (el.nodeName === 'IFRAME' && el.classList) el.classList.add('faz-hidden');
     }
     function park(el, policy) {
-        (attrs[el.nodeName] || []).forEach(function (prop) {
+        heldAttrs(el).forEach(function (prop) {
             var key = prop.toLowerCase();
             var value = attr(el, key);
             if (!value || localValue(key, value)) return;
@@ -1435,7 +1507,7 @@
             park(el, safety);
         },
         node: function (el) {
-            if (el.nodeName === 'SCRIPT') return safety.script(el);
+            if (tagKey(el) === 'SCRIPT') return safety.script(el);
             park(el, safety);
         },
         park: function (el, key, value) { parkAttribute(el, key, value, safety); },
@@ -1462,16 +1534,16 @@
     // the page had before, not a promise the platform cannot keep. The
     // synchronous setter gates above remain the hard guarantee for assignments.
     function guard(el) {
-        if (!el || el.nodeType !== 1 || !attrs[el.nodeName]) return;
+        if (!el || el.nodeType !== 1 || !heldAttrs(el).length) return;
         // A parser-built <script src> has already started its request by the
         // time any observer is notified, so parking it afterwards buys nothing
         // and restoring a legitimate one correctly is guesswork. Scripts keep
         // the coverage they have: createElement, the src setter, setAttribute,
         // and the handoff list that policy.script judges with the real rules.
-        if (el.nodeName === 'SCRIPT') return;
-        if (el.nodeName === 'INPUT' && String(attr(el, 'type') || '').toLowerCase() !== 'image') return;
+        if (tagKey(el) === 'SCRIPT') return;
+        if (tagKey(el) === 'INPUT' && String(attr(el, 'type') || '').toLowerCase() !== 'image') return;
         var values = staged.get(el);
-        attrs[el.nodeName].forEach(function (prop) {
+        heldAttrs(el).forEach(function (prop) {
             var key = prop.toLowerCase();
             // Already staged by a setter: that record owns the value and its own
             // queued task will decide. Parking it here would steal the URL from
@@ -1479,7 +1551,7 @@
             if (values && values[key]) return;
             var value = attr(el, key);
             if (!value || localValue(key, value)) return;
-            var target = parkTarget(el.nodeName, key);
+            var target = parkTarget(tagKey(el), key);
             // Park on origin alone, immediately, with the default category — so
             // the element is never left both unrequested and unrestorable, even
             // if no handoff ever comes.
@@ -1512,7 +1584,7 @@
     var OBSERVE = {
         childList: true, subtree: true,
         attributes: true,
-        attributeFilter: ['src', 'srcset', 'href', 'imagesrcset', 'data', 'poster']
+        attributeFilter: ['src', 'srcset', 'href', 'imagesrcset', 'data', 'poster', 'background', 'srcdoc']
     };
     function watch(target) {
         if (!observer || !target) return;

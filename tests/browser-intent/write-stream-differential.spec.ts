@@ -38,9 +38,13 @@ const CLOSE = '/* write-predicate:end */';
 // the thing that fetched.
 //
 // The guarded set is one list in three places — RESOURCES in bootstrap.js,
-// _fazParkResourceElementIfBlocked in script.js (img/iframe/source/link), and
-// the server-side pass in class-frontend.php (#<(?:img|iframe)\b#i) — and
-// everything below is outside all three. Widening it is a change to those
+// _fazParkResourceElementIfBlocked in script.js, and the server-side pass in
+// class-frontend.php — and everything below is outside all three. The two SVG
+// <image> rows used to live here and no longer do, and neither do the two
+// `background` ones: the namespace and the legacy attribute are covered in all
+// three places now. That is exactly the kind of change this table is meant to
+// force — a row that stops behaving as documented fails the run instead of
+// quietly becoming a lie. Widening it is a change to those
 // three places, not to this predicate, which is why these are recorded here,
 // at the point where they were measured, instead of being withdrawn around.
 const UNGUARDED: Array<[string, string]> = [
@@ -48,15 +52,6 @@ const UNGUARDED: Array<[string, string]> = [
     'deliberate: guard() declines every SCRIPT, because a parser-built script has started its '
     + 'request before any observer is notified. Withdrawing here would park every static resource '
     + "after a legacy document.write('<script src=…>') and gain nothing."],
-  ['<svg><image href=URL></svg>',
-    'SVG <image> is not in the guarded element set, in any of the three places. It fetches.'],
-  ['<svg><image xlink:href=URL></svg>',
-    'the same element through the legacy namespaced attribute.'],
-  ['<body background=URL>',
-    'the legacy `background` presentation attribute fetches an image, and no part of the plugin '
-    + 'looks at it — not the element list, not the server-side pass.'],
-  ['<table background=URL></table>',
-    'the same attribute on a table.'],
 ];
 
 const WRITES = [

@@ -4435,6 +4435,21 @@ function _fazSrcsetBlockedCategory(el, srcset) {
  * attributes the standard restore pass re-enables on consent. Writes the park
  * attributes via the native setAttribute so it does not re-enter this gate.
  */
+// Every absolute or protocol-relative URL a markup string names. The sibling
+// of _fazCssUrls for the other place a URL hides inside a value: an iframe's
+// srcdoc, which the engine parses into a document of its own that no gate here
+// can reach once it exists.
+function _fazMarkupUrls(markup) {
+    var found = String(markup == null ? "" : markup).match(/(?:https?:)?\/\/[^\s"'<>)]+/gi);
+    return found || [];
+}
+function _fazMarkupBlockedCategory(el, markup) {
+    var urls = _fazMarkupUrls(markup);
+    for (var i = 0; i < urls.length; i++) {
+        if (_fazImgShouldBlock(el, urls[i])) return _fazImgCategory(urls[i]);
+    }
+    return "";
+}
 function _fazGateResourceSetAttribute(proto, opts) {
     if (!proto || typeof proto.setAttribute !== "function") return;
     var native = proto.setAttribute;
@@ -4445,7 +4460,9 @@ function _fazGateResourceSetAttribute(proto, opts) {
         value: function (name, value) {
             try {
                 var n = String(name == null ? "" : name).toLowerCase();
-                if (n === opts.urlAttr && _fazImgShouldBlock(this, value)) {
+                // `xlink:href` is the same URL by its legacy spelling, and it is
+                // what every SVG library still writes. One gate, both names.
+                if ((n === opts.urlAttr || (opts.urlAltAttr && n === opts.urlAltAttr)) && _fazImgShouldBlock(this, value)) {
                     native.call(this, opts.parkAttr, String(value));
                     native.call(this, "data-faz-category", _fazImgCategory(String(value)));
                     if (opts.hideOnPark && this.classList) this.classList.add("faz-hidden");
@@ -4454,6 +4471,14 @@ function _fazGateResourceSetAttribute(proto, opts) {
                     // equally invisible to the block-time observer. #134/#146.
                     if (opts.hideOnPark) _fazRevealService(_fazResolveServiceId(String(value), (this.getAttribute && this.getAttribute("data-faz-service")) || ""));
                     return;
+                }
+                if (opts.markupAttr && n === opts.markupAttr) {
+                    var markupCat = _fazMarkupBlockedCategory(this, value);
+                    if (markupCat) {
+                        native.call(this, opts.markupParkAttr, String(value));
+                        native.call(this, "data-faz-category", markupCat);
+                        return;
+                    }
                 }
                 if (n === "srcset" && opts.srcset) {
                     var cat = _fazSrcsetBlockedCategory(this, value);
@@ -4469,11 +4494,51 @@ function _fazGateResourceSetAttribute(proto, opts) {
             return native.call(this, name, value);
         }
     });
+    // setAttributeNS is the only way to write a namespaced attribute, so an
+    // element whose URL lives in one (SVG's xlink:href) is reachable through it
+    // with the gate above never consulted.
+    if (!opts.ns || typeof proto.setAttributeNS !== "function") return;
+    var nativeNS = proto.setAttributeNS;
+    Object.defineProperty(proto, "setAttributeNS", {
+        configurable: true,
+        writable: true,
+        enumerable: true,
+        value: function (ns, name, value) {
+            try {
+                var n = String(name == null ? "" : name).toLowerCase();
+                if ((n === opts.urlAttr || n === "xlink:" + opts.urlAttr) && _fazImgShouldBlock(this, value)) {
+                    native.call(this, opts.parkAttr, String(value));
+                    native.call(this, "data-faz-category", _fazImgCategory(String(value)));
+                    return;
+                }
+            } catch (e) { /* fall through to native on any error */ }
+            return nativeNS.call(this, ns, name, value);
+        }
+    });
 }
 _fazGateResourceSetAttribute(window.HTMLImageElement && HTMLImageElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: true });
-_fazGateResourceSetAttribute(window.HTMLIFrameElement && HTMLIFrameElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: true, srcset: false });
+_fazGateResourceSetAttribute(window.HTMLIFrameElement && HTMLIFrameElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: true, srcset: false, markupAttr: "srcdoc", markupParkAttr: "data-faz-srcdoc" });
 _fazGateResourceSetAttribute(window.HTMLLinkElement && HTMLLinkElement.prototype, { urlAttr: "href", parkAttr: "data-faz-href", hideOnPark: false, srcset: false });
 _fazGateResourceSetAttribute(window.HTMLSourceElement && HTMLSourceElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: true });
+// The SVG namespace fetches through its own elements and its own attribute
+// spelling: <image> is an <img> by another name, <use href="https://x/s.svg#i">
+// fetches an external document, and an SVG <script href> EXECUTES. None of them
+// was gated anywhere — not here, not in the bootstrap's element map (keyed on
+// nodeName, which is uppercase only for HTML), not in the server-side pass.
+// The legacy `background` presentation attribute fetches an image and is
+// honoured on the body and on every table part. It belongs to no single
+// interface, so the gate goes on each one that can carry it.
+["HTMLBodyElement", "HTMLTableElement", "HTMLTableRowElement", "HTMLTableCellElement", "HTMLTableSectionElement"].forEach(function (name) {
+    _fazGateResourceSetAttribute(window[name] && window[name].prototype, {
+        urlAttr: "background", parkAttr: "data-faz-background", hideOnPark: false, srcset: false
+    });
+});
+["SVGImageElement", "SVGUseElement", "SVGScriptElement"].forEach(function (name) {
+    _fazGateResourceSetAttribute(window[name] && window[name].prototype, {
+        urlAttr: "href", urlAltAttr: "xlink:href", parkAttr: "data-faz-href",
+        hideOnPark: false, srcset: false, ns: true
+    });
+});
 
 // srcset PROPERTY setter (img.srcset = …) — the sibling of the .src/.href property
 // gates. Without it, a runtime `.srcset` assignment writes the attribute directly
@@ -4521,12 +4586,44 @@ function _fazParkResourceElementIfBlocked(el) {
                 el.removeAttribute("src");
                 if (tag === "iframe" && el.classList) el.classList.add("faz-hidden");
             }
+            var doc = el.getAttribute("srcdoc");
+            if (doc && !el.getAttribute("data-faz-srcdoc")) {
+                // srcdoc is a document, not a URL: judged whole, because what
+                // it names is fetched by a parser this side cannot intercept.
+                var docCat = _fazMarkupBlockedCategory(el, doc);
+                if (docCat) {
+                    el.setAttribute("data-faz-srcdoc", doc);
+                    el.setAttribute("data-faz-category", docCat);
+                    el.removeAttribute("srcdoc");
+                }
+            }
             var ss = el.getAttribute("srcset");
             if (ss && !el.getAttribute("data-faz-srcset")) {
                 var c = _fazSrcsetBlockedCategory(el, ss);
                 if (c) { el.setAttribute("data-faz-srcset", ss); el.setAttribute("data-faz-srcset-category", c); el.removeAttribute("srcset"); }
             }
-        } else if (tag === "link") {
+        } else if (tag === "image" || tag === "use" || (tag === "script" && el.namespaceURI === "http://www.w3.org/2000/svg")) {
+            // Parser-built SVG, which is the common case: an inline <svg> in the
+            // page's own HTML, or markup a script wrote. Both spellings are read
+            // and both are removed, so nothing is left for the engine to resolve.
+            var svgHref = el.getAttribute("href") || el.getAttribute("xlink:href");
+            if (svgHref && !el.getAttribute("data-faz-href") && _fazImgShouldBlock(el, svgHref)) {
+                el.setAttribute("data-faz-href", svgHref);
+                el.setAttribute("data-faz-category", _fazImgCategory(svgHref));
+                el.removeAttribute("href");
+                try { el.removeAttributeNS("http://www.w3.org/1999/xlink", "href"); } catch (e) { /* not namespaced */ }
+                el.removeAttribute("xlink:href");
+            }
+        }
+        // Any element at all, so it is checked outside the tag branches: the
+        // attribute is what fetches, not the tag.
+        var bg = el.getAttribute("background");
+        if (bg && !el.getAttribute("data-faz-background") && _fazImgShouldBlock(el, bg)) {
+            el.setAttribute("data-faz-background", bg);
+            el.setAttribute("data-faz-category", _fazImgCategory(bg));
+            el.removeAttribute("background");
+        }
+        if (tag === "link") {
             var href = el.getAttribute("href");
             var rel = (el.getAttribute("rel") || "").toLowerCase();
             // Same rel set the server-side pass gates (process_link_tag in
@@ -6065,6 +6162,45 @@ function _fazUnblockServerSide() {
             el.src = imgSrc;
             if (!el.getAttribute("src")) return; // gate re-parked it — stay parked, recoverable
             el.removeAttribute("data-faz-src");
+        });
+
+    // 3a-bis. The SVG namespace. Restored as the SVG2 `href` whatever spelling
+    // it arrived in: both park into one attribute precisely so there is one
+    // restore branch, and `href` is honoured by every engine in the support
+    // matrix. Using el.src here would write an expando and leave the element
+    // parked forever, which is how a delayed resource becomes a dead one.
+    document.querySelectorAll('image[data-faz-href][data-faz-category], use[data-faz-href][data-faz-category], script[data-faz-href][data-faz-category]')
+        .forEach(function (el) {
+            var cat = el.getAttribute("data-faz-category");
+            var href = el.getAttribute("data-faz-href");
+            if (_fazShouldBlockResource(cat, href, el.getAttribute("data-faz-service") || "")) return;
+            if (!_fazIsAllowedScheme(href)) return;
+            el.setAttribute("href", href);
+            if (!el.getAttribute("href")) return; // the gate re-parked it — stay parked, recoverable
+            el.removeAttribute("data-faz-href");
+        });
+
+    // 3a-quater. An iframe's srcdoc, parked whole.
+    document.querySelectorAll('iframe[data-faz-srcdoc][data-faz-category]')
+        .forEach(function (el) {
+            var cat = el.getAttribute("data-faz-category");
+            var doc = el.getAttribute("data-faz-srcdoc");
+            if (_fazShouldBlockResource(cat, doc, el.getAttribute("data-faz-service") || "")) return;
+            el.setAttribute("srcdoc", doc);
+            if (!el.getAttribute("srcdoc")) return; // the gate re-parked it
+            el.removeAttribute("data-faz-srcdoc");
+        });
+
+    // 3a-ter. The legacy `background` attribute, on whatever element carried it.
+    document.querySelectorAll('[data-faz-background][data-faz-category]')
+        .forEach(function (el) {
+            var cat = el.getAttribute("data-faz-category");
+            var bg = el.getAttribute("data-faz-background");
+            if (_fazShouldBlockResource(cat, bg, el.getAttribute("data-faz-service") || "")) return;
+            if (!_fazIsAllowedScheme(bg)) return;
+            el.setAttribute("background", bg);
+            if (!el.getAttribute("background")) return; // the gate re-parked it
+            el.removeAttribute("data-faz-background");
         });
 
     // 3b. srcset parked by the srcset gates (setAttribute / property setter / parser).

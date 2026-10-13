@@ -759,6 +759,82 @@ console.log('\nbootstrap: the backstop covers stylesheets and shadow trees too')
   }
 }
 
+console.log('\nbootstrap: the routes indexed on nodeName, and the two attributes with no element');
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const XLINK_NS = 'http://www.w3.org/1999/xlink';
+
+{
+  // The element map and the DOM backstop were both indexed on nodeName, which
+  // is uppercase only for HTML elements — so `attrs[el.nodeName]` was undefined
+  // for the whole SVG namespace and neither gate ever saw it. <image> is an
+  // <img> by another name; <use> fetches an external document; an SVG <script>
+  // carries its URL in href and RUNS.
+  const { window, document, nativeGetAttribute } = boot();
+  const sheet = document.createElementNS(SVG_NS, 'image');
+  sheet.setAttribute('href', 'https://tracker.test/svg-a.png');
+  const legacy = document.createElementNS(SVG_NS, 'image');
+  legacy.setAttributeNS(XLINK_NS, 'xlink:href', 'https://tracker.test/svg-b.png');
+  eq('an SVG <image> href is staged, not applied', nativeGetAttribute.call(sheet, 'href'), null);
+  eq('and reads back as applied, which is what libraries check', sheet.getAttribute('href'), 'https://tracker.test/svg-a.png');
+  eq('setAttributeNS is gated too, since it is the only way to write xlink:href',
+    nativeGetAttribute.call(legacy, 'xlink:href'), null);
+  runtimeHandoff(window);
+  eq('both are applied at the handoff', nativeGetAttribute.call(sheet, 'href'), 'https://tracker.test/svg-a.png');
+  eq('including the legacy spelling', nativeGetAttribute.call(legacy, 'xlink:href'), 'https://tracker.test/svg-b.png');
+}
+
+{
+  // The safety release parks it where a restore pass can find it, under the
+  // same attribute the server-side pass and the runtime use.
+  const { window, document, nativeGetAttribute } = boot();
+  const sheet = document.createElementNS(SVG_NS, 'use');
+  document.body.appendChild(sheet);
+  sheet.setAttribute('href', 'https://tracker.test/sprite.svg#icon');
+  await release(window);
+  eq('an SVG <use> is not left live', nativeGetAttribute.call(sheet, 'href'), null);
+  eq('its URL is parked where the runtime restores from',
+    nativeGetAttribute.call(sheet, 'data-faz-href'), 'https://tracker.test/sprite.svg#icon');
+}
+
+{
+  // `background` belongs to no tag in particular — it is honoured on <body> and
+  // every table part — so it is held on whatever element carries it rather than
+  // through a list of tags to forget something from.
+  const { window, document, nativeGetAttribute } = boot();
+  const table = document.createElement('table');
+  document.body.appendChild(table);
+  table.setAttribute('background', 'https://tracker.test/bg.png');
+  eq('the legacy background attribute is staged', nativeGetAttribute.call(table, 'background'), null);
+  await release(window);
+  eq('and parked on the safety release', nativeGetAttribute.call(table, 'data-faz-background'), 'https://tracker.test/bg.png');
+}
+
+{
+  // srcdoc is a DOCUMENT in an attribute: the engine parses it into a context
+  // no gate here can reach, so the unit of judgement is the whole attribute and
+  // the question is whether its markup names anything cross-origin.
+  const { window, document, nativeGetAttribute } = boot();
+  const frame = document.createElement('iframe');
+  document.body.appendChild(frame);
+  frame.srcdoc = '<img src="https://tracker.test/in-doc.png">';
+  eq('a srcdoc naming a third party is staged', nativeGetAttribute.call(frame, 'srcdoc'), null);
+  await release(window);
+  eq('and parked rather than applied', nativeGetAttribute.call(frame, 'data-faz-srcdoc'), '<img src="https://tracker.test/in-doc.png">');
+}
+
+{
+  // The other error direction, which decides whether this is usable: a srcdoc
+  // that names nothing remote is the site's own markup and must be released.
+  const { window, document, nativeGetAttribute } = boot();
+  const frame = document.createElement('iframe');
+  document.body.appendChild(frame);
+  frame.srcdoc = '<p>first-party markup</p><img src="/local.png">';
+  await release(window);
+  eq('a same-origin srcdoc is released by the safety policy',
+    nativeGetAttribute.call(frame, 'srcdoc'), '<p>first-party markup</p><img src="/local.png">');
+}
+
 console.log('\nbootstrap: srcset and imagesrcset are candidate lists, not URLs');
 
 // Resolving the whole list as one URL answers about the FIRST candidate only —

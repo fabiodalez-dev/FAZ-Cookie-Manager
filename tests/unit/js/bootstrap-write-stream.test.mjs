@@ -110,10 +110,16 @@ const CASES = [
   // insertion mode, so nothing is built and nothing fetches. A hand-written
   // predicate withdrew here for nothing.
   [[['<frame src=x>']], false, 'a <frame> in body context, which the parser drops'],
-  // An SVG <image href> is outside the element set this file and the runtime's
-  // observer guard at all, so the exemption is irrelevant to it: it was never
-  // judged before this change either. Recorded as the limit it is.
-  [[['<svg><image href=x></svg>']], false, 'an svg image (outside the guarded element set — known limit)'],
+  // An SVG <image href> used to be outside the element set entirely — this
+  // file's, the runtime's and the server pass's — so the exemption was
+  // irrelevant to it and this row expected `false` as the limit it was. The
+  // namespace is guarded in all three now, so a written one is something the
+  // backstop WOULD judge, and the exemption has to go.
+  [[['<svg><image href=x></svg>']], true, 'an svg image, now that the namespace is guarded'],
+  [[['<svg><image xlink:href=x></svg>']], true, 'the same through the legacy spelling'],
+  // The legacy presentation attribute, for the same reason: `[background]` is
+  // in the element list as an attribute selector, so a written one is judged.
+  [[['<table background=x></table>']], true, 'a table carrying the legacy background attribute'],
   // Markup with nothing to judge does not withdraw: the predicate asks the
   // backstop's own element list, so a written <p> changes nothing about what
   // the backstop would have done.
