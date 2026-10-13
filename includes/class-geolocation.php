@@ -93,6 +93,37 @@ class Geolocation {
 	 *                                 Pass null/empty to fall back to client IP.
 	 * @return string Two-letter country code or empty string.
 	 */
+	/**
+	 * Whether a request header is contributing to the country for this request.
+	 *
+	 * The transient cache below is keyed on the resolved ADDRESS alone, and the
+	 * headers are not part of that key. An address is not always one visitor —
+	 * a corporate NAT, a mobile carrier's CGNAT, a shared proxy — so a country
+	 * that came from one visitor's header would be served to the next visitor
+	 * on the same address for an hour, and with it the wrong consent regime.
+	 * Where the origin is reachable directly it is worse than drift: the header
+	 * is then chosen by whoever sent it, and the hour of cache is a poisoning
+	 * window for everybody behind that address.
+	 *
+	 * So a header-derived country is never cached. Nothing is lost: reading a
+	 * header costs nothing and is already per-request, while the cache exists
+	 * for the sources that are expensive — the MaxMind lookup and the outbound
+	 * HTTP one.
+	 *
+	 * @since 1.34.1
+	 * @return bool
+	 */
+	private static function country_header_in_play() {
+		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			&& self::cf_peer_is_trusted()
+			&& ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		) {
+			return true;
+		}
+		return apply_filters( 'faz_trust_geoip_country_code', false )
+			&& ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+	}
+
 	public static function get_country( $ip_override = null ) {
 		$ip = is_string( $ip_override ) && '' !== $ip_override ? $ip_override : self::get_client_ip();
 		if ( empty( $ip ) || in_array( $ip, array( '127.0.0.1', '::1' ), true ) ) {
@@ -103,18 +134,24 @@ class Geolocation {
 			return self::$country_cache[ $ip ];
 		}
 
-		// Check transient cache.
+		// A header is in play: resolve it per request and share nothing. See
+		// country_header_in_play() — the key here is the address, and an
+		// address is not always one visitor.
+		$header_in_play = self::country_header_in_play();
+
 		$cache_key = 'faz_geo_' . md5( $ip );
-		$cached    = get_transient( $cache_key );
-		if ( false !== $cached ) {
-			self::$country_cache[ $ip ] = $cached;
-			return $cached;
+		if ( ! $header_in_play ) {
+			$cached = get_transient( $cache_key );
+			if ( false !== $cached ) {
+				self::$country_cache[ $ip ] = $cached;
+				return $cached;
+			}
 		}
 
 		$country = self::detect_country( $ip );
 
-		// Cache for 1 hour.
-		if ( ! empty( $country ) ) {
+		// Cache for 1 hour, unless a header contributed to the answer.
+		if ( ! empty( $country ) && ! $header_in_play ) {
 			set_transient( $cache_key, $country, HOUR_IN_SECONDS );
 		}
 

@@ -60,10 +60,22 @@ namespace {
 	function wp_upload_dir() {
 		return array( 'basedir' => rtrim( ABSPATH, '/' ), 'baseurl' => 'http://example.test' );
 	}
+	// Registrano davvero: uno stub che butta via la scrittura farebbe passare
+	// a vuoto qualunque asserzione su cosa finisce in cache.
 	function get_transient( $key ) {
-		return false;
+		return array_key_exists( $key, $GLOBALS['__faz_transients'] ?? array() )
+			? $GLOBALS['__faz_transients'][ $key ]
+			: false;
 	}
 	function set_transient( $key, $value, $ttl = 0 ) {
+		if ( ! isset( $GLOBALS['__faz_transients'] ) ) {
+			$GLOBALS['__faz_transients'] = array();
+		}
+		$GLOBALS['__faz_transients'][ $key ] = $value;
+		return true;
+	}
+	function delete_transient( $key ) {
+		unset( $GLOBALS['__faz_transients'][ $key ] );
 		return true;
 	}
 	function faz_resolve_client_ip() {
@@ -403,6 +415,21 @@ namespace {
 	$GLOBALS['__faz_geoip_results'] = array( '203.0.113.7' => 'FR' );
 	Geolocation::reset_runtime_cache();
 	faz_is( Geolocation::get_country(), '', 'un vero disaccordo fra due fonti fa ancora scattare il consenso' );
+	// Un paese che viene da un'intestazione non si mette in cache: la chiave e'
+	// l'indirizzo, e un indirizzo non e' sempre un visitatore solo. Altrimenti
+	// il paese del primo arrivato dietro un NAT resterebbe per un'ora a tutti
+	// gli altri, e con esso il regime di consenso sbagliato.
+	$GLOBALS['__faz_transients'] = array();
+	Geolocation::reset_runtime_cache();
+	Geolocation::get_country( '203.0.113.77' );
+	$cached_keys = array_filter(
+		array_keys( (array) ( $GLOBALS['__faz_transients'] ?? array() ) ),
+		function ( $k ) {
+			return 0 === strpos( $k, 'faz_geo_' );
+		}
+	);
+	faz_is( count( $cached_keys ), 0, "un paese derivato da CF-IPCountry non viene messo in cache per indirizzo" );
+
 	unset( $_SERVER['HTTP_CF_IPCOUNTRY'], $_SERVER['REMOTE_ADDR'] );
 	faz_reset();
 	$GLOBALS['__faz_options']['faz_settings'] = array( 'geolocation' => array( 'geo_targeting' => true ) );
