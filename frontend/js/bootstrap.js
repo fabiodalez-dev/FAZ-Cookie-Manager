@@ -13,7 +13,8 @@
  * that path. Nothing third-party is released without a consent decision; some
  * first-party work is.
  *
- * Known limits, shared with the runtime:
+ * Known limits, shared with the runtime. Each one is reproducible, and each is
+ * out of scope for this file rather than a gap it has not got to:
  *   - a same-origin URL that REDIRECTS to a third party is released, because
  *     nothing on the client can see where a URL lands before requesting it
  *     (see local() below); server-side blocking is where that is answered;
@@ -22,7 +23,29 @@
  *     setAttribute on the element: SVGAnimatedString.baseVal is not
  *     interceptable without wrapping the `href` GETTER to hand out a proxy,
  *     which neither file does. Libraries write SVG URLs through
- *     setAttribute/setAttributeNS, which both files gate.
+ *     setAttribute/setAttributeNS, which both files gate;
+ *   - an inline third-party snippet — a <script> with no src and none of the
+ *     plugin's own blocking attributes — runs: nothing here can read a body
+ *     and tell a tracker from a page builder's configuration, and the runtime
+ *     keys its script gate on the same attributes (see resources() below);
+ *   - the `contentWindow` of a same-origin frame is another realm with its
+ *     own prototypes, and nothing here is installed in it: a script that
+ *     fetches through `frame.contentWindow.fetch` or builds elements with the
+ *     frame's document is judged by whatever that frame's own page loaded;
+ *   - page code that runs SYNCHRONOUSLY inside a replay on the safety release
+ *     — a load handler fired by an insertion, a MutationObserver callback
+ *     delivered in the same task — runs with the `replaying` flag set and
+ *     passes every wrapper here unjudged for that extent; the flag exists so a
+ *     replay is not caught by its own interceptor, and it cannot tell a
+ *     replay from code the replay happened to trigger;
+ *   - `el.style.backgroundImage = 'url(…)'`, `el.style.setProperty(…)` and
+ *     `el.style.cssText` write CSS through CSSStyleDeclaration, which neither
+ *     file gates; the server-side pass rewrites inline `style` attributes it
+ *     renders, and that is the coverage there is;
+ *   - srcdoc is judged by the absolute and protocol-relative URLs the markup
+ *     names: a relative URL inside the sub-document resolves against the
+ *     parent's origin and is released, as the redirect limit above says, and
+ *     nothing inside that document is intercepted once it is parsed.
  */
 (function (w, d) {
     'use strict';
@@ -240,9 +263,10 @@
         undo.push(function () { obj[name] = original; });
     }
     // video, audio, embed, object, track and input[type=image] fetch exactly the
-    // way img and iframe do, and the runtime's own observer walks the DOM rather
-    // than an element allowlist, so leaving them out gave the hold window a
-    // narrower surface than the window it opened.
+    // way img and iframe do. The runtime's own observer is an ALLOWLIST too —
+    // _fazParkResourceElementIfBlocked branches on the tag name — and this
+    // list is kept at least as wide as that one, so the hold window never
+    // opens a surface the window after it does not cover.
     // `image` and `use` are the SVG namespace's own fetching elements: <image>
     // is an <img> by another name, and <use href="https://x/sprite.svg#icon">
     // fetches an external document. A CSS type selector with no namespace
