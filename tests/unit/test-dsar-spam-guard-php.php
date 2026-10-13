@@ -620,6 +620,31 @@ namespace {
 		assert_eq( count( $GLOBALS['__faz_transients'] ), 0, "and no bucket is written for $what" );
 	}
 
+	// A key that already carries its own identity (a consent_id hash) loses
+	// nothing by dropping the address: 'entity' scope falls back to the prefix
+	// alone instead of skipping, so the replay window survives a shared address.
+	foreach ( array(
+		'a Cloudflare edge address' => '172.70.100.5',
+		'a loopback peer'           => '127.0.0.1',
+		'no address at all'         => '',
+	) as $what => $shared_ip ) {
+		reset_state();
+		$GLOBALS['__faz_ip'] = $shared_ip;
+		check( ! faz_throttle_request( 'faz_consent_abcd1234', 300, 'entity' ), "an entity-scoped first request behind $what is not throttled" );
+		check( faz_throttle_request( 'faz_consent_abcd1234', 300, 'entity' ), "but the second one inside the window is: the prefix alone is the key" );
+		check( ! faz_throttle_request( 'faz_consent_ffff0000', 300, 'entity' ), "and a different entity behind $what has its own window" );
+		check( ! faz_throttle_request( 'faz_consent_ip', 10, 'ip' ), "while an ip-scoped bucket behind $what is still skipped" );
+		check( ! faz_throttle_request( 'faz_consent_ip', 10, 'ip' ), 'twice' );
+		check( isset( $GLOBALS['__faz_transients']['faz_consent_abcd1234_shared'] ), "the shared key is the prefix plus _shared, for $what" );
+	}
+	// On an identified address the scope changes nothing: the key is per address.
+	reset_state();
+	$GLOBALS['__faz_ip'] = '203.0.113.7';
+	check( ! faz_throttle_request( 'faz_consent_abcd1234', 300, 'entity' ), 'entity scope on a public address: first request free' );
+	check( faz_throttle_request( 'faz_consent_abcd1234', 300, 'entity' ), 'second throttled' );
+	check( ! isset( $GLOBALS['__faz_transients']['faz_consent_abcd1234_shared'] ), 'and the address, not the shared key, is what it was keyed on' );
+
+
 	// ── 3c. Which forwarded value may be believed ───────────────────────────
 
 
