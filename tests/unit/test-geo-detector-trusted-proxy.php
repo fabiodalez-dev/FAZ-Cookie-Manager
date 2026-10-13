@@ -168,11 +168,6 @@ assert_eq(
 );
 unset( $GLOBALS['_faz_test_filters']['faz_trusted_proxy_cidrs'] );
 
-// A properly configured Cloudflare origin may not look like one. nginx's
-// real_ip module and Apache's mod_remoteip REPLACE REMOTE_ADDR with the
-// address CF-Connecting-IP carries, so the peer PHP sees is the visitor and no
-// range test can match it. The equality is the signal that something already
-// trusted the header enough to rewrite the peer with it.
 // A Cloudflare origin that restores the visitor's address does not look like
 // one: nginx real_ip, Apache mod_remoteip and most managed hosts leave
 // REMOTE_ADDR as the visitor, or as 127.0.0.1 behind a loopback proxy. No
@@ -254,7 +249,49 @@ $_SERVER = array(
 $ip = $resolve_client->invoke( $detector );
 assert_eq( $ip, '2001:db8::42', 'CF v6 edge + v6 CF-Connecting-IP → trusted' );
 
+// ---------- detect() — a header-derived country is not cached ----------
+// The object cache is keyed on the address hash alone, and an address is not
+// always one visitor: cached, the first arrival's CF-IPCountry would be served
+// to everybody behind the same NAT or proxy for an hour. Geolocation already
+// refuses to cache such a country; the detector keeps its own copy and must
+// refuse the same way.
+
+$cached_entries = function () {
+	return count(
+		array_filter(
+			array_keys( $GLOBALS['_faz_test_cache'] ),
+			function ( $k ) {
+				return 0 === strpos( $k, Geo_Detector::CACHE_GROUP . ':' );
+			}
+		)
+	);
+};
+
+$GLOBALS['_faz_test_cache']                                    = array();
+$GLOBALS['_faz_test_filters']['faz_trust_cf_ipcountry_header'] = function () {
+	return true;
+};
+$_SERVER = array(
+	'REMOTE_ADDR'       => '162.158.42.42', // genuine CF edge
+	'HTTP_CF_IPCOUNTRY' => 'DE',
+);
+$result  = $detector->detect();
+assert_eq( $result['country'], 'DE', 'trusted CF-IPCountry from a Cloudflare peer resolves the country' );
+assert_eq( $result['source'], 'cf_header', 'and the source says it came from the header' );
+assert_eq( $cached_entries(), 0, 'a header-derived country is NOT written to the object cache' );
+assert_eq( $detector->detect()['country'], 'DE', 'a second call re-reads the header instead' );
+
+// The same address without the header is cached: the assertion above is about
+// the SOURCE, not about caching having been switched off.
+$GLOBALS['_faz_test_cache'] = array();
+$_SERVER                    = array( 'REMOTE_ADDR' => '162.158.42.42' );
+$result                     = $detector->detect();
+assert_eq( $result['source'], 'unknown', 'with no header and no database the source is unknown' );
+assert_eq( $cached_entries(), 1, 'and that result IS cached under the address' );
+unset( $GLOBALS['_faz_test_filters']['faz_trust_cf_ipcountry_header'] );
+
 // ---------- Additional CIDR boundary cases (round-2 regression guards) ----------
+
 
 // /0 special case (CIDR matches the entire address space).
 assert_true(

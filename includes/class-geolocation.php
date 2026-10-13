@@ -93,37 +93,6 @@ class Geolocation {
 	 *                                 Pass null/empty to fall back to client IP.
 	 * @return string Two-letter country code or empty string.
 	 */
-	/**
-	 * Whether a request header is contributing to the country for this request.
-	 *
-	 * The transient cache below is keyed on the resolved ADDRESS alone, and the
-	 * headers are not part of that key. An address is not always one visitor —
-	 * a corporate NAT, a mobile carrier's CGNAT, a shared proxy — so a country
-	 * that came from one visitor's header would be served to the next visitor
-	 * on the same address for an hour, and with it the wrong consent regime.
-	 * Where the origin is reachable directly it is worse than drift: the header
-	 * is then chosen by whoever sent it, and the hour of cache is a poisoning
-	 * window for everybody behind that address.
-	 *
-	 * So a header-derived country is never cached. Nothing is lost: reading a
-	 * header costs nothing and is already per-request, while the cache exists
-	 * for the sources that are expensive — the MaxMind lookup and the outbound
-	 * HTTP one.
-	 *
-	 * @since 1.34.1
-	 * @return bool
-	 */
-	private static function country_header_in_play() {
-		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false )
-			&& self::cf_peer_is_trusted()
-			&& ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-		) {
-			return true;
-		}
-		return apply_filters( 'faz_trust_geoip_country_code', false )
-			&& ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-	}
-
 	public static function get_country( $ip_override = null ) {
 		$ip = is_string( $ip_override ) && '' !== $ip_override ? $ip_override : self::get_client_ip();
 		if ( empty( $ip ) || in_array( $ip, array( '127.0.0.1', '::1' ), true ) ) {
@@ -157,6 +126,41 @@ class Geolocation {
 
 		self::$country_cache[ $ip ] = $country;
 		return $country;
+	}
+
+	/**
+	 * Whether a request header is contributing to the country for this request.
+	 *
+	 * The transient cache in get_country() is keyed on the resolved ADDRESS
+	 * alone, and the headers are not part of that key. An address is not always
+	 * one visitor — a corporate NAT, a mobile carrier's CGNAT, a shared proxy —
+	 * so a country that came from one visitor's header would be served to the
+	 * next visitor on the same address for an hour, and with it the wrong
+	 * consent regime. Where the origin is reachable directly it is worse than
+	 * drift: the header is then chosen by whoever sent it, and the hour of
+	 * cache is a poisoning window for everybody behind that address.
+	 *
+	 * So a header-derived country is never cached. Nothing is lost: reading a
+	 * header costs nothing and is already per-request, while the cache exists
+	 * for the sources that do cost something — the PHP GeoIP extension and the
+	 * MaxMind database lookup. No source of detect_country() makes an outbound
+	 * call; the IPinfo VPN gate lives in Geo_Detector behind a cache of its own.
+	 *
+	 * Public because Geo_Detector keeps a second, object-cache copy of the
+	 * country under the same address-only key and must apply the same rule.
+	 *
+	 * @since 1.34.1
+	 * @return bool
+	 */
+	public static function country_header_in_play() {
+		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			&& self::cf_peer_is_trusted()
+			&& ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		) {
+			return true;
+		}
+		return apply_filters( 'faz_trust_geoip_country_code', false )
+			&& ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 	}
 
 	/**
@@ -711,6 +715,20 @@ class Geolocation {
 	 *    word (`country_filter`), and `faz_has_country_signal_source` forced
 	 *    true is the documented way to say an edge injects the country by other
 	 *    means (`signal_forced_by_filter`).
+	 *  - The Cloudflare opt-in is only half of what the resolver checks: the
+	 *    header is read when `faz_peer_is_cloudflare()` also vouches for the
+	 *    peer, and on the common origin that restores the visitor's address
+	 *    (nginx real_ip_header, Apache mod_remoteip, most managed hosts) that
+	 *    is false until the operator adds `faz_remote_addr_rewritten_by_cloudflare`.
+	 *    The opt-in alone would then report "working" while every visitor got
+	 *    the fallback, silently. So on an interactive admin request the status
+	 *    probes the predicate on the request in hand — the administrator's own
+	 *    traffic crosses the same edge as the visitors', so it is a valid
+	 *    sample — and reports `peer_not_cloudflare` when it fails. The probe is
+	 *    skipped on cron, WP-CLI, AJAX and REST, which carry no header and
+	 *    would report the context they were asked from, not the configuration;
+	 *    there the answer stays the declared one, as has_country_source()
+	 *    argues it must.
 	 *
 	 * @since 1.34.0
 	 * @param bool $force Recompute even when a fresh cached result exists.
@@ -727,14 +745,22 @@ class Geolocation {
 			: ( apply_filters( 'faz_trust_geoip_country_code', false ) ? 'mod_geoip' : '' );
 		if ( '' !== $declared ) {
 			// A trust filter is a developer asserting the edge supplies the
-			// country. There is nothing here to probe — the header arrives on
-			// visitor requests, not on this one.
-			return array(
+			// country. The header itself cannot be probed — it arrives on
+			// visitor requests, not on this one — but for Cloudflare the PEER
+			// can be, and only on a request an administrator is looking at:
+			// their browser reaches the origin the way a visitor's does, so a
+			// peer the predicate rejects here is one it rejects for visitors.
+			$status = array(
 				'source'     => $declared,
 				'configured' => true,
 				'working'    => true,
 				'reason'     => 'declared_by_filter',
 			);
+			if ( 'cloudflare' === $declared && self::is_interactive_admin_request() && ! self::cf_peer_is_trusted() ) {
+				$status['working'] = false;
+				$status['reason']  = 'peer_not_cloudflare';
+			}
+			return $status;
 		}
 		// get_visitor_country() passes every resolved value — including '' —
 		// through this filter and routes on whatever comes back, so a callback
@@ -773,9 +799,38 @@ class Geolocation {
 	}
 
 	/**
+	 * Whether this is a request an administrator is looking at.
+	 *
+	 * The peer probe in source_status() is only meaningful on such a request:
+	 * cron, WP-CLI and AJAX/REST calls reach the origin from places visitors
+	 * never come from, and a verdict formed there would describe the caller,
+	 * not the site. The function_exists guards keep the predicate loadable in
+	 * the standalone unit harness, where it reads as "not interactive".
+	 *
+	 * @since 1.34.1
+	 * @return bool
+	 */
+	private static function is_interactive_admin_request() {
+		if ( ! function_exists( 'is_admin' ) || ! is_admin() ) {
+			return false;
+		}
+		if ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) {
+			return false;
+		}
+		if ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() ) {
+			return false;
+		}
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			return false;
+		}
+		return true;
+	}
+
+	/**
 	 * The built-in sources detect_country() consults without a trust filter.
 	 *
 	 * @since 1.34.0
+
 	 * @param bool $force Recompute the MMDB probe even when a cached result exists.
 	 * @return array{source:string,configured:bool,working:bool,reason:string}
 	 */

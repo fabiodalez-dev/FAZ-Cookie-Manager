@@ -138,9 +138,26 @@ class Geo_Detector {
 			'source'  => $source,
 		);
 
-		wp_cache_set( $ip_hash, $result, self::CACHE_GROUP, self::CACHE_TTL );
+		// Same rule as Geolocation::get_country(): a country that came from a
+		// request header is never cached. The key is the address alone, and an
+		// address is not always one visitor — a NAT, a carrier's CGNAT, a
+		// shared proxy — so the first arrival's header would be served to
+		// everybody behind that address for an hour, and with it the wrong
+		// consent regime. Reading a header is free and already per request;
+		// the cache exists for the lookups that cost something. The fallback
+		// path asks Geolocation the same question, because its mod_geoip
+		// variable is a header too wherever a fastcgi_param lets one through.
+		$from_header = 'cf_header' === $source
+			|| ( 'geolocation_fallback' === $source
+				&& class_exists( '\\FazCookie\\Includes\\Geolocation' )
+				&& method_exists( '\\FazCookie\\Includes\\Geolocation', 'country_header_in_play' )
+				&& \FazCookie\Includes\Geolocation::country_header_in_play() );
+		if ( ! $from_header ) {
+			wp_cache_set( $ip_hash, $result, self::CACHE_GROUP, self::CACHE_TTL );
+		}
 		return $result;
 	}
+
 
 	/**
 	 * Read CF-IPCountry header from $_SERVER.

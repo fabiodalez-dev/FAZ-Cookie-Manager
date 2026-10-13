@@ -595,7 +595,16 @@ defined( 'ABSPATH' ) || exit;
 									esc_html_e( 'A GeoLite2 database is installed but a test lookup returned no country, so it cannot be relied on — it may be truncated, corrupt or the wrong edition. Until it is repaired, every visitor is served the most-protective fallback rule set and the targeting options below have no effect. Download the database again in the MaxMind section further down.', 'faz-cookie-manager' );
 								} elseif ( 'php_geoip_probe_failed' === $faz_geo_reason ) {
 									esc_html_e( 'The PHP GeoIP extension is installed, but test lookups returned no country. Repair its database or download a MaxMind GeoLite2 database below. Until a source works, every visitor receives the most-protective fallback rule set and the targeting options have no effect.', 'faz-cookie-manager' );
+								} elseif ( 'peer_not_cloudflare' === $faz_geo_reason ) {
+									// The opt-in is half the gate; the peer is the
+									// other half, and source_status() probed it on
+									// this very request. An origin that restores
+									// the visitor's address never looks like
+									// Cloudflare, so without the second filter the
+									// header is never read and nobody is routed.
+									esc_html_e( 'The Cloudflare CF-IPCountry opt-in (faz_trust_cf_ipcountry_header) is active, but this request did not arrive from a Cloudflare address, so visitor countries will not resolve and every visitor is served the fallback rule set. If your server or host restores the visitor\'s own address at the origin (nginx real_ip_header, Apache mod_remoteip, most managed hosts), a developer must also add the faz_remote_addr_rewritten_by_cloudflare filter, which asserts that the rewrite happens only for Cloudflare\'s ranges and that the origin cannot be reached any other way.', 'faz-cookie-manager' );
 								} elseif ( 'module_untrusted' === $faz_geo_reason ) {
+
 									// The module being loaded is not the resolver
 									// using it: detect_country() reads its value only
 									// behind the trust filter, so a request header

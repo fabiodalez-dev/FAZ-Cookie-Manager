@@ -1022,7 +1022,13 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 		// intention; only a working lookup records a capability. $faz_geo_state
 		// separates the two, and the notice now fires for both "never set up"
 		// and "set up but not working", with different wording.
-		$faz_has_cf      = (bool) apply_filters( 'faz_trust_cf_ipcountry_header', false );
+		$faz_geo_reason   = isset( $faz_geo_state['reason'] ) ? (string) $faz_geo_state['reason'] : '';
+		// The opt-in counts as a source only while the peer check it depends on
+		// passes on this request: source_status() probes it on admin requests
+		// and answers peer_not_cloudflare when it fails, and an opt-in that
+		// resolves nobody's country is the "configured but not working" case.
+		$faz_has_cf       = (bool) apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			&& 'peer_not_cloudflare' !== $faz_geo_reason;
 		$faz_geo_degraded = ( 'degraded' === $faz_geo_mode );
 		$faz_has_maxmind  = ! empty( $faz_geo_state['working'] );
 
@@ -1075,7 +1081,7 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 							'code' => array(),
 						)
 					);
-					if ( 'module_untrusted' === ( isset( $faz_geo_state['reason'] ) ? (string) $faz_geo_state['reason'] : '' ) ) :
+					if ( 'module_untrusted' === $faz_geo_reason ) :
 						?>
 						<p style="margin:.5rem 0 0;">
 							<?php
@@ -1090,7 +1096,14 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 							?>
 						</p>
 						<?php
+					elseif ( 'peer_not_cloudflare' === $faz_geo_reason ) :
+						?>
+						<p style="margin:.5rem 0 0;">
+							<?php echo esc_html__( 'The Cloudflare CF-IPCountry opt-in (faz_trust_cf_ipcountry_header) is active, but this request did not arrive from a Cloudflare address, so visitor countries will not resolve and every visitor is served the fallback rule set. If your server or host restores the visitor\'s own address at the origin (nginx real_ip_header, Apache mod_remoteip, most managed hosts), a developer must also add the faz_remote_addr_rewritten_by_cloudflare filter, which asserts that the rewrite happens only for Cloudflare\'s ranges and that the origin cannot be reached any other way.', 'faz-cookie-manager' ); ?>
+						</p>
+						<?php
 					endif;
+
 					?>
 				</div>
 			</div>
