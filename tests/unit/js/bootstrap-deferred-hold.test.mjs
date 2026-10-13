@@ -716,6 +716,72 @@ console.log('\nbootstrap: the backstop covers stylesheets and shadow trees too')
   ok('a server-rendered <style> is not touched', sheet.textContent.indexOf('logo.png') !== -1);
 }
 
+// Once a document.write has withdrawn the parser exemption, every <style> the
+// parser builds after it reaches the backstop — and the backstop asked the
+// broad question meant for script output, which a theme's comment or an
+// icon-font escape answers "yes" to. Measured: after one written iframe, the
+// theme sheet below was "" before the handoff and still "" after the safety
+// release. A parser-built sheet has no URL to hide; it is judged on the URLs
+// it names, by origin. A theme sheet stays live; a tracker @import is still
+// held.
+const THEME_CSS = '/* theme */ body{color:#123} .icon:before{content:"\\f101"}';
+// What a write leaves behind in jsdom: the document reset and rebuilt from the
+// written markup. The observer watches the document itself, so it survives.
+function writeThen(document, nativeAppendChild, css) {
+  document.write('<iframe src="https://ads.test/x"></iframe>');
+  const sheet = document.createElement('style');
+  nativeAppendChild.call(sheet, document.createTextNode(css));
+  nativeAppendChild.call(document.head || document.documentElement, sheet);
+  return sheet;
+}
+
+{
+  const { window, document, nativeAppendChild } = boot();
+  const sheet = writeThen(document, nativeAppendChild, THEME_CSS);
+  // Microtasks only: the observer delivers on them, while a macrotask would
+  // let jsdom fire its own DOMContentLoaded and the safety release would
+  // decide before the handoff below could.
+  await Promise.resolve();
+  await Promise.resolve();
+  eq('after a write, a first-party sheet with a comment and an icon escape stays live', sheet.textContent, THEME_CSS);
+  // Never parked, so no task holds its text: whichever of the handoff and
+  // jsdom's own DOMContentLoaded comes first, the sheet is not theirs to touch.
+  runtimeHandoff(window);
+  eq('and keeps its text once the queue drains', sheet.textContent, THEME_CSS);
+  eq('with no marker on it', sheet.getAttribute('data-faz-css'), null);
+}
+
+{
+  const { window, document, nativeAppendChild } = boot();
+  const sheet = writeThen(document, nativeAppendChild, THEME_CSS);
+  await new Promise((r) => setTimeout(r, 0));
+  eq('premise: live before the release', sheet.textContent, THEME_CSS);
+  await release(window);
+  eq('and keeps its text through the safety release', sheet.textContent, THEME_CSS);
+}
+
+{
+  const { window, document, nativeAppendChild, nativeGetAttribute } = boot();
+  const sheet = writeThen(document, nativeAppendChild, '@import url(https://tracker.test/after-write.css);');
+  await new Promise((r) => setTimeout(r, 0));
+  eq('a parser-built sheet naming a cross-origin @import after a write is still held', sheet.textContent, '');
+  ok('and parked', !!nativeGetAttribute.call(sheet, 'data-faz-css'));
+}
+
+{
+  // The broad question is still the one asked of a sheet a SCRIPT sink built:
+  // there the string was in the script's hands, and an escape can spell a
+  // URL a regex does not see.
+  const { window, document, nativeAppendChild, nativeGetAttribute } = boot();
+  const frag = document.createRange().createContextualFragment('<style id="escaped">.p{background-image:u\\72 l(https://tracker.test/esc.png)}</style>');
+  nativeAppendChild.call(document.head, frag);
+  await Promise.resolve();
+  await Promise.resolve();
+  const sheet = document.getElementById('escaped');
+  eq('a sink-built sheet hiding a URL behind an escape is still held', sheet.textContent, '');
+  ok('and parked', !!nativeGetAttribute.call(sheet, 'data-faz-css'));
+}
+
 {
   // A shadow root is a SEPARATE tree: the observer on the document never
   // reaches it, and the markup sinks' tag pass did not cover its innerHTML

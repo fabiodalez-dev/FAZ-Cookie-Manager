@@ -237,10 +237,21 @@
     // match, so handing it over would turn a delayed stylesheet into a dead one
     // — the exact trade parkTarget() below refuses to make. Handing back a live
     // <style> lets the runtime's own CSS gate judge it with real consent.
-    function parkSheet(el) {
+    //
+    // `judge` is the question asked of the text, and it depends on who wrote
+    // the sheet. One a script sink built — tagged, so the whole string was in
+    // the script's hands — gets the broad cssURL(): a regex cannot tell what
+    // an escape or a comment is hiding, and holding costs a replay. One the
+    // PARSER built is different: it reaches here only once a document.write
+    // has withdrawn the exemption for the server's markup, and from then on
+    // every theme stylesheet after it was emptied for a comment or an
+    // icon-font escape — a flash of unstyled content until the handoff, and
+    // on the safety release a theme never restored. The server's own sheet
+    // has no URL to hide; it is judged on the URLs it names, by origin.
+    function parkSheet(el, judge) {
         if (!nativeTextSet || !isStyle(el)) return;
         var text = String(el.textContent == null ? '' : el.textContent);
-        if (!text || !cssURL(text)) return;
+        if (!text || !(judge || cssURL)(text)) return;
         // Already parked: by the server-side pass, by the runtime, or by this
         // function on an earlier record for the same element.
         if (nativeHas.call(el, 'data-faz-css')) return;
@@ -812,7 +823,40 @@
     // comment, which can spell a property the browser understands and a regex
     // does not. Holding more costs a replay; holding less costs a leak.
     function cssURL(value) {
-        return /url|@import|image-set|src\s*\(|\\|\/\*/i.test(String(value || ''));
+        return /url\s*\(|@import|image-set|src\s*\(|\\|\/\*/i.test(String(value || ''));
+    }
+    // The URLs a regex can read out of CSS text: url() in its three spellings
+    // and the string form of @import — the same two patterns the runtime
+    // extracts (_fazCssUrls, script.js), kept identical on purpose, so a
+    // decision taken here on them is the decision the runtime would take on
+    // the same text.
+    var CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi;
+    var CSS_IMPORT = /(@import\s+)(["'])([^"']+)\2/gi;
+    function cssUrls(text) {
+        var urls = [], value = String(text == null ? '' : text);
+        value.replace(CSS_URL, function (match, dq, sq, bare) {
+            urls.push(dq || sq || bare || '');
+            return match;
+        });
+        value.replace(CSS_IMPORT, function (match, prefix, quote, url) {
+            urls.push(url || '');
+            return match;
+        });
+        return urls;
+    }
+    // The narrow question, for a sheet whose text is complete and whose author
+    // is the parser: does it name a URL that can reach a third party? Judged on
+    // the URLs that can be read out of it, by the same origin test every
+    // resource element gets, with an unresolvable one counting as remote. A
+    // comment or an escape on its own is not a reason — a theme's `/* header
+    // */` and an icon font's `content:"\f101"` are what those look like in
+    // practice, and cssURL() above held both.
+    function cssFetches(text) {
+        var urls = cssUrls(text);
+        for (var i = 0; i < urls.length; i++) {
+            if (!local(urls[i])) return true;
+        }
+        return false;
     }
     // During a normal handoff the runtime's permanent interceptors decide what
     // may load, so everything replays. During a safety release there are no
@@ -1544,7 +1588,11 @@
                     // judge, and it already did. See fromScript() above.
                     if (!fromScript(node)) continue;
                     resources(node).forEach(guard);
-                    sheets(node).forEach(parkSheet);
+                    // Tagged means a script sink built it; untagged here means
+                    // the parser did (or a wrapper above already judged it).
+                    sheets(node).forEach(function (el) {
+                        parkSheet(el, sunk && !sunk.has(el) ? cssFetches : cssURL);
+                    });
                 }
             }
         }
