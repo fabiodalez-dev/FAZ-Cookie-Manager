@@ -38,6 +38,7 @@ let savedSettings = '';
 let lockHeld = false;
 let litespeedWasActive = false;
 let fixtureWasActive = false;
+let auditLabWasActive = false;
 
 test.describe.configure({ mode: 'serial' });
 
@@ -134,6 +135,17 @@ test.beforeAll(async ({}, testInfo) => {
     $s['languages'] = array( 'default' => 'en', 'selected' => array( 'en', 'it' ) );
     update_option( 'faz_settings', $s );
   `);
+  // Test 02b needs the jurisdiction runtime ON with a country source, which is
+  // what makes Cache Compatibility Mode stand down. That state comes from
+  // faz-e2e-audit-lab's forced `faz_geo_ruleset_runtime` filter — and eight
+  // other specs call deactivatePluginsExcept() without it, never restoring it.
+  // Running near the end of the alphabet, this file always found the fixture
+  // gone and 02b skipped itself on a derived predicate. Worse, test 02 then
+  // passed for the wrong reason: with the runtime already off, pinning the
+  // language needed no help from Cache Compatibility Mode at all.
+  auditLabWasActive = isPluginActive('faz-e2e-audit-lab');
+  ensureFixturePlugin('faz-e2e-audit-lab');
+
   ready = true;
 });
 
@@ -164,6 +176,9 @@ test.afterAll(() => {
     }
     if (!litespeedWasActive && isPluginActive('litespeed-cache')) {
       deactivate.push('litespeed-cache');
+    }
+    if (!auditLabWasActive && isPluginActive('faz-e2e-audit-lab')) {
+      deactivate.push('faz-e2e-audit-lab');
     }
     if (deactivate.length > 0) {
       try {
@@ -227,7 +242,12 @@ test.describe('WPML + LiteSpeed + Cache Compatibility Mode (wp.org report)', () 
       echo \\FazCookie\\Includes\\Cache_Compatibility::is_paused() ? '1' : '0';
       echo \\FazCookie\\Includes\\Geolocation::has_country_source() ? '1' : '0';
     `).trim();
-    test.skip(paused !== '11', `needs a paused mode with a country source (got is_paused/has_country_source = ${paused})`);
+    // Assert, never skip: beforeAll provisioned both halves, so a mismatch here
+    // means the stand-down path is broken — the thing this test exists to prove.
+    expect(
+      paused,
+      'is_paused/has_country_source: the mode must stand down (1) with a country source available (1)',
+    ).toBe('11');
 
     const resp = await request.get(`${WP_BASE}/?wpmllang=it`, {
       headers: { 'User-Agent': 'Mozilla/5.0 (FAZ-E2E WPML)' },

@@ -54,28 +54,56 @@ const removeLink = () => {
 test.describe('Verified footer withdrawal path', () => {
   test.skip(!WP_PATH, 'WP_PATH is required to install the footer-link fixture mu-plugin');
 
-  let revisitRequired = false;
+  let geoTargetingWasOn = false;
 
   test.beforeAll(() => {
-    // The lock only exists where a reachable rule set demands the control. On an
-    // install with jurisdiction routing off there is nothing to unlock, and the
-    // assertions below would pass for the wrong reason.
-    revisitRequired =
-      wpEval('echo \\FazCookie\\Frontend\\Includes\\Geo_Runtime::is_enabled() ? "yes" : "no";').trim() === 'yes';
+    // The lock only exists where a reachable rule set demands the control, so
+    // this spec used to read Geo_Runtime::is_enabled() and skip when it came
+    // back false. That made the coverage depend on ambient state: eight specs
+    // call deactivatePluginsExcept() without faz-e2e-audit-lab, and once that
+    // fixture's forced filter is gone the predicate falls through to Settings >
+    // Geolocation > Geo-Targeting — off by default. Running late in the
+    // alphabet, this file therefore skipped itself in every full-suite run and
+    // the loss looked like a property of the install.
+    //
+    // Provision the requirement instead of surrendering to it, and through the
+    // real setting rather than the fixture's filter, so the lock is observed in
+    // the state an administrator can actually produce.
+    geoTargetingWasOn =
+      wpEval(
+        '$s = get_option( "faz_settings", array() );' +
+          '$was = ! empty( $s["geolocation"]["geo_targeting"] );' +
+          'if ( ! $was ) { $s["geolocation"]["geo_targeting"] = true; update_option( "faz_settings", $s ); }' +
+          'echo $was ? "1" : "0";',
+      ).trim() === '1';
+
+    // Fail loudly rather than skip: after provisioning, a false predicate means
+    // the enforcement path itself is broken, which is exactly what this spec is
+    // here to catch.
+    expect(
+      wpEval('echo \\FazCookie\\Frontend\\Includes\\Geo_Runtime::is_enabled() ? "yes" : "no";').trim(),
+      'Geo-Targeting was just enabled, so the jurisdiction runtime must report itself enabled',
+    ).toBe('yes');
   });
 
   test.afterAll(() => {
     removeLink();
     setPath('widget');
     wpEval('delete_option( "faz_withdrawal_link_probe" ); echo "clean";');
+    if (!geoTargetingWasOn) {
+      wpEval(
+        '$s = get_option( "faz_settings", array() );' +
+          '$s["geolocation"]["geo_targeting"] = false;' +
+          'update_option( "faz_settings", $s );' +
+          'echo "restored";',
+      );
+    }
   });
 
   test('a link found on every page unlocks the revisit widget; removing it locks it again', async ({
     page,
     loginAsAdmin,
   }) => {
-    test.skip(!revisitRequired, 'jurisdiction routing is off on this install, so no rule set locks the widget');
-
     await loginAsAdmin(page);
 
     // --- 1. Before anything: the widget is the only route, so it is locked ---
@@ -139,8 +167,6 @@ test.describe('Verified footer withdrawal path', () => {
   });
 
   test('the runtime overlay stops forcing the widget on only while the route is verified', async ({ page }) => {
-    test.skip(!revisitRequired, 'jurisdiction routing is off on this install, so the overlay applies no requirement');
-
     // The admin screen is one surface; what the visitor receives is the other.
     // Assert on the config actually shipped to the page, with the saved banner
     // switch OFF — the state an administrator reaches after unlocking it.
