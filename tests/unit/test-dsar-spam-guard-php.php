@@ -129,6 +129,22 @@ namespace {
 		unset( $GLOBALS['__faz_options'][ $key ] );
 		return true;
 	}
+	// add_option() is the lock: it succeeds once and fails while the row
+	// exists, which is what makes it atomic on MySQL (INSERT IGNORE).
+	function add_option( $key, $value = '', $deprecated = '', $autoload = 'yes' ) {
+		if ( array_key_exists( $key, $GLOBALS['__faz_options'] ) ) {
+			return false;
+		}
+		$GLOBALS['__faz_options'][ $key ] = $value;
+		return true;
+	}
+	// For the REAL faz_throttle_request(), loaded from class-utils.php below.
+	function absint( $n ) {
+		return abs( (int) $n );
+	}
+	function wp_using_ext_object_cache() {
+		return false;
+	}
 	function get_bloginfo( $what = 'name' ) {
 		return 'Example Site';
 	}
@@ -516,7 +532,96 @@ namespace {
 		check( 0 === strpos( $k, 'faz_dsar_rl_' ), "the notice key $k shares the resettable prefix" );
 	}
 
+	// ── 3d. The 60-second lock steps aside for the same reason ──────────────
+
+	echo "— the 60-second lock only applies where the address identifies a visitor\n";
+
+	// The lock is keyed on the same hash as the ceiling. Behind a proxy whose
+	// forwarded header cannot be read, a flood from ONE source holds the lock
+	// for the whole site, and every legitimate subject is told to wait a
+	// minute — which, repeated, is the same denial as the ceiling's, a minute
+	// at a time. So the lock is skipped where the address is shared, and the
+	// per-email limit and the cumulative ceilings keep bounding the flood.
+
+	// A real public address: the lock spaces submissions a minute apart.
+	reset_state();
+	$GLOBALS['__faz_ip'] = '203.0.113.7';
+	check( $dsar->claim_connection_lock(), 'a free lock is claimed' );
+	check( ! $dsar->claim_connection_lock(), 'and a second claim from the same address inside the minute is refused' );
+	$dsar->release_connection_lock( true );
+	check( ! $dsar->claim_connection_lock(), 'releasing after a stored submission keeps the 60-second window' );
+	$GLOBALS['__faz_now'] += 61;
+	check( $dsar->claim_connection_lock(), 'the window expires after a minute' );
+	$dsar->release_connection_lock( false );
+	check( $dsar->claim_connection_lock(), 'rolling the window back (server error) lets the visitor retry at once' );
+	$lock_keys = array_filter(
+		array_keys( $GLOBALS['__faz_options'] ),
+		function ( $k ) {
+			return 0 === strpos( $k, 'faz_dsar_lock_' );
+		}
+	);
+	assert_eq( count( $lock_keys ), 1, 'the lock row is an option named faz_dsar_lock_*' );
+
+	// A shared address: no lock, and nothing written under its key.
+	foreach ( array(
+		'a Cloudflare edge address' => '172.70.100.5',
+		'an RFC1918 peer'           => '10.0.0.5',
+		'a loopback peer'           => '127.0.0.1',
+		'no address at all'         => '',
+	) as $what => $shared_ip ) {
+		reset_state();
+		$GLOBALS['__faz_ip'] = $shared_ip;
+		$held                = 0;
+		for ( $i = 0; $i < 5; $i++ ) {
+			if ( ! $dsar->claim_connection_lock() ) {
+				++$held;
+			}
+			$dsar->release_connection_lock( true );
+		}
+		assert_eq( $held, 0, "5 back-to-back submissions behind $what are never told to wait" );
+		foreach ( array_keys( $GLOBALS['__faz_options'] ) as $k ) {
+			check( 0 !== strpos( $k, 'faz_dsar_lock_' ), "no lock row is written for $what ($k)" );
+		}
+		foreach ( array_keys( $GLOBALS['__faz_transients'] ) as $k ) {
+			check( 0 !== strpos( $k, 'faz_dsar_rl_' ) || 0 === strpos( $k, 'faz_dsar_rl_cnt_' ) || 'faz_dsar_rl_ip_unidentified' === $k, "no window transient is armed for $what ($k)" );
+		}
+	}
+
+	// ── 3e. faz_throttle_request() states the same policy, and now keeps it ──
+
+	echo "— faz_throttle_request() skips an address that does not identify a visitor\n";
+
+	// The helper the consent log and the AMP bridge throttle on. Its docblock
+	// claimed it already skipped for unidentifiable callers, but it only
+	// skipped an EMPTY address: behind a loopback proxy every visitor shared
+	// one bucket, and the consent log of every second visitor was dropped.
+	reset_state();
+	$GLOBALS['__faz_ip'] = '203.0.113.7';
+	check( ! faz_throttle_request( 'faz_unit', 10 ), 'a first request from a public address is not throttled' );
+	check( faz_throttle_request( 'faz_unit', 10 ), 'a second one inside the window is' );
+	$GLOBALS['__faz_now'] += 11;
+	check( ! faz_throttle_request( 'faz_unit', 10 ), 'and the window expires' );
+
+	foreach ( array(
+		'a Cloudflare edge address' => '172.70.100.5',
+		'an RFC1918 peer'           => '10.0.0.5',
+		'a loopback peer'           => '127.0.0.1',
+		'no address at all'         => '',
+	) as $what => $shared_ip ) {
+		reset_state();
+		$GLOBALS['__faz_ip'] = $shared_ip;
+		$throttled           = 0;
+		for ( $i = 0; $i < 5; $i++ ) {
+			if ( faz_throttle_request( 'faz_unit', 10 ) ) {
+				++$throttled;
+			}
+		}
+		assert_eq( $throttled, 0, "5 back-to-back requests behind $what are never throttled" );
+		assert_eq( count( $GLOBALS['__faz_transients'] ), 0, "and no bucket is written for $what" );
+	}
+
 	// ── 3c. Which forwarded value may be believed ───────────────────────────
+
 
 	echo "— forwarded headers: the resolved address is not the client's to choose\n";
 

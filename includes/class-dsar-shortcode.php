@@ -530,19 +530,11 @@ class DSAR_Shortcode {
 			return;
 		}
 
-		// Rate limiting: atomic DB-backed lock via add_option (MySQL INSERT IGNORE),
-		// plus a transient for the 60-second durability window. On installs without
-		// a persistent object cache (the majority), wp_cache_add is not inter-process
-		// atomic, so add_option is required to prevent concurrent bypass.
-		$rl_key   = 'faz_dsar_rl_'   . substr( $this->hash_ip(), 0, 16 );
-		$lock_key = 'faz_dsar_lock_' . substr( $this->hash_ip(), 0, 16 );
-
-		if ( false !== get_transient( $rl_key ) || ! add_option( $lock_key, 1, '', 'no' ) ) {
+		// The 60-second per-connection lock (see claim_connection_lock()).
+		if ( ! $this->claim_connection_lock() ) {
 			wp_send_json_error( __( 'Too many requests. Please wait 1 minute before submitting again.', 'faz-cookie-manager' ) );
 			return;
 		}
-		// Lock acquired — write durability transient, then process and release.
-		set_transient( $rl_key, 1, 60 );
 
 		// Claim the slot before the work (see record_submission()).
 		$this->record_submission( $email );
@@ -551,14 +543,13 @@ class DSAR_Shortcode {
 			$post_id = $this->store_request( $name, $email, $type, $message );
 			if ( ! $post_id ) {
 				$this->release_submission( $email );
-				// DB error — roll back rate-limit so the user can retry immediately.
-				delete_transient( $rl_key );
-				// Release the DB lock BEFORE wp_send_json_error(): wp_send_json_error()
-				// calls wp_die() which calls exit(), and PHP `finally` blocks are NOT
-				// executed when exit() terminates the script. Without this explicit
-				// release, the lock would persist until manual admin intervention,
-				// permanently locking out the originating IP from future submissions.
-				delete_option( $lock_key );
+				// DB error — roll back the lock AND its window so the user can
+				// retry immediately. Released BEFORE wp_send_json_error(): it
+				// calls wp_die() which calls exit(), and PHP `finally` blocks are
+				// NOT executed when exit() terminates the script. Without this
+				// explicit release the lock would persist until manual admin
+				// intervention, permanently locking out the originating IP.
+				$this->release_connection_lock( false );
 				wp_send_json_error( __( 'We could not record your request due to a server error. Please try again.', 'faz-cookie-manager' ) );
 				return;
 			}
@@ -575,9 +566,9 @@ class DSAR_Shortcode {
 				$this->send_confirmation( $name, $email, $type );
 			}
 		} finally {
-			// Release DB lock regardless of success or exception; the transient
-			// maintains the ongoing 60-second throttle window.
-			delete_option( $lock_key );
+			// Release the DB lock regardless of success or exception; the
+			// transient keeps the 60-second window running.
+			$this->release_connection_lock( true );
 		}
 
 		wp_send_json_success(
@@ -585,6 +576,74 @@ class DSAR_Shortcode {
 				'message' => __( 'Your request has been received. We will respond within 30 days as required by law.', 'faz-cookie-manager' ),
 			)
 		);
+	}
+
+	/**
+	 * Claim the 60-second per-connection lock, or report that it is held.
+	 *
+	 * Atomic DB-backed lock via add_option (MySQL INSERT IGNORE) plus a
+	 * transient for the 60-second durability window. On installs without a
+	 * persistent object cache (the majority) wp_cache_add is not inter-process
+	 * atomic, so add_option is what prevents a concurrent bypass.
+	 *
+	 * Keyed on the connection, so it applies only where the connection is one
+	 * visitor's. Behind a proxy whose forwarded header cannot be read every
+	 * visitor resolves to the proxy's own address, and a lock on that address
+	 * is not "one submission a minute per visitor" but "one submission a
+	 * minute for the whole site": under a flood from one source every
+	 * legitimate data subject is told to wait, which is the Art. 12(2) denial
+	 * the per-IP ceiling already steps aside to avoid. Same rule here, same
+	 * predicate (`faz_client_ip_identifies_visitor()`): where the address does
+	 * not identify a visitor there is no lock, and the per-email limit and the
+	 * cumulative ceilings keep bounding the flood.
+	 *
+	 * @since 1.34.1
+	 * @return bool True when the submission may proceed (lock claimed, or no
+	 *              lock applies); false when another submission from this
+	 *              connection holds it.
+	 */
+	public function claim_connection_lock() {
+		if ( ! $this->ip_identifies_visitor() ) {
+			return true;
+		}
+		list( $rl_key, $lock_key ) = $this->connection_lock_keys();
+		if ( false !== get_transient( $rl_key ) || ! add_option( $lock_key, 1, '', 'no' ) ) {
+			return false;
+		}
+		// Lock acquired — arm the durability window.
+		set_transient( $rl_key, 1, 60 );
+		return true;
+	}
+
+	/**
+	 * Release the per-connection lock claimed by claim_connection_lock().
+	 *
+	 * @since 1.34.1
+	 * @param bool $keep_window True after a stored submission, so the 60-second
+	 *                          window keeps running; false to roll the window
+	 *                          back too, so a visitor whose submission failed
+	 *                          on the server can retry at once.
+	 * @return void
+	 */
+	public function release_connection_lock( $keep_window = true ) {
+		if ( ! $this->ip_identifies_visitor() ) {
+			return;
+		}
+		list( $rl_key, $lock_key ) = $this->connection_lock_keys();
+		if ( ! $keep_window ) {
+			delete_transient( $rl_key );
+		}
+		delete_option( $lock_key );
+	}
+
+	/**
+	 * The window transient key and the lock option key for this connection.
+	 *
+	 * @return array{0:string,1:string}
+	 */
+	private function connection_lock_keys() {
+		$hash = substr( $this->hash_ip(), 0, 16 );
+		return array( 'faz_dsar_rl_' . $hash, 'faz_dsar_lock_' . $hash );
 	}
 
 	/**
@@ -1017,12 +1076,18 @@ class DSAR_Shortcode {
 	}
 
 	/**
-	 * Note when this version — the one that stamps forms — started running.
+	 * Note when the first version that stamps forms started running.
 	 *
 	 * Hooked to `faz_after_activate`, which fires on activation and on every
-	 * version bump, so the grace window above restarts whenever the rendering
-	 * code could have changed. Written with add_option so an existing epoch is
-	 * never pushed forward by a later activation of the same version.
+	 * version bump, but written with add_option, so the epoch is set ONCE: the
+	 * first activation that stamps forms records it, and no later activation
+	 * or upgrade moves it. The grace window above exists for forms rendered
+	 * BEFORE any stamp existed and still sitting in a page cache; a form
+	 * rendered after the epoch carries a stamp whatever version rendered it,
+	 * so restarting the window on every upgrade would only reopen the
+	 * stampless path for a day each time. Should the stamp format ever change
+	 * incompatibly, that is a new epoch under a NEW option key, not a push of
+	 * this one.
 	 *
 	 * @since 1.34.1
 	 */
@@ -1412,10 +1477,13 @@ class DSAR_Shortcode {
 		 *
 		 * @since 1.34.1
 		 * @param string $code    One of faz_dsar_gate, faz_dsar_email_throttled,
-		 *                        faz_dsar_site_throttled, faz_dsar_ip_throttled.
+		 *                        faz_dsar_site_throttled, faz_dsar_ip_throttled,
+		 *                        faz_dsar_stamp, faz_dsar_too_fast,
+		 *                        faz_dsar_stale, faz_dsar_honeypot, faz_dsar_pow.
 		 * @param array  $context Sanitized submission fields.
 		 */
 		do_action( 'faz_dsar_rejected', $code, $context );
+
 		return new \WP_Error( $code, $message );
 	}
 

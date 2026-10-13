@@ -1078,11 +1078,14 @@ if ( ! function_exists( 'faz_throttle_request' ) ) {
 	function faz_throttle_request( $prefix = 'faz_throttle', $ttl = 1 ) {
 		$ttl       = max( 1, absint( $ttl ) );
 		$client_ip = faz_resolve_client_ip();
-		if ( empty( $client_ip ) ) {
-			// Cannot identify the client — skip throttling rather than
-			// collapsing all unidentified callers into one bucket.
+		if ( empty( $client_ip ) || ! faz_client_ip_identifies_visitor() ) {
+			// Not one caller's address (empty, loopback, a proxy's own): skip
+			// rather than collapse every unidentified caller into one bucket,
+			// which would throttle the consent log of every second visitor
+			// behind a loopback proxy.
 			return false;
 		}
+
 
 		$ip_hash = md5( $client_ip );
 		$key     = $prefix . '_' . $ip_hash;

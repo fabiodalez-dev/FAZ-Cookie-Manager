@@ -37,11 +37,14 @@ trait IP_Hasher {
 	 * `hash_ip()` is a hash of whatever `faz_resolve_client_ip()` returned, and
 	 * that is not always a visitor: behind a proxy whose forwarded header
 	 * cannot be read it is the proxy's own address, and the 'no-ip' literal a
-	 * few lines up groups every request that has no address at all. A key is
-	 * still the right key for a lock measured in seconds; it is NOT a safe
-	 * basis for a ceiling measured in hours, because one shared bucket turns a
-	 * per-visitor limit into a site-wide denial. Callers that run such a
-	 * ceiling must ask this first.
+	 * few lines up groups every request that has no address at all. Such a
+	 * key is not a safe basis for ANY per-connection limit, the 60-second lock
+	 * included: one shared bucket turns a per-visitor limit into a denial of
+	 * the next visitor, for a minute or for a day, and under a flood from one
+	 * source behind that proxy every legitimate data subject is the one told
+	 * to wait. Callers that key a limit on the hash must ask this first and
+	 * step aside when the answer is no.
+
 	 *
 	 * The judgment lives in `faz_client_ip_identifies_visitor()` so that both
 	 * shortcodes using this trait make it identically and from one place. When
