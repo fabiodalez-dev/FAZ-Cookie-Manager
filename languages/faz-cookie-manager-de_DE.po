@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.9.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-13T22:04:31+00:00\n"
+"POT-Creation-Date: 2026-10-13T22:08:53+00:00\n"
 "PO-Revision-Date: 2026-04-10\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: German\n"
@@ -4726,7 +4726,7 @@ msgstr ""
 msgid "\"Carried\" means it was already on record for this visitor and keeps the verdict of that earlier row."
 msgstr ""
 
-#: admin/views/consent-logs.php:86 includes/class-dsar-admin.php:383
+#: admin/views/consent-logs.php:86 includes/class-dsar-admin.php:419
 msgid "Date"
 msgstr "Datum"
 
@@ -4735,7 +4735,7 @@ msgid "Consent ID"
 msgstr "Einwilligungs-ID"
 
 #: admin/views/consent-logs.php:88 includes/class-dsar-admin.php:135
-#: includes/class-dsar-admin.php:388 includes/class-utils.php:1302
+#: includes/class-dsar-admin.php:424 includes/class-utils.php:1302
 msgid "Status"
 msgstr "Status"
 
@@ -7776,71 +7776,75 @@ msgstr ""
 msgid "GDPR Article 12 gives you one month to respond."
 msgstr ""
 
-#: includes/class-dsar-admin.php:251
+#: includes/class-dsar-admin.php:255
 msgid "Request not found."
 msgstr ""
 
-#: includes/class-dsar-admin.php:255
+#: includes/class-dsar-admin.php:258
 msgid "You are not allowed to handle data subject requests."
 msgstr ""
 
-#: includes/class-dsar-admin.php:270
+#: includes/class-dsar-admin.php:273
 msgid "You are not allowed to create privacy requests."
 msgstr ""
 
-#: includes/class-dsar-admin.php:339
+#: includes/class-dsar-admin.php:365
 msgid "Erasure request created. WordPress has emailed the requester a confirmation link; once they confirm, erase their data from Tools → Erase Personal Data."
 msgstr ""
 
-#: includes/class-dsar-admin.php:344
+#: includes/class-dsar-admin.php:370
 msgid "Export request created. WordPress has emailed the requester a confirmation link; once they confirm, send their data from Tools → Export Personal Data."
 msgstr ""
 
-#: includes/class-dsar-admin.php:349
+#: includes/class-dsar-admin.php:375
+msgid "Privacy request created, but WordPress could not send the confirmation email to the requester. Once mail delivery works, open the request in Tools → Export/Erase Personal Data and use \"Resend email\"."
+msgstr ""
+
+#: includes/class-dsar-admin.php:380
 msgid "WordPress already has an unconfirmed privacy request for this address, so a second one was not created."
 msgstr ""
 
-#: includes/class-dsar-admin.php:352
+#: includes/class-dsar-admin.php:383
 msgid "Request marked as completed."
 msgstr ""
 
-#: includes/class-dsar-admin.php:353
+#: includes/class-dsar-admin.php:384
 msgid "Request reopened."
 msgstr ""
 
-#: includes/class-dsar-admin.php:354
+#: includes/class-dsar-admin.php:385
 msgid "The request could not be processed."
 msgstr ""
 
-#: includes/class-dsar-admin.php:386
+#: includes/class-dsar-admin.php:422
 msgid "Requester"
 msgstr ""
 
-#: includes/class-dsar-admin.php:387
+#: includes/class-dsar-admin.php:423
 msgid "Right invoked"
 msgstr ""
 
-#: includes/class-dsar-admin.php:437
+#: includes/class-dsar-admin.php:473
 msgid "Awaiting action"
 msgstr ""
 
-#: includes/class-dsar-admin.php:438
+#: includes/class-dsar-admin.php:474
 msgid "Sent to the WordPress privacy tools"
 msgstr ""
 
-#: includes/class-dsar-admin.php:439
+#: includes/class-dsar-admin.php:475
 msgid "Completed"
 msgstr ""
 
-#: includes/class-dsar-admin.php:443
+#: includes/class-dsar-admin.php:479
 msgid "Personal data erased — record kept for accountability"
 msgstr ""
 
-#: includes/class-dsar-admin.php:515
+#: includes/class-dsar-admin.php:551
 msgid "Open Tools → Erase Personal Data"
 msgstr ""
 
-#: includes/class-dsar-admin.php:516
+#: includes/class-dsar-admin.php:552
 msgid "Open Tools → Export Personal Data"
 msgstr ""
 

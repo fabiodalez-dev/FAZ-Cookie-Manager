@@ -71,6 +71,25 @@ namespace {
 	function get_post_meta( $post_id, $key, $single = false ) {
 		return isset( $GLOBALS['__faz_meta'][ $post_id ][ $key ] ) ? $GLOBALS['__faz_meta'][ $post_id ][ $key ] : '';
 	}
+	// What confirmation_outcome() needs: the send filter, core's mailer and its
+	// error type. The mailer's verdict is scripted per case and every call is
+	// counted, so "the filter switched it off" is a count of zero, not a guess.
+	$GLOBALS['__faz_filters']    = array();
+	$GLOBALS['__faz_send_result'] = true;
+	$GLOBALS['__faz_send_calls']  = array();
+	class WP_Error {
+		public function __construct( $code = '', $message = '' ) {}
+	}
+	function is_wp_error( $thing ) {
+		return $thing instanceof WP_Error;
+	}
+	function apply_filters( $hook, $value ) {
+		return array_key_exists( $hook, $GLOBALS['__faz_filters'] ) ? $GLOBALS['__faz_filters'][ $hook ] : $value;
+	}
+	function wp_send_user_request( $request_id ) {
+		$GLOBALS['__faz_send_calls'][] = $request_id;
+		return $GLOBALS['__faz_send_result'];
+	}
 
 	require_once __DIR__ . '/../../includes/class-dsar-admin.php';
 
@@ -218,6 +237,48 @@ namespace {
 	check( ! DSAR_Admin::notice_is_true( 'reopened', 51 ), 'and a reopen claim does not' );
 
 	check( ! DSAR_Admin::notice_is_true( 'created_erasure', 0 ), 'no record, no claim' );
+
+	// ── The confirmation email is reported as sent only when it was ─────────
+
+	echo "— the confirmation mail's outcome is the notice's outcome\n";
+
+	// wp_send_user_request() returns a WP_Error when the mail could not be
+	// handed over, and the redirect used to say "WordPress has emailed the
+	// requester" regardless. The request exists either way (core keeps it as
+	// request-pending with a "Resend email" link), so the notice must say
+	// created-but-unsent, not sent.
+	$GLOBALS['__faz_filters']     = array();
+	$GLOBALS['__faz_send_calls']  = array();
+	$GLOBALS['__faz_send_result'] = true;
+	assert_eq( DSAR_Admin::confirmation_outcome( 50, 'remove_personal_data', 9 ), 'created_erasure', 'mail sent => the erasure notice' );
+	assert_eq( DSAR_Admin::confirmation_outcome( 50, 'export_personal_data', 9 ), 'created_export', 'mail sent => the export notice' );
+	assert_eq( $GLOBALS['__faz_send_calls'], array( 9, 9 ), 'the core request is what gets mailed' );
+
+	$GLOBALS['__faz_send_result'] = new WP_Error( 'privacy_email_failed', 'Unable to send' );
+	assert_eq( DSAR_Admin::confirmation_outcome( 50, 'remove_personal_data', 9 ), 'created_unsent', 'mail refused => created-but-unsent, not "emailed"' );
+	assert_eq( DSAR_Admin::confirmation_outcome( 50, 'export_personal_data', 9 ), 'created_unsent', 'the same for an export request' );
+
+	// The filter that switches the confirmation off: nothing is sent, and the
+	// outcome is the plain creation.
+	$GLOBALS['__faz_send_calls']                                  = array();
+	$GLOBALS['__faz_filters']['faz_dsar_send_core_confirmation'] = false;
+	assert_eq( DSAR_Admin::confirmation_outcome( 50, 'remove_personal_data', 9 ), 'created_erasure', 'with the confirmation switched off the request is simply created' );
+	assert_eq( $GLOBALS['__faz_send_calls'], array(), 'and the mailer is not called at all' );
+	$GLOBALS['__faz_filters']     = array();
+	$GLOBALS['__faz_send_result'] = true;
+
+	// The unsent notice claims a request was created, so it is held to the same
+	// proof as the sent ones: the record must carry a core request.
+	$GLOBALS['__faz_meta'][52] = array();
+	check( ! DSAR_Admin::notice_is_true( 'created_unsent', 52 ), 'an unsent claim is refused with no core request on the record' );
+	$GLOBALS['__faz_meta'][52] = array(
+		'_dsar_core_request_id'     => 11,
+		'_dsar_core_request_action' => 'export_personal_data',
+	);
+	check( DSAR_Admin::notice_is_true( 'created_unsent', 52 ), 'and shown once the record carries one, of either kind' );
+	$GLOBALS['__faz_meta'][52]['_dsar_core_request_action'] = 'something_else';
+	check( ! DSAR_Admin::notice_is_true( 'created_unsent', 52 ), 'but not for a request kind the core tools do not have' );
+
 
 	// ── Status ───────────────────────────────────────────────────────────────
 

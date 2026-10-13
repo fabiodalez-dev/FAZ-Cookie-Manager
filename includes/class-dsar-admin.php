@@ -245,12 +245,15 @@ class DSAR_Admin {
 		// nonce was computed over.
 		$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : 0;
 		$action  = isset( $_GET['faz_action'] ) ? sanitize_key( wp_unslash( $_GET['faz_action'] ) ) : '';
-		$post    = $post_id ? get_post( $post_id ) : null;
 
+		// The nonce first, then the record: a 404 that answers before the nonce
+		// is checked would let any logged-in user walk the ID space and learn
+		// which IDs are data subject requests.
+		check_admin_referer( self::nonce_action( $post_id, $action ) );
+		$post = $post_id ? get_post( $post_id ) : null;
 		if ( ! $post || self::POST_TYPE !== $post->post_type ) {
 			wp_die( esc_html__( 'Request not found.', 'faz-cookie-manager' ), '', array( 'response' => 404 ) );
 		}
-		check_admin_referer( self::nonce_action( $post_id, $action ) );
 		if ( ! current_user_can( 'edit_post', $post_id ) ) {
 			wp_die( esc_html__( 'You are not allowed to handle data subject requests.', 'faz-cookie-manager' ), '', array( 'response' => 403 ) );
 		}
@@ -282,6 +285,28 @@ class DSAR_Admin {
 		update_post_meta( $post_id, '_dsar_status', 'forwarded' );
 		DSAR_Shortcode::flush_pending_count();
 
+		$this->redirect_back( $post_id, self::confirmation_outcome( $post_id, $action, (int) $request ) );
+	}
+
+	/**
+	 * Send core's confirmation email for a created request and name the outcome.
+	 *
+	 * wp_send_user_request() returns a WP_Error when the mail could not be
+	 * handed to the mailer, and the notice used to say "WordPress has emailed
+	 * the requester" regardless. The request exists either way — core keeps it
+	 * as request-pending and its tool offers "Resend email" — so the outcome
+	 * is a notice of its own, `created_unsent`, that says what did and did not
+	 * happen and points at the tool that can finish it.
+	 *
+	 * @since 1.34.1
+	 * @param int    $post_id    DSAR record ID.
+	 * @param string $action     Core request action name.
+	 * @param int    $request_id Core request ID returned by wp_create_user_request().
+	 * @return string Notice code: created_erasure, created_export or created_unsent.
+	 */
+	public static function confirmation_outcome( $post_id, $action, $request_id ) {
+		$created = 'remove_personal_data' === $action ? 'created_erasure' : 'created_export';
+
 		/**
 		 * Whether to send core's identity-confirmation email to the data subject.
 		 *
@@ -294,11 +319,12 @@ class DSAR_Admin {
 		 * @param int    $post_id DSAR record ID.
 		 * @param string $action  Core request action name.
 		 */
-		if ( apply_filters( 'faz_dsar_send_core_confirmation', true, $post_id, $action ) ) {
-			wp_send_user_request( (int) $request );
+		if ( ! apply_filters( 'faz_dsar_send_core_confirmation', true, $post_id, $action ) ) {
+			return $created;
 		}
 
-		$this->redirect_back( $post_id, 'remove_personal_data' === $action ? 'created_erasure' : 'created_export' );
+		$sent = wp_send_user_request( (int) $request_id );
+		return is_wp_error( $sent ) ? 'created_unsent' : $created;
 	}
 
 	/**
@@ -344,6 +370,11 @@ class DSAR_Admin {
 				__( 'Export request created. WordPress has emailed the requester a confirmation link; once they confirm, send their data from Tools → Export Personal Data.', 'faz-cookie-manager' ),
 				'export_personal_data',
 			),
+			'created_unsent'  => array(
+				'warning',
+				__( 'Privacy request created, but WordPress could not send the confirmation email to the requester. Once mail delivery works, open the request in Tools → Export/Erase Personal Data and use "Resend email".', 'faz-cookie-manager' ),
+				'',
+			),
 			'duplicate'       => array(
 				'warning',
 				__( 'WordPress already has an unconfirmed privacy request for this address, so a second one was not created.', 'faz-cookie-manager' ),
@@ -357,6 +388,11 @@ class DSAR_Admin {
 			return;
 		}
 		list( $kind, $text, $tool ) = $messages[ $code ];
+		if ( 'created_unsent' === $code ) {
+			// Which core tool holds the request is on the record, and
+			// notice_is_true() has already checked that it names a real one.
+			$tool = (string) get_post_meta( $post_id, '_dsar_core_request_action', true );
+		}
 
 		printf(
 			'<div class="notice notice-%1$s is-dismissible"><p>%2$s',
@@ -613,6 +649,17 @@ class DSAR_Admin {
 				$expected   = 'created_erasure' === $code ? 'remove_personal_data' : 'export_personal_data';
 				return $request_id > 0
 					&& $expected === (string) get_post_meta( $post_id, '_dsar_core_request_action', true );
+			case 'created_unsent':
+				// Claims a request was created, of either kind; the record must
+				// carry one before the claim is shown.
+				$request_id = (int) get_post_meta( $post_id, '_dsar_core_request_id', true );
+				return $request_id > 0
+					&& in_array(
+						(string) get_post_meta( $post_id, '_dsar_core_request_action', true ),
+						array( 'remove_personal_data', 'export_personal_data' ),
+						true
+					);
+
 			case 'completed':
 				return 'completed' === self::get_status( $post_id );
 			case 'reopened':
