@@ -508,6 +508,151 @@ namespace {
 	assert_true( false === strpos( $logged, 'PCRE error' ), 'without tripping the PCRE limit' );
 	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/before.png"' ), 'so the pixel before it is still parked' );
 
+	echo "\n-- an attribute right after a closing quote or a slash --\n";
+
+	// The tokenizer starts a new attribute right after a closing quote or a
+	// `/`; a rename that required whitespace before the name left exactly
+	// those tokens live, and live is what fetches.
+	$glued = array(
+		'img, after a quote'        => array( '<img title="x"src="https://cdn.tracker.test/p.png">', 'data-faz-src="https://cdn.tracker.test/p.png"' ),
+		'img, after a slash'        => array( '<img/src="https://cdn.tracker.test/p.png">', 'data-faz-src="https://cdn.tracker.test/p.png"' ),
+		'img srcset, after a quote' => array( '<img alt="x"srcset="https://cdn.tracker.test/p.png 1x">', 'data-faz-srcset="https://cdn.tracker.test/p.png 1x"' ),
+		'iframe, after a quote'     => array( '<iframe title="x"src="https://cdn.tracker.test/f.html"></iframe>', 'data-faz-src="https://cdn.tracker.test/f.html"' ),
+		'iframe, after a slash'     => array( '<iframe/src="https://cdn.tracker.test/f.html"></iframe>', 'data-faz-src="https://cdn.tracker.test/f.html"' ),
+		'image href, after a quote' => array( '<svg><image title="x"href="https://cdn.tracker.test/p.png"/></svg>', 'data-faz-href="https://cdn.tracker.test/p.png"' ),
+		'image href, after a slash' => array( '<svg><image/href="https://cdn.tracker.test/p.png"/></svg>', 'data-faz-href="https://cdn.tracker.test/p.png"' ),
+		'use xlink:href, after a quote' => array( '<svg><use title="x"xlink:href="https://cdn.tracker.test/s.svg#i"/></svg>', 'data-faz-href="https://cdn.tracker.test/s.svg#i"' ),
+		'td background, after a quote'  => array( '<table><tr><td title="x"background="https://cdn.tracker.test/c.png">x</td></tr></table>', 'data-faz-background="https://cdn.tracker.test/c.png"' ),
+		'body background, after a quote' => array( '<body class="x"background="https://cdn.tracker.test/b.png"></body>', 'data-faz-background="https://cdn.tracker.test/b.png"' ),
+		'td background, after a slash'  => array( '<table><tr><td/background="https://cdn.tracker.test/c.png">x</td></tr></table>', 'data-faz-background="https://cdn.tracker.test/c.png"' ),
+		'link href, after a quote'  => array( '<link rel="stylesheet"href="https://cdn.tracker.test/a.css">', 'data-faz-href="https://cdn.tracker.test/a.css"' ),
+		'link href, after a slash'  => array( '<link/rel="stylesheet"href="https://cdn.tracker.test/a.css">', 'data-faz-href="https://cdn.tracker.test/a.css"' ),
+		'link imagesrcset, after a quote' => array( '<link rel=preload as=image title="x"imagesrcset="https://cdn.tracker.test/p.png 1x">', 'data-faz-imagesrcset="https://cdn.tracker.test/p.png 1x"' ),
+		'noscript img, after a quote' => array( '<noscript><img title="x"src="https://cdn.tracker.test/p.png"></noscript>', 'data-faz-src="https://cdn.tracker.test/p.png"' ),
+		'noscript img, after a slash' => array( '<noscript><img/src="https://cdn.tracker.test/p.png"></noscript>', 'data-faz-src="https://cdn.tracker.test/p.png"' ),
+		'script, after a quote'     => array( '<script title="x"src="https://cdn.tracker.test/t.js"></script>', 'type="text/plain"' ),
+	);
+	foreach ( $glued as $label => $case ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html>' . $case[0] . '</html>' );
+		assert_true( false !== strpos( $out, $case[1] ), $label . ': parked' );
+		// A script parks through its type and keeps its src; every other
+		// resource parks by renaming the attribute.
+		if ( 'script, after a quote' !== $label ) {
+			assert_true( ! preg_match( '/(?<![\w:-])(?:src|srcset|href|xlink:href|background|imagesrcset)=/i', $out ), $label . ': nothing left live' );
+		}
+		assert_true( false !== strpos( $out, 'data-faz-category="marketing"' ), $label . ': with its category' );
+	}
+
+	// A `name=` inside another attribute's value is not that attribute.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><body><img alt="src=https://cdn.tracker.test/p.png" src="/local.png"></body></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'src= inside an alt value does not park the local image' );
+
+	echo "\n-- the URL as the engine reads it, not as it is written --\n";
+
+	// Chromium decodes entities, strips tab/LF/CR inside the URL and
+	// percent-decodes the host before it resolves anything; a provider match
+	// on the raw bytes saw none of these as the tracker.
+	$shapes = array(
+		'a character entity in the host' => 'https://cdn.tr&#97;cker.test/p.png',
+		'a &Tab; in the host'            => 'https://cdn.tra&Tab;cker.test/p.png',
+		'a literal newline in the host'  => "https://cdn.tra\ncker.test/p.png",
+		'a percent-encoded dot in the host' => 'https://cdn.tracker%2Etest/p.png',
+	);
+	foreach ( $shapes as $label => $url ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><img src="' . $url . '"><iframe src="' . $url . '"></iframe><script src="' . $url . '"></script><link rel="stylesheet" href="' . $url . '"></html>' );
+		assert_true( 2 === substr_count( $out, 'data-faz-src="' ), $label . ': img and iframe parked' );
+		assert_true( false !== strpos( $out, 'type="text/plain"' ), $label . ': script re-typed' );
+		assert_true( false !== strpos( $out, 'data-faz-href="' ), $label . ': link parked' );
+		// Inside a srcdoc the entity is decoded TWICE: once by the attribute,
+		// once by the document the attribute becomes.
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><iframe srcdoc="<img src=&quot;' . str_replace( array( '&', "\n" ), array( '&amp;', '&NewLine;' ), $url ) . '&quot;>"></iframe></html>' );
+		assert_true( false !== strpos( $out, 'data-faz-srcdoc=' ), $label . ': judged through a srcdoc' );
+	}
+
+	echo "\n-- a closing tag with whitespace before its > --\n";
+
+	// `</script >` is a closing tag to the parser. A tail that only knew
+	// `</script>` scanned past it, swallowed the next element, and judged the
+	// tracker script on the FIRST tag's local URL.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><script src="/local.js"></script ><script src="https://cdn.tracker.test/t.js"></script></html>' );
+	assert_true( false !== strpos( $out, '<script src="/local.js"></script >' ), 'the local script closed with </script > is untouched' );
+	assert_true( false !== strpos( $out, 'src="https://cdn.tracker.test/t.js" type="text/plain"' ) || preg_match( '/<script[^>]*text\/plain[^>]*cdn\.tracker\.test/', $out ), 'and the tracker script after it is re-typed' );
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><iframe src="/local.html"></iframe ><iframe src="https://cdn.tracker.test/f.html"></iframe></html>' );
+	assert_true( false !== strpos( $out, '<iframe src="/local.html"></iframe >' ), 'the local iframe closed with </iframe > is untouched' );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/f.html"' ), 'and the tracker iframe after it is parked' );
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><style>.a{}</style ><style>@import url(https://cdn.tracker.test/f.css);</style></html>' );
+	assert_true( false !== strpos( $out, '<style>.a{}</style >' ) && false !== strpos( $out, 'data-faz-css=' ), 'the same for </style >' );
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><noscript><p>x</p></noscript ><noscript><img src="https://cdn.tracker.test/p.png"></noscript></html>' );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/p.png"' ), 'and for </noscript >' );
+
+	echo "\n-- the stash markers cannot be spelled by the page --\n";
+
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><p>__FAZ_SRCDOC_STASH_0__ and __FAZ_NOSCRIPT_STASH_0__</p><iframe srcdoc="<img src=&quot;https://cdn.tracker.test/p.png&quot;>"></iframe><noscript><img src="https://cdn.tracker.test/n.png"></noscript></html>' );
+	assert_true( false !== strpos( $out, '<p>__FAZ_SRCDOC_STASH_0__ and __FAZ_NOSCRIPT_STASH_0__</p>' ), 'the literal marker text in a paragraph stays text' );
+	assert_true( false !== strpos( $out, 'data-faz-srcdoc="<img src=&quot;https://cdn.tracker.test/p.png&quot;>"' ), 'while the srcdoc is parked where it belongs' );
+	assert_true( false !== strpos( $out, '<noscript><img data-faz-category="marketing" data-faz-src="https://cdn.tracker.test/n.png"></noscript>' ), 'and the noscript block comes back where it belongs' );
+
+	echo "\n-- a hundred thousand attributes --\n";
+
+	// The tokenizer used to materialise every token of the tag at once: at
+	// ~1.3 KB each, 100k attributes on one iframe was 132 MB, a fatal under a
+	// 40 MB memory limit, and it was reached for every <iframe> as soon as
+	// the page contained the word "srcdoc".
+	$fe    = faz_ob_frontend( $providers, $blocked );
+	$many  = '';
+	for ( $i = 0; $i < 100000; $i++ ) {
+		$many .= ' a' . $i . '="x"';
+	}
+	$html  = '<html><iframe' . $many . ' src="https://cdn.tracker.test/f.html" srcdoc="<img src=&quot;https://cdn.tracker.test/p.png&quot;>"></iframe></html>';
+	gc_collect_cycles();
+	$before = memory_get_peak_usage();
+	$t0     = microtime( true );
+	$out    = faz_ob_run( $fe, $html );
+	$spent  = microtime( true ) - $t0;
+	$grown  = memory_get_peak_usage() - $before;
+	assert_true( false !== strpos( $out, 'data-faz-srcdoc=' ) && false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/f.html"' ), 'the frame is parked, src and srcdoc' );
+	assert_true( $grown < 16 * 1048576, sprintf( 'peak memory grows by a few MB at most (%.1f MB)', $grown / 1048576 ) );
+	assert_true( $spent < 3.0, sprintf( 'in linear time (%.2fs)', $spent ) );
+	unset( $html, $out, $many );
+
+	echo "\n-- the HTML image element, and a frame whose src is inert --\n";
+
+	// Outside <svg>, the tree builder turns <image> into <img>, which fetches
+	// src. The SVG pass looked at href only.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><image src="https://cdn.tracker.test/p.png"><image href="https://cdn.tracker.test/h.png" src="https://cdn.tracker.test/s.png"/></body></html>' );
+	assert_true( 2 === substr_count( $out, 'data-faz-src="https://cdn.tracker.test/' ), '<image src> is parked as data-faz-src, with or without an href' );
+	assert_true( false !== strpos( $out, 'data-faz-href="https://cdn.tracker.test/h.png"' ), 'and the href next to it still parks as data-faz-href' );
+	assert_true( ! preg_match( '/(?<![\w:-])src=/', $out ), 'with no src left live' );
+
+	// The "lite embed" pattern: an allowed srcdoc with a blocked src. The src
+	// is inert while srcdoc is present, so there is nothing to park, and the
+	// placeholder wrap used to destroy the srcdoc on its way through wp_kses.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><body><iframe srcdoc="<p>lite</p>" src="https://cdn.tracker.test/f.html" width="300"></iframe></body></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'an allowed srcdoc with a blocked src comes out byte-identical' );
+
+	// Two live srcdoc tokens: the parser keeps the first, so the first is
+	// judged — and once the first is parked the second would become THE
+	// srcdoc, so every one of them goes with it.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><iframe srcdoc="<img src=&quot;https://cdn.tracker.test/p.png&quot;>" srcdoc="<img src=&quot;https://cdn.tracker.test/q.png&quot;>"></iframe></body></html>' );
+	assert_true( false === strpos( $out, ' srcdoc="' ), 'no srcdoc is left live' );
+	assert_true( false !== strpos( $out, 'data-faz-srcdoc="<img src=&quot;https://cdn.tracker.test/p.png&quot;>"' ) && false !== strpos( $out, 'data-faz-srcdoc="<img src=&quot;https://cdn.tracker.test/q.png&quot;>"' ), 'both are parked verbatim, the first one first' );
+	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'with one category' );
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><body><iframe srcdoc="<p>a</p>" srcdoc="<img src=&quot;https://unknown.example/x.png&quot;>"></iframe></body></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'two allowed srcdoc tokens come back byte-identical' );
+
 	// ---------- result ----------
 
 	echo "\n";

@@ -80,6 +80,16 @@ class Frontend {
 	 *
 	 * Used with the `#` delimiter: it contains `/`.
 	 */
+	const ATTR_TOKEN = '/\G[\s\/"\'=>]*+([^\s"\'>\/=]++)(?:\s*+=\s*+("[^"]*+"|\'[^\']*+\'|[^\s>"\'][^\s>]*+))?/';
+
+	/**
+	 * One attribute token, anchored at the offset it is asked from: whatever
+	 * cannot start a name (whitespace, a slash, a stray quote, `=`, `>`) is
+	 * skipped, then a name, then optionally `=` and a value shaped as in
+	 * ATTR_WALK. tokenize_tag_attrs() walks a string with it one token at a
+	 * time; `\G` at the start makes the pattern anchored, so a failed match
+	 * does not scan forward.
+	 */
 	const ATTR_WALK = '(?:\s++|/(?!\s*+>)|[^\s"\'>/=]++(?:\s*+=\s*+(?:"[^"]*+"|\'[^\']*+\'|[^\s>"\'][^\s>]*+))?|[^\s>/])*+';
 
 	/**
@@ -4106,12 +4116,17 @@ class Frontend {
 		// let the apostrophe in `title=it's` open a run that swallowed the next
 		// iframe, and the `[^>]*` the other passes used stops at the first `>`
 		// of the document inside the value.
-		$srcdoc_stash = array();
+		// Both stashes mark their place with a per-request nonce the page
+		// cannot know: with a fixed marker, a paragraph that spelled
+		// `__FAZ_SRCDOC_STASH_0__` received the srcdoc token as live markup.
+		$stash_nonce   = $this->stash_nonce();
+		$srcdoc_marker = '__FAZ_SRCDOC_STASH_' . $stash_nonce . '_';
+		$srcdoc_stash  = array();
 		if ( false !== stripos( $html, 'srcdoc' ) ) {
 			$result = preg_replace_callback(
 				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
-				function ( $m ) use ( $providers, $blocked_categories, &$srcdoc_stash ) {
-					return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, $srcdoc_stash );
+				function ( $m ) use ( $providers, $blocked_categories, &$srcdoc_stash, $srcdoc_marker ) {
+					return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, $srcdoc_stash, $srcdoc_marker );
 				},
 				$html
 			);
@@ -4125,10 +4140,10 @@ class Frontend {
 		$noscript_stash = array();
 		if ( false !== stripos( $html, '<noscript' ) ) {
 			$result = preg_replace_callback(
-				'#<noscript\b[^>]*>(.*?)</noscript>#is',
-				function ( $m ) use ( $providers, $blocked_categories, &$noscript_stash ) {
+				'#<noscript(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>(.*?)</noscript(?=[\s/>])[^>]*>#is',
+				function ( $m ) use ( $providers, $blocked_categories, &$noscript_stash, $stash_nonce ) {
 					$processed              = $this->process_noscript_tag( $m, $providers, $blocked_categories );
-					$key                    = '__FAZ_NOSCRIPT_STASH_' . count( $noscript_stash ) . '__';
+					$key                    = '__FAZ_NOSCRIPT_STASH_' . $stash_nonce . '_' . count( $noscript_stash ) . '__';
 					$noscript_stash[ $key ] = $processed;
 					return $key;
 				},
@@ -4144,7 +4159,7 @@ class Frontend {
 		// 1. Block <script> tags.
 		if ( false !== stripos( $html, '<script' ) ) {
 			$result = preg_replace_callback(
-				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script>#is',
+				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_script_tag( $m, $providers, $blocked_categories );
 				},
@@ -4207,9 +4222,9 @@ class Frontend {
 		// 2. Block <iframe> tags (YouTube, Facebook, Maps, etc.).
 		if ( false !== stripos( $html, '<iframe' ) ) {
 			$result = preg_replace_callback(
-				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe>|/\s*+>)#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_iframe_tag( $m, $providers, $blocked_categories );
+				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
+				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
+					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );
 				},
 				$html
 			);
@@ -4228,7 +4243,7 @@ class Frontend {
 		//    inside a <style> (fonts, background-image, cursor, mask, @import).
 		if ( false !== stripos( $html, '<style' ) ) {
 			$result = preg_replace_callback(
-				'#<style(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</style>#is',
+				'#<style(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</style(?=[\s/>])[^>]*>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_style_tag( $m, $providers, $blocked_categories );
 				},
@@ -4305,7 +4320,7 @@ class Frontend {
 		// 6. Block <script data-faz-waitfor="category"> (deferred dependency scripts).
 		if ( false !== stripos( $html, 'data-faz-waitfor' ) ) {
 			$result = preg_replace_callback(
-				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script>#is',
+				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
 				function ( $m ) use ( $blocked_categories ) {
 					$attrs    = $m[1];
 					$content  = $m[2];
@@ -4572,17 +4587,27 @@ class Frontend {
 	 * @param array $blocked_categories Currently blocked category slugs.
 	 * @return string
 	 */
-	private function process_iframe_tag( $m, $providers, $blocked_categories ) {
+	private function process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker = '' ) {
 		$attrs = $m[1];
 		$full  = $m[0];
 
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
 			return $full;
 		}
-		// The name, not a prefix of it: `data-faz-src` is a substring of
+		// The token, not a substring: `data-faz-src` is the start of
 		// `data-faz-srcdoc`, and matching it made every srcdoc frame look
 		// already parked, leaving its src live.
-		if ( preg_match( '/(^|\s)data-faz-src\s*=/i', $attrs ) ) {
+		if ( $this->has_attr_token( $attrs, 'data-faz-src' ) ) {
+			return $full;
+		}
+		// A frame whose srcdoc is in the stash has nothing to park here: src
+		// is inert while srcdoc is present, so a blocked src on an ALLOWED
+		// srcdoc (the "lite embed" pattern) fetches nothing — and wrapping it
+		// in the placeholder sent the bare marker through wp_kses, which
+		// stripped it, so the srcdoc never came back. A parked srcdoc already
+		// took src with it. The marker carries the request nonce, so the page
+		// cannot spell it.
+		if ( '' !== $srcdoc_marker && false !== stripos( $attrs, $srcdoc_marker ) ) {
 			return $full;
 		}
 
@@ -4604,9 +4629,10 @@ class Frontend {
 			}
 		}
 
-		// Rename src → data-faz-src (avoid matching data-src).
-		$new_attrs = preg_replace( '/(^|\s)src\s*=\s*/i', '$1data-faz-src=', $attrs, 1 );
-		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		// Rename src → data-faz-src on the token the tokenizer would produce,
+		// whatever precedes it.
+		list( $new_attrs ) = $this->rename_attr_tokens( $attrs, array( 'src' => 'data-faz-src' ) );
+		$new_attrs        .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
 
 		$inner = isset( $m[2] ) ? $m[2] : '';
 		$blocked_iframe = isset( $m[2] )
@@ -4636,10 +4662,7 @@ class Frontend {
 	 * @return string URL or empty string.
 	 */
 	private function extract_src_from_attrs( $attrs ) {
-		if ( preg_match( '/\bsrc\s*=\s*["\']([^"\']+)["\']/i', $attrs, $m ) ) {
-			return $m[1];
-		}
-		return '';
+		return $this->normalize_resource_url( $this->extract_tag_attr( $attrs, 'src' ) );
 	}
 
 	/**
@@ -4804,19 +4827,16 @@ class Frontend {
 				if ( ! $label_category ) {
 					$label_category = $content_matched ? $content_matched : 'functional';
 				}
-				$rewritten = preg_replace( '/(\s)src\s*=/i', '$1data-faz-src=', $tag, 1 );
-				// preg_replace returns null on a PCRE failure and the subject
-				// unchanged when nothing matched; neither is a tag to rewrite.
-				if ( null === $rewritten || $rewritten === $tag ) {
+				// The match is `<img` or `<iframe` plus its attributes; rename
+				// src on its token, whatever precedes it.
+				if ( ! preg_match( '/^<(?:img|iframe)/i', $tag, $open ) ) {
 					return $tag;
 				}
-				$rewritten = preg_replace(
-					'/^(<(?:img|iframe)\b)/i',
-					'$1 data-faz-category="' . esc_attr( $label_category ) . '"',
-					$rewritten,
-					1
-				);
-				return null === $rewritten ? $tag : $rewritten;
+				list( $rewritten, $renamed ) = $this->rename_attr_tokens( substr( $tag, strlen( $open[0] ) ), array( 'src' => 'data-faz-src' ) );
+				if ( empty( $renamed ) ) {
+					return $tag;
+				}
+				return $open[0] . ' data-faz-category="' . esc_attr( $label_category ) . '"' . $rewritten;
 			},
 			$content
 		);
@@ -4848,8 +4868,9 @@ class Frontend {
 		$attrs = $m[1];
 		$full  = $m[0];
 
-		// Exact name: `data-faz-src` is also the start of `data-faz-srcset`.
-		if ( preg_match( '/(^|\s)data-faz-src\s*=/i', $attrs ) ) {
+		// The token, not a substring: `data-faz-src` is also the start of
+		// `data-faz-srcset`.
+		if ( $this->has_attr_token( $attrs, 'data-faz-src' ) ) {
 			return $full;
 		}
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
@@ -4878,17 +4899,16 @@ class Frontend {
 		// `data-faz-srcset` is the attribute the client's own restore pass
 		// already looks for (script.js: document.querySelectorAll('[data-faz-srcset]')),
 		// so no new convention is introduced.
-		$new_attrs = preg_replace( '/(^|\s)srcset\s*=\s*/i', '$1data-faz-srcset=', $attrs, 1 );
-		if ( null === $new_attrs ) {
-			return $full; // PCRE failure — never ship a half-rewritten tag.
-		}
-		$parked_srcset = ( $new_attrs !== $attrs );
-
-		$with_src = preg_replace( '/(^|\s)src\s*=\s*/i', '$1data-faz-src=', $new_attrs, 1 );
-		if ( null === $with_src ) {
-			return $full;
-		}
-		$parked_src = ( $with_src !== $new_attrs );
+		// Both renamed on their tokens, whatever precedes them.
+		list( $with_src, $renamed ) = $this->rename_attr_tokens(
+			$attrs,
+			array(
+				'srcset' => 'data-faz-srcset',
+				'src'    => 'data-faz-src',
+			)
+		);
+		$parked_srcset = ! empty( $renamed['srcset'] );
+		$parked_src    = ! empty( $renamed['src'] );
 		if ( ! $parked_src && ! $parked_srcset ) {
 			return $full; // Nothing fetchable to park — leave the tag alone.
 		}
@@ -4931,7 +4951,7 @@ class Frontend {
 		$close = isset( $m[3] ) ? $m[3] : '';
 		$full  = isset( $m[0] ) ? $m[0] : '';
 
-		if ( false !== strpos( $attrs, 'data-faz-href' ) ) {
+		if ( $this->has_attr_token( $attrs, 'data-faz-href' ) || $this->has_attr_token( $attrs, 'data-faz-src' ) ) {
 			return $full;
 		}
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
@@ -4952,30 +4972,48 @@ class Frontend {
 			return $full;
 		}
 
+		// Every href/xlink:href token leaves; the first SVG2 value (else the
+		// first legacy one) is what gets parked. Outside <svg> the tree
+		// builder turns <image> into <img>, which fetches `src`, so on that
+		// tag src is parked as data-faz-src too — the restore pass for <img>
+		// reads it there. Edits from the end, so earlier offsets stay valid.
+		$wanted = 'image' === $tag ? array( 'href', 'xlink:href', 'src' ) : array( 'href', 'xlink:href' );
+		$tokens = $this->tokenize_tag_attrs( $attrs, $wanted );
 		$value  = '';
+		$legacy = '';
 		$parked = $attrs;
-		foreach ( array( 'href', 'xlink:href' ) as $name ) {
-			// `(^|\s)` keeps the plain spelling from matching inside `xlink:href`.
-			$pattern = '/(^|\s)' . preg_quote( $name, '/' ) . '\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i';
-			if ( ! preg_match( $pattern, $parked, $found ) ) {
+		$src    = false;
+		for ( $i = count( $tokens ) - 1; $i >= 0; $i-- ) {
+			$token = $tokens[ $i ];
+			if ( null === $token['value'] ) {
 				continue;
 			}
-			if ( '' === $value ) {
-				$value = $found[2];
+			if ( 'src' === $token['key'] ) {
+				$parked = substr_replace( $parked, ' data-faz-src=' . $token['value'], $token['offset'], $token['length'] );
+				$src    = true;
+				continue;
 			}
-			$stripped = preg_replace( $pattern, '$1', $parked, 1 );
-			if ( null === $stripped ) {
-				return $full; // PCRE failure — never ship a half-rewritten tag.
+			if ( 'href' === $token['key'] ) {
+				$value = $token['value']; // Walking backwards: the last assignment is the first token.
+			} elseif ( '' === $value ) {
+				$legacy = $token['value'];
 			}
-			$parked = $stripped;
+			$parked = substr_replace( $parked, ' ', $token['offset'], $token['length'] );
 		}
 		if ( '' === $value ) {
+			$value = $legacy;
+		}
+		if ( '' === $value && ! $src ) {
 			return $full; // Nothing fetchable to park.
 		}
 
 		// Metadata BEFORE the captured attributes, for the same reason as
 		// process_img_tag(): a self-closing tag keeps its slash inside $attrs.
-		return '<' . $tag . ' data-faz-category="' . esc_attr( $matched_category ) . '" data-faz-href=' . $value . $parked . $close . '>';
+		$metadata = ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		if ( '' !== $value ) {
+			$metadata .= ' data-faz-href=' . $value;
+		}
+		return '<' . $tag . $metadata . $parked . $close . '>';
 	}
 
 	/**
@@ -4997,10 +5035,10 @@ class Frontend {
 
 		// The pattern matches every table part; only one carrying the
 		// attribute is worth the provider match.
-		if ( ! preg_match( '/(^|\s)background\s*=/i', $attrs ) ) {
+		if ( ! $this->has_attr_token( $attrs, 'background' ) ) {
 			return $full;
 		}
-		if ( false !== strpos( $attrs, 'data-faz-background' ) ) {
+		if ( $this->has_attr_token( $attrs, 'data-faz-background' ) ) {
 			return $full;
 		}
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
@@ -5021,8 +5059,8 @@ class Frontend {
 			return $full;
 		}
 
-		$parked = preg_replace( '/(^|\s)background\s*=\s*/i', '$1data-faz-background=', $attrs, 1 );
-		if ( null === $parked || $parked === $attrs ) {
+		list( $parked, $renamed ) = $this->rename_attr_tokens( $attrs, array( 'background' => 'data-faz-background' ) );
+		if ( empty( $renamed ) ) {
 			return $full;
 		}
 
@@ -5052,50 +5090,37 @@ class Frontend {
 	 * @param array $stash              Marker => original token, filled here.
 	 * @return string
 	 */
-	private function process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, array &$stash ) {
+	private function process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, array &$stash, $marker_prefix ) {
 		$attrs = isset( $m[1] ) ? $m[1] : '';
 		$close = isset( $m[2] ) ? $m[2] : '';
 		$full  = isset( $m[0] ) ? $m[0] : '';
 
-		$doc    = null;
-		$parked = null;
-		foreach ( $this->tokenize_tag_attrs( $attrs ) as $token ) {
-			if ( 'srcdoc' === $token['key'] && null === $doc ) {
-				$doc = $token;
-			} elseif ( 'data-faz-srcdoc' === $token['key'] && null === $parked ) {
-				$parked = $token;
-			}
-		}
-		if ( null !== $doc && ( null === $doc['value'] || '' === $doc['value'] ) ) {
-			$doc = null;
-		}
-		if ( null === $doc && null === $parked ) {
+		// EVERY srcdoc and data-faz-srcdoc token leaves the buffer. The parser
+		// keeps the first of a duplicated attribute, so the first live srcdoc
+		// is the one judged — and once it is parked the next one would become
+		// THE srcdoc, so a parked verdict applies to all of them. A parked
+		// token is protected, not re-judged; a live one next to it is judged
+		// all the same, because the parked one is no verdict on it and the
+		// engine loads the live one.
+		$tokens = $this->tokenize_tag_attrs( $attrs, array( 'srcdoc', 'data-faz-srcdoc' ) );
+		if ( array() === $tokens ) {
 			return $full;
 		}
-
-		// Both tokens leave the buffer, and the markers go in from the end so
-		// the earlier offset stays valid. A parked token is protected, not
-		// re-judged; a live one next to it is judged all the same, because the
-		// parked one is no verdict on it and the engine loads the live one.
-		$rest         = $attrs;
-		$token_marker = array();
-		foreach ( array( $doc, $parked ) as $token ) {
-			if ( null === $token ) {
-				continue;
+		$doc = null;
+		foreach ( $tokens as $token ) {
+			if ( 'srcdoc' === $token['key'] && null !== $token['value'] && '' !== $token['value'] ) {
+				$doc = $token;
+				break;
 			}
-			$marker                        = '__FAZ_SRCDOC_STASH_' . count( $stash ) . '__';
-			$stash[ $marker ]              = substr( $attrs, $token['offset'], $token['length'] );
-			$token_marker[ $token['key'] ] = $marker;
 		}
-		$ordered = array_filter( array( $doc, $parked ) );
-		usort(
-			$ordered,
-			function ( $a, $b ) {
-				return $b['offset'] - $a['offset'];
-			}
-		);
-		foreach ( $ordered as $token ) {
-			$rest = substr_replace( $rest, $token_marker[ $token['key'] ], $token['offset'], $token['length'] );
+
+		$rest = $attrs;
+		foreach ( $tokens as $i => $token ) {
+			$tokens[ $i ]['marker'] = $marker_prefix . count( $stash ) . '__';
+			$stash[ $tokens[ $i ]['marker'] ] = substr( $attrs, $token['offset'], $token['length'] );
+		}
+		for ( $i = count( $tokens ) - 1; $i >= 0; $i-- ) {
+			$rest = substr_replace( $rest, $tokens[ $i ]['marker'], $tokens[ $i ]['offset'], $tokens[ $i ]['length'] );
 		}
 		if ( null === $doc ) {
 			return '<iframe' . $rest . $close . '>';
@@ -5113,10 +5138,23 @@ class Frontend {
 		if ( ! $this->is_whitelisted( $rest, '' ) ) {
 			// Judged on what the engine would parse, not on the entity-encoded
 			// source: `src=&quot;https://…&quot;` is a quoted URL to the parser.
-			$markup = html_entity_decode( $inner, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			// Decoded until stable (the attribute decodes once, the document it
+			// becomes decodes again, so `&amp;#97;` is a letter by the time the
+			// request goes out) and stripped of tab/LF/CR the way the URL
+			// parser strips them, or `&NewLine;` inside a host hid it from the
+			// URL pattern below.
+			$markup = $inner;
+			for ( $pass = 0; $pass < 3; $pass++ ) {
+				$decoded = html_entity_decode( $markup, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+				if ( $decoded === $markup ) {
+					break;
+				}
+				$markup = $decoded;
+			}
+			$markup = str_replace( array( "\t", "\n", "\r" ), '', $markup );
 			if ( preg_match_all( '#(?:https?:)?//[^\s"\'<>)]+#i', $markup, $found ) ) {
 				foreach ( $found[0] as $url ) {
-					$category = $this->match_script_to_provider( ' src="' . $url . '"', '', $providers, $blocked_categories );
+					$category = $this->match_script_to_provider( ' src="' . $this->normalize_resource_url( $url ) . '"', '', $providers, $blocked_categories );
 					if ( $category && in_array( $category, $blocked_categories, true ) ) {
 						$matched_category = $category;
 						break;
@@ -5128,55 +5166,177 @@ class Frontend {
 			return '<iframe' . $rest . $close . '>';
 		}
 
-		$stash[ $token_marker['srcdoc'] ] = 'data-faz-srcdoc=' . $raw;
-		// src goes with it. Found again in $rest, where the markers are plain
-		// names and every offset is current.
-		foreach ( $this->tokenize_tag_attrs( $rest ) as $token ) {
-			if ( 'src' === $token['key'] && null !== $token['value'] ) {
-				$rest = substr_replace( $rest, 'data-faz-src=' . $token['value'], $token['offset'], $token['length'] );
-				break;
+		foreach ( $tokens as $token ) {
+			if ( 'srcdoc' === $token['key'] ) {
+				$stash[ $token['marker'] ] = 'data-faz-srcdoc=' . $token['value'];
 			}
 		}
+		// src goes with it, on its token in $rest, where the markers are plain
+		// names and every offset is current.
+		list( $rest ) = $this->rename_attr_tokens( $rest, array( 'src' => 'data-faz-src' ) );
 		// One category: a parked token next to this one may have brought its
 		// own. Metadata BEFORE the captured attributes, as in
 		// process_img_tag(): a self-closing tag keeps its slash separate.
-		$metadata = preg_match( '/(^|\s)data-faz-category\s*=/i', $rest ) ? '' : ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		$metadata = $this->has_attr_token( $rest, 'data-faz-category' ) ? '' : ' data-faz-category="' . esc_attr( $matched_category ) . '"';
 		return self::faz_add_hidden_class( '<iframe' . $metadata . $rest . $close . '>' );
 	}
 
 	/**
-	 * Split a tag's attribute string into tokens the way the HTML tokenizer
-	 * reads them: a name, optionally `=` and a value that is quoted only when
-	 * its first character is a quote and otherwise runs to whitespace or `>`.
+	 * Walk a tag's attribute string the way the HTML tokenizer reads it and
+	 * return the tokens named in $wanted, in document order.
 	 *
-	 * Only sound for an attribute string ATTR_WALK accepted, which guarantees
-	 * that every byte is whitespace, a slash, a stray quote or `=`, or such a
-	 * token.
+	 * Streaming: one preg_match per token, anchored at the previous token's
+	 * end, keeping only what the caller asked for. The first shape of this
+	 * method materialised EVERY token with preg_match_all and offset capture,
+	 * about 1.3 KB each, so 100k attributes on one iframe cost 132 MB — a
+	 * fatal under a 40 MB memory limit — and it ran for every <iframe> as soon
+	 * as the page contained the word "srcdoc".
 	 *
-	 * @param string $attrs Attribute string, as captured after the tag name.
+	 * A name counts wherever the tokenizer would start one: right after a
+	 * closing quote (`title="x"src=…`) or a slash (`<img/src=…>`) as much as
+	 * after whitespace. Every rename and lookup in this class goes through
+	 * these tokens, so a `name=` inside another attribute's value is never
+	 * mistaken for the attribute.
+	 *
+	 * @param string   $attrs  Attribute string, as captured after the tag name.
+	 * @param string[] $wanted Attribute names to return, any case.
 	 * @return array[] Each: name, key (lower-cased name), offset of the name,
 	 *                 length of name-through-value, value (quotes included) or
 	 *                 null for a bare attribute.
 	 */
-	private function tokenize_tag_attrs( $attrs ) {
+	private function tokenize_tag_attrs( $attrs, array $wanted ) {
 		$tokens = array();
-		// Whitespace, slashes and the stray quotes or `=` ATTR_WALK tolerates
-		// are skipped between tokens; a `\G` sequence would otherwise stop at
-		// the first of them and lose every attribute after it.
-		if ( ! preg_match_all( '/\G(?:\s++|\/|["\'=])*+([^\s"\'>\/=]++)(?:\s*+=\s*+("[^"]*+"|\'[^\']*+\'|[^\s>"\'][^\s>]*+))?/', $attrs, $found, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
-			return $tokens;
-		}
-		foreach ( $found as $f ) {
+		$attrs  = (string) $attrs;
+		$length = strlen( $attrs );
+		$lookup = array_fill_keys( array_map( 'strtolower', $wanted ), true );
+		$offset = 0;
+		while ( $offset < $length && preg_match( self::ATTR_TOKEN, $attrs, $f, PREG_OFFSET_CAPTURE, $offset ) ) {
+			$end = $f[0][1] + strlen( $f[0][0] );
+			if ( $end <= $offset ) {
+				break; // Cannot happen with this pattern; never loop forever if it did.
+			}
+			$offset = $end;
+			$key    = strtolower( $f[1][0] );
+			if ( ! isset( $lookup[ $key ] ) ) {
+				continue;
+			}
 			$has_value = isset( $f[2] ) && -1 !== $f[2][1];
 			$tokens[]  = array(
 				'name'   => $f[1][0],
-				'key'    => strtolower( $f[1][0] ),
+				'key'    => $key,
 				'offset' => $f[1][1],
-				'length' => ( $f[0][1] + strlen( $f[0][0] ) ) - $f[1][1],
+				'length' => $end - $f[1][1],
 				'value'  => $has_value ? $f[2][0] : null,
 			);
 		}
 		return $tokens;
+	}
+
+	/**
+	 * Whether the attribute string carries a token of this name.
+	 *
+	 * @param string $attrs Attribute string.
+	 * @param string $name  Attribute name.
+	 * @return bool
+	 */
+	private function has_attr_token( $attrs, $name ) {
+		return array() !== $this->tokenize_tag_attrs( $attrs, array( $name ) );
+	}
+
+	/**
+	 * Rename every token named in $map to the mapped name, in place, on the
+	 * tokens the tokenizer produces. A bare attribute (no value) fetches
+	 * nothing and is left alone. Every occurrence is renamed, because a
+	 * duplicated attribute is kept first-wins by the parser and renaming the
+	 * first alone left the second live.
+	 *
+	 * @param string $attrs Attribute string.
+	 * @param array  $map   name => new name.
+	 * @return array{0:string,1:array} The rewritten string and the keys renamed.
+	 */
+	private function rename_attr_tokens( $attrs, array $map ) {
+		$tokens  = $this->tokenize_tag_attrs( $attrs, array_keys( $map ) );
+		$renamed = array();
+		for ( $i = count( $tokens ) - 1; $i >= 0; $i-- ) {
+			$token = $tokens[ $i ];
+			if ( null === $token['value'] ) {
+				continue;
+			}
+			// A leading space when the token sits right after a quote or a
+			// slash, where the new name would otherwise glue to it.
+			$glued = $token['offset'] > 0 && ! ctype_space( $attrs[ $token['offset'] - 1 ] );
+			$attrs = substr_replace( $attrs, ( $glued ? ' ' : '' ) . $map[ $token['key'] ] . '=' . $token['value'], $token['offset'], $token['length'] );
+			$renamed[ $token['key'] ] = true;
+		}
+		return array( $attrs, $renamed );
+	}
+
+	/**
+	 * A resource URL as the engine resolves it, for matching only.
+	 *
+	 * Chromium decodes character references, strips tab, LF and CR anywhere
+	 * in the input, and percent-decodes the host before it resolves anything,
+	 * so `cdn.tr&#97;cker.test`, `cdn.tra&Tab;cker.test`, a literal newline
+	 * inside the host and `cdn.tracker%2Etest` are all one host to it and
+	 * were four different strings to a substring match on the raw bytes. A
+	 * contributor can write any of them through wp_kses. The decode loops
+	 * until stable, capped, so a doubly-encoded reference is seen through as
+	 * well; only the host is percent-decoded, the path keeps its bytes.
+	 *
+	 * @param string $value Raw attribute value.
+	 * @return string
+	 */
+	private function normalize_resource_url( $value ) {
+		$value = (string) $value;
+		if ( '' === $value ) {
+			return '';
+		}
+		for ( $i = 0; $i < 3; $i++ ) {
+			$decoded = html_entity_decode( $value, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			if ( $decoded === $value ) {
+				break;
+			}
+			$value = $decoded;
+		}
+		$value = str_replace( array( "\t", "\n", "\r" ), '', $value );
+		if ( preg_match( '#^(\s*(?:[a-z][a-z0-9+.\-]*:)?//)([^/?\#\s]+)(.*)$#is', $value, $p ) ) {
+			$value = $p[1] . rawurldecode( $p[2] ) . $p[3];
+		}
+		return $value;
+	}
+
+	/**
+	 * The same, for a comma-separated candidate list (srcset, imagesrcset).
+	 *
+	 * @param string $value Raw list.
+	 * @return string
+	 */
+	private function normalize_resource_list( $value ) {
+		$value = (string) $value;
+		if ( '' === $value ) {
+			return '';
+		}
+		$parts = explode( ',', $value );
+		foreach ( $parts as $i => $part ) {
+			$parts[ $i ] = $this->normalize_resource_url( ltrim( $part ) );
+		}
+		return implode( ', ', $parts );
+	}
+
+	/**
+	 * A per-request nonce for the stash markers. A fixed marker could be
+	 * spelled by the page — a paragraph containing `__FAZ_SRCDOC_STASH_0__`
+	 * received the srcdoc token as live markup — so the markers carry
+	 * something the page cannot know.
+	 *
+	 * @return string
+	 */
+	private function stash_nonce() {
+		try {
+			return bin2hex( random_bytes( 6 ) );
+		} catch ( \Exception $e ) {
+			return substr( md5( uniqid( '', true ) ), 0, 12 );
+		}
 	}
 
 	private function process_link_tag( $m, $providers, $blocked_categories ) {
@@ -5188,10 +5348,10 @@ class Frontend {
 		// Only fetching rels are gated: dns-prefetch and preconnect resolve DNS
 		// and open a socket but transfer no URL and set no cookie, so gating them
 		// would break unrelated performance work for no privacy gain.
-		if ( ! preg_match( '/\brel\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+))/i', $attrs, $rel_match ) ) {
+		$rel_value = $this->extract_tag_attr( $attrs, 'rel' );
+		if ( '' === $rel_value ) {
 			return $full;
 		}
-		$rel_value  = '' !== $rel_match[1] ? $rel_match[1] : ( '' !== $rel_match[2] ? $rel_match[2] : ( isset( $rel_match[3] ) ? $rel_match[3] : '' ) );
 		$rel_tokens = preg_split( '/\s+/', strtolower( trim( $rel_value ) ), -1, PREG_SPLIT_NO_EMPTY );
 		if ( ! $rel_tokens || ! array_intersect( $rel_tokens, array( 'stylesheet', 'preload', 'modulepreload', 'prefetch', 'prerender' ) ) ) {
 			return $full;
@@ -5206,7 +5366,7 @@ class Frontend {
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
 			return $full;
 		}
-		if ( false !== strpos( $attrs, 'data-faz-href' ) || false !== strpos( $attrs, 'data-faz-imagesrcset' ) ) {
+		if ( $this->has_attr_token( $attrs, 'data-faz-href' ) || $this->has_attr_token( $attrs, 'data-faz-imagesrcset' ) ) {
 			return $full;
 		}
 
@@ -5231,14 +5391,16 @@ class Frontend {
 		// `<link rel="preload" as="image" imagesrcset="https://tracker/…">` was
 		// correctly recognised as blocked and then left able to fetch: renaming
 		// href alone does nothing to a preload whose URL lives in imagesrcset.
-		// The attribute name cannot collide with the srcset rule below it —
-		// `(^|\s)srcset` needs whitespace before it, which `imagesrcset=` does
-		// not provide.
-		$new_attrs = preg_replace( '/(^|\s)imagesrcset\s*=\s*/i', '$1data-faz-imagesrcset=', $attrs, 1 );
-		// Rename href → data-faz-href (avoid matching data-href). Every
-		// occurrence: a duplicated attribute is kept first-wins by the parser,
-		// so renaming only the first left the second one live.
-		$new_attrs = preg_replace( '/(^|\s)href\s*=\s*/i', '$1data-faz-href=', $new_attrs );
+		// Both renamed on their tokens, every occurrence: a duplicated
+		// attribute is kept first-wins by the parser, so renaming only the
+		// first left the second one live.
+		list( $new_attrs ) = $this->rename_attr_tokens(
+			$attrs,
+			array(
+				'imagesrcset' => 'data-faz-imagesrcset',
+				'href'        => 'data-faz-href',
+			)
+		);
 		// As with <img>, $attrs may already end in the source tag's `/`.
 		// Prefix metadata so the slash remains the final token before `>`.
 		$metadata = ' data-faz-category="' . esc_attr( $matched_category ) . '"';
@@ -5412,8 +5574,9 @@ class Frontend {
 		$whitelist = $this->get_whitelist();
 		$attr_values = array_filter(
 			array(
-				$this->extract_tag_attr( $attrs, 'src' ),
-				$this->extract_tag_attr( $attrs, 'href' ),
+				$this->normalize_resource_url( $this->extract_tag_attr( $attrs, 'src' ) ),
+				$this->normalize_resource_url( $this->extract_tag_attr( $attrs, 'href' ) ),
+				$this->normalize_resource_url( $this->extract_tag_attr( $attrs, 'xlink:href' ) ),
 				$this->extract_tag_attr( $attrs, 'id' ),
 				$this->extract_tag_attr( $attrs, 'class' ),
 			)
@@ -5440,20 +5603,19 @@ class Frontend {
 	 * @return string
 	 */
 	private function extract_tag_attr( $attrs, $name ) {
-		// Called for every attribute of every tag the output buffer inspects —
-		// build each attribute's pattern string once per request.
-		static $patterns = array();
-		if ( ! isset( $patterns[ $name ] ) ) {
-			$patterns[ $name ] = '/(?<![a-z0-9\-])' . preg_quote( $name, '/' ) . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i';
-		}
-		if ( preg_match( $patterns[ $name ], $attrs, $matches ) ) {
-			for ( $i = 1; $i <= 3; $i++ ) {
-				if ( isset( $matches[ $i ] ) && '' !== $matches[ $i ] ) {
-					return $matches[ $i ];
-				}
+		// The first token of that name, as the tokenizer would produce it:
+		// the old lookbehind pattern found `src=` inside another attribute's
+		// value and parked a local image for the URL in its alt text.
+		foreach ( $this->tokenize_tag_attrs( $attrs, array( $name ) ) as $token ) {
+			if ( null === $token['value'] ) {
+				return '';
 			}
+			$raw = $token['value'];
+			if ( strlen( $raw ) >= 2 && ( '"' === $raw[0] || "'" === $raw[0] ) ) {
+				return substr( $raw, 1, -1 );
+			}
+			return $raw;
 		}
-
 		return '';
 	}
 
@@ -6322,16 +6484,23 @@ class Frontend {
 	 * @return array
 	 */
 	private function get_provider_match_context( $attrs, $content ) {
-		$url = $this->extract_tag_attr( $attrs, 'src' );
+		// Every URL value is matched as the engine resolves it, not as it is
+		// written: see normalize_resource_url().
+		$url = $this->normalize_resource_url( $this->extract_tag_attr( $attrs, 'src' ) );
 		if ( '' === $url ) {
-			$url = $this->extract_tag_attr( $attrs, 'href' );
+			$url = $this->normalize_resource_url( $this->extract_tag_attr( $attrs, 'href' ) );
+		}
+		if ( '' === $url ) {
+			// The legacy SVG spelling is its own token to the tokenizer; the
+			// lookbehind pattern this replaced used to find `href` inside it.
+			$url = $this->normalize_resource_url( $this->extract_tag_attr( $attrs, 'xlink:href' ) );
 		}
 		if ( '' === $url ) {
 			// The legacy `background` presentation attribute carries a URL that
 			// the CSS-less engine still fetches. Last in the chain because it is
 			// only ever the URL when there is no src and no href, so no existing
 			// caller's answer changes.
-			$url = $this->extract_tag_attr( $attrs, 'background' );
+			$url = $this->normalize_resource_url( $this->extract_tag_attr( $attrs, 'background' ) );
 		}
 		// srcset / imagesrcset are matched IN ADDITION to src, never as a mere
 		// fallback: a responsive image can pair a perfectly innocent src with a
@@ -6343,7 +6512,7 @@ class Frontend {
 		// Descriptors ("2x", "640w") and inter-candidate commas are harmless to
 		// fragment matching.
 		$srcset_haystack = trim(
-			$this->extract_tag_attr( $attrs, 'srcset' ) . ' ' . $this->extract_tag_attr( $attrs, 'imagesrcset' )
+			$this->normalize_resource_list( $this->extract_tag_attr( $attrs, 'srcset' ) ) . ' ' . $this->normalize_resource_list( $this->extract_tag_attr( $attrs, 'imagesrcset' ) )
 		);
 
 		$normalized_content  = (string) $content;
@@ -8617,7 +8786,7 @@ class Frontend {
 	 * @return string
 	 */
 	public function filter_inline_script_tag( $tag, $id, $handle = '' ) {
-		if ( ! preg_match( '#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*)</script>#si', $tag, $match ) ) {
+		if ( ! preg_match( '#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*)</script(?=[\s/>])[^>]*>#si', $tag, $match ) ) {
 			return $tag;
 		}
 		$category = $this->inline_script_block_category( $match[1], $match[2], $id, $handle );
@@ -9717,7 +9886,7 @@ class Frontend {
 		// them unblocked, which would violate consent requirements.
 		if ( false !== stripos( $content, '<script' ) ) {
 			$result = preg_replace_callback(
-				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script>#is',
+				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_script_tag( $m, $providers, $blocked_categories );
 				},
@@ -9727,14 +9896,14 @@ class Frontend {
 				$content = $result;
 			} else {
 				error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in filter_content_blocking (scripts)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				$content = preg_replace( '#<script\b[^>]*>.*?</script>#is', '', $content ) ?? $content;
+				$content = preg_replace( '#<script\b[^>]*>.*?</script(?=[\s/>])[^>]*>#is', '', $content ) ?? $content;
 			}
 		}
 
 		// Block <iframe> tags in content.
 		if ( false !== stripos( $content, '<iframe' ) ) {
 			$result = preg_replace_callback(
-				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe>|/\s*+>)#is',
+				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories );
 				},
@@ -9744,7 +9913,7 @@ class Frontend {
 				$content = $result;
 			} else {
 				error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in filter_content_blocking (iframes)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				$content = preg_replace( '#<iframe\b[^>]*>.*?</iframe>#is', '', $content ) ?? $content;
+				$content = preg_replace( '#<iframe\b[^>]*>.*?</iframe(?=[\s/>])[^>]*>#is', '', $content ) ?? $content;
 			}
 		}
 
@@ -9855,10 +10024,7 @@ class Frontend {
 		$blocked_html   = preg_replace_callback(
 			'#<iframe(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#i',
 			function ( $m ) use ( $frame_category ) {
-				$attrs = preg_replace( '/(^|\s)src\s*=\s*/i', '$1data-faz-src=', $m[1] );
-				if ( null === $attrs ) {
-					return $m[0];
-				}
+				list( $attrs ) = $this->rename_attr_tokens( $m[1], array( 'src' => 'data-faz-src' ) );
 				return '<iframe data-faz-category="' . esc_attr( $frame_category ) . '"' . $attrs . '>';
 			},
 			$blocked_html
@@ -9867,7 +10033,7 @@ class Frontend {
 		// Disable scripts using set_script_type_plain() for consistent type handling.
 		$cat_attr = $matched_category;
 		$result = preg_replace_callback(
-			'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script>#is',
+			'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
 			function ( $m ) use ( $cat_attr ) {
 				$attrs = $this->set_script_type_plain( $m[1] );
 				if ( false === strpos( $attrs, 'data-faz-category' ) ) {
@@ -9881,7 +10047,7 @@ class Frontend {
 			$blocked_html = $result;
 		} else {
 			error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in block_oembed (scripts)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			$blocked_html = preg_replace( '#<script\b[^>]*>.*?</script>#is', '', $blocked_html ) ?? $blocked_html;
+			$blocked_html = preg_replace( '#<script\b[^>]*>.*?</script(?=[\s/>])[^>]*>#is', '', $blocked_html ) ?? $blocked_html;
 		}
 
 		return Placeholder_Builder::build( $service_id, $service_name, $matched_category, $blocked_html, $thumb_url );
