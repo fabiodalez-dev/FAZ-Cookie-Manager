@@ -519,7 +519,7 @@
         replace(Node.prototype, name, function (original) {
             return function () {
                 var self = this, args = Array.prototype.slice.call(arguments);
-                var styleOwner = self.nodeName === 'STYLE' ? self : null;
+                var styleOwner = isStyle(self) ? self : null;
                 // replaceChild drops the old child, so the text it contributed
                 // stops counting — the same bookkeeping replaceWith needs.
                 var dropped = name === 'replaceChild' ? args[1] : null;
@@ -587,7 +587,7 @@
             replace(proto, name, function (original) {
                 return function () {
                     var node = this, owner = node.parentNode;
-                    if (!owner || owner.nodeName !== 'STYLE') return original.call(node);
+                    if (!isStyle(owner)) return original.call(node);
                     if (!cssRisk(styleTextWithout(owner, node), [])) return original.call(node);
                     defer(function (policy) {
                         if (!allowedStyle(policy, owner, node, 'without', [])) return;
@@ -600,7 +600,7 @@
     replace(Node.prototype, 'removeChild', function (original) {
         return function (child) {
             var self = this;
-            if (self.nodeName !== 'STYLE') return original.call(self, child);
+            if (!isStyle(self)) return original.call(self, child);
             if (!cssRisk(styleTextWithout(self, child), [])) return original.call(self, child);
             defer(function (policy) {
                 if (!allowedStyle(policy, self, child, 'without', [])) return;
@@ -630,6 +630,15 @@
                     // prepend, before, after, replaceWith, insertAdjacentText
                     // and appendData route — was held. Same owner rule as those:
                     // judge the text the engine will parse, not the fragment.
+                    // Captured only for the hold decision. A range is MUTABLE:
+                    // between the call and the replay the page can move the
+                    // boundary into another <style>, and validating the owner
+                    // captured here while inserting into the live one is the
+                    // same validator/consumer split this file closed everywhere
+                    // else. Reachable on the safety release with an innocuous
+                    // half — `rl(https://t/x)}` contains no url(, @import or
+                    // image-set, so it passes on its own — completing a URL the
+                    // OTHER style already half-holds. Recomputed below.
                     var styleOwner = rangeStyleOwner(range);
                     // surroundContents discards the new parent's own children
                     // and moves the range's contents inside it, so when that
@@ -638,7 +647,7 @@
                     // Recomputed at replay, like every other owner text here,
                     // because the queue drains in order.
                     function surrounded() {
-                        if (name !== 'surroundContents' || !node || node.nodeName !== 'STYLE') return '';
+                        if (name !== 'surroundContents' || !isStyle(node)) return '';
                         return rangeText(range);
                     }
                     var carries = resources(node).length
@@ -647,7 +656,8 @@
                         || !!(styleOwner && cssRisk(containerText(styleOwner, null, name), [node]));
                     if (!carries) return original.call(range, node);
                     defer(function (policy) {
-                        if (styleOwner && !allowedStyle(policy, styleOwner, null, name, [node])) return;
+                        var owner = rangeStyleOwner(range);
+                        if (owner && !allowedStyle(policy, owner, null, name, [node])) return;
                         if (!allowedStyleNode(policy, node) || !allowedCss(policy, surrounded())) return;
                         prepare(node, policy);
                         original.call(range, node);
@@ -701,9 +711,23 @@
     // by appendChild, and existing page text moved into a fresh <style> by
     // Range.surroundContents. Judged with cssURL, the same deliberately broad
     // question insertAdjacentHTML asks about markup carrying a <style>.
+    // nodeName is uppercase for HTML elements and the qualified name AS WRITTEN
+    // for every other namespace, so `=== 'STYLE'` answered "no" for an SVG
+    // <style> — an element browsers apply to the whole document, @import
+    // included. Measured: inside an inline <svg>, appendChild of
+    // `@import url(https://third-party/x.css)` into its <style> landed and
+    // fetched, and so did the textContent setter, because HTMLStyleElement is
+    // not in that element's prototype chain either. localName is the name
+    // without the namespace, which is the question every one of these sites is
+    // actually asking — and the same question `querySelectorAll('style')` asks,
+    // since a CSS type selector with no namespace matches any.
+    function isStyle(node) {
+        if (!node || node.nodeType !== 1) return false;
+        return String(node.localName || node.nodeName).toLowerCase() === 'style';
+    }
     function styleRisk(node) {
         if (!node || typeof node.nodeName !== 'string') return false;
-        if (node.nodeName === 'STYLE') return cssURL(node.textContent);
+        if (isStyle(node)) return cssURL(node.textContent);
         if (!node.querySelectorAll) return false;
         var styles = node.querySelectorAll('style');
         for (var i = 0; i < styles.length; i++) {
@@ -734,7 +758,7 @@
                 // the resulting text is the owner's text without this node,
                 // plus the value. Adding the whole parent textContent counted
                 // this node's old data twice.
-                var context = el && el.nodeName === 'STYLE' ? null : (el && el.parentNode);
+                var context = isStyle(el) ? null : (el && el.parentNode);
                 var scope = context ? 'without' : 'replaceChildren';
                 if (!eligible(el, value) || !cssRisk(containerText(context || el, el, scope), [value])) return desc.set.call(el, value);
                 defer(function (policy) { if (allowedStyle(policy, context || el, el, scope, [value])) el[prop] = value; });
@@ -747,9 +771,14 @@
     }
     ['textContent', 'innerHTML'].forEach(function (prop) {
         holdCSS(w.HTMLStyleElement && HTMLStyleElement.prototype, prop, function () { return true; });
+        // The SVG <style> has its own interface, so the descriptor defined on
+        // HTMLStyleElement.prototype never saw it and its text setters were
+        // ungated. jsdom has no SVGStyleElement, so the guard here is also what
+        // keeps this line harmless there.
+        holdCSS(w.SVGStyleElement && SVGStyleElement.prototype, prop, function () { return true; });
     });
     ['data', 'nodeValue'].forEach(function (prop) {
-        holdCSS(w.CharacterData && CharacterData.prototype, prop, function (node) { return node.parentNode && node.parentNode.nodeName === 'STYLE'; });
+        holdCSS(w.CharacterData && CharacterData.prototype, prop, function (node) { return isStyle(node.parentNode); });
     });
     holdCSS(Element.prototype, 'innerHTML', function (el, value) { return /<style\b/i.test(String(value)); });
     // The runtime gates these too when aggressive CSS-URL blocking is on, so
@@ -767,7 +796,7 @@
             defer(function (policy) { if (allowedCss(policy, markup)) el.insertAdjacentHTML(position, markup); });
         };
     });
-    function inStyle(node) { return !!(node && node.parentNode && node.parentNode.nodeName === 'STYLE'); }
+    function inStyle(node) { return isStyle(node && node.parentNode); }
     // One rule for every route into a <style>, on BOTH sides of the gate: judge
     // the text the engine will parse, never the fragment handed in. A fragment
     // can complete a URL the element already half-holds (`url(https://t` +
@@ -815,21 +844,32 @@
     // the owner's text: broad is the safe direction here, it costs a replay,
     // and a rule per method is how this surface was wrong four times.
     // The text a range currently spans. Range.prototype.toString is what the
-    // engine answers with, so no walk of our own can disagree with it.
+    // engine answers with, so no walk of our own can disagree with it — but
+    // `String(range)` called it through the page's own property, and a page that
+    // assigns `Range.prototype.toString = () => ''` then answers "no CSS here"
+    // for the one route whose resulting text only the range knows. Captured at
+    // install like the attribute natives, and failing CLOSED: with no native to
+    // ask, or a throw, the answer is a string that cssURL matches, so the
+    // insertion is held rather than let through on a missing measurement.
+    var nativeRangeText = w.Range && Range.prototype && typeof Range.prototype.toString === 'function'
+        ? Range.prototype.toString
+        : null;
+    var UNMEASURED = 'url(';
     function rangeText(range) {
-        try { return String(range); } catch (e) { return ''; }
+        if (!nativeRangeText) return UNMEASURED;
+        try { return String(nativeRangeText.call(range)); } catch (e) { return UNMEASURED; }
     }
     function rangeStyleOwner(range) {
         var at = null;
         try { at = range && range.startContainer; } catch (e) { return null; }
         if (!at) return null;
-        if (at.nodeName === 'STYLE') return at;
-        return at.parentNode && at.parentNode.nodeName === 'STYLE' ? at.parentNode : null;
+        if (isStyle(at)) return at;
+        return isStyle(at.parentNode) ? at.parentNode : null;
     }
     function cssOwner(node, name) {
         if (!node) return null;
         var owner = (name === 'before' || name === 'after' || name === 'replaceWith') ? node.parentNode : node;
-        return owner && owner.nodeName === 'STYLE' ? owner : null;
+        return isStyle(owner) ? owner : null;
     }
     // The text an owner is left with once `node` is gone. Removing the node that
     // split a URL reveals it, which is the same reason `deleteData` is
@@ -906,8 +946,8 @@
             // CSS, and missed the element-inside-a-style case.
             var inside = position === 'afterbegin' || position === 'beforeend';
             var owner = inside
-                ? (el.nodeName === 'STYLE' ? el : null)
-                : (el.parentNode && el.parentNode.nodeName === 'STYLE' ? el.parentNode : null);
+                ? (isStyle(el) ? el : null)
+                : (isStyle(el.parentNode) ? el.parentNode : null);
             if (!owner || !cssRisk(owner.textContent, [text])) return original.call(el, position, text);
             defer(function (policy) {
                 if (!allowedStyle(policy, owner, null, 'insertAdjacentText', [text])) return;

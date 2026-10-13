@@ -573,6 +573,92 @@ console.log('\nbootstrap: a <style> can also ARRIVE with its CSS already in it')
     document.head.textContent.indexOf('color:red') !== -1);
 }
 
+console.log('\nbootstrap: a <style> is a <style> in any namespace, and a range is mutable');
+
+{
+  // A range is MUTABLE. The owner was resolved when insertNode was called and
+  // the insertion happens at replay, against the boundary as it stands THEN —
+  // so validating the captured owner while inserting into the live one is a
+  // validator/consumer split. Reachable with an innocuous half: `rl(https://…)}`
+  // contains no url(, @import or image-set, so it passes on its own, and the
+  // other <style> supplies the beginning. Measured completing the URL before
+  // the owner was recomputed at replay.
+  const { window, document } = boot({ seed: '<style id="a">.x{/*</style><style id="b">.p{background-image:u</style>' });
+  const a = document.getElementById('a');
+  const b = document.getElementById('b');
+  const range = document.createRange();
+  range.setStart(a.firstChild, a.firstChild.data.length);
+  range.collapse(true);
+  range.insertNode(document.createTextNode('rl(https://tracker.test/m1.png)}'));
+  ok('premise: the insertion is held, so there is a window at all',
+    a.textContent.indexOf('tracker.test') === -1);
+  a.textContent = '';
+  eq('premise: the first <style> is emptied through its own gated setter', a.textContent, '');
+  range.setStart(b.firstChild, b.firstChild.data.length);
+  range.collapse(true);
+  await release(window);
+  ok('moving the range to another <style> while held does not complete the URL',
+    b.textContent.indexOf('tracker.test') === -1);
+}
+
+{
+  // Range.prototype.toString is the engine's own answer for the text a range
+  // spans, and it was reached through the page's property: `() => ''` turned the
+  // surroundContents check into "no CSS here".
+  const { window, document } = boot();
+  window.Range.prototype.toString = function () { return ''; };
+  const host = document.getElementById('list');
+  host.appendChild(document.createTextNode('@import url(https://tracker.test/m2.css);'));
+  const range = document.createRange();
+  range.selectNodeContents(host);
+  range.surroundContents(document.createElement('style'));
+  const sheet = host.querySelector('style');
+  ok('a shadowed Range.prototype.toString does not open the surround route',
+    !sheet || sheet.textContent.indexOf('tracker.test') === -1);
+}
+
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+{
+  // nodeName is uppercase only for HTML elements, so `=== 'STYLE'` answered no
+  // for an SVG <style> — which browsers apply to the whole document, @import
+  // included. Both directions were measured landing immediately.
+  const { window, document } = boot();
+  const svg = document.createElementNS(SVGNS, 'svg');
+  const sheet = document.createElementNS(SVGNS, 'style');
+  svg.appendChild(sheet);
+  document.body.appendChild(svg);
+  eq('premise: an SVG <style> does not report nodeName STYLE', sheet.nodeName, 'style');
+  sheet.appendChild(document.createTextNode('@import url(https://tracker.test/m3.css);'));
+  ok('CSS text appended into an SVG <style> is held',
+    sheet.textContent.indexOf('tracker.test') === -1);
+  runtimeHandoff(window);
+  ok('and it applies at handoff', sheet.textContent.indexOf('tracker.test') !== -1);
+}
+
+{
+  // The same element arriving with its text already in it, inserted bare —
+  // the branch that asks about the node rather than the container.
+  const { window, document } = boot();
+  const sheet = document.createElementNS(SVGNS, 'style');
+  sheet.appendChild(document.createTextNode('@import url(https://tracker.test/m4.css);'));
+  document.body.appendChild(sheet);
+  ok('a bare SVG <style> carrying CSS is held',
+    document.body.textContent.indexOf('m4.css') === -1);
+  runtimeHandoff(window);
+  ok('and it applies at handoff', document.body.textContent.indexOf('m4.css') !== -1);
+}
+
+{
+  // The other error direction, for the namespace too.
+  const { window, document } = boot();
+  const sheet = document.createElementNS(SVGNS, 'style');
+  sheet.appendChild(document.createTextNode('.a{fill:red}'));
+  document.body.appendChild(sheet);
+  ok('an SVG <style> that cannot fetch is inserted immediately',
+    document.body.textContent.indexOf('fill:red') !== -1);
+}
+
 console.log('\nbootstrap: srcset and imagesrcset are candidate lists, not URLs');
 
 // Resolving the whole list as one URL answers about the FIRST candidate only —
