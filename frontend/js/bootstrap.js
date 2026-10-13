@@ -341,6 +341,22 @@
        and note that the slice is evaluated with only `w` and `RESOURCES` in
        scope. */
     var wrote = false;
+    // The parser this predicate asks is captured here, at install, and never
+    // read from `w` again. Reading `w.DOMParser` at call time made the whole
+    // backstop silenceable from the page: a script that runs before this file
+    // assigns its own constructor whose parseFromString returns an empty
+    // document, and then every question below comes back "nothing written,
+    // nothing left open" and document.write regains the parser exemption for
+    // free. Both halves are captured, because shadowing either one is enough —
+    // `DOMParser.prototype.parseFromString = () => emptyDoc` needs no new
+    // constructor at all. Same reason the attribute natives are captured at
+    // the top of the file: a reference taken before page script runs cannot be
+    // reached by whatever shadows the global afterwards.
+    var Parser = typeof w.DOMParser === 'function' ? w.DOMParser : null;
+    var parseHTML = Parser && Parser.prototype && typeof Parser.prototype.parseFromString === 'function'
+        ? Parser.prototype.parseFromString
+        : null;
+    function parse(text) { return parseHTML.call(new Parser(), String(text), 'text/html'); }
     // A sentinel element, to ask the parser one question it cannot be asked
     // directly: after this text, is the stream still inside something that
     // swallows markup? If the sentinel comes back as an element the state is
@@ -361,8 +377,8 @@
     }
     function noteWrite(args) {
         if (wrote) return;
-        // No DOMParser, no distinction: withdraw and be done.
-        if (typeof w.DOMParser !== 'function') { wrote = true; return; }
+        // No parser, no distinction: withdraw and be done.
+        if (!parseHTML) { wrote = true; return; }
         // Each call on its OWN, deliberately. Joining successive writes into
         // one buffer was wrong in both directions, because writes from
         // different scripts are not contiguous in the real stream — the
@@ -374,7 +390,7 @@
         // below instead of being guessed at.
         var text = Array.prototype.join.call(args, '');
         var doc;
-        try { doc = new w.DOMParser().parseFromString(text, 'text/html'); }
+        try { doc = parse(text); }
         catch (e) { wrote = true; return; }
         // Asked with the backstop's OWN element list, so the two cannot drift:
         // the question is not "is this markup" but "could it have introduced
@@ -440,7 +456,7 @@
         // element rather than a list of such constructs, because a list is what
         // has been wrong four times on this surface.
         var probe;
-        try { probe = new w.DOMParser().parseFromString(text + PROBE, 'text/html'); }
+        try { probe = parse(text + PROBE); }
         catch (e) { wrote = true; return; }
         if (probe.querySelector('faz-probe-open')) return;
         // Swallowed — with one acceptable exception, asked of the parser the
@@ -508,6 +524,7 @@
                 // stops counting — the same bookkeeping replaceWith needs.
                 var dropped = name === 'replaceChild' ? args[1] : null;
                 var carries = resources(args[0]).length
+                    || styleRisk(args[0])
                     || !!(styleOwner && cssRisk(containerText(styleOwner, dropped, name), [args[0]]));
                 if (!carries && !waiting.has(self)) return original.apply(self, args);
                 waiting.add(self);
@@ -518,6 +535,7 @@
                     // the node would be dropped with only a console warning,
                     // so fall back to appending into the same parent.
                     if (styleOwner && !allowedStyle(policy, styleOwner, dropped, name, [args[0]])) return;
+                    if (!allowedStyleNode(policy, args[0])) return;
                     var ref = args[1];
                     if (name !== 'appendChild' && ref && ref.parentNode !== self) {
                         if (name === 'replaceChild') Node.prototype.appendChild.call(self, args[0]);
@@ -545,11 +563,14 @@
                     // One joined string, in call order, judged against the text
                     // the owner will actually hold. Per-argument tests missed a
                     // URL split across two arguments of one call.
-                    var carries = args.some(function (n) { return resources(n).length; })
+                    var carries = args.some(function (n) { return resources(n).length || styleRisk(n); })
                         || !!(styleOwner && cssRisk(containerText(styleOwner, self, name), args));
                     if (!carries) return original.apply(self, args);
                     defer(function (policy) {
                         if (styleOwner && !allowedStyle(policy, styleOwner, self, name, args)) return;
+                        // One call inserts every argument, so a refusal is
+                        // all-or-nothing here as it already is above.
+                        if (args.some(function (n) { return !allowedStyleNode(policy, n); })) return;
                         args.forEach(function (n) { prepare(n, policy); });
                         self[name].apply(self, args);
                     });
@@ -599,8 +620,38 @@
             replace(Range.prototype, name, function (original) {
                 return function (node) {
                     var range = this;
-                    if (!resources(node).length) return original.call(range, node);
-                    defer(function (policy) { prepare(node, policy); original.call(range, node); });
+                    // Resource ELEMENTS were judged here; CSS text was not, and
+                    // `style` is deliberately not in RESOURCES, so this was the
+                    // one insertion route that let a <style> grow a URL
+                    // unexamined. A text node carrying
+                    // `@import url(https://third-party/x.css)` dropped into a
+                    // connected <style> through a Range fetched on the spot,
+                    // while the identical appendChild — and every append,
+                    // prepend, before, after, replaceWith, insertAdjacentText
+                    // and appendData route — was held. Same owner rule as those:
+                    // judge the text the engine will parse, not the fragment.
+                    var styleOwner = rangeStyleOwner(range);
+                    // surroundContents discards the new parent's own children
+                    // and moves the range's contents inside it, so when that
+                    // parent IS a <style> the resulting stylesheet text is the
+                    // range's text — page text that passed through no setter.
+                    // Recomputed at replay, like every other owner text here,
+                    // because the queue drains in order.
+                    function surrounded() {
+                        if (name !== 'surroundContents' || !node || node.nodeName !== 'STYLE') return '';
+                        return rangeText(range);
+                    }
+                    var carries = resources(node).length
+                        || styleRisk(node)
+                        || cssURL(surrounded())
+                        || !!(styleOwner && cssRisk(containerText(styleOwner, null, name), [node]));
+                    if (!carries) return original.call(range, node);
+                    defer(function (policy) {
+                        if (styleOwner && !allowedStyle(policy, styleOwner, null, name, [node])) return;
+                        if (!allowedStyleNode(policy, node) || !allowedCss(policy, surrounded())) return;
+                        prepare(node, policy);
+                        original.call(range, node);
+                    });
                 };
             });
         });
@@ -608,9 +659,13 @@
     replace(Element.prototype, 'insertAdjacentElement', function (original) {
         return function (position, node) {
             var el = this;
-            if (!resources(node).length && !waiting.has(el)) return original.call(el, position, node);
+            if (!resources(node).length && !styleRisk(node) && !waiting.has(el)) return original.call(el, position, node);
             waiting.add(el);
-            defer(function (policy) { prepare(node, policy); el.insertAdjacentElement(position, node); });
+            defer(function (policy) {
+                if (!allowedStyleNode(policy, node)) return;
+                prepare(node, policy);
+                el.insertAdjacentElement(position, node);
+            });
             return node;
         };
     });
@@ -636,6 +691,29 @@
     // broken; the benefit is that no parser of ours stands between a visitor
     // and a third-party request.
     function allowedCss(policy, value) { return !policy || !policy.sameOriginOnly || !cssURL(value); }
+    // A <style> ELEMENT that arrives with its CSS already in it. Every gate in
+    // this file asks whether the CONTAINER is a <style>, and the text-entry
+    // routes (textContent, innerHTML, data, insertAdjacentText/HTML, appendData)
+    // cover the ways a style GROWS text — so what was left was bringing in a
+    // style that already holds the URL, built where no setter runs. Two such
+    // routes were measured fetching on insertion in jsdom:
+    // `range.createContextualFragment('<style>@import url(…)</style>')` followed
+    // by appendChild, and existing page text moved into a fresh <style> by
+    // Range.surroundContents. Judged with cssURL, the same deliberately broad
+    // question insertAdjacentHTML asks about markup carrying a <style>.
+    function styleRisk(node) {
+        if (!node || typeof node.nodeName !== 'string') return false;
+        if (node.nodeName === 'STYLE') return cssURL(node.textContent);
+        if (!node.querySelectorAll) return false;
+        var styles = node.querySelectorAll('style');
+        for (var i = 0; i < styles.length; i++) {
+            if (cssURL(styles[i].textContent)) return true;
+        }
+        return false;
+    }
+    function allowedStyleNode(policy, node) {
+        return !policy || !policy.sameOriginOnly || !styleRisk(node);
+    }
     // Preserve the runtime's CSS enforcement during its download too. Plain
     // layout/style changes keep their synchronous semantics.
     function holdCSS(proto, prop, eligible) {
@@ -724,6 +802,30 @@
     // Testing the node itself held `styleTag.after(text)`, which never becomes
     // CSS, while letting `nodeInsideStyle.after('rl(https://…)}')` through,
     // which does. Both error directions were reachable.
+    // The <style> a Range boundary writes into. insertNode lands the node at
+    // the range's start, so the element whose text changes is the start
+    // container when the boundary sits on a child list, and its parent when the
+    // boundary is inside a text node — the same two cases cssOwner() separates
+    // for before/after. commonAncestorContainer answers a different question
+    // (it can be an ancestor far above the <style>, or the <style>'s parent for
+    // a range that spans it) and would both miss and over-hold.
+    //
+    // surroundContents is held on the same rule even though its new parent's
+    // own children are discarded by the spec and the wrapped contents stay in
+    // the owner's text: broad is the safe direction here, it costs a replay,
+    // and a rule per method is how this surface was wrong four times.
+    // The text a range currently spans. Range.prototype.toString is what the
+    // engine answers with, so no walk of our own can disagree with it.
+    function rangeText(range) {
+        try { return String(range); } catch (e) { return ''; }
+    }
+    function rangeStyleOwner(range) {
+        var at = null;
+        try { at = range && range.startContainer; } catch (e) { return null; }
+        if (!at) return null;
+        if (at.nodeName === 'STYLE') return at;
+        return at.parentNode && at.parentNode.nodeName === 'STYLE' ? at.parentNode : null;
+    }
     function cssOwner(node, name) {
         if (!node) return null;
         var owner = (name === 'before' || name === 'after' || name === 'replaceWith') ? node.parentNode : node;

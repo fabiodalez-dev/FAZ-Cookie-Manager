@@ -452,6 +452,127 @@ async function release(window) {
     document.head.textContent.indexOf('not-css.png') !== -1);
 }
 
+console.log('\nbootstrap: a Range reaches the DOM through neither Node nor ParentNode');
+
+// Range.insertNode and Range.surroundContents judged resource ELEMENTS and
+// nothing else, and `style` is deliberately not in the resource list — so this
+// was the one insertion route into a <style> that no CSS gate stood in front
+// of. Every other route has a case in the section above; this one completes the
+// same split URL the same way and had to be held the same way.
+{
+  const { window, document } = boot({ seed: SPLIT_SEED });
+  const style = document.getElementById('seed');
+  const range = document.createRange();
+  range.setStart(style.firstChild, style.firstChild.data.length);
+  range.collapse(true);
+  range.insertNode(document.createTextNode('rl(https://tracker.test/r1.png)}'));
+  ok('Range.insertNode completing a URL inside <style> is held',
+    style.textContent.indexOf('tracker.test') === -1);
+  runtimeHandoff(window);
+  ok('and it applies at handoff', style.textContent.indexOf('tracker.test') !== -1);
+}
+
+{
+  // The release side of the same route: with no runtime, no style text that
+  // could fetch is applied at all.
+  const { window, document } = boot({ seed: SPLIT_SEED });
+  const style = document.getElementById('seed');
+  const range = document.createRange();
+  range.setStart(style.firstChild, style.firstChild.data.length);
+  range.collapse(true);
+  range.insertNode(document.createTextNode('rl(https://tracker.test/r2.png)}'));
+  await release(window);
+  ok('Range.insertNode: the safety release does not complete the URL',
+    style.textContent.indexOf('tracker.test') === -1);
+}
+
+{
+  // surroundContents is held on the same owner rule. Its new parent's own
+  // children are discarded by the spec, so this is the conservative direction
+  // on purpose: it costs a replay, and a rule per method is how this surface
+  // was wrong repeatedly.
+  const { window, document } = boot({ seed: SPLIT_SEED });
+  const style = document.getElementById('seed');
+  const wrapper = document.createElement('span');
+  wrapper.textContent = 'rl(https://tracker.test/r3.png)}';
+  const range = document.createRange();
+  range.selectNodeContents(style);
+  range.surroundContents(wrapper);
+  ok('Range.surroundContents with URL-carrying text is held',
+    style.textContent.indexOf('tracker.test') === -1);
+}
+
+{
+  // The other error direction: a Range outside any <style> carries no CSS, so
+  // ordinary page work must stay synchronous. Holding it would delay content
+  // that can never fetch anything.
+  const { window, document } = boot();
+  const list = document.getElementById('list');
+  list.appendChild(document.createTextNode('one'));
+  const range = document.createRange();
+  range.setStart(list.firstChild, 3);
+  range.collapse(true);
+  range.insertNode(document.createTextNode(' url(two)'));
+  ok('a Range insertion outside a <style> is not held',
+    list.textContent.indexOf('url(two)') !== -1);
+}
+
+console.log('\nbootstrap: a <style> can also ARRIVE with its CSS already in it');
+
+// Every gate above asks whether the CONTAINER is a <style>, and the text-entry
+// setters cover the ways a style grows text. What was left was a style built
+// where no setter runs, then inserted. Both routes below were measured fetching
+// on insertion, and both are ordinary DOM.
+{
+  const { window, document } = boot();
+  const range = document.createRange();
+  range.selectNodeContents(document.body);
+  const frag = range.createContextualFragment('<style>@import url(https://tracker.test/f1.css);</style>');
+  document.head.appendChild(frag);
+  ok('a <style> arriving inside a createContextualFragment is held',
+    document.head.textContent.indexOf('tracker.test') === -1);
+  runtimeHandoff(window);
+  ok('and it applies at handoff', document.head.textContent.indexOf('tracker.test') !== -1);
+}
+
+{
+  const { window, document } = boot();
+  const range = document.createRange();
+  range.selectNodeContents(document.body);
+  const frag = range.createContextualFragment('<style>@import url(https://tracker.test/f2.css);</style>');
+  document.head.appendChild(frag);
+  await release(window);
+  ok('the safety release does not apply it either',
+    document.head.textContent.indexOf('tracker.test') === -1);
+}
+
+{
+  // surroundContents with a fresh <style> as the new parent turns existing page
+  // text into a stylesheet. The text passed through no setter, and the owner is
+  // not a <style> before the call — so neither of the two rules above sees it.
+  const { window, document } = boot();
+  const p = document.getElementById('list');
+  p.appendChild(document.createTextNode('@import url(https://tracker.test/f3.css);'));
+  const range = document.createRange();
+  range.selectNodeContents(p);
+  range.surroundContents(document.createElement('style'));
+  const sheet = p.querySelector('style');
+  ok('wrapping page text in a new <style> is held', !sheet || sheet.textContent.indexOf('tracker.test') === -1);
+  runtimeHandoff(window);
+  ok('and the wrap applies at handoff',
+    !!p.querySelector('style') && p.querySelector('style').textContent.indexOf('tracker.test') !== -1);
+}
+
+{
+  // A <style> with no URL in it fetches nothing and must not be delayed.
+  const { window, document } = boot();
+  const plain = document.createElement('style');
+  plain.textContent = '.a{color:red}';
+  document.head.appendChild(plain);
+  ok('a <style> that cannot fetch is inserted immediately',
+    document.head.textContent.indexOf('color:red') !== -1);
+}
+
 console.log('\nbootstrap: srcset and imagesrcset are candidate lists, not URLs');
 
 // Resolving the whole list as one URL answers about the FIRST candidate only —

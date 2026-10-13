@@ -215,6 +215,48 @@ for (const prefix of ['<sc', '<scri', '<script']) {
     scan.withdrew(), false);
 }
 
+console.log('\nthe parser is captured at install, not read from the page at call time');
+
+// The predicate asks the engine's own parser, which made `w.DOMParser` a
+// security decision read from a mutable global: a script running before this
+// file assigns a constructor whose parseFromString returns an empty document,
+// and every question comes back "nothing written, nothing left open" — the
+// whole document.write backstop silenced from the page it is meant to guard.
+// Both halves are captured, because patching the prototype method needs no new
+// constructor at all. These scanners are built BEFORE the shadow, exactly as
+// the real file is installed before page script runs.
+{
+  const realParser = dom.window.DOMParser;
+  const realParse = realParser.prototype.parseFromString;
+  // "Nothing was written, and the stream is closed" — the two answers that
+  // buy back the parser exemption. An empty document would NOT do it: the
+  // sentinel probe would come back missing and the predicate would withdraw by
+  // accident, which is how the first version of this case passed unpatched.
+  const silent = () => realParse.call(new realParser(), '<faz-probe-open></faz-probe-open>', 'text/html');
+
+  const withdrawing = scanner();
+  const keeping = scanner();
+  const prototyped = scanner();
+
+  // A hostile constructor, installed after the bootstrap was evaluated.
+  dom.window.DOMParser = function () { return { parseFromString: silent }; };
+  withdrawing.note(['<iframe src="https://tracker.test/x"></iframe>']);
+  eq('a shadowed w.DOMParser does not stop the withdrawal', withdrawing.withdrew(), true);
+  keeping.note(['<p>ordinary copy</p>']);
+  eq('and the captured parser still answers, so it is not a blanket withdrawal',
+    keeping.withdrew(), false);
+  dom.window.DOMParser = realParser;
+
+  // The other half: same constructor, lobotomised method.
+  realParser.prototype.parseFromString = silent;
+  try {
+    prototyped.note(['<img src="https://tracker.test/p.gif">']);
+    eq('a shadowed parseFromString does not stop it either', prototyped.withdrew(), true);
+  } finally {
+    realParser.prototype.parseFromString = realParse;
+  }
+}
+
 console.log('');
 console.log(`bootstrap-write-stream: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
