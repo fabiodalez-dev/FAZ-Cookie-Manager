@@ -1000,6 +1000,30 @@
                 };
             });
         });
+        // Removing a span of a sheet's text reveals a URL the same way
+        // deleteData and removeChild do — `url(https:/*x*/ /t/a.png)` is a
+        // valid URL once the comment goes — and these two were the one removal
+        // route with no gate. Judged on the owner's text WITHOUT the range, as
+        // the other removals are. extractContents has to answer with a
+        // fragment at once; while the removal is held the answer is an empty
+        // one, the same shape of debt insertRule's index carries.
+        ['deleteContents', 'extractContents'].forEach(function (name) {
+            if (typeof Range.prototype[name] !== 'function') return;
+            replace(Range.prototype, name, function (original) {
+                return function () {
+                    var range = this, owner = rangeStyleOwner(range);
+                    if (!owner) return original.call(range);
+                    var result = rangeRemoved(range, owner);
+                    if (result !== null && !cssURL(result)) return original.call(range);
+                    defer(function (policy) {
+                        var live = rangeStyleOwner(range);
+                        if (!live) return void original.call(range);
+                        deliverCss(policy, live, null, 'without', [], function () { original.call(range); }, rangeRemoved(range, live));
+                    });
+                    return name === 'extractContents' ? d.createDocumentFragment() : undefined;
+                };
+            });
+        });
     }
     replace(Element.prototype, 'insertAdjacentElement', function (original) {
         return function (position, node) {
@@ -1298,6 +1322,28 @@
     // child list, inside a text node — which the engine splits at the offset —
     // when it is in one. Read at replay, against the boundary as it stands
     // then, for the reason rangeStyleOwner() is recomputed there.
+    // The text a <style> is left with once a range of it is deleted or
+    // extracted: each text child keeps the part before the range's start and
+    // the part after its end. The engine's own comparePoint() places a child
+    // against the boundaries, so no model of the range is kept here; when it
+    // cannot answer (a boundary in another tree, a detached node) the result
+    // is null, which the hold reads as risk and the delivery as the whole
+    // owner text.
+    function rangeRemoved(range, owner) {
+        var text = '';
+        try {
+            for (var child = owner.firstChild; child; child = child.nextSibling) {
+                if (!isText(child)) continue;
+                var data = textOf(child), from, to;
+                if (range.startContainer === child) from = range.startOffset;
+                else from = range.comparePoint(child, 0) < 0 ? data.length : 0;
+                if (range.endContainer === child) to = range.endOffset;
+                else to = range.comparePoint(child, data.length) > 0 ? 0 : data.length;
+                text += from >= to ? data : data.slice(0, from) + data.slice(to);
+            }
+        } catch (e) { return null; }
+        return text;
+    }
     function rangeResult(range, owner, node) {
         var at = range.startContainer, offset = range.startOffset;
         if (at === owner) return resultText(owner, owner.childNodes[offset] || null, 'insertBefore', [node]);
@@ -1394,9 +1440,11 @@
                 // sheet, not the text of one: delivered through the markup
                 // rule, where the sheets inside are judged one by one, and not
                 // written back as the text of some container.
-                var markup = prop === 'innerHTML' && !isStyle(el);
+                // outerHTML is markup too, and its nodes land in the parent.
+                var markup = (prop === 'innerHTML' && !isStyle(el)) || prop === 'outerHTML';
+                var host = prop === 'outerHTML' ? (el.parentNode || el) : el;
                 defer(function (policy) {
-                    if (markup) return deliverMarkup(policy, value, function (html) { el[prop] = html; }, el);
+                    if (markup) return deliverMarkup(policy, value, function (html) { el[prop] = html; }, host);
                     deliverCss(policy, context || el, el, scope, [value], function () { el[prop] = value; });
                 });
             }
@@ -1421,6 +1469,19 @@
     // A shadow root's innerHTML is a separate descriptor on a separate
     // interface, so the line above never covered `root.innerHTML = '<style>…'`.
     holdCSS(w.ShadowRoot && ShadowRoot.prototype, 'innerHTML', function (el, value) { return /<style\b/i.test(String(value)); });
+    // outerHTML replaces the element with parsed markup, which can carry a
+    // <style> exactly as innerHTML can; it was tagged for the backstop but
+    // not held, so the sheet was live a frame before the backstop saw it.
+    holdCSS(Element.prototype, 'outerHTML', function (el, value) { return /<style\b/i.test(String(value)); });
+    // innerText on a <style> is one more spelling of its text. jsdom defines
+    // no innerText, so holdCSS() finds no descriptor there and installs
+    // nothing; the line is exercised by the real engines only.
+    holdCSS(w.HTMLElement && HTMLElement.prototype, 'innerText', function (el) { return isStyle(el); });
+    // `textNode.textContent = css` on a text node INSIDE a <style> is the
+    // Node.prototype setter, which the two <style> interfaces above never
+    // covered — only `data` and `nodeValue` were. Installed last, so the gates
+    // above captured the real descriptor, not this one.
+    holdCSS(Node.prototype, 'textContent', function (node) { return isText(node) && isStyle(node.parentNode); });
     // The runtime gates these too when aggressive CSS-URL blocking is on, so
     // leaving them open here would reopen during the download exactly what it
     // closes afterwards. insertAdjacentElement was already held; the HTML and
@@ -1603,24 +1664,34 @@
             });
         };
     });
-    ['insertRule', 'replace', 'replaceSync'].forEach(function (name) {
-        var proto = w.CSSStyleSheet && CSSStyleSheet.prototype;
+    // The CSSOM routes into a sheet. CSSStyleSheet.addRule is the legacy
+    // spelling of insertRule and takes the rule in two halves; a grouping rule
+    // (@media, @supports, @layer) has an insertRule of its own on another
+    // interface, and a rule inserted there is as live as one at the top.
+    [
+        { proto: w.CSSStyleSheet && CSSStyleSheet.prototype, names: ['insertRule', 'replace', 'replaceSync', 'addRule'] },
+        { proto: w.CSSGroupingRule && CSSGroupingRule.prototype, names: ['insertRule'] }
+    ].forEach(function (host) { host.names.forEach(function (name) {
+        var proto = host.proto;
         if (!proto || typeof proto[name] !== 'function') return;
         replace(proto, name, function (original) {
             return function () {
                 var sheet = this, args = Array.prototype.slice.call(arguments);
-                if (!cssURL(args[0])) return original.apply(sheet, args);
+                var css = name === 'addRule'
+                    ? String(args[0] == null ? '' : args[0]) + '{' + String(args[1] == null ? '' : args[1]) + '}'
+                    : args[0];
+                if (!cssURL(css)) return original.apply(sheet, args);
                 if (name === 'replace') return new Promise(function (resolve, reject) {
                     defer(function (policy) {
                         // CSSStyleSheet.replace() resolves with the sheet, and
                         // callers chain on it: `sheet.replace(css).then(s =>
                         // s.insertRule(…))`. Resolving with undefined turned a
                         // refusal into a TypeError inside the caller.
-                        if (!allowedCss(policy, args[0])) return resolve(sheet);
+                        if (!allowedCss(policy, css)) return resolve(sheet);
                         sheet.replace.apply(sheet, args).then(resolve, reject);
                     });
                 });
-                defer(function (policy) { if (allowedCss(policy, args[0])) sheet[name].apply(sheet, args); });
+                defer(function (policy) { if (allowedCss(policy, css)) sheet[name].apply(sheet, args); });
                 // insertRule must answer synchronously with an index, and the
                 // rule it would describe does not exist yet. Report the index the
                 // caller asked for, clamped into the sheet as the spec requires,
@@ -1628,7 +1699,9 @@
                 // A caller that immediately deleteRule()s that index operates on
                 // a sheet one rule short; there is no synchronous answer that
                 // avoids it, and the alternative — fetching before consent to
-                // keep an index honest — is not a trade worth making.
+                // keep an index honest — is not a trade worth making. addRule
+                // answers -1 by specification, whatever happened.
+                if (name === 'addRule') return -1;
                 if (name !== 'insertRule') return undefined;
                 var at = Number(args[1]);
                 if (!isFinite(at) || at < 0) at = 0;
@@ -1636,7 +1709,7 @@
                 return at > length ? length : at;
             };
         });
-    });
+    }); });
     // Document.prototype, for the reason the write wrappers give: an instance
     // wrapper is one property lookup away from being skipped.
     replace(w.Document && Document.prototype && typeof Document.prototype.createElement === 'function' ? Document.prototype : d, 'createElement', function (original) {
@@ -2213,9 +2286,21 @@
         queue = [];
         immediate = safety;
         replaying++;
-        try { scripts.forEach(safety.script); } finally { replaying--; }
-        scripts = [];
+        try { judgeScripts(safety); } finally { replaying--; }
         tasks.forEach(function (task) { run(task, safety); });
+    }
+    // Every script the page created, judged one by one and each on its own,
+    // the way run() treats a task: a policy that throws on one element used
+    // to abort the loop AND the drain that followed it, leaving the queue
+    // undrained with `pending` already false — every held fetch and XHR on the
+    // page suspended for good, over one script.
+    function judgeScripts(policy) {
+        var list = scripts;
+        scripts = [];
+        list.forEach(function (el) {
+            try { policy.script(el); }
+            catch (error) { w.console.warn('[FAZ Cookie Manager] Deferred script decision failed', error); }
+        });
     }
     // Deferred scripts always run before DOMContentLoaded, so still pending at
     // that point means the runtime is not coming.
@@ -2252,8 +2337,7 @@
             handoffs.forEach(function (capture) { capture(); });
             handoffs = [];
             pending = false;
-            scripts.forEach(policy.script);
-            scripts = [];
+            judgeScripts(policy);
             var tasks = queue;
             queue = [];
             tasks.forEach(function (task) { run(task, policy); });

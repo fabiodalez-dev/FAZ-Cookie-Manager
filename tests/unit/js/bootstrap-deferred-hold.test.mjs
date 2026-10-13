@@ -1798,6 +1798,101 @@ for (const [label, css, blocked, needle] of TOKENIZER_CASES) {
   eq('with no marker', sheet && sheet.getAttribute('data-faz-css'), null);
 }
 
+console.log('\nbootstrap: the last four routes into a sheet, and a policy that throws');
+
+{
+  // `textNode.textContent = css` on a text node inside a <style> is the
+  // Node.prototype setter: the two <style> interfaces never saw it, and only
+  // `data` and `nodeValue` were gated on CharacterData.
+  const { window, document } = boot({ seed: '<style id="seed">.a{color:red}</style>' });
+  const node = document.getElementById('seed').firstChild;
+  node.textContent = '.p{background-image:url(https://tracker.test/tc.png)}';
+  eq('textContent on a text node inside a <style> is held', node.data, '.a{color:red}');
+  runtimeHandoff(window);
+  eq('and applies at handoff', document.getElementById('seed').textContent, '.p{background-image:url(https://tracker.test/tc.png)}');
+}
+
+{
+  // outerHTML carries markup like innerHTML does and was tagged but not held.
+  const { window, document } = boot();
+  const host = document.createElement('div');
+  host.id = 'host';
+  document.body.appendChild(host);
+  host.outerHTML = '<div id="replaced"><style>.p{background:url(https://tracker.test/o.png)}</style></div>';
+  ok('outerHTML carrying a <style> with a URL is held', host.parentNode === document.body && !document.getElementById('replaced'));
+  runtimeHandoff(window);
+  ok('and the replacement applies at handoff', !!document.getElementById('replaced') && host.parentNode === null);
+}
+
+for (const name of ['deleteContents', 'extractContents']) {
+  // Removing a span of a sheet's text reveals a URL, the way deleteData does.
+  const { window, document } = boot({ seed: '<style id="seed">.p{background-image:url(https:/*x*/ /tracker.test/a.png)}</style>' });
+  const node = document.getElementById('seed').firstChild;
+  const before = node.data;
+  const range = document.createRange();
+  range.setStart(node, before.indexOf('/*'));
+  range.setEnd(node, before.indexOf('/*') + 7);
+  const out = range[name]();
+  eq('Range.' + name + ' that would reveal a URL is held', document.getElementById('seed').textContent, before);
+  if (name === 'extractContents') eq('and answers with an empty fragment meanwhile', out && out.childNodes.length, 0);
+  runtimeHandoff(window);
+  eq('and it applies at handoff', document.getElementById('seed').textContent, '.p{background-image:url(https:tracker.test/a.png)}');
+}
+
+{
+  // A removal that reveals nothing keeps its synchronous semantics.
+  const { window, document } = boot({ seed: '<style id="seed">.a{color:red} .b{color:blue}</style>' });
+  const node = document.getElementById('seed').firstChild;
+  const range = document.createRange();
+  range.setStart(node, 0);
+  range.setEnd(node, 13);
+  range.deleteContents();
+  eq('a Range removal with nothing to reveal is not held', node.data, ' .b{color:blue}');
+}
+
+{
+  // The legacy addRule and the insertRule of a grouping rule are CSSOM
+  // routes of their own, and neither was gated.
+  const { window, document } = boot();
+  const style = document.createElement('style');
+  document.head.appendChild(style);
+  const sheet = style.sheet;
+  const index = sheet.addRule('.p', 'background-image:url(https://tracker.test/add.png)');
+  eq('addRule answers -1 as the specification says', index, -1);
+  eq('and the rule is held', sheet.cssRules.length, 0);
+  sheet.insertRule('@media screen {}', 0);
+  eq('premise: a grouping rule with no URL is inserted at once', sheet.cssRules.length, 1);
+  const group = sheet.cssRules[0];
+  group.insertRule('.q{background-image:url(https://tracker.test/group.png)}', 0);
+  eq('a rule inserted into a grouping rule is held', group.cssRules.length, 0);
+  runtimeHandoff(window);
+  eq('addRule applies at handoff', sheet.cssRules.length, 2);
+  eq('and so does the grouping rule insertion', group.cssRules.length, 1);
+}
+
+{
+  // A policy.script that throws on one element must not take the queue down
+  // with it: before, the throw left `pending` false with every held fetch
+  // and XHR suspended for the rest of the page view.
+  const { window, document, fetched } = boot();
+  document.createElement('script');
+  document.createElement('script');
+  window.fetch(SITE + 'wp-json/cart');
+  let thrown = null;
+  window.console.warn = function () {};
+  window._fazBootstrap.start();
+  try {
+    window._fazBootstrap.finish({
+      script: function () { throw new Error('boom'); },
+      node: function () {},
+      url: function () { return false; },
+    });
+  } catch (e) { thrown = e; }
+  eq('a throwing policy.script does not escape finish()', thrown, null);
+  await Promise.resolve();
+  eq('and the queue still drains: the held fetch went out', fetched.length, 1);
+}
+
 console.log('\nhandoff: the policy matches URLs the way the runtime does');
 
 // The policy handed to finish() used to match the raw URL string, while the
