@@ -676,6 +676,49 @@ namespace {
 		assert_true( 1 === substr_count( $out, 'data-faz-category=' ), $label . ': one category' );
 	}
 
+	echo "\n-- A2: a script whose type lives in a decoy --\n";
+
+	// The skips and the re-type matched `type=` anywhere in the attribute
+	// string, inside another attribute's value included.
+	foreach ( array(
+		'alt="type=\'module\'"'           => '<script alt="type=\'module\'" src="https://cdn.tracker.test/a.js"></script>',
+		'alt="type=\'text/plain\'"'       => '<script alt="type=\'text/plain\'" src="https://cdn.tracker.test/a.js"></script>',
+		'alt="data-fazcookie"'            => '<script alt="data-fazcookie" src="https://cdn.tracker.test/a.js"></script>',
+		'alt="type=\'application/json\'"' => '<script alt="type=\'application/json\'" src="https://cdn.tracker.test/a.js"></script>',
+	) as $label => $tag ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html>' . $tag . '</html>' );
+		assert_true( 1 === preg_match_all( '/(?<![\w-])type="text\/plain"/', $out ), $label . ': re-typed through a real type attribute, once' );
+		assert_true( false !== strpos( $out, substr( $tag, 8, strpos( $tag, ' src=' ) - 8 ) ), $label . ': and the decoy is untouched' );
+	}
+	// And a real type is replaced in place, with the original kept.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><script alt="type=\'x\'" type="module" src="https://cdn.tracker.test/a.js"></script></html>' );
+	assert_true( 1 === preg_match_all( '/(?<![\w-])type="text\/plain"/', $out ) && ! preg_match( '/(?<![\w-])type="module"/', $out ) && false !== strpos( $out, 'data-faz-original-type="module"' ), 'a real type="module" next to a decoy is replaced and remembered' );
+
+	echo "\n-- A3/A4/M1: backslashes and userinfo, as WHATWG resolves them --\n";
+
+	// The URL parser turns `\` into `/` for special schemes and reads the
+	// host after any userinfo; a boundary check on the raw bytes saw neither.
+	foreach ( array(
+		'scheme followed by backslashes' => 'https:\\\\cdn.tracker.test/pixel.png',
+		'backslash before an @ decoy'    => 'https://cdn.tracker.test\\@site.test/pixel.png',
+		'userinfo before the host'       => 'https://site.test@cdn.tracker.test/pixel.png',
+	) as $label => $url ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><img src="' . $url . '"><script src="' . $url . '"></script><iframe src="' . $url . '"></iframe></html>' );
+		assert_true( 2 === substr_count( $out, 'data-faz-src="' ), $label . ': img and iframe parked' );
+		assert_true( false !== strpos( $out, 'type="text/plain"' ), $label . ': script re-typed' );
+	}
+	// The whitelist reads the same host the engine does, not the one after a
+	// backslash-separated decoy.
+	$fe  = faz_ob_frontend( $providers, $blocked, array( 'maps.googleapis.com/' ) );
+	$out = faz_ob_run( $fe, '<html><img src="https://cdn.tracker.test\\@maps.googleapis.com/maps/api/x.png"></html>' );
+	assert_true( false !== strpos( $out, 'data-faz-src="' ), 'a whitelisted host after a backslash decoy does not exempt the tracker' );
+	$fe   = faz_ob_frontend( $providers, $blocked, array( 'maps.googleapis.com/' ) );
+	$html = '<html><img src="https://maps.googleapis.com/maps/api/x.png"></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'control: the real whitelisted host is exempt' );
+
 	echo "\n-- M2: special-scheme URLs inside a srcdoc --\n";
 
 	foreach ( array( 'https:/cdn.tracker.test/p', 'https:cdn.tracker.test/p' ) as $url ) {
@@ -684,12 +727,39 @@ namespace {
 		assert_true( false !== strpos( $out, 'data-faz-srcdoc=' ), $url . ' inside a srcdoc is judged as the engine resolves it' );
 	}
 
+	echo "\n-- M3: the whitelist reads the URL without its query and fragment --\n";
+
+	$fe  = faz_ob_frontend( $providers, $blocked, array( 'jquery.min.js', 'wp-includes/' ) );
+	$out = faz_ob_run( $fe, '<html><img src="https://cdn.tracker.test/pixel.png?x=jquery.min.js"><img src="https://cdn.tracker.test/pixel.png#wp-includes/"></html>' );
+	assert_true( 2 === substr_count( $out, 'data-faz-src="' ), 'a whitelist token in the query or the fragment does not exempt' );
+	$fe   = faz_ob_frontend( $providers, $blocked, array( 'jquery.min.js', 'wp-includes/' ) );
+	$html = '<html><img src="https://cdn.tracker.test/wp-includes/js/jquery.min.js"></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'control: the token in the path still exempts' );
+
 	echo "\n-- M4: a stashed token that is not a live srcdoc --\n";
 
 	$fe  = faz_ob_frontend( $providers, $blocked );
 	$out = faz_ob_run( $fe, '<html><body><iframe data-faz-srcdoc="x" src="https://cdn.tracker.test/f"></iframe></body></html>' );
 	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/f"' ), 'with no live srcdoc the src is not inert and is parked' );
 	assert_true( false !== strpos( $out, 'data-faz-srcdoc="x"' ), 'and the stashed token comes back' );
+
+	echo "\n-- M5: a forged empty sentinel --\n";
+
+	foreach ( array(
+		'svg image' => array( '<svg><image data-faz-src="" href="https://cdn.tracker.test/p.png"/></svg>', 'data-faz-href="https://cdn.tracker.test/p.png"', 'href' ),
+		'img'       => array( '<img data-faz-src="" src="https://cdn.tracker.test/p.png">', 'data-faz-src="https://cdn.tracker.test/p.png"', 'src' ),
+		'iframe'    => array( '<iframe data-faz-src="" src="https://cdn.tracker.test/f"></iframe>', 'data-faz-src="https://cdn.tracker.test/f"', 'src' ),
+		'link'      => array( '<link data-faz-href="" rel="stylesheet" href="https://cdn.tracker.test/a.css">', 'data-faz-href="https://cdn.tracker.test/a.css"', 'href' ),
+	) as $label => $case ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html>' . $case[0] . '</html>' );
+		assert_true( false !== strpos( $out, $case[1] ), $label . ': the live attribute is parked despite the sentinel' );
+		assert_true( ! preg_match( '/(?<![\w:-])' . $case[2] . '=/i', $out ), $label . ': and not left live' );
+		assert_true( 1 === substr_count( $out, 'data-faz-category=' ), $label . ': one category' );
+	}
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><img data-faz-category="marketing" data-faz-src="" src="https://cdn.tracker.test/p.png"></html>' );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/p.png"' ) && 1 === substr_count( $out, 'data-faz-category=' ), 'a sentinel with a category: parked, and the category is not written twice' );
 
 	// ---------- result ----------
 

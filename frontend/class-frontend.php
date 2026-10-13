@@ -4429,16 +4429,20 @@ class Frontend {
 		if ( $this->is_whitelisted( $attrs, $content ) ) {
 			return $full;
 		}
+		// The type is the `type` TOKEN, read through the tokenizer: a substring
+		// match found `type='text/plain'` inside an alt value and left the
+		// script live, and so did `data-fazcookie` spelled in a decoy.
+		$type = strtolower( trim( $this->extract_tag_attr( $attrs, 'type' ) ) );
 		// Skip already-blocked scripts.
-		if ( preg_match( '/type\s*=\s*["\']text\/plain["\']/', $attrs ) ) {
+		if ( 'text/plain' === $type ) {
 			return $full;
 		}
 		// Skip scripts already tagged with data-fazcookie.
-		if ( false !== strpos( $attrs, 'data-fazcookie' ) ) {
+		if ( $this->has_attr_token( $attrs, 'data-fazcookie' ) ) {
 			return $full;
 		}
 		// Skip non-executable script types (structured data, templates, etc.).
-		if ( preg_match( '/type\s*=\s*["\'](?:application\/(?:ld\+json|json)|text\/(?:template|html)|importmap)["\']/', $attrs ) ) {
+		if ( in_array( $type, array( 'application/ld+json', 'application/json', 'text/template', 'text/html', 'importmap' ), true ) ) {
 			return $full;
 		}
 
@@ -4597,8 +4601,8 @@ class Frontend {
 		// The token, not a substring: `data-faz-src` is the start of
 		// `data-faz-srcdoc`, and matching it made every srcdoc frame look
 		// already parked, leaving its src live.
-		if ( $this->has_attr_token( $attrs, 'data-faz-src' ) ) {
-			return $full;
+		if ( $this->has_attr_token( $attrs, 'data-faz-src' ) && ! $this->has_attr_token( $attrs, 'src' ) ) {
+			return $full; // Parked, and nothing live left (a bare sentinel does not exempt).
 		}
 		// A frame whose srcdoc is in the stash has nothing to park here: src
 		// is inert while srcdoc is present, so a blocked src on an ALLOWED
@@ -4632,7 +4636,9 @@ class Frontend {
 		// Rename src → data-faz-src on the token the tokenizer would produce,
 		// whatever precedes it.
 		list( $new_attrs ) = $this->rename_attr_tokens( $attrs, array( 'src' => 'data-faz-src' ) );
-		$new_attrs        .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		if ( ! $this->has_attr_token( $attrs, 'data-faz-category' ) ) {
+			$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		}
 
 		$inner = isset( $m[2] ) ? $m[2] : '';
 		$blocked_iframe = isset( $m[2] )
@@ -4868,9 +4874,11 @@ class Frontend {
 		$attrs = $m[1];
 		$full  = $m[0];
 
-		// The token, not a substring: `data-faz-src` is also the start of
+		// Already parked means parked AND nothing live left: a forged empty
+		// `data-faz-src=""` next to a live src used to exempt the tag. The
+		// token, not a substring: `data-faz-src` is also the start of
 		// `data-faz-srcset`.
-		if ( $this->has_attr_token( $attrs, 'data-faz-src' ) ) {
+		if ( $this->has_attr_token( $attrs, 'data-faz-src' ) && ! $this->has_attr_token( $attrs, 'src' ) && ! $this->has_attr_token( $attrs, 'srcset' ) ) {
 			return $full;
 		}
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
@@ -4916,8 +4924,9 @@ class Frontend {
 		// an XHTML-style closing slash inside $attrs (`<img ... />`), so appending
 		// metadata after it produced invalid `<img ... / data-faz-category=...>`.
 		// Prefixing preserves both ordinary and self-closing source markup.
-		$metadata = ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		if ( $parked_srcset ) {
+		// Never a second category when one is already on the tag.
+		$metadata = $this->has_attr_token( $attrs, 'data-faz-category' ) ? '' : ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		if ( $parked_srcset && ! $this->has_attr_token( $attrs, 'data-faz-srcset-category' ) ) {
 			// The srcset restore reads its category from its own attribute.
 			$metadata .= ' data-faz-srcset-category="' . esc_attr( $matched_category ) . '"';
 		}
@@ -4951,8 +4960,9 @@ class Frontend {
 		$close = isset( $m[3] ) ? $m[3] : '';
 		$full  = isset( $m[0] ) ? $m[0] : '';
 
-		if ( $this->has_attr_token( $attrs, 'data-faz-href' ) || $this->has_attr_token( $attrs, 'data-faz-src' ) ) {
-			return $full;
+		if ( ( $this->has_attr_token( $attrs, 'data-faz-href' ) || $this->has_attr_token( $attrs, 'data-faz-src' ) )
+			&& ! $this->has_attr_token( $attrs, 'href' ) && ! $this->has_attr_token( $attrs, 'xlink:href' ) && ! $this->has_attr_token( $attrs, 'src' ) ) {
+			return $full; // Parked, and nothing live left (a bare sentinel does not exempt).
 		}
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
 			return $full;
@@ -5009,7 +5019,7 @@ class Frontend {
 
 		// Metadata BEFORE the captured attributes, for the same reason as
 		// process_img_tag(): a self-closing tag keeps its slash inside $attrs.
-		$metadata = ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		$metadata = $this->has_attr_token( $attrs, 'data-faz-category' ) ? '' : ' data-faz-category="' . esc_attr( $matched_category ) . '"';
 		if ( '' !== $value ) {
 			$metadata .= ' data-faz-href=' . $value;
 		}
@@ -5038,9 +5048,9 @@ class Frontend {
 		if ( ! $this->has_attr_token( $attrs, 'background' ) ) {
 			return $full;
 		}
-		if ( $this->has_attr_token( $attrs, 'data-faz-background' ) ) {
-			return $full;
-		}
+		// A live background is judged whether or not a parked one sits next
+		// to it (a bare sentinel does not exempt); the pre-filter above
+		// already returned when there is none.
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
 			return $full;
 		}
@@ -5064,7 +5074,8 @@ class Frontend {
 			return $full;
 		}
 
-		return '<' . $tag . ' data-faz-category="' . esc_attr( $matched_category ) . '"' . $parked . '>';
+		$metadata = $this->has_attr_token( $attrs, 'data-faz-category' ) ? '' : ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		return '<' . $tag . $metadata . $parked . '>';
 	}
 
 	/**
@@ -5313,6 +5324,14 @@ class Frontend {
 			$value = $decoded;
 		}
 		$value = str_replace( array( "\t", "\n", "\r" ), '', $value );
+		// WHATWG turns every `\` into `/` for a special scheme, BEFORE the
+		// host is read: `https:\\host/p` is `https://host/p`, and
+		// `https://cdn.tracker.test\@site.test/p` has host cdn.tracker.test
+		// with `@site.test` in its path. A parse of the raw bytes read the
+		// decoy as the host, which the whitelist then trusted.
+		if ( preg_match( '#^\s*(?:https?:|[\\/]{2})#i', $value ) ) {
+			$value = str_replace( '\\', '/', $value );
+		}
 		// A special scheme takes exactly two slashes whatever was written:
 		// `https:/host` and `https:host` resolve to `https://host`.
 		$value = preg_replace( '#^(\s*https?:)/*#i', '$1//', $value );
@@ -5383,8 +5402,9 @@ class Frontend {
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
 			return $full;
 		}
-		if ( $this->has_attr_token( $attrs, 'data-faz-href' ) || $this->has_attr_token( $attrs, 'data-faz-imagesrcset' ) ) {
-			return $full;
+		if ( ( $this->has_attr_token( $attrs, 'data-faz-href' ) || $this->has_attr_token( $attrs, 'data-faz-imagesrcset' ) )
+			&& ! $this->has_attr_token( $attrs, 'href' ) && ! $this->has_attr_token( $attrs, 'imagesrcset' ) ) {
+			return $full; // Parked, and nothing live left (a bare sentinel does not exempt).
 		}
 
 		$matched_category = $this->match_script_to_provider( $attrs, '', $providers, $blocked_categories );
@@ -5420,7 +5440,7 @@ class Frontend {
 		);
 		// As with <img>, $attrs may already end in the source tag's `/`.
 		// Prefix metadata so the slash remains the final token before `>`.
-		$metadata = ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		$metadata = $this->has_attr_token( $attrs, 'data-faz-category' ) ? '' : ' data-faz-category="' . esc_attr( $matched_category ) . '"';
 		return '<link' . $metadata . $new_attrs . '>';
 	}
 
@@ -5651,6 +5671,15 @@ class Frontend {
 		$pattern = trim( (string) $pattern );
 		if ( '' === $value || '' === $pattern ) {
 			return false;
+		}
+		// A whitelist token in the query or the fragment is not the resource:
+		// `pixel.png?x=jquery.min.js` is the pixel. Unless the pattern itself
+		// names a query or a fragment, the value is matched without them.
+		if ( false === strpbrk( $pattern, '?#' ) ) {
+			$cut = strpbrk( $value, '?#' );
+			if ( false !== $cut ) {
+				$value = substr( $value, 0, strlen( $value ) - strlen( $cut ) );
+			}
 		}
 
 		// Domain+path patterns ("googleapis.com/maps/api/", "hcaptcha.com/")
@@ -6602,7 +6631,10 @@ class Frontend {
 	private function has_provider_boundary( $target, $index, $length ) {
 		if ( $index > 0 ) {
 			$before = substr( $target, $index - 1, 1 );
-			if ( ! preg_match( '/[\/.:\s"\'`=;,(<{\[]/', $before ) ) {
+			// `@` closes userinfo (`https://site.test@cdn.tracker.test/`, which
+			// Firefox and WebKit fetch from the host after it) and `\` is a
+			// slash to every special-scheme URL parser.
+			if ( ! preg_match( '/[\/.:\s"\'`=;,(<{\[@\\\\]/', $before ) ) {
 				return false;
 			}
 		}
@@ -7138,24 +7170,26 @@ class Frontend {
 	 * @return string Modified attributes string.
 	 */
 	private function set_script_type_plain( $attrs ) {
-		$type_match = preg_match( '/type\s*=\s*["\']([^"\']*)["\']/i', $attrs, $tm );
-		if ( 1 === $type_match ) {
-			$original = $tm[1];
-			$replaced = preg_replace( '/type\s*=\s*["\'][^"\']*["\']/i', 'type="text/plain"', $attrs );
-			if ( null === $replaced ) {
-				return self::script_attrs_type_plain_without_regex( $attrs );
-			}
-			$attrs = $replaced;
-			// Preserve non-default types (e.g. "module") so JS can restore them.
-			if ( 'text/plain' !== $original && 'text/javascript' !== $original && '' !== $original ) {
-				$attrs .= ' data-faz-original-type="' . esc_attr( $original ) . '"';
-			}
-			return $attrs;
+		// The `type` TOKEN, every occurrence of it, rewritten in place: a
+		// regex over the attribute string rewrote `type='module'` inside an
+		// alt value and left the script with no real type at all, executing.
+		$tokens = $this->tokenize_tag_attrs( $attrs, array( 'type' ) );
+		if ( array() === $tokens ) {
+			// No type: PREPEND one, so that if the tokenizer failed on a tag
+			// that does carry a type the parser's first-wins rule still reads
+			// the inert one.
+			return ' type="text/plain"' . $attrs;
 		}
-		if ( false === $type_match ) {
-			return self::script_attrs_type_plain_without_regex( $attrs );
+		$original = $this->extract_tag_attr( $attrs, 'type' );
+		for ( $i = count( $tokens ) - 1; $i >= 0; $i-- ) {
+			$glued = $tokens[ $i ]['offset'] > 0 && ! ctype_space( $attrs[ $tokens[ $i ]['offset'] - 1 ] );
+			$attrs = substr_replace( $attrs, ( $glued ? ' ' : '' ) . 'type="text/plain"', $tokens[ $i ]['offset'], $tokens[ $i ]['length'] );
 		}
-		return $attrs . ' type="text/plain"';
+		// Preserve non-default types (e.g. "module") so JS can restore them.
+		if ( 'text/plain' !== $original && 'text/javascript' !== $original && '' !== $original && ! $this->has_attr_token( $attrs, 'data-faz-original-type' ) ) {
+			$attrs .= ' data-faz-original-type="' . esc_attr( $original ) . '"';
+		}
+		return $attrs;
 	}
 
 	/**
