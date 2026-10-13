@@ -56,7 +56,7 @@ const code = readFileSync(BOOTSTRAP_PATH, 'utf8');
 
 // A fresh document per case: the bootstrap patches prototypes, so leaking one
 // instance into the next would make later cases pass for the wrong reason.
-function boot({ ready = 'loading', seed = '' } = {}) {
+function boot({ ready = 'loading', seed = '', holdDcl = false } = {}) {
   const dom = new JSDOM(`<!DOCTYPE html><html><head>${seed}</head><body><ul id="list"></ul></body></html>`, {
     runScripts: 'outside-only',
     url: SITE,
@@ -84,11 +84,24 @@ function boot({ ready = 'loading', seed = '' } = {}) {
     open: window.Document.prototype.open,
     createElement: window.Document.prototype.createElement,
   };
+  if (holdDcl) {
+    // jsdom fires its own DOMContentLoaded on the microtask queue, which is
+    // also where the observer delivers its records — so by the time a backstop
+    // park exists the safety release has already decided, and a handoff after
+    // it is ignored by design. A case that needs the HANDOFF side of a backstop
+    // park silences jsdom's event here, before the bootstrap registers its own
+    // listeners; the one release() dispatches is marked and let through.
+    window.document.addEventListener('DOMContentLoaded', function (event) {
+      if (!event.__fromTest) event.stopImmediatePropagation();
+    }, true);
+  }
   window.eval(code);
   return { window, document: window.document, fetched, dom, nativeGetAttribute, nativeSetAttribute, nativeAppendChild, nativeDocument };
 }
 
 // The handoff the real runtime performs once its own interceptors are in place.
+// This policy refuses nothing, which is the consent-granted shape: every held
+// operation replays live under it.
 function runtimeHandoff(window) {
   window._fazBootstrap.start();
   window._fazBootstrap.finish({
@@ -96,6 +109,36 @@ function runtimeHandoff(window) {
     node: function () {},
     url: function () { return false; },
   });
+}
+
+// The same handoff with consent REFUSED for one tracker origin: the shape the
+// real policy has (script, node, url, category), answering the way
+// _fazParkResourceElementIfBlocked and _fazShouldBlockProvider answer for it.
+// runtimeHandoff() above says "nothing is blocked", which is why a route that
+// replayed live at the handoff could never turn a case red under it.
+function refusingHandoff(window, blocked = /tracker\.test/) {
+  window._fazBootstrap.start();
+  window._fazBootstrap.finish({
+    script: function () {},
+    node: function (el) {
+      const src = el.getAttribute && el.getAttribute('src');
+      if (src && blocked.test(src)) {
+        el.setAttribute('data-faz-src', src);
+        el.setAttribute('data-faz-category', 'marketing');
+        el.removeAttribute('src');
+      }
+    },
+    url: function (url) { return blocked.test(String(url)); },
+    category: function () { return 'marketing'; },
+  });
+}
+// What a parked sheet holds, decoded the way the runtime decodes it.
+function parkedCss(el) {
+  return Buffer.from(String(el.getAttribute('data-faz-css') || ''), 'base64').toString('utf8');
+}
+// Is a fetchable tracker URL live in ANY <style> of the document?
+function trackerLive(document) {
+  return Array.from(document.querySelectorAll('style')).some((s) => s.textContent.indexOf('tracker.test') !== -1);
 }
 
 console.log('\nbootstrap: what is held while the runtime downloads');
@@ -320,7 +363,9 @@ console.log('\nbootstrap: hold and release judge the same text (six style routes
 const SPLIT_SEED = '<style id="seed">.p{background-image:u</style>';
 
 async function release(window) {
-  window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
+  const event = new window.Event('DOMContentLoaded');
+  event.__fromTest = true;
+  window.document.dispatchEvent(event);
   await new Promise((r) => setTimeout(r, 0));
 }
 
@@ -487,19 +532,25 @@ console.log('\nbootstrap: a Range reaches the DOM through neither Node nor Paren
 }
 
 {
-  // surroundContents is held on the same owner rule. Its new parent's own
-  // children are discarded by the spec, so this is the conservative direction
-  // on purpose: it costs a replay, and a rule per method is how this surface
-  // was wrong repeatedly.
-  const { window, document } = boot({ seed: SPLIT_SEED });
+  // surroundContents inside a <style> is held on the same owner rule. It is
+  // the conservative direction on purpose — for the CSS engine only direct
+  // child text nodes are stylesheet, so a wrap can only take text OUT of the
+  // sheet — and it costs a replay. The first version of this case could not
+  // fail: it gave the wrapper its own URL-carrying text, which surroundContents
+  // discards, so the sheet read the same on fixed and unfixed code. The sheet
+  // text is the RANGE's here, what Range.prototype.toString answers, and what
+  // the hold is asserted on is the wrap itself.
+  const { window, document } = boot({ seed: '<style id="seed">.p{background-image:url(https://tracker.test/r3.png)}</style>' });
   const style = document.getElementById('seed');
   const wrapper = document.createElement('span');
-  wrapper.textContent = 'rl(https://tracker.test/r3.png)}';
   const range = document.createRange();
   range.selectNodeContents(style);
+  eq('premise: the range spans the sheet text', range.toString(), '.p{background-image:url(https://tracker.test/r3.png)}');
   range.surroundContents(wrapper);
-  ok('Range.surroundContents with URL-carrying text is held',
-    style.textContent.indexOf('tracker.test') === -1);
+  eq('Range.surroundContents inside a <style> is held: the wrapper is not inserted', wrapper.parentNode, null);
+  runtimeHandoff(window);
+  eq('and the wrap applies at handoff', wrapper.parentNode, style);
+  eq('with the sheet text moved inside the wrapper', wrapper.textContent, '.p{background-image:url(https://tracker.test/r3.png)}');
 }
 
 {
@@ -659,6 +710,211 @@ const SVGNS = 'http://www.w3.org/2000/svg';
     document.body.textContent.indexOf('fill:red') !== -1);
 }
 
+console.log('\nhandoff: what the runtime refuses lands parked, not live and not dropped');
+
+// Every "and it applies at handoff" above runs under a policy that refuses
+// nothing. Under one that refuses the tracker, three routes replayed LIVE
+// through the captured natives, and the runtime judged none of them: it gates
+// the HTMLStyleElement interface with the style as PARENT, has no Range gate,
+// no SVG <style> gate, and no observer branch for an inserted <style>. Measured
+// in Chromium with consent refused: the stylesheet fetched right after the
+// handoff. The contract now: a refused sheet lands in the document in the
+// runtime's own parked form — neutralised text, the original in data-faz-css,
+// a category — so the restore pass hands it back on the consent that allows
+// it, and no fetchable tracker URL is live anywhere.
+{
+  // Route 1 — Range.insertNode completing a URL inside a connected <style>.
+  const { window, document } = boot({ seed: SPLIT_SEED });
+  const style = document.getElementById('seed');
+  const range = document.createRange();
+  range.setStart(style.firstChild, style.firstChild.data.length);
+  range.collapse(true);
+  range.insertNode(document.createTextNode('rl(https://tracker.test/r1.png)}'));
+  refusingHandoff(window);
+  ok('Range.insertNode: the refused URL is not live after the handoff', !trackerLive(document));
+  eq('the owner is parked with the text the engine would have been given',
+    parkedCss(style), '.p{background-image:url(https://tracker.test/r1.png)}');
+  eq('and carries the category the restore selectors need', style.getAttribute('data-faz-category'), 'marketing');
+}
+
+{
+  // The boundary in the MIDDLE of the text: the node is spliced in where the
+  // range points, not appended, and the marker holds exactly that string. Read
+  // in the other order the URL would not even be seen.
+  const { window, document } = boot({ seed: '<style id="seed">.p{background-image:u}</style>' });
+  const style = document.getElementById('seed');
+  const range = document.createRange();
+  range.setStart(style.firstChild, style.firstChild.data.indexOf('}'));
+  range.collapse(true);
+  range.insertNode(document.createTextNode('rl(https://tracker.test/mid.png)'));
+  refusingHandoff(window);
+  ok('a mid-text Range insertion is judged on the spliced text', !trackerLive(document));
+  eq('and parked as the spliced text', parkedCss(style), '.p{background-image:url(https://tracker.test/mid.png)}');
+}
+
+{
+  // Route 1, the other method — page text wrapped into a fresh <style>.
+  const { window, document } = boot();
+  const host = document.getElementById('list');
+  host.appendChild(document.createTextNode('@import url(https://tracker.test/f3.css);'));
+  const range = document.createRange();
+  range.selectNodeContents(host);
+  range.surroundContents(document.createElement('style'));
+  refusingHandoff(window);
+  const sheet = host.querySelector('style');
+  ok('Range.surroundContents: the <style> is in the document', !!sheet);
+  ok('with no live tracker URL', !trackerLive(document));
+  eq('and the wrapped text parked in it', sheet && parkedCss(sheet), '@import url(https://tracker.test/f3.css);');
+  eq('the page text it replaced is gone, as the wrap would have moved it', host.childNodes.length, 1);
+}
+
+{
+  // Route 2 — a pre-filled <style> arriving inside a fragment, via appendChild.
+  const { window, document } = boot();
+  const range = document.createRange();
+  range.selectNodeContents(document.body);
+  const frag = range.createContextualFragment('<style id="frag">.a{background-image:url(https://tracker.test/frag-css.png)}</style>');
+  document.head.appendChild(frag);
+  refusingHandoff(window);
+  const sheet = document.getElementById('frag');
+  ok('appendChild of a fragment: the <style> is in the document', !!sheet);
+  ok('with no live tracker URL', !trackerLive(document));
+  eq('and its CSS parked', sheet && parkedCss(sheet), '.a{background-image:url(https://tracker.test/frag-css.png)}');
+}
+
+{
+  // Route 2 through insertAdjacentElement and append, the other two entries.
+  const { window, document } = boot();
+  const viaAdjacent = document.createElement('style');
+  viaAdjacent.id = 'adjacent';
+  viaAdjacent.appendChild(document.createTextNode('.a{background:url(https://tracker.test/adj.png)}'));
+  document.body.insertAdjacentElement('beforeend', viaAdjacent);
+  const viaAppend = document.createElement('style');
+  viaAppend.id = 'appended';
+  viaAppend.appendChild(document.createTextNode('.b{background:url(https://tracker.test/app.png)}'));
+  document.head.append(viaAppend);
+  refusingHandoff(window);
+  ok('insertAdjacentElement: the <style> lands', !!document.getElementById('adjacent'));
+  ok('append: the <style> lands', !!document.getElementById('appended'));
+  ok('neither with a live tracker URL', !trackerLive(document));
+  eq('insertAdjacentElement: parked', parkedCss(viaAdjacent), '.a{background:url(https://tracker.test/adj.png)}');
+  eq('append: parked', parkedCss(viaAppend), '.b{background:url(https://tracker.test/app.png)}');
+}
+
+{
+  // Route 3 — the SVG <style>, both shapes: arriving with its text, and
+  // growing text through a method the runtime never wrapped for that
+  // interface.
+  const { window, document } = boot();
+  const bare = document.createElementNS(SVGNS, 'style');
+  bare.appendChild(document.createTextNode('@import url(https://tracker.test/svg-css.css);'));
+  document.body.appendChild(bare);
+  const svg = document.createElementNS(SVGNS, 'svg');
+  const grown = document.createElementNS(SVGNS, 'style');
+  svg.appendChild(grown);
+  document.body.appendChild(svg);
+  grown.appendChild(document.createTextNode('.c{fill:url(https://tracker.test/svg-fill.svg#g)}'));
+  refusingHandoff(window);
+  ok('a bare SVG <style> lands', bare.parentNode === document.body);
+  ok('and so does the text appended into one', grown.parentNode === svg);
+  ok('with no live tracker URL in any <style>', !trackerLive(document));
+  eq('bare: parked', parkedCss(bare), '@import url(https://tracker.test/svg-css.css);');
+  eq('grown: parked', parkedCss(grown), '.c{fill:url(https://tracker.test/svg-fill.svg#g)}');
+}
+
+{
+  // What "parked" means: the runtime's own form, not an emptied element. A
+  // sheet that mixes the site's icon with a tracker pixel keeps the icon, the
+  // tracker URL is replaced by the inert one the runtime uses, and the whole
+  // original is in the marker — so the runtime's bookkeeping adopts it as a
+  // sheet it parked itself.
+  const { window, document } = boot();
+  const mixed = document.createElement('style');
+  mixed.appendChild(document.createTextNode('.i{background:url(/icon.png)} .t{background:url(https://tracker.test/px.png)}'));
+  document.head.appendChild(mixed);
+  refusingHandoff(window);
+  ok("the site's own rule stays live", mixed.textContent.indexOf('url(/icon.png)') !== -1);
+  ok('the refused one is inert', mixed.textContent.indexOf('url("data:application/octet-stream,")') !== -1);
+  ok('and not live', mixed.textContent.indexOf('tracker.test') === -1);
+  eq('the original is whole in the marker', parkedCss(mixed), '.i{background:url(/icon.png)} .t{background:url(https://tracker.test/px.png)}');
+}
+
+{
+  // The other direction, explicitly: the same three routes under a policy that
+  // allows the URL deliver the CSS live, with no marker left behind.
+  const { window, document } = boot({ seed: SPLIT_SEED });
+  const style = document.getElementById('seed');
+  const range = document.createRange();
+  range.setStart(style.firstChild, style.firstChild.data.length);
+  range.collapse(true);
+  range.insertNode(document.createTextNode('rl(https://tracker.test/ok.png)}'));
+  const frag = document.createRange().createContextualFragment('<style id="ok-frag">.a{background:url(https://tracker.test/ok2.png)}</style>');
+  document.head.appendChild(frag);
+  const svgSheet = document.createElementNS(SVGNS, 'style');
+  svgSheet.appendChild(document.createTextNode('@import url(https://tracker.test/ok3.css);'));
+  document.body.appendChild(svgSheet);
+  refusingHandoff(window, /other\.test/);
+  ok('Range: live when allowed', style.textContent.indexOf('tracker.test/ok.png') !== -1);
+  ok('fragment: live when allowed', document.getElementById('ok-frag').textContent.indexOf('ok2.png') !== -1);
+  ok('SVG: live when allowed', svgSheet.textContent.indexOf('ok3.css') !== -1);
+  eq('and nothing is marked as parked', document.querySelectorAll('style[data-faz-css]').length, 0);
+}
+
+console.log('\nsafety release: a subtree is delivered, its sheets judged one by one');
+
+// A subtree carrying a <style> with a comment or a same-origin url() was held
+// whole (the hold is deliberately broad) and on the safety release refused
+// whole — so a widget cloned from a <template> with its own <style> and a
+// <span> of cart text never appeared, where on main it had. Now the subtree is
+// inserted, and each sheet in it is judged by origin: first-party content is
+// left as written, a cross-origin sheet lands parked.
+const WIDGET_CSS = '/* widget */ .cart{background:url(/cart.png)}';
+const WIDGET_TEMPLATE = '<template id="widget"><style id="widget-css">' + WIDGET_CSS + '</style><span id="total">cart total</span></template>';
+
+{
+  // The template is the server's markup; what the script does is clone it
+  // into the page, which is the subtree route.
+  const { window, document } = boot({ seed: WIDGET_TEMPLATE });
+  const tpl = document.getElementById('widget');
+  document.body.appendChild(document.importNode(tpl.content, true));
+  eq('premise: the widget is held while the runtime downloads', document.getElementById('total'), null);
+  await release(window);
+  ok('the widget is present after the safety release', !!document.getElementById('total'));
+  eq('with its first-party stylesheet intact',
+    document.getElementById('widget-css') && document.getElementById('widget-css').textContent, WIDGET_CSS);
+  eq('and not marked as parked', document.querySelectorAll('style[data-faz-css]').length, 0);
+}
+
+{
+  // The same widget written as markup — innerHTML is how a <template> is
+  // usually filled, and the string sinks were refusing the whole string on
+  // the same broad question.
+  const { window, document } = boot();
+  const host = document.getElementById('list');
+  host.innerHTML = '<style id="widget-css">' + WIDGET_CSS + '</style><span id="total">cart total</span>';
+  eq('premise: the markup is held while the runtime downloads', document.getElementById('total'), null);
+  await release(window);
+  ok('the markup is present after the safety release', !!document.getElementById('total'));
+  eq('with its first-party stylesheet intact',
+    document.getElementById('widget-css') && document.getElementById('widget-css').textContent, WIDGET_CSS);
+}
+
+{
+  // The cross-origin half of the same rule: present, parked, recoverable.
+  const { window, document, nativeGetAttribute } = boot({
+    seed: '<template id="tracked"><style id="tracked-css">.px{background:url(https://tracker.test/widget.png)}</style><span id="copy">copy</span></template>',
+  });
+  document.body.appendChild(document.importNode(document.getElementById('tracked').content, true));
+  await release(window);
+  ok('the widget is present', !!document.getElementById('copy'));
+  const sheet = document.getElementById('tracked-css');
+  ok('its sheet is in the document', !!sheet);
+  ok('with no live tracker URL', !trackerLive(document));
+  eq('and the original parked where the runtime restores from',
+    Buffer.from(String(nativeGetAttribute.call(sheet, 'data-faz-css')), 'base64').toString('utf8'),
+    '.px{background:url(https://tracker.test/widget.png)}');
+}
+
 console.log('\nbootstrap: the backstop covers stylesheets and shadow trees too');
 
 {
@@ -702,6 +958,93 @@ console.log('\nbootstrap: the backstop covers stylesheets and shadow trees too')
     !!nativeGetAttribute.call(sheet, 'data-faz-css'));
 }
 
+// The handoff side of a backstop park. The restore task wrote the text through
+// the live property — the runtime's own setter by then — and dropped the
+// marker AFTER the write. With consent refused the runtime's setter neutralises
+// the text and rewrites data-faz-css as its own; the drop then deleted the
+// runtime's marker, and _fazUnblockServerSide never found the sheet again on a
+// later accept. The marker now survives a refusing handoff.
+const BACKSTOP_CSS = '.a{background-image:url(https://tracker.test/n3.png)}';
+const INERT = 'url("data:application/octet-stream,")';
+// Park a sheet the way the backstop does: a tagged fragment inserted natively,
+// delivered on the microtask queue.
+async function backstopPark(document, nativeAppendChild, id, css) {
+  const frag = document.createRange().createContextualFragment('<style id="' + id + '">' + css + '</style>');
+  nativeAppendChild.call(document.head, frag);
+  await Promise.resolve();
+  await Promise.resolve();
+  return document.getElementById(id);
+}
+// The runtime's textContent gate on HTMLStyleElement.prototype, reduced to
+// what matters here: a blocked URL is neutralised and the marker rewritten,
+// anything else is written natively with the marker removed. Installed between
+// start() and finish(), where the real runtime installs its own.
+function installRuntimeStyleGate(window, blocked = /tracker\.test/) {
+  const desc = Object.getOwnPropertyDescriptor(window.Node.prototype, 'textContent');
+  Object.defineProperty(window.HTMLStyleElement.prototype, 'textContent', {
+    configurable: true,
+    get: desc.get,
+    set: function (value) {
+      const css = String(value == null ? '' : value);
+      if (blocked.test(css)) {
+        desc.set.call(this, css.replace(/url\([^)]*\)/g, INERT));
+        this.setAttribute('data-faz-css', Buffer.from(css, 'utf8').toString('base64'));
+        this.setAttribute('data-faz-category', 'marketing');
+        return;
+      }
+      desc.set.call(this, css);
+      this.removeAttribute('data-faz-css');
+    },
+  });
+}
+function refusingHandoffWithGate(window) {
+  window._fazBootstrap.start();
+  installRuntimeStyleGate(window);
+  window._fazBootstrap.finish({
+    script: function () {},
+    node: function () {},
+    url: function (url) { return /tracker\.test/.test(String(url)); },
+    category: function () { return 'marketing'; },
+  });
+}
+
+{
+  const { window, document, nativeAppendChild } = boot({ holdDcl: true });
+  const sheet = await backstopPark(document, nativeAppendChild, 'refused', BACKSTOP_CSS);
+  eq('premise: the backstop parked it', sheet.textContent, '');
+  refusingHandoffWithGate(window);
+  ok('after a refusing handoff the tracker URL is not live', sheet.textContent.indexOf('tracker.test') === -1);
+  eq('and data-faz-css is still on the sheet, decoding to the original', parkedCss(sheet), BACKSTOP_CSS);
+  eq('with the category the restore selectors need', sheet.getAttribute('data-faz-category'), 'marketing');
+}
+
+{
+  // The other direction with the same gate in place: allowed CSS comes back
+  // live and the marker is gone.
+  const { window, document, nativeAppendChild } = boot({ holdDcl: true });
+  const sheet = await backstopPark(document, nativeAppendChild, 'allowed', '.b{background-image:url(https://cdn.test/n4.png)}');
+  eq('premise: the backstop parked it', sheet.textContent, '');
+  refusingHandoffWithGate(window);
+  eq('an allowed sheet is live after the handoff', sheet.textContent, '.b{background-image:url(https://cdn.test/n4.png)}');
+  eq('with no marker left on it', sheet.getAttribute('data-faz-css'), null);
+}
+
+// The restore task wrote the parked text unconditionally. If the page rewrote
+// the sheet with safe text while the park waited, the handoff put the old text
+// back over the new one — and left a marker that a later restore pass would
+// have used to resurrect the old text once more.
+{
+  const { window, document, nativeAppendChild } = boot({ holdDcl: true });
+  const sheet = await backstopPark(document, nativeAppendChild, 'rewritten', BACKSTOP_CSS);
+  eq('premise: the backstop parked it', sheet.textContent, '');
+  // Through the gated setter, as a page would: safe text, applied at once.
+  sheet.textContent = '.x{color:blue}';
+  eq('premise: the page rewrote it while the park waited', sheet.textContent, '.x{color:blue}');
+  runtimeHandoff(window);
+  eq("the handoff leaves the page's text alone", sheet.textContent, '.x{color:blue}');
+  eq('and takes its stale marker with it', sheet.getAttribute('data-faz-css'), null);
+}
+
 {
   // And the server's own stylesheet is left exactly as it was sent: untagged,
   // inserted while the document parses, which is the parser's signature. The
@@ -714,6 +1057,72 @@ console.log('\nbootstrap: the backstop covers stylesheets and shadow trees too')
   nativeAppendChild.call(document.head, sheet);
   await new Promise((r) => setTimeout(r, 0));
   ok('a server-rendered <style> is not touched', sheet.textContent.indexOf('logo.png') !== -1);
+}
+
+// Once a document.write has withdrawn the parser exemption, every <style> the
+// parser builds after it reaches the backstop — and the backstop asked the
+// broad question meant for script output, which a theme's comment or an
+// icon-font escape answers "yes" to. Measured: after one written iframe, the
+// theme sheet below was "" before the handoff and still "" after the safety
+// release. A parser-built sheet has no URL to hide; it is judged on the URLs
+// it names, by origin. A theme sheet stays live; a tracker @import is still
+// held.
+const THEME_CSS = '/* theme */ body{color:#123} .icon:before{content:"\\f101"}';
+// What a write leaves behind in jsdom: the document reset and rebuilt from the
+// written markup. The observer watches the document itself, so it survives.
+function writeThen(document, nativeAppendChild, css) {
+  document.write('<iframe src="https://ads.test/x"></iframe>');
+  const sheet = document.createElement('style');
+  nativeAppendChild.call(sheet, document.createTextNode(css));
+  nativeAppendChild.call(document.head || document.documentElement, sheet);
+  return sheet;
+}
+
+{
+  const { window, document, nativeAppendChild } = boot();
+  const sheet = writeThen(document, nativeAppendChild, THEME_CSS);
+  // Microtasks only: the observer delivers on them, while a macrotask would
+  // let jsdom fire its own DOMContentLoaded and the safety release would
+  // decide before the handoff below could.
+  await Promise.resolve();
+  await Promise.resolve();
+  eq('after a write, a first-party sheet with a comment and an icon escape stays live', sheet.textContent, THEME_CSS);
+  // Never parked, so no task holds its text: whichever of the handoff and
+  // jsdom's own DOMContentLoaded comes first, the sheet is not theirs to touch.
+  runtimeHandoff(window);
+  eq('and keeps its text once the queue drains', sheet.textContent, THEME_CSS);
+  eq('with no marker on it', sheet.getAttribute('data-faz-css'), null);
+}
+
+{
+  const { window, document, nativeAppendChild } = boot();
+  const sheet = writeThen(document, nativeAppendChild, THEME_CSS);
+  await new Promise((r) => setTimeout(r, 0));
+  eq('premise: live before the release', sheet.textContent, THEME_CSS);
+  await release(window);
+  eq('and keeps its text through the safety release', sheet.textContent, THEME_CSS);
+}
+
+{
+  const { window, document, nativeAppendChild, nativeGetAttribute } = boot();
+  const sheet = writeThen(document, nativeAppendChild, '@import url(https://tracker.test/after-write.css);');
+  await new Promise((r) => setTimeout(r, 0));
+  eq('a parser-built sheet naming a cross-origin @import after a write is still held', sheet.textContent, '');
+  ok('and parked', !!nativeGetAttribute.call(sheet, 'data-faz-css'));
+}
+
+{
+  // The broad question is still the one asked of a sheet a SCRIPT sink built:
+  // there the string was in the script's hands, and an escape can spell a
+  // URL a regex does not see.
+  const { window, document, nativeAppendChild, nativeGetAttribute } = boot();
+  const frag = document.createRange().createContextualFragment('<style id="escaped">.p{background-image:u\\72 l(https://tracker.test/esc.png)}</style>');
+  nativeAppendChild.call(document.head, frag);
+  await Promise.resolve();
+  await Promise.resolve();
+  const sheet = document.getElementById('escaped');
+  eq('a sink-built sheet hiding a URL behind an escape is still held', sheet.textContent, '');
+  ok('and parked', !!nativeGetAttribute.call(sheet, 'data-faz-css'));
 }
 
 {

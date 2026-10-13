@@ -288,16 +288,31 @@
     // are fetched when a matching element is first rendered, which is a frame
     // away, not a microtask — so emptying the sheet here stops them.
     //
-    // Restored by this file rather than handed over parked: the runtime adopts a
-    // parked original only when the live text is the NEUTRALIZED form of it
+    // Emptied here, not handed over in that state: the runtime adopts a parked
+    // original only when the live text is the NEUTRALIZED form of it
     // (_fazPrimeStyleCssMarkers, script.js), and an emptied element does not
-    // match, so handing it over would turn a delayed stylesheet into a dead one
-    // — the exact trade parkTarget() below refuses to make. Handing back a live
-    // <style> lets the runtime's own CSS gate judge it with real consent.
-    function parkSheet(el) {
+    // match, so leaving it like this would turn a delayed stylesheet into a
+    // dead one — the exact trade parkTarget() below refuses to make. The task
+    // below delivers it at the handoff through deliverCss(): judged by the
+    // runtime's rules, it lands either live or in the runtime's own parked
+    // form, which the runtime then manages as its own.
+    //
+    // `judge` is the question asked of the text, and it depends on who wrote
+    // the sheet. One a script sink built — tagged, so the whole string was in
+    // the script's hands — gets the broad cssURL(): a regex cannot tell what
+    // an escape or a comment is hiding, and holding costs a replay. One the
+    // PARSER built is different: it reaches here only once a document.write
+    // has withdrawn the exemption for the server's markup, and from then on
+    // every theme stylesheet after it was emptied for a comment or an
+    // icon-font escape — a flash of unstyled content until the handoff, and
+    // on the safety release a theme never restored. The server's own sheet
+    // has no URL to hide; it is judged on the URLs it names, by origin.
+    function parkSheet(el, judge) {
         if (!nativeTextSet || !isStyle(el)) return;
+        // Delivered by a wrapper on the safety release, judged there.
+        if (judged && judged.has(el)) return;
         var text = String(el.textContent == null ? '' : el.textContent);
-        if (!text || !cssURL(text)) return;
+        if (!text || !(judge || cssURL)(text)) return;
         // Already parked: by the server-side pass, by the runtime, or by this
         // function on an earlier record for the same element.
         if (nativeHas.call(el, 'data-faz-css')) return;
@@ -308,18 +323,31 @@
         // here, not the restore path: the task below holds the text itself.
         if (encoded) setAttr(el, 'data-faz-css', encoded);
         defer(function (policy) {
-            if (!allowedCss(policy, text)) return;
-            // Through the PROPERTY, not the captured native setter. By the time
-            // this runs the handoff has uninstalled this file's gate and
-            // installed the runtime's (_fazGateStyleTextSetter), so an
-            // assignment is judged by it with real consent, while a native
-            // write would be invisible to it. Measured in a real browser: the
-            // native write handed back a live third-party background-image and
-            // the runtime never saw it — a leak traded for a leak. The clear
-            // above still uses the native, because there the gate to avoid is
-            // this file's own, which would defer the clear and do nothing.
-            el.textContent = text;
-            dropAttr(el, 'data-faz-css');
+            // The page may have written the sheet while it waited. A live text
+            // that is no longer the emptied form is the page's: it is left
+            // alone, and the marker this function wrote goes with it, or the
+            // restore pass would later put the old text back over the new. A
+            // marker that is no longer this one belongs to whoever wrote it.
+            var live = String(el.textContent == null ? '' : el.textContent);
+            var mine = attr(el, 'data-faz-css') === (encoded || null);
+            if (live !== '') {
+                if (mine) dropAttr(el, 'data-faz-css');
+                return;
+            }
+            if (!mine) return;
+            deliverCss(policy, el, null, 'replaceChildren', [text], function () {
+                // The marker goes BEFORE the write, not after it. The write
+                // goes through the PROPERTY, and by now that is the runtime's
+                // setter (_fazGateStyleTextSetter): when it neutralises the
+                // text it rewrites data-faz-css itself and owns it from then
+                // on — dropping it afterwards deleted the runtime's marker and
+                // the restore pass never found the sheet again. The clear
+                // above still uses the native, because there the gate to avoid
+                // is this file's own, which would defer the clear and do
+                // nothing.
+                dropAttr(el, 'data-faz-css');
+                el.textContent = text;
+            });
         });
     }
     // Which insertions the DOM backstop further down has any business judging.
@@ -348,6 +376,9 @@
     // document.write, handled below by withdrawing the exemption rather than
     // by trusting it.
     var sunk = typeof w.WeakSet === 'function' ? new w.WeakSet() : null;
+    // Sheets a wrapper has already delivered, judged, on the safety release.
+    // The backstop stays armed on that path and must not judge them again.
+    var judged = sunk ? new w.WeakSet() : null;
     function tag(node) {
         if (!sunk || !node) return node;
         if (node.nodeType === 1) sunk.add(node);
@@ -407,18 +438,21 @@
                 };
                 if (!/<style\b/i.test(markup) || !cssURL(markup)) return apply();
                 defer(function (policy) {
-                    if (!allowedCss(policy, markup)) return;
-                    // Through the LIVE property, like insertAdjacentHTML's own
-                    // deferred call: by replay time the handoff has installed
-                    // the runtime's gate for this sink, and going back to the
-                    // native captured here would skip it — measured leaking a
-                    // third-party background-image with consent refused.
-                    if (typeof self[name] === 'function' && self[name] !== original) {
-                        self[name].apply(self, args);
-                        tag(self);
-                        return;
-                    }
-                    apply();
+                    deliverMarkup(policy, markup, function (html) {
+                        args[0] = html;
+                        // Through the LIVE property, like insertAdjacentHTML's
+                        // own deferred call: by replay time the handoff has
+                        // installed the runtime's gate for this sink, and going
+                        // back to the native captured here would skip it —
+                        // measured leaking a third-party background-image with
+                        // consent refused.
+                        if (typeof self[name] === 'function' && self[name] !== original) {
+                            self[name].apply(self, args);
+                            tag(self);
+                            return;
+                        }
+                        apply();
+                    }, self);
                 });
             });
         });
@@ -496,15 +530,25 @@
     var wrote = false;
     // The parser this predicate asks is captured here, at install, and never
     // read from `w` again. Reading `w.DOMParser` at call time made the whole
-    // backstop silenceable from the page: a script that runs before this file
-    // assigns its own constructor whose parseFromString returns an empty
-    // document, and then every question below comes back "nothing written,
-    // nothing left open" and document.write regains the parser exemption for
-    // free. Both halves are captured, because shadowing either one is enough —
-    // `DOMParser.prototype.parseFromString = () => emptyDoc` needs no new
+    // backstop silenceable from the page AFTER this file had run: any script
+    // that comes later assigns its own constructor, or just its own
+    // parseFromString, and every question below is answered by it. The
+    // dangerous stub is not one returning an empty document — that one would
+    // lose the sentinel probe below and the predicate would withdraw by
+    // accident — but one answering "nothing was written, and the stream is
+    // closed", which is exactly what bootstrap-write-stream.test.mjs models:
+    // with that answer document.write regains the parser exemption for free.
+    // Both halves are captured, because shadowing either one is enough —
+    // `DOMParser.prototype.parseFromString = () => closedDoc` needs no new
     // constructor at all. Same reason the attribute natives are captured at
-    // the top of the file: a reference taken before page script runs cannot be
-    // reached by whatever shadows the global afterwards.
+    // the top of the file: a reference taken before page script runs cannot
+    // be reached by whatever shadows the global afterwards.
+    //
+    // What this does NOT defend against, said plainly: a script that runs
+    // BEFORE this file. That one shadows the global before the capture, and
+    // the capture then takes the hostile constructor as the native. It is the
+    // undefendable case for every native this file captures, and the reason
+    // the bootstrap is attached inline in <head>, before page scripts run.
     var Parser = typeof w.DOMParser === 'function' ? w.DOMParser : null;
     var parseHTML = Parser && Parser.prototype && typeof Parser.prototype.parseFromString === 'function'
         ? Parser.prototype.parseFromString
@@ -717,15 +761,22 @@
                     // this insertion waited. Replaying against it throws, and
                     // the node would be dropped with only a console warning,
                     // so fall back to appending into the same parent.
-                    if (styleOwner && !allowedStyle(policy, styleOwner, dropped, name, [args[0]])) return;
-                    if (!allowedStyleNode(policy, args[0])) return;
                     var ref = args[1];
-                    if (name !== 'appendChild' && ref && ref.parentNode !== self) {
-                        if (name === 'replaceChild') Node.prototype.appendChild.call(self, args[0]);
-                        else Node.prototype.insertBefore.call(self, args[0], null);
-                        return;
-                    }
-                    self[name].apply(self, args);
+                    var moved = name !== 'appendChild' && ref && ref.parentNode !== self;
+                    var insert = function () {
+                        parkSheets(args[0], policy);
+                        if (moved) {
+                            if (name === 'replaceChild') Node.prototype.appendChild.call(self, args[0]);
+                            else Node.prototype.insertBefore.call(self, args[0], null);
+                            return;
+                        }
+                        self[name].apply(self, args);
+                    };
+                    if (!styleOwner) return insert();
+                    // The anchor is the second argument for both insertBefore
+                    // and replaceChild; an appendChild has none, and so does a
+                    // reference that moved, since the fallback appends.
+                    deliverCss(policy, styleOwner, moved ? null : ref, moved ? 'appendChild' : name, [args[0]], insert);
                 });
                 return name === 'replaceChild' ? args[1] : args[0];
             };
@@ -750,12 +801,16 @@
                         || !!(styleOwner && cssRisk(containerText(styleOwner, self, name), args));
                     if (!carries) return original.apply(self, args);
                     defer(function (policy) {
-                        if (styleOwner && !allowedStyle(policy, styleOwner, self, name, args)) return;
-                        // One call inserts every argument, so a refusal is
-                        // all-or-nothing here as it already is above.
-                        if (args.some(function (n) { return !allowedStyleNode(policy, n); })) return;
-                        args.forEach(function (n) { prepare(n, policy); });
-                        self[name].apply(self, args);
+                        var insert = function () {
+                            args.forEach(function (n) { prepare(n, policy); parkSheets(n, policy); });
+                            self[name].apply(self, args);
+                        };
+                        if (!styleOwner) return insert();
+                        // before/after/replaceWith place the arguments against
+                        // `self`, a child of the owner; the other three address
+                        // the owner itself.
+                        var anchor = styleOwner === self ? null : self;
+                        deliverCss(policy, styleOwner, anchor, name, args, insert);
                     });
                 };
             });
@@ -773,8 +828,7 @@
                     if (!isStyle(owner)) return original.call(node);
                     if (!cssRisk(styleTextWithout(owner, node), [])) return original.call(node);
                     defer(function (policy) {
-                        if (!allowedStyle(policy, owner, node, 'without', [])) return;
-                        node[name].call(node);
+                        deliverCss(policy, owner, node, 'without', [], function () { node[name].call(node); });
                     });
                 };
             });
@@ -786,8 +840,7 @@
             if (!isStyle(self)) return original.call(self, child);
             if (!cssRisk(styleTextWithout(self, child), [])) return original.call(self, child);
             defer(function (policy) {
-                if (!allowedStyle(policy, self, child, 'without', [])) return;
-                self.removeChild(child);
+                deliverCss(policy, self, child, 'without', [], function () { self.removeChild(child); });
             });
             return child;
         };
@@ -798,6 +851,10 @@
     // can treat an untagged insertion as the parser's is that no such route
     // exists. Held like insertAdjacentElement, which has the same shape.
     if (w.Range && Range.prototype) {
+        // The two natives the parked form of a surroundContents is built from,
+        // captured before the loop below wraps the first of them.
+        var nativeRangeInsert = Range.prototype.insertNode;
+        var nativeRangeDelete = Range.prototype.deleteContents;
         ['insertNode', 'surroundContents'].forEach(function (name) {
             if (typeof Range.prototype[name] !== 'function') return;
             replace(Range.prototype, name, function (original) {
@@ -831,19 +888,63 @@
                     // because the queue drains in order.
                     function surrounded() {
                         if (name !== 'surroundContents' || !isStyle(node)) return '';
-                        return rangeText(range);
+                        var text = rangeText(range);
+                        // Unmeasured: fail closed, with a string cssURL matches.
+                        return text === null ? 'url(' : text;
                     }
+                    // insertNode can land in the MIDDLE of the owner's text —
+                    // a boundary inside a text node splits it there — and
+                    // neither junction order cssRisk() tries sees a URL that
+                    // only the splice completes (`…:u` + `rl(https://…)` + `}`).
+                    // So the spliced text is asked too, exactly as the engine
+                    // will read it.
                     var carries = resources(node).length
                         || styleRisk(node)
                         || cssURL(surrounded())
-                        || !!(styleOwner && cssRisk(containerText(styleOwner, null, name), [node]));
+                        || !!(styleOwner && cssRisk(containerText(styleOwner, null, name), [node]))
+                        || !!(styleOwner && name === 'insertNode' && cssURL(rangeResult(range, styleOwner, node)));
                     if (!carries) return original.call(range, node);
                     defer(function (policy) {
                         var owner = rangeStyleOwner(range);
-                        if (owner && !allowedStyle(policy, owner, null, name, [node])) return;
-                        if (!allowedStyleNode(policy, node) || !allowedCss(policy, surrounded())) return;
+                        var insert = function () {
+                            prepare(node, policy);
+                            parkSheets(node, policy);
+                            original.call(range, node);
+                        };
+                        if (owner) {
+                            // insertNode splices the node's text in at the
+                            // boundary. surroundContents moves the wrapped text
+                            // INTO the new element, and for the CSS engine only
+                            // direct child text nodes are stylesheet, so what
+                            // the owner then holds is its text minus the wrapped
+                            // part — judged on the whole of its text instead,
+                            // which is the safe direction and costs a replay.
+                            var result = name === 'insertNode'
+                                ? rangeResult(range, owner, node)
+                                : resultText(owner, null, 'append', []);
+                            return deliverCss(policy, owner, null, name, [node], insert, result);
+                        }
+                        if (name !== 'surroundContents' || !isStyle(node)) return insert();
+                        // A fresh <style> wrapping page text: the sheet it
+                        // becomes is the range's text, which the wrap moves in
+                        // after discarding the element's own children — so the
+                        // element cannot be parked ahead of the call the way a
+                        // subtree is. Build the wrap's end state by hand when
+                        // the policy refuses: the contents go into the marker,
+                        // the element takes their neutralised form and lands
+                        // where they were.
+                        var text = rangeText(range);
+                        if (text === null) return;
+                        var hit = cssBlocked(policy, text);
+                        if (!hit) {
+                            if (!allowedCss(policy, text)) return;
+                            prepare(node, policy);
+                            return original.call(range, node);
+                        }
+                        nativeRangeDelete.call(range);
+                        parkCss(node, text, policy, hit);
                         prepare(node, policy);
-                        original.call(range, node);
+                        nativeRangeInsert.call(range, node);
                     });
                 };
             });
@@ -855,8 +956,8 @@
             if (!resources(node).length && !styleRisk(node) && !waiting.has(el)) return original.call(el, position, node);
             waiting.add(el);
             defer(function (policy) {
-                if (!allowedStyleNode(policy, node)) return;
                 prepare(node, policy);
+                parkSheets(node, policy);
                 el.insertAdjacentElement(position, node);
             });
             return node;
@@ -869,20 +970,58 @@
     // comment, which can spell a property the browser understands and a regex
     // does not. Holding more costs a replay; holding less costs a leak.
     function cssURL(value) {
-        return /url|@import|image-set|src\s*\(|\\|\/\*/i.test(String(value || ''));
+        return /url\s*\(|@import|image-set|src\s*\(|\\|\/\*/i.test(String(value || ''));
+    }
+    // The URLs a regex can read out of CSS text: url() in its three spellings
+    // and the string form of @import — the same two patterns the runtime
+    // extracts (_fazCssUrls, script.js), kept identical on purpose, so a
+    // decision taken here on them is the decision the runtime would take on
+    // the same text.
+    var CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi;
+    var CSS_IMPORT = /(@import\s+)(["'])([^"']+)\2/gi;
+    function cssUrls(text) {
+        var urls = [], value = String(text == null ? '' : text);
+        value.replace(CSS_URL, function (match, dq, sq, bare) {
+            urls.push(dq || sq || bare || '');
+            return match;
+        });
+        value.replace(CSS_IMPORT, function (match, prefix, quote, url) {
+            urls.push(url || '');
+            return match;
+        });
+        return urls;
+    }
+    // The narrow question, for a sheet whose text is complete and whose author
+    // is the parser: does it name a URL that can reach a third party? Judged on
+    // the URLs that can be read out of it, by the same origin test every
+    // resource element gets, with an unresolvable one counting as remote. A
+    // comment or an escape on its own is not a reason — a theme's `/* header
+    // */` and an icon font's `content:"\f101"` are what those look like in
+    // practice, and cssURL() above held both.
+    function cssFetches(text) {
+        var urls = cssUrls(text);
+        for (var i = 0; i < urls.length; i++) {
+            if (!local(urls[i])) return true;
+        }
+        return false;
     }
     // During a normal handoff the runtime's permanent interceptors decide what
     // may load, so everything replays. During a safety release there are no
     // such interceptors and no provider rules, so only same-origin work runs.
     function allowed(policy, url, key) { return !policy || !policy.sameOriginOnly || localValue(key, url); }
-    // CSS is not released by origin, because judging that means re-implementing
-    // the browser's CSS parser: escapes, comments and image-set() can hide a
-    // URL from any regex while the engine still fetches it, and the two
-    // disagreeing is a bypass. During a safety release no style text that could
-    // fetch anything is applied at all. The cost is a stylesheet that stays
-    // parked for that page view, which only happens when the runtime is already
-    // broken; the benefit is that no parser of ours stands between a visitor
-    // and a third-party request.
+    // CSS TEXT is not released by origin on the safety release, because judging
+    // that means re-implementing the browser's CSS parser: escapes, comments
+    // and image-set() can hide a URL from any regex while the engine still
+    // fetches it, and the two disagreeing is a bypass. During a safety release
+    // no style text that could fetch anything is applied at all. The cost is a
+    // stylesheet that stays parked for that page view, which only happens when
+    // the runtime is already broken; the benefit is that no parser of ours
+    // stands between a visitor and a third-party request.
+    //
+    // A <style> ELEMENT arriving inside a subtree is the one exception, and
+    // parkSheets() below says why: there the choice was never "apply or hold"
+    // but "insert or drop the whole subtree", and dropping took a site's own
+    // widget down with the sheet it carried.
     function allowedCss(policy, value) { return !policy || !policy.sameOriginOnly || !cssURL(value); }
     // A <style> ELEMENT that arrives with its CSS already in it. Every gate in
     // this file asks whether the CONTAINER is a <style>, and the text-entry
@@ -918,8 +1057,184 @@
         }
         return false;
     }
-    function allowedStyleNode(policy, node) {
-        return !policy || !policy.sameOriginOnly || !styleRisk(node);
+    // Does the policy refuse this URL? `url` is the runtime's provider rules
+    // at the handoff and the origin test on the safety release. A rule that
+    // throws refuses: a missing answer must not read as permission.
+    function refused(policy, url) {
+        if (!policy || typeof policy.url !== 'function') return false;
+        try { return !!policy.url(url); } catch (e) { return true; }
+    }
+    // The first URL in the text the policy refuses, or '' when it would let
+    // every one it can read load.
+    function cssBlocked(policy, text) {
+        var urls = cssUrls(text);
+        for (var i = 0; i < urls.length; i++) {
+            if (refused(policy, urls[i])) return urls[i];
+        }
+        return '';
+    }
+    // The form the runtime gives a blocked sheet (_fazNeutralizeCssUrls):
+    // every refused url() and @import replaced by an inert data: URL and
+    // everything else left as written, so a sheet that mixes the site's own
+    // icons with a tracker's pixel keeps the icons. Byte-for-byte the
+    // runtime's own output on purpose: its bookkeeping adopts a parked
+    // original only when the live text IS that form
+    // (_fazPrimeStyleCssMarkers), which is what makes a sheet parked here one
+    // the runtime goes on managing as its own — a later append through its
+    // gate re-syncs the marker from the original instead of from an empty
+    // element and losing it.
+    var INERT_CSS_URL = 'data:application/octet-stream,';
+    function neutralise(policy, text) {
+        var inert = 'url("' + INERT_CSS_URL + '")';
+        return String(text == null ? '' : text)
+            .replace(CSS_URL, function (match, dq, sq, bare) {
+                return refused(policy, dq || sq || bare || '') ? inert : match;
+            })
+            .replace(CSS_IMPORT, function (match, prefix, quote, url) {
+                return refused(policy, url) ? prefix + inert : match;
+            });
+    }
+    // Park a <style> whose text the policy refuses, in place: the live text
+    // becomes the neutralised form, the original goes into data-faz-css, and
+    // the category the restore selectors need is named. Delivered, not
+    // dropped — the element is in the document, the site's own rules in it
+    // still apply, and the runtime's restore pass (`style[data-faz-css]` in
+    // _fazUnblockServerSide) hands the original back on the consent that
+    // allows it. Dropping the operation instead left the page one stylesheet
+    // short for the rest of the view, on that same consent.
+    function parkCss(el, text, policy, hit) {
+        if (!nativeTextSet) return;
+        var encoded = base64(text);
+        nativeTextSet.call(el, neutralise(policy, text));
+        if (encoded) setAttr(el, 'data-faz-css', encoded);
+        if (!attr(el, 'data-faz-category')) setAttr(el, 'data-faz-category', parkCategory(policy, hit));
+    }
+    // Every sheet a subtree carries, judged BEFORE the subtree is inserted:
+    // while the element is detached nothing parses it, so a refused sheet
+    // lands already parked and the engine never sees the URL. Inserting first
+    // and parking after is not the same thing — an @import is requested while
+    // the sheet is parsed, synchronously, on insertion. On the safety release
+    // this is also where a subtree holding a first-party sheet stops being
+    // dropped whole: each sheet is judged on its own and the rest of the
+    // subtree lands as the page meant it to.
+    function parkSheets(node, policy) {
+        sheets(node).forEach(function (el) {
+            var text = String(el.textContent == null ? '' : el.textContent);
+            var hit = text && cssBlocked(policy, text);
+            if (hit) parkCss(el, text, policy, hit);
+            if (judged) judged.add(el);
+        });
+    }
+    // The text a <style> is left holding once a change lands: the exact string
+    // the engine parses. The hold side asks the broader cssRisk(), which tries
+    // both junction orders because a hold must fail closed; delivery needs the
+    // one real order, because the URL it extracts and the original it parks
+    // are both read from this string. The anchor is the child the change is
+    // placed against — the reference node of insertBefore, the node
+    // before/after/replaceWith was called on, the text node a character
+    // method edits, the child being removed. No anchor, or one no longer in
+    // the owner, means the end of the text, which is where the replay puts an
+    // insertion whose reference node moved.
+    function textAround(owner, anchor) {
+        var out = { before: '', self: '', after: '' }, seen = false;
+        if (!owner) return out;
+        for (var child = owner.firstChild; child; child = child.nextSibling) {
+            var part = String(child.textContent == null ? '' : child.textContent);
+            if (child === anchor) { seen = true; out.self = part; continue; }
+            if (seen) out.after += part; else out.before += part;
+        }
+        return out;
+    }
+    function joinParts(parts) {
+        return (parts || []).map(function (part) {
+            if (part == null) return '';
+            return typeof part === 'string' ? part : String(part.textContent == null ? '' : part.textContent);
+        }).join('');
+    }
+    function resultText(owner, anchor, name, parts) {
+        var joined = joinParts(parts);
+        if (name === 'replaceChildren') return joined;
+        var at = textAround(owner, anchor);
+        switch (name) {
+            case 'prepend': case 'afterbegin': return joined + at.before + at.self + at.after;
+            case 'insertBefore': case 'before': case 'beforebegin': return at.before + joined + at.self + at.after;
+            case 'after': case 'afterend': return at.before + at.self + joined + at.after;
+            case 'replaceChild': case 'replaceWith': case 'without': return at.before + joined + at.after;
+            default: return at.before + at.self + at.after + joined;
+        }
+    }
+    // The text a <style> holds once Range.insertNode lands `node` at the
+    // range's start: before a child when the boundary is on the element's
+    // child list, inside a text node — which the engine splits at the offset —
+    // when it is in one. Read at replay, against the boundary as it stands
+    // then, for the reason rangeStyleOwner() is recomputed there.
+    function rangeResult(range, owner, node) {
+        var at = range.startContainer, offset = range.startOffset;
+        if (at === owner) return resultText(owner, owner.childNodes[offset] || null, 'insertBefore', [node]);
+        var around = textAround(owner, at);
+        return around.before + around.self.slice(0, offset) + joinParts([node]) + around.self.slice(offset) + around.after;
+    }
+    // Deliver a held change to a <style>'s text. On the safety release the
+    // broad rule stands — see allowedCss() — and a refusal leaves the owner as
+    // it is. At the handoff the runtime's rules are in the policy, so the
+    // resulting text is judged by them HERE, and a refused result lands parked
+    // rather than dropped: the owner takes the neutralised form of what it was
+    // about to hold and the original is marked for the restore pass. Judged on
+    // this side rather than left to the live method because the runtime gates
+    // the HTMLStyleElement interface and nothing else: a Range, the SVG
+    // <style>, before/after on a text node inside a sheet all reach the engine
+    // through methods it never wrapped, and a replay through those fetched
+    // with consent refused. The runtime does not have to learn these routes —
+    // the file that held them delivers them.
+    function deliverCss(policy, owner, anchor, name, parts, apply, result) {
+        if (!policy) return apply();
+        if (policy.sameOriginOnly) {
+            // The exact text, when the caller could compute one, is asked as
+            // well: a splice into the middle of a sheet completes a URL that
+            // neither junction order shows.
+            if (!allowedStyle(policy, owner, anchor, name, parts) || (result != null && cssURL(result))) return;
+            return apply();
+        }
+        var text = result == null ? resultText(owner, anchor, name, parts) : result;
+        var hit = cssBlocked(policy, text);
+        if (hit) return parkCss(owner, text, policy, hit);
+        apply();
+    }
+    // The markup half of parkSheets(): a <style> inside a string a sink is
+    // about to parse, rewritten the way the runtime rewrites the same string
+    // (_fazPrepareStyleTagHtml, script.js) when the policy refuses a URL in it
+    // — text neutralised, original in data-faz-css, a category. A tag already
+    // carrying the marker is someone else's park and is left as it is. Only
+    // the safety release comes through here: at the handoff the live sink IS
+    // the runtime's own markup gate, and that gate decides.
+    function escapeAttr(value) {
+        return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    }
+    function parkMarkup(policy, markup) {
+        return String(markup == null ? '' : markup).replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, function (full, attrs, css) {
+            attrs = attrs || '';
+            if (/\bdata-faz-css\s*=/i.test(attrs)) return full;
+            var hit = css && cssBlocked(policy, css);
+            if (!hit) return full;
+            var encoded = base64(css);
+            if (!encoded) return full;
+            var category = /\bdata-faz-category\s*=/i.test(attrs) ? '' : ' data-faz-category="' + escapeAttr(parkCategory(policy, hit)) + '"';
+            return '<style' + attrs + ' data-faz-css="' + escapeAttr(encoded) + '"' + category + '>' + neutralise(policy, css) + '</style>';
+        });
+    }
+    // `host` is where the parsed nodes land: the sheets that are new in it
+    // afterwards are the ones this delivery judged, and the backstop — still
+    // watching on the safety release — is told so, or it would re-ask its own
+    // broad question of a sheet just delivered on the narrow one and park a
+    // theme for a comment.
+    function deliverMarkup(policy, markup, apply, host) {
+        if (!policy || !policy.sameOriginOnly) return apply(markup);
+        var before = sheets(host);
+        apply(parkMarkup(policy, markup));
+        if (!judged) return;
+        sheets(host).forEach(function (el) {
+            if (before.indexOf(el) === -1) judged.add(el);
+        });
     }
     // Preserve the runtime's CSS enforcement during its download too. Plain
     // layout/style changes keep their synchronous semantics.
@@ -944,7 +1259,15 @@
                 var context = isStyle(el) ? null : (el && el.parentNode);
                 var scope = context ? 'without' : 'replaceChildren';
                 if (!eligible(el, value) || !cssRisk(containerText(context || el, el, scope), [value])) return desc.set.call(el, value);
-                defer(function (policy) { if (allowedStyle(policy, context || el, el, scope, [value])) el[prop] = value; });
+                // innerHTML on anything but a <style> is MARKUP carrying a
+                // sheet, not the text of one: delivered through the markup
+                // rule, where the sheets inside are judged one by one, and not
+                // written back as the text of some container.
+                var markup = prop === 'innerHTML' && !isStyle(el);
+                defer(function (policy) {
+                    if (markup) return deliverMarkup(policy, value, function (html) { el[prop] = html; }, el);
+                    deliverCss(policy, context || el, el, scope, [value], function () { el[prop] = value; });
+                });
             }
         });
         undo.push(function () {
@@ -979,7 +1302,12 @@
             // elements is handled by the DOM backstop further down, which judges
             // what landed instead of what the string looked like.
             if (!/<style\b/i.test(markup) || !cssURL(markup)) return original.call(el, position, markup);
-            defer(function (policy) { if (allowedCss(policy, markup)) el.insertAdjacentHTML(position, markup); });
+            defer(function (policy) {
+                // beforebegin and afterend land beside the element, in its
+                // parent; the other two land inside it.
+                deliverMarkup(policy, markup, function (html) { el.insertAdjacentHTML(position, html); },
+                    /^(beforebegin|afterend)$/i.test(String(position)) ? (el.parentNode || el) : el);
+            });
         };
     });
     function inStyle(node) { return isStyle(node && node.parentNode); }
@@ -1005,10 +1333,7 @@
     // `style.append('.q{background-image:u', 'rl(https://…)}')` through — that
     // one leaks during the ordinary hold window, with no failed runtime needed.
     function cssRisk(text, parts) {
-        var joined = (parts || []).map(function (part) {
-            if (part == null) return '';
-            return typeof part === 'string' ? part : String(part.textContent == null ? '' : part.textContent);
-        }).join('');
+        var joined = joinParts(parts);
         var current = String(text == null ? '' : text);
         return cssURL(joined) || cssURL(current + joined) || cssURL(joined + current);
     }
@@ -1025,25 +1350,29 @@
     // (it can be an ancestor far above the <style>, or the <style>'s parent for
     // a range that spans it) and would both miss and over-hold.
     //
-    // surroundContents is held on the same rule even though its new parent's
-    // own children are discarded by the spec and the wrapped contents stay in
-    // the owner's text: broad is the safe direction here, it costs a replay,
-    // and a rule per method is how this surface was wrong four times.
+    // surroundContents inside a <style> is held on the same rule, and the
+    // reason is worth stating exactly, because the obvious account is wrong.
+    // The wrap moves the range's text INTO the new element, and for the CSS
+    // engine only the direct child text nodes of a <style> are stylesheet —
+    // text inside a wrapper element is not. So the operation can only ever
+    // take text OUT of the sheet; it cannot complete a URL. It is held anyway
+    // because a hold is the safe direction and costs nothing but a replay,
+    // while a rule per method is how this surface was wrong four times.
     // The text a range currently spans. Range.prototype.toString is what the
     // engine answers with, so no walk of our own can disagree with it — but
     // `String(range)` called it through the page's own property, and a page that
     // assigns `Range.prototype.toString = () => ''` then answers "no CSS here"
     // for the one route whose resulting text only the range knows. Captured at
     // install like the attribute natives, and failing CLOSED: with no native to
-    // ask, or a throw, the answer is a string that cssURL matches, so the
-    // insertion is held rather than let through on a missing measurement.
+    // ask, or a throw, the answer is null, which the hold reads as a string
+    // cssURL matches and the delivery reads as nothing to deliver, so the
+    // insertion is neither let through nor replayed on a missing measurement.
     var nativeRangeText = w.Range && Range.prototype && typeof Range.prototype.toString === 'function'
         ? Range.prototype.toString
         : null;
-    var UNMEASURED = 'url(';
     function rangeText(range) {
-        if (!nativeRangeText) return UNMEASURED;
-        try { return String(nativeRangeText.call(range)); } catch (e) { return UNMEASURED; }
+        if (!nativeRangeText) return null;
+        try { return String(nativeRangeText.call(range)); } catch (e) { return null; }
     }
     function rangeStyleOwner(range) {
         var at = null;
@@ -1117,8 +1446,7 @@
                     // Recomputed: earlier tasks in the queue may have changed
                     // this node's data since the call was made.
                     var landing = dataResult(name, node.data, args);
-                    if (!allowedStyle(policy, owner, node, 'without', [landing])) return;
-                    node[name].apply(node, args);
+                    deliverCss(policy, owner, node, 'without', [landing], function () { node[name].apply(node, args); });
                 });
             };
         });
@@ -1136,8 +1464,11 @@
                 : (isStyle(el.parentNode) ? el.parentNode : null);
             if (!owner || !cssRisk(owner.textContent, [text])) return original.call(el, position, text);
             defer(function (policy) {
-                if (!allowedStyle(policy, owner, null, 'insertAdjacentText', [text])) return;
-                el.insertAdjacentText(position, text);
+                // The position names the junction: afterbegin/beforeend are the
+                // owner's two ends, beforebegin/afterend sit against `el`.
+                deliverCss(policy, owner, inside ? null : el, String(position).toLowerCase(), [text], function () {
+                    el.insertAdjacentText(position, text);
+                });
             });
         };
     });
@@ -1644,7 +1975,11 @@
                     // judge, and it already did. See fromScript() above.
                     if (!fromScript(node)) continue;
                     resources(node).forEach(guard);
-                    sheets(node).forEach(parkSheet);
+                    // Tagged means a script sink built it; untagged here means
+                    // the parser did (or a wrapper above already judged it).
+                    sheets(node).forEach(function (el) {
+                        parkSheet(el, sunk && !sunk.has(el) ? cssFetches : cssURL);
+                    });
                 }
             }
         }
