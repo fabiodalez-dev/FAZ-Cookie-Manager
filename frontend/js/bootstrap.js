@@ -320,7 +320,11 @@
     // by trusting it.
     var sunk = typeof w.WeakSet === 'function' ? new w.WeakSet() : null;
     // Sheets a wrapper has already delivered, judged, on the safety release.
-    // The backstop stays armed on that path and must not judge them again.
+    // The backstop stays armed on that path and must not judge them again —
+    // which is only sound because the delivery question (judgeCss) reads the
+    // text the way the tokenizer does, escapes decoded and comments removed,
+    // so an escaped `u\72l(` is caught there and not only by the backstop's
+    // broad cssURL(), while a comment on its own is not a reason to park.
     var judged = sunk ? new w.WeakSet() : null;
     function tag(node) {
         if (!sunk || !node) return node;
@@ -878,14 +882,14 @@
                         // where they were.
                         var text = rangeText(range);
                         if (text === null) return;
-                        var hit = cssBlocked(policy, text);
-                        if (!hit) {
+                        var verdict = judgeCss(policy, text);
+                        if (!verdict) {
                             if (!allowedCss(policy, text)) return;
                             prepare(node, policy);
                             return original.call(range, node);
                         }
                         nativeRangeDelete.call(range);
-                        parkCss(node, text, policy, hit);
+                        parkCss(node, text, policy, verdict);
                         prepare(node, policy);
                         nativeRangeInsert.call(range, node);
                     });
@@ -922,7 +926,20 @@
     // the same text.
     var CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi;
     var CSS_IMPORT = /(@import\s+)(["'])([^"']+)\2/gi;
-    function cssUrls(text) {
+    // Four more forms the runtime's pair does not read, and the engine does:
+    // `@import"x.css"`, which needs no whitespace to be an import; a url(
+    // left open at the end of the text, which the tokenizer reads to EOF as
+    // the URL — the shape a sheet has when a held fragment lands last; and
+    // the string arguments of image-set() and src(), which name a file
+    // without any url() around it.
+    var CSS_IMPORT_TIGHT = /@import(["'])([^"']+)\1/gi;
+    var CSS_URL_OPEN = /url\(\s*(?:"([^"]*)|'([^']*)|([^\)\s]*))\s*$/i;
+    var CSS_STRING_FN = /\b(?:image-set|src)\(((?:[^()]|\([^()]*\))*)\)/gi;
+    var CSS_STRING = /"([^"]*)"|'([^']*)'/g;
+    // `simple` restricts the answer to the two forms neutralise() can rewrite
+    // in place; a URL found only by the other three cannot be neutralised one
+    // token at a time, and the sheet carrying it is parked whole instead.
+    function cssUrls(text, simple) {
         var urls = [], value = String(text == null ? '' : text);
         value.replace(CSS_URL, function (match, dq, sq, bare) {
             urls.push(dq || sq || bare || '');
@@ -932,7 +949,42 @@
             urls.push(url || '');
             return match;
         });
+        if (simple) return urls;
+        value.replace(CSS_IMPORT_TIGHT, function (match, quote, url) {
+            urls.push(url || '');
+            return match;
+        });
+        var open = CSS_URL_OPEN.exec(value);
+        if (open && (open[1] || open[2] || open[3])) urls.push(open[1] || open[2] || open[3]);
+        value.replace(CSS_STRING_FN, function (match, inner) {
+            String(inner).replace(CSS_STRING, function (m, dq, sq) {
+                urls.push(dq || sq || '');
+                return m;
+            });
+            return match;
+        });
         return urls;
+    }
+    // The text as the CSS tokenizer reads it, for the regexes above to be
+    // asked a second time: comments removed and escapes decoded, both the hex
+    // form (`\72` is "r", with one optional whitespace after it) and the
+    // single-character form (`\.` is "."). `u\72l(`, `\75 rl(` and
+    // `tracker\.example.test` all spell something a regex on the raw text does
+    // not see and the engine fetches.
+    function normaliseCss(text) {
+        return String(text == null ? '' : text)
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/\\([0-9a-f]{1,6})[ \t\n\r\f]?/gi, function (match, hex) {
+                var code = parseInt(hex, 16);
+                try { return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : '�'; }
+                catch (e) { return '�'; }
+            })
+            .replace(/\\([^\n\r\f])/g, '$1');
+    }
+    // Every URL the text can be read to name, on the raw text and on the
+    // normalised one.
+    function cssUrlsAll(text) {
+        return cssUrls(text).concat(cssUrls(normaliseCss(text)));
     }
     // The narrow question, for a sheet whose text is complete and whose author
     // is the parser: does it name a URL that can reach a third party? Judged on
@@ -942,7 +994,7 @@
     // */` and an icon font's `content:"\f101"` are what those look like in
     // practice, and cssURL() above held both.
     function cssFetches(text) {
-        var urls = cssUrls(text);
+        var urls = cssUrlsAll(text);
         for (var i = 0; i < urls.length; i++) {
             if (!local(urls[i])) return true;
         }
@@ -1007,14 +1059,24 @@
         if (!policy || typeof policy.url !== 'function') return false;
         try { return !!policy.url(url); } catch (e) { return true; }
     }
-    // The first URL in the text the policy refuses, or '' when it would let
-    // every one it can read load.
-    function cssBlocked(policy, text) {
-        var urls = cssUrls(text);
-        for (var i = 0; i < urls.length; i++) {
-            if (refused(policy, urls[i])) return urls[i];
-        }
-        return '';
+    function refusedUrls(policy, urls) {
+        return urls.filter(function (url) { return refused(policy, url); });
+    }
+    // The verdict on a sheet's text: null when the policy would let every URL
+    // it can be read to name load, otherwise the first refused URL and whether
+    // the sheet has to be parked WHOLE. Whole when a refused URL is one
+    // neutralise() cannot rewrite in place — found only once the text is
+    // normalised (an escape in the function name or in the host), or only in
+    // a form the runtime's pair of patterns does not read (an open url(, an
+    // image-set() string). Rewriting the URLs a regex can see while one it
+    // cannot stays live would be a park in name only.
+    function judgeCss(policy, text) {
+        var raw = String(text == null ? '' : text);
+        var simple = refusedUrls(policy, cssUrls(raw, true));
+        var all = refusedUrls(policy, cssUrlsAll(raw));
+        if (!all.length) return null;
+        var whole = all.some(function (url) { return simple.indexOf(url) === -1; });
+        return { hit: all[0], whole: whole };
     }
     // The form the runtime gives a blocked sheet (_fazNeutralizeCssUrls):
     // every refused url() and @import replaced by an inert data: URL and
@@ -1025,7 +1087,9 @@
     // (_fazPrimeStyleCssMarkers), which is what makes a sheet parked here one
     // the runtime goes on managing as its own — a later append through its
     // gate re-syncs the marker from the original instead of from an empty
-    // element and losing it.
+    // element and losing it. Only the two forms the runtime reads are
+    // rewritten here; when judgeCss() finds a refused URL in any other form
+    // the sheet is parked whole (emptied) instead, see there.
     var INERT_CSS_URL = 'data:application/octet-stream,';
     function neutralise(policy, text) {
         var inert = 'url("' + INERT_CSS_URL + '")';
@@ -1045,12 +1109,12 @@
     // _fazUnblockServerSide) hands the original back on the consent that
     // allows it. Dropping the operation instead left the page one stylesheet
     // short for the rest of the view, on that same consent.
-    function parkCss(el, text, policy, hit) {
+    function parkCss(el, text, policy, verdict) {
         if (!nativeTextSet) return;
         var encoded = base64(text);
-        nativeTextSet.call(el, neutralise(policy, text));
+        nativeTextSet.call(el, verdict.whole ? '' : neutralise(policy, text));
         if (encoded) setAttr(el, 'data-faz-css', encoded);
-        if (!attr(el, 'data-faz-category')) setAttr(el, 'data-faz-category', parkCategory(policy, hit));
+        if (!attr(el, 'data-faz-category')) setAttr(el, 'data-faz-category', parkCategory(policy, verdict.hit));
     }
     // Every sheet a subtree carries, judged BEFORE the subtree is inserted:
     // while the element is detached nothing parses it, so a refused sheet
@@ -1062,9 +1126,9 @@
     // subtree lands as the page meant it to.
     function parkSheets(node, policy) {
         sheets(node).forEach(function (el) {
-            var text = String(el.textContent == null ? '' : el.textContent);
-            var hit = text && cssBlocked(policy, text);
-            if (hit) parkCss(el, text, policy, hit);
+            var text = styleText(el);
+            var verdict = text ? judgeCss(policy, text) : null;
+            if (verdict) parkCss(el, text, policy, verdict);
             if (judged) judged.add(el);
         });
     }
@@ -1078,20 +1142,39 @@
     // method edits, the child being removed. No anchor, or one no longer in
     // the owner, means the end of the text, which is where the replay puts an
     // insertion whose reference node moved.
+    //
+    // Only direct Text and CDATA children are stylesheet. A comment node, or
+    // an element, between two text nodes contributes nothing to what the
+    // engine parses — and counting its textContent did worse than over-hold:
+    // `url(https://t/c.png` + <!-- x --> + `)}` read as `url(https://t/c.png
+    // x)}`, which no URL pattern matches, while the engine reads the two text
+    // nodes back to back and fetches.
+    function isText(node) { return !!node && (node.nodeType === 3 || node.nodeType === 4); }
+    function textOf(node) { return isText(node) ? String(node.data == null ? '' : node.data) : ''; }
+    function styleText(owner) {
+        var text = '';
+        for (var child = owner && owner.firstChild; child; child = child.nextSibling) text += textOf(child);
+        return text;
+    }
     function textAround(owner, anchor) {
         var out = { before: '', self: '', after: '' }, seen = false;
         if (!owner) return out;
         for (var child = owner.firstChild; child; child = child.nextSibling) {
-            var part = String(child.textContent == null ? '' : child.textContent);
+            var part = textOf(child);
             if (child === anchor) { seen = true; out.self = part; continue; }
             if (seen) out.after += part; else out.before += part;
         }
         return out;
     }
+    // What an inserted part adds to the sheet: a string, a text node's data,
+    // the text children of a fragment (they become the owner's children), and
+    // nothing for an element or a comment.
     function joinParts(parts) {
         return (parts || []).map(function (part) {
             if (part == null) return '';
-            return typeof part === 'string' ? part : String(part.textContent == null ? '' : part.textContent);
+            if (typeof part === 'string') return part;
+            if (part.nodeType === 11) return styleText(part);
+            return textOf(part);
         }).join('');
     }
     function resultText(owner, anchor, name, parts) {
@@ -1139,8 +1222,8 @@
             return apply();
         }
         var text = result == null ? resultText(owner, anchor, name, parts) : result;
-        var hit = cssBlocked(policy, text);
-        if (hit) return parkCss(owner, text, policy, hit);
+        var verdict = judgeCss(policy, text);
+        if (verdict) return parkCss(owner, text, policy, verdict);
         apply();
     }
     // The markup half of parkSheets(): a <style> inside a string a sink is
@@ -1157,12 +1240,13 @@
         return String(markup == null ? '' : markup).replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, function (full, attrs, css) {
             attrs = attrs || '';
             if (/\bdata-faz-css\s*=/i.test(attrs)) return full;
-            var hit = css && cssBlocked(policy, css);
-            if (!hit) return full;
+            var verdict = css ? judgeCss(policy, css) : null;
+            if (!verdict) return full;
             var encoded = base64(css);
             if (!encoded) return full;
-            var category = /\bdata-faz-category\s*=/i.test(attrs) ? '' : ' data-faz-category="' + escapeAttr(parkCategory(policy, hit)) + '"';
-            return '<style' + attrs + ' data-faz-css="' + escapeAttr(encoded) + '"' + category + '>' + neutralise(policy, css) + '</style>';
+            var category = /\bdata-faz-category\s*=/i.test(attrs) ? '' : ' data-faz-category="' + escapeAttr(parkCategory(policy, verdict.hit)) + '"';
+            return '<style' + attrs + ' data-faz-css="' + escapeAttr(encoded) + '"' + category + '>'
+                + (verdict.whole ? '' : neutralise(policy, css)) + '</style>';
         });
     }
     // `host` is where the parsed nodes land: the sheets that are new in it
@@ -1338,7 +1422,7 @@
         var text = '';
         for (var child = owner.firstChild; child; child = child.nextSibling) {
             if (child === node) continue;
-            text += child.textContent == null ? '' : child.textContent;
+            text += textOf(child);
         }
         return text;
     }

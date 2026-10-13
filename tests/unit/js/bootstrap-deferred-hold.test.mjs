@@ -1622,6 +1622,106 @@ console.log('\nbootstrap: a consent-tagged inline script never runs without cons
     tagged.getAttribute('data-faz-blocked-by-us') === '1');
 }
 
+console.log('\nCSS is read the way the tokenizer reads it, not the way a regex does');
+
+// Only direct Text and CDATA children of a <style> are stylesheet. Counting
+// every child's textContent read `url(https://t/c.png` + <!-- x --> + `)}` as
+// `url(https://t/c.png x)}`, which no URL pattern matches, while the engine
+// reads the two text nodes back to back. Measured delivered live at the
+// handoff with consent refused.
+{
+  const { window, document } = boot();
+  const s = document.createElement('style');
+  document.head.appendChild(s);
+  s.appendChild(document.createTextNode('.p{background-image:url(https://tracker.test/c.png'));
+  s.appendChild(document.createComment(' x'));
+  s.appendChild(document.createTextNode(')}'));
+  refusingHandoff(window);
+  ok('a comment between two text nodes does not hide the URL from the replay', !trackerLive(document));
+  ok('and the sheet is parked', !!s.getAttribute('data-faz-css'));
+}
+
+{
+  // Control: the same sheet with no comment in it.
+  const { window, document } = boot();
+  const s = document.createElement('style');
+  document.head.appendChild(s);
+  s.appendChild(document.createTextNode('.p{background-image:url(https://tracker.test/c.png'));
+  s.appendChild(document.createTextNode(')}'));
+  refusingHandoff(window);
+  ok('two text nodes completing a URL are parked', !trackerLive(document));
+  ok('and the sheet is parked', !!s.getAttribute('data-faz-css'));
+}
+
+// Five spellings a regex on the raw text does not read and the engine does,
+// all delivered live before: @import with no whitespace, the image-set()
+// string form, an escape inside the function name (two ways), an escape
+// inside the host. Each is parked at a refusing handoff; the plain url()
+// control is parked too, by the ordinary in-place neutralisation.
+const TOKENIZER_CASES = [
+  ['@import with no whitespace', '@import"https://tracker.test/c.css";', /tracker\.test/, 'tracker.test'],
+  ['image-set() string form', '.p{background-image:image-set("https://tracker.test/c.png" 1x)}', /tracker\.test/, 'tracker.test'],
+  ['u\\72l( escape', '.p{background-image:u\\72l(https://tracker.test/c.png)}', /tracker\.test/, 'tracker.test'],
+  ['\\75 rl( escape', '.p{background-image:\\75 rl(https://tracker.test/c.png)}', /tracker\.test/, 'tracker.test'],
+  ['escape in the host', '.p{background-image:url(https://tracker\\.example.test/c.png)}', /tracker\.example\.test/, 'example.test'],
+  ['url( left open at the end', '.p{background-image:url(https://tracker.test/open.png', /tracker\.test/, 'tracker.test'],
+];
+for (const [label, css, blocked, needle] of TOKENIZER_CASES) {
+  const { window, document } = boot();
+  const s = document.createElement('style');
+  document.head.appendChild(s);
+  s.textContent = css;
+  eq('premise: ' + label + ' is held', s.textContent, '');
+  refusingHandoff(window, blocked);
+  eq(label + ': parked whole at a refusing handoff', s.textContent, '');
+  eq(label + ': with the original in the marker', parkedCss(s), css);
+  ok(label + ': and nothing of it live', document.head.textContent.indexOf(needle) === -1);
+}
+
+{
+  // Control.
+  const { window, document } = boot();
+  const s = document.createElement('style');
+  document.head.appendChild(s);
+  s.textContent = '.p{background-image:url(https://tracker.test/ctrl.png)}';
+  refusingHandoff(window);
+  ok('a plain url() is parked in place', s.textContent.indexOf('url("data:application/octet-stream,")') !== -1);
+  ok('with nothing of it live', !trackerLive(document));
+  eq('and the original in the marker', parkedCss(s), '.p{background-image:url(https://tracker.test/ctrl.png)}');
+}
+
+// After the safety release a markup sink delivers its sheets judged and tells
+// the backstop so. That is sound only if the delivery question sees what the
+// backstop's broad one sees: an escaped `u\72l(` went through judged-and-live
+// while the identical CSS assigned through textContent was held.
+{
+  const { window, document } = boot();
+  await release(window);
+  const d = document.createElement('div');
+  d.innerHTML = '<style id="esc">.p{background-image:u\\72l(https://tracker.test/b.png)}</style>';
+  document.body.appendChild(d);
+  await Promise.resolve();
+  await Promise.resolve();
+  const sheet = document.getElementById('esc');
+  ok('premise: the markup landed', !!sheet);
+  eq('an escaped url( in markup after the release is parked whole', sheet.textContent, '');
+  eq('with the original in the marker', parkedCss(sheet), '.p{background-image:u\\72l(https://tracker.test/b.png)}');
+}
+
+{
+  // And a comment-only first-party sheet on the same route stays live.
+  const { window, document } = boot();
+  await release(window);
+  const d = document.createElement('div');
+  d.innerHTML = '<style id="cmt">/* theme */ .a{color:red}</style>';
+  document.body.appendChild(d);
+  await Promise.resolve();
+  await Promise.resolve();
+  const sheet = document.getElementById('cmt');
+  eq('a comment-only sheet in markup after the release stays live', sheet && sheet.textContent, '/* theme */ .a{color:red}');
+  eq('with no marker', sheet && sheet.getAttribute('data-faz-css'), null);
+}
+
 console.log('\nhandoff: the policy matches URLs the way the runtime does');
 
 // The policy handed to finish() used to match the raw URL string, while the
