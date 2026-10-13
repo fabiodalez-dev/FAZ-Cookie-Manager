@@ -532,19 +532,25 @@ console.log('\nbootstrap: a Range reaches the DOM through neither Node nor Paren
 }
 
 {
-  // surroundContents is held on the same owner rule. Its new parent's own
-  // children are discarded by the spec, so this is the conservative direction
-  // on purpose: it costs a replay, and a rule per method is how this surface
-  // was wrong repeatedly.
-  const { window, document } = boot({ seed: SPLIT_SEED });
+  // surroundContents inside a <style> is held on the same owner rule. It is
+  // the conservative direction on purpose — for the CSS engine only direct
+  // child text nodes are stylesheet, so a wrap can only take text OUT of the
+  // sheet — and it costs a replay. The first version of this case could not
+  // fail: it gave the wrapper its own URL-carrying text, which surroundContents
+  // discards, so the sheet read the same on fixed and unfixed code. The sheet
+  // text is the RANGE's here, what Range.prototype.toString answers, and what
+  // the hold is asserted on is the wrap itself.
+  const { window, document } = boot({ seed: '<style id="seed">.p{background-image:url(https://tracker.test/r3.png)}</style>' });
   const style = document.getElementById('seed');
   const wrapper = document.createElement('span');
-  wrapper.textContent = 'rl(https://tracker.test/r3.png)}';
   const range = document.createRange();
   range.selectNodeContents(style);
+  eq('premise: the range spans the sheet text', range.toString(), '.p{background-image:url(https://tracker.test/r3.png)}');
   range.surroundContents(wrapper);
-  ok('Range.surroundContents with URL-carrying text is held',
-    style.textContent.indexOf('tracker.test') === -1);
+  eq('Range.surroundContents inside a <style> is held: the wrapper is not inserted', wrapper.parentNode, null);
+  runtimeHandoff(window);
+  eq('and the wrap applies at handoff', wrapper.parentNode, style);
+  eq('with the sheet text moved inside the wrapper', wrapper.textContent, '.p{background-image:url(https://tracker.test/r3.png)}');
 }
 
 {

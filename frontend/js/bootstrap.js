@@ -473,15 +473,25 @@
     var wrote = false;
     // The parser this predicate asks is captured here, at install, and never
     // read from `w` again. Reading `w.DOMParser` at call time made the whole
-    // backstop silenceable from the page: a script that runs before this file
-    // assigns its own constructor whose parseFromString returns an empty
-    // document, and then every question below comes back "nothing written,
-    // nothing left open" and document.write regains the parser exemption for
-    // free. Both halves are captured, because shadowing either one is enough —
-    // `DOMParser.prototype.parseFromString = () => emptyDoc` needs no new
+    // backstop silenceable from the page AFTER this file had run: any script
+    // that comes later assigns its own constructor, or just its own
+    // parseFromString, and every question below is answered by it. The
+    // dangerous stub is not one returning an empty document — that one would
+    // lose the sentinel probe below and the predicate would withdraw by
+    // accident — but one answering "nothing was written, and the stream is
+    // closed", which is exactly what bootstrap-write-stream.test.mjs models:
+    // with that answer document.write regains the parser exemption for free.
+    // Both halves are captured, because shadowing either one is enough —
+    // `DOMParser.prototype.parseFromString = () => closedDoc` needs no new
     // constructor at all. Same reason the attribute natives are captured at
-    // the top of the file: a reference taken before page script runs cannot be
-    // reached by whatever shadows the global afterwards.
+    // the top of the file: a reference taken before page script runs cannot
+    // be reached by whatever shadows the global afterwards.
+    //
+    // What this does NOT defend against, said plainly: a script that runs
+    // BEFORE this file. That one shadows the global before the capture, and
+    // the capture then takes the hostile constructor as the native. It is the
+    // undefendable case for every native this file captures, and the reason
+    // the bootstrap is attached inline in <head>, before page scripts run.
     var Parser = typeof w.DOMParser === 'function' ? w.DOMParser : null;
     var parseHTML = Parser && Parser.prototype && typeof Parser.prototype.parseFromString === 'function'
         ? Parser.prototype.parseFromString
