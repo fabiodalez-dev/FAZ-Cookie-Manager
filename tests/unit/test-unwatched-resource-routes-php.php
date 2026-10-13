@@ -208,6 +208,41 @@ namespace {
 	$out  = faz_ob_run( $fe, $html );
 	assert_true( $out === $html, 'a whitelisted URL is exempt' );
 
+	echo "\n-- SVG: both spellings on one element --\n";
+
+	// Sprites and exports commonly carry BOTH `href` and `xlink:href`. The old
+	// pass parked the first and left the second live, which fetches. Both go,
+	// and exactly one data-faz-href remains: the SVG2 value when it is there,
+	// because that is the one an engine honours when both are present.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><svg><image href="https://cdn.tracker.test/a.png" xlink:href="https://cdn.tracker.test/legacy.png" width="1"/></svg></body></html>' );
+	assert_true( ! preg_match( '/(?<![\w:-])href=/', $out ), 'href is not left live' );
+	assert_true( false === stripos( $out, 'xlink:href=' ), 'xlink:href is not left live either' );
+	assert_true( 1 === substr_count( $out, 'data-faz-href=' ), 'exactly one parked attribute' );
+	assert_true( false !== strpos( $out, 'data-faz-href="https://cdn.tracker.test/a.png"' ), 'carrying the SVG2 value' );
+	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'and one category' );
+	assert_true( false !== strpos( $out, 'width="1"/>' ), 'with the other attributes and the shape intact' );
+
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><svg><use xlink:href="https://cdn.tracker.test/s.svg#i" href="https://cdn.tracker.test/s.svg#i"></use></svg></body></html>' );
+	assert_true( ! preg_match( '/(?<![\w:-])href=/', $out ) && false === stripos( $out, 'xlink:href=' ), 'legacy spelling first: neither is left live' );
+	assert_true( 1 === substr_count( $out, 'data-faz-href=' ), 'and still one parked attribute' );
+
+	echo "\n-- SVG: feImage, and names that merely start with image or use --\n";
+
+	// <feImage> fetches through href exactly as <image> does.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><svg><filter><feImage href="https://cdn.tracker.test/f.png"/><feImage xlink:href="https://cdn.tracker.test/g.png"/></filter></svg></body></html>' );
+	assert_true( 2 === substr_count( $out, 'data-faz-href=' ), 'feImage is parked through either spelling' );
+	assert_true( ! preg_match( '/(?<![\w:-])href=/', $out ) && false === stripos( $out, 'xlink:href=' ), 'and neither is left live' );
+	assert_true( 2 === substr_count( $out, 'data-faz-category="marketing"' ), 'each with its category' );
+
+	// A custom element whose name starts with the tag is not the tag: the old
+	// \b let <use-case> and <image-gallery> through and mutilated them.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><body><use-case href="https://cdn.tracker.test/x"></use-case><image-gallery href="https://cdn.tracker.test/y"></image-gallery></body></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'custom elements named use-* and image-* pass through byte-identical' );
+
 	echo "\n-- the legacy background attribute --\n";
 
 	// Any element that honours it, not just the body.
@@ -216,6 +251,13 @@ namespace {
 	assert_true( 3 === substr_count( $out, 'data-faz-background=' ), 'body, table and cell are all parked' );
 	assert_true( false === strpos( $out, ' background="https://cdn.tracker.test' ), 'and none is left live' );
 	assert_true( 3 === substr_count( $out, 'data-faz-category="marketing"' ), 'each one carries the category' );
+
+	// Whitespace around `=` is legal and the attribute pattern accepted it,
+	// but the cheaper pre-check in front of it did not.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body background = "https://cdn.tracker.test/bg.png"></body></html>' );
+	assert_true( false !== strpos( $out, 'data-faz-background=' ), 'background = "…" with spaces is parked' );
+	assert_true( ! preg_match( '/(?<![\w-])background\s*=/i', $out ), 'and not left live' );
 
 	// First-party backgrounds are ordinary page decoration.
 	$fe   = faz_ob_frontend( $providers, $blocked );
@@ -226,6 +268,15 @@ namespace {
 	$fe   = faz_ob_frontend( $providers, $blocked );
 	$html = '<html><body data-faz-category="marketing" data-faz-background="https://cdn.tracker.test/bg.png"></body></html>';
 	assert_true( faz_ob_run( $fe, $html ) === $html, 'a parked background is not rewritten twice' );
+
+	echo "\n-- link: a duplicated href --\n";
+
+	// Duplicate attributes are kept first-wins by the parser. Renaming only the
+	// first href left the second one live, and live is what fetches.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><head><link rel="stylesheet" href="https://cdn.tracker.test/a.css" href="https://cdn.tracker.test/b.css"></head></html>' );
+	assert_true( ! preg_match( '/(?<![\w-])href=/', $out ), 'no href is left live on a <link> that carries two' );
+	assert_true( false !== strpos( $out, 'data-faz-href="https://cdn.tracker.test/a.css"' ), 'and the first, which the parser keeps, is the parked value' );
 
 	echo "\n-- iframe srcdoc: a document in an attribute --\n";
 

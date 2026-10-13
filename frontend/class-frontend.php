@@ -4141,9 +4141,13 @@ class Frontend {
 		// markup went out before consent. Measured per engine in
 		// tests/browser-intent/write-stream-differential.spec.ts, which printed
 		// it as an accepted limit of the element set until this pass.
-		if ( false !== stripos( $html, '<image' ) || false !== stripos( $html, '<use' ) ) {
+		// <feImage> fetches through href exactly as <image> does. The tag name
+		// must be followed by whitespace, a slash or `>`: a word boundary let
+		// <use-case> and <image-gallery> custom elements through and mutilated
+		// them.
+		if ( false !== stripos( $html, '<image' ) || false !== stripos( $html, '<use' ) || false !== stripos( $html, '<feimage' ) ) {
 			$result = preg_replace_callback(
-				'#<(image|use)\b([^>]*?)(/?)>#is',
+				'#<(image|use|feImage)(?=[\s/>])([^>]*?)(/?)>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_svg_href_tag( $m, $providers, $blocked_categories );
 				},
@@ -4160,7 +4164,9 @@ class Frontend {
 		// image on <body> and on every table part, and no pass here looked at
 		// it — measured fetching in all three engines by
 		// tests/browser-intent/write-stream-differential.spec.ts.
-		if ( false !== stripos( $html, 'background=' ) ) {
+		// The pre-check accepts the same `background = "…"` spacing the
+		// pattern does; a plain `background=` lookup skipped it.
+		if ( preg_match( '/\bbackground\s*=/i', $html ) ) {
 			$result = preg_replace_callback(
 				'#<(body|table|thead|tbody|tfoot|tr|td|th)\b([^>]*\sbackground\s*=[^>]*)>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
@@ -4876,13 +4882,20 @@ class Frontend {
 	}
 
 	/**
-	 * Process an SVG <image> / <use> tag for a blocked href.
+	 * Process an SVG <image> / <use> / <feImage> tag for a blocked href.
 	 *
 	 * Both spellings — `href` and the legacy `xlink:href` — park into ONE
 	 * attribute, `data-faz-href`, which is what the client's restore pass reads.
 	 * One parked name means one restore branch; two would be two branches that
 	 * can disagree, and a resource a restore pass cannot select is not delayed,
 	 * it is dead.
+	 *
+	 * Both spellings are REMOVED when both are present: sprites and exports
+	 * commonly carry the pair, and parking the first left the second live,
+	 * which fetches. The parked value is the SVG2 `href` when there is one,
+	 * because that is the one an engine honours over `xlink:href` when both
+	 * are present; the restore writes it back as `href`, which every engine in
+	 * the support matrix reads.
 	 *
 	 * @param array $m                  Regex match: tag name, attributes, closing slash.
 	 * @param array $providers          Provider-to-category map.
@@ -4916,17 +4929,30 @@ class Frontend {
 			return $full;
 		}
 
-		$parked = preg_replace( '/(^|\s)(?:xlink:)?href\s*=\s*/i', '$1data-faz-href=', $attrs, 1 );
-		if ( null === $parked ) {
-			return $full; // PCRE failure — never ship a half-rewritten tag.
+		$value  = '';
+		$parked = $attrs;
+		foreach ( array( 'href', 'xlink:href' ) as $name ) {
+			// `(^|\s)` keeps the plain spelling from matching inside `xlink:href`.
+			$pattern = '/(^|\s)' . preg_quote( $name, '/' ) . '\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i';
+			if ( ! preg_match( $pattern, $parked, $found ) ) {
+				continue;
+			}
+			if ( '' === $value ) {
+				$value = $found[2];
+			}
+			$stripped = preg_replace( $pattern, '$1', $parked, 1 );
+			if ( null === $stripped ) {
+				return $full; // PCRE failure — never ship a half-rewritten tag.
+			}
+			$parked = $stripped;
 		}
-		if ( $parked === $attrs ) {
+		if ( '' === $value ) {
 			return $full; // Nothing fetchable to park.
 		}
 
 		// Metadata BEFORE the captured attributes, for the same reason as
 		// process_img_tag(): a self-closing tag keeps its slash inside $attrs.
-		return '<' . $tag . ' data-faz-category="' . esc_attr( $matched_category ) . '"' . $parked . $close . '>';
+		return '<' . $tag . ' data-faz-category="' . esc_attr( $matched_category ) . '" data-faz-href=' . $value . $parked . $close . '>';
 	}
 
 	/**
@@ -5160,8 +5186,10 @@ class Frontend {
 		// `(^|\s)srcset` needs whitespace before it, which `imagesrcset=` does
 		// not provide.
 		$new_attrs = preg_replace( '/(^|\s)imagesrcset\s*=\s*/i', '$1data-faz-imagesrcset=', $attrs, 1 );
-		// Rename href → data-faz-href (avoid matching data-href).
-		$new_attrs = preg_replace( '/(^|\s)href\s*=\s*/i', '$1data-faz-href=', $new_attrs, 1 );
+		// Rename href → data-faz-href (avoid matching data-href). Every
+		// occurrence: a duplicated attribute is kept first-wins by the parser,
+		// so renaming only the first left the second one live.
+		$new_attrs = preg_replace( '/(^|\s)href\s*=\s*/i', '$1data-faz-href=', $new_attrs );
 		// As with <img>, $attrs may already end in the source tag's `/`.
 		// Prefix metadata so the slash remains the final token before `>`.
 		$metadata = ' data-faz-category="' . esc_attr( $matched_category ) . '"';
