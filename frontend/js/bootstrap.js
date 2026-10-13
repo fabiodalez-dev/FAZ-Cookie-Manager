@@ -52,15 +52,45 @@
     var nativeSet = Element.prototype.setAttribute;
     var nativeHas = Element.prototype.hasAttribute;
     var nativeRemove = Element.prototype.removeAttribute;
+    // The legacy SVG `xlink:href` is a NAMESPACED attribute, and the engine
+    // resolves it by namespace and local name, not by its qualified name: a
+    // library may write it as `setAttributeNS(XLINK, 'p:href', url)` with any
+    // prefix it likes, and getAttribute('xlink:href') then answers null while
+    // the image fetches. The three accessors below ask by namespace for that
+    // one key, and fall back to the qualified spelling, which is what a plain
+    // setAttribute('xlink:href') produces.
+    var XLINK = 'http://www.w3.org/1999/xlink';
+    var nativeGetNS = Element.prototype.getAttributeNS;
+    var nativeHasNS = Element.prototype.hasAttributeNS;
+    var nativeRemoveNS = Element.prototype.removeAttributeNS;
     // Parking a stylesheet has to clear the live text WITHOUT going through the
     // gate that holds such a write — otherwise the clear is itself deferred and
     // nothing happens. holdCSS() defines its setter on the <style> interfaces,
     // never on Node.prototype, so this descriptor stays the real one, and
     // calling it directly bypasses the subclass property entirely.
     var nativeTextSet = (Object.getOwnPropertyDescriptor(Node.prototype, 'textContent') || {}).set;
-    function attr(el, name) { try { return nativeGet.call(el, name); } catch (e) { return null; } }
+    function attr(el, name) {
+        try {
+            if (name === 'xlink:href') {
+                var namespaced = nativeGetNS.call(el, XLINK, 'href');
+                return namespaced != null ? namespaced : nativeGet.call(el, name);
+            }
+            return nativeGet.call(el, name);
+        } catch (e) { return null; }
+    }
+    function has(el, name) {
+        try {
+            if (name === 'xlink:href' && nativeHasNS.call(el, XLINK, 'href')) return true;
+            return nativeHas.call(el, name);
+        } catch (e) { return false; }
+    }
     function setAttr(el, name, value) { try { nativeSet.call(el, name, value); } catch (e) { /* detached or read-only */ } }
-    function dropAttr(el, name) { try { nativeRemove.call(el, name); } catch (e) { /* noop */ } }
+    function dropAttr(el, name) {
+        try {
+            if (name === 'xlink:href') nativeRemoveNS.call(el, XLINK, 'href');
+            nativeRemove.call(el, name);
+        } catch (e) { /* noop */ }
+    }
     // One place that decides whether a task runs now or at the handoff, so no
     // call site has to know which of the two states the bootstrap is in.
     function defer(task) {
@@ -150,8 +180,25 @@
     // broad and deliberately not a parser: the question is "could this markup
     // reach a third party", and a sub-document's own resources are beyond
     // anything this file can intercept once it is parsed.
+    // The markup is read AFTER the two encodings that hide a `//` from a
+    // literal search: HTML character references (`https:&#47;&#47;tracker`,
+    // numeric in both bases and the named `&sol;` / `&colon;`), which the
+    // parser decodes before the sub-document sees them, and the JSON escape
+    // `\/`, which a script embedding its markup as a string leaves behind.
+    function decodeMarkup(value) {
+        return String(value == null ? '' : value)
+            .replace(/\\\//g, '/')
+            .replace(/&#x([0-9a-f]+);?/gi, function (match, hex) {
+                try { return String.fromCodePoint(parseInt(hex, 16)); } catch (e) { return match; }
+            })
+            .replace(/&#(\d+);?/g, function (match, dec) {
+                try { return String.fromCodePoint(parseInt(dec, 10)); } catch (e) { return match; }
+            })
+            .replace(/&sol;/gi, '/')
+            .replace(/&colon;/gi, ':');
+    }
     function urlsIn(value) {
-        var found = String(value == null ? '' : value).match(/(?:https?:)?\/\/[^\s"'<>)]+/gi);
+        var found = decodeMarkup(value).match(/(?:https?:)?\/\/[^\s"'<>)]+/gi);
         return found || [];
     }
     // A list is same-origin only when EVERY candidate is: the browser picks one
@@ -253,7 +300,7 @@
             // which is an ordinary pattern. An inline third-party snippet is a
             // pre-existing gap in both files, to be closed in both or neither.
             return tagKey(el) !== 'SCRIPT' || nativeHas.call(el, 'src') || nativeHas.call(el, 'href')
-                || nativeHas.call(el, 'xlink:href') || nativeHas.call(el, 'data-faz-category')
+                || has(el, 'xlink:href') || nativeHas.call(el, 'data-faz-category')
                 || nativeHas.call(el, 'data-fazcookie') || nativeHas.call(el, 'data-faz-service');
         });
     }
@@ -1683,12 +1730,25 @@
     });
     // setAttributeNS is the only way to write a namespaced attribute, and
     // `image.setAttributeNS(XLINK, 'xlink:href', url)` is how every SVG library
-    // writes the legacy spelling. The qualified name is the key the map above
-    // uses, so the gate is the same one.
+    // writes the legacy spelling. The engine resolves the attribute by
+    // NAMESPACE and LOCAL NAME, so the gate keys on those and not on the
+    // qualified name: `setAttributeNS(XLINK, 'p:href', url)` is the same
+    // attribute under a prefix nobody wrapped, and comparing the spelling let
+    // it through while getAttribute('xlink:href') answered null for it. The
+    // staged record is keyed by the canonical spelling the park map knows,
+    // and the replay re-issues the call with the arguments as given.
     replace(Element.prototype, 'setAttributeNS', function (original) {
         return function (ns, name, value) {
-            var el = this, key = String(name).toLowerCase(), held = attrs[tagKey(el)];
-            if (held && held.some(function (p) { return p.toLowerCase() === key; })) {
+            var el = this, held = attrs[tagKey(el)];
+            var qualified = String(name == null ? '' : name);
+            var localName = qualified.slice(qualified.indexOf(':') + 1).toLowerCase();
+            var key = null;
+            if (held && localName === 'href' && (ns === XLINK || ns == null || ns === '')) {
+                key = ns === XLINK ? 'xlink:href' : 'href';
+            } else if (held && (ns == null || ns === '') && held.some(function (p) { return p.toLowerCase() === qualified.toLowerCase(); })) {
+                key = qualified.toLowerCase();
+            }
+            if (key && held.some(function (p) { return p.toLowerCase() === key; })) {
                 hold(el, key, value, function () { el.setAttributeNS(ns, name, value); });
                 return;
             }
@@ -1925,8 +1985,17 @@
             // guard below returns early and the element is never stamped — the
             // one case this function exists for.
             var values = staged.get(el) || {};
+            // In the SVG namespace a script's URL is an href, in either
+            // spelling, and resources() admits the element for it — so the
+            // same three places are read for href too, or the guard below
+            // returns on "no URL" and the script EXECUTES on the safety
+            // release. Measured: `<svg><script href="https://tracker/x.js">`
+            // inside a cloned <template> was requested.
             var src = attr(el, 'src') || attr(el, 'data-faz-src')
-                || (values.src && values.src.value) || '';
+                || (values.src && values.src.value)
+                || attr(el, 'href') || attr(el, 'xlink:href') || attr(el, 'data-faz-href')
+                || (values.href && values.href.value)
+                || (values['xlink:href'] && values['xlink:href'].value) || '';
             // An inline script the SITE marked as consent-gated must not run
             // without a consent decision, and there is none on this path. It has
             // no URL, so the origin test below cannot speak for it and used to

@@ -188,6 +188,80 @@ console.log('\nbootstrap: the SVG filter image and the background property');
   eq('a same-origin body.background is released by the safety policy', nativeGetAttribute.call(document.body, 'background'), '/paper.png');
 }
 
+console.log('\nbootstrap: the SVG script, the prefixed xlink spelling, and an encoded srcdoc');
+
+// 5 — an SVG <script href> inside a held subtree. The safety handler for
+// scripts read src alone and returned on "no URL" without parking, while
+// resources() had admitted the element for its href: the subtree landed on
+// the safety release with the script's href live, and the script ran.
+{
+  const { window, document, nativeGetAttribute } = boot({
+    body: '<template id="t"><img src="/local.png"><svg><script href="https://tracker.test/x.js"></script></svg></template>',
+  });
+  const tpl = document.getElementById('t');
+  document.body.appendChild(document.importNode(tpl.content, true));
+  eq('premise: the subtree is held', document.querySelector('svg script'), null);
+  await release(window);
+  const script = document.querySelector('svg script');
+  ok('the subtree lands on the safety release', !!script);
+  eq('the SVG script href is parked, not live', nativeGetAttribute.call(script, 'href'), null);
+  eq('under the parked name the runtime restores from', nativeGetAttribute.call(script, 'data-faz-href'), 'https://tracker.test/x.js');
+  eq('and the script is stamped inert', nativeGetAttribute.call(script, 'type'), 'javascript/blocked');
+  eq('the same-origin image next to it is released', nativeGetAttribute.call(document.querySelector('img'), 'src'), '/local.png');
+}
+
+// 6 — the xlink href under a prefix nobody wrapped. The engine resolves the
+// attribute by namespace and local name; the gate compared the qualified name
+// and let `p:href` through, and the sweep's getAttribute('xlink:href')
+// answered null for it.
+{
+  const { window, document, nativeGetAttribute } = boot();
+  const image = document.createElementNS(SVG_NS, 'image');
+  image.setAttributeNS(XLINK_NS, 'p:href', 'https://tracker.test/p.png');
+  eq('a prefixed xlink href is staged, not applied',
+    window.Element.prototype.getAttributeNS.call(image, XLINK_NS, 'href'), null);
+  await release(window);
+  eq('and parked on the safety release', nativeGetAttribute.call(image, 'data-faz-href'), 'https://tracker.test/p.png');
+  eq('with no live attribute in the namespace', window.Element.prototype.getAttributeNS.call(image, XLINK_NS, 'href'), null);
+}
+{
+  // A parsed one with the prefix, caught by the backstop and parked through
+  // the namespace-aware accessors.
+  const { window, document, nativeGetAttribute } = boot();
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  const image = document.createElementNS(SVG_NS, 'image');
+  window.Element.prototype.setAttributeNS.call(image, XLINK_NS, 'q:href', 'https://tracker.test/q.png');
+  svg.appendChild(image);
+  document.body.appendChild(svg);
+  await release(window);
+  eq('a prefixed xlink href carried by a subtree is parked', nativeGetAttribute.call(image, 'data-faz-href'), 'https://tracker.test/q.png');
+  eq('and removed from the namespace', window.Element.prototype.getAttributeNS.call(image, XLINK_NS, 'href'), null);
+}
+
+// 7 — a srcdoc that spells its `//` through an entity or a JSON escape: the
+// parser decodes the entity before the sub-document sees it, and the literal
+// search for `//` saw neither.
+for (const [label, markup] of [
+  ['numeric entities', '<img src="https:&#47;&#47;tracker.test/e.png">'],
+  ['hex entities', '<img src="https:&#x2F;&#x2F;tracker.test/h.png">'],
+  ['named entities', '<img src="https&colon;&sol;&sol;tracker.test/n.png">'],
+  ['a JSON escape', '<img src="https:\\/\\/tracker.test/j.png">'],
+]) {
+  const { window, document, nativeGetAttribute } = boot();
+  const frame = document.createElement('iframe');
+  frame.setAttribute('srcdoc', markup);
+  await release(window);
+  eq('srcdoc with ' + label + ' is parked on the safety release', nativeGetAttribute.call(frame, 'srcdoc'), null);
+  eq('with the markup kept where the runtime restores from', nativeGetAttribute.call(frame, 'data-faz-srcdoc'), markup);
+}
+{
+  const { window, document, nativeGetAttribute } = boot();
+  const frame = document.createElement('iframe');
+  frame.setAttribute('srcdoc', '<p>hi</p><img src="/local.png">');
+  await release(window);
+  eq('a srcdoc naming only the site itself is released', nativeGetAttribute.call(frame, 'srcdoc'), '<p>hi</p><img src="/local.png">');
+}
+
 console.log('\nruntime: the srcdoc and background IDL routes');
 
 const DOC = '<p>hi</p><img src="https://tracker.test/in-doc.png">';
