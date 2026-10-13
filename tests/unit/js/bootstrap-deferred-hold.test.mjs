@@ -659,6 +659,106 @@ const SVGNS = 'http://www.w3.org/2000/svg';
     document.body.textContent.indexOf('fill:red') !== -1);
 }
 
+console.log('\nbootstrap: the backstop covers stylesheets and shadow trees too');
+
+{
+  // A <style> that reached the document through a route with no wrapper of its
+  // own — here a tagged fragment inserted natively, which is how the tests
+  // reproduce a sink nobody wrapped. Its @import is already gone; what parking
+  // buys is every LAZY request in that sheet (background-image, @font-face src,
+  // cursor, mask), fetched a frame later when something matching renders.
+  const { window, document, nativeAppendChild, nativeGetAttribute } = boot();
+  const frag = document.createRange().createContextualFragment('<style id="backstop">.a{background-image:url(https://tracker.test/n1.png)}</style>');
+  nativeAppendChild.call(document.head, frag);
+  await Promise.resolve();
+  await Promise.resolve();
+  const sheet = document.getElementById('backstop');
+  eq('the sheet the backstop caught is emptied', sheet.textContent, '');
+  const parked = nativeGetAttribute.call(sheet, 'data-faz-css');
+  ok('and parked under the attribute the server and the runtime already use', !!parked);
+  // Delayed, not destroyed — asserted here at the data level, because the live
+  // restore cannot be exercised in jsdom at all: the observer delivers on the
+  // microtask queue and so does jsdom's DOMContentLoaded, so by the time a
+  // parked sheet exists the safety release has already decided, and a handoff
+  // after it is ignored by design. The live round trip — parked, handed back at
+  // the handoff, then judged by the runtime's own CSS gate with consent granted
+  // and refused — is pinned against three real engines in
+  // tests/browser-intent/written-style-and-shadow.spec.ts.
+  eq('with the original intact, which is what makes the park reversible',
+    Buffer.from(String(parked), 'base64').toString('utf8'),
+    '.a{background-image:url(https://tracker.test/n1.png)}');
+}
+
+{
+  // With no runtime there is no consent decision, so a sheet that could fetch
+  // stays parked for the page view — the stance every other CSS route takes.
+  const { window, document, nativeAppendChild, nativeGetAttribute } = boot();
+  const frag = document.createRange().createContextualFragment('<style id="held">.a{background-image:url(https://tracker.test/n2.png)}</style>');
+  nativeAppendChild.call(document.head, frag);
+  await release(window);
+  const sheet = document.getElementById('held');
+  eq('the safety release leaves it parked', sheet.textContent, '');
+  ok('with the original still recoverable from the attribute',
+    !!nativeGetAttribute.call(sheet, 'data-faz-css'));
+}
+
+{
+  // And the server's own stylesheet is left exactly as it was sent: untagged,
+  // inserted while the document parses, which is the parser's signature. The
+  // server-side pass already rewrote what had to be rewritten, and emptying it
+  // here would cost a flash of unstyled content for nothing.
+  const { window, document, nativeAppendChild } = boot();
+  eq('premise: the document is parsing', document.readyState, 'loading');
+  const sheet = document.createElement('style');
+  nativeAppendChild.call(sheet, document.createTextNode('.a{background-image:url(/logo.png)}'));
+  nativeAppendChild.call(document.head, sheet);
+  await new Promise((r) => setTimeout(r, 0));
+  ok('a server-rendered <style> is not touched', sheet.textContent.indexOf('logo.png') !== -1);
+}
+
+{
+  // A shadow root is a SEPARATE tree: the observer on the document never
+  // reaches it, and the markup sinks' tag pass did not cover its innerHTML
+  // either, so `root.innerHTML = '<img src=tracker>'` had nothing in front of
+  // it at all. Watched now as each root is created.
+  const { window, document, nativeGetAttribute } = boot();
+  // A <div>, not the <ul> the other cases use: attachShadow throws
+  // NotSupportedError on an element that cannot host a shadow tree.
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  if (typeof host.attachShadow === 'function') {
+    const root = host.attachShadow({ mode: 'open' });
+    root.innerHTML = '<img id="shadow-img" src="https://tracker.test/shadow.gif">';
+    await Promise.resolve();
+    await Promise.resolve();
+    const img = root.getElementById ? root.getElementById('shadow-img') : root.querySelector('img');
+    ok('premise: the markup built an element inside the shadow tree', !!img);
+    eq('its live src is parked', nativeGetAttribute.call(img, 'src'), null);
+    eq('under the attribute the runtime restores from',
+      nativeGetAttribute.call(img, 'data-faz-src'), 'https://tracker.test/shadow.gif');
+  } else {
+    ok('premise: this engine has no attachShadow, so there is no tree to watch', true);
+  }
+}
+
+{
+  // The CSS half of the same tree: a shadow root's innerHTML is its own
+  // descriptor on its own interface, so the gate on Element.prototype never
+  // saw it.
+  const { window, document } = boot();
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  if (typeof host.attachShadow === 'function') {
+    const root = host.attachShadow({ mode: 'open' });
+    root.innerHTML = '<style>@import url(https://tracker.test/shadow.css);</style>';
+    eq('a <style> written into a shadow root is held', root.querySelectorAll('style').length, 0);
+    runtimeHandoff(window);
+    eq('and applies at the handoff', root.querySelectorAll('style').length, 1);
+  } else {
+    ok('premise: no attachShadow on this engine', true);
+  }
+}
+
 console.log('\nbootstrap: srcset and imagesrcset are candidate lists, not URLs');
 
 // Resolving the whole list as one URL answers about the FIRST candidate only —

@@ -41,6 +41,12 @@
     var nativeSet = Element.prototype.setAttribute;
     var nativeHas = Element.prototype.hasAttribute;
     var nativeRemove = Element.prototype.removeAttribute;
+    // Parking a stylesheet has to clear the live text WITHOUT going through the
+    // gate that holds such a write — otherwise the clear is itself deferred and
+    // nothing happens. holdCSS() defines its setter on the <style> interfaces,
+    // never on Node.prototype, so this descriptor stays the real one, and
+    // calling it directly bypasses the subclass property entirely.
+    var nativeTextSet = (Object.getOwnPropertyDescriptor(Node.prototype, 'textContent') || {}).set;
     function attr(el, name) { try { return nativeGet.call(el, name); } catch (e) { return null; } }
     function setAttr(el, name, value) { try { nativeSet.call(el, name, value); } catch (e) { /* detached or read-only */ } }
     function dropAttr(el, name) { try { nativeRemove.call(el, name); } catch (e) { /* noop */ } }
@@ -197,6 +203,68 @@
     function prepare(node, policy) {
         resources(node).forEach(function (el) { policy.node(el); });
     }
+    // Every <style> in a subtree, the node itself included, in any namespace —
+    // querySelectorAll('style') matches both, since a CSS type selector with no
+    // namespace does.
+    function sheets(node) {
+        if (!node) return [];
+        var found = node.querySelectorAll ? Array.prototype.slice.call(node.querySelectorAll('style')) : [];
+        if (isStyle(node)) found.unshift(node);
+        return found;
+    }
+    function base64(text) {
+        // Same encoding the runtime decodes with (_fazBase64DecodeUtf8), so what
+        // is parked here is readable by whatever looks at it next.
+        try { return w.btoa(w.unescape(w.encodeURIComponent(text))); } catch (e) { return ''; }
+    }
+    // A <style> the DOM backstop caught: one a script put in the document
+    // through a route with no wrapper of its own — document.write, or markup in
+    // a tree the sinks could not tag. The element list above is about elements
+    // that fetch BY THEMSELVES; a stylesheet fetches through the CSS engine, so
+    // nothing here judged it.
+    //
+    // What this does and does not buy, stated plainly because the difference is
+    // the whole justification. An @import in a sheet the parser has already
+    // finished is gone: the request left before any observer was notified, and
+    // nothing on this side can unsend it. Every other CSS request in that sheet
+    // is LAZY — background-image, @font-face src, cursor, mask, list-style-image
+    // are fetched when a matching element is first rendered, which is a frame
+    // away, not a microtask — so emptying the sheet here stops them.
+    //
+    // Restored by this file rather than handed over parked: the runtime adopts a
+    // parked original only when the live text is the NEUTRALIZED form of it
+    // (_fazPrimeStyleCssMarkers, script.js), and an emptied element does not
+    // match, so handing it over would turn a delayed stylesheet into a dead one
+    // — the exact trade parkTarget() below refuses to make. Handing back a live
+    // <style> lets the runtime's own CSS gate judge it with real consent.
+    function parkSheet(el) {
+        if (!nativeTextSet || !isStyle(el)) return;
+        var text = String(el.textContent == null ? '' : el.textContent);
+        if (!text || !cssURL(text)) return;
+        // Already parked: by the server-side pass, by the runtime, or by this
+        // function on an earlier record for the same element.
+        if (nativeHas.call(el, 'data-faz-css')) return;
+        var encoded = base64(text);
+        nativeTextSet.call(el, '');
+        // The attribute the server and the runtime already use for exactly this,
+        // so the text is where anyone looking for it looks. It is bookkeeping
+        // here, not the restore path: the task below holds the text itself.
+        if (encoded) setAttr(el, 'data-faz-css', encoded);
+        defer(function (policy) {
+            if (!allowedCss(policy, text)) return;
+            // Through the PROPERTY, not the captured native setter. By the time
+            // this runs the handoff has uninstalled this file's gate and
+            // installed the runtime's (_fazGateStyleTextSetter), so an
+            // assignment is judged by it with real consent, while a native
+            // write would be invisible to it. Measured in a real browser: the
+            // native write handed back a live third-party background-image and
+            // the runtime never saw it — a leak traded for a leak. The clear
+            // above still uses the native, because there the gate to avoid is
+            // this file's own, which would defer the clear and do nothing.
+            el.textContent = text;
+            dropAttr(el, 'data-faz-css');
+        });
+    }
     // Which insertions the DOM backstop further down has any business judging.
     //
     // A MutationObserver cannot tell a parser insertion from a script one, and
@@ -259,15 +327,43 @@
         undo.push(restore);
     }
     // innerHTML and setHTMLUnsafe replace the subtree: tag what is there after.
-    tagSink(Element.prototype, 'innerHTML', function (set, value) {
-        set.call(this, value);
-        tag(this);
-    });
-    ['setHTMLUnsafe', 'setHTML'].forEach(function (name) {
-        tagSink(Element.prototype, name, function (original, args) {
-            var out = original.apply(this, args);
+    [Element.prototype, w.ShadowRoot && ShadowRoot.prototype].forEach(function (proto) {
+        tagSink(proto, 'innerHTML', function (set, value) {
+            set.call(this, value);
             tag(this);
-            return out;
+        });
+    });
+    // These two were tagged for the backstop but not gated, while their two
+    // siblings — innerHTML and insertAdjacentHTML — are both. A <style> inside
+    // the markup brings its own complete text, so the string IS the resulting
+    // CSS, which is the same reason insertAdjacentHTML can judge it as a string.
+    // ShadowRoot is in the list because a shadow root is where this API is
+    // mostly used, and its tree is one the document observer never sees.
+    ['setHTMLUnsafe', 'setHTML'].forEach(function (name) {
+        [Element.prototype, w.ShadowRoot && ShadowRoot.prototype].forEach(function (proto) {
+            tagSink(proto, name, function (original, args) {
+                var self = this, markup = String(args[0] == null ? '' : args[0]);
+                var apply = function () {
+                    var out = original.apply(self, args);
+                    tag(self);
+                    return out;
+                };
+                if (!/<style\b/i.test(markup) || !cssURL(markup)) return apply();
+                defer(function (policy) {
+                    if (!allowedCss(policy, markup)) return;
+                    // Through the LIVE property, like insertAdjacentHTML's own
+                    // deferred call: by replay time the handoff has installed
+                    // the runtime's gate for this sink, and going back to the
+                    // native captured here would skip it — measured leaking a
+                    // third-party background-image with consent refused.
+                    if (typeof self[name] === 'function' && self[name] !== original) {
+                        self[name].apply(self, args);
+                        tag(self);
+                        return;
+                    }
+                    apply();
+                });
+            });
         });
     });
     // outerHTML detaches the element, so the new nodes are the parent's
@@ -481,11 +577,41 @@
         replace(host, name, function (original) {
             return function () {
                 if (name === 'open') wrote = true;
-                else noteWrite(arguments);
+                else {
+                    noteWrite(arguments);
+                    noteWrittenStyle(arguments);
+                }
                 return original.apply(this, arguments);
             };
         });
     });
+    // A written <style> is not in RESOURCES, and deliberately so: that list is
+    // elements that fetch by themselves. A stylesheet fetches through the CSS
+    // engine, so a write carrying nothing but one kept the parser exemption,
+    // and the backstop then read the style the parser built as the server's. It
+    // is not — a script wrote it — and parkSheet() can only reach it once the
+    // exemption is withdrawn.
+    //
+    // Only a sheet that COULD fetch costs the exemption. A legacy widget
+    // writing `<style>.a{color:red}</style>` is ordinary markup, and
+    // withdrawing for it would park the server's resources after it for
+    // nothing. A sheet split across two writes needs no handling here: the
+    // first call leaves the stream inside a <style>, which the sentinel probe
+    // in the predicate already reports as a swallowing state.
+    //
+    // Outside the predicate slice because the slice is evaluated standalone by
+    // the tests with only `w` and RESOURCES in scope, and this question needs
+    // cssURL — one regex, in one place, shared with every other CSS gate here.
+    function noteWrittenStyle(args) {
+        if (wrote || !parseHTML) return;
+        var doc;
+        try { doc = parse(Array.prototype.join.call(args, '')); }
+        catch (e) { wrote = true; return; }
+        var found = doc.querySelectorAll('style');
+        for (var i = 0; i < found.length; i++) {
+            if (cssURL(found[i].textContent)) { wrote = true; return; }
+        }
+    }
     function fromScript(node) {
         // No WeakSet (and therefore no tags): keep the broader behaviour rather
         // than silently dropping the backstop. Costs a double fetch on an
@@ -781,6 +907,9 @@
         holdCSS(w.CharacterData && CharacterData.prototype, prop, function (node) { return isStyle(node.parentNode); });
     });
     holdCSS(Element.prototype, 'innerHTML', function (el, value) { return /<style\b/i.test(String(value)); });
+    // A shadow root's innerHTML is a separate descriptor on a separate
+    // interface, so the line above never covered `root.innerHTML = '<style>…'`.
+    holdCSS(w.ShadowRoot && ShadowRoot.prototype, 'innerHTML', function (el, value) { return /<style\b/i.test(String(value)); });
     // The runtime gates these too when aggressive CSS-URL blocking is on, so
     // leaving them open here would reopen during the download exactly what it
     // closes afterwards. insertAdjacentElement was already held; the HTML and
@@ -1377,6 +1506,19 @@
         });
     }
     var observer = null;
+    var watching = false;
+    // One set of options, used for the document and for every shadow root, so
+    // the two cannot drift into watching different things.
+    var OBSERVE = {
+        childList: true, subtree: true,
+        attributes: true,
+        attributeFilter: ['src', 'srcset', 'href', 'imagesrcset', 'data', 'poster']
+    };
+    function watch(target) {
+        if (!observer || !target) return;
+        try { observer.observe(target, OBSERVE); watching = true; }
+        catch (e) { /* a detached root, or an engine that refuses it */ }
+    }
     // Set once the parser can no longer be inserting, which is NOT the same as
     // reading d.readyState inside the callback: the task that finishes parsing
     // flips readyState before the checkpoint that delivers its records, so the
@@ -1402,6 +1544,7 @@
                     // judge, and it already did. See fromScript() above.
                     if (!fromScript(node)) continue;
                     resources(node).forEach(guard);
+                    sheets(node).forEach(parkSheet);
                 }
             }
         }
@@ -1411,12 +1554,25 @@
             // attached to a detached node: no records, no error, no
             // enforcement for the rest of the page view. Observing the
             // document survives that.
-            observer.observe(d, {
-                childList: true, subtree: true,
-                attributes: true,
-                attributeFilter: ['src', 'srcset', 'href', 'imagesrcset', 'data', 'poster']
-            });
+            watch(d);
+            if (!watching) observer = null;
         } catch (e) { observer = null; }
+        // A shadow root is a SEPARATE tree: an observer on the document never
+        // reaches it. Insertions through Node and ParentNode are wrapped, so
+        // what was unguarded is the markup routes — `root.innerHTML =
+        // '<img src=tracker>'` had nothing at all in front of it, and no tag
+        // pass either. Watch each root as it is created; the declarative form
+        // (<template shadowrootmode>) is the parser's and stays the
+        // server-side blocker's to judge, like the rest of its markup.
+        if (observer && typeof Element.prototype.attachShadow === 'function') {
+            replace(Element.prototype, 'attachShadow', function (original) {
+                return function (init) {
+                    var root = original.call(this, init);
+                    watch(root);
+                    return root;
+                };
+            });
+        }
         // Only the normal handoff tears it down — the runtime's own observer
         // takes over there. On the safety path it stays, because nothing else
         // will ever watch this document.

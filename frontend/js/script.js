@@ -5127,9 +5127,40 @@ function _fazGateInsertAdjacentHtml(proto) {
     });
 }
 
+// setHTMLUnsafe/setHTML carry the same markup string as innerHTML, and a shadow
+// root has its OWN innerHTML descriptor on its own interface — so the two gates
+// above covered neither, and `root.innerHTML = '<style>@import url(blocked)>'`
+// or `el.setHTMLUnsafe(...)` reached the CSS engine with nothing in front of it.
+// Measured in tests/browser-intent/written-style-and-shadow.spec.ts: with the
+// bootstrap holding setHTMLUnsafe during its download window and handing the
+// markup over at the handoff, the stylesheet then landed here ungated and
+// fetched its background-image with consent REFUSED.
+function _fazGateHtmlStringMethod(proto, name) {
+    if (!proto || typeof proto[name] !== "function") return;
+    var native = proto[name];
+    Object.defineProperty(proto, name, {
+        configurable: true,
+        writable: true,
+        enumerable: true,
+        value: function () {
+            // Every argument is passed on: setHTML takes an options object
+            // second, and dropping it would change what the sanitiser does.
+            var args = Array.prototype.slice.call(arguments);
+            var html = String(args[0] == null ? "" : args[0]);
+            try { args[0] = _fazPrepareStyleHtmlString(html); } catch (e) { /* fail open */ }
+            return native.apply(this, args);
+        }
+    });
+}
+
 if (_fazAggressiveCssUrlBlockingEnabled()) {
     _fazGateHtmlStyleStringSetter(window.Element && Element.prototype, "innerHTML");
     _fazGateInsertAdjacentHtml(window.Element && Element.prototype);
+    _fazGateHtmlStyleStringSetter(window.ShadowRoot && ShadowRoot.prototype, "innerHTML");
+    ["setHTMLUnsafe", "setHTML"].forEach(function (name) {
+        _fazGateHtmlStringMethod(window.Element && Element.prototype, name);
+        _fazGateHtmlStringMethod(window.ShadowRoot && ShadowRoot.prototype, name);
+    });
 }
 
 // Constructable Stylesheets (adoptedStyleSheets): CSS-in-JS and modern themes
