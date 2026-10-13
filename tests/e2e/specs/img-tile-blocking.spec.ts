@@ -27,7 +27,7 @@ test.describe('Advanced resource-src blocking (#163 img-tile + #167 Bricks-lazy 
 
   // deactivatePluginsExcept() rewrites active_plugins and nothing puts it
   // back: every plugin this spec switches off stays off for the rest of the
-  // run. Both this file and img-tile-blocking.spec.ts sit early in the
+  // run. Both this file and frontend-consent.spec.ts sit early in the
   // alphabet, so the specs that come later found the site stripped — the
   // faz-e2e-audit-lab fixture among them, and the third-party plugins whose
   // absence turned pr-regression's Koko Analytics check and

@@ -286,6 +286,9 @@ async function loginAdminResilient(page: Page, wpBaseURL: string, adminUser: str
   );
 }
 
+// Module-level on purpose: see the beforeAll note inside the describe.
+let suiteActivePluginFiles: string[] | null = null;
+
 test.describe('full-test-codex', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -304,10 +307,18 @@ test.describe('full-test-codex', () => {
   // the rest of the suite needs. Both files now keep their own house in order.
   // The plugins stay INSTALLED, so a later run still skips the download; only
   // the active set returns to what it was.
-  let suiteActivePluginFiles: string[] | null = null;
-
+  //
+  // The baseline is captured ONCE per file, not once per beforeAll: the hook
+  // runs again on every retry, and if the previous attempt died before
+  // afterAll ran, a fresh capture would record the polluted set — the 33
+  // plugins switched on — as the "baseline" and restore exactly that. Hence
+  // the module-level variable and the guard. It covers a re-entry in the
+  // same worker; a retry that Playwright moves to a fresh worker starts from
+  // a fresh module, and only an afterAll that actually ran protects that case.
   test.beforeAll(() => {
-    suiteActivePluginFiles = listActivePluginFiles();
+    if (!suiteActivePluginFiles) {
+      suiteActivePluginFiles = listActivePluginFiles();
+    }
   });
 
   test.afterAll(() => {

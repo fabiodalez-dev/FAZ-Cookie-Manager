@@ -242,8 +242,10 @@ test.describe('WPML + LiteSpeed + Cache Compatibility Mode (wp.org report)', () 
       echo \\FazCookie\\Includes\\Cache_Compatibility::is_paused() ? '1' : '0';
       echo \\FazCookie\\Includes\\Geolocation::has_country_source() ? '1' : '0';
     `).trim();
-    // Assert, never skip: beforeAll provisioned both halves, so a mismatch here
-    // means the stand-down path is broken — the thing this test exists to prove.
+    // Assert, never skip: this test just turned the runtime on and the mode on
+    // itself, and beforeAll ensured the lab fixture that supplies the country
+    // source, so a mismatch here means the stand-down path is broken — the
+    // thing this test exists to prove.
     expect(
       paused,
       'is_paused/has_country_source: the mode must stand down (1) with a country source available (1)',
