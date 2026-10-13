@@ -1,6 +1,10 @@
 import { expect, test } from '../fixtures/wp-fixture';
 import { clickFirstVisible } from '../utils/ui';
-import { deactivatePluginsExcept } from '../utils/wp-env';
+import {
+  deactivatePluginsExcept,
+  listActivePluginFiles,
+  restoreActivePluginFiles,
+} from '../utils/wp-env';
 
 /**
  * Advanced resource-src blocking (#163 img-tile + #167 Bricks-lazy iframe).
@@ -19,8 +23,26 @@ import { deactivatePluginsExcept } from '../utils/wp-env';
 const OSM_TILE = 'https://tile.openstreetmap.org/17/69083/45877.png';
 
 test.describe('Advanced resource-src blocking (#163 img-tile + #167 Bricks-lazy iframe)', () => {
+  let suiteActivePluginFiles: string[] | null = null;
+
+  // deactivatePluginsExcept() rewrites active_plugins and nothing puts it
+  // back: every plugin this spec switches off stays off for the rest of the
+  // run. Both this file and img-tile-blocking.spec.ts sit early in the
+  // alphabet, so the specs that come later found the site stripped — the
+  // faz-e2e-audit-lab fixture among them, and the third-party plugins whose
+  // absence turned pr-regression's Koko Analytics check and
+  // smash-balloon-inert-rule into silent skips. Save the list before
+  // narrowing it and restore it afterwards.
   test.beforeAll(() => {
+    suiteActivePluginFiles = listActivePluginFiles();
     deactivatePluginsExcept(['faz-cookie-manager']);
+  });
+
+  test.afterAll(() => {
+    if (suiteActivePluginFiles !== null) {
+      restoreActivePluginFiles(suiteActivePluginFiles);
+      suiteActivePluginFiles = null;
+    }
   });
 
   // Wait until FAZ's frontend blocker is initialised (banner present) before

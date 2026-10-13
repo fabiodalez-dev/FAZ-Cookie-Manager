@@ -1,10 +1,32 @@
 import { expect, test } from '../fixtures/wp-fixture';
 import { clickFirstVisible } from '../utils/ui';
-import { deactivatePluginsExcept } from '../utils/wp-env';
+import {
+  deactivatePluginsExcept,
+  listActivePluginFiles,
+  restoreActivePluginFiles,
+} from '../utils/wp-env';
 
 test.describe('Frontend consent flow', () => {
+  let suiteActivePluginFiles: string[] | null = null;
+
+  // deactivatePluginsExcept() rewrites active_plugins and nothing puts it
+  // back: every plugin this spec switches off stays off for the rest of the
+  // run. Both this file and img-tile-blocking.spec.ts sit early in the
+  // alphabet, so the specs that come later found the site stripped — the
+  // faz-e2e-audit-lab fixture among them, and the third-party plugins whose
+  // absence turned pr-regression's Koko Analytics check and
+  // smash-balloon-inert-rule into silent skips. Save the list before
+  // narrowing it and restore it afterwards.
   test.beforeAll(() => {
+    suiteActivePluginFiles = listActivePluginFiles();
     deactivatePluginsExcept(['faz-cookie-manager']);
+  });
+
+  test.afterAll(() => {
+    if (suiteActivePluginFiles !== null) {
+      restoreActivePluginFiles(suiteActivePluginFiles);
+      suiteActivePluginFiles = null;
+    }
   });
 
   test('shows banner on first visit and blocks non-technical cookies before consent', async ({ page, getNonTechnicalCookies }) => {

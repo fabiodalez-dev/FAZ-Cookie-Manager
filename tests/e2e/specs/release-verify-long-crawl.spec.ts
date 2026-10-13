@@ -43,6 +43,17 @@ const TAIL_COOKIE = 'faz_long_crawl_tail';
 // fraction of the wall clock: the heartbeat still needs all 330 iterations to
 // be proven, the observer only needs to be shown working while they happen.
 const REAL_PAGE_EVERY = 10;
+// Sampled pages are seeded at every REAL_PAGE_EVERY-th index above zero.
+const SAMPLED_SEEDED_PAGES = Math.floor((SEEDED_PAGE_COUNT - 1) / REAL_PAGE_EVERY);
+// Scanner_Controller::get_priority_urls() admits the home page plus the
+// PAGE_COUNT - 1 most recently modified posts, so the seeding headroom is
+// never discovered at all: SEEDED_PAGE_COUNT - (PAGE_COUNT - 1) seeded pages
+// are dropped before the crawl starts, and nothing says which ones — every
+// seeded page shares the same post_modified second, so the tie is resolved by
+// the database. Any of the dropped pages can be a sampled one, which is why
+// the sampled count below is computed from what was actually scanned instead
+// of being asserted against a hard-coded tolerance.
+const UNDISCOVERED_SEEDED_PAGES = SEEDED_PAGE_COUNT - (PAGE_COUNT - 1);
 // Emitted by faz-e2e-scan-lab's send_header_cookie() on the sampled pages.
 // HttpOnly and set by PHP, so it cannot be observed client-side: reaching the
 // imported set proves the server-side observation path ran.
@@ -190,6 +201,7 @@ test.describe('Release verify — 330-page crawl with sliding capture lifetime',
     let heartbeatRequests = 0;
     let tailWasServed = false;
     let realPageLoads = 0;
+    let tailWasSampled = false;
 
     page.on('request', (request) => {
       if (request.url().includes('/scans/heartbeat')) {
@@ -214,6 +226,10 @@ test.describe('Release verify — 330-page crawl with sliding capture lifetime',
       scanDocuments += 1;
       const emitTailCookie = scanDocuments === PAGE_COUNT;
       tailWasServed ||= emitTailCookie;
+      // The tail page carries the client-side cookie probe and must be the
+      // synthetic response, so when it happens to be a sampled page it is one
+      // pass-through the routing rule legitimately owes nothing for.
+      tailWasSampled ||= emitTailCookie && url.pathname.includes('faz-lab-headers-');
 
       // Sampling is decided by the URL, never by the document counter: the
       // engine's dispatch order is its own business and need not match the
@@ -275,11 +291,29 @@ test.describe('Release verify — 330-page crawl with sliding capture lifetime',
 
       // A meaningful slice of the crawl really booted PHP. Asserted as a
       // number, not a boolean: one stray real load would satisfy "> 0" while
-      // leaving the path essentially untested.
+      // leaving the path essentially untested. The floor is derived from the
+      // discovery budget rather than guessed: up to UNDISCOVERED_SEEDED_PAGES
+      // of the sampled pages never enter the crawl, so a tolerance of one made
+      // this assertion depend on which pages the database dropped from the
+      // post_modified tie — it passed in isolation and failed three times out
+      // of three in the full suite, measuring the tie and not the product.
+      const sampledScanned = (result.metrics.scannedUrls ?? []).filter((url) =>
+        url.includes('faz-lab-headers-')
+      ).length;
+
+      expect(
+        sampledScanned,
+        'the crawl must have reached the sampled pages — with none of them the server-side capture path is untested',
+      ).toBeGreaterThanOrEqual(SAMPLED_SEEDED_PAGES - UNDISCOVERED_SEEDED_PAGES);
+
+      // And every sampled page that did enter the crawl was passed through to
+      // the real server. This is the invariant of the routing rule itself, and
+      // unlike a floor it fails the moment a single sampled page is answered
+      // from the route handler instead of booting PHP.
       expect(
         realPageLoads,
-        'the sampled pages must have reached the real server — with none of them the server-side capture path is untested',
-      ).toBeGreaterThanOrEqual(Math.floor(PAGE_COUNT / REAL_PAGE_EVERY) - 1);
+        'every sampled page in the crawl must have been passed through to the real server, the tail page aside',
+      ).toBe(sampledScanned - (tailWasSampled ? 1 : 0));
 
       // And the observer actually recorded them. This cookie is HttpOnly and
       // emitted by PHP, so no client-side path could have produced it: its
