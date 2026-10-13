@@ -51,6 +51,27 @@ namespace FazCookie\Includes {
 	}
 }
 
+namespace FazCookie\Frontend\Includes {
+
+	// Double for the placeholder the iframe pass wraps a blocked frame in: the
+	// decoy cases below need that pass to run end to end, and the markup it
+	// hands back is all these cases look at.
+	class Placeholder_Builder {
+		public static function detect_service_from_url( $url ) {
+			return 'default';
+		}
+		public static function get_service_name( $id ) {
+			return 'Embedded content';
+		}
+		public static function get_video_thumbnail( $url ) {
+			return '';
+		}
+		public static function build( $service_id, $service_name, $category, $blocked_html, $thumbnail_url = '' ) {
+			return $blocked_html;
+		}
+	}
+}
+
 namespace {
 
 	// ---------- Bootstrap ----------
@@ -385,6 +406,31 @@ namespace {
 	assert_true( '"' . $doc . '"' === faz_raw_attr( $out, 'data-faz-srcdoc' ), 'the next iframe is parked' );
 	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'with its category' );
 
+	// The tokenizer accepts, with a parse error, an attribute name that
+	// contains a quote or starts with `=`. A walk strict enough to reject such
+	// a tag would leave it to the later passes, which rewrite inside its
+	// srcdoc exactly as before: tolerance here is what keeps the fix whole.
+	foreach ( array(
+		'a quote inside an attribute name' => '<iframe x"y srcdoc="<img src=\'https://cdn.tracker.test/p.png\'>"></iframe>',
+		'a name starting with ='           => '<iframe =z srcdoc="<img src=\'https://cdn.tracker.test/p.png\'>"></iframe>',
+		'a value followed by a name with no whitespace' => '<iframe a="b"c srcdoc="<img src=\'https://cdn.tracker.test/p.png\'>"></iframe>',
+	) as $label => $tag ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><body>' . $tag . '</body></html>' );
+		assert_true( '"<img src=\'https://cdn.tracker.test/p.png\'>"' === faz_raw_attr( $out, 'data-faz-srcdoc' ), $label . ': still parked verbatim' );
+		assert_true( 1 === substr_count( $out, 'data-faz-category=' ), $label . ': with one category' );
+	}
+
+	// A parked token next to a LIVE one: the parked one is not a verdict on
+	// the live one, which the engine loads. Both are stashed, the live one is
+	// judged.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><iframe data-faz-srcdoc="x" srcdoc="<img src=https://cdn.tracker.test/p.png>"></iframe></body></html>' );
+	assert_true( false !== strpos( $out, 'data-faz-srcdoc="x"' ), 'the parked token survives byte-for-byte' );
+	assert_true( false !== strpos( $out, 'data-faz-srcdoc="<img src=https://cdn.tracker.test/p.png>"' ), 'and the live one is parked, byte-for-byte' );
+	assert_true( false === strpos( $out, ' srcdoc="' ), 'nothing is left live' );
+	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'with one category' );
+
 	// A megabyte of attribute value with no closing quote must neither
 	// backtrack nor trip the PCRE limit: the old walk did the latter, and a
 	// PCRE failure makes that pass give up for the WHOLE page. The tag is
@@ -402,7 +448,65 @@ namespace {
 	unlink( $log );
 	assert_true( $spent < 1.0, sprintf( 'a 1 MB unterminated srcdoc is walked in linear time (%.3fs)', $spent ) );
 	assert_true( false === strpos( $logged, 'PCRE error' ), 'and does not trip the PCRE limit, which would skip blocking for the whole page' );
-	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/after.png"' ), 'so the pixel after it is still parked' );
+	// Read as the engine reads it: the value runs to the NEXT quote, which is
+	// the one opening the pixel's src, so the pixel is text inside an allowed
+	// srcdoc and the whole thing comes back byte-identical.
+	assert_true( $out === $tail, 'and the tag is read as the engine reads it: byte-identical' );
+
+	echo "\n-- a > inside a quoted value, before the resource attribute --\n";
+
+	// Every pass walked attributes with [^>]*, so a `>` inside a QUOTED value
+	// ended the walk early and hid every attribute after it. For
+	// server-rendered markup the engine starts the fetch before any client
+	// layer can act, so this was a request before consent on every pass.
+	$decoys = array(
+		'script'     => array( '<script title="a>b" src="https://cdn.tracker.test/t.js"></script>', 'type="text/plain"' ),
+		'svg image'  => array( '<svg><image title="a>b" href="https://cdn.tracker.test/p.png"/></svg>', 'data-faz-href="https://cdn.tracker.test/p.png"' ),
+		'background' => array( '<table><tr><td title="a>b" background="https://cdn.tracker.test/c.png">x</td></tr></table>', 'data-faz-background="https://cdn.tracker.test/c.png"' ),
+		'srcdoc'     => array( '<iframe title="a>b" srcdoc="<img src=&quot;https://cdn.tracker.test/p.png&quot;>"></iframe>', 'data-faz-srcdoc="<img src=&quot;https://cdn.tracker.test/p.png&quot;>"' ),
+		'iframe'     => array( '<iframe title="a>b" src="https://cdn.tracker.test/f.html"></iframe>', 'data-faz-src="https://cdn.tracker.test/f.html"' ),
+		'style'      => array( '<style title="a>b">@import url(https://cdn.tracker.test/f.css);</style>', 'data-faz-css=' ),
+		'img'        => array( '<img title="a>b" src="https://cdn.tracker.test/p.png">', 'data-faz-src="https://cdn.tracker.test/p.png"' ),
+		'link'       => array( '<link title="a>b" rel="stylesheet" href="https://cdn.tracker.test/a.css">', 'data-faz-href="https://cdn.tracker.test/a.css"' ),
+		'waitfor'    => array( '<script title="a>b" data-faz-waitfor="marketing">x()</script>', 'type="text/plain"' ),
+		'noscript'   => array( '<noscript><img title="a>b" src="https://cdn.tracker.test/p.png"></noscript>', 'data-faz-src="https://cdn.tracker.test/p.png"' ),
+	);
+	foreach ( $decoys as $label => $case ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><body>' . $case[0] . '</body></html>' );
+		assert_true( false !== strpos( $out, $case[1] ), $label . ': the resource after the decoy is parked' );
+		assert_true( false !== strpos( $out, 'title="a>b"' ), $label . ': and the decoy value is untouched' );
+		// The waitfor pass restores through data-faz-waitfor and never wrote
+		// a category; every other one must.
+		if ( 'waitfor' !== $label ) {
+			assert_true( false !== strpos( $out, 'data-faz-category="marketing"' ), $label . ': with its category' );
+		}
+	}
+
+	// The same walk in the helper that neutralises one script tag.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$m   = new ReflectionMethod( Frontend::class, 'block_script_tag_safely' );
+	$m->setAccessible( true );
+	$out = $m->invoke( $fe, '<script title="a>b" id="x">track()</script>', 'marketing', 'test' );
+	assert_true( false !== strpos( $out, 'type="text/plain"' ), 'block_script_tag_safely re-types a tag with a decoy' );
+	assert_true( false !== strpos( $out, 'title="a>b"' ) && false !== strpos( $out, '>track()</script>' ), 'and leaves the decoy and the body intact' );
+
+	// The walk must stay linear on every pass, not only on srcdoc: the old
+	// [^>]* backtracked a megabyte on an unterminated <img> and tripped the
+	// PCRE limit, which skipped that pass for the whole page.
+	$fe      = faz_ob_frontend( $providers, $blocked );
+	$tail    = '<html><body><img src="https://cdn.tracker.test/before.png"><img title="' . str_repeat( 'a', 1048576 );
+	$log     = tempnam( sys_get_temp_dir(), 'faz-pcre' );
+	$old_log = ini_set( 'error_log', $log );
+	$t0      = microtime( true );
+	$out     = faz_ob_run( $fe, $tail );
+	$spent   = microtime( true ) - $t0;
+	ini_set( 'error_log', (string) $old_log );
+	$logged = (string) file_get_contents( $log );
+	unlink( $log );
+	assert_true( $spent < 1.0, sprintf( 'a 1 MB unterminated <img> is walked in linear time (%.3fs)', $spent ) );
+	assert_true( false === strpos( $logged, 'PCRE error' ), 'without tripping the PCRE limit' );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/before.png"' ), 'so the pixel before it is still parked' );
 
 	// ---------- result ----------
 

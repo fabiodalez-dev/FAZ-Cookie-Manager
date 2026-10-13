@@ -56,6 +56,33 @@ class Frontend {
 	const SMASH_BALLOON_SETTINGS_SLUG = 'sbi-settings';
 
 	/**
+	 * The attribute walk every tag pattern in this class uses, written the way
+	 * the HTML tokenizer reads a start tag.
+	 *
+	 * A value is quoted only when a quote is the first character after `=`,
+	 * and an unquoted value runs to the next whitespace or `>` whatever it
+	 * contains. A stray quote or `=` where a name should start is accepted as
+	 * the tokenizer accepts it (with a parse error), one character at a time,
+	 * so a tag the engine will render is never one this class refuses to see.
+	 * A `/` is consumed unless it is the last thing before `>`, which each
+	 * pattern then captures or skips on its own, so self-closing shapes keep
+	 * their existing capture semantics.
+	 *
+	 * `[^>]*` was the walk before this, on every pass, and a `>` inside a
+	 * QUOTED value ended it early and hid every attribute after it: an
+	 * `<img title="a>b" src="https://tracker/p.png">` was never parked, and
+	 * for server-rendered markup the engine starts the fetch before any
+	 * client layer can act. Every quantifier here is possessive and the
+	 * alternatives cannot start with the same character, so there is nothing
+	 * to backtrack into and a megabyte of unterminated value fails in one
+	 * pass instead of tripping the PCRE limit — which `[^>]*` did, and a PCRE
+	 * failure skips that pass for the whole page.
+	 *
+	 * Used with the `#` delimiter: it contains `/`.
+	 */
+	const ATTR_WALK = '(?:\s++|/(?!\s*+>)|[^\s"\'>/=]++(?:\s*+=\s*+(?:"[^"]*+"|\'[^\']*+\'|[^\s>"\'][^\s>]*+))?|[^\s>/])*+';
+
+	/**
 	 * The ID of this plugin.
 	 *
 	 * @since    3.0.0
@@ -1201,7 +1228,7 @@ class Frontend {
 		if ( is_admin() || empty( $this->deferred_script_handles[ $handle ] ) ) {
 			return $tag;
 		}
-		$new_tag = preg_replace_callback( '#<script\b([^>]*)>#i', function ( $match ) {
+		$new_tag = preg_replace_callback( '#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#i', function ( $match ) {
 			$attributes = $match[1];
 			if ( ! preg_match( '/(?:^|\s)src\s*=/i', $attributes ) || preg_match( '/\btype\s*=\s*[\'"]text\/plain/i', $attributes ) ) {
 				return $match[0];
@@ -4074,19 +4101,15 @@ class Frontend {
 		// literal <noscript> that the stash would otherwise cut out of the
 		// attribute.
 		//
-		// The opening-tag pattern walks attributes the way the tokenizer does:
-		// a value is quoted only when a quote is the first character after `=`,
-		// and an unquoted value runs to the next whitespace or `>` whatever it
-		// contains. Walking "anything but a quote, or a quoted run" instead let
-		// the apostrophe in `title=it's` open a run that swallowed the next
-		// iframe. Every quantifier is possessive: the alternatives cannot start
-		// with the same character, so there is nothing to backtrack into, and a
-		// megabyte of unterminated value fails in one pass instead of tripping
-		// the PCRE limit — which made the whole buffer give up on blocking.
+		// The opening-tag pattern uses ATTR_WALK, and the reason that walk
+		// exists is this pass: walking "anything but a quote, or a quoted run"
+		// let the apostrophe in `title=it's` open a run that swallowed the next
+		// iframe, and the `[^>]*` the other passes used stops at the first `>`
+		// of the document inside the value.
 		$srcdoc_stash = array();
 		if ( false !== stripos( $html, 'srcdoc' ) ) {
 			$result = preg_replace_callback(
-				'#<iframe(?=[\s/>])((?:\s++|/|[^\s"\'>/=]++(?:\s*+=\s*+(?:"[^"]*+"|\'[^\']*+\'|[^\s>"\'][^\s>]*+))?)*+)>#is',
+				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				function ( $m ) use ( $providers, $blocked_categories, &$srcdoc_stash ) {
 					return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, $srcdoc_stash );
 				},
@@ -4121,7 +4144,7 @@ class Frontend {
 		// 1. Block <script> tags.
 		if ( false !== stripos( $html, '<script' ) ) {
 			$result = preg_replace_callback(
-				'#<script\b([^>]*)>(.*?)</script>#is',
+				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_script_tag( $m, $providers, $blocked_categories );
 				},
@@ -4147,7 +4170,7 @@ class Frontend {
 		// them.
 		if ( false !== stripos( $html, '<image' ) || false !== stripos( $html, '<use' ) || false !== stripos( $html, '<feimage' ) ) {
 			$result = preg_replace_callback(
-				'#<(image|use|feImage)(?=[\s/>])([^>]*?)(/?)>#is',
+				'#<(image|use|feImage)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_svg_href_tag( $m, $providers, $blocked_categories );
 				},
@@ -4168,7 +4191,7 @@ class Frontend {
 		// pattern does; a plain `background=` lookup skipped it.
 		if ( preg_match( '/\bbackground\s*=/i', $html ) ) {
 			$result = preg_replace_callback(
-				'#<(body|table|thead|tbody|tfoot|tr|td|th)\b([^>]*\sbackground\s*=[^>]*)>#is',
+				'#<(body|table|thead|tbody|tfoot|tr|td|th)(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_background_attr_tag( $m, $providers, $blocked_categories );
 				},
@@ -4184,7 +4207,7 @@ class Frontend {
 		// 2. Block <iframe> tags (YouTube, Facebook, Maps, etc.).
 		if ( false !== stripos( $html, '<iframe' ) ) {
 			$result = preg_replace_callback(
-				'#<iframe\b([^>]*)(?:>(.*?)</iframe>|/>)#is',
+				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe>|/\s*+>)#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories );
 				},
@@ -4205,7 +4228,7 @@ class Frontend {
 		//    inside a <style> (fonts, background-image, cursor, mask, @import).
 		if ( false !== stripos( $html, '<style' ) ) {
 			$result = preg_replace_callback(
-				'#<style\b([^>]*)>(.*?)</style>#is',
+				'#<style(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</style>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_style_tag( $m, $providers, $blocked_categories );
 				},
@@ -4231,7 +4254,7 @@ class Frontend {
 		// the fetch before any script runs.
 		if ( false !== stripos( $html, '<img' ) ) {
 			$result = preg_replace_callback(
-				'#<img\b([^>]*)/?>#is',
+				'#<img(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_img_tag( $m, $providers, $blocked_categories );
 				},
@@ -4266,7 +4289,7 @@ class Frontend {
 			// `rel="preload stylesheet"` (the standard async-CSS pair) both
 			// slipped past and fetched the provider pre-consent.
 			$result = preg_replace_callback(
-				'#<link\b([^>]*)/?>#is',
+				'#<link(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_link_tag( $m, $providers, $blocked_categories );
 				},
@@ -4282,12 +4305,12 @@ class Frontend {
 		// 6. Block <script data-faz-waitfor="category"> (deferred dependency scripts).
 		if ( false !== stripos( $html, 'data-faz-waitfor' ) ) {
 			$result = preg_replace_callback(
-				'#<script\b([^>]*data-faz-waitfor\s*=\s*["\']([^"\']+)["\'][^>]*)>(.*?)</script>#is',
+				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script>#is',
 				function ( $m ) use ( $blocked_categories ) {
 					$attrs    = $m[1];
-					$wait_cat = $m[2];
-					$content  = $m[3];
-					if ( ! in_array( $wait_cat, $blocked_categories, true ) ) {
+					$content  = $m[2];
+					$wait_cat = $this->extract_tag_attr( $attrs, 'data-faz-waitfor' );
+					if ( '' === $wait_cat || ! in_array( $wait_cat, $blocked_categories, true ) ) {
 						return $m[0]; // Category is allowed — let it run.
 					}
 					// Block: change type to text/plain so JS won't execute.
@@ -4677,7 +4700,7 @@ class Frontend {
 		$tag_whitelisted = array();
 		$tag_categories = array();
 		$tag_svcs       = array();
-		if ( preg_match_all( '#<(?:img|iframe)\b[^>]*#i', $content, $embedded_matches ) ) {
+		if ( preg_match_all( '#<(?:img|iframe)(?=[\s/>])' . self::ATTR_WALK . '#i', $content, $embedded_matches ) ) {
 			foreach ( $embedded_matches[0] as $embedded_tag ) {
 				$whitelisted       = $this->is_whitelisted( $embedded_tag, '' );
 				$embedded_tags[]   = $embedded_tag;
@@ -4761,7 +4784,7 @@ class Frontend {
 		// each match its own target and the aliasing unrepresentable.
 		$rewrite_index   = -1;
 		$blocked_content = preg_replace_callback(
-			'#<(?:img|iframe)\b[^>]*#i',
+			'#<(?:img|iframe)(?=[\s/>])' . self::ATTR_WALK . '#i',
 			function ( $m ) use ( &$rewrite_index, $gate, $tag_categories, $content_matched ) {
 				$rewrite_index++;
 				$tag = $m[0];
@@ -4972,6 +4995,11 @@ class Frontend {
 		$attrs = isset( $m[2] ) ? $m[2] : '';
 		$full  = isset( $m[0] ) ? $m[0] : '';
 
+		// The pattern matches every table part; only one carrying the
+		// attribute is worth the provider match.
+		if ( ! preg_match( '/(^|\s)background\s*=/i', $attrs ) ) {
+			return $full;
+		}
 		if ( false !== strpos( $attrs, 'data-faz-background' ) ) {
 			return $full;
 		}
@@ -5026,41 +5054,58 @@ class Frontend {
 	 */
 	private function process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, array &$stash ) {
 		$attrs = isset( $m[1] ) ? $m[1] : '';
+		$close = isset( $m[2] ) ? $m[2] : '';
 		$full  = isset( $m[0] ) ? $m[0] : '';
 
 		$doc    = null;
 		$parked = null;
-		$src    = null;
 		foreach ( $this->tokenize_tag_attrs( $attrs ) as $token ) {
 			if ( 'srcdoc' === $token['key'] && null === $doc ) {
 				$doc = $token;
 			} elseif ( 'data-faz-srcdoc' === $token['key'] && null === $parked ) {
 				$parked = $token;
-			} elseif ( 'src' === $token['key'] && null === $src ) {
-				$src = $token;
 			}
 		}
-
-		// Already parked: no verdict to reach, but the value still has to be
-		// kept out of the passes below, or they rewrite inside it.
-		if ( null !== $parked ) {
-			$marker           = '__FAZ_SRCDOC_STASH_' . count( $stash ) . '__';
-			$stash[ $marker ] = substr( $attrs, $parked['offset'], $parked['length'] );
-			return '<iframe' . substr_replace( $attrs, $marker, $parked['offset'], $parked['length'] ) . '>';
+		if ( null !== $doc && ( null === $doc['value'] || '' === $doc['value'] ) ) {
+			$doc = null;
 		}
-		if ( null === $doc || null === $doc['value'] ) {
+		if ( null === $doc && null === $parked ) {
 			return $full;
+		}
+
+		// Both tokens leave the buffer, and the markers go in from the end so
+		// the earlier offset stays valid. A parked token is protected, not
+		// re-judged; a live one next to it is judged all the same, because the
+		// parked one is no verdict on it and the engine loads the live one.
+		$rest         = $attrs;
+		$token_marker = array();
+		foreach ( array( $doc, $parked ) as $token ) {
+			if ( null === $token ) {
+				continue;
+			}
+			$marker                        = '__FAZ_SRCDOC_STASH_' . count( $stash ) . '__';
+			$stash[ $marker ]              = substr( $attrs, $token['offset'], $token['length'] );
+			$token_marker[ $token['key'] ] = $marker;
+		}
+		$ordered = array_filter( array( $doc, $parked ) );
+		usort(
+			$ordered,
+			function ( $a, $b ) {
+				return $b['offset'] - $a['offset'];
+			}
+		);
+		foreach ( $ordered as $token ) {
+			$rest = substr_replace( $rest, $token_marker[ $token['key'] ], $token['offset'], $token['length'] );
+		}
+		if ( null === $doc ) {
+			return '<iframe' . $rest . $close . '>';
 		}
 
 		$raw   = $doc['value'];
 		$inner = ( strlen( $raw ) >= 2 && ( '"' === $raw[0] || "'" === $raw[0] ) ) ? substr( $raw, 1, -1 ) : $raw;
 		if ( '' === $inner ) {
-			return $full;
+			return '<iframe' . $rest . $close . '>';
 		}
-
-		$marker           = '__FAZ_SRCDOC_STASH_' . count( $stash ) . '__';
-		$rest             = substr_replace( $attrs, $marker, $doc['offset'], $doc['length'] );
-		$stash[ $marker ] = $doc['name'] . '=' . $raw;
 
 		// The whitelist reads the frame's own src/id/class, so it is asked of
 		// the attributes WITHOUT the document in them.
@@ -5080,23 +5125,23 @@ class Frontend {
 			}
 		}
 		if ( '' === $matched_category ) {
-			return '<iframe' . $rest . '>';
+			return '<iframe' . $rest . $close . '>';
 		}
 
-		$stash[ $marker ] = 'data-faz-srcdoc=' . $raw;
-		// src goes with it. The src token sits before or after the srcdoc one;
-		// the marker is a different length from the token it replaced, so the
-		// src offset is only valid as-is when src comes first.
-		if ( null !== $src && null !== $src['value'] ) {
-			$offset = $src['offset'];
-			if ( $offset > $doc['offset'] ) {
-				$offset += strlen( $marker ) - $doc['length'];
+		$stash[ $token_marker['srcdoc'] ] = 'data-faz-srcdoc=' . $raw;
+		// src goes with it. Found again in $rest, where the markers are plain
+		// names and every offset is current.
+		foreach ( $this->tokenize_tag_attrs( $rest ) as $token ) {
+			if ( 'src' === $token['key'] && null !== $token['value'] ) {
+				$rest = substr_replace( $rest, 'data-faz-src=' . $token['value'], $token['offset'], $token['length'] );
+				break;
 			}
-			$rest = substr_replace( $rest, 'data-faz-src=' . $src['value'], $offset, $src['length'] );
 		}
-		// Metadata BEFORE the captured attributes, as in process_img_tag(): a
-		// self-closing tag keeps its slash inside $attrs.
-		return self::faz_add_hidden_class( '<iframe data-faz-category="' . esc_attr( $matched_category ) . '"' . $rest . '>' );
+		// One category: a parked token next to this one may have brought its
+		// own. Metadata BEFORE the captured attributes, as in
+		// process_img_tag(): a self-closing tag keeps its slash separate.
+		$metadata = preg_match( '/(^|\s)data-faz-category\s*=/i', $rest ) ? '' : ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		return self::faz_add_hidden_class( '<iframe' . $metadata . $rest . $close . '>' );
 	}
 
 	/**
@@ -5104,8 +5149,9 @@ class Frontend {
 	 * reads them: a name, optionally `=` and a value that is quoted only when
 	 * its first character is a quote and otherwise runs to whitespace or `>`.
 	 *
-	 * Only sound for an attribute string the step-0 pattern accepted, which
-	 * guarantees that every byte is whitespace, a slash, or such a token.
+	 * Only sound for an attribute string ATTR_WALK accepted, which guarantees
+	 * that every byte is whitespace, a slash, a stray quote or `=`, or such a
+	 * token.
 	 *
 	 * @param string $attrs Attribute string, as captured after the tag name.
 	 * @return array[] Each: name, key (lower-cased name), offset of the name,
@@ -5114,7 +5160,10 @@ class Frontend {
 	 */
 	private function tokenize_tag_attrs( $attrs ) {
 		$tokens = array();
-		if ( ! preg_match_all( '/\G\s*+(?:\/\s*+)*+([^\s"\'>\/=]++)(?:\s*+=\s*+("[^"]*+"|\'[^\']*+\'|[^\s>"\'][^\s>]*+))?/', $attrs, $found, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
+		// Whitespace, slashes and the stray quotes or `=` ATTR_WALK tolerates
+		// are skipped between tokens; a `\G` sequence would otherwise stop at
+		// the first of them and lose every attribute after it.
+		if ( ! preg_match_all( '/\G(?:\s++|\/|["\'=])*+([^\s"\'>\/=]++)(?:\s*+=\s*+("[^"]*+"|\'[^\']*+\'|[^\s>"\'][^\s>]*+))?/', $attrs, $found, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
 			return $tokens;
 		}
 		foreach ( $found as $f ) {
@@ -8084,7 +8133,7 @@ class Frontend {
 		// (excluding ones we have already neutralised to `text/plain` or
 		// that already carry the hints from a prior filter pass).
 		$new_tag = preg_replace_callback(
-			'#<script\b([^>]*?)(/?)>#i',
+			'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#i',
 			function ( $m ) use ( $hints ) {
 				$attrs = $m[1];
 				// Skip blocked scripts and idempotent re-runs.
@@ -8568,7 +8617,7 @@ class Frontend {
 	 * @return string
 	 */
 	public function filter_inline_script_tag( $tag, $id, $handle = '' ) {
-		if ( ! preg_match( '/<script\b([^>]*)>(.*)<\/script>/si', $tag, $match ) ) {
+		if ( ! preg_match( '#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*)</script>#si', $tag, $match ) ) {
 			return $tag;
 		}
 		$category = $this->inline_script_block_category( $match[1], $match[2], $id, $handle );
@@ -9668,7 +9717,7 @@ class Frontend {
 		// them unblocked, which would violate consent requirements.
 		if ( false !== stripos( $content, '<script' ) ) {
 			$result = preg_replace_callback(
-				'#<script\b([^>]*)>(.*?)</script>#is',
+				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_script_tag( $m, $providers, $blocked_categories );
 				},
@@ -9685,7 +9734,7 @@ class Frontend {
 		// Block <iframe> tags in content.
 		if ( false !== stripos( $content, '<iframe' ) ) {
 			$result = preg_replace_callback(
-				'#<iframe\b([^>]*)(?:>(.*?)</iframe>|/>)#is',
+				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe>|/\s*+>)#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories );
 				},
@@ -9800,15 +9849,25 @@ class Frontend {
 
 		// Neutralize the embed: wrap iframes, disable scripts.
 		$blocked_html = $html;
-		// Rename iframe src to prevent loading.
-		$blocked_html = preg_replace( '/(<iframe\b[^>]*\s)src\s*=\s*/i', '$1data-faz-src=', $blocked_html );
-		// Add data-faz-category to iframes.
-		$blocked_html = preg_replace( '/(<iframe\b)/', '$1 data-faz-category="' . esc_attr( $matched_category ) . '"', $blocked_html );
+		// Rename iframe src to prevent loading and label the frame, in one walk
+		// over its attributes.
+		$frame_category = $matched_category;
+		$blocked_html   = preg_replace_callback(
+			'#<iframe(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#i',
+			function ( $m ) use ( $frame_category ) {
+				$attrs = preg_replace( '/(^|\s)src\s*=\s*/i', '$1data-faz-src=', $m[1] );
+				if ( null === $attrs ) {
+					return $m[0];
+				}
+				return '<iframe data-faz-category="' . esc_attr( $frame_category ) . '"' . $attrs . '>';
+			},
+			$blocked_html
+		) ?? $blocked_html;
 		$blocked_html = self::faz_add_hidden_class( $blocked_html );
 		// Disable scripts using set_script_type_plain() for consistent type handling.
 		$cat_attr = $matched_category;
 		$result = preg_replace_callback(
-			'#<script\b([^>]*)>(.*?)</script>#is',
+			'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script>#is',
 			function ( $m ) use ( $cat_attr ) {
 				$attrs = $this->set_script_type_plain( $m[1] );
 				if ( false === strpos( $attrs, 'data-faz-category' ) ) {
@@ -10384,7 +10443,7 @@ class Frontend {
 	 */
 	private function block_script_tag_safely( string $tag, string $category, string $context ): string {
 		$blocked = preg_replace_callback(
-			'/<script\b([^>]*)>/i',
+			'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#i',
 			function ( $match ) use ( $category ) {
 				$new_attrs = $this->set_script_type_plain( $match[1] );
 				if ( false === strpos( $new_attrs, 'data-faz-category' ) ) {
