@@ -1070,7 +1070,35 @@ if ( ! function_exists( 'faz_throttle_request' ) ) {
 	 * cache (Redis, Memcached) is active. Falls back to transients (database-
 	 * backed) on standard WordPress installations without persistent cache.
 	 *
+	 * The key is `$prefix` plus a hash of the resolved client address, so
+	 * every window this function keeps is a per-ADDRESS window, whatever the
+	 * prefix says: the consent logger's per-IP bucket and its per-consent_id
+	 * replay windows, the AMP consent endpoint, the pageviews API and the
+	 * refusal accounting all share that shape. It therefore applies only
+	 * where the address identifies one visitor (`faz_client_ip_identifies_
+	 * visitor()`), and is SKIPPED, deliberately, where it does not:
+	 *
+	 *  - Behind a reverse proxy or CDN that is not declared, every visitor
+	 *    resolves to the proxy's own address. The old shared key was not a
+	 *    protection there but a site-wide clamp — one write per window for
+	 *    every visitor of the site, so the consent log of every second
+	 *    visitor was dropped. Skipping removes no working control.
+	 *  - What it does cost: on such a setup these callers write unthrottled,
+	 *    and the consent-id windows go with the per-IP one because they are
+	 *    keyed on the address as well. The bound that remains is the size of
+	 *    the tables they write to. The remedy is to declare the proxy —
+	 *    `faz_trust_proxy_headers`, or `faz_trusted_proxy_cidrs` /
+	 *    `faz_proxy_forwarded_header` / `faz_loopback_proxy_header` — which
+	 *    gives this function a per-visitor key again and switches every
+	 *    window back on.
+	 *  - The DSAR form's 60-second lock skips on the same predicate (see
+	 *    DSAR_Shortcode::claim_connection_lock()) and, unlike these callers,
+	 *    stays bounded there by the one-per-email-per-hour limit and the
+	 *    cumulative per-day ceilings.
+	 *
 	 * @since 1.1.0
+	 * @since 1.34.1 Skips an address that does not identify a visitor, not
+	 *               only an empty one.
 	 * @param string $prefix Cache key prefix (e.g. 'faz_consent', 'faz_pv').
 	 * @param int    $ttl    Throttle window in seconds. Default 1.
 	 * @return bool True if request is a duplicate and should be skipped.
@@ -1080,11 +1108,16 @@ if ( ! function_exists( 'faz_throttle_request' ) ) {
 		$client_ip = faz_resolve_client_ip();
 		if ( empty( $client_ip ) || ! faz_client_ip_identifies_visitor() ) {
 			// Not one caller's address (empty, loopback, a proxy's own): skip
-			// rather than collapse every unidentified caller into one bucket,
-			// which would throttle the consent log of every second visitor
-			// behind a loopback proxy.
+			// rather than collapse every unidentified caller into one bucket.
+			// That bucket was a site-wide clamp, not a limit — one write per
+			// window for every visitor behind a loopback proxy, dropping the
+			// consent log of every second one — so nothing that worked is
+			// lost; what is lost, until the proxy is declared and the key is
+			// per-visitor again, is throttling on those setups at all. The
+			// docblock above lists the callers and what still bounds them.
 			return false;
 		}
+
 
 
 		$ip_hash = md5( $client_ip );
