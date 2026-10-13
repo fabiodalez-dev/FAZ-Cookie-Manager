@@ -4753,26 +4753,74 @@ function _fazAggressiveCssUrlBlockingEnabled() {
     return !!(_fazStore && _fazStore._aggressiveCssUrlBlocking);
 }
 
-function _fazCssUrls(css) {
+// A CSS escape, as the CSS tokenizer consumes it: `\XX` (one to six hex
+// digits, one optional whitespace swallowed after them) or `\c` for any other
+// character. `u\72l(` is `url(` to the tokenizer, `\75 rl(` is too, and
+// `tracker\.test` is `tracker.test` — none of which a regex over the raw text
+// could see, so each of them fetched.
+function _fazCssDecodeEscapes(css) {
+    if (!css || typeof css !== "string" || css.indexOf("\\") === -1) return css;
+    return css.replace(/\\([0-9a-f]{1,6})[ \t\n\r\f]?|\\([\s\S])/gi, function (_m, hex, ch) {
+        if (hex) {
+            var cp = parseInt(hex, 16);
+            if (!cp || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) return "\ufffd";
+            try { return String.fromCodePoint(cp); } catch (_e) { return "\ufffd"; }
+        }
+        return ch;
+    });
+}
+
+// Every URL a stylesheet names, read the way the CSS tokenizer reads it:
+// url() in its three forms, `@import` followed by a string with or without
+// whitespace, the string form of image-set(), and all of them again on a copy
+// with CSS escapes decoded, because an escape can hide the function name or
+// a character of the host from the raw text.
+function _fazCssUrlsRaw(css) {
     var urls = [];
     if (!css || typeof css !== "string") return urls;
     css.replace(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi, function (_m, dq, sq, bare) {
         urls.push(dq || sq || bare || "");
         return _m;
     });
-    css.replace(/@import\s+(["'])([^"']+)\1/gi, function (_m, _q, url) {
+    css.replace(/@import\s*(["'])([^"']+)\1/gi, function (_m, _q, url) {
         urls.push(url || "");
+        return _m;
+    });
+    css.replace(/(?:-webkit-)?image-set\(([^()]*)\)/gi, function (_m, inner) {
+        String(inner).replace(/"([^"]*)"|'([^']*)'/g, function (_s, dq, sq) {
+            urls.push(dq || sq || "");
+            return _s;
+        });
         return _m;
     });
     return urls;
 }
+function _fazCssUrls(css) {
+    var urls = _fazCssUrlsRaw(css);
+    var decoded = _fazCssDecodeEscapes(css);
+    if (decoded !== css) {
+        var more = _fazCssUrlsRaw(decoded);
+        for (var i = 0; i < more.length; i++) {
+            if (urls.indexOf(more[i]) === -1) urls.push(more[i]);
+        }
+    }
+    return urls;
+}
 
+// Judged on host and path, exactly as policy.url judges a URL for the
+// bootstrap: a substring match over the whole URL called
+// `cdn.site.test/p.png?u=tracker.test` a tracker, the bootstrap did not, the
+// two layers' neutralised forms diverged, _fazPrimeStyleCssMarkers() could
+// not adopt the server's original, and the first append lost it. Escapes are
+// decoded first so `tracker\.test` is the host it is to the tokenizer.
 function _fazCssUrlShouldBlock(url) {
     if (!url || typeof url !== "string") return false;
-    url = url.trim();
+    url = _fazCssDecodeEscapes(url).trim();
     if (!url || url.charAt(0) === "#" || /^data:/i.test(url) || /^blob:/i.test(url)) return false;
     if (_fazIsUserWhitelisted(url)) return false;
-    return _fazShouldBlockProvider(url);
+    var endpoint = _fazExtractEndpoint(url);
+    if (!endpoint) return false;
+    return _fazShouldBlockProvider(endpoint);
 }
 
 function _fazCssShouldBlock(css) {
@@ -4786,21 +4834,34 @@ function _fazCssShouldBlock(css) {
 function _fazCssBlockedCategory(css) {
     var urls = _fazCssUrls(css);
     for (var i = 0; i < urls.length; i++) {
-        if (_fazCssUrlShouldBlock(urls[i])) return _fazImgCategory(urls[i]);
+        if (_fazCssUrlShouldBlock(urls[i])) return _fazImgCategory(_fazExtractEndpoint(_fazCssDecodeEscapes(urls[i])) || urls[i]);
     }
     return "functional";
 }
 
+// Neutralise in place what a regex over the raw text can reach: url(), an
+// @import string, an image-set() string. What it cannot reach — a URL or a
+// function name spelled through CSS escapes — is still found by _fazCssUrls
+// on the decoded copy, and a sheet that still fetches after the in-place pass
+// is blocked WHOLE: empty live text, the original in the marker, restored on
+// consent. Partial is not an option there; partial is how it fetched.
 function _fazNeutralizeCssUrls(css) {
     if (!css || typeof css !== "string") return css;
-    css = css.replace(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi, function (match, dq, sq, bare) {
+    var out = css.replace(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi, function (match, dq, sq, bare) {
         var url = dq || sq || bare || "";
         return _fazCssUrlShouldBlock(url) ? 'url("' + _FAZ_INERT_CSS_URL + '")' : match;
     });
-    css = css.replace(/(@import\s+)(["'])([^"']+)\2/gi, function (match, prefix, _quote, url) {
+    out = out.replace(/(@import\s*)(["'])([^"']+)\2/gi, function (match, prefix, _quote, url) {
         return _fazCssUrlShouldBlock(url) ? prefix + 'url("' + _FAZ_INERT_CSS_URL + '")' : match;
     });
-    return css;
+    out = out.replace(/((?:-webkit-)?image-set\()([^()]*)(\))/gi, function (match, open, inner, close) {
+        var replaced = String(inner).replace(/"([^"]*)"|'([^']*)'/g, function (str, dq, sq) {
+            return _fazCssUrlShouldBlock(dq || sq || "") ? '"' + _FAZ_INERT_CSS_URL + '"' : str;
+        });
+        return open + replaced + close;
+    });
+    if (_fazCssShouldBlock(out)) return "";
+    return out;
 }
 
 function _fazBase64EncodeUtf8(str) {
@@ -4955,7 +5016,16 @@ function _fazGateStyleTextSetter(proto, prop) {
             try {
                 if (_fazStore._block && s && _fazCssShouldBlock(s)) {
                     nativeSet.call(this, _fazNeutralizeCssUrls(s));
-                    if (_fazIsStyleTextNode(this.firstChild)) _fazSetStyleNodeOriginalCss(this.firstChild, s);
+                    // A sheet blocked whole has an EMPTY live text, and an empty
+                    // textContent write leaves no text node to carry the
+                    // original; give it one, or the marker could not be written
+                    // and the original would be lost.
+                    var holder = this.firstChild;
+                    if (!_fazIsStyleTextNode(holder) && _fazNativeNodeAppendChild) {
+                        holder = (this.ownerDocument || document).createTextNode("");
+                        _fazNativeNodeAppendChild.call(this, holder);
+                    }
+                    if (_fazIsStyleTextNode(holder)) _fazSetStyleNodeOriginalCss(holder, s);
                 } else {
                     nativeSet.call(this, s);
                 }
@@ -5009,10 +5079,38 @@ function _fazGateStyleTextNodeMethod(proto, methodName) {
                 } catch (e) { /* leave this argument untouched on any error */ }
             }
             var result = native.apply(this, args);
+            try { _fazCollapseSplitStyleCss(this); } catch (_collapseErr) { /* native mutation already succeeded */ }
             try { _fazSyncStyleCssAttribute(this); } catch (_syncErr) { /* native mutation already succeeded */ }
             return result;
         }
     });
+}
+
+// The per-argument gate above judges each string or node on its own, and a
+// URL can be split across two of them: `s.append('.p{background-image:u',
+// 'rl(https://tracker/c.png)}')`, or two consecutive appendChild() calls.
+// Neither piece names a URL, so nothing was neutralised — while the marker
+// was still written from the combined original, which read as "parked" with
+// the live text fetching. The RESULTING text is what the engine parses, so
+// that is what is judged here, after the write: if the live text still
+// fetches, the children collapse into one text node holding the neutralised
+// combined CSS, with the combined original kept for the restore pass.
+var _fazNativeNodeRemoveChild = window.Node && Node.prototype.removeChild;
+var _fazNativeNodeAppendChild = window.Node && Node.prototype.appendChild;
+function _fazCollapseSplitStyleCss(style) {
+    if (!_fazStore._block || !style || !style.childNodes || !_fazNativeNodeRemoveChild || !_fazNativeNodeAppendChild) return;
+    var live = "";
+    for (var i = 0; i < style.childNodes.length; i++) {
+        var node = style.childNodes[i];
+        live += _fazIsStyleTextNode(node) ? (node.nodeValue || "") : (node.textContent || "");
+    }
+    if (!live || !_fazCssShouldBlock(live)) return;
+    var original = _fazStyleOriginalCss(style);
+    var doc = style.ownerDocument || document;
+    var replacement = doc.createTextNode(_fazNeutralizeCssUrls(original));
+    _fazSetStyleNodeOriginalCss(replacement, original);
+    while (style.firstChild) _fazNativeNodeRemoveChild.call(style, style.firstChild);
+    _fazNativeNodeAppendChild.call(style, replacement);
 }
 
 _fazGateStyleTextSetter(window.HTMLStyleElement && HTMLStyleElement.prototype, "textContent");
@@ -5206,8 +5304,7 @@ function _fazGateStyleCharacterDataReplaceWith(proto) {
 // resource is not fetched before consent. (Live restore of an individually-inserted
 // rule is not tracked — the inert rule is re-evaluated on the next navigation once
 // consented; the pre-consent leak is what matters here.)
-function _fazGateStyleSheetInsertRule() {
-    var proto = window.CSSStyleSheet && CSSStyleSheet.prototype;
+function _fazGateInsertRuleOn(proto) {
     if (!proto || typeof proto.insertRule !== "function") return;
     var native = proto.insertRule;
     Object.defineProperty(proto, "insertRule", {
@@ -5220,6 +5317,32 @@ function _fazGateStyleSheetInsertRule() {
                 }
             } catch (e) { /* fall through to native */ }
             return native.call(this, rule, index);
+        }
+    });
+}
+function _fazGateStyleSheetInsertRule() {
+    _fazGateInsertRuleOn(window.CSSStyleSheet && CSSStyleSheet.prototype);
+    // A grouping rule (@media, @supports, @layer…) has its own insertRule,
+    // which never reaches the sheet's.
+    _fazGateInsertRuleOn(window.CSSGroupingRule && CSSGroupingRule.prototype);
+    // The legacy addRule(selector, block, index) is insertRule by another
+    // signature; the block is what carries the url().
+    var proto = window.CSSStyleSheet && CSSStyleSheet.prototype;
+    if (!proto || typeof proto.addRule !== "function") return;
+    var nativeAdd = proto.addRule;
+    Object.defineProperty(proto, "addRule", {
+        configurable: true, writable: true, enumerable: true,
+        value: function (selector, block, index) {
+            try {
+                var b = String(block == null ? "" : block);
+                if (_fazStore._block && b && _fazCssShouldBlock(selector + "{" + b + "}")) {
+                    var neutral = _fazNeutralizeCssUrls(selector + "{" + b + "}");
+                    // Whole-sheet fallback came back empty: insert an empty block.
+                    var inner = neutral ? neutral.slice(String(selector).length + 1, -1) : "";
+                    return nativeAdd.call(this, selector, inner, index);
+                }
+            } catch (e) { /* fall through to native */ }
+            return nativeAdd.call(this, selector, block, index);
         }
     });
 }
