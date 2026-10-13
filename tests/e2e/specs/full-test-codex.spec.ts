@@ -5,6 +5,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
 import { getWpLoginPath } from '../utils/wp-auth';
 import { clickFirstVisible } from '../utils/ui';
+import { listActivePluginFiles, restoreActivePluginFiles } from '../utils/wp-env';
 
 type ConsentCategory = 'analytics' | 'marketing' | 'functional';
 
@@ -287,6 +288,34 @@ async function loginAdminResilient(page: Page, wpBaseURL: string, adminUser: str
 
 test.describe('full-test-codex', () => {
   test.describe.configure({ mode: 'serial' });
+
+  // This spec activates ~33 real third-party tracking plugins to prove the
+  // provider catalogue recognises them, and it used to leave every one of them
+  // active for the rest of the run. Measured: the suite ended with 41 active
+  // plugins instead of the baseline 8, every page load after this file booted
+  // 33 extra analytics and pixel plugins, and the wall clock went from 1.7h to
+  // 3.4h with 3 failed and 12 flaky — among them a performance-probe test that
+  // took a full hour and left orphaned categories behind, which then broke the
+  // AMP bridge specs deterministically.
+  //
+  // The leak was invisible for as long as img-tile-blocking.spec.ts happened to
+  // run later and strip active_plugins down to faz-cookie-manager, acting as an
+  // accidental garbage collector — at the cost of removing the fixture plugins
+  // the rest of the suite needs. Both files now keep their own house in order.
+  // The plugins stay INSTALLED, so a later run still skips the download; only
+  // the active set returns to what it was.
+  let suiteActivePluginFiles: string[] | null = null;
+
+  test.beforeAll(() => {
+    suiteActivePluginFiles = listActivePluginFiles();
+  });
+
+  test.afterAll(() => {
+    if (suiteActivePluginFiles !== null) {
+      restoreActivePluginFiles(suiteActivePluginFiles);
+      suiteActivePluginFiles = null;
+    }
+  });
 
   // Declare the long budget HERE, not as the first statement of the test body.
   // The clock starts before the body does — fixture setup and the serial-mode
