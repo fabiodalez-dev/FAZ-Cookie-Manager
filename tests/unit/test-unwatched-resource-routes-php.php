@@ -229,11 +229,28 @@ namespace {
 
 	echo "\n-- iframe srcdoc: a document in an attribute --\n";
 
+	// The raw attribute token as it sits in the output, quotes included, so a
+	// value the pipeline rewrote INSIDE cannot pass as parked.
+	function faz_raw_attr( $html, $name ) {
+		if ( preg_match( '/(?<![\w-])' . preg_quote( $name, '/' ) . '=("[^"]*"|\'[^\']*\'|[^\s>]+)/', $html, $m ) ) {
+			return $m[1];
+		}
+		return null;
+	}
+	function faz_decode_attr( $raw ) {
+		$inner = ( null !== $raw && strlen( $raw ) >= 2 && ( '"' === $raw[0] || "'" === $raw[0] ) ) ? substr( $raw, 1, -1 ) : (string) $raw;
+		return html_entity_decode( $inner, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+	}
+
 	$fe  = faz_ob_frontend( $providers, $blocked );
 	$out = faz_ob_run( $fe, '<html><body><iframe srcdoc="<img src=&quot;https://cdn.tracker.test/pixel.png&quot;>"></iframe></body></html>' );
 	assert_true( false !== strpos( $out, 'data-faz-srcdoc=' ), 'a srcdoc naming a blocked provider is parked' );
 	assert_true( false !== strpos( $out, 'data-faz-category="marketing"' ), 'with its category' );
 	assert_true( false === strpos( $out, ' srcdoc="' ), 'and the live attribute is gone' );
+	assert_true( '"<img src=&quot;https://cdn.tracker.test/pixel.png&quot;>"' === faz_raw_attr( $out, 'data-faz-srcdoc' ), 'the parked value is the original byte-for-byte: no pass rewrote inside it' );
+	assert_true( '<img src="https://cdn.tracker.test/pixel.png">' === faz_decode_attr( faz_raw_attr( $out, 'data-faz-srcdoc' ) ), 'and decodes to the document the engine would have parsed' );
+	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'exactly one category on the tag' );
+	assert_true( false !== strpos( $out, 'class="faz-hidden"' ), 'a parked srcdoc frame is hidden like a parked src frame' );
 
 	$fe   = faz_ob_frontend( $providers, $blocked );
 	$html = '<html><body><iframe srcdoc="<p>plain local markup</p>"></iframe></body></html>';
@@ -242,6 +259,99 @@ namespace {
 	$fe   = faz_ob_frontend( $providers, $blocked );
 	$html = '<html><body><iframe srcdoc="<img src=&quot;https://unknown.example/x.png&quot;>"></iframe></body></html>';
 	assert_true( faz_ob_run( $fe, $html ) === $html, 'an unrecognised third party inside srcdoc is not gated by this pass' );
+
+	echo "\n-- iframe srcdoc: every pass that used to rewrite inside the value --\n";
+
+	// Each inner element belongs to a pass that runs over the whole buffer:
+	// <script src> (step 1), <style>@import (4), <img src> (4b), <link> (5).
+	// Every one of them wrote a double-quoted attribute INTO a double-quoted
+	// value and so ended the value early; the engine then read the tracker's
+	// URL as the frame's src. The parked value must be the original, exactly.
+	$inner_docs = array(
+		'inner <script src>'        => '<script src=&quot;https://cdn.tracker.test/t.js&quot;></script>',
+		'inner <link rel=stylesheet>' => '<link rel=&quot;stylesheet&quot; href=&quot;https://cdn.tracker.test/a.css&quot;>',
+		'inner <style>@import'      => '<style>@import url(https://cdn.tracker.test/f.css);</style>',
+		'inner <img src>, entities for > and "' => '&lt;p&gt;a &gt; b&lt;/p&gt;<img src=&quot;https://cdn.tracker.test/p.png&quot;>',
+	);
+	foreach ( $inner_docs as $label => $doc ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><body><iframe srcdoc="' . $doc . '"></iframe></body></html>' );
+		assert_true( '"' . $doc . '"' === faz_raw_attr( $out, 'data-faz-srcdoc' ), $label . ': parked verbatim' );
+		assert_true( false === strpos( $out, ' srcdoc="' ), $label . ': not left live' );
+		assert_true( 1 === substr_count( $out, 'data-faz-category=' ), $label . ': one category' );
+	}
+
+	// Single-quoted srcdoc: the inner markup carries raw double quotes, so the
+	// <img> pass used to deliver a data-faz-src INSIDE a document that has no
+	// runtime to restore it.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, "<html><body><iframe srcdoc='<img src=\"https://cdn.tracker.test/pixel.png\">'></iframe></body></html>" );
+	assert_true( "'<img src=\"https://cdn.tracker.test/pixel.png\">'" === faz_raw_attr( $out, 'data-faz-srcdoc' ), 'single-quoted srcdoc: parked verbatim, quoting preserved' );
+	assert_true( false === strpos( $out, "data-faz-src=\"https://cdn.tracker.test" ), 'and nothing inside it was parked separately' );
+
+	// An ALLOWED srcdoc is just as much off-limits to the inner passes.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = "<html><body><iframe srcdoc='<script src=\"/local.js\"></script><img src=\"/p.png\">'></iframe></body></html>";
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'an allowed srcdoc with inner script and img passes through byte-identical' );
+
+	// Already parked: protected from the inner passes too, and not re-judged.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><body><iframe class="faz-hidden" data-faz-category="marketing" data-faz-srcdoc="<img src=&quot;https://cdn.tracker.test/pixel.png&quot;>"></iframe></body></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'a parked srcdoc is not rewritten a second time, inside or out' );
+
+	echo "\n-- iframe srcdoc: src goes with it --\n";
+
+	// The engine ignores src while srcdoc is present. Parking srcdoc alone
+	// therefore ACTIVATED a src that had been inert, and the iframe pass never
+	// parked it because its "already parked" check matched data-faz-src as a
+	// substring of data-faz-srcdoc.
+	$doc = '<img src=&quot;https://cdn.tracker.test/pixel.png&quot;>';
+	foreach ( array(
+		'srcdoc then src'          => '<iframe srcdoc="' . $doc . '" src="https://cdn.tracker.test/frame.html"></iframe>',
+		'src then srcdoc'          => '<iframe src="https://cdn.tracker.test/frame.html" srcdoc="' . $doc . '"></iframe>',
+		'first-party src, blocked srcdoc' => '<iframe src="/local.html" srcdoc="' . $doc . '" width="300"></iframe>',
+	) as $label => $tag ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><body>' . $tag . '</body></html>' );
+		assert_true( null !== faz_raw_attr( $out, 'data-faz-src' ), $label . ': src is parked' );
+		// The tag's own attributes, with the parked document taken out: the
+		// document legitimately contains a `src=` of its own.
+		$own = str_replace( 'data-faz-srcdoc=' . faz_raw_attr( $out, 'data-faz-srcdoc' ), '', $out );
+		assert_true( ! preg_match( '/(?<![\w-])src=/', $own ), $label . ': and not left live' );
+		assert_true( '"' . $doc . '"' === faz_raw_attr( $out, 'data-faz-srcdoc' ), $label . ': srcdoc is parked verbatim' );
+		assert_true( 1 === substr_count( $out, 'data-faz-category=' ), $label . ': exactly one category' );
+		assert_true( false !== strpos( $out, 'faz-hidden' ), $label . ': hidden' );
+	}
+
+	echo "\n-- iframe srcdoc: the attribute walk --\n";
+
+	// An apostrophe in an unquoted value is part of that value, not the start
+	// of a run: the old walk swallowed the next iframe, which came out parked
+	// without a category.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$out  = faz_ob_run( $fe, '<html><body><iframe title=it\'s src="/local"></iframe><iframe srcdoc="' . $doc . '"></iframe></body></html>' );
+	assert_true( false !== strpos( $out, '<iframe title=it\'s src="/local"></iframe>' ), 'the iframe with the apostrophe is untouched' );
+	assert_true( '"' . $doc . '"' === faz_raw_attr( $out, 'data-faz-srcdoc' ), 'the next iframe is parked' );
+	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'with its category' );
+
+	// A megabyte of attribute value with no closing quote must neither
+	// backtrack nor trip the PCRE limit: the old walk did the latter, and a
+	// PCRE failure makes that pass give up for the WHOLE page. The tag is
+	// closed so the later iframe pass, whose own `(.*?)</iframe>` scan is a
+	// separate and older limit, is not what gets measured here.
+	$fe      = faz_ob_frontend( $providers, $blocked );
+	$tail    = '<html><body><iframe srcdoc="' . str_repeat( 'a', 1048576 ) . '></iframe><img src="https://cdn.tracker.test/after.png"></body></html>';
+	$log     = tempnam( sys_get_temp_dir(), 'faz-pcre' );
+	$old_log = ini_set( 'error_log', $log );
+	$t0      = microtime( true );
+	$out     = faz_ob_run( $fe, $tail );
+	$spent   = microtime( true ) - $t0;
+	ini_set( 'error_log', (string) $old_log );
+	$logged = (string) file_get_contents( $log );
+	unlink( $log );
+	assert_true( $spent < 1.0, sprintf( 'a 1 MB unterminated srcdoc is walked in linear time (%.3fs)', $spent ) );
+	assert_true( false === strpos( $logged, 'PCRE error' ), 'and does not trip the PCRE limit, which would skip blocking for the whole page' );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/after.png"' ), 'so the pixel after it is still parked' );
 
 	// ---------- result ----------
 

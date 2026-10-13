@@ -4054,6 +4054,51 @@ class Frontend {
 		// data-faz-src + data-faz-category) but preserves the enclosing
 		// <noscript> wrapper, and it is that PROCESSED block that gets stashed
 		// and later restored.
+		// 0. Every <iframe srcdoc> is lifted out of the buffer BEFORE any other
+		// pass runs, and put back verbatim after the last one. The attribute's
+		// value is markup, and every pass below is a regex over markup: the
+		// script pass re-typed a <script src> inside it, the <img> pass renamed
+		// its src, the <link> and <style> passes did the same — each writing a
+		// double-quoted attribute INTO a double-quoted value, which ends the
+		// value at the first injected quote. The engine then read the tracker's
+		// URL as the frame's src and a truncated document as its srcdoc; with a
+		// single-quoted srcdoc the inner <img> was delivered parked into a
+		// document that has no runtime to restore it.
+		//
+		// So the srcdoc is judged whole here (a sub-document's fetches are
+		// beyond any gate once it is parsed), its token is replaced by a marker
+		// no pass can match, and the marker is swapped back at the very end for
+		// the ORIGINAL token: `srcdoc=…` when allowed, `data-faz-srcdoc=…` when
+		// parked, bytes and quoting untouched either way. Runs ahead of the
+		// <noscript> stash as well, because a single-quoted srcdoc can carry a
+		// literal <noscript> that the stash would otherwise cut out of the
+		// attribute.
+		//
+		// The opening-tag pattern walks attributes the way the tokenizer does:
+		// a value is quoted only when a quote is the first character after `=`,
+		// and an unquoted value runs to the next whitespace or `>` whatever it
+		// contains. Walking "anything but a quote, or a quoted run" instead let
+		// the apostrophe in `title=it's` open a run that swallowed the next
+		// iframe. Every quantifier is possessive: the alternatives cannot start
+		// with the same character, so there is nothing to backtrack into, and a
+		// megabyte of unterminated value fails in one pass instead of tripping
+		// the PCRE limit — which made the whole buffer give up on blocking.
+		$srcdoc_stash = array();
+		if ( false !== stripos( $html, 'srcdoc' ) ) {
+			$result = preg_replace_callback(
+				'#<iframe(?=[\s/>])((?:\s++|/|[^\s"\'>/=]++(?:\s*+=\s*+(?:"[^"]*+"|\'[^\']*+\'|[^\s>"\'][^\s>]*+))?)*+)>#is',
+				function ( $m ) use ( $providers, $blocked_categories, &$srcdoc_stash ) {
+					return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, $srcdoc_stash );
+				},
+				$html
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
+		}
+
 		$noscript_stash = array();
 		if ( false !== stripos( $html, '<noscript' ) ) {
 			$result = preg_replace_callback(
@@ -4120,27 +4165,6 @@ class Frontend {
 				'#<(body|table|thead|tbody|tfoot|tr|td|th)\b([^>]*\sbackground\s*=[^>]*)>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_background_attr_tag( $m, $providers, $blocked_categories );
-				},
-				$html
-			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
-		}
-
-		// 1-quater. An <iframe srcdoc="…"> carries a whole document in an
-		// attribute, and the engine parses it into a browsing context nothing on
-		// either side can intercept once it exists. So it is judged whole: if
-		// the markup names a blocked provider, the attribute is parked. The
-		// attribute regex below walks quoted values rather than stopping at the
-		// first `>`, because srcdoc markup is full of them.
-		if ( false !== stripos( $html, 'srcdoc' ) ) {
-			$result = preg_replace_callback(
-				'#<iframe((?:[^>"\']|"[^"]*"|\'[^\']*\')*)>#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories );
 				},
 				$html
 			);
@@ -4302,6 +4326,12 @@ class Frontend {
 		$html = $this->process_social_embeds( $html, $blocked_categories );
 		$html = $this->process_elementor_video_widgets( $html, $blocked_categories, $providers );
 		$html = $this->process_bricks_map_widgets( $html, $blocked_categories, $providers );
+
+		// Put every srcdoc back, last of all, so no pass above — the embed
+		// detectors included — ever saw its markup.
+		if ( ! empty( $srcdoc_stash ) ) {
+			$html = strtr( $html, $srcdoc_stash );
+		}
 
 		if ( ! $pcre_failed ) {
 			Embed_Inventory::complete_render();
@@ -4520,7 +4550,10 @@ class Frontend {
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
 			return $full;
 		}
-		if ( false !== strpos( $attrs, 'data-faz-src' ) ) {
+		// The name, not a prefix of it: `data-faz-src` is a substring of
+		// `data-faz-srcdoc`, and matching it made every srcdoc frame look
+		// already parked, leaving its src live.
+		if ( preg_match( '/(^|\s)data-faz-src\s*=/i', $attrs ) ) {
 			return $full;
 		}
 
@@ -4786,7 +4819,8 @@ class Frontend {
 		$attrs = $m[1];
 		$full  = $m[0];
 
-		if ( false !== strpos( $attrs, 'data-faz-src' ) ) {
+		// Exact name: `data-faz-src` is also the start of `data-faz-srcset`.
+		if ( preg_match( '/(^|\s)data-faz-src\s*=/i', $attrs ) ) {
 			return $full;
 		}
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
@@ -4942,58 +4976,132 @@ class Frontend {
 	}
 
 	/**
-	 * Park an <iframe srcdoc> whose markup names a blocked provider.
+	 * Stash an <iframe srcdoc>, parking it when its markup names a blocked
+	 * provider.
 	 *
 	 * The attribute is a document, so the unit of judgement is the whole
 	 * attribute: the sub-document's resources are fetched by a parser that no
 	 * gate on either side of the plugin can reach once the context exists.
-	 * Every absolute URL the markup names is matched through the ordinary
-	 * provider matcher, and the first blocked one decides.
+	 * Every absolute URL the DECODED markup names is matched through the
+	 * ordinary provider matcher, and the first blocked one decides.
+	 *
+	 * Whatever the verdict, the srcdoc token leaves the buffer here and comes
+	 * back only when every other pass has run, byte-for-byte: the passes are
+	 * regexes over markup and the value IS markup. A parked srcdoc takes the
+	 * frame's src with it, because the engine ignores src while srcdoc is
+	 * present and removing srcdoc would activate it; both park under ONE
+	 * data-faz-category, and the frame is hidden like a parked-src frame.
 	 *
 	 * @param array $m                  Regex match: the iframe's attributes.
 	 * @param array $providers          Provider-to-category map.
 	 * @param array $blocked_categories Currently blocked category slugs.
+	 * @param array $stash              Marker => original token, filled here.
 	 * @return string
 	 */
-	private function process_iframe_srcdoc_tag( $m, $providers, $blocked_categories ) {
+	private function process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, array &$stash ) {
 		$attrs = isset( $m[1] ) ? $m[1] : '';
 		$full  = isset( $m[0] ) ? $m[0] : '';
 
-		if ( ! preg_match( '/(^|\s)srcdoc\s*=/i', $attrs ) ) {
-			return $full;
+		$doc    = null;
+		$parked = null;
+		$src    = null;
+		foreach ( $this->tokenize_tag_attrs( $attrs ) as $token ) {
+			if ( 'srcdoc' === $token['key'] && null === $doc ) {
+				$doc = $token;
+			} elseif ( 'data-faz-srcdoc' === $token['key'] && null === $parked ) {
+				$parked = $token;
+			} elseif ( 'src' === $token['key'] && null === $src ) {
+				$src = $token;
+			}
 		}
-		if ( false !== strpos( $attrs, 'data-faz-srcdoc' ) ) {
-			return $full;
+
+		// Already parked: no verdict to reach, but the value still has to be
+		// kept out of the passes below, or they rewrite inside it.
+		if ( null !== $parked ) {
+			$marker           = '__FAZ_SRCDOC_STASH_' . count( $stash ) . '__';
+			$stash[ $marker ] = substr( $attrs, $parked['offset'], $parked['length'] );
+			return '<iframe' . substr_replace( $attrs, $marker, $parked['offset'], $parked['length'] ) . '>';
 		}
-		if ( $this->is_whitelisted( $attrs, '' ) ) {
+		if ( null === $doc || null === $doc['value'] ) {
 			return $full;
 		}
 
-		$markup = $this->extract_tag_attr( $attrs, 'srcdoc' );
-		if ( '' === $markup ) {
+		$raw   = $doc['value'];
+		$inner = ( strlen( $raw ) >= 2 && ( '"' === $raw[0] || "'" === $raw[0] ) ) ? substr( $raw, 1, -1 ) : $raw;
+		if ( '' === $inner ) {
 			return $full;
 		}
 
+		$marker           = '__FAZ_SRCDOC_STASH_' . count( $stash ) . '__';
+		$rest             = substr_replace( $attrs, $marker, $doc['offset'], $doc['length'] );
+		$stash[ $marker ] = $doc['name'] . '=' . $raw;
+
+		// The whitelist reads the frame's own src/id/class, so it is asked of
+		// the attributes WITHOUT the document in them.
 		$matched_category = '';
-		if ( preg_match_all( '#(?:https?:)?//[^\s"\'<>)]+#i', $markup, $found ) ) {
-			foreach ( $found[0] as $url ) {
-				$category = $this->match_script_to_provider( ' src="' . $url . '"', '', $providers, $blocked_categories );
-				if ( $category && in_array( $category, $blocked_categories, true ) ) {
-					$matched_category = $category;
-					break;
+		if ( ! $this->is_whitelisted( $rest, '' ) ) {
+			// Judged on what the engine would parse, not on the entity-encoded
+			// source: `src=&quot;https://…&quot;` is a quoted URL to the parser.
+			$markup = html_entity_decode( $inner, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			if ( preg_match_all( '#(?:https?:)?//[^\s"\'<>)]+#i', $markup, $found ) ) {
+				foreach ( $found[0] as $url ) {
+					$category = $this->match_script_to_provider( ' src="' . $url . '"', '', $providers, $blocked_categories );
+					if ( $category && in_array( $category, $blocked_categories, true ) ) {
+						$matched_category = $category;
+						break;
+					}
 				}
 			}
 		}
 		if ( '' === $matched_category ) {
-			return $full;
+			return '<iframe' . $rest . '>';
 		}
 
-		$parked = preg_replace( '/(^|\s)srcdoc\s*=\s*/i', '$1data-faz-srcdoc=', $attrs, 1 );
-		if ( null === $parked || $parked === $attrs ) {
-			return $full;
+		$stash[ $marker ] = 'data-faz-srcdoc=' . $raw;
+		// src goes with it. The src token sits before or after the srcdoc one;
+		// the marker is a different length from the token it replaced, so the
+		// src offset is only valid as-is when src comes first.
+		if ( null !== $src && null !== $src['value'] ) {
+			$offset = $src['offset'];
+			if ( $offset > $doc['offset'] ) {
+				$offset += strlen( $marker ) - $doc['length'];
+			}
+			$rest = substr_replace( $rest, 'data-faz-src=' . $src['value'], $offset, $src['length'] );
 		}
+		// Metadata BEFORE the captured attributes, as in process_img_tag(): a
+		// self-closing tag keeps its slash inside $attrs.
+		return self::faz_add_hidden_class( '<iframe data-faz-category="' . esc_attr( $matched_category ) . '"' . $rest . '>' );
+	}
 
-		return '<iframe data-faz-category="' . esc_attr( $matched_category ) . '"' . $parked . '>';
+	/**
+	 * Split a tag's attribute string into tokens the way the HTML tokenizer
+	 * reads them: a name, optionally `=` and a value that is quoted only when
+	 * its first character is a quote and otherwise runs to whitespace or `>`.
+	 *
+	 * Only sound for an attribute string the step-0 pattern accepted, which
+	 * guarantees that every byte is whitespace, a slash, or such a token.
+	 *
+	 * @param string $attrs Attribute string, as captured after the tag name.
+	 * @return array[] Each: name, key (lower-cased name), offset of the name,
+	 *                 length of name-through-value, value (quotes included) or
+	 *                 null for a bare attribute.
+	 */
+	private function tokenize_tag_attrs( $attrs ) {
+		$tokens = array();
+		if ( ! preg_match_all( '/\G\s*+(?:\/\s*+)*+([^\s"\'>\/=]++)(?:\s*+=\s*+("[^"]*+"|\'[^\']*+\'|[^\s>"\'][^\s>]*+))?/', $attrs, $found, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
+			return $tokens;
+		}
+		foreach ( $found as $f ) {
+			$has_value = isset( $f[2] ) && -1 !== $f[2][1];
+			$tokens[]  = array(
+				'name'   => $f[1][0],
+				'key'    => strtolower( $f[1][0] ),
+				'offset' => $f[1][1],
+				'length' => ( $f[0][1] + strlen( $f[0][0] ) ) - $f[1][1],
+				'value'  => $has_value ? $f[2][0] : null,
+			);
+		}
+		return $tokens;
 	}
 
 	private function process_link_tag( $m, $providers, $blocked_categories ) {
