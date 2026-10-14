@@ -241,17 +241,17 @@ wcheck(
 	'the shipped guard frees the first change and rate-limits the ones after it'
 );
 wcheck(
-	false !== strpos( $src, "'faz_consent_chgn_' . \$hash, 10, 'entity' )" ),
-	'and the change window is still the 10s one this suite simulates, entity-scoped so a shared address keeps it'
+	false !== strpos( $src, "'faz_consent_chgn_' . \$hash, 10 )" ),
+	'and the change window is still the 10s one this suite simulates'
 );
 // Both 300s TTLs were unanchored: the replay window and the first-change window
 // could each have been retuned without a single assertion noticing.
 wcheck(
-	false !== strpos( $src, "\$window_closed = faz_throttle_request( \$consent_key, 300, 'entity' );" ),
-	'the replay window is still 300s, entity-scoped so a shared address keeps it'
+	false !== strpos( $src, '$window_closed = faz_throttle_request( $consent_key, 300 );' ),
+	'the replay window is still 300s'
 );
 wcheck(
-	false !== strpos( $src, "'faz_consent_chg1_' . \$hash, 300, 'entity' )" ),
+	false !== strpos( $src, "'faz_consent_chg1_' . \$hash, 300 )" ),
 	'and the first-change window is still 300s'
 );
 

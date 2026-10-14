@@ -98,9 +98,11 @@ class DSAR_Shortcode {
 	 * identify a visitor (`faz_client_ip_identifies_visitor()`), this layer is
 	 * SKIPPED rather than applied: the site-wide ceilings, the 60-second lock
 	 * and the one-per-email-per-hour limit still bound a flood, which costs the
-	 * database rows the hard ceiling allows instead of everybody's rights. It
-	 * is the same policy `faz_throttle_request()` already states for the same
-	 * situation — skip, never collapse into one bucket.
+	 * database rows the hard ceiling allows instead of everybody's rights. The
+	 * skip is specific to ceilings that deny a right: `faz_throttle_request()`
+	 * keeps keying on the address even when it is shared, because the windows
+	 * it keeps bound writes rather than refuse people, and a bounded site-wide
+	 * window beats an unbounded one.
 	 *
 	 * Since 1.34.1 the resolver recognises a Cloudflare edge by itself, and
 	 * every other topology once the site declares it — one filter each, and

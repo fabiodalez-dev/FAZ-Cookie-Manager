@@ -1027,9 +1027,14 @@ if ( ! function_exists( 'faz_client_ip_identifies_visitor' ) ) {
 	 * the same address, and a ceiling keyed on it stops being "five requests
 	 * per visitor" and becomes "five requests for the whole site" — which, on
 	 * the DSAR form, is a 24-hour denial of other people's Art. 15-22 requests.
-	 * `faz_throttle_request()` already states the policy for the same
-	 * situation: skip the throttle rather than collapse every unidentified
-	 * caller into one bucket.
+	 * This predicate is for ceilings that DENY something to the visitor. The
+	 * windows kept by `faz_throttle_request()` deliberately do not consult it:
+	 * they bound writes from unauthenticated callers (the consent log, its
+	 * refusal accounting, the AMP bridge, the pageview counter), and on a
+	 * shared address a bounded site-wide window is the lesser harm compared to
+	 * an unbounded one. The remedy for a site behind a proxy is to declare the
+	 * proxy (`faz_trusted_proxy_cidrs`, `faz_loopback_proxy_header`), which
+	 * gives every window a per-visitor key again.
 	 *
 	 * The rule is concrete, never a guess:
 	 *   FALSE when the resolved value is empty, the `no-ip` literal, not a
@@ -1070,67 +1075,22 @@ if ( ! function_exists( 'faz_throttle_request' ) ) {
 	 * cache (Redis, Memcached) is active. Falls back to transients (database-
 	 * backed) on standard WordPress installations without persistent cache.
 	 *
-	 * The key is `$prefix` plus a hash of the resolved client address, so on
-	 * an identified address every window this function keeps is a per-ADDRESS
-	 * window. Where the address does NOT identify one visitor
-	 * (`faz_client_ip_identifies_visitor()`: empty, loopback, private, or a
-	 * trusted proxy's own, which is what every visitor resolves to behind a
-	 * proxy that is not declared), what happens depends on `$scope`:
-	 *
-	 *  - 'ip' (default): the bucket is SKIPPED. A key that is nothing but the
-	 *    shared address was never a protection there but a site-wide clamp —
-	 *    one write per window for every visitor of the site, so the consent
-	 *    log of every second visitor was dropped. Skipping removes no working
-	 *    control. Callers: the consent logger's per-IP bucket and its refusal
-	 *    accounting, the AMP consent endpoint, the pageviews API.
-	 *  - 'entity': the key falls back to `$prefix . '_shared'`. The prefix
-	 *    already names one entity (a consent_id hash), so sharing the address
-	 *    adds nothing and dropping it loses nothing: the replay window and the
-	 *    change counters keep bounding that entity's writes. Callers: the
-	 *    consent logger's per-consent_id window and its change counters.
-	 *
-	 * The residual exposure on an undeclared proxy is therefore the 'ip'
-	 * buckets only: those callers write unthrottled per address, bounded by
-	 * the entity windows where one exists and by the table sizes elsewhere,
-	 * until the proxy is declared — `faz_trust_proxy_headers`, or
-	 * `faz_trusted_proxy_cidrs` / `faz_proxy_forwarded_header` /
-	 * `faz_loopback_proxy_header` — which gives this function a per-visitor
-	 * key again. The DSAR form's 60-second lock skips on the same predicate
-	 * (see DSAR_Shortcode::claim_connection_lock()) and stays bounded there by
-	 * the one-per-email-per-hour limit and the cumulative per-day ceilings.
-	 *
 	 * @since 1.1.0
-	 * @since 1.34.1 Skips an address that does not identify a visitor, not
-	 *               only an empty one; `$scope` lets an entity-keyed caller
-	 *               keep its window on the prefix alone instead.
 	 * @param string $prefix Cache key prefix (e.g. 'faz_consent', 'faz_pv').
 	 * @param int    $ttl    Throttle window in seconds. Default 1.
-	 * @param string $scope  'ip' when the prefix alone names nothing and the
-	 *                       address is the whole key; 'entity' when the prefix
-	 *                       already carries its own identity. Default 'ip'.
 	 * @return bool True if request is a duplicate and should be skipped.
 	 */
-	function faz_throttle_request( $prefix = 'faz_throttle', $ttl = 1, $scope = 'ip' ) {
+	function faz_throttle_request( $prefix = 'faz_throttle', $ttl = 1 ) {
 		$ttl       = max( 1, absint( $ttl ) );
 		$client_ip = faz_resolve_client_ip();
-		if ( empty( $client_ip ) || ! faz_client_ip_identifies_visitor() ) {
-			if ( 'entity' !== $scope ) {
-				// Not one caller's address (empty, loopback, a proxy's own):
-				// skip rather than collapse every unidentified caller into one
-				// bucket. That bucket was a site-wide clamp, not a limit — one
-				// write per window for every visitor behind a loopback proxy,
-				// dropping the consent log of every second one — so nothing
-				// that worked is lost; what is lost, until the proxy is
-				// declared and the key is per-visitor again, is per-address
-				// throttling on those setups. The docblock lists the callers.
-				return false;
-			}
-			// The prefix names the entity by itself: keep its window on the
-			// prefix alone, since the shared address would add nothing to it.
-			$key = $prefix . '_shared';
-		} else {
-			$key = $prefix . '_' . md5( $client_ip );
+		if ( empty( $client_ip ) ) {
+			// Cannot identify the client — skip throttling rather than
+			// collapsing all unidentified callers into one bucket.
+			return false;
 		}
+
+		$ip_hash = md5( $client_ip );
+		$key     = $prefix . '_' . $ip_hash;
 
 		if ( wp_using_ext_object_cache() ) {
 			// Persistent object cache — atomic wp_cache_add().

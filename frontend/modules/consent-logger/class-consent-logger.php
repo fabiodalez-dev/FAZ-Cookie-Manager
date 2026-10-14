@@ -641,10 +641,7 @@ class Consent_Logger {
 			// here keeps replays throttled from the very first repeat while a real
 			// change still always lands.
 			$consent_key   = 'faz_consent_' . substr( md5( $sanitized_consent_id ), 0, 8 );
-			// 'entity': the key already names this consent_id, so behind an
-			// undeclared proxy the window stays on the prefix alone instead of
-			// being skipped with the per-address buckets.
-			$window_closed = faz_throttle_request( $consent_key, 300, 'entity' );
+			$window_closed = faz_throttle_request( $consent_key, 300 );
 
 			// The FIRST change in a window is always free; the ones after it are
 			// rate-limited. A flat cap on every change was tried first and was
@@ -656,10 +653,9 @@ class Consent_Logger {
 			// addresses sharing one consent_id.
 			if ( $status_changed ) {
 				$hash = substr( md5( $sanitized_consent_id ), 0, 8 );
-				if ( faz_throttle_request( 'faz_consent_chg1_' . $hash, 300, 'entity' ) ) {
+				if ( faz_throttle_request( 'faz_consent_chg1_' . $hash, 300 ) ) {
 					// A change already landed in this window — throttle the rest.
-					$status_changed = ! faz_throttle_request( 'faz_consent_chgn_' . $hash, 10, 'entity' );
-
+					$status_changed = ! faz_throttle_request( 'faz_consent_chgn_' . $hash, 10 );
 				}
 			}
 

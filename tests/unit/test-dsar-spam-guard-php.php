@@ -587,14 +587,18 @@ namespace {
 		}
 	}
 
-	// ── 3e. faz_throttle_request() states the same policy, and now keeps it ──
+	// ── 3e. faz_throttle_request() keeps a bounded window on a shared address ──
 
-	echo "— faz_throttle_request() skips an address that does not identify a visitor\n";
+	echo "— faz_throttle_request() keys on the address even when it is shared\n";
 
-	// The helper the consent log and the AMP bridge throttle on. Its docblock
-	// claimed it already skipped for unidentifiable callers, but it only
-	// skipped an EMPTY address: behind a loopback proxy every visitor shared
-	// one bucket, and the consent log of every second visitor was dropped.
+	// The helper the consent log, its refusal accounting and the AMP bridge
+	// throttle on. Unlike the per-connection DSAR ceiling it does NOT skip an
+	// address that fails to identify one visitor: its windows bound writes
+	// from unauthenticated callers, and behind an undeclared proxy a bounded
+	// site-wide window is the lesser harm compared to no window at all (the
+	// E2E suite pins that: a burst of bogus tokens from one client must not
+	// buy one option write per request). The remedy for that site is to
+	// declare the proxy, which gives the window a per-visitor key again.
 	reset_state();
 	$GLOBALS['__faz_ip'] = '203.0.113.7';
 	check( ! faz_throttle_request( 'faz_unit', 10 ), 'a first request from a public address is not throttled' );
@@ -606,44 +610,18 @@ namespace {
 		'a Cloudflare edge address' => '172.70.100.5',
 		'an RFC1918 peer'           => '10.0.0.5',
 		'a loopback peer'           => '127.0.0.1',
-		'no address at all'         => '',
 	) as $what => $shared_ip ) {
 		reset_state();
 		$GLOBALS['__faz_ip'] = $shared_ip;
-		$throttled           = 0;
-		for ( $i = 0; $i < 5; $i++ ) {
-			if ( faz_throttle_request( 'faz_unit', 10 ) ) {
-				++$throttled;
-			}
-		}
-		assert_eq( $throttled, 0, "5 back-to-back requests behind $what are never throttled" );
-		assert_eq( count( $GLOBALS['__faz_transients'] ), 0, "and no bucket is written for $what" );
+		check( ! faz_throttle_request( 'faz_unit', 10 ), "the first request behind $what passes" );
+		check( faz_throttle_request( 'faz_unit', 10 ), "and the second inside the window is throttled: the window is bounded, not absent" );
+		assert_eq( count( $GLOBALS['__faz_transients'] ), 1, "one bucket is written for $what" );
 	}
 
-	// A key that already carries its own identity (a consent_id hash) loses
-	// nothing by dropping the address: 'entity' scope falls back to the prefix
-	// alone instead of skipping, so the replay window survives a shared address.
-	foreach ( array(
-		'a Cloudflare edge address' => '172.70.100.5',
-		'a loopback peer'           => '127.0.0.1',
-		'no address at all'         => '',
-	) as $what => $shared_ip ) {
-		reset_state();
-		$GLOBALS['__faz_ip'] = $shared_ip;
-		check( ! faz_throttle_request( 'faz_consent_abcd1234', 300, 'entity' ), "an entity-scoped first request behind $what is not throttled" );
-		check( faz_throttle_request( 'faz_consent_abcd1234', 300, 'entity' ), "but the second one inside the window is: the prefix alone is the key" );
-		check( ! faz_throttle_request( 'faz_consent_ffff0000', 300, 'entity' ), "and a different entity behind $what has its own window" );
-		check( ! faz_throttle_request( 'faz_consent_ip', 10, 'ip' ), "while an ip-scoped bucket behind $what is still skipped" );
-		check( ! faz_throttle_request( 'faz_consent_ip', 10, 'ip' ), 'twice' );
-		check( isset( $GLOBALS['__faz_transients']['faz_consent_abcd1234_shared'] ), "the shared key is the prefix plus _shared, for $what" );
-	}
-	// On an identified address the scope changes nothing: the key is per address.
 	reset_state();
-	$GLOBALS['__faz_ip'] = '203.0.113.7';
-	check( ! faz_throttle_request( 'faz_consent_abcd1234', 300, 'entity' ), 'entity scope on a public address: first request free' );
-	check( faz_throttle_request( 'faz_consent_abcd1234', 300, 'entity' ), 'second throttled' );
-	check( ! isset( $GLOBALS['__faz_transients']['faz_consent_abcd1234_shared'] ), 'and the address, not the shared key, is what it was keyed on' );
-
+	$GLOBALS['__faz_ip'] = '';
+	check( ! faz_throttle_request( 'faz_unit', 10 ) && ! faz_throttle_request( 'faz_unit', 10 ), 'with no address at all nothing is throttled and nothing is keyed' );
+	assert_eq( count( $GLOBALS['__faz_transients'] ), 0, 'and no bucket is written without an address' );
 
 	// ── 3c. Which forwarded value may be believed ───────────────────────────
 
