@@ -1103,6 +1103,24 @@ function writeThen(document, nativeAppendChild, css) {
   eq('and keeps its text through the safety release', sheet.textContent, THEME_CSS);
 }
 
+// A write withdraws the parser exemption, and from there the narrow question
+// is what judges every sheet the parser builds. That is only as good as the
+// URLs the narrow question can read: these three spellings name a third party
+// and the engine fetches all three, so a written page must hold them exactly
+// as the handoff path does.
+const WRITTEN_HIDDEN = [
+  ['an escape in the function name', '.p{background-image:u\\72l(https://tracker.test/w1.png)}'],
+  ['an escaped space in an unquoted url(', '.p{background-image:url(https://tracker.test/w\\ 2.png)}'],
+  ['comment markers held inside strings', '.a{content:"/*"}.p{background-image:url(https://tracker.test/w3.png)}.b{content:"*/"}'],
+];
+for (const [label, css] of WRITTEN_HIDDEN) {
+  const { window, document, nativeAppendChild } = boot();
+  const sheet = writeThen(document, nativeAppendChild, css);
+  await new Promise((r) => setTimeout(r, 0));
+  eq('after a write, a sheet hiding its URL behind ' + label + ' is held', sheet.textContent, '');
+  eq('with the original in the marker (' + label + ')', parkedCss(sheet), css);
+}
+
 {
   const { window, document, nativeAppendChild, nativeGetAttribute } = boot();
   const sheet = writeThen(document, nativeAppendChild, '@import url(https://tracker.test/after-write.css);');
@@ -1722,6 +1740,51 @@ for (const [label, css, blocked, needle] of TOKENIZER_CASES) {
   eq('with no marker', sheet && sheet.getAttribute('data-faz-css'), null);
 }
 
+// Two spellings judgeCss read as clean, and the engine fetches both.
+// normaliseCss() stripped `/*…*/` with no regard for strings, so a pair of
+// markers held INSIDE two strings erased every real token between them; and an
+// escaped space inside an unquoted url() decoded to a literal space, which
+// CSS_URL's bare branch then refused, so neither pass extracted a URL at all.
+// A sheet no pass reads a URL out of is delivered live AND added to `judged`,
+// which is precisely the set the backstop's broad cssURL() is told to skip —
+// so nothing downstream asks again.
+const JUDGED_CLEAN = [
+  ['an escaped space in an unquoted url(', '.p{background-image:url(https://tracker.test/a\\ b.png)}'],
+  ['a hex-escaped space in an unquoted url(', '.p{background-image:url(https://tracker.test/a\\20 b.png)}'],
+  ['comment markers held inside strings', '.a{content:"/*"}.p{background-image:u\\72l(https://tracker.test/c.png)}.b{content:"*/"}'],
+];
+for (const [label, css] of JUDGED_CLEAN) {
+  const { window, document } = boot();
+  await release(window);
+  const d = document.createElement('div');
+  d.innerHTML = '<style id="jc">' + css + '</style>';
+  document.body.appendChild(d);
+  await Promise.resolve();
+  await Promise.resolve();
+  const sheet = document.getElementById('jc');
+  ok('premise: the markup landed (' + label + ')', !!sheet);
+  eq(label + ' is parked whole', sheet && sheet.textContent, '');
+  eq(label + ' keeps its original in the marker', sheet && parkedCss(sheet), css);
+}
+
+// The controls `judged` exists for still stay live: a comment marker inside a
+// string is not a comment, and an icon-font escape names no URL. Over-holding
+// these is what asking the broad question of every sheet used to cost.
+{
+  const LIVE_CSS = '.a{content:"/*"} .b{color:red} .c{content:"*/"} .d:before{content:"\\f101"}';
+  const { window, document } = boot();
+  await release(window);
+  const d = document.createElement('div');
+  d.innerHTML = '<style id="strcmt">' + LIVE_CSS + '</style>';
+  document.body.appendChild(d);
+  await Promise.resolve();
+  await Promise.resolve();
+  const sheet = document.getElementById('strcmt');
+  eq('a first-party sheet whose strings hold comment markers stays live', sheet && sheet.textContent, LIVE_CSS);
+  eq('with no marker', sheet && sheet.getAttribute('data-faz-css'), null);
+}
+
+
 console.log('\nparked means nothing of it fetches, whatever spelling it took');
 
 // A verdict decided by string identity called a sheet rewritable when the
@@ -1775,19 +1838,55 @@ for (const [label, css] of TWICE_SPELLED) {
 // child, and with zero children the first append through its gate re-synced
 // the marker from nothing and dropped it, so the original was never restored.
 // The gate here is the runtime's own `append`, reduced to that adopt-and-sync.
-function installRuntimeAppend(window) {
+// The runtime's own adopt-and-sync pair, guards included, because without them
+// the test answers a question the runtime never asks. These mirror
+// _fazPrimeStyleCssMarkers and _fazSyncStyleCssAttribute (script.js): adoption
+// is refused unless the live text is the marker's neutralised form OR the
+// element is empty, which is what a sheet parked whole looks like; and the
+// marker survives the re-sync only if the ORIGINAL still reads as blocking —
+// asked with the same normalisation the runtime's extractor uses, or an escape
+// spells a URL that the sync cannot see and the marker goes.
+function runtimeNeutralise(css, blocked) {
+  return String(css).replace(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi, (m, dq, sq, bare) => {
+    const url = dq || sq || bare || '';
+    return blocked.test(url) ? 'url("data:application/octet-stream,")' : m;
+  });
+}
+function runtimeNormalise(css) {
+  return String(css)
+    .replace(/("(?:[^"\\\n]|\\[\s\S])*"|'(?:[^'\\\n]|\\[\s\S])*')|\/\*[\s\S]*?\*\//g, '$1')
+    .replace(/\\([0-9a-f]{1,6})(?:\r\n|[ \t\n\r\f])?/gi, (m, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/\\([^\n\r\f])/g, '$1');
+}
+function runtimeShouldBlock(css, blocked) {
+  const urls = [];
+  const take = (text, loose) => {
+    text.replace(loose ? /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)]+?))\s*\)/gi : /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi,
+      (m, dq, sq, bare) => { urls.push(dq || sq || bare || ''); return m; });
+  };
+  take(String(css), false);
+  take(runtimeNormalise(css), true);
+  return urls.some((u) => blocked.test(u));
+}
+function installRuntimeAppend(window, blocked = /tracker\.test/) {
   const native = window.Element.prototype.append;
   const originals = new WeakMap();
   window.HTMLStyleElement.prototype.append = function () {
     const kids = this.childNodes;
-    if (kids.length === 1 && kids[0].nodeType === 3 && !originals.has(kids[0])) {
-      const marker = this.getAttribute('data-faz-css');
-      if (marker) originals.set(kids[0], Buffer.from(marker, 'base64').toString('utf8'));
+    const marker = this.getAttribute('data-faz-css');
+    if (marker && kids.length <= 1 && (kids.length === 0 || (kids[0].nodeType === 3 && !originals.has(kids[0])))) {
+      const decoded = Buffer.from(marker, 'base64').toString('utf8');
+      const live = kids.length === 1 ? (kids[0].nodeValue || '') : '';
+      // The runtime's two accepted shapes, and nothing else.
+      if (live === '' || runtimeNeutralise(decoded, blocked) === live) {
+        if (kids.length === 1) originals.set(kids[0], decoded);
+        else this.__fazParkedWhole = decoded;
+      }
     }
     native.apply(this, arguments);
-    let original = '';
+    let original = this.__fazParkedWhole || '';
     for (const kid of this.childNodes) original += originals.has(kid) ? originals.get(kid) : (kid.nodeValue || '');
-    if (/tracker\.test/.test(original)) this.setAttribute('data-faz-css', Buffer.from(original, 'utf8').toString('base64'));
+    if (original && runtimeShouldBlock(original, blocked)) this.setAttribute('data-faz-css', Buffer.from(original, 'utf8').toString('base64'));
     else this.removeAttribute('data-faz-css');
   };
 }

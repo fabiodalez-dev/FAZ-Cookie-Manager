@@ -4582,17 +4582,54 @@ function _fazAggressiveCssUrlBlockingEnabled() {
     return !!(_fazStore && _fazStore._aggressiveCssUrlBlocking);
 }
 
-function _fazCssUrls(css) {
-    var urls = [];
-    if (!css || typeof css !== "string") return urls;
-    css.replace(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi, function (_m, dq, sq, bare) {
+// A comment is a comment only OUTSIDE a string. `content:"/*"` is two
+// characters of content, and stripping from there to a `*/` held in a later
+// string deleted every real token between them — the url() the sheet would be
+// judged on included. The alternation consumes whole strings first and gives
+// them back untouched, so only a comment outside one is removed.
+var _FAZ_CSS_COMMENT = /("(?:[^"\\\n]|\\[\s\S])*"|'(?:[^'\\\n]|\\[\s\S])*')|\/\*[\s\S]*?\*\//g;
+// The text as the CSS tokenizer reads it: comments removed and escapes decoded,
+// both the hex form (`\72` is "r", with one optional whitespace after it, and a
+// CRLF counts as ONE because the tokenizer's preprocessing folds it first) and
+// the single-character form (`\.` is "."). `u\72l(`, `\75 rl(` and
+// `tracker\.test` each spell something the engine resolves and a regex on the
+// raw text does not see. Kept in step with normaliseCss() in bootstrap.js on
+// purpose: a sheet the pre-runtime blocker parked must read as blocking here
+// too, or this runtime drops the marker and consent restores nothing.
+function _fazNormaliseCss(css) {
+    return String(css == null ? "" : css)
+        .replace(_FAZ_CSS_COMMENT, "$1")
+        .replace(/\\([0-9a-f]{1,6})(?:\r\n|[ \t\n\r\f])?/gi, function (_m, hex) {
+            var code = parseInt(hex, 16);
+            try { return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "�"; }
+            catch (_e) { return "�"; }
+        })
+        .replace(/\\([^\n\r\f])/g, "$1");
+}
+// url() in its three spellings, plus @import in both the spaced and the tight
+// form. The bare branch stops at the first whitespace, which is right for the
+// RAW text — an unquoted url() token cannot hold one. On the normalised text it
+// is wrong: an escape that decoded to a space put one inside the token, so
+// there the body runs to the closing paren instead.
+var _FAZ_CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi;
+var _FAZ_CSS_URL_DECODED = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)]+?))\s*\)/gi;
+function _fazCssUrlsIn(css, urls, decoded) {
+    String(css).replace(decoded ? _FAZ_CSS_URL_DECODED : _FAZ_CSS_URL, function (_m, dq, sq, bare) {
         urls.push(dq || sq || bare || "");
         return _m;
     });
-    css.replace(/@import\s+(["'])([^"']+)\1/gi, function (_m, _q, url) {
+    // `@import"x.css"` needs no whitespace to be an import.
+    String(css).replace(/@import\s*(["'])([^"']+)\1/gi, function (_m, _q, url) {
         urls.push(url || "");
         return _m;
     });
+    return urls;
+}
+function _fazCssUrls(css) {
+    var urls = [];
+    if (!css || typeof css !== "string") return urls;
+    _fazCssUrlsIn(css, urls, false);
+    _fazCssUrlsIn(_fazNormaliseCss(css), urls, true);
     return urls;
 }
 
@@ -4626,9 +4663,17 @@ function _fazNeutralizeCssUrls(css) {
         var url = dq || sq || bare || "";
         return _fazCssUrlShouldBlock(url) ? 'url("' + _FAZ_INERT_CSS_URL + '")' : match;
     });
-    css = css.replace(/(@import\s+)(["'])([^"']+)\2/gi, function (match, prefix, _quote, url) {
+    css = css.replace(/(@import\s*)(["'])([^"']+)\2/gi, function (match, prefix, _quote, url) {
         return _fazCssUrlShouldBlock(url) ? prefix + 'url("' + _FAZ_INERT_CSS_URL + '")' : match;
     });
+    // Rewriting one token at a time can only reach the spellings the regexes
+    // above parse. When a URL is named in a form they cannot rewrite — an
+    // escape in the function name or in the host, an escaped space inside an
+    // unquoted url() — the rewritten text STILL fetches, and applying it would
+    // be a leak dressed as a park. Answer with the empty string instead: the
+    // callers read that as "park this sheet whole", keep the original in
+    // data-faz-css and restore it on consent.
+    if (_fazCssShouldBlock(css)) return "";
     return css;
 }
 
@@ -4696,7 +4741,18 @@ function _fazPrimeStyleCssMarkers(style) {
         // e.g. `style.textContent = "body{color:red}"` after a prior blocked
         // write left a stale data-faz-css — its value won't match, so priming is
         // skipped and the restore pass can't resurrect the old blocked CSS.
-        if (_fazNeutralizeCssUrls(original) === style.childNodes[0].nodeValue) {
+        //
+        // An EMPTY live node is the other shape a park takes, and it has to be
+        // accepted explicitly: a sheet whose URL cannot be neutralised one
+        // token at a time is parked WHOLE, with its text emptied and the
+        // original in the marker (emptySheet(), bootstrap.js). The equality
+        // above can never hold for it, so the original was never adopted, the
+        // re-sync below then rebuilt the marker from nothing and dropped it,
+        // and consent restored an empty stylesheet. An empty text node next to
+        // a marker is not something an author writes and leaves — it is what
+        // parking whole looks like.
+        var live = style.childNodes[0].nodeValue || "";
+        if (live === "" || _fazNeutralizeCssUrls(original) === live) {
             _fazSetStyleNodeOriginalCss(style.childNodes[0], original);
         }
     }
@@ -4784,6 +4840,19 @@ function _fazGateStyleTextSetter(proto, prop) {
             try {
                 if (_fazStore._block && s && _fazCssShouldBlock(s)) {
                     nativeSet.call(this, _fazNeutralizeCssUrls(s));
+                    // Parking WHOLE writes the empty string, and writing it
+                    // through textContent/innerHTML removes every child — so
+                    // there was no text node left to hang the original on, the
+                    // re-sync below rebuilt the marker from nothing and dropped
+                    // it, and consent restored an empty stylesheet. One empty
+                    // text node is what a park whole looks like everywhere
+                    // else (emptySheet(), bootstrap.js); make it look the same
+                    // here.
+                    if (!this.firstChild) {
+                        try {
+                            Node.prototype.appendChild.call(this, (this.ownerDocument || document).createTextNode(""));
+                        } catch (_e) { /* a document the element cannot take text in */ }
+                    }
                     if (_fazIsStyleTextNode(this.firstChild)) _fazSetStyleNodeOriginalCss(this.firstChild, s);
                 } else {
                     nativeSet.call(this, s);
@@ -5042,13 +5111,30 @@ function _fazGateStyleSheetInsertRule() {
     Object.defineProperty(proto, "insertRule", {
         configurable: true, writable: true, enumerable: true,
         value: function (rule, index) {
+            // The decision is taken first and kept, because from the moment a
+            // rule is refused the ORIGINAL must not be what reaches the native
+            // method. It used to: the neutralised form was inserted inside a
+            // try whose catch fell through to `native.call(this, rule, index)`,
+            // and insertRule() throws on the empty string — which is exactly
+            // what a rule whose URL cannot be rewritten one token at a time
+            // neutralises to. The refusal then inserted the refused rule.
+            var blocked = false, s = "";
             try {
-                var s = String(rule == null ? "" : rule);
-                if (_fazStore._block && s && _fazCssShouldBlock(s)) {
-                    return native.call(this, _fazNeutralizeCssUrls(s), index);
-                }
-            } catch (e) { /* fall through to native */ }
-            return native.call(this, rule, index);
+                s = String(rule == null ? "" : rule);
+                blocked = !!(_fazStore._block && s && _fazCssShouldBlock(s));
+            } catch (e) { blocked = false; }
+            if (!blocked) return native.call(this, rule, index);
+            // A rule has to land, or a caller that reads the returned index
+            // gets one that does not exist and every later index shifts. An
+            // @media query that can never match is valid CSS, occupies the
+            // slot, and fetches nothing.
+            var inert = "@media not all{}";
+            var neutral = "";
+            try { neutral = _fazNeutralizeCssUrls(s) || ""; } catch (e) { neutral = ""; }
+            try { return native.call(this, neutral || inert, index); } catch (e) { /* the inert form below */ }
+            // If this throws too the index itself is bad, and the caller is
+            // owed that error — never the rule.
+            return native.call(this, inert, index);
         }
     });
 }
