@@ -661,6 +661,14 @@
 				var derivedAdd = buildConsentArtifacts(purposes);
 				tcStr    = encodeTcString(purposes, sfAdd, false, derivedAdd);
 				data     = buildTCData(purposes, sfAdd, tcStr, listenerId, derivedAdd);
+				// Registration reports `tcloaded`, not the current UI state.
+				// Reporting cmpuishown here instead looked like the stricter
+				// reading of the spec, and it is the wrong one for this API:
+				// the events describe TRANSITIONS, and a listener added after
+				// the banner was revealed genuinely missed that transition —
+				// `ping` is the documented way to ask what the UI is doing
+				// right now, and it answers correctly. Changing this broke
+				// T03c and T09, which pin the registration status on purpose.
 				data.eventStatus = "tcloaded";
 				callback(data, true);
 				break;
@@ -766,10 +774,26 @@
 	}, false);
 
 	// Track banner visibility for ping displayStatus.
-	document.addEventListener("fazcookie_banner_loaded", function () {
+	//
+	// `fazcookie_banner_loaded` is ONE-SHOT, and this file is enqueued with
+	// script.js as a dependency: under ordered defer script.js finds the DOM
+	// already parsed, so it can reveal the banner and fire the event during its
+	// own execution, before this script has run at all. A listener registered
+	// afterwards waits for an event that never comes again, and the CMP then
+	// answers `hidden` for a banner the visitor is looking at, for the rest of
+	// the page view — with no `cmpuishown` for any vendor. script.js records
+	// window._fazBannerLoaded BEFORE dispatching, saying in its own comment
+	// that it is there so late-running enhancers can recover the state; this is
+	// that reader.
+	function markBannerShown() {
+		if (displayOpen) return;
 		displayOpen = true;
 		notifyListeners("cmpuishown");
-	});
+	}
+	document.addEventListener("fazcookie_banner_loaded", markBannerShown);
+	if (true === window._fazBannerLoaded) {
+		markBannerShown();
+	}
 
 	document.addEventListener("fazcookie_consent_update", function (event) {
 		var action = event && event.detail ? event.detail.action : "";

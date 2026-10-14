@@ -455,6 +455,7 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Fixed: A tracker address written with backslashes, or with a scheme and no slashes (`https:tracker.example/p.png`), inside an embedded document was read as a tracker by the server and as nothing by the runtime. Browsers resolve every one of those spellings to the same host, so the request went out.
 * Fixed: A stylesheet address carrying credentials before the host (`url(https://user@tracker.example/f.woff2)`) was not recognised as belonging to a known provider, so the resource was not held back. Firefox does fetch such addresses.
 * Fixed: An embedded document written directly in a post could be damaged rather than delayed. The pass that protects scripts wrote its own attribute inside the embedded markup and cut the document short at the first quotation mark, so the embed was destroyed instead of being restored after consent. The embed is now set aside untouched and comes back exactly as it was written.
+* Fixed: With the new deferred loading, the IAB TCF framework could report its own interface as not displayed while the consent banner was on screen, so a vendor asking through the TCF API was told the notice had never been shown. The runtime already recorded that the banner had appeared; the framework now reads that record instead of relying only on an event it could arrive too late to hear.
 
 = 1.34.0 =
 * Fixed: The banner did not render at all with WPSpeed by JExtensions active, for two separate reasons. Its image optimiser rewrites the page through an HTML4 parser that truncates the banner template at the first closing tag, leaving a 0 px consent bar with no buttons; and because it combines and defers the scripts, initialisation ran before part of the file existed and died halfway. The template is now written so both parsers keep it intact, and initialisation runs in the same order whether the script is deferred, async, combined or delayed.
@@ -531,17 +532,5 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Fixed: three more locales pointed at translations WordPress does not have. `es_PY`, `en_IN` and `en_IE` have never existed, so a Paraguayan visitor was served English instead of Spanish, and Ireland and India silently lost the British spelling that mapping exists to preserve.
 * Localisation: 20 new strings added to the catalogues and translated into Italian.
 
-= 1.28.1 =
-* Fixed: a cached page could serve one visitor's jurisdiction to another when Cloudflare's country header was trusted. The check deciding whether output varies by country required the `CF-IPCountry` header on the current request, so a cache warmer — or anything reaching the origin without passing through Cloudflare — was told no country source existed, and its response was cached without the country cache-bust. A later visitor whose header did identify their country could then be served that cached page with the fallback rule set and banner instead of their own. Narrow to reach, since trusting the header is opt-in and off by default, but the failure is an EEA visitor served an opt-out banner from cache.
-
-= 1.28.0 =
-* Changed: fresh installs now enable the 47-law jurisdiction runtime, and a new cache-safe bootstrap can serve one strict GDPR shell and resolve the live law before the banner mounts, so a compatible page cache no longer has to be given up for correct per-country rules. Every unsupported configuration is named in the admin and falls back to the existing no-cache path.
-* Changed: sites upgrading from 1.27.x keep the enforcement they already had. The Geo-Targeting toggle is now authoritative, so a one-time migration turns it on and normalises a dormant "no banner" default, leaving banner visibility unchanged. A dismissible notice explains the change.
-* Fixed: turning Geo-Targeting off restores full-page caching without a PHP snippet, and LiteSpeed CSS optimisation no longer produces an unstyled banner first paint.
-* Fixed: WooCommerce look-alike scripts are blockable again. The three strictly-necessary handles were also reaching the general whitelist, which matches by token prefix against id and class, so names like `wc-settings-tracker-js` were being exempted from consent blocking.
-* Fixed: Croatian translations load again — the catalogue shipped under a locale WordPress does not have — and ten further invalid country-to-locale mappings are corrected.
-* Fixed: admin controls that the jurisdiction runtime overrides now say so instead of silently doing nothing, and preference-centre colours reach every rendered element including the audit table and the "Always Active" label.
-
-
 = Older versions =
-Older releases (1.25.0 and earlier) are listed in the full changelog on GitHub, linked at the top of this section.
+Older releases (1.28.1 and earlier) are listed in the full changelog on GitHub, linked at the top of this section.
