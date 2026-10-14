@@ -124,6 +124,10 @@ for (const consent of ['no', 'yes']) {
         hadSetHTMLUnsafe: (window as any).hasSetHTMLUnsafe === true,
       };
     });
+    // The premise of both unsafe-css checks below. Computed and never asserted,
+    // a missing setHTMLUnsafe turned every `not.toContain('/unsafe-css.png')`
+    // into a pass that proved nothing about the route.
+    expect(parked.hadSetHTMLUnsafe).toBe(true);
     expect(parked.writtenText).toBe('');
     expect(parked.writtenParked).toBe(true);
     // A shadow root's markup is judged like the document's: parked under the
@@ -144,9 +148,19 @@ for (const consent of ['no', 'yes']) {
 
     if (consent === 'yes') {
       await expect.poll(() => requests.includes('/written-css.png'), { timeout: 10_000 }).toBe(true);
+      // The header's own requirement: EVERY held sheet comes back. Without this
+      // the setHTMLUnsafe route was only ever checked in the negative, so a
+      // sheet held forever would have read as success.
+      await expect.poll(() => requests.includes('/unsafe-css.png'), { timeout: 10_000 }).toBe(true);
     } else {
       // Still blocked, now by the runtime's own neutralisation rather than by
-      // an emptied element.
+      // an emptied element. A background-image is requested when a matching
+      // element is first rendered, which is a frame away, so a check taken the
+      // instant the text returns can beat the request it means to rule out:
+      // give it two frames to happen first.
+      await page.evaluate(() => new Promise<void>((r) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => r()));
+      }));
       expect(requests).not.toContain('/written-css.png');
       expect(requests).not.toContain('/unsafe-css.png');
     }

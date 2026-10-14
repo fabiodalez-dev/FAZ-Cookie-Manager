@@ -4457,9 +4457,29 @@ function _fazMarkupUrls(markup) {
             text = area.value;
         }
     } catch (e) { /* search the raw text */ }
-    text = text.replace(/\\\//g, "/");
-    var found = text.match(/(?:https?:)?\/\/[^\s"'<>)]+/gi);
-    return found || [];
+    // Every spelling that names a host to the WHATWG parser, not just a
+    // literal `//`: for a special scheme a backslash IS a slash, and any run
+    // of slashes after `https:` is ignored — so `https:host`, `https:/host`,
+    // `\\host`, `/\\host` and `\\/host` all fetch from that host. The server
+    // already judges all of them inside a srcdoc (M2 and the backslash block
+    // of test-unwatched-resource-routes-php.php) and this side read none of
+    // them, which is the layer disagreement the pair keeps falling into.
+    var MARKUP_URL = /(?:https?:[\\\/]*|[\\\/]{2})[^\s"'<>)\\\/][^\s"'<>)]*/gi;
+    var found = [];
+    var push = function (list) {
+        for (var i = 0; i < list.length; i++) {
+            if (found.indexOf(list[i]) === -1) found.push(list[i]);
+        }
+    };
+    // The raw text first. Collapsing `\\/` to `/` BEFORE the match would turn
+    // `\\/host` — protocol-relative to the parser — into a first-party path and
+    // lose the host, so the escaped form is read as a second, separate pass
+    // rather than in place: the same union _fazCssUrls does for the decoded
+    // spelling of a sheet.
+    push(text.match(MARKUP_URL) || []);
+    var unescaped = text.replace(/\\\//g, "/");
+    if (unescaped !== text) push(unescaped.match(MARKUP_URL) || []);
+    return found;
 }
 function _fazMarkupBlockedCategory(el, markup) {
     var urls = _fazMarkupUrls(markup);
@@ -4845,7 +4865,15 @@ var _FAZ_CSS_URL_DECODED = /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\
 var _FAZ_CSS_URL_OPEN = /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)|'((?:[^'\\]|\\[\s\S])*)|([^\)\s]*))\s*$/i;
 // image-set() and src() name a file with a bare string and no url() around it.
 // src() was the other form bootstrap.js read and this one did not.
-var _FAZ_CSS_STRING_FN = /(?:-webkit-)?(?:image-set|src)\(([^()]*)\)/gi;
+//
+// The body allows ONE level of nesting, which is the depth bootstrap.js's
+// CSS_STRING_FN has always had. A flat `[^()]*` stopped at the first nested
+// token, so `image-set(url(a.png) 1x, "https://tracker.test/b.png" 2x)` never
+// reached the string after the url() — the server parked that sheet and the
+// runtime called it clean, which is the layer disagreement this pair keeps
+// falling back into. Deeper nesting than one level is not valid in either
+// function's grammar.
+var _FAZ_CSS_STRING_FN = /(?:-webkit-)?(?:image-set|src)\(((?:[^()]|\([^()]*\))*)\)/gi;
 function _fazCssUrlsRaw(css, decoded) {
     var urls = [];
     if (!css || typeof css !== "string") return urls;
