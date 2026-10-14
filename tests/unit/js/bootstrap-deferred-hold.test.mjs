@@ -1798,6 +1798,42 @@ for (const [label, css, blocked, needle] of TOKENIZER_CASES) {
   eq('with no marker', sheet && sheet.getAttribute('data-faz-css'), null);
 }
 
+console.log('\nparked means nothing of it fetches, whatever spelling it took');
+
+// A verdict decided by string identity called a sheet rewritable when the
+// same URL appeared once in a form neutralise() rewrites and once in one it
+// does not: the first spelling was replaced, the second stayed live, and
+// /h1.png was fetched at the handoff and on the safety release alike. The
+// rewrite is now re-judged, and whatever still fetches parks the sheet whole.
+const TWICE_SPELLED = [
+  ['url() next to an escaped url()', '.p1{background-image:url(https://tracker.test/h1.png)} .p2{background-image:u\\72l(https://tracker.test/h1.png)}'],
+  ['@import url() next to @import with no whitespace', '@import url(https://tracker.test/h1.css); @import"https://tracker.test/h1.css";'],
+];
+for (const [label, css] of TWICE_SPELLED) {
+  const { window, document } = boot();
+  const s = document.createElement('style');
+  document.head.appendChild(s);
+  s.textContent = css;
+  refusingHandoff(window);
+  eq(label + ': parked whole at a refusing handoff', s.textContent, '');
+  ok(label + ': with nothing of it live', !trackerLive(document));
+  eq(label + ': and the original in the marker', parkedCss(s), css);
+}
+for (const [label, css] of TWICE_SPELLED) {
+  // Into a host already in the document, so the markup sink is the only
+  // judge the sheet meets.
+  const { window, document } = boot();
+  const d = document.createElement('div');
+  document.body.appendChild(d);
+  await release(window);
+  d.innerHTML = '<style id="twice">' + css + '</style>';
+  await Promise.resolve();
+  await Promise.resolve();
+  const sheet = document.getElementById('twice');
+  eq(label + ': parked whole through markup after the release', sheet && sheet.textContent, '');
+  ok(label + ': with nothing of it live', !trackerLive(document));
+}
+
 console.log('\nbootstrap: the last four routes into a sheet, and a policy that throws');
 
 {
@@ -1891,6 +1927,91 @@ for (const name of ['deleteContents', 'extractContents']) {
   eq('a throwing policy.script does not escape finish()', thrown, null);
   await Promise.resolve();
   eq('and the queue still drains: the held fetch went out', fetched.length, 1);
+}
+
+{
+  // A hex escape followed by CRLF: the tokenizer folds the pair into one
+  // newline the escape consumes; eating only the `\r` left `u\nrl(`.
+  const { window, document } = boot();
+  const s = document.createElement('style');
+  document.head.appendChild(s);
+  s.textContent = '.p3{background-image:\\75\r\nrl(https://tracker.test/x.png)}';
+  refusingHandoff(window);
+  ok('an escape followed by CRLF is read as the tokenizer reads it', !trackerLive(document));
+  eq('and the sheet is parked', s.textContent, '');
+}
+
+// The whole-park form keeps exactly one empty text node. The runtime adopts
+// the original from the marker only when the element has exactly one text
+// child, and with zero children the first append through its gate re-synced
+// the marker from nothing and dropped it, so the original was never restored.
+// The gate here is the runtime's own `append`, reduced to that adopt-and-sync.
+function installRuntimeAppend(window) {
+  const native = window.Element.prototype.append;
+  const originals = new WeakMap();
+  window.HTMLStyleElement.prototype.append = function () {
+    const kids = this.childNodes;
+    if (kids.length === 1 && kids[0].nodeType === 3 && !originals.has(kids[0])) {
+      const marker = this.getAttribute('data-faz-css');
+      if (marker) originals.set(kids[0], Buffer.from(marker, 'base64').toString('utf8'));
+    }
+    native.apply(this, arguments);
+    let original = '';
+    for (const kid of this.childNodes) original += originals.has(kid) ? originals.get(kid) : (kid.nodeValue || '');
+    if (/tracker\.test/.test(original)) this.setAttribute('data-faz-css', Buffer.from(original, 'utf8').toString('base64'));
+    else this.removeAttribute('data-faz-css');
+  };
+}
+{
+  const ORIGINAL = '.p{background-image:u\\72l(https://tracker.test/h2.png)}';
+  const { window, document } = boot();
+  const s = document.createElement('style');
+  document.head.appendChild(s);
+  s.textContent = ORIGINAL;
+  window._fazBootstrap.start();
+  installRuntimeAppend(window);
+  window._fazBootstrap.finish({
+    script: function () {},
+    node: function () {},
+    url: function (url) { return /tracker\.test/.test(String(url)); },
+    category: function () { return 'marketing'; },
+  });
+  eq('premise: parked whole', s.textContent, '');
+  eq('a sheet parked whole keeps exactly one text child', s.childNodes.length, 1);
+  s.append('.z{color:blue}');
+  ok("after the page's first append the marker is still there", !!s.getAttribute('data-faz-css'));
+  ok('and still carries the original', parkedCss(s).indexOf(ORIGINAL) === 0);
+}
+
+console.log('\nhandoff: a policy.script that throws is a refusal, and the queue still drains');
+
+// finish() ran the script list bare: a throw on one element aborted the loop
+// and the drain after it with `pending` already false, so every held fetch
+// and XHR stayed suspended for the page view — and the element it threw on
+// was left unjudged, its staged src replayed as allowed. Decided explicitly
+// now: a decision nobody made is a refusal.
+{
+  const { window, document, fetched, nativeGetAttribute } = boot();
+  const script = document.createElement('script');
+  script.src = 'https://tracker.test/throws.js';
+  document.head.appendChild(script);
+  window.fetch(SITE + 'wp-json/cart');
+  let thrown = null;
+  window.console.warn = function () {};
+  window._fazBootstrap.start();
+  try {
+    window._fazBootstrap.finish({
+      script: function () { throw new Error('boom'); },
+      node: function () {},
+      url: function () { return false; },
+    });
+  } catch (e) { thrown = e; }
+  eq('a throwing policy.script does not escape finish()', thrown, null);
+  eq('the script it threw on is stamped inert', nativeGetAttribute.call(script, 'type'), 'javascript/blocked');
+  eq('with its staged src parked, not replayed', nativeGetAttribute.call(script, 'data-faz-src'), 'https://tracker.test/throws.js');
+  eq('and no live src', nativeGetAttribute.call(script, 'src'), null);
+  await Promise.resolve();
+  eq('while the queue still drains: the held first-party fetch went out', fetched.length, 1);
 }
 
 console.log('\nhandoff: the policy matches URLs the way the runtime does');
