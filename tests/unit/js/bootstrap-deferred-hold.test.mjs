@@ -1812,6 +1812,37 @@ function installRuntimeAppend(window) {
   ok('and still carries the original', parkedCss(s).indexOf(ORIGINAL) === 0);
 }
 
+console.log('\nhandoff: a policy.script that throws is a refusal, and the queue still drains');
+
+// finish() ran the script list bare: a throw on one element aborted the loop
+// and the drain after it with `pending` already false, so every held fetch
+// and XHR stayed suspended for the page view — and the element it threw on
+// was left unjudged, its staged src replayed as allowed. Decided explicitly
+// now: a decision nobody made is a refusal.
+{
+  const { window, document, fetched, nativeGetAttribute } = boot();
+  const script = document.createElement('script');
+  script.src = 'https://tracker.test/throws.js';
+  document.head.appendChild(script);
+  window.fetch(SITE + 'wp-json/cart');
+  let thrown = null;
+  window.console.warn = function () {};
+  window._fazBootstrap.start();
+  try {
+    window._fazBootstrap.finish({
+      script: function () { throw new Error('boom'); },
+      node: function () {},
+      url: function () { return false; },
+    });
+  } catch (e) { thrown = e; }
+  eq('a throwing policy.script does not escape finish()', thrown, null);
+  eq('the script it threw on is stamped inert', nativeGetAttribute.call(script, 'type'), 'javascript/blocked');
+  eq('with its staged src parked, not replayed', nativeGetAttribute.call(script, 'data-faz-src'), 'https://tracker.test/throws.js');
+  eq('and no live src', nativeGetAttribute.call(script, 'src'), null);
+  await Promise.resolve();
+  eq('while the queue still drains: the held first-party fetch went out', fetched.length, 1);
+}
+
 console.log('\nhandoff: the policy matches URLs the way the runtime does');
 
 // The policy handed to finish() used to match the raw URL string, while the

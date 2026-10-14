@@ -2079,9 +2079,46 @@
         queue = [];
         immediate = safety;
         replaying++;
-        try { scripts.forEach(safety.script); } finally { replaying--; }
-        scripts = [];
+        try { judgeScripts(safety); } finally { replaying--; }
         tasks.forEach(function (task) { run(task, safety); });
+    }
+    // Every script the page created, judged one by one and each on its own,
+    // the way run() treats a task. A policy that threw on one element used to
+    // abort the loop AND the drain that followed it, with `pending` already
+    // false: every held fetch and XHR on the page suspended for good, over one
+    // script. And the element itself, left unjudged, had its staged src
+    // replayed as allowed — a throw read as permission. Decided the other way
+    // now, explicitly: a decision nobody made is a refusal. The script is
+    // stamped inert and its URL, live or staged, is parked where the runtime
+    // restores from, so the one error a consent runtime can have never runs
+    // a script.
+    function judgeScripts(policy) {
+        var list = scripts;
+        scripts = [];
+        list.forEach(function (el) {
+            try { policy.script(el); }
+            catch (error) {
+                w.console.warn('[FAZ Cookie Manager] Deferred script decision failed; the script stays blocked', error);
+                refuseScript(el);
+            }
+        });
+    }
+    function refuseScript(el) {
+        if (!nativeHas.call(el, 'data-faz-original-type') && attr(el, 'type')) setAttr(el, 'data-faz-original-type', attr(el, 'type'));
+        setAttr(el, 'type', 'javascript/blocked');
+        setAttr(el, 'data-faz-blocked-by-us', '1');
+        // The staged record is retired with its URL parked, or its own task
+        // would still replay the assignment as the policy allows it.
+        var values = staged.get(el);
+        if (values && values.src) {
+            parkAttribute(el, 'src', values.src.value, null);
+            delete values.src;
+        }
+        var live = attr(el, 'src');
+        if (live) {
+            parkAttribute(el, 'src', live, null);
+            dropAttr(el, 'src');
+        }
     }
     // Deferred scripts always run before DOMContentLoaded, so still pending at
     // that point means the runtime is not coming.
@@ -2118,8 +2155,7 @@
             handoffs.forEach(function (capture) { capture(); });
             handoffs = [];
             pending = false;
-            scripts.forEach(policy.script);
-            scripts = [];
+            judgeScripts(policy);
             var tasks = queue;
             queue = [];
             tasks.forEach(function (task) { run(task, policy); });
