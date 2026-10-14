@@ -4818,10 +4818,19 @@ function _fazCssDecodeEscapes(css) {
 // whitespace, the string form of image-set(), and all of them again on a copy
 // with CSS escapes decoded, because an escape can hide the function name or
 // a character of the host from the raw text.
-function _fazCssUrlsRaw(css) {
+// The bare branch of the url() pattern stops at the first whitespace, which is
+// right for the RAW text: an unquoted url() token cannot hold one. On the
+// DECODED copy it is wrong — an escape that decoded to a space put one inside
+// the token, so `url(https://tracker.test/a\ b.png)` matched neither pass and
+// no URL was read out of the sheet at all. On the decoded text the whitespace
+// is already part of the URL the engine resolved, so the body runs to the
+// closing paren instead.
+var _FAZ_CSS_URL_BARE = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi;
+var _FAZ_CSS_URL_DECODED = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)]+?))\s*\)/gi;
+function _fazCssUrlsRaw(css, decoded) {
     var urls = [];
     if (!css || typeof css !== "string") return urls;
-    css.replace(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi, function (_m, dq, sq, bare) {
+    css.replace(decoded ? _FAZ_CSS_URL_DECODED : _FAZ_CSS_URL_BARE, function (_m, dq, sq, bare) {
         urls.push(dq || sq || bare || "");
         return _m;
     });
@@ -4842,7 +4851,7 @@ function _fazCssUrls(css) {
     var urls = _fazCssUrlsRaw(css);
     var decoded = _fazCssDecodeEscapes(css);
     if (decoded !== css) {
-        var more = _fazCssUrlsRaw(decoded);
+        var more = _fazCssUrlsRaw(decoded, true);
         for (var i = 0; i < more.length; i++) {
             if (urls.indexOf(more[i]) === -1) urls.push(more[i]);
         }
@@ -4973,6 +4982,18 @@ function _fazPrimeStyleCssMarkers(style) {
         var holder = (style.ownerDocument || document).createTextNode("");
         _fazNativeNodeAppendChild.call(style, holder);
         _fazSetStyleNodeOriginalCss(holder, original);
+        return;
+    }
+    // The OTHER shape a park whole takes, and the one the pre-runtime blocker
+    // actually writes: emptySheet() (bootstrap.js) leaves exactly ONE empty
+    // Text node, for this very reason. Only the no-children case was covered,
+    // so a sheet parked by the bootstrap reached the equality below — which
+    // compares the neutralised original against an empty string and can never
+    // hold — was never adopted, and the first append dropped its marker.
+    if (style.childNodes.length === 1 && _fazIsStyleTextNode(style.childNodes[0])
+        && !_fazHasStyleNodeOriginalCss(style.childNodes[0])
+        && (style.childNodes[0].nodeValue || "") === "") {
+        _fazSetStyleNodeOriginalCss(style.childNodes[0], original);
         return;
     }
     if (style.childNodes.length === 1 && _fazIsStyleTextNode(style.childNodes[0]) && !_fazHasStyleNodeOriginalCss(style.childNodes[0])) {
@@ -5371,13 +5392,31 @@ function _fazGateInsertRuleOn(proto) {
     Object.defineProperty(proto, "insertRule", {
         configurable: true, writable: true, enumerable: true,
         value: function (rule, index) {
+            // The decision is taken first and KEPT, because past a refusal the
+            // original must never be what reaches the sheet. It used to be: the
+            // neutralised form was inserted inside a try whose catch fell
+            // through to `native.call(this, rule, index)`, and insertRule()
+            // throws on the empty string — which is exactly what
+            // _fazNeutralizeCssUrls answers for a rule whose URL it cannot
+            // rewrite one token at a time. The refusal then inserted the
+            // refused rule, and the engine fetched it.
+            var blocked = false, s = "";
             try {
-                var s = String(rule == null ? "" : rule);
-                if (_fazStore._block && s && _fazCssShouldBlock(s)) {
-                    return native.call(this, _fazNeutralizeCssUrls(s), index);
-                }
-            } catch (e) { /* fall through to native */ }
-            return native.call(this, rule, index);
+                s = String(rule == null ? "" : rule);
+                blocked = !!(_fazStore._block && s && _fazCssShouldBlock(s));
+            } catch (e) { blocked = false; }
+            if (!blocked) return native.call(this, rule, index);
+            // Something has to land: a caller that reads the returned index
+            // gets one that does not exist otherwise, and every later index
+            // shifts under it. An @media query that can never match is valid
+            // CSS, holds the slot, and fetches nothing.
+            var inert = "@media not all{}";
+            var neutral = "";
+            try { neutral = _fazNeutralizeCssUrls(s) || ""; } catch (e) { neutral = ""; }
+            try { return native.call(this, neutral || inert, index); } catch (e) { /* the inert form below */ }
+            // If this throws too, the index itself is bad and the caller is
+            // owed that error — never the rule.
+            return native.call(this, inert, index);
         }
     });
 }
@@ -5394,16 +5433,22 @@ function _fazGateStyleSheetInsertRule() {
     Object.defineProperty(proto, "addRule", {
         configurable: true, writable: true, enumerable: true,
         value: function (selector, block, index) {
+            // Same rule as insertRule above: once refused, the original block
+            // is not what gets written, whatever goes wrong afterwards.
+            var blocked = false, b = "";
             try {
-                var b = String(block == null ? "" : block);
-                if (_fazStore._block && b && _fazCssShouldBlock(selector + "{" + b + "}")) {
-                    var neutral = _fazNeutralizeCssUrls(selector + "{" + b + "}");
-                    // Whole-sheet fallback came back empty: insert an empty block.
-                    var inner = neutral ? neutral.slice(String(selector).length + 1, -1) : "";
-                    return nativeAdd.call(this, selector, inner, index);
-                }
-            } catch (e) { /* fall through to native */ }
-            return nativeAdd.call(this, selector, block, index);
+                b = String(block == null ? "" : block);
+                blocked = !!(_fazStore._block && b && _fazCssShouldBlock(selector + "{" + b + "}"));
+            } catch (e) { blocked = false; }
+            if (!blocked) return nativeAdd.call(this, selector, block, index);
+            var inner = "";
+            try {
+                var neutral = _fazNeutralizeCssUrls(selector + "{" + b + "}");
+                // Whole-sheet fallback came back empty: insert an empty block.
+                inner = neutral ? neutral.slice(String(selector).length + 1, -1) : "";
+            } catch (e) { inner = ""; }
+            try { return nativeAdd.call(this, selector, inner, index); } catch (e) { /* the empty block below */ }
+            return nativeAdd.call(this, selector, "", index);
         }
     });
 }

@@ -635,6 +635,31 @@ namespace {
 	assert_true( false !== strpos( $out, 'data-faz-href="https://cdn.tracker.test/h.png"' ), 'and the href next to it still parks as data-faz-href' );
 	assert_true( ! preg_match( '/(?<![\w:-])src=/', $out ), 'with no src left live' );
 
+	// srcset on the same element, for the same reason as src: the tree builder
+	// keeps every attribute when it turns <image> into <img>, and the browser
+	// picks a candidate from srcset in PREFERENCE to src. The <img> pass has
+	// parked both since the responsive-beacon fix; this one listed only src, so
+	// a tag carrying srcset ALONE had nothing to park and came back untouched.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><image srcset="https://cdn.tracker.test/p.png 1x"></body></html>' );
+	assert_true( false !== strpos( $out, 'data-faz-srcset="https://cdn.tracker.test/p.png 1x"' ), '<image srcset> alone is parked as data-faz-srcset' );
+	assert_true( false !== strpos( $out, 'data-faz-srcset-category=' ), 'and carries the category its own restore reads' );
+	assert_true( ! preg_match( '/(?<![\w:-])srcset=/', $out ), 'with no srcset left live' );
+
+	// And next to a src, both leave: parking one of the two would let the other
+	// fetch on its own.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><image src="https://cdn.tracker.test/s.png" srcset="https://cdn.tracker.test/p.png 2x"></body></html>' );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/s.png"' ), '<image src> next to a srcset still parks' );
+	assert_true( false !== strpos( $out, 'data-faz-srcset="https://cdn.tracker.test/p.png 2x"' ), 'and the srcset parks with it' );
+	assert_true( ! preg_match( '/(?<![\w:-])(?:src|srcset)=/', $out ), 'with neither left live' );
+
+	// A first-party srcset is left exactly as it was: the park is for what the
+	// origin test refuses, not for the attribute's name.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><body><image srcset="/wp-content/own.png 1x"></body></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'a same-origin <image srcset> comes out byte-identical' );
+
 	// The "lite embed" pattern: an allowed srcdoc with a blocked src. The src
 	// is inert while srcdoc is present, so there is nothing to park, and the
 	// placeholder wrap used to destroy the srcdoc on its way through wp_kses.
@@ -821,6 +846,7 @@ namespace {
 
 	echo "\n-- a megabyte of type attributes --\n";
 
+	$spent_by_size = array();
 	foreach ( array( 1048576, 1572864 ) as $bytes ) {
 		$fe    = faz_ob_frontend( $providers, $blocked );
 		$many  = str_repeat( 'type="module" ', (int) ( $bytes / 14 ) );
@@ -832,10 +858,23 @@ namespace {
 		$spent  = microtime( true ) - $t0;
 		$grown  = memory_get_peak_usage() - $before;
 		assert_true( false !== strpos( $out, 'type="text/plain"' ) && ! preg_match( '/(?<![\w-])type="module"/', $out ), sprintf( '%.1f MB of type attributes: every one re-typed', $bytes / 1048576 ) );
-		assert_true( $spent < 1.0, sprintf( 'in linear time (%.2fs)', $spent ) );
 		assert_true( $grown < 16 * 1048576, sprintf( 'with peak memory up by a few MB at most (%.1f MB)', $grown / 1048576 ) );
+		$spent_by_size[ $bytes ] = $spent;
 		unset( $html, $out, $many );
 	}
+
+	// What this measures is the QUADRATIC pass this one replaced — 3.2s and
+	// 7.4s, growing with the square of the input. An absolute ceiling cannot
+	// say that: the one that used to be here was 1.0s, which this laptop meets
+	// and a GitHub-hosted runner does not (measured 1.23s and 1.83s, every
+	// run), so the Quality check would go red on hardware and not on a defect.
+	// The RATIO is the part no machine changes: 1.5x the input costs about
+	// 1.5x linear and about 2.25x quadratic, and 1.9 separates them with margin
+	// on both sides. The generous absolute ceiling stays as a backstop for a
+	// run that is pathological rather than merely slow.
+	$ratio = $spent_by_size[1048576] > 0 ? $spent_by_size[1572864] / $spent_by_size[1048576] : 0;
+	assert_true( $ratio > 0 && $ratio < 1.9, sprintf( '1.5x the input costs about 1.5x the time, not its square (%.2fx)', $ratio ) );
+	assert_true( $spent_by_size[1572864] < 10.0, sprintf( 'and stays far under the old quadratic cost (%.2fs)', $spent_by_size[1572864] ) );
 
 	// ---------- result ----------
 

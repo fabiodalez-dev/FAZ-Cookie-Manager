@@ -4982,16 +4982,27 @@ class Frontend {
 		// first legacy one) is what gets parked. Outside <svg> the tree
 		// builder turns <image> into <img>, which fetches `src`, so on that
 		// tag src is parked as data-faz-src too — the restore pass for <img>
-		// reads it there. Edits from the end, so earlier offsets stay valid.
-		$wanted = 'image' === $tag ? array( 'href', 'xlink:href', 'src' ) : array( 'href', 'xlink:href' );
+		// reads it there. `srcset` goes with it for the reason the <img> pass
+		// gives: the tree builder keeps every attribute, and the browser picks
+		// a candidate from srcset in PREFERENCE to src, so a responsive beacon
+		// needs no src at all. Listing only src left a tag carrying srcset
+		// alone with nothing to park, and the early return below handed it
+		// back untouched. Edits from the end, so earlier offsets stay valid.
+		$wanted = 'image' === $tag ? array( 'href', 'xlink:href', 'src', 'srcset' ) : array( 'href', 'xlink:href' );
 		$tokens = $this->tokenize_tag_attrs( $attrs, $wanted );
 		$value  = '';
 		$legacy = '';
 		$parked = $attrs;
 		$src    = false;
+		$srcset = false;
 		for ( $i = count( $tokens ) - 1; $i >= 0; $i-- ) {
 			$token = $tokens[ $i ];
 			if ( null === $token['value'] ) {
+				continue;
+			}
+			if ( 'srcset' === $token['key'] ) {
+				$parked = substr_replace( $parked, ' data-faz-srcset=' . $token['value'], $token['offset'], $token['length'] );
+				$srcset = true;
 				continue;
 			}
 			if ( 'src' === $token['key'] ) {
@@ -5009,14 +5020,20 @@ class Frontend {
 		if ( '' === $value ) {
 			$value = $legacy;
 		}
-		if ( '' === $value && ! $src ) {
+		if ( '' === $value && ! $src && ! $srcset ) {
 			return $full; // Nothing fetchable to park.
 		}
 
 		// Metadata BEFORE the captured attributes, for the same reason as
 		// process_img_tag(): a self-closing tag keeps its slash inside $attrs.
 		$metadata = '' !== $value ? ' data-faz-href=' . $value : '';
-		return '<' . $tag . $this->label_category_first( $metadata . $parked, $matched_category ) . $close . '>';
+		$out      = $this->label_category_first( $metadata . $parked, $matched_category );
+		if ( $srcset ) {
+			// The srcset restore reads its category from its own attribute, as
+			// it does on an <img>; the matcher's, alone.
+			$out = ' data-faz-srcset-category="' . esc_attr( $matched_category ) . '"' . $this->strip_attr_tokens( $out, 'data-faz-srcset-category' );
+		}
+		return '<' . $tag . $out . $close . '>';
 	}
 
 	/**
