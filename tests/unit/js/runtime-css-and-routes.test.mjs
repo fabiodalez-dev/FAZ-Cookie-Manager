@@ -304,5 +304,90 @@ console.log('\nruntime: a URL is matched as the engine resolves it (server parit
   eq('control: the plain tracker URL still matches', matches('https://tracker.test/p'), 1);
 }
 
+console.log('\ncss: a hex escape followed by CRLF');
+
+// 1 — the tokenizer swallows ONE whitespace after a hex escape, and CRLF is
+// one whitespace to it; the regex ate only the CR and left `u\nrl(`.
+{
+  const w = runtime();
+  const s = w.document.createElement('style');
+  s.textContent = '.p3{background-image:\\75\r\nrl(https://tracker.test/x.png)}';
+  ok('\\75 followed by CRLF: the live text names no tracker', s.textContent.indexOf('tracker.test') === -1);
+  ok('and the original is parked', !!s.getAttribute('data-faz-css'));
+}
+
+console.log('\nroutes the bootstrap replays onto');
+
+// 2a — outerHTML carries markup like innerHTML does.
+{
+  const w = runtime({ body: '<p id="p">x</p>' });
+  w.document.getElementById('p').outerHTML = '<style id="h3">@import url(https://tracker.test/h3.css);</style>';
+  const s = w.document.getElementById('h3');
+  ok('premise: the style replaced the paragraph', !!s);
+  ok('outerHTML: the written sheet names no tracker', s.textContent.indexOf('tracker.test') === -1);
+  ok('and carries the original', !!s.getAttribute('data-faz-css'));
+}
+// 2b — setAttributeNS with a null namespace on an HTML element.
+{
+  const w = runtime();
+  const link = w.document.createElement('link');
+  link.rel = 'stylesheet';
+  link.setAttributeNS(null, 'href', 'https://tracker.test/f2.css');
+  eq('setAttributeNS(null, "href") on a <link>: not written', link.getAttribute('href'), null);
+  eq('and parked', link.getAttribute('data-faz-href'), 'https://tracker.test/f2.css');
+  const img = w.document.createElement('img');
+  img.setAttributeNS(null, 'src', 'https://tracker.test/i.png');
+  eq('the same on an <img> src', img.getAttribute('data-faz-src'), 'https://tracker.test/i.png');
+  const local = w.document.createElement('img');
+  local.setAttributeNS(null, 'src', '/local.png');
+  eq('a same-origin one is written', local.getAttribute('src'), '/local.png');
+}
+// 2c — Node.prototype.textContent on a Text child of a <style>.
+{
+  const w = runtime();
+  const s = w.document.createElement('style');
+  s.textContent = '.a{color:red}';
+  w.document.head.appendChild(s);
+  s.firstChild.textContent = '.p{background:url(https://tracker.test/t.png)}';
+  ok('a Text child written through textContent: the live text names no tracker', s.textContent.indexOf('tracker.test') === -1);
+  ok('and the original is parked', !!s.getAttribute('data-faz-css'));
+}
+// 2d — innerText: not implemented by jsdom, guarded in the runtime, stated here.
+console.log('  skip innerText on <style>: not implemented by this jsdom');
+// 2e — a Range edit that completes a tracker host.
+for (const method of ['deleteContents', 'extractContents']) {
+  const w = runtime();
+  const s = w.document.createElement('style');
+  s.textContent = '.p{background:url(https://tracker.te.st/r.png)}';
+  w.document.head.appendChild(s);
+  const text = s.firstChild;
+  const at = text.data.indexOf('te.st') + 2;
+  const range = w.document.createRange();
+  range.setStart(text, at);
+  range.setEnd(text, at + 1);
+  range[method]();
+  ok(`Range.${method} completing a tracker host: the live text names no tracker`, s.textContent.indexOf('tracker.test') === -1);
+  ok('and the original is parked', !!s.getAttribute('data-faz-css'));
+}
+
+console.log('\ncss: a sheet parked whole has no children');
+
+// 3 — the whole-park form leaves zero children; priming must accept it.
+{
+  const w = runtime();
+  const original = '.p{background:u\\72l(https://tracker.test/w.png)}';
+  const s = w.document.createElement('style');
+  s.setAttribute('data-faz-css', w.eval(`_fazBase64EncodeUtf8(${JSON.stringify(original)})`));
+  s.setAttribute('data-faz-category', 'marketing');
+  w.document.head.appendChild(s);
+  eq('premise: no children', s.childNodes.length, 0);
+  s.append('.p6{color:red}');
+  ok('after an append the marker is kept', !!s.getAttribute('data-faz-css'));
+  ok('and the live text still names no tracker', s.textContent.indexOf('tracker.test') === -1);
+  consent(w, { marketing: 'yes' });
+  w.eval('_fazUnblockServerSide()');
+  eq('accept restores the original plus the appended rule', s.textContent, original + '.p6{color:red}');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
