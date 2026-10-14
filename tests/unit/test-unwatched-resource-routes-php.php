@@ -876,6 +876,111 @@ namespace {
 	assert_true( $ratio > 0 && $ratio < 1.9, sprintf( '1.5x the input costs about 1.5x the time, not its square (%.2fx)', $ratio ) );
 	assert_true( $spent_by_size[1572864] < 10.0, sprintf( 'and stays far under the old quadratic cost (%.2fs)', $spent_by_size[1572864] ) );
 
+	echo "\n-- a CSS url() whose authority carries userinfo --\n";
+
+	// `@` was dropped from the left-hand boundary set on the grounds that
+	// normalize_resource_url() removes userinfo before the match. That holds for
+	// the haystacks get_provider_match_context() builds, and NOT for this route:
+	// css_url_block_category() trimmed the quotes and passed the raw url() token
+	// straight to provider_url_pattern_matches(), so the host sat behind an `@`
+	// that was no longer a boundary and matched nothing. Firefox fetches
+	// subresources with embedded credentials, so the sheet went out live.
+	foreach ( array(
+		'userinfo before the host'      => '<style>.p{background-image:url(https://x@cdn.tracker.test/p.png)}</style>',
+		'user:pass before the host'     => '<style>.p{background-image:url("https://u:p@cdn.tracker.test/p.png")}</style>',
+		'userinfo on an @import'        => '<style>@import url(https://x@cdn.tracker.test/f.css);</style>',
+		'a backslash-spelled authority' => '<style>.p{background-image:url(https:\\\\cdn.tracker.test/p.png)}</style>',
+	) as $label => $html ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html>' . $html . '</html>' );
+		assert_true( false !== strpos( $out, 'data-faz-css=' ), $label . ' is neutralised' );
+	}
+
+	// The other direction: an `@` inside a path or a query is not an authority
+	// separator, and the host that gets fetched is the first-party one.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><style>.p{background-image:url(/local.png?u=me@cdn.tracker.test)}</style></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'a tracker host in a query is not over-parked' );
+
+	echo "\n-- the_content entry point protects a srcdoc the same way --\n";
+
+	// filter_content_blocking() runs the same script and iframe passes as
+	// process_output_buffer(), over `the_content`. The srcdoc protection existed
+	// only in the output buffer, so here the script pass re-typed a <script src>
+	// INSIDE the attribute value and wrote data-faz-category="…" into it: the
+	// parser ends the srcdoc at that first injected quote, the embedded document
+	// is truncated, and the remainder becomes stray attributes on the frame. The
+	// resource is destroyed rather than delayed.
+	if ( ! function_exists( 'is_admin' ) ) {
+		function is_admin() {
+			return false; }
+	}
+	if ( ! function_exists( 'wp_doing_cron' ) ) {
+		function wp_doing_cron() {
+			return false; }
+	}
+	if ( ! function_exists( 'faz_is_machine_readable_request' ) ) {
+		function faz_is_machine_readable_request() {
+			return false; }
+	}
+	if ( ! function_exists( 'faz_disable_banner' ) ) {
+		function faz_disable_banner() {
+			return false; }
+	}
+	if ( ! function_exists( 'get_the_ID' ) ) {
+		function get_the_ID() {
+			return 0; }
+	}
+	if ( ! function_exists( 'wp_unslash' ) ) {
+		function wp_unslash( $v ) {
+			return $v; }
+	}
+	if ( ! class_exists( 'Faz_Content_Test_Settings' ) ) {
+		class Faz_Content_Test_Settings {
+			public function get( $group, $key = null ) {
+				return 'status' === $key ? true : array();
+			}
+		}
+	}
+
+	$faz_content_frontend = function ( array $providers, array $blocked ) {
+		$fe = faz_ob_frontend( $providers, $blocked );
+		$rc = new ReflectionClass( Frontend::class );
+		foreach ( array(
+			'settings' => new Faz_Content_Test_Settings(),
+			'template' => true,
+		) as $prop => $val ) {
+			$p = $rc->getProperty( $prop );
+			$p->setAccessible( true );
+			$p->setValue( $fe, $val );
+		}
+		return $fe;
+	};
+	$faz_content_run = function ( $fe, $content ) {
+		$m = new ReflectionMethod( Frontend::class, 'filter_content_blocking' );
+		$m->setAccessible( true );
+		return $m->invoke( $fe, $content );
+	};
+
+	foreach ( array(
+		'a tracker <script> inside a srcdoc' => '<iframe srcdoc="<script src=&quot;https://cdn.tracker.test/t.js&quot;></script><p>hi</p>"></iframe>',
+		'a tracker <img> inside a srcdoc'    => '<iframe srcdoc="<p>hi</p><img src=&quot;https://cdn.tracker.test/p.png&quot;>"></iframe>',
+		'a single-quoted srcdoc'             => "<iframe srcdoc='<img src=\"https://cdn.tracker.test/p.png\">'></iframe>",
+	) as $label => $html ) {
+		$fe  = $faz_content_frontend( $providers, $blocked );
+		$out = $faz_content_run( $fe, '<p>x</p>' . $html );
+		assert_true( false !== strpos( $out, 'data-faz-srcdoc=' ), $label . ': parked whole' );
+		assert_true( false === strpos( $out, ' srcdoc=' ), $label . ': no live srcdoc left behind' );
+		// The truncating shape itself: an injected attribute inside the value.
+		assert_true( ! preg_match( '/data-faz-srcdoc="[^"]*data-faz-category="/', $out ), $label . ': nothing was written into the value' );
+	}
+
+	// The control that keeps the protection from becoming a blunt instrument: a
+	// srcdoc that names nothing blocked stays a live srcdoc, byte for byte.
+	$fe   = $faz_content_frontend( $providers, $blocked );
+	$html = '<p>x</p><iframe srcdoc="<p>hi</p><img src=&quot;/local.png&quot;>"></iframe>';
+	assert_true( $faz_content_run( $fe, $html ) === $html, 'a first-party srcdoc is returned untouched' );
+
 	// ---------- result ----------
 
 	echo "\n";

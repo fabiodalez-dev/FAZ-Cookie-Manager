@@ -516,5 +516,43 @@ for (const method of ['deleteContents', 'extractContents']) {
   ok('with toString shadowed the live text still names no tracker', s.textContent.indexOf('tracker.test') === -1);
 }
 
+// ---------------------------------------------------------------------------
+// The URLs a srcdoc names, read the way the engine resolves them.
+//
+// The document the engine builds from a srcdoc is out of reach once it exists,
+// so the only chance to judge it is the markup string. The server already
+// judges all of these spellings (test-unwatched-resource-routes-php.php, M2 and
+// the backslash block): for a special scheme the WHATWG parser reads a
+// backslash as a slash and ignores any run of slashes after `https:`, so each
+// of them names the tracker host. The runtime looked for a literal `//` and saw
+// none of them, which left the two layers disagreeing on the same markup.
+// ---------------------------------------------------------------------------
+console.log('\nsrcdoc: every spelling that names a host');
+
+{
+  const w = runtime({ body: '<iframe id="f"></iframe>' });
+  const cat = (markup) =>
+    w.eval('_fazMarkupBlockedCategory(document.getElementById("f"), ' + JSON.stringify(markup) + ')');
+
+  const SPELLINGS = [
+    'https:/cdn.tracker.test/p',
+    'https:cdn.tracker.test/p',
+    '\\\\cdn.tracker.test/p',
+    '/\\cdn.tracker.test/p',
+    '\\/cdn.tracker.test/p',
+  ];
+  for (const url of SPELLINGS) {
+    eq('srcdoc naming ' + url + ' is blocked', cat('<img src="' + url + '">'), 'marketing');
+  }
+
+  // The other direction, kept from the server's own control: a tracker host
+  // after an authority the engine has already closed, or inside a query, is
+  // not the host that gets fetched and must not be parked.
+  eq('a tracker host after a backslash-closed first-party authority is live',
+    cat('<img src="https://site.test\\@cdn.tracker.test/p">'), '');
+  eq('a tracker host inside a query string is live',
+    cat('<img src="/local.png?u=me@cdn.tracker.test">'), '');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

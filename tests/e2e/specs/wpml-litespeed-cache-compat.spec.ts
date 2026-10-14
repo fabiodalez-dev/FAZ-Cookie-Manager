@@ -123,6 +123,10 @@ test.beforeAll(async ({}, testInfo) => {
   // The lab's WPML emulation is opt-in (specs exercising a REAL multilingual
   // plugin activate the same fixture purely for its probe headers).
   setOption('faz_e2e_wpml_emulate', 'yes');
+  // 02b asserts the mode stands down WITH a country source, so the source is
+  // provisioned here by the lab fixture rather than inherited from whatever
+  // geo configuration this install happens to carry. Cleared in afterAll.
+  setOption('faz_e2e_force_country_source', 'yes');
   if (!litespeedWasActive) {
     wp(['plugin', 'activate', 'litespeed-cache']);
   }
@@ -165,6 +169,7 @@ test.afterAll(() => {
         delete_option( 'faz_e2e_wpml_negotiation' );
         delete_option( 'faz_e2e_ls_purge_count' );
         delete_option( 'faz_e2e_wpml_emulate' );
+        delete_option( 'faz_e2e_force_country_source' );
         delete_option( 'faz_e2e_geo_runtime_off' );
       `);
     } catch {
@@ -242,13 +247,16 @@ test.describe('WPML + LiteSpeed + Cache Compatibility Mode (wp.org report)', () 
       echo \\FazCookie\\Includes\\Cache_Compatibility::is_paused() ? '1' : '0';
       echo \\FazCookie\\Includes\\Geolocation::has_country_source() ? '1' : '0';
     `).trim();
-    // Assert, never skip: this test just turned the runtime on and the mode on
-    // itself, and beforeAll ensured the lab fixture that supplies the country
-    // source, so a mismatch here means the stand-down path is broken — the
-    // thing this test exists to prove.
+    // Assert, never skip: this test turned the runtime on and the mode on
+    // itself, and beforeAll provisioned the country source through the lab
+    // fixture's faz_e2e_force_country_source flag — which the CLI process
+    // below sees too, because it is an option and not a per-request header.
+    // So a mismatch here means the stand-down path is broken, which is the
+    // thing this test exists to prove, and no longer means the machine was
+    // missing a geo fixture.
     expect(
       paused,
-      'is_paused/has_country_source: the mode must stand down (1) with a country source available (1)',
+      'is_paused/has_country_source: the mode must stand down (1) with the fixture-provisioned country source (1)',
     ).toBe('11');
 
     const resp = await request.get(`${WP_BASE}/?wpmllang=it`, {

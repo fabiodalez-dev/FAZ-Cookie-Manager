@@ -87,6 +87,27 @@ if ( 'yes' === get_option( 'faz_e2e_wpml_emulate', 'no' ) ) {
 }
 
 /*
+ * ---- Country source, opt-in ----------------------------------------------
+ *
+ * Geolocation::has_country_source() answers "is a country source CONFIGURED
+ * for this site", and 02b needs it to answer yes in both the HTTP request and
+ * the separate wpEval CLI process. On this machine the dev-only mu-plugin
+ * faz-geo-dev-fake-cf happens to supply one, but a spec must not rest on a
+ * fixture that is not in the repository: with it absent — or with a leftover
+ * faz-e2e-force-no-geo — the test failed as though the stand-down path were
+ * broken, which is the environment dependence it was written to remove.
+ *
+ * faz_trust_geoip_country_code rather than the Cloudflare header: it satisfies
+ * has_country_source() without changing how a country is RESOLVED, because the
+ * mod_geoip path behind it needs geoip_country_code_by_name(), which this stack
+ * does not have. Gated on an option so only the spec that asks for it is
+ * affected.
+ */
+if ( 'yes' === get_option( 'faz_e2e_force_country_source', 'no' ) ) {
+	add_filter( 'faz_trust_geoip_country_code', '__return_true' );
+}
+
+/*
  * ---- Observability -------------------------------------------------------
  */
 

@@ -2002,15 +2002,20 @@ for (const name of ['deleteContents', 'extractContents']) {
   document.createElement('script');
   window.fetch(SITE + 'wp-json/cart');
   let thrown = null;
+  let scriptCalls = 0;
   window.console.warn = function () {};
   window._fazBootstrap.start();
   try {
     window._fazBootstrap.finish({
-      script: function () { throw new Error('boom'); },
+      script: function () { scriptCalls += 1; throw new Error('boom'); },
       node: function () {},
       url: function () { return false; },
     });
   } catch (e) { thrown = e; }
+  // The premise, asserted: both scripts above are detached and carry no src,
+  // so if finish() never handed them to policy.script the throw would never
+  // happen and every check below would pass against the unfixed code too.
+  ok('premise: policy.script was actually reached', scriptCalls > 0);
   eq('a throwing policy.script does not escape finish()', thrown, null);
   await Promise.resolve();
   eq('and the queue still drains: the held fetch went out', fetched.length, 1);

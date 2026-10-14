@@ -188,3 +188,59 @@ for (const consent of ['refused', 'accept']) {
     expect(errors).toEqual([]);
   });
 }
+
+/**
+ * The premise the srcdoc gate's entity decode rests on.
+ *
+ * _fazMarkupUrls() has to read a srcdoc the way the engine will: the document
+ * it builds decodes character references, so a search over the raw attribute
+ * saw neither `https:&#x2F;&#x2F;` nor `https:\/\/`. The decode is done by
+ * assigning the text to a DETACHED <textarea>, whose content is RCDATA — tags
+ * stay text — and reading .value back.
+ *
+ * CodeQL flags that assignment as js/xss-through-dom (alert 83), and the
+ * question it raises is a fair one: if `</textarea>` could close the RCDATA
+ * context, the rest would be parsed as real elements, and a detached <img
+ * onerror> both fetches and fires. That would make the gate execute the markup
+ * it was asked only to inspect. It does not — measured here on all three
+ * engines rather than deduced from the spec, because this is the assumption
+ * that makes the whole route safe, and nothing else in the suite would notice
+ * if an engine ever changed it.
+ */
+test('the srcdoc entity decode builds no elements and fetches nothing', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', (r) => { if (r.url().includes('probe.example.invalid')) requests.push(r.url()); });
+
+  const result = await page.evaluate(() => {
+    const out: { elements: string[][]; fired: boolean; decoded: string } = {
+      elements: [], fired: false, decoded: '',
+    };
+    (window as unknown as { __fazProbeFired?: boolean }).__fazProbeFired = false;
+    const ESCAPES = [
+      '</textarea><img src="https://probe.example.invalid/a.png" onerror="window.__fazProbeFired=true">',
+      '</TEXTAREA ><img src="https://probe.example.invalid/b.png" onerror="window.__fazProbeFired=true">',
+      '</textarea/><img src="https://probe.example.invalid/c.png" onerror="window.__fazProbeFired=true">',
+      '</textarea\t><img src="https://probe.example.invalid/d.png" onerror="window.__fazProbeFired=true">',
+    ];
+    for (const payload of ESCAPES) {
+      const area = document.createElement('textarea');
+      area.innerHTML = payload;
+      out.elements.push(Array.from(area.children).map((n) => n.tagName));
+    }
+    // And the decode still decodes — otherwise this test would pass just as
+    // well against a step that had stopped working altogether.
+    const area = document.createElement('textarea');
+    area.innerHTML = 'https:&#x2F;&#x2F;tracker.example.test/x.png';
+    out.decoded = area.value;
+    out.fired = (window as unknown as { __fazProbeFired?: boolean }).__fazProbeFired === true;
+    return out;
+  });
+
+  for (const tags of result.elements) {
+    expect(tags, 'the RCDATA context must hold: no element may be built from the text').toEqual([]);
+  }
+  expect(result.decoded, 'the decode must still resolve character references').toBe('https://tracker.example.test/x.png');
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => (window as unknown as { __fazProbeFired?: boolean }).__fazProbeFired === true)).toBe(false);
+  expect(requests, 'a detached <img> fetches, so any element built here would show up as a request').toEqual([]);
+});

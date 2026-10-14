@@ -4120,21 +4120,13 @@ class Frontend {
 		// cannot know: with a fixed marker, a paragraph that spelled
 		// `__FAZ_SRCDOC_STASH_0__` received the srcdoc token as live markup.
 		$stash_nonce   = $this->stash_nonce();
-		$srcdoc_marker = '__FAZ_SRCDOC_' . $stash_nonce . '_';
 		$srcdoc_stash  = array();
-		if ( false !== stripos( $html, 'srcdoc' ) ) {
-			$result = preg_replace_callback(
-				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
-				function ( $m ) use ( $providers, $blocked_categories, &$srcdoc_stash, $srcdoc_marker ) {
-					return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, $srcdoc_stash, $srcdoc_marker );
-				},
-				$html
-			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
+		$srcdoc_marker = '';
+		$result        = $this->stash_iframe_srcdocs( $html, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker );
+		if ( null === $result ) {
+			$pcre_failed = true;
+		} else {
+			$html = $result;
 		}
 
 		$noscript_stash = array();
@@ -5498,6 +5490,39 @@ class Frontend {
 	 *
 	 * @return string
 	 */
+	/**
+	 * Replace every iframe srcdoc token with a marker no later pass can match.
+	 *
+	 * Shared by both entry points on purpose. This protection first existed
+	 * only in process_output_buffer(), and filter_content_blocking() — which
+	 * runs the same script and iframe passes over `the_content` — did not have
+	 * it, so a <script> inside a srcdoc was re-typed in place and the injected
+	 * double-quoted attribute ended the srcdoc value at its first quote. One
+	 * helper, one place to keep right.
+	 *
+	 * @param string $html               Markup to walk.
+	 * @param array  $providers          Provider-to-category map.
+	 * @param array  $blocked_categories Currently blocked category slugs.
+	 * @param string $stash_nonce        Per-request nonce the page cannot know.
+	 * @param array  $stash              Marker => original token, filled here.
+	 * @param string $marker             Marker prefix, set here.
+	 * @return string|null Markup with the tokens stashed, or null on PCRE error.
+	 */
+	private function stash_iframe_srcdocs( $html, $providers, $blocked_categories, $stash_nonce, array &$stash, &$marker ) {
+		$marker = '__FAZ_SRCDOC_' . $stash_nonce . '_';
+		$stash  = array();
+		if ( false === stripos( $html, 'srcdoc' ) ) {
+			return $html;
+		}
+		return preg_replace_callback(
+			'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+			function ( $m ) use ( $providers, $blocked_categories, &$stash, $marker ) {
+				return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, $stash, $marker );
+			},
+			$html
+		);
+	}
+
 	private function stash_nonce() {
 		try {
 			return bin2hex( random_bytes( 6 ) );
@@ -5688,6 +5713,18 @@ class Frontend {
 	private function css_url_block_category( $url, $providers, $blocked_categories ) {
 		$url = trim( (string) $url, " \t\n\r\0\x0B\"'" );
 		if ( '' === $url || '#' === $url[0] || 0 === stripos( $url, 'data:' ) || 0 === stripos( $url, 'blob:' ) ) {
+			return false;
+		}
+		// Normalise before matching, for the same reason every other route
+		// does. has_provider_boundary() stopped treating `@` as a boundary on
+		// the grounds that userinfo is dropped first — true of the haystacks
+		// get_provider_match_context() builds, and this route passed the raw
+		// token, so `url(https://x@cdn.tracker.test/p.png)` had its host behind
+		// an `@` that was no longer a boundary and matched nothing. Firefox
+		// fetches subresources with embedded credentials. Relative values are
+		// returned unchanged, so a decoy in a path or a query stays unmatched.
+		$url = $this->normalize_resource_url( $url );
+		if ( '' === $url ) {
 			return false;
 		}
 
@@ -10069,6 +10106,28 @@ class Frontend {
 			return $content;
 		}
 
+		// An iframe's srcdoc is markup inside an attribute value, and every pass
+		// below is a regex over markup: without this the script pass re-typed a
+		// <script src> INSIDE the value and wrote `data-faz-category="…"` into a
+		// double-quoted attribute, which ends the srcdoc at the first injected
+		// quote. The embedded document was then truncated — destroyed rather
+		// than delayed — and the leftovers became stray attributes on the frame.
+		// process_output_buffer() has had this protection since the same defect
+		// was found there; this entry point runs the same passes and did not.
+		$stash_nonce   = $this->stash_nonce();
+		$srcdoc_stash  = array();
+		$srcdoc_marker = '';
+		$stashed       = $this->stash_iframe_srcdocs( $content, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker );
+		if ( null === $stashed ) {
+			// Fail-secure, as the passes below: a srcdoc that cannot be walked
+			// is a document whose fetches nothing downstream can gate.
+			error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in filter_content_blocking (srcdoc)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			$srcdoc_stash  = array();
+			$srcdoc_marker = '';
+		} else {
+			$content = $stashed;
+		}
+
 		// Block <script> tags in content.
 		// Fail-secure: on PCRE error, strip scripts entirely rather than serving
 		// them unblocked, which would violate consent requirements.
@@ -10092,8 +10151,8 @@ class Frontend {
 		if ( false !== stripos( $content, '<iframe' ) ) {
 			$result = preg_replace_callback(
 				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_iframe_tag( $m, $providers, $blocked_categories );
+				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
+					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );
 				},
 				$content
 			);
@@ -10113,6 +10172,14 @@ class Frontend {
 		// data-settings, so the generic <iframe> blocker above never sees one).
 		$content = $this->process_elementor_video_widgets( $content, $blocked_categories, $providers );
 		$content = $this->process_bricks_map_widgets( $content, $blocked_categories, $providers );
+
+		// Last, so no pass above can have written into the value: the marker
+		// goes back to the ORIGINAL token — `srcdoc=…` when the document is
+		// allowed, `data-faz-srcdoc=…` when it is parked — bytes and quoting
+		// untouched either way.
+		if ( ! empty( $srcdoc_stash ) ) {
+			$content = strtr( $content, $srcdoc_stash );
+		}
 
 		return $content;
 	}

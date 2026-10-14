@@ -119,6 +119,15 @@ eq('an unclosed url( followed by a newline is blocking', shouldBlock('.p{backgro
 eq('an unclosed @import url( is blocking', shouldBlock('@import url(https://tracker.test/open.css'), true);
 eq('a first-party sheet whose last url( is open still blocks on the tracker before it', shouldBlock('.a{background-image:url(https://site.test/ok.png)}.p{background-image:url(https://tracker.test/open.png'), true);
 eq('the string form of src() is blocking', shouldBlock('@font-face{src:src("https://tracker.test/f.woff2")}'), true);
+// image-set() mixes a url() token and a bare string in one value. The inner
+// body here has to cross that nested `url(...)` to reach the string after it:
+// bootstrap.js's CSS_STRING_FN allows one level of nesting and reads it, and
+// this extractor stopped at the first paren, so the two layers disagreed on
+// the same text again — the server parked the sheet and the runtime that
+// replaced it called it clean. A 2x display is all it takes to fetch.
+eq('a nested url() before the string in image-set() is blocking', shouldBlock('.p{background-image:image-set(url(https://site.test/a.png) 1x, "https://tracker.test/b.png" 2x)}'), true);
+eq('the -webkit- prefixed form with a nested url() is blocking', shouldBlock('.p{background-image:-webkit-image-set(url(/local.png) 1x, "https://tracker.test/b.png" 2x)}'), true);
+eq('a nested url() before the string in src() is blocking', shouldBlock('@font-face{src:src(url(/local.woff2) format("woff2"), "https://tracker.test/f.woff2")}'), true);
 // An escaped quote inside the quoted url() string. The extractor's quoted
 // branch is `"([^"]*)"`, which stops at the ESCAPED quote and then fails the
 // closing paren, so the bare branch takes the whole thing including the quotes
@@ -137,6 +146,7 @@ eq('a relative url() is not blocking', shouldBlock('.p{background-image:url(/wp-
 eq('a data: url() is not blocking', shouldBlock('.p{background-image:url("data:image/gif;base64,R0lGODlhAQABAAAAACw=")}'), false);
 eq('an unrelated third party is not blocking', shouldBlock('.p{background-image:url(https://example.com/ok.png)}'), false);
 eq('an escaped comment marker alone is not a URL', shouldBlock('.a{content:"\\2f\\2a"} .b{color:red}'), false);
+eq('image-set() whose nested url() and string are both same-origin is not blocking', shouldBlock('.p{background-image:image-set(url(https://site.test/a.png) 1x, "https://site.test/b.png" 2x)}'), false);
 
 // ---------------------------------------------------------------------------
 // The shape bootstrap.js leaves behind, read back through the runtime's own
@@ -222,7 +232,12 @@ for (const [label, prop] of [['textContent', 'textContent'], ['innerHTML', 'inne
   const style = w.document.createElement('style');
   w.document.head.appendChild(style);
   style[prop] = ORIGINAL;
-  eq(prop + ' leaves nothing live', style.childNodes.length === 1 ? (style.childNodes[0].nodeValue || '') : '', '');
+  // Read the whole live text, not one child's. The earlier form only looked at
+  // childNodes[0] when there was exactly one child and read '' otherwise, so a
+  // setter that left the original in place and appended an empty node passed
+  // this check with the tracker still live.
+  eq(prop + ' leaves nothing live', style.textContent, '');
+  ok(prop + ' leaves at most one text child', style.childNodes.length <= 1);
   eq(prop + ' keeps the original in the marker', markerCss(style), ORIGINAL);
 }
 
