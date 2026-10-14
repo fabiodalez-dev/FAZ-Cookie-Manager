@@ -963,16 +963,25 @@ namespace {
 	};
 
 	foreach ( array(
-		'a tracker <script> inside a srcdoc' => '<iframe srcdoc="<script src=&quot;https://cdn.tracker.test/t.js&quot;></script><p>hi</p>"></iframe>',
-		'a tracker <img> inside a srcdoc'    => '<iframe srcdoc="<p>hi</p><img src=&quot;https://cdn.tracker.test/p.png&quot;>"></iframe>',
-		'a single-quoted srcdoc'             => "<iframe srcdoc='<img src=\"https://cdn.tracker.test/p.png\">'></iframe>",
-	) as $label => $html ) {
+		'a tracker <script> inside a srcdoc' => array( '"', '<script src=&quot;https://cdn.tracker.test/t.js&quot;></script><p>hi</p>' ),
+		'a tracker <img> inside a srcdoc'    => array( '"', '<p>hi</p><img src=&quot;https://cdn.tracker.test/p.png&quot;>' ),
+		'a single-quoted srcdoc'             => array( "'", '<img src="https://cdn.tracker.test/p.png">' ),
+	) as $label => $spec ) {
+		list( $quote, $value ) = $spec;
 		$fe  = $faz_content_frontend( $providers, $blocked );
-		$out = $faz_content_run( $fe, '<p>x</p>' . $html );
+		$out = $faz_content_run( $fe, '<p>x</p><iframe srcdoc=' . $quote . $value . $quote . '></iframe>' );
 		assert_true( false !== strpos( $out, 'data-faz-srcdoc=' ), $label . ': parked whole' );
 		assert_true( false === strpos( $out, ' srcdoc=' ), $label . ': no live srcdoc left behind' );
-		// The truncating shape itself: an injected attribute inside the value.
-		assert_true( ! preg_match( '/data-faz-srcdoc="[^"]*data-faz-category="/', $out ), $label . ': nothing was written into the value' );
+		// The invariant that matters, and the only one that catches a pass
+		// rewriting the document INSIDE the value: the parked token is the
+		// original token, byte for byte, quoting included. The earlier shape
+		// searched for an injected attribute behind a `data-faz-srcdoc="`
+		// prefix, which a single-quoted value can never match — so for that
+		// case the check could not fail at all.
+		assert_true(
+			false !== strpos( $out, 'data-faz-srcdoc=' . $quote . $value . $quote ),
+			$label . ': the parked value is the original, byte for byte'
+		);
 	}
 
 	// The control that keeps the protection from becoming a blunt instrument: a
