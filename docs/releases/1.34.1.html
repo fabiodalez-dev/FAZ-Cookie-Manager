@@ -33,3 +33,30 @@
 <p>Non l'ho trovato io, e vale la pena dirlo. È emerso perché mi è stato chiesto se avessi verificato che tutti i rilievi delle revisioni fossero stati chiusi, comprese le modifiche finite nella release. Non l'avevo fatto: avevo controllato a fondo l'ultima richiesta di modifica e dato per buone le precedenti perché erano state integrate. Dare per buono non è verificare. Controllandole una per una, tre avevano un rilievo ancora aperto, e uno era questo.</p>
 
 <p>Aggiornare è consigliato a chi usa il collegamento nel piè di pagina al posto del widget. Chi tiene il widget — l'impostazione predefinita — non è toccato da questo difetto.</p>
+
+
+<h2>Quattro volte lo stesso disaccordo</h2>
+
+<p>Questa versione contiene anche quattro correzioni che non erano in programma, e hanno tutte la stessa forma. Il plugin blocca le risorse di terze parti in due momenti distinti: un primo strato che agisce prima che il runtime esista, e il runtime che poi lo sostituisce. I due devono leggere lo stesso testo nello stesso modo, e la documentazione dice che sono tenuti identici di proposito. Non lo erano, in quattro punti diversi.</p>
+
+<p>Un valore CSS come <code>image-set(url(a.png) 1x, "https://tracker.example/b.png" 2x)</code> veniva letto dal primo strato e non dal runtime, perché il runtime si fermava alla prima parentesi annidata: su uno schermo a densità doppia la richiesta partiva. Un indirizzo scritto con le barre rovesciate, o con lo schema e nessuna barra — <code>https:tracker.example/p.png</code> — dentro il documento di un iframe veniva giudicato dal server e ignorato dal runtime, mentre il browser li risolve tutti allo stesso host. Un <code>url()</code> con le credenziali davanti all'host non trovava corrispondenza nell'elenco dei provider, e Firefox quelle richieste le esegue. E un documento incorporato scritto dentro un articolo veniva <em>danneggiato</em> invece che ritardato: la passata che protegge gli script scriveva un proprio attributo dentro il documento e lo troncava alla prima virgoletta.</p>
+
+<p>L'ultima l'ho chiusa in modo diverso dalle altre tre. Il percorso che tratta il contenuto degli articoli e quello che tratta l'intera pagina eseguivano le stesse passate, e uno dei due aveva la protezione e l'altro no. Invece di aggiungere le venti righe mancanti nel secondo, le ho estratte in un unico punto condiviso: quel difetto esisteva precisamente perché due luoghi che dovevano restare identici venivano tenuti identici a mano.</p>
+
+<h2>Il difetto che ho trovato rifiutando una scorciatoia</h2>
+
+<p>La suite di conformità ha una sezione per il framework IAB TCF che non partiva, perché TCF è spento sul sito di test. Diciotto controlli che non venivano eseguiti, e la strada comoda era annotarli come esclusione motivata: impostazione disattivata, esclusione legittima, si va avanti. Li ho accesi.</p>
+
+<p>Il primo di quei diciotto ha trovato che il CMP dichiarava la propria interfaccia come non visualizzata mentre il banner era sullo schermo. Non è un dettaglio estetico: <code>displayStatus</code> e l'evento <code>cmpuishown</code> sono il modo in cui un fornitore IAB apprende che la richiesta di consenso è stata mostrata, e un CMP che risponde il contrario sta dando una risposta falsa a chi lo interroga, compreso un validatore.</p>
+
+<p>La causa era il caricamento differito introdotto da questa stessa versione. L'evento che segnala la comparsa del banner viene emesso una volta sola, e il file del CMP viene caricato dopo quello del runtime: da quando il runtime trova la pagina già analizzata, mostra il banner ed emette l'evento durante la propria esecuzione, cioè prima che il CMP esista. Il listener si registrava per un evento che non sarebbe più tornato.</p>
+
+<p>La parte che mi ha colpito è che il rimedio c'era già. Il runtime scrive una bandierina prima di emettere l'evento, e il commento accanto dice a cosa serve: perché chi arriva in ritardo possa recuperare lo stato. Nessuno la leggeva. Il difetto non era l'assenza di una soluzione, era una soluzione lasciata non collegata.</p>
+
+<p>Ne ho anche fatto uno sbaglio, mentre lo correggevo. Avevo aggiunto una seconda modifica, oltre a quella misurata, perché la specifica a leggerla bene sembrava chiederlo. Ha rotto due controlli di conformità che il progetto aveva scritto apposta per fissare quel comportamento, e avevano ragione loro: gli eventi TCF descrivono transizioni, e chi si registra dopo la comparsa del banner quella transizione l'ha davvero perduta. Lo stato di adesso si chiede con un'altra chiamata, ed era quella a mentire. Ho revocato la seconda modifica lasciando scritto nel codice perché era sbagliata, così il prossimo che legge non rifà la deviazione.</p>
+
+<h2>Tre controlli che non potevano fallire</h2>
+
+<p>L'ultima cosa, e non riguarda il prodotto ma come lo verifico. Nella revisione sono emersi tre controlli automatici che passavano sempre, qualunque cosa facesse il codice sotto. Uno leggeva il contenuto di un elemento solo quando i figli erano esattamente uno, e leggeva una stringa vuota in tutti gli altri casi: un difetto che lasciasse l'originale al suo posto e aggiungesse un nodo vuoto passava, col tracciatore ancora attivo. Un altro verificava il comportamento di una funzione che non era detto venisse mai chiamata. Il terzo cercava un attributo con le virgolette doppie, in un caso dove l'attributo ne ha di singole.</p>
+
+<p>Due dei tre li avevo scritti io, in questa stessa sessione, mentre correggevo i difetti di cui sopra. Un controllo che non può fallire è peggio di un controllo assente: quello assente lo sai che manca.</p>
