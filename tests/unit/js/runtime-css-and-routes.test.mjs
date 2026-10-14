@@ -470,5 +470,51 @@ for (const [label, url] of [
   eq(`${label}: a created script is blocked`, script.getAttribute('type'), 'javascript/blocked');
 }
 
+console.log('\ncss: a Range edit the runtime cannot judge is refused, not applied');
+
+// 4 — fail closed: when the judgement throws, the native edit must not land
+// on a live sheet (an @import it completes would leave during the parse).
+// The throw comes from a point the page controls: cloneContents for
+// extractContents, the holder's nodeValue setter for deleteContents.
+for (const method of ['deleteContents', 'extractContents']) {
+  const w = runtime();
+  const s = w.document.createElement('style');
+  s.textContent = '.p{background:url(https://tracker.te.st/x.png)}';
+  w.document.head.appendChild(s);
+  const before = s.textContent;
+  const text = s.firstChild;
+  if (method === 'extractContents') {
+    w.Range.prototype.cloneContents = function () { throw new Error('boom'); };
+  } else {
+    Object.defineProperty(text, 'nodeValue', { configurable: true, get() { return text.data; }, set() { throw new Error('boom'); } });
+  }
+  const at = text.data.indexOf('te.st') + 2;
+  const range = w.document.createRange();
+  range.setStart(text, at);
+  range.setEnd(text, at + 1);
+  let out, threw = false;
+  try { out = range[method](); } catch (e) { threw = true; }
+  ok(`Range.${method} with a throwing judgement does not throw to the page`, !threw);
+  eq('and the sheet is left as it was', s.textContent, before);
+  ok('so the live text still names no tracker', s.textContent.indexOf('tracker.test') === -1);
+  if (method === 'extractContents') ok('and extractContents answers with an empty fragment', !!out && out.childNodes.length === 0);
+  else eq('and deleteContents answers nothing', out, undefined);
+}
+// 4b — a page that shadows Range.prototype.toString cannot shrink the removed length.
+{
+  const w = runtime();
+  const s = w.document.createElement('style');
+  s.textContent = '.p{background:url(https://tracker.te.st/y.png)}';
+  w.document.head.appendChild(s);
+  w.Range.prototype.toString = function () { return ''; };
+  const text = s.firstChild;
+  const at = text.data.indexOf('te.st') + 2;
+  const range = w.document.createRange();
+  range.setStart(text, at);
+  range.setEnd(text, at + 1);
+  range.deleteContents();
+  ok('with toString shadowed the live text still names no tracker', s.textContent.indexOf('tracker.test') === -1);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

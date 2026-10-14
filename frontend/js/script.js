@@ -5497,6 +5497,9 @@ function _fazDeriveEditedOriginal(original, live, at, removed) {
 function _fazGateRangeEditOnStyle(proto, methodName) {
     if (!proto || typeof proto[methodName] !== "function") return;
     var native = proto[methodName];
+    // Captured now: the page can reassign Range.prototype.toString, and the
+    // removed length must come from the engine, not from whoever shadowed it.
+    var nativeToString = typeof proto.toString === "function" ? proto.toString : null;
     Object.defineProperty(proto, methodName, {
         configurable: true, writable: true, enumerable: true,
         value: function () {
@@ -5508,7 +5511,7 @@ function _fazGateRangeEditOnStyle(proto, methodName) {
                 var returned = methodName === "extractContents" ? this.cloneContents() : undefined;
                 var live = _fazStyleLiveText(owner);
                 var at = _fazRangeStartInStyle(owner, this);
-                var removed = String(this.toString()).length;
+                var removed = String(nativeToString ? nativeToString.call(this) : "").length;
                 var result = live.slice(0, at) + live.slice(at + removed);
                 var original = _fazStyleOriginalCss(owner);
                 var derived = _fazDeriveEditedOriginal(original, live, at, removed);
@@ -5528,7 +5531,12 @@ function _fazGateRangeEditOnStyle(proto, methodName) {
                 try { this.setStart(holder, Math.min(at, holder.nodeValue.length)); this.collapse(true); } catch (e) { /* a boundary the engine already moved */ }
                 return returned;
             } catch (e) {
-                return native.apply(this, arguments);
+                // A decision nobody made is a refusal: the native edit would land
+                // on a live sheet and an @import it completes leaves during the
+                // parse, so the edit is dropped rather than applied unjudged.
+                try { console.warn("[FAZ Cookie Manager] Range edit on a stylesheet could not be judged; the edit was refused", e); } catch (e2) { /* no console */ }
+                try { if (methodName === "extractContents") return (this.startContainer && this.startContainer.ownerDocument || document).createDocumentFragment(); } catch (e3) { /* fall through */ }
+                return undefined;
             }
         }
     });
