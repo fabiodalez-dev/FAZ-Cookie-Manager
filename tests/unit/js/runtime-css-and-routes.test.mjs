@@ -389,5 +389,86 @@ console.log('\ncss: a sheet parked whole has no children');
   eq('accept restores the original plus the appended rule', s.textContent, original + '.p6{color:red}');
 }
 
+console.log('\ncss: a Range edit is judged before it lands');
+
+// 1a — extractContents still hands back what it removed; deleteContents nothing.
+{
+  const w = runtime();
+  const s = w.document.createElement('style');
+  s.textContent = '.p{background:url(https://tracker.te.st/r.png)}';
+  w.document.head.appendChild(s);
+  const text = s.firstChild;
+  const at = text.data.indexOf('te.st') + 2;
+  const range = w.document.createRange();
+  range.setStart(text, at);
+  range.setEnd(text, at + 1);
+  const frag = range.extractContents();
+  eq('extractContents returns the removed text as a fragment', frag && frag.textContent, '.');
+  ok('while the live text names no tracker', s.textContent.indexOf('tracker.test') === -1);
+  const range2 = w.document.createRange();
+  range2.setStart(s.firstChild, 0);
+  range2.setEnd(s.firstChild, 1);
+  eq('deleteContents returns nothing', range2.deleteContents(), undefined);
+}
+// 1b — an edit away from the parked URLs keeps the parked original, derived.
+{
+  const w = runtime();
+  const s = w.document.createElement('style');
+  s.textContent = '.a{color:red}.p{background:url(https://tracker.test/k.png)}';
+  w.document.head.appendChild(s);
+  ok('premise: parked', !!s.getAttribute('data-faz-css'));
+  const text = s.firstChild;
+  const range = w.document.createRange();
+  range.setStart(text, '.a{'.length);
+  range.setEnd(text, '.a{color:'.length);
+  range.deleteContents();
+  eq('the live text is the edited, still neutralised, sheet', s.textContent, '.a{red}.p{background:url("' + INERT + '")}');
+  eq('and the parked original is the edited original', w.eval(`_fazBase64DecodeUtf8(${JSON.stringify(s.getAttribute('data-faz-css') || '')})`), '.a{red}.p{background:url(https://tracker.test/k.png)}');
+  consent(w, { marketing: 'yes' });
+  w.eval('_fazUnblockServerSide()');
+  eq('which consent restores', s.textContent, '.a{red}.p{background:url(https://tracker.test/k.png)}');
+}
+// 1c — first-party content is edited as asked and left alone.
+{
+  const w = runtime();
+  const s = w.document.createElement('style');
+  s.textContent = '.a{color:red}';
+  w.document.head.appendChild(s);
+  const range = w.document.createRange();
+  range.setStart(s.firstChild, 3);
+  range.setEnd(s.firstChild, 9);
+  range.deleteContents();
+  eq('a first-party sheet is edited in place', s.textContent, '.a{red}');
+  eq('and not parked', s.getAttribute('data-faz-css'), null);
+}
+
+console.log('\nruntime: the authority as the engine reads it');
+
+// 2 — percent-encoding in the host and tab/LF/CR anywhere are undone by the
+// URL parser before the host is read; the match saw the raw bytes.
+for (const [label, url] of [
+  ['a percent-encoded dot in the host', 'https://tracker%2Etest/p.png'],
+  ['a tab inside the host', 'https://tra\tcker.test/t.png'],
+]) {
+  const w = runtime();
+  const img = w.document.createElement('img');
+  img.src = url;
+  eq(`${label}: img.src is parked`, img.getAttribute('data-faz-src'), url);
+  eq('with no live src', img.getAttribute('src'), null);
+  const img2 = w.document.createElement('img');
+  img2.setAttribute('src', url);
+  eq(`${label}: img.setAttribute("src") is parked`, img2.getAttribute('data-faz-src'), url);
+  const frame = w.document.createElement('iframe');
+  frame.src = url;
+  eq(`${label}: iframe.src is parked`, frame.getAttribute('data-faz-src'), url);
+  const link = w.document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = url;
+  eq(`${label}: link.href is parked`, link.getAttribute('data-faz-href'), url);
+  const script = w.document.createElement('script');
+  script.src = url;
+  eq(`${label}: a created script is blocked`, script.getAttribute('type'), 'javascript/blocked');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

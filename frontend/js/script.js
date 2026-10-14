@@ -5440,18 +5440,59 @@ function _fazStyleOwnerOf(node) {
     }
     return null;
 }
-// After an in-place edit the live text is the source again: a node whose live
-// value no longer is the neutralised form of its parked original was edited,
-// and its parked original would restore CSS the page removed.
-function _fazResettleStyleAfterEdit(style) {
-    if (!style || !style.childNodes) return;
+// A Range edit on a <style> is judged BEFORE it lands. Blink reparses an
+// inline sheet synchronously on the text mutation, and an @import request
+// leaves during that parse: a gate that let the native edit run and
+// neutralised the text afterwards emitted the request first, measured in
+// tests/browser-intent/range-edit-import.spec.ts. So the resulting text is
+// computed from the live text and the range's own offsets (the owner's text
+// minus the range's text, the way the bootstrap's rangeRemoved does it),
+// judged, and written through _fazApplyStyleCharacterData, which writes the
+// neutralised form and parks the original; the native edit never touches a
+// live sheet. extractContents still hands back the removed content, cloned
+// from the range before the edit; deleteContents returns nothing, as it does.
+//
+// The parked original survives an edit that does not touch the parked URLs:
+// the live text is the original with its blocked url()s replaced, so the two
+// share a prefix and a suffix around those spans, and a deletion that lies
+// entirely in the shared prefix or suffix is applied to the original at the
+// same place. An edit that reaches into a replaced span has no derivable
+// original, and the resulting live text becomes the source, as it must: the
+// old original would restore CSS the page removed.
+function _fazStyleLiveText(style) {
+    var live = "";
     for (var i = 0; i < style.childNodes.length; i++) {
         var node = style.childNodes[i];
-        if (!_fazIsStyleTextNode(node) || !_fazHasStyleNodeOriginalCss(node)) continue;
-        if (_fazNeutralizeCssUrls(_fazGetStyleNodeOriginalCss(node)) !== node.nodeValue) _fazClearStyleNodeOriginalCss(node);
+        live += _fazIsStyleTextNode(node) ? (node.nodeValue || "") : (node.textContent || "");
     }
-    _fazCollapseSplitStyleCss(style);
-    _fazSyncStyleCssAttribute(style);
+    return live;
+}
+function _fazRangeStartInStyle(style, range) {
+    var acc = 0;
+    for (var i = 0; i < style.childNodes.length; i++) {
+        var node = style.childNodes[i];
+        if (range.startContainer === style) {
+            if (i === range.startOffset) return acc;
+        } else if (node === range.startContainer || (node.contains && node.contains(range.startContainer))) {
+            return acc + (node === range.startContainer ? range.startOffset : 0);
+        }
+        acc += _fazIsStyleTextNode(node) ? (node.nodeValue || "").length : (node.textContent || "").length;
+    }
+    return acc;
+}
+function _fazDeriveEditedOriginal(original, live, at, removed) {
+    if (original === live) return original.slice(0, at) + original.slice(at + removed);
+    var prefix = 0;
+    while (prefix < original.length && prefix < live.length && original.charAt(prefix) === live.charAt(prefix)) prefix++;
+    if (at + removed <= prefix) return original.slice(0, at) + original.slice(at + removed);
+    var suffix = 0;
+    while (suffix < original.length - prefix && suffix < live.length - prefix
+        && original.charAt(original.length - 1 - suffix) === live.charAt(live.length - 1 - suffix)) suffix++;
+    if (at >= live.length - suffix) {
+        var from = original.length - (live.length - at);
+        return original.slice(0, from) + original.slice(from + removed);
+    }
+    return null;
 }
 function _fazGateRangeEditOnStyle(proto, methodName) {
     if (!proto || typeof proto[methodName] !== "function") return;
@@ -5461,9 +5502,34 @@ function _fazGateRangeEditOnStyle(proto, methodName) {
         value: function () {
             var owner = null;
             try { owner = _fazStyleOwnerOf(this.commonAncestorContainer); } catch (e) { owner = null; }
-            var result = native.apply(this, arguments);
-            if (owner) { try { _fazResettleStyleAfterEdit(owner); } catch (e) { /* the edit itself succeeded */ } }
-            return result;
+            if (!owner || !_fazStore._block || !_fazNativeNodeRemoveChild || !_fazNativeNodeAppendChild) return native.apply(this, arguments);
+            try {
+                _fazPrimeStyleCssMarkers(owner);
+                var returned = methodName === "extractContents" ? this.cloneContents() : undefined;
+                var live = _fazStyleLiveText(owner);
+                var at = _fazRangeStartInStyle(owner, this);
+                var removed = String(this.toString()).length;
+                var result = live.slice(0, at) + live.slice(at + removed);
+                var original = _fazStyleOriginalCss(owner);
+                var derived = _fazDeriveEditedOriginal(original, live, at, removed);
+                var source = derived === null ? result : derived;
+                // One text node carries the result; the range is collapsed so a
+                // live boundary cannot point past the text it used to cover.
+                var holder = owner.childNodes.length === 1 && _fazIsStyleTextNode(owner.firstChild) ? owner.firstChild : null;
+                if (!holder) {
+                    while (owner.firstChild) _fazNativeNodeRemoveChild.call(owner, owner.firstChild);
+                    holder = (owner.ownerDocument || document).createTextNode("");
+                    _fazNativeNodeAppendChild.call(owner, holder);
+                }
+                _fazApplyStyleCharacterData(owner, holder, source, function (node, value) {
+                    _fazInStyleCharDataWrite = true;
+                    try { node.nodeValue = value; } finally { _fazInStyleCharDataWrite = false; }
+                });
+                try { this.setStart(holder, Math.min(at, holder.nodeValue.length)); this.collapse(true); } catch (e) { /* a boundary the engine already moved */ }
+                return returned;
+            } catch (e) {
+                return native.apply(this, arguments);
+            }
         }
     });
 }
@@ -6806,10 +6872,19 @@ function _fazDecodeDataUriPayload(uri) {
 // over-park, and `site.test\@tracker.test` is the first-party host it is.
 function _fazNormalizeResourceUrl(url) {
     var s = String(url == null ? "" : url);
+    // Tab, LF and CR are stripped anywhere by the URL parser before anything
+    // is read; `https://tra\tcker.test/` is tracker.test to the engine.
+    if (/[\t\n\r]/.test(s)) s = s.replace(/[\t\n\r]/g, "");
     if (!/^\s*(?:https?:|[\\\/]{2})/i.test(s)) return s;
     s = s.replace(/\\/g, "/");
     s = s.replace(/^(\s*https?:)\/*/i, "$1//");
-    return s.replace(/^(\s*(?:[a-z][a-z0-9+.\-]*:)?\/\/)([^\/?#\s]*)@/i, "$1");
+    s = s.replace(/^(\s*(?:[a-z][a-z0-9+.\-]*:)?\/\/)([^\/?#\s]*)@/i, "$1");
+    // The host is percent-decoded by the parser too: `tracker%2Etest` is
+    // tracker.test. Authority only; the path keeps its bytes.
+    return s.replace(/^(\s*(?:[a-z][a-z0-9+.\-]*:)?\/\/)([^\/?#\s]*)/i, function (m, scheme, authority) {
+        if (authority.indexOf("%") === -1) return m;
+        try { return scheme + decodeURIComponent(authority); } catch (e) { return m; }
+    });
 }
 function _fazGetProviderMatchTarget(target) {
     if (!target || typeof target !== "string") return "";
