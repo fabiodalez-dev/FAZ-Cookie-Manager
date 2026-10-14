@@ -756,11 +756,27 @@ class Geolocation {
 				'working'    => true,
 				'reason'     => 'declared_by_filter',
 			);
-			if ( 'cloudflare' === $declared && self::is_interactive_admin_request() && ! self::cf_peer_is_trusted() ) {
-				$status['working'] = false;
-				$status['reason']  = 'peer_not_cloudflare';
+			if ( ! ( 'cloudflare' === $declared && self::is_interactive_admin_request() && ! self::cf_peer_is_trusted() ) ) {
+				return $status;
 			}
-			return $status;
+			// The declared edge is not vouching for this peer, so CF-IPCountry
+			// will not be read. That is not the whole answer, and returning it
+			// as one was the defect: the resolver still consults
+			// faz_visitor_country, the detected sources and the signal filter,
+			// and detect_country() uses every one of them for visitors. A site
+			// with the Cloudflare opt-in, a working MaxMind database and an
+			// IP-restoring origin — the very topology this docblock describes —
+			// was reported as degraded, which inerted the region presets and
+			// the custom country list in banner.php and told the administrator
+			// every visitor got the fallback, while MMDB routed them all
+			// correctly. So the failed probe is held and answered only if
+			// nothing below works.
+			$peer_failed = array(
+				'source'     => $declared,
+				'configured' => true,
+				'working'    => false,
+				'reason'     => 'peer_not_cloudflare',
+			);
 		}
 		// get_visitor_country() passes every resolved value — including '' —
 		// through this filter and routes on whatever comes back, so a callback
@@ -793,6 +809,13 @@ class Geolocation {
 				'working'    => true,
 				'reason'     => 'signal_forced_by_filter',
 			);
+		}
+
+		// Nothing the resolver consults is working, so the failed Cloudflare
+		// peer probe IS the answer — and it is the more useful one, because it
+		// names the filter the operator is missing instead of a download.
+		if ( isset( $peer_failed ) ) {
+			return $peer_failed;
 		}
 
 		return $status;

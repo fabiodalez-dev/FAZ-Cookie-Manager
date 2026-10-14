@@ -96,9 +96,11 @@ class DSAR_Shortcode {
 	 * denial of Art. 15-22 requests that MAX_PER_DAY below is written to avoid,
 	 * reproduced at 5 instead of 500. So when the address cannot be shown to
 	 * identify a visitor (`faz_client_ip_identifies_visitor()`), this layer is
-	 * SKIPPED rather than applied: the site-wide ceilings, the 60-second lock
-	 * and the one-per-email-per-hour limit still bound a flood, which costs the
-	 * database rows the hard ceiling allows instead of everybody's rights. The
+	 * SKIPPED rather than applied: the site-wide ceilings and the
+	 * one-per-email-per-hour limit still bound a flood, which costs the
+	 * database rows the hard ceiling allows instead of everybody's rights. NOT
+	 * the 60-second lock — claim_connection_lock() skips on the same predicate,
+	 * for the same reason, so naming it here claimed a bound that is not there. The
 	 * skip is specific to ceilings that deny a right: `faz_throttle_request()`
 	 * keeps keying on the address even when it is shared, because the windows
 	 * it keeps bound writes rather than refuse people, and a bounded site-wide

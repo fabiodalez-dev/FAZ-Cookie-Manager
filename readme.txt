@@ -329,7 +329,7 @@ There is no default here because guessing would be unsafe, not just imprecise: n
 
 Anything else keeps using the connection's own address and ignores forwarded headers, because those are forgeable by anyone who can reach the site directly. To trust a load balancer of your own, enable `faz_trust_proxy_headers` and scope it with `faz_trusted_proxies`.
 
-Where no per-visitor address can be resolved, the per-connection limit on `[faz_dsar_form]` is **skipped** rather than applied to everyone at once: five submissions must never close the form for unrelated people for 24 hours, since GDPR Art. 12(2) requires the controller to facilitate requests. The site-wide limits, the 60-second lock and the one-per-address-per-hour limit still bound a flood, the hourly summary email says the per-connection limit is not in force, and `faz_dsar_max_per_ip_per_day` changes it (`0` switches it off).
+Where no per-visitor address can be resolved, the per-connection limit on `[faz_dsar_form]` is **skipped** rather than applied to everyone at once: five submissions must never close the form for unrelated people for 24 hours, since GDPR Art. 12(2) requires the controller to facilitate requests. The site-wide limits and the one-per-address-per-hour limit still bound a flood, the hourly summary email says the per-connection limit is not in force, and `faz_dsar_max_per_ip_per_day` changes it (`0` switches it off).
 
 = How do I run my own script when a category is consented? =
 

@@ -267,6 +267,71 @@ namespace {
 	faz_is( $probed['working'], false, 'richiesta admin + opt-in + peer NON Cloudflare -> working FALSE' );
 	faz_is( $probed['reason'], 'peer_not_cloudflare', 'causa propria: peer_not_cloudflare, che nomina il filtro mancante' );
 
+	// Ma peer_not_cloudflare non e' l'ultima parola: il resolver consulta
+	// ANCHE faz_visitor_country, le sorgenti rilevate (MMDB, estensione PHP) e
+	// faz_has_country_signal_source, e detect_country() le usa tutte per i
+	// visitatori. Uscire qui diceva "degradato" a un sito con l'opt-in
+	// Cloudflare, un database MaxMind funzionante e un origin che ripristina
+	// l'indirizzo — cioe' esattamente la topologia che il docblock descrive —
+	// e banner.php inertizzava i preset di regione e la lista paesi mentre
+	// MMDB instradava ogni visitatore correttamente. La sonda fallita e' una
+	// causa solo quando nient'altro funziona.
+	//
+	// Ogni caso riparte da faz_reset(): has_filter() qui e' array_key_exists,
+	// quindi un filtro rimesso a null resterebbe "presente" e il caso
+	// successivo leggerebbe lo stato di quello prima.
+	$faz_peer_fail = function () {
+		faz_reset();
+		faz_set_filter( 'faz_trust_cf_ipcountry_header', true );
+		$GLOBALS['__faz_request']['admin'] = true;
+		$_SERVER['REMOTE_ADDR']            = '203.0.113.99';
+	};
+
+	// Un MMDB che risolve davvero: il fixture passa il controllo di formato ma
+	// non risolve nulla, quindi il verdetto funzionante si semina nella sonda
+	// memorizzata, come fa il caso del riuso piu' sotto.
+	$faz_peer_fail();
+	faz_write_db( $db_path, str_repeat( 'x', 2048 ) . $marker );
+	Geolocation::reset_runtime_cache();
+	Geolocation::source_status();
+	$faz_probe = get_option( 'faz_geo_source_probe', array() );
+	$faz_probe['working'] = true;
+	$faz_probe['source']  = 'mmdb';
+	$faz_probe['reason']  = 'probe_ok';
+	update_option( 'faz_geo_source_probe', $faz_probe, false );
+	Geolocation::reset_runtime_cache();
+	$fallback = Geolocation::source_status();
+	faz_is( $fallback['working'], true, 'opt-in CF + peer non CF + MMDB funzionante -> working TRUE, non degradato' );
+	faz_is( $fallback['source'], 'mmdb', 'e la sorgente riportata e\' quella che davvero instrada' );
+	@unlink( $db_path );
+
+	// faz_visitor_country: il resolver gli da' l'ultima parola.
+	$faz_peer_fail();
+	faz_set_filter( 'faz_visitor_country', 'IT' );
+	$via_filter = Geolocation::source_status( true );
+	faz_is( $via_filter['working'], true, 'opt-in CF + peer non CF + faz_visitor_country -> working TRUE' );
+	faz_is( $via_filter['reason'], 'country_filter', 'con la causa del filtro che risponde' );
+
+	// Il segnale dichiarato dall'integratore.
+	$faz_peer_fail();
+	faz_set_filter( 'faz_has_country_signal_source', true );
+	$forced = Geolocation::source_status( true );
+	faz_is( $forced['working'], true, 'opt-in CF + peer non CF + segnale forzato -> working TRUE' );
+	faz_is( $forced['reason'], 'signal_forced_by_filter', 'con la causa del segnale dichiarato' );
+
+	// E senza nessun ripiego la sonda fallita resta la causa: la diagnosi che
+	// nomina il filtro mancante non va persa.
+	$faz_peer_fail();
+	@unlink( $db_path );
+	Geolocation::reset_runtime_cache();
+	$alone = Geolocation::source_status( true );
+	faz_is( $alone['working'], false, 'opt-in CF + peer non CF + nessun ripiego -> working FALSE' );
+	faz_is( $alone['reason'], 'peer_not_cloudflare', 'e la causa resta peer_not_cloudflare' );
+	faz_is( $alone['source'], 'cloudflare', 'con la sorgente dichiarata, non quella mancante' );
+
+	// Ripristina lo stato che i casi seguenti si aspettano.
+	$faz_peer_fail();
+
 	// Lo stesso peer con l'asserzione dell'operatore: il predicato passa.
 	faz_set_filter( 'faz_remote_addr_rewritten_by_cloudflare', true );
 	faz_is( Geolocation::source_status()['reason'], 'declared_by_filter', "con faz_remote_addr_rewritten_by_cloudflare l'origin ripristinato torna funzionante" );
