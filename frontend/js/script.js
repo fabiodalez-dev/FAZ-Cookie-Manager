@@ -4304,6 +4304,9 @@ function _fazAttachShortCodeStyles() {
  */
 function _fazImgShouldBlock(el, url) {
     if (!_fazStore._block || typeof url !== "string" || url === "") return false;
+    // Judged as the engine resolves it: `https:\\host/p` has no `//` as
+    // written and read as a relative path below, so it was never blocked.
+    url = _fazNormalizeResourceUrl(url);
     // Root-relative ("/path") is same-origin and bails; protocol-relative
     // ("//host/path") is CROSS-origin and must still be matched — only the host
     // check below can clear it. data:/blob: are inert and bail.
@@ -6704,14 +6707,33 @@ function _fazDecodeDataUriPayload(uri) {
     }
 }
 
+// A URL as the engine resolves it, for matching only — the same rules the
+// server applies in Frontend::normalize_resource_url(): for a special scheme
+// every `\` is a `/` (WHATWG), a scheme takes exactly two slashes whatever
+// was written, and the host is what follows the authority's LAST `@`. Without
+// this `https://site.test@tracker.test/p`, `https:\\tracker.test/p` and
+// `\\tracker.test/p` were not recognised on restore or by the sweep while
+// every engine fetched tracker.test; and dropping the userinfo is what lets
+// the boundary check work on host and path alone, so an `@` in a path or a
+// query (`/local.png?u=me@tracker.test`) is not a boundary and does not
+// over-park, and `site.test\@tracker.test` is the first-party host it is.
+function _fazNormalizeResourceUrl(url) {
+    var s = String(url == null ? "" : url);
+    if (!/^\s*(?:https?:|[\\\/]{2})/i.test(s)) return s;
+    s = s.replace(/\\/g, "/");
+    s = s.replace(/^(\s*https?:)\/*/i, "$1//");
+    return s.replace(/^(\s*(?:[a-z][a-z0-9+.\-]*:)?\/\/)([^\/?#\s]*)@/i, "$1");
+}
 function _fazGetProviderMatchTarget(target) {
     if (!target || typeof target !== "string") return "";
     if (/^data:/i.test(target)) return _fazDecodeDataUriPayload(target);
-    return target;
+    return _fazNormalizeResourceUrl(target);
 }
 
 function _fazHasProviderBoundary(target, index, length) {
-    if (index > 0 && !/[\/\.\:\s"'`=;,(<{\[]/.test(target.charAt(index - 1))) return false;
+    // `\` is a slash to every special-scheme URL parser; `@` is deliberately
+    // NOT here, see _fazNormalizeResourceUrl.
+    if (index > 0 && !/[\/\.\:\s"'`=;,(<{\[\\]/.test(target.charAt(index - 1))) return false;
     // A pattern ending on a separator already carries its own right-hand
     // boundary — `js.hs-scripts.com/` cannot be the prefix of a longer domain
     // label once the slash has closed it. Requiring a further separator after
@@ -6720,7 +6742,7 @@ function _fazHasProviderBoundary(target, index, length) {
     // Frontend::has_provider_boundary().
     if (/[\/\.\:\?\#=&]/.test(target.charAt(index + length - 1))) return true;
     var afterPos = index + length;
-    if (afterPos < target.length && !/[\/\.\:\?\#\s"'=;,&)<}\]]/.test(target.charAt(afterPos))) return false;
+    if (afterPos < target.length && !/[\/\.\:\?\#\s"'=;,&)<}\]\\]/.test(target.charAt(afterPos))) return false;
     return true;
 }
 
@@ -7180,6 +7202,7 @@ function _fazShouldChangeType(element, src, typeOverride) {
 function _fazExtractEndpoint(url) {
     if (!url || typeof url !== "string") return "";
     try {
+        url = _fazNormalizeResourceUrl(url);
         var full = url.startsWith("//") ? window.location.protocol + url : url;
         // Normalise WebSocket schemes to https so URL() can parse them.
         full = full.replace(/^wss?:\/\//i, 'https://');

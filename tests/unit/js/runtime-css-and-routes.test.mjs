@@ -281,5 +281,28 @@ console.log('\nroutes: a srcdoc URL spelled through entities or escaped slashes'
   eq('control: a same-origin URL through entities is applied', c.getAttribute('srcdoc'), '<p>https:&#x2F;&#x2F;site.test/own</p>');
 }
 
+console.log('\nruntime: a URL is matched as the engine resolves it (server parity)');
+
+// The server normalises a URL before matching: every `\` is a `/` for a
+// special scheme, a scheme takes its two slashes, and the host is what
+// follows the authority's last `@`. The runtime matched the raw string.
+{
+  const w = runtime();
+  const matches = (u) => w.eval(`_fazMatchingProviders(${JSON.stringify(u)}).length`);
+  const blocks = (u) => w.eval(`_fazImgShouldBlock(null, ${JSON.stringify(u)})`);
+  const endpoint = (u) => w.eval(`_fazExtractEndpoint(${JSON.stringify(u)})`);
+  eq('userinfo before the host: matched', matches('https://site.test@tracker.test/p'), 1);
+  eq('and blocked', blocks('https://site.test@tracker.test/p'), true);
+  eq('scheme followed by backslashes: matched', matches('https:\\\\tracker.test/p'), 1);
+  eq('and blocked', blocks('https:\\\\tracker.test/p'), true);
+  eq('scheme-relative backslashes: matched', matches('\\\\tracker.test/p'), 1);
+  eq('and blocked', blocks('\\\\tracker.test/p'), true);
+  eq('and its endpoint is the host and path', endpoint('\\\\tracker.test/p'), 'tracker.test/p');
+  eq('a backslash-closed authority: the host is site.test, not matched', matches('https://site.test\\@tracker.test/p'), 0);
+  eq('and not blocked', blocks('https://site.test\\@tracker.test/p'), false);
+  eq('a tracker host in a query is not matched', matches('/local.png?u=me@tracker.test'), 0);
+  eq('control: the plain tracker URL still matches', matches('https://tracker.test/p'), 1);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
