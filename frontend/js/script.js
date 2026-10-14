@@ -4825,8 +4825,27 @@ function _fazCssDecodeEscapes(css) {
 // no URL was read out of the sheet at all. On the decoded text the whitespace
 // is already part of the URL the engine resolved, so the body runs to the
 // closing paren instead.
-var _FAZ_CSS_URL_BARE = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi;
-var _FAZ_CSS_URL_DECODED = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)]+?))\s*\)/gi;
+// A CSS string ends at an UNESCAPED quote: `url("https://host/a\".png")` is one
+// string whose value holds a quote, and the engine fetches it. Reading the body
+// as `[^"]*` stopped at the escaped quote, failed the closing paren, and let the
+// bare branch swallow the whole thing INCLUDING the quotes — a token that
+// resolves against the page and lands on the site's own origin, so the third
+// party was never named and never blocked. The two alternatives below are
+// disjoint on their first character, so this cannot backtrack badly.
+var _FAZ_CSS_URL_BARE = /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'|([^\)\s]+))\s*\)/gi;
+var _FAZ_CSS_URL_DECODED = /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'|([^\)]+?))\s*\)/gi;
+// A url( left OPEN: the tokenizer reads to the end of the text as the URL, and
+// the engine fetches it. That is the shape a sheet has while a held fragment
+// has not landed yet, and the shape a truncated sheet keeps for good — so it
+// is not exotic. bootstrap.js has held it all along (CSS_URL_OPEN) and this
+// extractor did not, which made the two layers disagree on the same text: the
+// pre-runtime blocker parked the sheet and the runtime that arrived afterwards
+// read it as clean. Anchored at the end, so only a genuinely unclosed token
+// matches.
+var _FAZ_CSS_URL_OPEN = /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)|'((?:[^'\\]|\\[\s\S])*)|([^\)\s]*))\s*$/i;
+// image-set() and src() name a file with a bare string and no url() around it.
+// src() was the other form bootstrap.js read and this one did not.
+var _FAZ_CSS_STRING_FN = /(?:-webkit-)?(?:image-set|src)\(([^()]*)\)/gi;
 function _fazCssUrlsRaw(css, decoded) {
     var urls = [];
     if (!css || typeof css !== "string") return urls;
@@ -4834,17 +4853,21 @@ function _fazCssUrlsRaw(css, decoded) {
         urls.push(dq || sq || bare || "");
         return _m;
     });
-    css.replace(/@import\s*(["'])([^"']+)\1/gi, function (_m, _q, url) {
+    // Same reason as the url() string above: the body must cross an escaped
+    // quote, or `@import"https://host/a\".css"` names nothing.
+    css.replace(/@import\s*(["'])((?:(?!\1)[^\\]|\\[\s\S])+)\1/gi, function (_m, _q, url) {
         urls.push(url || "");
         return _m;
     });
-    css.replace(/(?:-webkit-)?image-set\(([^()]*)\)/gi, function (_m, inner) {
-        String(inner).replace(/"([^"]*)"|'([^']*)'/g, function (_s, dq, sq) {
+    css.replace(_FAZ_CSS_STRING_FN, function (_m, inner) {
+        String(inner).replace(/"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'/g, function (_s, dq, sq) {
             urls.push(dq || sq || "");
             return _s;
         });
         return _m;
     });
+    var open = _FAZ_CSS_URL_OPEN.exec(css);
+    if (open && (open[1] || open[2] || open[3])) urls.push(open[1] || open[2] || open[3]);
     return urls;
 }
 function _fazCssUrls(css) {

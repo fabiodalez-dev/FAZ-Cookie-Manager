@@ -1826,6 +1826,8 @@ for (const [label, css, blocked, needle] of TOKENIZER_CASES) {
 // so nothing downstream asks again.
 const JUDGED_CLEAN = [
   ['an escaped space in an unquoted url(', '.p{background-image:url(https://tracker.test/a\\ b.png)}'],
+  ['an escaped quote inside an @import string', '@import"https://tracker.test/a\\".css";'],
+  ['an unclosed url( with an escaped quote', '.p{background-image:url("https://tracker.test/open\\".png'],
   ['a hex-escaped space in an unquoted url(', '.p{background-image:url(https://tracker.test/a\\20 b.png)}'],
   ['comment markers held inside strings', '.a{content:"/*"}.p{background-image:u\\72l(https://tracker.test/c.png)}.b{content:"*/"}'],
 ];
@@ -1841,6 +1843,28 @@ for (const [label, css] of JUDGED_CLEAN) {
   ok('premise: the markup landed (' + label + ')', !!sheet);
   eq(label + ' is parked whole', sheet && sheet.textContent, '');
   eq(label + ' keeps its original in the marker', sheet && parkedCss(sheet), css);
+}
+
+// An escaped quote inside the url() string. Once the quoted body is read the
+// way the tokenizer reads it — to the first UNESCAPED quote — this spelling is
+// one neutralise() can rewrite in PLACE, so the sheet is not parked whole: the
+// site's own rules in it stay live and only the refused URL goes inert. What
+// must hold either way is that the tracker is not in the live text and the
+// original is recoverable.
+{
+  const CSS = '.p{background-image:url("https://tracker.test/a\\".png")} .k{color:red}';
+  const { window, document } = boot();
+  await release(window);
+  const d = document.createElement('div');
+  d.innerHTML = '<style id="eq">' + CSS + '</style>';
+  document.body.appendChild(d);
+  await Promise.resolve();
+  await Promise.resolve();
+  const sheet = document.getElementById('eq');
+  ok('premise: the markup landed (escaped quote in the url string)', !!sheet);
+  ok('an escaped quote in the url() string does not leave the tracker live', (sheet.textContent || '').indexOf('tracker.test') === -1);
+  eq('and the original is in the marker', parkedCss(sheet), CSS);
+  ok("and the sheet's own other rules survive", (sheet.textContent || '').indexOf('color:red') !== -1);
 }
 
 // The controls `judged` exists for still stay live: a comment marker inside a

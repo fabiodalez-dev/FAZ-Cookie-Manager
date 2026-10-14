@@ -1080,18 +1080,24 @@
     // extracts (_fazCssUrls, script.js), kept identical on purpose, so a
     // decision taken here on them is the decision the runtime would take on
     // the same text.
-    var CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi;
-    var CSS_IMPORT = /(@import\s+)(["'])([^"']+)\2/gi;
+    // A CSS string ends at an UNESCAPED quote. Reading the body as `[^"]*`
+    // stopped at an escaped one, failed the closing paren, and let the bare
+    // branch swallow the quotes with it — a token that resolves against the
+    // page and lands on the site's own origin, so the third party in
+    // `url("https://host/a\".png")` was never named. The two alternatives are
+    // disjoint on their first character, so this cannot backtrack badly.
+    var CSS_URL = /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'|([^\)\s]+))\s*\)/gi;
+    var CSS_IMPORT = /(@import\s+)(["'])((?:(?!\2)[^\\]|\\[\s\S])+)\2/gi;
     // Four more forms the runtime's pair does not read, and the engine does:
     // `@import"x.css"`, which needs no whitespace to be an import; a url(
     // left open at the end of the text, which the tokenizer reads to EOF as
     // the URL — the shape a sheet has when a held fragment lands last; and
     // the string arguments of image-set() and src(), which name a file
     // without any url() around it.
-    var CSS_IMPORT_TIGHT = /@import(["'])([^"']+)\1/gi;
-    var CSS_URL_OPEN = /url\(\s*(?:"([^"]*)|'([^']*)|([^\)\s]*))\s*$/i;
+    var CSS_IMPORT_TIGHT = /@import(["'])((?:(?!\1)[^\\]|\\[\s\S])+)\1/gi;
+    var CSS_URL_OPEN = /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)|'((?:[^'\\]|\\[\s\S])*)|([^\)\s]*))\s*$/i;
     var CSS_STRING_FN = /\b(?:image-set|src)\(((?:[^()]|\([^()]*\))*)\)/gi;
-    var CSS_STRING = /"([^"]*)"|'([^']*)'/g;
+    var CSS_STRING = /"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'/g;
     // The bare branch of CSS_URL stops at the first whitespace, which is right
     // for the raw text — an unquoted url() token cannot hold one. On the
     // NORMALISED text it is wrong: an escape that decoded to a space put one
@@ -1099,7 +1105,7 @@
     // neither pass, so no URL was read out of it at all and the sheet was
     // called clean. Here the whitespace is already part of the URL the engine
     // resolved, so the body runs to the closing paren instead.
-    var CSS_URL_DECODED = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)]+?))\s*\)/gi;
+    var CSS_URL_DECODED = /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'|([^\)]+?))\s*\)/gi;
     // A comment is a comment only outside a string. `content:"/*"` is two
     // characters of content, and stripping from there to the `*/` held in a
     // later string deleted every real token between them — including the url()

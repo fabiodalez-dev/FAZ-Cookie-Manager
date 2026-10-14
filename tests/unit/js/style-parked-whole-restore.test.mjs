@@ -105,6 +105,28 @@ eq(
 );
 eq('@import with no whitespace is blocking', shouldBlock('@import"https://tracker.test/g.css";'), true);
 
+// Two more forms the CSS tokenizer reads and this extractor did not, both of
+// which bootstrap.js has always held (CSS_URL_OPEN, CSS_STRING_FN) — the two
+// layers are documented as kept in step, and here they were not. A url( left
+// OPEN is read to the end of the text as the URL, which is the shape a sheet
+// has when a held fragment lands last; and src() names a file with no url()
+// around it. Measured against a reference tokenizer: before this, the runtime
+// answered "clean" to every spelling below while the engine fetched them.
+eq('an unclosed url( running to the end of the text is blocking', shouldBlock('.p{background-image:url(https://tracker.test/open.png'), true);
+eq('an unclosed quoted url( is blocking', shouldBlock('.p{background-image:url("https://tracker.test/open.png'), true);
+eq("an unclosed single-quoted url( is blocking", shouldBlock(".p{background-image:url('https://tracker.test/open.png"), true);
+eq('an unclosed url( followed by a newline is blocking', shouldBlock('.p{background-image:url(https://tracker.test/open.png\n'), true);
+eq('an unclosed @import url( is blocking', shouldBlock('@import url(https://tracker.test/open.css'), true);
+eq('a first-party sheet whose last url( is open still blocks on the tracker before it', shouldBlock('.a{background-image:url(https://site.test/ok.png)}.p{background-image:url(https://tracker.test/open.png'), true);
+eq('the string form of src() is blocking', shouldBlock('@font-face{src:src("https://tracker.test/f.woff2")}'), true);
+// An escaped quote inside the quoted url() string. The extractor's quoted
+// branch is `"([^"]*)"`, which stops at the ESCAPED quote and then fails the
+// closing paren, so the bare branch takes the whole thing including the quotes
+// — a token that resolves to the site's own origin, not the tracker's. Whether
+// that still blocks depends on how the provider match reads it, which is
+// exactly the kind of accident that must not be what protects a visitor.
+eq('an escaped quote inside the url() string is blocking', shouldBlock('.p{background-image:url("https://tracker.test/a\\".png")}'), true);
+
 // The controls the narrow question exists for: holding these is what asking the
 // broad question of every sheet used to cost a theme.
 console.log('\n_fazCssShouldBlock() — what must stay live');
