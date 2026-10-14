@@ -47,6 +47,10 @@
     // never on Node.prototype, so this descriptor stays the real one, and
     // calling it directly bypasses the subclass property entirely.
     var nativeTextSet = (Object.getOwnPropertyDescriptor(Node.prototype, 'textContent') || {}).set;
+    // Captured before the insertion wrappers below shadow it: emptySheet()
+    // puts one empty text node into a parked <style>, and that write must not
+    // be judged by the very gate that is parking the element.
+    var nativeAppend = Node.prototype.appendChild;
     function attr(el, name) { try { return nativeGet.call(el, name); } catch (e) { return null; } }
     function setAttr(el, name, value) { try { nativeSet.call(el, name, value); } catch (e) { /* detached or read-only */ } }
     function dropAttr(el, name) { try { nativeRemove.call(el, name); } catch (e) { /* noop */ } }
@@ -974,7 +978,11 @@
     function normaliseCss(text) {
         return String(text == null ? '' : text)
             .replace(/\/\*[\s\S]*?\*\//g, '')
-            .replace(/\\([0-9a-f]{1,6})[ \t\n\r\f]?/gi, function (match, hex) {
+            // One whitespace after the hex digits belongs to the escape, and
+            // CRLF counts as ONE: the tokenizer's preprocessing folds it into
+            // a single newline before the escape consumes it, so eating only
+            // the `\r` left `u\nrl(` behind and a regex that read it as text.
+            .replace(/\\([0-9a-f]{1,6})(?:\r\n|[ \t\n\r\f])?/gi, function (match, hex) {
                 var code = parseInt(hex, 16);
                 try { return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : '�'; }
                 catch (e) { return '�'; }
@@ -1109,10 +1117,33 @@
     // _fazUnblockServerSide) hands the original back on the consent that
     // allows it. Dropping the operation instead left the page one stylesheet
     // short for the rest of the view, on that same consent.
+    // The live text a refused sheet is left with. The in-place rewrite is
+    // asked the same question AGAIN, on its own raw and normalised copies: a
+    // URL that appears once in a form neutralise() rewrites and once in one
+    // it does not (`url(T/x)` next to `u\72l(T/x)`, `@import url(X)` next to
+    // `@import"X"`) is the same string in both lists, so a verdict decided
+    // by string identity called the sheet rewritable and left the second
+    // spelling live. Whatever still fetches after the rewrite parks the
+    // sheet whole.
+    function parkedForm(policy, text, verdict) {
+        var out = verdict.whole ? '' : neutralise(policy, text);
+        if (out && judgeCss(policy, out)) out = '';
+        return out;
+    }
+    // A sheet parked whole keeps exactly ONE empty text node as its content,
+    // not none: the runtime adopts a parked original from the marker only
+    // when the element has exactly one text child (_fazPrimeStyleCssMarkers),
+    // and with zero children the first append through its gate re-synced the
+    // marker from nothing and dropped it, so the original was never restored.
+    function emptySheet(el) {
+        nativeTextSet.call(el, '');
+        try { nativeAppend.call(el, d.createTextNode('')); } catch (e) { /* a document the element cannot take text in */ }
+    }
     function parkCss(el, text, policy, verdict) {
         if (!nativeTextSet) return;
         var encoded = base64(text);
-        nativeTextSet.call(el, verdict.whole ? '' : neutralise(policy, text));
+        var live = parkedForm(policy, text, verdict);
+        if (live) nativeTextSet.call(el, live); else emptySheet(el);
         if (encoded) setAttr(el, 'data-faz-css', encoded);
         if (!attr(el, 'data-faz-category')) setAttr(el, 'data-faz-category', parkCategory(policy, verdict.hit));
     }
@@ -1246,7 +1277,7 @@
             if (!encoded) return full;
             var category = /\bdata-faz-category\s*=/i.test(attrs) ? '' : ' data-faz-category="' + escapeAttr(parkCategory(policy, verdict.hit)) + '"';
             return '<style' + attrs + ' data-faz-css="' + escapeAttr(encoded) + '"' + category + '>'
-                + (verdict.whole ? '' : neutralise(policy, css)) + '</style>';
+                + parkedForm(policy, css, verdict) + '</style>';
         });
     }
     // `host` is where the parsed nodes land: the sheets that are new in it
@@ -1258,9 +1289,13 @@
         if (!policy || !policy.sameOriginOnly) return apply(markup);
         var before = sheets(host);
         apply(parkMarkup(policy, markup));
-        if (!judged) return;
         sheets(host).forEach(function (el) {
-            if (before.indexOf(el) === -1) judged.add(el);
+            if (before.indexOf(el) !== -1) return;
+            // The parser builds no text node for an empty element, so a
+            // sheet parked whole through markup gets its one empty text child
+            // here, for the reason emptySheet() gives.
+            if (nativeHas.call(el, 'data-faz-css') && !el.firstChild) emptySheet(el);
+            if (judged) judged.add(el);
         });
     }
     // Preserve the runtime's CSS enforcement during its download too. Plain
