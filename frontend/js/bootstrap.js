@@ -1092,12 +1092,28 @@
     var CSS_URL_OPEN = /url\(\s*(?:"([^"]*)|'([^']*)|([^\)\s]*))\s*$/i;
     var CSS_STRING_FN = /\b(?:image-set|src)\(((?:[^()]|\([^()]*\))*)\)/gi;
     var CSS_STRING = /"([^"]*)"|'([^']*)'/g;
+    // The bare branch of CSS_URL stops at the first whitespace, which is right
+    // for the raw text — an unquoted url() token cannot hold one. On the
+    // NORMALISED text it is wrong: an escape that decoded to a space put one
+    // inside the token, and `url(https://tracker.test/a\ b.png)` then matched
+    // neither pass, so no URL was read out of it at all and the sheet was
+    // called clean. Here the whitespace is already part of the URL the engine
+    // resolved, so the body runs to the closing paren instead.
+    var CSS_URL_DECODED = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)]+?))\s*\)/gi;
+    // A comment is a comment only outside a string. `content:"/*"` is two
+    // characters of content, and stripping from there to the `*/` held in a
+    // later string deleted every real token between them — including the url()
+    // the sheet was judged on. The alternation consumes whole strings first,
+    // and gives them back untouched, so only a comment outside one is removed.
+    var CSS_COMMENT = /("(?:[^"\\\n]|\\[\s\S])*"|'(?:[^'\\\n]|\\[\s\S])*')|\/\*[\s\S]*?\*\//g;
     // `simple` restricts the answer to the two forms neutralise() can rewrite
     // in place; a URL found only by the other three cannot be neutralised one
     // token at a time, and the sheet carrying it is parked whole instead.
-    function cssUrls(text, simple) {
+    // `decoded` says the text has been through normaliseCss(), which is the
+    // one case the looser bare branch above applies to.
+    function cssUrls(text, simple, decoded) {
         var urls = [], value = String(text == null ? '' : text);
-        value.replace(CSS_URL, function (match, dq, sq, bare) {
+        value.replace(decoded ? CSS_URL_DECODED : CSS_URL, function (match, dq, sq, bare) {
             urls.push(dq || sq || bare || '');
             return match;
         });
@@ -1129,7 +1145,7 @@
     // not see and the engine fetches.
     function normaliseCss(text) {
         return String(text == null ? '' : text)
-            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(CSS_COMMENT, '$1')
             // One whitespace after the hex digits belongs to the escape, and
             // CRLF counts as ONE: the tokenizer's preprocessing folds it into
             // a single newline before the escape consumes it, so eating only
@@ -1144,7 +1160,7 @@
     // Every URL the text can be read to name, on the raw text and on the
     // normalised one.
     function cssUrlsAll(text) {
-        return cssUrls(text).concat(cssUrls(normaliseCss(text)));
+        return cssUrls(text).concat(cssUrls(normaliseCss(text), false, true));
     }
     // The narrow question, for a sheet whose text is complete and whose author
     // is the parser: does it name a URL that can reach a third party? Judged on

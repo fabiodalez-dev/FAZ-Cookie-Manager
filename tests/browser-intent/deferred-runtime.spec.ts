@@ -76,6 +76,20 @@ for (const consent of ['no', 'yes', 'missing']) {
           iah.insertAdjacentHTML('beforeend','<img id="iahimg" src="https://tracker.example.test/iah.gif">');
           var oh=document.createElement('div');host.appendChild(oh);
           oh.outerHTML='<div id="ohw"><img id="ohimg" src="https://tracker.example.test/outerhtml.gif"></div>';
+          // setHTMLUnsafe is the fourth markup sink bootstrap.js wraps, and the
+          // only one this file never measured. Its sibling setHTML is the
+          // sanitizing form and is newer, so it is probed only where it exists.
+          // A SHADOW ROOT gets its own probe because that is where this API is
+          // mostly used, and a shadow tree is one the document observer never
+          // sees — if anything parks that image it has to be the sink itself.
+          var shHost=document.createElement('div');host.appendChild(shHost);
+          window.hasSetHTMLUnsafe=typeof shHost.setHTMLUnsafe==='function';
+          if(window.hasSetHTMLUnsafe){
+            shHost.setHTMLUnsafe('<img id="shu" src="https://tracker.example.test/sethtml.gif">');
+            var srHost=document.createElement('div');host.appendChild(srHost);
+            window.probeShadow=srHost.attachShadow({mode:'open'});
+            window.probeShadow.setHTMLUnsafe('<img id="shadowimg" src="https://tracker.example.test/shadow-sethtml.gif">');
+          }
         </script>
         </body></html>` });
     });
@@ -97,7 +111,7 @@ for (const consent of ['no', 'yes', 'missing']) {
     // exactly what script.js has always used and documents as best-effort
     // against the first fetch. So they are judged on the state they end in,
     // below, not on winning a race.
-    const MARKUP = ['/innerhtml.gif', '/innerhtml-frame', '/iah.gif', '/outerhtml.gif'];
+    const MARKUP = ['/innerhtml.gif', '/innerhtml-frame', '/iah.gif', '/outerhtml.gif', '/sethtml.gif', '/shadow-sethtml.gif'];
     // Treated as one set everywhere below, because which member of it reaches
     // the network is a property of the engine's scheduler, not of this plugin.
     expect(requests.filter((path) => !MARKUP.includes(path))).toEqual([]);
@@ -113,12 +127,19 @@ for (const consent of ['no', 'yes', 'missing']) {
     // last state was the permanent half of the regression — nothing re-reads an
     // already-present node, so there was no placeholder, no per-service reveal
     // and no re-evaluation when consent changed.
+    // The sink has to be there for its probe to mean anything: a browser
+    // without setHTMLUnsafe would make the two new ids absent and the check
+    // below vacuously true.
+    expect(await page.evaluate(() => (window as any).hasSetHTMLUnsafe)).toBe(true);
     await expect.poll(() => page.evaluate(() => {
-      const ids = ['ih', 'ihf', 'iahimg', 'ohimg'];
-      return ids.every((id) => {
-        const el = document.getElementById(id);
-        return !!el && !el.getAttribute('src') && !!el.getAttribute('data-faz-src') && !!el.getAttribute('data-faz-category');
-      });
+      const parked = (el: Element | null | undefined) =>
+        !!el && !el.getAttribute('src') && !!el.getAttribute('data-faz-src') && !!el.getAttribute('data-faz-category');
+      const ids = ['ih', 'ihf', 'iahimg', 'ohimg', 'shu'];
+      // Inside a shadow root getElementById does not reach, and neither does
+      // the document observer — this one is the sink's own responsibility.
+      const shadow = (window as any).probeShadow as ShadowRoot | undefined;
+      return ids.every((id) => parked(document.getElementById(id)))
+        && parked(shadow && shadow.getElementById ? shadow.getElementById('shadowimg') : shadow?.querySelector('#shadowimg'));
     })).toBe(true);
     // And the server's own markup is left exactly as it was sent. Read through
     // the native accessor: the bootstrap's getAttribute answers with the staged
@@ -195,7 +216,16 @@ for (const consent of ['no', 'yes', 'missing']) {
           'https://tracker.example.test/innerhtml.gif',
           'https://tracker.example.test/outerhtml.gif',
           'https://tracker.example.test/script.js',
+          'https://tracker.example.test/sethtml.gif',
         ]);
+      // The shadow-root probe is deliberately NOT in the list above: a shadow
+      // tree is outside document.querySelectorAll, which is also why the
+      // document observer never sees it. It is asserted through its root.
+      expect(await page.evaluate(() => {
+        const root = (window as any).probeShadow as ShadowRoot;
+        const el = root.querySelector('img');
+        return [el && el.getAttribute('src'), el && el.getAttribute('data-faz-src')];
+      })).toEqual([null, 'https://tracker.example.test/shadow-sethtml.gif']);
       // The detached probes (new Image(), the removeAttribute'd one) are not in
       // the document and so are not in the list above; the held pixel is
       // asserted through its own reference.
