@@ -4483,9 +4483,7 @@ class Frontend {
 			return $full;
 		}
 
-		$new_attrs = $this->set_script_type_plain( $attrs );
-		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		return '<script' . $new_attrs . '>' . $content . '</script>';
+		return '<script' . $this->label_category_first( $this->set_script_type_plain( $attrs ), $matched_category ) . '>' . $content . '</script>';
 	}
 
 	/**
@@ -4636,9 +4634,7 @@ class Frontend {
 		// Rename src → data-faz-src on the token the tokenizer would produce,
 		// whatever precedes it.
 		list( $new_attrs ) = $this->rename_attr_tokens( $attrs, array( 'src' => 'data-faz-src' ) );
-		if ( ! $this->has_attr_token( $attrs, 'data-faz-category' ) ) {
-			$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		}
+		$new_attrs         = $this->label_category_first( $new_attrs, $matched_category );
 
 		$inner = isset( $m[2] ) ? $m[2] : '';
 		$blocked_iframe = isset( $m[2] )
@@ -4842,7 +4838,7 @@ class Frontend {
 				if ( empty( $renamed ) ) {
 					return $tag;
 				}
-				return $open[0] . ' data-faz-category="' . esc_attr( $label_category ) . '"' . $rewritten;
+				return $open[0] . $this->label_category_first( $rewritten, $label_category );
 			},
 			$content
 		);
@@ -4924,13 +4920,13 @@ class Frontend {
 		// an XHTML-style closing slash inside $attrs (`<img ... />`), so appending
 		// metadata after it produced invalid `<img ... / data-faz-category=...>`.
 		// Prefixing preserves both ordinary and self-closing source markup.
-		// Never a second category when one is already on the tag.
-		$metadata = $this->has_attr_token( $attrs, 'data-faz-category' ) ? '' : ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		if ( $parked_srcset && ! $this->has_attr_token( $attrs, 'data-faz-srcset-category' ) ) {
-			// The srcset restore reads its category from its own attribute.
-			$metadata .= ' data-faz-srcset-category="' . esc_attr( $matched_category ) . '"';
+		$with_src = $this->label_category_first( $with_src, $matched_category );
+		if ( $parked_srcset ) {
+			// The srcset restore reads its category from its own attribute;
+			// the matcher's, alone, for the same reason.
+			$with_src = ' data-faz-srcset-category="' . esc_attr( $matched_category ) . '"' . $this->strip_attr_tokens( $with_src, 'data-faz-srcset-category' );
 		}
-		return '<img' . $metadata . $with_src . '>';
+		return '<img' . $with_src . '>';
 	}
 
 	/**
@@ -5019,11 +5015,8 @@ class Frontend {
 
 		// Metadata BEFORE the captured attributes, for the same reason as
 		// process_img_tag(): a self-closing tag keeps its slash inside $attrs.
-		$metadata = $this->has_attr_token( $attrs, 'data-faz-category' ) ? '' : ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		if ( '' !== $value ) {
-			$metadata .= ' data-faz-href=' . $value;
-		}
-		return '<' . $tag . $metadata . $parked . $close . '>';
+		$metadata = '' !== $value ? ' data-faz-href=' . $value : '';
+		return '<' . $tag . $this->label_category_first( $metadata . $parked, $matched_category ) . $close . '>';
 	}
 
 	/**
@@ -5074,8 +5067,7 @@ class Frontend {
 			return $full;
 		}
 
-		$metadata = $this->has_attr_token( $attrs, 'data-faz-category' ) ? '' : ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		return '<' . $tag . $metadata . $parked . '>';
+		return '<' . $tag . $this->label_category_first( $parked, $matched_category ) . '>';
 	}
 
 	/**
@@ -5175,6 +5167,10 @@ class Frontend {
 				$markup = $decoded;
 			}
 			$markup = str_replace( array( "\t", "\n", "\r" ), '', $markup );
+			// Every `\` is a `/` to the URL parser the document will run, so
+			// `\\host`, `/\host` and `\/host` are all `//host` here, and a meta
+			// refresh to `\\host` is one too. For judging only.
+			$markup = str_replace( '\\', '/', $markup );
 			// `https:/host` and `https:host` are special-scheme URLs the engine
 			// resolves to `https://host`; the normaliser gives them their slashes.
 			if ( preg_match_all( '#(?:https?:(?://|/?)|//)[^\s"\'<>)]+#i', $markup, $found ) ) {
@@ -5202,8 +5198,7 @@ class Frontend {
 		// One category: a parked token next to this one may have brought its
 		// own. Metadata BEFORE the captured attributes, as in
 		// process_img_tag(): a self-closing tag keeps its slash separate.
-		$metadata = $this->has_attr_token( $rest, 'data-faz-category' ) ? '' : ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		return self::faz_add_hidden_class( '<iframe' . $metadata . $rest . $close . '>' );
+		return self::faz_add_hidden_class( '<iframe' . $this->label_category_first( $rest, $matched_category ) . $close . '>' );
 	}
 
 	/**
@@ -5231,6 +5226,29 @@ class Frontend {
 	 */
 	private function tokenize_tag_attrs( $attrs, array $wanted ) {
 		$tokens = array();
+		$this->each_attr_token(
+			$attrs,
+			$wanted,
+			function ( $token ) use ( &$tokens ) {
+				$tokens[] = $token;
+				return true;
+			}
+		);
+		return $tokens;
+	}
+
+	/**
+	 * The streaming walk behind every token helper: one anchored preg_match
+	 * per token, the callback invoked for each wanted one with the same shape
+	 * tokenize_tag_attrs() returns, nothing kept. The callback returns false
+	 * to stop the walk.
+	 *
+	 * @param string   $attrs    Attribute string.
+	 * @param string[] $wanted   Attribute names, any case.
+	 * @param callable $callback function ( array $token ): bool
+	 * @return void
+	 */
+	private function each_attr_token( $attrs, array $wanted, $callback ) {
 		$attrs  = (string) $attrs;
 		$length = strlen( $attrs );
 		$lookup = array_fill_keys( array_map( 'strtolower', $wanted ), true );
@@ -5246,15 +5264,84 @@ class Frontend {
 				continue;
 			}
 			$has_value = isset( $f[2] ) && -1 !== $f[2][1];
-			$tokens[]  = array(
+			$token     = array(
 				'name'   => $f[1][0],
 				'key'    => $key,
 				'offset' => $f[1][1],
 				'length' => $end - $f[1][1],
 				'value'  => $has_value ? $f[2][0] : null,
 			);
+			if ( false === $callback( $token ) ) {
+				return;
+			}
 		}
-		return $tokens;
+	}
+
+	/**
+	 * Rewrite the wanted tokens in ONE pass over the string: the output is
+	 * built from substr() slices between tokens, so a megabyte of repeated
+	 * attributes costs one copy, not one copy per token. A per-token
+	 * substr_replace() over 75k `type` tokens took 3.2 s and 65 MB — a fatal
+	 * in the output buffer under an ordinary memory limit.
+	 *
+	 * @param string   $attrs   Attribute string.
+	 * @param string[] $wanted  Attribute names, any case.
+	 * @param callable $replace function ( array $token ): ?string — the text
+	 *                          replacing the token, or null to keep it.
+	 * @return string
+	 */
+	private function rewrite_attr_tokens( $attrs, array $wanted, $replace ) {
+		$attrs = (string) $attrs;
+		$out   = '';
+		$pos   = 0;
+		$this->each_attr_token(
+			$attrs,
+			$wanted,
+			function ( $token ) use ( &$out, &$pos, $attrs, $replace ) {
+				$replacement = $replace( $token );
+				if ( null === $replacement ) {
+					return true;
+				}
+				$out .= substr( $attrs, $pos, $token['offset'] - $pos ) . $replacement;
+				$pos  = $token['offset'] + $token['length'];
+				return true;
+			}
+		);
+		return $out . substr( $attrs, $pos );
+	}
+
+	/**
+	 * Remove every token of this name, any casing or spacing.
+	 *
+	 * @param string $attrs Attribute string.
+	 * @param string $name  Attribute name.
+	 * @return string
+	 */
+	private function strip_attr_tokens( $attrs, $name ) {
+		return $this->rewrite_attr_tokens(
+			$attrs,
+			array( $name ),
+			function () {
+				return '';
+			}
+		);
+	}
+
+	/**
+	 * The matcher's category, FIRST and alone. A page-authored
+	 * data-faz-category="necessary" next to a live tracker attribute is a
+	 * restore order — the runtime restores a parked resource whose category
+	 * is allowed, before consent — so when a pass parks a live attribute every
+	 * category token already on the tag is removed and exactly one, the
+	 * matcher's, is written ahead of the captured attributes. Only a tag with
+	 * nothing live to park keeps what it carries, and those return earlier.
+	 *
+	 * @param string $attrs    Attribute string, already rewritten.
+	 * @param string $category The matcher's category.
+	 * @return string
+	 */
+	private function label_category_first( $attrs, $category ) {
+		return ' data-faz-category="' . esc_attr( $category ) . '"' . $this->strip_attr_tokens( $attrs, 'data-faz-category' );
 	}
 
 	/**
@@ -5265,7 +5352,16 @@ class Frontend {
 	 * @return bool
 	 */
 	private function has_attr_token( $attrs, $name ) {
-		return array() !== $this->tokenize_tag_attrs( $attrs, array( $name ) );
+		$found = false;
+		$this->each_attr_token(
+			$attrs,
+			array( $name ),
+			function () use ( &$found ) {
+				$found = true;
+				return false;
+			}
+		);
+		return $found;
 	}
 
 	/**
@@ -5280,20 +5376,23 @@ class Frontend {
 	 * @return array{0:string,1:array} The rewritten string and the keys renamed.
 	 */
 	private function rename_attr_tokens( $attrs, array $map ) {
-		$tokens  = $this->tokenize_tag_attrs( $attrs, array_keys( $map ) );
+		$attrs   = (string) $attrs;
 		$renamed = array();
-		for ( $i = count( $tokens ) - 1; $i >= 0; $i-- ) {
-			$token = $tokens[ $i ];
-			if ( null === $token['value'] ) {
-				continue;
+		$out     = $this->rewrite_attr_tokens(
+			$attrs,
+			array_keys( $map ),
+			function ( $token ) use ( &$renamed, $attrs, $map ) {
+				if ( null === $token['value'] ) {
+					return null;
+				}
+				$renamed[ $token['key'] ] = true;
+				// A leading space when the token sits right after a quote or a
+				// slash, where the new name would otherwise glue to it.
+				$glued = $token['offset'] > 0 && ! ctype_space( $attrs[ $token['offset'] - 1 ] );
+				return ( $glued ? ' ' : '' ) . $map[ $token['key'] ] . '=' . $token['value'];
 			}
-			// A leading space when the token sits right after a quote or a
-			// slash, where the new name would otherwise glue to it.
-			$glued = $token['offset'] > 0 && ! ctype_space( $attrs[ $token['offset'] - 1 ] );
-			$attrs = substr_replace( $attrs, ( $glued ? ' ' : '' ) . $map[ $token['key'] ] . '=' . $token['value'], $token['offset'], $token['length'] );
-			$renamed[ $token['key'] ] = true;
-		}
-		return array( $attrs, $renamed );
+		);
+		return array( $out, $renamed );
 	}
 
 	/**
@@ -5329,14 +5428,29 @@ class Frontend {
 		// `https://cdn.tracker.test\@site.test/p` has host cdn.tracker.test
 		// with `@site.test` in its path. A parse of the raw bytes read the
 		// decoy as the host, which the whitelist then trusted.
-		if ( preg_match( '#^\s*(?:https?:|[\\/]{2})#i', $value ) ) {
+		// The class is `[\\/]` in the pattern, i.e. a backslash or a slash:
+		// written as `[\\/]` in a single-quoted string it was `[\/]`, only
+		// ever a slash, and `\\host` was never normalised.
+		if ( preg_match( '#^\s*(?:https?:|[\\\\/]{2})#i', $value ) ) {
 			$value = str_replace( '\\', '/', $value );
 		}
 		// A special scheme takes exactly two slashes whatever was written:
 		// `https:/host` and `https:host` resolve to `https://host`.
 		$value = preg_replace( '#^(\s*https?:)/*#i', '$1//', $value );
 		if ( preg_match( '#^(\s*(?:[a-z][a-z0-9+.\-]*:)?//)([^/?\#\s]+)(.*)$#is', $value, $p ) ) {
-			$value = $p[1] . rawurldecode( $p[2] ) . $p[3];
+			// The host is what follows the LAST `@` of the authority: the
+			// engine reads `https://site.test@cdn.tracker.test/` from
+			// cdn.tracker.test, and once the backslashes above are slashes,
+			// `site.test\@cdn.tracker.test` has already closed its authority
+			// at site.test. Dropping the userinfo here is what lets the
+			// boundary check work on host and path alone, with no `@`
+			// separator that would over-park a decoy in a path or a query.
+			$authority = $p[2];
+			$at        = strrpos( $authority, '@' );
+			if ( false !== $at ) {
+				$authority = substr( $authority, $at + 1 );
+			}
+			$value = $p[1] . rawurldecode( $authority ) . $p[3];
 		}
 		return $value;
 	}
@@ -5440,8 +5554,7 @@ class Frontend {
 		);
 		// As with <img>, $attrs may already end in the source tag's `/`.
 		// Prefix metadata so the slash remains the final token before `>`.
-		$metadata = $this->has_attr_token( $attrs, 'data-faz-category' ) ? '' : ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		return '<link' . $metadata . $new_attrs . '>';
+		return '<link' . $this->label_category_first( $new_attrs, $matched_category ) . '>';
 	}
 
 	/**
@@ -5464,7 +5577,7 @@ class Frontend {
 		$content = isset( $m[2] ) ? $m[2] : '';
 		$full    = isset( $m[0] ) ? $m[0] : '';
 
-		if ( '' === trim( $content ) || false !== strpos( $attrs, 'data-faz-css' ) ) {
+		if ( '' === trim( $content ) ) {
 			return $full;
 		}
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
@@ -5477,12 +5590,10 @@ class Frontend {
 			return $full;
 		}
 
-		$category = reset( $categories );
-		$new_attrs = $attrs;
-		$new_attrs .= ' data-faz-css="' . esc_attr( base64_encode( $content ) ) . '"'; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- inert transport for original CSS text, decoded only after consent.
-		$new_attrs .= ' data-faz-category="' . esc_attr( $category ) . '"';
+		$category  = reset( $categories );
+		$new_attrs = ' data-faz-css="' . esc_attr( base64_encode( $content ) ) . '"' . $this->strip_attr_tokens( $attrs, 'data-faz-css' ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- inert transport for original CSS text, decoded only after consent.
 
-		return '<style' . $new_attrs . '>' . $rewritten . '</style>';
+		return '<style' . $this->label_category_first( $new_attrs, $category ) . '>' . $rewritten . '</style>';
 	}
 
 	/**
@@ -5642,18 +5753,21 @@ class Frontend {
 	private function extract_tag_attr( $attrs, $name ) {
 		// The first token of that name, as the tokenizer would produce it:
 		// the old lookbehind pattern found `src=` inside another attribute's
-		// value and parked a local image for the URL in its alt text.
-		foreach ( $this->tokenize_tag_attrs( $attrs, array( $name ) ) as $token ) {
-			if ( null === $token['value'] ) {
-				return '';
+		// value and parked a local image for the URL in its alt text. The
+		// walk stops at the first one; the rest of the tag is never read.
+		$value = '';
+		$this->each_attr_token(
+			$attrs,
+			array( $name ),
+			function ( $token ) use ( &$value ) {
+				$raw = $token['value'];
+				if ( null !== $raw ) {
+					$value = ( strlen( $raw ) >= 2 && ( '"' === $raw[0] || "'" === $raw[0] ) ) ? substr( $raw, 1, -1 ) : $raw;
+				}
+				return false;
 			}
-			$raw = $token['value'];
-			if ( strlen( $raw ) >= 2 && ( '"' === $raw[0] || "'" === $raw[0] ) ) {
-				return substr( $raw, 1, -1 );
-			}
-			return $raw;
-		}
-		return '';
+		);
+		return $value;
 	}
 
 	/**
@@ -6631,10 +6745,12 @@ class Frontend {
 	private function has_provider_boundary( $target, $index, $length ) {
 		if ( $index > 0 ) {
 			$before = substr( $target, $index - 1, 1 );
-			// `@` closes userinfo (`https://site.test@cdn.tracker.test/`, which
-			// Firefox and WebKit fetch from the host after it) and `\` is a
-			// slash to every special-scheme URL parser.
-			if ( ! preg_match( '/[\/.:\s"\'`=;,(<{\[@\\\\]/', $before ) ) {
+			// `\` is a slash to every special-scheme URL parser. Userinfo is
+			// not a separator here: normalize_resource_url() drops it, so the
+			// host after an `@` is matched at a `/`, while an `@` inside a
+			// path or a query (`/local.png?u=me@cdn.tracker.test`) is not a
+			// boundary and does not over-park.
+			if ( ! preg_match( '/[\/.:\s"\'`=;,(<{\[\\\\]/', $before ) ) {
 				return false;
 			}
 		}
@@ -6654,7 +6770,7 @@ class Frontend {
 		$after_pos = $index + $length;
 		if ( $after_pos < strlen( $target ) ) {
 			$after = substr( $target, $after_pos, 1 );
-			if ( ! preg_match( '/[\/.:\?#\s"\'=;,&)<}\]]/', $after ) ) {
+			if ( ! preg_match( '/[\/.:\?#\s"\'=;,&)<}\]\\\\]/', $after ) ) {
 				return false;
 			}
 		}
@@ -7173,18 +7289,22 @@ class Frontend {
 		// The `type` TOKEN, every occurrence of it, rewritten in place: a
 		// regex over the attribute string rewrote `type='module'` inside an
 		// alt value and left the script with no real type at all, executing.
-		$tokens = $this->tokenize_tag_attrs( $attrs, array( 'type' ) );
-		if ( array() === $tokens ) {
+		if ( ! $this->has_attr_token( $attrs, 'type' ) ) {
 			// No type: PREPEND one, so that if the tokenizer failed on a tag
 			// that does carry a type the parser's first-wins rule still reads
 			// the inert one.
 			return ' type="text/plain"' . $attrs;
 		}
 		$original = $this->extract_tag_attr( $attrs, 'type' );
-		for ( $i = count( $tokens ) - 1; $i >= 0; $i-- ) {
-			$glued = $tokens[ $i ]['offset'] > 0 && ! ctype_space( $attrs[ $tokens[ $i ]['offset'] - 1 ] );
-			$attrs = substr_replace( $attrs, ( $glued ? ' ' : '' ) . 'type="text/plain"', $tokens[ $i ]['offset'], $tokens[ $i ]['length'] );
-		}
+		$source   = $attrs;
+		$attrs    = $this->rewrite_attr_tokens(
+			$source,
+			array( 'type' ),
+			function ( $token ) use ( $source ) {
+				$glued = $token['offset'] > 0 && ! ctype_space( $source[ $token['offset'] - 1 ] );
+				return ( $glued ? ' ' : '' ) . 'type="text/plain"';
+			}
+		);
 		// Preserve non-default types (e.g. "module") so JS can restore them.
 		if ( 'text/plain' !== $original && 'text/javascript' !== $original && '' !== $original && ! $this->has_attr_token( $attrs, 'data-faz-original-type' ) ) {
 			$attrs .= ' data-faz-original-type="' . esc_attr( $original ) . '"';
@@ -10662,11 +10782,7 @@ class Frontend {
 		$blocked = preg_replace_callback(
 			'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#i',
 			function ( $match ) use ( $category ) {
-				$new_attrs = $this->set_script_type_plain( $match[1] );
-				if ( false === strpos( $new_attrs, 'data-faz-category' ) ) {
-					$new_attrs .= ' data-faz-category="' . esc_attr( $category ) . '"';
-				}
-				return '<script' . $new_attrs . '>';
+				return '<script' . $this->label_category_first( $this->set_script_type_plain( $match[1] ), $category ) . '>';
 			},
 			$tag,
 			1

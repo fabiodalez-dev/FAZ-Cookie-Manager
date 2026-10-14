@@ -759,7 +759,83 @@ namespace {
 	}
 	$fe  = faz_ob_frontend( $providers, $blocked );
 	$out = faz_ob_run( $fe, '<html><img data-faz-category="marketing" data-faz-src="" src="https://cdn.tracker.test/p.png"></html>' );
-	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/p.png"' ) && 1 === substr_count( $out, 'data-faz-category=' ), 'a sentinel with a category: parked, and the category is not written twice' );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/p.png"' ) && 1 === substr_count( $out, 'data-faz-category=' ) && false !== strpos( $out, 'data-faz-category="marketing"' ), 'a sentinel with a category: parked, and exactly one category, the matcher\'s' );
+
+	echo "\n-- a forged category on a tag whose live attribute is parked --\n";
+
+	// A page-authored data-faz-category="necessary" next to a live tracker
+	// attribute is a restore order: the runtime restores a parked resource
+	// whose category is allowed before consent. When a pass parks a live
+	// attribute, the matcher's category must be the only one on the tag,
+	// whatever casing or spacing the forged one uses.
+	$forged = array(
+		'img'          => '<img data-faz-category="necessary" src="https://cdn.tracker.test/p.png">',
+		'img, odd casing and spacing' => '<img DATA-FAZ-CATEGORY = " Necessary " src="https://cdn.tracker.test/p.png">',
+		'iframe, empty' => '<iframe data-faz-category="" src="https://cdn.tracker.test/f"></iframe>',
+		'script'       => '<script data-faz-category="necessary" src="https://cdn.tracker.test/t.js"></script>',
+		'link, unknown value' => '<link data-faz-category="zzz" rel="stylesheet" href="https://cdn.tracker.test/a.css">',
+		'svg image'    => '<svg><image data-faz-category="necessary" href="https://cdn.tracker.test/p.png"/></svg>',
+		'svg use'      => '<svg><use data-faz-category="necessary" xlink:href="https://cdn.tracker.test/s.svg#i"/></svg>',
+		'svg feImage'  => '<svg><feImage data-faz-category="necessary" href="https://cdn.tracker.test/f.png"/></svg>',
+		'body background' => '<body data-faz-category="necessary" background="https://cdn.tracker.test/b.png"></body>',
+		'td background'   => '<table><tr><td data-faz-category="necessary" background="https://cdn.tracker.test/c.png">x</td></tr></table>',
+		'srcdoc'       => '<iframe data-faz-category="necessary" srcdoc="<img src=&quot;https://cdn.tracker.test/p.png&quot;>"></iframe>',
+		'noscript img' => '<noscript><img data-faz-category="necessary" src="https://cdn.tracker.test/p.png"></noscript>',
+		'style'        => '<style data-faz-category="necessary">@import url(https://cdn.tracker.test/f.css);</style>',
+	);
+	foreach ( $forged as $label => $tag ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html>' . $tag . '</html>' );
+		assert_true( 1 === preg_match_all( '/(?<![\w-])data-faz-category\s*=/i', $out ), $label . ': exactly one category token' );
+		assert_true( false !== strpos( $out, 'data-faz-category="marketing"' ), $label . ': and it is the matcher\'s' );
+	}
+	// A tag with nothing live to park keeps what it carries.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><img data-faz-category="necessary" data-faz-src="https://cdn.tracker.test/p.png"></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'a parked tag with nothing live keeps its own category' );
+
+	echo "\n-- backslashes where the engine reads slashes --\n";
+
+	foreach ( array(
+		'scheme-relative backslashes with an @ decoy' => '\\\\cdn.tracker.test\\@site.test/p',
+		'scheme-relative backslashes'                 => '\\\\cdn.tracker.test\\p',
+	) as $label => $url ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><img src="' . $url . '"></html>' );
+		assert_true( false !== strpos( $out, 'data-faz-src="' ), $label . ': parked' );
+	}
+	foreach ( array(
+		'backslashes in an img src'     => '<img src=\'\\\\cdn.tracker.test/p\'>',
+		'/\\ in an img src'              => '<img src=\'/\\cdn.tracker.test/p\'>',
+		'\\/ in an img src'              => '<img src=\'\\/cdn.tracker.test/p\'>',
+		'a meta refresh with backslashes' => '<meta http-equiv=refresh content=\'0;url=\\\\cdn.tracker.test/r\'>',
+	) as $label => $inner ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><iframe srcdoc="' . $inner . '"></iframe></html>' );
+		assert_true( false !== strpos( $out, 'data-faz-srcdoc=' ), $label . ' inside a srcdoc is judged' );
+	}
+	// The other direction: the host the engine reads is the first-party one.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><img src="https://site.test\\@cdn.tracker.test/p"><img src="/local.png?u=me@cdn.tracker.test"></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'a tracker host after a backslash-closed authority, or in a query, is not parked' );
+
+	echo "\n-- a megabyte of type attributes --\n";
+
+	foreach ( array( 1048576, 1572864 ) as $bytes ) {
+		$fe    = faz_ob_frontend( $providers, $blocked );
+		$many  = str_repeat( 'type="module" ', (int) ( $bytes / 14 ) );
+		$html  = '<html><script ' . $many . 'src="https://cdn.tracker.test/t.js"></script></html>';
+		gc_collect_cycles();
+		$before = memory_get_peak_usage();
+		$t0     = microtime( true );
+		$out    = faz_ob_run( $fe, $html );
+		$spent  = microtime( true ) - $t0;
+		$grown  = memory_get_peak_usage() - $before;
+		assert_true( false !== strpos( $out, 'type="text/plain"' ) && ! preg_match( '/(?<![\w-])type="module"/', $out ), sprintf( '%.1f MB of type attributes: every one re-typed', $bytes / 1048576 ) );
+		assert_true( $spent < 1.0, sprintf( 'in linear time (%.2fs)', $spent ) );
+		assert_true( $grown < 16 * 1048576, sprintf( 'with peak memory up by a few MB at most (%.1f MB)', $grown / 1048576 ) );
+		unset( $html, $out, $many );
+	}
 
 	// ---------- result ----------
 
