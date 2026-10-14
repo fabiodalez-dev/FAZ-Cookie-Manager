@@ -60,14 +60,59 @@ namespace {
 	function wp_upload_dir() {
 		return array( 'basedir' => rtrim( ABSPATH, '/' ), 'baseurl' => 'http://example.test' );
 	}
+	// Registrano davvero: uno stub che butta via la scrittura farebbe passare
+	// a vuoto qualunque asserzione su cosa finisce in cache.
 	function get_transient( $key ) {
-		return false;
+		return array_key_exists( $key, $GLOBALS['__faz_transients'] ?? array() )
+			? $GLOBALS['__faz_transients'][ $key ]
+			: false;
 	}
 	function set_transient( $key, $value, $ttl = 0 ) {
+		if ( ! isset( $GLOBALS['__faz_transients'] ) ) {
+			$GLOBALS['__faz_transients'] = array();
+		}
+		$GLOBALS['__faz_transients'][ $key ] = $value;
+		return true;
+	}
+	function delete_transient( $key ) {
+		unset( $GLOBALS['__faz_transients'][ $key ] );
 		return true;
 	}
 	function faz_resolve_client_ip() {
 		return '203.0.113.7';
+	}
+	// Mirrors includes/class-utils.php: only Cloudflare's own edges may assert
+	// a CF-* header, because Cloudflare is what writes one. Stubbed against a
+	// real shipped range so this file can exercise BOTH sides of the gate
+	// without pulling in the whole helpers file — a stub returning true would
+	// hide the thing the gate exists to do.
+	function faz_peer_is_cloudflare( $remote_addr = '' ) {
+		$ip = '' !== $remote_addr
+			? $remote_addr
+			: ( isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '' );
+		if ( 0 === strpos( (string) $ip, '162.158.' ) ) {
+			return true;
+		}
+		// The second half of the real predicate, as it is now: an origin that
+		// restores the visitor's address never looks like Cloudflare, so it is
+		// the operator's assertion and nothing else. The earlier revision also
+		// accepted CF-Connecting-IP == REMOTE_ADDR, and that rule is gone —
+		// mod_remoteip removes the header it consumed, and a direct client
+		// could satisfy the equality itself.
+		return (bool) apply_filters( 'faz_remote_addr_rewritten_by_cloudflare', false );
+	}
+	// The request context source_status() reads before probing the peer. The
+	// default is "not an interactive admin request", which is what the real
+	// functions answer on a CLI run as well.
+	$GLOBALS['__faz_request'] = array( 'admin' => false, 'cron' => false, 'ajax' => false );
+	function is_admin() {
+		return (bool) $GLOBALS['__faz_request']['admin'];
+	}
+	function wp_doing_cron() {
+		return (bool) $GLOBALS['__faz_request']['cron'];
+	}
+	function wp_doing_ajax() {
+		return (bool) $GLOBALS['__faz_request']['ajax'];
 	}
 	function sanitize_text_field( $v ) {
 		return is_string( $v ) ? trim( $v ) : '';
@@ -102,7 +147,8 @@ namespace {
 	function faz_reset() {
 		$GLOBALS['__faz_filters'] = array();
 		$GLOBALS['__faz_options'] = array();
-		unset( $_SERVER['GEOIP_COUNTRY_CODE'] );
+		$GLOBALS['__faz_request'] = array( 'admin' => false, 'cron' => false, 'ajax' => false );
+		unset( $_SERVER['GEOIP_COUNTRY_CODE'], $_SERVER['REMOTE_ADDR'] );
 		Geolocation::reset_runtime_cache();
 	}
 
@@ -198,7 +244,126 @@ namespace {
 	faz_set_filter( 'faz_trust_cf_ipcountry_header', true );
 	$cf = Geolocation::source_status();
 	faz_is( $cf['source'], 'cloudflare', 'il filtro dichiara la sorgente' );
-	faz_is( $cf['working'], true, "una dichiarazione dello sviluppatore non si sonda: l'intestazione arriva al visitatore" );
+	faz_is( $cf['working'], true, "fuori da una richiesta admin la dichiarazione non si sonda: l'intestazione arriva al visitatore" );
+	faz_is( $cf['reason'], 'declared_by_filter', 'causa: dichiarato dallo sviluppatore' );
+
+	echo "\n\033[1msource_status() — l'opt-in Cloudflare non basta se il peer non lo e'\033[0m\n";
+
+	// La regressione silenziosa: su un origin che ripristina l'indirizzo del
+	// visitatore (nginx real_ip_header, Apache mod_remoteip, la topologia
+	// Cloudflare piu' comune) faz_peer_is_cloudflare() e' falso finche'
+	// l'operatore non aggiunge faz_remote_addr_rewritten_by_cloudflare, e il
+	// resolver non legge mai CF-IPCountry. Dire "funzionante" sul solo opt-in
+	// mandava via l'amministratore con ogni visitatore sul fallback. Una
+	// richiesta admin attraversa lo stesso edge dei visitatori: e' una sonda
+	// valida, e un peer che il predicato rifiuta qui lo rifiuta anche per loro.
+	faz_reset();
+	faz_set_filter( 'faz_trust_cf_ipcountry_header', true );
+	$GLOBALS['__faz_request']['admin'] = true;
+	$_SERVER['REMOTE_ADDR']            = '203.0.113.99';
+	$probed                            = Geolocation::source_status();
+	faz_is( $probed['source'], 'cloudflare', 'la sorgente dichiarata resta Cloudflare' );
+	faz_is( $probed['configured'], true, "l'opt-in e' comunque una configurazione" );
+	faz_is( $probed['working'], false, 'richiesta admin + opt-in + peer NON Cloudflare -> working FALSE' );
+	faz_is( $probed['reason'], 'peer_not_cloudflare', 'causa propria: peer_not_cloudflare, che nomina il filtro mancante' );
+
+	// Ma peer_not_cloudflare non e' l'ultima parola: il resolver consulta
+	// ANCHE faz_visitor_country, le sorgenti rilevate (MMDB, estensione PHP) e
+	// faz_has_country_signal_source, e detect_country() le usa tutte per i
+	// visitatori. Uscire qui diceva "degradato" a un sito con l'opt-in
+	// Cloudflare, un database MaxMind funzionante e un origin che ripristina
+	// l'indirizzo — cioe' esattamente la topologia che il docblock descrive —
+	// e banner.php inertizzava i preset di regione e la lista paesi mentre
+	// MMDB instradava ogni visitatore correttamente. La sonda fallita e' una
+	// causa solo quando nient'altro funziona.
+	//
+	// Ogni caso riparte da faz_reset(): has_filter() qui e' array_key_exists,
+	// quindi un filtro rimesso a null resterebbe "presente" e il caso
+	// successivo leggerebbe lo stato di quello prima.
+	$faz_peer_fail = function () {
+		faz_reset();
+		faz_set_filter( 'faz_trust_cf_ipcountry_header', true );
+		$GLOBALS['__faz_request']['admin'] = true;
+		$_SERVER['REMOTE_ADDR']            = '203.0.113.99';
+	};
+
+	// Un MMDB che risolve davvero: il fixture passa il controllo di formato ma
+	// non risolve nulla, quindi il verdetto funzionante si semina nella sonda
+	// memorizzata, come fa il caso del riuso piu' sotto.
+	$faz_peer_fail();
+	faz_write_db( $db_path, str_repeat( 'x', 2048 ) . $marker );
+	Geolocation::reset_runtime_cache();
+	Geolocation::source_status();
+	$faz_probe = get_option( 'faz_geo_source_probe', array() );
+	$faz_probe['working'] = true;
+	$faz_probe['source']  = 'mmdb';
+	$faz_probe['reason']  = 'probe_ok';
+	update_option( 'faz_geo_source_probe', $faz_probe, false );
+	Geolocation::reset_runtime_cache();
+	$fallback = Geolocation::source_status();
+	faz_is( $fallback['working'], true, 'opt-in CF + peer non CF + MMDB funzionante -> working TRUE, non degradato' );
+	faz_is( $fallback['source'], 'mmdb', 'e la sorgente riportata e\' quella che davvero instrada' );
+	@unlink( $db_path );
+
+	// faz_visitor_country: il resolver gli da' l'ultima parola.
+	$faz_peer_fail();
+	faz_set_filter( 'faz_visitor_country', 'IT' );
+	$via_filter = Geolocation::source_status( true );
+	faz_is( $via_filter['working'], true, 'opt-in CF + peer non CF + faz_visitor_country -> working TRUE' );
+	faz_is( $via_filter['reason'], 'country_filter', 'con la causa del filtro che risponde' );
+
+	// Il segnale dichiarato dall'integratore.
+	$faz_peer_fail();
+	faz_set_filter( 'faz_has_country_signal_source', true );
+	$forced = Geolocation::source_status( true );
+	faz_is( $forced['working'], true, 'opt-in CF + peer non CF + segnale forzato -> working TRUE' );
+	faz_is( $forced['reason'], 'signal_forced_by_filter', 'con la causa del segnale dichiarato' );
+
+	// E senza nessun ripiego la sonda fallita resta la causa: la diagnosi che
+	// nomina il filtro mancante non va persa.
+	$faz_peer_fail();
+	@unlink( $db_path );
+	Geolocation::reset_runtime_cache();
+	$alone = Geolocation::source_status( true );
+	faz_is( $alone['working'], false, 'opt-in CF + peer non CF + nessun ripiego -> working FALSE' );
+	faz_is( $alone['reason'], 'peer_not_cloudflare', 'e la causa resta peer_not_cloudflare' );
+	faz_is( $alone['source'], 'cloudflare', 'con la sorgente dichiarata, non quella mancante' );
+
+	// Ripristina lo stato che i casi seguenti si aspettano.
+	$faz_peer_fail();
+
+	// Lo stesso peer con l'asserzione dell'operatore: il predicato passa.
+	faz_set_filter( 'faz_remote_addr_rewritten_by_cloudflare', true );
+	faz_is( Geolocation::source_status()['reason'], 'declared_by_filter', "con faz_remote_addr_rewritten_by_cloudflare l'origin ripristinato torna funzionante" );
+	faz_set_filter( 'faz_remote_addr_rewritten_by_cloudflare', false );
+
+	// Un vero edge Cloudflare passa da solo.
+	$_SERVER['REMOTE_ADDR'] = '162.158.42.42';
+	faz_is( Geolocation::source_status()['working'], true, 'richiesta admin da un edge Cloudflare -> funzionante' );
+
+	// Fuori da una richiesta interattiva la sonda non parte: cron, WP-CLI e
+	// AJAX raggiungono l'origin da dove nessun visitatore arriva, e un verdetto
+	// formato li' descriverebbe il chiamante, non il sito.
+	$_SERVER['REMOTE_ADDR']           = '203.0.113.99';
+	$GLOBALS['__faz_request']['cron'] = true;
+	$cron                             = Geolocation::source_status();
+	faz_is( $cron['working'], true, 'richiesta cron + opt-in -> ancora working TRUE' );
+	faz_is( $cron['reason'], 'declared_by_filter', "causa: declared_by_filter, la sonda non e' partita" );
+	$GLOBALS['__faz_request']['cron'] = false;
+	$GLOBALS['__faz_request']['ajax'] = true;
+	faz_is( Geolocation::source_status()['reason'], 'declared_by_filter', 'richiesta admin-ajax -> nessuna sonda' );
+	$GLOBALS['__faz_request'] = array( 'admin' => false, 'cron' => false, 'ajax' => false );
+	faz_is( Geolocation::source_status()['reason'], 'declared_by_filter', 'richiesta non admin -> nessuna sonda' );
+
+	// mod_geoip non ha un peer da sondare: la sua variabile e' del server.
+	faz_reset();
+	$GLOBALS['__faz_request']['admin'] = true;
+	$_SERVER['REMOTE_ADDR']            = '203.0.113.99';
+	$_SERVER['GEOIP_COUNTRY_CODE']     = 'IT';
+	faz_set_filter( 'faz_trust_geoip_country_code', true );
+	faz_is( Geolocation::source_status()['reason'], 'declared_by_filter', 'mod_geoip fidato su richiesta admin -> nessuna sonda del peer' );
+	unset( $_SERVER['GEOIP_COUNTRY_CODE'] );
+
 
 	echo "\n\033[1msource_status() — 'funzionante' vuol dire ciò che il resolver usa davvero\033[0m\n";
 
@@ -372,12 +537,36 @@ namespace {
 	faz_set_filter( 'faz_trust_cf_ipcountry_header', true );
 	faz_set_filter( 'faz_country_detection_consensus', true );
 	$_SERVER['HTTP_CF_IPCOUNTRY'] = 'IT';
+	// The opt-in filter is half the gate. The other half is the peer: a
+	// CF-IPCountry that did not arrive from Cloudflare was written by whoever
+	// sent the request, so without a Cloudflare peer the header does not vote
+	// and only the extension's 'XX' is left — which is no vote either.
+	$_SERVER['REMOTE_ADDR'] = '203.0.113.99';
+	Geolocation::reset_runtime_cache();
+	faz_is( Geolocation::get_country(), '', 'un CF-IPCountry da un peer non Cloudflare non vota, per quanto si sia dato l\'opt-in' );
+
+	$_SERVER['REMOTE_ADDR'] = '162.158.42.42';
 	Geolocation::reset_runtime_cache();
 	faz_is( Geolocation::get_country(), 'IT', "un 'XX' dall'estensione non vota e non fa scattare il consenso" );
 	$GLOBALS['__faz_geoip_results'] = array( '203.0.113.7' => 'FR' );
 	Geolocation::reset_runtime_cache();
 	faz_is( Geolocation::get_country(), '', 'un vero disaccordo fra due fonti fa ancora scattare il consenso' );
-	unset( $_SERVER['HTTP_CF_IPCOUNTRY'] );
+	// Un paese che viene da un'intestazione non si mette in cache: la chiave e'
+	// l'indirizzo, e un indirizzo non e' sempre un visitatore solo. Altrimenti
+	// il paese del primo arrivato dietro un NAT resterebbe per un'ora a tutti
+	// gli altri, e con esso il regime di consenso sbagliato.
+	$GLOBALS['__faz_transients'] = array();
+	Geolocation::reset_runtime_cache();
+	Geolocation::get_country( '203.0.113.77' );
+	$cached_keys = array_filter(
+		array_keys( (array) ( $GLOBALS['__faz_transients'] ?? array() ) ),
+		function ( $k ) {
+			return 0 === strpos( $k, 'faz_geo_' );
+		}
+	);
+	faz_is( count( $cached_keys ), 0, "un paese derivato da CF-IPCountry non viene messo in cache per indirizzo" );
+
+	unset( $_SERVER['HTTP_CF_IPCOUNTRY'], $_SERVER['REMOTE_ADDR'] );
 	faz_reset();
 	$GLOBALS['__faz_options']['faz_settings'] = array( 'geolocation' => array( 'geo_targeting' => true ) );
 

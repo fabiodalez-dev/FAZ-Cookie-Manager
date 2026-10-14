@@ -289,6 +289,16 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
     }]);
   });
 
+  // check_antibot() runs before anything else and refuses a submission that
+  // arrives sooner than `faz_dsar_min_dwell_seconds` (three by default) after
+  // the form was rendered: a person exercising a legal right takes longer than
+  // three seconds to read and fill this form, and a script does not. Playwright
+  // does not either, so every spec here that expects its POST to reach the
+  // server has to outlast the dwell first — otherwise it asserts the dwell
+  // refusal, or passes on how fast the machine happens to be. The dwell itself
+  // is covered in tests/unit/test-dsar-antibot-php.php.
+  const DWELL_MS = 3400;
+
   test('DSAR-01: form renders with all required fields visible', async ({ page }) => {
     await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
     const form = page.locator('.faz-dsar-form');
@@ -324,7 +334,13 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
     const hp = page.locator('.faz-dsar-honeypot');
     await expect(hp).toBeAttached();
     await expect(hp).toBeHidden();
-    await expect(hp.locator('input[name="faz_hp_name"]')).toBeAttached();
+    // The field's NAME is derived per render from the form's signed issue
+    // time, so there is no fixed name to select on any more — that is the
+    // point: a script could learn one fixed name once and omit it thereafter.
+    // Select it through its container, and assert the shape the server checks.
+    const hpInput = hp.locator('input[type="text"]');
+    await expect(hpInput).toBeAttached();
+    await expect(hpInput).toHaveAttribute('name', /^faz_hp_[0-9a-f]{12}$/);
   });
 
   test('DSAR-05: custom button label via attribute is reflected in DOM', async ({ page }) => {
@@ -380,6 +396,7 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
     await page.locator('input[name="dsar_name"]').fill('Jane Doe');
     await page.locator('input[name="dsar_email"]').fill('jane@example.com');
     await page.locator('select[name="dsar_type"]').selectOption('access');
+    await page.waitForTimeout(DWELL_MS);
     const [response] = await Promise.all([
       waitForFazAjax(page, 'faz_dsar_submit'),
       page.locator('button.faz-dsar-btn').click(),
@@ -396,6 +413,7 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
     await page.locator('input[name="dsar_name"]').fill('John Smith');
     await page.locator('input[name="dsar_email"]').fill('john@example.com');
     await page.locator('select[name="dsar_type"]').selectOption('erasure');
+    await page.waitForTimeout(DWELL_MS);
     await Promise.all([
       waitForFazAjax(page, 'faz_dsar_submit'),
       page.locator('button.faz-dsar-btn').click(),
@@ -409,6 +427,7 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
     await page.locator('input[name="dsar_name"]').fill('E2E Tester');
     await page.locator('input[name="dsar_email"]').fill(email);
     await page.locator('select[name="dsar_type"]').selectOption('portability');
+    await page.waitForTimeout(DWELL_MS);
     await Promise.all([
       waitForFazAjax(page, 'faz_dsar_submit'),
       page.locator('button.faz-dsar-btn').click(),
@@ -434,6 +453,7 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
     await page.locator('input[name="dsar_name"]').fill('Hacker');
     await page.locator('input[name="dsar_email"]').fill('hacker@example.com');
     await page.locator('select[name="dsar_type"]').selectOption('access');
+    await page.waitForTimeout(DWELL_MS);
     const [response] = await Promise.all([
       waitForFazAjax(page, 'faz_dsar_submit'),
       page.locator('button.faz-dsar-btn').click(),
@@ -444,10 +464,11 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
 
   test('DSAR-14: honeypot field filled by bot causes server rejection', async ({ page }) => {
     await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
-    await page.locator('input[name="faz_hp_name"]').evaluate((el: HTMLInputElement) => { el.value = 'bot-content'; });
+    await page.locator('.faz-dsar-honeypot input[type="text"]').evaluate((el: HTMLInputElement) => { el.value = 'bot-content'; });
     await page.locator('input[name="dsar_name"]').fill('Bot User');
     await page.locator('input[name="dsar_email"]').fill('bot@example.com');
     await page.locator('select[name="dsar_type"]').selectOption('erasure');
+    await page.waitForTimeout(DWELL_MS);
     const [response] = await Promise.all([
       waitForFazAjax(page, 'faz_dsar_submit'),
       page.locator('button.faz-dsar-btn').click(),
@@ -462,6 +483,7 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
     await page.locator('input[name="dsar_email"]').fill('detail@example.com');
     await page.locator('select[name="dsar_type"]').selectOption('rectify');
     await page.locator('textarea[name="dsar_message"]').fill('Please correct my date of birth.');
+    await page.waitForTimeout(DWELL_MS);
     const [response] = await Promise.all([
       waitForFazAjax(page, 'faz_dsar_submit'),
       page.locator('button.faz-dsar-btn').click(),
@@ -502,6 +524,7 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
       el.appendChild(opt);
       el.value = 'DROP TABLE';
     });
+    await page.waitForTimeout(DWELL_MS);
     const [response] = await Promise.all([
       waitForFazAjax(page, 'faz_dsar_submit'),
       page.locator('button.faz-dsar-btn').click(),
@@ -519,6 +542,7 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
       await page.locator('input[name="dsar_name"]').fill('Loop Tester');
       await page.locator('input[name="dsar_email"]').fill(`loop-${type}@example.com`);
       await page.locator('select[name="dsar_type"]').selectOption(type);
+      await page.waitForTimeout(DWELL_MS);
       const [response] = await Promise.all([
         waitForFazAjax(page, 'faz_dsar_submit'),
         page.locator('button.faz-dsar-btn').click(),

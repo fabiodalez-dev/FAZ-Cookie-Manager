@@ -735,19 +735,28 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
       // First: filter OFF → header must be ignored, result identical to baseline.
       $off = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
 
-      // Then: filter ON → header consumed.
+      // The opt-in is only half the gate: the request also has to have come
+      // from Cloudflare, because Cloudflare is what writes this header. With
+      // the filter ON but an ordinary peer, the header is still a value the
+      // visitor chose, so it must not steer anything.
       $closure = function() { return true; };
       add_filter( 'faz_trust_cf_ipcountry_header', $closure, 10 );
+      $_SERVER['REMOTE_ADDR'] = '203.0.113.99';
+      $on_direct = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
+
+      // Both halves: a published Cloudflare edge plus the opt-in → consumed.
+      $_SERVER['REMOTE_ADDR'] = '162.158.42.42';
       $on = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
       remove_filter( 'faz_trust_cf_ipcountry_header', $closure, 10 );
 
-      unset( $_SERVER['HTTP_CF_IPCOUNTRY'] );
-      echo wp_json_encode( array( 'baseline' => $baseline, 'off' => $off, 'on' => $on ) );
+      unset( $_SERVER['HTTP_CF_IPCOUNTRY'], $_SERVER['REMOTE_ADDR'] );
+      echo wp_json_encode( array( 'baseline' => $baseline, 'off' => $off, 'on' => $on, 'on_direct' => $on_direct ) );
     `).trim();
 
     const data = JSON.parse(result);
-    expect(data.on, 'with trust filter ON, CF-IPCountry header steers the result').toBe('DE');
+    expect(data.on, 'with the trust filter ON and a Cloudflare peer, CF-IPCountry steers the result').toBe('DE');
     expect(data.off, 'with trust filter OFF, CF-IPCountry header must NOT alter the resolved country (spoof-safe by default)').toBe(data.baseline);
+    expect(data.on_direct, 'with the trust filter ON but a direct peer, the header is still ignored — the opt-in does not say who sent it').toBe(data.baseline);
   });
 
   test('GEO-22: Geolocation::get_visitor_country rejects the Cloudflare "XX" placeholder', () => {
@@ -755,18 +764,35 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
     // private networks, etc.). Routing on "XX" would create a phantom geo
     // bucket — treat it the same as no signal.
     const result = wpEval(`
-      $_SERVER['HTTP_CF_IPCOUNTRY'] = 'XX';
+      // A Cloudflare peer, so this test fails for the reason it claims: with
+      // an ordinary peer the header would be discarded by the trust gate and
+      // the result would prove nothing about the "XX" handling.
+      $_SERVER['REMOTE_ADDR'] = '162.158.42.42';
       $closure = function() { return true; };
       add_filter( 'faz_trust_cf_ipcountry_header', $closure, 10 );
-      $resolved = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
-      remove_filter( 'faz_trust_cf_ipcountry_header', $closure, 10 );
+
+      // Baseline with the SAME peer and no header: whatever the fallback
+      // chain resolves for this address, it is not the thing under test.
+      // Asserting a bare '' would make this test depend on MaxMind being
+      // unreachable, and it would fail on a box where it is not even though
+      // "XX" was handled correctly.
       unset( $_SERVER['HTTP_CF_IPCOUNTRY'] );
-      echo var_export( $resolved, true );
+      \\FazCookie\\Includes\\Geolocation::reset_runtime_cache();
+      $baseline = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
+
+      $_SERVER['HTTP_CF_IPCOUNTRY'] = 'XX';
+      \\FazCookie\\Includes\\Geolocation::reset_runtime_cache();
+      $resolved = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
+
+      remove_filter( 'faz_trust_cf_ipcountry_header', $closure, 10 );
+      unset( $_SERVER['HTTP_CF_IPCOUNTRY'], $_SERVER['REMOTE_ADDR'] );
+      echo wp_json_encode( array( 'baseline' => $baseline, 'resolved' => $resolved ) );
     `).trim();
 
-    // The MaxMind / ip-api.com fallback is unreachable on the local test stack,
-    // so "XX" collapsing to no signal must produce an empty string here.
-    expect(result, "CF-IPCountry='XX' is treated as no signal").toBe("''");
+    const data = JSON.parse(result);
+    // The contract is "XX carries no signal", i.e. indistinguishable from the
+    // header being absent — not "the answer is empty".
+    expect(data.resolved, "CF-IPCountry='XX' is treated as no signal at all").toBe(data.baseline);
   });
 
   test('GEO-23: is_country_dependent_output returns true when at least one active banner targets a country', () => {

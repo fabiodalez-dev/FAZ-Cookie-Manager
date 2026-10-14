@@ -504,14 +504,439 @@ if ( ! function_exists( 'faz_ip_in_cidr_list' ) ) {
 		return false;
 	}
 }
+if ( ! function_exists( 'faz_cloudflare_proxy_cidrs' ) ) {
+	/**
+	 * Cloudflare's published proxy IP ranges — the shipped list, unfiltered.
+	 *
+	 * https://www.cloudflare.com/ips/, static as of 2026 — REFRESH ANNUALLY.
+	 * This is the plugin's single copy of the list.
+	 *
+	 * Deliberately NOT filterable, and deliberately separate from
+	 * `faz_trusted_proxy_cidrs()`. `CF-Connecting-IP` may be believed only from
+	 * a peer that actually is Cloudflare, because Cloudflare is what overwrites
+	 * that header; from anywhere else it is a client-supplied string. Were the
+	 * CF binding read off the filtered list instead, an admin who added their
+	 * own CDN's ranges would also have made `CF-Connecting-IP` authoritative
+	 * from that CDN — a header it never writes, so one the visitor still
+	 * controls. Hence a private copy here and a filtered view next door.
+	 *
+	 * @since 1.34.1
+	 * @return string[] CIDR ranges, IPv4 first then IPv6.
+	 */
+	function faz_cloudflare_proxy_cidrs() {
+		return array(
+			// IPv4.
+			'173.245.48.0/20',
+			'103.21.244.0/22',
+			'103.22.200.0/22',
+			'103.31.4.0/22',
+			'141.101.64.0/18',
+			'108.162.192.0/18',
+			'190.93.240.0/20',
+			'188.114.96.0/20',
+			'197.234.240.0/22',
+			'198.41.128.0/17',
+			'162.158.0.0/15',
+			'104.16.0.0/13',
+			'104.24.0.0/14',
+			'172.64.0.0/13',
+			'131.0.72.0/22',
+			// IPv6.
+			'2400:cb00::/32',
+			'2606:4700::/32',
+			'2803:f800::/32',
+			'2405:b500::/32',
+			'2405:8100::/32',
+			'2a06:98c0::/29',
+			'2c0f:f248::/32',
+		);
+	}
+}
+
+if ( ! function_exists( 'faz_peer_is_cloudflare' ) ) {
+	/**
+	 * Whether the request arrived from one of Cloudflare's own published edges.
+	 *
+	 * The one predicate for "may this request assert a Cloudflare header".
+	 * `CF-Connecting-IP`, `CF-IPCountry` and `CF-Region-Code` are written by
+	 * Cloudflare's edge and by nothing else, so each of them is only worth
+	 * reading when the peer is Cloudflare — and that question has to be
+	 * answered the same way everywhere, which is why it lives here and not in
+	 * the three classes that ask it.
+	 *
+	 * Reads the SHIPPED list and never the filtered view. An administrator who
+	 * adds a range for their own CDN is telling the plugin which peer is
+	 * infrastructure, not which headers that peer invents; granting a header
+	 * CDN never writes on the strength of that range is how a visitor behind it
+	 * ends up choosing their own country. Widening trust for an operator's own
+	 * edge is `faz_trusted_proxy_cidrs` plus `faz_proxy_forwarded_header`.
+	 *
+	 * @since 1.34.1
+	 * @param string $remote_addr Peer address; read from REMOTE_ADDR when empty.
+	 * @return bool
+	 */
+	function faz_peer_is_cloudflare( $remote_addr = '' ) {
+		if ( '' === $remote_addr ) {
+			$remote_addr = ! empty( $_SERVER['REMOTE_ADDR'] )
+				// phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+				? (string) $_SERVER['REMOTE_ADDR']
+				: '';
+		}
+		if ( '' === $remote_addr || ! filter_var( $remote_addr, FILTER_VALIDATE_IP ) ) {
+			return false;
+		}
+		if ( faz_ip_in_cidr_list( $remote_addr, faz_cloudflare_proxy_cidrs() ) ) {
+			return true;
+		}
+
+		// Many Cloudflare origins do not look like one, and the ones that follow
+		// Cloudflare's own advice look least like it. nginx's real_ip module
+		// with `real_ip_header CF-Connecting-IP`, Apache's mod_remoteip, and
+		// most managed hosts RESTORE the visitor's address at the origin, so
+		// REMOTE_ADDR is the visitor — or 127.0.0.1 behind a loopback proxy —
+		// and never an edge. The range test above can never match there.
+		//
+		// There is nothing left for this function to verify on such a site:
+		// the peer has already been rewritten, and whether that rewrite can be
+		// trusted is a fact about the network, not about the request. Only the
+		// operator knows it, so only the operator can assert it.
+		//
+		// Note what is NOT required: that `CF-Connecting-IP` still be present,
+		// nor that it equal REMOTE_ADDR. An earlier revision demanded both and
+		// was wrong twice over. mod_remoteip REMOVES the header once it has
+		// consumed it — and a single-valued `CF-Connecting-IP` always is — so
+		// the requirement made this unreachable on exactly the Apache origins
+		// it names, and unreachable behind a loopback proxy that does not pass
+		// the header on. The equality was no safeguard either: a client
+		// reaching the origin directly can send its own address and satisfy
+		// it, which is why it was already gated behind this same filter.
+		/**
+		 * Whether the visitor's address is restored at the origin for Cloudflare.
+		 *
+		 * Return true ONLY when both of these hold:
+		 *
+		 * - the web server, or the host, rewrites `REMOTE_ADDR` from
+		 *   `CF-Connecting-IP` for Cloudflare's ranges and nothing else
+		 *   (nginx `real_ip_header` with `set_real_ip_from` limited to those
+		 *   ranges, Apache `mod_remoteip` with `RemoteIPTrustedProxy`, or the
+		 *   equivalent your host documents);
+		 * - the origin is NOT reachable except through Cloudflare.
+		 *
+		 * The second is the one that matters and the one no plugin can check.
+		 * Without it a client reaches the origin directly and dictates
+		 * `CF-IPCountry`, which is the whole reason this defaults to false.
+		 *
+		 * @since 1.34.1
+		 * @param bool $restored Default false.
+		 */
+		if ( (bool) apply_filters( 'faz_remote_addr_rewritten_by_cloudflare', false ) ) {
+			return true;
+		}
+
+		return false;
+	}
+}
+
+if ( ! function_exists( 'faz_trusted_proxy_cidrs' ) ) {
+	/**
+	 * The reverse-proxy ranges whose forwarded header may be read at all.
+	 *
+	 * The shipped Cloudflare ranges (faz_cloudflare_proxy_cidrs()) plus
+	 * whatever the `faz_trusted_proxy_cidrs` filter adds. `Geo_Detector::
+	 * is_trusted_proxy()` reads this same function, so the two resolvers cannot
+	 * attribute the same request to two different addresses.
+	 *
+	 * Membership here answers one question only — "is this peer infrastructure
+	 * rather than a visitor?" — and it does NOT say which header that peer
+	 * writes. That second question is answered per peer kind in
+	 * `faz_forwarded_client_ip()`: a Cloudflare peer by `CF-Connecting-IP`, an
+	 * admin-added peer by `faz_proxy_forwarded_header` (`X-Forwarded-For` by
+	 * default), a loopback peer by `faz_loopback_proxy_header` (unset by
+	 * default). Adding a range is therefore necessary but not always
+	 * sufficient: it is the whole configuration for a CDN that appends to
+	 * `X-Forwarded-For`, and half of it for one that writes some other header.
+	 *
+	 * A request whose REMOTE_ADDR is NOT in this list, and is not loopback, is
+	 * treated as direct: CF-Connecting-IP / X-Forwarded-For / X-Real-IP are
+	 * ignored, because those are set by an edge and anyone who can reach the
+	 * origin directly can forge them.
+	 *
+	 * @since 1.34.1
+	 * @return string[] CIDR ranges, IPv4 first then IPv6.
+	 */
+	function faz_trusted_proxy_cidrs() {
+		/**
+		 * Extend (or replace) the shipped trusted-proxy ranges.
+		 *
+		 * Add the published edge ranges of another CDN here to have the plugin
+		 * recognise it as infrastructure rather than as a visitor, without
+		 * opting into the unscoped `faz_trust_proxy_headers` trust. CIDRs and
+		 * bare IPs are both accepted; non-string entries are ignored by the
+		 * matcher.
+		 *
+		 * This filter alone does not choose a header. A peer matched only here
+		 * is read through `faz_proxy_forwarded_header`, which defaults to
+		 * `HTTP_X_FORWARDED_FOR` and is walked from the right — correct for any
+		 * CDN that appends to that chain. A CDN that writes its own header
+		 * instead (`True-Client-IP`, `Fastly-Client-IP`, …) needs both filters:
+		 * this one to trust the peer, that one to name the header. The shipped
+		 * `CF-Connecting-IP` binding is NOT extended by adding a range, by
+		 * design — see faz_cloudflare_proxy_cidrs().
+		 *
+		 * @since 1.34.1
+		 * @param string[] $cidrs Default = Cloudflare's published proxy ranges.
+		 */
+		return (array) apply_filters( 'faz_trusted_proxy_cidrs', faz_cloudflare_proxy_cidrs() );
+	}
+}
+
+if ( ! function_exists( 'faz_ip_is_private_or_local' ) ) {
+	/**
+	 * Whether an address is loopback, link-local, RFC1918/ULA or reserved.
+	 *
+	 * Such an address cannot identify a visitor arriving from the internet: it
+	 * is either the machine itself or something inside the private network.
+	 *
+	 * @since 1.34.1
+	 * @param string $ip Address to test.
+	 * @return bool False for a syntactically invalid address — ask
+	 *              `filter_var()` separately when that distinction matters.
+	 */
+	function faz_ip_is_private_or_local( $ip ) {
+		if ( ! filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+			return false;
+		}
+		return ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE );
+	}
+}
+
+if ( ! function_exists( 'faz_ip_is_loopback' ) ) {
+	/**
+	 * Whether an address is the loopback interface (127.0.0.0/8 or ::1).
+	 *
+	 * The one private class a remote client can never present as REMOTE_ADDR:
+	 * a packet from the internet cannot arrive with a loopback source address,
+	 * so a loopback peer is a reverse proxy or cache on this same host.
+	 *
+	 * Deliberately NOT the whole of RFC1918: on a LAN-hosted or containerised
+	 * site a visitor's own peer address can be 10.x/172.16.x/192.168.x, which
+	 * would make the visitor the "proxy" and leave them free to forge the
+	 * forwarded header. Those topologies stay behind the explicit
+	 * `faz_trust_proxy_headers` / `faz_trusted_proxies` opt-in.
+	 *
+	 * @since 1.34.1
+	 * @param string $ip Address to test.
+	 * @return bool
+	 */
+	function faz_ip_is_loopback( $ip ) {
+		return faz_ip_in_cidr_list( (string) $ip, array( '127.0.0.0/8', '::1/128' ) );
+	}
+}
+
+if ( ! function_exists( 'faz_remote_addr_is_trusted_proxy' ) ) {
+	/**
+	 * Whether the TCP peer in front of us is infrastructure, not a visitor.
+	 *
+	 * True in two cases, and only these two:
+	 *   1. The address is inside the trusted-proxy ranges — the shipped
+	 *      Cloudflare list plus anything `faz_trusted_proxy_cidrs` adds.
+	 *   2. The address is loopback — a reverse proxy, a cache or a load
+	 *      balancer on this same host. See faz_ip_is_loopback() for why the
+	 *      rest of RFC1918 is deliberately NOT included.
+	 *
+	 * Also used to recognise known hops while walking an X-Forwarded-For
+	 * chain, which is the same question asked of a different address.
+	 *
+	 * @since 1.34.1
+	 * @param string $remote_addr The REMOTE_ADDR value, or one chain entry.
+	 * @return bool
+	 */
+	function faz_remote_addr_is_trusted_proxy( $remote_addr ) {
+		$remote_addr = (string) $remote_addr;
+		if ( '' === $remote_addr || ! filter_var( $remote_addr, FILTER_VALIDATE_IP ) ) {
+			return false;
+		}
+		if ( faz_ip_is_loopback( $remote_addr ) ) {
+			return true;
+		}
+		return faz_ip_in_cidr_list( $remote_addr, faz_trusted_proxy_cidrs() );
+	}
+}
+
+if ( ! function_exists( 'faz_forwarded_client_ip' ) ) {
+	/**
+	 * The client address a verified proxy forwarded, or '' when there is none.
+	 *
+	 * Callers must first satisfy themselves that the peer is a proxy at all
+	 * (faz_remote_addr_is_trusted_proxy()); this helper decides which header
+	 * may be believed and which entry of it is the client.
+	 *
+	 * Three rules, all of them load-bearing:
+	 *
+	 * 1. Each header is bound to the proxy that actually sets it, and the kind
+	 *    of peer in front decides which single header may be read. There are
+	 *    three peer kinds and each gets exactly one header:
+	 *      - a peer in the SHIPPED Cloudflare ranges
+	 *        (faz_cloudflare_proxy_cidrs(), never the filtered list) is read on
+	 *        `CF-Connecting-IP`, because Cloudflare OVERWRITES that header;
+	 *        from anywhere else it is just another client-supplied string;
+	 *      - a peer matching a range an admin added through
+	 *        `faz_trusted_proxy_cidrs` is read on `faz_proxy_forwarded_header`,
+	 *        `HTTP_X_FORWARDED_FOR` by default and walked from the right, which
+	 *        is what every CDN that appends to that chain produces;
+	 *      - a loopback peer is read on `faz_loopback_proxy_header`, which is
+	 *        UNSET by default and so reads nothing until the site names the
+	 *        header its local proxy writes.
+	 *    Treating the headers as interchangeable let a client pick which one
+	 *    was authoritative, which is the whole exploit.
+	 * 2. There is NO fallback between headers. If the selected header yields
+	 *    nothing usable, this returns '' and the caller keeps REMOTE_ADDR.
+	 *    Falling through to a second header hands the choice back to whoever
+	 *    sent the request.
+	 * 3. The selected chain is walked from the RIGHT. A proxy APPENDS the peer
+	 *    it saw rather than rewriting the header, so everything the client sent
+	 *    stays on the left: taking the leftmost entry is taking a value the
+	 *    client controls, which is a fresh throttle bucket per request and a
+	 *    poisoned ip_hash. Known hops (trusted ranges, loopback) are stepped
+	 *    over; the first entry that is not a known hop must be a valid public
+	 *    address, and if it is not — private, reserved, malformed — the walk
+	 *    stops rather than guessing further left.
+	 *
+	 * @since 1.34.1
+	 * @param string $remote_addr The REMOTE_ADDR value (the actual TCP peer).
+	 * @return string Public client address, or '' when none can be vouched for.
+	 */
+	function faz_forwarded_client_ip( $remote_addr = '' ) {
+		$remote_addr = (string) $remote_addr;
+		if ( '' === $remote_addr || ! filter_var( $remote_addr, FILTER_VALIDATE_IP ) ) {
+			return '';
+		}
+
+		// Peer kind 1 — a Cloudflare edge: one header, no alternatives, no
+		// fallback. Matched against the SHIPPED list and not the filtered one,
+		// so a range an admin added for their own CDN can never make
+		// CF-Connecting-IP authoritative from a peer that never writes it.
+		if ( faz_ip_in_cidr_list( $remote_addr, faz_cloudflare_proxy_cidrs() ) ) {
+			if ( empty( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+				return '';
+			}
+			$cf_ip = trim( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			return filter_var( $cf_ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ? $cf_ip : '';
+		}
+
+		if ( faz_ip_is_loopback( $remote_addr ) ) {
+			// Peer kind 2 — a reverse proxy, cache or load balancer on this
+			// same host.
+			/**
+			 * The one forwarded header a loopback reverse proxy is known to write.
+			 *
+			 * UNSET by default, deliberately, and so nothing is read from a
+			 * loopback peer until the site names a header. The precondition for
+			 * guessing wrong is the common case, not an exotic one: nginx's own
+			 * convention is `proxy_set_header X-Real-IP $remote_addr;` with
+			 * nothing managing X-Forwarded-For at all, and a header the local
+			 * proxy does not itself write arrives from the client untouched. A
+			 * default of `HTTP_X_FORWARDED_FOR` would therefore have let a
+			 * visitor on such a host name their own address — a fresh per-IP
+			 * throttle key per request and a poisoned consent-log ip_hash —
+			 * which is worse than resolving to the peer address and skipping
+			 * the per-IP ceiling, the behaviour an unconfigured site now gets.
+			 *
+			 * Name the header the local proxy writes, and only that one:
+			 * `HTTP_X_FORWARDED_FOR` for `proxy_set_header X-Forwarded-For
+			 * $proxy_add_x_forwarded_for;`, `HTTP_X_REAL_IP` for
+			 * `proxy_set_header X-Real-IP $remote_addr;`. Exactly one header is
+			 * read, and there is no fallback to another.
+			 *
+			 * @since 1.34.1
+			 * @param string $header The `$_SERVER` key to read. Default '' (read nothing).
+			 */
+			$header = (string) apply_filters( 'faz_loopback_proxy_header', '' );
+		} elseif ( faz_ip_in_cidr_list( $remote_addr, faz_trusted_proxy_cidrs() ) ) {
+			// Peer kind 3 — a range an admin added through
+			// `faz_trusted_proxy_cidrs`. The shipped CF binding above does not
+			// apply: this peer is not Cloudflare and does not write
+			// CF-Connecting-IP, so it is read through a named header instead.
+			/**
+			 * The forwarded header a non-Cloudflare trusted proxy writes.
+			 *
+			 * Applies to a peer matched by a range added through
+			 * `faz_trusted_proxy_cidrs`. `HTTP_X_FORWARDED_FOR` by default,
+			 * walked from the right, which is correct for every CDN or load
+			 * balancer that APPENDS the peer it saw to that chain. Point it at
+			 * `HTTP_TRUE_CLIENT_IP`, `HTTP_FASTLY_CLIENT_IP` or whatever single
+			 * header your edge overwrites if it uses one of its own.
+			 *
+			 * Exactly one header is read, and there is no fallback to another:
+			 * a fallback would let the visitor decide which header was
+			 * authoritative by sending the other one.
+			 *
+			 * @since 1.34.1
+			 * @param string $header      The `$_SERVER` key to read.
+			 * @param string $remote_addr The peer address being read through.
+			 */
+			$header = (string) apply_filters( 'faz_proxy_forwarded_header', 'HTTP_X_FORWARDED_FOR', $remote_addr );
+		} else {
+			// Not a peer kind this function knows how to read.
+			return '';
+		}
+
+		if ( '' === $header || empty( $_SERVER[ $header ] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			return '';
+		}
+
+		$chain = explode( ',', sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		foreach ( array_reverse( $chain ) as $hop ) {
+			$hop = trim( (string) $hop );
+			if ( faz_remote_addr_is_trusted_proxy( $hop ) ) {
+				// A hop we already know about — keep walking left.
+				continue;
+			}
+			if ( filter_var( $hop, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+				return $hop;
+			}
+			// Not a known hop and not a usable public address: stop here.
+			// Anything further left was supplied by whoever sent this.
+			break;
+		}
+
+		return '';
+	}
+}
+
 if ( ! function_exists( 'faz_resolve_client_ip' ) ) {
 	/**
 	 * Resolve the client IP address with proxy awareness.
 	 *
-	 * Checks common proxy headers before falling back to REMOTE_ADDR.
-	 * Proxy headers (X-Forwarded-For, X-Real-IP, CF-Connecting-IP) are
-	 * client-controlled and can be spoofed. Private/reserved ranges are
-	 * rejected to mitigate trivial bypasses.
+	 * Two paths, in this order:
+	 *
+	 * 1. `faz_trust_proxy_headers` — the explicit opt-in, unchanged since
+	 *    1.1.0 and scoped by `faz_trusted_proxies` since 1.17.2. A site
+	 *    already using those filters behaves exactly as it did.
+	 * 2. Since 1.34.1, a trusted-peer path through faz_forwarded_client_ip(),
+	 *    which binds each header to the proxy kind that sets it and walks a
+	 *    chain from the right. ONE topology resolves with no configuration at
+	 *    all: a peer in the shipped Cloudflare ranges, read on
+	 *    `CF-Connecting-IP`. Another CDN takes a range in
+	 *    `faz_trusted_proxy_cidrs` (and `faz_proxy_forwarded_header` if it
+	 *    writes something other than X-Forwarded-For). A loopback peer takes
+	 *    `faz_loopback_proxy_header`, which is unset by default, so until the
+	 *    site names the header its local proxy writes nothing is read and the
+	 *    peer address stands. Every per-IP key in this plugin — the DSAR
+	 *    ceilings, the 60-second locks, the consent-log ip_hash, the geo lookup
+	 *    — assumed this value identified ONE visitor, and behind an
+	 *    unconfigured Cloudflare it was the edge's own address, shared by every
+	 *    visitor of the site.
+	 *
+	 * A forwarded header arriving from a public peer that is NOT in the
+	 * allowlist is still ignored, and so is one arriving from a trusted peer
+	 * whose header has not been named; the resolved address stays REMOTE_ADDR:
+	 * those headers are forgeable by anyone who can reach the origin, and
+	 * trusting them unconditionally would hand an attacker a fresh key per
+	 * request for every per-IP throttle in the plugin. The rest of RFC1918 is
+	 * not a verified proxy either (faz_ip_is_loopback() says why), so a
+	 * LAN-hosted or containerised site keeps using its peer address unless it
+	 * opts in through path 1.
 	 *
 	 * @since 1.1.0
 	 * @return string Client IP address, or empty string if unavailable.
@@ -554,6 +979,12 @@ if ( ! function_exists( 'faz_resolve_client_ip' ) ) {
 				// cannot be vouched for, so fall back to the real peer address.
 				return $remote_addr;
 			}
+			// Deliberately NOT faz_forwarded_client_ip(): this path keeps the
+			// semantics it has had since 1.1.0, leftmost entry first, because a
+			// site that opted in may be relying on exactly that reading, and
+			// scoping it is what `faz_trusted_proxies` is for. The stricter
+			// parser governs the new default path below, which no site asked
+			// for and must therefore not be fooled by a forged header.
 			$headers = array(
 				'HTTP_CF_CONNECTING_IP', // Cloudflare.
 				'HTTP_X_FORWARDED_FOR',  // Generic reverse proxy.
@@ -562,16 +993,77 @@ if ( ! function_exists( 'faz_resolve_client_ip' ) ) {
 			foreach ( $headers as $header ) {
 				if ( ! empty( $_SERVER[ $header ] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 					// Header may contain comma-separated IPs (e.g. X-Forwarded-For chain) — take the first.
-					$ip = strtok( sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ), ',' );
-					$ip = trim( $ip );
+					$ip = strtok( sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ), ',' ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+					$ip = trim( (string) $ip );
 					if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
 						return $ip;
 					}
 				}
 			}
+
+			return $remote_addr;
+		}
+
+		// Default path: the peer is verifiably a proxy, so the address it
+		// forwards is the visitor. Without this every visitor behind that
+		// proxy shares one key.
+		if ( faz_remote_addr_is_trusted_proxy( $remote_addr ) ) {
+			$forwarded = faz_forwarded_client_ip( $remote_addr );
+			if ( '' !== $forwarded ) {
+				return $forwarded;
+			}
 		}
 
 		return $remote_addr;
+	}
+}
+
+if ( ! function_exists( 'faz_client_ip_identifies_visitor' ) ) {
+	/**
+	 * Whether the resolved client address identifies one visitor.
+	 *
+	 * A per-IP ceiling may only be applied when it does. Behind a proxy whose
+	 * forwarded header could not be read, every visitor of the site resolves to
+	 * the same address, and a ceiling keyed on it stops being "five requests
+	 * per visitor" and becomes "five requests for the whole site" — which, on
+	 * the DSAR form, is a 24-hour denial of other people's Art. 15-22 requests.
+	 * This predicate is for ceilings that DENY something to the visitor. The
+	 * windows kept by `faz_throttle_request()` deliberately do not consult it:
+	 * they bound writes from unauthenticated callers (the consent log, its
+	 * refusal accounting, the AMP bridge, the pageview counter), and on a
+	 * shared address a bounded site-wide window is the lesser harm compared to
+	 * an unbounded one. The remedy for a site behind a proxy is to declare the
+	 * proxy (`faz_trusted_proxy_cidrs`, `faz_loopback_proxy_header`), which
+	 * gives every window a per-visitor key again.
+	 *
+	 * The rule is concrete, never a guess:
+	 *   FALSE when the resolved value is empty, the `no-ip` literal, not a
+	 *   valid address, loopback/RFC1918/ULA/reserved, or inside the
+	 *   trusted-proxy ranges — shipped or added through
+	 *   `faz_trusted_proxy_cidrs` — which means the forwarded value was
+	 *   missing or unusable and what came back is the edge's own address.
+	 *   TRUE otherwise — including an unknown CDN's edge, which is
+	 *   indistinguishable from a direct public visitor and must not be guessed
+	 *   at: treating "a forwarded header is present" as the test would silently
+	 *   delete the ceiling on every host with mod_remoteip/realip configured,
+	 *   where REMOTE_ADDR is already the real visitor and the header is still
+	 *   there.
+	 *
+	 * @since 1.34.1
+	 * @return bool
+	 */
+	function faz_client_ip_identifies_visitor() {
+		$ip = (string) faz_resolve_client_ip();
+		if ( '' === $ip || 'no-ip' === $ip ) {
+			return false;
+		}
+		if ( ! filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+			return false;
+		}
+		if ( faz_ip_is_private_or_local( $ip ) ) {
+			return false;
+		}
+		return ! faz_ip_in_cidr_list( $ip, faz_trusted_proxy_cidrs() );
 	}
 }
 
@@ -777,6 +1269,16 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 				)
 			);
 			foreach ( $query->posts as $post_id ) {
+				// A record whose erasure has already been honoured keeps a dated,
+				// non-identifying trace and NO address (see faz_privacy_eraser()).
+				// It cannot match the meta_query above, so this is defence in
+				// depth — but it is the line that guarantees an erased request is
+				// never exported back out, and that nothing derived from the
+				// address can leak through this exporter.
+				$record_email = (string) get_post_meta( $post_id, '_dsar_email', true );
+				if ( '' === $record_email ) {
+					continue;
+				}
 				$export_items[] = array(
 					'group_id'    => 'faz_dsar_requests',
 					'group_label' => __( 'Privacy requests (FAZ Cookie Manager)', 'faz-cookie-manager' ),
@@ -788,7 +1290,7 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 						),
 						array(
 							'name'  => __( 'Email', 'faz-cookie-manager' ),
-							'value' => (string) get_post_meta( $post_id, '_dsar_email', true ),
+							'value' => $record_email,
 						),
 						array(
 							'name'  => __( 'Request type', 'faz-cookie-manager' ),
@@ -821,24 +1323,47 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 
 if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 	/**
-	 * Erase personal data (consent logs) for WordPress privacy tools.
+	 * Erase personal data (consent logs, stored DSAR requests) for WordPress
+	 * privacy tools.
 	 *
 	 * Consent logs use one-way IP hashing (SHA-256 + salt). We cannot
 	 * identify which records belong to a specific email address.
 	 * Records are auto-purged after the configured retention period.
 	 *
+	 * Stored DSAR requests (post_type faz_dsar) DO carry the requester's name,
+	 * address and free text, and are REDACTED here rather than deleted: the
+	 * personal data goes, a dated record that the request existed and which
+	 * right was invoked stays. Deleting the record outright destroyed the only
+	 * evidence that the request was received and answered (GDPR Art. 5(2)
+	 * accountability, Art. 12(3)) — and the admin screen tells the
+	 * administrator that this record IS that audit trail. Keeping a
+	 * non-identifying trace is also the position WordPress itself takes: core
+	 * does not delete its own `user_request` post when an erasure completes, it
+	 * flips it to `request-completed`. Art. 17(3)(b)-(e) is the ground for it.
+	 *
+	 * Nothing derived from the address is kept — no hash, keyed or otherwise. A
+	 * salted but deterministic HMAC of an email is still pseudonymous personal
+	 * data, re-identifiable by anyone holding the salt and a candidate address,
+	 * so storing one would contradict the erasure this function performs. It is
+	 * also unnecessary: DELETING `_dsar_email` is precisely what takes the
+	 * record out of the `_dsar_email = $email` match set, which is what keeps
+	 * the drain loop terminating and makes a second erasure for the same
+	 * address a no-op.
+	 *
 	 * @since 1.5.0
+	 * @since 1.34.1 DSAR records are redacted in place instead of force-deleted.
 	 * @param string $email_address The user's email address.
 	 * @param int    $page          Page number for batched erasures.
 	 * @return array Erasure result conforming to the WP privacy eraser format.
 	 */
 	function faz_privacy_eraser( $email_address, $page = 1 ) {
-		$email         = sanitize_email( (string) $email_address );
-		$page          = max( 1, (int) $page );
-		$per_page      = 20;
-		$items_removed = 0;
-		$messages      = array();
-		$done          = true;
+		$email          = sanitize_email( (string) $email_address );
+		$page           = max( 1, (int) $page );
+		$per_page       = 20;
+		$items_removed  = 0;
+		$items_retained = false;
+		$messages       = array();
+		$done           = true;
 
 		// Consent logs use one-way IP hashing and cannot be linked to an email,
 		// so there is nothing to erase there (they auto-purge by retention). DSAR
@@ -849,12 +1374,22 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 		if ( is_email( $email ) && post_type_exists( 'faz_dsar' ) ) {
 			// IMPORTANT: always read the FIRST batch, never `paged => $page`.
 			// WordPress calls the eraser repeatedly, incrementing $page, but each
-			// call here DELETES the records it finds — so the matching set shrinks
-			// underneath the offset. Paging forward (page 2, 3, …) would skip the
-			// records that slid into the earlier offsets and leave them behind
-			// (e.g. 25 records / 20-per-page → page 1 deletes 20, page 2 offsets
-			// past the remaining 5 and reports done, orphaning them). Reading
-			// page 1 every time drains the set deterministically.
+			// call here removes the records it finds FROM THE MATCH SET — so the
+			// set shrinks underneath the offset. Paging forward (page 2, 3, …)
+			// would skip the records that slid into the earlier offsets and leave
+			// them behind (e.g. 25 records / 20-per-page → page 1 handles 20,
+			// page 2 offsets past the remaining 5 and reports done, orphaning
+			// them). Reading page 1 every time drains the set deterministically.
+			//
+			// Since the records are redacted rather than deleted, what keeps the
+			// set shrinking is DELETING `_dsar_email` below: the meta_query is
+			// `_dsar_email = $email`, so a redacted record no longer matches and
+			// `$found` falls under `$per_page` exactly as it did when the records
+			// were destroyed. Do NOT turn this into a skip or an exemption that
+			// leaves `_dsar_email` in place: `$found` would stick at `$per_page`,
+			// `$done` would never be true, and core's erasure AJAX loop would run
+			// unbounded — a hang on the administrator's erase screen, worse than
+			// the problem being fixed.
 			$query = new WP_Query(
 				array(
 					'post_type'      => 'faz_dsar',
@@ -873,15 +1408,125 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 					),
 				)
 			);
-			$found = count( $query->posts );
+			$found      = count( $query->posts );
+			$redacted   = 0;
+			$unanswered = 0;
+			$deleted    = 0;
 			foreach ( $query->posts as $post_id ) {
-				if ( wp_delete_post( (int) $post_id, true ) ) {
-					$items_removed++;
+				$post_id = (int) $post_id;
+
+				/**
+				 * Whether to keep a dated, non-identifying record of an erased request.
+				 *
+				 * True (the default) redacts the stored request in place: the
+				 * name, the address and the free-text message go, the right
+				 * invoked and the submission date stay, so the controller can
+				 * still show that the request was received and answered.
+				 * Returning false restores the pre-1.34.1 behaviour and force-
+				 * deletes the record, audit trail included.
+				 *
+				 * @since 1.34.1
+				 * @param bool   $retain  Default true.
+				 * @param int    $post_id DSAR record ID.
+				 * @param string $email   Address being erased.
+				 */
+				if ( ! apply_filters( 'faz_dsar_erasure_retain_record', true, $post_id, $email ) ) {
+					if ( wp_delete_post( $post_id, true ) ) {
+						$deleted++;
+						$items_removed++;
+					}
+					continue;
+				}
+
+				// Read before redacting: the status says whether this request had
+				// been answered, the type and date survive into the new title.
+				$status = (string) get_post_meta( $post_id, '_dsar_status', true );
+				$type   = (string) get_post_meta( $post_id, '_dsar_type', true );
+
+				delete_post_meta( $post_id, '_dsar_name' );
+				delete_post_meta( $post_id, '_dsar_message' );
+				// Last of the three, and the one that matters to the loop above:
+				// this is what removes the record from the match set.
+				delete_post_meta( $post_id, '_dsar_email' );
+				update_post_meta( $post_id, '_dsar_status', 'erased' );
+				update_post_meta( $post_id, '_dsar_erased_at', current_time( 'mysql', true ) );
+
+				// The title was `[<Label>] <name> — <date>`: the requester's name
+				// is personal data and must not survive on the list screen or in
+				// the posts table. The right invoked and the date do survive, so
+				// the screen stays usable. post_content and the excerpt need no
+				// treatment — DSAR_Shortcode::store_request() writes neither.
+				$label = class_exists( '\FazCookie\Includes\DSAR_Shortcode' )
+					? \FazCookie\Includes\DSAR_Shortcode::get_type_label( $type )
+					: $type;
+				$date  = substr( (string) get_post_field( 'post_date', $post_id ), 0, 10 );
+				wp_update_post(
+					array(
+						'ID'         => $post_id,
+						'post_title' => '' !== $date
+							? sprintf( '[%s] %s', $label, $date )
+							: sprintf( '[%s]', $label ),
+						// The slug too, and not as a nicety: store_request()
+						// never sets post_name, and `private` is not one of the
+						// statuses wp_insert_post() skips slug generation for, so
+						// every stored request carries a post_name derived from
+						// the old title — `erasure-jane-doe-2026-06-16`. Blanking
+						// it here makes wp_insert_post() regenerate it from the
+						// redacted title; leaving it would have kept the
+						// requester's name in wp_posts after an "erasure".
+						'post_name'  => '',
+					)
+				);
+
+				$redacted++;
+				$items_removed++;
+				$items_retained = true;
+				if ( ! in_array( $status, array( 'completed', 'erased' ), true ) ) {
+					$unanswered++;
 				}
 			}
-			if ( $items_removed > 0 ) {
+
+			if ( $redacted > 0 ) {
+				$messages[] = sprintf(
+					/* translators: %d: number of privacy-request records redacted. */
+					_n(
+						'Erased the personal data in %d FAZ Cookie Manager privacy request. A dated record of the request itself — the right invoked and the date, with no name, address or message — is kept to demonstrate compliance (GDPR Art. 5(2) accountability, Art. 17(3)(b)-(e)), the same position WordPress takes by keeping its own privacy-request records.',
+						'Erased the personal data in %d FAZ Cookie Manager privacy requests. A dated record of each request itself — the right invoked and the date, with no name, address or message — is kept to demonstrate compliance (GDPR Art. 5(2) accountability, Art. 17(3)(b)-(e)), the same position WordPress takes by keeping its own privacy-request records.',
+						$redacted,
+						'faz-cookie-manager'
+					),
+					$redacted
+				);
+				if ( $unanswered > 0 ) {
+					// An erasure matches the ADDRESS, not one request. Every
+					// stored request from this address is redacted, including an
+					// access or rectification request still waiting for an
+					// answer — skipping those is not available (it would leave
+					// their `_dsar_email` in place and break the drain above), so
+					// the administrator is told instead of finding out later.
+					$messages[] = sprintf(
+						/* translators: %d: number of erased privacy requests that had not been answered yet. */
+						_n(
+							'%d of those requests had not been answered yet: an erasure matches the email address rather than a single request, so every stored request from this address was erased — including rights that were still awaiting a reply.',
+							'%d of those requests had not been answered yet: an erasure matches the email address rather than a single request, so every stored request from this address was erased — including rights that were still awaiting a reply.',
+							$unanswered,
+							'faz-cookie-manager'
+						),
+						$unanswered
+					);
+				}
+			}
+			if ( $deleted > 0 ) {
 				/* translators: %d: number of privacy-request records deleted. */
-				$messages[] = sprintf( _n( 'Deleted %d FAZ Cookie Manager privacy request.', 'Deleted %d FAZ Cookie Manager privacy requests.', $items_removed, 'faz-cookie-manager' ), $items_removed );
+				$messages[] = sprintf( _n( 'Deleted %d FAZ Cookie Manager privacy request.', 'Deleted %d FAZ Cookie Manager privacy requests.', $deleted, 'faz-cookie-manager' ), $deleted );
+			}
+			if ( $redacted > 0 && class_exists( '\FazCookie\Includes\DSAR_Shortcode' ) ) {
+				// A redaction changes `_dsar_status` without a post transition or
+				// a delete, so neither `transition_post_status` nor
+				// `before_delete_post` fires: without this the menu badge keeps
+				// counting a request that is no longer pending for up to five
+				// minutes, disagreeing with the list screen next to it.
+				\FazCookie\Includes\DSAR_Shortcode::flush_pending_count();
 			}
 			// Not done while this batch was full — there may be more to drain on
 			// the next call (which again reads the new first page).
@@ -890,7 +1535,11 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 
 		return array(
 			'items_removed'  => $items_removed,
-			'items_retained' => false,
+			// True once a record has been redacted rather than destroyed. Core
+			// shows this to the administrator and in the completion email, so
+			// reporting false while keeping a record would be the inverse of the
+			// accountability problem this redaction solves.
+			'items_retained' => $items_retained,
 			'messages'       => $messages,
 			'done'           => $done,
 		);

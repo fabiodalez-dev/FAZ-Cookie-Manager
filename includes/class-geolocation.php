@@ -103,23 +103,64 @@ class Geolocation {
 			return self::$country_cache[ $ip ];
 		}
 
-		// Check transient cache.
+		// A header is in play: resolve it per request and share nothing. See
+		// country_header_in_play() — the key here is the address, and an
+		// address is not always one visitor.
+		$header_in_play = self::country_header_in_play();
+
 		$cache_key = 'faz_geo_' . md5( $ip );
-		$cached    = get_transient( $cache_key );
-		if ( false !== $cached ) {
-			self::$country_cache[ $ip ] = $cached;
-			return $cached;
+		if ( ! $header_in_play ) {
+			$cached = get_transient( $cache_key );
+			if ( false !== $cached ) {
+				self::$country_cache[ $ip ] = $cached;
+				return $cached;
+			}
 		}
 
 		$country = self::detect_country( $ip );
 
-		// Cache for 1 hour.
-		if ( ! empty( $country ) ) {
+		// Cache for 1 hour, unless a header contributed to the answer.
+		if ( ! empty( $country ) && ! $header_in_play ) {
 			set_transient( $cache_key, $country, HOUR_IN_SECONDS );
 		}
 
 		self::$country_cache[ $ip ] = $country;
 		return $country;
+	}
+
+	/**
+	 * Whether a request header is contributing to the country for this request.
+	 *
+	 * The transient cache in get_country() is keyed on the resolved ADDRESS
+	 * alone, and the headers are not part of that key. An address is not always
+	 * one visitor — a corporate NAT, a mobile carrier's CGNAT, a shared proxy —
+	 * so a country that came from one visitor's header would be served to the
+	 * next visitor on the same address for an hour, and with it the wrong
+	 * consent regime. Where the origin is reachable directly it is worse than
+	 * drift: the header is then chosen by whoever sent it, and the hour of
+	 * cache is a poisoning window for everybody behind that address.
+	 *
+	 * So a header-derived country is never cached. Nothing is lost: reading a
+	 * header costs nothing and is already per-request, while the cache exists
+	 * for the sources that do cost something — the PHP GeoIP extension and the
+	 * MaxMind database lookup. No source of detect_country() makes an outbound
+	 * call; the IPinfo VPN gate lives in Geo_Detector behind a cache of its own.
+	 *
+	 * Public because Geo_Detector keeps a second, object-cache copy of the
+	 * country under the same address-only key and must apply the same rule.
+	 *
+	 * @since 1.34.1
+	 * @return bool
+	 */
+	public static function country_header_in_play() {
+		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			&& self::cf_peer_is_trusted()
+			&& ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		) {
+			return true;
+		}
+		return apply_filters( 'faz_trust_geoip_country_code', false )
+			&& ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 	}
 
 	/**
@@ -148,6 +189,24 @@ class Geolocation {
 	}
 
 	/**
+	 * Whether this request may assert a Cloudflare header.
+	 *
+	 * Fails CLOSED when the shared predicate is unavailable: it is the only
+	 * thing that proves the peer is Cloudflare, and a header nothing vouches
+	 * for is a value the visitor chose. The leading `\` is the house rule for
+	 * global helpers called from inside this namespace.
+	 *
+	 * @since 1.34.1
+	 * @return bool
+	 */
+	private static function cf_peer_is_trusted() {
+		if ( ! function_exists( 'faz_peer_is_cloudflare' ) ) {
+			return false;
+		}
+		return (bool) \faz_peer_is_cloudflare();
+	}
+
+	/**
 	 * Resolve the visitor country with the public filter contract applied.
 	 *
 	 * This is the country signal used for banner selection. It intentionally
@@ -162,6 +221,7 @@ class Geolocation {
 		$country = '';
 		if (
 			apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			&& self::cf_peer_is_trusted()
 			&& isset( $_SERVER['HTTP_CF_IPCOUNTRY'] )
 		) {
 			$code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) );
@@ -206,6 +266,7 @@ class Geolocation {
 
 		if (
 			apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			&& self::cf_peer_is_trusted()
 			&& ! empty( $_SERVER['HTTP_CF_REGION_CODE'] )
 			&& ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] )
 		) {
@@ -315,7 +376,7 @@ class Geolocation {
 		$votes = array();
 
 		// 1. Cloudflare CF-IPCountry header.
-		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) && ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) {
+		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) && self::cf_peer_is_trusted() && ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) {
 			$code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) );
 			if ( self::is_valid_country_code( $code ) && 'XX' !== $code ) {
 				$votes['cf']  = $code;
@@ -564,6 +625,14 @@ class Geolocation {
 		// and answering "no source" for it would cache a page rendered for an
 		// unknown country and then serve it to a real visitor whose country the
 		// edge did identify.
+		// Deliberately NOT cf_peer_is_trusted() here, even though the resolvers
+		// require it. That check answers "may THIS request assert the header";
+		// this function answers "is a country source configured for this site",
+		// and the two differ exactly where it matters — see the paragraph
+		// above. A review round asked for parity and it would be the wrong
+		// parity: a warmer would be told "no source", the page would be cached
+		// as country-unknown, and real visitors whose country the edge did
+		// identify would be served it.
 		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
 			$has_source = true;
 		}
@@ -646,24 +715,67 @@ class Geolocation {
 	 *    word (`country_filter`), and `faz_has_country_signal_source` forced
 	 *    true is the documented way to say an edge injects the country by other
 	 *    means (`signal_forced_by_filter`).
+	 *  - The Cloudflare opt-in is only half of what the resolver checks: the
+	 *    header is read when `faz_peer_is_cloudflare()` also vouches for the
+	 *    peer, and on the common origin that restores the visitor's address
+	 *    (nginx real_ip_header, Apache mod_remoteip, most managed hosts) that
+	 *    is false until the operator adds `faz_remote_addr_rewritten_by_cloudflare`.
+	 *    The opt-in alone would then report "working" while every visitor got
+	 *    the fallback, silently. So on an interactive admin request the status
+	 *    probes the predicate on the request in hand — the administrator's own
+	 *    traffic crosses the same edge as the visitors', so it is a valid
+	 *    sample — and reports `peer_not_cloudflare` when it fails. The probe is
+	 *    skipped on cron, WP-CLI, AJAX and REST, which carry no header and
+	 *    would report the context they were asked from, not the configuration;
+	 *    there the answer stays the declared one, as has_country_source()
+	 *    argues it must.
 	 *
 	 * @since 1.34.0
 	 * @param bool $force Recompute even when a fresh cached result exists.
 	 * @return array{source:string,configured:bool,working:bool,reason:string}
 	 */
 	public static function source_status( $force = false ) {
+		// Site-level, like has_country_source(): what the operator declared,
+		// not whether the request in hand may assert it. A status that flipped
+		// to "not configured" on a WP-CLI or cache-warmer request — neither of
+		// which carries the header — would be reporting the context it was
+		// asked from, not the configuration.
 		$declared = apply_filters( 'faz_trust_cf_ipcountry_header', false )
 			? 'cloudflare'
 			: ( apply_filters( 'faz_trust_geoip_country_code', false ) ? 'mod_geoip' : '' );
 		if ( '' !== $declared ) {
 			// A trust filter is a developer asserting the edge supplies the
-			// country. There is nothing here to probe — the header arrives on
-			// visitor requests, not on this one.
-			return array(
+			// country. The header itself cannot be probed — it arrives on
+			// visitor requests, not on this one — but for Cloudflare the PEER
+			// can be, and only on a request an administrator is looking at:
+			// their browser reaches the origin the way a visitor's does, so a
+			// peer the predicate rejects here is one it rejects for visitors.
+			$status = array(
 				'source'     => $declared,
 				'configured' => true,
 				'working'    => true,
 				'reason'     => 'declared_by_filter',
+			);
+			if ( ! ( 'cloudflare' === $declared && self::is_interactive_admin_request() && ! self::cf_peer_is_trusted() ) ) {
+				return $status;
+			}
+			// The declared edge is not vouching for this peer, so CF-IPCountry
+			// will not be read. That is not the whole answer, and returning it
+			// as one was the defect: the resolver still consults
+			// faz_visitor_country, the detected sources and the signal filter,
+			// and detect_country() uses every one of them for visitors. A site
+			// with the Cloudflare opt-in, a working MaxMind database and an
+			// IP-restoring origin — the very topology this docblock describes —
+			// was reported as degraded, which inerted the region presets and
+			// the custom country list in banner.php and told the administrator
+			// every visitor got the fallback, while MMDB routed them all
+			// correctly. So the failed probe is held and answered only if
+			// nothing below works.
+			$peer_failed = array(
+				'source'     => $declared,
+				'configured' => true,
+				'working'    => false,
+				'reason'     => 'peer_not_cloudflare',
 			);
 		}
 		// get_visitor_country() passes every resolved value — including '' —
@@ -699,13 +811,49 @@ class Geolocation {
 			);
 		}
 
+		// Nothing the resolver consults is working, so the failed Cloudflare
+		// peer probe IS the answer — and it is the more useful one, because it
+		// names the filter the operator is missing instead of a download.
+		if ( isset( $peer_failed ) ) {
+			return $peer_failed;
+		}
+
 		return $status;
+	}
+
+	/**
+	 * Whether this is a request an administrator is looking at.
+	 *
+	 * The peer probe in source_status() is only meaningful on such a request:
+	 * cron, WP-CLI and AJAX/REST calls reach the origin from places visitors
+	 * never come from, and a verdict formed there would describe the caller,
+	 * not the site. The function_exists guards keep the predicate loadable in
+	 * the standalone unit harness, where it reads as "not interactive".
+	 *
+	 * @since 1.34.1
+	 * @return bool
+	 */
+	private static function is_interactive_admin_request() {
+		if ( ! function_exists( 'is_admin' ) || ! is_admin() ) {
+			return false;
+		}
+		if ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) {
+			return false;
+		}
+		if ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() ) {
+			return false;
+		}
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			return false;
+		}
+		return true;
 	}
 
 	/**
 	 * The built-in sources detect_country() consults without a trust filter.
 	 *
 	 * @since 1.34.0
+
 	 * @param bool $force Recompute the MMDB probe even when a cached result exists.
 	 * @return array{source:string,configured:bool,working:bool,reason:string}
 	 */

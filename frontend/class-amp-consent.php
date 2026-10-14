@@ -247,9 +247,28 @@ class AMP_Consent {
 		}
 		// Last, because it is the only gate here with a side effect: it vetoes
 		// the page cache for the crawler-only render. A page the banner never
-		// reaches (status off, or excluded by id/path) does not vary by
+		// reaches (status off, or excluded by path) does not vary by
 		// User-Agent, so it must reach this point and keep its cache entry.
 		// Frontend::enqueue_scripts() orders these the same way.
+		//
+		// "Excluded by path", and not by id, on part of the version range this
+		// plugin supports — which is worth spelling out because WordPress
+		// changed the answer. Frontend::send_geo_cache_headers() runs on
+		// `send_headers`, and WP::main() reordered in 6.1: up to 6.0 it fired
+		// send_headers() BEFORE query_posts(), so get_the_ID() was false there
+		// and the numeric entries of excluded_pages could never match; from
+		// 6.1 query_posts(), handle_404() and register_globals() all run first,
+		// so on a parsed request the ID is available and a numeric exclusion
+		// does match. `Requires at least` is 5.0, so both orders are live in
+		// the field.
+		//
+		// Either way this call stays last and the hook stays put. On 6.1+ the
+		// veto is simply correct. On 6.0 and earlier a page excluded by ID
+		// still takes it, and the cost is one crawler response that could have
+		// been cached — cheaper than the alternatives, which are moving the
+		// hook to template_redirect (changing when headers are sent) or
+		// resolving the ID with url_to_postid() (a query on every front-end
+		// request). Stated rather than silently implied.
 		if ( $this->bot_suppression_applies() ) {
 			return true;
 		}

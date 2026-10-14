@@ -101,6 +101,12 @@ final class Faz_E2E_Audit_Lab {
 
 		if ( isset( $_GET['faz_e2e_cf_country'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$_SERVER['HTTP_CF_IPCOUNTRY'] = strtoupper( sanitize_text_field( wp_unslash( $_GET['faz_e2e_cf_country'] ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			// A CF-* header is only read when the request arrived from one of
+			// Cloudflare's own edges, which is the whole point of the gate — so
+			// a fixture that injects the header without the peer is simulating
+			// something the plugin is right to ignore. 162.158.0.0/15 is one of
+			// Cloudflare's published ranges, the same list the plugin ships.
+			$_SERVER['REMOTE_ADDR'] = '162.158.42.42';
 		}
 
 		if ( isset( $_GET['faz_e2e_forwarded_ip'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
