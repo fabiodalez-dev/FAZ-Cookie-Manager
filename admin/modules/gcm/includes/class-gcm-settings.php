@@ -54,8 +54,18 @@ class Gcm_Settings extends Store {
 			// container stay hard-blocked. Default off — existing installs
 			// keep doing Basic mode (tags only after consent).
 			'advanced_mode' => false,
-			// When true and marketing consent is denied, serve non-personalized ads:
-			// ad_storage = granted, but ad_user_data / ad_personalization = denied.
+			// When true and marketing consent is denied, request non-personalized
+			// ads WITHOUT granting anything:
+			// ad_storage / ad_user_data / ad_personalization all stay denied
+			// (no ad cookies are written — granting ad_storage without consent
+			// is unlawful in the EEA/UK/CH), and gcm.js / the inline Advanced-mode
+			// default only emit the legacy gtag('set', { npa: 1 }) signal for ad
+			// tags that do not read Consent Mode, flipping it to npa: 0 once
+			// ad_storage is granted. Consent Mode v2 tags already serve
+			// cookieless non-personalized ads in the denied state. (1.11.0
+			// granted ad_storage here; the 1.17.2 compliance pass reversed it.
+			// gcm.js setNpaIfDenied() / buildConsentState() are the runtime,
+			// admin/views/gcm.php the help text.)
 			// See https://support.google.com/adsense/answer/13554116
 			'non_personalized_ads_fallback' => false,
 		);
