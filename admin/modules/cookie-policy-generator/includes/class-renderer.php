@@ -718,14 +718,14 @@ class Renderer {
 
 	/**
 	 * Resolve an already-decoded multilingual map ({ <lang> => string }) to the
-	 * active language. Same fallback chain as
-	 * Cookie_Table_Shortcode::resolve_transfer_text() (active language →
+	 * active language. Same fallback chain as the banner's
+	 * Shortcodes::resolve_transfer_text() and the legacy table's
+	 * Cookie_Table_Shortcode::localize() (active language →
 	 * faz_default_language() → first non-empty entry) so the transfer
-	 * country/safeguard text matches between the banner preference-center and
-	 * the [faz_cookie_policy_complete] page on sites whose default language
-	 * isn't 'en'. Value is already a PHP array (the transfer countries/safeguard
-	 * sub-objects arrive decoded from the cookie meta JSON, not as a raw JSON
-	 * string).
+	 * country/safeguard text matches across the three declaration surfaces on
+	 * sites whose default language isn't 'en'. Value is already a PHP array (the
+	 * transfer countries/safeguard sub-objects arrive decoded from the cookie
+	 * meta JSON, not as a raw JSON string).
 	 *
 	 * @param mixed  $map  Multilingual array, or a plain string.
 	 * @param string $lang Preferred language code.
