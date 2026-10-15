@@ -611,6 +611,15 @@ class Banner_Rest {
 			'age_confirm_error'                   => __( 'Please confirm you meet the minimum age to accept optional cookies.', 'faz-cookie-manager' ),
 			// translators: %d is a number of seconds.
 			'optout_autoclose_countdown'          => sprintf( __( 'Banner closes automatically in %d s...', 'faz-cookie-manager' ), 0 ),
+			// IAB TCF section of the preference centre, including the Right-to-Object
+			// controls: a legal notice to the visitor, so translated like the rest.
+			'iab_consent'                         => __( 'Consent', 'faz-cookie-manager' ),
+			'iab_cookie_retention'                => __( 'Cookie retention', 'faz-cookie-manager' ),
+			'iab_features'                        => __( 'Features', 'faz-cookie-manager' ),
+			'iab_legitimate_interest'             => __( 'Legitimate Interest', 'faz-cookie-manager' ),
+			'iab_legitimate_interest_note'        => __( 'Some vendors process your data on the basis of legitimate interest rather than consent. You have the right to object: switch a purpose off to object to that processing.', 'faz-cookie-manager' ),
+			'iab_vendor_consent'                  => __( 'IAB Vendor Consent', 'faz-cookie-manager' ),
+			'iab_vendor_legitimate_interest_label'=> __( 'Allow processing based on legitimate interest', 'faz-cookie-manager' ),
 		);
 	}
 
