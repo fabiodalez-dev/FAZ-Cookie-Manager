@@ -7268,26 +7268,93 @@ function _fazIsStrictlyNecessaryScript(element) {
     return false;
 }
 
+/**
+ * The URL half of the server's matches_whitelist_pattern() contract, ported
+ * line for line from class-frontend.php so that one operator entry yields one
+ * verdict on both layers. This used to be a substring test on the raw URL —
+ * query and fragment included, host unanchored — so `googleapis.com/youtube/v3`
+ * exempted a runtime-inserted evilgoogleapis.com script, and an operator who
+ * whitelisted their own domain released every GA/Meta beacon whose query
+ * carried the page URL (`dl=https%3A%2F%2Fsite.test%2F`), while the identical
+ * tag in server markup stayed parked. Three rules, in the server's order:
+ *
+ *   1. A whitelist token in the query or the fragment is not the resource:
+ *      `pixel.png?x=jquery.min.js` is the pixel. Unless the pattern itself
+ *      names a query or a fragment, the value is matched without them.
+ *   2. A pattern whose pre-slash segment looks like a hostname (contains a
+ *      dot) — `googleapis.com/maps/api/`, `hcaptcha.com/` — is HOST-ANCHORED:
+ *      the value's host must equal it or be a sub-domain on a label boundary,
+ *      and the path must begin with the pattern's path.
+ *   3. Everything else that contains a dot or a slash — a filename
+ *      (`jquery.min.js`), a path fragment (`wp-includes/`), a bare host with
+ *      no slash — is a substring of host+path, as wp_parse_url() reads them.
+ *
+ * `value` is already lower-cased and normalised (_fazGetProviderMatchTarget).
+ */
+function _fazWhitelistParseUrl(value) {
+    try {
+        var full = value.indexOf("//") === 0 ? window.location.protocol + value : value;
+        return new URL(full);
+    } catch (e) { return null; }
+}
+function _fazWhitelistDomainMatches(value, patternHost, patternPath) {
+    patternHost = String(patternHost || "").trim();
+    if (!patternHost) return false;
+    var parsed = _fazWhitelistParseUrl(value);
+    var host = parsed ? String(parsed.hostname || "").toLowerCase() : "";
+    // A relative URL (no host) can never satisfy a domain pattern.
+    if (!host) return false;
+    var hostOk = host === patternHost
+        || (host.length > patternHost.length + 1 && host.slice(-(patternHost.length + 1)) === "." + patternHost);
+    if (!hostOk) return false;
+    if (!patternPath) return true;
+    var path = String(parsed.pathname || "").toLowerCase().replace(/^\/+/, "");
+    return path.indexOf(patternPath) === 0;
+}
+function _fazWhitelistUrlMatches(value, pattern) {
+    value = String(value == null ? "" : value).trim();
+    if (!value || !pattern) return false;
+    if (!/[?#]/.test(pattern)) {
+        var cut = value.search(/[?#]/);
+        if (cut !== -1) value = value.slice(0, cut);
+    }
+    var slashPos = pattern.indexOf("/");
+    if (slashPos !== -1) {
+        var patternHost = pattern.slice(0, slashPos);
+        if (patternHost.indexOf(".") !== -1) {
+            return _fazWhitelistDomainMatches(value, patternHost, pattern.slice(slashPos + 1).replace(/^\/+/, ""));
+        }
+    }
+    var needle = pattern.replace(/^\/+/, "");
+    var pathOnly = value.replace(/^\/+/, "");
+    var parsed = _fazWhitelistParseUrl(value);
+    if (parsed) {
+        var path = String(parsed.pathname || "").toLowerCase().replace(/^\/+/, "");
+        var normalized = String(parsed.hostname || "").toLowerCase() + (path ? "/" + path : "");
+        return normalized.indexOf(needle) !== -1 || pathOnly.indexOf(needle) !== -1;
+    }
+    return pathOnly.indexOf(needle) !== -1;
+}
 function _fazIsUserWhitelisted(url, element) {
     if (typeof url !== "string") return false;
     var wl = _fazStore._userWhitelist;
     if (!Array.isArray(wl) || !wl.length) return false;
-    var rawTarget = url.toLowerCase();
-    var decodedTarget = String(_fazGetProviderMatchTarget(url) || url).toLowerCase();
+    var target = String(_fazGetProviderMatchTarget(url) || url).toLowerCase();
     for (var i = 0; i < wl.length; i++) {
         if (typeof wl[i] !== "string" || !wl[i]) continue;
-        var needle = wl[i].toLowerCase();
+        var needle = wl[i].toLowerCase().trim();
+        if (!needle) continue;
         if (_fazWhitelistElementMatches(element, needle)) return true;
-        // URL substring matching is reserved for URL-fragment patterns — ones
-        // containing "." or "/" — mirroring the server-side
-        // matches_whitelist_pattern() contract. A bare ID/class token must only
-        // match element attributes (whole-word, above): substring-matching it
-        // against every URL meant a short entry like "js" disabled client-side
-        // blocking wholesale. The 3-char floor matches the documented minimum
-        // the PHP cookie-pattern path already enforces.
+        // URL matching is reserved for URL-fragment patterns — ones containing
+        // "." or "/" — the same split matches_whitelist_pattern() makes. A bare
+        // ID/class token must only match element attributes (whole-word,
+        // above): substring-matching it against every URL meant a short entry
+        // like "js" disabled client-side blocking wholesale. The 3-char floor
+        // matches the documented minimum the PHP cookie-pattern path already
+        // enforces.
         if (needle.length < 3) continue;
         if (needle.indexOf(".") === -1 && needle.indexOf("/") === -1) continue;
-        if (rawTarget.indexOf(needle) !== -1 || decodedTarget.indexOf(needle) !== -1) return true;
+        if (_fazWhitelistUrlMatches(target, needle)) return true;
     }
     return false;
 }
@@ -7507,6 +7574,27 @@ function _fazExtractEndpoint(url) {
 }
 
 /**
+ * The string a network call will actually be made to, read the way the engine
+ * reads it. fetch() and the WebSocket constructor take a URL object natively,
+ * sendBeacon() and XMLHttpRequest.open() take a USVString and WebIDL
+ * stringifies whatever is passed — so a tracker that builds its endpoint with
+ * `new URL()` reaches the network exactly as the string would. The gates below
+ * used to read `input.url`, which a Request has and a URL does not (it has
+ * `href`), or required a string outright: the endpoint came back "", the gate
+ * took its passthrough branch, and the identical call with a string was
+ * dropped. The bootstrap's hold window stringifies (local() does String(url)),
+ * and so does the handoff policy at the end of this file; the live gates now
+ * judge the same text those two do.
+ */
+function _fazRequestTarget(input) {
+    if (input == null) return "";
+    if (typeof input === "string") return input;
+    // A Request carries its (already absolute) URL in .url.
+    if (typeof input.url === "string") return input.url;
+    try { return String(input); } catch (e) { return ""; }
+}
+
+/**
  * Network-level consent enforcement.
  *
  * Wraps navigator.sendBeacon, fetch, XMLHttpRequest.open, and WebSocket to block
@@ -7520,8 +7608,9 @@ function _fazExtractEndpoint(url) {
     if (navigator.sendBeacon) {
         var _fazOrigSendBeacon = navigator.sendBeacon.bind(navigator);
         navigator.sendBeacon = function (url, data) {
-            var endpoint = _fazExtractEndpoint(url);
-            if (endpoint && !_fazIsUserWhitelisted(url) && _fazShouldBlockProvider(endpoint)) {
+            var target = _fazRequestTarget(url);
+            var endpoint = _fazExtractEndpoint(target);
+            if (endpoint && !_fazIsUserWhitelisted(target) && _fazShouldBlockProvider(endpoint)) {
                 return true; // Pretend success — silently drop.
             }
             return _fazOrigSendBeacon(url, data);
@@ -7532,7 +7621,7 @@ function _fazExtractEndpoint(url) {
     if (window.fetch) {
         var _fazOrigFetch = window.fetch.bind(window);
         window.fetch = function (input, init) {
-            var url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+            var url = _fazRequestTarget(input);
             var endpoint = _fazExtractEndpoint(url);
             if (endpoint && !_fazIsUserWhitelisted(url) && _fazShouldBlockProvider(endpoint)) {
                 return Promise.resolve(new Response("", { status: 200, statusText: "Blocked by consent" }));
@@ -7551,8 +7640,9 @@ function _fazExtractEndpoint(url) {
             try { delete this.readyState; } catch (e) { /* non-configurable fallback */ }
             try { delete this.responseText; } catch (e) { /* non-configurable fallback */ }
         }
-        var endpoint = _fazExtractEndpoint(url);
-        this._fazBlocked = !!(endpoint && !_fazIsUserWhitelisted(url) && _fazShouldBlockProvider(endpoint));
+        var target = _fazRequestTarget(url);
+        var endpoint = _fazExtractEndpoint(target);
+        this._fazBlocked = !!(endpoint && !_fazIsUserWhitelisted(target) && _fazShouldBlockProvider(endpoint));
         return _fazOrigXHROpen.apply(this, arguments);
     };
     var _fazOrigXHRSend = XMLHttpRequest.prototype.send;
@@ -7577,15 +7667,16 @@ function _fazExtractEndpoint(url) {
     if (typeof WebSocket !== 'undefined') {
         var _fazOrigWebSocket = window.WebSocket;
         window.WebSocket = function (url, protocols) {
-            var endpoint = _fazExtractEndpoint(url);
-            if (endpoint && !_fazIsUserWhitelisted(url) && _fazShouldBlockProvider(endpoint)) {
+            var target = _fazRequestTarget(url);
+            var endpoint = _fazExtractEndpoint(target);
+            if (endpoint && !_fazIsUserWhitelisted(target) && _fazShouldBlockProvider(endpoint)) {
                 // Build a mock that immediately transitions to CLOSED.
                 // We set up the prototype chain from _fazOrigWebSocket so that
                 // `instanceof WebSocket` checks still pass for callers that use them.
                 var mock = Object.create(_fazOrigWebSocket.prototype);
                 Object.defineProperty(mock, 'readyState',     { get: function () { return 3; /* CLOSED */ } });
                 Object.defineProperty(mock, 'bufferedAmount', { get: function () { return 0; } });
-                Object.defineProperty(mock, 'url',            { get: function () { return url; } });
+                Object.defineProperty(mock, 'url',            { get: function () { return target; } });
                 mock.send  = function () {};
                 mock.close = function () {};
 
