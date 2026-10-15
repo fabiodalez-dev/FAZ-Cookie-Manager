@@ -6,7 +6,8 @@
  * with core segment + mandatory DisclosedVendors segment (TCF v2.3).
  *
  * When GVL data is provided via _fazTcfConfig, encodes real vendor consent
- * and legitimate interest bitfields based on user category consent.
+ * (from the visitor's explicit vendor record) and legitimate interest
+ * bitfields (established by default, ended by the visitor's Right to Object).
  */
 (function () {
 	"use strict";
@@ -250,77 +251,126 @@
 	}
 
 	/**
-	 * Build vendor consent map.
-	 * A vendor gets consent=true if:
-	 *  - Explicit vendor consent cookie exists → use it
-	 *  - Otherwise: user consented to ALL purposes that vendor declares under consent basis
+	 * Read the Right-to-Object record written by script.js when the visitor
+	 * saves the IAB section of the preference center.
+	 *
+	 * Format: fazVendorLI=p2:no,p7:yes,755:no
+	 *   p<purposeId>  → purpose-level switch
+	 *   <vendorId>    → vendor-level switch (only objected vendors are written,
+	 *                   so an absent vendor key means "not objected")
+	 *   "no" = the visitor objected, "yes" = legitimate interest stays established.
+	 *
+	 * Returns null when there is no record at all — the visitor never saw the
+	 * LI controls, or the consent cookie is gone or stale — so callers can tell
+	 * "no record" from "nothing objected".
 	 */
-	function buildVendorConsent(purposeConsent) {
+	function readLIObjections() {
+		var consentPairs = readConsentCookiePairs();
+		if (!consentPairs || isConsentCookieStale(consentPairs)) return null;
+
+		var match = document.cookie.match(/fazVendorLI=([^;]+)/);
+		if (!match) return null;
+
+		var record = { purposes: {}, vendors: {} };
+		var pairs = match[1].split(",");
+		for (var i = 0; i < pairs.length; i++) {
+			var kv = pairs[i].split(":");
+			if (kv.length !== 2) continue;
+			var key = kv[0].trim();
+			var established = kv[1].trim() === "yes";
+			if (key.charAt(0) === "p") {
+				var pid = parseInt(key.substring(1), 10);
+				if (!isNaN(pid)) record.purposes[pid] = established;
+			} else {
+				var vid = parseInt(key, 10);
+				if (!isNaN(vid)) record.vendors[vid] = established;
+			}
+		}
+		return record;
+	}
+
+	/**
+	 * Build vendor consent map.
+	 *
+	 * A vendor is consented only when the visitor's explicit record says so.
+	 * The record (fazVendorConsent) is written by script.js with one entry per
+	 * vendor that was DISCLOSED in the preference center at the moment of the
+	 * choice. A vendor absent from it was never shown to this visitor — the
+	 * operator added it later, the first GVL download auto-selected it, or TCF
+	 * was switched on after the visitor had already answered the banner — and
+	 * consent that is informed about recipients (GDPR Art. 4(11), EDPB 05/2020
+	 * §64) cannot be minted for it from an earlier category choice. This used
+	 * to derive "consented if every consent purpose is consented" for exactly
+	 * those vendors, and rewrite euconsent-v2 with the result on the next
+	 * pageview while the preference center showed the same vendor unticked.
+	 *
+	 * A vendor id the GVL in use does not carry is never consented, whatever an
+	 * older record says: a de-registered vendor has no Framework basis left.
+	 */
+	function buildVendorConsent() {
 		var vendorConsent = {};
 		var explicit = readVendorConsent();
 
 		for (var i = 0; i < SELECTED_VENDORS.length; i++) {
 			var vid = SELECTED_VENDORS[i];
-			var v = VENDORS[vid];
-
-			// Check explicit vendor-level consent first.
-			if (typeof explicit[vid] !== "undefined") {
-				vendorConsent[vid] = explicit[vid];
-				continue;
-			}
-
-			// Derive from purpose consent: vendor gets consent if ALL its
-			// consent-basis purposes are consented.
-			if (!v || !v.purposes || v.purposes.length === 0) {
+			if (!VENDORS[vid]) {
 				vendorConsent[vid] = false;
 				continue;
 			}
-			var allConsented = true;
-			for (var j = 0; j < v.purposes.length; j++) {
-				if (!purposeConsent[String(v.purposes[j])]) {
-					allConsented = false;
-					break;
-				}
-			}
-			vendorConsent[vid] = allConsented;
+			vendorConsent[vid] = explicit[vid] === true;
 		}
 		return vendorConsent;
 	}
 
 	/**
-	 * Build PurposesLegitimateInterest bitfield.
+	 * Build the PurposesLegitimateInterest and VendorLegitimateInterest maps.
 	 *
-	 * Per IAB TCF, legitimate interest is established BY DEFAULT and is
-	 * extinguished only when the user exercises the Right to Object (RTO) — a
-	 * separate signal from consent. Declining *consent* for a category is NOT an
-	 * RTO exercise, so it must not clear a vendor's LI bit. Until a dedicated RTO
-	 * toggle exists in the banner, set the LI bit for every purpose a selected
-	 * vendor declares under legitimate interest. (Over-reporting LI is the
-	 * less-harmful default under TCF; the previous code gated LI on
-	 * purposeConsent, which UNDER-reported LI — dropping valid LI signals
-	 * whenever the user merely declined consent — and mis-encoded the TC string.)
+	 * Per IAB TCF, legitimate interest is established BY DEFAULT and ends when
+	 * the visitor exercises the Right to Object (TCF Policies, Appendix B;
+	 * GDPR Art. 21) — a signal distinct from consent. The preference center
+	 * exposes that right per purpose and per vendor, and records it in the
+	 * fazVendorLI cookie (readLIObjections). The rules, in order:
+	 *
+	 *  - A purpose is objected when the record says so, or when the visitor
+	 *    pressed Reject All without an LI record (a choice recorded before the
+	 *    LI controls existed): Reject All is an objection to everything, which
+	 *    is the EDPB/CNIL reading and the only safe one for a legacy record.
+	 *  - A vendor keeps LI only when the visitor did not object to it, did not
+	 *    switch it off, and it was actually disclosed (present in the vendor
+	 *    record once the visitor acted). A vendor switched OFF loses LI as
+	 *    well — nobody who turned a vendor off meant "but keep processing my
+	 *    data under legitimate interest".
+	 *  - Vendor LI needs at least one of its LI purposes still established;
+	 *    purpose LI is established only if at least one vendor with LI still
+	 *    declares it. The two bitfields therefore agree.
+	 *
+	 * Before the visitor acts there is no record and nothing is objected, so
+	 * the TCF default (established) is what the UI shows and the string says.
 	 */
-	function buildPurposeLI() {
-		var li = {};
-		for (var p = 1; p <= 24; p++) li[String(p)] = false;
+	function buildLegitimateInterest(categoryConsent) {
+		var record   = readLIObjections();
+		var explicit = readVendorConsent();
+		var acted    = !!(categoryConsent && categoryConsent._acted);
 
-		for (var i = 0; i < SELECTED_VENDORS.length; i++) {
-			var v = VENDORS[SELECTED_VENDORS[i]];
-			if (!v || !v.legIntPurposes) continue;
-			for (var j = 0; j < v.legIntPurposes.length; j++) {
-				li[String(v.legIntPurposes[j])] = true;
+		var rejectedAll = false;
+		if (acted && !record) {
+			rejectedAll = true;
+			for (var cat in categoryConsent) {
+				if (!categoryConsent.hasOwnProperty(cat)) continue;
+				if (cat === "necessary" || cat === "_acted") continue;
+				if (categoryConsent[cat]) { rejectedAll = false; break; }
 			}
 		}
-		return li;
-	}
 
-	/**
-	 * Build vendor legitimate interest map.
-	 * Per IAB TCF spec: vendor LI = true only if at least one of the vendor's
-	 * LI purposes still has LI established (user did not object).
-	 */
-	function buildVendorLI(purposeLI) {
+		function purposeObjected(pid) {
+			if (rejectedAll) return true;
+			return !!(record && record.purposes[pid] === false);
+		}
+
+		var purposeLI = {};
+		for (var p = 1; p <= 24; p++) purposeLI[String(p)] = false;
 		var vendorLI = {};
+
 		for (var i = 0; i < SELECTED_VENDORS.length; i++) {
 			var vid = SELECTED_VENDORS[i];
 			var v = VENDORS[vid];
@@ -328,30 +378,36 @@
 				vendorLI[vid] = false;
 				continue;
 			}
-			var hasAllowedLI = false;
-			for (var j = 0; j < v.legIntPurposes.length; j++) {
-				if (purposeLI[String(v.legIntPurposes[j])]) {
-					hasAllowedLI = true;
-					break;
+			var eligible = !rejectedAll;
+			if (record && record.vendors[vid] === false) eligible = false;
+			if (acted && explicit[vid] !== true) eligible = false;
+
+			var hasLI = false;
+			if (eligible) {
+				for (var j = 0; j < v.legIntPurposes.length; j++) {
+					var pid = v.legIntPurposes[j];
+					if (purposeObjected(pid)) continue;
+					hasLI = true;
+					purposeLI[String(pid)] = true;
 				}
 			}
-			vendorLI[vid] = hasAllowedLI;
+			vendorLI[vid] = hasLI;
 		}
-		return vendorLI;
+		return { purposeLI: purposeLI, vendorLI: vendorLI };
 	}
 
 	/**
 	 * Build all derived consent artifacts once so callers can reuse them.
+	 *
+	 * `categoryConsent` is the readConsent() map: LI needs to know whether the
+	 * visitor has acted (and what they granted) to read a legacy Reject All.
 	 */
-	function buildConsentArtifacts(purposeConsent) {
-		var vendorConsent = buildVendorConsent(purposeConsent);
-		// LI no longer depends on per-purpose consent (LI is established by
-		// default and only cleared by an explicit Right-to-Object signal).
-		var purposeLI     = buildPurposeLI();
+	function buildConsentArtifacts(purposeConsent, categoryConsent) {
+		var li = buildLegitimateInterest(categoryConsent || {});
 		return {
-			vendorConsent: vendorConsent,
-			purposeLI:     purposeLI,
-			vendorLI:      buildVendorLI(purposeLI)
+			vendorConsent: buildVendorConsent(),
+			purposeLI:     li.purposeLI,
+			vendorLI:      li.vendorLI
 		};
 	}
 
@@ -391,7 +447,7 @@
 	 */
 	function encodeTcString(purposeConsent, sfOptins, refreshLastUpdated, derived) {
 		var bits = [];
-		var artifacts      = derived || buildConsentArtifacts(purposeConsent);
+		var artifacts      = derived || buildConsentArtifacts(purposeConsent, readConsent());
 		var vendorConsent  = artifacts.vendorConsent;
 		var purposeLI      = artifacts.purposeLI;
 		var vendorLI       = artifacts.vendorLI;
@@ -529,7 +585,7 @@
 	 * Build the TCData object returned by getTCData / addEventListener.
 	 */
 	function buildTCData(purposeConsent, sfOptins, tcString, listenerIdVal, derived) {
-		var artifacts     = derived || buildConsentArtifacts(purposeConsent);
+		var artifacts     = derived || buildConsentArtifacts(purposeConsent, readConsent());
 		var vendorConsent = artifacts.vendorConsent;
 		var purposeLI     = artifacts.purposeLI;
 		var vendorLI      = artifacts.vendorLI;
@@ -594,7 +650,7 @@
 		var consent  = readConsent();
 		var purposes = buildPurposeConsent(consent);
 		var sf       = buildSpecialFeatureOptins(consent);
-		var derived  = buildConsentArtifacts(purposes);
+		var derived  = buildConsentArtifacts(purposes, consent);
 		var vendorConsent = derived.vendorConsent;
 		var purposeLI = derived.purposeLI;
 		var tcStr    = encodeTcString(purposes, sf, eventStatus === "useractioncomplete", derived);
@@ -645,7 +701,7 @@
 				consent  = readConsent();
 				purposes = buildPurposeConsent(consent);
 				var sfGet = buildSpecialFeatureOptins(consent);
-				var derivedGet = buildConsentArtifacts(purposes);
+				var derivedGet = buildConsentArtifacts(purposes, consent);
 				tcStr    = encodeTcString(purposes, sfGet, false, derivedGet);
 				data     = buildTCData(purposes, sfGet, tcStr, undefined, derivedGet);
 				data.eventStatus = "tcloaded";
@@ -659,7 +715,7 @@
 				consent  = readConsent();
 				purposes = buildPurposeConsent(consent);
 				var sfAdd = buildSpecialFeatureOptins(consent);
-				var derivedAdd = buildConsentArtifacts(purposes);
+				var derivedAdd = buildConsentArtifacts(purposes, consent);
 				tcStr    = encodeTcString(purposes, sfAdd, false, derivedAdd);
 				data     = buildTCData(purposes, sfAdd, tcStr, listenerId, derivedAdd);
 				// Registration reports `tcloaded`, not the current UI state.
@@ -815,7 +871,7 @@
 		var existingConsent = readConsent();
 		var purposes = buildPurposeConsent(existingConsent);
 		var sfInit   = buildSpecialFeatureOptins(existingConsent);
-		var derivedInit = buildConsentArtifacts(purposes);
+		var derivedInit = buildConsentArtifacts(purposes, existingConsent);
 		var purposeLI = derivedInit.purposeLI;
 		var vendorConsent = derivedInit.vendorConsent;
 		if (shouldPersistTcCookie(purposes, vendorConsent, purposeLI, sfInit)) {

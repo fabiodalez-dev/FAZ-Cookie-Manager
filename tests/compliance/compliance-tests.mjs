@@ -43,7 +43,7 @@ const ADMIN_PASS = process.env.WP_ADMIN_PASS || 'admin';
 // refusal — the opposite of what ZA09 exists to protect.
 const TECHNICAL_COOKIE_RE = [
 	/^wordpress_/i, /^wp-settings/i, /^PHPSESSID$/i,
-	/^fazcookie-consent$/, /^fazVendorConsent$/, /^euconsent-v2$/,
+	/^fazcookie-consent$/, /^fazVendorConsent$/, /^fazVendorLI$/, /^euconsent-v2$/,
 	/^wp_lang$/i, /^wordpress_test_cookie$/i,
 ];
 const isTechnicalCookie = (name) => TECHNICAL_COOKIE_RE.some(re => re.test(name));

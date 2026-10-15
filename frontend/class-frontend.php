@@ -849,8 +849,13 @@ class Frontend {
 
 					$selected_ids = (array) get_option( 'faz_gvl_selected_vendors', array() );
 					if ( ! empty( $selected_ids ) ) {
-						$tcf_config['selectedVendors'] = array_map( 'absint', $selected_ids );
+						// Only vendors the GVL in use still carries and has not
+						// marked deleted: get_vendors() filters both. The raw
+						// option used to be emitted here, so a since-deleted
+						// vendor stayed in DisclosedVendors and kept receiving
+						// consent and LI bits.
 						$selected_vendors = $gvl->get_vendors( $selected_ids );
+						$tcf_config['selectedVendors'] = array_map( 'absint', array_keys( $selected_vendors ) );
 						$compact_vendors  = array();
 						foreach ( $selected_vendors as $vid => $v ) {
 							$compact_vendors[ $vid ] = array(

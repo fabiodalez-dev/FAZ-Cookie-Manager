@@ -292,7 +292,7 @@ Full `__tcfapi()` implementation aligned with the IAB Transparency & Consent Fra
 - **Real Vendor Consent**: TC Strings encode actual vendor consent and legitimate interest bits based on user choices and vendor purpose declarations
 - **Special Feature Opt-ins**: TCF v2.3 Special Features (precise geolocation, device scanning) mapped from user category consent
 - **DisclosedVendors Segment**: Mandatory segment listing all vendors the CMP discloses to users
-- **Vendor Legitimate Interest**: Honors user's Right to Object -- LI bits are only set when the user hasn't objected to the corresponding purposes
+- **Vendor Legitimate Interest**: Honors the visitor's Right to Object -- the preference center carries a legitimate-interest switch per purpose and per vendor, LI bits are set only for the purposes and vendors the visitor has not objected to, a vendor switched off loses its LI as well, and Reject All objects to all of it
 - **Vendor Consent UI**: Per-vendor toggles in the preference center, with vendor name, purposes, privacy policy link, and cookie retention info
 - **TC String**: Full base64url encoding with core segment + DisclosedVendors segment, `euconsent-v2` cookie
 - **Cross-frame messaging**: `__tcfapiLocator` iframe + `postMessage` bridge
