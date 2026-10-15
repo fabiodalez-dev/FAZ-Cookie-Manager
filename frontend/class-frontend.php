@@ -237,6 +237,19 @@ class Frontend {
 	private $faz_law_fallback_suppress = false;
 
 	/**
+	 * Whether print_gcm_default_inline() emitted the synchronous denied
+	 * `consent default` in THIS response. The Advanced Consent Mode gtag
+	 * exemption (process_script_tag / inline_script_block_category) is only
+	 * sound while that default precedes the exempted stack, so the exemption
+	 * reads this flag: a response without wp_head() output, an AMP response or
+	 * any other path that never printed the default keeps the Google stack
+	 * hard-blocked, exactly like Basic mode.
+	 *
+	 * @var bool
+	 */
+	private $gcm_default_emitted = false;
+
+	/**
 	 * Per-request memo for is_bot_variant_render() (null = not yet computed).
 	 *
 	 * @var bool|null
@@ -2869,12 +2882,16 @@ class Frontend {
 		// when a site uses a non-default dataLayer name.
 		// INVARIANT — this inline bootstrap must only ever emit gtag('consent',…)
 		// and gtag('set',…) calls. It must NOT emit gtag('config'|'js',…) or
-		// dataLayer.push({…}): those are exactly the Google code-signatures
-		// is_gcm_managed_script() / match_script_to_provider() look for, so the
-		// output-buffer blocker would neutralise this very <script> while still
-		// letting the (exempted) gtag stack load — i.e. the denied default would
-		// never run and a pre-consent cookie could be written. Keep it to
-		// consent/set only so it always falls through the blocker unmatched.
+		// dataLayer.push({…}): those are the Google code-signatures
+		// is_gcm_managed_script() looks for, and the exemption they drive is
+		// meant for the stack that FOLLOWS this default, not for the default
+		// itself. The tag's survival in the output buffer does not rest on its
+		// body, though: it is printed with an own-handle id (see
+		// gcm_default_script_id()), so process_script_tag() returns it untouched
+		// before any provider pattern is consulted — an admin custom rule or a
+		// `faz_blocking_rules` code signature such as `gtag(` that happens to
+		// match this body cannot re-type it to text/plain while the gtag stack
+		// it was written for stays exempted.
 		$dl    = wp_json_encode( $this->gcm_datalayer_name() );
 		$js    = 'window[' . $dl . ']=window[' . $dl . ']||[];function gtag(){window[' . $dl . '].push(arguments);}';
 		$js   .= "gtag('consent','default'," . wp_json_encode( $default ) . ');';
@@ -2885,8 +2902,47 @@ class Frontend {
 		$js .= "gtag('set','ads_data_redaction'," . ( $redaction ? 'true' : 'false' ) . ');';
 		$js .= "gtag('set','url_passthrough'," . ( $passthrough ? 'true' : 'false' ) . ');';
 
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
-		echo "<script>" . $js . "</script>\n";
+		// Record the emission BEFORE printing: the Advanced-mode gtag exemption
+		// in process_script_tag() / inline_script_block_category() only applies
+		// while this default is in front of the exempted stack in the same
+		// response (see $gcm_default_emitted).
+		$this->gcm_default_emitted = true;
+
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; the id is a plugin constant passed through esc_attr and every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
+		echo '<script id="' . esc_attr( $this->gcm_default_script_id() ) . '">' . $js . "</script>\n";
+	}
+
+	/**
+	 * The id printed on the Advanced Consent Mode `consent default` tag.
+	 *
+	 * Shaped like a core inline-script id (`<handle>-js-before`) on an own
+	 * handle, so is_own_inline_script_id() recognises the tag as the plugin's
+	 * and process_script_tag() / inline_script_block_category() return it
+	 * untouched by construction — the same protection every other FAZ tag
+	 * already had. The handle mirrors the gcm.js one (`<plugin>-gcm`) with a
+	 * `-default` suffix.
+	 *
+	 * @return string
+	 */
+	private function gcm_default_script_id() {
+		$base = is_string( $this->plugin_name ) && '' !== $this->plugin_name ? $this->plugin_name : 'faz-cookie-manager';
+		return $base . '-gcm-default-js-before';
+	}
+
+	/**
+	 * Whether the Advanced Consent Mode gtag exemption may apply to a tag on
+	 * this request: Advanced mode is on AND the synchronous denied default has
+	 * been emitted in this response. Without the default in front of it, an
+	 * exempted gtag stack would run with no consent signal at all and Google
+	 * treats that as granted, so the answer is no and the stack stays
+	 * hard-blocked (Basic-mode behaviour).
+	 *
+	 * @return bool
+	 */
+	private function gcm_advanced_exemption_active() {
+		return $this->gcm_default_emitted
+			&& $this->gcm_settings
+			&& $this->gcm_settings->is_advanced_mode();
 	}
 
 	/**
@@ -4458,11 +4514,17 @@ class Frontend {
 		}
 
 		// Advanced Consent Mode (#165): when on, let Consent-Mode-aware Google
-		// tags (gtag.js / GA4 / Ads) load before consent. gcm.js has already
-		// emitted a synchronous `consent default → denied`, so these send
-		// cookieless/modeled pings and upgrade on consent instead of being
-		// hard-blocked. The GTM *container* (gtm.js) is intentionally NOT
-		// exempt: it can host non-Google tags that ignore Consent Mode.
+		// tags (gtag.js / GA4 / Ads) load before consent. print_gcm_default_inline()
+		// has already emitted a synchronous `consent default → denied` at the top
+		// of <head>, so these send cookieless/modeled pings and upgrade on
+		// consent instead of being hard-blocked. The GTM *container* (gtm.js) is
+		// intentionally NOT exempt: it can host non-Google tags that ignore
+		// Consent Mode.
+		//
+		// The exemption is only sound while that default actually precedes the
+		// stack in THIS response — gcm_advanced_exemption_active() checks the
+		// emission flag, so a response that never printed the default (no
+		// wp_head(), AMP) keeps the stack hard-blocked.
 		//
 		// But never override an EXPLICIT per-service denial: if the visitor
 		// rejected this specific Google service via per-service consent
@@ -4470,7 +4532,7 @@ class Frontend {
 		// and the tag stays hard-blocked. The exemption only applies to the
 		// pre-consent / category-default state, not an explicit rejection.
 		if ( true !== $svc_blocked
-			&& $this->gcm_settings && $this->gcm_settings->is_advanced_mode()
+			&& $this->gcm_advanced_exemption_active()
 			&& $this->is_gcm_managed_script( $attrs, $content ) ) {
 			return $full;
 		}
@@ -9116,9 +9178,10 @@ class Frontend {
 		} elseif ( true === $svc_blocked ) {
 			$should_block = true;
 		}
-		// Match the output-buffer exemption for Advanced Consent Mode, but an
-		// explicit service denial still wins over a cookieless bootstrap.
-		if ( true !== $svc_blocked && $this->gcm_settings && $this->gcm_settings->is_advanced_mode()
+		// Match the output-buffer exemption for Advanced Consent Mode (same
+		// emitted-default condition, see gcm_advanced_exemption_active()), but
+		// an explicit service denial still wins over a cookieless bootstrap.
+		if ( true !== $svc_blocked && $this->gcm_advanced_exemption_active()
 			&& $this->is_gcm_managed_script( $attrs, $content ) ) {
 			return false;
 		}
