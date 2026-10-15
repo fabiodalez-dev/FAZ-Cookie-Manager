@@ -574,20 +574,39 @@ class Consent_Logger {
 		$is_ip_throttled      = faz_throttle_request( 'faz_consent_ip', 10 );
 		$is_consent_throttled = false;
 
-		// Answer a throttled caller before doing any work for it. The block
-		// below runs a database query (last_logged_status) and arms two
-		// transients, and until now all of that happened even when the verdict
-		// at the bottom was already decided — so a client being rate-limited
-		// still cost a query per request, which is the flooding this endpoint
-		// throttles in the first place. Nothing below can clear an IP throttle,
-		// so returning here changes no outcome, only the price of reaching it.
-		if ( $is_ip_throttled ) {
+		// Allowlisted BEFORE any comparison, and matching the set the controller
+		// keeps (anything else it folds to 'partial'). Without this,
+		// sanitize_key() made any non-empty string a "change", so a caller could
+		// alternate junk values — or even valid ones — and mint a fresh row on
+		// every request, using the accountability bypass as an unthrottled write
+		// path. Read here, above the IP gate, because the gate's one exception
+		// below needs it.
+		$status = sanitize_key( (string) $request->get_param( 'status' ) );
+		if ( ! in_array( $status, array( 'accepted', 'rejected', 'partial', 'dnsmpi_optout', 'dns_rescinded', 'pmp_grant' ), true ) ) {
+			$status = '';
+		}
+
+		// Answer a throttled caller before doing any work for it when nothing
+		// below could change the verdict: without a consent_id there is no
+		// previous decision to compare with, and without an allowlisted status
+		// there is no decision at all. The block below runs a database query
+		// (the newest-row lookup) and arms transients, and a client being
+		// rate-limited used to cost that query per request — which is the
+		// flooding this endpoint throttles in the first place. A request that
+		// carries a known id AND a real status falls through, because the IP
+		// gate has exactly one exception and this is the only way to tell
+		// whether the request is it.
+		if ( $is_ip_throttled && ( '' === $sanitized_consent_id || '' === $status ) ) {
 			// A dropped record is a dropped record even when the answer is 200:
 			// the fire-and-forget client never inspects it, so without counting
 			// this the loss is as invisible as the one issue #292 was about.
 			self::record_refusal( self::CAUSE_THROTTLED );
 			return rest_ensure_response( array( 'throttled' => true ) );
 		}
+
+		// Whether this request is the one thing the IP gate yields to: a later
+		// decision from the SAME visitor the register already knows. Set below.
+		$same_visitor_change = false;
 
 		if ( '' !== $sanitized_consent_id ) {
 			// The per-consent_id throttle exists to stop one id being replayed
@@ -601,17 +620,6 @@ class Consent_Logger {
 			// visitor who has withdrawn: worse than a missing record, and the one
 			// record Art. 7(3) accountability actually needs. A status change is
 			// never a replay — it is the event — so it bypasses the id throttle.
-			// The per-IP throttle above still bounds flooding.
-			// Allowlisted BEFORE the comparison, and matching the set the
-			// controller keeps (anything else it folds to 'partial'). Without
-			// this, sanitize_key() made any non-empty string a "change", so a
-			// caller could alternate junk values — or even valid ones — and mint
-			// a fresh row on every request, using the accountability bypass as an
-			// unthrottled write path.
-			$status = sanitize_key( (string) $request->get_param( 'status' ) );
-			if ( ! in_array( $status, array( 'accepted', 'rejected', 'partial', 'dnsmpi_optout', 'dns_rescinded', 'pmp_grant' ), true ) ) {
-				$status = '';
-			}
 			// One lookup of the newest row serves both comparisons below. They
 			// used to query it separately, and the second identical SELECT ran
 			// before the throttle verdict — paid by the replay traffic this
@@ -660,8 +668,27 @@ class Consent_Logger {
 			}
 
 			$is_consent_throttled = $status_changed ? false : $window_closed;
+
+			// The per-IP window (10 s) used to run before all of this and win
+			// regardless, so the guarantee the comment above describes held only
+			// for a withdrawal more than 10 s after the acceptance. Within 10 s —
+			// accept, open the preference centre, reject, which the compliance
+			// suite's TF14 does in about 4 s — the second POST was answered
+			// `{throttled:true}` with a 200 the beacon never reads, and the
+			// register kept saying "accepted" for a visitor who had withdrawn.
+			//
+			// The IP gate yields to exactly one shape of request: the SAME
+			// consent_id the log already holds a row for, posting an allowlisted
+			// status that differs from that row's — a later decision by a visitor
+			// the register knows, already bounded by the chg1/chgn caps. It does
+			// not yield to a first-ever row (a flooder would mint a fresh id per
+			// request), to a replay of the same status, to a status outside the
+			// allowlist, or to a new GPC exception on an unchanged status. A
+			// different consent_id from the same address inside the window stays
+			// refused, as the ipBucketOnly E2E case pins.
+			$same_visitor_change = $status_changed && is_array( $previous_row ) && '' !== $status && $status !== $previous;
 		}
-		if ( $is_ip_throttled || $is_consent_throttled ) {
+		if ( $is_consent_throttled || ( $is_ip_throttled && ! $same_visitor_change ) ) {
 			self::record_refusal( self::CAUSE_THROTTLED );
 			return rest_ensure_response( array( 'throttled' => true ) );
 		}
