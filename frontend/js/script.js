@@ -4406,6 +4406,22 @@ function _fazGateSrcSetter(proto, hideOnPark) {
 }
 _fazGateSrcSetter(window.HTMLImageElement && HTMLImageElement.prototype, false);
 _fazGateSrcSetter(window.HTMLIFrameElement && HTMLIFrameElement.prototype, true);
+// <video>/<audio> (their `src` lives on HTMLMediaElement), <embed>, <track> and
+// <input type=image> fetch through `src` exactly as <img> does, and <embed> and
+// <object data> to an HTML URL render a nested browsing context exactly as
+// <iframe> does — a legacy YouTube <object>/<embed> is the full player, with
+// its cookies. None of them had a gate: the deferred bootstrap held them
+// during the download window and then replayed `el.src = url` on the premise
+// that this runtime would judge the replay, so the hold was only a delay, a
+// post-handoff `video.src = …` was never judged at all, and server markup
+// lived for the page view. The restore pass already read their park keys
+// (data-faz-src, data-faz-poster, data-faz-data); these are the gate half.
+// hideOnPark stays false: the restore pass for these keys does not clear
+// faz-hidden, and a parked media element is an empty box either way.
+_fazGateSrcSetter(window.HTMLMediaElement && HTMLMediaElement.prototype, false);
+_fazGateSrcSetter(window.HTMLEmbedElement && HTMLEmbedElement.prototype, false);
+_fazGateSrcSetter(window.HTMLTrackElement && HTMLTrackElement.prototype, false);
+_fazGateSrcSetter(window.HTMLInputElement && HTMLInputElement.prototype, false);
 
 /**
  * Same gate for the `href` PROPERTY setter on <link>, so a stylesheet a script
@@ -4533,6 +4549,14 @@ function _fazGateResourceSetAttribute(proto, opts) {
             if (opts.hideOnPark) _fazRevealService(_fazResolveServiceId(String(value), (el.getAttribute && el.getAttribute("data-faz-service")) || ""));
             return true;
         }
+        // A second URL attribute with a park key of its own on the same
+        // element: a <video>'s poster next to its src. One category attribute
+        // serves both, as the restore pass expects.
+        if (opts.also && Object.prototype.hasOwnProperty.call(opts.also, n) && _fazImgShouldBlock(el, value)) {
+            native.call(el, opts.also[n], String(value));
+            if (!el.getAttribute("data-faz-category")) native.call(el, "data-faz-category", _fazImgCategory(String(value)));
+            return true;
+        }
         if (opts.markupAttr && n === opts.markupAttr) {
             var markupCat = _fazMarkupBlockedCategory(el, value);
             if (markupCat) {
@@ -4606,6 +4630,15 @@ _fazGateResourceSetAttribute(window.HTMLImageElement && HTMLImageElement.prototy
 _fazGateResourceSetAttribute(window.HTMLIFrameElement && HTMLIFrameElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: true, srcset: false, markupAttr: "srcdoc", markupParkAttr: "data-faz-srcdoc" });
 _fazGateResourceSetAttribute(window.HTMLLinkElement && HTMLLinkElement.prototype, { urlAttr: "href", parkAttr: "data-faz-href", hideOnPark: false, srcset: false });
 _fazGateResourceSetAttribute(window.HTMLSourceElement && HTMLSourceElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: true });
+// The same six element types the src-property gate above covers, by their
+// attribute route; <video> carries poster too and <object> fetches through
+// `data`. Each parks into the key its restore branch reads.
+_fazGateResourceSetAttribute(window.HTMLVideoElement && HTMLVideoElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: false, also: { poster: "data-faz-poster" } });
+_fazGateResourceSetAttribute(window.HTMLAudioElement && HTMLAudioElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: false });
+_fazGateResourceSetAttribute(window.HTMLEmbedElement && HTMLEmbedElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: false });
+_fazGateResourceSetAttribute(window.HTMLObjectElement && HTMLObjectElement.prototype, { urlAttr: "data", parkAttr: "data-faz-data", hideOnPark: false, srcset: false });
+_fazGateResourceSetAttribute(window.HTMLTrackElement && HTMLTrackElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: false });
+_fazGateResourceSetAttribute(window.HTMLInputElement && HTMLInputElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: false });
 // The SVG namespace fetches through its own elements and its own attribute
 // spelling: <image> is an <img> by another name, <use href="https://x/s.svg#i">
 // fetches an external document, and an SVG <script href> EXECUTES. None of them
@@ -4696,6 +4729,35 @@ function _fazGateBackgroundSetter(proto) {
 }
 _fazGateBackgroundSetter(window.HTMLBodyElement && HTMLBodyElement.prototype);
 
+/**
+ * The IDL route for a URL attribute that is not `src`: `video.poster = url`
+ * and `object.data = url`. Same judgement as the src gate, parked into the key
+ * the restore pass reads for that attribute (data-faz-poster, data-faz-data).
+ */
+function _fazGateUrlPropertySetter(proto, prop, parkAttr) {
+    if (!proto) return;
+    var desc = Object.getOwnPropertyDescriptor(proto, prop);
+    if (!desc || typeof desc.set !== "function" || typeof desc.get !== "function" || desc.configurable === false) return;
+    var nativeSet = desc.set, nativeGet = desc.get;
+    Object.defineProperty(proto, prop, {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: function () { return nativeGet.call(this); },
+        set: function (val) {
+            try {
+                if (_fazImgShouldBlock(this, val)) {
+                    this.setAttribute(parkAttr, String(val));
+                    if (!this.getAttribute("data-faz-category")) this.setAttribute("data-faz-category", _fazImgCategory(String(val)));
+                    return;
+                }
+            } catch (e) { /* fall through to the native setter on any error */ }
+            nativeSet.call(this, val);
+        }
+    });
+}
+_fazGateUrlPropertySetter(window.HTMLVideoElement && HTMLVideoElement.prototype, "poster", "data-faz-poster");
+_fazGateUrlPropertySetter(window.HTMLObjectElement && HTMLObjectElement.prototype, "data", "data-faz-data");
+
 // srcset PROPERTY setter (img.srcset = …) — the sibling of the .src/.href property
 // gates. Without it, a runtime `.srcset` assignment writes the attribute directly
 // and the browser can fetch a blocked candidate before consent. Parks into the same
@@ -4734,13 +4796,26 @@ function _fazParkResourceElementIfBlocked(el) {
     if (!el || el.nodeType !== 1 || !el.getAttribute) return;
     var tag = (el.nodeName || "").toLowerCase();
     try {
-        if (tag === "img" || tag === "iframe" || tag === "source") {
+        // An <input> only fetches as type=image; every other input would be
+        // parked for nothing. Same filter the bootstrap's backstop applies.
+        var inputImage = tag === "input" && String(el.getAttribute("type") || "").toLowerCase() === "image";
+        if (tag === "img" || tag === "iframe" || tag === "source"
+            || tag === "video" || tag === "audio" || tag === "embed" || tag === "track" || inputImage) {
             var src = el.getAttribute("src");
             if (src && !el.getAttribute("data-faz-src") && _fazImgShouldBlock(el, src)) {
                 el.setAttribute("data-faz-src", src);
                 el.setAttribute("data-faz-category", _fazImgCategory(src));
                 el.removeAttribute("src");
                 if (tag === "iframe" && el.classList) el.classList.add("faz-hidden");
+            }
+            // The poster frame fetches before any play: an i.ytimg.com or
+            // i.vimeocdn.com poster is a request to the provider with the
+            // visitor's IP and referrer, judged like the src next to it.
+            var poster = tag === "video" ? el.getAttribute("poster") : null;
+            if (poster && !el.getAttribute("data-faz-poster") && _fazImgShouldBlock(el, poster)) {
+                el.setAttribute("data-faz-poster", poster);
+                if (!el.getAttribute("data-faz-category")) el.setAttribute("data-faz-category", _fazImgCategory(poster));
+                el.removeAttribute("poster");
             }
             var doc = el.getAttribute("srcdoc");
             if (doc && !el.getAttribute("data-faz-srcdoc")) {
@@ -4758,6 +4833,16 @@ function _fazParkResourceElementIfBlocked(el) {
             if (ss && !el.getAttribute("data-faz-srcset")) {
                 var c = _fazSrcsetBlockedCategory(el, ss);
                 if (c) { el.setAttribute("data-faz-srcset", ss); el.setAttribute("data-faz-srcset-category", c); el.removeAttribute("srcset"); }
+            }
+        } else if (tag === "object") {
+            // <object data> is an HTML sink as much as a resource fetch: to
+            // youtube.com/embed it is the whole player. Parked under its own
+            // key, which the restore pass admits back as absolute http(s) only.
+            var data = el.getAttribute("data");
+            if (data && !el.getAttribute("data-faz-data") && _fazImgShouldBlock(el, data)) {
+                el.setAttribute("data-faz-data", data);
+                el.setAttribute("data-faz-category", _fazImgCategory(data));
+                el.removeAttribute("data");
             }
         } else if (tag === "image" || tag === "use" || tag === "feimage" || (tag === "script" && el.namespaceURI === "http://www.w3.org/2000/svg")) {
             // Parser-built SVG, which is the common case: an inline <svg> in the
@@ -6019,8 +6104,11 @@ function _fazMutationObserver(mutations) {
                 // The SVG namespace and the legacy `background` attribute fetch
                 // the same way and were missing from this set, so markup built
                 // after the handoff (`div.innerHTML = '<svg><image href=…>'`)
-                // fetched while the <img> next to it was parked.
+                // fetched while the <img> next to it was parked. So did
+                // video/audio/embed/object/track/input[type=image] — the
+                // bootstrap's element list, which this one is now as wide as.
                 if (tag === 'img' || tag === 'link' || tag === 'source' || tag === 'image' || tag === 'use' || tag === 'feimage'
+                    || tag === 'video' || tag === 'audio' || tag === 'embed' || tag === 'object' || tag === 'track' || tag === 'input'
                     || (n.hasAttribute && n.hasAttribute('background'))) {
                     if (!_fazInsideNoscript(n)) _fazParkResourceElementIfBlocked(n);
                 }
@@ -6032,7 +6120,8 @@ function _fazMutationObserver(mutations) {
                         if (_fazInsideNoscript(nested[ni])) continue;
                         nodesToProcess.push(nested[ni]);
                     }
-                    var nestedRes = n.querySelectorAll('img[src], img[srcset], link[href], source[src], source[srcset], image, use, feImage, [background], iframe[srcdoc]');
+                    var nestedRes = n.querySelectorAll('img[src], img[srcset], link[href], source[src], source[srcset], image, use, feImage, [background], iframe[srcdoc],'
+                        + ' video[src], video[poster], audio[src], embed[src], object[data], track[src], input[type="image"][src]');
                     for (var ri = 0; ri < nestedRes.length; ri++) {
                         if (_fazInsideNoscript(nestedRes[ri])) continue;
                         _fazParkResourceElementIfBlocked(nestedRes[ri]);
@@ -6655,13 +6744,15 @@ function _fazUnblockServerSide() {
     // 3. Images (tracking pixels inside noscript tags that JS can see), plus
     // every other element that fetches through a plain `src`.
     //
-    // video, audio, embed, track and input[type=image] are here because the
-    // deferred bootstrap parks them: its element list is the one the runtime's
-    // own observer uses, so whatever it can park must be restorable from the
-    // same keys, or a resource held during the download window would stay dead
-    // for the rest of the page view even after the visitor consents. Restoring
-    // needs no per-tag branch — `el.src` is the right IDL attribute on all of
-    // them, and the gate below re-parks anything still blocked.
+    // video, audio, embed, track and input[type=image] are parked by the
+    // deferred bootstrap during the download window AND by this runtime's own
+    // src/setAttribute gates, observer and startup sweep after it — the two
+    // element lists are the same set, and media-embed-object-gate.test.mjs
+    // pins that. Whatever either side can park must be restorable from the
+    // same keys, or a resource that was merely delayed would stay dead for the
+    // rest of the page view even after the visitor consents. Restoring needs
+    // no per-tag branch — `el.src` is the right IDL attribute on all of them,
+    // and the gate re-parks anything still blocked.
     document.querySelectorAll(
         'img[data-faz-src][data-faz-category], source[data-faz-src][data-faz-category],'
         + ' video[data-faz-src][data-faz-category], audio[data-faz-src][data-faz-category],'
@@ -6740,8 +6831,8 @@ function _fazUnblockServerSide() {
 
     // 3c. <object data> and the poster frame of a media element. Both are
     // parked under their own keys (data-faz-data, data-faz-poster) because
-    // neither is a `src`, and neither had a restore pass at all: the bootstrap
-    // could park them and nothing could ever hand them back.
+    // neither is a `src`; the bootstrap parks them during the download window
+    // and the runtime's data/poster gates and sweep park them after it.
     document.querySelectorAll('object[data-faz-data][data-faz-category]')
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
@@ -6909,7 +7000,8 @@ function _fazAddProviderToList(node, cleanedHostname) {
 // exactly as it is.
 try {
     document
-        .querySelectorAll('img[src],img[srcset],source[src],source[srcset],iframe[src],iframe[srcdoc],link[href],link[imagesrcset],image,use,feImage,[background]')
+        .querySelectorAll('img[src],img[srcset],source[src],source[srcset],iframe[src],iframe[srcdoc],link[href],link[imagesrcset],image,use,feImage,[background],'
+            + 'video[src],video[poster],audio[src],embed[src],object[data],track[src],input[type="image"][src]')
         .forEach(_fazParkResourceElementIfBlocked);
     // Scripts are deliberately NOT swept. A parser-inserted <script src> has
     // already been fetched and executed by the time this deferred bundle runs,

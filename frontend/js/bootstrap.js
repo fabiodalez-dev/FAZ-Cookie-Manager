@@ -268,9 +268,13 @@
     }
     // video, audio, embed, object, track and input[type=image] fetch exactly the
     // way img and iframe do. The runtime's own observer is an ALLOWLIST too —
-    // _fazParkResourceElementIfBlocked branches on the tag name — and this
-    // list is kept at least as wide as that one, so the hold window never
-    // opens a surface the window after it does not cover.
+    // _fazParkResourceElementIfBlocked branches on the tag name — and the two
+    // lists are the SAME set, kept so on purpose: a tag held here and not gated
+    // there is replayed onto the native setter at the handoff, so the hold
+    // would only have delayed the request. That was the case for these six
+    // until the runtime grew their gates; media-embed-object-gate.test.mjs
+    // holds each of them through this file and asserts the runtime parks the
+    // replay.
     // `image` and `use` are the SVG namespace's own fetching elements: <image>
     // is an <img> by another name, and <use href="https://x/sprite.svg#icon">
     // fetches an external document. A CSS type selector with no namespace
@@ -1183,8 +1187,10 @@
         return false;
     }
     // During a normal handoff the runtime's permanent interceptors decide what
-    // may load, so everything replays. During a safety release there are no
-    // such interceptors and no provider rules, so only same-origin work runs.
+    // may load, so everything replays — which is only true while the runtime
+    // gates every key in `attrs` below (it does; the test named at RESOURCES
+    // pins it). During a safety release there are no such interceptors and no
+    // provider rules, so only same-origin work runs.
     function allowed(policy, url, key) { return !policy || !policy.sameOriginOnly || localValue(key, url); }
     // CSS TEXT is not released by origin on the safety release, because judging
     // that means re-implementing the browser's CSS parser: escapes, comments
@@ -1801,7 +1807,12 @@
         };
     });
     // Detached images can fetch before insertion. Hold URL assignments too;
-    // replay uses the runtime's own property/setAttribute interceptors.
+    // replay uses the runtime's own property/setAttribute interceptors, and
+    // the runtime installs one for every key in this map — src on
+    // img/iframe/media/embed/track/input, poster, object data, href, srcset,
+    // srcdoc, background and the SVG spellings. A key held here without a
+    // runtime gate would replay onto the native setter, so adding one means
+    // adding its gate in script.js first.
     //
     // `srcdoc` is in the list now, and it used to be deliberately absent with
     // the note "it belongs in both files or neither" — so it went into both.
