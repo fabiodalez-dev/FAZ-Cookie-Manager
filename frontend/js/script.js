@@ -6216,6 +6216,28 @@ function _fazIsAllowedScheme(url) {
 }
 
 /**
+ * Whether a parked src may be written back by the <iframe> and <img>-family
+ * restore passes: everything _fazIsAllowedScheme() admits, plus `data:`.
+ *
+ * The server parks an <iframe src="data:text/html,…"> whose decoded payload
+ * names a provider — a sub-document that would load a tracker, which nothing
+ * gates once it is parsed — and this restore refused every scheme but http(s),
+ * so the frame stayed parked after consent, hidden, with no placeholder left
+ * to say why. Three layers disagreed on one value: the server parked it, the
+ * src gate and the bootstrap would never have, the restore could not undo it.
+ * A data: URL on these elements is a resource, not a script sink: the frame
+ * it creates has an opaque origin in every supported engine, an image never
+ * runs it, and the value came from the page's own markup, which could have
+ * written it live. javascript: and every other scheme stay refused, and
+ * <embed>, which can load a document in the page, keeps the strict rule.
+ */
+function _fazIsRestorableSrc(url) {
+    if (_fazIsAllowedScheme(url)) return true;
+    if (!url || typeof url !== "string") return false;
+    return /^data:/i.test(url.replace(/[\u0000-\u0020]/g, ''));
+}
+
+/**
  * Let libraries that were waiting on a restored script finish their own setup.
  *
  * A restored <script src> is a new element, so it downloads and runs AFTER the
@@ -6507,11 +6529,12 @@ function _fazDrainScriptRestoreQueue() {
 /**
  * Re-enable resources that were blocked server-side via PHP output buffering.
  *
- * Handles four element types:
- * - Scripts:     type="text/plain" + data-faz-category → clone with type="text/javascript"
- * - Iframes:     data-faz-src + data-faz-category     → restore src
- * - Images:      data-faz-src + data-faz-category      → restore src (tracking pixels)
- * - Stylesheets: data-faz-href + data-faz-category     → restore href
+ * The main keys, each with its pass below:
+ * - Scripts:       type="text/plain" + data-faz-category → clone with type="text/javascript"
+ * - Iframes:       data-faz-src + data-faz-category     → restore src
+ * - src elements:  data-faz-src + data-faz-category     → restore src (img, source, video, audio, embed, track, input)
+ * - Stylesheets:   data-faz-href + data-faz-category    → restore href
+ * - Inline CSS:    style[data-faz-css], [data-faz-style] → restore the original text / attribute
  */
 function _fazUnblockServerSide() {
     // 2. Placeholders with <template> content (iframes, oEmbeds).
@@ -6538,7 +6561,7 @@ function _fazUnblockServerSide() {
             var phService = placeholder.getAttribute("data-faz-service") || "";
             fragment.querySelectorAll('iframe[data-faz-src]').forEach(function (iframe) {
                 var fazSrc = iframe.getAttribute("data-faz-src");
-                if (!_fazIsAllowedScheme(fazSrc)) return;
+                if (!_fazIsRestorableSrc(fazSrc)) return;
                 iframe.src = fazSrc;
                 if (!iframe.getAttribute("src")) return; // gate re-parked it — stay parked, recoverable
                 iframe.removeAttribute("data-faz-src");
@@ -6583,7 +6606,7 @@ function _fazUnblockServerSide() {
             var cat = el.getAttribute("data-faz-category");
             var fazSrc = el.getAttribute("data-faz-src");
             if (_fazShouldBlockResource(cat, fazSrc, el.getAttribute("data-faz-service") || "")) return;
-            if (!_fazIsAllowedScheme(fazSrc)) return;
+            if (!_fazIsRestorableSrc(fazSrc)) return;
             el.src = fazSrc;
             // If the gate re-parked it (the URL matches another provider whose
             // category is still denied), the native src stays empty — leave the
@@ -6629,13 +6652,16 @@ function _fazUnblockServerSide() {
     // 3. Images (tracking pixels inside noscript tags that JS can see), plus
     // every other element that fetches through a plain `src`.
     //
-    // video, audio, embed, track and input[type=image] are here because the
-    // deferred bootstrap parks them: its element list is the one the runtime's
-    // own observer uses, so whatever it can park must be restorable from the
-    // same keys, or a resource held during the download window would stay dead
-    // for the rest of the page view even after the visitor consents. Restoring
-    // needs no per-tag branch — `el.src` is the right IDL attribute on all of
-    // them, and the gate below re-parks anything still blocked.
+    // video, audio, embed, track and input[type=image] are here because both
+    // the deferred bootstrap and the server pass (process_media_resource_tag
+    // in class-frontend.php) park them under this key: whatever either layer
+    // can park must be restorable from the same keys, or a resource held
+    // during the download window — or parked in the page's own markup —
+    // would stay dead for the rest of the page view even after the visitor
+    // consents. Restoring needs no per-tag branch — `el.src` is the right IDL
+    // attribute on all of them, and the gate below re-parks anything still
+    // blocked. <embed> alone keeps the strict scheme rule: it can load a
+    // document in the page, so a data: payload is not handed back to it.
     document.querySelectorAll(
         'img[data-faz-src][data-faz-category], source[data-faz-src][data-faz-category],'
         + ' video[data-faz-src][data-faz-category], audio[data-faz-src][data-faz-category],'
@@ -6646,7 +6672,8 @@ function _fazUnblockServerSide() {
             var cat = el.getAttribute("data-faz-category");
             var imgSrc = el.getAttribute("data-faz-src");
             if (_fazShouldBlockResource(cat, imgSrc, el.getAttribute("data-faz-service") || "")) return;
-            if (!_fazIsAllowedScheme(imgSrc)) return;
+            var strict = (el.nodeName || "").toLowerCase() === "embed";
+            if (!(strict ? _fazIsAllowedScheme(imgSrc) : _fazIsRestorableSrc(imgSrc))) return;
             el.src = imgSrc;
             if (!el.getAttribute("src")) return; // gate re-parked it — stay parked, recoverable
             el.removeAttribute("data-faz-src");
@@ -6726,9 +6753,10 @@ function _fazUnblockServerSide() {
             // data:text/html payload there would run in this origin. So the
             // value is resolved through the URL parser and admitted only as
             // http(s) — stricter than _fazIsAllowedScheme, which lets a
-            // relative URL through, and free of cost here because the only
-            // thing that parks this key is the bootstrap and it parks nothing
-            // that is not absolute and cross-origin.
+            // relative URL through, and free of cost here because what parks
+            // this key is the bootstrap, which parks nothing that is not
+            // absolute and cross-origin, and the server pass, which parks
+            // only a value that matched a provider pattern, i.e. a host.
             var resolved;
             try { resolved = new URL(parked, document.baseURI); } catch (e) { return; }
             if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') return;
@@ -6787,6 +6815,27 @@ function _fazUnblockServerSide() {
             el.removeAttribute("data-faz-css");
             el.removeAttribute("data-faz-category");
             el.textContent = css;
+        });
+
+    // 4c. Inline `style` ATTRIBUTES the server neutralised (process_style_attr_tag
+    // in class-frontend.php): the original declarations live in data-faz-style
+    // and the live attribute carries the neutralised copy — or nothing, when a
+    // form the in-place rewrite could not reach made the server park the value
+    // whole. Same rule as 4b: handed back only when NO URL in the original is
+    // still blocked, so one accepted category does not release a declaration
+    // that also names a denied provider. The category label is left in place
+    // while another parked key on the same element still selects on it.
+    document.querySelectorAll('[data-faz-style]')
+        .forEach(function (el) {
+            var css = el.getAttribute("data-faz-style") || "";
+            if (!css || _fazCssShouldBlock(css)) return;
+            el.setAttribute("style", css);
+            el.removeAttribute("data-faz-style");
+            var otherKeys = ["data-faz-src", "data-faz-srcset", "data-faz-href", "data-faz-imagesrcset", "data-faz-background", "data-faz-poster", "data-faz-data", "data-faz-srcdoc"];
+            for (var k = 0; k < otherKeys.length; k++) {
+                if (el.hasAttribute(otherKeys[k])) return;
+            }
+            el.removeAttribute("data-faz-category");
         });
 
     // 4b. Constructable Stylesheets parked at build time (adoptedStyleSheets).
