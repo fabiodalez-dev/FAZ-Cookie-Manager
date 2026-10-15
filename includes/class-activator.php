@@ -276,8 +276,12 @@ class Activator {
 		if ( class_exists( $generator ) && method_exists( $generator, 'policy_languages' ) ) {
 			$languages = array_merge( $languages, (array) $generator::policy_languages() );
 		}
-		foreach ( array_unique( array_filter( $languages, 'is_string' ) ) as $language ) {
-			wp_cache_delete( 'faz_cookie_policy_list_' . $language, 'faz_cookie_policy' );
+		$languages = array_unique( array_filter( $languages, 'is_string' ) );
+		$renderer  = '\\FazCookie\\Admin\\Modules\\Cookie_Policy_Generator\\Includes\\Renderer';
+		if ( class_exists( $renderer ) && method_exists( $renderer, 'delete_cookie_list_cache' ) ) {
+			// The table cache is keyed by language AND jurisdiction; the renderer
+			// owns the key, so it also owns the deletion.
+			$renderer::delete_cookie_list_cache( $languages );
 		}
 		if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
 			faz_clear_banner_template_cache();

@@ -79,11 +79,42 @@ class Renderer {
 	 */
 	private static $public_cookie_rows_cache = null;
 
+	/**
+	 * Object-cache key of the rendered cookie table for one document.
+	 *
+	 * The table text depends on the jurisdiction as well as the language (the
+	 * no-country transfer fallback names the document's regime), so both are
+	 * part of the key. Every writer and every invalidation goes through here so
+	 * the two can never drift apart again.
+	 *
+	 * @param string $lang         Policy language.
+	 * @param string $jurisdiction Policy jurisdiction.
+	 * @return string
+	 */
+	public static function cookie_list_cache_key( $lang, $jurisdiction ) {
+		return 'faz_cookie_policy_list_' . $lang . '_' . $jurisdiction;
+	}
+
+	/**
+	 * Delete the cookie-table object-cache entries of the given languages, for
+	 * every jurisdiction a document can be rendered in.
+	 *
+	 * @param string[] $languages Policy languages.
+	 * @return void
+	 */
+	public static function delete_cookie_list_cache( array $languages ) {
+		foreach ( $languages as $language ) {
+			foreach ( Generator::JURISDICTIONS as $jurisdiction ) {
+				wp_cache_delete( self::cookie_list_cache_key( $language, $jurisdiction ), 'faz_cookie_policy' );
+			}
+		}
+	}
+
 	/** Invalidate declarations after an administrator changes their visibility. */
 	public static function clear_cookie_declaration_cache() {
 		$languages = array_unique( array_merge( faz_selected_languages(), array( faz_current_language() ) ) );
+		self::delete_cookie_list_cache( $languages );
 		foreach ( $languages as $language ) {
-			wp_cache_delete( 'faz_cookie_policy_list_' . $language, 'faz_cookie_policy' );
 			wp_cache_delete( 'faz_cookie_policy_transfers_' . $language, 'faz_cookie_policy' );
 		}
 		self::$cookie_list_cache        = array();
@@ -479,7 +510,7 @@ class Renderer {
 	 */
 	private static function build_cookie_list_html( $lang, $jurisdiction = 'gdpr-strict' ) {
 		$jurisdiction = is_string( $jurisdiction ) && '' !== $jurisdiction ? $jurisdiction : 'gdpr-strict';
-		$cache_key    = 'faz_cookie_policy_list_' . $lang . '_' . $jurisdiction;
+		$cache_key    = self::cookie_list_cache_key( $lang, $jurisdiction );
 		if ( isset( self::$cookie_list_cache[ $cache_key ] ) ) {
 			return self::$cookie_list_cache[ $cache_key ];
 		}

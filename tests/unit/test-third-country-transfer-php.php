@@ -174,6 +174,11 @@ if ( ! function_exists( 'faz_default_language' ) ) {
 		return 'en';
 	}
 }
+if ( ! function_exists( 'faz_current_language' ) ) {
+	function faz_current_language( $reset_cache = false ) {
+		return 'en';
+	}
+}
 if ( ! function_exists( 'faz_selected_languages' ) ) {
 	function faz_selected_languages( $language = '' ) {
 		$langs = array( 'en' );
@@ -577,6 +582,24 @@ assert_contains( $cookie_list->invoke( null, 'en', 'gdpr-strict' ), 'Transfers p
 $lgpd_table = $cookie_list->invoke( null, 'en', 'lgpd-brazil' );
 assert_contains( $lgpd_table, 'Transfers personal data outside Brazil', 'table row fallback(lgpd): "outside Brazil", not served from the GDPR cache entry' );
 assert_not_contains( $lgpd_table, 'EU/EEA', 'table row fallback(lgpd): no EU/EEA wording' );
+
+// Invalidation must follow the key. Once the jurisdiction joined the cache key,
+// clearing only `faz_cookie_policy_list_<lang>` left every real entry in a
+// persistent object cache: an administrator hiding a cookie kept seeing it in
+// the published table for up to five minutes.
+$GLOBALS['_cache'] = array();
+$reset_renderer();
+foreach ( Generator::JURISDICTIONS as $faz_j ) {
+	$cookie_list->invoke( null, 'en', $faz_j );
+}
+$faz_list_keys = static function () {
+	return array_values( array_filter( array_keys( $GLOBALS['_cache'] ), static function ( $k ) {
+		return 0 === strpos( $k, 'faz_cookie_policy|faz_cookie_policy_list_' );
+	} ) );
+};
+assert_eq( count( $faz_list_keys() ), count( Generator::JURISDICTIONS ), 'cache: one cookie-table entry per jurisdiction was stored (premise)' );
+Renderer::clear_cookie_declaration_cache();
+assert_eq( $faz_list_keys(), array(), 'cache: clear_cookie_declaration_cache() removes the jurisdiction-keyed cookie-table entries' );
 
 // Restore the two-row inventory for the shared-query check below.
 $wpdb->cookies_rows = array(
