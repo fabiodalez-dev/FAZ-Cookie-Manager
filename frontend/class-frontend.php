@@ -4517,9 +4517,19 @@ class Frontend {
 		// is not an element. Rewriting it would insert double-quoted
 		// attributes into the literal and stop the whole inline script from
 		// parsing, a breakage far worse than the fetch it would prevent.
+		// The skip ends where the HTML parser ends the element ("</script"
+		// followed by whitespace, "/" or ">"). Comments and the other
+		// raw-text containers (style, textarea, title, xmp) are consumed the
+		// same way, first, so a "<script" the parser reads as text cannot
+		// open a skip that hides the real elements after it. A style
+		// attribute inside any of them is text too, so leaving it is right.
 		if ( preg_match( '/\bstyle\s*=/i', $html ) ) {
+			$raw_text = '';
+			foreach ( array( 'script', 'style', 'textarea', 'title', 'xmp' ) as $raw_tag ) {
+				$raw_text .= '<' . $raw_tag . '(?=[\s/>])(?:' . self::ATTR_WALK . ')(?:/\s*+)?>.*?</' . $raw_tag . '(?=[\s/>])[^>]*+>|';
+			}
 			$result = preg_replace_callback(
-				'#<script(?=[\s/>])[^>]*+>.*?</script\s*+>|<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'#<!--.*?-->|' . $raw_text . '<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					if ( ! isset( $m[1] ) || '' === $m[1] ) {
 						return $m[0];

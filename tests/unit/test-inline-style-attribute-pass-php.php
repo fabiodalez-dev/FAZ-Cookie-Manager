@@ -260,6 +260,24 @@ namespace {
 	$out2 = faz_ob_run( faz_ob_frontend( $providers, $blocked ), '<html><body>' . $tpl . '</body></html>' );
 	assert_true( false !== strpos( $out2, $tpl ), 'a script template body is left to whoever renders it' );
 
+	echo "\n-- the script skip ends where the HTML parser ends it --\n";
+
+	// A "<script" that the parser reads as comment text must not open a skip
+	// that swallows the real elements after it.
+	$el   = '<div style="background:url(' . $poster . ')">z</div>';
+	$out3 = faz_ob_run( faz_ob_frontend( $providers, $blocked ), '<html><body><!-- <script> -->' . $el . '<script>var a=1;</script></body></html>' );
+	assert_true( 1 === substr_count( $out3, 'data-faz-style' ), 'a <script> inside a comment does not hide the element after it' );
+	// The parser closes a script at "</script" followed by whitespace, "/" or ">".
+	$out4 = faz_ob_run( faz_ob_frontend( $providers, $blocked ), '<html><body><script>var b=1;</script >' . $el . '<script>var c=1;</script></body></html>' );
+	assert_true( 1 === substr_count( $out4, 'data-faz-style' ), 'a script closed by "</script >" ends the skip there' );
+	$out5 = faz_ob_run( faz_ob_frontend( $providers, $blocked ), '<html><body><script>var d=1;</script/x>' . $el . '<script>var e=1;</script></body></html>' );
+	assert_true( 1 === substr_count( $out5, 'data-faz-style' ), 'a script closed by "</script/x>" ends the skip there' );
+
+	foreach ( array( 'style' => '/* <script> */', 'textarea' => '<script>', 'title' => '<script>', 'xmp' => '<script>' ) as $raw_tag => $raw_body ) {
+		$out6 = faz_ob_run( faz_ob_frontend( $providers, $blocked ), '<html><body><' . $raw_tag . '>' . $raw_body . '</' . $raw_tag . '>' . $el . '<script>var f=1;</script></body></html>' );
+		assert_true( 1 === substr_count( $out6, 'data-faz-style' ), 'a <script> written as text inside <' . $raw_tag . '> does not hide the element after it' );
+	}
+
 	echo "\n";
 	if ( 0 === $tests_failed ) {
 		echo "ALL PASS ({$tests_passed})\n";
