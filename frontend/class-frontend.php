@@ -6518,6 +6518,16 @@ class Frontend {
 				} elseif ( ! $is_optout_law ) {
 					// No ruleset opinion: opt-in law blocks every non-necessary
 					// category until the visitor consents.
+					//
+					// The category's `prior_consent` flag is deliberately NOT read
+					// here. It pre-grants the category on the client (defaultConsent
+					// = true seeds the in-memory store and pre-ticks the toggle) for
+					// an admin-declared consent-exempt category; the server keeps
+					// its server-rendered tags blocked under an opt-in law until an
+					// affirmative act, because unblocking on a REST/import-only flag
+					// would be pre-consent loading the moment it is misconfigured.
+					// Fail-closed is the documented split (see the REST schema of
+					// `prior_consent` in class-categories-api.php and README.md).
 					$blocked[] = $slug;
 				}
 			} else {

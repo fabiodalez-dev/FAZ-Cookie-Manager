@@ -216,7 +216,7 @@ An optional age-confirmation checkbox rendered directly above the Accept/Reject 
 
 - **Cookie list**: Full CRUD for cookies -- name, domain, duration, description, category, URL pattern
 - **Cookie categories**: Necessary, Functional, Analytics, Performance, Advertisement, Uncategorized
-- **Per-category prior consent**: Each category has a configurable `prior_consent` flag. Set to OFF for first-party analytics cookies that meet the Garante Privacy exemption (first-party only, aggregated data, anonymized IP, no cross-referencing)
+- **Per-category prior consent**: Each category carries a `prior_consent` flag (REST/import only, default OFF for every category but Necessary). ON means the category is granted before any consent action — meant for an admin-declared consent-exempt category such as first-party analytics cookies that meet the Garante Privacy exemption (first-party only, aggregated data, anonymized IP, no cross-referencing). It pre-grants the category client-side only: the server-side blocker keeps the category's scripts blocked under an opt-in law until the visitor acts
 - **Audit table**: Per-category cookie listing embedded in the preference center
 - **Multilingual descriptions**: Cookie description and duration stored per-language
 
