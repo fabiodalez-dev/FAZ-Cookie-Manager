@@ -69,6 +69,36 @@ namespace {
 	$GLOBALS['__faz_nonce_ok']     = true;
 	$GLOBALS['__faz_json']         = array();
 
+	$GLOBALS['__faz_queried'] = null;
+	if ( ! function_exists( 'is_singular' ) ) {
+		function is_singular() {
+			return $GLOBALS['__faz_queried'] instanceof WP_Post;
+		}
+	}
+	if ( ! function_exists( 'get_queried_object' ) ) {
+		function get_queried_object() {
+			return $GLOBALS['__faz_queried'];
+		}
+	}
+	if ( ! function_exists( 'has_shortcode' ) ) {
+		function has_shortcode( $content, $tag ) {
+			return false !== strpos( (string) $content, '[' . $tag );
+		}
+	}
+	if ( ! function_exists( 'has_block' ) ) {
+		function has_block( $name, $post = null ) {
+			return false;
+		}
+	}
+	if ( ! class_exists( 'WP_Post' ) ) {
+		class WP_Post {
+			public $post_content = '';
+			public function __construct( $content ) {
+				$this->post_content = $content;
+			}
+		}
+	}
+
 	if ( ! class_exists( 'WP_Error' ) ) {
 		class WP_Error {
 			private $code;
@@ -391,6 +421,25 @@ namespace {
 	check( array() === $GLOBALS['__faz_headers'], 'with output started no header() call is attempted' );
 	check( 1 === count( fired( 'litespeed_control_set_nocache' ) ), 'but LiteSpeed is still told' );
 	check( isset( $GLOBALS['__faz_filters']['flying_press_is_cacheable'] ), 'and so is FlyingPress' );
+
+	// Before output: a singular page whose content carries the shortcode is
+	// vetoed on template_redirect, while headers can still be sent. Inside
+	// the_content they almost never can, so the shortcode's own render is
+	// too late for the no-store header.
+	$early = new FazCookie\Includes\DSAR_Shortcode();
+	reset_state();
+	$GLOBALS['__faz_queried'] = new WP_Post( "Intro\n[faz_dsar_form]\n" );
+	$early->maybe_veto_page_cache_early();
+	check( headers_contain( 'no-store' ), 'a page that carries the form is vetoed before output, with the no-store header' );
+	check( 1 === count( fired( 'litespeed_control_set_nocache' ) ), 'and LiteSpeed is told once' );
+	$early->render( array() );
+	check( 1 === count( fired( 'litespeed_control_set_nocache' ) ), 'the later render of the same form does not repeat the veto' );
+	$other = new FazCookie\Includes\DSAR_Shortcode();
+	reset_state();
+	$GLOBALS['__faz_queried'] = new WP_Post( 'An ordinary page.' );
+	$other->maybe_veto_page_cache_early();
+	check( array() === $GLOBALS['__faz_headers'] && 0 === count( fired( 'litespeed_control_set_nocache' ) ), 'a page without the form keeps its cache' );
+	$GLOBALS['__faz_queried'] = null;
 
 	// ── 2. Every refusal a stale page can produce names the way out ──────────
 
