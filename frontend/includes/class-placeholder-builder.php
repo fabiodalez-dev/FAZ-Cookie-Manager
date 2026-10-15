@@ -238,6 +238,17 @@ class Placeholder_Builder {
 
 		// Hidden original content for JS to restore after consent.
 		// Sanitize with wp_kses to prevent XSS from crafted oEmbed/post content.
+		// The clone goes LIVE after consent, so kses is the last filter before
+		// live insertion of oEmbed/post-derived markup and stays. The list has
+		// to carry the publisher's own hardening along with the functional
+		// attributes, or a consented embed comes back less restricted than the
+		// one authored: sandbox and referrerpolicy="no-referrer" used to be
+		// stripped here, so the restored frame ran unsandboxed and sent the
+		// full referrer, with no error anywhere. An explicit list receives no
+		// global attributes from core, so data-* (its wildcard spelling, which
+		// kses honours) and the aria-* names are listed here; core has no
+		// aria-* wildcard. For a script, integrity and crossorigin are what
+		// lets the browser check the restored file against its hash.
 		$safe_html = wp_kses( $blocked_html, array_merge(
 			wp_kses_allowed_html( 'post' ),
 			array(
@@ -246,10 +257,16 @@ class Placeholder_Builder {
 					'width' => true, 'height' => true, 'frameborder' => true,
 					'allow' => true, 'allowfullscreen' => true, 'loading' => true,
 					'style' => true, 'class' => true, 'id' => true, 'title' => true,
+					'sandbox' => true, 'referrerpolicy' => true, 'name' => true, 'scrolling' => true,
+					'credentialless' => true, 'csp' => true, 'data-*' => true,
+					'aria-label' => true, 'aria-labelledby' => true, 'aria-describedby' => true, 'aria-hidden' => true,
+					'role' => true, 'lang' => true, 'tabindex' => true,
 				),
 				'script' => array(
 					'type' => true, 'src' => true, 'data-faz-category' => true, 'data-faz-service' => true,
 					'data-faz-src' => true, 'async' => true, 'defer' => true,
+					'crossorigin' => true, 'integrity' => true, 'referrerpolicy' => true, 'nonce' => true,
+					'id' => true, 'charset' => true, 'nomodule' => true, 'data-*' => true,
 				),
 			)
 		) );
