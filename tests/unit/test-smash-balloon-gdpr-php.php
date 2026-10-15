@@ -234,11 +234,19 @@ foreach ( array( 'auto', 'no', '' ) as $value ) {
 // re-blocking the script the server had just allowed.
 $server_at = strpos( (string) $fe_src, '$sb_exempt_patterns = self::smash_balloon_exempt_patterns();' );
 sb_eq( false !== $server_at, true, 'the server provider map applies the exemption' );
-// Anchored on the client loop's own condition rather than on a count of call
+// Anchored on the client path's own condition rather than on a count of call
 // sites: a count says "two of something" and would go green on two copies in the
-// same function, which is the failure it is meant to exclude.
+// same function, which is the failure it is meant to exclude. The client list
+// is exempted inside apply_client_provider_exemptions(), which get_store_data()
+// calls; that helper must read the same set.
+$client_helper_at = strpos( (string) $fe_src, 'private function apply_client_provider_exemptions(' );
+$client_helper    = false === $client_helper_at ? '' : substr( (string) $fe_src, $client_helper_at, 3000 );
+$store_at         = strpos( (string) $fe_src, 'public function get_store_data()' );
+$store_body       = false === $store_at ? '' : substr( (string) $fe_src, $store_at, strpos( (string) $fe_src, 'return $store;', $store_at ) - $store_at );
 sb_eq(
-	false !== strpos( (string) $fe_src, '$this->is_always_allowed_gateway_pattern( $pattern ) || isset( $sb_exempt_patterns[ $pattern ] )' ),
+	false !== strpos( $store_body, '$this->apply_client_provider_exemptions( $this->providers,' )
+		&& false !== strpos( $client_helper, '$sb_exempt_patterns = self::smash_balloon_exempt_patterns();' )
+		&& false !== strpos( $client_helper, 'isset( $sb_exempt_patterns[ $pattern ] )' ),
 	true,
 	'and so does the client-side provider list (separate code path, same set)'
 );
