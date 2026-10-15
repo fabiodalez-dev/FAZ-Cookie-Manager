@@ -50,6 +50,14 @@ try {
 		'browser artifacts never reach the webroot'        => ! file_exists( $target . '/test-results' ),
 		'node_modules never reaches the webroot'           => ! file_exists( $target . '/node_modules' ),
 	);
+	// The private assistant context of the checkout never reaches the webroot:
+	// .claude/ carries notes and, when agents work in worktrees, whole copies
+	// of the repository (206 MB measured), and CLAUDE.md is private context.
+	// Asked of the list itself, because the test source tree has neither.
+	$excludes = array();
+	exec( 'bash ' . escapeshellarg( $script ) . ' --print-excludes 2>&1', $excludes );
+	$checks['.claude/ is excluded from the deploy'] = in_array( '.claude', $excludes, true );
+	$checks['CLAUDE.md is excluded from the deploy'] = in_array( 'CLAUDE.md', $excludes, true );
 	foreach ( $checks as $label => $passed ) {
 		if ( $passed ) {
 			echo "  [PASS] {$label}\n";
@@ -68,4 +76,4 @@ try {
 if ( $failed ) {
 	exit( 1 );
 }
-echo "Deploy target cleanliness: 7 passed.\n";
+echo "Deploy target cleanliness: " . count( $checks ) . " passed.\n";

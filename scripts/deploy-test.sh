@@ -53,6 +53,11 @@ EXCLUDES=(
 	'test-results'
 	'*.zip'
 	'.DS_Store'
+	# Private assistant context of the checkout. .claude/ also holds agent
+	# worktrees, i.e. whole copies of the repository: one deploy copied 206 MB
+	# of them into the test webroot.
+	'.claude'
+	'CLAUDE.md'
 )
 
 if [ "${1:-}" = '--print-excludes' ]; then
