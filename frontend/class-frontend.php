@@ -3458,18 +3458,31 @@ class Frontend {
 			}
 		}
 
-		// 3. Admin custom blocking rules (Settings → Script Blocking).
-		$custom_rules = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
+		// 3. Admin custom blocking rules (Settings → Script Blocking). Tracked
+		// as EXPLICIT rules, exactly like get_provider_category_map() does
+		// with $custom_patterns, so the gateway / Instagram Feed exemption
+		// below can never drop them from the client list while the server map
+		// keeps them (admin intent wins on both layers or on neither).
+		$custom_rules    = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
+		$client_explicit = array();
 		foreach ( $custom_rules as $rule ) {
 			$pattern  = isset( $rule['pattern'] ) ? $rule['pattern'] : '';
 			$category = isset( $rule['category'] ) ? $rule['category'] : '';
 			if ( ! empty( $pattern ) && ! empty( $category ) && in_array( $category, $valid_categories, true ) ) {
-				$this->providers[ $pattern ] = array( $category );
+				$this->providers[ $pattern ]   = array( $category );
+				$client_explicit[ $pattern ] = true;
 			}
 		}
 
-		// 4. Developer filter.
-		$this->providers = apply_filters( 'faz_blocking_rules_client', $this->providers );
+		// 4. Developer filter. Snapshot first so a rule the filter ADDS counts
+		// as explicit too (mirrors the $pre_filter_map snapshot on the server).
+		$pre_filter_client = $this->providers;
+		$this->providers   = apply_filters( 'faz_blocking_rules_client', $this->providers );
+		foreach ( array_keys( $this->providers ) as $pattern ) {
+			if ( ! array_key_exists( $pattern, $pre_filter_client ) ) {
+				$client_explicit[ $pattern ] = true;
+			}
+		}
 
 		// Some payment SDKs are required outside checkout too (e.g. Stripe express buttons).
 		// The Instagram Feed exemption rides along here for the same reason it
@@ -3477,26 +3490,10 @@ class Frontend {
 		// SEPARATE list built from $this->providers, so exempting only the server
 		// map would leave the browser re-blocking the very script the server just
 		// allowed — the pattern reaching the page in _fazConfig is enough to do it.
-		$sb_exempt_patterns = self::smash_balloon_exempt_patterns();
-		foreach ( array_keys( $this->providers ) as $pattern ) {
-			if ( $this->is_always_allowed_gateway_pattern( $pattern ) || isset( $sb_exempt_patterns[ $pattern ] ) ) {
-				unset( $this->providers[ $pattern ] );
-			}
-		}
-
-		// On WooCommerce checkout/cart pages, remove the remaining payment gateway patterns
-		// from client-side blocking so JS interceptors don't break payments.
-		if ( $this->is_wc_checkout_or_cart() ) {
-			$gateway_whitelist = $this->get_payment_gateway_whitelist();
-			foreach ( array_keys( $this->providers ) as $pattern ) {
-				foreach ( $gateway_whitelist as $gw ) {
-					if ( false !== stripos( $pattern, $gw ) ) {
-						unset( $this->providers[ $pattern ] );
-						break;
-					}
-				}
-			}
-		}
+		// Explicit rules are carved out (see apply_client_provider_exemptions()).
+		$client_exemptions        = $this->apply_client_provider_exemptions( $this->providers, $client_explicit );
+		$this->providers          = $client_exemptions['providers'];
+		$client_gateway_whitelist = $client_exemptions['whitelist'];
 
 		// On pages excluded from script blocking, send empty providers
 		// so client-side interceptors don't block anything.
@@ -3526,7 +3523,13 @@ class Frontend {
 		$user_whitelist = isset( $settings['script_blocking']['whitelist_patterns'] )
 			? array_values( array_filter( array_map( 'sanitize_text_field', (array) $settings['script_blocking']['whitelist_patterns'] ) ) )
 			: array();
-		$store['_userWhitelist'] = $user_whitelist;
+		// Plus the always-allowed gateway tokens whenever an explicit rule
+		// overlapped one and was therefore KEPT on the client list (see
+		// apply_client_provider_exemptions()). The server releases a gateway's
+		// own urls through get_whitelist(), not by dropping the rule, so the
+		// client needs the same tokens to resolve them the same way. Empty on
+		// every install without such a rule: the payload is unchanged there.
+		$store['_userWhitelist'] = array_values( array_unique( array_merge( $user_whitelist, $client_gateway_whitelist ) ) );
 		// Non-filterable commerce configuration invariant mirrored by the
 		// runtime MutationObserver/createElement interceptor. Keep it separate
 		// from the editable whitelist so an empty Settings field cannot remove
@@ -6325,6 +6328,77 @@ class Frontend {
 			$this->always_allowed_cache = $this->get_always_allowed_gateway_patterns();
 		}
 		return $this->gateway_pattern_matches( $pattern, $this->always_allowed_cache );
+	}
+
+	/**
+	 * Apply the payment-gateway and Instagram Feed exemptions to the CLIENT
+	 * provider list (get_store_data() → `_providersToBlock`), with the same
+	 * explicit-rule carve-out get_provider_category_map() applies to the
+	 * server map.
+	 *
+	 * Built-in patterns (provider database, cookie DB) that overlap an
+	 * always-allowed gateway token — or, on WooCommerce checkout/cart, any
+	 * entry of get_payment_gateway_whitelist() — are removed, as before. An
+	 * EXPLICIT rule (an admin custom rule, or one added through
+	 * `faz_blocking_rules_client`) is never removed: gateway_pattern_matches()
+	 * is a bidirectional substring test, so a generic rule like `payment` or
+	 * `klarna` would otherwise vanish from the client for being a substring of
+	 * `stripe-payment` / `x.klarnacdn.net` while the server map kept it — and a
+	 * dynamically injected script the admin had ruled on ran before consent.
+	 *
+	 * The server does not release a gateway's OWN urls by dropping the rule
+	 * but through get_whitelist(), which merges the same tokens. When an
+	 * explicit rule overlapped a gateway and was kept, the overlapping tokens
+	 * are therefore returned for the client whitelist, so a gateway-hosted url
+	 * resolves to "allowed" on both layers and a differently-hosted script
+	 * under the explicit rule resolves to "blocked" on both. Nothing is
+	 * returned when no explicit rule overlapped: an install without such a
+	 * rule ships exactly the payload it shipped before.
+	 *
+	 * @param array $providers Pattern => category list.
+	 * @param array $explicit  Pattern => true for admin / filter-added rules.
+	 * @return array{providers: array, whitelist: string[]}
+	 */
+	private function apply_client_provider_exemptions( array $providers, array $explicit ) {
+		$sb_exempt_patterns = self::smash_balloon_exempt_patterns();
+		$on_checkout        = $this->is_wc_checkout_or_cart();
+		$checkout_whitelist = $on_checkout ? $this->get_payment_gateway_whitelist() : array();
+		$gateway_overlap    = false;
+
+		foreach ( array_keys( $providers ) as $pattern ) {
+			$gateway_hit = $this->is_always_allowed_gateway_pattern( $pattern );
+			if ( ! $gateway_hit && $on_checkout ) {
+				// On checkout/cart pages the remaining gateway patterns go too, so
+				// the JS interceptors cannot break a payment.
+				foreach ( $checkout_whitelist as $gw ) {
+					if ( false !== stripos( $pattern, $gw ) ) {
+						$gateway_hit = true;
+						break;
+					}
+				}
+			}
+			if ( ! $gateway_hit && ! isset( $sb_exempt_patterns[ $pattern ] ) ) {
+				continue;
+			}
+			if ( isset( $explicit[ $pattern ] ) ) {
+				if ( $gateway_hit ) {
+					$gateway_overlap = true;
+				}
+				continue;
+			}
+			unset( $providers[ $pattern ] );
+		}
+
+		$whitelist = array();
+		if ( $gateway_overlap ) {
+			$whitelist = array_merge( (array) $this->always_allowed_cache, $checkout_whitelist );
+			$whitelist = array_values( array_unique( array_filter( array_map( 'strval', $whitelist ), 'strlen' ) ) );
+		}
+
+		return array(
+			'providers' => $providers,
+			'whitelist' => $whitelist,
+		);
 	}
 
 	/**
