@@ -75,7 +75,7 @@ Built-in browser-based scanner with multiple scan depths: Quick (10 pages), Stan
 ![Cookie scanner](assets/screenshot-5.png)
 
 ### Consent Logs
-Complete audit trail of every visitor's consent decision. Shows consent ID, status, categories chosen, anonymized IP, and page URL. Search, filter, and export to CSV for GDPR accountability.
+Complete audit trail of every visitor's consent decision. Shows consent ID, status, categories chosen, a pseudonymised IP (salted one-way hash), and page URL. Search, filter, and export to CSV for GDPR accountability.
 
 ![Consent Logs](assets/screenshot-6.png)
 

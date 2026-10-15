@@ -194,7 +194,17 @@ class Controller {
 	}
 
 	/**
-	 * Hash an IP address for GDPR compliance.
+	 * Pseudonymise an IP address before it is stored.
+	 *
+	 * A salted one-way hash, keyed by the installation's salt. It is
+	 * pseudonymisation in the sense of GDPR Art. 4(5), not anonymisation: the
+	 * same address always yields the same value for the life of the salt, so
+	 * rows from one address stay linkable for the retention period, and
+	 * anyone holding wp-config's salts and a candidate address can confirm a
+	 * match. The row is therefore still personal data, kept as the server-side
+	 * witness of where a consent came from and purged with the row. The
+	 * wording shown to administrators (the eraser message, the readme) says
+	 * exactly this, and no more.
 	 *
 	 * @param string $ip The IP address.
 	 * @return string SHA256 hash of IP + salt.
