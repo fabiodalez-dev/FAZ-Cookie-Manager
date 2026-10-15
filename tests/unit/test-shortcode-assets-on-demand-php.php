@@ -56,6 +56,13 @@ namespace {
 
 	function add_shortcode( $tag, $cb ) {}
 	function add_action( $hook, $cb, $priority = 10, $args = 1 ) {}
+	// render() keeps its page out of full-page caches (DSAR_Shortcode::veto_page_cache()):
+	// the LiteSpeed action and the FlyingPress filter it fires are no-ops here.
+	function add_filter( $hook, $cb, $priority = 10, $args = 1 ) {}
+	function do_action( $hook, ...$args ) {}
+	function __return_false() {
+		return false;
+	}
 	function is_admin() {
 		return $GLOBALS['__faz_is_admin'];
 	}
