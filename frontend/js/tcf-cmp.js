@@ -439,8 +439,9 @@
 		// PurposeOneTreatment
 		pushBits(bits, PURPOSE_ONE_TREATMENT ? 1 : 0, 1);
 
-		// PublisherCC
-		var publisherCC = cfg.publisherCC || "IT";
+		// PublisherCC — "AA" is the spec's value for an unknown publisher
+		// country; the server resolves the real one (resolve_tcf_publisher_cc).
+		var publisherCC = cfg.publisherCC || "AA";
 		pushBits(bits, charTo6(publisherCC.charAt(0)), 6);
 		pushBits(bits, charTo6(publisherCC.charAt(1)), 6);
 
@@ -562,7 +563,7 @@
 			isServiceSpecific:   true,
 			useNonStandardTexts: false,
 			purposeOneTreatment: PURPOSE_ONE_TREATMENT,
-			publisherCC:         cfg.publisherCC || "IT",
+			publisherCC:         cfg.publisherCC || "AA",
 			outOfBand: {
 				allowedVendors:   {},
 				disclosedVendors: disclosedObj

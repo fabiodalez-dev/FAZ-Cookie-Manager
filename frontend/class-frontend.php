@@ -821,17 +821,7 @@ class Frontend {
 					$this->enqueue_deferred_script( $tcf_handle, faz_frontend_url() . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
 				}
 
-				// PublisherCC: use admin setting, fall back to site locale.
-				$saved_cc     = $this->settings->get( 'iab', 'publisher_cc' );
-				$country_code = ! empty( $saved_cc ) ? strtoupper( sanitize_text_field( $saved_cc ) ) : '';
-				if ( ! preg_match( '/^[A-Z]{2}$/', $country_code ) ) {
-					$site_locale = (string) get_locale();
-					if ( preg_match( '/^[a-z]{2}[_-]([A-Z]{2})/i', $site_locale, $matches ) ) {
-						$country_code = strtoupper( $matches[1] );
-					} else {
-						$country_code = 'IT';
-					}
-				}
+				$country_code = $this->resolve_tcf_publisher_cc();
 
 				// ConsentLanguage: use current banner language (uppercase 2-char ISO 639-1).
 				$consent_lang = strtoupper( substr( faz_current_language(), 0, 2 ) );
@@ -839,18 +829,9 @@ class Frontend {
 					$consent_lang = 'EN';
 				}
 
-				// gdprApplies: true when visitor is in EU/EEA or country unknown
-				// (safe default). Under Cache Compatibility Mode this payload
-				// must be identical for every anonymous visitor, so do not read
-				// the visitor country; use the conservative TCF default instead.
-				if ( $this->is_cache_compatibility_enabled() ) {
-					$gdpr_applies = true;
-				} else {
-					$visitor_country = $this->get_visitor_country();
-					$gdpr_applies    = empty( $visitor_country ) || in_array( $visitor_country, Geolocation::$eu_countries, true );
-				}
+				$gdpr_applies = $this->resolve_tcf_gdpr_applies();
 
-				// Build TCF config with GVL data if available.
+				// Build TCF config with GVL data (the gate above guarantees it).
 				$tcf_config = array(
 					'publisherCC'         => $country_code,
 					'consentLanguage'     => $consent_lang,
@@ -1904,6 +1885,69 @@ class Frontend {
 	 */
 	private function get_visitor_country() {
 		return Geolocation::get_visitor_country();
+	}
+
+	/**
+	 * PublisherCC for the TC string: the publisher's country of establishment.
+	 *
+	 * The configured iab.publisher_cc wins. Without one, the region of the site
+	 * locale is a reasonable proxy (de_DE → DE). When the locale has no region
+	 * either — fi, el, et, lv, hr, ja and every other region-less WordPress
+	 * locale — the answer is 'AA', the value the TC String specification
+	 * reserves for an unknown publisher country. This used to fall back to a
+	 * hard-coded 'IT' (repeated in tcf-cmp.js), which asserted a specific, and
+	 * for every non-Italian publisher wrong, country in a signed consent record.
+	 *
+	 * @return string Two upper-case letters.
+	 */
+	private function resolve_tcf_publisher_cc() {
+		$saved_cc     = $this->settings->get( 'iab', 'publisher_cc' );
+		$country_code = is_scalar( $saved_cc ) && '' !== (string) $saved_cc ? strtoupper( sanitize_text_field( (string) $saved_cc ) ) : '';
+		if ( preg_match( '/^[A-Z]{2}$/', $country_code ) ) {
+			return $country_code;
+		}
+		$site_locale = (string) get_locale();
+		if ( preg_match( '/^[a-z]{2,3}[_-]([A-Z]{2})/i', $site_locale, $matches ) ) {
+			return strtoupper( $matches[1] );
+		}
+		return 'AA';
+	}
+
+	/**
+	 * gdprApplies for the TCF payload.
+	 *
+	 * The CMP API spec defines gdprApplies as the PUBLISHER's perspective:
+	 * whether the Framework applies to this user, in this context. When the
+	 * geo-routing runtime resolves a ruleset for the visitor, that ruleset IS
+	 * the publisher's declaration — it decides the banner model, the blocked
+	 * scripts and the GCM defaults — and its `signals.tcf_v22` says whether the
+	 * regime it enforces is a TCF one. gdpr-strict routes CH, AD, MC, SM, VA
+	 * (and every US visitor without a state ruleset) to an opt-in banner with
+	 * tcf_v22 true, while Geolocation::$eu_countries does not list them; so
+	 * reading only the country list made the CMP tell vendors gdprApplies=false
+	 * for a visitor whose page had just enforced opt-in and shown the TCF UI,
+	 * which under TCF semantics entitles them to disregard the TC string.
+	 *
+	 * The signal is the flag, not the model: LGPD/POPIA rulesets are opt-in
+	 * but carry tcf_v22 false and must stay false. Without a resolved ruleset
+	 * (routing off) the country list decides, with "unknown country" kept
+	 * conservative (true). Under Cache Compatibility Mode the payload must be
+	 * identical for every anonymous visitor, so nothing per-visitor is read.
+	 *
+	 * @return bool
+	 */
+	private function resolve_tcf_gdpr_applies() {
+		if ( $this->is_cache_compatibility_enabled() ) {
+			return true;
+		}
+		$ruleset = $this->get_runtime_ruleset();
+		if ( is_array( $ruleset )
+			&& isset( $ruleset['signals'] ) && is_array( $ruleset['signals'] )
+			&& array_key_exists( 'tcf_v22', $ruleset['signals'] ) ) {
+			return (bool) $ruleset['signals']['tcf_v22'];
+		}
+		$visitor_country = $this->get_visitor_country();
+		return empty( $visitor_country ) || in_array( $visitor_country, Geolocation::$eu_countries, true );
 	}
 
 	/**
