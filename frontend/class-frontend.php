@@ -4510,10 +4510,20 @@ class Frontend {
 		// once for the great majority that carry no style, or no URL in it.
 		// Runs after the src/href passes so a tag they already parked keeps
 		// its one category label.
+		//
+		// A <script> element is consumed whole by the first alternative and
+		// returned untouched: its body is JavaScript (or a template another
+		// script renders), and a tag-shaped substring inside a string literal
+		// is not an element. Rewriting it would insert double-quoted
+		// attributes into the literal and stop the whole inline script from
+		// parsing, a breakage far worse than the fetch it would prevent.
 		if ( preg_match( '/\bstyle\s*=/i', $html ) ) {
 			$result = preg_replace_callback(
-				'#<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#s',
+				'#<script(?=[\s/>])[^>]*+>.*?</script\s*+>|<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
+					if ( ! isset( $m[1] ) || '' === $m[1] ) {
+						return $m[0];
+					}
 					return $this->process_style_attr_tag( $m, $providers, $blocked_categories );
 				},
 				$html

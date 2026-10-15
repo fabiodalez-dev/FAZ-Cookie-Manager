@@ -245,6 +245,21 @@ namespace {
 	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'under one category label' );
 	assert_true( false !== strpos( $out, 'alt=""/>' ), 'and the self-closing slash stays last' );
 
+	echo "\n-- markup inside a script body is JavaScript, not markup --\n";
+
+	// A theme or a page builder that builds HTML in a JS string must not have
+	// the string rewritten: the pass would insert double-quoted attributes into
+	// a double-quoted literal and the whole inline script would stop parsing.
+	$fe     = faz_ob_frontend( $providers, $blocked );
+	$script = '<script>var h = "<div style=\'background:url(' . $poster . ')\'>x</div>"; document.body.insertAdjacentHTML("beforeend", h);</script>';
+	$html   = '<html><body>' . $script . '<div style="background:url(' . $poster . ')">y</div></body></html>';
+	$out    = faz_ob_run( $fe, $html );
+	assert_true( false !== strpos( $out, $script ), 'an inline script body leaves the pass byte-identical' );
+	assert_true( 1 === substr_count( $out, 'data-faz-style' ), 'while the real element after it is still parked' );
+	$tpl  = '<script type="text/template"><div style="background:url(' . $poster . ')"></div></script>';
+	$out2 = faz_ob_run( faz_ob_frontend( $providers, $blocked ), '<html><body>' . $tpl . '</body></html>' );
+	assert_true( false !== strpos( $out2, $tpl ), 'a script template body is left to whoever renders it' );
+
 	echo "\n";
 	if ( 0 === $tests_failed ) {
 		echo "ALL PASS ({$tests_passed})\n";
