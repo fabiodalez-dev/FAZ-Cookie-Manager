@@ -280,7 +280,7 @@ You may withdraw consent at any time (Art. 8, § 5) via the "Cookie settings" li
 		_x(
 			'## Categories of personal data processed (Art. 5, I)
 
-- **Online identifiers** — IP (hashed with monthly salt), device IDs, session IDs
+- **Online identifiers** — IP (one-way hashed with a site-specific salt), device IDs, session IDs
 - **Browsing data** — pages visited, dwell time, interactions
 - **Approximate location** — country/region from IP (not precise GPS)
 - **Preferences** — consent categories, language

@@ -32,7 +32,7 @@ Você pode revogar seu consentimento a qualquer momento (Art. 8, § 5º LGPD) at
 
 Tratamos as seguintes categorias por meio de cookies:
 
-- **Identificadores online** — endereço IP (hash com sal mensal), identificadores de dispositivo, identificadores de sessão
+- **Identificadores online** — endereço IP (hash irreversível com um sal específico do site), identificadores de dispositivo, identificadores de sessão
 - **Dados de navegação** — páginas visitadas, tempo de permanência, interações
 - **Localização aproximada** — país/região derivada do IP (não GPS preciso)
 - **Preferências** — categorias de consentimento, idioma
