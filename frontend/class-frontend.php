@@ -791,14 +791,23 @@ class Frontend {
 				$this->enqueue_inline_bundle( $gcm_handle, 'js/gcm' . $gcm_suffix . '.js', $alt_asset ? array( $script_handle ) : array(), false );
 			}
 
-			// IAB TCF v2.3 CMP stub (when IAB is enabled AND a valid CMP ID is set).
+			// IAB TCF v2.3 CMP stub (when IAB is enabled AND a valid CMP ID is set
+			// AND the Global Vendor List has been downloaded).
 			// IAB Europe assigns CMP IDs; 0 and 1 are reserved/invalid. A TC string
 			// built with CmpId < 2 is rejected by the IAB-compliant ad-tech supply
 			// chain, so emitting one (the euconsent-v2 cookie) is a supply-chain
 			// non-compliance. Refuse to activate the CMP — do not enqueue tcf-cmp.js
 			// and do not emit _fazTcfConfig — until a registered CMP ID is configured.
+			// The same refusal applies while no GVL is stored: without it the CMP
+			// would encode VendorListVersion 0 and an empty DisclosedVendors
+			// segment, which the IAB CMP validator rejects (Controls Catalogue
+			// checks 6/7), and answer getVendorList with null. Settings::update()
+			// downloads the GVL the moment TCF is switched on, so this window is
+			// normally just a failed download away from closing itself.
+			$gvl         = Gvl::get_instance();
 			$iab_enabled = (bool) $this->settings->get( 'iab', 'enabled' )
-				&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2;
+				&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2
+				&& $gvl->has_data();
 			if ( $iab_enabled ) {
 				// Early command-queue stub so ad scripts can call __tcfapi before CMP loads.
 				// Handles 'ping' directly so pre-CMP callers get a valid response.
@@ -850,7 +859,6 @@ class Frontend {
 					'purposeOneTreatment' => (bool) $this->settings->get( 'iab', 'purpose_one_treatment' ),
 				);
 
-				$gvl = Gvl::get_instance();
 				if ( $gvl->has_data() ) {
 					$tcf_config['gvlVersion']       = $gvl->get_version();
 					$tcf_config['purposes']         = $gvl->get_purposes( strtolower( $consent_lang ) );
@@ -3531,16 +3539,19 @@ class Frontend {
 
 		// IAB vendor data for preference center.
 		// Mirror the asset-enqueue gate above: the IAB/TCF preference UI is
-		// only surfaced when a registered CMP ID (>= 2) is configured. CMP IDs
-		// 0 and 1 are reserved/invalid in the IAB GVL, so emitting the vendor
-		// list and purpose toggles without one would show a TCF UI that can
-		// never produce a valid TC string (tcf-cmp.js is not enqueued in that
-		// state). Keep both gates in sync.
+		// only surfaced when a registered CMP ID (>= 2) is configured AND the
+		// Global Vendor List is stored. CMP IDs 0 and 1 are reserved/invalid in
+		// the IAB GVL, so emitting the vendor list and purpose toggles without
+		// one would show a TCF UI that can never produce a valid TC string
+		// (tcf-cmp.js is not enqueued in that state); without a GVL there is
+		// nothing to disclose and tcf-cmp.js is not enqueued either. Keep both
+		// gates in sync.
+		$gvl         = Gvl::get_instance();
 		$iab_enabled = (bool) $this->settings->get( 'iab', 'enabled' )
-			&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2;
+			&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2
+			&& $gvl->has_data();
 		$store['_iabEnabled'] = $iab_enabled;
 		if ( $iab_enabled ) {
-			$gvl = Gvl::get_instance();
 			if ( $gvl->has_data() ) {
 				$selected_ids = (array) get_option( 'faz_gvl_selected_vendors', array() );
 				if ( ! empty( $selected_ids ) ) {
