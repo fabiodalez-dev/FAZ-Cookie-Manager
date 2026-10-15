@@ -886,6 +886,11 @@ class AMP_Consent {
 	 * (2) per-banner ruleSet (settings.ruleSet entries restricted to
 	 * EU/US/OTHER country sets).
 	 *
+	 * With the geo runtime on, the resolved ruleset's model picks the banner
+	 * whose law matches it; when no such banner is active, the country-selected
+	 * banner is kept so the <amp-consent> instance and its component blocking
+	 * still ship, as Frontend::load_banner() does on the classic page.
+	 *
 	 * When Cache Compatibility Mode is effectively active, AMP follows the classic frontend's
 	 * cache-safe baseline: no visitor-country lookup, no geo suppression, and
 	 * neutral banner selection. Runtime ruleset enforcement disables that mode
@@ -915,10 +920,31 @@ class AMP_Consent {
 				$law_banner = Controller::get_instance()->get_active_banner_for_law( $wanted_law, $country );
 				if ( $law_banner ) {
 					$banner = $law_banner;
-				} elseif ( 'gdpr' === $wanted_law ) {
-					// Do not show an opt-out notice for an opt-in jurisdiction.
-					return false;
 				}
+				// No banner for the wanted law: keep the country-selected one.
+				//
+				// This used to return false when the wanted law was 'gdpr', to
+				// avoid showing an opt-out notice in an opt-in jurisdiction. On
+				// AMP, false does not mean "no UI": both callers read it as
+				// "nothing to do", so output_amp_consent() rendered no
+				// <amp-consent> and start_component_blocking_buffer() never
+				// started its buffer. With no instance and no blocking
+				// attributes the AMP runtime gates nothing, and every
+				// amp-analytics, amp-ad and amp-pixel ran on an opt-in visitor
+				// with no consent and no log row. The AMP caches then served
+				// that document to every later reader of the URL. A wizard
+				// "US only" install reaches this with a single CCPA banner,
+				// and so does any install without a country source, because
+				// the unresolved-country fallback ruleset is opt-in.
+				//
+				// Frontend::load_banner() handles the same mismatch by keeping
+				// the banner so server-side blocking still runs and hiding
+				// only its UI. Here nothing needs hiding: the AMP prompt is
+				// already opt-in shaped (Accept, Reject, Save with every
+				// purpose unticked) and the check endpoint answers
+				// consentRequired:true, so rendering it over the CCPA
+				// banner's scope misrepresents nothing. Scripts stay blocked
+				// and the visitor can still consent or opt out.
 			}
 			// Normal-page footer probes only prove a script.js trigger, not
 			// an AMP tap action. Keep the native post-consent control.
