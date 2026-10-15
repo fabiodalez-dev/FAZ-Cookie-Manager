@@ -400,13 +400,13 @@ class Controller {
 		// added schema-side but never written, leaving NULL on every row.
 		//
 		// Data source priority:
-		//   1. $data['visitor_context'] explicitly passed by caller
-		//      (REST API consent_log endpoint, JS-side hydration).
-		//   2. Geo_Routing::get_visitor_context() server-side resolve
-		//      (cached per-request — no extra HTTP). Only invoked if
-		//      the Geo_Routing class is available (defensive — geo-
-		//      routing v2 module might be removed by a future host
-		//      filter).
+		//   1. $data['visitor_context'] explicitly passed by a caller that
+		//      already resolved the context it enforced.
+		//   2. The enforcement chain the frontend itself used for this
+		//      visitor — Geolocation::get_visitor_country() and
+		//      Geo_Runtime::resolve_for_country() — see
+		//      runtime_visitor_context() for why it is that chain and not
+		//      the bare detector.
 		//   3. NULL columns (legacy fallback).
 		$geo_fields = $this->resolve_geo_audit_fields( $data );
 
@@ -490,25 +490,21 @@ class Controller {
 		$ctx = isset( $data['visitor_context'] ) && is_array( $data['visitor_context'] ) ? $data['visitor_context'] : null;
 
 		if ( null === $ctx ) {
-			$class = '\\FazCookie\\Admin\\Modules\\Geo_Routing\\Geo_Routing';
-			if ( class_exists( $class ) ) {
-				try {
-					$orchestrator = $class::get_instance();
-					if ( method_exists( $orchestrator, 'get_visitor_context' ) ) {
-						$ctx = $orchestrator->get_visitor_context();
-					}
-				} catch ( \Throwable $e ) {
-					$ctx = null;
-				}
-			}
+			$ctx = $this->runtime_visitor_context();
 		}
 
 		if ( ! is_array( $ctx ) ) {
-			return array();
+			// No jurisdiction context at all (the geo classes are absent): the
+			// signal and TCF/GPP columns below still have a source, the request.
+			$ctx = array();
 		}
 
 		$out = array();
-		if ( isset( $ctx['country'] ) && is_string( $ctx['country'] ) && preg_match( '/^[A-Z]{2}$/', $ctx['country'] ) ) {
+		// 'XX' is the detector's "unknown" sentinel, not a country: the data
+		// model (specs/001-geo-routing-next/data-model.md) keeps an unresolved
+		// country NULL, and a row claiming a country of XX would read as a
+		// value to anyone correlating the export.
+		if ( isset( $ctx['country'] ) && is_string( $ctx['country'] ) && preg_match( '/^[A-Z]{2}$/', $ctx['country'] ) && 'XX' !== $ctx['country'] ) {
 			$out['country_at_consent'] = $ctx['country'];
 		}
 		if ( isset( $ctx['region'] ) && is_string( $ctx['region'] ) && preg_match( '/^[A-Z]{2}-[A-Z0-9]{1,3}$/', $ctx['region'] ) ) {
@@ -548,6 +544,118 @@ class Controller {
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * The jurisdiction context the frontend ENFORCED for this visitor.
+	 *
+	 * Resolved through the same chain the frontend uses to pick the banner,
+	 * the consent defaults, the blocking decision and the GCM defaults:
+	 * Geolocation::get_visitor_country() (which honours `faz_visitor_country`
+	 * and the proxy-trust settings), Geolocation::get_visitor_region() and
+	 * Geo_Runtime::resolve_for_country(), which hands that country to the
+	 * routing module as an authoritative override precisely so that nothing
+	 * downstream can disagree on it.
+	 *
+	 * This method used to call the bare detector instead
+	 * (Geo_Routing::get_visitor_context() with no override). The two chains
+	 * agree on the default topologies — a local MMDB, or a trusted Cloudflare
+	 * edge — and disagree on every opt-in one: a country supplied by the
+	 * `faz_visitor_country` callback (which the Geolocation screen reports as
+	 * a working source) never reached the detector, so a US-CA visitor who
+	 * was served ccpa-california was logged as 'XX' under
+	 * 'fallback-gdpr-most-protective'; the admin override reached only the
+	 * log; a legacy `faz_trust_proxy_headers` site resolved the proxy's own
+	 * address here and the visitor's there. Under Cache Compatibility Mode the
+	 * frontend applies no server-side ruleset at all (every per-visitor render
+	 * path returns null), so the row claims none either.
+	 *
+	 * Runs inside the consent REST request, which is never served from a
+	 * page cache and carries the visitor's own address and headers, so it
+	 * sees what the page render saw. Never throws: an absent class or a
+	 * resolver error degrades to "no context", never to a wrong one.
+	 *
+	 * @since 1.34.2
+	 * @return array|null Keys: country ('' when unknown), region, ruleset_id
+	 *                    ('' when nothing was enforced). Null when the geo
+	 *                    classes are not loaded.
+	 */
+	protected function runtime_visitor_context() {
+		$geolocation = '\\FazCookie\\Includes\\Geolocation';
+		$runtime     = '\\FazCookie\\Frontend\\Includes\\Geo_Runtime';
+		$cache_mode  = '\\FazCookie\\Includes\\Cache_Compatibility';
+
+		if ( ! class_exists( $geolocation ) || ! method_exists( $geolocation, 'get_visitor_country' ) ) {
+			return null;
+		}
+
+		try {
+			$country = strtoupper( trim( (string) $geolocation::get_visitor_country() ) );
+			if ( 1 !== preg_match( '/^[A-Z]{2}$/', $country ) || 'XX' === $country ) {
+				$country = '';
+			}
+
+			$region = '';
+			if ( method_exists( $geolocation, 'get_visitor_region' ) ) {
+				$region = strtoupper( trim( (string) $geolocation::get_visitor_region() ) );
+			}
+			// Coherence, as the routing module applies it: a region belongs to
+			// the resolved country or it is nothing.
+			if ( 1 !== preg_match( '/^[A-Z]{2}-[A-Z0-9]{1,3}$/', $region ) || '' === $country || substr( $region, 0, 2 ) !== $country ) {
+				$region = '';
+			}
+
+			$ruleset_id = '';
+			$invariant  = class_exists( $cache_mode ) && method_exists( $cache_mode, 'is_active' ) && $cache_mode::is_active();
+			if ( ! $invariant && class_exists( $runtime ) && method_exists( $runtime, 'resolve_for_country' ) ) {
+				$ruleset = $runtime::resolve_for_country( $country );
+				if ( is_array( $ruleset ) && isset( $ruleset['id'] ) && is_string( $ruleset['id'] ) ) {
+					$ruleset_id = $ruleset['id'];
+				}
+			}
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+
+		return array(
+			'country'    => $country,
+			'region'     => $region,
+			'ruleset_id' => $ruleset_id,
+		);
+	}
+
+	/**
+	 * A stored created_at value as the same instant in UTC, RFC 3339.
+	 *
+	 * created_at is written with current_time( 'mysql' ): the site's wall
+	 * clock, no offset — the WordPress convention post_date and comment_date
+	 * follow. That is fine inside the site, which knows its own timezone, and
+	 * ambiguous the moment the value leaves it: an auditor correlating the
+	 * export with server logs or a vendor's TCF records (both UTC) has to
+	 * guess the offset, and guesses wrong by an hour around a DST change.
+	 * The export and the REST payload therefore carry this alongside the
+	 * stored value, so the stored value keeps its meaning for the admin table
+	 * and existing integrations while the instant is stated once, unambiguously.
+	 *
+	 * Converted with the site's timezone, as WordPress does for the GMT
+	 * columns of its own tables. A value from inside the one repeated hour of
+	 * a DST fall-back resolves to one of its two instants; log_id order
+	 * disambiguates those rows.
+	 *
+	 * @since 1.34.2
+	 * @param mixed $created_at The stored `Y-m-d H:i:s` site-time value.
+	 * @return string `Y-m-d\TH:i:s\Z`, or '' when the value is empty or unparseable.
+	 */
+	public static function created_at_gmt( $created_at ) {
+		$created_at = is_string( $created_at ) ? trim( $created_at ) : '';
+		if ( '' === $created_at || ! function_exists( 'get_gmt_from_date' ) ) {
+			return '';
+		}
+		if ( false === strtotime( $created_at ) ) {
+			return '';
+		}
+		$gmt = get_gmt_from_date( $created_at, 'Y-m-d\TH:i:s\Z' );
+		return is_string( $gmt ) ? $gmt : '';
 	}
 
 	/**
@@ -837,8 +945,25 @@ class Controller {
 		$where_clause = implode( ' AND ', $where );
 
 
-		// CSV header row.
-		fputcsv( $handle, array( 'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent Hash', 'URL', 'Banner Slug', 'Policy Revision', 'Created At' ), ',', '"', '\\' );
+		// CSV header row. The seven Migration_V2 columns are part of the proof
+		// the plugin collects — the regime the visitor was enforced under, the
+		// privacy signals the request carried, the TC and GPP strings consented
+		// to — and this export is the path readme.txt advertises for audits and
+		// DPIAs, so they belong here. Emitted empty for a row written before the
+		// migration (or on an install where it is pending), never shifted.
+		// created_at is exported twice on purpose: the stored site-time value
+		// and the same instant in UTC — see created_at_gmt().
+		fputcsv(
+			$handle,
+			array(
+				'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent Hash', 'URL', 'Banner Slug', 'Policy Revision',
+				'Created At (Site Time)', 'Created At (UTC)',
+				'Country', 'Region', 'Ruleset', 'GPC Received', 'DNT Received', 'TC String', 'GPP String',
+			),
+			',',
+			'"',
+			'\\'
+		);
 
 		// Stream in keyset-paginated batches instead of materialising the whole
 		// table in one get_results() call: the consent-log table is the plugin's
@@ -900,6 +1025,14 @@ class Controller {
 							isset( $item['banner_slug'] ) ? $item['banner_slug'] : '',
 							isset( $item['policy_revision'] ) ? $item['policy_revision'] : 1,
 							$item['created_at'],
+							self::created_at_gmt( $item['created_at'] ),
+							isset( $item['country_at_consent'] ) ? (string) $item['country_at_consent'] : '',
+							isset( $item['region_at_consent'] ) ? (string) $item['region_at_consent'] : '',
+							isset( $item['ruleset_id_at_consent'] ) ? (string) $item['ruleset_id_at_consent'] : '',
+							isset( $item['signal_gpc_received'] ) ? (string) $item['signal_gpc_received'] : '',
+							isset( $item['signal_dnt_received'] ) ? (string) $item['signal_dnt_received'] : '',
+							isset( $item['tc_string'] ) ? (string) $item['tc_string'] : '',
+							isset( $item['gpp_string'] ) ? (string) $item['gpp_string'] : '',
 						)
 					),
 					',',
@@ -1157,7 +1290,11 @@ class Controller {
 
 		$table    = $this->get_table_name();
 		$months   = absint( $months );
-		$cutoff   = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months" ) );
+		// On the clock created_at is on. The column holds site time (see
+		// log_consent()), and the stats cutoffs are computed from
+		// current_time( 'mysql' ) for that reason; this one was computed in UTC,
+		// so the purge ran early or late by the site's offset.
+		$cutoff   = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months", strtotime( current_time( 'mysql' ) ) ) );
 
 		// Delete in bounded batches: the first cleanup on a long-lived install
 		// can match hundreds of thousands of rows, and a single unbounded
