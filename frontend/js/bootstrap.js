@@ -1113,12 +1113,15 @@
     // disjoint on their first character, so this cannot backtrack badly.
     var CSS_URL = /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'|([^\)\s]+))\s*\)/gi;
     var CSS_IMPORT = /(@import\s+)(["'])((?:(?!\2)[^\\]|\\[\s\S])+)\2/gi;
-    // Four more forms the runtime's pair does not read, and the engine does:
-    // `@import"x.css"`, which needs no whitespace to be an import; a url(
-    // left open at the end of the text, which the tokenizer reads to EOF as
-    // the URL — the shape a sheet has when a held fragment lands last; and
-    // the string arguments of image-set() and src(), which name a file
-    // without any url() around it.
+    // Four more forms the engine reads, and both files read now (the runtime
+    // caught up in _fazCssUrlsRaw: its tight @import, _FAZ_CSS_URL_OPEN and
+    // _FAZ_CSS_STRING_FN are these four): `@import"x.css"`, which needs no
+    // whitespace to be an import; a url( left open at the end of the text,
+    // which the tokenizer reads to EOF as the URL — the shape a sheet has when
+    // a held fragment lands last; and the string arguments of image-set() and
+    // src(), which name a file without any url() around it. A form read here
+    // and not there is a sheet parked by this file and called clean by the
+    // runtime, so one is not added without the other.
     var CSS_IMPORT_TIGHT = /@import(["'])((?:(?!\1)[^\\]|\\[\s\S])+)\1/gi;
     var CSS_URL_OPEN = /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)|'((?:[^'\\]|\\[\s\S])*)|([^\)\s]*))\s*$/i;
     var CSS_STRING_FN = /\b(?:image-set|src)\(((?:[^()]|\([^()]*\))*)\)/gi;
@@ -2133,8 +2136,36 @@
         }
         return PARK_CATEGORY;
     }
+    // An HTML <script src> is parked in the form the server writes and the
+    // runtime restores from: type="text/plain", a data-faz-category, and the
+    // URL LIVE in src. _fazUnblockServerSide() selects
+    // `script[type="text/plain"][data-faz-category]` and _fazBuildRestoredScript
+    // reads `src`; a script whose type is not a JavaScript MIME type is never
+    // fetched, so the live attribute makes no request. The type is made inert
+    // FIRST, then the URL is written — the other order would fetch.
+    //
+    // The previous form — src moved into data-faz-src under
+    // type="javascript/blocked" — was selectable by no restore pass at all: the
+    // runtime's data-faz-src pass lists img/source/media, its javascript/blocked
+    // branch requires data-fazcookie, its builder reads src only, and its
+    // observer never backs up a script without a src. A script merely refused
+    // at the handoff (policy.script threw) therefore stayed dead after the
+    // visitor consented, against the contract judgeScripts() states. The SVG
+    // spellings keep their data-faz-href park, which
+    // script[data-faz-href][data-faz-category] restores.
+    function parkScriptSrc(el, src, policy) {
+        var type = attr(el, 'type');
+        if (type && type !== 'text/plain' && type !== 'javascript/blocked' && !nativeHas.call(el, 'data-faz-original-type')) {
+            setAttr(el, 'data-faz-original-type', type);
+        }
+        setAttr(el, 'type', 'text/plain');
+        if (!attr(el, 'data-faz-category')) setAttr(el, 'data-faz-category', parkCategory(policy, src));
+        dropAttr(el, 'data-faz-src');
+        if (attr(el, 'src') !== src) setAttr(el, 'src', src);
+    }
     function parkAttribute(el, key, value, policy) {
         if (!el || el.nodeType !== 1) return;
+        if (key === 'src' && tagKey(el) === 'SCRIPT') return parkScriptSrc(el, String(value), policy);
         var target = parkTarget(tagKey(el), key);
         setAttr(el, target.value, value);
         // A list restores by re-reading every candidate, so it carries no
@@ -2177,8 +2208,9 @@
             // returns on "no URL" and the script EXECUTES on the safety
             // release. Measured: `<svg><script href="https://tracker/x.js">`
             // inside a cloned <template> was requested.
-            var src = attr(el, 'src') || attr(el, 'data-faz-src')
-                || (values.src && values.src.value)
+            var htmlSrc = attr(el, 'src') || attr(el, 'data-faz-src')
+                || (values.src && values.src.value) || '';
+            var src = htmlSrc
                 || attr(el, 'href') || attr(el, 'xlink:href') || attr(el, 'data-faz-href')
                 || (values.href && values.href.value)
                 || (values['xlink:href'] && values['xlink:href'].value) || '';
@@ -2199,6 +2231,12 @@
                 return;
             }
             if (!src || local(src)) return;
+            // An HTML src: the restorable form (parkScriptSrc). The staged
+            // record is retired, or its own task would park the same URL again.
+            if (htmlSrc) {
+                if (values.src) delete values.src;
+                return parkScriptSrc(el, htmlSrc, safety);
+            }
             if (!nativeHas.call(el, 'data-faz-original-type') && attr(el, 'type')) setAttr(el, 'data-faz-original-type', attr(el, 'type'));
             setAttr(el, 'type', 'javascript/blocked');
             setAttr(el, 'data-faz-blocked-by-us', '1');
@@ -2452,21 +2490,20 @@
         });
     }
     function refuseScript(el) {
+        // The staged record is retired with its URL parked, or its own task
+        // would still replay the assignment as the policy allows it. An HTML
+        // src goes into the restorable form (parkScriptSrc): the staged value
+        // is the later assignment and wins over a live attribute.
+        var values = staged.get(el);
+        var src = (values && values.src && values.src.value) || attr(el, 'src') || '';
+        if (values && values.src) delete values.src;
+        if (src) {
+            parkScriptSrc(el, src, null);
+            return;
+        }
         if (!nativeHas.call(el, 'data-faz-original-type') && attr(el, 'type')) setAttr(el, 'data-faz-original-type', attr(el, 'type'));
         setAttr(el, 'type', 'javascript/blocked');
         setAttr(el, 'data-faz-blocked-by-us', '1');
-        // The staged record is retired with its URL parked, or its own task
-        // would still replay the assignment as the policy allows it.
-        var values = staged.get(el);
-        if (values && values.src) {
-            parkAttribute(el, 'src', values.src.value, null);
-            delete values.src;
-        }
-        var live = attr(el, 'src');
-        if (live) {
-            parkAttribute(el, 'src', live, null);
-            dropAttr(el, 'src');
-        }
         // An SVG script fetches through href; same refusal, same parking.
         ['href', 'xlink:href'].forEach(function (key) {
             if (values && values[key]) {
@@ -2504,13 +2541,40 @@
             while (undo.length) undo.pop()();
         },
         finish: function (policy) {
-            // A second call, or a call after the safety release already decided,
-            // must not re-drain. Say so instead of returning in silence: a
-            // handoff that does nothing is indistinguishable from a handoff that
-            // worked, and that ambiguity cost a review cycle.
-            if (!pending || immediate) {
-                return w.console.warn('[FAZ Cookie Manager] Consent handoff ignored: the bootstrap queue was already drained'
-                    + (immediate ? ' by the safety release.' : '.'));
+            // A second call must not re-drain. Say so instead of returning in
+            // silence: a handoff that does nothing is indistinguishable from a
+            // handoff that worked, and that ambiguity cost a review cycle.
+            if (!pending) {
+                return w.console.warn('[FAZ Cookie Manager] Consent handoff ignored: the bootstrap queue was already drained.');
+            }
+            // A runtime that arrives AFTER the safety release — an optimiser
+            // re-ran this inline script after parsing, or delayed script.js
+            // past DOMContentLoaded — used to be refused here with the queue
+            // "already drained". The queue was indeed empty, but refusing left
+            // two layers in charge: start() had already restored the natives
+            // and the runtime had installed its gates, while this file's
+            // observer stayed armed with the origin-only safety policy and
+            // every wrapper a library had captured during the window still
+            // routed to `installed` because `pending` never flipped. Measured:
+            // a first-party CDN image inserted through innerHTML after the
+            // late handoff was parked under data-faz-category="marketing" with
+            // the runtime's rules never consulted, a captured fetch resolved
+            // "Blocked by consent" for an allowed API, and <html> kept
+            // faz-consent-runtime-missing with the banner on screen. The
+            // runtime is what applies consent, so it takes over: the same
+            // handoff as on time, with the released state undone. There is
+            // nothing to drain, but the scripts created since the release are
+            // judged by the real rules, and any straggling decision is made
+            // against the runtime's policy rather than by origin.
+            var late = immediate === safety;
+            if (late) {
+                w.console.warn('[FAZ Cookie Manager] The consent runtime loaded after the safety release and takes over '
+                    + 'enforcement from here; the warning above about a missing runtime no longer applies to this page view.');
+                try {
+                    d.documentElement.className = d.documentElement.className
+                        .replace(/(^|\s)faz-consent-runtime-missing(?=\s|$)/g, '$1').replace(/\s+/g, ' ').replace(/^\s|\s$/g, '');
+                } catch (e) { /* noop */ }
+                if (w._fazBootstrap) w._fazBootstrap.released = false;
             }
             handoffs.forEach(function (capture) { capture(); });
             handoffs = [];
@@ -2519,6 +2583,7 @@
             var tasks = queue;
             queue = [];
             tasks.forEach(function (task) { run(task, policy); });
+            if (late) immediate = policy;
         }
     };
 })(window, document);

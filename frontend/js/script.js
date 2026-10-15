@@ -10047,8 +10047,12 @@ if (window._fazBootstrap) window._fazBootstrap.finish({
             // data-faz-blocked-by-us is what the src/type setters and the
             // mutation observer read to tell our block from a third party's.
             // Without it a script blocked here was never unblocked again.
+            // text/plain is excluded as the observer excludes it: it is the
+            // parked form (the server's, and the bootstrap's for a refused
+            // script), not the author's type, and recording it would restore
+            // an inert clone.
             var type = node.getAttribute('type');
-            if (type && type !== 'javascript/blocked' && !node.getAttribute('data-faz-original-type')) {
+            if (type && type !== 'javascript/blocked' && type !== 'text/plain' && !node.getAttribute('data-faz-original-type')) {
                 node.setAttribute('data-faz-original-type', type);
             }
             node.setAttribute('data-faz-blocked-by-us', '1');
