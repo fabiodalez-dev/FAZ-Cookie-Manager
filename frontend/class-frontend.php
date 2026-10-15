@@ -963,6 +963,20 @@ class Frontend {
 						"var d=e.detail||{};" .
 						"if(!d.action||d.action==='init')return;" .
 						"if(typeof _fazConsentLog==='undefined')return;" .
+						// The payload is built in a microtask, not inside the
+						// handler. This listener is registered at parse time, so
+						// it is the FIRST on the event; the TCF CMP (tcf-cmp.js,
+						// deferred) and the GPP module register later, and they
+						// are the ones that write euconsent-v2 / the GPP string
+						// for this very decision. Listeners run in registration
+						// order, so a synchronous read here saw the cookie as it
+						// stood BEFORE the decision: the first Accept logged an
+						// empty tc_string and a later Reject logged the Accept-All
+						// string. A microtask runs after every listener of this
+						// dispatch and still before any navigation a listener
+						// may have requested, so the keepalive POST below is not
+						// put at risk.
+						"Promise.resolve().then(function(){" .
 						"var safeUrl=(function(){if(_fazConsentLog.pageUrl)return _fazConsentLog.pageUrl;try{var current=new URL(window.location.href);return current.origin+current.pathname+current.search}catch(err){var origin=window.location.origin||(window.location.protocol+'//'+window.location.host);return origin+(window.location.pathname||'')+(window.location.search||'')}})();" .
 						"fetch(_fazConsentLog.restUrl,{" .
 							"method:'POST'," .
@@ -1011,10 +1025,15 @@ class Frontend {
 								// TCF TC string (euconsent-v2 cookie) and GPP string
 								// (__gpp API), forwarded so the tc_string / gpp_string
 								// audit columns are populated for TCF/GPP-enabled sites.
+								// Both are read in the microtask opened above, i.e.
+								// after the CMP wrote them for THIS decision, so the
+								// row carries the string that was actually set (or
+								// an empty value when the CMP cleared the cookie).
 								"tc_string:(function(){var m=document.cookie.match(/euconsent-v2=([^;]+)/);return m?m[1]:''})()," .
 								"gpp_string:(function(){try{if(typeof window.__gpp!=='function')return '';var s='';window.__gpp('getGPPData',function(d){if(d&&d.gppString)s=d.gppString});return s}catch(e){return ''}})()," .
 								"token:_fazConsentLog.token" .
 						"})" .
+					"}).catch(function(){});" .
 					"}).catch(function(){});" .
 				"});";
 				// 'before', not the default 'after', and both halves of that
