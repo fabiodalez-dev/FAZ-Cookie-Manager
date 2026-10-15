@@ -93,7 +93,7 @@
         "description": "Utilizada por Google reCAPTCHA para distinguir entre personas y bots."
     },
     "fazcookie-consent": {
-        "description": "Preferencias de consentimiento de cookies establecidas por el visitante."
+        "description": "Almacena las decisiones de consentimiento de cookies del visitante y un identificador de consentimiento aleatorio utilizado para conservar un registro de esa decisión."
     },
     "_clck": {
         "description": "Cookie de Microsoft Clarity para análisis."

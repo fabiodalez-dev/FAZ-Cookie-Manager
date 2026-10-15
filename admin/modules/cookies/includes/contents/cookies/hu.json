@@ -93,7 +93,7 @@
         "description": "A Google reCAPTCHA használja az emberek és a botok megkülönböztetésére."
     },
     "fazcookie-consent": {
-        "description": "A látogató által megadott sütihozzájárulási beállítások."
+        "description": "Tárolja a látogató sütihozzájárulási döntéseit és egy véletlenszerű hozzájárulási azonosítót, amellyel a döntésről nyilvántartás vezethető."
     },
     "_clck": {
         "description": "A Microsoft Clarity elemzési sütije."

@@ -30,7 +30,7 @@
   "__cf_bm":{"description":"Cookie di Cloudflare utilizzato per la gestione dei bot."},
   "__cfduid":{"description":"Cookie di Cloudflare utilizzato per identificare il traffico web affidabile."},
   "_grecaptcha":{"description":"Utilizzato da Google reCAPTCHA per distinguere le persone dai bot."},
-  "fazcookie-consent":{"description":"Memorizza le preferenze sui cookie impostate dal visitatore."},
+  "fazcookie-consent":{"description":"Memorizza le scelte di consenso ai cookie del visitatore e un identificativo di consenso casuale usato per conservare una registrazione di tale scelta."},
   "_clck":{"description":"Cookie di Microsoft Clarity utilizzato per le analisi."},
   "_clsk":{"description":"Cookie di sessione di Microsoft Clarity."},
   "muid":{"description":"Cookie di Microsoft Bing Ads per il monitoraggio universale degli eventi."},
