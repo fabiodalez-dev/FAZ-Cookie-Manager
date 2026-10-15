@@ -333,8 +333,8 @@ foreach ( $config->jurisdictions() as $jurisdiction ) {
 
 // The two callables must reach the real implementations, not a stale copy.
 assert_true(
-	array() === $config->missing_required_settings( 'gdpr-strict', array() ),
-	'missing_required_settings() delegates to the POPIA-only gating (GDPR needs nothing)'
+	array( 'company.name', 'company.email' ) === $config->missing_required_settings( 'gdpr-strict', array() ),
+	'missing_required_settings() delegates to the real gate (GDPR requires the controller name and contact email)'
 );
 assert_true(
 	in_array( 'company.name', $config->missing_required_settings( 'popia-southafrica', array() ), true ),
@@ -625,7 +625,9 @@ assert_true(
 );
 
 $GLOBALS['faz_test_state']['options']['faz_test_other_document'] = array(
-	'company'      => array( 'name' => 'Altra Ditta S.p.A.' ),
+	// Name AND contact email: the gate refuses a GDPR document without both, and
+	// this case is about which option is read, not about the refusal path.
+	'company'      => array( 'name' => 'Altra Ditta S.p.A.', 'email' => 'privacy@altra.test' ),
 	'jurisdiction' => 'gdpr-strict',
 	'language'     => 'en',
 );

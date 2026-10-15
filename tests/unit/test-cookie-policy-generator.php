@@ -327,7 +327,35 @@ assert_eq(
 	array( 'company.name', 'privacy_policy_url' ),
 	'POPIA validation rejects non-scalar option values without string coercion'
 );
-assert_eq( Generator::missing_required_settings( 'gdpr-strict', array() ), array(), 'POPIA-only requirements do not alter existing jurisdictions' );
+// Every jurisdiction's scaffold names a controller and tells the visitor whom
+// to contact (GDPR Art. 12(1)/13(1)(a)-(b), CCPA § 1798.130(a)(5), LGPD Art. 9
+// III/IV). With both fields empty the rendered page carried `how **** ("we",
+// "us", "our")` and `contact us at ****`, which the admin form already refused
+// client-side for every jurisdiction — only the server let it through outside
+// POPIA. The two-field floor is the form's contract, enforced where it reaches
+// the public page; POPIA keeps its longer section-18 list above.
+foreach ( array( 'gdpr-strict', 'ccpa-california', 'lgpd-brazil' ) as $faz_gated ) {
+	assert_eq(
+		Generator::missing_required_settings( $faz_gated, array() ),
+		array( 'company.name', 'company.email' ),
+		"{$faz_gated}: controller name and contact email are required server-side"
+	);
+	assert_eq(
+		Generator::missing_required_settings( $faz_gated, array( 'company' => array( 'name' => 'ACME', 'email' => 'privacy@acme.test' ) ) ),
+		array(),
+		"{$faz_gated}: name + valid email satisfy the gate (no POPIA-only fields demanded)"
+	);
+	assert_eq(
+		Generator::missing_required_settings( $faz_gated, array( 'company' => array( 'name' => 'ACME', 'email' => 'not-an-email' ) ) ),
+		array( 'company.email' ),
+		"{$faz_gated}: a malformed contact email is reported, not published"
+	);
+	assert_eq(
+		Generator::missing_required_settings( $faz_gated, array( 'company' => array( 'name' => '   ', 'email' => 'privacy@acme.test' ) ) ),
+		array( 'company.name' ),
+		"{$faz_gated}: a whitespace-only name counts as missing"
+	);
+}
 
 // ---------- Generator::policy_version_hash ----------
 

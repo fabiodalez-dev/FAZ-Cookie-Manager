@@ -490,10 +490,26 @@ function faz_fx_cookie_rows_with_transfer() {
 $fixtures = array(
 	array(
 		'name'    => 'gdpr-empty-install',
-		'why'     => 'fresh install: no saved option, baseline defaults only, empty inventory',
+		// Until 1.34.2 this fixture pinned the degraded page itself: `how ****
+		// ("we", "us", "our")`, an emptied "Who we are" section and `contact
+		// us at ****` — a policy that asserts a controller and names none. The
+		// gate that already refused the same state for POPIA now covers every
+		// jurisdiction, so an unconfigured install shows the administrator the
+		// actionable notice and publishes nothing.
+		'why'     => 'fresh install: no saved option, baseline defaults only — refused with the admin notice, never the **** page',
 		'option'  => null,
 		'atts'    => array(),
 		'rows'    => array(),
+		'expect'  => 'notice',
+	),
+	array(
+		'name'     => 'gdpr-empty-install-visitor',
+		'why'      => 'the same fresh install seen by an anonymous visitor: silence, never a half-empty legal document',
+		'option'   => null,
+		'atts'     => array(),
+		'rows'     => array(),
+		'is_admin' => false,
+		'expect'   => 'empty',
 	),
 	array(
 		'name'    => 'gdpr-full-en',
@@ -535,10 +551,13 @@ $fixtures = array(
 	array(
 		'name'    => 'gdpr-empty-label-lines',
 		'why'     => 'blank optional fields must not leave orphan "**Label:**" rows (1.16.2, Gooloo)',
+		// Name and contact email are the two fields every jurisdiction now
+		// requires, so they are filled in; address, registry and the DPO rows
+		// stay blank — those are the optional labels this fixture is about.
 		'option'  => array(
 			'jurisdiction' => 'gdpr-strict',
 			'language'     => 'en',
-			'company'      => array( 'name' => 'Minimal Ltd', 'address' => '', 'email' => '', 'registry' => '' ),
+			'company'      => array( 'name' => 'Minimal Ltd', 'address' => '', 'email' => 'privacy@minimal.test', 'registry' => '' ),
 			'dpo'          => array( 'name' => '', 'email' => '' ),
 		),
 		'atts'    => array(),
@@ -855,10 +874,18 @@ if ( ! $faz_update_mode ) {
 		'POPIA with mandatory fields renders the policy'
 	);
 
-	// Never publish the admin email / site name without an explicit save.
+	// Never publish the admin email / site name without an explicit save — and,
+	// since 1.34.2, never publish the scaffold without a controller either.
+	// The administrator gets the actionable notice; the visitor gets nothing,
+	// not a page that says `contact us at ****`.
 	assert_true(
-		'' !== $rendered_all['gdpr-empty-install'],
-		'an unconfigured install still renders something rather than a blank page'
+		'' !== $rendered_all['gdpr-empty-install']
+			&& false === strpos( $rendered_all['gdpr-empty-install'], '****' ),
+		'an unconfigured install shows the administrator a notice, never the **** page'
+	);
+	assert_true(
+		'' === $rendered_all['gdpr-empty-install-visitor'],
+		'an unconfigured install publishes nothing to anonymous visitors'
 	);
 }
 
