@@ -467,6 +467,43 @@ namespace {
 	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'exactly one tag is gated — the faz-skip look-alike is untouched' );
 	assert_true( false !== strpos( $out, '<img src="https://www.facebook.com/tr?id=77" class="faz-skip"' ), 'the exempted sibling keeps its live src' );
 
+	// ---------- <link> inside <noscript> ----------
+	//
+	// Async-CSS optimisers emit, for every stylesheet, a live preload and a
+	// <noscript><link rel="stylesheet"> fallback. The live copy was gated by
+	// process_link_tag; the fallback was stashed BEFORE that pass ran and came
+	// back verbatim, so a visitor without JavaScript — the one who can never
+	// consent — fetched Google Fonts on every page. The block is walked for
+	// <link> too, through the same rel-token gate the live pass applies.
+	$fonts = 'https://fonts.googleapis.com/css2?family=Inter';
+	$fe    = faz_ob_frontend( array( 'fonts.googleapis.com' => 'functional', 'www.facebook.com/tr' => 'marketing' ), array( 'functional', 'marketing' ) );
+	$html  = '<html><head><link rel="preload" as="style" href="' . $fonts . '" onload="this.rel=\'stylesheet\'"><noscript><link rel="stylesheet" href="' . $fonts . '"></noscript></head></html>';
+	$out   = faz_ob_run( $fe, $html );
+	assert_true( false !== strpos( $out, '<noscript><link data-faz-category="functional" rel="stylesheet" data-faz-href="' . $fonts . '"></noscript>' ), 'the <noscript> stylesheet fallback is gated like its live preload' );
+	assert_true( 2 === substr_count( $out, 'data-faz-href=' ) && false === strpos( $out, ' href="' . $fonts ), 'neither copy is left fetching' );
+
+	// Mixed block: the fallback next to a pixel the pass already gated.
+	$fe   = faz_ob_frontend( array( 'fonts.googleapis.com' => 'functional', 'www.facebook.com/tr' => 'marketing' ), array( 'functional', 'marketing' ) );
+	$html = '<html><body><noscript><img src="https://www.facebook.com/tr?id=1"/><link rel="stylesheet" href="' . $fonts . '"></noscript></body></html>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://www.facebook.com/tr?id=1"' ), 'the pixel is gated' );
+	assert_true( false !== strpos( $out, 'data-faz-href="' . $fonts . '"' ) && false === strpos( $out, ' href="' . $fonts . '"' ), 'and so is the stylesheet beside it' );
+	assert_true( false !== strpos( $out, '<link data-faz-category="functional"' ), 'labelled with its own category, not the pixel\'s' );
+
+	// What the live pass does not gate, this one does not either.
+	$fe   = faz_ob_frontend( array( 'fonts.googleapis.com' => 'functional' ), array( 'functional' ) );
+	$html = '<html><head><noscript><link rel="dns-prefetch" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.googleapis.com"></noscript></head></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'dns-prefetch and preconnect inside <noscript> are not fetches and stay' );
+	$fe   = faz_ob_frontend( array( 'fonts.googleapis.com' => 'functional' ), array( 'functional' ) );
+	$html = '<html><head><noscript><link rel="stylesheet" href="/wp-content/themes/x/style.css"></noscript></head></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'a first-party stylesheet fallback is untouched' );
+	$fe   = faz_ob_frontend( array( 'faz-cookie-manager/assets' => 'marketing' ), array( 'marketing' ) );
+	$html = '<html><head><noscript><link rel="stylesheet" id="faz-cookie-manager-css-css" href="https://example.com/wp-content/uploads/faz-cookie-manager/assets/banner-abc.css"></noscript></head></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'the plugin\'s own banner stylesheet fallback is never gated' );
+	$fe   = faz_ob_frontend( array( 'fonts.googleapis.com' => 'functional' ), array( 'functional' ) );
+	$html = '<html><head><noscript><link rel="stylesheet" href="' . $fonts . '" class="faz-skip"></noscript></head></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'a whitelisted fallback is exempt' );
+
 	// ---------- result ----------
 
 	echo "\n";

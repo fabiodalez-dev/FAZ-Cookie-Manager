@@ -4011,13 +4011,17 @@ class Frontend {
 	}
 
 	/**
-	 * Process the output buffer: find scripts, iframes, images, and CSS links
-	 * that belong to blocked providers and neutralise them.
+	 * Process the output buffer: find scripts, iframes, images, media, CSS
+	 * links and inline CSS that belong to blocked providers and neutralise them.
 	 *
 	 * - Scripts: type → text/plain, add data-faz-category.
 	 * - Iframes: src → data-faz-src, add data-faz-category.
-	 * - Images:  src → data-faz-src, add data-faz-category.
-	 * - CSS:     href → data-faz-href, add data-faz-category.
+	 * - Images:  src → data-faz-src, srcset → data-faz-srcset, add data-faz-category.
+	 * - Media:   <video|audio|source|embed|track|input type=image> src → data-faz-src,
+	 *            poster → data-faz-poster, <object> data → data-faz-data.
+	 * - CSS:     href → data-faz-href, add data-faz-category; <style> text and
+	 *            `style` attributes neutralised in place (original in
+	 *            data-faz-css / data-faz-style) or parked whole.
 	 *
 	 * @param string $html Full page HTML.
 	 * @return string Modified HTML.
@@ -4274,6 +4278,37 @@ class Frontend {
 			}
 		}
 
+		// 4c. Media, plug-in, text-track and image-button elements.
+		//
+		// <video src|poster>, <audio src>, <source src|srcset>, <embed src>,
+		// <object data>, <track src> and <input type=image src> all fetch from
+		// the parser exactly as <img src> does, and no pass here looked at
+		// them: a legacy `<object data="https://www.youtube.com/embed/ID">`
+		// loaded the player document — and its cookies — before consent, a
+		// `<video poster="https://i.ytimg.com/…">` sent the visitor's IP and
+		// referrer to a provider the catalogue files under marketing, and the
+		// element then lived unparked for the whole page view. The deferred
+		// bootstrap defers parser-built markup to this pass as the authority,
+		// and the runtime's restore branches for data-faz-src, data-faz-srcset,
+		// data-faz-poster and data-faz-data were already in place: the server
+		// was the one layer not writing those keys. The tag name must be
+		// followed by whitespace, a slash or `>`, so <video-player> and
+		// <source-list> custom elements are not read as the media tag.
+		if ( preg_match( '/<(?:video|audio|source|embed|object|track|input)(?=[\s\/>])/i', $html ) ) {
+			$result = preg_replace_callback(
+				'#<(video|audio|source|embed|object|track|input)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_media_resource_tag( $m, $providers, $blocked_categories );
+				},
+				$html
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
+		}
+
 		// 5. Block fetching <link> tags: stylesheet AND the preload family.
 		//
 		// This used to match rel="stylesheet" only, which left the whole preload
@@ -4299,6 +4334,33 @@ class Frontend {
 				'#<link(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_link_tag( $m, $providers, $blocked_categories );
+				},
+				$html
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
+		}
+
+		// 5b. Inline `style` attributes, on whatever tag carries one.
+		//
+		// Pass 4 gates CSS URLs inside <style> ELEMENTS. The same url() in a
+		// style ATTRIBUTE — `<div style="background-image:url(https://i.ytimg.com/vi/ID/hq.jpg)">`
+		// from a theme hero or a lazy-video plugin — shipped live, and the
+		// engine fetched the poster at first paint while the identical URL in
+		// an <img src> on the same page was parked. Nothing on the client
+		// reads a parser-built style attribute, so the server is the layer.
+		// Every opening tag is walked; process_style_attr_tag() returns at
+		// once for the great majority that carry no style, or no URL in it.
+		// Runs after the src/href passes so a tag they already parked keeps
+		// its one category label.
+		if ( preg_match( '/\bstyle\s*=/i', $html ) ) {
+			$result = preg_replace_callback(
+				'#<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#s',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_style_attr_tag( $m, $providers, $blocked_categories );
 				},
 				$html
 			);
@@ -4594,16 +4656,20 @@ class Frontend {
 		if ( $this->has_attr_token( $attrs, 'data-faz-src' ) && ! $this->has_attr_token( $attrs, 'src' ) ) {
 			return $full; // Parked, and nothing live left (a bare sentinel does not exempt).
 		}
-		// A frame whose srcdoc is in the stash has nothing to park here: src
-		// is inert while srcdoc is present, so a blocked src on an ALLOWED
-		// srcdoc (the "lite embed" pattern) fetches nothing — and wrapping it
-		// in the placeholder sent the bare marker through wp_kses, which
-		// stripped it, so the srcdoc never came back. A parked srcdoc already
-		// took src with it. The marker carries the request nonce, so the page
-		// cannot spell it.
-		if ( '' !== $srcdoc_marker && false !== strpos( $attrs, $srcdoc_marker . 'LIVE_' ) ) {
-			return $full;
-		}
+		// A frame whose ALLOWED srcdoc is in the stash (the "lite embed"
+		// pattern: a click-to-load facade with the provider URL in src). The
+		// engine ignores src while srcdoc is present, so nothing fetches as
+		// rendered — but the facade's own Play button removes srcdoc, and the
+		// src it activates had been gated by nothing: the frame navigated to
+		// the provider with no consent. So a blocked src is parked here too,
+		// in place and hidden like every parked frame, which is the rule the
+		// runtime's own park applies to the same frame; the srcdoc stays
+		// live, byte-for-byte, and restore 2b hands src back on consent.
+		// Parked WITHOUT the placeholder wrap: that sent the bare stash marker
+		// through wp_kses, which stripped it, so the srcdoc never came back.
+		// A parked srcdoc already took src with it. The marker carries the
+		// request nonce, so the page cannot spell it.
+		$live_srcdoc = '' !== $srcdoc_marker && false !== strpos( $attrs, $srcdoc_marker . 'LIVE_' );
 
 		$matched_category = $this->match_script_to_provider( $attrs, '', $providers, $blocked_categories );
 		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
@@ -4625,8 +4691,18 @@ class Frontend {
 
 		// Rename src → data-faz-src on the token the tokenizer would produce,
 		// whatever precedes it.
-		list( $new_attrs ) = $this->rename_attr_tokens( $attrs, array( 'src' => 'data-faz-src' ) );
-		$new_attrs         = $this->label_category_first( $new_attrs, $matched_category );
+		list( $new_attrs, $renamed ) = $this->rename_attr_tokens( $attrs, array( 'src' => 'data-faz-src' ) );
+		if ( $live_srcdoc ) {
+			if ( empty( $renamed ) ) {
+				return $full; // No live src: the allowed srcdoc alone, nothing to park.
+			}
+			$new_attrs = $this->label_category_first( $new_attrs, $matched_category );
+			$frame     = isset( $m[2] )
+				? '<iframe' . $new_attrs . '>' . $m[2] . '</iframe>'
+				: '<iframe' . $new_attrs . '/>';
+			return self::faz_add_hidden_class( $frame );
+		}
+		$new_attrs = $this->label_category_first( $new_attrs, $matched_category );
 
 		$inner = isset( $m[2] ) ? $m[2] : '';
 		$blocked_iframe = isset( $m[2] )
@@ -4678,7 +4754,8 @@ class Frontend {
 	}
 
 	/**
-	 * Process a <noscript> block — block tracking pixel <img> tags inside.
+	 * Process a <noscript> block — gate the <img>, <iframe> and <link>
+	 * fallbacks inside it for the visitor who has JavaScript off.
 	 *
 	 * @param array $m               Regex match.
 	 * @param array $providers       Provider→category map.
@@ -4690,7 +4767,12 @@ class Frontend {
 		$content = $m[1];
 
 		// Only process if the noscript contains a blockable fallback resource.
-		if ( false === stripos( $content, '<img' ) && false === stripos( $content, '<iframe' ) ) {
+		// <link> is one: async-CSS optimisers pair every live preload with a
+		// `<noscript><link rel="stylesheet">` fallback, and that copy used to
+		// be stashed past the <link> pass and restored verbatim — so a visitor
+		// without JavaScript, the one who can never consent, fetched Google
+		// Fonts on every page while the live preload beside it was parked.
+		if ( false === stripos( $content, '<img' ) && false === stripos( $content, '<iframe' ) && false === stripos( $content, '<link' ) ) {
 			return $full;
 		}
 
@@ -4704,8 +4786,11 @@ class Frontend {
 		// tag attributes. The content-only call above carries no src haystack
 		// (attrs are empty), so URL patterns like "www.facebook.com/tr" never
 		// gated <noscript> pixel beacons — the very tags this pass exists for.
-		// Match each <img>/<iframe> exactly the way the script/iframe filters
-		// match regular tags, skipping whitelisted resources.
+		// Match each <img>/<iframe>/<link> exactly the way the script/iframe/
+		// link filters match regular tags, skipping whitelisted resources. A
+		// <link> is a resource only through the rel tokens process_link_tag()
+		// gates (stylesheet and the preload family); dns-prefetch, preconnect
+		// and the plugin's own banner stylesheet are exempt here as there.
 		// Resolve each tag's own category once, here, and keep it alongside the
 		// tag. Both the gating decision below and the category label written
 		// onto each rewritten tag need it, and matching twice invites the two to
@@ -4717,9 +4802,13 @@ class Frontend {
 		$tag_whitelisted = array();
 		$tag_categories = array();
 		$tag_svcs       = array();
-		if ( preg_match_all( '#<(?:img|iframe)(?=[\s/>])' . self::ATTR_WALK . '#i', $content, $embedded_matches ) ) {
+		if ( preg_match_all( '#<(?:img|iframe|link)(?=[\s/>])' . self::ATTR_WALK . '#i', $content, $embedded_matches ) ) {
 			foreach ( $embedded_matches[0] as $embedded_tag ) {
-				$whitelisted       = $this->is_whitelisted( $embedded_tag, '' );
+				$whitelisted = $this->is_whitelisted( $embedded_tag, '' );
+				if ( ! $whitelisted && 0 === stripos( $embedded_tag, '<link' ) ) {
+					$whitelisted = ! $this->link_tag_fetches( $embedded_tag )
+						|| $this->is_own_asset_tag_id( $this->extract_tag_attr( $embedded_tag, 'id' ), '-css' );
+				}
 				$embedded_tags[]   = $embedded_tag;
 				$tag_whitelisted[] = $whitelisted;
 				$tag_categories[]  = $whitelisted ? '' : $this->match_script_to_provider( $embedded_tag, '', $providers, $blocked_categories );
@@ -4801,7 +4890,7 @@ class Frontend {
 		// each match its own target and the aliasing unrepresentable.
 		$rewrite_index   = -1;
 		$blocked_content = preg_replace_callback(
-			'#<(?:img|iframe)(?=[\s/>])' . self::ATTR_WALK . '#i',
+			'#<(?:img|iframe|link)(?=[\s/>])' . self::ATTR_WALK . '#i',
 			function ( $m ) use ( &$rewrite_index, $gate, $tag_categories, $content_matched ) {
 				$rewrite_index++;
 				$tag = $m[0];
@@ -4821,12 +4910,21 @@ class Frontend {
 				if ( ! $label_category ) {
 					$label_category = $content_matched ? $content_matched : 'functional';
 				}
-				// The match is `<img` or `<iframe` plus its attributes; rename
-				// src on its token, whatever precedes it.
-				if ( ! preg_match( '/^<(?:img|iframe)/i', $tag, $open ) ) {
+				// The match is `<img`, `<iframe` or `<link` plus its attributes;
+				// rename the fetching attribute on its token, whatever precedes
+				// it. A <link> fetches through href or imagesrcset, and both are
+				// parked under the names process_link_tag() uses, so the
+				// runtime's one restore branch reads them.
+				if ( ! preg_match( '/^<(?:img|iframe|link)/i', $tag, $open ) ) {
 					return $tag;
 				}
-				list( $rewritten, $renamed ) = $this->rename_attr_tokens( substr( $tag, strlen( $open[0] ) ), array( 'src' => 'data-faz-src' ) );
+				$map = 0 === strcasecmp( substr( $open[0], 1 ), 'link' )
+					? array(
+						'imagesrcset' => 'data-faz-imagesrcset',
+						'href'        => 'data-faz-href',
+					)
+					: array( 'src' => 'data-faz-src' );
+				list( $rewritten, $renamed ) = $this->rename_attr_tokens( substr( $tag, strlen( $open[0] ) ), $map );
 				if ( empty( $renamed ) ) {
 					return $tag;
 				}
@@ -4871,6 +4969,23 @@ class Frontend {
 		}
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
 			return $full;
+		}
+		// A data: src is not a request: the engine decodes it in place, and an
+		// SVG shown through <img> can neither fetch an external resource nor
+		// run script, so a provider URL inside the payload is text, not a
+		// beacon. Parking it was a false positive — one the runtime's restore
+		// then refused to undo, so the image stayed blank after consent. The
+		// runtime's own src gate and the bootstrap never park a data: image
+		// either; this brings the server level with them. Judged all the same
+		// when a srcset stands next to it, because srcset candidates ARE
+		// fetched. (An <iframe src="data:…"> is a different thing: its payload
+		// is a document whose fetches no gate can reach once it is parsed, so
+		// process_iframe_tag keeps parking it and the restore accepts it back.)
+		if ( ! $this->has_attr_token( $attrs, 'srcset' ) ) {
+			$src_value = $this->normalize_resource_url( $this->extract_tag_attr( $attrs, 'src' ) );
+			if ( '' !== $src_value && 0 === stripos( $src_value, 'data:' ) ) {
+				return $full;
+			}
 		}
 
 		$matched_category = $this->match_script_to_provider( $attrs, '', $providers, $blocked_categories );
@@ -5077,6 +5192,242 @@ class Frontend {
 		}
 
 		return '<' . $tag . $this->label_category_first( $parked, $matched_category ) . '>';
+	}
+
+	/**
+	 * Process a media, plug-in, text-track or image-button element for the
+	 * attributes the parser fetches from.
+	 *
+	 * <video src|poster>, <audio src>, <source src|srcset>, <embed src>,
+	 * <object data>, <track src> and <input type=image src> request a URL
+	 * exactly as <img src> does. Each attribute is judged ON ITS OWN through
+	 * resource_attr_block_category(): a <video> can pair a first-party src
+	 * with a provider poster, and one verdict for the tag would park, or
+	 * release, both. Each is parked under the key its restore branch in
+	 * script.js reads (data-faz-src, data-faz-srcset with its own category,
+	 * data-faz-poster, data-faz-data); metadata goes BEFORE the captured
+	 * attributes for the reason process_img_tag() gives. No hidden class: the
+	 * restore for these keys removes none, so one added here would outlive
+	 * consent.
+	 *
+	 * @param array $m                  Regex match: tag name, attributes, closing slash.
+	 * @param array $providers          Provider-to-category map.
+	 * @param array $blocked_categories Currently blocked category slugs.
+	 * @return string
+	 */
+	private function process_media_resource_tag( $m, $providers, $blocked_categories ) {
+		$tag   = strtolower( isset( $m[1] ) ? $m[1] : '' );
+		$attrs = isset( $m[2] ) ? $m[2] : '';
+		$close = isset( $m[3] ) ? $m[3] : '';
+		$full  = isset( $m[0] ) ? $m[0] : '';
+
+		switch ( $tag ) {
+			case 'video':
+				$wanted = array(
+					'src'    => 'data-faz-src',
+					'poster' => 'data-faz-poster',
+				);
+				break;
+			case 'source':
+				$wanted = array(
+					'src'    => 'data-faz-src',
+					'srcset' => 'data-faz-srcset',
+				);
+				break;
+			case 'object':
+				$wanted = array( 'data' => 'data-faz-data' );
+				break;
+			case 'input':
+				// Only an image button fetches its src. Every other input is a
+				// form control, and a src on it is noise the engine ignores.
+				if ( 'image' !== strtolower( trim( $this->extract_tag_attr( $attrs, 'type' ) ) ) ) {
+					return $full;
+				}
+				$wanted = array( 'src' => 'data-faz-src' );
+				break;
+			default: // audio, embed, track.
+				$wanted = array( 'src' => 'data-faz-src' );
+		}
+
+		$parked          = $attrs;
+		$categories      = array();
+		$srcset_category = '';
+		foreach ( $wanted as $name => $parked_name ) {
+			if ( ! $this->has_attr_token( $attrs, $name ) ) {
+				continue;
+			}
+			$category = $this->resource_attr_block_category( $attrs, $name, $providers, $blocked_categories );
+			if ( false === $category ) {
+				continue;
+			}
+			list( $parked, $renamed ) = $this->rename_attr_tokens( $parked, array( $name => $parked_name ) );
+			if ( empty( $renamed ) ) {
+				continue; // A bare attribute with no value fetches nothing.
+			}
+			if ( 'srcset' === $name ) {
+				$srcset_category = $category;
+			} else {
+				$categories[] = $category;
+			}
+		}
+		if ( array() === $categories && '' === $srcset_category ) {
+			return $full;
+		}
+
+		$out = $parked;
+		if ( '' !== $srcset_category ) {
+			// The srcset restore reads its category from its own attribute, as
+			// it does on an <img>.
+			$out = ' data-faz-srcset-category="' . esc_attr( $srcset_category ) . '"' . $this->strip_attr_tokens( $out, 'data-faz-srcset-category' );
+		}
+		$label = array() !== $categories ? $categories[0] : $srcset_category;
+		return '<' . $tag . $this->label_category_first( $out, $label ) . $close . '>';
+	}
+
+	/**
+	 * Judge ONE URL-bearing attribute of a tag on its own.
+	 *
+	 * The tag-level matcher reads the first of src/href/xlink:href/background
+	 * and would judge a <video>'s poster by its src. The attribute is judged
+	 * through a probe instead: the tag's attributes with every OTHER URL
+	 * attribute removed and this one spelled `src`, so the matcher, the
+	 * whitelist and the per-service check read it exactly the way they read
+	 * an <img src> — id and class included, so faz-skip and an id/class
+	 * whitelist entry still exempt the tag. `srcset` keeps its own name: the
+	 * match context already folds a candidate list in.
+	 *
+	 * @param string $attrs              Attribute string.
+	 * @param string $name               The attribute to judge.
+	 * @param array  $providers          Provider-to-category map.
+	 * @param array  $blocked_categories Currently blocked category slugs.
+	 * @return string|false The category to park under, or false to leave it live.
+	 */
+	private function resource_attr_block_category( $attrs, $name, $providers, $blocked_categories ) {
+		$probe = $attrs;
+		foreach ( array( 'src', 'srcset', 'href', 'xlink:href', 'background', 'poster', 'data', 'imagesrcset' ) as $other ) {
+			if ( $other !== $name ) {
+				$probe = $this->strip_attr_tokens( $probe, $other );
+			}
+		}
+		if ( 'src' !== $name && 'srcset' !== $name ) {
+			list( $probe ) = $this->rename_attr_tokens( $probe, array( $name => 'src' ) );
+		}
+		if ( $this->is_whitelisted( $probe, '' ) ) {
+			return false;
+		}
+
+		$matched_category = $this->match_script_to_provider( $probe, '', $providers, $blocked_categories );
+		$svc_blocked      = $this->check_per_service_blocking( $probe, '' );
+
+		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
+			if ( true !== $svc_blocked ) {
+				return false;
+			}
+			return $matched_category ? $matched_category : 'functional';
+		}
+		if ( false === $svc_blocked ) {
+			return false;
+		}
+		return $matched_category;
+	}
+
+	/**
+	 * Process any tag's inline `style` attribute for blockable CSS URLs.
+	 *
+	 * The <style> pass gated url()/@import inside style ELEMENTS only, so a
+	 * `<div style="background-image:url(https://i.ytimg.com/vi/ID/hq.jpg)">`
+	 * shipped live and the engine fetched the poster at first paint. The
+	 * value is judged as the engine parses it — character references decoded,
+	 * then the same extractor as the <style> pass (CSS escapes, every url()
+	 * shape, @import, image-set()/src() strings). The neutralised
+	 * declarations become the live style; the original moves to
+	 * data-faz-style, which the runtime hands back on consent only when no URL
+	 * in it is still blocked. A form the in-place rewrite cannot reach parks
+	 * the value WHOLE — no live style at all — as the <style> pass parks a
+	 * sheet.
+	 *
+	 * The category label is the matcher's, first and alone, as everywhere —
+	 * unless an earlier pass already parked a key on this tag and labelled
+	 * it. Two labels on one element cannot both be read, the restore for
+	 * this key re-judges the ORIGINAL declarations by URL and never trusts
+	 * the label, so keeping the earlier one costs nothing here and keeps the
+	 * other restore selectable.
+	 *
+	 * @param array $m                  Regex match: tag name, attributes, closing slash.
+	 * @param array $providers          Provider-to-category map.
+	 * @param array $blocked_categories Currently blocked category slugs.
+	 * @return string
+	 */
+	private function process_style_attr_tag( $m, $providers, $blocked_categories ) {
+		$tag   = isset( $m[1] ) ? $m[1] : '';
+		$attrs = isset( $m[2] ) ? $m[2] : '';
+		$close = isset( $m[3] ) ? $m[3] : '';
+		$full  = isset( $m[0] ) ? $m[0] : '';
+
+		// Every opening tag in the document reaches here; most carry no style
+		// at all, and most styles name no URL. Cheap substring tests first.
+		if ( false === stripos( $attrs, 'style' ) ) {
+			return $full;
+		}
+		$raw = $this->extract_tag_attr( $attrs, 'style' );
+		if ( '' === $raw || ! preg_match( '/url|image-set|src\(|@import|\\\\/i', $raw ) ) {
+			return $full;
+		}
+		if ( $this->is_whitelisted( $attrs, '' ) ) {
+			return $full;
+		}
+
+		// What the engine parses is the DECODED attribute value.
+		$css        = html_entity_decode( $raw, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$categories = array();
+		$rewritten  = $this->neutralize_blocked_css_urls( $css, $providers, $blocked_categories, $categories );
+		if ( empty( $categories ) || $rewritten === $css ) {
+			return $full;
+		}
+
+		// Every style token leaves on its own bytes (the parser keeps the first
+		// of a duplicated attribute, and the first is the one judged above).
+		list( $parked, $renamed ) = $this->rename_attr_tokens( $attrs, array( 'style' => 'data-faz-style' ) );
+		if ( empty( $renamed ) ) {
+			return $full;
+		}
+		$live = '' !== $rewritten ? ' style="' . esc_attr( $rewritten ) . '"' : '';
+
+		$labelled = false;
+		if ( $this->has_attr_token( $parked, 'data-faz-category' ) ) {
+			foreach ( array( 'data-faz-src', 'data-faz-srcset', 'data-faz-href', 'data-faz-imagesrcset', 'data-faz-background', 'data-faz-poster', 'data-faz-data', 'data-faz-srcdoc' ) as $key ) {
+				if ( $this->has_attr_token( $parked, $key ) ) {
+					$labelled = true;
+					break;
+				}
+			}
+		}
+		$out = $labelled ? $live . $parked : $this->label_category_first( $live . $parked, reset( $categories ) );
+		return '<' . $tag . $out . $close . '>';
+	}
+
+	/**
+	 * Whether a <link> fetches a resource: rel carries stylesheet, preload,
+	 * modulepreload, prefetch or prerender.
+	 *
+	 * The same token set process_link_tag() gates in the live document, read
+	 * the same way — rel is a space-separated TOKEN LIST whose value may be
+	 * unquoted. dns-prefetch and preconnect resolve DNS and open a socket but
+	 * transfer no URL and set no cookie, so they are not fetches, for the
+	 * reason given there. The two lists must stay equal: a <link> judged
+	 * differently inside and outside <noscript> is the layer drift this
+	 * helper exists to prevent.
+	 *
+	 * @param string $attrs Attribute string.
+	 * @return bool
+	 */
+	private function link_tag_fetches( $attrs ) {
+		$rel_value = $this->extract_tag_attr( $attrs, 'rel' );
+		if ( '' === $rel_value ) {
+			return false;
+		}
+		$rel_tokens = preg_split( '/\s+/', strtolower( trim( $rel_value ) ), -1, PREG_SPLIT_NO_EMPTY );
+		return ! empty( $rel_tokens ) && array() !== array_intersect( $rel_tokens, array( 'stylesheet', 'preload', 'modulepreload', 'prefetch', 'prerender' ) );
 	}
 
 	/**
@@ -5641,11 +5992,24 @@ class Frontend {
 	/**
 	 * Replace blocked CSS URL tokens with an inert data URL.
 	 *
+	 * Three in-place passes neutralise what a regex over the raw text can
+	 * reach — url() in its three forms, an @import string with or without
+	 * whitespace, the string arguments of image-set()/src() — and leave the
+	 * rest of the sheet active. Then the REWRITTEN text is read the way the
+	 * CSS tokenizer reads it (css_urls(): escapes decoded, a url( left open,
+	 * every string channel), and if a blocked URL is still named the sheet is
+	 * parked WHOLE: an empty string comes back, the caller keeps the original
+	 * in data-faz-css, and the runtime restores it on consent. Partial is not
+	 * an option there; partial is how `u\72l(…)` and `@import"…"` fetched
+	 * Google Fonts at parse time while the two client layers, which read all
+	 * of these forms, called the same text blocked. This is the runtime's
+	 * _fazNeutralizeCssUrls() in PHP, and the two must stay in step.
+	 *
 	 * @param string $css                CSS text.
 	 * @param array  $providers          Provider-to-category map.
 	 * @param array  $blocked_categories Currently blocked category slugs.
 	 * @param array  $categories         Output list of categories that triggered a block.
-	 * @return string Rewritten CSS.
+	 * @return string Rewritten CSS, or '' when the sheet must be parked whole.
 	 */
 	private function neutralize_blocked_css_urls( $css, $providers, $blocked_categories, &$categories ) {
 		$categories = array();
@@ -5677,19 +6041,24 @@ class Frontend {
 		// returns null. Fail OPEN: reset categories and return the ORIGINAL CSS
 		// so process_style_tag leaves the <style> untouched, instead of emitting
 		// an empty <style> body that strips every rule. Also never pass a null
-		// subject into the second pass (deprecated / TypeError on PHP 8.1+).
+		// subject into the next pass (deprecated / TypeError on PHP 8.1+).
 		if ( null === $rewritten ) {
 			$categories = array();
 			return $original;
 		}
 
+		// `\s*`, not `\s+`: the at-keyword may be followed directly by the
+		// string token, and `@import"…"` is what esbuild's CSS minifier and
+		// critical-CSS inliners emit. The replacement always puts one space
+		// after the at-keyword: `@importurl(` would be a different, unknown
+		// at-rule, and `@import url("data:…")` is valid in its place.
 		$rewritten = preg_replace_callback(
-			'/(@import\s+)(["\'])([^"\']+)\2/i',
+			'/(@import\s*)(["\'])([^"\']+)\2/i',
 			function ( $m ) use ( $block_url, $inert_url ) {
 				if ( ! $block_url( $m[3] ) ) {
 					return $m[0];
 				}
-				return $m[1] . 'url("' . $inert_url . '")';
+				return rtrim( $m[1] ) . ' url("' . $inert_url . '")';
 			},
 			$rewritten
 		);
@@ -5698,8 +6067,194 @@ class Frontend {
 			return $original;
 		}
 
+		// image-set() and src() name a file with a bare string and no url()
+		// around it. One level of nesting in the body, so the string after a
+		// nested url() is reached; a first-party candidate next to the blocked
+		// one stays.
+		$rewritten = preg_replace_callback(
+			'/((?:-webkit-)?(?:image-set|src)\()((?:[^()]|\([^()]*\))*)(\))/i',
+			function ( $m ) use ( $block_url, $inert_url ) {
+				$inner = preg_replace_callback(
+					'/"((?:[^"\\\\]|\\\\[\s\S])*)"|\'((?:[^\'\\\\]|\\\\[\s\S])*)\'/',
+					function ( $s ) use ( $block_url, $inert_url ) {
+						$url = isset( $s[1] ) && '' !== $s[1] ? $s[1] : ( isset( $s[2] ) ? $s[2] : '' );
+						return $block_url( $url ) ? '"' . $inert_url . '"' : $s[0];
+					},
+					$m[2]
+				);
+				return null === $inner ? $m[0] : $m[1] . $inner . $m[3];
+			},
+			$rewritten
+		);
+		if ( null === $rewritten ) {
+			$categories = array();
+			return $original;
+		}
+
+		// The judgement: does the engine still fetch a blocked URL from what
+		// is left? Read as the tokenizer reads it, which the in-place passes
+		// above cannot be — an escape in the function name or the host, a
+		// url( with no closing paren. Any hit parks the sheet whole.
+		$residual = $this->css_blocked_category( $rewritten, $providers, $blocked_categories );
+		if ( false !== $residual ) {
+			$categories[] = $residual;
+			$categories   = array_values( array_unique( $categories ) );
+			return '';
+		}
+
 		$categories = array_values( array_unique( $categories ) );
 		return $rewritten;
+	}
+
+	/**
+	 * The first blocked category among every URL a CSS text names, or false.
+	 *
+	 * @param string $css                CSS text.
+	 * @param array  $providers          Provider-to-category map.
+	 * @param array  $blocked_categories Currently blocked category slugs.
+	 * @return string|false
+	 */
+	private function css_blocked_category( $css, $providers, $blocked_categories ) {
+		foreach ( $this->css_urls( $css ) as $url ) {
+			$category = $this->css_url_block_category( $url, $providers, $blocked_categories );
+			if ( false !== $category ) {
+				return $category;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Every URL a stylesheet names, read the way the CSS tokenizer reads it.
+	 *
+	 * url() in its three forms, `@import` followed by a string with or
+	 * without whitespace, the string arguments of image-set() and src(), a
+	 * url( left open — and all of them again on a copy with CSS escapes
+	 * decoded, because an escape can hide the function name or a character
+	 * of the host from the raw text. The PHP twin of _fazCssUrls() in
+	 * script.js; the two read the same forms or the layers disagree on the
+	 * same text.
+	 *
+	 * @param string $css CSS text.
+	 * @return string[]
+	 */
+	private function css_urls( $css ) {
+		$css  = (string) $css;
+		$urls = $this->css_urls_raw( $css, false );
+		$decoded = $this->css_decode_escapes( $css );
+		if ( $decoded !== $css ) {
+			foreach ( $this->css_urls_raw( $decoded, true ) as $url ) {
+				if ( ! in_array( $url, $urls, true ) ) {
+					$urls[] = $url;
+				}
+			}
+		}
+		return $urls;
+	}
+
+	/**
+	 * One extraction pass of css_urls().
+	 *
+	 * The bare branch of url() stops at the first whitespace on the RAW text,
+	 * where an unquoted token cannot hold one; on the DECODED copy an escape
+	 * may have become a space inside the URL the engine resolved, so the body
+	 * runs to the closing paren instead. A CSS string ends at an UNESCAPED
+	 * quote, so every string body crosses `\"`.
+	 *
+	 * @param string $css     CSS text.
+	 * @param bool   $decoded Whether $css is the escape-decoded copy.
+	 * @return string[]
+	 */
+	private function css_urls_raw( $css, $decoded ) {
+		$urls = array();
+		if ( '' === $css ) {
+			return $urls;
+		}
+		$url_pattern = $decoded
+			? '/url\(\s*(?:"((?:[^"\\\\]|\\\\[\s\S])*)"|\'((?:[^\'\\\\]|\\\\[\s\S])*)\'|([^)]+?))\s*\)/i'
+			: '/url\(\s*(?:"((?:[^"\\\\]|\\\\[\s\S])*)"|\'((?:[^\'\\\\]|\\\\[\s\S])*)\'|([^)\s]+))\s*\)/i';
+		if ( preg_match_all( $url_pattern, $css, $found, PREG_SET_ORDER ) ) {
+			foreach ( $found as $f ) {
+				$urls[] = isset( $f[1] ) && '' !== $f[1] ? $f[1] : ( isset( $f[2] ) && '' !== $f[2] ? $f[2] : ( isset( $f[3] ) ? $f[3] : '' ) );
+			}
+		}
+		if ( preg_match_all( '/@import\s*(["\'])((?:(?!\1)[^\\\\]|\\\\[\s\S])+)\1/i', $css, $found, PREG_SET_ORDER ) ) {
+			foreach ( $found as $f ) {
+				$urls[] = $f[2];
+			}
+		}
+		if ( preg_match_all( '/(?:-webkit-)?(?:image-set|src)\(((?:[^()]|\([^()]*\))*)\)/i', $css, $found, PREG_SET_ORDER ) ) {
+			foreach ( $found as $f ) {
+				if ( preg_match_all( '/"((?:[^"\\\\]|\\\\[\s\S])*)"|\'((?:[^\'\\\\]|\\\\[\s\S])*)\'/', $f[1], $strings, PREG_SET_ORDER ) ) {
+					foreach ( $strings as $s ) {
+						$urls[] = isset( $s[1] ) && '' !== $s[1] ? $s[1] : ( isset( $s[2] ) ? $s[2] : '' );
+					}
+				}
+			}
+		}
+		// A url( left OPEN: the tokenizer reads to the end of the text as the
+		// URL, and the engine fetches it. Anchored at the end, so only a
+		// genuinely unclosed token matches.
+		if ( preg_match( '/url\(\s*(?:"((?:[^"\\\\]|\\\\[\s\S])*)|\'((?:[^\'\\\\]|\\\\[\s\S])*)|([^)\s]*))\s*$/i', $css, $open ) ) {
+			$value = isset( $open[1] ) && '' !== $open[1] ? $open[1] : ( isset( $open[2] ) && '' !== $open[2] ? $open[2] : ( isset( $open[3] ) ? $open[3] : '' ) );
+			if ( '' !== $value ) {
+				$urls[] = $value;
+			}
+		}
+		return $urls;
+	}
+
+	/**
+	 * Decode CSS escapes the way the tokenizer consumes them.
+	 *
+	 * `\XX` is one to six hex digits with one optional whitespace swallowed
+	 * after them (CRLF counts as one), `\c` is any other character. `u\72l(`
+	 * is `url(` to the tokenizer, `\75 rl(` is too, and `tracker\.test` is
+	 * `tracker.test` — none of which a regex over the raw text could see.
+	 * The twin of _fazCssDecodeEscapes() in script.js.
+	 *
+	 * @param string $css CSS text.
+	 * @return string
+	 */
+	private function css_decode_escapes( $css ) {
+		$css = (string) $css;
+		if ( false === strpos( $css, '\\' ) ) {
+			return $css;
+		}
+		$decoded = preg_replace_callback(
+			'/\\\\([0-9a-f]{1,6})(?:\r\n|[ \t\n\r\f])?|\\\\([\s\S])/i',
+			function ( $m ) {
+				if ( isset( $m[1] ) && '' !== $m[1] ) {
+					$cp = (int) hexdec( $m[1] );
+					if ( 0 === $cp || $cp > 0x10FFFF || ( $cp >= 0xD800 && $cp <= 0xDFFF ) ) {
+						return "\xEF\xBF\xBD"; // U+FFFD, as the tokenizer substitutes.
+					}
+					return $this->css_codepoint_to_utf8( $cp );
+				}
+				return isset( $m[2] ) ? $m[2] : '';
+			},
+			$css
+		);
+		return null === $decoded ? $css : $decoded;
+	}
+
+	/**
+	 * UTF-8 bytes for one code point, with no mbstring dependency.
+	 *
+	 * @param int $cp Code point, already range-checked.
+	 * @return string
+	 */
+	private function css_codepoint_to_utf8( $cp ) {
+		if ( $cp < 0x80 ) {
+			return chr( $cp );
+		}
+		if ( $cp < 0x800 ) {
+			return chr( 0xC0 | ( $cp >> 6 ) ) . chr( 0x80 | ( $cp & 0x3F ) );
+		}
+		if ( $cp < 0x10000 ) {
+			return chr( 0xE0 | ( $cp >> 12 ) ) . chr( 0x80 | ( ( $cp >> 6 ) & 0x3F ) ) . chr( 0x80 | ( $cp & 0x3F ) );
+		}
+		return chr( 0xF0 | ( $cp >> 18 ) ) . chr( 0x80 | ( ( $cp >> 12 ) & 0x3F ) ) . chr( 0x80 | ( ( $cp >> 6 ) & 0x3F ) ) . chr( 0x80 | ( $cp & 0x3F ) );
 	}
 
 	/**
@@ -5711,7 +6266,9 @@ class Frontend {
 	 * @return string|false Category slug, or false when allowed.
 	 */
 	private function css_url_block_category( $url, $providers, $blocked_categories ) {
-		$url = trim( (string) $url, " \t\n\r\0\x0B\"'" );
+		// Escapes first, so `tracker\.test` is the host it is to the tokenizer
+		// — the runtime's _fazCssUrlShouldBlock() decodes before it judges too.
+		$url = trim( $this->css_decode_escapes( (string) $url ), " \t\n\r\0\x0B\"'" );
 		if ( '' === $url || '#' === $url[0] || 0 === stripos( $url, 'data:' ) || 0 === stripos( $url, 'blob:' ) ) {
 			return false;
 		}
@@ -5726,6 +6283,14 @@ class Frontend {
 		$url = $this->normalize_resource_url( $url );
 		if ( '' === $url ) {
 			return false;
+		}
+		// The administrator's whitelist binds here as in every tag pass, and
+		// as it does in the runtime's _fazCssUrlShouldBlock(): a URL the
+		// operator exempted is not a blocked URL whichever channel names it.
+		foreach ( $this->get_whitelist() as $pattern ) {
+			if ( $this->matches_whitelist_pattern( $url, $pattern ) ) {
+				return false;
+			}
 		}
 
 		$service_consent = $this->get_service_consent();
