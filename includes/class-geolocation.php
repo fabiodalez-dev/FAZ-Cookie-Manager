@@ -614,7 +614,16 @@ class Geolocation {
 	 * told geo-routing is configured while the resolver returns '' for every
 	 * visitor, so there is one predicate now and both callers use it.
 	 *
+	 * The sources counted here are the ones get_visitor_country() can route
+	 * on: the trust filters, mod_geoip, the PHP extension, the MaxMind
+	 * database AND a callback on `faz_visitor_country`. The callback was
+	 * missing until 1.34.2, so source_status() reported it as working and
+	 * the admin saw routing live while this predicate — the page-cache veto's
+	 * — said "no source" and let a shared cache keep one jurisdiction's render
+	 * for the next visitor.
+	 *
 	 * @since 1.34.0
+	 * @since 1.34.2 A `faz_visitor_country` callback counts as a source.
 	 * @return bool
 	 */
 	public static function has_country_source() {
@@ -643,6 +652,17 @@ class Geolocation {
 			$has_source = true;
 		}
 		if ( ! $has_source && function_exists( 'geoip_country_code_by_name' ) ) {
+			$has_source = true;
+		}
+		// A callback on faz_visitor_country is a source in its own right:
+		// get_visitor_country() passes every resolved value through it and
+		// routes on whatever comes back, and it is the only route offered to an
+		// edge that is not Cloudflare. source_status() already counted it as
+		// 'country_filter', so the admin was told routing was live while this
+		// predicate said "no source" and the page cache kept the first
+		// visitor's render for the next one. Presence is the test, as there:
+		// the visitor's request, not this one, is what the callback answers.
+		if ( ! $has_source && function_exists( 'has_filter' ) && has_filter( 'faz_visitor_country' ) ) {
 			$has_source = true;
 		}
 		// get_database_path() returns '' unless a GeoLite2 MMDB exists, is
