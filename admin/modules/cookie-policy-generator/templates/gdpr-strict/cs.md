@@ -24,7 +24,7 @@ Používáme rovněž podobné technologie, jako jsou **localStorage**, **sessio
 
 Pro **nezbytně nutné** cookies je právním základem zpracování náš oprávněný zájem podle čl. 6 odst. 1 písm. f) GDPR a technická výjimka podle čl. 5 odst. 3 směrnice o soukromí v elektronických komunikacích.
 
-Pro **všechny ostatní** kategorie cookies je právním základem váš **výslovný souhlas** podle čl. 6 odst. 1 písm. a) a čl. 7 GDPR, který je od vás vyžadován prostřednictvím lišty souhlasu s cookies ještě před uložením jakéhokoli nezbytně nutného cookies.
+Pro **všechny ostatní** kategorie cookies je právním základem váš **výslovný souhlas** podle čl. 6 odst. 1 písm. a) a čl. 7 GDPR, který je od vás vyžadován prostřednictvím lišty souhlasu s cookies ještě před uložením jakéhokoli nepovinného cookies.
 
 Souhlas můžete kdykoli odvolat pomocí odkazu „Nastavení cookies" nebo vymazáním cookies ve vašem prohlížeči; odvolání souhlasu nemá vliv na zákonnost zpracování provedeného před odvoláním (čl. 7 odst. 3 GDPR).
 
