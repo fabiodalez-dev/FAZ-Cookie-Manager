@@ -716,11 +716,18 @@
 	cmpLoaded = true;
 	cmpStatus = "loaded";
 
-	// Process the command queue
+	// Process the command queue.
+	//
+	// The inline stub in class-frontend.php pushes its `arguments` object, as
+	// the IAB reference stub does. That is array-like but NOT an Array, so an
+	// Array.isArray() guard here dropped every command a vendor queued before
+	// the CMP loaded: the callback never ran, the listener was never stored,
+	// and the visitor's decision never reached that vendor. Accept any
+	// array-like entry and copy it into a real array for the call.
 	for (var q = 0; q < pendingQueue.length; q++) {
-		if (Array.isArray(pendingQueue[q])) {
-			tcfapi.apply(null, pendingQueue[q]);
-		}
+		var queued = pendingQueue[q];
+		if (!queued || typeof queued !== "object" || typeof queued.length !== "number") continue;
+		tcfapi.apply(null, Array.prototype.slice.call(queued));
 	}
 
 	// Create the __tcfapiLocator iframe (required by TCF spec)
