@@ -490,26 +490,26 @@ function faz_fx_cookie_rows_with_transfer() {
 $fixtures = array(
 	array(
 		'name'    => 'gdpr-empty-install',
-		// Until 1.34.2 this fixture pinned the degraded page itself: `how ****
-		// ("we", "us", "our")`, an emptied "Who we are" section and `contact
-		// us at ****` — a policy that asserts a controller and names none. The
-		// gate that already refused the same state for POPIA now covers every
-		// jurisdiction, so an unconfigured install shows the administrator the
-		// actionable notice and publishes nothing.
-		'why'     => 'fresh install: no saved option, baseline defaults only — refused with the admin notice, never the **** page',
+		// The controller gate covers every jurisdiction when a policy is
+		// PUBLISHED (REST save, wizard, policy page), but at render time only
+		// POPIA refuses. A GDPR/CCPA/LGPD page that is already live on an
+		// upgraded site keeps rendering for visitors, as it did in 1.34.1:
+		// blanking it would take the cookie inventory and the withdrawal
+		// instructions off a live site on an automatic update. The
+		// administrator sees the actionable notice above the document.
+		'why'     => 'fresh install: no saved option, baseline defaults only — the administrator sees the notice above the document',
 		'option'  => null,
 		'atts'    => array(),
 		'rows'    => array(),
-		'expect'  => 'notice',
+		'expect'  => 'document_with_notice',
 	),
 	array(
 		'name'     => 'gdpr-empty-install-visitor',
-		'why'      => 'the same fresh install seen by an anonymous visitor: silence, never a half-empty legal document',
+		'why'      => 'the same install seen by an anonymous visitor: the published document stays, with no admin hint',
 		'option'   => null,
 		'atts'     => array(),
 		'rows'     => array(),
 		'is_admin' => false,
-		'expect'   => 'empty',
 	),
 	array(
 		'name'    => 'gdpr-full-en',
@@ -766,6 +766,13 @@ if ( ! $faz_update_mode ) {
 					"{$name}: article wrapper carries lang, jurisdiction and a version hash"
 				);
 				break;
+			case 'document_with_notice':
+				assert_true(
+					0 === strpos( $html, '<div class="faz-cookie-policy-empty' )
+						&& false !== strpos( $html, '<article class="faz-cookie-policy"' ),
+					"{$name}: administrator sees the notice first and the document after it"
+				);
+				break;
 			case 'notice':
 				assert_true(
 					false !== strpos( $html, 'faz-cookie-policy-empty' )
@@ -874,18 +881,19 @@ if ( ! $faz_update_mode ) {
 		'POPIA with mandatory fields renders the policy'
 	);
 
-	// Never publish the admin email / site name without an explicit save — and,
-	// since 1.34.2, never publish the scaffold without a controller either.
-	// The administrator gets the actionable notice; the visitor gets nothing,
-	// not a page that says `contact us at ****`.
+	// Never publish the admin email / site name without an explicit save.
+	// Since 1.34.2 an incomplete controller identity refuses publishing on
+	// every jurisdiction, but a page that is already live keeps rendering for
+	// visitors (only POPIA refuses at render time, as before): the visitor
+	// gets the document, never the admin notice.
 	assert_true(
-		'' !== $rendered_all['gdpr-empty-install']
-			&& false === strpos( $rendered_all['gdpr-empty-install'], '****' ),
-		'an unconfigured install shows the administrator a notice, never the **** page'
+		false !== strpos( $rendered_all['gdpr-empty-install'], 'faz-cookie-policy-empty' ),
+		'an unconfigured install shows the administrator the notice'
 	);
 	assert_true(
-		'' === $rendered_all['gdpr-empty-install-visitor'],
-		'an unconfigured install publishes nothing to anonymous visitors'
+		false !== strpos( $rendered_all['gdpr-empty-install-visitor'], '<article class="faz-cookie-policy"' )
+			&& false === strpos( $rendered_all['gdpr-empty-install-visitor'], 'faz-cookie-policy-empty' ),
+		'a live GDPR page on an upgraded install still renders for anonymous visitors, without the admin notice'
 	);
 
 	// The consent records the policy talks about are the plugin's own consent

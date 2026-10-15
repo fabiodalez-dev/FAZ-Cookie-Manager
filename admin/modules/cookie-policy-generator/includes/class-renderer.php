@@ -185,8 +185,20 @@ class Renderer {
 		// override changes the legal regime, but it must never bypass that
 		// regime's mandatory fields (notably the POPIA operator and Information
 		// Officer details).
+		//
+		// Since 1.34.2 the controller identity is required for every
+		// jurisdiction, but that gate belongs to PUBLISHING (REST save, wizard,
+		// policy page). At render time only POPIA refuses, as before: a
+		// GDPR/CCPA/LGPD page already live on an upgraded site keeps rendering
+		// for visitors, because blanking it would remove the cookie inventory
+		// and the withdrawal instructions on an automatic update. The
+		// administrator sees the actionable notice above the document.
+		$admin_notice = '';
 		if ( $doc->missing_required_settings( $jurisdiction, $settings ) ) {
-			return self::incomplete_configuration_notice();
+			if ( 'popia-southafrica' === $jurisdiction ) {
+				return self::incomplete_configuration_notice();
+			}
+			$admin_notice = self::incomplete_configuration_notice();
 		}
 
 		// FR-03 step 3: load scaffold.
@@ -327,7 +339,7 @@ class Renderer {
 				$allowed[ $tag ]['aria-level'] = true;
 			}
 		}
-		return $wrapper_open . wp_kses( $html, $allowed ) . $wrapper_close;
+		return $admin_notice . $wrapper_open . wp_kses( $html, $allowed ) . $wrapper_close;
 	}
 
 	/**
