@@ -263,7 +263,7 @@ Go to **FAZ Cookie > Cookies** and click **Scan Site**. The scanner runs in your
 
 = Can I log consent for GDPR accountability? =
 
-Yes. Every consent action (accept, reject, customize) is recorded in a local database table with timestamp, consent ID, categories chosen, anonymized IP, and page URL. Export to CSV anytime from the Consent Logs page.
+Yes. Every consent action (accept, reject, customize) is recorded in a local database table with timestamp, consent ID, categories chosen, a pseudonymised IP (salted one-way hash), and page URL. Export to CSV anytime from the Consent Logs page.
 
 = Does it support multiple languages? =
 

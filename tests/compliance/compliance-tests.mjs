@@ -165,6 +165,28 @@ async function loginAdmin(page) {
 	await page.waitForLoadState('domcontentloaded');
 }
 
+/**
+ * The consent-log rows for ONE consent id, read through the admin REST list
+ * from a logged-in admin page (the page must expose fazConfig.api.nonce, i.e.
+ * be a plugin admin screen). `search` is a LIKE on consent_id, so callers still
+ * filter the result by exact id. Returns the parsed array, or a diagnostic
+ * object when the call failed.
+ */
+async function fetchConsentLogRows(adminPage, consentId) {
+	if (!consentId) return [];
+	try {
+		await adminPage.waitForFunction(() => typeof window.fazConfig?.api?.nonce === 'string' && window.fazConfig.api.nonce.length > 0, null, { timeout: 10000 });
+	} catch { /* fall through: the fetch below reports the failure */ }
+	return adminPage.evaluate(async (id) => {
+		try {
+			const nonce = window.fazConfig && window.fazConfig.api ? window.fazConfig.api.nonce : '';
+			const r = await fetch('/?rest_route=/faz/v1/consent_logs/&per_page=50&search=' + encodeURIComponent(id), { headers: { 'X-WP-Nonce': nonce } });
+			const text = await r.text();
+			try { return JSON.parse(text); } catch { return { _status: r.status, _raw: text.substring(0, 200) }; }
+		} catch (e) { return { _error: e.message }; }
+	}, consentId);
+}
+
 async function replaceGcmSettings(browser, nextSettings) {
 	const { ctx, page } = await freshPage(browser, { traceName: 'compliance-gcm-settings' });
 	try {
@@ -721,6 +743,13 @@ async function testConsentManagement(browser) {
 		await page.click('[data-faz-tag="accept-button"]');
 		await page.waitForTimeout(1500);
 
+		// The id THIS click was logged under. Without it the check below is
+		// satisfied by any historical row in the table — the endpoint could
+		// refuse every write (as it did for days in issue #292) and the suite
+		// would still print green.
+		const c01Cookie = await getConsentCookie(ctx);
+		const c01ConsentId = c01Cookie ? (parseConsentCookie(c01Cookie.value).consentid || '') : '';
+
 		// Login as admin and check consent logs
 		const adminPage = await ctx.newPage();
 		await loginAdmin(adminPage);
@@ -730,18 +759,14 @@ async function testConsentManagement(browser) {
 		const hasLogTable = await adminPage.locator('table, .faz-consent-log, #faz-consent-logs-table').count() > 0;
 		test('C01 Consent logs page accessible', hasLogTable);
 
-		// Check API for logs
-		const logResult = await adminPage.evaluate(async () => {
-			try {
-				const nonce = window.fazConfig && window.fazConfig.api ? window.fazConfig.api.nonce : '';
-				const r = await fetch('/?rest_route=/faz/v1/consent_logs/', { headers: { 'X-WP-Nonce': nonce } });
-				const text = await r.text();
-				try { return JSON.parse(text); } catch { return { _raw: text.substring(0, 200) }; }
-			} catch (e) { return { _error: e.message }; }
-		});
-		const hasLogs = Array.isArray(logResult) && logResult.length > 0;
-		test('C01b Consent log entries exist', hasLogs,
-			Array.isArray(logResult) ? `${logResult.length} entries` : JSON.stringify(logResult).substring(0, 100));
+		// Check API for THIS visitor's row, not for the table being non-empty.
+		const c01Rows = await fetchConsentLogRows(adminPage, c01ConsentId);
+		const c01Row = Array.isArray(c01Rows) ? c01Rows.find(r => r && r.consent_id === c01ConsentId) : null;
+		test('C01b Consent log entry exists for this visitor',
+			!!c01ConsentId && !!c01Row && c01Row.status === 'accepted',
+			c01ConsentId
+				? (c01Row ? `consent_id=${c01ConsentId.slice(0, 12)}… status=${c01Row.status}` : `no row for consent_id ${c01ConsentId.slice(0, 12)}… (${Array.isArray(c01Rows) ? c01Rows.length : JSON.stringify(c01Rows).substring(0, 80)})`)
+				: 'no consentid in the consent cookie');
 
 		await ctx.close();
 	}
@@ -1666,6 +1691,13 @@ async function testFunctionalScenarios(browser) {
 		await waitForBanner(page);
 		await page.click('[data-faz-tag="accept-button"]');
 		await page.waitForTimeout(1500);
+		// The id the acceptance was logged under; the withdrawal below posts the
+		// SAME id seconds later, from the same address, and no transient is
+		// cleared in between — that is the sequence the per-IP throttle used to
+		// drop, leaving a register that said "accepted" for a visitor who had
+		// withdrawn.
+		const acceptedCookie = await getConsentCookie(ctx);
+		const tf14ConsentId = acceptedCookie ? (parseConsentCookie(acceptedCookie.value).consentid || '') : '';
 
 		// Open revisit and reject
 		const revisitVisible = await page.evaluate(() => {
@@ -1684,20 +1716,77 @@ async function testFunctionalScenarios(browser) {
 			const consent = await getConsentCookie(ctx);
 			if (consent) {
 				const parsed = parseConsentCookie(consent.value);
-				const revoked = ['analytics', 'advertisement', 'functional'].every(k => parsed[k] !== 'yes');
-				test('TF14 Revoke: non-necessary consent removed', revoked);
+				// The category slug is `marketing` (renamed from `advertisement`
+				// in 2026-03); asserting on a key that no longer exists is
+				// trivially true.
+				const revoked = ['analytics', 'marketing', 'functional'].every(k => parsed[k] !== 'yes');
+				test('TF14 Revoke: non-necessary consent removed', revoked,
+					`analytics=${parsed.analytics || 'no'} marketing=${parsed.marketing || 'no'} functional=${parsed.functional || 'no'}`);
 			} else {
-				test('TF14 Revoke: consent cookie cleared', true);
+				// Without a cookie the revocation cannot be verified from the client
+				// side; the log assertion below still has to hold.
+				test('TF14 Revoke: consent cookie present after rejection', false, 'consent cookie absent — cannot verify the revoked state');
 			}
+
+			// The withdrawal must be ON RECORD: the newest row for this visitor's
+			// consent id says 'rejected', and it is newer than the 'accepted' one.
+			// Read through the admin API from a second page in the same context.
+			const adminPage = await ctx.newPage();
+			await loginAdmin(adminPage);
+			await adminPage.goto(SITE + '/wp-admin/admin.php?page=faz-cookie-manager-consent-logs', { waitUntil: 'domcontentloaded' });
+			await adminPage.waitForTimeout(1500);
+			const tf14Rows = await fetchConsentLogRows(adminPage, tf14ConsentId);
+			const mine = Array.isArray(tf14Rows) ? tf14Rows.filter(r => r && r.consent_id === tf14ConsentId) : [];
+			// Newest first: the list endpoint orders by created_at DESC; log_id
+			// breaks the tie when both posts land inside the same second.
+			mine.sort((a, b) => (b.created_at > a.created_at ? 1 : b.created_at < a.created_at ? -1 : (parseInt(b.log_id, 10) - parseInt(a.log_id, 10))));
+			const newest = mine[0];
+			const hasAccepted = mine.some(r => r.status === 'accepted');
+			test('TF14b Withdrawal is logged: newest row for this consent id is "rejected"',
+				!!tf14ConsentId && !!newest && newest.status === 'rejected' && hasAccepted,
+				tf14ConsentId
+					? `${mine.length} row(s) for ${tf14ConsentId.slice(0, 12)}…: ${mine.map(r => r.status).join(' <- ') || 'none'}`
+					: 'no consentid in the consent cookie');
 		} else {
 			test('TF14 Revoke consent', false, 'no revisit widget');
+			test('TF14b Withdrawal is logged', false, 'no revisit widget');
 		}
 		await ctx.close();
 	}
 
-	// TF15 — Consent logged (proof of consent)
-	// Already tested in C01 above
-	test('TF15 Consent logged', true, 'see C01 result above');
+	// TF15 — Consent logged (proof of consent). This used to be
+	// `test('TF15 …', true, …)` deferring to C01, whose own check accepted any
+	// historical row — the literal-true pattern the skip() docblock condemns.
+	// Now: give consent, read the consentid the plugin wrote, and assert the row
+	// for THAT id records the click's status and categories.
+	{
+		const { ctx, page } = await freshPage(browser);
+		await gotoFront(page);
+		await waitForBanner(page);
+		await page.click('[data-faz-tag="accept-button"]');
+		await page.waitForTimeout(1500);
+		const tf15Cookie = await getConsentCookie(ctx);
+		const tf15Parsed = tf15Cookie ? parseConsentCookie(tf15Cookie.value) : {};
+		const tf15ConsentId = tf15Parsed.consentid || '';
+
+		const adminPage = await ctx.newPage();
+		await loginAdmin(adminPage);
+		await adminPage.goto(SITE + '/wp-admin/admin.php?page=faz-cookie-manager-consent-logs', { waitUntil: 'domcontentloaded' });
+		await adminPage.waitForTimeout(1500);
+		const tf15Rows = await fetchConsentLogRows(adminPage, tf15ConsentId);
+		const tf15Row = Array.isArray(tf15Rows) ? tf15Rows.find(r => r && r.consent_id === tf15ConsentId) : null;
+		let cats = tf15Row ? tf15Row.categories : null;
+		if (typeof cats === 'string') { try { cats = JSON.parse(cats); } catch { cats = null; } }
+		// Accept-all: every category the cookie granted is 'yes' in the row.
+		const grantedInCookie = Object.keys(tf15Parsed).filter(k => tf15Parsed[k] === 'yes' && !['action', 'consentid', 'consent'].includes(k) && !k.includes('.'));
+		const categoriesMatch = !!cats && grantedInCookie.length > 0 && grantedInCookie.every(k => cats[k] === 'yes');
+		test('TF15 Consent logged for this visitor with status and categories',
+			!!tf15ConsentId && !!tf15Row && tf15Row.status === 'accepted' && categoriesMatch,
+			tf15ConsentId
+				? (tf15Row ? `status=${tf15Row.status}; cookie granted [${grantedInCookie.join(',')}]; row ${cats ? JSON.stringify(cats).slice(0, 80) : 'no categories'}` : `no row for consent_id ${tf15ConsentId.slice(0, 12)}…`)
+				: 'no consentid in the consent cookie');
+		await ctx.close();
+	}
 
 	// TF16 — Script blocking before consent
 	{

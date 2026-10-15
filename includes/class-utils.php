@@ -1396,11 +1396,19 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 		$messages       = array();
 		$done           = true;
 
-		// Consent logs use one-way IP hashing and cannot be linked to an email,
-		// so there is nothing to erase there (they auto-purge by retention). DSAR
-		// form submissions DO carry the requester's email and free text, so they
-		// are erasable on request.
-		$messages[] = __( 'FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses; they auto-purge after the configured retention period.', 'faz-cookie-manager' );
+		// Consent logs hold a salted one-way hash of the IP and no email, so an
+		// email-keyed erasure cannot find them: there is nothing to erase there
+		// (they auto-purge by retention). DSAR form submissions DO carry the
+		// requester's email and free text, so they are erasable on request.
+		//
+		// "Pseudonymised", not "anonymized". The hash is keyed by the
+		// installation's salt and deterministic, so the same address yields the
+		// same value for the whole retention period and anyone holding the salt
+		// and a candidate address can confirm a match — which is exactly the
+		// reasoning the docblock above applies to e-mail hashes. The message is
+		// what an administrator reads when drafting the Art. 30 record, so it
+		// has to call the data what it is.
+		$messages[] = __( 'FAZ Cookie Manager consent logs hold a pseudonymised IP (a salted one-way hash) and no email address, so they cannot be linked to an email address and nothing is erased there; they auto-purge after the configured retention period.', 'faz-cookie-manager' );
 
 		if ( is_email( $email ) && post_type_exists( 'faz_dsar' ) ) {
 			// IMPORTANT: always read the FIRST batch, never `paged => $page`.

@@ -802,6 +802,17 @@ class Admin {
 						// Label for meta.signal_only: the record was created by a
 						// privacy signal and the visitor never answered the banner.
 						'metaSignalOnly'           => __( 'Privacy signal, banner unanswered', 'faz-cookie-manager' ),
+						// Tooltips (title) of the Context column pills: the
+						// Migration_V2 audit columns. The pill labels themselves
+						// are codes (ISO country/region, ruleset id, GPC, DNT,
+						// TCF, GPP) and are not translated.
+						'ctxRegionTitle'           => __( 'Region the consent was enforced under (ISO 3166-2).', 'faz-cookie-manager' ),
+						'ctxCountryTitle'          => __( 'Country the consent was enforced under (ISO 3166-1).', 'faz-cookie-manager' ),
+						'ctxRulesetTitle'          => __( 'Jurisdiction ruleset applied at consent time.', 'faz-cookie-manager' ),
+						'ctxGpcTitle'              => __( 'The request carried a Global Privacy Control signal (Sec-GPC: 1).', 'faz-cookie-manager' ),
+						'ctxDntTitle'              => __( 'The request carried a Do Not Track signal (DNT: 1).', 'faz-cookie-manager' ),
+						'ctxTcTitle'               => __( 'IAB TCF TC String recorded with this consent:', 'faz-cookie-manager' ),
+						'ctxGppTitle'              => __( 'IAB GPP string recorded with this consent:', 'faz-cookie-manager' ),
 						'loadFailed'            => __( 'Failed to load consent logs.', 'faz-cookie-manager' ),
 						'noLogs'                   => __( 'No consent logs found.', 'faz-cookie-manager' ),
 						'exportOk'                 => __( 'CSV exported successfully.', 'faz-cookie-manager' ),
