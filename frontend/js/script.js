@@ -580,7 +580,7 @@ function _fazInvalidateStoredConsent() {
     // Delete all consent-tracking cookies immediately so later scripts in the
     // same page load (GCM, TCF, consent forwarding) do not keep reading the
     // stale state.
-    ["fazcookie-consent", "fazVendorConsent", "euconsent-v2"].forEach(_fazDeleteCookie);
+    ["fazcookie-consent", "fazVendorConsent", "fazVendorLI", "euconsent-v2"].forEach(_fazDeleteCookie);
     // Wipe the entries that gate the banner so showBanner() logic triggers.
     // We keep `consentid` so cross-session analytics can still correlate if
     // the visitor re-consents. The __scope.* keys cannot collide with any
@@ -2847,7 +2847,7 @@ function _fazRemoveDeadCookies(category) {
         // This server-provided protection also outranks granular denials.
         if (neverDelete === true) continue;
         // Never delete the plugin's own consent-mechanism cookies.
-        if (cookieID === "fazcookie-consent" || cookieID === "fazVendorConsent" || cookieID === "euconsent-v2") continue;
+        if (cookieID === "fazcookie-consent" || cookieID === "fazVendorConsent" || cookieID === "fazVendorLI" || cookieID === "euconsent-v2") continue;
         var serviceDecision = _fazGetServiceCookieDecision(cookieID);
         // An explicit per-service/per-cookie decision outranks a general
         // whitelist: yes preserves the cookie, no must still delete it. The
@@ -7905,7 +7905,7 @@ function _fazDeleteCookie(name) {
  * Uses the _cookieCategoryMap provided by the server (Known Providers cookie map).
  *
  * Skips the plugin's own consent-tracking cookies (fazcookie-consent,
- * fazVendorConsent, euconsent-v2) so that consent state is preserved.
+ * fazVendorConsent, fazVendorLI, euconsent-v2) so that consent state is preserved.
  */
 function _fazCleanupRevokedCookies() {
     var cookieMap = _fazStore._cookieCategoryMap;
@@ -7914,7 +7914,7 @@ function _fazCleanupRevokedCookies() {
     if (!hasCategoryMap && !_fazStore._perServiceConsent) return;
 
     // Plugin cookies that must never be deleted.
-    var protectedCookies = ['fazcookie-consent', 'fazVendorConsent', 'euconsent-v2'];
+    var protectedCookies = ['fazcookie-consent', 'fazVendorConsent', 'fazVendorLI', 'euconsent-v2'];
     // The same protection applies to revocation cleanup, which walks the
     // browser jar independently of _fazRemoveDeadCookies().
     (_fazStore._categories || []).forEach(function (category) {
@@ -9086,8 +9086,64 @@ function _fazRenderVendorSection() {
         _fazStore._iabPurposes.forEach(function(p) { purposeNames[p.id] = p.name; });
     }
 
-    // Read existing vendor consent.
+    // Read existing vendor consent and the Right-to-Object record.
     const existingConsent = _fazReadVendorConsent();
+    const existingLI = _fazReadVendorLI();
+    const liDefault = _fazLIDefaultEstablished();
+    // Whether legitimate interest is still established for a purpose or a
+    // vendor: the record decides when there is one; otherwise the TCF default
+    // (established) — except after a legacy Reject All, which is an objection
+    // to all of it (see _fazLIDefaultEstablished and tcf-cmp.js).
+    const liEstablished = function (map, id) {
+        if (existingLI) return !map || map[id] !== false;
+        return liDefault;
+    };
+    const liLabel = _fazTranslate('iab_legitimate_interest', 'Legitimate Interest');
+
+    // Right to Object, per purpose (IAB TCF Policies, Appendix B; GDPR
+    // Art. 21). Every purpose any selected vendor declares under legitimate
+    // interest gets a switch; off means "I object", and tcf-cmp.js then emits
+    // a negative LI signal for that purpose. Before these switches existed the
+    // CMP set the LI bit for every such purpose with no visitor input at all.
+    const liPurposeIds = [];
+    _fazStore._iabVendors.forEach(function(vendor) {
+        (vendor.legIntPurposes || []).forEach(function(pid) {
+            if (liPurposeIds.indexOf(pid) === -1) liPurposeIds.push(pid);
+        });
+    });
+    liPurposeIds.sort(function(a, b) { return a - b; });
+    if (liPurposeIds.length) {
+        _fazInjectIabLiStyles();
+        const liBlock = document.createElement('div');
+        liBlock.className = 'faz-iab-li-section';
+        const liHeading = document.createElement('h4');
+        liHeading.className = 'faz-preference-title faz-iab-section-heading';
+        liHeading.textContent = liLabel;
+        liBlock.appendChild(liHeading);
+        const liNote = document.createElement('p');
+        liNote.className = 'faz-iab-section-count';
+        liNote.textContent = _fazTranslate('iab_legitimate_interest_note', 'Some vendors process your data on the basis of legitimate interest rather than consent. You have the right to object: switch a purpose off to object to that processing.');
+        liBlock.appendChild(liNote);
+        liPurposeIds.forEach(function(pid) {
+            const row = document.createElement('div');
+            row.className = 'faz-iab-li-row';
+            const text = document.createElement('span');
+            text.className = 'faz-iab-li-row-label';
+            text.textContent = purposeNames[pid] || ('Purpose ' + pid);
+            row.appendChild(text);
+            const sw = document.createElement('div');
+            sw.className = 'faz-switch';
+            const liCb = document.createElement('input');
+            liCb.type = 'checkbox';
+            liCb.id = 'fazPurposeLISwitch' + pid;
+            liCb.setAttribute('aria-label', liLabel + ': ' + (purposeNames[pid] || ('Purpose ' + pid)));
+            liCb.checked = liEstablished(existingLI && existingLI.purposes, pid);
+            sw.appendChild(liCb);
+            row.appendChild(sw);
+            liBlock.appendChild(row);
+        });
+        section.appendChild(liBlock);
+    }
 
     _fazStore._iabVendors.forEach(function(vendor) {
         const accordion = document.createElement('div');
@@ -9190,7 +9246,34 @@ function _fazRenderVendorSection() {
             parent.appendChild(p);
         }
         if (purposeLabels.length) appendDetail(body, _fazTranslate('iab_consent', 'Consent'), purposeLabels.join(', '));
-        if (liLabels.length) appendDetail(body, _fazTranslate('iab_legitimate_interest', 'Legitimate Interest'), liLabels.join(', '));
+        if (liLabels.length) {
+            appendDetail(body, liLabel, liLabels.join(', '));
+            // Right to Object, per vendor. Off = "I object to this vendor's
+            // legitimate-interest processing". Switching the vendor's consent
+            // off also objects: nobody who turned a vendor off meant "but keep
+            // processing my data under legitimate interest", and the save path
+            // enforces the same rule whatever this switch says.
+            _fazInjectIabLiStyles();
+            const vendorLiRow = document.createElement('div');
+            vendorLiRow.className = 'faz-iab-li-row faz-iab-vendor-li-row';
+            const vendorLiText = document.createElement('span');
+            vendorLiText.className = 'faz-iab-li-row-label';
+            vendorLiText.textContent = _fazTranslate('iab_vendor_legitimate_interest_label', 'Allow processing based on legitimate interest');
+            vendorLiRow.appendChild(vendorLiText);
+            const vendorLiSwitch = document.createElement('div');
+            vendorLiSwitch.className = 'faz-switch';
+            const vendorLiCb = document.createElement('input');
+            vendorLiCb.type = 'checkbox';
+            vendorLiCb.id = 'fazVendorLISwitch' + vendor.id;
+            vendorLiCb.setAttribute('aria-label', liLabel + ': ' + vendor.name);
+            vendorLiCb.checked = liEstablished(existingLI && existingLI.vendors, vendor.id);
+            vendorLiSwitch.appendChild(vendorLiCb);
+            vendorLiRow.appendChild(vendorLiSwitch);
+            body.appendChild(vendorLiRow);
+            cb.addEventListener('change', function() {
+                if (!cb.checked) vendorLiCb.checked = false;
+            });
+        }
         if (vendor.features && vendor.features.length) {
             appendDetail(body, _fazTranslate('iab_features', 'Features'), vendor.features.map(function(fid) { return 'Feature ' + fid; }).join(', '));
         }
@@ -9245,39 +9328,167 @@ function _fazReadVendorConsent() {
 }
 
 /**
- * Sync vendor checkbox UI states from the fazVendorConsent cookie.
+ * Read the Right-to-Object record from the fazVendorLI cookie.
+ *
+ * Format: fazVendorLI=p2:no,p7:yes,755:no — `p<purposeId>` for the purpose
+ * switches, `<vendorId>` for the vendor switches (only objected vendors are
+ * written), `no` meaning the visitor objected. Returns null when there is no
+ * record, so callers can apply the default (see _fazLIDefaultEstablished).
+ *
+ * @return {{purposes: Object<number, boolean>, vendors: Object<number, boolean>}|null}
+ */
+function _fazReadVendorLI() {
+    const match = document.cookie.match(/fazVendorLI=([^;]+)/);
+    if (!match) return null;
+    const result = { purposes: {}, vendors: {} };
+    match[1].split(',').forEach(function(pair) {
+        const kv = pair.split(':');
+        if (kv.length !== 2) return;
+        const key = kv[0].trim();
+        const established = kv[1].trim() === 'yes';
+        if (key.charAt(0) === 'p') {
+            const pid = parseInt(key.substring(1), 10);
+            if (!isNaN(pid)) result.purposes[pid] = established;
+        } else {
+            const vid = parseInt(key, 10);
+            if (!isNaN(vid)) result.vendors[vid] = established;
+        }
+    });
+    return result;
+}
+
+/**
+ * Default state of the legitimate-interest switches when no record exists.
+ *
+ * Under TCF, legitimate interest is established until the visitor objects, so
+ * a visitor who has not acted yet sees the switches on. A visitor who already
+ * acted but has no record made that choice before the switches existed; when
+ * that choice granted nothing beyond strictly-necessary — Reject All — it is
+ * read as an objection to everything, which is the EDPB/CNIL reading and the
+ * one tcf-cmp.js applies to the signal. Anything else keeps the default.
+ *
+ * @return {boolean} true = established (switch on).
+ */
+function _fazLIDefaultEstablished() {
+    if (ref._fazGetFromStore('action') !== 'yes' || ref._fazGetFromStore('undecided') === '1') return true;
+    const categories = _fazStore._categories || [];
+    for (let i = 0; i < categories.length; i++) {
+        const category = categories[i];
+        if (!category || category.isNecessary || category.slug === 'necessary') continue;
+        if (ref._fazGetFromStore(category.slug) === 'yes') return true;
+    }
+    return false;
+}
+
+/**
+ * Inject the few rules the legitimate-interest rows need, once. The base
+ * banner CSS lives in the cached template; these rows are built here.
+ *
+ * @return {void}
+ */
+function _fazInjectIabLiStyles() {
+    if (document.getElementById('faz-iab-li-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'faz-iab-li-styles';
+    style.textContent =
+        '.faz-iab-li-row{display:flex;align-items:center;justify-content:space-between;padding:4px 0;}' +
+        '.faz-iab-li-row-label{font-size:12px;padding-right:8px;}' +
+        '.faz-iab-li-row .faz-switch{flex-shrink:0;}' +
+        '.faz-iab-vendor-li-row{margin-top:6px;}';
+    document.head.appendChild(style);
+}
+
+/**
+ * Sync vendor checkbox UI states from the fazVendorConsent cookie, and the
+ * legitimate-interest switches from the fazVendorLI record.
  * Called after Accept All / Reject All and when reopening the preference center.
  */
 function _fazUpdateVendorCheckboxStates() {
     if (!_fazStore._iabEnabled || !_fazStore._iabVendors || !_fazStore._iabVendors.length) return;
     const consent = _fazReadVendorConsent();
+    const li = _fazReadVendorLI();
+    const liDefault = _fazLIDefaultEstablished();
+    const liEstablished = function (map, id) {
+        if (li) return !map || map[id] !== false;
+        return liDefault;
+    };
     _fazStore._iabVendors.forEach(function(vendor) {
         const cb = document.getElementById('fazVendorSwitch' + vendor.id);
-        if (!cb) return;
-        cb.checked = consent[vendor.id] === true;
+        if (cb) cb.checked = consent[vendor.id] === true;
+        const liCb = document.getElementById('fazVendorLISwitch' + vendor.id);
+        if (liCb) liCb.checked = liEstablished(li && li.vendors, vendor.id);
     });
+    const purposeSwitches = document.querySelectorAll('input[id^="fazPurposeLISwitch"]');
+    for (let i = 0; i < purposeSwitches.length; i++) {
+        const pid = parseInt(purposeSwitches[i].id.substring('fazPurposeLISwitch'.length), 10);
+        if (!isNaN(pid)) purposeSwitches[i].checked = liEstablished(li && li.purposes, pid);
+    }
 }
 
 /**
- * Save vendor consent based on choice.
+ * Save vendor consent and the Right-to-Object record based on choice.
+ *
+ * fazVendorConsent: one `id:yes|no` per disclosed vendor. tcf-cmp.js treats a
+ * vendor absent from this record as NOT consented — the record is the proof
+ * the vendor was disclosed when the visitor chose.
+ *
+ * fazVendorLI: `p<purposeId>:yes|no` for every legitimate-interest purpose on
+ * the page and `<vendorId>:no` for every vendor the visitor objected to (a
+ * vendor switched off counts as objected). Reject All objects to all of it;
+ * Accept All objects to nothing. Only objected vendors are written so the
+ * record stays small; an absent vendor key means "not objected".
+ *
  * @param {string} choice 'all', 'reject', or 'custom'
  */
 function _fazSaveVendorConsent(choice) {
     if (!_fazStore._iabEnabled || !_fazStore._iabVendors || !_fazStore._iabVendors.length) return;
 
     const parts = [];
+    const liVendorParts = [];
+    const liPurposeIds = [];
     _fazStore._iabVendors.forEach(function(vendor) {
         let value = 'no';
+        const cb = document.getElementById('fazVendorSwitch' + vendor.id);
         if (choice === 'all') {
             value = 'yes';
         } else if (choice === 'reject') {
             value = 'no';
         } else {
             // Custom: read checkbox state.
-            const cb = document.getElementById('fazVendorSwitch' + vendor.id);
             value = (cb && cb.checked) ? 'yes' : 'no';
         }
         parts.push(vendor.id + ':' + value);
+
+        const lis = vendor.legIntPurposes || [];
+        if (!lis.length) return;
+        lis.forEach(function(pid) {
+            if (liPurposeIds.indexOf(pid) === -1) liPurposeIds.push(pid);
+        });
+        let liEstablished;
+        if (choice === 'all') {
+            liEstablished = true;
+        } else if (choice === 'reject') {
+            liEstablished = false;
+        } else {
+            const liCb = document.getElementById('fazVendorLISwitch' + vendor.id);
+            // Vendor off → objected, whatever the LI switch says.
+            liEstablished = value === 'yes' && (liCb ? liCb.checked : true);
+        }
+        if (!liEstablished) liVendorParts.push(vendor.id + ':no');
+    });
+
+    liPurposeIds.sort(function(a, b) { return a - b; });
+    const liPurposeParts = liPurposeIds.map(function(pid) {
+        let established;
+        if (choice === 'all') {
+            established = true;
+        } else if (choice === 'reject') {
+            established = false;
+        } else {
+            const liCb = document.getElementById('fazPurposeLISwitch' + pid);
+            established = liCb ? liCb.checked : true;
+        }
+        return 'p' + pid + ':' + (established ? 'yes' : 'no');
     });
 
     const expiry = _fazStore._expiry || 180;
@@ -9287,12 +9498,28 @@ function _fazSaveVendorConsent(choice) {
     if (_fazStore._rootDomain) {
         domain = ';domain=' + _fazStore._rootDomain;
     }
+    const secure = location.protocol === 'https:' ? ';Secure' : '';
+
+    if (liPurposeParts.length) {
+        // Purposes first: they are few (at most 24) and an objection to every
+        // purpose already ends every vendor's LI, so if the vendor list does not
+        // fit the budget the purpose-level record alone still carries the
+        // visitor's objections.
+        let liPayload = liPurposeParts.concat(liVendorParts).join(',');
+        if (liPayload.length > 3800) {
+            console.warn('fazVendorLI record too large (' + liPayload.length + ' bytes), keeping purpose-level objections only.');
+            liPayload = liPurposeParts.join(',');
+        }
+        document.cookie = 'fazVendorLI=' + liPayload + ';expires=' + date.toUTCString() + ';path=/' + domain + ';SameSite=Lax' + secure;
+    }
+
     const payload = parts.join(',');
     if (payload.length > 3800) {
+        // Not written: tcf-cmp.js then treats every vendor as not consented
+        // (fail closed) rather than trusting a truncated record.
         console.warn('fazVendorConsent cookie too large (' + payload.length + ' bytes), vendor consent may not persist reliably.');
         return;
     }
-    const secure = location.protocol === 'https:' ? ';Secure' : '';
     document.cookie = 'fazVendorConsent=' + payload + ';expires=' + date.toUTCString() + ';path=/' + domain + ';SameSite=Lax' + secure;
 }
 
@@ -9642,7 +9869,7 @@ window.addEventListener('message', function(event) {
         // or euconsent-v2 would resurface after the reload — producing an
         // inconsistent state where the main cookie says "deny marketing"
         // but TCF vendors are still flagged as consented.
-        ["fazVendorConsent", "euconsent-v2"].forEach(_fazDeleteCookie);
+        ["fazVendorConsent", "fazVendorLI", "euconsent-v2"].forEach(_fazDeleteCookie);
         // Apply forwarded consent cookie.
         ref._fazSetCookie('fazcookie-consent', consent, _fazStore._expiry || 180);
         // Reload to apply the forwarded consent state.

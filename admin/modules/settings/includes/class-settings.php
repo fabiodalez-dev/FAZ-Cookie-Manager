@@ -421,9 +421,55 @@ class Settings extends Store {
 	public function update( $data, $clear = true ) {
 		$defaults = $this->get_defaults();
 		$settings = self::sanitize( $data, $defaults );
+		$previous = get_option( 'faz_settings', array() );
 		update_option( 'faz_settings', $settings );
 		self::$cached_settings = null;
+		self::maybe_bootstrap_gvl( is_array( $previous ) ? $previous : array(), $settings );
 		do_action( 'faz_after_update_settings', $clear );
+	}
+
+	/**
+	 * Download the IAB Global Vendor List the moment TCF is switched on.
+	 *
+	 * This is the one write path every iab.enabled change goes through
+	 * (settings REST, onboarding wizard, import), so it is where the GVL is
+	 * fetched when the flag flips from off to on and no list is stored yet.
+	 * Until now the only triggers were the "Update GVL Now" button and the
+	 * weekly cron — whose first tick after the switch is up to seven days away,
+	 * longer without WP-Cron — so an operator who enabled TCF and entered a CMP
+	 * ID shipped TC strings with VendorListVersion 0 and no disclosed vendors
+	 * in the meantime (the frontend now also refuses to activate the CMP
+	 * without a GVL, so the visible effect of a failed download here is "TCF
+	 * not yet active", not an invalid string).
+	 *
+	 * Only the flip triggers it: an ordinary save while TCF is already on must
+	 * not cost a network round-trip, and refreshes belong to the cron.
+	 *
+	 * @param array $previous The faz_settings option before this update.
+	 * @param array $current  The sanitised settings being stored.
+	 * @return void
+	 */
+	private static function maybe_bootstrap_gvl( array $previous, array $current ) {
+		$now_enabled = ! empty( $current['iab']['enabled'] );
+		$was_enabled = ! empty( $previous['iab']['enabled'] );
+		if ( ! $now_enabled || $was_enabled ) {
+			return;
+		}
+		if ( ! class_exists( '\\FazCookie\\Includes\\Gvl' ) ) {
+			return;
+		}
+		$gvl = \FazCookie\Includes\Gvl::get_instance();
+		if ( $gvl->has_data() ) {
+			return;
+		}
+		$result = $gvl->download();
+		if ( empty( $result['success'] ) ) {
+			return;
+		}
+		$lang = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
+		if ( 'en' !== $lang ) {
+			$gvl->download_purposes( $lang );
+		}
 	}
 
 	/**
