@@ -207,14 +207,15 @@
     // broad and deliberately not a parser: the question is "could this markup
     // reach a third party", and a sub-document's own resources are beyond
     // anything this file can intercept once it is parsed.
-    // The markup is read AFTER the two encodings that hide a `//` from a
-    // literal search: HTML character references (`https:&#47;&#47;tracker`,
-    // numeric in both bases and the named `&sol;` / `&colon;`), which the
-    // parser decodes before the sub-document sees them, and the JSON escape
-    // `\/`, which a script embedding its markup as a string leaves behind.
+    // The markup is read AFTER the encodings that hide a URL from a literal
+    // search: HTML character references (`https:&#47;&#47;tracker`, numeric in
+    // both bases and the named `&sol;` / `&colon;`), which the parser decodes
+    // before the sub-document sees them; and tab, LF and CR, which the URL
+    // parser strips from anywhere in a URL before it reads a scheme or a host
+    // (`https:/\t/tracker` is tracker), as the server pass strips them. The
+    // JSON escape `\/` is deliberately NOT undone here: see urlsIn().
     function decodeMarkup(value) {
         return String(value == null ? '' : value)
-            .replace(/\\\//g, '/')
             .replace(/&#x([0-9a-f]+);?/gi, function (match, hex) {
                 try { return String.fromCodePoint(parseInt(hex, 16)); } catch (e) { return match; }
             })
@@ -222,11 +223,31 @@
                 try { return String.fromCodePoint(parseInt(dec, 10)); } catch (e) { return match; }
             })
             .replace(/&sol;/gi, '/')
-            .replace(/&colon;/gi, ':');
+            .replace(/&colon;/gi, ':')
+            .replace(/[\t\n\r]/g, '');
     }
+    // Every spelling that names a host to the WHATWG parser, not just a
+    // literal `//`: for a special scheme a backslash IS a slash, and any run
+    // of slashes after `https:` is ignored — so `https:host`, `https:/host`,
+    // `\\host`, `/\\host` and `\\/host` all fetch from that host (the
+    // scheme-less ones resolve against the page's scheme, which local() asks
+    // the parser about). The server judges all of them inside a srcdoc and
+    // the runtime's _fazMarkupUrls reads the same shape; this file matched a
+    // literal `//` only, found nothing, and an empty list is "same-origin" —
+    // the layer disagreement the three files keep falling into, fixed in the
+    // other two first (9ab2ef77) and here last.
+    var MARKUP_URL = /(?:https?:[\\\/]*|[\\\/]{2})[^\s"'<>)\\\/][^\s"'<>)]*/gi;
     function urlsIn(value) {
-        var found = decodeMarkup(value).match(/(?:https?:)?\/\/[^\s"'<>)]+/gi);
-        return found || [];
+        var text = decodeMarkup(value);
+        var found = text.match(MARKUP_URL) || [];
+        // The JSON escape `\/`, which a script embedding its markup as a
+        // string leaves behind. Collapsing it to `/` BEFORE the match would
+        // turn `\/host` — protocol-relative to the parser — into a first-party
+        // path and lose the host, so the escaped form is read as a second,
+        // separate pass, the same union _fazMarkupUrls makes.
+        var unescaped = text.replace(/\\\//g, '/');
+        if (unescaped !== text) found = found.concat(unescaped.match(MARKUP_URL) || []);
+        return found;
     }
     // A list is same-origin only when EVERY candidate is: the browser picks one
     // by viewport and pixel ratio, so a single remote entry is a request.
@@ -2240,8 +2261,36 @@
             // right answer is to hand the attribute straight back — its restore
             // pass has already run by the time the handoff reaches here, so
             // leaving the element parked would strand it for the page view.
+            //
+            // What is asked depends on what the attribute holds. A URL goes to
+            // live.url. A candidate LIST goes candidate by candidate: asked as
+            // one string, `/a.png 1x, https://t/b.png 2x` is not a URL to any
+            // parser, came back "not blocked", and the list was handed back
+            // live with its remote candidate unjudged. A srcdoc is MARKUP and
+            // goes to live.markup, which the runtime answers with the category
+            // it would park the document under; the same string through
+            // live.url read as a relative path and came back "not blocked" too.
+            // On the safety release, where this decision is immediate, the
+            // re-applied attribute produced a new record, a new park and a new
+            // re-application — an endless microtask loop that froze the page,
+            // measured in jsdom with a plain `https://` pixel inside an
+            // innerHTML-sunk srcdoc. With no runtime there is nothing that can
+            // read markup, so a parked srcdoc stays parked; the restore pass
+            // of a later page view hands it back on the consent that allows it.
             defer(function (live) {
-                if (live && live.url && !live.url(value)) {
+                var refused, named = '';
+                if (key === 'srcdoc') {
+                    if (live && typeof live.markup === 'function') {
+                        named = String(live.markup(el, value) || '');
+                        refused = named !== '';
+                    } else {
+                        refused = true;
+                    }
+                } else {
+                    var urls = isList(key) ? candidates(value) : [value];
+                    refused = !(live && live.url) || urls.some(function (url) { return !!live.url(url); });
+                }
+                if (!refused) {
                     dropAttr(el, target.value);
                     if (target.category) dropAttr(el, target.category);
                     if (el.nodeName === 'IFRAME' && el.classList) el.classList.remove('faz-hidden');
@@ -2249,7 +2298,7 @@
                 }
                 // Refused. Now someone can name the category the restore
                 // selectors need, so replace the placeholder with the real one.
-                if (target.category && live) setAttr(el, target.category, parkCategory(live, value));
+                if (target.category && live) setAttr(el, target.category, named || parkCategory(live, value));
                 if (live && live.node) live.node(el);
             });
         });

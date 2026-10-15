@@ -10067,7 +10067,12 @@ if (window._fazBootstrap) window._fazBootstrap.finish({
     // one. This is the answer to that: the same resolution the parser backstop
     // uses, so an element parked during the download is restored on exactly the
     // consent that would have released it had it arrived a moment later.
-    category: function (url) { return _fazImgCategory(String(url)); }
+    category: function (url) { return _fazImgCategory(String(url)); },
+    // A srcdoc the bootstrap's backstop parked is MARKUP, not a URL: `url`
+    // above cannot judge it (it reads as a relative path). This is the same
+    // judgement the runtime's own srcdoc gates make — the category the
+    // document would be parked under, or "" when nothing in it is blocked.
+    markup: function (el, markup) { return _fazMarkupBlockedCategory(el, String(markup == null ? '' : markup)); }
 });
 
 } // end: if ( _fazStore ) — null-safety guard for deferred _fazConfig
