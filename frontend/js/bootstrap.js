@@ -49,7 +49,11 @@
  */
 (function (w, d) {
     'use strict';
-    if (w._fazBootstrap || !w._fazConfig || !w._fazConfig._block) return;
+    // _fazRuntimeStarted: the runtime already ran, which only happens when an
+    // optimiser deferred this inline script past it. Arming now would put
+    // these interceptors on top of the runtime's gates, release at once as if
+    // the runtime were missing, and stay that way for the page view.
+    if (w._fazBootstrap || w._fazRuntimeStarted || !w._fazConfig || !w._fazConfig._block) return;
     var queue = [], undo = [], scripts = [], pending = true, handoffs = [], staged = new WeakMap();
     // Set by releaseSafely() only. From then on the interceptors stay installed
     // and every new decision is taken immediately against this policy instead

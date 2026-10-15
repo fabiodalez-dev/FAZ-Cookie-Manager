@@ -15,6 +15,13 @@ if (window._fazConfig && window._fazStaticConfig) {
 // provider rules. Keep resources parked and let a reload retry the asset.
 const _fazStaticConfigMissing = window._fazConfig && window._fazConfig._staticConfigRequired && !window._fazStaticConfig;
 const _fazStore = _fazStaticConfigMissing ? null : window._fazConfig;
+// Announce the runtime before anything else runs. An optimiser that turns the
+// inline bootstrap into a deferred script can execute it AFTER this file; it
+// then reads this flag and stands down instead of installing its interceptors
+// on top of the runtime's gates and releasing itself as if no runtime existed.
+// Only a runtime that has its store claims it: without one the bootstrap is
+// still the only thing protecting the page.
+if (_fazStore) window._fazRuntimeStarted = true;
 if (_fazStore && window._fazBootstrap) window._fazBootstrap.start();
 
 // Opt-out success message (US state laws / CCPA): after the visitor confirms an
