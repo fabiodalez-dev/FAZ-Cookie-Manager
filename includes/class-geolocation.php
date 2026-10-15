@@ -207,6 +207,51 @@ class Geolocation {
 	}
 
 	/**
+	 * Cloudflare's CF-IPCountry value for a connection that arrived through Tor.
+	 *
+	 * Distinct from 'XX', which is "no country data". The two used to be
+	 * treated alike, as no answer, and the address was then geolocated
+	 * anyway — for a Tor visitor, that is the exit relay's country.
+	 *
+	 * @since 1.34.2
+	 * @var string
+	 */
+	const CF_ANONYMISER_SENTINEL = 'T1';
+
+	/**
+	 * Whether the trusted Cloudflare header reports an anonymising network.
+	 *
+	 * Cloudflare writes `T1` to CF-IPCountry when the visitor reached the edge
+	 * through Tor. That is not a missing answer: it is the edge saying that
+	 * the address it forwarded belongs to a relay, not to the visitor, so no
+	 * other source may geolocate it in the header's place. The MaxMind
+	 * database would answer with the relay's country, and an exit in an
+	 * opt-out jurisdiction would hand a visitor of unknown jurisdiction an
+	 * opt-out regime with analytics and marketing granted before any action.
+	 * The spec (001, US-05) names Tor among the cases that receive the
+	 * most-protective fallback; Geo_Detector applies the same rule and turns
+	 * it into its anonymity verdict, which Ruleset_Resolver routes first.
+	 *
+	 * Same trust gate as every other CF-* read: the operator's opt-in AND a
+	 * Cloudflare peer. From any other peer the value is the client's own and
+	 * is not read.
+	 *
+	 * @since 1.34.2
+	 * @return bool
+	 */
+	public static function cf_reports_anonymiser() {
+		if (
+			! apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			|| ! self::cf_peer_is_trusted()
+			|| empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		) {
+			return false;
+		}
+		$code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		return self::CF_ANONYMISER_SENTINEL === $code;
+	}
+
+	/**
 	 * Resolve the visitor country with the public filter contract applied.
 	 *
 	 * This is the country signal used for banner selection. It intentionally
@@ -239,11 +284,12 @@ class Geolocation {
 
 		$filtered = (string) apply_filters( 'faz_visitor_country', $country );
 		$filtered = strtoupper( trim( $filtered ) );
-		// Mirror the CF branch above: 'XX' is the Cloudflare-defined
-		// "anonymous proxy / Tor / unknown" sentinel. A third-party filter
-		// could reintroduce it from a different detection source, and we
-		// must not route it as a real country — is_valid_country_code()
-		// only checks the [A-Z]{2} shape and would accept 'XX'.
+		// Mirror the CF branch above: 'XX' is Cloudflare's "no country data"
+		// sentinel (Tor is 'T1', which cf_reports_anonymiser() turns into no
+		// country before any source is consulted). A third-party filter could
+		// reintroduce 'XX' from a different detection source, and it must not
+		// be routed as a real country — is_valid_country_code() only checks
+		// the [A-Z]{2} shape and would accept it.
 		if ( ! self::is_valid_country_code( $filtered ) || 'XX' === $filtered ) {
 			return '';
 		}
@@ -277,7 +323,9 @@ class Geolocation {
 			}
 		}
 
-		if ( '' === $region ) {
+		// The edge says the forwarded address is a Tor relay: the relay's
+		// subdivision is not the visitor's, and is not looked up.
+		if ( '' === $region && ! self::cf_reports_anonymiser() ) {
 			$region = self::get_region();
 		}
 
@@ -369,6 +417,14 @@ class Geolocation {
 	 * @return string Two-letter country code or empty string.
 	 */
 	private static function detect_country( $ip ) {
+		// The edge says the forwarded address is a Tor relay. There is no
+		// country to resolve, and the relay's must not be resolved instead:
+		// every source below would answer with the relay's, and the visitor
+		// would be routed by where the relay sits. No vote is cast.
+		if ( self::cf_reports_anonymiser() ) {
+			return '';
+		}
+
 		// Collect every source's vote so we can both (a) return the first
 		// non-empty value (existing priority order) and (b) compare them
 		// for the consensus check below. The associative shape preserves
@@ -402,7 +458,7 @@ class Geolocation {
 		// 3. PHP GeoIP extension.
 		if ( function_exists( 'geoip_country_code_by_name' ) ) {
 			$code = @geoip_country_code_by_name( $ip ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
-			// 'XX' is the "unknown / anonymous proxy" sentinel, and the
+			// 'XX' is the extension's "unknown" sentinel, and the
 			// extension outranks MMDB in the priority order below. Accepting it
 			// as a vote would let a database-less extension bury a real MMDB
 			// answer: get_visitor_country() turns the winning 'XX' back into ''

@@ -95,6 +95,21 @@ class Geo_Detector {
 			return array( 'country' => $admin_override, 'region' => '', 'vpn' => false, 'source' => 'admin_override' );
 		}
 
+		// 1b. The edge says the forwarded address is a Tor relay (`T1`). That is
+		// an anonymity verdict, not a missing one: Ruleset_Resolver routes a
+		// VPN/Tor visitor to the most-protective fallback before it looks at
+		// any country, and this is the same gate the paid ipinfo lookup feeds.
+		// It used to be folded into "no answer" with 'XX', after which the
+		// GeoLite2 fallback geolocated the relay and a Tor visitor whose exit
+		// sat in an opt-out jurisdiction received that regime. Nothing below
+		// runs: the relay's country is not the visitor's, and its address is
+		// not sent to ipinfo to learn what the edge has already said. Read
+		// before the cache, like the override, because a header costs nothing
+		// and a header-derived verdict is never cached under the address.
+		if ( $this->cf_header_reports_anonymiser() ) {
+			return array( 'country' => 'XX', 'region' => '', 'vpn' => true, 'source' => 'cf_anonymiser' );
+		}
+
 		// Cache hit?
 		$cached = wp_cache_get( $ip_hash, self::CACHE_GROUP );
 		if ( is_array( $cached ) ) {
@@ -184,12 +199,37 @@ class Geo_Detector {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		$cc = strtoupper( trim( (string) $_SERVER['HTTP_CF_IPCOUNTRY'] ) );
 		if ( 'XX' === $cc || 'T1' === $cc ) {
-			return ''; // CF unknown/Tor sentinel
+			// Neither is a country. 'XX' is "no country data" and the address
+			// is resolved by the fallbacks; 'T1' (Tor) never reaches this
+			// method — detect() answers it first, as an anonymity verdict.
+			return '';
 		}
 		if ( ! preg_match( '/^[A-Z]{2}$/', $cc ) ) {
 			return '';
 		}
 		return $cc;
+	}
+
+	/**
+	 * Whether the trusted CF-IPCountry header carries Cloudflare's Tor sentinel.
+	 *
+	 * Cloudflare writes `T1` when the connection arrived through Tor; `XX` is
+	 * the unrelated "no country data" value. Same trust gate as the country
+	 * read: the operator's opt-in AND a Cloudflare peer, because from any other
+	 * peer the header is the client's own and a client must not be able to
+	 * assert an anonymity verdict. `Geolocation::cf_reports_anonymiser()` is
+	 * the sibling rule for the banner-selection layer; both read the same
+	 * token through the same gate so the two layers cannot disagree.
+	 *
+	 * @since 1.34.2
+	 * @return bool
+	 */
+	private function cf_header_reports_anonymiser() {
+		if ( empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) || ! $this->cf_header_is_trusted() ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		return 'T1' === strtoupper( trim( (string) $_SERVER['HTTP_CF_IPCOUNTRY'] ) );
 	}
 
 	/**
