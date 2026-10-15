@@ -42,7 +42,7 @@ Každá třetí strana je ve vztahu ke cookies, které ukládá, samostatným sp
 
 ## Doba uchovávání údajů
 
-Záznamy o souhlasech a analytická data uchováváme po dobu {{RETENTION_PERIOD}} od jejich shromáždění. Nezbytně nutné cookies jsou uchovávány pouze po dobu trvání relace nebo po dobu nezbytnou pro technickou funkci, které slouží. Konkrétní životnost každého cookie je uvedena v tabulce výše.
+Záznamy o volbách souhlasu, které provedete v naší liště cookies, uchováváme po dobu {{CONSENT_RECORD_RETENTION}} od jejich shromáždění, abychom mohli prokázat souhlas, o který se opíráme. Ostatní údaje shromážděné prostřednictvím cookies, včetně analytických dat, uchováváme pouze po dobu nezbytnou pro jejich účel a, není-li uvedena kratší konkrétní doba, nejdéle po deklarovanou náhradní dobu {{RETENTION_PERIOD}}. Nezbytně nutné cookies jsou uchovávány pouze po dobu trvání relace nebo po dobu nezbytnou pro technickou funkci, které slouží. Konkrétní životnost každého cookie je uvedena v tabulce výše.
 
 ## Vaše práva
 

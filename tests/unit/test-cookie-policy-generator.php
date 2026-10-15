@@ -389,6 +389,7 @@ $rendered = Generator::substitute( $scaffold, array(
 	'THIRD_PARTY_SERVICES' => 'Google Analytics 4, Cloudflare',
 	'LAST_UPDATED_DATE'    => '2026-05-20',
 	'RETENTION_PERIOD'     => '12 months',
+	'CONSENT_RECORD_RETENTION' => '24 months',
 	'EDPB_CONTACT'         => 'edpb@edpb.europa.eu',
 	'OFFICIAL_RESOURCES_URL' => 'https://edpb.europa.eu/',
 	'COOKIE_POLICY_URL'    => 'https://acme.test/cookie-policy/',
@@ -396,6 +397,7 @@ $rendered = Generator::substitute( $scaffold, array(
 assert_contains( $rendered, 'ACME Srl', 'Real GDPR-EN template renders company name' );
 assert_contains( $rendered, 'privacy@acme.test', 'Real template renders contact email' );
 assert_contains( $rendered, '12 months', 'Real template renders retention' );
+assert_contains( $rendered, 'consent choices you make in our cookie banner are kept for 24 months', 'Real template states the consent-log period from its own placeholder' );
 assert_false( strpos( $rendered, '{{' ) !== false, 'Real template: no leftover {{...}} tokens' );
 
 // Same for CCPA
@@ -432,6 +434,7 @@ $rendered = Generator::substitute( $lgpd_scaffold, array(
 	'COOKIE_CATEGORIES' => '<dl></dl>',
 	'THIRD_PARTY_SERVICES' => 'GA4',
 	'RETENTION_PERIOD'  => '12 meses',
+	'CONSENT_RECORD_RETENTION' => '24 meses',
 	'OFFICIAL_RESOURCES_URL' => 'https://www.gov.br/anpd/pt-br',
 ) );
 assert_contains( $rendered, 'Encarregado', 'LGPD-pt-BR mentions Encarregado (Art. 41)' );

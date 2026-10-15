@@ -42,7 +42,7 @@ Ogni terza parte è titolare autonomo del trattamento per i cookie che imposta; 
 
 ## Periodo di conservazione
 
-I registri di consenso e i dati analitici sono conservati per {{RETENTION_PERIOD}} dalla raccolta. I cookie strettamente necessari sono conservati per la durata della sessione o per il tempo necessario alla loro funzione tecnica. Consulta la tabella per la durata specifica di ogni cookie.
+Le registrazioni delle scelte di consenso espresse nel banner dei cookie sono conservate per {{CONSENT_RECORD_RETENTION}} dalla raccolta, per poter dimostrare il consenso su cui ci basiamo. Gli altri dati raccolti tramite cookie, compresi i dati analitici, sono conservati solo per il tempo necessario alla loro finalità e, quando non è indicato un periodo specifico più breve, non oltre il periodo residuale dichiarato di {{RETENTION_PERIOD}}. I cookie strettamente necessari sono conservati per la durata della sessione o per il tempo necessario alla loro funzione tecnica. Consulta la tabella per la durata specifica di ogni cookie.
 
 ## I tuoi diritti
 

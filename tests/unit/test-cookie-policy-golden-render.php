@@ -887,6 +887,76 @@ if ( ! $faz_update_mode ) {
 		'' === $rendered_all['gdpr-empty-install-visitor'],
 		'an unconfigured install publishes nothing to anonymous visitors'
 	);
+
+	// The consent records the policy talks about are the plugin's own consent
+	// log, purged by Activator::run_retention_cleanup() on
+	// faz_settings.consent_logs.retention. The policy's "declared fallback"
+	// field (retention_months) is a different setting, and the admin help says
+	// it "does not change consent-log … retention". Until 1.34.2 the GDPR
+	// scaffold (and the pt-BR LGPD one) still printed the fallback figure as
+	// the consent-record period, so moving the purge window left the published
+	// period wrong. Distinct values (37 vs 12) make the two sources visible.
+	$faz_retention_render = function ( $jurisdiction, $lang, $consent_months ) {
+		$GLOBALS['faz_test_state']['options']       = array(
+			'faz_cookie_policy_data' => array_merge( faz_fx_company(), array(
+				'jurisdiction'     => $jurisdiction,
+				'language'         => $lang,
+				'retention_months' => 12,
+			) ),
+		);
+		if ( null !== $consent_months ) {
+			$GLOBALS['faz_test_state']['options']['faz_settings'] = array(
+				'consent_logs' => array( 'status' => true, 'retention' => $consent_months ),
+			);
+		}
+		$GLOBALS['faz_test_state']['locale']        = 'en_US';
+		$GLOBALS['faz_test_state']['locale_stack']  = array();
+		$GLOBALS['faz_test_state']['translate']     = false;
+		$GLOBALS['faz_test_state']['is_admin_user'] = true;
+		$GLOBALS['wpdb']->rows           = faz_fx_cookie_rows();
+		$GLOBALS['wpdb']->tables_present = true;
+		faz_reset_renderer_statics();
+		return Renderer::render( array( 'lang' => $lang ) );
+	};
+	$faz_consent_period = array(
+		'en' => '37 months', 'it' => '37 mesi', 'fr' => '37 mois', 'de' => '37 Monate',
+		'es' => '37 meses', 'bg' => '37 месеца', 'cs' => '37 měsíců', 'nl' => '37 maanden',
+		'hr' => '37 mjeseci', 'pt-BR' => '37 meses',
+	);
+	foreach ( $faz_consent_period as $faz_l => $faz_period ) {
+		$faz_html = $faz_retention_render( 'gdpr-strict', $faz_l, 37 );
+		assert_true(
+			false !== strpos( $faz_html, $faz_period ),
+			"gdpr-strict/{$faz_l}: consent-record period follows the consent-log purge setting ({$faz_period})"
+		);
+	}
+	$faz_html = $faz_retention_render( 'lgpd-brazil', 'pt-BR', 37 );
+	assert_true(
+		false !== strpos( $faz_html, '37 meses' ),
+		'lgpd-brazil/pt-BR: consent-record period follows the consent-log purge setting (37 meses)'
+	);
+	$faz_html = $faz_retention_render( 'gdpr-strict', 'en', 37 );
+	assert_true(
+		false === strpos( $faz_html, 'Consent records and analytics data are retained for 12 months' ),
+		'gdpr-strict/en: the fallback figure is no longer presented as the consent-record period'
+	);
+	assert_true(
+		false !== strpos( $faz_html, '12 months' ),
+		'gdpr-strict/en: the declared fallback period is still stated'
+	);
+	$faz_default = $faz_retention_render( 'gdpr-strict', 'en', null );
+	assert_true(
+		false !== strpos( $faz_default, 'kept for 12 months' ),
+		'gdpr-strict/en: with no saved settings the consent-record period is the purge default (12 months)'
+	);
+	assert_true(
+		$hash_of( $faz_retention_render( 'gdpr-strict', 'en', 37 ) ) !== $hash_of( $faz_retention_render( 'gdpr-strict', 'en', 24 ) ),
+		'version hash changes when the consent-log retention, which the GDPR text states, changes'
+	);
+	assert_true(
+		$hash_of( $faz_retention_render( 'ccpa-california', 'en', 37 ) ) === $hash_of( $faz_retention_render( 'ccpa-california', 'en', 24 ) ),
+		'version hash of a CCPA policy, whose text does not state it, ignores the consent-log retention'
+	);
 }
 
 // ---------------------------------------------------------------------------

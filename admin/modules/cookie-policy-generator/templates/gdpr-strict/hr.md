@@ -42,7 +42,7 @@ Svaka treća strana samostalni je voditelj obrade za kolačiće koje postavlja; 
 
 ## Koliko dugo čuvamo podatke
 
-Evidencije privola i analitički podaci čuvaju se {{RETENTION_PERIOD}} od prikupljanja. Nužni kolačići čuvaju se samo za trajanja sesije ili onoliko koliko zahtijeva tehnička funkcija koju obavljaju. Konkretno trajanje svakog kolačića navedeno je u tablici iznad.
+Evidencije izbora privole koje napravite u našem banneru za kolačiće čuvaju se {{CONSENT_RECORD_RETENTION}} od prikupljanja kako bismo mogli dokazati privolu na koju se oslanjamo. Ostali podaci prikupljeni putem kolačića, uključujući analitičke podatke, čuvaju se samo onoliko dugo koliko to zahtijeva njihova svrha i, ako nije naveden kraći rok specifičan za pojedini kolačić, ne dulje od objavljenog zamjenskog roka od {{RETENTION_PERIOD}}. Nužni kolačići čuvaju se samo za trajanja sesije ili onoliko koliko zahtijeva tehnička funkcija koju obavljaju. Konkretno trajanje svakog kolačića navedeno je u tablici iznad.
 
 ## Vaša prava
 

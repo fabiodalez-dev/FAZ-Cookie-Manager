@@ -80,6 +80,14 @@ class Renderer {
 	private static $public_cookie_rows_cache = null;
 
 	/**
+	 * Jurisdictions whose scaffolds state how long the consent log is kept, and
+	 * therefore receive the {{CONSENT_RECORD_RETENTION}} placeholder.
+	 *
+	 * @var string[]
+	 */
+	const CONSENT_RECORD_RETENTION_JURISDICTIONS = array( 'gdpr-strict', 'lgpd-brazil' );
+
+	/**
 	 * Object-cache key of the rendered cookie table for one document.
 	 *
 	 * The table text depends on the jurisdiction as well as the language (the
@@ -456,6 +464,17 @@ class Renderer {
 		$transfer_rows = self::collect_transfer_disclosures( $lang );
 		if ( ! empty( $transfer_rows ) ) {
 			$data['INTERNATIONAL_TRANSFERS_FP'] = sha1( (string) wp_json_encode( $transfer_rows ) );
+		}
+
+		// The consent-record period is the consent log's own purge window
+		// (faz_settings.consent_logs.retention, read by
+		// Activator::run_retention_cleanup()), never the policy's declared
+		// fallback: two settings on two screens must not be published as one
+		// figure. Only the scaffolds that state it carry the key, so a policy
+		// whose text does not mention the consent log keeps an unchanged version
+		// hash when the purge window moves.
+		if ( in_array( $jurisdiction, self::CONSENT_RECORD_RETENTION_JURISDICTIONS, true ) ) {
+			$data['CONSENT_RECORD_RETENTION'] = esc_html( self::format_months( self::consent_log_retention_months(), $lang ) );
 		}
 
 		// Jurisdiction-specific official body refs.
@@ -1624,6 +1643,37 @@ class Renderer {
 		$value  = $settings['retention_months'] ?? 12;
 		$months = is_scalar( $value ) ? (int) $value : 12;
 		if ( $months <= 0 ) { $months = 12; }
+		return self::format_months( $months, $lang );
+	}
+
+	/**
+	 * Months the consent log is kept before the daily purge deletes it.
+	 *
+	 * Mirrors Activator::run_retention_cleanup(), which reads the same option
+	 * key with the same default; Settings::sanitize_option() clamps the stored
+	 * value to 1-120, and a hand-written non-positive value falls back to the
+	 * default here rather than publishing "0 months".
+	 *
+	 * @return int
+	 */
+	private static function consent_log_retention_months() {
+		$settings = get_option( 'faz_settings' );
+		$value    = is_array( $settings ) && isset( $settings['consent_logs'] ) && is_array( $settings['consent_logs'] )
+			? ( $settings['consent_logs']['retention'] ?? 12 )
+			: 12;
+		$months   = is_scalar( $value ) ? (int) $value : 12;
+		return $months > 0 ? $months : 12;
+	}
+
+	/**
+	 * Format a month count as a localised "%d months" string.
+	 *
+	 * @param int    $months Positive month count.
+	 * @param string $lang   Template language code.
+	 * @return string
+	 */
+	private static function format_months( $months, $lang ) {
+		$months = (int) $months;
 		$labels = array(
 			'en'    => '%d months',
 			'it'    => '%d mesi',
