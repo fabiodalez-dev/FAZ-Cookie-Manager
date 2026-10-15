@@ -1368,6 +1368,8 @@ class Renderer {
 				'pt-BR' => 'Esta política de cookies foi gerada pelo FAZ Cookie Manager a partir de um modelo para a jurisdição %s. Os modelos não constituem aconselhamento jurídico. O administrador deste site permanece como controlador dos dados conforme a lei aplicável e é responsável pela exatidão e adequação do conteúdo publicado. Para orientação específica da jurisdição, consulte: %s.',
 				'bg'    => 'Тази политика за бисквитки е генерирана от FAZ Cookie Manager въз основа на образец за юрисдикция %s. Образците не представляват правен съвет. Администраторът на този сайт остава администратор на лични данни съгласно приложимото право и носи отговорност за точността и адекватността на публикуваното съдържание. За насоки, специфични за юрисдикцията, направете справка с: %s.',
 				'cs'    => 'Tyto zásady používání cookies byly vygenerovány pluginem FAZ Cookie Manager na základě šablony pro jurisdikci %s. Šablony nepředstavují právní poradenství. Provozovatel tohoto webu zůstává správcem osobních údajů ve smyslu platných právních předpisů a odpovídá za správnost a přiměřenost zveřejněného obsahu. Pro informace specifické pro danou jurisdikci se obraťte na: %s.',
+				'nl'    => 'Dit cookiebeleid is gegenereerd door FAZ Cookie Manager op basis van een sjabloon voor het rechtsgebied %s. Sjablonen vormen geen juridisch advies. De beheerder van deze website blijft de verwerkingsverantwoordelijke in de zin van het toepasselijke recht en is verantwoordelijk voor de juistheid en toereikendheid van de gepubliceerde inhoud. Raadpleeg voor richtsnoeren die specifiek zijn voor het rechtsgebied: %s.',
+				'hr'    => 'Ova pravila o kolačićima generirao je FAZ Cookie Manager na temelju predloška za jurisdikciju %s. Predlošci ne predstavljaju pravni savjet. Administrator ove web stranice ostaje voditelj obrade osobnih podataka u skladu s mjerodavnim pravom i odgovoran je za točnost i primjerenost objavljenog sadržaja. Za smjernice specifične za jurisdikciju pogledajte: %s.',
 			);
 			$tpl = $texts[ $lang ] ?? $texts['en'];
 			$jurisdiction_label = self::jurisdiction_display_name( $jurisdiction, $lang );
@@ -1545,8 +1547,12 @@ class Renderer {
 				// Czech dates take an ordinal day (trailing dot) and decline the
 				// month into the genitive — month_names() returns those forms.
 				return sprintf( '%d. %s %s', $day, $month_name, $year );       // 3. června 2026
+			case 'hr':
+				// Croatian, like Czech, uses an ordinal day and the genitive
+				// month, and also closes the ordinal year with a dot.
+				return sprintf( '%d. %s %s.', $day, $month_name, $year );      // 3. lipnja 2026.
 			default:
-				return sprintf( '%d %s %s', $day, $month_name, $year );        // it / fr: 3 giugno 2026
+				return sprintf( '%d %s %s', $day, $month_name, $year );        // it / fr / nl: 3 giugno 2026
 		}
 	}
 
@@ -1569,6 +1575,9 @@ class Renderer {
 			// ("3. června 2026"), and month_names() is only ever consumed by
 			// format_date(), so storing the genitive here keeps the date correct.
 			'cs'    => array( 'ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince' ),
+			'nl'    => array( 'januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december' ),
+			// Genitive forms, for the same reason as Czech ("3. lipnja 2026.").
+			'hr'    => array( 'siječnja', 'veljače', 'ožujka', 'travnja', 'svibnja', 'lipnja', 'srpnja', 'kolovoza', 'rujna', 'listopada', 'studenoga', 'prosinca' ),
 		);
 		return $names[ $lang ] ?? $names['en'];
 	}
@@ -1593,8 +1602,30 @@ class Renderer {
 			'pt-BR' => '%d meses',
 			'bg'    => '%d месеца',
 			'cs'    => '%d měsíců',
+			'nl'    => 1 === $months ? '%d maand' : '%d maanden',
+			'hr'    => self::croatian_month_label( $months ),
 		);
 		return sprintf( $labels[ $lang ] ?? '%d months', $months );
+	}
+
+	/**
+	 * Croatian count form for "month": 1, 21, 31… take the singular
+	 * ("mjesec"), 2-4, 22-24… the paucal ("mjeseca"), everything else —
+	 * including 11-14 — the genitive plural ("mjeseci").
+	 *
+	 * @param int $months Month count (positive).
+	 * @return string sprintf() pattern with one %d.
+	 */
+	private static function croatian_month_label( $months ) {
+		$mod10  = $months % 10;
+		$mod100 = $months % 100;
+		if ( 1 === $mod10 && 11 !== $mod100 ) {
+			return '%d mjesec';
+		}
+		if ( $mod10 >= 2 && $mod10 <= 4 && ( $mod100 < 12 || $mod100 > 14 ) ) {
+			return '%d mjeseca';
+		}
+		return '%d mjeseci';
 	}
 
 	/**
@@ -1606,10 +1637,10 @@ class Renderer {
 	 */
 	private static function jurisdiction_display_name( $jurisdiction, $lang ) {
 		$names = array(
-			'gdpr-strict'       => array( 'en' => 'GDPR (EU/EEA/UK)', 'it' => 'GDPR (UE/SEE/UK)', 'fr' => 'RGPD (UE/EEE/UK)', 'de' => 'DSGVO (EU/EWR/UK)', 'es' => 'RGPD (UE/EEE/UK)', 'pt-BR' => 'GDPR (UE/EEE/UK)', 'bg' => 'GDPR (ЕС/ЕИП/Обединеното кралство)', 'cs' => 'GDPR (EU/EHP/UK)' ),
-			'ccpa-california'   => array( 'en' => 'CCPA/CPRA (California)', 'it' => 'CCPA/CPRA (California)', 'fr' => 'CCPA/CPRA (Californie)', 'de' => 'CCPA/CPRA (Kalifornien)', 'es' => 'CCPA/CPRA (California)', 'pt-BR' => 'CCPA/CPRA (Califórnia)', 'bg' => 'CCPA/CPRA (Калифорния)', 'cs' => 'CCPA/CPRA (Kalifornie)' ),
-			'lgpd-brazil'       => array( 'en' => 'LGPD (Brazil)', 'it' => 'LGPD (Brasile)', 'fr' => 'LGPD (Brésil)', 'de' => 'LGPD (Brasilien)', 'es' => 'LGPD (Brasil)', 'pt-BR' => 'LGPD (Brasil)', 'bg' => 'LGPD (Бразилия)', 'cs' => 'LGPD (Brazílie)' ),
-			'popia-southafrica' => array( 'en' => 'POPIA (South Africa)', 'it' => 'POPIA (Sudafrica)', 'fr' => 'POPIA (Afrique du Sud)', 'de' => 'POPIA (Südafrika)', 'es' => 'POPIA (Sudáfrica)', 'pt-BR' => 'POPIA (África do Sul)', 'bg' => 'POPIA (Южна Африка)', 'cs' => 'POPIA (Jihoafrická republika)' ),
+			'gdpr-strict'       => array( 'en' => 'GDPR (EU/EEA/UK)', 'it' => 'GDPR (UE/SEE/UK)', 'fr' => 'RGPD (UE/EEE/UK)', 'de' => 'DSGVO (EU/EWR/UK)', 'es' => 'RGPD (UE/EEE/UK)', 'pt-BR' => 'GDPR (UE/EEE/UK)', 'bg' => 'GDPR (ЕС/ЕИП/Обединеното кралство)', 'cs' => 'GDPR (EU/EHP/UK)', 'nl' => 'AVG (EU/EER/VK)', 'hr' => 'GDPR (EU/EGP/UK)' ),
+			'ccpa-california'   => array( 'en' => 'CCPA/CPRA (California)', 'it' => 'CCPA/CPRA (California)', 'fr' => 'CCPA/CPRA (Californie)', 'de' => 'CCPA/CPRA (Kalifornien)', 'es' => 'CCPA/CPRA (California)', 'pt-BR' => 'CCPA/CPRA (Califórnia)', 'bg' => 'CCPA/CPRA (Калифорния)', 'cs' => 'CCPA/CPRA (Kalifornie)', 'nl' => 'CCPA/CPRA (Californië)', 'hr' => 'CCPA/CPRA (Kalifornija)' ),
+			'lgpd-brazil'       => array( 'en' => 'LGPD (Brazil)', 'it' => 'LGPD (Brasile)', 'fr' => 'LGPD (Brésil)', 'de' => 'LGPD (Brasilien)', 'es' => 'LGPD (Brasil)', 'pt-BR' => 'LGPD (Brasil)', 'bg' => 'LGPD (Бразилия)', 'cs' => 'LGPD (Brazílie)', 'nl' => 'LGPD (Brazilië)', 'hr' => 'LGPD (Brazil)' ),
+			'popia-southafrica' => array( 'en' => 'POPIA (South Africa)', 'it' => 'POPIA (Sudafrica)', 'fr' => 'POPIA (Afrique du Sud)', 'de' => 'POPIA (Südafrika)', 'es' => 'POPIA (Sudáfrica)', 'pt-BR' => 'POPIA (África do Sul)', 'bg' => 'POPIA (Южна Африка)', 'cs' => 'POPIA (Jihoafrická republika)', 'nl' => 'POPIA (Zuid-Afrika)', 'hr' => 'POPIA (Južna Afrika)' ),
 		);
 		return $names[ $jurisdiction ][ $lang ] ?? $names[ $jurisdiction ]['en'] ?? $jurisdiction;
 	}
@@ -1632,6 +1663,8 @@ class Renderer {
 			'pt-BR' => 'Português (Brasil)',
 			'bg'    => 'Български',
 			'cs'    => 'Čeština',
+			'nl'    => 'Nederlands',
+			'hr'    => 'Hrvatski',
 		);
 		return $names[ $lang ] ?? $lang;
 	}
