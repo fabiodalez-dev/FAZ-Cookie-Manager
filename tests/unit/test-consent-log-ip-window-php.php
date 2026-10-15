@@ -57,6 +57,9 @@ namespace FazCookie\Admin\Modules\Consentlogs\Includes {
 				'status'     => (string) $data['status'],
 				'categories' => is_array( $data['categories'] ) ? $data['categories'] : array(),
 				'at'         => $GLOBALS['faz_fake_now'],
+				// Kept as handed over (or absent): the jurisdiction-bootstrap
+				// verdict the controller reads to tell shell from live payload.
+				'geo_bootstrap' => array_key_exists( 'geo_bootstrap', $data ) ? $data['geo_bootstrap'] : null,
 			);
 			self::$rows[] = $row;
 			return $row;
@@ -160,14 +163,14 @@ namespace {
 	 *
 	 * @return string 'logged', 'throttled', or the WP_Error code.
 	 */
-	$post = function ( $consent_id, $status, array $categories = array( 'analytics' => 'yes' ) ) use ( $logger ) {
-		$request = new WP_REST_Request( array(
+	$post = function ( $consent_id, $status, array $categories = array( 'analytics' => 'yes' ), array $extra = array() ) use ( $logger ) {
+		$request = new WP_REST_Request( array_merge( array(
 			'token'      => Consent_Logger::current_token(),
 			'consent_id' => $consent_id,
 			'status'     => $status,
 			'categories' => $categories,
 			'url'        => 'https://example.test/',
-		) );
+		), $extra ) );
 		$result = $logger->handle_rest_consent( $request );
 		if ( $result instanceof WP_Error ) {
 			return $result->get_error_code();
@@ -256,6 +259,20 @@ namespace {
 	$post( $id, 'accepted' );
 	faz_advance( 6 );
 	ipw_check( 'throttled' === $post( '', 'rejected' ), 'a post without a consent_id inside the window is throttled' );
+
+	// 9. The jurisdiction-bootstrap verdict the beacon sends must reach the
+	//    controller, and the key must be present even when the beacon sent
+	//    nothing: its presence is how the controller tells the browser path
+	//    (where the strict shell may have stayed authoritative) from the AMP
+	//    and Do-Not-Sell callers, which never run the bootstrap.
+	faz_reset();
+	$post( $id, 'accepted', array( 'analytics' => 'yes' ), array( 'geo_bootstrap' => 'strict-fallback' ) );
+	$row = Controller::get_instance()->get_log_by_consent_id( $id );
+	ipw_check( is_array( $row ) && 'strict-fallback' === $row['geo_bootstrap'], 'the browser\'s geo_bootstrap verdict is forwarded to log_consent()' );
+	faz_reset();
+	$post( $id, 'accepted' );
+	$row = Controller::get_instance()->get_log_by_consent_id( $id );
+	ipw_check( is_array( $row ) && '' === $row['geo_bootstrap'], 'a beacon that sent no verdict still hands the controller the key, as an empty string' );
 
 	echo "\nconsent-log IP window: {$passed} passed, {$failed} failed\n";
 	exit( $failed > 0 ? 1 : 0 );

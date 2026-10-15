@@ -44,6 +44,16 @@ class Controller {
 	private $db_version = '1.2';
 
 	/**
+	 * The ruleset every page enforces while the jurisdiction bootstrap owns
+	 * normal pages: the one Frontend::get_geo_bootstrap_strict_ruleset()
+	 * loads for the cached shell.
+	 *
+	 * @since 1.34.2
+	 * @var string
+	 */
+	const GEO_BOOTSTRAP_STRICT_RULESET = 'fallback-gdpr-most-protective';
+
+	/**
 	 * Return the current instance of the class
 	 *
 	 * @return Controller
@@ -493,14 +503,27 @@ class Controller {
 	 * returns an empty array → caller skips the v2 columns entirely.
 	 *
 	 * @since 1.15.0
-	 * @param array $data Caller payload (may contain 'visitor_context').
+	 * @param array $data Caller payload (may contain 'visitor_context', and
+	 *                    'geo_bootstrap' on the browser path — see
+	 *                    runtime_visitor_context()).
 	 * @return array Sparse column→value map.
 	 */
 	protected function resolve_geo_audit_fields( $data ) {
 		$ctx = isset( $data['visitor_context'] ) && is_array( $data['visitor_context'] ) ? $data['visitor_context'] : null;
 
 		if ( null === $ctx ) {
-			$ctx = $this->runtime_visitor_context();
+			// The jurisdiction-bootstrap verdict, when the caller is the one
+			// path that runs the bootstrap (the inline beacon through the
+			// consent endpoint, which always sends the key). null means the
+			// caller never renders the strict shell: AMP, Do-Not-Sell, CLI.
+			$verdict = null;
+			if ( array_key_exists( 'geo_bootstrap', $data ) ) {
+				$verdict = is_string( $data['geo_bootstrap'] ) ? $data['geo_bootstrap'] : '';
+				if ( ! in_array( $verdict, array( 'live', 'strict-fallback' ), true ) ) {
+					$verdict = '';
+				}
+			}
+			$ctx = $this->runtime_visitor_context( $verdict );
 		}
 
 		if ( ! is_array( $ctx ) ) {
@@ -580,17 +603,44 @@ class Controller {
 	 * frontend applies no server-side ruleset at all (every per-visitor render
 	 * path returns null), so the row claims none either.
 	 *
+	 * The jurisdiction bootstrap (Settings → Geolocation → cache-safe
+	 * bootstrap) is the one topology where the chain above is not enough.
+	 * While Frontend::get_geo_bootstrap_status() reports the gate active,
+	 * every normal page is rendered as the strict most-protective GDPR shell
+	 * (Frontend::get_runtime_ruleset() returns that fallback and never
+	 * resolves the country); script.js then asks the banner REST for the live
+	 * law, which resolves it through the very chain used here, and applies
+	 * it. So the visitor was enforced under EITHER the per-country ruleset
+	 * (the live payload landed) OR the strict shell (the lookup timed out,
+	 * failed, or had no endpoint) — and only the browser knows which. The
+	 * inline beacon therefore reports script.js's verdict as `geo_bootstrap`
+	 * ('live' or 'strict-fallback'), and this method records the strict
+	 * fallback's id for 'strict-fallback', the per-country ruleset for
+	 * 'live', and no ruleset at all when the gate is active but the browser
+	 * said nothing (a page cached before the beacon learned to report): an
+	 * unclaimed ruleset is never wrong, a guessed one can be. The server
+	 * gate is consulted, not the browser alone, so a verdict from a page
+	 * cached under a setting since turned off, or a forged one, cannot make
+	 * the row claim a shell the frontend did not render. Callers that never
+	 * run the bootstrap (AMP, whose pages the gate excludes; the Do-Not-Sell
+	 * form) pass no verdict and keep the per-country chain. The visitor's
+	 * country and region are recorded in every case: they describe the
+	 * visitor, not the ruleset, and are what the live lookup resolved from.
+	 *
 	 * Runs inside the consent REST request, which is never served from a
 	 * page cache and carries the visitor's own address and headers, so it
 	 * sees what the page render saw. Never throws: an absent class or a
 	 * resolver error degrades to "no context", never to a wrong one.
 	 *
 	 * @since 1.34.2
+	 * @param string|null $bootstrap_verdict 'live' or 'strict-fallback' as the
+	 *                    browser reported it, '' when the browser path reported
+	 *                    nothing, null when the caller never runs the bootstrap.
 	 * @return array|null Keys: country ('' when unknown), region, ruleset_id
-	 *                    ('' when nothing was enforced). Null when the geo
-	 *                    classes are not loaded.
+	 *                    ('' when nothing was enforced or nothing can be
+	 *                    claimed). Null when the geo classes are not loaded.
 	 */
-	protected function runtime_visitor_context() {
+	protected function runtime_visitor_context( $bootstrap_verdict = null ) {
 		$geolocation = '\\FazCookie\\Includes\\Geolocation';
 		$runtime     = '\\FazCookie\\Frontend\\Includes\\Geo_Runtime';
 		$cache_mode  = '\\FazCookie\\Includes\\Cache_Compatibility';
@@ -617,7 +667,24 @@ class Controller {
 
 			$ruleset_id = '';
 			$invariant  = class_exists( $cache_mode ) && method_exists( $cache_mode, 'is_active' ) && $cache_mode::is_active();
-			if ( ! $invariant && class_exists( $runtime ) && method_exists( $runtime, 'resolve_for_country' ) ) {
+			// The gate is asked only when it can change the answer: a 'live'
+			// verdict and a caller outside the bootstrap both resolve per
+			// country, as the banner REST and Frontend::get_runtime_ruleset()
+			// did for that visitor.
+			$shell = ! $invariant && null !== $bootstrap_verdict && 'live' !== $bootstrap_verdict
+				? $this->geo_bootstrap_shell_active()
+				: false;
+			if ( $invariant ) {
+				$ruleset_id = '';
+			} elseif ( false !== $shell ) {
+				// true: the strict shell was what every page rendered. null:
+				// the gate could not be read, so the shell cannot be ruled out.
+				// Either way the per-country ruleset is not what was enforced
+				// unless the browser said the live payload landed.
+				$ruleset_id = ( true === $shell && 'strict-fallback' === $bootstrap_verdict )
+					? self::GEO_BOOTSTRAP_STRICT_RULESET
+					: '';
+			} elseif ( class_exists( $runtime ) && method_exists( $runtime, 'resolve_for_country' ) ) {
 				$ruleset = $runtime::resolve_for_country( $country );
 				if ( is_array( $ruleset ) && isset( $ruleset['id'] ) && is_string( $ruleset['id'] ) ) {
 					$ruleset_id = $ruleset['id'];
@@ -632,6 +699,38 @@ class Controller {
 			'region'     => $region,
 			'ruleset_id' => $ruleset_id,
 		);
+	}
+
+	/**
+	 * Whether the jurisdiction bootstrap currently owns normal pages.
+	 *
+	 * Mirrors Frontend::is_geo_bootstrap_cache_active() for a request that is
+	 * not a page render: the request-independent readiness gate the frontend
+	 * and the admin status endpoint share, minus the AMP exclusion (an AMP
+	 * consent never carries a bootstrap verdict, so it never reaches here)
+	 * and minus Cache Compatibility Mode, which the caller has already ruled
+	 * out. Asked at most once per consent write, and only when the browser
+	 * reported a shell or nothing: get_geo_bootstrap_status() runs two banner
+	 * queries and loads a ruleset file, which the common 'live' path skips.
+	 *
+	 * @since 1.34.2
+	 * @return bool|null True when active, false when not, null when the gate
+	 *                   cannot be read (class absent or it threw).
+	 */
+	protected function geo_bootstrap_shell_active() {
+		$frontend = '\\FazCookie\\Frontend\\Frontend';
+		if ( ! class_exists( $frontend ) || ! method_exists( $frontend, 'get_geo_bootstrap_status' ) ) {
+			return null;
+		}
+		try {
+			$status = $frontend::get_geo_bootstrap_status();
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+		if ( ! is_array( $status ) || ! array_key_exists( 'active', $status ) ) {
+			return null;
+		}
+		return ! empty( $status['active'] ) && false === apply_filters( 'faz_is_amp_request', false );
 	}
 
 	/**

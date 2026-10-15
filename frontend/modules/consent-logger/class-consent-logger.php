@@ -145,6 +145,18 @@ class Consent_Logger {
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 					),
+					// The jurisdiction bootstrap's verdict, as script.js
+					// publishes it in window._fazGeoBootstrapResolved: 'live'
+					// when the no-store banner payload replaced the strict
+					// shell, 'strict-fallback' when the shell stayed
+					// authoritative, '' on a page that was never a shell. The
+					// consent log reads it to record the ruleset the visitor was
+					// actually enforced under — see
+					// Controller::runtime_visitor_context().
+					'geo_bootstrap' => array(
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
 				),
 			)
 		);
@@ -710,6 +722,11 @@ class Consent_Logger {
 			'signal_dnt' => ( isset( $_SERVER['HTTP_DNT'] ) && '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_DNT'] ) ) ) ? 1 : 0,
 			'tc_string'  => $request->get_param( 'tc_string' ),
 			'gpp_string' => $request->get_param( 'gpp_string' ),
+			// Always present on this path, as a string: its presence is how the
+			// controller tells the browser beacon (the one caller whose page may
+			// have been the bootstrap's strict shell) from the AMP and
+			// Do-Not-Sell callers, which never run the bootstrap and pass no key.
+			'geo_bootstrap' => (string) $request->get_param( 'geo_bootstrap' ),
 		);
 
 		$result = Controller::get_instance()->log_consent( $data );

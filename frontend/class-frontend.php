@@ -1013,6 +1013,12 @@ class Frontend {
 								// audit columns are populated for TCF/GPP-enabled sites.
 								"tc_string:(function(){var m=document.cookie.match(/euconsent-v2=([^;]+)/);return m?m[1]:''})()," .
 								"gpp_string:(function(){try{if(typeof window.__gpp!=='function')return '';var s='';window.__gpp('getGPPData',function(d){if(d&&d.gppString)s=d.gppString});return s}catch(e){return ''}})()," .
+								// Jurisdiction-bootstrap verdict ('live' or
+								// 'strict-fallback', set by script.js before the
+								// banner mounts; absent on a page that was never the
+								// strict shell). The consent log needs it to record
+								// the ruleset this visitor was actually enforced under.
+								"geo_bootstrap:(typeof window._fazGeoBootstrapResolved==='string'?window._fazGeoBootstrapResolved:'')," .
 								"token:_fazConsentLog.token" .
 						"})" .
 					"}).catch(function(){});" .

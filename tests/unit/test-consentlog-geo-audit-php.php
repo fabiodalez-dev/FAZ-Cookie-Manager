@@ -48,6 +48,20 @@ namespace FazCookie\Includes {
 	}
 }
 
+namespace FazCookie\Frontend {
+	/**
+	 * Double of the jurisdiction-bootstrap readiness gate. When it reports
+	 * `active`, every normal page is the strict most-protective GDPR shell and
+	 * script.js asks the banner REST for the live law; the consent beacon then
+	 * reports which of the two the visitor ended up under.
+	 */
+	class Frontend {
+		public static $bootstrap = array( 'requested' => false, 'active' => false, 'reason' => 'disabled' );
+		public static $calls     = 0;
+		public static function get_geo_bootstrap_status( $settings = null ) { self::$calls++; return self::$bootstrap; }
+	}
+}
+
 namespace FazCookie\Frontend\Includes {
 	/** Double of the runtime resolver: the ruleset the frontend enforced. */
 	class Geo_Runtime {
@@ -155,6 +169,7 @@ namespace {
 	use FazCookie\Admin\Modules\Consentlogs\Includes\Controller;
 	use FazCookie\Includes\Geolocation;
 	use FazCookie\Includes\Cache_Compatibility;
+	use FazCookie\Frontend\Frontend;
 	use FazCookie\Frontend\Includes\Geo_Runtime;
 	use FazCookie\Admin\Modules\Geo_Routing\Geo_Routing;
 
@@ -185,6 +200,8 @@ namespace {
 		Geolocation::$region        = '';
 		Geolocation::$calls         = 0;
 		Cache_Compatibility::$active = false;
+		Frontend::$bootstrap        = array( 'requested' => false, 'active' => false, 'reason' => 'disabled' );
+		Frontend::$calls            = 0;
 		Geo_Runtime::$by_country    = array();
 		Geo_Runtime::$calls         = array();
 		Geo_Routing::$calls         = 0;
@@ -292,6 +309,100 @@ namespace {
 	//    survive: the row's source of truth is the server-side enforcement chain.
 	$src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/consentlogs/includes/class-controller.php' );
 	geo_ok( false === strpos( $src, 'JS-side hydration' ), 'the controller no longer documents an unimplemented JS-side hydration as its first source' );
+
+	// 10. The jurisdiction bootstrap (geolocation.cache_geo_bootstrap). The
+	//     page is the strict most-protective GDPR shell for EVERY visitor;
+	//     script.js then asks the banner REST for the live law, which resolves
+	//     through the same chain as case 1. Which of the two the visitor was
+	//     enforced under is known only to the browser, so the beacon reports
+	//     it as `geo_bootstrap`. A US visitor whose live lookup failed saw —
+	//     and consented under — the strict shell: the row must say so, not
+	//     claim the opt-out ruleset the page never applied.
+	echo "-- geo-bootstrap strict shell --\n";
+	geo_reset();
+	Geolocation::$country    = 'US';
+	Geolocation::$region     = 'US-CA';
+	Frontend::$bootstrap     = array( 'requested' => true, 'active' => true, 'reason' => 'ready' );
+	Geo_Runtime::$by_country = array( 'US' => array( 'id' => 'ccpa-california', 'model' => 'opt-out' ) );
+	$out = $fields( array( 'geo_bootstrap' => 'strict-fallback' ) );
+	geo_eq( $out['ruleset_id_at_consent'] ?? null, 'fallback-gdpr-most-protective', 'under the geo-bootstrap strict shell the row records fallback-gdpr-most-protective, not the per-country ruleset' );
+	geo_eq( Geo_Runtime::$calls, array(), 'and the per-country resolver is not asked, exactly as Frontend::get_runtime_ruleset() does not ask it' );
+	geo_eq( $out['country_at_consent'] ?? null, 'US', 'the visitor\'s country is still recorded: it is a fact about the visitor, not about the ruleset' );
+	geo_eq( $out['region_at_consent'] ?? null, 'US-CA', 'and so is the region' );
+
+	// 11. The live payload replaced the shell: the banner REST resolved the
+	//     ruleset for this country through the same chain, so that is what the
+	//     visitor was enforced under. Recording the strict fallback here would
+	//     be the opposite misstatement, on every row of a healthy site.
+	echo "-- geo-bootstrap live payload --\n";
+	geo_reset();
+	Geolocation::$country    = 'US';
+	Frontend::$bootstrap     = array( 'requested' => true, 'active' => true, 'reason' => 'ready' );
+	Geo_Runtime::$by_country = array( 'US' => array( 'id' => 'ccpa-california' ) );
+	$out = $fields( array( 'geo_bootstrap' => 'live' ) );
+	geo_eq( $out['ruleset_id_at_consent'] ?? null, 'ccpa-california', 'when the live payload was applied the row records the per-country ruleset the banner REST served' );
+	geo_eq( Geo_Runtime::$calls, array( 'US' ), 'resolved through Geo_Runtime with the visitor\'s country' );
+
+	// 12. The browser path reported nothing (a page cached before the beacon
+	//     learned to report, or a client that is not script.js) while the gate
+	//     is active: the server cannot tell shell from live, so it claims no
+	//     ruleset rather than a possibly wrong one.
+	echo "-- geo-bootstrap, no verdict --\n";
+	geo_reset();
+	Geolocation::$country    = 'US';
+	Frontend::$bootstrap     = array( 'requested' => true, 'active' => true, 'reason' => 'ready' );
+	Geo_Runtime::$by_country = array( 'US' => array( 'id' => 'ccpa-california' ) );
+	$out = $fields( array( 'geo_bootstrap' => '' ) );
+	geo_ok( ! array_key_exists( 'ruleset_id_at_consent', $out ), 'with the gate active and no verdict from the browser, no ruleset is claimed' );
+	geo_eq( $out['country_at_consent'] ?? null, 'US', 'the country is still recorded' );
+	$out = $fields( array( 'geo_bootstrap' => 'something-else' ) );
+	geo_ok( ! array_key_exists( 'ruleset_id_at_consent', $out ), 'an unrecognised verdict counts as none' );
+
+	// 13. The server gate wins over the browser: a 'strict-fallback' verdict
+	//     when the bootstrap is NOT active (a page cached before the setting
+	//     was turned off, or a forged value) does not make the row claim a
+	//     shell the frontend did not render.
+	echo "-- geo-bootstrap gate not active --\n";
+	geo_reset();
+	Geolocation::$country    = 'US';
+	Frontend::$bootstrap     = array( 'requested' => true, 'active' => false, 'reason' => 'iab' );
+	Geo_Runtime::$by_country = array( 'US' => array( 'id' => 'ccpa-california' ) );
+	$out = $fields( array( 'geo_bootstrap' => 'strict-fallback' ) );
+	geo_eq( $out['ruleset_id_at_consent'] ?? null, 'ccpa-california', 'a strict-fallback verdict with the gate inactive is ignored: the per-country ruleset was enforced' );
+
+	// 14. A caller that never runs the bootstrap (the AMP endpoint, the
+	//     Do-Not-Sell form) passes no `geo_bootstrap` key at all. AMP pages are
+	//     excluded from the bootstrap by is_geo_bootstrap_cache_active(), so
+	//     the per-country ruleset was enforced there even while the gate is
+	//     active for normal pages; the gate is not even consulted.
+	echo "-- caller outside the bootstrap --\n";
+	geo_reset();
+	Geolocation::$country    = 'US';
+	Frontend::$bootstrap     = array( 'requested' => true, 'active' => true, 'reason' => 'ready' );
+	Geo_Runtime::$by_country = array( 'US' => array( 'id' => 'ccpa-california' ) );
+	$out = $fields();
+	geo_eq( $out['ruleset_id_at_consent'] ?? null, 'ccpa-california', 'without a geo_bootstrap key the per-country chain applies' );
+	geo_eq( Frontend::$calls, 0, 'and the readiness gate is not consulted' );
+
+	// 15. Cache Compatibility Mode still wins over everything: no ruleset.
+	echo "-- geo-bootstrap under cache compatibility mode --\n";
+	geo_reset();
+	Geolocation::$country       = 'US';
+	Cache_Compatibility::$active = true;
+	Frontend::$bootstrap        = array( 'requested' => true, 'active' => true, 'reason' => 'ready' );
+	Geo_Runtime::$by_country    = array( 'US' => array( 'id' => 'ccpa-california' ) );
+	$out = $fields( array( 'geo_bootstrap' => 'live' ) );
+	geo_ok( ! array_key_exists( 'ruleset_id_at_consent', $out ), 'cache compatibility mode records no ruleset whatever the browser says' );
+
+	// 16. The two ends of the wire. The inline beacon in class-frontend.php
+	//     must send the verdict script.js publishes, and the consent endpoint
+	//     must declare and forward it; otherwise cases 10-12 are unreachable
+	//     in production and every bootstrap row degrades to case 12.
+	$beacon = (string) file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' );
+	geo_ok( false !== strpos( $beacon, 'geo_bootstrap:' ) && false !== strpos( $beacon, '_fazGeoBootstrapResolved' ), 'the inline consent beacon sends the bootstrap verdict (window._fazGeoBootstrapResolved) as geo_bootstrap' );
+	$endpoint = (string) file_get_contents( dirname( __DIR__, 2 ) . '/frontend/modules/consent-logger/class-consent-logger.php' );
+	geo_ok( 1 === preg_match( "/'geo_bootstrap'\s*=>\s*array\(/", $endpoint ), 'the consent endpoint declares the geo_bootstrap argument' );
+	geo_ok( 1 === preg_match( "/'geo_bootstrap'\s*=>\s*\(string\)\s*\\\$request->get_param\(\s*'geo_bootstrap'\s*\)/", $endpoint ), 'and forwards it to log_consent() as a string, so the controller can tell the browser path from the AMP one' );
 
 	echo "\n--\nTests:  $run\nPassed: $pass\nFailed: $fail\n\n";
 	if ( $fail > 0 ) { echo "\033[31mFAIL\033[0m\n"; exit( 1 ); }

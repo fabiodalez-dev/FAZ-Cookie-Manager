@@ -30,6 +30,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../../..');
 const PAGE_JS = readFileSync(resolve(ROOT, 'admin/assets/js/pages/consent-logs.js'), 'utf8');
 const VIEW = readFileSync(resolve(ROOT, 'admin/views/consent-logs.php'), 'utf8');
+const ADMIN_PHP = readFileSync(resolve(ROOT, 'admin/class-admin.php'), 'utf8');
 
 let passed = 0;
 let failed = 0;
@@ -130,6 +131,16 @@ const ths = (VIEW.match(/<th[\s>]/g) || []).length;
 check('the view declares seven header cells', ths === 7);
 check('the view names the new column', /Context/.test(VIEW));
 check('the view\'s loading row spans seven columns', /colspan="7"/.test(VIEW));
+
+// Every tooltip the context cell asks fazI18n for must exist in the admin
+// i18n map, or a localised administrator always reads the English fallback.
+// The map is keyed `'consentLogs' => array( 'key' => __( ... ) )` in
+// admin/class-admin.php; the page JS reads it as consentLogs.<key>.
+const ctxKeys = [...PAGE_JS.matchAll(/fazI18n\('consentLogs\.(ctx[A-Za-z]+)'/g)].map((m) => m[1]);
+check('the context cell asks fazI18n for its seven tooltips', new Set(ctxKeys).size === 7);
+for (const key of new Set(ctxKeys)) {
+  check(`consentLogs.${key} is declared in the admin i18n map`, new RegExp(`'${key}'\\s*=>\\s*__\\(`).test(ADMIN_PHP));
+}
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);
