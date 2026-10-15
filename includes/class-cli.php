@@ -435,7 +435,7 @@ class CLI {
 			$content = sprintf(
 				'<h2>%s</h2><p>%s</p><p>%s</p>',
 				esc_html__( 'Cookie Consent (FAZ Cookie Manager)', 'faz-cookie-manager' ),
-				esc_html__( 'This site uses the FAZ Cookie Manager plugin to collect and manage cookie consent. When you interact with the cookie banner, we record your consent choice (accepted, rejected, or partial), a hashed version of your IP address, your browser user agent, and the page URL where consent was given. This data is stored locally on our server and retained for the period configured in the plugin settings (default: 12 months).', 'faz-cookie-manager' ),
+				esc_html__( 'This site uses the FAZ Cookie Manager plugin to collect and manage cookie consent. When you interact with the cookie banner, we record your consent choice (accepted, rejected, or partial), a random consent identifier that is also stored in the consent cookie in your browser, a hashed version of your IP address, a hashed version of your browser user agent, and the page URL where consent was given. This data is stored locally on our server and retained for the period configured in the plugin settings (default: 12 months).', 'faz-cookie-manager' ),
 				esc_html__( 'You can change your cookie preferences at any time using the cookie icon in the bottom corner of the page.', 'faz-cookie-manager' )
 			);
 			wp_add_privacy_policy_content( 'FAZ Cookie Manager', $content );

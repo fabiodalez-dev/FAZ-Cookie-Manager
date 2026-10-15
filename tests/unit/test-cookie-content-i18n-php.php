@@ -261,8 +261,18 @@ $GLOBALS['cookie_i18n_cache_deletes']          = array();
 $GLOBALS['cookie_i18n_template_cache_clears']  = 0;
 Activator::refresh_cookie_translation_caches();
 cookie_i18n_eq( $GLOBALS['cookie_i18n_controller_clears'], array( 'cookies', 'categories' ), 'upgrade migration rotates prepared cookie/category caches' );
+// The table cache is keyed by language AND jurisdiction (the no-country
+// transfer fallback names the document's regime). Deleting the bare
+// `faz_cookie_policy_list_<lang>` key removed nothing a render ever stored.
+$cookie_i18n_expected_frags = array();
+foreach ( array( 'en', 'it' ) as $cookie_i18n_lang ) {
+	foreach ( Generator::JURISDICTIONS as $cookie_i18n_jur ) {
+		$cookie_i18n_expected_frags[] = 'faz_cookie_policy:' . Renderer::cookie_list_cache_key( $cookie_i18n_lang, $cookie_i18n_jur );
+	}
+}
+cookie_i18n_eq( in_array( 'faz_cookie_policy:faz_cookie_policy_list_it_lgpd-brazil', $cookie_i18n_expected_frags, true ), true, 'policy fragment keys carry the jurisdiction (premise)' );
 $cookie_i18n_missing_frags = array_values( array_diff(
-	array( 'faz_cookie_policy:faz_cookie_policy_list_en', 'faz_cookie_policy:faz_cookie_policy_list_it' ),
+	$cookie_i18n_expected_frags,
 	$GLOBALS['cookie_i18n_cache_deletes']
 ) );
 cookie_i18n_eq( $cookie_i18n_missing_frags, array(), 'upgrade migration clears language-specific policy fragments' );
@@ -278,7 +288,7 @@ $GLOBALS['cookie_i18n_selected_languages'] = array( 'it' );
 $GLOBALS['cookie_i18n_cache_deletes']      = array();
 Activator::refresh_cookie_translation_caches();
 cookie_i18n_eq(
-	in_array( 'faz_cookie_policy:faz_cookie_policy_list_en', $GLOBALS['cookie_i18n_cache_deletes'], true ),
+	in_array( 'faz_cookie_policy:faz_cookie_policy_list_en_gdpr-strict', $GLOBALS['cookie_i18n_cache_deletes'], true ),
 	true,
 	'the English policy fragment is cleared even when English is not selected'
 );

@@ -22,7 +22,7 @@ U kunt uw toestemming op elk moment intrekken (art. 8, § 5) via de link "Cookie
 
 ## Categorieën verwerkte persoonsgegevens (art. 5, I)
 
-- **Online identificatoren** — IP (gehasht met een maandelijkse salt), apparaat-ID's, sessie-ID's
+- **Online identificatoren** — IP (onomkeerbaar gehasht met een sitespecifieke salt), apparaat-ID's, sessie-ID's
 - **Browsegegevens** — bezochte pagina's, verblijfsduur, interacties
 - **Locatie bij benadering** — land/regio op basis van het IP-adres (geen precieze GPS-locatie)
 - **Voorkeuren** — toestemmingscategorieën, taal

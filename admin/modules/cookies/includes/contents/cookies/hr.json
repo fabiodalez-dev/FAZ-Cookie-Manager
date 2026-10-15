@@ -93,7 +93,7 @@
         "description": "Koristi ga Google reCAPTCHA za razlikovanje ljudi od botova."
     },
     "fazcookie-consent": {
-        "description": "Postavke privole za kolačiće koje je odredio posjetitelj."
+        "description": "Pohranjuje posjetiteljeve izbore privole za kolačiće i nasumični identifikator privole koji služi za vođenje evidencije o tom izboru."
     },
     "_clck": {
         "description": "Kolačić Microsoft Clarityja za analitiku."

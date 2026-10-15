@@ -24,7 +24,7 @@ Souhlas lze kdykoli odvolat (čl. 8, § 5) prostřednictvím odkazu „Nastaven�
 
 ## Kategorie zpracovávaných osobních údajů (čl. 5, I)
 
-- **Online identifikátory** — IP adresa (hashovaná s měsíčně obměňovaným klíčem), identifikátory zařízení, identifikátory relace
+- **Online identifikátory** — IP adresa (jednosměrně hashovaná s klíčem specifickým pro web), identifikátory zařízení, identifikátory relace
 - **Data o prohlížení** — navštívené stránky, čas strávený na stránce, interakce
 - **Přibližná poloha** — stát/region odvozený z IP adresy (nikoli přesná poloha GPS)
 - **Preference** — kategorie souhlasů, jazykové nastavení

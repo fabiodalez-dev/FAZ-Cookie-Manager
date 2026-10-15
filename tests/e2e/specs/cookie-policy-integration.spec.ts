@@ -662,7 +662,7 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
         'description' => '<strong>Probe</strong> for P2-A regression.',
       ) );
       // Bust the per-language cookie-list cache so the next render reflects the probe.
-      wp_cache_delete( 'faz_cookie_policy_list_en', 'faz_cookie_policy' );
+      \\FazCookie\\Admin\\Modules\\Cookie_Policy_Generator\\Includes\\Renderer::delete_cookie_list_cache( array( 'en' ) );
       wp_cache_flush();
       $rendered = do_shortcode( '[faz_cookie_policy_complete]' );
       echo $rendered;
@@ -685,7 +685,7 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
     wpEval(`
       global $wpdb;
       $wpdb->delete( $wpdb->prefix . 'faz_cookies', array( 'name' => 'faz_p2_probe' ) );
-      wp_cache_delete( 'faz_cookie_policy_list_en', 'faz_cookie_policy' );
+      \\FazCookie\\Admin\\Modules\\Cookie_Policy_Generator\\Includes\\Renderer::delete_cookie_list_cache( array( 'en' ) );
     `);
   });
 

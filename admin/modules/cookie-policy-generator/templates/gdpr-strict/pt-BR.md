@@ -28,7 +28,7 @@ Cookies são pequenos arquivos de texto armazenados no seu dispositivo quando vo
 
 ## Retenção
 
-{{RETENTION_PERIOD}} a partir da coleta.
+Os registros das escolhas de consentimento feitas no nosso banner de cookies são conservados por {{CONSENT_RECORD_RETENTION}} a partir da coleta, para que possamos comprovar o consentimento em que nos baseamos. Os demais dados coletados por meio de cookies, inclusive dados analíticos, são conservados somente pelo tempo necessário à sua finalidade e, quando não houver um prazo específico menor, por no máximo o período residual declarado de {{RETENTION_PERIOD}}. Cookies estritamente necessários são conservados apenas pela duração da sessão ou pelo tempo exigido pela função técnica que desempenham. Consulte a tabela acima para a duração de cada cookie.
 
 ## Seus direitos (GDPR Art. 12-22)
 

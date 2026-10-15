@@ -42,7 +42,7 @@ Elke derde partij is zelfstandig verwerkingsverantwoordelijke voor de cookies di
 
 ## Hoe lang wij gegevens bewaren
 
-Toestemmingsregistraties en analysegegevens worden {{RETENTION_PERIOD}} vanaf de verzameling bewaard. Strikt noodzakelijke cookies worden uitsluitend bewaard voor de duur van de sessie of zolang de technische functie die zij vervullen dat vereist. Zie de tabel hierboven voor de specifieke bewaartermijn van elke cookie.
+Registraties van de toestemmingskeuzes die u in onze cookiebanner maakt, worden {{CONSENT_RECORD_RETENTION}} vanaf de verzameling bewaard, zodat wij de toestemming waarop wij ons baseren kunnen aantonen. Andere via cookies verzamelde gegevens, waaronder analysegegevens, worden uitsluitend bewaard zolang hun doel dat vereist en, wanneer geen kortere cookiespecifieke termijn is vermeld, niet langer dan de opgegeven terugvaltermijn van {{RETENTION_PERIOD}}. Strikt noodzakelijke cookies worden uitsluitend bewaard voor de duur van de sessie of zolang de technische functie die zij vervullen dat vereist. Zie de tabel hierboven voor de specifieke bewaartermijn van elke cookie.
 
 ## Uw rechten
 
