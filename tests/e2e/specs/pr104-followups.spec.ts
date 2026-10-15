@@ -457,7 +457,7 @@ test.describe('PR104-FU — country→language fallback respects the opt-in filt
       // short-circuit, and a deterministic visitor country via filter so
       // the test never depends on MaxMind/ip-api availability.
       $_SERVER['REMOTE_ADDR'] = '8.8.8.8';
-      delete_transient( 'faz_geo_' . md5( '8.8.8.8' ) );
+      delete_transient( 'faz_geo_' . faz_ip_cache_key( '8.8.8.8' ) );
       $country_closure = function () { return 'IT'; };
       add_filter( 'faz_visitor_country', $country_closure );
 
@@ -489,7 +489,7 @@ test.describe('PR104-FU — country→language fallback respects the opt-in filt
       remove_filter( 'faz_use_country_language_fallback', $fallback_closure );
       remove_filter( 'faz_visitor_country', $country_closure );
       unset( $_SERVER['REMOTE_ADDR'] );
-      delete_transient( 'faz_geo_' . md5( '8.8.8.8' ) );
+      delete_transient( 'faz_geo_' . faz_ip_cache_key( '8.8.8.8' ) );
       if ( null === $prev ) { delete_option( 'faz_settings' ); } else { update_option( 'faz_settings', $prev ); }
       faz_current_language( true );
 

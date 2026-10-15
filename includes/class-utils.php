@@ -1106,6 +1106,37 @@ if ( ! function_exists( 'faz_throttle_request' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_ip_cache_key' ) ) {
+	/**
+	 * The one way a visitor address becomes a cache key.
+	 *
+	 * An IP address is personal data, and a cache keyed on it is a record of
+	 * who visited. Without a persistent object cache a transient is a row in
+	 * wp_options, and that row outlives the request: in the live table, in
+	 * every backup, on every staging copy. A bare md5 does not change that,
+	 * because the IPv4 space is enumerated in seconds. The geolocation memos
+	 * were keyed that way while Geo_Detector and Ipinfo_Client keyed their
+	 * object-cache copies on a salted, month-rotated sha256, so one rule
+	 * (spec 001, Constitution VIII / NFR-03) was written two ways and only
+	 * one of them met it. Every per-address cache key goes through here now.
+	 *
+	 * The digest is bound to this site's nonce salt, so it cannot be computed
+	 * without the install's secrets, and to the current month, so an old row
+	 * stops matching anything and the cache's own turnover is a retention
+	 * limit. The formula is byte-for-byte what Geo_Detector used before, so
+	 * existing object-cache entries stay valid across the upgrade.
+	 *
+	 * @since 1.34.2
+	 * @param string $ip Cleartext address.
+	 * @return string 64-character hex digest.
+	 */
+	function faz_ip_cache_key( $ip ) {
+		$salt  = function_exists( 'wp_salt' ) ? (string) wp_salt( 'nonce' ) : 'faz-fallback';
+		$month = gmdate( 'Y-m' );
+		return hash( 'sha256', (string) $ip . '|' . $month . '|' . $salt );
+	}
+}
+
 if ( ! function_exists( 'faz_path_matches_pattern' ) ) {
 	/**
 	 * Match a URL path against a glob-like pattern with case-folding and

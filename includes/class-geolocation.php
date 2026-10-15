@@ -108,7 +108,10 @@ class Geolocation {
 		// address is not always one visitor.
 		$header_in_play = self::country_header_in_play();
 
-		$cache_key = 'faz_geo_' . md5( $ip );
+		// Salted and month-rotated, never a bare digest of the address: a
+		// transient is a row in wp_options on most hosts, and md5 of an IPv4
+		// is reversed by enumeration. See faz_ip_cache_key().
+		$cache_key = 'faz_geo_' . \faz_ip_cache_key( $ip );
 		if ( ! $header_in_play ) {
 			$cached = get_transient( $cache_key );
 			if ( false !== $cached ) {
@@ -360,7 +363,10 @@ class Geolocation {
 			return self::$region_cache[ $ip ];
 		}
 
-		$cache_key = 'faz_georeg_' . md5( $ip );
+		// Same key rule as get_country(): this memo is written for EVERY
+		// visitor address — the empty result included — so a reversible key
+		// here would be a visitor log in wp_options.
+		$cache_key = 'faz_georeg_' . \faz_ip_cache_key( $ip );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
 			self::$region_cache[ $ip ] = (string) $cached;

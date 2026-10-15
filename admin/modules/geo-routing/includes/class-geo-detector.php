@@ -456,14 +456,17 @@ class Geo_Detector {
 	}
 
 	/**
-	 * Hash IP for cache key with monthly-rotating salt.
+	 * The cache key for an address: the shared salted, month-rotated digest.
+	 *
+	 * Delegates to `faz_ip_cache_key()` so that this layer, Ipinfo_Client and
+	 * the Geolocation transients key one address identically. The formula
+	 * used to live here and in Ipinfo_Client while Geolocation used a bare
+	 * md5; three copies of one rule is how one of them drifts.
 	 *
 	 * @param string $ip Cleartext IP.
 	 * @return string 64-char hex.
 	 */
 	private function hash_ip( $ip ) {
-		$salt  = function_exists( 'wp_salt' ) ? (string) wp_salt( 'nonce' ) : 'faz-fallback';
-		$month = gmdate( 'Y-m' );
-		return hash( 'sha256', (string) $ip . '|' . $month . '|' . $salt );
+		return \faz_ip_cache_key( $ip );
 	}
 }

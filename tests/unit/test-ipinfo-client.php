@@ -65,6 +65,9 @@ class WP_Error {
 	public function get_error_message() { return $this->message; }
 }
 
+// The cache key is the shared faz_ip_cache_key() from the helpers file since
+// 1.34.2 — loaded for real, so the key asserted below is the production one.
+require_once dirname( __DIR__, 2 ) . '/includes/class-utils.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/geo-routing/includes/class-secrets.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/geo-routing/includes/class-ipinfo-client.php';
 

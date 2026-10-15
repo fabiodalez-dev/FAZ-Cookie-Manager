@@ -125,6 +125,10 @@ namespace {
 	// reale, altrimenti "il database non funziona" sarebbe un'affermazione del
 	// test e non della produzione.
 	require_once __DIR__ . '/../../includes/class-mmdb-reader.php';
+	// The helpers file for real: get_country() keys its transient with
+	// faz_ip_cache_key() since 1.34.2. Loaded AFTER the stubs above, whose
+	// function_exists() guards in the helpers file let the stubs win.
+	require_once __DIR__ . '/../../includes/class-utils.php';
 	require_once __DIR__ . '/../../includes/class-geolocation.php';
 
 	use FazCookie\Includes\Geolocation;

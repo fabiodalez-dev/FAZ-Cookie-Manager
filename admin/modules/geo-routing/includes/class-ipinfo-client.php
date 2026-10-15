@@ -109,15 +109,17 @@ class Ipinfo_Client {
 	}
 
 	/**
-	 * Hash an IP address with monthly-rotating salt.
+	 * The cache key for an address: the shared salted, month-rotated digest.
+	 *
+	 * Delegates to `faz_ip_cache_key()`, the one place the rule lives, so this
+	 * cache, Geo_Detector's and the Geolocation transients key one address
+	 * identically.
 	 *
 	 * @param string $ip Cleartext IP.
 	 * @return string 64-char hex.
 	 */
 	private function hash_ip( $ip ) {
-		$salt = function_exists( 'wp_salt' ) ? (string) wp_salt( 'nonce' ) : 'faz-fallback';
-		$month = gmdate( 'Y-m' );
-		return hash( 'sha256', $ip . '|' . $month . '|' . $salt );
+		return \faz_ip_cache_key( $ip );
 	}
 
 	/**
