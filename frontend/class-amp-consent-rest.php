@@ -1292,14 +1292,22 @@ class AMP_Consent_Rest {
 		if ( absint( isset( $parsed['rev'] ) ? $parsed['rev'] : 1 ) < absint( $context['revision'] ) ) {
 			return false;
 		}
-		$stored_banner = isset( $parsed['__scope.banner'] ) ? $parsed['__scope.banner'] : ( isset( $parsed['banner'] ) ? $parsed['banner'] : '' );
-		$stored_law    = isset( $parsed['__scope.law'] ) ? $parsed['__scope.law'] : ( isset( $parsed['law'] ) ? $parsed['law'] : '' );
-		$stored_fp     = isset( $parsed['__scope.fp'] ) ? $parsed['__scope.fp'] : '';
-		if (
-			! hash_equals( (string) $context['slug'], (string) $stored_banner )
-			|| ! hash_equals( (string) $context['law'], (string) $stored_law )
-			|| ! hash_equals( (string) $context['scope_fingerprint'], (string) $stored_fp )
-		) {
+		// One scope predicate for every server surface. The classic blocker and
+		// this bridge used to answer "is this cookie still valid" differently
+		// (revision-only versus slug|law|fp), so the same visitor was consented
+		// on one and not on the other. AMP always knows its exact banner, so it
+		// runs the shared check in strict mode: every scope key present and
+		// matching, no legacy slot, no pre-1.14 tolerance — what it did before.
+		if ( ! function_exists( 'faz_consent_cookie_scope_changed' ) ) {
+			return false;
+		}
+		$scope = array(
+			'slug'        => (string) $context['slug'],
+			'law'         => (string) $context['law'],
+			'fingerprint' => (string) $context['scope_fingerprint'],
+			'strict'      => true,
+		);
+		if ( faz_consent_cookie_scope_changed( $parsed, $scope ) ) {
 			return false;
 		}
 		$has_absolute_expiry = isset( $parsed['exp'] );
