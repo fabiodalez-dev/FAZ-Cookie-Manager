@@ -205,8 +205,19 @@ for (const consent of ['no', 'yes', 'missing']) {
       // parked for the rest of this page view: restoring them needs the
       // provider rules that never arrived, and a reload hands the decision
       // back to server-side blocking.
+      //
+      // A refused <script> is the one exception to the parking attribute: it
+      // keeps its src and is parked by TYPE (text/plain + data-faz-category),
+      // the form the runtime's script restore reads. A script whose type is
+      // not JavaScript is neither fetched nor run, which the request list
+      // above already proves on every engine.
       expect(await page.evaluate(() => Array.from(document.querySelectorAll('script,iframe,img'))
-        .filter((el) => (el.getAttribute('src') || '').includes('tracker.example.test')).length)).toBe(0);
+        .filter((el) => (el.getAttribute('src') || '').includes('tracker.example.test'))
+        .filter((el) => !(el.tagName === 'SCRIPT' && el.getAttribute('type') === 'text/plain' && el.hasAttribute('data-faz-category')))
+        .length)).toBe(0);
+      expect(await page.evaluate(() => Array.from(document.querySelectorAll('script[type="text/plain"][data-faz-category]'))
+        .map((el) => el.getAttribute('src'))
+        .filter((v) => (v || '').includes('tracker.example.test')))).toEqual(['https://tracker.example.test/script.js']);
       expect(await page.evaluate(() => Array.from(document.querySelectorAll('script,iframe,img'))
         .map((el) => el.getAttribute('data-faz-src'))
         .filter((v) => (v || '').includes('tracker.example.test')).sort())).toEqual([
@@ -215,7 +226,6 @@ for (const consent of ['no', 'yes', 'missing']) {
           'https://tracker.example.test/innerhtml-frame',
           'https://tracker.example.test/innerhtml.gif',
           'https://tracker.example.test/outerhtml.gif',
-          'https://tracker.example.test/script.js',
           'https://tracker.example.test/sethtml.gif',
         ]);
       // The shadow-root probe is deliberately NOT in the list above: a shadow
@@ -234,8 +244,10 @@ for (const consent of ['no', 'yes', 'missing']) {
       // The permanent half of the regression, and the part that mattered more
       // than the extra request: a markup-injected node used to stay live and
       // unexamined for the whole page view — no placeholder, no per-service
-      // reveal, no re-evaluation when consent changed. None is left live now.
+      // reveal, no re-evaluation when consent changed. None is left live now
+      // (a script parked by type keeps an inert src, asserted above).
       expect(await page.evaluate(() => Array.from(document.querySelectorAll('img,iframe,script,video,audio,embed,object,input'))
+        .filter((el) => !(el.tagName === 'SCRIPT' && el.getAttribute('type') === 'text/plain' && el.hasAttribute('data-faz-category')))
         .map((el) => el.getAttribute('src') || el.getAttribute('data') || '')
         .filter((v) => v.includes('tracker.example.test')))).toEqual([]);
       // Everything the bootstrap parks carries a category, because every
