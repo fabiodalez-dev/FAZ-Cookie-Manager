@@ -103,6 +103,17 @@
 		return value;
 	}
 
+	var DECISECONDS_PER_DAY = 864000;
+
+	/**
+	 * The UTC midnight of the day containing `ms`, in deciseconds — the only
+	 * value the TC String format allows in Created and LastUpdated.
+	 */
+	function utcMidnightDeciseconds(ms) {
+		var d = new Date(ms);
+		return Math.round(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 100);
+	}
+
 	function readTcTimestamps() {
 		var match = document.cookie.match(/euconsent-v2=([^;]+)/);
 		if (!match) return null;
@@ -396,16 +407,30 @@
 		var purposeLI      = artifacts.purposeLI;
 		var vendorLI       = artifacts.vendorLI;
 
-		// Deciseconds since Unix epoch (Jan 1, 1970) per IAB TCF spec.
-		var now = Math.round(Date.now() / 100);
+		// Created and LastUpdated: deciseconds since the Unix epoch, and per the
+		// IAB TC String format (Core String, "What happened to Created and
+		// LastUpdated?") the two fields hold the SAME value, the UTC midnight
+		// of the day the string was last updated. A sub-day timestamp is
+		// fingerprinting entropy and a consent record names a day, not an
+		// instant. An earlier version kept Created from the previous cookie
+		// and wrote both at decisecond precision; every string failed the
+		// precision rule and every re-consent failed the equality rule.
 		var existingTimestamps = readTcTimestamps();
-		var created = existingTimestamps && existingTimestamps.created ? existingTimestamps.created : now;
-		var lastUpdated = existingTimestamps && existingTimestamps.lastUpdated ? existingTimestamps.lastUpdated : created;
-		if (lastUpdated < created) {
-			lastUpdated = created;
-		}
-		if (refreshLastUpdated) {
-			lastUpdated = now < created ? created : now;
+		var created;
+		var lastUpdated;
+		if (refreshLastUpdated || !existingTimestamps) {
+			// A decision (or no prior string at all): this is the update.
+			created = lastUpdated = utcMidnightDeciseconds(Date.now());
+		} else {
+			// A re-read is not an update, so the day is kept. A string written
+			// by an earlier release with decisecond timestamps is brought to the
+			// midnight of the day it was last updated, without claiming a new one.
+			var kept = existingTimestamps.lastUpdated >= existingTimestamps.created
+				? existingTimestamps.lastUpdated
+				: existingTimestamps.created;
+			created = lastUpdated = kept > 0
+				? kept - (kept % DECISECONDS_PER_DAY)
+				: utcMidnightDeciseconds(Date.now());
 		}
 
 		pushBits(bits, TCF_VERSION, 6);

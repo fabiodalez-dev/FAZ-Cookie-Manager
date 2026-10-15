@@ -894,7 +894,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
     }
   });
 
-  test('TCF preserves created timestamp, advances lastUpdated on real changes, and finishes with cmpStatus=loaded', async ({ browser }) => {
+  test('TCF writes Created and LastUpdated as one day-level value, refreshes both on real changes, and finishes with cmpStatus=loaded', async ({ browser }) => {
     const originalSettings = backupSettingsOption();
     // Also snapshot the active banner row — the wpEval block below
     // persists type=classic / preferenceCenterType=pushdown /
@@ -959,10 +959,16 @@ test.describe('PR audit regressions (2026-04-19)', () => {
         const initialTs = parseTcString(initialTc.tcString);
         expect(initialTs).not.toBeNull();
 
-        // TCF lastUpdated has decisecond resolution. Wait past one decisecond
-        // bucket before mutating consent so the new write lands in a strictly
-        // later bucket. 200ms ≥ 2 deciseconds covers wall-clock + JS jitter.
-        await page.waitForTimeout(200);
+        // IAB TC String format (Core String, "What happened to Created and
+        // LastUpdated?"): the two fields hold the SAME value, the UTC midnight
+        // of the day the string was last updated, in deciseconds. 864000
+        // deciseconds make one day. An earlier version of this test pinned the
+        // opposite (Created preserved, LastUpdated at decisecond resolution),
+        // which is what an IAB validator fails a CMP for.
+        const DECISECONDS_PER_DAY = 864000;
+        expect(initialTs?.created).toBe(initialTs?.lastUpdated);
+        expect((initialTs?.lastUpdated ?? 1) % DECISECONDS_PER_DAY).toBe(0);
+
         await page.evaluate(() => {
           if (typeof window.revisitFazConsent === 'function') {
             window.revisitFazConsent();
@@ -974,11 +980,11 @@ test.describe('PR audit regressions (2026-04-19)', () => {
         await page.waitForFunction(() => typeof (window as any).__tcfapi === 'function', undefined, { timeout: 10_000 });
 
         // Under suite-wide load, the cookie write that backs the new TCString
-        // can race the immediate getTCData read. Poll the value until the
-        // lastUpdated decisecond strictly advances past initial — this is
-        // robust to PHP-FPM stalls, raf coalescing, and decisecond bucket
-        // alignment without relying on a fixed sleep.
-        const initialLast = initialTs?.lastUpdated ?? 0;
+        // can race the immediate getTCData read. Timestamps are day-level now,
+        // so they cannot tell the two strings apart within a day: poll until
+        // the TC string itself differs from the initial one (turning analytics
+        // off clears Purpose 10, so the purposes bitfield must change). This
+        // is robust to PHP-FPM stalls and raf coalescing without a fixed sleep.
         let updatedTc: { ping: any; tcData: any } | null = null;
         await expect
           .poll(
@@ -992,7 +998,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
                   }),
               );
               const ts = parseTcString(updatedTc!.tcData.tcString);
-              return ts !== null && ts.lastUpdated > initialLast;
+              return ts !== null && updatedTc!.tcData.tcString !== initialTc.tcString;
             },
             { timeout: 10_000 },
           )
@@ -1001,8 +1007,19 @@ test.describe('PR audit regressions (2026-04-19)', () => {
         const updatedTs = parseTcString(updatedTc!.tcData.tcString);
         expect(updatedTs).not.toBeNull();
         expect(updatedTc!.ping.cmpStatus).toBe('loaded');
-        expect(updatedTs?.created).toBe(initialTs?.created);
-        expect((updatedTs?.lastUpdated ?? 0) > (initialTs?.lastUpdated ?? 0)).toBe(true);
+        // The re-consent is an update: both fields are refreshed together to
+        // the (day-level) time of this decision. Created is NOT preserved
+        // from the first string; within one UTC day the two strings carry the
+        // same day, across midnight the later one is strictly later.
+        expect(updatedTs?.created).toBe(updatedTs?.lastUpdated);
+        expect((updatedTs?.lastUpdated ?? 1) % DECISECONDS_PER_DAY).toBe(0);
+        expect((updatedTs?.lastUpdated ?? 0) >= (initialTs?.lastUpdated ?? 0)).toBe(true);
+        // The cookie handed to vendors is the string getTCData returns.
+        const cookieTc = await page.evaluate(() => {
+          const m = document.cookie.match(/euconsent-v2=([^;]+)/);
+          return m ? m[1] : '';
+        });
+        expect(cookieTc).toBe(updatedTc!.tcData.tcString);
       } finally {
         await visitor.close();
       }
