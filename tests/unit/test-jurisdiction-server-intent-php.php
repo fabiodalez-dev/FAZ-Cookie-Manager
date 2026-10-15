@@ -8,6 +8,17 @@
 namespace FazCookie\Includes {
     class Geolocation {
         public static function get_visitor_country() { return 'IT'; }
+        public static function has_country_source() { return true; }
+    }
+}
+namespace FazCookie\Admin\Modules\Banners\Includes {
+    // get_blocked_categories() now asks whether the output varies by country
+    // before scoping the consent cookie to the banner (the same _geoRouting gate
+    // script.js uses). Country-dependent banners here; the cookies this suite
+    // feeds carry no scope keys, so every decision below is still law-driven.
+    class Controller {
+        public static function get_instance() { return new self(); }
+        public function has_country_dependent_banners() { return true; }
     }
 }
 namespace FazCookie\Admin\Modules\Cookies\Includes {
@@ -31,6 +42,7 @@ namespace {
     function apply_filters( $tag, $value ) { return $value; }
     function wp_unslash( $value ) { return $value; }
     function sanitize_text_field( $value ) { return trim( strip_tags( $value ) ); }
+    function wp_hash( $data, $scheme = 'auth' ) { return hash_hmac( 'md5', (string) $data, 'intent-salt-' . $scheme ); }
     // This is the validated-cookie input boundary, NOT the parser under test.
     function faz_get_valid_consent_cookie() { return $GLOBALS['intent_cookie']; }
     require dirname( __DIR__, 2 ) . '/frontend/includes/class-geo-runtime.php';
@@ -75,6 +87,7 @@ namespace {
                 private $law;
                 public function __construct( $law ) { $this->law = $law; }
                 public function get_law() { return $this->law; }
+                public function get_slug() { return $this->law . '-1'; }
             } );
             $_SERVER = array(); $_COOKIE = array(); $GLOBALS['intent_cookie'] = '';
             $denied = array();

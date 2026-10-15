@@ -335,14 +335,115 @@ function faz_is_consent_cookie_stale( $cookie = '' ) {
 }
 
 /**
- * Return the consent cookie only if it is valid for the current revision.
+ * Read a scope key from a parsed consent cookie, honouring the legacy slot.
  *
- * @param string $cookie Raw cookie string. Falls back to the current request.
+ * Mirrors _fazReadScopedCookieValue() in frontend/js/script.js. Cookies written
+ * before the `__scope.` prefix stored the banner slug and law under the bare
+ * `banner` / `law` keys, which a category slug can also be called; a value that
+ * looks like a category decision ("yes", "no", "yes:<ts>") is therefore not a
+ * scope value. Strict mode reads only the prefixed key.
+ *
+ * @param array  $parsed     Parsed cookie (faz_parse_consent_cookie()).
+ * @param string $key        Prefixed scope key.
+ * @param string $legacy_key Unprefixed pre-1.14 key.
+ * @param bool   $strict     Ignore the legacy slot.
  * @return string
  */
-function faz_get_valid_consent_cookie( $cookie = '' ) {
+function faz_read_scoped_cookie_value( $parsed, $key, $legacy_key, $strict ) {
+	$primary = isset( $parsed[ $key ] ) ? (string) $parsed[ $key ] : '';
+	if ( '' !== $primary || $strict ) {
+		return $primary;
+	}
+	$legacy = isset( $parsed[ $legacy_key ] ) ? (string) $parsed[ $legacy_key ] : '';
+	if ( '' === $legacy || preg_match( '/^(yes|no)(:.*)?$/i', $legacy ) ) {
+		return '';
+	}
+	return $legacy;
+}
+
+/**
+ * Whether a consent cookie was recorded under a different banner/law scope.
+ *
+ * This is the server twin of _fazConsentScopeChanged() in script.js and the
+ * one scope predicate every server surface uses (classic blocker, per-service
+ * consent, AMP bridge). A record acknowledged under one legal regime is not
+ * consent under another (GDPR Art. 4(11)/7(1), EDPB 05/2020 §55-60), so a
+ * cookie whose scope no longer matches the banner served must be treated as
+ * absent on the SAME request the client invalidates it — not one page later,
+ * after the trackers it granted have already run.
+ *
+ * Rules, in order:
+ *  - the Paid Memberships Pro privacy alternative (source:pmp, action:auto,
+ *    consent:no) is a server-refreshed necessary-only state, never consent,
+ *    and carries no scope on purpose: it is valid under every scope;
+ *  - strict mode (`faz_strict_scope_fingerprint`, and always on AMP): every
+ *    scope key must be present and hash_equals the active scope;
+ *  - a cookie with no scope keys at all is a pre-1.14 upgrade case and stands;
+ *  - a fingerprint present on both sides decides on its own (tamper check);
+ *  - otherwise the banner slug and law decide when both sides know them.
+ *
+ * @param array $parsed Parsed cookie (faz_parse_consent_cookie()).
+ * @param array $scope  { slug, law, fingerprint, strict } of the active banner.
+ * @return bool True when the record belongs to another scope.
+ */
+function faz_consent_cookie_scope_changed( $parsed, $scope ) {
+	$parsed = is_array( $parsed ) ? $parsed : array();
+	$scope  = is_array( $scope ) ? $scope : array();
+
+	if (
+		isset( $parsed['source'], $parsed['action'], $parsed['consent'] )
+		&& 'pmp' === $parsed['source']
+		&& 'auto' === $parsed['action']
+		&& 'no' === $parsed['consent']
+	) {
+		return false;
+	}
+
+	$strict      = ! empty( $scope['strict'] );
+	$slug        = isset( $scope['slug'] ) ? (string) $scope['slug'] : '';
+	$law         = isset( $scope['law'] ) ? (string) $scope['law'] : '';
+	$fingerprint = isset( $scope['fingerprint'] ) ? (string) $scope['fingerprint'] : '';
+
+	$stored_fp     = isset( $parsed['__scope.fp'] ) ? (string) $parsed['__scope.fp'] : '';
+	$stored_banner = faz_read_scoped_cookie_value( $parsed, '__scope.banner', 'banner', $strict );
+	$stored_law    = faz_read_scoped_cookie_value( $parsed, '__scope.law', 'law', $strict );
+
+	if ( $strict ) {
+		return '' === $stored_fp
+			|| '' === $stored_banner
+			|| '' === $stored_law
+			|| ! hash_equals( $fingerprint, $stored_fp )
+			|| ! hash_equals( $slug, $stored_banner )
+			|| ! hash_equals( $law, $stored_law );
+	}
+
+	if ( '' === $stored_banner && '' === $stored_law && '' === $stored_fp ) {
+		return false;
+	}
+	if ( '' !== $stored_fp && '' !== $fingerprint && ! hash_equals( $fingerprint, $stored_fp ) ) {
+		return true;
+	}
+	return ( '' !== $slug && '' !== $stored_banner && ! hash_equals( $slug, $stored_banner ) )
+		|| ( '' !== $law && '' !== $stored_law && ! hash_equals( $law, $stored_law ) );
+}
+
+/**
+ * Return the consent cookie only if it is valid for the current revision and,
+ * when the active scope is given, for the banner/law it is being relied on.
+ *
+ * @param string     $cookie Raw cookie string. Falls back to the current request.
+ * @param array|null $scope  Active banner scope ({ slug, law, fingerprint,
+ *                           strict }, see faz_consent_cookie_scope_changed()).
+ *                           Null keeps the revision-only check, for callers
+ *                           that run before a banner is selected.
+ * @return string
+ */
+function faz_get_valid_consent_cookie( $cookie = '', $scope = null ) {
 	$cookie = '' !== $cookie ? (string) $cookie : faz_get_consent_cookie_value();
 	if ( '' === $cookie || faz_is_consent_cookie_stale( $cookie ) ) {
+		return '';
+	}
+	if ( is_array( $scope ) && faz_consent_cookie_scope_changed( faz_parse_consent_cookie( $cookie ), $scope ) ) {
 		return '';
 	}
 	return $cookie;

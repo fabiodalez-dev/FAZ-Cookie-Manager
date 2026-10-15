@@ -190,6 +190,13 @@ class Frontend {
 	private $whitelist_cache          = null;
 	private $service_consent_cache    = null;
 	/**
+	 * Per-request cache for get_consent_cookie_scope(). `false` = not computed
+	 * yet; null is a legitimate value (no scope check on this request).
+	 *
+	 * @var array|null|false
+	 */
+	private $consent_cookie_scope_cache = false;
+	/**
 	 * Categories blocked by a binding privacy signal on THIS request.
 	 *
 	 * Populated by get_blocked_categories(); read by get_service_consent(),
@@ -6419,6 +6426,59 @@ class Frontend {
 	}
 
 	/**
+	 * Scope the active banner gives the consent cookie, for
+	 * faz_get_valid_consent_cookie().
+	 *
+	 * The server used to validate the cookie by revision alone while script.js
+	 * (_fazConsentScopeChanged) also compared __scope.banner / __scope.law /
+	 * __scope.fp with the banner served. On the request where the scope changed
+	 * — a CCPA-acknowledged cookie arriving under the GDPR banner after a
+	 * country change, a GeoIP miss or an admin re-targeting — the server still
+	 * read `marketing:yes` and shipped the trackers executable; the client then
+	 * invalidated the same cookie and re-prompted, one page view too late.
+	 * Passing this scope makes both layers reject the same cookie on the same
+	 * request.
+	 *
+	 * Mirrors the client exactly: the check applies only when the output varies
+	 * by country (`_geoRouting`), the fingerprint is the `_scopeFingerprint`
+	 * formula, and strict mode follows the same `faz_strict_scope_fingerprint`
+	 * filter. Null means "revision-only", as before.
+	 *
+	 * @return array|null
+	 */
+	private function get_consent_cookie_scope() {
+		if ( false !== $this->consent_cookie_scope_cache ) {
+			return $this->consent_cookie_scope_cache;
+		}
+		$scope = null;
+		if ( $this->banner && $this->is_country_dependent_output() ) {
+			$slug  = (string) $this->banner->get_slug();
+			$law   = (string) $this->banner->get_law();
+			$scope = array(
+				'slug'        => $slug,
+				'law'         => $law,
+				'fingerprint' => substr( wp_hash( $slug . '|' . $law, 'auth' ), 0, 32 ),
+				'strict'      => (bool) apply_filters( 'faz_strict_scope_fingerprint', false ),
+			);
+		}
+		$this->consent_cookie_scope_cache = $scope;
+		return $scope;
+	}
+
+	/**
+	 * The consent cookie this request may rely on: current revision AND the
+	 * scope of the banner being served (see get_consent_cookie_scope()).
+	 *
+	 * @return string Raw cookie, or '' when none is valid.
+	 */
+	private function get_scoped_valid_consent_cookie() {
+		if ( ! function_exists( 'faz_get_valid_consent_cookie' ) ) {
+			return '';
+		}
+		return (string) faz_get_valid_consent_cookie( '', $this->get_consent_cookie_scope() );
+	}
+
+	/**
 	 * Determine which cookie categories are currently blocked.
 	 * On first visit (no consent cookie), all non-necessary categories are blocked.
 	 *
@@ -6455,7 +6515,7 @@ class Frontend {
 			return $blocked;
 		}
 
-		$consent = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie() : '';
+		$consent = $this->get_scoped_valid_consent_cookie();
 
 		// CCPA/CPRA is an OPT-OUT regime: personal data may be sold/shared — and
 		// the corresponding scripts may run — UNTIL the visitor exercises the
@@ -6537,6 +6597,16 @@ class Frontend {
 				} elseif ( ! $is_optout_law ) {
 					// No ruleset opinion: opt-in law blocks every non-necessary
 					// category until the visitor consents.
+					//
+					// The category's `prior_consent` flag is deliberately NOT read
+					// here. It pre-grants the category on the client (defaultConsent
+					// = true seeds the in-memory store and pre-ticks the toggle) for
+					// an admin-declared consent-exempt category; the server keeps
+					// its server-rendered tags blocked under an opt-in law until an
+					// affirmative act, because unblocking on a REST/import-only flag
+					// would be pre-consent loading the moment it is misconfigured.
+					// Fail-closed is the documented split (see the REST schema of
+					// `prior_consent` in class-categories-api.php and README.md).
 					$blocked[] = $slug;
 				}
 			} else {
@@ -6587,7 +6657,7 @@ class Frontend {
 			return $this->service_consent_cache;
 		}
 
-		$consent = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie() : '';
+		$consent = $this->get_scoped_valid_consent_cookie();
 		if ( empty( $consent ) ) {
 			return $this->service_consent_cache;
 		}
