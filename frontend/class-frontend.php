@@ -3324,6 +3324,15 @@ class Frontend {
 			'_expiry'       => $faz_expiry,
 			'_categories'   => $this->get_cookie_groups(),
 			'_activeLaw'         => $banner->get_law(),
+			// WP Consent API regime for this visitor, computed by the SAME method
+			// that answers `wp_get_consent_type` server-side. wca.js declares
+			// window.wp_consent_type from this, not from _activeLaw: the banner's
+			// label is deliberately wrong in the fail-closed geo-runtime branch
+			// (an opt-in ruleset served under a kept CCPA banner) and under Cache
+			// Compatibility Mode, which is exactly where filter_wp_consent_type()
+			// corrects it — a client that re-derived the regime from the label
+			// undid that correction for every JS Consent-API consumer.
+			'_wpConsentType'     => $this->filter_wp_consent_type( '' ),
 			'_bannerSlug'        => $banner->get_slug(),
 			'_geoRouting'        => $this->is_country_dependent_output(),
 			// When a runtime geo ruleset is active, the per-category
