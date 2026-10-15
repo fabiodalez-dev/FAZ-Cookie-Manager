@@ -1276,26 +1276,37 @@ function _fazApplyGpcOptOut() {
     // request is itself a later explicit act and keeps winning.
     if (_fazClearStoredServiceConsent(saleShareSlugs, true)) changed = true;
 
-    // First signal-driven action: create the strictly-necessary audit record
-    // now, never before the signal is actually processed.
-    if (!ref._fazGetFromStore("action")) {
-        _fazSetConsentID();
-        ref._fazSetInStore("action", "yes");
-        ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
-        ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
-        ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
-        ref._fazSetInStore("consent", "no");
-        // The signal created this record, not the visitor: they have not
-        // answered the banner yet. _fazInitOperations() keeps showing it
-        // until they do; _fazAcceptCookies() clears the flag.
-        ref._fazSetInStore("undecided", "1");
+    // Every _fazSetInStore() call below rewrites the consent cookie, and a
+    // rewrite re-issues it with `expires` = now + lifetime. This function runs
+    // on EVERY page load of a GPC browser, so writing unconditionally turned
+    // the configured lifetime (182 days under the GDPR family) into a sliding
+    // window: a returning Brave visitor's day-0 consent was renewed on each
+    // visit and never re-collected, while the same choice in a non-GPC browser
+    // expired on schedule. Like _fazApplyDnsmpiOptOut(), the store is written
+    // only when the signal actually changes something; the restore pass still
+    // runs, and dead cookies of a denied sale/share category are still shredded.
+    if (changed) {
+        // First signal-driven action: create the strictly-necessary audit
+        // record now, never before the signal is actually processed.
+        if (!ref._fazGetFromStore("action")) {
+            _fazSetConsentID();
+            ref._fazSetInStore("action", "yes");
+            ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
+            ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
+            ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
+            ref._fazSetInStore("consent", "no");
+            // The signal created this record, not the visitor: they have not
+            // answered the banner yet. _fazInitOperations() keeps showing it
+            // until they do; _fazAcceptCookies() clears the flag.
+            ref._fazSetInStore("undecided", "1");
+        }
+        ref._fazSetInStore("gpc", "1");
     }
-    ref._fazSetInStore("gpc", "1");
 
     for (var j = 0; j < categories.length; j++) {
         var current = categories[j];
         if (saleShareSlugs.indexOf(current.slug) !== -1) {
-            ref._fazSetInStore(current.slug, "no");
+            if (changed) ref._fazSetInStore(current.slug, "no");
             _fazRemoveDeadCookies(current);
         }
         if (ref._fazGetFromStore(current.slug) === "yes") responseCategories.accepted.push(current.slug);
@@ -1304,11 +1315,26 @@ function _fazApplyGpcOptOut() {
 
     // Vendor grants can represent advertising/sale processing, so the GPC
     // signal revokes them even though unrelated category choices are retained.
-    if (saleShareSlugs.length) _fazSaveVendorConsent("reject");
+    // Written only when there is a grant left to revoke: the vendor cookie
+    // carries its own `expires` and rewriting it on every load slid the same way.
+    if (saleShareSlugs.length && (changed || _fazAnyVendorGranted())) _fazSaveVendorConsent("reject");
 
     _fazUnblock();
     if (changed) _fazFireEvent(responseCategories);
     return changed;
+}
+
+/**
+ * Whether the fazVendorConsent cookie still grants at least one TCF vendor.
+ *
+ * @returns {boolean}
+ */
+function _fazAnyVendorGranted() {
+    var granted = _fazReadVendorConsent();
+    for (var id in granted) {
+        if (Object.prototype.hasOwnProperty.call(granted, id) && granted[id] === true) return true;
+    }
+    return false;
 }
 
 function _fazPreviewEnabled() {
