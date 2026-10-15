@@ -207,14 +207,15 @@
     // broad and deliberately not a parser: the question is "could this markup
     // reach a third party", and a sub-document's own resources are beyond
     // anything this file can intercept once it is parsed.
-    // The markup is read AFTER the two encodings that hide a `//` from a
-    // literal search: HTML character references (`https:&#47;&#47;tracker`,
-    // numeric in both bases and the named `&sol;` / `&colon;`), which the
-    // parser decodes before the sub-document sees them, and the JSON escape
-    // `\/`, which a script embedding its markup as a string leaves behind.
+    // The markup is read AFTER the encodings that hide a URL from a literal
+    // search: HTML character references (`https:&#47;&#47;tracker`, numeric in
+    // both bases and the named `&sol;` / `&colon;`), which the parser decodes
+    // before the sub-document sees them; and tab, LF and CR, which the URL
+    // parser strips from anywhere in a URL before it reads a scheme or a host
+    // (`https:/\t/tracker` is tracker), as the server pass strips them. The
+    // JSON escape `\/` is deliberately NOT undone here: see urlsIn().
     function decodeMarkup(value) {
         return String(value == null ? '' : value)
-            .replace(/\\\//g, '/')
             .replace(/&#x([0-9a-f]+);?/gi, function (match, hex) {
                 try { return String.fromCodePoint(parseInt(hex, 16)); } catch (e) { return match; }
             })
@@ -222,11 +223,31 @@
                 try { return String.fromCodePoint(parseInt(dec, 10)); } catch (e) { return match; }
             })
             .replace(/&sol;/gi, '/')
-            .replace(/&colon;/gi, ':');
+            .replace(/&colon;/gi, ':')
+            .replace(/[\t\n\r]/g, '');
     }
+    // Every spelling that names a host to the WHATWG parser, not just a
+    // literal `//`: for a special scheme a backslash IS a slash, and any run
+    // of slashes after `https:` is ignored — so `https:host`, `https:/host`,
+    // `\\host`, `/\\host` and `\\/host` all fetch from that host (the
+    // scheme-less ones resolve against the page's scheme, which local() asks
+    // the parser about). The server judges all of them inside a srcdoc and
+    // the runtime's _fazMarkupUrls reads the same shape; this file matched a
+    // literal `//` only, found nothing, and an empty list is "same-origin" —
+    // the layer disagreement the three files keep falling into, fixed in the
+    // other two first (9ab2ef77) and here last.
+    var MARKUP_URL = /(?:https?:[\\\/]*|[\\\/]{2})[^\s"'<>)\\\/][^\s"'<>)]*/gi;
     function urlsIn(value) {
-        var found = decodeMarkup(value).match(/(?:https?:)?\/\/[^\s"'<>)]+/gi);
-        return found || [];
+        var text = decodeMarkup(value);
+        var found = text.match(MARKUP_URL) || [];
+        // The JSON escape `\/`, which a script embedding its markup as a
+        // string leaves behind. Collapsing it to `/` BEFORE the match would
+        // turn `\/host` — protocol-relative to the parser — into a first-party
+        // path and lose the host, so the escaped form is read as a second,
+        // separate pass, the same union _fazMarkupUrls makes.
+        var unescaped = text.replace(/\\\//g, '/');
+        if (unescaped !== text) found = found.concat(unescaped.match(MARKUP_URL) || []);
+        return found;
     }
     // A list is same-origin only when EVERY candidate is: the browser picks one
     // by viewport and pixel ratio, so a single remote entry is a request.
@@ -268,9 +289,13 @@
     }
     // video, audio, embed, object, track and input[type=image] fetch exactly the
     // way img and iframe do. The runtime's own observer is an ALLOWLIST too —
-    // _fazParkResourceElementIfBlocked branches on the tag name — and this
-    // list is kept at least as wide as that one, so the hold window never
-    // opens a surface the window after it does not cover.
+    // _fazParkResourceElementIfBlocked branches on the tag name — and the two
+    // lists are the SAME set, kept so on purpose: a tag held here and not gated
+    // there is replayed onto the native setter at the handoff, so the hold
+    // would only have delayed the request. That was the case for these six
+    // until the runtime grew their gates; media-embed-object-gate.test.mjs
+    // holds each of them through this file and asserts the runtime parks the
+    // replay.
     // `image` and `use` are the SVG namespace's own fetching elements: <image>
     // is an <img> by another name, and <use href="https://x/sprite.svg#icon">
     // fetches an external document. A CSS type selector with no namespace
@@ -1088,12 +1113,15 @@
     // disjoint on their first character, so this cannot backtrack badly.
     var CSS_URL = /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'|([^\)\s]+))\s*\)/gi;
     var CSS_IMPORT = /(@import\s+)(["'])((?:(?!\2)[^\\]|\\[\s\S])+)\2/gi;
-    // Four more forms the runtime's pair does not read, and the engine does:
-    // `@import"x.css"`, which needs no whitespace to be an import; a url(
-    // left open at the end of the text, which the tokenizer reads to EOF as
-    // the URL — the shape a sheet has when a held fragment lands last; and
-    // the string arguments of image-set() and src(), which name a file
-    // without any url() around it.
+    // Four more forms the engine reads, and both files read now (the runtime
+    // caught up in _fazCssUrlsRaw: its tight @import, _FAZ_CSS_URL_OPEN and
+    // _FAZ_CSS_STRING_FN are these four): `@import"x.css"`, which needs no
+    // whitespace to be an import; a url( left open at the end of the text,
+    // which the tokenizer reads to EOF as the URL — the shape a sheet has when
+    // a held fragment lands last; and the string arguments of image-set() and
+    // src(), which name a file without any url() around it. A form read here
+    // and not there is a sheet parked by this file and called clean by the
+    // runtime, so one is not added without the other.
     var CSS_IMPORT_TIGHT = /@import(["'])((?:(?!\1)[^\\]|\\[\s\S])+)\1/gi;
     var CSS_URL_OPEN = /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)|'((?:[^'\\]|\\[\s\S])*)|([^\)\s]*))\s*$/i;
     var CSS_STRING_FN = /\b(?:image-set|src)\(((?:[^()]|\([^()]*\))*)\)/gi;
@@ -1183,8 +1211,10 @@
         return false;
     }
     // During a normal handoff the runtime's permanent interceptors decide what
-    // may load, so everything replays. During a safety release there are no
-    // such interceptors and no provider rules, so only same-origin work runs.
+    // may load, so everything replays — which is only true while the runtime
+    // gates every key in `attrs` below (it does; the test named at RESOURCES
+    // pins it). During a safety release there are no such interceptors and no
+    // provider rules, so only same-origin work runs.
     function allowed(policy, url, key) { return !policy || !policy.sameOriginOnly || localValue(key, url); }
     // CSS TEXT is not released by origin on the safety release, because judging
     // that means re-implementing the browser's CSS parser: escapes, comments
@@ -1801,7 +1831,12 @@
         };
     });
     // Detached images can fetch before insertion. Hold URL assignments too;
-    // replay uses the runtime's own property/setAttribute interceptors.
+    // replay uses the runtime's own property/setAttribute interceptors, and
+    // the runtime installs one for every key in this map — src on
+    // img/iframe/media/embed/track/input, poster, object data, href, srcset,
+    // srcdoc, background and the SVG spellings. A key held here without a
+    // runtime gate would replay onto the native setter, so adding one means
+    // adding its gate in script.js first.
     //
     // `srcdoc` is in the list now, and it used to be deliberately absent with
     // the note "it belongs in both files or neither" — so it went into both.
@@ -2101,8 +2136,36 @@
         }
         return PARK_CATEGORY;
     }
+    // An HTML <script src> is parked in the form the server writes and the
+    // runtime restores from: type="text/plain", a data-faz-category, and the
+    // URL LIVE in src. _fazUnblockServerSide() selects
+    // `script[type="text/plain"][data-faz-category]` and _fazBuildRestoredScript
+    // reads `src`; a script whose type is not a JavaScript MIME type is never
+    // fetched, so the live attribute makes no request. The type is made inert
+    // FIRST, then the URL is written — the other order would fetch.
+    //
+    // The previous form — src moved into data-faz-src under
+    // type="javascript/blocked" — was selectable by no restore pass at all: the
+    // runtime's data-faz-src pass lists img/source/media, its javascript/blocked
+    // branch requires data-fazcookie, its builder reads src only, and its
+    // observer never backs up a script without a src. A script merely refused
+    // at the handoff (policy.script threw) therefore stayed dead after the
+    // visitor consented, against the contract judgeScripts() states. The SVG
+    // spellings keep their data-faz-href park, which
+    // script[data-faz-href][data-faz-category] restores.
+    function parkScriptSrc(el, src, policy) {
+        var type = attr(el, 'type');
+        if (type && type !== 'text/plain' && type !== 'javascript/blocked' && !nativeHas.call(el, 'data-faz-original-type')) {
+            setAttr(el, 'data-faz-original-type', type);
+        }
+        setAttr(el, 'type', 'text/plain');
+        if (!attr(el, 'data-faz-category')) setAttr(el, 'data-faz-category', parkCategory(policy, src));
+        dropAttr(el, 'data-faz-src');
+        if (attr(el, 'src') !== src) setAttr(el, 'src', src);
+    }
     function parkAttribute(el, key, value, policy) {
         if (!el || el.nodeType !== 1) return;
+        if (key === 'src' && tagKey(el) === 'SCRIPT') return parkScriptSrc(el, String(value), policy);
         var target = parkTarget(tagKey(el), key);
         setAttr(el, target.value, value);
         // A list restores by re-reading every candidate, so it carries no
@@ -2145,8 +2208,9 @@
             // returns on "no URL" and the script EXECUTES on the safety
             // release. Measured: `<svg><script href="https://tracker/x.js">`
             // inside a cloned <template> was requested.
-            var src = attr(el, 'src') || attr(el, 'data-faz-src')
-                || (values.src && values.src.value)
+            var htmlSrc = attr(el, 'src') || attr(el, 'data-faz-src')
+                || (values.src && values.src.value) || '';
+            var src = htmlSrc
                 || attr(el, 'href') || attr(el, 'xlink:href') || attr(el, 'data-faz-href')
                 || (values.href && values.href.value)
                 || (values['xlink:href'] && values['xlink:href'].value) || '';
@@ -2167,6 +2231,12 @@
                 return;
             }
             if (!src || local(src)) return;
+            // An HTML src: the restorable form (parkScriptSrc). The staged
+            // record is retired, or its own task would park the same URL again.
+            if (htmlSrc) {
+                if (values.src) delete values.src;
+                return parkScriptSrc(el, htmlSrc, safety);
+            }
             if (!nativeHas.call(el, 'data-faz-original-type') && attr(el, 'type')) setAttr(el, 'data-faz-original-type', attr(el, 'type'));
             setAttr(el, 'type', 'javascript/blocked');
             setAttr(el, 'data-faz-blocked-by-us', '1');
@@ -2229,8 +2299,36 @@
             // right answer is to hand the attribute straight back — its restore
             // pass has already run by the time the handoff reaches here, so
             // leaving the element parked would strand it for the page view.
+            //
+            // What is asked depends on what the attribute holds. A URL goes to
+            // live.url. A candidate LIST goes candidate by candidate: asked as
+            // one string, `/a.png 1x, https://t/b.png 2x` is not a URL to any
+            // parser, came back "not blocked", and the list was handed back
+            // live with its remote candidate unjudged. A srcdoc is MARKUP and
+            // goes to live.markup, which the runtime answers with the category
+            // it would park the document under; the same string through
+            // live.url read as a relative path and came back "not blocked" too.
+            // On the safety release, where this decision is immediate, the
+            // re-applied attribute produced a new record, a new park and a new
+            // re-application — an endless microtask loop that froze the page,
+            // measured in jsdom with a plain `https://` pixel inside an
+            // innerHTML-sunk srcdoc. With no runtime there is nothing that can
+            // read markup, so a parked srcdoc stays parked; the restore pass
+            // of a later page view hands it back on the consent that allows it.
             defer(function (live) {
-                if (live && live.url && !live.url(value)) {
+                var refused, named = '';
+                if (key === 'srcdoc') {
+                    if (live && typeof live.markup === 'function') {
+                        named = String(live.markup(el, value) || '');
+                        refused = named !== '';
+                    } else {
+                        refused = true;
+                    }
+                } else {
+                    var urls = isList(key) ? candidates(value) : [value];
+                    refused = !(live && live.url) || urls.some(function (url) { return !!live.url(url); });
+                }
+                if (!refused) {
                     dropAttr(el, target.value);
                     if (target.category) dropAttr(el, target.category);
                     if (el.nodeName === 'IFRAME' && el.classList) el.classList.remove('faz-hidden');
@@ -2238,7 +2336,7 @@
                 }
                 // Refused. Now someone can name the category the restore
                 // selectors need, so replace the placeholder with the real one.
-                if (target.category && live) setAttr(el, target.category, parkCategory(live, value));
+                if (target.category && live) setAttr(el, target.category, named || parkCategory(live, value));
                 if (live && live.node) live.node(el);
             });
         });
@@ -2392,21 +2490,20 @@
         });
     }
     function refuseScript(el) {
+        // The staged record is retired with its URL parked, or its own task
+        // would still replay the assignment as the policy allows it. An HTML
+        // src goes into the restorable form (parkScriptSrc): the staged value
+        // is the later assignment and wins over a live attribute.
+        var values = staged.get(el);
+        var src = (values && values.src && values.src.value) || attr(el, 'src') || '';
+        if (values && values.src) delete values.src;
+        if (src) {
+            parkScriptSrc(el, src, null);
+            return;
+        }
         if (!nativeHas.call(el, 'data-faz-original-type') && attr(el, 'type')) setAttr(el, 'data-faz-original-type', attr(el, 'type'));
         setAttr(el, 'type', 'javascript/blocked');
         setAttr(el, 'data-faz-blocked-by-us', '1');
-        // The staged record is retired with its URL parked, or its own task
-        // would still replay the assignment as the policy allows it.
-        var values = staged.get(el);
-        if (values && values.src) {
-            parkAttribute(el, 'src', values.src.value, null);
-            delete values.src;
-        }
-        var live = attr(el, 'src');
-        if (live) {
-            parkAttribute(el, 'src', live, null);
-            dropAttr(el, 'src');
-        }
         // An SVG script fetches through href; same refusal, same parking.
         ['href', 'xlink:href'].forEach(function (key) {
             if (values && values[key]) {
@@ -2444,13 +2541,40 @@
             while (undo.length) undo.pop()();
         },
         finish: function (policy) {
-            // A second call, or a call after the safety release already decided,
-            // must not re-drain. Say so instead of returning in silence: a
-            // handoff that does nothing is indistinguishable from a handoff that
-            // worked, and that ambiguity cost a review cycle.
-            if (!pending || immediate) {
-                return w.console.warn('[FAZ Cookie Manager] Consent handoff ignored: the bootstrap queue was already drained'
-                    + (immediate ? ' by the safety release.' : '.'));
+            // A second call must not re-drain. Say so instead of returning in
+            // silence: a handoff that does nothing is indistinguishable from a
+            // handoff that worked, and that ambiguity cost a review cycle.
+            if (!pending) {
+                return w.console.warn('[FAZ Cookie Manager] Consent handoff ignored: the bootstrap queue was already drained.');
+            }
+            // A runtime that arrives AFTER the safety release — an optimiser
+            // re-ran this inline script after parsing, or delayed script.js
+            // past DOMContentLoaded — used to be refused here with the queue
+            // "already drained". The queue was indeed empty, but refusing left
+            // two layers in charge: start() had already restored the natives
+            // and the runtime had installed its gates, while this file's
+            // observer stayed armed with the origin-only safety policy and
+            // every wrapper a library had captured during the window still
+            // routed to `installed` because `pending` never flipped. Measured:
+            // a first-party CDN image inserted through innerHTML after the
+            // late handoff was parked under data-faz-category="marketing" with
+            // the runtime's rules never consulted, a captured fetch resolved
+            // "Blocked by consent" for an allowed API, and <html> kept
+            // faz-consent-runtime-missing with the banner on screen. The
+            // runtime is what applies consent, so it takes over: the same
+            // handoff as on time, with the released state undone. There is
+            // nothing to drain, but the scripts created since the release are
+            // judged by the real rules, and any straggling decision is made
+            // against the runtime's policy rather than by origin.
+            var late = immediate === safety;
+            if (late) {
+                w.console.warn('[FAZ Cookie Manager] The consent runtime loaded after the safety release and takes over '
+                    + 'enforcement from here; the warning above about a missing runtime no longer applies to this page view.');
+                try {
+                    d.documentElement.className = d.documentElement.className
+                        .replace(/(^|\s)faz-consent-runtime-missing(?=\s|$)/g, '$1').replace(/\s+/g, ' ').replace(/^\s|\s$/g, '');
+                } catch (e) { /* noop */ }
+                if (w._fazBootstrap) w._fazBootstrap.released = false;
             }
             handoffs.forEach(function (capture) { capture(); });
             handoffs = [];
@@ -2459,6 +2583,7 @@
             var tasks = queue;
             queue = [];
             tasks.forEach(function (task) { run(task, policy); });
+            if (late) immediate = policy;
         }
     };
 })(window, document);

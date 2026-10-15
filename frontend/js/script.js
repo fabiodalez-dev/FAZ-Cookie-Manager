@@ -1279,26 +1279,37 @@ function _fazApplyGpcOptOut() {
     // request is itself a later explicit act and keeps winning.
     if (_fazClearStoredServiceConsent(saleShareSlugs, true)) changed = true;
 
-    // First signal-driven action: create the strictly-necessary audit record
-    // now, never before the signal is actually processed.
-    if (!ref._fazGetFromStore("action")) {
-        _fazSetConsentID();
-        ref._fazSetInStore("action", "yes");
-        ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
-        ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
-        ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
-        ref._fazSetInStore("consent", "no");
-        // The signal created this record, not the visitor: they have not
-        // answered the banner yet. _fazInitOperations() keeps showing it
-        // until they do; _fazAcceptCookies() clears the flag.
-        ref._fazSetInStore("undecided", "1");
+    // Every _fazSetInStore() call below rewrites the consent cookie, and a
+    // rewrite re-issues it with `expires` = now + lifetime. This function runs
+    // on EVERY page load of a GPC browser, so writing unconditionally turned
+    // the configured lifetime (182 days under the GDPR family) into a sliding
+    // window: a returning Brave visitor's day-0 consent was renewed on each
+    // visit and never re-collected, while the same choice in a non-GPC browser
+    // expired on schedule. Like _fazApplyDnsmpiOptOut(), the store is written
+    // only when the signal actually changes something; the restore pass still
+    // runs, and dead cookies of a denied sale/share category are still shredded.
+    if (changed) {
+        // First signal-driven action: create the strictly-necessary audit
+        // record now, never before the signal is actually processed.
+        if (!ref._fazGetFromStore("action")) {
+            _fazSetConsentID();
+            ref._fazSetInStore("action", "yes");
+            ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
+            ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
+            ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
+            ref._fazSetInStore("consent", "no");
+            // The signal created this record, not the visitor: they have not
+            // answered the banner yet. _fazInitOperations() keeps showing it
+            // until they do; _fazAcceptCookies() clears the flag.
+            ref._fazSetInStore("undecided", "1");
+        }
+        ref._fazSetInStore("gpc", "1");
     }
-    ref._fazSetInStore("gpc", "1");
 
     for (var j = 0; j < categories.length; j++) {
         var current = categories[j];
         if (saleShareSlugs.indexOf(current.slug) !== -1) {
-            ref._fazSetInStore(current.slug, "no");
+            if (changed) ref._fazSetInStore(current.slug, "no");
             _fazRemoveDeadCookies(current);
         }
         if (ref._fazGetFromStore(current.slug) === "yes") responseCategories.accepted.push(current.slug);
@@ -1307,11 +1318,26 @@ function _fazApplyGpcOptOut() {
 
     // Vendor grants can represent advertising/sale processing, so the GPC
     // signal revokes them even though unrelated category choices are retained.
-    if (saleShareSlugs.length) _fazSaveVendorConsent("reject");
+    // Written only when there is a grant left to revoke: the vendor cookie
+    // carries its own `expires` and rewriting it on every load slid the same way.
+    if (saleShareSlugs.length && (changed || _fazAnyVendorGranted())) _fazSaveVendorConsent("reject");
 
     _fazUnblock();
     if (changed) _fazFireEvent(responseCategories);
     return changed;
+}
+
+/**
+ * Whether the fazVendorConsent cookie still grants at least one TCF vendor.
+ *
+ * @returns {boolean}
+ */
+function _fazAnyVendorGranted() {
+    var granted = _fazReadVendorConsent();
+    for (var id in granted) {
+        if (Object.prototype.hasOwnProperty.call(granted, id) && granted[id] === true) return true;
+    }
+    return false;
 }
 
 function _fazPreviewEnabled() {
@@ -4383,6 +4409,22 @@ function _fazGateSrcSetter(proto, hideOnPark) {
 }
 _fazGateSrcSetter(window.HTMLImageElement && HTMLImageElement.prototype, false);
 _fazGateSrcSetter(window.HTMLIFrameElement && HTMLIFrameElement.prototype, true);
+// <video>/<audio> (their `src` lives on HTMLMediaElement), <embed>, <track> and
+// <input type=image> fetch through `src` exactly as <img> does, and <embed> and
+// <object data> to an HTML URL render a nested browsing context exactly as
+// <iframe> does — a legacy YouTube <object>/<embed> is the full player, with
+// its cookies. None of them had a gate: the deferred bootstrap held them
+// during the download window and then replayed `el.src = url` on the premise
+// that this runtime would judge the replay, so the hold was only a delay, a
+// post-handoff `video.src = …` was never judged at all, and server markup
+// lived for the page view. The restore pass already read their park keys
+// (data-faz-src, data-faz-poster, data-faz-data); these are the gate half.
+// hideOnPark stays false: the restore pass for these keys does not clear
+// faz-hidden, and a parked media element is an empty box either way.
+_fazGateSrcSetter(window.HTMLMediaElement && HTMLMediaElement.prototype, false);
+_fazGateSrcSetter(window.HTMLEmbedElement && HTMLEmbedElement.prototype, false);
+_fazGateSrcSetter(window.HTMLTrackElement && HTMLTrackElement.prototype, false);
+_fazGateSrcSetter(window.HTMLInputElement && HTMLInputElement.prototype, false);
 
 /**
  * Same gate for the `href` PROPERTY setter on <link>, so a stylesheet a script
@@ -4510,6 +4552,14 @@ function _fazGateResourceSetAttribute(proto, opts) {
             if (opts.hideOnPark) _fazRevealService(_fazResolveServiceId(String(value), (el.getAttribute && el.getAttribute("data-faz-service")) || ""));
             return true;
         }
+        // A second URL attribute with a park key of its own on the same
+        // element: a <video>'s poster next to its src. One category attribute
+        // serves both, as the restore pass expects.
+        if (opts.also && Object.prototype.hasOwnProperty.call(opts.also, n) && _fazImgShouldBlock(el, value)) {
+            native.call(el, opts.also[n], String(value));
+            if (!el.getAttribute("data-faz-category")) native.call(el, "data-faz-category", _fazImgCategory(String(value)));
+            return true;
+        }
         if (opts.markupAttr && n === opts.markupAttr) {
             var markupCat = _fazMarkupBlockedCategory(el, value);
             if (markupCat) {
@@ -4583,6 +4633,15 @@ _fazGateResourceSetAttribute(window.HTMLImageElement && HTMLImageElement.prototy
 _fazGateResourceSetAttribute(window.HTMLIFrameElement && HTMLIFrameElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: true, srcset: false, markupAttr: "srcdoc", markupParkAttr: "data-faz-srcdoc" });
 _fazGateResourceSetAttribute(window.HTMLLinkElement && HTMLLinkElement.prototype, { urlAttr: "href", parkAttr: "data-faz-href", hideOnPark: false, srcset: false });
 _fazGateResourceSetAttribute(window.HTMLSourceElement && HTMLSourceElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: true });
+// The same six element types the src-property gate above covers, by their
+// attribute route; <video> carries poster too and <object> fetches through
+// `data`. Each parks into the key its restore branch reads.
+_fazGateResourceSetAttribute(window.HTMLVideoElement && HTMLVideoElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: false, also: { poster: "data-faz-poster" } });
+_fazGateResourceSetAttribute(window.HTMLAudioElement && HTMLAudioElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: false });
+_fazGateResourceSetAttribute(window.HTMLEmbedElement && HTMLEmbedElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: false });
+_fazGateResourceSetAttribute(window.HTMLObjectElement && HTMLObjectElement.prototype, { urlAttr: "data", parkAttr: "data-faz-data", hideOnPark: false, srcset: false });
+_fazGateResourceSetAttribute(window.HTMLTrackElement && HTMLTrackElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: false });
+_fazGateResourceSetAttribute(window.HTMLInputElement && HTMLInputElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: false });
 // The SVG namespace fetches through its own elements and its own attribute
 // spelling: <image> is an <img> by another name, <use href="https://x/s.svg#i">
 // fetches an external document, and an SVG <script href> EXECUTES. None of them
@@ -4673,6 +4732,35 @@ function _fazGateBackgroundSetter(proto) {
 }
 _fazGateBackgroundSetter(window.HTMLBodyElement && HTMLBodyElement.prototype);
 
+/**
+ * The IDL route for a URL attribute that is not `src`: `video.poster = url`
+ * and `object.data = url`. Same judgement as the src gate, parked into the key
+ * the restore pass reads for that attribute (data-faz-poster, data-faz-data).
+ */
+function _fazGateUrlPropertySetter(proto, prop, parkAttr) {
+    if (!proto) return;
+    var desc = Object.getOwnPropertyDescriptor(proto, prop);
+    if (!desc || typeof desc.set !== "function" || typeof desc.get !== "function" || desc.configurable === false) return;
+    var nativeSet = desc.set, nativeGet = desc.get;
+    Object.defineProperty(proto, prop, {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: function () { return nativeGet.call(this); },
+        set: function (val) {
+            try {
+                if (_fazImgShouldBlock(this, val)) {
+                    this.setAttribute(parkAttr, String(val));
+                    if (!this.getAttribute("data-faz-category")) this.setAttribute("data-faz-category", _fazImgCategory(String(val)));
+                    return;
+                }
+            } catch (e) { /* fall through to the native setter on any error */ }
+            nativeSet.call(this, val);
+        }
+    });
+}
+_fazGateUrlPropertySetter(window.HTMLVideoElement && HTMLVideoElement.prototype, "poster", "data-faz-poster");
+_fazGateUrlPropertySetter(window.HTMLObjectElement && HTMLObjectElement.prototype, "data", "data-faz-data");
+
 // srcset PROPERTY setter (img.srcset = …) — the sibling of the .src/.href property
 // gates. Without it, a runtime `.srcset` assignment writes the attribute directly
 // and the browser can fetch a blocked candidate before consent. Parks into the same
@@ -4711,13 +4799,26 @@ function _fazParkResourceElementIfBlocked(el) {
     if (!el || el.nodeType !== 1 || !el.getAttribute) return;
     var tag = (el.nodeName || "").toLowerCase();
     try {
-        if (tag === "img" || tag === "iframe" || tag === "source") {
+        // An <input> only fetches as type=image; every other input would be
+        // parked for nothing. Same filter the bootstrap's backstop applies.
+        var inputImage = tag === "input" && String(el.getAttribute("type") || "").toLowerCase() === "image";
+        if (tag === "img" || tag === "iframe" || tag === "source"
+            || tag === "video" || tag === "audio" || tag === "embed" || tag === "track" || inputImage) {
             var src = el.getAttribute("src");
             if (src && !el.getAttribute("data-faz-src") && _fazImgShouldBlock(el, src)) {
                 el.setAttribute("data-faz-src", src);
                 el.setAttribute("data-faz-category", _fazImgCategory(src));
                 el.removeAttribute("src");
                 if (tag === "iframe" && el.classList) el.classList.add("faz-hidden");
+            }
+            // The poster frame fetches before any play: an i.ytimg.com or
+            // i.vimeocdn.com poster is a request to the provider with the
+            // visitor's IP and referrer, judged like the src next to it.
+            var poster = tag === "video" ? el.getAttribute("poster") : null;
+            if (poster && !el.getAttribute("data-faz-poster") && _fazImgShouldBlock(el, poster)) {
+                el.setAttribute("data-faz-poster", poster);
+                if (!el.getAttribute("data-faz-category")) el.setAttribute("data-faz-category", _fazImgCategory(poster));
+                el.removeAttribute("poster");
             }
             var doc = el.getAttribute("srcdoc");
             if (doc && !el.getAttribute("data-faz-srcdoc")) {
@@ -4735,6 +4836,16 @@ function _fazParkResourceElementIfBlocked(el) {
             if (ss && !el.getAttribute("data-faz-srcset")) {
                 var c = _fazSrcsetBlockedCategory(el, ss);
                 if (c) { el.setAttribute("data-faz-srcset", ss); el.setAttribute("data-faz-srcset-category", c); el.removeAttribute("srcset"); }
+            }
+        } else if (tag === "object") {
+            // <object data> is an HTML sink as much as a resource fetch: to
+            // youtube.com/embed it is the whole player. Parked under its own
+            // key, which the restore pass admits back as absolute http(s) only.
+            var data = el.getAttribute("data");
+            if (data && !el.getAttribute("data-faz-data") && _fazImgShouldBlock(el, data)) {
+                el.setAttribute("data-faz-data", data);
+                el.setAttribute("data-faz-category", _fazImgCategory(data));
+                el.removeAttribute("data");
             }
         } else if (tag === "image" || tag === "use" || tag === "feimage" || (tag === "script" && el.namespaceURI === "http://www.w3.org/2000/svg")) {
             // Parser-built SVG, which is the common case: an inline <svg> in the
@@ -5996,8 +6107,11 @@ function _fazMutationObserver(mutations) {
                 // The SVG namespace and the legacy `background` attribute fetch
                 // the same way and were missing from this set, so markup built
                 // after the handoff (`div.innerHTML = '<svg><image href=…>'`)
-                // fetched while the <img> next to it was parked.
+                // fetched while the <img> next to it was parked. So did
+                // video/audio/embed/object/track/input[type=image] — the
+                // bootstrap's element list, which this one is now as wide as.
                 if (tag === 'img' || tag === 'link' || tag === 'source' || tag === 'image' || tag === 'use' || tag === 'feimage'
+                    || tag === 'video' || tag === 'audio' || tag === 'embed' || tag === 'object' || tag === 'track' || tag === 'input'
                     || (n.hasAttribute && n.hasAttribute('background'))) {
                     if (!_fazInsideNoscript(n)) _fazParkResourceElementIfBlocked(n);
                 }
@@ -6009,7 +6123,8 @@ function _fazMutationObserver(mutations) {
                         if (_fazInsideNoscript(nested[ni])) continue;
                         nodesToProcess.push(nested[ni]);
                     }
-                    var nestedRes = n.querySelectorAll('img[src], img[srcset], link[href], source[src], source[srcset], image, use, feImage, [background], iframe[srcdoc]');
+                    var nestedRes = n.querySelectorAll('img[src], img[srcset], link[href], source[src], source[srcset], image, use, feImage, [background], iframe[srcdoc],'
+                        + ' video[src], video[poster], audio[src], embed[src], object[data], track[src], input[type="image"][src]');
                     for (var ri = 0; ri < nestedRes.length; ri++) {
                         if (_fazInsideNoscript(nestedRes[ri])) continue;
                         _fazParkResourceElementIfBlocked(nestedRes[ri]);
@@ -6655,16 +6770,18 @@ function _fazUnblockServerSide() {
     // 3. Images (tracking pixels inside noscript tags that JS can see), plus
     // every other element that fetches through a plain `src`.
     //
-    // video, audio, embed, track and input[type=image] are here because both
-    // the deferred bootstrap and the server pass (process_media_resource_tag
-    // in class-frontend.php) park them under this key: whatever either layer
-    // can park must be restorable from the same keys, or a resource held
-    // during the download window — or parked in the page's own markup —
-    // would stay dead for the rest of the page view even after the visitor
-    // consents. Restoring needs no per-tag branch — `el.src` is the right IDL
-    // attribute on all of them, and the gate below re-parks anything still
-    // blocked. <embed> alone keeps the strict scheme rule: it can load a
-    // document in the page, so a data: payload is not handed back to it.
+    // video, audio, embed, track and input[type=image] are parked by three
+    // layers under this key: the deferred bootstrap during the download
+    // window, this runtime's own src/setAttribute gates, observer and startup
+    // sweep after it (media-embed-object-gate.test.mjs pins that the lists are
+    // the same set), and the server pass (process_media_resource_tag in
+    // class-frontend.php) in the page's own markup. Whatever any of them can
+    // park must be restorable from the same keys, or a resource that was
+    // merely held would stay dead for the rest of the page view even after
+    // the visitor consents. Restoring needs no per-tag branch — `el.src` is
+    // the right IDL attribute on all of them, and the gate re-parks anything
+    // still blocked. <embed> alone keeps the strict scheme rule: it can load
+    // a document in the page, so a data: payload is not handed back to it.
     document.querySelectorAll(
         'img[data-faz-src][data-faz-category], source[data-faz-src][data-faz-category],'
         + ' video[data-faz-src][data-faz-category], audio[data-faz-src][data-faz-category],'
@@ -6744,8 +6861,8 @@ function _fazUnblockServerSide() {
 
     // 3c. <object data> and the poster frame of a media element. Both are
     // parked under their own keys (data-faz-data, data-faz-poster) because
-    // neither is a `src`, and neither had a restore pass at all: the bootstrap
-    // could park them and nothing could ever hand them back.
+    // neither is a `src`; the bootstrap parks them during the download window
+    // and the runtime's data/poster gates and sweep park them after it.
     document.querySelectorAll('object[data-faz-data][data-faz-category]')
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
@@ -6935,7 +7052,8 @@ function _fazAddProviderToList(node, cleanedHostname) {
 // exactly as it is.
 try {
     document
-        .querySelectorAll('img[src],img[srcset],source[src],source[srcset],iframe[src],iframe[srcdoc],link[href],link[imagesrcset],image,use,feImage,[background]')
+        .querySelectorAll('img[src],img[srcset],source[src],source[srcset],iframe[src],iframe[srcdoc],link[href],link[imagesrcset],image,use,feImage,[background],'
+            + 'video[src],video[poster],audio[src],embed[src],object[data],track[src],input[type="image"][src]')
         .forEach(_fazParkResourceElementIfBlocked);
     // Scripts are deliberately NOT swept. A parser-inserted <script src> has
     // already been fetched and executed by the time this deferred bundle runs,
@@ -7294,26 +7412,93 @@ function _fazIsStrictlyNecessaryScript(element) {
     return false;
 }
 
+/**
+ * The URL half of the server's matches_whitelist_pattern() contract, ported
+ * line for line from class-frontend.php so that one operator entry yields one
+ * verdict on both layers. This used to be a substring test on the raw URL —
+ * query and fragment included, host unanchored — so `googleapis.com/youtube/v3`
+ * exempted a runtime-inserted evilgoogleapis.com script, and an operator who
+ * whitelisted their own domain released every GA/Meta beacon whose query
+ * carried the page URL (`dl=https%3A%2F%2Fsite.test%2F`), while the identical
+ * tag in server markup stayed parked. Three rules, in the server's order:
+ *
+ *   1. A whitelist token in the query or the fragment is not the resource:
+ *      `pixel.png?x=jquery.min.js` is the pixel. Unless the pattern itself
+ *      names a query or a fragment, the value is matched without them.
+ *   2. A pattern whose pre-slash segment looks like a hostname (contains a
+ *      dot) — `googleapis.com/maps/api/`, `hcaptcha.com/` — is HOST-ANCHORED:
+ *      the value's host must equal it or be a sub-domain on a label boundary,
+ *      and the path must begin with the pattern's path.
+ *   3. Everything else that contains a dot or a slash — a filename
+ *      (`jquery.min.js`), a path fragment (`wp-includes/`), a bare host with
+ *      no slash — is a substring of host+path, as wp_parse_url() reads them.
+ *
+ * `value` is already lower-cased and normalised (_fazGetProviderMatchTarget).
+ */
+function _fazWhitelistParseUrl(value) {
+    try {
+        var full = value.indexOf("//") === 0 ? window.location.protocol + value : value;
+        return new URL(full);
+    } catch (e) { return null; }
+}
+function _fazWhitelistDomainMatches(value, patternHost, patternPath) {
+    patternHost = String(patternHost || "").trim();
+    if (!patternHost) return false;
+    var parsed = _fazWhitelistParseUrl(value);
+    var host = parsed ? String(parsed.hostname || "").toLowerCase() : "";
+    // A relative URL (no host) can never satisfy a domain pattern.
+    if (!host) return false;
+    var hostOk = host === patternHost
+        || (host.length > patternHost.length + 1 && host.slice(-(patternHost.length + 1)) === "." + patternHost);
+    if (!hostOk) return false;
+    if (!patternPath) return true;
+    var path = String(parsed.pathname || "").toLowerCase().replace(/^\/+/, "");
+    return path.indexOf(patternPath) === 0;
+}
+function _fazWhitelistUrlMatches(value, pattern) {
+    value = String(value == null ? "" : value).trim();
+    if (!value || !pattern) return false;
+    if (!/[?#]/.test(pattern)) {
+        var cut = value.search(/[?#]/);
+        if (cut !== -1) value = value.slice(0, cut);
+    }
+    var slashPos = pattern.indexOf("/");
+    if (slashPos !== -1) {
+        var patternHost = pattern.slice(0, slashPos);
+        if (patternHost.indexOf(".") !== -1) {
+            return _fazWhitelistDomainMatches(value, patternHost, pattern.slice(slashPos + 1).replace(/^\/+/, ""));
+        }
+    }
+    var needle = pattern.replace(/^\/+/, "");
+    var pathOnly = value.replace(/^\/+/, "");
+    var parsed = _fazWhitelistParseUrl(value);
+    if (parsed) {
+        var path = String(parsed.pathname || "").toLowerCase().replace(/^\/+/, "");
+        var normalized = String(parsed.hostname || "").toLowerCase() + (path ? "/" + path : "");
+        return normalized.indexOf(needle) !== -1 || pathOnly.indexOf(needle) !== -1;
+    }
+    return pathOnly.indexOf(needle) !== -1;
+}
 function _fazIsUserWhitelisted(url, element) {
     if (typeof url !== "string") return false;
     var wl = _fazStore._userWhitelist;
     if (!Array.isArray(wl) || !wl.length) return false;
-    var rawTarget = url.toLowerCase();
-    var decodedTarget = String(_fazGetProviderMatchTarget(url) || url).toLowerCase();
+    var target = String(_fazGetProviderMatchTarget(url) || url).toLowerCase();
     for (var i = 0; i < wl.length; i++) {
         if (typeof wl[i] !== "string" || !wl[i]) continue;
-        var needle = wl[i].toLowerCase();
+        var needle = wl[i].toLowerCase().trim();
+        if (!needle) continue;
         if (_fazWhitelistElementMatches(element, needle)) return true;
-        // URL substring matching is reserved for URL-fragment patterns — ones
-        // containing "." or "/" — mirroring the server-side
-        // matches_whitelist_pattern() contract. A bare ID/class token must only
-        // match element attributes (whole-word, above): substring-matching it
-        // against every URL meant a short entry like "js" disabled client-side
-        // blocking wholesale. The 3-char floor matches the documented minimum
-        // the PHP cookie-pattern path already enforces.
+        // URL matching is reserved for URL-fragment patterns — ones containing
+        // "." or "/" — the same split matches_whitelist_pattern() makes. A bare
+        // ID/class token must only match element attributes (whole-word,
+        // above): substring-matching it against every URL meant a short entry
+        // like "js" disabled client-side blocking wholesale. The 3-char floor
+        // matches the documented minimum the PHP cookie-pattern path already
+        // enforces.
         if (needle.length < 3) continue;
         if (needle.indexOf(".") === -1 && needle.indexOf("/") === -1) continue;
-        if (rawTarget.indexOf(needle) !== -1 || decodedTarget.indexOf(needle) !== -1) return true;
+        if (_fazWhitelistUrlMatches(target, needle)) return true;
     }
     return false;
 }
@@ -7533,6 +7718,27 @@ function _fazExtractEndpoint(url) {
 }
 
 /**
+ * The string a network call will actually be made to, read the way the engine
+ * reads it. fetch() and the WebSocket constructor take a URL object natively,
+ * sendBeacon() and XMLHttpRequest.open() take a USVString and WebIDL
+ * stringifies whatever is passed — so a tracker that builds its endpoint with
+ * `new URL()` reaches the network exactly as the string would. The gates below
+ * used to read `input.url`, which a Request has and a URL does not (it has
+ * `href`), or required a string outright: the endpoint came back "", the gate
+ * took its passthrough branch, and the identical call with a string was
+ * dropped. The bootstrap's hold window stringifies (local() does String(url)),
+ * and so does the handoff policy at the end of this file; the live gates now
+ * judge the same text those two do.
+ */
+function _fazRequestTarget(input) {
+    if (input == null) return "";
+    if (typeof input === "string") return input;
+    // A Request carries its (already absolute) URL in .url.
+    if (typeof input.url === "string") return input.url;
+    try { return String(input); } catch (e) { return ""; }
+}
+
+/**
  * Network-level consent enforcement.
  *
  * Wraps navigator.sendBeacon, fetch, XMLHttpRequest.open, and WebSocket to block
@@ -7546,8 +7752,9 @@ function _fazExtractEndpoint(url) {
     if (navigator.sendBeacon) {
         var _fazOrigSendBeacon = navigator.sendBeacon.bind(navigator);
         navigator.sendBeacon = function (url, data) {
-            var endpoint = _fazExtractEndpoint(url);
-            if (endpoint && !_fazIsUserWhitelisted(url) && _fazShouldBlockProvider(endpoint)) {
+            var target = _fazRequestTarget(url);
+            var endpoint = _fazExtractEndpoint(target);
+            if (endpoint && !_fazIsUserWhitelisted(target) && _fazShouldBlockProvider(endpoint)) {
                 return true; // Pretend success — silently drop.
             }
             return _fazOrigSendBeacon(url, data);
@@ -7558,7 +7765,7 @@ function _fazExtractEndpoint(url) {
     if (window.fetch) {
         var _fazOrigFetch = window.fetch.bind(window);
         window.fetch = function (input, init) {
-            var url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+            var url = _fazRequestTarget(input);
             var endpoint = _fazExtractEndpoint(url);
             if (endpoint && !_fazIsUserWhitelisted(url) && _fazShouldBlockProvider(endpoint)) {
                 return Promise.resolve(new Response("", { status: 200, statusText: "Blocked by consent" }));
@@ -7577,8 +7784,9 @@ function _fazExtractEndpoint(url) {
             try { delete this.readyState; } catch (e) { /* non-configurable fallback */ }
             try { delete this.responseText; } catch (e) { /* non-configurable fallback */ }
         }
-        var endpoint = _fazExtractEndpoint(url);
-        this._fazBlocked = !!(endpoint && !_fazIsUserWhitelisted(url) && _fazShouldBlockProvider(endpoint));
+        var target = _fazRequestTarget(url);
+        var endpoint = _fazExtractEndpoint(target);
+        this._fazBlocked = !!(endpoint && !_fazIsUserWhitelisted(target) && _fazShouldBlockProvider(endpoint));
         return _fazOrigXHROpen.apply(this, arguments);
     };
     var _fazOrigXHRSend = XMLHttpRequest.prototype.send;
@@ -7603,15 +7811,16 @@ function _fazExtractEndpoint(url) {
     if (typeof WebSocket !== 'undefined') {
         var _fazOrigWebSocket = window.WebSocket;
         window.WebSocket = function (url, protocols) {
-            var endpoint = _fazExtractEndpoint(url);
-            if (endpoint && !_fazIsUserWhitelisted(url) && _fazShouldBlockProvider(endpoint)) {
+            var target = _fazRequestTarget(url);
+            var endpoint = _fazExtractEndpoint(target);
+            if (endpoint && !_fazIsUserWhitelisted(target) && _fazShouldBlockProvider(endpoint)) {
                 // Build a mock that immediately transitions to CLOSED.
                 // We set up the prototype chain from _fazOrigWebSocket so that
                 // `instanceof WebSocket` checks still pass for callers that use them.
                 var mock = Object.create(_fazOrigWebSocket.prototype);
                 Object.defineProperty(mock, 'readyState',     { get: function () { return 3; /* CLOSED */ } });
                 Object.defineProperty(mock, 'bufferedAmount', { get: function () { return 0; } });
-                Object.defineProperty(mock, 'url',            { get: function () { return url; } });
+                Object.defineProperty(mock, 'url',            { get: function () { return target; } });
                 mock.send  = function () {};
                 mock.close = function () {};
 
@@ -10117,8 +10326,12 @@ if (window._fazBootstrap) window._fazBootstrap.finish({
             // data-faz-blocked-by-us is what the src/type setters and the
             // mutation observer read to tell our block from a third party's.
             // Without it a script blocked here was never unblocked again.
+            // text/plain is excluded as the observer excludes it: it is the
+            // parked form (the server's, and the bootstrap's for a refused
+            // script), not the author's type, and recording it would restore
+            // an inert clone.
             var type = node.getAttribute('type');
-            if (type && type !== 'javascript/blocked' && !node.getAttribute('data-faz-original-type')) {
+            if (type && type !== 'javascript/blocked' && type !== 'text/plain' && !node.getAttribute('data-faz-original-type')) {
                 node.setAttribute('data-faz-original-type', type);
             }
             node.setAttribute('data-faz-blocked-by-us', '1');
@@ -10137,7 +10350,12 @@ if (window._fazBootstrap) window._fazBootstrap.finish({
     // one. This is the answer to that: the same resolution the parser backstop
     // uses, so an element parked during the download is restored on exactly the
     // consent that would have released it had it arrived a moment later.
-    category: function (url) { return _fazImgCategory(String(url)); }
+    category: function (url) { return _fazImgCategory(String(url)); },
+    // A srcdoc the bootstrap's backstop parked is MARKUP, not a URL: `url`
+    // above cannot judge it (it reads as a relative path). This is the same
+    // judgement the runtime's own srcdoc gates make — the category the
+    // document would be parked under, or "" when nothing in it is blocked.
+    markup: function (el, markup) { return _fazMarkupBlockedCategory(el, String(markup == null ? '' : markup)); }
 });
 
 } // end: if ( _fazStore ) — null-safety guard for deferred _fazConfig
