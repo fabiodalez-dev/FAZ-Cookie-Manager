@@ -244,6 +244,19 @@ class Frontend {
 	private $faz_law_fallback_suppress = false;
 
 	/**
+	 * Whether print_gcm_default_inline() emitted the synchronous denied
+	 * `consent default` in THIS response. The Advanced Consent Mode gtag
+	 * exemption (process_script_tag / inline_script_block_category) is only
+	 * sound while that default precedes the exempted stack, so the exemption
+	 * reads this flag: a response without wp_head() output, an AMP response or
+	 * any other path that never printed the default keeps the Google stack
+	 * hard-blocked, exactly like Basic mode.
+	 *
+	 * @var bool
+	 */
+	private $gcm_default_emitted = false;
+
+	/**
 	 * Per-request memo for is_bot_variant_render() (null = not yet computed).
 	 *
 	 * @var bool|null
@@ -2952,12 +2965,16 @@ class Frontend {
 		// when a site uses a non-default dataLayer name.
 		// INVARIANT — this inline bootstrap must only ever emit gtag('consent',…)
 		// and gtag('set',…) calls. It must NOT emit gtag('config'|'js',…) or
-		// dataLayer.push({…}): those are exactly the Google code-signatures
-		// is_gcm_managed_script() / match_script_to_provider() look for, so the
-		// output-buffer blocker would neutralise this very <script> while still
-		// letting the (exempted) gtag stack load — i.e. the denied default would
-		// never run and a pre-consent cookie could be written. Keep it to
-		// consent/set only so it always falls through the blocker unmatched.
+		// dataLayer.push({…}): those are the Google code-signatures
+		// is_gcm_managed_script() looks for, and the exemption they drive is
+		// meant for the stack that FOLLOWS this default, not for the default
+		// itself. The tag's survival in the output buffer does not rest on its
+		// body, though: it is printed with an own-handle id (see
+		// gcm_default_script_id()), so process_script_tag() returns it untouched
+		// before any provider pattern is consulted — an admin custom rule or a
+		// `faz_blocking_rules` code signature such as `gtag(` that happens to
+		// match this body cannot re-type it to text/plain while the gtag stack
+		// it was written for stays exempted.
 		$dl    = wp_json_encode( $this->gcm_datalayer_name() );
 		$js    = 'window[' . $dl . ']=window[' . $dl . ']||[];function gtag(){window[' . $dl . '].push(arguments);}';
 		$js   .= "gtag('consent','default'," . wp_json_encode( $default ) . ');';
@@ -2968,8 +2985,47 @@ class Frontend {
 		$js .= "gtag('set','ads_data_redaction'," . ( $redaction ? 'true' : 'false' ) . ');';
 		$js .= "gtag('set','url_passthrough'," . ( $passthrough ? 'true' : 'false' ) . ');';
 
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
-		echo "<script>" . $js . "</script>\n";
+		// Record the emission BEFORE printing: the Advanced-mode gtag exemption
+		// in process_script_tag() / inline_script_block_category() only applies
+		// while this default is in front of the exempted stack in the same
+		// response (see $gcm_default_emitted).
+		$this->gcm_default_emitted = true;
+
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; the id is a plugin constant passed through esc_attr and every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
+		echo '<script id="' . esc_attr( $this->gcm_default_script_id() ) . '">' . $js . "</script>\n";
+	}
+
+	/**
+	 * The id printed on the Advanced Consent Mode `consent default` tag.
+	 *
+	 * Shaped like a core inline-script id (`<handle>-js-before`) on an own
+	 * handle, so is_own_inline_script_id() recognises the tag as the plugin's
+	 * and process_script_tag() / inline_script_block_category() return it
+	 * untouched by construction — the same protection every other FAZ tag
+	 * already had. The handle mirrors the gcm.js one (`<plugin>-gcm`) with a
+	 * `-default` suffix.
+	 *
+	 * @return string
+	 */
+	private function gcm_default_script_id() {
+		$base = is_string( $this->plugin_name ) && '' !== $this->plugin_name ? $this->plugin_name : 'faz-cookie-manager';
+		return $base . '-gcm-default-js-before';
+	}
+
+	/**
+	 * Whether the Advanced Consent Mode gtag exemption may apply to a tag on
+	 * this request: Advanced mode is on AND the synchronous denied default has
+	 * been emitted in this response. Without the default in front of it, an
+	 * exempted gtag stack would run with no consent signal at all and Google
+	 * treats that as granted, so the answer is no and the stack stays
+	 * hard-blocked (Basic-mode behaviour).
+	 *
+	 * @return bool
+	 */
+	private function gcm_advanced_exemption_active() {
+		return $this->gcm_default_emitted
+			&& $this->gcm_settings
+			&& $this->gcm_settings->is_advanced_mode();
 	}
 
 	/**
@@ -3351,6 +3407,15 @@ class Frontend {
 			'_expiry'       => $faz_expiry,
 			'_categories'   => $this->get_cookie_groups(),
 			'_activeLaw'         => $banner->get_law(),
+			// WP Consent API regime for this visitor, computed by the SAME method
+			// that answers `wp_get_consent_type` server-side. wca.js declares
+			// window.wp_consent_type from this, not from _activeLaw: the banner's
+			// label is deliberately wrong in the fail-closed geo-runtime branch
+			// (an opt-in ruleset served under a kept CCPA banner) and under Cache
+			// Compatibility Mode, which is exactly where filter_wp_consent_type()
+			// corrects it — a client that re-derived the regime from the label
+			// undid that correction for every JS Consent-API consumer.
+			'_wpConsentType'     => $this->filter_wp_consent_type( '' ),
 			'_bannerSlug'        => $banner->get_slug(),
 			'_geoRouting'        => $this->is_country_dependent_output(),
 			// When a runtime geo ruleset is active, the per-category
@@ -3485,18 +3550,31 @@ class Frontend {
 			}
 		}
 
-		// 3. Admin custom blocking rules (Settings → Script Blocking).
-		$custom_rules = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
+		// 3. Admin custom blocking rules (Settings → Script Blocking). Tracked
+		// as EXPLICIT rules, exactly like get_provider_category_map() does
+		// with $custom_patterns, so the gateway / Instagram Feed exemption
+		// below can never drop them from the client list while the server map
+		// keeps them (admin intent wins on both layers or on neither).
+		$custom_rules    = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
+		$client_explicit = array();
 		foreach ( $custom_rules as $rule ) {
 			$pattern  = isset( $rule['pattern'] ) ? $rule['pattern'] : '';
 			$category = isset( $rule['category'] ) ? $rule['category'] : '';
 			if ( ! empty( $pattern ) && ! empty( $category ) && in_array( $category, $valid_categories, true ) ) {
-				$this->providers[ $pattern ] = array( $category );
+				$this->providers[ $pattern ]   = array( $category );
+				$client_explicit[ $pattern ] = true;
 			}
 		}
 
-		// 4. Developer filter.
-		$this->providers = apply_filters( 'faz_blocking_rules_client', $this->providers );
+		// 4. Developer filter. Snapshot first so a rule the filter ADDS counts
+		// as explicit too (mirrors the $pre_filter_map snapshot on the server).
+		$pre_filter_client = $this->providers;
+		$this->providers   = apply_filters( 'faz_blocking_rules_client', $this->providers );
+		foreach ( array_keys( $this->providers ) as $pattern ) {
+			if ( ! array_key_exists( $pattern, $pre_filter_client ) ) {
+				$client_explicit[ $pattern ] = true;
+			}
+		}
 
 		// Some payment SDKs are required outside checkout too (e.g. Stripe express buttons).
 		// The Instagram Feed exemption rides along here for the same reason it
@@ -3504,26 +3582,10 @@ class Frontend {
 		// SEPARATE list built from $this->providers, so exempting only the server
 		// map would leave the browser re-blocking the very script the server just
 		// allowed — the pattern reaching the page in _fazConfig is enough to do it.
-		$sb_exempt_patterns = self::smash_balloon_exempt_patterns();
-		foreach ( array_keys( $this->providers ) as $pattern ) {
-			if ( $this->is_always_allowed_gateway_pattern( $pattern ) || isset( $sb_exempt_patterns[ $pattern ] ) ) {
-				unset( $this->providers[ $pattern ] );
-			}
-		}
-
-		// On WooCommerce checkout/cart pages, remove the remaining payment gateway patterns
-		// from client-side blocking so JS interceptors don't break payments.
-		if ( $this->is_wc_checkout_or_cart() ) {
-			$gateway_whitelist = $this->get_payment_gateway_whitelist();
-			foreach ( array_keys( $this->providers ) as $pattern ) {
-				foreach ( $gateway_whitelist as $gw ) {
-					if ( false !== stripos( $pattern, $gw ) ) {
-						unset( $this->providers[ $pattern ] );
-						break;
-					}
-				}
-			}
-		}
+		// Explicit rules are carved out (see apply_client_provider_exemptions()).
+		$client_exemptions        = $this->apply_client_provider_exemptions( $this->providers, $client_explicit );
+		$this->providers          = $client_exemptions['providers'];
+		$client_gateway_whitelist = $client_exemptions['whitelist'];
 
 		// On pages excluded from script blocking, send empty providers
 		// so client-side interceptors don't block anything.
@@ -3553,7 +3615,13 @@ class Frontend {
 		$user_whitelist = isset( $settings['script_blocking']['whitelist_patterns'] )
 			? array_values( array_filter( array_map( 'sanitize_text_field', (array) $settings['script_blocking']['whitelist_patterns'] ) ) )
 			: array();
-		$store['_userWhitelist'] = $user_whitelist;
+		// Plus the always-allowed gateway tokens whenever an explicit rule
+		// overlapped one and was therefore KEPT on the client list (see
+		// apply_client_provider_exemptions()). The server releases a gateway's
+		// own urls through get_whitelist(), not by dropping the rule, so the
+		// client needs the same tokens to resolve them the same way. Empty on
+		// every install without such a rule: the payload is unchanged there.
+		$store['_userWhitelist'] = array_values( array_unique( array_merge( $user_whitelist, $client_gateway_whitelist ) ) );
 		// Non-filterable commerce configuration invariant mirrored by the
 		// runtime MutationObserver/createElement interceptor. Keep it separate
 		// from the editable whitelist so an empty Settings field cannot remove
@@ -4544,11 +4612,17 @@ class Frontend {
 		}
 
 		// Advanced Consent Mode (#165): when on, let Consent-Mode-aware Google
-		// tags (gtag.js / GA4 / Ads) load before consent. gcm.js has already
-		// emitted a synchronous `consent default → denied`, so these send
-		// cookieless/modeled pings and upgrade on consent instead of being
-		// hard-blocked. The GTM *container* (gtm.js) is intentionally NOT
-		// exempt: it can host non-Google tags that ignore Consent Mode.
+		// tags (gtag.js / GA4 / Ads) load before consent. print_gcm_default_inline()
+		// has already emitted a synchronous `consent default → denied` at the top
+		// of <head>, so these send cookieless/modeled pings and upgrade on
+		// consent instead of being hard-blocked. The GTM *container* (gtm.js) is
+		// intentionally NOT exempt: it can host non-Google tags that ignore
+		// Consent Mode.
+		//
+		// The exemption is only sound while that default actually precedes the
+		// stack in THIS response — gcm_advanced_exemption_active() checks the
+		// emission flag, so a response that never printed the default (no
+		// wp_head(), AMP) keeps the stack hard-blocked.
 		//
 		// But never override an EXPLICIT per-service denial: if the visitor
 		// rejected this specific Google service via per-service consent
@@ -4556,7 +4630,7 @@ class Frontend {
 		// and the tag stays hard-blocked. The exemption only applies to the
 		// pre-consent / category-default state, not an explicit rejection.
 		if ( true !== $svc_blocked
-			&& $this->gcm_settings && $this->gcm_settings->is_advanced_mode()
+			&& $this->gcm_advanced_exemption_active()
 			&& $this->is_gcm_managed_script( $attrs, $content ) ) {
 			return $full;
 		}
@@ -6349,6 +6423,77 @@ class Frontend {
 			$this->always_allowed_cache = $this->get_always_allowed_gateway_patterns();
 		}
 		return $this->gateway_pattern_matches( $pattern, $this->always_allowed_cache );
+	}
+
+	/**
+	 * Apply the payment-gateway and Instagram Feed exemptions to the CLIENT
+	 * provider list (get_store_data() → `_providersToBlock`), with the same
+	 * explicit-rule carve-out get_provider_category_map() applies to the
+	 * server map.
+	 *
+	 * Built-in patterns (provider database, cookie DB) that overlap an
+	 * always-allowed gateway token — or, on WooCommerce checkout/cart, any
+	 * entry of get_payment_gateway_whitelist() — are removed, as before. An
+	 * EXPLICIT rule (an admin custom rule, or one added through
+	 * `faz_blocking_rules_client`) is never removed: gateway_pattern_matches()
+	 * is a bidirectional substring test, so a generic rule like `payment` or
+	 * `klarna` would otherwise vanish from the client for being a substring of
+	 * `stripe-payment` / `x.klarnacdn.net` while the server map kept it — and a
+	 * dynamically injected script the admin had ruled on ran before consent.
+	 *
+	 * The server does not release a gateway's OWN urls by dropping the rule
+	 * but through get_whitelist(), which merges the same tokens. When an
+	 * explicit rule overlapped a gateway and was kept, the overlapping tokens
+	 * are therefore returned for the client whitelist, so a gateway-hosted url
+	 * resolves to "allowed" on both layers and a differently-hosted script
+	 * under the explicit rule resolves to "blocked" on both. Nothing is
+	 * returned when no explicit rule overlapped: an install without such a
+	 * rule ships exactly the payload it shipped before.
+	 *
+	 * @param array $providers Pattern => category list.
+	 * @param array $explicit  Pattern => true for admin / filter-added rules.
+	 * @return array{providers: array, whitelist: string[]}
+	 */
+	private function apply_client_provider_exemptions( array $providers, array $explicit ) {
+		$sb_exempt_patterns = self::smash_balloon_exempt_patterns();
+		$on_checkout        = $this->is_wc_checkout_or_cart();
+		$checkout_whitelist = $on_checkout ? $this->get_payment_gateway_whitelist() : array();
+		$gateway_overlap    = false;
+
+		foreach ( array_keys( $providers ) as $pattern ) {
+			$gateway_hit = $this->is_always_allowed_gateway_pattern( $pattern );
+			if ( ! $gateway_hit && $on_checkout ) {
+				// On checkout/cart pages the remaining gateway patterns go too, so
+				// the JS interceptors cannot break a payment.
+				foreach ( $checkout_whitelist as $gw ) {
+					if ( false !== stripos( $pattern, $gw ) ) {
+						$gateway_hit = true;
+						break;
+					}
+				}
+			}
+			if ( ! $gateway_hit && ! isset( $sb_exempt_patterns[ $pattern ] ) ) {
+				continue;
+			}
+			if ( isset( $explicit[ $pattern ] ) ) {
+				if ( $gateway_hit ) {
+					$gateway_overlap = true;
+				}
+				continue;
+			}
+			unset( $providers[ $pattern ] );
+		}
+
+		$whitelist = array();
+		if ( $gateway_overlap ) {
+			$whitelist = array_merge( (array) $this->always_allowed_cache, $checkout_whitelist );
+			$whitelist = array_values( array_unique( array_filter( array_map( 'strval', $whitelist ), 'strlen' ) ) );
+		}
+
+		return array(
+			'providers' => $providers,
+			'whitelist' => $whitelist,
+		);
 	}
 
 	/**
@@ -9265,9 +9410,10 @@ class Frontend {
 		} elseif ( true === $svc_blocked ) {
 			$should_block = true;
 		}
-		// Match the output-buffer exemption for Advanced Consent Mode, but an
-		// explicit service denial still wins over a cookieless bootstrap.
-		if ( true !== $svc_blocked && $this->gcm_settings && $this->gcm_settings->is_advanced_mode()
+		// Match the output-buffer exemption for Advanced Consent Mode (same
+		// emitted-default condition, see gcm_advanced_exemption_active()), but
+		// an explicit service denial still wins over a cookieless bootstrap.
+		if ( true !== $svc_blocked && $this->gcm_advanced_exemption_active()
 			&& $this->is_gcm_managed_script( $attrs, $content ) ) {
 			return false;
 		}
