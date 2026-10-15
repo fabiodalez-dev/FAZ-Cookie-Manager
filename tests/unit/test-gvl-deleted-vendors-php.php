@@ -143,6 +143,9 @@ namespace {
 	assert_eq( Gvl::is_vendor_deleted( array( 'id' => 1 ) ), false, 'no deletedDate → not deleted' );
 	assert_eq( Gvl::is_vendor_deleted( array( 'id' => 68, 'deletedDate' => $past ) ), true, 'past deletedDate → deleted' );
 	assert_eq( Gvl::is_vendor_deleted( array( 'id' => 999, 'deletedDate' => $future ) ), false, 'future deletedDate → not yet deleted' );
+	assert_eq( Gvl::is_vendor_deleted( array( 'id' => 7, 'deletedDate' => null ) ), false, 'an explicit null deletedDate is no date → not deleted' );
+	assert_eq( Gvl::is_vendor_deleted( array( 'id' => 8, 'deletedDate' => '' ) ), false, 'an empty deletedDate is no date → not deleted' );
+	assert_eq( Gvl::is_vendor_deleted( array( 'id' => 9, 'deletedDate' => 'not a date' ) ), true, 'a present but unreadable date still fails closed → deleted' );
 
 	// ---------------------------------------------------------------------
 	// Download: the selected-vendor option is pruned to live vendors.

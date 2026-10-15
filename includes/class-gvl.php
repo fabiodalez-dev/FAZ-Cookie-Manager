@@ -222,6 +222,12 @@ class Gvl {
 		if ( ! is_array( $vendor ) || ! array_key_exists( 'deletedDate', $vendor ) ) {
 			return false;
 		}
+		// The GVL spec only writes the field for a deleted vendor; an explicit
+		// null or an empty string carries no date and is not a deletion. A
+		// present value that does not parse still fails closed below.
+		if ( null === $vendor['deletedDate'] || '' === $vendor['deletedDate'] ) {
+			return false;
+		}
 		$deleted_at = strtotime( (string) $vendor['deletedDate'] );
 		return false === $deleted_at || $deleted_at <= time();
 	}
