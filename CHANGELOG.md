@@ -2,6 +2,28 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.34.2] - Unreleased
+
+### Added
+- Right to Object in the IAB TCF section of the preference centre, per purpose and per vendor. Legitimate-interest signals are no longer sent for vendors the visitor switched off or after Reject All, the switches are never shown pre-ticked, and vendor consent is only signalled for vendors that were actually shown to the visitor. Vendors the Global Vendor List marks as deleted are no longer listed or signalled, the list is downloaded as soon as TCF is switched on, and the TCF dates follow the IAB day-level rule.
+
+### Fixed
+- On AMP pages, a site whose geo rules required opt-in consent but which had no GDPR-family banner (for example one set up as "US only" by the wizard) lost both the consent prompt and the blocking, so analytics, ads and pixels on AMP ran without consent and were cached that way by the AMP caches. The prompt and the blocking now stay, as they already did on regular pages.
+- A consent given under one law or banner (for example the US notice) was honoured by the server and by Google Consent Mode on a page served under another (for example the GDPR banner after travelling or a VPN), until the banner script noticed and withdrew it. Every layer now rejects a consent cookie from a different scope before anything runs.
+- Vendors that queued a request on the TCF API before the consent framework finished loading never got an answer: the queue was discarded. Queued commands are now replayed.
+- The consent log stored the TC string of the previous decision, so a Reject row carried the Accept All string. Each row now records the string of its own decision.
+- A withdrawal made within ten seconds of an acceptance, from the same browser, was dropped by the flood limit, so the log kept saying "accepted". A correction by the same visitor now goes through; new visitors from one address are still limited.
+- With Advanced Consent Mode, a custom blocking rule that happened to match the inline Consent Mode default could neutralise it while the Google tags still ran. The default is now protected from the blocker.
+- Server-side blocking missed video and audio sources and posters, legacy object and embed players, inline style attributes, compact CSS imports and stylesheets inside noscript, all of which load before any script runs. They are now held back until consent like images and frames, and the consent runtime gates the same elements when scripts create them.
+- A theme or edge service that supplies the visitor's country through the faz_visitor_country filter was not counted as a country source when deciding whether a page may be cached, so a page rendered for one jurisdiction could be served from cache to another. Tor exits flagged by Cloudflare now go to the most protective rules, and geolocation caches no longer store a plain hash of the visitor's IP.
+- The data request form refused every submission when its page was served from a full-page cache for longer than the security token lives, and the Do Not Sell form could cache one visitor's state for everyone. Both pages are now kept out of page caches, the Do Not Sell form recovers an expired token on its own, and every refusal names the email fallback.
+- The consent log now records the jurisdiction that was actually enforced, includes the TC string, GPP string, GPC and DNT signals, country and ruleset in the CSV export, adds the time in UTC, and single Do Not Sell records can be fetched by id. The admin wording now says the IP is pseudonymised, not anonymised.
+- Generated cookie policies could be published with no controller name or contact for GDPR, CCPA and LGPD; publishing now requires them, while a page already live keeps showing for visitors. International transfers are described under the document's own law (LGPD, POPIA or neutral) instead of always citing the GDPR, the legacy cookie table shows transfer disclosures too, Dutch and Croatian policies are fully translated, and the consent-record period comes from the consent-log setting.
+- The WP Consent API was told the banner's law instead of the regime actually applied; the IAB labels are now translatable; GPC no longer rewrites the consent cookie on every page view; explicit blocking rules are kept on the client under the payment-gateway exemption; restored embeds keep the site's sandbox and referrer settings; uninstall with data removal also removes the plugin's user meta; and wp faz status reports per-service consent correctly.
+- The inline bootstrap that protects the page while the consent runtime downloads now stands down when an optimiser runs it after the runtime, and hands over to a runtime that arrives late, instead of staying in its fallback mode for the whole visit.
+- Query Monitor's admin bar stopped working on any page that loaded a tracker, because its inline data block names the page's scripts and FAZ read a tracker signature inside it (#322). An inline script that only assigns JSON data is no longer searched for tracker signatures, in both places FAZ judges inline scripts; the script is still judged by its own id, and any call or statement next to the data is checked as before.
+- The "Site Kit by Google" entry of the provider list and its blocking template matched every file of the Site Kit plugin, so its admin bar, dashboard scripts and consent-mode bridge were blocked until analytics was accepted, for the administrator too (#322). The entry now matches only the gtag.js tag Site Kit prints for Google Analytics.
+
 ## [1.34.1] - 2026-10-10
 
 ### Added
