@@ -2,7 +2,7 @@
     "gdpr": {
         "notice": {
             "elements": {
-                "title": "Záleží nám na vašom súkrome",
+                "title": "Záleží nám na vašom súkromí",
                 "description": "<p>Súbory cookie používame na zlepšenie vášho prehliadania, zobrazovanie personalizovaných reklám alebo obsahu a analýzu našej návštevnosti. Kliknutím na „Prijať všetko“ súhlasíte s používaním súborov cookie. Svoj súhlas môžete kedykoľvek zmeniť alebo odvolať kliknutím na ikonu predvolieb súhlasu.</p>",
                 "privacyLink": "",
                 "buttons": {
@@ -108,7 +108,7 @@
     "ccpa": {
         "notice": {
             "elements": {
-                "title": "Záleží nám na vašom súkrome",
+                "title": "Záleží nám na vašom súkromí",
                 "description": "<p>Táto webová stránka alebo nástroje tretích strán spracúvajú osobné údaje. Predaj svojich osobných údajov môžete odmietnuť kliknutím na odkaz „Nepredávať ani nezdieľať moje osobné údaje“. Svoj súhlas môžete kedykoľvek zmeniť alebo odvolať kliknutím na ikonu predvolieb súhlasu.</p>",
                 "privacyLink": "",
                 "buttons": {
