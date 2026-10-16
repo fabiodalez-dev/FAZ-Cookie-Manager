@@ -260,33 +260,57 @@ namespace {
 	faz_advance( 6 );
 	ipw_check( 'throttled' === $post( '', 'rejected' ), 'a post without a consent_id inside the window is throttled' );
 
-	// 8b. The exception is rationed per ADDRESS, not only per consent_id. Each
-	//     id carries its own chg1/chgn caps, so on their own they let an
-	//     address holding K known ids land K rows every 10 s by alternating
-	//     their statuses — where the IP gate alone lets one through.
+	// 8b. Two visitors behind ONE address (NAT, CGNAT, a corporate proxy),
+	//     each withdrawing seconds after accepting: both withdrawals must
+	//     land. The exception's first use is keyed on the consent_id, so one
+	//     person's correction can never spend another person's.
+	faz_reset();
+	$visitor_a = 'shared-nat-visitor-a-0123456789abcdef';
+	$visitor_b = 'shared-nat-visitor-b-0123456789abcdef';
+	$post( $visitor_a, 'accepted' );           // t=0
+	faz_advance( 11 );
+	$post( $visitor_b, 'accepted' );           // t=11, IP window closed until t=21
+	faz_advance( 2 );
+	ipw_check( 'logged' === $post( $visitor_a, 'rejected' ), 'shared address: visitor A\'s withdrawal at t=13 lands' );
+	faz_advance( 2 );
+	ipw_check( 'logged' === $post( $visitor_b, 'rejected' ), 'and visitor B\'s withdrawal at t=15, from the same address, lands too' );
+	ipw_check( 'rejected' === $newest_status( $visitor_a ) && 'rejected' === $newest_status( $visitor_b ), 'both registers now say "rejected"' );
+
+	// 8c. A flood of K known ids from one address stays bounded. Each id's
+	//     first exception is free (once per 300 s); every later one draws on a
+	//     budget shared by the address, one per 10 s. Before, the per-id caps
+	//     alone let the address land K rows every 10 s by alternating.
 	faz_reset();
 	$ids = array( 'known-visitor-a-0123456789abcdef', 'known-visitor-b-0123456789abcdef', 'known-visitor-c-0123456789abcdef' );
 	foreach ( $ids as $known ) {
-		$post( $known, 'accepted' ); // each lands in its own IP window
+		$post( $known, 'accepted' ); // t=0, 11, 22: each in its own IP window
 		faz_advance( 11 );
 	}
-	// t=33: the IP window was armed at t=22 and is open again. Arm it with a
-	// visitor the register has never seen, so no id's own caps are touched.
-	$post( 'window-opener-0123456789abcdef', 'accepted' );
+	$post( 'window-opener-0123456789abcdef', 'accepted' ); // t=33: close the IP window again
 	faz_advance( 2 );
 	$landed = 0;
 	foreach ( $ids as $known ) {
-		if ( 'logged' === $post( $known, 'partial', array( 'analytics' => 'no' ) ) ) {
-			$landed++;
-		}
+		$landed += 'logged' === $post( $known, 'partial', array( 'analytics' => 'no' ) ) ? 1 : 0;
 	}
-	ipw_check( 1 === $landed, 'three known ids flipping from one address inside one window land ONE exception, not three (got ' . $landed . ')' );
-	faz_advance( 11 );
-	$post( 'window-opener-2-0123456789abcdef', 'accepted' ); // close the IP window again
+	ipw_check( 3 === $landed, 'round 1: each known id\'s first correction lands (got ' . $landed . ')' );
+	faz_advance( 2 );
+	ipw_check( 'throttled' === $post( $ids[0], 'rejected' ), 'a flip the per-id chgn cap refuses is refused' );
+	$shared = array_filter( array_keys( $GLOBALS['faz_throttles'] ), function ( $key ) { return 0 === strpos( $key, 'faz_consent_ip_chg_' ); } );
+	ipw_check( array() === array_values( $shared ), 'and neither the first corrections nor that refused candidate spent the address\'s shared budget' );
+	faz_advance( 9 );                                      // t=46: IP window open, chgn windows elapsed
+	$post( 'window-opener-2-0123456789abcdef', 'accepted' ); // close it again
 	faz_advance( 1 );
-	ipw_check( 'logged' === $post( $ids[2], 'rejected' ), 'and the exception comes back with the next window' );
+	$landed = 0;
+	foreach ( $ids as $known ) {
+		$landed += 'logged' === $post( $known, 'rejected' ) ? 1 : 0;
+	}
+	ipw_check( 1 === $landed, 'round 2 inside one IP window: the address lands ONE further correction, not three (got ' . $landed . ')' );
+	faz_advance( 11 );
+	$post( 'window-opener-3-0123456789abcdef', 'accepted' );
+	faz_advance( 1 );
+	ipw_check( 'logged' === $post( $ids[2], 'accepted' ), 'and the shared budget comes back with the next window' );
 
-	// 8c. A request the IP gate refuses arms nothing on its way out. It used to
+	// 8d. A request the IP gate refuses arms nothing on its way out. It used to
 	//     fall through and arm the per-id window and the chg1 cap before the
 	//     verdict — two wp_options rows per request on a site without an
 	//     object cache, bought by minting a fresh consent_id each time.
