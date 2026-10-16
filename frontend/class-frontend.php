@@ -9439,7 +9439,7 @@ class Frontend {
 	 * function, a single-quoted string, a reference to another variable or a
 	 * call is not data and the script is judged as usual. A declaration list
 	 * (`var a = {…}, b = …`) is rejected too: the part after the comma can be
-	 * any expression.
+	 * any expression. So is an assignment to `location`, which navigates.
 	 *
 	 * @param string $content Inline script body.
 	 * @return bool
@@ -9463,7 +9463,21 @@ class Frontend {
 			if ( $pos >= $len ) {
 				return $seen > 0;
 			}
-			if ( ! preg_match( '/\G(?:(?:var|let|const)\s+|window\.)[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*/', $body, $m, 0, $pos ) ) {
+			if ( ! preg_match( '/\G(?:(?:var|let|const)\s+|window\.)([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*/', $body, $m, 0, $pos ) ) {
+				return false;
+			}
+			// `location` is a global whose assignment is an action, not a
+			// definition: `var location = "https://…"` at top level and
+			// `window.location = …` both go through the Location setter and
+			// navigate the page, whatever JSON value is given (an object
+			// navigates to its string form). Exempted, that navigation ran
+			// before consent and outside every provider and custom rule, so it
+			// is judged as code. The grammar above already refuses every other
+			// spelling (`document.location`, `top.location`, `window["…"]`).
+			// Event handler names need no entry: an IDL handler takes a
+			// callable or null, and JSON can spell neither a function nor
+			// source to compile.
+			if ( 'location' === $m[1] ) {
 				return false;
 			}
 			$pos += strlen( $m[0] );
