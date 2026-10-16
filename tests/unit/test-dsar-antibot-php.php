@@ -113,7 +113,12 @@ namespace {
 		}
 		return $out;
 	}
-	function add_action( $hook, $cb = null, $prio = 10, $args = 1 ) {}
+	function add_action( $hook, $cb = null, $prio = 10, $args = 1 ) {
+		$GLOBALS['__faz_actions'][ $hook ] = $cb;
+	}
+	function wp_send_json_success( $data = null ) {
+		$GLOBALS['__faz_json'] = array( 'success' => true, 'data' => $data );
+	}
 	function add_filter( $hook, $cb, $prio = 10, $args = 1 ) {
 		$GLOBALS['__faz_filters'][ $hook ][] = $cb;
 	}
@@ -888,6 +893,60 @@ namespace {
 	foreach ( array( 'faz_dsar_pre_submit', 'challenges.cloudflare.com', 'api.hcaptcha.com', 'altcha.org', 'Akismet' ) as $needle ) {
 		check( false !== strpos( $source, $needle ), "the filter's docblock documents $needle" );
 	}
+
+	// ── 9. A copy a cache kept for days can still be submitted ───────────────
+	//
+	// The page-cache veto reaches a form in a singular post's content; a form in
+	// a widget, a builder or block template, a synced pattern, or a page an edge
+	// cache keeps anyway, is served with a nonce and a stamp a day or more old,
+	// and every submission was refused. The script now refreshes both from
+	// handle_refresh() before sending (tests/unit/js/dsar-cache-refresh.test.mjs
+	// pins the client half); this pins what the server hands out.
+
+	echo "— the refresh action hands out a nonce and stamp the submit accepts\n";
+
+	reset_state();
+	$refresh_action = defined( 'FazCookie\Includes\DSAR_Shortcode::REFRESH_ACTION' ) ? FazCookie\Includes\DSAR_Shortcode::REFRESH_ACTION : 'faz_dsar_refresh';
+	check( isset( $GLOBALS['__faz_actions'][ 'wp_ajax_nopriv_' . $refresh_action ] ), 'the refresh action is registered for anonymous visitors' );
+	check( isset( $GLOBALS['__faz_actions'][ 'wp_ajax_' . $refresh_action ] ), 'and for logged-in ones' );
+
+	// The premise: a stamp rendered two days ago is refused.
+	$cached = FazCookie\Includes\DSAR_Shortcode::issue_stamp();
+	$GLOBALS['__faz_now'] += 2 * DAY_IN_SECONDS;
+	$_POST = browser_post( $cached );
+	assert_eq( err_code( $dsar->guard_submission( ctx() ) ), 'faz_dsar_stale', 'premise: the stamp of a copy cached two days ago is refused' );
+
+	$GLOBALS['__faz_json'] = null;
+	if ( method_exists( $dsar, 'handle_refresh' ) ) {
+		$dsar->handle_refresh();
+	}
+	$fresh = is_array( $GLOBALS['__faz_json'] ) && ! empty( $GLOBALS['__faz_json']['success'] ) ? $GLOBALS['__faz_json']['data'] : array();
+	assert_eq( isset( $fresh['nonce'] ) ? $fresh['nonce'] : null, 'nonce-faz_dsar_submit', 'the refresh returns the nonce handle_submit() verifies' );
+	assert_eq( isset( $fresh['t'] ) ? $fresh['t'] : null, $GLOBALS['__faz_now'], 'and a stamp issued now' );
+	assert_eq( isset( $fresh['hp'] ) ? $fresh['hp'] : null, hp_name_for( $GLOBALS['__faz_now'] ), 'with the honeypot name derived from it' );
+	assert_eq( isset( $fresh['wait'] ) ? $fresh['wait'] : null, 3, 'and the dwell the script must wait out before sending' );
+	$GLOBALS['__faz_now'] += 3;
+	$_POST = browser_post( array( 't' => $fresh['t'] ?? 0, 'sig' => $fresh['sig'] ?? '', 'salt' => $fresh['salt'] ?? '', 'diff' => $fresh['diff'] ?? 0 ) );
+	assert_eq( $dsar->guard_submission( ctx() ), true, 'the refreshed form, sent after the dwell, is accepted' );
+
+	reset_state();
+	enable_pow( 2 );
+	add_filter( 'faz_dsar_min_dwell_seconds', function () { return 5; } );
+	$GLOBALS['__faz_json'] = null;
+	if ( method_exists( $dsar, 'handle_refresh' ) ) {
+		$dsar->handle_refresh();
+	}
+	$fresh = is_array( $GLOBALS['__faz_json'] ) ? $GLOBALS['__faz_json']['data'] : array();
+	check( ! empty( $fresh['salt'] ) && 2 === ( $fresh['diff'] ?? 0 ), 'with the proof of work on, the refresh issues a new challenge' );
+	assert_eq( isset( $fresh['wait'] ) ? $fresh['wait'] : null, 5, 'and the wait follows the filtered dwell' );
+	$GLOBALS['__faz_now'] += 1;
+	$_POST = browser_post( array( 't' => $fresh['t'] ?? 0, 'sig' => $fresh['sig'] ?? '', 'salt' => $fresh['salt'] ?? '', 'diff' => $fresh['diff'] ?? 0 ) );
+	assert_eq( err_code( $dsar->guard_submission( ctx() ) ), 'faz_dsar_too_fast', 'the dwell still applies, counted from the refresh' );
+	$GLOBALS['__faz_now'] += 5;
+	$_POST = browser_post( array( 't' => $fresh['t'] ?? 0, 'sig' => $fresh['sig'] ?? '', 'salt' => $fresh['salt'] ?? '', 'diff' => $fresh['diff'] ?? 0 ), array( 'faz_pow_n' => solve_pow( $fresh['salt'] ?? '', $fresh['diff'] ?? 0 ) ) );
+	assert_eq( $dsar->guard_submission( ctx() ), true, 'and the refreshed challenge, solved, is accepted' );
+	$source = (string) file_get_contents( __DIR__ . '/../../includes/class-dsar-shortcode.php' );
+	check( false !== strpos( $source, "'refreshAction' => self::REFRESH_ACTION" ), 'the script is told the action through fazDsarConfig' );
 
 	// ── Summary ──────────────────────────────────────────────────────────────
 
