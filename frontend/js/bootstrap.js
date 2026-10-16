@@ -2450,6 +2450,17 @@
     // against the live provider rules next to it, so a conservative guess
     // delays nothing it should not.
     var PARK_CATEGORY = 'marketing';
+    // What the safety release parked, by origin alone and under that
+    // placeholder category. A runtime that arrives afterwards (finish(), the
+    // `late` branch) has the rules this file lacks, and these are the
+    // decisions it has to see again: an allowed CDN image is handed back, a
+    // refused one gets the category its consent actually turns on. Bounded
+    // like the queue; past the cap a park simply keeps its placeholder,
+    // which delays a restore and releases nothing.
+    var safetyParks = [];
+    function noteSafetyPark(el, key, value, script) {
+        if (safetyParks.length < LIMIT) safetyParks.push({ el: el, key: key, value: String(value), script: !!script });
+    }
     function parkCategory(policy, value) {
         if (policy && typeof policy.category === 'function') {
             try {
@@ -2477,6 +2488,7 @@
     // spellings keep their data-faz-href park, which
     // script[data-faz-href][data-faz-category] restores.
     function parkScriptSrc(el, src, policy) {
+        if (policy === safety) noteSafetyPark(el, 'src', src, true);
         var type = attr(el, 'type');
         if (type && type !== 'text/plain' && type !== 'javascript/blocked' && !nativeHas.call(el, 'data-faz-original-type')) {
             setAttr(el, 'data-faz-original-type', type);
@@ -2489,6 +2501,7 @@
     function parkAttribute(el, key, value, policy) {
         if (!el || el.nodeType !== 1) return;
         if (key === 'src' && tagKey(el) === 'SCRIPT') return parkScriptSrc(el, String(value), policy);
+        if (policy === safety) noteSafetyPark(el, key, value, false);
         var target = parkTarget(tagKey(el), key);
         setAttr(el, target.value, value);
         // A list restores by re-reading every candidate, so it carries no
@@ -2639,29 +2652,72 @@
             // read markup, so a parked srcdoc stays parked; the restore pass
             // of a later page view hands it back on the consent that allows it.
             defer(function (live) {
-                var refused, named = '';
-                if (key === 'srcdoc') {
-                    if (live && typeof live.markup === 'function') {
-                        named = String(live.markup(el, value) || '');
-                        refused = named !== '';
-                    } else {
-                        refused = true;
-                    }
-                } else {
-                    var urls = isList(key) ? candidates(value) : [value];
-                    refused = !(live && live.url) || urls.some(function (url) { return !!live.url(url); });
-                }
-                if (!refused) {
-                    dropAttr(el, target.value);
-                    if (target.category) dropAttr(el, target.category);
-                    if (el.nodeName === 'IFRAME' && el.classList) el.classList.remove('faz-hidden');
+                var verdict = parkVerdict(el, key, value, live);
+                if (!verdict.refused) {
+                    unpark(el, key, target);
                     return setAttr(el, key, value);
                 }
                 // Refused. Now someone can name the category the restore
                 // selectors need, so replace the placeholder with the real one.
-                if (target.category && live) setAttr(el, target.category, named || parkCategory(live, value));
+                if (target.category && live) setAttr(el, target.category, verdict.named || parkCategory(live, value));
+                if (live === safety) noteSafetyPark(el, key, value, false);
                 if (live && live.node) live.node(el);
             });
+        });
+    }
+    // The question guard() hands to whoever has the rules, and the one a late
+    // runtime is asked again about each safety park (reviewSafetyParks).
+    function parkVerdict(el, key, value, live) {
+        if (key === 'srcdoc') {
+            if (live && typeof live.markup === 'function') {
+                var named = String(live.markup(el, value) || '');
+                return { refused: named !== '', named: named };
+            }
+            return { refused: true, named: '' };
+        }
+        var urls = isList(key) ? candidates(value) : [value];
+        return { refused: !(live && live.url) || urls.some(function (url) { return !!live.url(url); }), named: '' };
+    }
+    function unpark(el, key, target) {
+        dropAttr(el, target.value);
+        if (target.category) dropAttr(el, target.category);
+        if (el.nodeName === 'IFRAME' && el.classList) el.classList.remove('faz-hidden');
+    }
+    // Each park the safety release made, judged again by the runtime that has
+    // just taken over. A park the page or the runtime has since changed is
+    // theirs and is left alone; so is a category somebody other than this
+    // file wrote. An allowed one is handed back through the LIVE setAttribute,
+    // which by now is the runtime's own gate, so it is judged a second time
+    // by the rules that apply from here on rather than written natively.
+    // Scripts are not re-inserted here — restoring one is the runtime's own
+    // pass (_fazUnblockServerSide), which reads the category; this corrects
+    // the category it will read.
+    function reviewSafetyParks(policy) {
+        var list = safetyParks;
+        safetyParks = [];
+        list.forEach(function (park) {
+            try {
+                var el = park.el;
+                if (park.script) {
+                    if (attr(el, 'type') === 'text/plain' && attr(el, 'src') === park.value && attr(el, 'data-faz-category') === PARK_CATEGORY) {
+                        setAttr(el, 'data-faz-category', parkCategory(policy, park.value));
+                    }
+                    return;
+                }
+                var target = parkTarget(tagKey(el), park.key);
+                if (attr(el, target.value) !== park.value) return;
+                var verdict = parkVerdict(el, park.key, park.value, policy);
+                if (!verdict.refused) {
+                    unpark(el, park.key, target);
+                    return el.setAttribute(park.key, park.value);
+                }
+                if (target.category && attr(el, target.category) === PARK_CATEGORY) {
+                    setAttr(el, target.category, verdict.named || parkCategory(policy, park.value));
+                }
+                if (policy.node) policy.node(el);
+            } catch (error) {
+                w.console.warn('[FAZ Cookie Manager] Re-evaluating a resource parked by the safety release failed; it stays parked', error);
+            }
         });
     }
     var observer = null;
@@ -2853,8 +2909,51 @@
     }
     // Deferred scripts always run before DOMContentLoaded, so still pending at
     // that point means the runtime is not coming.
+    //
+    // Once parsing is over that cannot be read off the event any more. This
+    // file is then itself running as a DEFERRED script — an optimiser rewrote
+    // the inline bootstrap (LiteSpeed "Load JS Deferred" turns it into a
+    // data: URI with `defer`) — and the runtime, deferred after it in the same
+    // ordered list, has not run yet. A microtask released before it every
+    // time, so the runtime always arrived "late" and every first-party request
+    // of the window went out under the origin-only policy instead of the real
+    // one. When the runtime's tag is in the document and has not run, its own
+    // load or error event is the signal, with a ceiling for a tag that never
+    // fires one (a delay-until-interaction loader that runs a copy instead).
+    var RUNTIME_WAIT_MS = 5000;
+    function runtimeTag() {
+        var tag = d.getElementById('faz-cookie-manager-js');
+        if (tag && tag.nodeName === 'SCRIPT') return tag;
+        var all = d.getElementsByTagName('script');
+        for (var i = 0; i < all.length; i++) {
+            var src = attr(all[i], 'src') || attr(all[i], 'data-src') || '';
+            if (/\/frontend\/js\/script(?:\.min)?\.js(?:[?#]|$)/.test(src)) return all[i];
+        }
+        return null;
+    }
+    function releaseAfterRuntime() {
+        // Every runtime leaves window.fazcookie behind once it has run — a
+        // store-less one included, which is exactly the one that never hands
+        // over — so its presence means there is nothing left to wait for.
+        var tag = w.fazcookie ? null : runtimeTag();
+        if (!tag) return void Promise.resolve().then(releaseSafely);
+        var done = false, timer = null;
+        var settle = function () {
+            if (done) return;
+            done = true;
+            tag.removeEventListener('load', settle);
+            tag.removeEventListener('error', settle);
+            if (timer) w.clearTimeout(timer);
+            // A microtask later, not now: the handoff of a stale runtime
+            // (adoptStale) is itself a microtask queued while it evaluated.
+            Promise.resolve().then(releaseSafely);
+        };
+        tag.addEventListener('load', settle);
+        tag.addEventListener('error', settle);
+        timer = w.setTimeout(settle, RUNTIME_WAIT_MS);
+    }
     if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', releaseSafely);
-    else Promise.resolve().then(releaseSafely);
+    else releaseAfterRuntime();
 
     // A runtime from before this file — 1.34.0 and older — never calls
     // start() or finish(). A page cache serving that bundle under current
@@ -3012,7 +3111,15 @@
             queue = [];
             tasks.forEach(function (task) { run(task, policy); });
             into = new WeakMap();
-            if (late) immediate = policy;
+            if (late) {
+                immediate = policy;
+                // What the safety release parked under its placeholder is
+                // decided again by the rules that exist now. A policy with
+                // no URL matcher (a stale runtime that exposes none) cannot
+                // say anything new, and the parks stay as they are.
+                if (typeof policy.url === 'function') reviewSafetyParks(policy);
+            }
+            safetyParks = [];
         }
     };
 })(window, document);

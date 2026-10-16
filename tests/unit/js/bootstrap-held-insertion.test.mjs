@@ -27,7 +27,10 @@
  *   d. a namespace name (xmlns) is not a request;
  *   e. the real 1.34.0 runtime under this bootstrap: no loop, banner mounted
  *      (git tag v1.34.0; reported as SKIPPED where the tag is not fetched), and
- *      the same contract against a minimal stand-in that always runs.
+ *      the same contract against a minimal stand-in that always runs;
+ *   f. a bootstrap that runs deferred waits for the runtime's tag;
+ *   g. a runtime that takes over after the safety release re-judges what the
+ *      release parked under its placeholder category.
  *
  * Every loop below is bounded by a counter, so the unfixed code FAILS here
  * instead of hanging the runner. Point FAZ_BOOTSTRAP_UNDER_TEST at another
@@ -522,6 +525,57 @@ await scenario(async () => {
     ok('1.34.0: the hand-over is reported', warnings.some((l) => l.indexOf('older than this page') !== -1));
     ok('1.34.0: and it is not mistaken for a missing runtime', document.documentElement.className.indexOf('faz-consent-runtime-missing') === -1);
   }
+});
+
+console.log('\nf. a bootstrap that runs deferred waits for the runtime');
+
+await scenario(async () => {
+  const tag = '<script id="faz-cookie-manager-js" src="/wp-content/plugins/faz-cookie-manager/frontend/js/script.min.js"></script>';
+  const { window, document, fetched } = boot({ ready: 'interactive', body: '<ul id="list"></ul>' + tag });
+  window.fetch(SITE + 'wp-json/early');
+  await Promise.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+  ok('not released while the runtime\'s tag has not run', window._fazBootstrap.released !== true);
+  eq('so a first-party request waits for the real policy', fetched.length, 0);
+  document.getElementById('faz-cookie-manager-js').dispatchEvent(new window.Event('error'));
+  await Promise.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+  eq('the tag failing to load releases it', window._fazBootstrap.released, true);
+  ok('and the held request goes out', fetched.indexOf(SITE + 'wp-json/early') !== -1);
+});
+
+await scenario(async () => {
+  const { window } = boot({ ready: 'interactive' });
+  await Promise.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+  eq('with no runtime tag in the document it releases at once, as before', window._fazBootstrap.released, true);
+});
+
+console.log('\ng. a late runtime re-judges what the safety release parked');
+
+await scenario(async () => {
+  const { window, document, nativeGetAttribute } = boot({ ready: 'complete' });
+  await Promise.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+  eq('premise: released', window._fazBootstrap.released, true);
+  const list = document.getElementById('list');
+  list.innerHTML = '<img id="cdn" src="https://cdn.site-assets.test/hero.jpg"><img id="px" src="https://tracker.test/px.gif">';
+  const set = document.createElement('img');
+  set.id = 'set';
+  set.src = 'https://cdn.site-assets.test/set.jpg';
+  list.appendChild(set);
+  await new Promise((r) => setTimeout(r, 0));
+  eq('premise: the CDN image is parked by origin', nativeGetAttribute.call(document.getElementById('cdn'), 'data-faz-category'), 'marketing');
+  eq('premise: so is the one assigned through the setter', nativeGetAttribute.call(set, 'data-faz-src'), 'https://cdn.site-assets.test/set.jpg');
+  handoff(window, {
+    url: (u) => /tracker\.test/.test(String(u)),
+    category: () => 'analytics',
+  });
+  eq('an image the runtime allows is handed back', nativeGetAttribute.call(document.getElementById('cdn'), 'src'), 'https://cdn.site-assets.test/hero.jpg');
+  eq('without its placeholder category', nativeGetAttribute.call(document.getElementById('cdn'), 'data-faz-category'), null);
+  eq('the setter-assigned one too', nativeGetAttribute.call(set, 'src'), 'https://cdn.site-assets.test/set.jpg');
+  eq('a refused one stays parked', nativeGetAttribute.call(document.getElementById('px'), 'src'), null);
+  eq('under the category its consent really turns on', nativeGetAttribute.call(document.getElementById('px'), 'data-faz-category'), 'analytics');
 });
 
 console.log('');
