@@ -276,7 +276,8 @@ if ( is_callable( $migrate ) ) {
 	$GLOBALS['faz_test_options']  = array();
 	Cookie_Controller::$busts     = 0;
 	Category_Controller::$busts   = 0;
-	call_user_func( $migrate );
+	$done_now = call_user_func( $migrate );
+	nd_eq( $done_now, true, 'a completed run reports itself done' );
 
 	$nec = json_decode( $db->tables['wp_faz_cookie_categories'][1]['description'], true );
 	nd_eq( $nec['en'], $en_cat['necessary']['description'], 'stored English stock text (even reflowed, tags lost) becomes the current English text' );
@@ -293,8 +294,9 @@ if ( is_callable( $migrate ) ) {
 	// Once per site: an administrator who later restores the old sentence keeps it.
 	$db->tables['wp_faz_cookie_categories'][1]['description'] = wp_json_encode( array( 'en' => $legacy_en ) );
 	$before = $db->updates;
-	call_user_func( $migrate );
+	$done_again = call_user_func( $migrate );
 	nd_eq( $db->updates, $before, 'a second run writes nothing' );
+	nd_eq( $done_again, true, 'and still reports done, so the batch can write its version marker' );
 
 	// A plain-string legacy value is rewritten in the default language.
 	$db = new Faz_Disclosure_Wpdb();
@@ -311,8 +313,12 @@ if ( is_callable( $migrate ) ) {
 	$db = new Faz_Disclosure_Wpdb();
 	$GLOBALS['wpdb']             = $db;
 	$GLOBALS['faz_test_options'] = array();
-	call_user_func( $migrate );
+	$declined = call_user_func( $migrate );
 	nd_eq( get_option( 'faz_necessary_disclosure_text_done', 0 ), 0, 'no tables yet: marker withheld so the migration retries' );
+	// The step's own marker is not enough: run_pending_migrations() returns
+	// before calling anything once the BATCH marker is current, so a decline
+	// that does not reach the batch was retried only by the next release.
+	nd_eq( $declined, false, 'and the decline is reported, so the batch withholds its version marker' );
 
 	// A failed write throws so the batch withholds its version marker.
 	$db = new Faz_Disclosure_Wpdb();
@@ -333,7 +339,8 @@ if ( is_callable( $migrate ) ) {
 
 	// Registered in the batch.
 	$src = (string) file_get_contents( $root . '/includes/class-activator.php' );
-	nd_eq( 1 === preg_match( '/function run_pending_migrations\(\).*?self::refresh_necessary_disclosure_text\(\);.*?self::refresh_cookie_translation_caches\(\);/s', $src ), true, 'run_pending_migrations() runs it, before the translation caches are refreshed' );
+	nd_eq( 1 === preg_match( '/function run_pending_migrations\(\).*?self::refresh_necessary_disclosure_text\(\).*?self::refresh_cookie_translation_caches\(\);/s', $src ), true, 'run_pending_migrations() runs it, before the translation caches are refreshed' );
+	nd_eq( 1 === preg_match( '/\$all_complete = self::refresh_necessary_disclosure_text\(\) && \$all_complete;/', $src ), true, 'and its result gates the batch version marker' );
 }
 
 echo "\n{$passed} passed, {$failed} failed\n";

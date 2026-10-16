@@ -167,7 +167,7 @@ class Activator {
 			self::normalize_legacy_functional_optout_flags();
 			self::move_sourcebuster_to_marketing();
 			self::reset_stale_per_cookie_consent();
-			self::refresh_necessary_disclosure_text();
+			$all_complete = self::refresh_necessary_disclosure_text() && $all_complete;
 			self::demote_bulky_autoloaded_options();
 			self::refresh_cookie_translation_caches();
 			self::remove_dead_site_settings();
@@ -2484,15 +2484,23 @@ class Activator {
 	 * restores the old sentence; withheld while the tables are missing; a failed
 	 * write throws so the batch withholds its version marker and retries.
 	 *
-	 * @return void
+	 * "Retried" has to be true, and until the return value it was not: a step
+	 * that declined (helpers not loaded, tables missing) returned quietly, the
+	 * batch wrote its version marker anyway, and the fast path in
+	 * run_pending_migrations() never called this again until a release bumped
+	 * MIGRATIONS_VERSION. It now reports the decline the way
+	 * seed_own_consent_cookie() does, and the batch withholds the marker.
+	 *
+	 * @return bool True when the step is done (now or on an earlier run); false
+	 *              when it declined and must be retried.
 	 * @throws \RuntimeException When a row cannot be written.
 	 */
 	public static function refresh_necessary_disclosure_text() {
 		if ( get_option( 'faz_necessary_disclosure_text_done' ) ) {
-			return;
+			return true;
 		}
 		if ( ! function_exists( 'faz_read_json_file' ) ) {
-			return; // Utilities not loaded in this context: retried later.
+			return false; // Utilities not loaded in this context: retried later.
 		}
 		global $wpdb;
 		$cookies    = $wpdb->prefix . 'faz_cookies';
@@ -2500,7 +2508,7 @@ class Activator {
 		foreach ( array( $cookies, $categories ) as $table ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the upgrade path.
 			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
-				return; // No table yet: retried on the next run, marker not set.
+				return false; // No table yet: retried on the next run, marker not set.
 			}
 		}
 
@@ -2595,6 +2603,7 @@ class Activator {
 		}
 		wp_cache_delete( 'faz_category_contents_en', 'faz_category_contents' );
 		update_option( 'faz_necessary_disclosure_text_done', 1, false );
+		return true;
 	}
 
 	/**
