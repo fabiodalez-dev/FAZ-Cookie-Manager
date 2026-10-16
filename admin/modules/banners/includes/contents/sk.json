@@ -1,0 +1,214 @@
+{
+    "gdpr": {
+        "notice": {
+            "elements": {
+                "title": "Záleží nám na vašom súkromí",
+                "description": "<p>Súbory cookie používame na zlepšenie vášho prehliadania, zobrazovanie personalizovaných reklám alebo obsahu a analýzu našej návštevnosti. Kliknutím na „Prijať všetko“ súhlasíte s používaním súborov cookie. Svoj súhlas môžete kedykoľvek zmeniť alebo odvolať kliknutím na ikonu predvolieb súhlasu.</p>",
+                "privacyLink": "",
+                "buttons": {
+                    "elements": {
+                        "accept": "Prijať všetko",
+                        "reject": "Odmietnuť všetko",
+                        "settings": "Prispôsobiť",
+                        "readMore": "Zásady používania súborov cookie",
+                        "donotSell": "Nepredávať ani nezdieľať moje osobné údaje"
+                    }
+                },
+                "closeButton": "Zavrieť"
+            }
+        },
+        "categoryPreview": {
+            "elements": {
+                "buttons": {
+                    "elements": {
+                        "save": "Uložiť moje predvoľby"
+                    }
+                }
+            }
+        },
+        "preferenceCenter": {
+            "elements": {
+                "title": "Prispôsobenie nastavenia súhlasu",
+                "description": "<p>Súbory cookie nám pomáhajú, aby ste sa na webovej stránke mohli efektívne pohybovať a využívať určité funkcie. Podrobné informácie o všetkých súboroch cookie nájdete nižšie v jednotlivých kategóriách súhlasu.</p><p>Súbory cookie zaradené do kategórie „Nevyhnutné“ sa ukladajú vo vašom prehliadači, pretože sú nevyhnutné na zabezpečenie základných funkcií webovej stránky.</p><p>Používame aj súbory cookie tretích strán, ktoré nám pomáhajú analyzovať, ako túto webovú stránku používate, ukladať vaše predvoľby a poskytovať obsah a marketingové materiály, ktoré sú pre vás relevantné. Tieto súbory cookie sa vo vašom prehliadači uložia iba s vaším predchádzajúcim súhlasom.</p><p>Môžete sa rozhodnúť povoliť alebo zakázať niektoré z týchto súborov cookie alebo všetky, avšak zakázanie niektorých z nich môže ovplyvniť vaše prehliadanie.</p>",
+                "showMore": "Zobraziť viac",
+                "showLess": "Zobraziť menej",
+                "category": {
+                    "elements": {
+                        "alwaysEnabled": "Vždy aktívne",
+                        "enable": "Povoliť",
+                        "disable": "Zakázať"
+                    }
+                },
+                "buttons": {
+                    "elements": {
+                        "accept": "Prijať všetko",
+                        "save": "Uložiť moje predvoľby",
+                        "reject": "Odmietnuť všetko"
+                    }
+                },
+                "closeButton": "Zavrieť"
+            }
+        },
+        "optoutPopup": {
+            "elements": {
+                "title": "Predvoľby odhlásenia",
+                "description": "<p>Používame súbory cookie tretích strán, ktoré nám pomáhajú analyzovať, ako túto webovú stránku používate, ukladať vaše predvoľby a poskytovať obsah a marketingové materiály, ktoré sú pre vás relevantné. Z používania týchto súborov cookie sa však môžete odhlásiť začiarknutím možnosti „Nepredávať ani nezdieľať moje osobné údaje“ a kliknutím na tlačidlo „Uložiť moje predvoľby“. Po odhlásení sa môžete kedykoľvek znova prihlásiť zrušením začiarknutia možnosti „Nepredávať ani nezdieľať moje osobné údaje“ a kliknutím na tlačidlo „Uložiť moje predvoľby“.</p>",
+                "optOption": {
+                    "elements": {
+                        "title": "Nepredávať ani nezdieľať moje osobné údaje",
+                        "enable": "Povoliť",
+                        "disable": "Zakázať"
+                    }
+                },
+                "gpcOption": {
+                    "elements": {
+                        "description": "<p>Vaše nastavenie odhlásenia pre túto webovú stránku bolo rešpektované, pretože sme z vášho prehliadača zaznamenali signál <b>Global Privacy Control</b>, a preto toto nastavenie nemôžete zmeniť.</p>"
+                    }
+                },
+                "showLess": "Zobraziť menej",
+                "showMore": "Zobraziť viac",
+                "buttons": {
+                    "elements": {
+                        "cancel": "Zrušiť",
+                        "confirm": "Uložiť moje predvoľby"
+                    }
+                },
+                "closeButton": "Zavrieť",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "Vaša voľba odhlásenia bola rešpektovaná.",
+                        "subtext": "Banner sa automaticky zatvorí o <span id=\"fazCountdownTimer\"></span> s..."
+                    }
+                }
+            }
+        },
+        "revisitConsent": {
+            "elements": {
+                "title": "Predvoľby súhlasu"
+            }
+        },
+        "auditTable": {
+            "elements": {
+                "headers": {
+                    "elements": {
+                        "id": "Cookie",
+                        "duration": "Trvanlivosť",
+                        "description": "Popis"
+                    }
+                },
+                "message": "Nie sú k dispozícii žiadne súbory cookie."
+            }
+        },
+        "videoPlaceholder": {
+            "elements": {
+                "title": "Pre zobrazenie tohto obsahu prijmite súbory cookie"
+            }
+        }
+    },
+    "ccpa": {
+        "notice": {
+            "elements": {
+                "title": "Záleží nám na vašom súkromí",
+                "description": "<p>Táto webová stránka alebo nástroje tretích strán spracúvajú osobné údaje. Predaj svojich osobných údajov môžete odmietnuť kliknutím na odkaz „Nepredávať ani nezdieľať moje osobné údaje“. Svoj súhlas môžete kedykoľvek zmeniť alebo odvolať kliknutím na ikonu predvolieb súhlasu.</p>",
+                "privacyLink": "",
+                "buttons": {
+                    "elements": {
+                        "accept": "Prijať všetko",
+                        "reject": "Odmietnuť všetko",
+                        "settings": "Prispôsobiť",
+                        "readMore": "Zásady používania súborov cookie",
+                        "donotSell": "Nepredávať ani nezdieľať moje osobné údaje"
+                    }
+                },
+                "closeButton": "Zavrieť"
+            }
+        },
+        "categoryPreview": {
+            "elements": {
+                "buttons": {
+                    "elements": {
+                        "save": "Uložiť moje predvoľby"
+                    }
+                }
+            }
+        },
+        "preferenceCenter": {
+            "elements": {
+                "title": "Prispôsobenie nastavenia súhlasu",
+                "description": "<p>Súbory cookie nám pomáhajú, aby ste sa na webovej stránke mohli efektívne pohybovať a využívať určité funkcie. Podrobné informácie o všetkých súboroch cookie nájdete nižšie v jednotlivých kategóriách súhlasu.</p><p>Súbory cookie zaradené do kategórie „Nevyhnutné“ sa ukladajú vo vašom prehliadači, pretože sú nevyhnutné na zabezpečenie základných funkcií webovej stránky.</p><p>Používame aj súbory cookie tretích strán, ktoré nám pomáhajú analyzovať, ako túto webovú stránku používate, ukladať vaše predvoľby a poskytovať obsah a marketingové materiály, ktoré sú pre vás relevantné. Tieto súbory cookie sa vo vašom prehliadači uložia iba s vaším predchádzajúcim súhlasom.</p><p>Môžete sa rozhodnúť povoliť alebo zakázať niektoré z týchto súborov cookie alebo všetky, avšak zakázanie niektorých z nich môže ovplyvniť vaše prehliadanie.</p>",
+                "showMore": "Zobraziť viac",
+                "showLess": "Zobraziť menej",
+                "category": {
+                    "elements": {
+                        "alwaysEnabled": "Vždy aktívne",
+                        "enable": "Povoliť",
+                        "disable": "Zakázať"
+                    }
+                },
+                "buttons": {
+                    "elements": {
+                        "accept": "Prijať všetko",
+                        "save": "Uložiť moje predvoľby",
+                        "reject": "Odmietnuť všetko"
+                    }
+                },
+                "closeButton": "Zavrieť"
+            }
+        },
+        "optoutPopup": {
+            "elements": {
+                "title": "Predvoľby odhlásenia",
+                "description": "<p>Používame súbory cookie tretích strán, ktoré nám pomáhajú analyzovať, ako túto webovú stránku používate, ukladať vaše predvoľby a poskytovať obsah a marketingové materiály, ktoré sú pre vás relevantné. Z používania týchto súborov cookie sa však môžete odhlásiť začiarknutím možnosti „Nepredávať ani nezdieľať moje osobné údaje“ a kliknutím na tlačidlo „Uložiť moje predvoľby“. Po odhlásení sa môžete kedykoľvek znova prihlásiť zrušením začiarknutia možnosti „Nepredávať ani nezdieľať moje osobné údaje“ a kliknutím na tlačidlo „Uložiť moje predvoľby“.</p>",
+                "optOption": {
+                    "elements": {
+                        "title": "Nepredávať ani nezdieľať moje osobné údaje",
+                        "enable": "Povoliť",
+                        "disable": "Zakázať"
+                    }
+                },
+                "gpcOption": {
+                    "elements": {
+                        "description": "<p>Vaše nastavenie odhlásenia pre túto webovú stránku bolo rešpektované, pretože sme z vášho prehliadača zaznamenali signál <b>Global Privacy Control</b>, a preto toto nastavenie nemôžete zmeniť.</p>"
+                    }
+                },
+                "showLess": "Zobraziť menej",
+                "showMore": "Zobraziť viac",
+                "buttons": {
+                    "elements": {
+                        "cancel": "Zrušiť",
+                        "confirm": "Uložiť moje predvoľby"
+                    }
+                },
+                "closeButton": "Zavrieť",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "Vaša voľba odhlásenia bola rešpektovaná.",
+                        "subtext": "Banner sa automaticky zatvorí o <span id=\"fazCountdownTimer\"></span> s..."
+                    }
+                }
+            }
+        },
+        "revisitConsent": {
+            "elements": {
+                "title": "Predvoľby súhlasu"
+            }
+        },
+        "auditTable": {
+            "elements": {
+                "headers": {
+                    "elements": {
+                        "id": "Cookie",
+                        "duration": "Trvanlivosť",
+                        "description": "Popis"
+                    }
+                },
+                "message": "Nie sú k dispozícii žiadne súbory cookie."
+            }
+        },
+        "videoPlaceholder": {
+            "elements": {
+                "title": "Pre zobrazenie tohto obsahu prijmite súbory cookie"
+            }
+        }
+    }
+}
