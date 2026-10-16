@@ -1424,6 +1424,9 @@ class Activator {
 				}
 			} ),
 			array( 'W3 Total Cache', function () {
+				// Every W3TC cache, not just pages: an upgrade ships new JS/CSS
+				// that its minify and CDN caches may hold. A save only needs the
+				// page cache (see the W3_Total_Cache adapter).
 				if ( function_exists( 'w3tc_flush_all' ) ) {
 					w3tc_flush_all();
 				}
@@ -1434,8 +1437,12 @@ class Activator {
 				}
 			} ),
 			array( 'Cache Enabler', function () {
+				// Same API as the Cache_Enabler adapter: the 1.6.0+ action, and
+				// the deprecated ce_clear_cache only for older builds.
 				if ( has_action( 'cache_enabler_clear_complete_cache' ) ) {
 					do_action( 'cache_enabler_clear_complete_cache' );
+				} elseif ( has_action( 'ce_clear_cache' ) ) {
+					do_action( 'ce_clear_cache' );
 				}
 			} ),
 			array( 'SG Optimizer', function () {
