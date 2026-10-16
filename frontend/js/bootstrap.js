@@ -145,6 +145,54 @@
             return nativeHas.call(el, name);
         } catch (e) { return false; }
     }
+    // What a network hold judges, and what it later hands to the native: the
+    // bootstrap twin of _fazNetworkTarget() in script.js, read ONCE, when the
+    // call is made, which is when the native itself reads its argument.
+    //
+    // The holds used to judge one reading and pass the input on for another:
+    // fetch read `input.url` by duck typing while the native stringifies
+    // anything that is not a genuine Request, and every hold re-read the input
+    // at release. An object whose string has state (the site's own API on the
+    // first reading, a tracker on the next) was judged on one URL and sent to
+    // the other, and on the safety release this judgement is the only one.
+    // So: a genuine Request (brand-checked through the native getter captured
+    // here, before any page script runs) travels as itself, its URL is in an
+    // internal slot that cannot change; a URL object becomes its href; anything
+    // else its string, and that string is both judged and passed. `error` is
+    // set when the input cannot be stringified: the caller fails the way the
+    // native would rather than hand it a value it would read a second time.
+    function brandGetter(ctor, name) {
+        try {
+            var desc = typeof ctor === 'function' && Object.getOwnPropertyDescriptor(ctor.prototype, name);
+            return desc && typeof desc.get === 'function' ? desc.get : null;
+        } catch (e) { return null; }
+    }
+    var requestUrl = brandGetter(w.Request, 'url');
+    var urlHref = brandGetter(w.URL, 'href');
+    function networkTarget(input) {
+        if (input == null) return { url: '', pass: input, error: null };
+        if (typeof input === 'string') return { url: input, pass: input, error: null };
+        if (typeof input === 'object') {
+            if (requestUrl) {
+                try {
+                    var fromRequest = requestUrl.call(input);
+                    if (typeof fromRequest === 'string') return { url: fromRequest, pass: input, error: null };
+                } catch (e) { /* not a Request */ }
+            }
+            if (urlHref) {
+                try {
+                    var href = urlHref.call(input);
+                    if (typeof href === 'string') return { url: href, pass: href, error: null };
+                } catch (e) { /* not a URL */ }
+            }
+        }
+        try {
+            var text = String(input);
+            return { url: text, pass: text, error: null };
+        } catch (e) {
+            return { url: '', pass: input, error: e };
+        }
+    }
     function setAttr(el, name, value) { try { nativeSet.call(el, name, value); } catch (e) { /* detached or read-only */ } }
     function dropAttr(el, name) {
         try {
@@ -2288,27 +2336,30 @@
     });
     if (w.fetch) replace(w, 'fetch', function () {
         return function (input, init) {
-            var target = input && input.url ? input.url : input;
+            var judged = networkTarget(input);
+            if (judged.error) return Promise.reject(judged.error);
             return new Promise(function (resolve, reject) {
                 defer(function (policy) {
                     // Resolve with an empty 200 rather than rejecting, matching
                     // what the runtime's own fetch gate returns. A rejection
                     // here would surface as an unhandled promise rejection in
                     // callers that never expected to be blocked.
-                    if (!allowed(policy, target)) {
+                    if (!allowed(policy, judged.url)) {
                         return resolve(typeof w.Response === 'function'
                             ? new w.Response('', { status: 200, statusText: 'Blocked by consent' })
                             : { ok: true, status: 200, statusText: 'Blocked by consent' });
                     }
-                    w.fetch(input, init).then(resolve, reject);
+                    w.fetch(judged.pass, init).then(resolve, reject);
                 });
             });
         };
     });
     if (w.navigator.sendBeacon) replace(w.navigator, 'sendBeacon', function () {
         return function (url, data) {
+            var judged = networkTarget(url);
+            if (judged.error) throw judged.error;
             defer(function (policy) {
-                if (allowed(policy, url)) w.navigator.sendBeacon(url, data);
+                if (allowed(policy, judged.url)) w.navigator.sendBeacon(judged.pass, data);
             });
             return true;
         };
@@ -2316,8 +2367,14 @@
     var xhrState = new WeakMap();
     replace(XMLHttpRequest.prototype, 'open', function (original) {
         return function (method, url, async) {
-            xhrState.set(this, { url: url, sync: async === false, cancelled: false });
-            return original.apply(this, arguments);
+            // The native reads the URL here, so it is read here once: send()
+            // judges this same string instead of stringifying the input again.
+            var judged = networkTarget(url);
+            if (judged.error) throw judged.error;
+            xhrState.set(this, { url: judged.url, sync: async === false, cancelled: false });
+            var args = Array.prototype.slice.call(arguments);
+            if (args.length > 1) args[1] = judged.pass;
+            return original.apply(this, args);
         };
     });
     replace(XMLHttpRequest.prototype, 'abort', function (original) {
@@ -2365,6 +2422,11 @@
         function PendingSocket(url, protocols) {
             if (!new.target) throw new TypeError("WebSocket requires 'new'");
             if (!pending || replaying) return protocols === undefined ? new bridge.current(url) : new bridge.current(url, protocols);
+            // Read once, as the constructor reads it (see networkTarget()): the
+            // facade, the release judgement and the socket all use this string.
+            var judged = networkTarget(url);
+            if (judged.error) throw judged.error;
+            url = judged.pass;
             var target = new EventTarget(), socket = null, closed = false, facade;
             facade = new Proxy(target, {
                 getPrototypeOf: function () { return Original.prototype; },
