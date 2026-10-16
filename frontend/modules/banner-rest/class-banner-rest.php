@@ -298,6 +298,9 @@ class Banner_Rest {
 			'scopeFingerprint' => substr( wp_hash( $banner->get_slug() . '|' . $active_law, 'auth' ), 0, 32 ),
 			'consentExpiry'    => Frontend::normalize_consent_expiry( $active_law, $configured_expiry ),
 			'runtimeGeo'       => ( null !== $runtime_ruleset ),
+			// The WP Consent API regime for the banner actually returned; the
+			// client replaces the shell's `_wpConsentType` with it.
+			'wpConsentType'    => Frontend::resolve_wp_consent_type( $runtime_ruleset, $cache_compatibility, $active_law ),
 			'html'             => $html,
 			'styles'           => Frontend::prepare_banner_styles( $styles ),
 			'shortCodes'       => $short_codes,

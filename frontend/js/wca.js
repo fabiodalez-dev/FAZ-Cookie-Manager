@@ -63,12 +63,15 @@ function applyConsentToWpApi() {
     if ((consentData.isUserActionCompleted === false) && gskEnabled && !Object.values(categories).slice(1).includes(true)) {
         return;
     }
-    const signature = JSON.stringify([consentData.activeLaw, consentData.isUserActionCompleted, categories]);
+    // The regime is part of the state: the store's verdict can change on the
+    // same law and categories (the banner REST payload replaces it).
+    const type = resolveConsentType(consentData.activeLaw);
+    const signature = JSON.stringify([consentData.activeLaw, type, consentData.isUserActionCompleted, categories]);
     if (signature === lastAppliedConsent) {
         return;
     }
     lastAppliedConsent = signature;
-    window.wp_consent_type = resolveConsentType(consentData.activeLaw);
+    window.wp_consent_type = type;
     let event = new CustomEvent('wp_consent_type_defined');
     document.dispatchEvent( event );
     Object.entries(categories).forEach(([key, value]) => {

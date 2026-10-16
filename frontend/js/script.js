@@ -1642,6 +1642,12 @@ function _fazApplyBannerPayload(payload) {
     if (typeof payload.runtimeGeo !== 'undefined') {
         _fazStore._runtimeGeo = !!payload.runtimeGeo;
     }
+    // The WP Consent API verdict travels with the banner it belongs to:
+    // wca.js reads _wpConsentType from this store, and a strict cached shell
+    // shipped 'optin' even when the live payload resolves a CCPA banner.
+    if (payload.wpConsentType === 'optin' || payload.wpConsentType === 'optout') {
+        _fazStore._wpConsentType = payload.wpConsentType;
+    }
     if (typeof payload.html === 'string' && payload.html !== '') {
         var tpl = document.getElementById('fazBannerTemplate');
         if (tpl) tpl.textContent = payload.html;

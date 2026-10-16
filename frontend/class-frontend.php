@@ -2223,17 +2223,37 @@ class Frontend {
 		//    be wrong in exactly that case.
 		// 2. Cache Compatibility Mode blocks every non-necessary category
 		//    regardless of law, so nothing may be assumed consented.
-		$runtime_ruleset = $this->get_runtime_ruleset();
+		return self::resolve_wp_consent_type(
+			$this->get_runtime_ruleset(),
+			$this->is_cache_compatibility_enabled(),
+			$this->banner ? (string) $this->banner->get_law() : ''
+		);
+	}
+
+	/**
+	 * The WP Consent API type for a resolved ruleset, mode and banner law.
+	 *
+	 * One rule for the two places that answer it: the page render
+	 * (filter_wp_consent_type(), shipped in the store as `_wpConsentType`) and
+	 * the public banner endpoint (`wpConsentType`), which replaces the store
+	 * after a language swap or the jurisdiction bootstrap. Without the second,
+	 * a cached strict shell kept its `optin` verdict after the live payload
+	 * resolved a CCPA banner, and wca.js, where the stricter verdict wins, kept
+	 * declaring opt-in for the rest of the page view.
+	 *
+	 * @param array|null $runtime_ruleset     Ruleset resolved for the visitor.
+	 * @param bool       $cache_compatibility Whether Cache Compatibility applies.
+	 * @param string     $law                 Law of the banner being served.
+	 * @return string 'optin' or 'optout'.
+	 */
+	public static function resolve_wp_consent_type( $runtime_ruleset, $cache_compatibility, $law ) {
 		if ( null !== $runtime_ruleset && 'ccpa' !== Geo_Runtime::model_to_law( $runtime_ruleset ) ) {
 			return 'optin';
 		}
-		if ( $this->is_cache_compatibility_enabled() ) {
+		if ( $cache_compatibility ) {
 			return 'optin';
 		}
-		if ( $this->banner && 'ccpa' === $this->banner->get_law() ) {
-			return 'optout';
-		}
-		return 'optin';
+		return 'ccpa' === $law ? 'optout' : 'optin';
 	}
 
 	/**

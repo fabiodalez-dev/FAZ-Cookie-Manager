@@ -180,6 +180,24 @@ namespace {
 		'the banner label is still shipped separately as _activeLaw (UI and cookie scope keep using it)'
 	);
 
+	// 3. The banner REST payload (language swap, jurisdiction bootstrap)
+	//    replaces the store, so it must carry the verdict for the banner it
+	//    returns — computed by the same rule as the page — or a cached strict
+	//    shell's `optin` survives a live CCPA payload.
+	echo "\nbanner REST payload carries the verdict\n";
+	eq( method_exists( Frontend::class, 'resolve_wp_consent_type' ), true, 'one shared rule: Frontend::resolve_wp_consent_type()' );
+	if ( method_exists( Frontend::class, 'resolve_wp_consent_type' ) ) {
+		eq( Frontend::resolve_wp_consent_type( null, false, 'ccpa' ), 'optout', 'rule: CCPA banner, no ruleset, no Cache Compatibility → optout' );
+		eq( Frontend::resolve_wp_consent_type( null, true, 'ccpa' ), 'optin', 'rule: Cache Compatibility → optin' );
+		eq( Frontend::resolve_wp_consent_type( null, false, 'gdpr' ), 'optin', 'rule: GDPR banner → optin' );
+	}
+	$rest_source = (string) file_get_contents( dirname( __DIR__, 2 ) . '/frontend/modules/banner-rest/class-banner-rest.php' );
+	eq(
+		1 === preg_match( '/\'wpConsentType\'\s*=>\s*Frontend::resolve_wp_consent_type\(\s*\$runtime_ruleset,\s*\$cache_compatibility,\s*\$active_law\s*\)/', $rest_source ),
+		true,
+		'the REST payload ships wpConsentType for the returned banner (its law, its ruleset, its mode)'
+	);
+
 	// ---------- summary ----------
 	echo "\n";
 	if ( 0 === $tests_failed ) {
