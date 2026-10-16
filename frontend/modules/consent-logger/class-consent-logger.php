@@ -67,6 +67,28 @@ class Consent_Logger {
 	const REJECTION_OPTION = 'faz_consent_token_rejections';
 
 	/**
+	 * How recent a row must be for its correction to be a free IP-gate exception.
+	 *
+	 * Seconds; the same 300 s the per-consent_id change caps use.
+	 *
+	 * @since 1.34.2
+	 */
+	const CORRECTION_WINDOW = 300;
+
+	/**
+	 * Free IP-gate exceptions one address may take per CORRECTION_WINDOW.
+	 *
+	 * A cumulative ceiling, not a single-use token: it bounds how many rows an
+	 * address can land past its closed window without a shared-budget slot,
+	 * whatever the number of consent_ids it holds. Five covers a household or a
+	 * small office behind one address correcting at once; past it, corrections
+	 * still land at the shared one-per-10-seconds rate.
+	 *
+	 * @since 1.34.2
+	 */
+	const FREE_EXCEPTIONS_PER_ADDRESS = 5;
+
+	/**
 	 * Constructor - register hooks.
 	 */
 	public function __construct() {
@@ -702,25 +724,31 @@ class Consent_Logger {
 				// leave, and it is asked for only now, after the per-id caps have
 				// accepted it, so a candidate they refuse spends nothing.
 				//
-				// The FIRST such exception per consent_id (per address, per 300 s)
-				// is always granted: it is the case the exception exists for, one
-				// visitor correcting a decision seconds after making it, and it is
-				// keyed on the id so that two visitors behind one NAT, CGNAT or
-				// corporate proxy each keep their own — one person's correction
-				// can never consume another person's withdrawal. Only the second
-				// and later exceptions for an id draw on a budget shared by the
-				// address (faz_consent_ip_chg, one per 10 s). Before this, the
-				// per-id caps alone bounded nothing across ids: an address holding
-				// K ids the register knew could land K rows every 10 seconds by
-				// alternating their statuses. Now it is K first corrections per
-				// 300 s — each id a row that had to get through the gates to exist
-				// at all — plus one per 10 s for the address. Both keys sit under
-				// the `faz_consent_ip_` prefix, so whatever resets the IP window
-				// resets its exceptions with it.
-				if ( $status_changed && $is_ip_throttled
-					&& faz_throttle_request( 'faz_consent_ip_x_' . $hash, 300 )
-					&& faz_throttle_request( 'faz_consent_ip_chg', 10 ) ) {
-					$status_changed = false;
+				// A FREE exception is the case the exception exists for: one
+				// visitor correcting, from where they are, a decision they made
+				// moments ago. So it is granted only when the row being corrected
+				// was written from this same address inside the correction window
+				// (is_recent_row_from_this_address()), only once per consent_id
+				// (faz_consent_ip_x_<id>, 300 s), and only FREE_EXCEPTIONS_PER_ADDRESS
+				// times per address per window (a cumulative counter, see
+				// claim_free_exception()). Two visitors behind one NAT, CGNAT or
+				// corporate proxy each withdrawing seconds after accepting both
+				// land — one person's correction never consumes another's — while
+				// an address that has accumulated K ids cannot turn them into K
+				// free writes: the counter caps it whatever K is. Everything else
+				// draws on the budget the address shares, one per 10 s
+				// (faz_consent_ip_chg). The rate per address is therefore a
+				// constant, at most FREE_EXCEPTIONS_PER_ADDRESS per 300 s plus one
+				// per 10 s, not a function of how many ids it holds. All three keys
+				// sit under the `faz_consent_ip_` prefix, so whatever resets the IP
+				// window resets its exceptions with it.
+				if ( $status_changed && $is_ip_throttled ) {
+					$is_free = $this->is_recent_row_from_this_address( $previous_row )
+						&& ! faz_throttle_request( 'faz_consent_ip_x_' . $hash, self::CORRECTION_WINDOW )
+						&& self::claim_free_exception();
+					if ( ! $is_free && faz_throttle_request( 'faz_consent_ip_chg', 10 ) ) {
+						$status_changed = false;
+					}
 				}
 			}
 
@@ -789,6 +817,74 @@ class Consent_Logger {
 		}
 
 		return rest_ensure_response( $result );
+	}
+
+	/**
+	 * Whether a row was written from this request's address, and recently.
+	 *
+	 * The free IP-gate exception is for a visitor correcting their own
+	 * decision moments after making it. A row older than the correction window,
+	 * or one written from another address, is not that: it is an id that was
+	 * collected, and correcting it waits for the shared budget like any other
+	 * request. A row with no address hash (the address could not be resolved
+	 * when it was written) proves nothing either way and is treated the same.
+	 *
+	 * @param array|null $row Newest row for the consent id.
+	 * @return bool
+	 */
+	private function is_recent_row_from_this_address( $row ) {
+		if ( ! is_array( $row ) || empty( $row['ip_hash'] ) || empty( $row['created_at'] ) ) {
+			return false;
+		}
+		$controller = Controller::get_instance();
+		if ( ! method_exists( $controller, 'current_ip_hash' ) ) {
+			return false;
+		}
+		$here = (string) $controller->current_ip_hash();
+		if ( '' === $here || ! hash_equals( (string) $row['ip_hash'], $here ) ) {
+			return false;
+		}
+		// Both sides are site-time strings (log_consent() writes created_at with
+		// current_time( 'mysql' )), so their difference is the row's age.
+		$written = strtotime( (string) $row['created_at'] );
+		$now     = strtotime( (string) current_time( 'mysql' ) );
+		if ( false === $written || false === $now ) {
+			return false;
+		}
+		$age = $now - $written;
+		return $age >= 0 && $age <= self::CORRECTION_WINDOW;
+	}
+
+	/**
+	 * Take one of this address's free IP-gate exceptions, if any is left.
+	 *
+	 * A counter with a fixed window: the first claim opens it for
+	 * CORRECTION_WINDOW seconds and each claim adds one, up to
+	 * FREE_EXCEPTIONS_PER_ADDRESS. Keyed with faz_ip_cache_key(), like the
+	 * throttle windows. Without a persistent object cache the read and the
+	 * write are two statements, so two claims in the same instant can both
+	 * read the same count: the overshoot is bounded by the concurrency of one
+	 * address, the same judgement record_refusal() documents for its gate.
+	 *
+	 * @return bool True when a free exception was granted.
+	 */
+	private static function claim_free_exception() {
+		$ip = function_exists( 'faz_resolve_client_ip' ) ? (string) faz_resolve_client_ip() : '';
+		if ( '' === $ip || ! function_exists( 'faz_ip_cache_key' ) ) {
+			return false;
+		}
+		$key   = 'faz_consent_ip_free_' . faz_ip_cache_key( $ip );
+		$now   = time();
+		$state = get_transient( $key );
+		if ( ! is_array( $state ) || ! isset( $state['until'], $state['n'] ) || (int) $state['until'] <= $now ) {
+			$state = array( 'n' => 0, 'until' => $now + self::CORRECTION_WINDOW );
+		}
+		if ( (int) $state['n'] >= self::FREE_EXCEPTIONS_PER_ADDRESS ) {
+			return false;
+		}
+		$state['n'] = (int) $state['n'] + 1;
+		set_transient( $key, $state, max( 1, (int) $state['until'] - $now ) );
+		return true;
 	}
 
 	/**

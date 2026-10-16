@@ -880,6 +880,20 @@ class Controller {
 	}
 
 	/**
+	 * The address hash a row written by this request would carry.
+	 *
+	 * Lets the consent endpoint tell whether the row a request corrects was
+	 * written from the same address, with the formula log_consent() stores,
+	 * without a second copy of it.
+	 *
+	 * @since 1.34.2
+	 * @return string '' when the address cannot be resolved.
+	 */
+	public function current_ip_hash() {
+		return $this->hash_ip( $this->get_visitor_ip() );
+	}
+
+	/**
 	 * Get a single consent log by consent_id.
 	 *
 	 * @param string $consent_id The consent ID to look up.

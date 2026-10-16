@@ -50,8 +50,14 @@ namespace FazCookie\Admin\Modules\Consentlogs\Includes {
 			}
 			return $best;
 		}
+		/** The address hash a row written now would carry (log_consent() below stores it). */
+		public function current_ip_hash() {
+			return md5( 'ip|' . $GLOBALS['faz_client_ip'] );
+		}
 		public function log_consent( $data ) {
 			$row = array(
+				'ip_hash'    => $this->current_ip_hash(),
+				'created_at' => gmdate( 'Y-m-d H:i:s', FAZ_TEST_EPOCH + $GLOBALS['faz_fake_now'] ),
 				'log_id'     => count( self::$rows ) + 1,
 				'consent_id' => (string) $data['consent_id'],
 				'status'     => (string) $data['status'],
@@ -80,6 +86,7 @@ namespace {
 	// runner's output to its own assertions.
 	ini_set( 'error_log', sys_get_temp_dir() . '/faz-consent-ip-window-test.log' );
 
+	define( 'FAZ_TEST_EPOCH', 1760000000 );
 	$GLOBALS['faz_fake_now']   = 0;
 	$GLOBALS['faz_client_ip']  = '203.0.113.7';
 	$GLOBALS['faz_throttles']  = array();
@@ -103,11 +110,17 @@ namespace {
 		$GLOBALS['faz_throttles'][ $key ] = $now + (int) $ttl;
 		return false;
 	}
+	// The address the real helpers would resolve, and the clock log_consent()
+	// stamps rows with: both follow the fake ones above.
+	function faz_resolve_client_ip() { return $GLOBALS['faz_client_ip']; }
+	function faz_ip_cache_key( $ip ) { return md5( (string) $ip ); }
+	function current_time( $type, $gmt = 0 ) { return gmdate( 'Y-m-d H:i:s', FAZ_TEST_EPOCH + $GLOBALS['faz_fake_now'] ); }
 	function faz_advance( $seconds ) {
 		$GLOBALS['faz_fake_now'] += (int) $seconds;
 	}
 	function faz_reset() {
-		$GLOBALS['faz_fake_now']   = 0;
+		define( 'FAZ_TEST_EPOCH', 1760000000 );
+	$GLOBALS['faz_fake_now']   = 0;
 		$GLOBALS['faz_throttles']  = array();
 		$GLOBALS['faz_transients'] = array();
 		\FazCookie\Admin\Modules\Consentlogs\Includes\Controller::$rows = array();
@@ -309,6 +322,60 @@ namespace {
 	$post( 'window-opener-3-0123456789abcdef', 'accepted' );
 	faz_advance( 1 );
 	ipw_check( 'logged' === $post( $ids[2], 'accepted' ), 'and the shared budget comes back with the next window' );
+
+	// 8e. An address that has collected many ids cannot turn them into as many
+	//     free writes. Fifty rows written from this address moments ago, all
+	//     flipped inside one closed IP window: the free exceptions stop at the
+	//     per-address ceiling, then one shared-budget slot, then nothing.
+	faz_reset();
+	$post( 'window-opener-0123456789abcdef', 'accepted' ); // t=0: closes the IP window
+	for ( $i = 0; $i < 50; $i++ ) {
+		Controller::$rows[] = array(
+			'log_id' => 1000 + $i, 'consent_id' => 'collected-' . $i . '-0123456789abcdef', 'status' => 'accepted',
+			'categories' => array(), 'ip_hash' => md5( 'ip|' . $GLOBALS['faz_client_ip'] ),
+			'created_at' => gmdate( 'Y-m-d H:i:s', FAZ_TEST_EPOCH ),
+		);
+	}
+	faz_advance( 2 );
+	$landed = 0;
+	for ( $i = 0; $i < 50; $i++ ) {
+		$landed += 'logged' === $post( 'collected-' . $i . '-0123456789abcdef', 'rejected' ) ? 1 : 0;
+	}
+	$free    = defined( Consent_Logger::class . '::FREE_EXCEPTIONS_PER_ADDRESS' ) ? constant( Consent_Logger::class . '::FREE_EXCEPTIONS_PER_ADDRESS' ) : 5;
+	$ceiling = $free + 1;
+	ipw_check( $landed <= $ceiling, "fifty collected ids from one address land at most {$ceiling} rows in one window (got {$landed})" );
+	ipw_check( $ceiling === $landed, 'exactly the free ceiling plus the one shared slot: the rate does not grow with the number of ids' );
+
+	// 8f. A free exception corrects a RECENT row from THIS address. A row older
+	//     than the correction window, or written from another address, is an
+	//     id that was collected: it waits for the shared budget.
+	faz_reset();
+	$GLOBALS['faz_client_ip'] = '198.51.100.20';
+	foreach ( array( 'elsewhere-a-0123456789abcdef', 'elsewhere-b-0123456789abcdef', 'elsewhere-c-0123456789abcdef' ) as $other ) {
+		$post( $other, 'accepted' ); // written from another address, one per IP window
+		faz_advance( 11 );
+	}
+	$GLOBALS['faz_client_ip'] = '203.0.113.7';
+	$post( 'window-opener-0123456789abcdef', 'accepted' );
+	faz_advance( 2 );
+	$landed = 0;
+	foreach ( array( 'elsewhere-a-0123456789abcdef', 'elsewhere-b-0123456789abcdef', 'elsewhere-c-0123456789abcdef' ) as $other ) {
+		$landed += 'logged' === $post( $other, 'rejected' ) ? 1 : 0;
+	}
+	ipw_check( 1 === $landed, 'rows written from another address get no free exception here: one shared slot (got ' . $landed . ')' );
+	faz_reset();
+	foreach ( array( 'old-a-0123456789abcdef', 'old-b-0123456789abcdef', 'old-c-0123456789abcdef' ) as $old ) {
+		$post( $old, 'accepted' );
+		faz_advance( 11 );
+	}
+	faz_advance( 400 ); // every row is now older than the correction window
+	$post( 'window-opener-0123456789abcdef', 'accepted' );
+	faz_advance( 2 );
+	$landed = 0;
+	foreach ( array( 'old-a-0123456789abcdef', 'old-b-0123456789abcdef', 'old-c-0123456789abcdef' ) as $old ) {
+		$landed += 'logged' === $post( $old, 'rejected' ) ? 1 : 0;
+	}
+	ipw_check( 1 === $landed, 'rows older than the correction window get no free exception: one shared slot (got ' . $landed . ')' );
 
 	// 8d. A request the IP gate refuses arms nothing on its way out. It used to
 	//     fall through and arm the per-id window and the chg1 cap before the
