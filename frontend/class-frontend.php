@@ -224,6 +224,8 @@ class Frontend {
 	private $settings_option_cache    = null;
 	private $always_allowed_cache     = null;
 	private $service_cookie_decisions_cache = null;
+	/** @var array|null Visitor-view twin of the above, filled only on a 'fallback' render. */
+	private $visitor_service_cookie_decisions_cache = null;
 	private $whitelisted_cookie_patterns_cache = null;
 	private $catalog_cookie_categories_cache = null;
 	/**
@@ -11985,7 +11987,13 @@ class Frontend {
 		// reach a foregone conclusion. Both conditions are required — a
 		// `svc.<id>:no` / `ck.<svc>.<cookie>:no` denial stays enforceable on a
 		// site where no category is blocked.
-		if ( empty( $this->get_enforcement_blocked_categories() ) && empty( $this->get_service_cookie_decisions() ) ) {
+		//
+		// Both questions are asked of the visitor view (see
+		// is_cookie_allowed_for_visitor()): the cookies being deleted are the
+		// ones already in THIS visitor's browser, so their own grants decide.
+		$visitor_view = 'fallback' === $this->visitor_state_veto;
+		$blocked      = $visitor_view ? $this->get_enforcement_blocked_categories() : $this->get_blocked_categories();
+		if ( empty( $blocked ) && empty( $this->get_service_cookie_decisions( $visitor_view ) ) ) {
 			return;
 		}
 
@@ -11995,7 +12003,7 @@ class Frontend {
 		$domain_candidates = array_values( array_unique( array_filter( array( $current_host, $shared_domain ) ) ) );
 
 		foreach ( array_keys( $_COOKIE ) as $name ) {
-			if ( ! $this->is_cookie_allowed( $name ) ) {
+			if ( ! $this->is_cookie_allowed_for_visitor( $name ) ) {
 				setcookie( $name, '', -1, '/' );
 				foreach ( $domain_candidates as $domain ) {
 					setcookie( $name, '', -1, '/', $domain );
@@ -12020,13 +12028,51 @@ class Frontend {
 	 * token can break authentication or checkout. The scanner inventories them;
 	 * once classified, this guard enforces their category automatically.
 	 *
+	 * This public entry point answers for the RESPONSE being built: on a
+	 * 'fallback' render (see decide_visitor_state_cache_veto()) it reads the
+	 * shareable block set, because that response may be stored by a cache that
+	 * also keeps its headers (nginx with fastcgi_ignore_headers Set-Cookie, some
+	 * CDNs) and a Set-Cookie for a category a first visit has not granted would
+	 * be replayed to every later visitor. script.js sets those cookies after
+	 * consent instead. The shredder, which deletes cookies already in this
+	 * visitor's browser, asks is_cookie_allowed_for_visitor().
+	 *
 	 * @param string $name   Cookie name.
 	 * @param string $domain Optional cookie domain (reserved for future rules).
 	 * @return bool
 	 */
 	public function is_cookie_allowed( $name, $domain = '' ) {
+		return $this->cookie_allowed_in_view( $name, $domain, false );
+	}
+
+	/**
+	 * Whether a cookie already in the visitor's browser may stay there.
+	 *
+	 * Same policy as is_cookie_allowed(), read against the visitor's OWN state
+	 * on a 'fallback' render instead of the shareable union. That union is a
+	 * render-time over-block the client undoes; a deletion is not undone, and
+	 * applying the union here destroyed a consenting visitor's `_ga` on every
+	 * page of a site whose visitor-state veto was off. Their denials are part
+	 * of their own state, so a rejected category's cookies are still deleted.
+	 * On every other verdict the two views are the same set.
+	 *
+	 * @param string $name Cookie name.
+	 * @return bool
+	 */
+	private function is_cookie_allowed_for_visitor( $name ) {
+		return $this->cookie_allowed_in_view( $name, '', 'fallback' === $this->visitor_state_veto );
+	}
+
+	/**
+	 * @param string $name         Cookie name.
+	 * @param string $domain       Optional cookie domain.
+	 * @param bool   $visitor_view Read the visitor's own state (fallback shredder).
+	 * @return bool
+	 */
+	private function cookie_allowed_in_view( $name, $domain, $visitor_view ) {
 		$name      = sanitize_text_field( (string) $name );
-		$cache_key = strtolower( $name . '|' . (string) $domain );
+		$cache_key = ( $visitor_view ? 'visitor|' : '' ) . strtolower( $name . '|' . (string) $domain );
+		$blocked_categories = $visitor_view ? $this->get_enforcement_blocked_categories() : $this->get_blocked_categories();
 		if ( isset( $this->cookie_allowed_cache[ $cache_key ] ) ) {
 			return $this->cookie_allowed_cache[ $cache_key ];
 		}
@@ -12035,7 +12081,7 @@ class Frontend {
 			return true;
 		}
 
-		$service_decisions = $this->get_service_cookie_decisions();
+		$service_decisions = $this->get_service_cookie_decisions( $visitor_view );
 
 		// Nothing is blocked and no explicit per-service/per-cookie decision
 		// exists: every remaining path in this method provably returns true, so
@@ -12051,7 +12097,7 @@ class Frontend {
 		// category is blocked — a consent regression, and one that a casual
 		// smoke test would miss because most sites configure no per-service
 		// consent at all.
-		if ( empty( $service_decisions ) && empty( $this->get_enforcement_blocked_categories() ) ) {
+		if ( empty( $service_decisions ) && empty( $blocked_categories ) ) {
 			$this->cookie_allowed_cache[ $cache_key ] = true;
 			return true;
 		}
@@ -12091,7 +12137,7 @@ class Frontend {
 			$this->cookie_allowed_cache[ $cache_key ] = true;
 			return true;
 		}
-		if ( ! in_array( $category, $this->get_enforcement_blocked_categories(), true ) ) {
+		if ( ! in_array( $category, $blocked_categories, true ) ) {
 			$this->cookie_allowed_cache[ $cache_key ] = true;
 			return true;
 		}
@@ -12107,13 +12153,35 @@ class Frontend {
 		return false;
 	}
 
-	/** @return array<string,array<int,string>> */
-	private function get_service_cookie_decisions() {
-		if ( null !== $this->service_cookie_decisions_cache ) {
-			return $this->service_cookie_decisions_cache;
+	/**
+	 * @param bool $visitor_view Read the visitor's own svc.* grants (see
+	 *                           is_cookie_allowed_for_visitor()); only differs
+	 *                           from the render view on a 'fallback' render.
+	 * @return array<string,array<int,string>>
+	 */
+	private function get_service_cookie_decisions( $visitor_view = false ) {
+		if ( $visitor_view && 'fallback' === $this->visitor_state_veto ) {
+			if ( null === $this->visitor_service_cookie_decisions_cache ) {
+				$this->visitor_service_cookie_decisions_cache = $this->compute_service_cookie_decisions( $this->get_enforcement_service_consent() );
+			}
+			return $this->visitor_service_cookie_decisions_cache;
 		}
-		$this->service_cookie_decisions_cache = array();
-		$service_consent = $this->get_enforcement_service_consent();
+		if ( null === $this->service_cookie_decisions_cache ) {
+			// On a 'fallback' render get_service_consent() has already dropped
+			// the svc.* grants; a ck.* grant read straight from the cookie must
+			// not reopen a Set-Cookie on that cacheable response either.
+			$this->service_cookie_decisions_cache = $this->compute_service_cookie_decisions( $this->get_service_consent(), 'fallback' === $this->visitor_state_veto );
+		}
+		return $this->service_cookie_decisions_cache;
+	}
+
+	/**
+	 * @param array $service_consent Per-service map (render or visitor view).
+	 * @param bool  $denials_only    Keep only the 'no' decisions.
+	 * @return array<string,array<int,string>>
+	 */
+	private function compute_service_cookie_decisions( $service_consent, $denials_only = false ) {
+		$decisions       = array();
 		$settings        = $this->get_faz_settings();
 		$banner_control  = isset( $settings['banner_control'] ) ? (array) $settings['banner_control'] : array();
 		$per_cookie      = ! empty( $banner_control['per_cookie_consent'] ) && ! empty( $banner_control['per_service_consent'] );
@@ -12124,7 +12192,7 @@ class Frontend {
 		$consent         = ( '' !== $valid && function_exists( 'faz_parse_consent_cookie' ) ) ? faz_parse_consent_cookie( $valid ) : array();
 		$signal_blocked = $per_cookie ? $this->get_signal_blocked_services( $valid ) : array();
 		if ( empty( $service_consent ) && ! $per_cookie ) {
-			return $this->service_cookie_decisions_cache;
+			return $decisions;
 		}
 		foreach ( $this->get_enforceable_services() as $service ) {
 			$svc_id = isset( $service['id'] ) ? sanitize_key( $service['id'] ) : '';
@@ -12135,19 +12203,19 @@ class Frontend {
 			foreach ( $service['cookies'] as $cookie_pattern ) {
 				$cookie_pattern = sanitize_text_field( (string) $cookie_pattern );
 				$decision       = $this->resolve_service_cookie_decision( $svc_id, $cookie_pattern, $svc_decision, $consent, $per_cookie );
-				if ( 'yes' === $decision && isset( $signal_blocked[ $svc_id ] ) ) {
+				if ( 'yes' === $decision && ( $denials_only || isset( $signal_blocked[ $svc_id ] ) ) ) {
 					continue;
 				}
 				if ( '' === $cookie_pattern || ! in_array( $decision, array( 'yes', 'no' ), true ) ) {
 					continue;
 				}
-				if ( ! isset( $this->service_cookie_decisions_cache[ $cookie_pattern ] ) ) {
-					$this->service_cookie_decisions_cache[ $cookie_pattern ] = array();
+				if ( ! isset( $decisions[ $cookie_pattern ] ) ) {
+					$decisions[ $cookie_pattern ] = array();
 				}
-				$this->service_cookie_decisions_cache[ $cookie_pattern ][] = $decision;
+				$decisions[ $cookie_pattern ][] = $decision;
 			}
 		}
-		return $this->service_cookie_decisions_cache;
+		return $decisions;
 	}
 
 	/** @return string[] */

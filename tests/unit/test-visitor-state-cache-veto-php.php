@@ -291,9 +291,14 @@ namespace {
 	$GLOBALS['vs_filters']['faz_veto_cache_for_visitor_state'] = false;
 	$fe = vs_request( 'gdpr', array( 'fazcookie-consent' => $accept_all, 'probe_ga' => '1', 'probe_ad' => '1' ) );
 	vs_check( $optional === vs_blocked( $fe ), 'fallback: the render is still the shareable one' );
-	vs_check( true === $fe->is_cookie_allowed( 'probe_ga' ) && true === $fe->is_cookie_allowed( 'probe_ad' ), 'fallback: an accepted category\'s cookie is allowed (Set-Cookie guard)' );
 	$fe->shred_non_consented_cookies();
 	vs_check( array() === $GLOBALS['vs_deleted'] && isset( $_COOKIE['probe_ga'] ), 'fallback: the shredder deletes none of an accept-all visitor\'s cookies' );
+	// The outgoing guard is the opposite case: it decides what this possibly
+	// cached RESPONSE carries. A cache that keeps headers would replay a
+	// server-side `Set-Cookie: probe_ga=…` to every later visitor, so on the
+	// shareable render it is stripped and script.js sets it after consent.
+	$out = $fe->filter_outgoing_cookie_header_lines( array( 'Set-Cookie: probe_ga=GA1.1.2; path=/', 'Set-Cookie: wordpress_test_cookie=WP; path=/' ) );
+	vs_check( array( 'Set-Cookie: wordpress_test_cookie=WP; path=/' ) === $out['set_cookie_headers'], 'fallback: the Set-Cookie guard still strips a server-side Set-Cookie of an accepted category from the cacheable response' );
 
 	$fe = vs_request( 'gdpr', array( 'fazcookie-consent' => $reject_all, 'probe_ga' => '1' ) );
 	$fe->shred_non_consented_cookies();
@@ -306,6 +311,25 @@ namespace {
 	vs_check( isset( $GLOBALS['vs_deleted']['probe_ad'] ), 'fallback: the denied category\'s cookie is deleted' );
 	vs_check( ! isset( $GLOBALS['vs_deleted']['probe_ga'] ), 'fallback: the granted category\'s cookie survives' );
 	vs_check( ! isset( $GLOBALS['vs_deleted']['VISITOR_INFO1_LIVE'] ), 'fallback: a per-service YES inside a denied category survives' );
+	$out = $fe->filter_outgoing_cookie_header_lines( array( 'Set-Cookie: VISITOR_INFO1_LIVE=x; path=/', 'Set-Cookie: probe_ga=y; path=/' ) );
+	vs_check( array() === $out['set_cookie_headers'], 'fallback: the guard strips both the per-service and the category grant from the response' );
+
+	// A per-cookie ck.* grant is read straight from the cookie, not through
+	// get_service_consent(): it must not reopen the Set-Cookie either, while the
+	// shredder still keeps the cookie in the visitor's browser.
+	$GLOBALS['vs_settings']['banner_control']['per_cookie_consent'] = true;
+	$per_cookie = 'consentid:abc,consent:yes,action:yes,necessary:yes,analytics:yes,marketing:no,ck.youtube.VISITOR_INFO1_LIVE:yes,rev:1';
+	$fe = vs_request( 'gdpr', array( 'fazcookie-consent' => $per_cookie, 'VISITOR_INFO1_LIVE' => '1' ) );
+	$fe->shred_non_consented_cookies();
+	vs_check( ! isset( $GLOBALS['vs_deleted']['VISITOR_INFO1_LIVE'] ), 'fallback: a per-cookie YES keeps the cookie in the browser' );
+	$out = $fe->filter_outgoing_cookie_header_lines( array( 'Set-Cookie: VISITOR_INFO1_LIVE=x; path=/' ) );
+	vs_check( array() === $out['set_cookie_headers'], 'fallback: and the guard still strips its Set-Cookie from the response' );
+	unset( $GLOBALS['vs_settings']['banner_control']['per_cookie_consent'] );
+
+	$GLOBALS['vs_filters']['faz_veto_cache_for_visitor_state'] = true;
+	$fe = vs_request( 'gdpr', array( 'fazcookie-consent' => $accept_all ) );
+	$out = $fe->filter_outgoing_cookie_header_lines( array( 'Set-Cookie: probe_ga=GA1.1.2; path=/' ) );
+	vs_check( 'vetoed' === vs_verdict( $fe ) && 1 === count( $out['set_cookie_headers'] ), 'vetoed (uncacheable) response: the accepted category\'s Set-Cookie passes' );
 	unset( $GLOBALS['vs_filters']['faz_veto_cache_for_visitor_state'] );
 
 	$fe = vs_request( 'ccpa', array( 'fazcookie-consent' => $ccpa_optout, 'probe_ad' => '1', 'probe_ga' => '1' ), array(), true );
