@@ -4,8 +4,9 @@
  * tracker code (GitHub issue #322).
  *
  * Query Monitor prints `var QueryMonitorData = {…};` in an inline script with
- * its own id, from `shutdown`, so the markup still passes through the output
- * buffer. The JSON lists every script and HTTP call of the page, so on a page
+ * its own id. Version 4.x prints it with wp_print_inline_script_tag(), so the
+ * `wp_inline_script_attributes` filter judges it before the output buffer
+ * does; both layers are pinned below. The JSON lists every script and HTTP call of the page, so on a page
  * that loads any tracker the provider matcher found the tracker's URL inside
  * the data and re-typed the whole script to text/plain: QueryMonitorData was
  * never defined, the admin-bar panels stopped working, and other developer and
@@ -105,6 +106,17 @@ namespace {
 	if ( ! function_exists( 'set_transient' ) ) {
 		function set_transient( $key, $value, $ttl = 0 ) {
 			return true;
+		}
+	}
+
+	if ( ! function_exists( 'is_admin' ) ) {
+		function is_admin() {
+			return false;
+		}
+	}
+	if ( ! function_exists( 'faz_disable_banner' ) ) {
+		function faz_disable_banner() {
+			return false;
 		}
 	}
 
@@ -248,6 +260,58 @@ namespace {
 	$src = '<script src="https://www.googletagmanager.com/gtag/js?id=G-TEST">var X = {"a":1};</script>';
 	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $src ) );
 	assert_true( $is_parked( $out ), 'an external script is judged by its src, whatever its body says' );
+
+	// ── Second layer: wp_inline_script_attributes ──────────────────────────
+	// Query Monitor 4.x prints its payload with wp_print_inline_script_tag(),
+	// so it never reaches the output-buffer pass above as an unjudged tag: the
+	// `wp_inline_script_attributes` filter retypes it first. Measured on
+	// faz-test with Query Monitor 4.0.7: the exemption above alone left
+	// QueryMonitorData undefined. Both layers must give the same verdict.
+	echo "\n-- the same verdict from the inline-attributes filter --\n";
+
+	$filter_fe = function () use ( $providers, $blocked ) {
+		$fe = new class() extends Frontend {
+			public function __construct() {}
+			protected function is_banner_disabled_by_settings() {
+				return false;
+			}
+			protected function is_blocking_disabled_for_page() {
+				return false;
+			}
+		};
+		$rc = new ReflectionClass( Frontend::class );
+		$preset = array(
+			'blocked_categories_cache'  => $blocked,
+			'provider_map_cache'        => $providers,
+			'service_consent_cache'     => array(),
+			'whitelist_cache'           => array(),
+			'settings_option_cache'     => array(),
+			'pattern_service_cache'     => array(),
+			'provider_match_meta_cache' => null,
+			'service_match_meta_cache'  => null,
+			'template'                  => array( 'html' => '<div></div>' ),
+		);
+		foreach ( $preset as $prop => $value ) {
+			$p = $rc->getProperty( $prop );
+			$p->setAccessible( true );
+			$p->setValue( $fe, $value );
+		}
+		return $fe;
+	};
+	$filtered = function ( $id, $body ) use ( $filter_fe ) {
+		return $filter_fe()->filter_inline_script_attributes( array( 'id' => $id ), $body );
+	};
+	$typed_plain = function ( $attrs ) {
+		return isset( $attrs['type'] ) && 'text/plain' === $attrs['type'] && ! empty( $attrs['data-faz-category'] );
+	};
+
+	$qm_body = 'var QueryMonitorData = {"assets":{"scripts":[{"handle":"google_gtagjs"}]},"hooks":[{"callback":"fbq(init)"}]};';
+	assert_true( ! $typed_plain( $filtered( 'query-monitor-inline-data', $qm_body ) ), 'filter: the Query Monitor payload keeps its type' );
+	assert_true( ! $typed_plain( $filtered( 'site-data', "var a = {\"gtag\":1};\nvar b = [\"_paq\"];" ) ), 'filter: several JSON assignments keep their type' );
+	assert_true( ! $typed_plain( $filtered( 'win-data', 'window.Payload = {"tracker":"gtag"}' ) ), 'filter: window.NAME = JSON keeps its type' );
+	assert_true( $typed_plain( $filtered( 'loader', "gtag('config','G-TEST');" ) ), 'filter: a tracker call is still retyped' );
+	assert_true( $typed_plain( $filtered( 'mixed', 'var cfg = {"id":"G-TEST"}; gtag("config", cfg.id);' ) ), 'filter: data followed by a call is still retyped' );
+	assert_true( $typed_plain( $filtered( 'paq', 'var _paq = window._paq = window._paq || []; _paq.push(["trackPageView"]);' ) ), 'filter: the Matomo queue is still retyped' );
 
 	echo "\n";
 	if ( 0 === $tests_failed ) {

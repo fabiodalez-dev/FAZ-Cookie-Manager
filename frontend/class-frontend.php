@@ -10089,6 +10089,14 @@ class Frontend {
 		if ( false !== strpos( $attrs, 'data-faz-category' ) ) {
 			return false;
 		}
+		// A body made only of JSON assignments defines data and sends nothing,
+		// the same rule process_script_tag() applies (#322). Query Monitor 4.x
+		// prints its payload through wp_print_inline_script_tag(), so this
+		// filter judges it before the output buffer ever does; without the
+		// rule here the two layers disagreed and QueryMonitorData was retyped.
+		if ( $this->is_inline_json_data_assignment( (string) $content ) ) {
+			return false;
+		}
 
 		$providers = $this->get_provider_category_map();
 		if ( empty( $providers ) ) {
