@@ -103,6 +103,9 @@ class Activator {
 		// every install still using the floating widget.
 		add_action( 'faz_daily_cleanup', array( 'FazCookie\Includes\Withdrawal_Path', 'cron_verify' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
+		// One-off GVL download scheduled when TCF is enabled without a list
+		// (Settings::maybe_bootstrap_gvl) — kept out of the settings request.
+		add_action( 'faz_gvl_bootstrap', array( 'FazCookie\Admin\Modules\Settings\Includes\Settings', 'run_gvl_bootstrap' ) );
 		add_action( 'faz_weekly_definitions_update', array( 'FazCookie\Includes\Cookie_Definitions', 'cron_update' ) );
 		add_action( 'faz_after_update_settings', array( 'FazCookie\Includes\Cookie_Definitions', 'schedule_updates' ) );
 		add_action( 'faz_scheduled_scan', array( __CLASS__, 'run_scheduled_scan' ) );

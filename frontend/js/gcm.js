@@ -138,22 +138,8 @@ var initialCookieObj = parseConsentCookie();
     for (var index = 0; index < regionSettings.length; index++) {
         var regionSetting = regionSettings[index];
         if (!regionSetting || typeof regionSetting !== "object") continue;
-        // Read the category-mirror keys: these are the source of truth for the
-        // storage-type signals. The non-personalized-ads fallback deliberately
-        // keeps the `marketing` mirror and the canonical `ad_storage` OUT of sync
-        // (marketing drives ad serving here), so reading the mirrors is
-        // load-bearing — do NOT switch this to canonical-first. The runtime
-        // geo-routing override writes these same mirror keys (see
-        // Geo_Runtime::apply_cmv2_to_gcm) so its CMv2 signals reach gtag too.
-        var consentRegionData = {
-            ad_storage: regionSetting.marketing || regionSetting.advertisement || "denied",
-            analytics_storage: regionSetting.analytics,
-            functionality_storage: regionSetting.functional,
-            personalization_storage: regionSetting.functional,
-            security_storage: regionSetting.necessary,
-            ad_user_data: regionSetting.ad_user_data,
-            ad_personalization: regionSetting.ad_personalization
-        };
+        // Category-mirror keys, see regionConsentData().
+        var consentRegionData = regionConsentData(regionSetting);
         var regionsRaw = typeof regionSetting.regions === "string" ? regionSetting.regions : "";
         var regionsToSetFor = regionsRaw
             .split(",")
@@ -167,21 +153,84 @@ var initialCookieObj = parseConsentCookie();
     }
 
     if (setDefaultSetting) {
-        setConsentInitStates({
-          ad_storage: "denied",
-          analytics_storage: "denied",
-          functionality_storage: "denied",
-          personalization_storage: "denied",
-          security_storage: "granted",
-          ad_user_data: "denied",
-          ad_personalization: "denied"
-        });
+        setConsentInitStates(fallbackDefault());
         anyAdDenied = true;
     }
 
     // Single global npa for the pre-consent default stage (see comment above):
     // most-restrictive wins, since gtag('set', { npa }) is not region-scoped.
     setNpaIfDenied(anyAdDenied ? "denied" : "granted");
+}
+
+// The consent signals one admin-configured region row stands for. Read the
+// category-mirror keys: these are the source of truth for the storage-type
+// signals. The non-personalized-ads fallback deliberately keeps the
+// `marketing` mirror and the canonical `ad_storage` OUT of sync (marketing
+// drives ad serving here), so reading the mirrors is load-bearing — do NOT
+// switch this to canonical-first. The runtime geo-routing override writes these
+// same mirror keys (see Geo_Runtime::apply_cmv2_to_gcm) so its CMv2 signals
+// reach gtag too.
+function regionConsentData(regionSetting) {
+    return {
+        ad_storage: regionSetting.marketing || regionSetting.advertisement || "denied",
+        analytics_storage: regionSetting.analytics,
+        functionality_storage: regionSetting.functional,
+        personalization_storage: regionSetting.functional,
+        security_storage: regionSetting.necessary,
+        ad_user_data: regionSetting.ad_user_data,
+        ad_personalization: regionSetting.ad_personalization
+    };
+}
+
+// The default applied everywhere no region row covers (no "all" row), and the
+// whole default in Advanced Consent Mode (print_gcm_default_inline emits the
+// same values).
+function fallbackDefault() {
+    return {
+        ad_storage: "denied",
+        analytics_storage: "denied",
+        functionality_storage: "denied",
+        personalization_storage: "denied",
+        security_storage: "granted",
+        ad_user_data: "denied",
+        ad_personalization: "denied"
+    };
+}
+
+// What to go back to when a restored record is invalidated on this page view.
+//
+// It used to be the hard-coded global denial above, whatever the admin had set
+// per region: an install whose defaults grant, say, analytics_storage
+// everywhere had it withdrawn from a visitor whose record merely went stale,
+// a state the visitor never had before the restore. The right target is the
+// region default the page started from — but `consent update` cannot be
+// region-scoped (`region` is a `consent default` parameter only) and this
+// script does not know the visitor's region; a second `consent default`
+// instead is what issue #149 removed. So each signal goes back to the value
+// every applicable default row agrees on, and to denied where they disagree:
+// exactly the region default whenever the visitor's own row could not have
+// said anything else, the most restrictive of the candidates otherwise.
+// Advanced Consent Mode has a single global denied default, so it is that.
+function baselineConsentState() {
+    var rows = [];
+    if (!data.advanced_mode) {
+        for (var i = 0; i < regionSettings.length; i++) {
+            if (regionSettings[i] && typeof regionSettings[i] === "object") {
+                rows.push(regionConsentData(regionSettings[i]));
+            }
+        }
+    }
+    if (data.advanced_mode || setDefaultSetting) rows.push(fallbackDefault());
+    var state = fallbackDefault();
+    for (var key in state) {
+        if (!state.hasOwnProperty(key)) continue;
+        var agreed = rows.length > 0;
+        for (var r = 0; r < rows.length; r++) {
+            if (rows[r][key] !== "granted") { agreed = false; break; }
+        }
+        state[key] = agreed ? "granted" : "denied";
+    }
+    return state;
 }
 
 // Returning visitor with saved consent: restore it via `consent update` (the
@@ -384,10 +433,13 @@ document.addEventListener("fazcookie_consent_update", function () {
         // baseline on the same page view instead of leaving them standing.
         if (!restoredFromCookie) return;
         restoredFromCookie = false;
-        var baseline = { necessary: "granted" };
-        updateConsentState(buildConsentState(baseline));
+        // The region defaults, not a global denial (see baselineConsentState).
+        var baseline = baselineConsentState();
+        setNpaIfDenied(baseline.ad_storage);
+        updateConsentState(baseline);
         if (data.gacm_enabled && data.gacm_provider_ids) {
-            setAdditionalConsent(baseline);
+            // No record: no additional-consent provider is consented.
+            setAdditionalConsent({ necessary: "granted" });
         }
         return;
     }
