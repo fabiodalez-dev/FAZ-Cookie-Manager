@@ -1686,6 +1686,14 @@ async function testFunctionalScenarios(browser) {
 
 	// TF14 — Revoke consent removes non-necessary
 	{
+		// TF13 logged a consent from this same address seconds ago, under a
+		// different consent id. The per-IP window (10 s) rightly drops a NEW id
+		// from the same address inside it — that is the flood bound, pinned by
+		// the E2E suite — so the acceptance below would be dropped and the
+		// withdrawal would then have no earlier row of its own to follow. Let
+		// that window close BEFORE the acceptance only: between the acceptance
+		// and the withdrawal nothing waits, which is the sequence under test.
+		await new Promise((resolve) => setTimeout(resolve, 11000));
 		const { ctx, page } = await freshPage(browser);
 		await gotoFront(page);
 		await waitForBanner(page);
@@ -1760,6 +1768,10 @@ async function testFunctionalScenarios(browser) {
 	// Now: give consent, read the consentid the plugin wrote, and assert the row
 	// for THAT id records the click's status and categories.
 	{
+		// TF14 logged from this same address moments ago under another consent
+		// id; let the per-IP window close first, or the row is (correctly)
+		// dropped as a flood. See TF14.
+		await new Promise((resolve) => setTimeout(resolve, 11000));
 		const { ctx, page } = await freshPage(browser);
 		await gotoFront(page);
 		await waitForBanner(page);
