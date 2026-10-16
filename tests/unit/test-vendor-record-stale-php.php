@@ -304,6 +304,14 @@ namespace {
 	$fe = vs_request( 'ccpa', array( 'fazcookie-consent' => $ccpa ) );
 	vr_check( array( 'marketing' ) === vs_blocked( $fe ), 'CCPA: the recorded opt-out stands, not reset to a first visit' );
 
+	echo "Teardown: the consent-tracking set is the one script.js invalidates\n";
+	if ( ! defined( 'DAY_IN_SECONDS' ) ) {
+		define( 'DAY_IN_SECONDS', 86400 );
+	}
+	$_COOKIE = array( 'fazcookie-consent' => $decided, 'fazVendorConsent' => $full, 'fazVendorLI' => 'p2:no,v:g', 'euconsent-v2' => 'CP', 'keep' => '1' );
+	faz_clear_consent_tracking_cookies();
+	vr_check( array( 'keep' => '1' ) === $_COOKIE, 'faz_clear_consent_tracking_cookies() clears fazVendorLI along with the consent, vendor and TC records' );
+
 	echo "vendor-record-stale: {$passed} passed, {$failed} failed\n";
 	exit( $failed ? 1 : 0 );
 }

@@ -757,10 +757,16 @@ function faz_expire_browser_cookie( $name ) {
 /**
  * Clear all consent-tracking cookies that must stay in sync.
  *
+ * The same set _fazInvalidateStoredConsent() in script.js deletes. fazVendorLI
+ * (the IAB Right-to-Object record) belongs to it: left behind, the objections
+ * of a choice that no longer exists outlived it and were applied to the next
+ * one, so a visitor who never objected under the new choice still signalled
+ * the old objections.
+ *
  * @return void
  */
 function faz_clear_consent_tracking_cookies() {
-	foreach ( array( 'fazcookie-consent', 'fazVendorConsent', 'euconsent-v2' ) as $cookie_name ) {
+	foreach ( array( 'fazcookie-consent', 'fazVendorConsent', 'fazVendorLI', 'euconsent-v2' ) as $cookie_name ) {
 		faz_expire_browser_cookie( $cookie_name );
 	}
 }
