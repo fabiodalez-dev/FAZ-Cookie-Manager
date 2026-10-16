@@ -401,7 +401,32 @@ function buildBaseline(html: string): Baseline {
 const EXECUTABLE_TYPES = new Set(['', 'text/javascript', 'application/javascript', 'module']);
 
 /** (a) every baseline FAZ handle is still a live, unmodified script. */
-function fazHandleViolations(html: string, base: Baseline): string[] {
+/**
+ * `src` as the baseline would have it when the page itself moved FAZ's assets
+ * to another host: a URL on `cdnHost` is re-based onto the origin of the
+ * baseline URL, keeping path, query and fragment. Anything else is returned
+ * as is, so a real rewrite (another path, a ?ver= hash, an optimiser copy, a
+ * third host) still differs.
+ */
+function rebaseCdnSrc(src: string, expectedSrc: string, cdnHost?: string): string {
+  if (!cdnHost) return src;
+  try {
+    const actual = new URL(src, WP_BASE);
+    if (actual.hostname !== cdnHost) return src;
+    const origin = new URL(expectedSrc, WP_BASE).origin;
+    return origin + actual.pathname + actual.search + actual.hash;
+  } catch {
+    return src;
+  }
+}
+
+/**
+ * @param options.cdnHost A host the scenario itself serves FAZ assets from
+ *   (test 25's script_loader_src filter): the change to that host is the
+ *   premise, not a violation, so src is compared with it re-based onto the
+ *   site's origin. type, defer, async and every other check are unaffected.
+ */
+function fazHandleViolations(html: string, base: Baseline, options: { cdnHost?: string } = {}): string[] {
   const current = fazScriptsById(html);
   const problems: string[] = [];
   for (const expected of base.handles) {
@@ -427,7 +452,7 @@ function fazHandleViolations(html: string, base: Baseline): string[] {
         problems.push(`${expected.id}: src became a data: URI`);
       } else if (/\/litespeed\/(?:js|css)\//.test(src) || /\/cache\/flying-press\//.test(src)) {
         problems.push(`${expected.id}: src now points at an optimiser copy ${short(src)}`);
-      } else if (src !== expected.src) {
+      } else if (rebaseCdnSrc(src, expected.src, options.cdnHost) !== expected.src) {
         // Byte-for-byte: a FlyingPress ?ver=<hash> rewrite means minify did not
         // honour FAZ's exclusion, even if the path is unchanged.
         problems.push(`${expected.id}: src changed ${short(expected.src)} -> ${short(src)}`);
@@ -1630,8 +1655,11 @@ test.describe('FlyingPress page optimisation leaves FAZ intact', () => {
       expect(control?.attrs['data-loading-method'], 'positive control: a non-FAZ script on the same CDN host must be delayed as third-party').toBe('user-interaction');
       const delayed = [...fazScriptsById(hit.html)].filter(([, tag]) => 'data-loading-method' in tag.attrs).map(([id]) => id);
       expect(delayed, 'no FAZ handle may be delayed until interaction').toEqual([]);
-      expect(fazHandleViolations(preload.html, base)).toEqual([]);
-      expect(fazHandleViolations(hit.html, base)).toEqual([]);
+      // The scenario moves FAZ's assets to the fake CDN host on purpose, so
+      // the host change is not a violation; a changed path or query, type,
+      // defer or async still is.
+      expect(fazHandleViolations(preload.html, base, { cdnHost: FAKE_CDN_HOST })).toEqual([]);
+      expect(fazHandleViolations(hit.html, base, { cdnHost: FAKE_CDN_HOST })).toEqual([]);
       expect(bootstrapOrderViolations(hit.html)).toEqual([]);
 
       const context = await visitorContext(browser);
