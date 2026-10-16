@@ -4667,6 +4667,17 @@ class Frontend {
 		if ( $this->is_wp_localize_or_translations_inline_id( $id ) ) {
 			return $full;
 		}
+		// The same shape printed under any other id, or none: an inline body
+		// made only of `var|let|const|window.NAME = <JSON>;` assignments
+		// defines values and requests nothing. Query Monitor publishes
+		// `var QueryMonitorData = {…}` this way, and its JSON names the page's
+		// handles and callbacks — a handle like google_gtagjs carries the
+		// `gtag` signature — so the whole payload was re-typed and its admin
+		// bar stopped working (GitHub issue #322). The tracker that reads such
+		// data is judged on its own tag.
+		if ( '' === $this->extract_tag_attr( $attrs, 'src' ) && $this->is_inline_json_data_assignment( $content ) ) {
+			return $full;
+		}
 
 		// Never block whitelisted scripts.
 		if ( $this->is_whitelisted( $attrs, $content ) ) {
@@ -9374,6 +9385,126 @@ class Frontend {
 	 * @param string $id Inline script tag ID.
 	 * @return bool
 	 */
+	/**
+	 * Whether an inline script body only assigns JSON values.
+	 *
+	 * Accepted: one or more `var NAME = <JSON>`, `let NAME = <JSON>`,
+	 * `const NAME = <JSON>` or `window.NAME = <JSON>` statements, each
+	 * optionally ended by a semicolon, with nothing else in the body except
+	 * whitespace, the CDATA markers core wraps localized data in, and
+	 * `//# sourceURL=` / `//# sourceMappingURL=` lines. Every value must be
+	 * valid JSON as json_decode() reads it, so an object literal holding a
+	 * function, a single-quoted string, a reference to another variable or a
+	 * call is not data and the script is judged as usual. A declaration list
+	 * (`var a = {…}, b = …`) is rejected too: the part after the comma can be
+	 * any expression.
+	 *
+	 * @param string $content Inline script body.
+	 * @return bool
+	 */
+	private function is_inline_json_data_assignment( $content ) {
+		if ( ! is_string( $content ) ) {
+			return false;
+		}
+		$body = preg_replace( '#^[ \t]*//\#[ \t]*source(?:Mapping)?URL=[^\n]*$#m', '', $content );
+		if ( null === $body ) {
+			return false;
+		}
+		$body = str_replace( array( '/* <![CDATA[ */', '/* ]]> */' ), '', $body );
+		$len  = strlen( $body );
+		$pos  = 0;
+		$seen = 0;
+		while ( true ) {
+			while ( $pos < $len && ctype_space( $body[ $pos ] ) ) {
+				$pos++;
+			}
+			if ( $pos >= $len ) {
+				return $seen > 0;
+			}
+			if ( ! preg_match( '/\G(?:(?:var|let|const)\s+|window\.)[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*/', $body, $m, 0, $pos ) ) {
+				return false;
+			}
+			$pos += strlen( $m[0] );
+			$end  = $this->json_value_end( $body, $pos );
+			if ( false === $end ) {
+				return false;
+			}
+			$value = substr( $body, $pos, $end - $pos );
+			json_decode( $value );
+			if ( JSON_ERROR_NONE !== json_last_error() ) {
+				return false;
+			}
+			$pos = $end;
+			while ( $pos < $len && ctype_space( $body[ $pos ] ) && "\n" !== $body[ $pos ] ) {
+				$pos++;
+			}
+			if ( $pos < $len && ';' === $body[ $pos ] ) {
+				$pos++;
+			} elseif ( $pos < $len && "\n" !== $body[ $pos ] ) {
+				// Anything but a statement end after the value (`,`, an
+				// operator, a call) means this is not a plain assignment.
+				return false;
+			}
+			$seen++;
+		}
+	}
+
+	/**
+	 * Offset just past the JSON value that starts at $start, or false.
+	 *
+	 * A scanner, not a parser: it finds where the value ENDS (matching
+	 * brackets outside strings, honouring escapes) so json_decode() can then
+	 * judge exactly that slice. Scalars end at the first character that
+	 * cannot continue them.
+	 *
+	 * @param string $s     Script body.
+	 * @param int    $start Offset of the value's first character.
+	 * @return int|false
+	 */
+	private function json_value_end( $s, $start ) {
+		$len = strlen( $s );
+		if ( $start >= $len ) {
+			return false;
+		}
+		$first = $s[ $start ];
+		if ( '{' !== $first && '[' !== $first && '"' !== $first ) {
+			if ( ! preg_match( '/\G(?:-?[0-9][0-9.eE+-]*|true|false|null)/', $s, $m, 0, $start ) ) {
+				return false;
+			}
+			return $start + strlen( $m[0] );
+		}
+		$depth     = 0;
+		$in_string = false;
+		for ( $i = $start; $i < $len; $i++ ) {
+			$c = $s[ $i ];
+			if ( $in_string ) {
+				if ( '\\' === $c ) {
+					$i++;
+				} elseif ( '"' === $c ) {
+					$in_string = false;
+					if ( 0 === $depth ) {
+						return $i + 1;
+					}
+				}
+				continue;
+			}
+			if ( '"' === $c ) {
+				$in_string = true;
+			} elseif ( '{' === $c || '[' === $c ) {
+				$depth++;
+			} elseif ( '}' === $c || ']' === $c ) {
+				$depth--;
+				if ( 0 === $depth ) {
+					return $i + 1;
+				}
+				if ( $depth < 0 ) {
+					return false;
+				}
+			}
+		}
+		return false;
+	}
+
 	private function is_wp_localize_or_translations_inline_id( $id ) {
 		if ( ! is_string( $id ) || '' === $id ) {
 			return false;
