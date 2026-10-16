@@ -22,10 +22,6 @@
   ],
   "signals": {
     "tcf_v22": false,
-    "gpp": {
-      "enabled": true,
-      "section": "usnj"
-    },
     "gpc_honored": true,
     "gpc_required": true,
     "dnt_honored": false,

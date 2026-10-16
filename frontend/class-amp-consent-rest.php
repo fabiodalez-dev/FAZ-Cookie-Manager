@@ -785,7 +785,7 @@ class AMP_Consent_Rest {
 			'purposes'          => self::get_purposes(),
 			'expiry_days'       => $expiry_days,
 			'revision'          => max( 1, absint( $revision ) ),
-			'scope_fingerprint' => substr( wp_hash( $slug . '|' . $law, 'auth' ), 0, 32 ),
+			'scope_fingerprint' => faz_scope_fingerprint( $slug, $law ),
 		);
 	}
 

@@ -3,7 +3,7 @@
  *
  * These tests validate the plugin's declared compliance behaviour, not legal
  * conclusions. Each case checks the catalogue source, geo resolver, runtime
- * consent defaults, GPC/GPP obligations, UI withdrawal path, sensitive-data
+ * consent defaults, GPC obligations, UI withdrawal path, sensitive-data
  * treatment and Google Consent Mode mapping.
  *
  * Primary regulatory anchors used to shape the invariants:
@@ -57,7 +57,6 @@ type Ruleset = {
   official_resources_url: string[];
   signals: {
     tcf_v22: boolean;
-    gpp: { enabled: boolean; section: string | null };
     gpc_honored: boolean;
     gpc_required: boolean;
     dnt_honored: boolean;
@@ -278,17 +277,13 @@ test.describe('Regulatory compliance matrix — 40 jurisdictions', () => {
       expect(ruleset.ui.donotsell_link_required).toBe(Boolean(scenario.doNotSell));
       expect(ruleset.ui.sensitive_separate_optin).toBe(Boolean(scenario.sensitive));
 
-      // GPC and GPP must agree with each jurisdiction's declared obligations.
+      // GPC must agree with each jurisdiction's declared obligations.
       expect(ruleset.signals.gpc_honored).toBe(Boolean(scenario.gpcHonored));
       expect(ruleset.signals.gpc_required).toBe(Boolean(scenario.gpcRequired));
       if (ruleset.signals.gpc_required) {
         expect(ruleset.signals.gpc_honored, 'a required GPC signal cannot be ignored').toBe(true);
       }
-      const isUsState = Boolean(scenario.region?.startsWith('US-'));
-      expect(ruleset.signals.gpp.enabled, 'US state laws expose an IAB GPP section').toBe(isUsState);
-      expect(ruleset.signals.gpp.section, 'GPP section matches the state code').toBe(
-        isUsState ? scenario.region!.replace('-', '').toLowerCase() : null,
-      );
+      expect(ruleset.signals).not.toHaveProperty('gpp');
 
       // Category defaults must encode prior consent, sensitive opt-in and
       // necessary-cookie exemptions without relying on frontend heuristics.

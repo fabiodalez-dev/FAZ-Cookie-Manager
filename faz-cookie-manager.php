@@ -239,6 +239,21 @@ function faz_get_cookie_domain() {
 	return apply_filters( 'faz_cookie_domain', $domain );
 }
 
+/** Whether shared-domain cookies must remain bound to the current multisite site. */
+function faz_consent_site_bound() {
+	$settings = get_option( 'faz_settings', array() );
+	return function_exists( 'is_multisite' ) && is_multisite() && ! empty( $settings['banner_control']['subdomain_sharing'] );
+}
+
+/** Build the same scope fingerprint for classic, REST and AMP consent. */
+function faz_scope_fingerprint( $slug, $law ) {
+	$scope = $slug . '|' . $law;
+	if ( faz_consent_site_bound() ) {
+		$scope .= '|' . get_current_network_id() . ':' . get_current_blog_id();
+	}
+	return substr( wp_hash( $scope, 'auth' ), 0, 32 );
+}
+
 /**
  * Return the raw FAZ consent cookie value from the current request.
  *
@@ -331,6 +346,14 @@ function faz_is_consent_cookie_stale( $cookie = '' ) {
 	$parsed           = faz_parse_consent_cookie( $cookie );
 	$stored_revision  = isset( $parsed['rev'] ) ? absint( $parsed['rev'] ) : 0;
 
+	if ( faz_consent_site_bound() && ! ( isset( $parsed['source'], $parsed['action'], $parsed['consent'] ) && 'pmp' === $parsed['source'] && 'auto' === $parsed['action'] && 'no' === $parsed['consent'] ) ) {
+		// Pluggable functions are unavailable during early plugin loading. Fail
+		// closed until WordPress can verify the site's fingerprint.
+		if ( ! function_exists( 'wp_hash' ) || empty( $parsed['__scope.fp'] ) ||
+			! hash_equals( faz_scope_fingerprint( $parsed['__scope.banner'] ?? '', $parsed['__scope.law'] ?? '' ), $parsed['__scope.fp'] ) ) {
+			return true;
+		}
+	}
 	return $current_revision > 1 && $stored_revision < $current_revision;
 }
 

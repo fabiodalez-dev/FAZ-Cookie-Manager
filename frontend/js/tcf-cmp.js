@@ -142,6 +142,11 @@
 	function isConsentCookieStale(pairs) {
 		if (!pairs) return false;
 		var config = window._fazConfig || {};
+		// A pending geo lookup cannot authorize the cached shell's consent.
+		if (config._siteScopeBound && !(pairs.source === 'pmp' && pairs.action === 'auto' && pairs.consent === 'no')) {
+			if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
+			if (!config._scopeFingerprint || pairs['__scope.fp'] !== config._scopeFingerprint) return true;
+		}
 		// Coerce because wp_localize_script may stringify integers.
 		var serverRevisionRaw = config && config._consentRevision;
 		var serverRevision = parseInt(serverRevisionRaw, 10);

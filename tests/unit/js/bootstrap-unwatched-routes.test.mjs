@@ -66,6 +66,7 @@ const runtimeCode = readFileSync(SCRIPT_PATH, 'utf8');
 function runtimeConfig() {
   return {
     _block: '1',
+    _srcdocKey: 'test-response-proof',
     _categories: [
       { slug: 'necessary', isNecessary: true },
       { slug: 'functional', isNecessary: false },
@@ -361,7 +362,7 @@ console.log('\nruntime: parked is restorable');
 }
 // 8c — a parked srcdoc frame comes back visible.
 {
-  const w = runtimeOnly({ body: '<iframe id="p" class="faz-hidden" data-faz-category="marketing" data-faz-srcdoc="&lt;p&gt;x&lt;/p&gt;&lt;img src=&quot;https://tracker.test/d.png&quot;&gt;"></iframe>' });
+  const w = runtimeOnly({ body: '<iframe id="p" class="faz-hidden" data-faz-srcdoc-key="test-response-proof" data-faz-category="marketing" data-faz-srcdoc="&lt;p&gt;x&lt;/p&gt;&lt;img src=&quot;https://tracker.test/d.png&quot;&gt;"></iframe>' });
   const el = w.document.getElementById('p');
   consent(w, { marketing: 'yes' });
   w.eval('_fazUnblockServerSide()');

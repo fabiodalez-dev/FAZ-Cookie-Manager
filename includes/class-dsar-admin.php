@@ -134,6 +134,10 @@ class DSAR_Admin {
 			__( 'Submitted', 'faz-cookie-manager' )    => esc_html( get_post_time( 'Y-m-d H:i', false, $post ) ),
 			__( 'Status', 'faz-cookie-manager' )       => esc_html( self::status_label( self::get_status( $post->ID ) ) ),
 		);
+		$consent_id = (string) get_post_meta( $post->ID, '_dsar_consent_id', true );
+		if ( '' !== $consent_id ) {
+			$rows[ __( 'Consent ID', 'faz-cookie-manager' ) ] = '<code>' . esc_html( $consent_id ) . '</code> <a href="' . esc_url( add_query_arg( array( 'page' => 'faz-cookie-manager-consent-logs', 'consent_id' => rawurlencode( $consent_id ) ), admin_url( 'admin.php' ) ) ) . '">' . esc_html__( 'View consent history', 'faz-cookie-manager' ) . '</a>';
+		}
 		?>
 		<table class="widefat striped" style="margin-bottom:12px;">
 			<tbody>

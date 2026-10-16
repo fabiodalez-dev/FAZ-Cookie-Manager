@@ -76,7 +76,7 @@ ref._fazConsentStore = new Map();
 // _fazBootstrap.start()/finish(), the bootstrap's DOMContentLoaded fallback
 // takes over, and the fallback no longer uninstalls anything, so the stale
 // runtime's own gates stay in place instead of being wiped.
-const _FAZ_BUILD = '1.34.1+deferred-bootstrap';
+const _FAZ_BUILD = '1.34.1+consent-scope-srcdoc';
 
 /**
  * One-call frontend self-diagnosis for support: paste
@@ -143,6 +143,7 @@ ref._fazSetInStore = function (key, value) {
  * @returns {void}
  */
 ref._fazPersistConsentCookie = function () {
+    _fazUpdateConsentId();
     // Build a service-id → category-slug map so we can skip redundant
     // `svc.<id>:<category-value>` entries below. On installs with many
     // registered services (the default shipped catalog has ~160), the
@@ -526,7 +527,7 @@ function _fazCurrentScopeFingerprint() {
     return (_fazStore && typeof _fazStore._scopeFingerprint === 'string') ? _fazStore._scopeFingerprint : "";
 }
 function _fazConsentScopeChanged() {
-    if (!_fazHasConsentCookie || !_fazStore || !_fazStore._geoRouting) return false;
+    if (!_fazHasConsentCookie || !_fazStore || !(_fazStore._geoRouting || _fazStore._siteScopeBound)) return false;
     // The PMP membership alternative is a server-refreshed, necessary-only
     // privacy state, not consent. It is safe across every banner/law scope and
     // deliberately carries no user identifier or scope fingerprint. Requiring
@@ -555,7 +556,7 @@ function _fazConsentScopeChanged() {
     // "no integrity signal" → invalidate so the visitor is re-prompted
     // with a freshly-signed cookie. Pre-1.14.0 visitors get re-prompted
     // ONE TIME after enabling strict mode, then never again.
-    if (_fazStrictScopeFp() && !storedFp) return true;
+    if ((_fazStrictScopeFp() || _fazStore._siteScopeBound) && !storedFp) return true;
     // Pre-1.14.0 cookies have no scope keys — treat that as
     // "upgrade case, no scope info known" and let the existing consent
     // stand. Without this guard, every returning visitor on an install
@@ -1596,6 +1597,7 @@ function _fazApplyBannerPayload(payload) {
     if (Array.isArray(payload.tags)) {
         _fazStore._tags = payload.tags;
     }
+    if (typeof payload.siteScopeBound === "boolean") _fazStore._siteScopeBound = payload.siteScopeBound;
     if (payload.scopeFingerprint) {
         _fazStore._scopeFingerprint = String(payload.scopeFingerprint);
     }
@@ -4511,6 +4513,7 @@ function _fazGateResourceSetAttribute(proto, opts) {
             var markupCat = _fazMarkupBlockedCategory(el, value);
             if (markupCat) {
                 native.call(el, opts.markupParkAttr, String(value));
+                native.call(el, "data-faz-srcdoc-key", _fazStore._srcdocKey || "");
                 native.call(el, "data-faz-category", markupCat);
                 // A parked srcdoc frame is an empty frame in the layout
                 // exactly like a parked-src one; hide it the same way.
@@ -4631,6 +4634,7 @@ function _fazGateSrcdocSetter(proto) {
                 var cat = _fazMarkupBlockedCategory(this, val);
                 if (cat) {
                     this.setAttribute("data-faz-srcdoc", String(val));
+                    this.setAttribute("data-faz-srcdoc-key", _fazStore._srcdocKey || "");
                     this.setAttribute("data-faz-category", cat);
                     if (this.classList) this.classList.add("faz-hidden");
                     return; // park the document; the engine never parses it
@@ -4710,19 +4714,20 @@ function _fazParkResourceElementIfBlocked(el) {
     try {
         if (tag === "img" || tag === "iframe" || tag === "source") {
             var src = el.getAttribute("src");
-            if (src && !el.getAttribute("data-faz-src") && _fazImgShouldBlock(el, src)) {
+            if (src && _fazImgShouldBlock(el, src)) {
                 el.setAttribute("data-faz-src", src);
                 el.setAttribute("data-faz-category", _fazImgCategory(src));
                 el.removeAttribute("src");
                 if (tag === "iframe" && el.classList) el.classList.add("faz-hidden");
             }
             var doc = el.getAttribute("srcdoc");
-            if (doc && !el.getAttribute("data-faz-srcdoc")) {
+            if (doc) {
                 // srcdoc is a document, not a URL: judged whole, because what
                 // it names is fetched by a parser this side cannot intercept.
                 var docCat = _fazMarkupBlockedCategory(el, doc);
                 if (docCat) {
                     el.setAttribute("data-faz-srcdoc", doc);
+                    el.setAttribute("data-faz-srcdoc-key", _fazStore._srcdocKey || "");
                     el.setAttribute("data-faz-category", docCat);
                     el.removeAttribute("srcdoc");
                     if (el.classList) el.classList.add("faz-hidden");
@@ -6679,11 +6684,14 @@ function _fazUnblockServerSide() {
     document.querySelectorAll('iframe[data-faz-srcdoc][data-faz-category]')
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
+            if (!_fazStore._srcdocKey || el.getAttribute("data-faz-srcdoc-key") !== _fazStore._srcdocKey) return;
             var doc = el.getAttribute("data-faz-srcdoc");
             if (_fazShouldBlockResource(cat, doc, el.getAttribute("data-faz-service") || "")) return;
             el.setAttribute("srcdoc", doc);
             if (!el.getAttribute("srcdoc")) return; // the gate re-parked it
             el.removeAttribute("data-faz-srcdoc");
+            el.removeAttribute("data-faz-srcdoc-key");
+            el.removeAttribute("data-faz-srcdoc-sig");
             el.classList.remove("faz-hidden");
         });
 
@@ -8288,7 +8296,34 @@ function _fazSetFocus(tagName) {
     element.focus();
 }
 
+function _fazUpdateConsentId() {
+    var anchor = document.querySelector('[data-faz-tag="detail-powered-by"]');
+    var detail = document.querySelector('[data-faz-tag="detail"]');
+    var body = detail && (detail.querySelector('.faz-preference-body-wrapper') || detail);
+    var parent = body || (anchor && anchor.parentNode);
+    var line = document.querySelector('[data-faz-tag="detail-consent-id"]');
+    if (!line && parent) {
+        line = document.createElement('label');
+        line.setAttribute('data-faz-tag', 'detail-consent-id');
+        var label = document.createElement('span');
+        label.textContent = (_fazStore._i18n || {}).consent_id || 'Consent ID';
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.readOnly = true;
+        input.addEventListener('click', function () { input.select(); });
+        line.appendChild(label);
+        line.appendChild(input);
+        if (body) body.appendChild(line);
+        else parent.insertBefore(line, anchor);
+    }
+    if (!line) return;
+    var id = ref._fazGetFromStore('consentid');
+    line.hidden = !id;
+    var field = line.querySelector('input');
+    if (field) field.value = id;
+}
 function _fazSetPoweredBy() {
+    _fazUpdateConsentId();
     // Layout handled via CSS: [data-faz-tag="detail-powered-by"], [data-faz-tag="optout-powered-by"] { display: flex; justify-content: flex-end; align-items: center; }
 }
 function _fazWatchBannerElement() {

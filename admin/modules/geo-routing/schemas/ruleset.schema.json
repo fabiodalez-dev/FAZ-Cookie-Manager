@@ -93,22 +93,10 @@
     },
     "signals": {
       "type": "object",
-      "required": ["tcf_v22", "gpp", "gpc_honored", "gpc_required", "dnt_honored", "cmv2"],
+      "required": ["tcf_v22", "gpc_honored", "gpc_required", "dnt_honored", "cmv2"],
       "additionalProperties": false,
       "properties": {
         "tcf_v22": { "type": "boolean" },
-        "gpp": {
-          "type": "object",
-          "required": ["enabled"],
-          "additionalProperties": false,
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "section": {
-              "type": ["string", "null"],
-              "description": "IAB GPP section identifier (e.g. usca, usco, usnatv1) when enabled."
-            }
-          }
-        },
         "gpc_honored": { "type": "boolean" },
         "gpc_required": { "type": "boolean" },
         "dnt_honored": { "type": "boolean" },

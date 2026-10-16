@@ -62,6 +62,7 @@ const runtimeCode = readFileSync(SCRIPT_PATH, 'utf8');
 function runtimeConfig() {
   return {
     _block: '1',
+    _srcdocKey: 'test-response-proof',
     _categories: [
       { slug: 'necessary', isNecessary: true },
       { slug: 'functional', isNecessary: false },
@@ -552,6 +553,28 @@ console.log('\nsrcdoc: every spelling that names a host');
     cat('<img src="https://site.test\\@cdn.tracker.test/p">'), '');
   eq('a tracker host inside a query string is live',
     cat('<img src="/local.png?u=me@cdn.tracker.test">'), '');
+}
+
+
+console.log('srcdoc authenticity');
+for (const proof of ['', 'wrong-proof', 'test-response-proof']) {
+  const w = runtime({ body: `<iframe id="proof" data-faz-category="marketing" data-faz-srcdoc="&lt;p&gt;safe&lt;/p&gt;" data-faz-srcdoc-key="${proof}"></iframe>` });
+  consent(w, { action: 'yes', marketing: 'yes' });
+  w.eval('_fazUnblockServerSide()');
+  eq('restore requires the response proof: ' + proof, !!w.document.getElementById('proof').getAttribute('srcdoc'), proof === 'test-response-proof');
+  w.close();
+}
+{
+  const w = runtime({ body: '<iframe id="forged" src="https://tracker.test/f" srcdoc="&lt;img src=&quot;https://tracker.test/p&quot;&gt;" data-faz-src="x" data-faz-srcdoc="x"></iframe>' });
+  w.eval('_fazParkResourceElementIfBlocked(document.getElementById("forged"))');
+  const f = w.document.getElementById('forged');
+  eq('a forged sentinel cannot exempt a live src', f.getAttribute('src'), null);
+  eq('a forged sentinel cannot exempt a live srcdoc', f.getAttribute('srcdoc'), null);
+  eq('runtime parks carry the response proof', f.getAttribute('data-faz-srcdoc-key'), 'test-response-proof');
+  consent(w, { action: 'yes', marketing: 'yes' });
+  w.eval('_fazUnblockServerSide()');
+  ok('runtime-authored srcdoc restores after consent', !!f.getAttribute('srcdoc'));
+  w.close();
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

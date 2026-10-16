@@ -213,6 +213,11 @@ function parseConsentCookieParts() {
 function isConsentCookieStale(parsed) {
     if (!parsed) return false;
     var config = window._fazConfig || {};
+    // A pending geo lookup cannot authorize the cached shell's consent.
+    if (config._siteScopeBound && !(parsed.source === 'pmp' && parsed.action === 'auto' && parsed.consent === 'no')) {
+        if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
+        if (!config._scopeFingerprint || parsed['__scope.fp'] !== config._scopeFingerprint) return true;
+    }
     // wp_localize_script often stringifies numeric values ("1" instead of 1),
     // so we can't rely on typeof === "number". Coerce and fall back to 1.
     var serverRevisionRaw = config && config._consentRevision;

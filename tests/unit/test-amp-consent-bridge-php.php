@@ -131,6 +131,7 @@ namespace {
 	function wp_strip_all_tags( $value ) { return trim( strip_tags( (string) $value ) ); }
 	function wp_json_encode( $value ) { return json_encode( $value ); }
 	function wp_salt( $scheme = 'auth' ) { return 'amp-test-salt-' . $scheme; }
+	require_once __DIR__ . '/helpers/load-consent-scope.php';
 	function wp_hash( $value, $scheme = 'auth' ) { return hash_hmac( 'sha256', (string) $value, wp_salt( $scheme ) ); }
 	function wp_generate_password( $length = 12, $special = true, $extra = false ) { return substr( str_repeat( 'RANDOM-CONSENT-ID-', 4 ), 0, $length ); }
 	function get_option( $key, $default = false ) { return array_key_exists( $key, $GLOBALS['faz_test_options'] ) ? $GLOBALS['faz_test_options'][ $key ] : $default; }

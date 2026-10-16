@@ -1244,11 +1244,9 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 		$per_page     = 20;
 		$done         = true;
 
-		// Consent logs store only one-way hashed IPs (SHA-256 + salt) and cannot
-		// be linked back to an email address — nothing to export there. DSAR form
-		// submissions (post_type faz_dsar), however, store the requester's name,
-		// email, request type and message in the clear, keyed by _dsar_email, so
-		// they ARE exportable personal data.
+		// A submitted consent ID links the requester's email to their full
+		// pseudonymous consent history. Core confirms the email before export.
+		$seen_consent_ids = array();
 		if ( is_email( $email ) && post_type_exists( 'faz_dsar' ) ) {
 			$query = new WP_Query(
 				array(
@@ -1279,6 +1277,36 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 				if ( '' === $record_email ) {
 					continue;
 				}
+				$consent_id = (string) get_post_meta( $post_id, '_dsar_consent_id', true );
+				if ( '' !== $consent_id && ! isset( $seen_consent_ids[ $consent_id ] ) ) {
+					$seen_consent_ids[ $consent_id ] = true;
+					$logs = \FazCookie\Admin\Modules\Consentlogs\Includes\Controller::get_instance()->get_logs_by_consent_id( $consent_id );
+					$labels = array(
+						'consent_id' => __( 'Consent ID', 'faz-cookie-manager' ),
+						'status' => __( 'Status', 'faz-cookie-manager' ),
+						'categories' => __( 'Category and service decisions', 'faz-cookie-manager' ),
+						'url' => __( 'Page URL', 'faz-cookie-manager' ),
+						'banner_slug' => __( 'Banner', 'faz-cookie-manager' ),
+						'policy_revision' => __( 'Policy revision', 'faz-cookie-manager' ),
+						'created_at' => __( 'Date', 'faz-cookie-manager' ),
+						'ip_hash' => __( 'Salted IP hash', 'faz-cookie-manager' ),
+						'user_agent' => __( 'Salted user-agent hash', 'faz-cookie-manager' ),
+						'tc_string' => __( 'TCF string', 'faz-cookie-manager' ),
+						'gpp_string' => __( 'GPP string from external CMP', 'faz-cookie-manager' ),
+						'country_at_consent' => __( 'Country at consent', 'faz-cookie-manager' ),
+						'region_at_consent' => __( 'Region at consent', 'faz-cookie-manager' ),
+						'ruleset_id_at_consent' => __( 'Ruleset at consent', 'faz-cookie-manager' ),
+						'signal_gpc_received' => __( 'GPC signal', 'faz-cookie-manager' ),
+						'signal_dnt_received' => __( 'Do Not Track signal', 'faz-cookie-manager' ),
+					);
+					foreach ( $logs as $log ) {
+						$data = array();
+						foreach ( $labels as $field => $label ) {
+							$data[] = array( 'name' => $label, 'value' => isset( $log[ $field ] ) ? ( is_array( $log[ $field ] ) ? wp_json_encode( $log[ $field ] ) : (string) $log[ $field ] ) : '' );
+						}
+						$export_items[] = array( 'group_id' => 'faz_consent_logs', 'group_label' => __( 'Consent history (FAZ Cookie Manager)', 'faz-cookie-manager' ), 'item_id' => 'faz-consent-' . $log['log_id'], 'data' => $data );
+					}
+				}
 				$export_items[] = array(
 					'group_id'    => 'faz_dsar_requests',
 					'group_label' => __( 'Privacy requests (FAZ Cookie Manager)', 'faz-cookie-manager' ),
@@ -1292,6 +1320,7 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 							'name'  => __( 'Email', 'faz-cookie-manager' ),
 							'value' => $record_email,
 						),
+						array( 'name' => __( 'Consent ID', 'faz-cookie-manager' ), 'value' => $consent_id ),
 						array(
 							'name'  => __( 'Request type', 'faz-cookie-manager' ),
 							'value' => (string) get_post_meta( $post_id, '_dsar_type', true ),
@@ -1326,9 +1355,8 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 	 * Erase personal data (consent logs, stored DSAR requests) for WordPress
 	 * privacy tools.
 	 *
-	 * Consent logs use one-way IP hashing (SHA-256 + salt). We cannot
-	 * identify which records belong to a specific email address.
-	 * Records are auto-purged after the configured retention period.
+	 * Consent history can be resolved through the consent ID supplied in a
+	 * DSAR request. Core confirms the email before invoking this eraser.
 	 *
 	 * Stored DSAR requests (post_type faz_dsar) DO carry the requester's name,
 	 * address and free text, and are REDACTED here rather than deleted: the
@@ -1360,16 +1388,13 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 		$email          = sanitize_email( (string) $email_address );
 		$page           = max( 1, (int) $page );
 		$per_page       = 20;
+		$log_erasure_failed = false;
 		$items_removed  = 0;
 		$items_retained = false;
 		$messages       = array();
 		$done           = true;
 
-		// Consent logs use one-way IP hashing and cannot be linked to an email,
-		// so there is nothing to erase there (they auto-purge by retention). DSAR
-		// form submissions DO carry the requester's email and free text, so they
-		// are erasable on request.
-		$messages[] = __( 'FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses; they auto-purge after the configured retention period.', 'faz-cookie-manager' );
+		$messages[] = __( 'Consent history is located using consent IDs supplied with privacy requests. Other records expire under the configured retention policy. You can change or withdraw your cookie choices through the cookie preferences.', 'faz-cookie-manager' );
 
 		if ( is_email( $email ) && post_type_exists( 'faz_dsar' ) ) {
 			// IMPORTANT: always read the FIRST batch, never `paged => $page`.
@@ -1414,6 +1439,23 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 			$deleted    = 0;
 			foreach ( $query->posts as $post_id ) {
 				$post_id = (int) $post_id;
+				$consent_id = (string) get_post_meta( $post_id, '_dsar_consent_id', true );
+				if ( '' !== $consent_id ) {
+					if ( apply_filters( 'faz_consent_log_erasure_retain', false, $consent_id, $email ) ) {
+						$items_retained = true;
+						$messages[] = __( 'Consent records were retained under the site retention policy.', 'faz-cookie-manager' );
+					} else {
+						$removed = \FazCookie\Admin\Modules\Consentlogs\Includes\Controller::get_instance()->delete_logs_by_consent_id( $consent_id );
+						if ( false === $removed ) {
+							$log_erasure_failed = true;
+							$items_retained = true;
+							$messages[] = __( 'Consent history could not be erased. Please retry this request.', 'faz-cookie-manager' );
+							continue;
+						}
+						$items_removed += (int) $removed;
+					}
+					delete_post_meta( $post_id, '_dsar_consent_id' );
+				}
 
 				/**
 				 * Whether to keep a dated, non-identifying record of an erased request.
@@ -1530,7 +1572,7 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 			}
 			// Not done while this batch was full — there may be more to drain on
 			// the next call (which again reads the new first page).
-			$done = $found < $per_page;
+			$done = $log_erasure_failed || $found < $per_page;
 		}
 
 		return array(

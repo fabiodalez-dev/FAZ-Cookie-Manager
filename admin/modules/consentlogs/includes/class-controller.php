@@ -698,6 +698,19 @@ class Controller {
 		return $item;
 	}
 
+	/** All decisions for an identifier, for authenticated privacy tools. */
+	public function get_logs_by_consent_id( $consent_id ) {
+		global $wpdb;
+		$table = $this->get_table_name();
+		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE consent_id = %s ORDER BY created_at DESC, log_id DESC", $consent_id ), ARRAY_A ); // phpcs:ignore WordPress.DB
+	}
+
+	/** Erase the complete history, not just the latest decision. */
+	public function delete_logs_by_consent_id( $consent_id ) {
+		global $wpdb;
+		return $wpdb->delete( $this->get_table_name(), array( 'consent_id' => $consent_id ), array( '%s' ) ); // phpcs:ignore WordPress.DB
+	}
+
 	/**
 	 * The immediately preceding decision for a consent id.
 	 *

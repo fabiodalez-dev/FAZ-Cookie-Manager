@@ -4,8 +4,6 @@
     "description": "Blocks Site Kit by Google analytics tracking, page-view collection, and session data.",
     "category": "analytics",
     "patterns": [
-        "google-site-kit",
-        "googlesitekit",
         "google_gtagjs-js"
     ],
     "cookies": []
