@@ -45,7 +45,19 @@
  *   - srcdoc is judged by the absolute and protocol-relative URLs the markup
  *     names: a relative URL inside the sub-document resolves against the
  *     parent's origin and is released, as the redirect limit above says, and
- *     nothing inside that document is intercepted once it is parsed.
+ *     nothing inside that document is intercepted once it is parsed;
+ *   - a held insertion takes its node out of where it was at once, but the
+ *     node only ARRIVES at the handoff: until then its parentNode is a private
+ *     fragment and the destination does not list it (see stash()). A removal
+ *     out of a <style> whose remainder could fetch happens at once as well,
+ *     with that one sheet switched off until the remainder is judged (see
+ *     suspendSheet()). Text changes INSIDE a sheet — the data setters,
+ *     appendData and its siblings, textContent on a <style> — are still held
+ *     as a whole. A loop that waits on one of them to take effect stops
+ *     growing the queue at the fuse (LIMIT), but on the safety release a
+ *     refused one does not happen at all, so such a loop would not end there.
+ *     No such idiom is known to be in use; the insertion and removal idioms,
+ *     which are, end.
  */
 (function (w, d) {
     'use strict';
@@ -55,6 +67,15 @@
     // the runtime were missing, and stay that way for the page view.
     if (w._fazBootstrap || w._fazRuntimeStarted || !w._fazConfig || !w._fazConfig._block) return;
     var queue = [], undo = [], scripts = [], pending = true, handoffs = [], staged = new WeakMap();
+    // The fuse. Every held operation is a closure kept alive until the
+    // handoff, and nothing about a page bounds how many it makes: a loop that
+    // waits for a held insertion to take effect queued one per iteration,
+    // synchronously, until the tab ran out of memory (LiteSpeed serving the
+    // 1.34.0 runtime under 1.34.1 markup did exactly that inside
+    // _fazRenderBanner). Past this many, the bootstrap stops queuing and
+    // applies its safety policy instead (see defer()), and the lists below
+    // that grow with page activity are capped at the same figure.
+    var LIMIT = 5000;
     // Set by releaseSafely() only. From then on the interceptors stay installed
     // and every new decision is taken immediately against this policy instead
     // of being queued for a runtime that is not coming. Without it the natives
@@ -130,6 +151,11 @@
     // One place that decides whether a task runs now or at the handoff, so no
     // call site has to know which of the two states the bootstrap is in.
     function defer(task) {
+        // Past the fuse the queue is released, not grown: the safety policy
+        // decides what is held so far and everything after it, which is what
+        // would happen at DOMContentLoaded anyway, only sooner. A runtime that
+        // arrives later still takes over (finish(), the `late` branch).
+        if (!immediate && queue.length >= LIMIT) releaseSafely('overflow');
         if (!immediate) return queue.push(task);
         run(task, immediate);
     }
@@ -2093,7 +2119,16 @@
     replace(w.Document && Document.prototype && typeof Document.prototype.createElement === 'function' ? Document.prototype : d, 'createElement', function (original) {
         return function () {
             var el = original.apply(this, arguments);
-            if (tagKey(el) === 'SCRIPT') scripts.push(el);
+            // Kept for judgeScripts() at the handoff, and only while there is
+            // one to come. On the safety release every script is judged where
+            // it is used — its src assignment and its insertion both decide
+            // immediately — and the list, which nothing drains on that path,
+            // grew by one element per createElement('script') for the rest of
+            // the page view. While pending it is bounded by the fuse.
+            if (tagKey(el) === 'SCRIPT' && !immediate) {
+                if (scripts.length >= LIMIT) releaseSafely('overflow');
+                else scripts.push(el);
+            }
             return el;
         };
     });
@@ -2699,16 +2734,24 @@
             parsed = true;
         }
     }
-    function releaseSafely() {
+    // `reason` is 'overflow' when the fuse in defer() tripped; anything else —
+    // the DOMContentLoaded event itself, or nothing — is the runtime being
+    // missing, which is what the second message says.
+    function releaseSafely(reason) {
         if (!pending || immediate) return;
-        w.console.warn(
-            '[FAZ Cookie Manager] The consent runtime did not load before DOMContentLoaded, '
-            + 'so the consent banner will not appear on this page view. Third-party scripts, '
-            + 'iframes, images and embeds stay blocked; same-origin requests are released so the '
-            + "site's own JavaScript keeps working. Check the Network tab for a failed or blocked "
-            + 'request to frontend/js/script.min.js — the usual causes are an ad-blocker or filter-list '
-            + 'rule matching the "cookie" segment in the plugin path, a 404 after a partial update, a '
-            + 'minify/combine plugin that mangled the bundle, or a stale CDN copy.'
+        w.console.warn(reason === 'overflow'
+            ? '[FAZ Cookie Manager] More than ' + LIMIT + ' operations were held while waiting for the consent '
+                + 'runtime, so the bootstrap stopped queuing them and applied its safety policy instead of '
+                + 'letting the queue grow without bound: third-party scripts, iframes, images and embeds stay '
+                + "blocked and same-origin requests are released. The consent runtime still takes over if it "
+                + 'loads. A script on this page is inserting or requesting at a rate no consent window should see.'
+            : '[FAZ Cookie Manager] The consent runtime did not load before DOMContentLoaded, '
+                + 'so the consent banner will not appear on this page view. Third-party scripts, '
+                + 'iframes, images and embeds stay blocked; same-origin requests are released so the '
+                + "site's own JavaScript keeps working. Check the Network tab for a failed or blocked "
+                + 'request to frontend/js/script.min.js — the usual causes are an ad-blocker or filter-list '
+                + 'rule matching the "cookie" segment in the plugin path, a 404 after a partial update, a '
+                + 'minify/combine plugin that mangled the bundle, or a stale CDN copy.'
         );
         // What a visitor sees on this page view, stated plainly because the
         // answer is not "nothing": every embed the SERVER blocked keeps its

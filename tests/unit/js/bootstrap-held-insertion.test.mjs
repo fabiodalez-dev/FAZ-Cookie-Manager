@@ -21,7 +21,9 @@
  *      the fragment they were moved into is itself inserted while they wait;
  *   b. the same for append, insertBefore, insertAdjacentElement,
  *      replaceChildren, replaceWith (a lazy loader's querySelector loop) and
- *      removeChild out of a <style>, on the hold and on the safety release.
+ *      removeChild out of a <style>, on the hold and on the safety release;
+ *   c. the fuse: the queue never grows past its limit, and on the safety
+ *      release created scripts are no longer retained.
  *
  * Every loop below is bounded by a counter, so the unfixed code FAILS here
  * instead of hanging the runner. Point FAZ_BOOTSTRAP_UNDER_TEST at another
@@ -350,6 +352,32 @@ await scenario(async () => {
   // the page may see fewer children than it split — what matters is the end.
   ok('safety release: removing out of a <style> ends too', turns < MAX && style.childNodes.length === 0);
   ok('and nothing third-party was left live in it on the way', style.textContent.indexOf('tracker.test') === -1);
+});
+
+console.log('\nc. the fuse');
+
+await scenario(async () => {
+  const { window, warnings, fetched } = boot();
+  for (let i = 0; i < 5200; i += 1) window.fetch('https://tracker.test/beacon?' + i);
+  ok('past the limit the bootstrap says so', warnings.some((l) => l.indexOf('More than 5000 operations') !== -1));
+  eq('and releases under the safety policy', window._fazBootstrap.released, true);
+  window.fetch(SITE + 'wp-json/after');
+  await Promise.resolve();
+  ok('from there a request is decided at once, not queued', fetched.indexOf(SITE + 'wp-json/after') !== -1);
+  ok('third-party requests stay refused', fetched.every((u) => u.indexOf('tracker.test') === -1));
+});
+
+await scenario(async () => {
+  // On the safety release nothing drains the created-scripts list, so it must
+  // not be filled: a late runtime is asked about none of them.
+  const { window, document } = boot({ ready: 'complete' });
+  await Promise.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+  eq('premise: released', window._fazBootstrap.released, true);
+  for (let i = 0; i < 20; i += 1) document.createElement('script');
+  let asked = 0;
+  handoff(window, { script: function () { asked += 1; } });
+  eq('scripts created after the safety release are not retained', asked, 0);
 });
 
 console.log('');
