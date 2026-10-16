@@ -3201,8 +3201,19 @@ class Frontend {
 		// response (see $gcm_default_emitted).
 		$this->gcm_default_emitted = true;
 
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; the id is a plugin constant passed through esc_attr and every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
-		echo '<script id="' . esc_attr( $this->gcm_default_script_id() ) . '">' . $js . "</script>\n";
+		// The same optimizer opt-outs every other FAZ script carries
+		// (tag_own_scripts_nooptimize / tag_own_inline_attributes_nooptimize).
+		// This tag is echoed, so neither filter sees it, and it is the one that
+		// matters most: a delay-until-interaction or defer pass (LiteSpeed Guest
+		// Mode, WP Rocket, Autoptimize, Cloudflare Rocket Loader) would move the
+		// denied `consent default` behind the gtag snippets it must precede,
+		// and Google treats a tag that fires without a default as granted.
+		$hints = apply_filters( 'faz_auto_exclude_cache_plugins', true )
+			? ' data-no-defer="1" data-no-optimize="1" data-no-minify="1" data-cfasync="false" data-ao-skip="1"'
+			: '';
+
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; the id is a plugin constant passed through esc_attr, $hints is a literal, and every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
+		echo '<script id="' . esc_attr( $this->gcm_default_script_id() ) . '"' . $hints . '>' . $js . "</script>\n";
 	}
 
 	/**

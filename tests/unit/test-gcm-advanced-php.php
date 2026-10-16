@@ -184,7 +184,13 @@ namespace {
 	// output-buffer blocker return it untouched before any provider pattern
 	// (including an admin `gtag(` rule) is consulted — see
 	// test-gcm-default-blocker-php.php for the behaviour this pins.
-	ok( 1 === preg_match( '/^<script id="faz-cookie-manager-gcm-default-js-before">/', $out ) && false !== strpos( $out, '</script>' ), 'output is wrapped in an own-id <script>' );
+	ok( 1 === preg_match( '/^<script id="faz-cookie-manager-gcm-default-js-before"[\s>]/', $out ) && false !== strpos( $out, '</script>' ), 'output is wrapped in an own-id <script>' );
+	// Echoed, so the attribute filters that protect every other FAZ script from
+	// defer/delay/combine never see it; it must carry the hints itself.
+	foreach ( array( 'data-no-defer="1"', 'data-no-optimize="1"', 'data-no-minify="1"', 'data-cfasync="false"', 'data-ao-skip="1"' ) as $hint ) {
+		$open = substr( $out, 0, (int) strpos( $out, '>' ) );
+		ok( false !== strpos( $open, $hint ), 'the consent default carries ' . $hint );
+	}
 	ok( false !== strpos( $out, "gtag('consent','default'," ), 'emits a consent default call' );
 	ok( false !== strpos( $out, '"ad_storage":"denied"' ), 'ad_storage denied in the baseline' );
 	ok( false !== strpos( $out, '"security_storage":"granted"' ), 'security_storage granted in the baseline' );
