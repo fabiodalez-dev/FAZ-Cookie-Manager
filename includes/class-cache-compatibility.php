@@ -68,6 +68,59 @@ class Cache_Compatibility {
 	const STATE_PAUSED = 'paused';
 
 	/**
+	 * The response headers every FAZ page-cache veto sends, in one place.
+	 *
+	 * Each veto site used to carry its own copy of three lines (Cache-Control,
+	 * Pragma, X-LiteSpeed-Cache-Control) and nothing else. That set is read by
+	 * the WordPress page caches and by LiteSpeed, but several caches in front of
+	 * WordPress decide from response headers alone and never see a PHP constant:
+	 *
+	 *   private                       shared caches must not store the response
+	 *                                 even when a later layer rewrites max-age.
+	 *   CDN-Cache-Control             the targeted header (RFC 9213) Fastly,
+	 *                                 Akamai and Cloudflare read in preference
+	 *                                 to Cache-Control — an edge rule that
+	 *                                 overrides Cache-Control does not override
+	 *                                 this one.
+	 *   Cloudflare-CDN-Cache-Control  the Cloudflare-only spelling, honoured by
+	 *                                 "Cache Everything" rules.
+	 *   Surrogate-Control             Varnish/Fastly and most reverse proxies.
+	 *
+	 * Every value is a "do not store" directive, so adding one can only ever
+	 * keep a response out of a cache, never put one in.
+	 *
+	 * @since 1.34.2
+	 */
+	const NO_STORE_HEADERS = array(
+		'Cache-Control'                => 'private, no-store, no-cache, must-revalidate, max-age=0',
+		'Pragma'                       => 'no-cache',
+		'X-LiteSpeed-Cache-Control'    => 'no-cache',
+		'CDN-Cache-Control'            => 'no-store',
+		'Cloudflare-CDN-Cache-Control' => 'no-store',
+		'Surrogate-Control'            => 'no-store',
+	);
+
+	/**
+	 * Define the page-cache bypass constants the WordPress caches read.
+	 *
+	 * DONOTCACHEPAGE (WP Rocket, W3TC, WP Super Cache, Cache Enabler, SG
+	 * Optimizer, Breeze …), DONOTCACHEOBJECT and DONOTCACHEDB (W3TC), and
+	 * LSCACHE_NO_CACHE, which LiteSpeed Cache checks on its own besides the
+	 * `litespeed_control_set_nocache` action. Constants cannot be undefined,
+	 * so a value someone else already set is left as it is.
+	 *
+	 * @since 1.34.2
+	 * @return void
+	 */
+	public static function define_no_cache_constants() {
+		foreach ( array( 'DONOTCACHEPAGE', 'DONOTCACHEOBJECT', 'DONOTCACHEDB', 'LSCACHE_NO_CACHE' ) as $constant ) {
+			if ( ! defined( $constant ) ) {
+				define( $constant, true );
+			}
+		}
+	}
+
+	/**
 	 * Whether the switch is saved on, regardless of whether it applies.
 	 *
 	 * This is the administrator's stored intention — the value the settings

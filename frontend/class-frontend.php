@@ -2205,15 +2205,7 @@ class Frontend {
 		if ( $this->is_geo_bootstrap_cache_active() ) {
 			return;
 		}
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', true );
-		}
-		if ( ! defined( 'DONOTCACHEOBJECT' ) ) {
-			define( 'DONOTCACHEOBJECT', true );
-		}
-		if ( ! defined( 'DONOTCACHEDB' ) ) {
-			define( 'DONOTCACHEDB', true );
-		}
+		\FazCookie\Includes\Cache_Compatibility::define_no_cache_constants();
 	}
 
 	/**
@@ -2309,25 +2301,55 @@ class Frontend {
 		// header, not from a response-side `Cache-Control: no-store` (see the
 		// rest_pre_dispatch note in faz-cookie-manager.php). Fire it either way:
 		// it only records intent, which LSCWP applies when it buffers output.
-		do_action( 'litespeed_control_set_nocache', 'FAZ Cookie Manager crawler-only banner render' );
-		if ( headers_sent() ) {
+		if ( ! $this->send_page_cache_veto( 'FAZ Cookie Manager crawler-only banner render', 'User-Agent' ) ) {
 			// Output has already started, so the directive the edge cache reads
 			// can no longer be set. Report the veto as absent: the caller then
 			// renders the banner instead, which costs a crawler a few KB of
 			// markup. The other direction costs a human their consent notice.
 			return false;
 		}
-		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
-		header( 'Pragma: no-cache' );
-		header( 'X-LiteSpeed-Cache-Control: no-cache' );
-		header( 'Vary: User-Agent', false );
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', true );
-		}
-		if ( ! defined( 'DONOTCACHEOBJECT' ) ) {
-			define( 'DONOTCACHEOBJECT', true );
-		}
 		$this->bot_variance_cache_vetoed = true;
+		return true;
+	}
+
+	/**
+	 * Keep THIS response out of every shared cache: the one veto every
+	 * per-request variance in this class uses.
+	 *
+	 * Three things in one call, because each cache family listens to a
+	 * different one and a veto that speaks to only some of them is a page that
+	 * one of the others keeps:
+	 *
+	 *  - `litespeed_control_set_nocache` — LiteSpeed Cache decides from this
+	 *    action (and LSCACHE_NO_CACHE), not from a response-side no-store.
+	 *    Fired first and unconditionally: it only records intent, which LSCWP
+	 *    applies when it buffers the output, so it still counts when the
+	 *    headers below can no longer be sent.
+	 *  - the response headers in Cache_Compatibility::NO_STORE_HEADERS, for
+	 *    the caches that only read headers (CDNs, Varnish, nginx, QUIC.cloud);
+	 *  - the DONOTCACHE* constants the WordPress page caches read.
+	 *
+	 * FlyingPress reads none of the three; flying_press_is_cacheable() answers
+	 * it from the same memoised verdicts.
+	 *
+	 * @param string $reason Diagnostic label passed to LiteSpeed.
+	 * @param string $vary   Optional request header the variance is keyed on.
+	 * @return bool False when headers were already sent, i.e. the edge caches
+	 *              could not be told. Callers must then render the variant
+	 *              that is safe to share.
+	 */
+	private function send_page_cache_veto( $reason, $vary = '' ) {
+		do_action( 'litespeed_control_set_nocache', $reason );
+		if ( headers_sent() ) {
+			return false;
+		}
+		foreach ( \FazCookie\Includes\Cache_Compatibility::NO_STORE_HEADERS as $name => $value ) {
+			header( $name . ': ' . $value );
+		}
+		if ( '' !== $vary ) {
+			header( 'Vary: ' . $vary, false );
+		}
+		\FazCookie\Includes\Cache_Compatibility::define_no_cache_constants();
 		return true;
 	}
 
@@ -2578,15 +2600,10 @@ class Frontend {
 		}
 
 		$this->maybe_disable_country_page_cache();
-		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
-		header( 'Pragma: no-cache' );
-		header( 'X-LiteSpeed-Cache-Control: no-cache' );
-		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
-			header( 'Vary: CF-IPCountry', false );
-		}
-		if ( defined( 'LSCWP_V' ) ) {
-			do_action( 'litespeed_control_set_nocache', 'FAZ country-dependent banner' );
-		}
+		$this->send_page_cache_veto(
+			'FAZ country-dependent banner',
+			apply_filters( 'faz_trust_cf_ipcountry_header', false ) ? 'CF-IPCountry' : ''
+		);
 	}
 
 	/**
