@@ -429,11 +429,15 @@ class Frontend {
 			//     exclusion list straight from Config::$config['js_delay_excludes']
 			//     with no filter, so on 5.x these two add_filter() calls are inert
 			//     but must stay for 4.x installs.
-			//   * flying_press_exclude_from_minify:js — still present in 5.x and 4.x.
+			//   * flying_press_exclude_from_minify:js / :css — still present in 5.x
+			//     and 4.x (CSS::minify() reads the :css one).
 			//   * flying_press_apply_runtime_delay_exclusions() (below) — the 5.x
 			//     path: it injects the same keywords into the in-memory
-			//     Config::$config['js_delay_excludes'] (front-end renders only, never
-			//     persisting/overwriting the saved option).
+			//     Config::$config lists FlyingPress 5 reads without a filter —
+			//     'js_delay_excludes' (Delay all JavaScript),
+			//     'js_delay_third_party_excludes' (Delay third-party scripts) and
+			//     'css_rucss_include_selectors' (Remove unused CSS) — on front-end
+			//     renders only.
 			// FlyingPress older than 4.16 (no delay/defer filter) falls back to the
 			// manual "Delay JavaScript" keyword exclusion documented in readme.txt.
 			// Registered in the always-run frontend composition root — the admin
@@ -441,6 +445,7 @@ class Frontend {
 			add_filter( 'flying_press_exclude_from_delay:js', array( $this, 'flying_press_exclude_own_scripts' ) );
 			add_filter( 'flying_press_exclude_from_defer:js', array( $this, 'flying_press_exclude_own_scripts' ) );
 			add_filter( 'flying_press_exclude_from_minify:js', array( $this, 'flying_press_exclude_own_scripts' ) );
+			add_filter( 'flying_press_exclude_from_minify:css', array( $this, 'flying_press_exclude_own_scripts' ) );
 			add_action( 'plugins_loaded', array( $this, 'flying_press_apply_runtime_delay_exclusions' ), PHP_INT_MAX, 0 );
 			// Re-apply on `wp` too (front-end page loads, after `init`): if
 			// FlyingPress populates its static config later than plugins_loaded,
@@ -9669,28 +9674,80 @@ class Frontend {
 	}
 
 	/**
-	 * Add FAZ to FlyingPress v5's Delay All JavaScript runtime config.
+	 * The FlyingPress 5 runtime-config lists FAZ adds itself to, and the
+	 * keywords it adds to each one.
+	 *
+	 * Verified against FlyingPress 5.5.0 and 5.6.5 (same code in both):
+	 *
+	 *   - `js_delay_excludes` — JavaScript::delay_scripts(), the "Delay all
+	 *     JavaScript" pass. Keywords are matched with stripos() against the
+	 *     whole `<script>` tag, so `faz-cookie-manager` hits the id of every
+	 *     FAZ tag (`faz-cookie-manager-js`, `-js-extra`, `-js-before`,
+	 *     `-gcm-default-js-before`) and `faz-fw` the alternative-asset family.
+	 *   - `js_delay_third_party_excludes` — JavaScript::delay_third_party_scripts(),
+	 *     "Delay third-party scripts". It first keeps the tags that mention any
+	 *     domain in the Cloud Optimizer's `external_domains`, and then honours
+	 *     ONLY this list. A FAZ asset served from a CDN host (BunnyCDN on the
+	 *     site that reported it) counts as third-party, and so does the inline
+	 *     `_fazConfig`, whose default whitelist contains `www.google.com/recaptcha`:
+	 *     without this list the banner waited for the first interaction, or
+	 *     script.js ran with no `_fazConfig` and showed nothing at all.
+	 *   - `css_rucss_include_selectors` — "Remove unused CSS". The dashboard
+	 *     describes it as keywords that force matching selectors into the
+	 *     generated used CSS, and the value travels to the Cloud Optimizer in
+	 *     Config::safe_config(). The banner's states (`.faz-modal.faz-modal-open`,
+	 *     `.faz-switch input:checked`, …) are not on screen when the page is
+	 *     analysed, so they were dropped while CSS::load_used_css() turned the
+	 *     banner stylesheet into a `data-href` link that loads only on
+	 *     interaction. `faz-` is a substring of every FAZ selector, `#faz-consent`
+	 *     and `[data-faz-tag]` included.
+	 *
+	 * "Delay selected scripts" (`js_delay_selected_includes`) has no exclusion
+	 * list; flying_press_restore_own_assets() covers it.
+	 *
+	 * @return array<string, string[]>
+	 */
+	private function flying_press_runtime_keyword_map() {
+		$script_keywords = array( 'faz-cookie-manager', 'faz-fw' );
+		return array(
+			'js_delay_excludes'             => $script_keywords,
+			'js_delay_third_party_excludes' => $script_keywords,
+			'css_rucss_include_selectors'   => array( 'faz-' ),
+		);
+	}
+
+	/**
+	 * Add FAZ to FlyingPress v5's runtime optimisation config.
 	 *
 	 * FlyingPress v5 no longer consumes the v4 delay/defer filters while
-	 * optimizing HTML; it reads `js_delay_excludes` from Config::$config.
-	 * The helper only receives FlyingPress's already-loaded static value; FAZ
-	 * deliberately does not filter or write the `FLYING_PRESS_CONFIG` option,
-	 * so disabling FAZ restores the administrator's exact configuration.
-	 * Empty/unmigrated or older config shapes are left untouched.
+	 * optimizing HTML; it reads the lists in flying_press_runtime_keyword_map()
+	 * straight from Config::$config. The helper only receives FlyingPress's
+	 * already-loaded static value; FAZ deliberately does not filter or write the
+	 * `FLYING_PRESS_CONFIG` option, so disabling FAZ restores the administrator's
+	 * exact configuration. Empty/unmigrated or older config shapes are left
+	 * untouched, and so is every list that is missing or not an array.
 	 *
 	 * @param mixed $config FlyingPress configuration option.
 	 * @return mixed
 	 */
 	public function flying_press_add_delay_exclusions_to_config( $config ) {
-		// Require an ARRAY value, not just the key: array_key_exists() alone would
-		// let a non-array js_delay_excludes (null, or a delimited string as some
-		// cache plugins use) reach flying_press_exclude_own_scripts(), which
-		// coerces non-arrays to array() and would silently drop the administrator's
-		// original value. Leave any unexpected shape untouched.
-		if ( ! is_array( $config ) || ! isset( $config['js_delay_excludes'] ) || ! is_array( $config['js_delay_excludes'] ) ) {
+		if ( ! is_array( $config ) ) {
 			return $config;
 		}
-		$config['js_delay_excludes'] = $this->flying_press_exclude_own_scripts( $config['js_delay_excludes'] );
+		foreach ( $this->flying_press_runtime_keyword_map() as $key => $keywords ) {
+			// Require an ARRAY value, not just the key: a non-array list (null, or
+			// a delimited string as some cache plugins use) would be coerced to
+			// array() by the merge and silently drop the administrator's original
+			// value. Leave any unexpected shape untouched.
+			if ( ! isset( $config[ $key ] ) || ! is_array( $config[ $key ] ) ) {
+				continue;
+			}
+			foreach ( $keywords as $keyword ) {
+				if ( ! in_array( $keyword, $config[ $key ], true ) ) {
+					$config[ $key ][] = $keyword;
+				}
+			}
+		}
 		return $config;
 	}
 
