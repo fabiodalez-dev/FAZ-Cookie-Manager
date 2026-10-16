@@ -5950,11 +5950,22 @@ function _fazGuardScriptElement(createdElement) {
     // saved, fall back to "text/javascript" which matches classic script
     // semantics. Mirrors the server-side approach used by
     // _fazBuildRestoredScript / _fazRestoreInlineScript.
+    // A parking type is never the author's: text/plain is the form the server
+    // (and the bootstrap, for a refused script) parks a script in, and
+    // javascript/blocked is this runtime's own. Recording either as the
+    // "original" made the restore write it back, and the restored clone stayed
+    // inert — consent given, script never run. The mutation observer and the
+    // bootstrap handoff exclude both for the same reason; when nothing real
+    // was saved, restoreOriginalType() falls back to text/javascript.
+    function isParkingType(type) {
+        var t = String(type || "").trim().toLowerCase();
+        return t === "text/plain" || t === "javascript/blocked";
+    }
     function rememberOriginalType() {
         var current = createdElement.getAttribute("type");
         if (
             current &&
-            current !== "javascript/blocked" &&
+            !isParkingType(current) &&
             !createdElement.getAttribute("data-faz-original-type")
         ) {
             originalSetAttribute("data-faz-original-type", current);
@@ -6018,7 +6029,7 @@ function _fazGuardScriptElement(createdElement) {
                     // the "original" before we substitute the blocked type.
                     if (
                         value &&
-                        value !== "javascript/blocked" &&
+                        !isParkingType(value) &&
                         !createdElement.getAttribute("data-faz-original-type")
                     ) {
                         originalSetAttribute("data-faz-original-type", value);
