@@ -4383,6 +4383,14 @@ function _fazImgCategory(url) {
     }
     return "functional";
 }
+// Whether an element is an iframe showing a srcdoc document of its own: the
+// engine ignores src while srcdoc is present, so parking src leaves the frame
+// showing that document, and there is nothing to hide.
+function _fazHasLiveSrcdoc(el) {
+    try {
+        return !!(el && el.nodeName && el.nodeName.toLowerCase() === "iframe" && el.hasAttribute && el.hasAttribute("srcdoc"));
+    } catch (e) { return false; }
+}
 function _fazGateSrcSetter(proto, hideOnPark) {
     if (!proto) return;
     var desc = Object.getOwnPropertyDescriptor(proto, "src");
@@ -4401,8 +4409,10 @@ function _fazGateSrcSetter(proto, hideOnPark) {
                     this.setAttribute("data-faz-category", _fazImgCategory(String(val)));
                     // Hide a parked iframe (the restore pass clears faz-hidden on
                     // consent); leave parked <img> visible so a map widget's tile
-                    // layout / positioning is not disturbed.
-                    if (hideOnPark && this.classList) this.classList.add("faz-hidden");
+                    // layout / positioning is not disturbed. A frame with a live
+                    // srcdoc stays visible: it shows that document, not src (the
+                    // "lite embed" facade), which is the server's rule too.
+                    if (hideOnPark && this.classList && !_fazHasLiveSrcdoc(this)) this.classList.add("faz-hidden");
                     // Reveal the per-service toggle for a JS-parked embed. The
                     // MutationObserver reveal path (_fazRevealService at block
                     // time) never fires on this iframe — this setter parks its src
@@ -4558,7 +4568,7 @@ function _fazGateResourceSetAttribute(proto, opts) {
         if ((n === opts.urlAttr || (opts.urlAltAttr && n === opts.urlAltAttr)) && _fazImgShouldBlock(el, value)) {
             native.call(el, opts.parkAttr, String(value));
             native.call(el, "data-faz-category", _fazImgCategory(String(value)));
-            if (opts.hideOnPark && el.classList) el.classList.add("faz-hidden");
+            if (opts.hideOnPark && el.classList && !_fazHasLiveSrcdoc(el)) el.classList.add("faz-hidden");
             // Same runtime per-service reveal as the src-property gate: a
             // lazy-loader that parks the embed via setAttribute('src') is
             // equally invisible to the block-time observer. #134/#146.
@@ -4818,11 +4828,12 @@ function _fazParkResourceElementIfBlocked(el) {
         if (tag === "img" || tag === "iframe" || tag === "source"
             || tag === "video" || tag === "audio" || tag === "embed" || tag === "track" || inputImage) {
             var src = el.getAttribute("src");
+            var parkedFrameSrc = false;
             if (src && !el.getAttribute("data-faz-src") && _fazImgShouldBlock(el, src)) {
                 el.setAttribute("data-faz-src", src);
                 el.setAttribute("data-faz-category", _fazImgCategory(src));
                 el.removeAttribute("src");
-                if (tag === "iframe" && el.classList) el.classList.add("faz-hidden");
+                parkedFrameSrc = tag === "iframe";
             }
             // The poster frame fetches before any play: an i.ytimg.com or
             // i.vimeocdn.com poster is a request to the provider with the
@@ -4845,6 +4856,10 @@ function _fazParkResourceElementIfBlocked(el) {
                     if (el.classList) el.classList.add("faz-hidden");
                 }
             }
+            // Hidden once the srcdoc has been judged: a frame whose srcdoc
+            // stays live shows that document, not the parked src (the "lite
+            // embed" facade), and is left visible like the server leaves it.
+            if (parkedFrameSrc && el.classList && !_fazHasLiveSrcdoc(el)) el.classList.add("faz-hidden");
             var ss = el.getAttribute("srcset");
             if (ss && !el.getAttribute("data-faz-srcset")) {
                 var c = _fazSrcsetBlockedCategory(el, ss);

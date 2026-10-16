@@ -1375,6 +1375,33 @@ class DSAR_Shortcode {
 	}
 
 	/**
+	 * Veto the page cache before output when the queried page carries the form.
+	 *
+	 * The shortcode's own render runs inside the_content, after the theme has
+	 * printed <head>, so its no-store header can almost never be sent there;
+	 * only the constant, the LiteSpeed action and the FlyingPress filter get
+	 * through. Caches that read only response headers (a reverse proxy, an
+	 * edge cache) need the header, so a singular page whose content names the
+	 * shortcode is vetoed here, on template_redirect, while headers can still
+	 * be sent. A form placed elsewhere (a widget, a template) is still vetoed
+	 * by render() through the signals that do not need headers.
+	 *
+	 * @since 1.34.2
+	 */
+	public function maybe_veto_page_cache_early() {
+		if ( ! is_singular() ) {
+			return;
+		}
+		$post = get_queried_object();
+		if ( ! is_object( $post ) || ! isset( $post->post_content ) ) {
+			return;
+		}
+		if ( has_shortcode( (string) $post->post_content, 'faz_dsar_form' ) ) {
+			$this->veto_page_cache();
+		}
+	}
+
+	/**
 	 * Keep the page that renders the form out of full-page caches.
 	 *
 	 * The form bakes an anonymous nonce (valid 12 to 24 hours) and a signed
@@ -1412,33 +1439,6 @@ class DSAR_Shortcode {
 	 * @since 1.34.2
 	 * @return void
 	 */
-	/**
-	 * Veto the page cache before output when the queried page carries the form.
-	 *
-	 * The shortcode's own render runs inside the_content, after the theme has
-	 * printed <head>, so its no-store header can almost never be sent there;
-	 * only the constant, the LiteSpeed action and the FlyingPress filter get
-	 * through. Caches that read only response headers (a reverse proxy, an
-	 * edge cache) need the header, so a singular page whose content names the
-	 * shortcode is vetoed here, on template_redirect, while headers can still
-	 * be sent. A form placed elsewhere (a widget, a template) is still vetoed
-	 * by render() through the signals that do not need headers.
-	 *
-	 * @since 1.34.2
-	 */
-	public function maybe_veto_page_cache_early() {
-		if ( ! is_singular() ) {
-			return;
-		}
-		$post = get_queried_object();
-		if ( ! is_object( $post ) || ! isset( $post->post_content ) ) {
-			return;
-		}
-		if ( has_shortcode( (string) $post->post_content, 'faz_dsar_form' ) ) {
-			$this->veto_page_cache();
-		}
-	}
-
 	private function veto_page_cache() {
 		if ( $this->page_cache_vetoed ) {
 			return;

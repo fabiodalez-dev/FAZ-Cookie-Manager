@@ -4540,7 +4540,15 @@ class Frontend {
 		// Both stashes mark their place with a per-request nonce the page
 		// cannot know: with a fixed marker, a paragraph that spelled
 		// `__FAZ_SRCDOC_STASH_0__` received the srcdoc token as live markup.
-		$stash_nonce   = $this->stash_nonce();
+		$stash_nonce = $this->stash_nonce();
+
+		// Comments and raw-text bodies are text to the parser, and no pass may
+		// rewrite inside them — find_inert_spans() says why and how they are
+		// found. Stashed before every other pass, put back after the last of
+		// them; the script and style passes are handed their bodies back.
+		$inert_stash = array();
+		$html        = $this->stash_inert_spans( $html, $stash_nonce, $inert_stash );
+
 		$srcdoc_stash  = array();
 		$srcdoc_marker = '';
 		$result        = $this->stash_iframe_srcdocs( $html, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker );
@@ -4572,9 +4580,16 @@ class Frontend {
 		// 1. Block <script> tags.
 		if ( false !== stripos( $html, '<script' ) ) {
 			$result = preg_replace_callback(
-				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_script_tag( $m, $providers, $blocked_categories );
+				'#' . self::script_token_skip() . '<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
+				function ( $m ) use ( $providers, $blocked_categories, &$inert_stash ) {
+					return $this->process_with_inert_body(
+						$m,
+						'script',
+						$inert_stash,
+						function ( $m ) use ( $providers, $blocked_categories ) {
+							return $this->process_script_tag( $m, $providers, $blocked_categories );
+						}
+					);
 				},
 				$html
 			);
@@ -4657,8 +4672,15 @@ class Frontend {
 		if ( false !== stripos( $html, '<style' ) ) {
 			$result = preg_replace_callback(
 				'#<style(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</style(?=[\s/>])[^>]*>#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_style_tag( $m, $providers, $blocked_categories );
+				function ( $m ) use ( $providers, $blocked_categories, &$inert_stash ) {
+					return $this->process_with_inert_body(
+						$m,
+						'style',
+						$inert_stash,
+						function ( $m ) use ( $providers, $blocked_categories ) {
+							return $this->process_style_tag( $m, $providers, $blocked_categories );
+						}
+					);
 				},
 				$html
 			);
@@ -4711,6 +4733,9 @@ class Frontend {
 		// was the one layer not writing those keys. The tag name must be
 		// followed by whitespace, a slash or `>`, so <video-player> and
 		// <source-list> custom elements are not read as the media tag.
+		// Like every pass here it never sees comments or script bodies (the
+		// inert stash at the top): a `<video poster=\"…\">` inside a JS
+		// string is text, and parking it broke the string and the script.
 		if ( preg_match( '/<(?:video|audio|source|embed|object|track|input)(?=[\s\/>])/i', $html ) ) {
 			$result = preg_replace_callback(
 				'#<(video|audio|source|embed|object|track|input)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
@@ -4774,29 +4799,14 @@ class Frontend {
 		// Runs after the src/href passes so a tag they already parked keeps
 		// its one category label.
 		//
-		// A <script> element is consumed whole by the first alternative and
-		// returned untouched: its body is JavaScript (or a template another
-		// script renders), and a tag-shaped substring inside a string literal
-		// is not an element. Rewriting it would insert double-quoted
-		// attributes into the literal and stop the whole inline script from
-		// parsing, a breakage far worse than the fetch it would prevent.
-		// The skip ends where the HTML parser ends the element ("</script"
-		// followed by whitespace, "/" or ">"). Comments and the other
-		// raw-text containers (style, textarea, title, xmp) are consumed the
-		// same way, first, so a "<script" the parser reads as text cannot
-		// open a skip that hides the real elements after it. A style
-		// attribute inside any of them is text too, so leaving it is right.
+		// Comments and the bodies of <script> and the other raw-text
+		// containers never reach this pass (the inert stash at the top): a
+		// tag-shaped substring inside a string literal is not an element, and
+		// rewriting it stopped the whole inline script from parsing.
 		if ( preg_match( '/\bstyle\s*=/i', $html ) ) {
-			$raw_text = '';
-			foreach ( array( 'script', 'style', 'textarea', 'title', 'xmp' ) as $raw_tag ) {
-				$raw_text .= '<' . $raw_tag . '(?=[\s/>])(?:' . self::ATTR_WALK . ')(?:/\s*+)?>.*?</' . $raw_tag . '(?=[\s/>])[^>]*+>|';
-			}
 			$result = preg_replace_callback(
-				'#<!--.*?-->|' . $raw_text . '<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'#<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
-					if ( ! isset( $m[1] ) || '' === $m[1] ) {
-						return $m[0];
-					}
 					return $this->process_style_attr_tag( $m, $providers, $blocked_categories );
 				},
 				$html
@@ -4847,6 +4857,12 @@ class Frontend {
 		// Restore <noscript> blocks we stashed before the filter pass.
 		if ( ! empty( $noscript_stash ) ) {
 			$html = strtr( $html, $noscript_stash );
+		}
+		// Then the inert spans, which a restored <noscript> block can hold.
+		// Before the embed detectors below: they read the page as they always
+		// have, script bodies included.
+		if ( ! empty( $inert_stash ) ) {
+			$html = strtr( $html, $inert_stash );
 		}
 
 		// 7. Hide social/widget embed containers that depend on blocked scripts
@@ -5121,11 +5137,15 @@ class Frontend {
 		// rendered — but the facade's own Play button removes srcdoc, and the
 		// src it activates had been gated by nothing: the frame navigated to
 		// the provider with no consent. So a blocked src is parked here too,
-		// in place and hidden like every parked frame, which is the rule the
-		// runtime's own park applies to the same frame; the srcdoc stays
-		// live, byte-for-byte, and restore 2b hands src back on consent.
-		// Parked WITHOUT the placeholder wrap: that sent the bare stash marker
-		// through wp_kses, which stripped it, so the srcdoc never came back.
+		// in place; the srcdoc stays live, byte-for-byte, and restore 2b
+		// hands src back on consent. Parked WITHOUT the placeholder wrap:
+		// that sent the bare stash marker through wp_kses, which stripped it,
+		// so the srcdoc never came back. And NOT hidden: what the frame shows
+		// is the allowed srcdoc, and with src parked nothing in it can reach
+		// the provider. Hiding it left a hole where the site put its facade
+		// and took away the only thing on the page that said a video was
+		// there; the banner and the revisit widget remain the way to consent.
+		// The runtime's park leaves a frame with a live srcdoc visible too.
 		// A parked srcdoc already took src with it. The marker carries the
 		// request nonce, so the page cannot spell it.
 		$live_srcdoc = '' !== $srcdoc_marker && false !== strpos( $attrs, $srcdoc_marker . 'LIVE_' );
@@ -5156,10 +5176,9 @@ class Frontend {
 				return $full; // No live src: the allowed srcdoc alone, nothing to park.
 			}
 			$new_attrs = $this->label_category_first( $new_attrs, $matched_category );
-			$frame     = isset( $m[2] )
+			return isset( $m[2] )
 				? '<iframe' . $new_attrs . '>' . $m[2] . '</iframe>'
 				: '<iframe' . $new_attrs . '/>';
-			return self::faz_add_hidden_class( $frame );
 		}
 		$new_attrs = $this->label_category_first( $new_attrs, $matched_category );
 
@@ -6339,6 +6358,254 @@ class Frontend {
 		} catch ( \Exception $e ) {
 			return substr( md5( uniqid( '', true ) ), 0, 12 );
 		}
+	}
+
+	/**
+	 * Spans of a document the HTML parser reads as inert text: closed
+	 * comments, and the bodies of <script>, <style>, <textarea>, <title> and
+	 * <xmp> in HTML content.
+	 *
+	 * Every pass in the output buffer is a regex over the whole response, and
+	 * a response carries markup that is not markup. Inside a script it is
+	 * usually a string literal — `"<video poster=\"https://i.ytimg.com/…\">"`
+	 * — and a pass that parked it wrote `data-faz-category="marketing"` into
+	 * a double-quoted literal, which ended the literal at the first injected
+	 * quote and stopped the WHOLE inline script from parsing, the data
+	 * scripts #322 leaves executable included. A tag a script writes is
+	 * judged by the runtime when it is written, and a blocked script is
+	 * restored only once its category is allowed, so the server has nothing
+	 * to do inside the body.
+	 *
+	 * A regex alternation in front of each pass could not get this right:
+	 * the spans are a property of the HTML tokenizer, and imitating it
+	 * piecemeal hid real elements behind tokens it did not know. So this is
+	 * a small tokenizer, one linear walk, and every rule in it errs the same
+	 * way — when unsure, a span is NOT inert, and the passes see it:
+	 *
+	 * - Every construct the tokenizer reads as one token is consumed whole
+	 *   first, so a `<script` written inside it never opens a span: start and
+	 *   end tags with their attributes (`</p title="<script>">` is an end tag
+	 *   with an attribute), bogus comments (`<?…>`, `<!…>`, `</ …>`, all up
+	 *   to the first `>`) and comments.
+	 * - A comment ends as the parser ends it: `<!-->`, `<!--->`, `-->` or
+	 *   `--!>`. One that never closes is not inert; the walk goes on after
+	 *   its `<!--`.
+	 * - Inside <svg> and <math> nothing is raw text: there <title>, <style>
+	 *   and <script> are elements with children, and an <img> in them breaks
+	 *   out and loads. The walk counts those containers open and closed and
+	 *   records no span while one is open (a breakout it does not model
+	 *   keeps it counting: more is judged, never less).
+	 * - A raw-text body ends at the first `</name` followed by whitespace,
+	 *   `/` or `>`, which is never later than where the parser ends it. A
+	 *   body with no end, or a <plaintext>, ends the walk: nothing after it
+	 *   is recorded.
+	 * - <iframe>, <noembed>, <noframes> and <noscript> bodies are raw text to
+	 *   the parser too and are walked past for that reason, but not recorded:
+	 *   the iframe and noscript passes read them.
+	 *
+	 * @param string $html Document.
+	 * @return array<int,array{0:int,1:int}>|null Offset/length pairs in
+	 *         document order, or null when the walk could not finish (a PCRE
+	 *         error), in which case nothing may be treated as inert.
+	 */
+	private function find_inert_spans( $html ) {
+		$spans     = array();
+		$len       = strlen( $html );
+		$pos       = 0;
+		$foreign   = 0;
+		$dash_next = -1;
+		$bang_next = -1;
+		$recorded  = array( 'script', 'style', 'textarea', 'title', 'xmp' );
+		$walked    = array( 'iframe', 'noembed', 'noframes', 'noscript' );
+		$tag_re    = '#\G<([a-zA-Z][^\s/>]*+)' . self::ATTR_WALK . '(/\s*+)?>#';
+		$end_re    = '#\G</[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>#';
+		while ( $pos < $len ) {
+			$lt = strpos( $html, '<', $pos );
+			if ( false === $lt || $lt + 1 >= $len ) {
+				break;
+			}
+			$c = $html[ $lt + 1 ];
+			if ( '!' === $c && '<!--' === substr( $html, $lt, 4 ) ) {
+				$p = $lt + 4;
+				if ( $p < $len && '>' === $html[ $p ] ) {
+					$end = $p + 1;
+				} elseif ( '->' === substr( $html, $p, 2 ) ) {
+					$end = $p + 2;
+				} else {
+					if ( false !== $dash_next && $dash_next < $p ) {
+						$dash_next = strpos( $html, '-->', $p );
+					}
+					if ( false !== $bang_next && $bang_next < $p ) {
+						$bang_next = strpos( $html, '--!>', $p );
+					}
+					$a   = false === $dash_next ? PHP_INT_MAX : $dash_next + 3;
+					$b   = false === $bang_next ? PHP_INT_MAX : $bang_next + 4;
+					$end = min( $a, $b );
+				}
+				if ( PHP_INT_MAX === $end ) {
+					$pos = $p; // Never closed: not inert, keep walking.
+					continue;
+				}
+				$spans[] = array( $lt, $end - $lt );
+				$pos     = $end;
+				continue;
+			}
+			if ( '!' === $c || '?' === $c || ( '/' === $c && ( $lt + 2 >= $len || ! ctype_alpha( $html[ $lt + 2 ] ) ) ) ) {
+				// A bogus comment (or `</>`), one token up to the first `>`.
+				$gt = strpos( $html, '>', $lt + 2 );
+				if ( false === $gt ) {
+					break;
+				}
+				$pos = $gt + 1;
+				continue;
+			}
+			if ( '/' === $c ) {
+				$ok = preg_match( $end_re, $html, $m, 0, $lt );
+				if ( false === $ok ) {
+					return null;
+				}
+				if ( 0 === $ok ) {
+					break; // A tag still open at the end of the document.
+				}
+				if ( $foreign > 0 && preg_match( '#\G</(?:svg|math)(?=[\s/>])#i', $html, $unused, 0, $lt ) ) {
+					$foreign--;
+				}
+				$pos = $lt + strlen( $m[0] );
+				continue;
+			}
+			if ( ! ctype_alpha( $c ) ) {
+				$pos = $lt + 1; // A `<` that starts nothing is text.
+				continue;
+			}
+			$ok = preg_match( $tag_re, $html, $m, 0, $lt );
+			if ( false === $ok ) {
+				return null;
+			}
+			if ( 0 === $ok ) {
+				break;
+			}
+			$name  = strtolower( $m[1] );
+			$after = $lt + strlen( $m[0] );
+			$pos   = $after;
+			if ( 'svg' === $name || 'math' === $name ) {
+				if ( empty( $m[2] ) ) {
+					$foreign++;
+				}
+				continue;
+			}
+			if ( $foreign > 0 ) {
+				continue;
+			}
+			if ( 'plaintext' === $name ) {
+				break;
+			}
+			$is_recorded = in_array( $name, $recorded, true );
+			if ( ! $is_recorded && ! in_array( $name, $walked, true ) ) {
+				continue;
+			}
+			$ok = preg_match( '#</' . $name . '(?=[\s/>])#i', $html, $close, PREG_OFFSET_CAPTURE, $after );
+			if ( false === $ok ) {
+				return null;
+			}
+			if ( 0 === $ok ) {
+				break;
+			}
+			$close_at = $close[0][1];
+			if ( $is_recorded && $close_at > $after ) {
+				$spans[] = array( $after, $close_at - $after );
+			}
+			$pos = $close_at;
+		}
+		return $spans;
+	}
+
+	/**
+	 * Leading alternation for the step-1 script pattern: every construct the
+	 * tokenizer reads as one token, consumed whole and skipped.
+	 *
+	 * The script pattern is the one pass that still has to find elements by
+	 * regex across the page, and a `<script` written INSIDE one of these
+	 * tokens is not a script start: `</p title="<script>">` is an end tag
+	 * with an attribute, and `<?x …>`, `<!x …>`, `</ …>` are bogus comments
+	 * that end at their first `>`. Matched there, the pattern took the real
+	 * tracker after it for the body of a script that does not exist, and the
+	 * tracker shipped live. Other opening tags are consumed through
+	 * ATTR_WALK for the same reason (a `<script` in an attribute value).
+	 * `<!--` is left out: a closed comment is already stashed, and one that
+	 * never closes is judged rather than skipped.
+	 * Every quantifier is possessive: nothing here can backtrack, so this
+	 * adds no PCRE-limit failure to the pass. Closed comments and raw-text
+	 * bodies are already out of the buffer (stash_inert_spans()).
+	 *
+	 * @return string Pattern fragment ending in `|`, for the `#` delimiter.
+	 */
+	private static function script_token_skip() {
+		return '(?:</[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
+			. '|<\?[^>]*+>|<!(?!--)[^>]*+>'
+			. '|</(?![a-zA-Z])[^>]*+>'
+			. '|<(?!script(?=[\s/>]))[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
+			. ')(*SKIP)(*FAIL)|';
+	}
+
+	/**
+	 * Replace every inert span with a marker no pass can match.
+	 *
+	 * The markers carry the request nonce, like the srcdoc and noscript
+	 * stashes, so the page cannot spell one. The script and style passes,
+	 * which must read a body, are handed it back by process_with_inert_body().
+	 *
+	 * @param string $html  Document.
+	 * @param string $nonce Per-request nonce.
+	 * @param array  $stash Marker => original text, filled here.
+	 * @return string Document with the spans stashed; unchanged when the walk
+	 *                could not finish.
+	 */
+	private function stash_inert_spans( $html, $nonce, array &$stash ) {
+		$stash = array();
+		$spans = $this->find_inert_spans( $html );
+		if ( empty( $spans ) ) {
+			return $html;
+		}
+		$out  = '';
+		$last = 0;
+		foreach ( $spans as $span ) {
+			$key           = '__FAZ_INERT_' . $nonce . '_' . count( $stash ) . '__';
+			$stash[ $key ] = substr( $html, $span[0], $span[1] );
+			$out          .= substr( $html, $last, $span[0] - $last ) . $key;
+			$last          = $span[0] + $span[1];
+		}
+		return $out . substr( $html, $last );
+	}
+
+	/**
+	 * Run a script or style pass on an element whose body is stashed.
+	 *
+	 * The processor is given the real body, and the body it returns (the
+	 * style pass rewrites CSS) goes back into the stash, so the passes after
+	 * this one still cannot see it. Should the result not have the shape the
+	 * processors build, it is returned as it is: the body is then visible to
+	 * the later passes, as it was before the stash existed.
+	 *
+	 * @param array    $m       Match: 0 element, 1 attributes, 2 body.
+	 * @param string   $tag     `script` or `style`.
+	 * @param array    $stash   Inert stash, updated in place.
+	 * @param callable $process Processor taking the match.
+	 * @return string
+	 */
+	private function process_with_inert_body( $m, $tag, array &$stash, $process ) {
+		$marker = isset( $m[2] ) ? $m[2] : '';
+		if ( '' === $marker || ! isset( $stash[ $marker ] ) ) {
+			return $process( $m );
+		}
+		$real   = $stash[ $marker ];
+		$m[0]   = str_replace( $marker, $real, $m[0] );
+		$m[2]   = $real;
+		$result = $process( $m );
+		if ( 1 === preg_match( '#^(<' . $tag . '(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>)(.*)(</' . $tag . '(?=[\s/>])[^>]*+>)$#is', $result, $r ) ) {
+			$stash[ $marker ] = $r[2];
+			return $r[1] . $marker . $r[3];
+		}
+		return $result;
 	}
 
 	private function process_link_tag( $m, $providers, $blocked_categories ) {
@@ -9688,44 +9955,6 @@ class Frontend {
 	}
 
 	/**
-	 * Detect inline scripts that carry only config/i18n payload — never tracker code.
-	 *
-	 * WordPress core emits two ID shapes that are guaranteed to be data-only:
-	 *
-	 *   - `<handle>-js-extra`        — `wp_localize_script()` output. Always a
-	 *                                  `var NAME = { … };` assignment. No function
-	 *                                  calls, no network I/O, no tracker pixels.
-	 *   - `<handle>-js-translations` — `wp_set_script_translations()` output.
-	 *                                  Always `wp.i18n.setLocaleData( JSON, domain );`
-	 *                                  reaching only into WP's in-memory i18n store.
-	 *
-	 * Neither shape can host an analytics call. Yet `match_script_to_provider()`
-	 * runs a `stripos( $content, $pattern )` substring match against the body of
-	 * the inline script, which means any localised string or config key that
-	 * incidentally contains a provider name (e.g. trx_addons emits the config key
-	 * `animate_to_mc4wp_form_submitted`, RankMath localises `addtoany`, Yoast
-	 * carries `gtag` in instruction strings) will trigger a false-positive block.
-	 * The block rewrites the tag to `type="text/plain"`, the `var NAME = …`
-	 * assignment never runs, and downstream code that reads the global crashes
-	 * with `ReferenceError: NAME is not defined`.
-	 *
-	 * `-js-before` and `-js-after` are NOT exempted — `wp_add_inline_script()`
-	 * with those positions accepts arbitrary executable code (a third-party
-	 * plugin may legitimately emit a tracker call this way), so they still
-	 * route through the regular provider matcher.
-	 *
-	 * The exemption applies to inline tags from any plugin, not just our own,
-	 * because the convention is enforced by WordPress core: only `wp_localize_script`
-	 * produces the `-js-extra` suffix, and only `wp_set_script_translations`
-	 * produces the `-js-translations` suffix. A malicious plugin choosing one of
-	 * those IDs to hide a tracker has the entire rest of the page to exfiltrate
-	 * from — the assumption "the IDs WP core appends mark data, not behaviour"
-	 * is the same one WordPress itself relies on.
-	 *
-	 * @param string $id Inline script tag ID.
-	 * @return bool
-	 */
-	/**
 	 * Whether an inline script body only assigns JSON values.
 	 *
 	 * Accepted: one or more `var NAME = <JSON>`, `let NAME = <JSON>`,
@@ -9737,7 +9966,7 @@ class Frontend {
 	 * function, a single-quoted string, a reference to another variable or a
 	 * call is not data and the script is judged as usual. A declaration list
 	 * (`var a = {…}, b = …`) is rejected too: the part after the comma can be
-	 * any expression.
+	 * any expression. So is an assignment to `location`, which navigates.
 	 *
 	 * @param string $content Inline script body.
 	 * @return bool
@@ -9761,7 +9990,21 @@ class Frontend {
 			if ( $pos >= $len ) {
 				return $seen > 0;
 			}
-			if ( ! preg_match( '/\G(?:(?:var|let|const)\s+|window\.)[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*/', $body, $m, 0, $pos ) ) {
+			if ( ! preg_match( '/\G(?:(?:var|let|const)\s+|window\.)([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*/', $body, $m, 0, $pos ) ) {
+				return false;
+			}
+			// `location` is a global whose assignment is an action, not a
+			// definition: `var location = "https://…"` at top level and
+			// `window.location = …` both go through the Location setter and
+			// navigate the page, whatever JSON value is given (an object
+			// navigates to its string form). Exempted, that navigation ran
+			// before consent and outside every provider and custom rule, so it
+			// is judged as code. The grammar above already refuses every other
+			// spelling (`document.location`, `top.location`, `window["…"]`).
+			// Event handler names need no entry: an IDL handler takes a
+			// callable or null, and JSON can spell neither a function nor
+			// source to compile.
+			if ( 'location' === $m[1] ) {
 				return false;
 			}
 			$pos += strlen( $m[0] );
@@ -9845,6 +10088,44 @@ class Frontend {
 		return false;
 	}
 
+	/**
+	 * Detect inline scripts that carry only config/i18n payload — never tracker code.
+	 *
+	 * WordPress core emits two ID shapes that are guaranteed to be data-only:
+	 *
+	 *   - `<handle>-js-extra`        — `wp_localize_script()` output. Always a
+	 *                                  `var NAME = { … };` assignment. No function
+	 *                                  calls, no network I/O, no tracker pixels.
+	 *   - `<handle>-js-translations` — `wp_set_script_translations()` output.
+	 *                                  Always `wp.i18n.setLocaleData( JSON, domain );`
+	 *                                  reaching only into WP's in-memory i18n store.
+	 *
+	 * Neither shape can host an analytics call. Yet `match_script_to_provider()`
+	 * runs a `stripos( $content, $pattern )` substring match against the body of
+	 * the inline script, which means any localised string or config key that
+	 * incidentally contains a provider name (e.g. trx_addons emits the config key
+	 * `animate_to_mc4wp_form_submitted`, RankMath localises `addtoany`, Yoast
+	 * carries `gtag` in instruction strings) will trigger a false-positive block.
+	 * The block rewrites the tag to `type="text/plain"`, the `var NAME = …`
+	 * assignment never runs, and downstream code that reads the global crashes
+	 * with `ReferenceError: NAME is not defined`.
+	 *
+	 * `-js-before` and `-js-after` are NOT exempted — `wp_add_inline_script()`
+	 * with those positions accepts arbitrary executable code (a third-party
+	 * plugin may legitimately emit a tracker call this way), so they still
+	 * route through the regular provider matcher.
+	 *
+	 * The exemption applies to inline tags from any plugin, not just our own,
+	 * because the convention is enforced by WordPress core: only `wp_localize_script`
+	 * produces the `-js-extra` suffix, and only `wp_set_script_translations`
+	 * produces the `-js-translations` suffix. A malicious plugin choosing one of
+	 * those IDs to hide a tracker has the entire rest of the page to exfiltrate
+	 * from — the assumption "the IDs WP core appends mark data, not behaviour"
+	 * is the same one WordPress itself relies on.
+	 *
+	 * @param string $id Inline script tag ID.
+	 * @return bool
+	 */
 	private function is_wp_localize_or_translations_inline_id( $id ) {
 		if ( ! is_string( $id ) || '' === $id ) {
 			return false;
@@ -11899,7 +12180,11 @@ class Frontend {
 		// than delayed — and the leftovers became stray attributes on the frame.
 		// process_output_buffer() has had this protection since the same defect
 		// was found there; this entry point runs the same passes and did not.
-		$stash_nonce   = $this->stash_nonce();
+		$stash_nonce = $this->stash_nonce();
+		// Comments and script bodies are text; see process_output_buffer().
+		$inert_stash = array();
+		$content     = $this->stash_inert_spans( $content, $stash_nonce, $inert_stash );
+
 		$srcdoc_stash  = array();
 		$srcdoc_marker = '';
 		$stashed       = $this->stash_iframe_srcdocs( $content, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker );
@@ -11918,9 +12203,16 @@ class Frontend {
 		// them unblocked, which would violate consent requirements.
 		if ( false !== stripos( $content, '<script' ) ) {
 			$result = preg_replace_callback(
-				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_script_tag( $m, $providers, $blocked_categories );
+				'#' . self::script_token_skip() . '<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
+				function ( $m ) use ( $providers, $blocked_categories, &$inert_stash ) {
+					return $this->process_with_inert_body(
+						$m,
+						'script',
+						$inert_stash,
+						function ( $m ) use ( $providers, $blocked_categories ) {
+							return $this->process_script_tag( $m, $providers, $blocked_categories );
+						}
+					);
 				},
 				$content
 			);
@@ -11947,6 +12239,10 @@ class Frontend {
 				error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in filter_content_blocking (iframes)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 				$content = preg_replace( '#<iframe\b[^>]*>.*?</iframe(?=[\s/>])[^>]*>#is', '', $content ) ?? $content;
 			}
+		}
+
+		if ( ! empty( $inert_stash ) ) {
+			$content = strtr( $content, $inert_stash );
 		}
 
 		// Hide social embed containers that depend on blocked scripts.
