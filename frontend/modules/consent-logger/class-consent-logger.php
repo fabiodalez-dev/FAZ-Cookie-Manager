@@ -89,11 +89,87 @@ class Consent_Logger {
 	const FREE_EXCEPTIONS_PER_ADDRESS = 5;
 
 	/**
+	 * Read-only AJAX action that hands out the current origin tokens.
+	 *
+	 * The inline beacons (consent log and pageview, printed by
+	 * Frontend::enqueue_scripts()) call it once when a POST is refused with
+	 * `invalid_token`, then resend with the fresh value. See
+	 * handle_token_refresh().
+	 *
+	 * @since 1.34.2
+	 */
+	const TOKEN_REFRESH_ACTION = 'faz_origin_tokens';
+
+	/**
 	 * Constructor - register hooks.
 	 */
 	public function __construct() {
 		// Public REST route.
 		add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
+		add_action( 'wp_ajax_' . self::TOKEN_REFRESH_ACTION, array( $this, 'handle_token_refresh' ) );
+		add_action( 'wp_ajax_nopriv_' . self::TOKEN_REFRESH_ACTION, array( $this, 'handle_token_refresh' ) );
+	}
+
+	/**
+	 * Hand out the origin tokens a page rendered right now would carry.
+	 *
+	 * Why it exists. The tokens ship inside cacheable HTML, and the endpoints
+	 * accept them for a bounded window (TOKEN_MAX_AGE, 7 days by default, 30 at
+	 * most through the filter). A page an edge cache keeps longer — a CDN that
+	 * is never purged, an APO entry held "until changed" — carries a token
+	 * the endpoint refuses, and every consent record posted from it is lost:
+	 * the call is fire-and-forget, so the visitor sees a working banner and
+	 * the Art. 7(1) record simply never lands. Widening the window would only
+	 * move that cliff, and it is already as wide as a token's age can say
+	 * anything about the page. So the beacon recovers instead: on a 403
+	 * `invalid_token` it asks here for the current value and resends once,
+	 * whatever the age of the cached copy.
+	 *
+	 * Why it is safe. It is read-only and unauthenticated, like the DNSMPI
+	 * nonce refresh (Do_Not_Sell_Shortcode::handle_nonce_refresh()): every
+	 * value it returns is already printed into every public page this site
+	 * renders, so it exposes nothing a GET of any page does not. The token was
+	 * never the control against a forged record — is_same_origin_request() and
+	 * the per-IP and per-consent_id throttles are, and a fresh token bypasses
+	 * none of them. A cross-site page cannot read the JSON (no CORS header) and
+	 * cannot execute it.
+	 *
+	 * Why admin-ajax and not a REST route. Several page caches cache GET REST
+	 * responses by default (LiteSpeed's "Cache REST API" among them) and some
+	 * CDNs ignore query strings, so a REST GET could come back as stale as the
+	 * page it is meant to repair. admin-ajax.php sends nocache_headers() itself
+	 * and every page cache excludes it; the explicit no-store below keeps the
+	 * contract in this file rather than in that convention.
+	 *
+	 * Why it has no rate limit. It does no database I/O at all — two keyed
+	 * hashes and a settings read that WordPress has already autoloaded — and
+	 * faz_throttle_request() would ADD a wp_options write per request on a site
+	 * without a persistent object cache, turning the cheapest endpoint the
+	 * plugin has into a write path, while refusing the second visitor behind a
+	 * shared address who needs the same value. Bootstrapping WordPress is the
+	 * cost floor, and no throttle inside WordPress lowers it.
+	 *
+	 * Each token is returned only when its beacon is enabled, with the same
+	 * strict reads Frontend::enqueue_scripts() uses to print them.
+	 *
+	 * @since 1.34.2
+	 * @return void
+	 */
+	public function handle_token_refresh() {
+		if ( ! headers_sent() ) {
+			header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private' );
+		}
+		$settings = get_option( 'faz_settings', array() );
+		$settings = is_array( $settings ) ? $settings : array();
+		$tokens   = array();
+		if ( isset( $settings['consent_logs']['status'] ) && true === $settings['consent_logs']['status'] ) {
+			$tokens['consent'] = self::current_token();
+		}
+		if ( isset( $settings['pageview_tracking'] ) && true === $settings['pageview_tracking']
+			&& class_exists( '\\FazCookie\\Admin\\Modules\\Pageviews\\Api\\Api' ) ) {
+			$tokens['pageview'] = \FazCookie\Admin\Modules\Pageviews\Api\Api::current_token();
+		}
+		wp_send_json_success( $tokens );
 	}
 
 	/**
@@ -133,6 +209,16 @@ class Consent_Logger {
 					'token' => array(
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
+					),
+					// Set by the inline beacon on its FIRST post: "if my token
+					// is refused, I will fetch a fresh one and resend". A
+					// stale-token refusal of such a post is not a lost record,
+					// so it is not counted; the resend is sent without it and
+					// is counted under whatever cause refuses it. See
+					// handle_token_refresh().
+					'can_refresh' => array(
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
 					),
 					'consent_id' => array(
 						'type'              => 'string',
@@ -577,7 +663,17 @@ class Consent_Logger {
 		$token = $request->get_param( 'token' );
 		if ( ! empty( $token ) ) {
 			if ( ! self::token_is_valid( $token ) ) {
-				self::record_refusal( self::CAUSE_STALE_TOKEN );
+				// A beacon that announced it can refresh will resend with a
+				// current token (handle_token_refresh()), so this refusal is not
+				// yet a lost record and System Status must not report it as one.
+				// The resend carries no flag: if it is refused too, it is counted
+				// under its own cause, and if the refresh itself fails the beacon
+				// resends the original, which is counted here as before. A client
+				// that sets the flag on junk only removes itself from a tally
+				// that exists for real visitors' records.
+				if ( 1 !== (int) $request->get_param( 'can_refresh' ) ) {
+					self::record_refusal( self::CAUSE_STALE_TOKEN );
+				}
 				return new \WP_Error(
 					'invalid_token',
 					'Invalid origin token.',
