@@ -58,6 +58,10 @@ EXCLUDES=(
 	# of them into the test webroot.
 	'.claude'
 	'CLAUDE.md'
+	# Browser-tool scratch (snapshots, console dumps) written into the
+	# checkout during manual verification; never part of the plugin.
+	'.playwright-mcp'
+	'.playwright-cli'
 )
 
 if [ "${1:-}" = '--print-excludes' ]; then

@@ -58,6 +58,10 @@ try {
 	exec( 'bash ' . escapeshellarg( $script ) . ' --print-excludes 2>&1', $excludes );
 	$checks['.claude/ is excluded from the deploy'] = in_array( '.claude', $excludes, true );
 	$checks['CLAUDE.md is excluded from the deploy'] = in_array( 'CLAUDE.md', $excludes, true );
+	// Browser-tool scratch: measured in a working tree on 2026-10-16, copied
+	// into the webroot by every deploy until it was listed here.
+	$checks['.playwright-mcp/ is excluded from the deploy'] = in_array( '.playwright-mcp', $excludes, true );
+	$checks['.playwright-cli/ is excluded from the deploy'] = in_array( '.playwright-cli', $excludes, true );
 	foreach ( $checks as $label => $passed ) {
 		if ( $passed ) {
 			echo "  [PASS] {$label}\n";
