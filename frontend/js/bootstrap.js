@@ -2572,7 +2572,12 @@
         if (target.category && !attr(el, target.category)) setAttr(el, target.category, parkCategory(policy, value));
         // The runtime hides a parked iframe rather than leaving an empty frame
         // in the layout; match it so the two paths look the same to a visitor.
-        if (el.nodeName === 'IFRAME' && el.classList) el.classList.add('faz-hidden');
+        // Except a frame that keeps a live srcdoc: the engine ignores src while
+        // srcdoc is present, so parking src leaves it showing that document —
+        // the "lite embed" facade — and there is nothing empty to hide. The
+        // server and the runtime (_fazHasLiveSrcdoc) leave it visible. When the
+        // key being parked IS srcdoc, it is about to leave, so the frame hides.
+        if (el.nodeName === 'IFRAME' && el.classList && (key === 'srcdoc' || !has(el, 'srcdoc'))) el.classList.add('faz-hidden');
     }
     function park(el, policy) {
         heldAttrs(el).forEach(function (prop) {
