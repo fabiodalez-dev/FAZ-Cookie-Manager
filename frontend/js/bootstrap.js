@@ -272,6 +272,23 @@
     // the layer disagreement the three files keep falling into, fixed in the
     // other two first (9ab2ef77) and here last.
     var MARKUP_URL = /(?:https?:[\\\/]*|[\\\/]{2})[^\s"'<>)\\\/][^\s"'<>)]*/gi;
+    // Namespace names. They are spelled as URLs and are never fetched, and
+    // every inline SVG names one: `<svg xmlns="http://www.w3.org/2000/svg">`
+    // read as a cross-origin reference, so on the safety release a srcdoc
+    // carrying nothing but a first-party icon stayed parked for the page view.
+    // Matched by VALUE, not by stripping `xmlns="…"` from the text: an
+    // attribute-shaped string outside a tag is text to the tokenizer, and a
+    // regex that removed it there would swallow the real markup up to the
+    // next quote — `xmlns='</p><img src="https://t/x.png">'` is an image. An
+    // exact w3.org namespace name is not a destination anyone tracks with,
+    // wherever in the markup it appears.
+    var NAMESPACES = [
+        'http://www.w3.org/2000/svg', 'http://www.w3.org/1999/xlink', 'http://www.w3.org/1999/xhtml',
+        'http://www.w3.org/1998/Math/MathML', 'http://www.w3.org/XML/1998/namespace', 'http://www.w3.org/2000/xmlns/'
+    ];
+    function namespaceName(url) {
+        return NAMESPACES.indexOf(String(url).replace(/\\\//g, '/')) !== -1;
+    }
     function urlsIn(value) {
         var text = decodeMarkup(value);
         var found = text.match(MARKUP_URL) || [];
@@ -282,7 +299,7 @@
         // separate pass, the same union _fazMarkupUrls makes.
         var unescaped = text.replace(/\\\//g, '/');
         if (unescaped !== text) found = found.concat(unescaped.match(MARKUP_URL) || []);
-        return found;
+        return found.filter(function (url) { return !namespaceName(url); });
     }
     // A list is same-origin only when EVERY candidate is: the browser picks one
     // by viewport and pixel ratio, so a single remote entry is a request.

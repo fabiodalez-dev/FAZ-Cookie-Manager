@@ -23,7 +23,8 @@
  *      replaceChildren, replaceWith (a lazy loader's querySelector loop) and
  *      removeChild out of a <style>, on the hold and on the safety release;
  *   c. the fuse: the queue never grows past its limit, and on the safety
- *      release created scripts are no longer retained.
+ *      release created scripts are no longer retained;
+ *   d. a namespace name (xmlns) is not a request.
  *
  * Every loop below is bounded by a counter, so the unfixed code FAILS here
  * instead of hanging the runner. Point FAZ_BOOTSTRAP_UNDER_TEST at another
@@ -378,6 +379,25 @@ await scenario(async () => {
   let asked = 0;
   handoff(window, { script: function () { asked += 1; } });
   eq('scripts created after the safety release are not retained', asked, 0);
+});
+
+console.log('\nd. a namespace name is not a request');
+
+await scenario(async () => {
+  const { window, document, nativeGetAttribute } = boot();
+  const icon = document.createElement('iframe');
+  icon.srcdoc = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path d="M0 0h1"/></svg>';
+  document.body.appendChild(icon);
+  const tracked = document.createElement('iframe');
+  tracked.srcdoc = '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://tracker.test/p.png"/></svg>';
+  document.body.appendChild(tracked);
+  const trick = document.createElement('iframe');
+  trick.srcdoc = '<p> xmlns=\'</p><img src="https://tracker.test/x.png">\'</p>';
+  document.body.appendChild(trick);
+  await release(window);
+  ok('an SVG that only names its namespaces is applied on the safety release', String(nativeGetAttribute.call(icon, 'srcdoc') || '').indexOf('<svg') === 0);
+  eq('one that also names a third party stays parked', nativeGetAttribute.call(tracked, 'srcdoc'), null);
+  eq('and an attribute-shaped string outside a tag hides nothing', nativeGetAttribute.call(trick, 'srcdoc'), null);
 });
 
 console.log('');
