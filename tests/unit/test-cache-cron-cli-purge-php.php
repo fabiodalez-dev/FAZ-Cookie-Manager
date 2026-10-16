@@ -205,6 +205,10 @@ namespace {
 	// ---------------------------------------------------------------------
 	faz_cc_boot_admin();
 	faz_cc_ok( 0 === faz_cc_flying_press_listeners( 'faz_after_create_cookie' ), '01 an ordinary page request does not load the cache module' );
+	faz_cc_ok(
+		! empty( $GLOBALS['faz_filters']['varnish_http_purge_events'] ) && ! empty( $GLOBALS['faz_filters']['varnish_http_purge_events_full'] ),
+		'01a every request adds the FAZ purge action to Proxy Cache Purge before init'
+	);
 
 	$GLOBALS['faz_actions'] = array();
 	$GLOBALS['faz_is_cron'] = true;

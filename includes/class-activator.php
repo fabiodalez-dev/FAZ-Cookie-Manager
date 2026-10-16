@@ -1470,6 +1470,16 @@ class Activator {
 					wpo_cache_flush();
 				}
 			} ),
+			array( 'Nginx Helper', function () {
+				if ( has_action( 'rt_nginx_helper_purge_all' ) ) {
+					do_action( 'rt_nginx_helper_purge_all' );
+				}
+			} ),
+			array( 'Super Page Cache', function () {
+				if ( has_action( 'swcfpc_purge_cache' ) ) {
+					do_action( 'swcfpc_purge_cache' );
+				}
+			} ),
 			array( 'Comet Cache', function () {
 				if ( class_exists( '\\WebSharks\\CometCache\\Classes\\Plugin' ) ) {
 					$comet = \WebSharks\CometCache\Classes\Plugin::class;

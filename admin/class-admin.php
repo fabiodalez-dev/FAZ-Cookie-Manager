@@ -169,6 +169,12 @@ class Admin {
 	 * @return void
 	 */
 	private function maybe_load_modules() {
+		// Proxy Cache Purge reads the actions that trigger a purge on `init`,
+		// before the cache module is loaded on REST requests, so the FAZ purge
+		// action is added to its lists here, on every request.
+		if ( class_exists( '\\FazCookie\\Admin\\Modules\\Cache\\Services\\Proxy_Cache_Purge' ) ) {
+			\FazCookie\Admin\Modules\Cache\Services\Proxy_Cache_Purge::register_purge_events();
+		}
 		// REST API requests need routes registered — always load.
 		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
 			$this->load_modules();
