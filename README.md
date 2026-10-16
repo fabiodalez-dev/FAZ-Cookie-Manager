@@ -379,23 +379,12 @@ Detects visitor country for geo-targeted banner display:
 
 When **no URL-based multilingual plugin** (WPML/Polylang/TranslatePress/Weglot)
 is installed and **two or more languages** are selected in the admin, the
-banner HTML is rendered server-side in the **site default language** so it
-stays safe to cache. A `Vary: Accept-Language` response header is emitted for
-caches that honour it, and the banner is swapped client-side via
-`GET /wp-json/faz/v1/banner/{lang}` when the visitor's browser prefers a
-different selected language.
-
-Recommended cache configuration:
-
-- **Cloudflare (APO / Cache Everything / Cache Rules)**: `Vary` alone is not
-  sufficient in these modes. Either keep banner pages off "Cache Everything",
-  or add a Cache Rule that includes `Accept-Language` in the cache key for
-  the affected pages.
-- **LiteSpeed Cache**: enable **Cache by language** (Cache → Advanced) or
-  exclude banner-bearing pages from HTML caching.
-- **WP Rocket**: enable **Cache by language** under Advanced Rules.
-- **nginx fastcgi_cache / page caches**: add `$http_accept_language` to the
-  cache key.
+banner HTML is rendered server-side in the **site default language**, the
+same document for every visitor, so it is safe to cache under one key per URL.
+The banner is swapped client-side via `GET /wp-json/faz/v1/banner/{lang}` when
+the visitor's browser prefers a different selected language. No cache needs to
+key on `Accept-Language`, and since 1.34.2 FAZ no longer sends
+`Vary: Accept-Language` (it only fragmented caches that honour `Vary`).
 
 Escape hatch — disable browser detection entirely (banner always served in
 the site default language):
@@ -404,10 +393,11 @@ the site default language):
 add_filter( 'faz_disable_browser_language_detection', '__return_true' );
 ```
 
-Disable only the `Vary` header (keep client-side detection active):
+Send `Vary: Accept-Language` anyway (only useful when the theme or another
+plugin varies the page by that header):
 
 ```php
-add_filter( 'faz_send_vary_header', '__return_false' );
+add_filter( 'faz_send_vary_header', '__return_true' );
 ```
 
 ### Shortcodes

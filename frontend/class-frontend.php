@@ -10559,16 +10559,22 @@ class Frontend {
 	}
 
 	/**
-	 * Emit `Vary: Accept-Language` when client-side browser-language detection
-	 * is active.
+	 * Emit `Vary: Accept-Language` only when an integrator asks for it.
 	 *
-	 * Caches and CDNs that honour Vary can then key the cached response by
-	 * Accept-Language. When a URL-based multilingual plugin
-	 * (WPML/Polylang/TranslatePress/Weglot) is active, browser detection is
-	 * not used, so the header is not needed. The emission follows
-	 * faz_browser_detect_enabled() so the two escape hatches
-	 * (faz_disable_browser_language_detection and the plugin/language checks)
-	 * stay consistent — disabling detection also stops cache fragmentation.
+	 * The HTML does not depend on Accept-Language. faz_current_language() never
+	 * reads the header (issue #67: the server renders the site default, or the
+	 * URL language of a multilingual plugin), and the browser-preferred
+	 * language is resolved in script.js from navigator.languages, which swaps
+	 * the banner through the REST endpoint. faz_detect_browser_language() is
+	 * not called on any render path. The header therefore described a variance
+	 * that does not exist, and its only effect was to split every cached URL
+	 * into one entry per Accept-Language spelling (hundreds of distinct values
+	 * in real traffic) on the caches that honour Vary — Cloudflare, Varnish,
+	 * LiteSpeed — a lower hit rate for an identical document.
+	 *
+	 * Kept behind `faz_send_vary_header` (now default false) for a site whose
+	 * own theme or plugins do vary the page by Accept-Language and relied on
+	 * FAZ to announce it.
 	 *
 	 * @return void
 	 */
@@ -10590,11 +10596,12 @@ class Frontend {
 			return;
 		}
 		/**
-		 * Short-circuit the Vary header emission.
+		 * Whether to announce `Vary: Accept-Language`.
 		 *
-		 * @param bool $enabled Whether to emit the header. Defaults to true.
+		 * @since 1.34.2 Defaults to false: FAZ's HTML does not vary by it.
+		 * @param bool $enabled Whether to emit the header. Defaults to false.
 		 */
-		if ( false === apply_filters( 'faz_send_vary_header', true ) ) {
+		if ( true !== apply_filters( 'faz_send_vary_header', false ) ) {
 			return;
 		}
 
