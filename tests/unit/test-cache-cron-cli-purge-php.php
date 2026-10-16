@@ -262,10 +262,24 @@ namespace {
 	\FazCookie\Includes\Gvl::cron_update();
 	faz_cc_ok( $before + 1 === \FlyingPress\Purge::$pages, '09 the weekly GVL refresh purges the page cache once the list is replaced' );
 
+	// The IAB publishes a new list roughly weekly, but not always between two
+	// ticks; download() returns the version it fetched whether or not it is the
+	// one already stored, so purging on "non-zero" emptied every page cache on
+	// the site once a week for nothing.
+	$GLOBALS['faz_http_response'] = array( 'code' => 200, 'body' => $gvl_body );
+	$before                       = \FlyingPress\Purge::$pages;
+	\FazCookie\Includes\Gvl::cron_update();
+	faz_cc_ok( $before === \FlyingPress\Purge::$pages, '09a a weekly refresh that fetches the version already stored purges nothing' );
+
 	$GLOBALS['faz_http_response'] = array( 'code' => 200, 'body' => $gvl_body );
 	$before                       = \FlyingPress\Purge::$pages;
 	( new \FazCookie\Admin\Modules\Gvl\Api\Api() )->update_gvl( $request );
 	faz_cc_ok( $before + 1 === \FlyingPress\Purge::$pages, '10 the manual "Update GVL" purges the page cache' );
+
+	$GLOBALS['faz_http_response'] = array( 'code' => 200, 'body' => str_replace( '"vendorListVersion":150', '"vendorListVersion":151', $gvl_body ) );
+	$before                       = \FlyingPress\Purge::$pages;
+	\FazCookie\Includes\Gvl::cron_update();
+	faz_cc_ok( $before + 1 === \FlyingPress\Purge::$pages, '09b a weekly refresh that brings a new version purges once' );
 
 	$GLOBALS['faz_http_response'] = array( 'code' => 503, 'body' => '' );
 	$before                       = \FlyingPress\Purge::$pages;

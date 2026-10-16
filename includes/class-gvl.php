@@ -663,7 +663,9 @@ class Gvl {
 		}
 
 		$gvl    = self::get_instance();
-		$result = $gvl->download();
+		// Read before the download overwrites it: see the purge below.
+		$stored_version = $gvl->get_version();
+		$result         = $gvl->download();
 		if ( ! $result['success'] ) {
 			error_log( 'FAZ GVL cron: download failed - ' . $result['message'] ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 		}
@@ -680,9 +682,13 @@ class Gvl {
 		// gvlVersion, purposes and vendor names are embedded in every page, so
 		// the refreshed list reaches visitors only once the page caches are
 		// purged (the cache module is loaded on cron for this). A non-zero
-		// version means the stored list was replaced, even when the copy on
-		// disk could not be written afterwards.
-		if ( ! empty( $result['version'] ) ) {
+		// version means the list was stored, even when the copy on disk could
+		// not be written afterwards — but download() returns the version it
+		// fetched whether or not it is the one already stored, and the IAB does
+		// not publish a new list between every two weekly ticks. Purging on
+		// "non-zero" emptied every page cache on the site once a week for an
+		// identical list, so only a version change purges.
+		if ( ! empty( $result['version'] ) && absint( $result['version'] ) !== $stored_version ) {
 			do_action( 'faz_purge_page_cache' );
 		}
 	}
