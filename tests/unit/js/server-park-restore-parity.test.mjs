@@ -17,9 +17,11 @@
  *      the original is still blocked. data-faz-category is kept while another
  *      parked key on the element still needs it.
  *   3. The lite-embed frame (allowed srcdoc, blocked src): the runtime parks the
- *      src, keeps the srcdoc live and hides the frame — the rule the server now
- *      shares — and restore 2b hands the src back on consent. Pinned here so
- *      the two layers cannot drift apart again unnoticed.
+ *      src, keeps the srcdoc live and leaves the frame VISIBLE — it shows the
+ *      allowed facade, not the parked src — which is the server's rule too,
+ *      and restore 2b hands the src back on consent. A frame whose srcdoc is
+ *      parked as well is still hidden. Pinned here so the two layers cannot
+ *      drift apart again unnoticed.
  *
  * Loads the REAL frontend/js/script.js with its DOMContentLoaded bootstrap
  * neutralised, and calls the internals as Annex-B globals.
@@ -219,7 +221,7 @@ console.log('\n3. the lite-embed frame: one rule in both layers');
   eq('the startup sweep parks the blocked src', f.getAttribute('data-faz-src'), TRACKER);
   eq('with no live src for the facade\'s Play button to activate', f.getAttribute('src'), null);
   eq('the allowed srcdoc stays live', f.getAttribute('srcdoc'), '<button class=play>Play</button>');
-  ok('and the frame is hidden, like every parked frame', f.classList.contains('faz-hidden'));
+  ok('and the frame stays visible: it shows the allowed facade', !f.classList.contains('faz-hidden'));
   consent(w, { marketing: 'yes' });
   restore(w);
   eq('on consent the src is handed back', f.getAttribute('src'), TRACKER);
@@ -229,14 +231,41 @@ console.log('\n3. the lite-embed frame: one rule in both layers');
 // 3b — the shape the server now emits for the same frame is left alone by the
 // sweep and restored by the same branch: the two layers converge.
 {
-  const w = runtimeOnly({ body: `<iframe id="f" class="faz-hidden" data-faz-category="marketing" srcdoc="<button class=play>Play</button>" data-faz-src="${TRACKER}"></iframe>` });
+  const w = runtimeOnly({ body: `<iframe id="f" data-faz-category="marketing" srcdoc="<button class=play>Play</button>" data-faz-src="${TRACKER}"></iframe>` });
   const f = w.document.getElementById('f');
   eq('a server-parked lite frame is not re-judged', f.getAttribute('data-faz-src'), TRACKER);
   eq('its srcdoc is untouched', f.getAttribute('srcdoc'), '<button class=play>Play</button>');
+  ok('and the sweep does not hide it', !f.classList.contains('faz-hidden'));
   consent(w, { marketing: 'yes' });
   restore(w);
   eq('and restore 2b hands its src back', f.getAttribute('src'), TRACKER);
   ok('visible', !f.classList.contains('faz-hidden'));
+}
+
+// 3c — the same frame built by a script, through either setter: src is parked
+// and the frame keeps showing its facade. Without a srcdoc it is hidden as
+// before, and so is a frame whose srcdoc is parked too.
+{
+  const w = runtimeOnly();
+  const d = w.document;
+  const viaProp = d.createElement('iframe');
+  viaProp.setAttribute('srcdoc', '<button class=play>Play</button>');
+  viaProp.src = TRACKER;
+  eq('property setter: src is parked', viaProp.getAttribute('data-faz-src'), TRACKER);
+  ok('property setter: a frame with a live srcdoc stays visible', !viaProp.classList.contains('faz-hidden'));
+  const viaAttr = d.createElement('iframe');
+  viaAttr.setAttribute('srcdoc', '<button class=play>Play</button>');
+  viaAttr.setAttribute('src', TRACKER);
+  eq('setAttribute: src is parked', viaAttr.getAttribute('data-faz-src'), TRACKER);
+  ok('setAttribute: a frame with a live srcdoc stays visible', !viaAttr.classList.contains('faz-hidden'));
+  const bare = d.createElement('iframe');
+  bare.src = TRACKER;
+  ok('a frame with no srcdoc is still hidden when its src is parked', bare.classList.contains('faz-hidden'));
+}
+{
+  const w = runtimeOnly({ body: `<iframe id="f" srcdoc="<img src=https://tracker.test/p.png>" src="${TRACKER}"></iframe>` });
+  const f = w.document.getElementById('f');
+  ok('a frame whose srcdoc is parked as well is hidden', f.classList.contains('faz-hidden') && f.getAttribute('data-faz-srcdoc') && !f.hasAttribute('srcdoc'));
 }
 
 console.log('\n4. the server\'s media shapes restore through the existing branches');

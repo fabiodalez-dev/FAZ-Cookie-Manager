@@ -4889,11 +4889,15 @@ class Frontend {
 		// rendered — but the facade's own Play button removes srcdoc, and the
 		// src it activates had been gated by nothing: the frame navigated to
 		// the provider with no consent. So a blocked src is parked here too,
-		// in place and hidden like every parked frame, which is the rule the
-		// runtime's own park applies to the same frame; the srcdoc stays
-		// live, byte-for-byte, and restore 2b hands src back on consent.
-		// Parked WITHOUT the placeholder wrap: that sent the bare stash marker
-		// through wp_kses, which stripped it, so the srcdoc never came back.
+		// in place; the srcdoc stays live, byte-for-byte, and restore 2b
+		// hands src back on consent. Parked WITHOUT the placeholder wrap:
+		// that sent the bare stash marker through wp_kses, which stripped it,
+		// so the srcdoc never came back. And NOT hidden: what the frame shows
+		// is the allowed srcdoc, and with src parked nothing in it can reach
+		// the provider. Hiding it left a hole where the site put its facade
+		// and took away the only thing on the page that said a video was
+		// there; the banner and the revisit widget remain the way to consent.
+		// The runtime's park leaves a frame with a live srcdoc visible too.
 		// A parked srcdoc already took src with it. The marker carries the
 		// request nonce, so the page cannot spell it.
 		$live_srcdoc = '' !== $srcdoc_marker && false !== strpos( $attrs, $srcdoc_marker . 'LIVE_' );
@@ -4924,10 +4928,9 @@ class Frontend {
 				return $full; // No live src: the allowed srcdoc alone, nothing to park.
 			}
 			$new_attrs = $this->label_category_first( $new_attrs, $matched_category );
-			$frame     = isset( $m[2] )
+			return isset( $m[2] )
 				? '<iframe' . $new_attrs . '>' . $m[2] . '</iframe>'
 				: '<iframe' . $new_attrs . '/>';
-			return self::faz_add_hidden_class( $frame );
 		}
 		$new_attrs = $this->label_category_first( $new_attrs, $matched_category );
 
