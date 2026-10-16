@@ -101,6 +101,28 @@ class Cache_Compatibility {
 	);
 
 	/**
+	 * Send NO_STORE_HEADERS, while headers can still be sent.
+	 *
+	 * For the responses that are not a page veto but must never be stored
+	 * either — the no-store refresh endpoints, the plugin's REST routes, the
+	 * DSAR form page — so every FAZ "do not store" speaks the same header set
+	 * as the page vetoes, CDN-targeted directives included, instead of a local
+	 * copy of the three lines the set started as.
+	 *
+	 * @since 1.34.2
+	 * @return bool False when headers were already sent.
+	 */
+	public static function send_no_store_headers() {
+		if ( headers_sent() ) {
+			return false;
+		}
+		foreach ( self::NO_STORE_HEADERS as $name => $value ) {
+			header( $name . ': ' . $value );
+		}
+		return true;
+	}
+
+	/**
 	 * Define the page-cache bypass constants the WordPress caches read.
 	 *
 	 * DONOTCACHEPAGE (WP Rocket, W3TC, WP Super Cache, Cache Enabler, SG

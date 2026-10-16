@@ -240,6 +240,7 @@ namespace {
 	// Real helpers behind the IP layer; the resolver above stays stubbed.
 	require_once __DIR__ . '/../../includes/class-utils.php';
 	require_once __DIR__ . '/../../includes/class-ip-hasher.php';
+	require_once __DIR__ . '/../../includes/class-cache-compatibility.php';
 	require_once __DIR__ . '/../../includes/class-dsar-shortcode.php';
 
 	// ── Harness ──────────────────────────────────────────────────────────────

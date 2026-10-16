@@ -156,9 +156,7 @@ class Consent_Logger {
 	 * @return void
 	 */
 	public function handle_token_refresh() {
-		if ( ! headers_sent() ) {
-			header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private' );
-		}
+		\FazCookie\Includes\Cache_Compatibility::send_no_store_headers();
 		$settings = get_option( 'faz_settings', array() );
 		$settings = is_array( $settings ) ? $settings : array();
 		$tokens   = array();

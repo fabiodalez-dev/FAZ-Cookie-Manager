@@ -35,6 +35,13 @@ namespace FazCookie\Admin\Modules\Consentlogs\Includes {
 	}
 }
 
+namespace FazCookie\Includes {
+	// Cache_Compatibility::send_no_store_headers() runs in this namespace, so
+	// these record what the refresh endpoint actually sends.
+	function headers_sent() { return false; }
+	function header( $line, $replace = true ) { $GLOBALS['faz_sent_headers'][] = $line; }
+}
+
 namespace FazCookie\Admin\Modules\Pageviews\Api {
 	/** The pageview token minting, as the real class does it (wp_hash of the bucket). */
 	class Api {
@@ -92,6 +99,7 @@ namespace {
 		public function get_param( $key ) { return array_key_exists( $key, $this->params ) ? $this->params[ $key ] : null; }
 	}
 
+	require_once dirname( __DIR__, 2 ) . '/includes/class-cache-compatibility.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/modules/consent-logger/class-consent-logger.php';
 
 	use FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger;
@@ -140,8 +148,16 @@ namespace {
 	}
 	ref_check( is_array( $GLOBALS['faz_json'] ) && array() === $GLOBALS['faz_json']['data'], 'with both off the payload is empty' );
 
-	$src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/frontend/modules/consent-logger/class-consent-logger.php' );
-	ref_check( false !== strpos( $src, "header( 'Cache-Control: no-store" ), 'the refresh response is sent no-store (CLI cannot read headers, so the call is pinned)' );
+	// The full no-store set every FAZ veto sends, not a local Cache-Control
+	// line: an edge that reads only CDN-Cache-Control or Surrogate-Control
+	// would otherwise store a token the next visitor is handed.
+	$GLOBALS['faz_sent_headers'] = array();
+	$logger->handle_token_refresh();
+	$faz_expected = array();
+	foreach ( \FazCookie\Includes\Cache_Compatibility::NO_STORE_HEADERS as $faz_name => $faz_value ) {
+		$faz_expected[] = $faz_name . ': ' . $faz_value;
+	}
+	ref_check( $faz_expected === $GLOBALS['faz_sent_headers'], 'the refresh response carries Cache_Compatibility::NO_STORE_HEADERS' );
 
 	echo "\n== Counting a stale-token refusal ==\n";
 	$stale_token = 'a-token-from-a-page-cached-too-long';

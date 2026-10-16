@@ -942,9 +942,11 @@ add_filter( 'rest_pre_dispatch', function ( $result, $server, $request ) {
 		return $result;
 	}
 	do_action( 'litespeed_control_set_nocache', 'FAZ Cookie Manager REST route' );
-	if ( ! headers_sent() ) {
+	// The one no-store set every FAZ veto sends (CDN-targeted directives
+	// included); LiteSpeed's header keeps the no-vary token these routes
+	// always carried.
+	if ( \FazCookie\Includes\Cache_Compatibility::send_no_store_headers() ) {
 		header( 'X-LiteSpeed-Cache-Control: no-cache, no-vary', true );
-		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private', true );
 	}
 	if ( ! defined( 'DONOTCACHEPAGE' ) ) {
 		define( 'DONOTCACHEPAGE', true );

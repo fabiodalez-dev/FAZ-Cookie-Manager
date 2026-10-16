@@ -539,9 +539,7 @@ class DSAR_Shortcode {
 	 * @return void
 	 */
 	public function handle_refresh() {
-		if ( ! headers_sent() ) {
-			header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private' );
-		}
+		Cache_Compatibility::send_no_store_headers();
 		$stamp = self::issue_stamp();
 		wp_send_json_success(
 			array(
@@ -1491,12 +1489,12 @@ class DSAR_Shortcode {
 	 *
 	 * So the page is not cached. The same signals the plugin already sends
 	 * for a country-dependent banner (see Frontend::veto_page_cache_for_bot_variance()):
-	 * the `DONOTCACHEPAGE` / `DONOTCACHEOBJECT` constants that WP Rocket, W3
-	 * Total Cache, WP Super Cache, Cache Enabler and SG Optimizer read when
-	 * they decide at shutdown; the `litespeed_control_set_nocache` action,
+	 * the `DONOTCACHEPAGE` / `LSCACHE_NO_CACHE` constants that WP Rocket, W3
+	 * Total Cache, WP Super Cache, Cache Enabler, SG Optimizer and LiteSpeed
+	 * read when they decide at shutdown; the `litespeed_control_set_nocache` action,
 	 * which LSCache honours whenever it is fired because it only records
 	 * intent; the `flying_press_is_cacheable` filter, the only signal
-	 * FlyingPress reads; and the `Cache-Control: no-store` family for the
+	 * FlyingPress reads; and Cache_Compatibility::NO_STORE_HEADERS for the
 	 * edge — sent only while headers can still be sent, which on most themes
 	 * they cannot by the time a shortcode runs, since `<head>` went out
 	 * first. The header half is therefore best-effort; the constant, action
@@ -1541,23 +1539,16 @@ class DSAR_Shortcode {
 		}
 		$this->page_cache_vetoed = true;
 
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', true );
-		}
-		if ( ! defined( 'DONOTCACHEOBJECT' ) ) {
-			define( 'DONOTCACHEOBJECT', true );
-		}
+		// The same constants and headers every page veto uses
+		// (Cache_Compatibility), so an edge that reads only CDN-Cache-Control
+		// or Surrogate-Control is told too.
+		Cache_Compatibility::define_no_cache_constants();
 		do_action( 'litespeed_control_set_nocache', 'FAZ Cookie Manager data subject request form' );
 		// Registered at render time, which is before FlyingPress asks: it
 		// decides from its buffered output at shutdown.
 		add_filter( 'flying_press_is_cacheable', '__return_false' );
 
-		if ( headers_sent() ) {
-			return;
-		}
-		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
-		header( 'Pragma: no-cache' );
-		header( 'X-LiteSpeed-Cache-Control: no-cache' );
+		Cache_Compatibility::send_no_store_headers();
 	}
 
 	/**

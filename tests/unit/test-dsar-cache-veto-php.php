@@ -285,6 +285,7 @@ namespace {
 
 	require_once __DIR__ . '/../../includes/class-utils.php';
 	require_once __DIR__ . '/../../includes/class-ip-hasher.php';
+	require_once __DIR__ . '/../../includes/class-cache-compatibility.php';
 	require_once __DIR__ . '/../../includes/class-dsar-shortcode.php';
 
 	// ── Harness ──────────────────────────────────────────────────────────────
@@ -395,7 +396,8 @@ namespace {
 	$html = $dsar->render( array() );
 	check( false !== strpos( $html, 'name="nonce"' ), 'the form still carries its nonce' );
 	check( defined( 'DONOTCACHEPAGE' ) && true === DONOTCACHEPAGE, 'DONOTCACHEPAGE is defined (WP Rocket, W3TC, WP Super Cache, Cache Enabler, SG Optimizer)' );
-	check( defined( 'DONOTCACHEOBJECT' ) && true === DONOTCACHEOBJECT, 'and DONOTCACHEOBJECT' );
+	check( defined( 'LSCACHE_NO_CACHE' ) && true === LSCACHE_NO_CACHE, 'and LSCACHE_NO_CACHE, as every page veto (Cache_Compatibility::define_no_cache_constants())' );
+	check( ! defined( 'DONOTCACHEOBJECT' ), 'W3TC\'s object cache is left on: it holds nothing this page varies by' );
 	check( 1 === count( fired( 'litespeed_control_set_nocache' ) ), 'LiteSpeed is told through its action (it does not read the constant until it buffers)' );
 	check(
 		isset( $GLOBALS['__faz_filters']['flying_press_is_cacheable'] )
@@ -404,6 +406,7 @@ namespace {
 	);
 	check( headers_contain( 'no-store' ), 'and the response says no-store while headers can still be sent' );
 	check( headers_contain( 'X-LiteSpeed-Cache-Control: no-cache' ), 'including the LiteSpeed request-time header' );
+	check( headers_contain( 'CDN-Cache-Control: no-store' ) && headers_contain( 'Surrogate-Control: no-store' ), 'and the CDN-targeted directives of the shared no-store set' );
 
 	// Two forms on one page: one veto, not two LiteSpeed actions and two
 	// header sets. Headers are already recorded above, so count the action.
@@ -498,6 +501,10 @@ namespace {
 
 	// ── Summary ──────────────────────────────────────────────────────────────
 
+	echo "— the nonce refresh endpoint is sent with the shared no-store set\n";
+	reset_state();
+	( new FazCookie\Includes\DSAR_Shortcode() )->handle_refresh();
+	check( headers_contain( 'Cache-Control: private, no-store' ) && headers_contain( 'CDN-Cache-Control: no-store' ) && headers_contain( 'Surrogate-Control: no-store' ), 'handle_refresh() sends Cache_Compatibility::NO_STORE_HEADERS, not a lone Cache-Control line' );
 	echo "\n";
 	if ( $fail ) {
 		echo "FAILED: $fail of " . ( $pass + $fail ) . "\n";

@@ -395,12 +395,12 @@ Since 1.34.0 the DSAR form script, the Do-Not-Sell form script and the Cookie Po
 
 When multi-banner geo-routing is active, the rendered HTML can legitimately vary by visitor country. This plugin asks the page-cache layer to bypass caching on those requests by emitting:
 
-* `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`
+* `Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0`
 * `Pragma: no-cache`
 * `X-LiteSpeed-Cache-Control: no-cache`
-* `CDN-Cache-Control: no-store` and `Cloudflare-CDN-Cache-Control: no-store` (banner REST endpoint only, so an edge that overrides the browser directive still refuses to store the country-dependent payload)
+* `CDN-Cache-Control: no-store`, `Cloudflare-CDN-Cache-Control: no-store` and `Surrogate-Control: no-store`, so an edge that overrides the browser directive still refuses to store the response. The same set is sent by every other FAZ response that must not be stored: the plugin's REST routes, the data-request form page and the nonce/token refresh endpoints.
 * `Vary: CF-IPCountry` (when the trust filter `faz_trust_cf_ipcountry_header` is enabled). It is emitted for symmetry but is inert on these responses: nothing is stored, so there is no cache key to vary. `Vary` only does work on the storable responses — the banner REST endpoint's *non*-country-dependent answers, which are served `public, max-age=300` and carry the same header.
-* `DONOTCACHEPAGE`, `DONOTCACHEOBJECT`, `DONOTCACHEDB` PHP constants (industry-standard bypass hints)
+* `DONOTCACHEPAGE` and `LSCACHE_NO_CACHE` PHP constants (industry-standard bypass hints). W3 Total Cache's `DONOTCACHEOBJECT` / `DONOTCACHEDB` are not set on front-end pages: its object and database caches hold nothing that varies by visitor, so they stay on.
 * `do_action( 'litespeed_control_set_nocache', ... )` when LiteSpeed Cache is installed
 
 The jurisdiction runtime follows **Settings → Geolocation → Jurisdiction & Geo-routing** and is enabled by default on new installations. Turning it off makes the law saved on the active banner apply to every visitor; for example, a CCPA banner no longer gains GDPR blocking for an EEA visitor.
@@ -412,7 +412,7 @@ When jurisdiction enforcement is off, Cache Compatibility Mode can still keep no
 = Verified compatible (no extra configuration needed) =
 * **LiteSpeed Cache** — uses the explicit `litespeed_control_set_nocache` action, `LSCACHE_NO_CACHE` and the `X-LiteSpeed-Cache-Control` header. Every page-cache bypass also sends `Cache-Control: private, no-store`, `CDN-Cache-Control`, `Cloudflare-CDN-Cache-Control` and `Surrogate-Control: no-store` for QUIC.cloud and other edges. FAZ asset URLs carry `_litespeed_rm_qs=0`, so "Remove Query Strings" keeps their `?ver=` and an update is never served with the previous consent runtime.
 * **WP Rocket** — honors `DONOTCACHEPAGE` natively.
-* **W3 Total Cache** — honors `DONOTCACHEPAGE` / `DONOTCACHEOBJECT` natively.
+* **W3 Total Cache** — honors `DONOTCACHEPAGE` natively; its object and database caches keep working on the pages FAZ keeps out of the page cache.
 * **WP Super Cache** — honors `DONOTCACHEPAGE` natively.
 * **Hummingbird (WPMU DEV)** — honors `DONOTCACHEPAGE` natively.
 * **FlyingPress** — the plugin purges FlyingPress's cached HTML pages automatically whenever a banner, cookie, category or setting is saved, so a change never keeps serving stale banner markup. Only the rendered HTML is purged (that is all a consent change alters); FlyingPress's site-wide preload crawl is not triggered, matching the purge-only behaviour of the other supported caches. FlyingPress does not honor `DONOTCACHEPAGE`, so the plugin also hooks its documented `flying_press_is_cacheable` filter to skip caching on country-dependent pages, matching the bypass every other supported cache gets. The consent scripts are excluded automatically from minification, "Delay all JavaScript" and "Delay third-party scripts", and the banner selectors are kept by "Remove unused CSS": FlyingPress 4.x receives them through its delay/defer filters, FlyingPress 5 through its in-memory configuration, without changing your saved FlyingPress settings. If any FlyingPress pass still rewrites a FAZ script or the banner stylesheet (for example a "Delay selected scripts" keyword such as gtag or recaptcha that also matches the banner configuration), the plugin restores it before FlyingPress caches the page and writes one note a day to the PHP error log. If you see that note, or the banner appears only after the first click, add `faz-cookie-manager` to the exclusions of both "Delay JavaScript" and "Delay third-party scripts", and remove any "Delay selected scripts" keyword that matches the plugin.
