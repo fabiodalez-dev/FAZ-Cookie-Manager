@@ -4,6 +4,11 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 
 ## Unreleased
 
+- PR #333 review: isolate consent, vendor and opt-out cookies by network/site on every multisite topology, including subdirectories and custom cookie domains. Choices survive A → B → A without sharing optional grants.
+- PR #333 review: require a nonce-protected administrator attestation of consent-ID ownership before privacy tools touch consent history. Typed IDs remain unverified claims; confirmations are bound to the exact request, email and identifier.
+- PR #333 review: propagate consent-history read/delete failures as WordPress errors so incomplete operations remain retryable, flush pending GPP log capture on pagehide, reject optional grants in the PMP exemption, and recognize large JSON data without unbounded regex backtracking.
+
+
 - Fix #330: shared-domain consent on multisite is bound to the network and site in PHP, classic, REST, AMP, Google Consent Mode and TCF. Existing shared multisite cookies require a fresh choice; single-site cookies keep their fingerprint.
 - Fix #329: remove unsupported GPP declarations from rulesets and schema. FAZ does not provide a GPP CMP; consent logs may capture a string from an external CMP using its asynchronous v1.1 `ping` API.
 - Fix #328: generate suggested privacy-policy text from live settings, disclosing consent identifiers, salted IP and user-agent hashes, feature cookies, aggregate counters, geolocation, optional ipinfo disclosure and privacy-request retention. Withdrawal instructions follow the verified configured route.

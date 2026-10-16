@@ -64,7 +64,7 @@ check(
 
 // The localize array carries the value, computed by the inventory's own
 // function so the two sides cannot drift.
-const localize = PHP.slice(PHP.indexOf("'_fazConsentLog',"), PHP.indexOf("'_fazConsentLog',") + 900);
+const localize = PHP.slice(PHP.indexOf("'_fazConsentLog',"), PHP.indexOf('$inline_js =', PHP.indexOf("'_fazConsentLog',")));
 check('_fazConsentLog carries pageUrl', /'pageUrl'\s*=>/.test(localize));
 check('computed by Embed_Inventory::current_url()', localize.includes('Embed_Inventory::current_url()'));
 

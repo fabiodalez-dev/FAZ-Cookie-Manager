@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { JSDOM } from 'jsdom';
+import { JSDOM, CookieJar } from 'jsdom';
 const source = readFileSync(new URL('../../../frontend/js/script.js', import.meta.url), 'utf8');
 let passed = 0;
 for (const fp of ['', 'foreign-site', 'this-site']) {
@@ -52,10 +52,50 @@ for (const file of ['gcm.js', 'tcf-cmp.js']) {
   assert.equal(w.isConsentCookieStale({'__scope.fp':'foreign-site'}), true); ++passed;
   assert.equal(w.isConsentCookieStale({'__scope.fp':'this-site'}), false); ++passed;
   assert.equal(w.isConsentCookieStale({}), true); ++passed;
+  for (const grant of ['analytics','svc.maps','ck.maps.x','custom']) {
+    assert.equal(w.isConsentCookieStale({source:'pmp',action:'auto',consent:'no',[grant]:'yes'}),true); ++passed;
+  }
   w._fazConfig._geoBootstrap=true;
   assert.equal(w.isConsentCookieStale({'__scope.fp':'this-site'}), true); ++passed;
   w._fazConfig._geoBootstrapResolved='live';
   assert.equal(w.isConsentCookieStale({'__scope.fp':'this-site'}), false); ++passed;
   w.close();
+}
+
+for (const topology of ['subdirectory','subdomain']) {
+ const jar=new CookieJar();
+ function visit(site) {
+  const url=topology==='subdirectory'?`https://network.test/${site}/`:`https://${site}.network.test/`;
+  const w=new JSDOM('',{runScripts:'outside-only',url,cookieJar:jar}).window;
+  const cookieNames=Object.fromEntries(['fazcookie-consent','fazVendorConsent','euconsent-v2','fazcookie-dnsmpi'].map(name=>[name,`${name}-n1-b${site==='a'?1:2}`]));
+  w._fazConfig={_cookieNames:cookieNames,_siteScopeBound:true,_geoRouting:false,_scopeFingerprint:'site-'+site,_bannerSlug:'main',_activeLaw:'gdpr',_rootDomain:'.network.test',_categories:[{slug:'necessary',isNecessary:true},{slug:'analytics',isNecessary:false}],_bannerConfig:{settings:{applicableLaw:'gdpr'}}};
+  const add=w.document.addEventListener.bind(w.document);
+  w.document.addEventListener=(type,...args)=>type==='DOMContentLoaded'?undefined:add(type,...args);
+  w.eval(source); return w;
+ }
+ let a=visit('a');
+ for(const [key,value] of Object.entries({'__scope.fp':'site-a','__scope.banner':'main','__scope.law':'gdpr',consentid:'visitorA',analytics:'yes',action:'yes',consent:'yes'})) a.fazcookie._fazSetInStore(key,value);
+ a.close();
+ const b=visit('b');
+ assert.equal(b.fazcookie._fazGetFromStore('action'),'','a different site cannot inherit acceptance'); ++passed;
+ for(const [key,value] of Object.entries({'__scope.fp':'site-b','__scope.banner':'main','__scope.law':'gdpr',consentid:'visitorB',analytics:'no',action:'yes',consent:'no'})) b.fazcookie._fazSetInStore(key,value);
+ b.close();
+ a=visit('a');
+ assert.equal(a.fazcookie._fazGetFromStore('action'),'yes',topology+' A → B → A keeps the original choice'); ++passed;
+ assert.equal(a.fazcookie._fazGetFromStore('analytics'),'yes'); ++passed;
+ assert.equal(a.getFazConsent().consentID,'visitorA'); ++passed;
+ a._fazGcm={default_settings:[{analytics:'denied',marketing:'denied',functional:'denied',necessary:'granted',regions:'all'}]};
+ a.eval(readFileSync(new URL('../../../frontend/js/gcm.js',import.meta.url),'utf8'));
+ const update=a.dataLayer.find(args=>args[0]==='consent' && args[1]==='update');
+ assert.equal(update[2].analytics_storage,'granted','GCM reads this site’s namespaced consent'); ++passed;
+ a._fazTcfConfig={};
+ a.eval(readFileSync(new URL('../../../frontend/js/tcf-cmp.js',import.meta.url),'utf8'));
+ a.__tcfapi('getTCData',2,(data,success)=>{assert.ok(success);assert.equal(data.purpose.consents['8'],true,'TCF reads this site’s namespaced consent');++passed;});
+ assert.ok(a.document.cookie.includes('euconsent-v2-n1-b1='),'TCF writes its per-site cookie'); ++passed;
+ a.close();
+ const b2=visit('b');
+ assert.equal(b2.fazcookie._fazGetFromStore('analytics'),'no'); ++passed;
+ assert.equal(b2.getFazConsent().consentID,'visitorB'); ++passed;
+ b2.close();
 }
 console.log(`${passed} passed, 0 failed`);

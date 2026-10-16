@@ -152,8 +152,8 @@ class Paid_Memberships_Pro {
 	public function sync_consent_cookie() {
 		$current_cookie    = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie() : '';
 		$is_pmp_managed    = function_exists( 'faz_is_pmp_managed_consent_cookie' ) ? faz_is_pmp_managed_consent_cookie( $current_cookie ) : false;
-		$has_vendor_cookie = ! empty( $_COOKIE['fazVendorConsent'] );
-		$has_tcf_cookie    = ! empty( $_COOKIE['euconsent-v2'] );
+		$has_vendor_cookie = ! empty( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazVendorConsent' ) : 'fazVendorConsent' ] );
+		$has_tcf_cookie    = ! empty( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'euconsent-v2' ) : 'euconsent-v2' ] );
 		$is_exempted       = $this->is_current_user_exempted();
 
 		if ( ! $is_exempted ) {
@@ -177,7 +177,7 @@ class Paid_Memberships_Pro {
 			// presence of vendor cookies would loop: clear → banner → re-accept
 			// → vendor cookie re-created → clear → …). The marker breaks that
 			// tie without re-introducing the loop.
-			$pmp_vendor_marker = isset( $_COOKIE['fazVendorSource'] ) && 'pmp' === $_COOKIE['fazVendorSource'];
+			$pmp_vendor_marker = isset( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazVendorSource' ) : 'fazVendorSource' ] ) && 'pmp' === $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazVendorSource' ) : 'fazVendorSource' ];
 			if ( $is_pmp_managed && function_exists( 'faz_clear_consent_tracking_cookies' ) ) {
 				faz_clear_consent_tracking_cookies();
 			}
@@ -185,7 +185,7 @@ class Paid_Memberships_Pro {
 				faz_expire_browser_cookie( 'fazVendorConsent' );
 				faz_expire_browser_cookie( 'euconsent-v2' );
 				faz_expire_browser_cookie( 'fazVendorSource' );
-				unset( $_COOKIE['fazVendorConsent'], $_COOKIE['euconsent-v2'], $_COOKIE['fazVendorSource'] );
+				unset( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazVendorConsent' ) : 'fazVendorConsent' ], $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'euconsent-v2' ) : 'euconsent-v2' ], $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazVendorSource' ) : 'fazVendorSource' ] );
 			}
 			return;
 		}
@@ -240,7 +240,7 @@ class Paid_Memberships_Pro {
 		// no personal data — only the literal string "pmp".
 		if ( function_exists( 'faz_set_browser_cookie' ) ) {
 			faz_set_browser_cookie( 'fazVendorSource', 'pmp', time() + ( 365 * DAY_IN_SECONDS ) );
-			$_COOKIE['fazVendorSource'] = 'pmp';
+			$_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazVendorSource' ) : 'fazVendorSource' ] = 'pmp';
 		}
 		$this->set_consent_cookie( $desired_cookie );
 
@@ -396,7 +396,7 @@ class Paid_Memberships_Pro {
 		// Same contract — and same justification — as faz_set_browser_cookie().
 		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
 		setcookie( // nosemgrep
-			'fazcookie-consent',
+			function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name() : 'fazcookie-consent',
 			$value,
 			array( // nosemgrep
 				'expires'  => $expiry,
@@ -407,7 +407,7 @@ class Paid_Memberships_Pro {
 				'samesite' => 'Lax',
 			)
 		);
-		$_COOKIE['fazcookie-consent'] = $value;
+		$_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-consent' ) : 'fazcookie-consent' ] = $value;
 	}
 
 	/**

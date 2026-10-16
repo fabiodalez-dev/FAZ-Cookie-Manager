@@ -11,6 +11,7 @@ class Privacy_Policy_Text {
 		$ipinfo = new \FazCookie\Admin\Modules\Geo_Routing\Includes\Ipinfo_Client();
 		return array(
 			'withdrawal_satisfied' => Withdrawal_Path::satisfies_revisit_requirement( $settings ),
+			'multisite' => function_exists( 'is_multisite' ) && is_multisite(),
 			'has_mmdb' => Geolocation::has_database(),
 			'ipinfo_active' => $ipinfo->is_optin_active() && '' !== $ipinfo->get_api_key(),
 		);
@@ -27,9 +28,12 @@ class Privacy_Policy_Text {
 		$facts = array(
 			'purpose' => __( 'This site uses FAZ Cookie Manager to collect and manage cookie choices.', 'faz-cookie-manager' ),
 			'consent_cookie' => __( 'The fazcookie-consent cookie stores your choices, their scope and policy revision, and a persistent consent ID for the configured cookie lifetime; the ID is kept when you withdraw consent.', 'faz-cookie-manager' ),
-			'consent_id' => __( 'Your consent ID is shown in cookie preferences and can be supplied with a privacy request to locate, export or erase your consent history, subject to applicable retention requirements.', 'faz-cookie-manager' ),
+			'consent_id' => __( 'Your consent ID is shown in cookie preferences and can be supplied with a privacy request to locate your consent history; export or erasure of that history requires independent ownership verification and is subject to applicable retention requirements.', 'faz-cookie-manager' ),
 			'dnsmpi' => __( 'If you use the Do Not Sell or Share control, fazcookie-dnsmpi records that opt-out.', 'faz-cookie-manager' ),
 		);
+		if ( ! empty( $env['multisite'] ) ) {
+			$facts['multisite'] = __( 'On WordPress multisite, these consent cookie names include a network and site suffix so each site keeps a separate choice.', 'faz-cookie-manager' );
+		}
 		if ( ! isset( $settings['consent_logs']['status'] ) || ! empty( $settings['consent_logs']['status'] ) ) {
 			$facts['logs'] = __( 'Consent records are stored on this site with the consent ID, decision, category and service choices, date, page URL with non-routing query parameters removed, banner and policy revision, and applicable region and privacy signals.', 'faz-cookie-manager' );
 			$facts['log_signals'] = __( 'When available, consent records also contain the TCF string and a GPP string supplied by an external CMP; FAZ does not generate GPP signals.', 'faz-cookie-manager' );

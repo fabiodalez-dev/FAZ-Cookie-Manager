@@ -76,7 +76,7 @@ ref._fazConsentStore = new Map();
 // _fazBootstrap.start()/finish(), the bootstrap's DOMContentLoaded fallback
 // takes over, and the fallback no longer uninstalls anything, so the stale
 // runtime's own gates stay in place instead of being wiped.
-const _FAZ_BUILD = '1.34.1+consent-scope-srcdoc';
+const _FAZ_BUILD = '1.34.1+verified-dsar-site-cookies';
 
 /**
  * One-call frontend self-diagnosis for support: paste
@@ -90,7 +90,7 @@ ref._diag = function () {
     var notice = null;
     try { notice = _fazGetBanner(); } catch (e) { /* not ready */ }
     var hasConsentCookie = false;
-    try { hasConsentCookie = /(?:^|;\s*)fazcookie-consent=/.test(document.cookie); } catch (e) { /* noop */ }
+    try { hasConsentCookie = document.cookie.split(';').some(function(part){return part.trim().indexOf(_fazCookieName('fazcookie-consent') + '=') === 0;}); } catch (e) { /* noop */ }
     var store = (typeof _fazStore === 'object' && _fazStore) ? _fazStore : {};
     return {
         build: _FAZ_BUILD,
@@ -109,15 +109,25 @@ ref._diag = function () {
     };
 };
 
+function _fazCookieName(name) {
+    return (_fazStore._cookieNames || {})[name] || name;
+}
+function _fazIsConsentCookieName(name) {
+    return /^(?:fazcookie-consent|fazVendorConsent|euconsent-v2|fazcookie-dnsmpi|fazVendorSource)(?:-n[0-9]+-b[0-9]+)?$/.test(name);
+}
+
 ref._fazGetCookieMap = function () {
     const cookieMap = {};
     try {
         document.cookie.split(";").forEach((cookie) => {
-            const [key, value] = cookie.split("=");
-            if (!key) return;
-            cookieMap[key.trim()] = value;
+            const sep = cookie.indexOf("=");
+            if (sep < 1) return;
+            cookieMap[cookie.slice(0, sep).trim()] = cookie.slice(sep + 1);
         });
     } catch (_unused) { /* malformed cookie string */ }
+    Object.keys(_fazStore._cookieNames || {}).forEach(function(base) {
+        cookieMap[base] = cookieMap[_fazCookieName(base)] || "";
+    });
     return cookieMap;
 };
 
@@ -538,7 +548,8 @@ function _fazConsentScopeChanged() {
     if (
         fazcookieConsentMap.source === "pmp" &&
         fazcookieConsentMap.action === "auto" &&
-        fazcookieConsentMap.consent === "no"
+        fazcookieConsentMap.consent === "no" &&
+        !Object.keys(fazcookieConsentMap).some(function(key){return key !== "necessary" && /^yes(?::|$)/.test(fazcookieConsentMap[key]);})
     ) return false;
     const currentBannerSlug = _fazCurrentBannerSlug();
     const currentLaw = _fazCurrentLaw();
@@ -700,7 +711,7 @@ if (!_fazConsentInvalidated && _fazStore._perServiceConsent && _fazStore._servic
  * @returns {string}
  */
 ref._fazGetCookie = function (name) {
-    const prefix = name + '=';
+    const prefix = _fazCookieName(name) + '=';
     const cookies = document.cookie.split('; ');
     for (var i = 0; i < cookies.length; i++) {
         if (cookies[i].indexOf(prefix) === 0) {
@@ -728,7 +739,7 @@ ref._fazSetCookie = function (name, value, days = 0, domain = _fazStore._rootDom
         days === 0 ? 0 : date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
     const secure = location.protocol === 'https:' ? ' Secure;' : '';
     const cookieValue = name === "fazcookie-consent" ? encodeURIComponent(value) : value;
-    const cookieStr = `${name}=${cookieValue}; expires=${new Date(
+    const cookieStr = `${_fazCookieName(name)}=${cookieValue}; expires=${new Date(
         toSetTime
     ).toUTCString()}; path=/;${domain}; SameSite=Lax;${secure}`;
     // Issue #112: warn when the encoded consent cookie grows past 3.5 KB
@@ -1172,7 +1183,7 @@ function _fazGpcActive() {
  */
 function _fazDnsmpiCookieActive() {
     return document.cookie.split(";").some(function (part) {
-        return part.trim().indexOf("fazcookie-dnsmpi=1") === 0;
+        return part.trim() === _fazCookieName("fazcookie-dnsmpi") + "=1";
     });
 }
 
@@ -2849,7 +2860,7 @@ function _fazRemoveDeadCookies(category) {
         // This server-provided protection also outranks granular denials.
         if (neverDelete === true) continue;
         // Never delete the plugin's own consent-mechanism cookies.
-        if (cookieID === "fazcookie-consent" || cookieID === "fazVendorConsent" || cookieID === "euconsent-v2") continue;
+        if (_fazIsConsentCookieName(cookieID)) continue;
         var serviceDecision = _fazGetServiceCookieDecision(cookieID);
         // An explicit per-service/per-cookie decision outranks a general
         // whitelist: yes preserves the cookie, no must still delete it. The
@@ -7881,6 +7892,7 @@ function _fazAfterConsent() {
  * to ensure deletion regardless of how the cookie was originally set.
  */
 function _fazDeleteCookie(name) {
+    name = _fazCookieName(name);
     var paths = ['/', window.location.pathname];
     var hostname = window.location.hostname;
     var rootDomain = _fazStore._rootDomain || '';
@@ -7940,7 +7952,7 @@ function _fazCleanupRevokedCookies() {
         if (!cookieName) continue;
 
         // Never delete the plugin's own cookies.
-        if (protectedCookies.indexOf(cookieName) !== -1) continue;
+        if (_fazIsConsentCookieName(cookieName) || protectedCookies.indexOf(cookieName) !== -1) continue;
 
         var serviceDecision = _fazGetServiceCookieDecision(cookieName);
         // A general whitelist only overrides category denial. Explicit
@@ -9268,9 +9280,9 @@ function _fazRenderVendorSection() {
  */
 function _fazReadVendorConsent() {
     const result = {};
-    const match = document.cookie.match(/fazVendorConsent=([^;]+)/);
-    if (!match) return result;
-    match[1].split(',').forEach(function(pair) {
+    const value = ref._fazGetCookie("fazVendorConsent");
+    if (!value) return result;
+    value.split(',').forEach(function(pair) {
         const kv = pair.split(':');
         if (kv.length === 2) {
             result[parseInt(kv[0], 10)] = kv[1].trim() === 'yes';
@@ -9328,7 +9340,7 @@ function _fazSaveVendorConsent(choice) {
         return;
     }
     const secure = location.protocol === 'https:' ? ';Secure' : '';
-    document.cookie = 'fazVendorConsent=' + payload + ';expires=' + date.toUTCString() + ';path=/' + domain + ';SameSite=Lax' + secure;
+    document.cookie = _fazCookieName('fazVendorConsent') + '=' + payload + ';expires=' + date.toUTCString() + ';path=/' + domain + ';SameSite=Lax' + secure;
 }
 
 /**

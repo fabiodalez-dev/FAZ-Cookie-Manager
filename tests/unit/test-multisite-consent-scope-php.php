@@ -29,6 +29,10 @@ scope_check( faz_is_consent_cookie_stale( $cookie ), 'network id also binds cons
 scope_check( faz_is_consent_cookie_stale( 'action:yes,analytics:yes' ), 'legacy shared cookies need fresh consent' );
 scope_check( ! faz_is_consent_cookie_stale( 'source:pmp,action:auto,consent:no,analytics:no' ), 'necessary-only PMP state survives' );
 scope_check( faz_is_consent_cookie_stale( 'source:pmp,action:yes,consent:yes,analytics:yes' ), 'PMP marker cannot preserve a grant' );
+foreach (array('analytics:yes','svc.maps:yes','ck.maps.x:yes','custom:yes:123') as $grant) {
+ scope_check(faz_is_consent_cookie_stale('source:pmp,action:auto,consent:no,necessary:yes,'.$grant), 'PMP cannot exempt optional grant '.$grant);
+}
 $GLOBALS['settings']['banner_control']['subdomain_sharing'] = false;
-scope_check( faz_scope_fingerprint( 'main', 'gdpr' ) === $legacy, 'multisite without sharing unchanged' );
+scope_check( faz_scope_fingerprint( 'main', 'gdpr' ) !== $legacy, 'subdirectory multisite is bound even without domain sharing' );
+scope_check( faz_consent_cookie_name() === 'fazcookie-consent-n2-b1', 'cookie names isolate the current site' );
 echo "ALL PASS ($checks multisite scope checks)\n";

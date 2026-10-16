@@ -239,10 +239,38 @@ function faz_get_cookie_domain() {
 	return apply_filters( 'faz_cookie_domain', $domain );
 }
 
-/** Whether shared-domain cookies must remain bound to the current multisite site. */
+/** Whether consent must be bound to the current multisite site on any topology. */
 function faz_consent_site_bound() {
-	$settings = get_option( 'faz_settings', array() );
-	return function_exists( 'is_multisite' ) && is_multisite() && ! empty( $settings['banner_control']['subdomain_sharing'] );
+	return function_exists( 'is_multisite' ) && is_multisite();
+}
+
+/** Per-site names prevent one multisite choice from overwriting another. */
+function faz_consent_cookie_name( $name = 'fazcookie-consent' ) {
+	$managed = array( 'fazcookie-consent', 'fazVendorConsent', 'euconsent-v2', 'fazcookie-dnsmpi', 'fazVendorSource' );
+	return faz_consent_site_bound() && in_array( $name, $managed, true )
+		? $name . '-n' . get_current_network_id() . '-b' . get_current_blog_id() : $name;
+}
+
+/** Cookie names exposed to every runtime consumer, including early logger/GCM. */
+function faz_consent_cookie_names() {
+	$names = array();
+	foreach ( array( 'fazcookie-consent', 'fazVendorConsent', 'euconsent-v2', 'fazcookie-dnsmpi', 'fazVendorSource' ) as $name ) {
+		$names[ $name ] = faz_consent_cookie_name( $name );
+	}
+	return $names;
+}
+
+/** Only a necessary-only PMP state may omit a consent fingerprint. */
+function faz_pmp_necessary_only( array $parsed ) {
+	if ( ( $parsed['source'] ?? '' ) !== 'pmp' || ( $parsed['action'] ?? '' ) !== 'auto' || ( $parsed['consent'] ?? '' ) !== 'no' ) {
+		return false;
+	}
+	foreach ( $parsed as $key => $value ) {
+		if ( 'necessary' !== $key && 1 === preg_match( '/^yes(?::|$)/', (string) $value ) ) {
+			return false;
+		}
+	}
+	return true;
 }
 
 /** Build the same scope fingerprint for classic, REST and AMP consent. */
@@ -260,7 +288,7 @@ function faz_scope_fingerprint( $slug, $law ) {
  * @return string
  */
 function faz_get_consent_cookie_value() {
-	if ( ! isset( $_COOKIE['fazcookie-consent'] ) ) {
+	if ( ! isset( $_COOKIE[ faz_consent_cookie_name() ] ) ) {
 		return '';
 	}
 
@@ -270,7 +298,7 @@ function faz_get_consent_cookie_value() {
 	// because they are ASCII-printable, so the URL-decode step below still
 	// works on the percent-encoded payload written by _fazSetInStore() in
 	// frontend/js/script.js.
-	$raw = sanitize_text_field( wp_unslash( (string) $_COOKIE['fazcookie-consent'] ) );
+	$raw = sanitize_text_field( wp_unslash( (string) $_COOKIE[ faz_consent_cookie_name() ] ) );
 
 	if ( false !== strpos( $raw, '%' ) ) {
 		// Second-pass sanitization: re-sanitize after URL-decode in case the
@@ -346,7 +374,7 @@ function faz_is_consent_cookie_stale( $cookie = '' ) {
 	$parsed           = faz_parse_consent_cookie( $cookie );
 	$stored_revision  = isset( $parsed['rev'] ) ? absint( $parsed['rev'] ) : 0;
 
-	if ( faz_consent_site_bound() && ! ( isset( $parsed['source'], $parsed['action'], $parsed['consent'] ) && 'pmp' === $parsed['source'] && 'auto' === $parsed['action'] && 'no' === $parsed['consent'] ) ) {
+	if ( faz_consent_site_bound() && ! faz_pmp_necessary_only( $parsed ) ) {
 		// Pluggable functions are unavailable during early plugin loading. Fail
 		// closed until WordPress can verify the site's fingerprint.
 		if ( ! function_exists( 'wp_hash' ) || empty( $parsed['__scope.fp'] ) ||
@@ -413,6 +441,7 @@ function faz_is_auto_granted_consent_cookie( $cookie = '' ) {
  * @return void
  */
 function faz_set_browser_cookie( $name, $value, $expires, $domain = null, $same_site = 'Lax', $force_secure = null ) {
+	$name = faz_consent_cookie_name( $name );
 	$domain = null === $domain ? faz_get_cookie_domain() : (string) $domain;
 	$same_site = in_array( $same_site, array( 'Lax', 'Strict', 'None' ), true ) ? $same_site : 'Lax';
 	$secure    = null === $force_secure ? is_ssl() : (bool) $force_secure;
@@ -457,6 +486,7 @@ function faz_set_browser_cookie( $name, $value, $expires, $domain = null, $same_
  * @return void
  */
 function faz_expire_browser_cookie( $name ) {
+	$name = faz_consent_cookie_name( $name );
 	$domains       = array( '' );
 	$cookie_domain = faz_get_cookie_domain();
 	if ( '' !== $cookie_domain ) {

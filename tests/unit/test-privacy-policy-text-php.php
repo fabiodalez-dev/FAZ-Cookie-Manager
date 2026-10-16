@@ -4,6 +4,16 @@ define( 'ABSPATH', __DIR__ );
 function __( $s, $domain = '' ) { return $s; }
 function esc_html__( $s, $domain = '' ) { return htmlspecialchars($s); }
 function esc_html( $s ) { return htmlspecialchars($s); }
+define('DAY_IN_SECONDS',86400);
+$GLOBALS['policy_options']=array();
+function get_option($key,$default=false) {return $GLOBALS['policy_options'][$key] ?? $default;}
+class PolicySecrets { public static function decrypt($value){return $value;} }
+class PolicyGeo { public static function has_database(){return true;} }
+class PolicyWithdrawal { public static function satisfies_revisit_requirement($settings){return ($settings['banner_control']['withdrawal_path'] ?? '')==='footer_link';} }
+class_alias(PolicySecrets::class,'FazCookie\\Admin\\Modules\\Geo_Routing\\Includes\\Secrets');
+class_alias(PolicyGeo::class,'FazCookie\\Includes\\Geolocation');
+class_alias(PolicyWithdrawal::class,'FazCookie\\Includes\\Withdrawal_Path');
+require dirname(__DIR__,2) . '/admin/modules/geo-routing/includes/class-ipinfo-client.php';
 require dirname(__DIR__,2) . '/includes/class-privacy-policy-text.php';
 use FazCookie\Includes\Privacy_Policy_Text as Policy;
 $checks=0;
@@ -28,4 +38,13 @@ policy_check(strpos(Policy::facts($settings,array())['pageview_retention'],'no a
 $root=dirname(__DIR__,2);
 foreach(array('MaxMind','ipinfo.io') as $provider) policy_check(strpos(file_get_contents($root.'/readme.txt'),$provider)!==false,'service documented in readme');
 policy_check(strpos(Policy::build($settings,array()),'<h2>')===0,'builder produces policy HTML');
+
+foreach(array(false,true) as $optin) foreach(array('', 'configured-key') as $key) {
+ $GLOBALS['policy_options']=array('faz_geo_ipinfo_optin'=>$optin,'faz_geo_ipinfo_api_key'=>$key);
+ $env=Policy::environment($settings);
+ $html=Policy::build($settings,$env);
+ policy_check($env['ipinfo_active']===($optin && $key!==''), 'environment requires both opt-in and a usable API key');
+ policy_check((strpos($html,'ipinfo.io')!==false)===($optin && $key!==''), 'full builder follows the external-service gate');
+ foreach(Policy::facts($settings,$env) as $sentence) policy_check(strpos($html,esc_html($sentence))!==false,'build renders the complete fact set');
+}
 echo "ALL PASS ($checks policy text checks)\n";

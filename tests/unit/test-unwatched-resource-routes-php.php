@@ -1005,6 +1005,7 @@ namespace {
 	$refresh->setAccessible( true );
 	$old_proof = preg_replace( '/data-faz-srcdoc-key="[^"]*"/', 'data-faz-srcdoc-key="previous-response"', $parked );
 	$refreshed = $refresh->invoke( $fe, $old_proof );
+	assert_true( '' !== faz_raw_attr( $refreshed, 'data-faz-srcdoc-key' ) && faz_raw_attr( $refreshed, 'data-faz-srcdoc-key' ) === faz_raw_attr( $parked, 'data-faz-srcdoc-key' ), 'refreshed fragment carries the current non-empty proof' );
 	assert_true( false !== strpos( $refreshed, ' data-faz-srcdoc=' ) && false === strpos( $refreshed, 'previous-response' ), 'signed cached fragments receive the current proof even without blocking' );
 	$tampered = str_replace( 'data-faz-category="marketing"', 'data-faz-category="necessary"', $parked );
 	assert_true( false === strpos( $faz_content_run( $fe, $tampered ), ' data-faz-srcdoc=' ), 'category tampering invalidates the signature' );
@@ -1019,6 +1020,8 @@ namespace {
 	assert_true( false !== strpos( $faz_content_run( $fe, $executable ), 'type="text/plain"' ), 'a data assignment followed by tracking code is still blocked' );
 	$json_check = new ReflectionMethod( Frontend::class, 'is_json_data_assignment' );
 	$json_check->setAccessible( true );
+	$large_json = 'var QueryMonitorData = ' . json_encode( array( 'handles' => str_repeat( 'gtag(', 600000 ) ) ) . ';';
+	assert_true( $json_check->invoke( $fe, $large_json ), 'multi-megabyte JSON remains data-only without PCRE backtracking' );
 	foreach ( array( 'var x={"gtag(":1};gtag("config","x");', 'var x=fetch("https://tracker.test");', 'var x={"f":function(){gtag()}};' ) as $code ) {
 		assert_true( ! $json_check->invoke( $fe, $code ), 'executable code is never exempted as JSON data' );
 	}

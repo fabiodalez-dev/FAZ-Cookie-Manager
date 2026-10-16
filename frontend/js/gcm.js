@@ -10,6 +10,7 @@ var regionSettings = Array.isArray(data.default_settings) ? data.default_setting
 var waitForTime = data.wait_for_update || 0;
 
 function getCookieValues(cookieName) {
+    cookieName = ((window._fazConfig || {})._cookieNames || {})[cookieName] || cookieName;
     var values = [];
     var name = cookieName + "=";
     var parts = document.cookie.split(';');
@@ -214,7 +215,7 @@ function isConsentCookieStale(parsed) {
     if (!parsed) return false;
     var config = window._fazConfig || {};
     // A pending geo lookup cannot authorize the cached shell's consent.
-    if (config._siteScopeBound && !(parsed.source === 'pmp' && parsed.action === 'auto' && parsed.consent === 'no')) {
+    if (config._siteScopeBound && !(parsed.source === 'pmp' && parsed.action === 'auto' && parsed.consent === 'no' && !Object.keys(parsed).some(function(key){return key !== 'necessary' && /^yes(?::|$)/.test(parsed[key]);}))) {
         if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
         if (!config._scopeFingerprint || parsed['__scope.fp'] !== config._scopeFingerprint) return true;
     }

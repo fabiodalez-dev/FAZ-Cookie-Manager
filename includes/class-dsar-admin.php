@@ -195,6 +195,18 @@ class DSAR_Admin {
 			return;
 		}
 
+		$consent_id = (string) get_post_meta( $post->ID, '_dsar_consent_id', true );
+		if ( '' !== $consent_id ) {
+			if ( '' !== faz_dsar_verified_consent_id( $post->ID, $email ) ) {
+				echo '<p>' . esc_html__( 'Ownership of this consent ID has been independently verified.', 'faz-cookie-manager' ) . '</p>';
+			} else {
+				echo '<p>' . esc_html__( 'Independently verify that this consent ID belongs to the requester before confirming it below. Email confirmation alone does not prove ownership. Consent history is excluded from automated exports and erasure until verified.', 'faz-cookie-manager' ) . '</p>';
+				if ( current_user_can( 'manage_privacy_options' ) ) {
+					self::action_link( $post->ID, 'verify_consent_id', __( 'Confirm independently verified consent ID', 'faz-cookie-manager' ) );
+				}
+			}
+		}
+
 		if ( $request_id && get_post( $request_id ) ) {
 			$action_name = (string) get_post_meta( $post->ID, '_dsar_core_request_action', true );
 			printf(
@@ -260,6 +272,17 @@ class DSAR_Admin {
 		}
 		if ( ! current_user_can( 'edit_post', $post_id ) ) {
 			wp_die( esc_html__( 'You are not allowed to handle data subject requests.', 'faz-cookie-manager' ), '', array( 'response' => 403 ) );
+		}
+
+		if ( 'verify_consent_id' === $action ) {
+			if ( ! current_user_can( 'manage_privacy_options' ) ) {
+				wp_die( esc_html__( 'You are not allowed to verify consent ownership.', 'faz-cookie-manager' ), '', array( 'response' => 403 ) );
+			}
+			$proof = faz_dsar_consent_verification_token( $post_id );
+			if ( '' !== $proof ) {
+				update_post_meta( $post_id, '_dsar_consent_id_verified', $proof );
+			}
+			$this->redirect_back( $post_id, '' !== $proof ? 'consent_verified' : 'error' );
 		}
 
 		if ( 'complete' === $action || 'reopen' === $action ) {
@@ -364,6 +387,7 @@ class DSAR_Admin {
 		$email   = $post_id ? (string) get_post_meta( $post_id, '_dsar_email', true ) : '';
 
 		$messages = array(
+			'consent_verified' => array( 'success', __( 'Consent ownership verification recorded.', 'faz-cookie-manager' ), '' ),
 			'created_erasure' => array(
 				'success',
 				__( 'Erasure request created. WordPress has emailed the requester a confirmation link; once they confirm, erase their data from Tools → Erase Personal Data.', 'faz-cookie-manager' ),
@@ -647,6 +671,8 @@ class DSAR_Admin {
 			return false;
 		}
 		switch ( $code ) {
+			case 'consent_verified':
+				return '' !== faz_dsar_verified_consent_id( $post_id, (string) get_post_meta( $post_id, '_dsar_email', true ) );
 			case 'created_erasure':
 			case 'created_export':
 				$request_id = (int) get_post_meta( $post_id, '_dsar_core_request_id', true );

@@ -956,6 +956,7 @@ class Frontend {
 						// only origin + path and dropped the routing parameters
 						// (?p=, ?lang=) the inventory keys on. It varies by page,
 						// never by visitor, so a cached copy stays correct.
+						'cookieNames'    => function_exists( 'faz_consent_cookie_names' ) ? faz_consent_cookie_names() : array(),
 						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::current_url() : '',
 					)
 				);
@@ -964,8 +965,9 @@ class Frontend {
 						"if(!d.action||d.action==='init')return;" .
 						"if(typeof _fazConsentLog==='undefined')return;" .
 						"var safeUrl=(function(){if(_fazConsentLog.pageUrl)return _fazConsentLog.pageUrl;try{var current=new URL(window.location.href);return current.origin+current.pathname+current.search}catch(err){var origin=window.location.origin||(window.location.protocol+'//'+window.location.host);return origin+(window.location.pathname||'')+(window.location.search||'')}})();" .
+						"function readCookie(name){var names=_fazConsentLog.cookieNames||{};var prefix=(names[name]||name)+'=';var parts=document.cookie.split(';');for(var i=0;i<parts.length;i++){var p=parts[i].trim();if(p.indexOf(prefix)===0)return [p,p.substring(prefix.length)]}return null}" .
 						"var payload={" .
-								"consent_id:(function(){var m=document.cookie.match(/fazcookie-consent=([^;]+)/);if(!m)return '';var v=m[1];try{v=decodeURIComponent(v)}catch(err){}var p=v.match(/(?:^|,)consentid:([^,;]+)/);return p?p[1]:''})()," .
+								"consent_id:(function(){var m=readCookie('fazcookie-consent');if(!m)return '';var v=m[1];try{v=decodeURIComponent(v)}catch(err){}var p=v.match(/(?:^|,)consentid:([^,;]+)/);return p?p[1]:''})()," .
 								"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
 								"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});" .
 									// P1-3: fold the granular per-service (svc.*) and per-cookie
@@ -983,7 +985,7 @@ class Frontend {
 									// audit key meta.gpc_exception.<id>:yes — the log keeps only
 									// yes/no values, and meta.* stays out of the dashboard's
 									// per-category acceptance chart.
-									"try{var cm=document.cookie.match(/fazcookie-consent=([^;]+)/);if(cm){var cv=cm[1];try{cv=decodeURIComponent(cv)}catch(er){}cv.split(',').forEach(function(pr){var ci=pr.indexOf(':');if(ci<1)return;var ck=pr.substring(0,ci);if(ck.indexOf('svc.')===0||ck.indexOf('ck.')===0){c[ck]=pr.substring(ci+1)}else if(ck.indexOf('gpcx.')===0&&pr.substring(ci+1)==='1'){c['meta.gpc_exception.'+ck.substring(5)]='yes'}else if(ck==='undecided'&&pr.substring(ci+1)==='1'){c['meta.signal_only']='yes'}})}}catch(er){}" .
+									"try{var cm=readCookie('fazcookie-consent');if(cm){var cv=cm[1];try{cv=decodeURIComponent(cv)}catch(er){}cv.split(',').forEach(function(pr){var ci=pr.indexOf(':');if(ci<1)return;var ck=pr.substring(0,ci);if(ck.indexOf('svc.')===0||ck.indexOf('ck.')===0){c[ck]=pr.substring(ci+1)}else if(ck.indexOf('gpcx.')===0&&pr.substring(ci+1)==='1'){c['meta.gpc_exception.'+ck.substring(5)]='yes'}else if(ck==='undecided'&&pr.substring(ci+1)==='1'){c['meta.signal_only']='yes'}})}}catch(er){}" .
 										// Age-gate accountability (GDPR Art. 5(2)/7(1)): when the
 										// visitor affirmed they meet the digital age of consent, fold
 										// the reserved meta.age_affirmed:yes key into the logged
@@ -998,12 +1000,12 @@ class Frontend {
 								// TCF TC string (euconsent-v2 cookie) and GPP string
 								// captured passively from an external CMP (__gpp API).
 								// FAZ does not implement GPP or generate a GPP string.
-								"tc_string:(function(){var m=document.cookie.match(/euconsent-v2=([^;]+)/);return m?m[1]:''})()," .
+								"tc_string:(function(){var m=readCookie('euconsent-v2');return m?m[1]:''})()," .
 								"gpp_string:''," .
 								"token:_fazConsentLog.token" .
 						"};" .
-						"var readGpp=function(){return new Promise(function(resolve){var done=false;function finish(s){if(done)return;done=true;resolve(typeof s==='string'?s:'')}if(typeof window.__gpp!=='function'){finish('');return}var timer=setTimeout(function(){finish('')},150);try{window.__gpp('ping',function(data,success){if(success===false)return;clearTimeout(timer);finish(data&&data.gppString)})}catch(err){clearTimeout(timer);finish('')}})};" .
-						"readGpp().then(function(gppString){payload.gpp_string=gppString;return fetch(_fazConsentLog.restUrl,{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})}).catch(function(){});" .
+						"var sent=false,timer;function send(gppString){if(sent)return;sent=true;clearTimeout(timer);window.removeEventListener('pagehide',flush);payload.gpp_string=typeof gppString==='string'?gppString:'';fetch(_fazConsentLog.restUrl,{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(function(){})}function flush(){send('')}" .
+						"window.addEventListener('pagehide',flush);if(typeof window.__gpp!=='function'){flush();return}timer=setTimeout(flush,150);try{window.__gpp('ping',function(data,success){if(success!==false)send(data&&data.gppString)})}catch(err){flush()}" .
 				"});";
 				// 'before', not the default 'after', and both halves of that
 				// matter. An 'after' inline makes WordPress drop the defer
@@ -3280,6 +3282,7 @@ class Frontend {
 			// 32 hex chars — enough collision resistance for an integrity
 			// check, short enough to stay light in the cookie.
 			'_srcdocKey'         => self::srcdoc_key(),
+			'_cookieNames'       => function_exists( 'faz_consent_cookie_names' ) ? faz_consent_cookie_names() : array(),
 			'_siteScopeBound'    => faz_consent_site_bound(),
 			'_scopeFingerprint'  => faz_scope_fingerprint( $banner->get_slug(), $banner->get_law() ),
 			/**
@@ -6455,8 +6458,8 @@ class Frontend {
 		// whenever it is present covers that mode too; under a pure opt-in law
 		// the sell/share categories are already blocked, so this is a no-op
 		// there.
-		$dnsmpi_optout = isset( $_COOKIE['fazcookie-dnsmpi'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+		$dnsmpi_optout = isset( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-dnsmpi' ) : 'fazcookie-dnsmpi' ] )
+			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-dnsmpi' ) : 'fazcookie-dnsmpi' ] ) );
 
 		foreach ( $categories as $cat_data ) {
 			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data );
@@ -6581,8 +6584,8 @@ class Frontend {
 	private function get_signal_blocked_services( $consent ) {
 		$gpc_header = isset( $_SERVER['HTTP_SEC_GPC'] )
 			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
-		$dnsmpi_req = isset( $_COOKIE['fazcookie-dnsmpi'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+		$dnsmpi_req = isset( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-dnsmpi' ) : 'fazcookie-dnsmpi' ] )
+			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-dnsmpi' ) : 'fazcookie-dnsmpi' ] ) );
 		$signal_blocked = array();
 		if ( $gpc_header || $dnsmpi_req ) {
 			$this->get_blocked_categories();
@@ -8478,10 +8481,14 @@ class Frontend {
 
 	/** Only a single global variable declaration whose value is JSON. */
 	private function is_json_data_assignment( $content ) {
-		if ( ! preg_match( '/^\s*(?:var|let|const)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*([\s\S]+?)\s*;?\s*$/D', $content, $m ) ) {
+		if ( ! preg_match( '/^\s*(?:var|let|const)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*=/', $content, $m ) ) {
 			return false;
 		}
-		json_decode( $m[1] );
+		$value = rtrim( substr( $content, strlen( $m[0] ) ) );
+		if ( ';' === substr( $value, -1 ) ) {
+			$value = substr( $value, 0, -1 );
+		}
+		json_decode( $value );
 		return JSON_ERROR_NONE === json_last_error();
 	}
 
@@ -9554,7 +9561,7 @@ class Frontend {
 			return true;
 		}
 		$patterns = array(
-			'fazcookie-consent', 'fazcookie-dnsmpi', 'faz_scan_session',
+			'fazcookie-consent*', 'fazcookie-dnsmpi*', 'fazVendorConsent*', 'euconsent-v2*', 'fazVendorSource*', 'faz_scan_session',
 			'wordpress_*', 'wp-settings-*', 'wp-settings-time-*', 'wp-postpass_*',
 			'comment_author_*', 'wp_lang', 'wordpress_test_cookie',
 			'wp_woocommerce_session_*', 'woocommerce_*', 'wc_cart_hash_*', 'wc_fragments_*',

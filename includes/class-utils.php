@@ -1223,6 +1223,25 @@ if ( ! function_exists( 'faz_verify_nonce' ) ) {
 	}
 }
 
+/** Bind an administrator's verification to the exact request, address and ID. */
+function faz_dsar_consent_verification_token( $post_id ) {
+	$id = (string) get_post_meta( $post_id, '_dsar_consent_id', true );
+	$email = (string) get_post_meta( $post_id, '_dsar_email', true );
+	return '' !== $id && is_email( $email ) ? wp_hash( $post_id . '|' . $email . '|' . $id, 'auth' ) : '';
+}
+
+/** Return an ID only after independent ownership verification by the controller. */
+function faz_dsar_verified_consent_id( $post_id, $email ) {
+	$record_email = (string) get_post_meta( $post_id, '_dsar_email', true );
+	if ( strtolower( $email ) !== strtolower( $record_email ) ) {
+		return '';
+	}
+	$proof = (string) get_post_meta( $post_id, '_dsar_consent_id_verified', true );
+	$expected = faz_dsar_consent_verification_token( $post_id );
+	return '' !== $proof && '' !== $expected && hash_equals( $expected, $proof )
+		? (string) get_post_meta( $post_id, '_dsar_consent_id', true ) : '';
+}
+
 if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 	/**
 	 * Export personal data (consent logs) for WordPress privacy tools.
@@ -1277,10 +1296,13 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 				if ( '' === $record_email ) {
 					continue;
 				}
-				$consent_id = (string) get_post_meta( $post_id, '_dsar_consent_id', true );
+				$consent_id = faz_dsar_verified_consent_id( $post_id, $email );
 				if ( '' !== $consent_id && ! isset( $seen_consent_ids[ $consent_id ] ) ) {
 					$seen_consent_ids[ $consent_id ] = true;
 					$logs = \FazCookie\Admin\Modules\Consentlogs\Includes\Controller::get_instance()->get_logs_by_consent_id( $consent_id );
+					if ( is_wp_error( $logs ) ) {
+						return $logs;
+					}
 					$labels = array(
 						'consent_id' => __( 'Consent ID', 'faz-cookie-manager' ),
 						'status' => __( 'Status', 'faz-cookie-manager' ),
@@ -1320,7 +1342,7 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 							'name'  => __( 'Email', 'faz-cookie-manager' ),
 							'value' => $record_email,
 						),
-						array( 'name' => __( 'Consent ID', 'faz-cookie-manager' ), 'value' => $consent_id ),
+						array( 'name' => __( 'Consent ID', 'faz-cookie-manager' ), 'value' => (string) get_post_meta( $post_id, '_dsar_consent_id', true ) ),
 						array(
 							'name'  => __( 'Request type', 'faz-cookie-manager' ),
 							'value' => (string) get_post_meta( $post_id, '_dsar_type', true ),
@@ -1382,13 +1404,12 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 	 * @since 1.34.1 DSAR records are redacted in place instead of force-deleted.
 	 * @param string $email_address The user's email address.
 	 * @param int    $page          Page number for batched erasures.
-	 * @return array Erasure result conforming to the WP privacy eraser format.
+	 * @return array|WP_Error Erasure batch or an error that stops core until retry.
 	 */
 	function faz_privacy_eraser( $email_address, $page = 1 ) {
 		$email          = sanitize_email( (string) $email_address );
 		$page           = max( 1, (int) $page );
 		$per_page       = 20;
-		$log_erasure_failed = false;
 		$items_removed  = 0;
 		$items_retained = false;
 		$messages       = array();
@@ -1439,7 +1460,11 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 			$deleted    = 0;
 			foreach ( $query->posts as $post_id ) {
 				$post_id = (int) $post_id;
-				$consent_id = (string) get_post_meta( $post_id, '_dsar_consent_id', true );
+				$consent_id = faz_dsar_verified_consent_id( $post_id, $email );
+				if ( '' === $consent_id && '' !== (string) get_post_meta( $post_id, '_dsar_consent_id', true ) ) {
+					$items_retained = true;
+					$messages[] = __( 'Consent history was not erased because ownership of the supplied consent ID has not been independently verified.', 'faz-cookie-manager' );
+				}
 				if ( '' !== $consent_id ) {
 					if ( apply_filters( 'faz_consent_log_erasure_retain', false, $consent_id, $email ) ) {
 						$items_retained = true;
@@ -1447,15 +1472,15 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 					} else {
 						$removed = \FazCookie\Admin\Modules\Consentlogs\Includes\Controller::get_instance()->delete_logs_by_consent_id( $consent_id );
 						if ( false === $removed ) {
-							$log_erasure_failed = true;
-							$items_retained = true;
-							$messages[] = __( 'Consent history could not be erased. Please retry this request.', 'faz-cookie-manager' );
-							continue;
+							// Core stops on WP_Error without marking the request complete;
+							// retry resumes the shrinking first-page batch after repair.
+							return new WP_Error( 'faz_consent_history_erasure', __( 'Consent history could not be erased. Please retry this request.', 'faz-cookie-manager' ) );
 						}
 						$items_removed += (int) $removed;
 					}
-					delete_post_meta( $post_id, '_dsar_consent_id' );
 				}
+				delete_post_meta( $post_id, '_dsar_consent_id' );
+				delete_post_meta( $post_id, '_dsar_consent_id_verified' );
 
 				/**
 				 * Whether to keep a dated, non-identifying record of an erased request.
@@ -1572,7 +1597,7 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 			}
 			// Not done while this batch was full — there may be more to drain on
 			// the next call (which again reads the new first page).
-			$done = $log_erasure_failed || $found < $per_page;
+			$done = $found < $per_page;
 		}
 
 		return array(

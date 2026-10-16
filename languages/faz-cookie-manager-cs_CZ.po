@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-16T17:23:26+00:00\n"
+"POT-Creation-Date: 2026-10-16T23:54:03+00:00\n"
 "PO-Revision-Date: 2026-08-01 13:45+0200\n"
 "Last-Translator: \n"
 "Language-Team: Czech\n"
@@ -49,7 +49,7 @@ msgid "Cookie Banner"
 msgstr "Cookie Banner"
 
 #: admin/class-admin.php:233 admin/views/base.php:21
-#: frontend/class-frontend.php:3314
+#: frontend/class-frontend.php:3317
 #: frontend/modules/banner-rest/class-banner-rest.php:604
 msgid "Cookies"
 msgstr "Cookies"
@@ -2363,6 +2363,10 @@ msgstr "URL stránky, kde byl souhlas udělen."
 msgid "Date the consent was logged."
 msgstr "Datum zaznamenání souhlasu."
 
+#: admin/modules/consentlogs/includes/class-controller.php:712
+msgid "Consent history could not be read. Please retry the privacy request."
+msgstr ""
+
 #: admin/modules/cookie-policy-generator/api/class-cookie-policy-api.php:210
 msgid "The consent revision could not be updated safely. Retry the operation."
 msgstr "Revizi souhlasu se nepodařilo bezpečně aktualizovat. Zopakujte operaci."
@@ -4031,7 +4035,7 @@ msgstr "Jazyk:"
 msgid "Notice Title"
 msgstr "Nadpis banneru"
 
-#: admin/views/banner.php:383 frontend/class-frontend.php:3309
+#: admin/views/banner.php:383 frontend/class-frontend.php:3312
 #: frontend/modules/banner-rest/class-banner-rest.php:598
 msgid "We value your privacy"
 msgstr "Vážíme si vašeho soukromí"
@@ -4378,7 +4382,7 @@ msgstr "Text pro opt-out (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Text modálního okna «Předvolby odhlášení», které návštěvník uvidí po kliknutí na odkaz «Do Not Sell or Share My Personal Information». Zobrazuje se pouze u bannerů CCPA / zákonů států USA (a Obojí). Řídí se jazykem vybraným výše."
 
-#: admin/views/banner.php:875 frontend/class-frontend.php:3311
+#: admin/views/banner.php:875 frontend/class-frontend.php:3314
 #: frontend/modules/banner-rest/class-banner-rest.php:601
 msgid "Opt-out Preferences"
 msgstr "Předvolby odhlášení"
@@ -4736,21 +4740,21 @@ msgstr ""
 msgid "\"Carried\" means it was already on record for this visitor and keeps the verdict of that earlier row."
 msgstr ""
 
-#: admin/views/consent-logs.php:86 includes/class-dsar-admin.php:423
-#: includes/class-utils.php:1291
+#: admin/views/consent-logs.php:86 includes/class-dsar-admin.php:447
+#: includes/class-utils.php:1313
 msgid "Date"
 msgstr "Datum"
 
-#: admin/views/consent-logs.php:87 frontend/class-frontend.php:3308
+#: admin/views/consent-logs.php:87 frontend/class-frontend.php:3311
 #: frontend/modules/banner-rest/class-banner-rest.php:599
-#: includes/class-dsar-admin.php:139 includes/class-utils.php:1285
-#: includes/class-utils.php:1323
+#: includes/class-dsar-admin.php:139 includes/class-utils.php:1307
+#: includes/class-utils.php:1345
 msgid "Consent ID"
 msgstr "ID souhlasu"
 
 #: admin/views/consent-logs.php:88 includes/class-dsar-admin.php:135
-#: includes/class-dsar-admin.php:428 includes/class-utils.php:1286
-#: includes/class-utils.php:1333
+#: includes/class-dsar-admin.php:452 includes/class-utils.php:1308
+#: includes/class-utils.php:1355
 msgid "Status"
 msgstr "Stav"
 
@@ -4762,7 +4766,7 @@ msgstr "Kategorie"
 msgid "IP Hash"
 msgstr "IP Hash"
 
-#: admin/views/consent-logs.php:91 includes/class-utils.php:1288
+#: admin/views/consent-logs.php:91 includes/class-utils.php:1310
 msgid "Page URL"
 msgstr "URL stránky"
 
@@ -5186,7 +5190,7 @@ msgid "Select all cookies"
 msgstr "Vybrat všechny cookies"
 
 #: admin/views/cookies.php:175 includes/class-dsar-admin.php:127
-#: includes/class-dsar-shortcode.php:289 includes/class-utils.php:1316
+#: includes/class-dsar-shortcode.php:289 includes/class-utils.php:1338
 msgid "Name"
 msgstr "Název"
 
@@ -7299,59 +7303,59 @@ msgid "Manage cookie preferences"
 msgstr "Spravovat předvolby cookies"
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:1040
+#: frontend/class-frontend.php:1042
 msgid "{name} enabled, disable {name}"
 msgstr "{name} povoleno, zakázat {name}"
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:1042
+#: frontend/class-frontend.php:1044
 msgid "{name} disabled, enable {name}"
 msgstr "{name} zakázáno, povolit {name}"
 
-#: frontend/class-frontend.php:3310
+#: frontend/class-frontend.php:3313
 #: frontend/modules/banner-rest/class-banner-rest.php:600
 msgid "Your cookie preferences have been saved."
 msgstr "Vaše předvolby cookies byly uloženy."
 
-#: frontend/class-frontend.php:3312
+#: frontend/class-frontend.php:3315
 #: frontend/modules/banner-rest/class-banner-rest.php:602
 msgid "Customise Consent Preferences"
 msgstr "Přizpůsobit předvolby souhlasu"
 
-#: frontend/class-frontend.php:3313
+#: frontend/class-frontend.php:3316
 #: frontend/modules/banner-rest/class-banner-rest.php:603
 msgid "Service consent"
 msgstr "Souhlas se službou"
 
-#: frontend/class-frontend.php:3315
+#: frontend/class-frontend.php:3318
 #: frontend/modules/banner-rest/class-banner-rest.php:605
 msgid "Cookie consent"
 msgstr "Souhlas s cookies"
 
-#: frontend/class-frontend.php:3316
+#: frontend/class-frontend.php:3319
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "Vendor consent"
 msgstr "Souhlas dodavatele"
 
-#: frontend/class-frontend.php:3317
+#: frontend/class-frontend.php:3320
 #: frontend/modules/banner-rest/class-banner-rest.php:607
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Tyto soubory cookie nastavuje vložená služba na své vlastní doméně a jejich chování lze řídit povolením nebo zablokováním výše uvedené vložené služby – nelze je odstranit jednotlivě."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:3321
+#: frontend/class-frontend.php:3324
 #: frontend/modules/banner-rest/class-banner-rest.php:612
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Potvrzuji, že mi je alespoň %d let"
 
-#: frontend/class-frontend.php:3322
+#: frontend/class-frontend.php:3325
 #: frontend/modules/banner-rest/class-banner-rest.php:613
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Potvrďte prosím, že splňujete minimální věk pro přijetí volitelných cookies."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:3329
+#: frontend/class-frontend.php:3332
 #: frontend/modules/banner-rest/class-banner-rest.php:615
 #, php-format
 msgid "Banner closes automatically in %d s..."
@@ -7708,16 +7712,16 @@ msgid "(erased)"
 msgstr ""
 
 #: includes/class-dsar-admin.php:130 includes/class-dsar-shortcode.php:290
-#: includes/class-utils.php:1320
+#: includes/class-utils.php:1342
 msgid "Email"
 msgstr "E-mail"
 
 #: includes/class-dsar-admin.php:133 includes/class-dsar-shortcode.php:291
-#: includes/class-utils.php:1325
+#: includes/class-utils.php:1347
 msgid "Request type"
 msgstr "Typ požadavku"
 
-#: includes/class-dsar-admin.php:134 includes/class-utils.php:1337
+#: includes/class-dsar-admin.php:134 includes/class-utils.php:1359
 msgid "Submitted"
 msgstr "Odesláno"
 
@@ -7749,107 +7753,127 @@ msgstr ""
 msgid "This record has no valid email address, so it cannot be turned into a WordPress privacy request."
 msgstr ""
 
-#: includes/class-dsar-admin.php:202
-msgid "A WordPress privacy request has already been created for this address. Finish it from the core tool:"
+#: includes/class-dsar-admin.php:201
+msgid "Ownership of this consent ID has been independently verified."
 msgstr ""
 
-#: includes/class-dsar-admin.php:210
-msgid "Create the matching WordPress privacy request. The data subject receives a confirmation link first — WordPress verifies the address before any data is exported or erased."
+#: includes/class-dsar-admin.php:203
+msgid "Independently verify that this consent ID belongs to the requester before confirming it below. Email confirmation alone does not prove ownership. Consent history is excluded from automated exports and erasure until verified."
+msgstr ""
+
+#: includes/class-dsar-admin.php:205
+msgid "Confirm independently verified consent ID"
 msgstr ""
 
 #: includes/class-dsar-admin.php:214
+msgid "A WordPress privacy request has already been created for this address. Finish it from the core tool:"
+msgstr ""
+
+#: includes/class-dsar-admin.php:222
+msgid "Create the matching WordPress privacy request. The data subject receives a confirmation link first — WordPress verifies the address before any data is exported or erased."
+msgstr ""
+
+#: includes/class-dsar-admin.php:226
 msgid "Create erasure request"
 msgstr ""
 
-#: includes/class-dsar-admin.php:215
+#: includes/class-dsar-admin.php:227
 msgid "Create export request"
 msgstr ""
 
-#: includes/class-dsar-admin.php:225
+#: includes/class-dsar-admin.php:237
 msgid "WordPress has no automated flow for this right: handle it by replying to the requester. An export request is still useful to see what data the site holds about them."
 msgstr ""
 
-#: includes/class-dsar-admin.php:231
+#: includes/class-dsar-admin.php:243
 msgid "Reopen request"
 msgstr ""
 
-#: includes/class-dsar-admin.php:233
+#: includes/class-dsar-admin.php:245
 msgid "Mark as completed"
 msgstr ""
 
-#: includes/class-dsar-admin.php:235
+#: includes/class-dsar-admin.php:247
 msgid "GDPR Article 12 gives you one month to respond."
 msgstr ""
 
-#: includes/class-dsar-admin.php:259
+#: includes/class-dsar-admin.php:271
 msgid "Request not found."
 msgstr ""
 
-#: includes/class-dsar-admin.php:262
+#: includes/class-dsar-admin.php:274
 msgid "You are not allowed to handle data subject requests."
 msgstr ""
 
-#: includes/class-dsar-admin.php:277
+#: includes/class-dsar-admin.php:279
+msgid "You are not allowed to verify consent ownership."
+msgstr ""
+
+#: includes/class-dsar-admin.php:300
 msgid "You are not allowed to create privacy requests."
 msgstr ""
 
-#: includes/class-dsar-admin.php:369
+#: includes/class-dsar-admin.php:390
+msgid "Consent ownership verification recorded."
+msgstr ""
+
+#: includes/class-dsar-admin.php:393
 msgid "Erasure request created. WordPress has emailed the requester a confirmation link; once they confirm, erase their data from Tools → Erase Personal Data."
 msgstr ""
 
-#: includes/class-dsar-admin.php:374
+#: includes/class-dsar-admin.php:398
 msgid "Export request created. WordPress has emailed the requester a confirmation link; once they confirm, send their data from Tools → Export Personal Data."
 msgstr ""
 
-#: includes/class-dsar-admin.php:379
+#: includes/class-dsar-admin.php:403
 msgid "Privacy request created, but WordPress could not send the confirmation email to the requester. Once mail delivery works, open the request in Tools → Export/Erase Personal Data and use \"Resend email\"."
 msgstr ""
 
-#: includes/class-dsar-admin.php:384
+#: includes/class-dsar-admin.php:408
 msgid "WordPress already has an unconfirmed privacy request for this address, so a second one was not created."
 msgstr ""
 
-#: includes/class-dsar-admin.php:387
+#: includes/class-dsar-admin.php:411
 msgid "Request marked as completed."
 msgstr ""
 
-#: includes/class-dsar-admin.php:388
+#: includes/class-dsar-admin.php:412
 msgid "Request reopened."
 msgstr ""
 
-#: includes/class-dsar-admin.php:389
+#: includes/class-dsar-admin.php:413
 msgid "The request could not be processed."
 msgstr ""
 
-#: includes/class-dsar-admin.php:426
+#: includes/class-dsar-admin.php:450
 msgid "Requester"
 msgstr ""
 
-#: includes/class-dsar-admin.php:427
+#: includes/class-dsar-admin.php:451
 msgid "Right invoked"
 msgstr ""
 
-#: includes/class-dsar-admin.php:477
+#: includes/class-dsar-admin.php:501
 msgid "Awaiting action"
 msgstr ""
 
-#: includes/class-dsar-admin.php:478
+#: includes/class-dsar-admin.php:502
 msgid "Sent to the WordPress privacy tools"
 msgstr ""
 
-#: includes/class-dsar-admin.php:479
+#: includes/class-dsar-admin.php:503
 msgid "Completed"
 msgstr ""
 
-#: includes/class-dsar-admin.php:483
+#: includes/class-dsar-admin.php:507
 msgid "Personal data erased — record kept for accountability"
 msgstr ""
 
-#: includes/class-dsar-admin.php:555
+#: includes/class-dsar-admin.php:579
 msgid "Open Tools → Erase Personal Data"
 msgstr ""
 
-#: includes/class-dsar-admin.php:556
+#: includes/class-dsar-admin.php:580
 msgid "Open Tools → Export Personal Data"
 msgstr ""
 
@@ -8178,85 +8202,89 @@ msgstr "V archivu nebyl nalezen žádný soubor .mmdb."
 msgid "Extraction failed: %s"
 msgstr "Extrakce selhala: %s"
 
-#: includes/class-privacy-policy-text.php:21
+#: includes/class-privacy-policy-text.php:22
 msgid "You can change or withdraw your cookie choices using the cookie settings link in the site footer."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:22
+#: includes/class-privacy-policy-text.php:23
 msgid "You can change or withdraw your cookie choices using the floating cookie settings button."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:28
+#: includes/class-privacy-policy-text.php:29
 msgid "This site uses FAZ Cookie Manager to collect and manage cookie choices."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:29
+#: includes/class-privacy-policy-text.php:30
 msgid "The fazcookie-consent cookie stores your choices, their scope and policy revision, and a persistent consent ID for the configured cookie lifetime; the ID is kept when you withdraw consent."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:30
-msgid "Your consent ID is shown in cookie preferences and can be supplied with a privacy request to locate, export or erase your consent history, subject to applicable retention requirements."
+#: includes/class-privacy-policy-text.php:31
+msgid "Your consent ID is shown in cookie preferences and can be supplied with a privacy request to locate your consent history; export or erasure of that history requires independent ownership verification and is subject to applicable retention requirements."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:31
+#: includes/class-privacy-policy-text.php:32
 msgid "If you use the Do Not Sell or Share control, fazcookie-dnsmpi records that opt-out."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:34
+#: includes/class-privacy-policy-text.php:35
+msgid "On WordPress multisite, these consent cookie names include a network and site suffix so each site keeps a separate choice."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:38
 msgid "Consent records are stored on this site with the consent ID, decision, category and service choices, date, page URL with non-routing query parameters removed, banner and policy revision, and applicable region and privacy signals."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:35
+#: includes/class-privacy-policy-text.php:39
 msgid "When available, consent records also contain the TCF string and a GPP string supplied by an external CMP; FAZ does not generate GPP signals."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:36
+#: includes/class-privacy-policy-text.php:40
 msgid "The IP address and browser user agent in consent records are stored as stable salted SHA-256 hashes, rather than their raw values; these are pseudonymous identifiers."
 msgstr ""
 
 #. translators: %d: retention in months.
-#: includes/class-privacy-policy-text.php:38
+#: includes/class-privacy-policy-text.php:42
 #, php-format
 msgid "Consent records are retained for %d months."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:41
+#: includes/class-privacy-policy-text.php:45
 msgid "With IAB TCF enabled, euconsent-v2 stores the consent string and fazVendorConsent stores vendor choices."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:44
+#: includes/class-privacy-policy-text.php:48
 msgid "IP-based geolocation selects the applicable cookie rules and banner, using available server or trusted proxy country information."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:46
+#: includes/class-privacy-policy-text.php:50
 msgid "Geolocation can also use the MaxMind database stored locally on this server, without sending the visitor IP to MaxMind."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:49
+#: includes/class-privacy-policy-text.php:53
 msgid "The enabled ipinfo.io VPN/proxy lookup sends the visitor IP address in cleartext to ipinfo.io and caches the classification under a hashed IP key."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:53
-msgid "Pageview measurement stores aggregate counters by page URL, page title and event type, without a visitor identifier."
-msgstr ""
-
-#. translators: %d: retention in months.
 #: includes/class-privacy-policy-text.php:57
-#, php-format
-msgid "Pageview counters are retained for %d months."
-msgstr ""
-
-#: includes/class-privacy-policy-text.php:58
-msgid "Pageview counters have no automatic retention limit."
+msgid "Pageview measurement stores aggregate counters by page URL, page title and event type, without a visitor identifier."
 msgstr ""
 
 #. translators: %d: retention in months.
 #: includes/class-privacy-policy-text.php:61
 #, php-format
+msgid "Pageview counters are retained for %d months."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:62
+msgid "Pageview counters have no automatic retention limit."
+msgstr ""
+
+#. translators: %d: retention in months.
+#: includes/class-privacy-policy-text.php:65
+#, php-format
 msgid "If you submit a privacy request through the site form, we store your name, email, request type, message, status and any consent ID you supply in a private request record for %d months; erasure removes identifying details unless applicable retention requirements require otherwise."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:67
+#: includes/class-privacy-policy-text.php:71
 msgid "Cookie Consent (FAZ Cookie Manager)"
 msgstr "Cookie Consent (FAZ Cookie Manager)"
 
@@ -8284,80 +8312,84 @@ msgstr "Omlouváme se, nemáte oprávnění mazat tento zdroj."
 msgid "Invalid nonce. Please refresh the page and try again."
 msgstr "Neplatný nonce. Obnovte prosím stránku a zkuste to znovu."
 
-#: includes/class-utils.php:1287
+#: includes/class-utils.php:1309
 msgid "Category and service decisions"
 msgstr ""
 
-#: includes/class-utils.php:1289
+#: includes/class-utils.php:1311
 msgid "Banner"
 msgstr ""
 
-#: includes/class-utils.php:1290
+#: includes/class-utils.php:1312
 msgid "Policy revision"
 msgstr ""
 
-#: includes/class-utils.php:1292
+#: includes/class-utils.php:1314
 msgid "Salted IP hash"
 msgstr ""
 
-#: includes/class-utils.php:1293
+#: includes/class-utils.php:1315
 msgid "Salted user-agent hash"
 msgstr ""
 
-#: includes/class-utils.php:1294
+#: includes/class-utils.php:1316
 msgid "TCF string"
 msgstr ""
 
-#: includes/class-utils.php:1295
+#: includes/class-utils.php:1317
 msgid "GPP string from external CMP"
 msgstr ""
 
-#: includes/class-utils.php:1296
+#: includes/class-utils.php:1318
 msgid "Country at consent"
 msgstr ""
 
-#: includes/class-utils.php:1297
+#: includes/class-utils.php:1319
 msgid "Region at consent"
 msgstr ""
 
-#: includes/class-utils.php:1298
+#: includes/class-utils.php:1320
 msgid "Ruleset at consent"
 msgstr ""
 
-#: includes/class-utils.php:1299
+#: includes/class-utils.php:1321
 msgid "GPC signal"
 msgstr ""
 
-#: includes/class-utils.php:1300
+#: includes/class-utils.php:1322
 msgid "Do Not Track signal"
 msgstr ""
 
-#: includes/class-utils.php:1307
+#: includes/class-utils.php:1329
 msgid "Consent history (FAZ Cookie Manager)"
 msgstr ""
 
-#: includes/class-utils.php:1312
+#: includes/class-utils.php:1334
 msgid "Privacy requests (FAZ Cookie Manager)"
 msgstr "Žádosti o ochranu osobních údajů (FAZ Cookie Manager)"
 
-#: includes/class-utils.php:1329
+#: includes/class-utils.php:1351
 msgid "Message"
 msgstr "Zpráva"
 
-#: includes/class-utils.php:1397
+#: includes/class-utils.php:1418
 msgid "Consent history is located using consent IDs supplied with privacy requests. Other records expire under the configured retention policy. You can change or withdraw your cookie choices through the cookie preferences."
 msgstr ""
 
-#: includes/class-utils.php:1446
+#: includes/class-utils.php:1466
+msgid "Consent history was not erased because ownership of the supplied consent ID has not been independently verified."
+msgstr ""
+
+#: includes/class-utils.php:1471
 msgid "Consent records were retained under the site retention policy."
 msgstr ""
 
-#: includes/class-utils.php:1452
+#: includes/class-utils.php:1477
 msgid "Consent history could not be erased. Please retry this request."
 msgstr ""
 
 #. translators: %d: number of privacy-request records redacted.
-#: includes/class-utils.php:1534
+#: includes/class-utils.php:1559
 #, php-format
 msgid "Erased the personal data in %d FAZ Cookie Manager privacy request. A dated record of the request itself — the right invoked and the date, with no name, address or message — is kept to demonstrate compliance (GDPR Art. 5(2) accountability, Art. 17(3)(b)-(e)), the same position WordPress takes by keeping its own privacy-request records."
 msgid_plural "Erased the personal data in %d FAZ Cookie Manager privacy requests. A dated record of each request itself — the right invoked and the date, with no name, address or message — is kept to demonstrate compliance (GDPR Art. 5(2) accountability, Art. 17(3)(b)-(e)), the same position WordPress takes by keeping its own privacy-request records."
@@ -8366,7 +8398,7 @@ msgstr[1] ""
 msgstr[2] ""
 
 #. translators: %d: number of erased privacy requests that had not been answered yet.
-#: includes/class-utils.php:1551
+#: includes/class-utils.php:1576
 #, php-format
 msgid "%d of those requests had not been answered yet: an erasure matches the email address rather than a single request, so every stored request from this address was erased — including rights that were still awaiting a reply."
 msgid_plural "%d of those requests had not been answered yet: an erasure matches the email address rather than a single request, so every stored request from this address was erased — including rights that were still awaiting a reply."
@@ -8375,7 +8407,7 @@ msgstr[1] ""
 msgstr[2] ""
 
 #. translators: %d: number of privacy-request records deleted.
-#: includes/class-utils.php:1563
+#: includes/class-utils.php:1588
 #, php-format
 msgid "Deleted %d FAZ Cookie Manager privacy request."
 msgid_plural "Deleted %d FAZ Cookie Manager privacy requests."

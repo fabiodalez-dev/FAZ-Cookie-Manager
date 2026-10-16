@@ -149,20 +149,10 @@ namespace {
 	function esc_html_e( $text ) { echo esc_html( $text ); }
 	function faz_current_language() { return 'en'; }
 	function faz_throttle_request() { return false; }
-	function faz_get_consent_revision() { return max( 1, absint( $GLOBALS['faz_test_options']['faz_settings']['general']['consent_revision'] ) ); }
-	function faz_parse_consent_cookie( $cookie = '' ) {
-		$cookie = '' !== $cookie ? $cookie : $GLOBALS['faz_test_cookie'];
-		$out = array();
-		foreach ( explode( ',', rawurldecode( (string) $cookie ) ) as $pair ) {
-			$parts = explode( ':', $pair, 2 );
-			if ( 2 === count( $parts ) ) { $out[ $parts[0] ] = $parts[1]; }
-		}
-		return $out;
-	}
-	function faz_get_valid_consent_cookie() {
-		$parsed = faz_parse_consent_cookie( $GLOBALS['faz_test_cookie'] );
-		return absint( isset( $parsed['rev'] ) ? $parsed['rev'] : 0 ) < faz_get_consent_revision() ? '' : $GLOBALS['faz_test_cookie'];
-	}
+	function is_multisite() { return ! empty( $GLOBALS['amp_multisite'] ); }
+	function get_current_blog_id() { return $GLOBALS['amp_blog'] ?? 1; }
+	function get_current_network_id() { return $GLOBALS['amp_network'] ?? 1; }
+	function faz_get_consent_cookie_value() { return rawurldecode( $GLOBALS['faz_test_cookie'] ); }
 	function faz_set_browser_cookie( $name, $value, $expires, $domain = null, $same_site = 'Lax', $secure = null ) {
 		$GLOBALS['faz_test_cookie'] = $value;
 		$GLOBALS['faz_test_set_cookie'] = compact( 'name', 'value', 'expires', 'domain', 'same_site', 'secure' );
@@ -1257,6 +1247,22 @@ namespace {
 		! isset( $faz_legacy_check->get_data()['consentString'] ),
 		'and no state is signed into AMP local storage for a lifetime the server cannot prove'
 	);
+	$GLOBALS['faz_test_cookie'] = '';
+
+	// Production scope checks must reject cross-blog/network replay in AMP too.
+	$GLOBALS['amp_multisite'] = true;
+	$GLOBALS['faz_test_cookie'] = 'action:yes,consent:yes,rev:2,__scope.banner:main-banner,__scope.law:gdpr,__scope.fp:' . faz_scope_fingerprint( 'main-banner', 'gdpr' ) . ',analytics:yes';
+	$own_cookie = $GLOBALS['faz_test_cookie'];
+	amp_same( faz_get_valid_consent_cookie(), $own_cookie, 'AMP uses the production cookie validator for its own blog' );
+	$GLOBALS['amp_blog'] = 2;
+	$foreign = $bridge->handle_check( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'accepted' ) ) );
+	amp_same( faz_get_valid_consent_cookie(), '', 'AMP rejects the other blog through production validation' );
+	amp_ok( $foreign->get_data()['consentStateValue'] !== 'accepted', 'AMP does not restore acceptance from another blog' );
+	$GLOBALS['amp_blog'] = 1;
+	$GLOBALS['amp_network'] = 2;
+	amp_same( faz_get_valid_consent_cookie(), '', 'AMP rejects a foreign network fingerprint' );
+	$GLOBALS['amp_multisite'] = false;
+	$GLOBALS['amp_network'] = 1;
 	$GLOBALS['faz_test_cookie'] = '';
 
 	// ── A CORS origin is never inherited on the AMP routes ─────────────────
