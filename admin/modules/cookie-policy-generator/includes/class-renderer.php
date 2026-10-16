@@ -1680,25 +1680,57 @@ class Renderer {
 	/**
 	 * Format a month count as a localised "%d months" string.
 	 *
+	 * Each language takes its own count form, by the CLDR plural rule of that
+	 * language: until 1.34.2 only Dutch and Croatian did, so a site keeping
+	 * records for one month published "1 months", "1 mesi", "1 Monate", and a
+	 * Czech policy said "2 měsíců" where Czech says "2 měsíce".
+	 *
+	 * Deliberately not _n(). The policy is rendered in the TEMPLATE language,
+	 * which is chosen per policy and is often not the site's WordPress locale,
+	 * and _n() answers in the locale: an Italian policy on an English site
+	 * would get the English plural. The words live with the rest of the
+	 * template text, keyed by template language, as the month names do.
+	 *
 	 * @param int    $months Positive month count.
 	 * @param string $lang   Template language code.
 	 * @return string
 	 */
 	private static function format_months( $months, $lang ) {
 		$months = (int) $months;
+		$one    = 1 === $months;
 		$labels = array(
-			'en'    => '%d months',
-			'it'    => '%d mesi',
+			'en'    => $one ? '%d month' : '%d months',
+			'it'    => $one ? '%d mese' : '%d mesi',
+			// French counts 0 and 1 as singular; "mois" is invariable anyway.
 			'fr'    => '%d mois',
-			'de'    => '%d Monate',
-			'es'    => '%d meses',
-			'pt-BR' => '%d meses',
-			'bg'    => '%d месеца',
-			'cs'    => '%d měsíců',
-			'nl'    => 1 === $months ? '%d maand' : '%d maanden',
+			'de'    => $one ? '%d Monat' : '%d Monate',
+			'es'    => $one ? '%d mes' : '%d meses',
+			'pt-BR' => $one ? '%d mês' : '%d meses',
+			'bg'    => $one ? '%d месец' : '%d месеца',
+			'cs'    => self::czech_month_label( $months ),
+			'nl'    => $one ? '%d maand' : '%d maanden',
 			'hr'    => self::croatian_month_label( $months ),
 		);
-		return sprintf( $labels[ $lang ] ?? '%d months', $months );
+		return sprintf( $labels[ $lang ] ?? $labels['en'], $months );
+	}
+
+	/**
+	 * Czech count form for "month": 1 takes the singular ("měsíc"), exactly
+	 * 2-4 the few form ("měsíce"), everything else — 0, 5 and up, and 22, 23,
+	 * 24, which Czech does not treat like 2-4 — the genitive plural
+	 * ("měsíců"). CLDR: one = 1; few = 2..4; other.
+	 *
+	 * @param int $months Month count (positive).
+	 * @return string sprintf() pattern with one %d.
+	 */
+	private static function czech_month_label( $months ) {
+		if ( 1 === $months ) {
+			return '%d měsíc';
+		}
+		if ( $months >= 2 && $months <= 4 ) {
+			return '%d měsíce';
+		}
+		return '%d měsíců';
 	}
 
 	/**
