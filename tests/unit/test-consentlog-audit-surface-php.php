@@ -17,7 +17,10 @@
  *     UTC while the stats computed theirs in site time. The export now carries
  *     an explicit UTC column next to the site-time one, REST adds
  *     `created_at_gmt` (RFC 3339) and describes `created_at` truthfully, and
- *     every cutoff is on the clock the column is on.
+ *     every cutoff is on the clock the column is on. The site-time column
+ *     keeps its 1.34.1 name, 'Created At', so integrations that read the
+ *     export by column name keep working; the UTC column beside it names the
+ *     clock.
  *  3. The single-record route excluded '-', so the ids the Do-Not-Sell logger
  *     writes (dnsmpi-…, dnsmpi-rsc-…) answered 404 rest_no_route.
  *
@@ -200,10 +203,15 @@ namespace {
 
 	$expected_header = array(
 		'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent Hash', 'URL', 'Banner Slug', 'Policy Revision',
-		'Created At (Site Time)', 'Created At (UTC)',
+		'Created At', 'Created At (UTC)',
 		'Country', 'Region', 'Ruleset', 'GPC Received', 'DNT Received', 'TC String', 'GPP String',
 	);
 	sf_eq( $header, $expected_header, 'the header names the seven jurisdiction/signal/TCF/GPP columns and both clocks' );
+	// The 1.34.1 header, verbatim. An integration that reads the export by
+	// column name or by position must find every one of these where it was;
+	// new columns may only follow them.
+	$shipped_1341 = array( 'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent Hash', 'URL', 'Banner Slug', 'Policy Revision', 'Created At' );
+	sf_eq( array_slice( (array) $header, 0, count( $shipped_1341 ) ), $shipped_1341, 'the first ten columns are the 1.34.1 header, names and order unchanged' );
 	$col = array_flip( $expected_header );
 	sf_eq( $row_tcf[ $col['Consent ID'] ] ?? null, 'cid-tcf', 'newest row first' );
 	sf_eq( $row_tcf[ $col['Country'] ] ?? null, 'DE', 'country_at_consent is exported' );
@@ -218,9 +226,9 @@ namespace {
 		sf_eq( $row_old[ $col[ $name ] ] ?? null, '', "…with an empty {$name} cell rather than a shifted column" );
 	}
 
-	// ---------- 2. Timestamps: site time labelled, UTC alongside ----------
+	// ---------- 2. Timestamps: site time under its 1.34.1 name, UTC alongside ----------
 	echo "-- timestamps --\n";
-	sf_eq( $row_tcf[ $col['Created At (Site Time)'] ] ?? null, '2026-06-19 12:00:00', 'the stored site-time value is exported as such' );
+	sf_eq( $row_tcf[ $col['Created At'] ] ?? null, '2026-06-19 12:00:00', 'the stored site-time value is exported as such' );
 	sf_eq( $row_tcf[ $col['Created At (UTC)'] ] ?? null, '2026-06-19T10:00:00Z', 'and next to it the same instant in UTC, RFC 3339, so a server-log or vendor correlation needs no guess at the offset' );
 	sf_eq( $row_old[ $col['Created At (UTC)'] ] ?? null, '2026-01-09T23:30:00Z', 'a conversion that crosses midnight moves the date as well' );
 	sf_eq( Controller::created_at_gmt( '' ), '', 'an empty created_at yields an empty UTC cell, not a 1970 date' );
