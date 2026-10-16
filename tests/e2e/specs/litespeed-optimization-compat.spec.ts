@@ -1197,7 +1197,12 @@ test.describe('LiteSpeed Cache page optimisation leaves FAZ intact', () => {
     if (deprecations.length > 0) {
       test.info().annotations.push({ type: 'faz-deprecations', description: deprecations.slice(0, 5).join(' | ') });
     }
-    const offending = lines.filter((line) => /PHP (?:Warning|Notice|Fatal error|Parse error)|FAZ Cookie Manager:/.test(line));
+    // The per-IP consent throttle's diagnostic is expected here: the browser
+    // runs accept from the same 127.0.0.1 a few seconds apart, and the 10 s
+    // window refuses the second record by design. Everything else FAZ logs,
+    // and every PHP warning or notice, still fails the test.
+    const throttle = /FAZ Cookie Manager: refused a consent record because the request was rate-limited/;
+    const offending = lines.filter((line) => /PHP (?:Warning|Notice|Fatal error|Parse error)|FAZ Cookie Manager:/.test(line) && !throttle.test(line));
     expect(offending).toEqual([]);
   });
 });

@@ -81,8 +81,13 @@
  * The fixture then removes FAZ's flying_press_exclude_* filters and its
  * runtime delay-exclusion injection (resetting FlyingPress's in-memory
  * js_delay_excludes to the stored value) and strips FAZ's optimiser hint
- * attributes. Tests 03–10, 16 and 17 must then go red (02 stays green: the
- * MISS copy is never optimised). Test 23 does exactly this
+ * attributes. Tests 03–10 and 16 must then go red (02 stays green: the
+ * MISS copy is never optimised) — measured on 2026-10-16, one test at a time,
+ * all nine red because FAZ's static config is delayed through data-src or its
+ * inline config is turned into a data:text/javascript defer. The browser run
+ * (17) stays green under the switch: the visitor still gets a working banner
+ * and the blocked script still runs after Accept, so it cannot tell; test 04,
+ * on the same HIT copy, is the one that catches the rewrite. Test 23 does exactly this
  * inside the run under "delay until user interaction" and asserts the handle
  * check reports delayed FAZ scripts; if it ever goes green with the switch on,
  * the check itself is broken. afterAll deletes the option either way.
@@ -529,7 +534,15 @@ function liveParkedSources(html: string): string[] {
   while ((match = live.exec(body)) !== null) {
     const value = decodeEntities(match[2]);
     if (PARKED_TARGET.test(value)) {
-      found.push(`${match[1].toLowerCase()}=${value}`);
+      // data-src / data-lazy-src / data-litespeed-src / data-origin-src are all
+      // dormant: nothing loads from them until a script copies them into src.
+      // A lazy loader renaming one into another (FlyingPress turns a third-party
+      // data-src into data-lazy-src) is the same dormant URL, not a new live
+      // one; whether a script later makes it live is a runtime question, and
+      // the browser scroll check in tests 12–13 answers it.
+      const attr = match[1].toLowerCase();
+      const kind = attr === 'src' || attr === 'srcdoc' ? attr : 'dormant';
+      found.push(`${kind}=${value}`);
     }
   }
   return found;
@@ -850,6 +863,48 @@ function restoreProbeKey(base: Baseline): string {
     throw new Error(`no same-origin matrix provider was blocked in the baseline (blocked: ${[...blockedKeys].join(', ') || 'none'})`);
   }
   return pick;
+}
+
+/**
+ * A visitor who scrolls the whole cached page and never answers the banner must
+ * cause no request to a blocked provider. Lazy loaders make dormant embeds live
+ * as they enter the viewport (FlyingPress copies data-lazy-src into src), so
+ * this is the check that matters for them: the HTML only shows a dormant URL,
+ * and FAZ's runtime is what has to park it when the loader assigns it.
+ */
+async function scrollWithoutConsent(browser: Browser, url: string, label: string): Promise<void> {
+  const context: BrowserContext = await browser.newContext({ baseURL: WP_BASE });
+  const blocked: string[] = [];
+  try {
+    await context.route(THIRD_PARTY, async (route) => {
+      blocked.push(route.request().url());
+      await route.abort();
+    });
+    const page = await context.newPage();
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    expect((response?.headers()['x-flying-press-cache'] ?? '').toUpperCase(), `${label}: the visitor must be served the cached copy`).toBe('HIT');
+    await expect(page.locator('[data-faz-tag="notice"]').first(), `${label}: banner must be on screen`).toBeVisible({ timeout: 20_000 });
+    // Real wheel input as well as programmatic scrolling: wheel is one of the
+    // interaction events that also releases FlyingPress's delayed scripts.
+    await page.mouse.move(200, 200);
+    for (let i = 0; i < 12; i += 1) {
+      await page.mouse.wheel(0, 800);
+      await page.waitForTimeout(150);
+    }
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.waitForTimeout(3_000);
+    const liveEmbeds = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('iframe'))
+        .map((el) => el.getAttribute('src') || '')
+        .filter((src) => /youtube(?:-nocookie)?\.com\/embed|facebook\.com\/tr/i.test(src)),
+    );
+    expect(liveEmbeds, `${label}: no blocked embed may carry a live src after scrolling without consent`).toEqual([]);
+    expect(blocked, `${label}: no request may reach a blocked provider before consent`).toEqual([]);
+    const consent = (await context.cookies(WP_BASE)).find((cookie) => cookie.name === 'fazcookie-consent');
+    expect(consent, `${label}: scrolling is not consent`).toBeUndefined();
+  } finally {
+    await context.close();
+  }
 }
 
 async function visitorFlow(browser: Browser, url: string, label: string, base: Baseline, expectHit = false): Promise<void> {
@@ -1226,7 +1281,7 @@ test.describe('FlyingPress page optimisation leaves FAZ intact', () => {
     expect(fazHandleViolations(hit.html, base)).toEqual([]);
   });
 
-  test('12 lazy_load images, HIT copy: the parked Meta pixel keeps data-faz-src and is given no live src', async () => {
+  test('12 lazy_load images, HIT copy: the parked Meta pixel keeps data-faz-src and is given no live src', async ({ browser }) => {
     const base = requireBaseline();
     applyFp({ lazy_load: true });
     const { hit } = await fpCopies(matrixUrl);
@@ -1234,9 +1289,10 @@ test.describe('FlyingPress page optimisation leaves FAZ intact', () => {
     expect(control, 'the control image must be on the page').toBeDefined();
     expect('loading' in (control?.attrs ?? {}), 'positive control: lazy_load must set loading= on the same-origin control image').toBe(true);
     expect(parkedEmbedViolations(hit.html, base)).toEqual([]);
+    await scrollWithoutConsent(browser, matrixUrl, 'FlyingPress lazy_load (HIT)');
   });
 
-  test('13 lazy_load iframes + youtube_placeholder, HIT copy: the parked YouTube embed is neither made live nor swapped for a FlyingPress thumbnail', async () => {
+  test('13 lazy_load iframes + youtube_placeholder, HIT copy: the parked YouTube embed is neither made live nor swapped for a FlyingPress thumbnail', async ({ browser }) => {
     const base = requireBaseline();
     applyFp({ lazy_load: true, youtube_placeholder: true });
     const { hit } = await fpCopies(matrixUrl);
@@ -1244,6 +1300,7 @@ test.describe('FlyingPress page optimisation leaves FAZ intact', () => {
     expect(control, 'the control iframe must be on the page').toBeDefined();
     expect('data-lazy-src' in (control?.attrs ?? {}), 'positive control: lazy_load must defer the same-origin control iframe').toBe(true);
     expect(parkedEmbedViolations(hit.html, base)).toEqual([]);
+    await scrollWithoutConsent(browser, matrixUrl, 'FlyingPress lazy_load + youtube_placeholder (HIT)');
   });
 
   test('14 remove unused CSS (css_rucss), HIT copy: the banner stylesheet and template survive', async () => {
@@ -1387,7 +1444,12 @@ test.describe('FlyingPress page optimisation leaves FAZ intact', () => {
     if (deprecations.length > 0) {
       annotate('faz-deprecations', deprecations.slice(0, 5).join(' | '));
     }
-    const offending = lines.filter((line) => /PHP (?:Warning|Notice|Fatal error|Parse error)|FAZ Cookie Manager:/.test(line));
+    // The per-IP consent throttle's diagnostic is expected here: the browser
+    // runs accept from the same 127.0.0.1 a few seconds apart, and the 10 s
+    // window refuses the second record by design. Everything else FAZ logs,
+    // and every PHP warning or notice, still fails the test.
+    const throttle = /FAZ Cookie Manager: refused a consent record because the request was rate-limited/;
+    const offending = lines.filter((line) => /PHP (?:Warning|Notice|Fatal error|Parse error)|FAZ Cookie Manager:/.test(line) && !throttle.test(line));
     expect(offending).toEqual([]);
   });
 });
