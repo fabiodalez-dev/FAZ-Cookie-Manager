@@ -1,0 +1,231 @@
+{
+    "wpemojisettingssupports": {
+        "description": "WordPress nastaví tento súbor cookie, keď používateľ na webovej stránke WordPress pracuje s emotikonmi."
+    },
+    "wordpress_test_cookie": {
+        "description": "Testovací súbor cookie WordPressu na overenie, či sú súbory cookie povolené."
+    },
+    "wordpress_logged_in_": {
+        "description": "Označuje stav prihlásenia a totožnosť používateľa."
+    },
+    "wp-settings-": {
+        "description": "Prispôsobuje administračné rozhranie jednotlivým používateľom."
+    },
+    "wordpress_": {
+        "description": "Overovací súbor cookie WordPressu pre administračnú časť."
+    },
+    "wp_lang": {
+        "description": "Ukladá jazyk vybraný pri prihlasovaní."
+    },
+    "comment_author_email_": {
+        "description": "Z dôvodu pohodlia ukladá e-mail autora komentára."
+    },
+    "comment_author_url_": {
+        "description": "Z dôvodu pohodlia ukladá adresu webovej stránky autora komentára."
+    },
+    "comment_author_": {
+        "description": "Z dôvodu pohodlia ukladá meno autora komentára."
+    },
+    "_ga": {
+        "description": "Súbor cookie služby Google Analytics používaný na rozlíšenie používateľov."
+    },
+    "_ga_": {
+        "description": "Súbor cookie služby Google Analytics 4 používaný na uchovanie stavu relácie."
+    },
+    "_gid": {
+        "description": "Súbor cookie služby Google Analytics používaný na rozlíšenie používateľov."
+    },
+    "_gat": {
+        "description": "Súbor cookie služby Google Analytics používaný na obmedzenie frekvencie požiadaviek."
+    },
+    "wp_statistics_": {
+        "description": "Súbor cookie doplnku WP Statistics používaný na sledovanie relácií návštevníkov a zobrazení stránok."
+    },
+    "burst_uid": {
+        "description": "Súbor cookie doplnku Burst Statistics používaný na identifikáciu jedinečných návštevníkov."
+    },
+    "_koko_analytics_pages_viewed": {
+        "description": "Súbor cookie doplnku Koko Analytics používaný na rozpoznanie jedinečných návštevníkov a počítanie zobrazených stránok v rámci relácie."
+    },
+    "_gac_": {
+        "description": "Súbor cookie služby Google Analytics obsahujúci informácie o kampani."
+    },
+    "__utma": {
+        "description": "Súbor cookie služby Google Analytics (Classic) používaný na rozlíšenie používateľov a relácií."
+    },
+    "__utmb": {
+        "description": "Súbor cookie služby Google Analytics (Classic) používaný na určenie nových relácií."
+    },
+    "__utmc": {
+        "description": "Súbor cookie služby Google Analytics (Classic) používaný spolu so súborom __utmb na určenie nových relácií."
+    },
+    "__utmz": {
+        "description": "Súbor cookie služby Google Analytics (Classic), ktorý ukladá zdroj návštevnosti alebo kampaň."
+    },
+    "__utmt": {
+        "description": "Súbor cookie služby Google Analytics (Classic) používaný na obmedzenie frekvencie požiadaviek."
+    },
+    "_gcl_au": {
+        "description": "Konverzný súbor cookie služby Google Ads (conversion linker)."
+    },
+    "ide": {
+        "description": "Súbor cookie DoubleClick/Google používaný na cielenú reklamu.",
+        "domains": [
+            "doubleclick.net"
+        ]
+    },
+    "dsid": {
+        "description": "Reklamný súbor cookie spoločnosti Google na personalizáciu reklám.",
+        "domains": [
+            "doubleclick.net"
+        ]
+    },
+    "_fbp": {
+        "description": "Súbor cookie Facebook Pixel používaný na reklamu a analytiku."
+    },
+    "_fbc": {
+        "description": "Súbor cookie s identifikátorom kliknutia na Facebooku."
+    },
+    "fr": {
+        "description": "Reklamný súbor cookie spoločnosti Facebook.",
+        "domains": [
+            "facebook.com"
+        ]
+    },
+    "__cf_bm": {
+        "description": "Súbor cookie služby Cloudflare na správu botov."
+    },
+    "__cfduid": {
+        "description": "Súbor cookie služby Cloudflare používaný na identifikáciu dôveryhodnej návštevnosti."
+    },
+    "_grecaptcha": {
+        "description": "Používa ho služba Google reCAPTCHA na rozlíšenie ľudí od botov."
+    },
+    "fazcookie-consent": {
+        "description": "Predvoľby súhlasu so súbormi cookie nastavené návštevníkom."
+    },
+    "_clck": {
+        "description": "Súbor cookie služby Microsoft Clarity na analytiku."
+    },
+    "_clsk": {
+        "description": "Relačný súbor cookie služby Microsoft Clarity."
+    },
+    "muid": {
+        "description": "Súbor cookie služby Microsoft Bing Ads Universal Event Tracking.",
+        "domains": [
+            "bing.com",
+            "microsoft.com",
+            "clarity.ms"
+        ]
+    },
+    "_uetsid": {
+        "description": "Súbor cookie služby Microsoft Bing Ads UET na sledovanie relácie."
+    },
+    "_uetvid": {
+        "description": "Súbor cookie služby Microsoft Bing Ads UET na sledovanie naprieč reláciami."
+    },
+    "bcookie": {
+        "description": "Súbor cookie siete LinkedIn na identifikáciu prehliadača."
+    },
+    "li_sugr": {
+        "description": "Súbor cookie nástroja LinkedIn Insight Tag."
+    },
+    "lidc": {
+        "description": "Súbor cookie siete LinkedIn na optimalizáciu smerovania do dátových centier.",
+        "domains": [
+            "linkedin.com"
+        ]
+    },
+    "__hssc": {
+        "description": "Súbor cookie služby HubSpot na sledovanie relácie."
+    },
+    "__hssrc": {
+        "description": "Súbor cookie služby HubSpot na zisťovanie obnovenia relácie."
+    },
+    "__hstc": {
+        "description": "Hlavný analytický súbor cookie služby HubSpot."
+    },
+    "hubspotutk": {
+        "description": "Súbor cookie služby HubSpot na sledovanie návštevníkov."
+    },
+    "__hs_opt_out": {
+        "description": "Súbor cookie služby HubSpot na zapamätanie voľby odhlásenia."
+    },
+    "ysc": {
+        "description": "Súbor cookie služby YouTube používaný na sledovanie zobrazení vložených videí.",
+        "domains": [
+            "youtube.com",
+            "youtube-nocookie.com"
+        ]
+    },
+    "visitor_info1_live": {
+        "description": "Súbor cookie služby YouTube používaný na odhad šírky pásma a nastavení zobrazenia."
+    },
+    "vuid": {
+        "description": "Analytický súbor cookie služby Vimeo na sledovanie zobrazení videí.",
+        "domains": [
+            "vimeo.com"
+        ]
+    },
+    "__stripe_mid": {
+        "description": "Súbor cookie služby Stripe na prevenciu podvodov pri spracovaní platieb."
+    },
+    "__stripe_sid": {
+        "description": "Relačný súbor cookie služby Stripe na prevenciu podvodov pri spracovaní platieb."
+    },
+    "mp_": {
+        "description": "Analytický súbor cookie služby Mixpanel na sledovanie interakcií používateľov."
+    },
+    "distinct_id": {
+        "description": "Súbor cookie služby Mixpanel používaný na identifikáciu jedinečných používateľov."
+    },
+    "_hj*": {
+        "description": "Analytický súbor cookie služby Hotjar."
+    },
+    "woocommerce_cart_hash": {
+        "description": "Súbor cookie WooCommerce na zistenie zmien v obsahu košíka."
+    },
+    "woocommerce_items_in_cart": {
+        "description": "Súbor cookie WooCommerce na sledovanie položiek v košíku."
+    },
+    "wp_woocommerce_session_": {
+        "description": "Relačný súbor cookie WooCommerce."
+    },
+    "__tea_cache_tokens_": {
+        "description": "Token vyrovnávacej pamäte TikToku používaný analytickou sadou SDK."
+    },
+    "_ttp": {
+        "description": "Súbor cookie TikTok Pixel používaný na sledovanie návštevníkov naprieč webovými stránkami na reklamné účely."
+    },
+    "tt_webid": {
+        "description": "Súbor cookie TikToku používaný na identifikáciu a sledovanie používateľov na reklamné účely."
+    },
+    "guest_id": {
+        "description": "Súbor cookie siete Twitter používaný na identifikáciu neprihlásených používateľov."
+    },
+    "personalization_id": {
+        "description": "Súbor cookie siete Twitter používaný na personalizáciu a reklamu."
+    },
+    "ct0": {
+        "description": "Súbor cookie siete Twitter používaný na zabezpečenie a prevenciu spamu vo vloženom obsahu.",
+        "domains": [
+            "twitter.com",
+            "x.com"
+        ]
+    },
+    "_scid": {
+        "description": "Súbor cookie Snapchat Pixel na identifikáciu návštevníkov naprieč webovými stránkami."
+    },
+    "sc_at": {
+        "description": "Súbor cookie Snapchat Pixel používaný na reklamnú atribúciu."
+    },
+    "_pin_unauth": {
+        "description": "Súbor cookie siete Pinterest používaný na sledovanie neprihlásených používateľov."
+    },
+    "_pinterest_sess": {
+        "description": "Relačný súbor cookie siete Pinterest používaný na reklamu a sledovanie."
+    },
+    "phpsessid": {
+        "description": "Relačný súbor cookie PHP na správu používateľských relácií."
+    }
+}

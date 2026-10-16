@@ -481,5 +481,51 @@
       "one": "ano",
       "other": "anos"
     }
+  },
+  "sk": {
+    "session": "relácia",
+    "persistent": "trvalé",
+    "second": {
+      "one": "sekunda",
+      "few": "sekundy",
+      "many": "sekundy",
+      "other": "sekúnd"
+    },
+    "minute": {
+      "one": "minúta",
+      "few": "minúty",
+      "many": "minúty",
+      "other": "minút"
+    },
+    "hour": {
+      "one": "hodina",
+      "few": "hodiny",
+      "many": "hodiny",
+      "other": "hodín"
+    },
+    "day": {
+      "one": "deň",
+      "few": "dni",
+      "many": "dňa",
+      "other": "dní"
+    },
+    "week": {
+      "one": "týždeň",
+      "few": "týždne",
+      "many": "týždňa",
+      "other": "týždňov"
+    },
+    "month": {
+      "one": "mesiac",
+      "few": "mesiace",
+      "many": "mesiaca",
+      "other": "mesiacov"
+    },
+    "year": {
+      "one": "rok",
+      "few": "roky",
+      "many": "roka",
+      "other": "rokov"
+    }
   }
 }
