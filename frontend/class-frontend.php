@@ -11033,7 +11033,10 @@ class Frontend {
 		$settings        = $this->get_faz_settings();
 		$banner_control  = isset( $settings['banner_control'] ) ? (array) $settings['banner_control'] : array();
 		$per_cookie      = ! empty( $banner_control['per_cookie_consent'] ) && ! empty( $banner_control['per_service_consent'] );
-		$valid           = ( $per_cookie && function_exists( 'faz_get_valid_consent_cookie' ) ) ? (string) faz_get_valid_consent_cookie() : '';
+		// Scoped like get_service_consent() and get_blocked_categories(): a
+		// ck.* grant recorded under another banner/law must not outlive the
+		// cookie the rest of this request has already rejected.
+		$valid           = $per_cookie ? $this->get_scoped_valid_consent_cookie() : '';
 		$consent         = ( '' !== $valid && function_exists( 'faz_parse_consent_cookie' ) ) ? faz_parse_consent_cookie( $valid ) : array();
 		$signal_blocked = $per_cookie ? $this->get_signal_blocked_services( $valid ) : array();
 		if ( empty( $service_consent ) && ! $per_cookie ) {
