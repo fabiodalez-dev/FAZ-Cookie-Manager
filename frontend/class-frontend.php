@@ -945,12 +945,25 @@ class Frontend {
 				// window drift apart in issue #292.
 				$pv_token = Pageviews_Api::current_token();
 
+				// The URL is baked into HTML that page caches replay to everyone
+				// (LiteSpeed, WP Rocket and most CDNs drop gclid/utm_*/fbclid from
+				// the cache key, so a page warmed by an ad click is served under
+				// the clean URL). The raw REQUEST_URI therefore put one visitor's
+				// click identifiers into every later visitor's pageview beacon.
+				// faz_normalize_page_url() keeps the routing parameters that tell
+				// pages apart and drops campaign and session ones — the same
+				// spelling the consent log and the embed inventory use.
+				$pv_url = home_url( add_query_arg( array(), false ) );
+				if ( function_exists( 'faz_normalize_page_url' ) ) {
+					$pv_url = faz_normalize_page_url( $pv_url );
+				}
+
 				wp_localize_script(
 					$script_handle,
 					'_fazPageviewConfig',
 					array(
 						'restUrl'   => rest_url( 'faz/v1/pageviews' ),
-						'pageUrl'   => home_url( add_query_arg( array(), false ) ),
+						'pageUrl'   => $pv_url,
 						'pageTitle' => wp_get_document_title(),
 						'token'     => $pv_token,
 					)
