@@ -269,6 +269,79 @@ namespace {
 		'15 the plugins_loaded bridge patches the third-party and RUCSS lists in memory'
 	);
 
+	// ---------------------------------------------------------------------
+	// 2. flying_press_optimization:after safety net. The fixtures are the
+	// shapes FlyingPress 5 writes: data-loading-method + data-src for a
+	// delayed tag, a data:text/javascript, URI for an inline body, data-href
+	// for a stylesheet held back by "Remove unused CSS". Only apply_filters()
+	// is used so the unfixed code reports failures instead of fataling.
+	// ---------------------------------------------------------------------
+	$log_file = tempnam( sys_get_temp_dir(), 'faz-fp-log' );
+	ini_set( 'error_log', $log_file ); // phpcs:ignore WordPress.PHP.IniSet.Risky
+	$GLOBALS['faz_test_transients'] = array();
+	$restore = static function ( $html ) {
+		return apply_filters( 'flying_press_optimization:after', $html );
+	};
+	$config_body = 'var _fazConfig = {"whitelist":["www.google.com/recaptcha"],"x":"a+b & c"};';
+	$cases       = array(
+		'delayed inline config (third-party pass)' => array(
+			'<script id="faz-cookie-manager-js-extra" data-loading-method="user-interaction" data-src="data:text/javascript,' . rawurlencode( $config_body ) . '"></script>',
+			'<script id="faz-cookie-manager-js-extra">' . $config_body . '</script>',
+		),
+		'delayed external runtime keeps its own attributes' => array(
+			'<script data-no-defer="1" id="faz-cookie-manager-js" data-loading-method="user-interaction" data-src="https://shop.b-cdn.net/wp-content/plugins/faz-cookie-manager/frontend/js/script.min.js?ver=1&amp;x=2"></script>',
+			'<script data-no-defer="1" id="faz-cookie-manager-js" src="https://shop.b-cdn.net/wp-content/plugins/faz-cookie-manager/frontend/js/script.min.js?ver=1&amp;x=2"></script>',
+		),
+		'GCM default delayed by a "Delay selected" gtag keyword' => array(
+			'<script id="faz-cookie-manager-gcm-default-js-before" data-loading-method="user-interaction" data-src="data:text/javascript,' . rawurlencode( "gtag('consent','default',{});" ) . '"></script>',
+			"<script id=\"faz-cookie-manager-gcm-default-js-before\">gtag('consent','default',{});</script>",
+		),
+		'inline body turned into a deferred data: URI' => array(
+			'<script id="faz-cookie-manager-js-before" defer src="data:text/javascript,' . rawurlencode( 'window._fazGcm = 1;' ) . '"></script>',
+			'<script id="faz-cookie-manager-js-before">window._fazGcm = 1;</script>',
+		),
+		'parked non-script type is dropped' => array(
+			'<script type="flying-press/delayed" id="faz-fw-js" data-loading-method="idle" data-src="/wp-content/uploads/faz-fw/a.js"></script>',
+			'<script id="faz-fw-js" src="/wp-content/uploads/faz-fw/a.js"></script>',
+		),
+		'banner stylesheet held back by Remove unused CSS' => array(
+			"<link rel='stylesheet' id='faz-cookie-manager-css' media='all' data-href='https://example.test/wp-content/uploads/faz-cookie-manager/assets/banner-abc.css' />",
+			"<link rel='stylesheet' id='faz-cookie-manager-css' media='all' href=\"https://example.test/wp-content/uploads/faz-cookie-manager/assets/banner-abc.css\"/>",
+		),
+	);
+	foreach ( $cases as $label => $case ) {
+		$page = '<html><head>' . $case[0] . '</head><body></body></html>';
+		faz_ob_ok(
+			'<html><head>' . $case[1] . '</head><body></body></html>' === $restore( $page ),
+			'16 restored: ' . $label
+		);
+	}
+	faz_ob_ok( 1 === count( $GLOBALS['faz_test_transients'] ), '17 the restoration leaves one diagnostic transient' );
+	$log_lines = array_filter( explode( "\n", (string) file_get_contents( $log_file ) ) );
+	faz_ob_ok(
+		1 === count( $log_lines ) && false !== strpos( implode( '', $log_lines ), 'FAZ Cookie Manager: FlyingPress rewrote 1 FAZ asset' ),
+		'18 the diagnostic is logged once, not once per page'
+	);
+
+	$untouched = array(
+		'a delayed third-party script'              => '<script id="google-gtag-js" data-loading-method="user-interaction" data-src="https://www.googletagmanager.com/gtag/js"></script>',
+		'a FAZ script FlyingPress did not rewrite'  => '<script id="faz-cookie-manager-js" src="/wp-content/plugins/faz-cookie-manager/frontend/js/script.min.js" defer></script>',
+		'the banner template'                       => '<script id="fazBannerTemplate" type="text/template"><div class="faz-consent-container"></div></script>',
+		'a FAZ stylesheet that still has its href'  => "<link rel='stylesheet' id='faz-cookie-manager-css' href='/banner.css' data-href='/old.css' />",
+		'another plugin stylesheet held back'       => "<link rel='stylesheet' id='theme-css' data-href='/theme.css' />",
+		'a look-alike id that is not a FAZ handle'  => '<script id="faz-cookie-manager" data-loading-method="user-interaction" data-src="/x.js"></script>',
+	);
+	foreach ( $untouched as $label => $tag ) {
+		$page = '<html><head>' . $tag . '<link rel="stylesheet" id="faz-cookie-manager-css" href="/b.css"></head></html>';
+		faz_ob_ok( $page === $restore( $page ), '19 left alone: ' . $label );
+	}
+
+	$restored_once = $restore( '<head>' . $cases['delayed inline config (third-party pass)'][0] . '</head>' );
+	faz_ob_ok( $restored_once === $restore( $restored_once ), '20 the safety net is idempotent' );
+	$log_lines = array_filter( explode( "\n", (string) file_get_contents( $log_file ) ) );
+	faz_ob_ok( 1 === count( $log_lines ), '21 later restorations within the day do not log again' );
+	unlink( $log_file );
+
 	echo "\n" . ( 0 === $faz_fail ? "ALL PASS ({$faz_pass})\n" : "FAILED: {$faz_fail}, passed: {$faz_pass}\n" );
 	exit( 0 === $faz_fail ? 0 : 1 );
 }

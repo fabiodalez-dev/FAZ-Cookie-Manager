@@ -438,6 +438,10 @@ class Frontend {
 			//     'js_delay_third_party_excludes' (Delay third-party scripts) and
 			//     'css_rucss_include_selectors' (Remove unused CSS) — on front-end
 			//     renders only.
+			//   * flying_press_optimization:after — the safety net: whatever pass
+			//     still rewrote a FAZ tag ("Delay selected scripts" has no exclusion
+			//     list at all, and a FlyingPress release may add new passes), the
+			//     tag is restored to load immediately before FlyingPress caches it.
 			// FlyingPress older than 4.16 (no delay/defer filter) falls back to the
 			// manual "Delay JavaScript" keyword exclusion documented in readme.txt.
 			// Registered in the always-run frontend composition root — the admin
@@ -446,6 +450,7 @@ class Frontend {
 			add_filter( 'flying_press_exclude_from_defer:js', array( $this, 'flying_press_exclude_own_scripts' ) );
 			add_filter( 'flying_press_exclude_from_minify:js', array( $this, 'flying_press_exclude_own_scripts' ) );
 			add_filter( 'flying_press_exclude_from_minify:css', array( $this, 'flying_press_exclude_own_scripts' ) );
+			add_filter( 'flying_press_optimization:after', array( $this, 'flying_press_restore_own_assets' ), 1000 );
 			add_action( 'plugins_loaded', array( $this, 'flying_press_apply_runtime_delay_exclusions' ), PHP_INT_MAX, 0 );
 			// Re-apply on `wp` too (front-end page loads, after `init`): if
 			// FlyingPress populates its static config later than plugins_loaded,
@@ -9816,6 +9821,223 @@ class Frontend {
 			}
 			unset( $error );
 		}
+	}
+
+	/**
+	 * `flying_press_optimization:after` safety net: undo any FlyingPress rewrite
+	 * that still reached a FAZ tag.
+	 *
+	 * The exclusion lists above cover the passes that have one. "Delay selected
+	 * scripts" has none (an include keyword such as `gtag` or `recaptcha` that
+	 * happens to match the GCM default or the `_fazConfig` whitelist delays
+	 * it), "Remove unused CSS" rewrites every stylesheet link, and a future
+	 * FlyingPress release may add a pass or rename a list. The filter runs on
+	 * the finished HTML right before FlyingPress writes it to its page cache,
+	 * so whatever is restored here is also what the cache serves.
+	 *
+	 * Only tags whose id belongs to FAZ are touched, and only when they carry
+	 * FlyingPress's own markers:
+	 *   - `<script data-loading-method=… data-src=…>` → `src` restored, the
+	 *     markers removed; a `data:text/javascript,` source (how FlyingPress
+	 *     carries an inline script) becomes the inline body again;
+	 *   - `<script defer src="data:text/javascript,…">` (the "defer" delay
+	 *     method on an inline script) → inline again;
+	 *   - a `type` that is not a script type (an optimiser's parking type)
+	 *     on such a tag is dropped, which means text/javascript;
+	 *   - `<link data-href=…>` without `href` → `href` restored.
+	 *
+	 * @param mixed $html Optimised page HTML.
+	 * @return mixed
+	 */
+	public function flying_press_restore_own_assets( $html ) {
+		if ( ! is_string( $html ) || '' === $html || false === stripos( $html, 'faz-' ) ) {
+			return $html;
+		}
+		$restored = 0;
+
+		$scripts = preg_replace_callback(
+			'#<script\b([^>]*)>(.*?)</script>#is',
+			function ( $match ) use ( &$restored ) {
+				$result = $this->flying_press_restore_script_tag( $match[0], '<script' . $match[1] . '>' );
+				if ( $result !== $match[0] ) {
+					++$restored;
+				}
+				return $result;
+			},
+			$html
+		);
+		if ( is_string( $scripts ) ) {
+			$html = $scripts;
+		}
+
+		$links = preg_replace_callback(
+			'#<link\b[^>]*>#i',
+			function ( $match ) use ( &$restored ) {
+				$result = $this->flying_press_restore_link_tag( $match[0] );
+				if ( $result !== $match[0] ) {
+					++$restored;
+				}
+				return $result;
+			},
+			$html
+		);
+		if ( is_string( $links ) ) {
+			$html = $links;
+		}
+
+		if ( $restored > 0 ) {
+			$this->flying_press_note_restored_assets( $restored );
+		}
+		return $html;
+	}
+
+	/**
+	 * Restore one `<script>` tag (see flying_press_restore_own_assets()).
+	 *
+	 * @param string $tag      Complete tag, `<script …>…</script>`.
+	 * @param string $open_tag Its opening tag.
+	 * @return string The restored tag, or $tag unchanged.
+	 */
+	private function flying_press_restore_script_tag( $tag, $open_tag ) {
+		$id = self::flying_press_tag_attribute( $open_tag, 'id' );
+		if ( null === $id || ! ( $this->is_own_asset_tag_id( $id, '-js' ) || $this->is_own_inline_script_id( $id ) ) ) {
+			return $tag;
+		}
+		$data_src = self::flying_press_tag_attribute( $open_tag, 'data-src' );
+		$src      = self::flying_press_tag_attribute( $open_tag, 'src' );
+		$delayed  = null !== self::flying_press_tag_attribute( $open_tag, 'data-loading-method' ) || null !== $data_src;
+		$inlined  = is_string( $src ) && 0 === stripos( $src, 'data:text/javascript,' );
+		if ( ! $delayed && ! $inlined ) {
+			return $tag;
+		}
+		$target = null !== $data_src ? $data_src : $src;
+		if ( ! is_string( $target ) || '' === $target ) {
+			return $tag;
+		}
+
+		$open = self::flying_press_tag_remove_attribute( $open_tag, 'data-loading-method' );
+		$open = self::flying_press_tag_remove_attribute( $open, 'data-src' );
+		$open = self::flying_press_tag_remove_attribute( $open, 'src' );
+		$type = self::flying_press_tag_attribute( $open, 'type' );
+		if ( null !== $type && ! in_array( strtolower( trim( $type ) ), array( '', 'text/javascript', 'application/javascript', 'module' ), true ) ) {
+			$open = self::flying_press_tag_remove_attribute( $open, 'type' );
+		}
+
+		if ( 0 === stripos( $target, 'data:text/javascript,' ) ) {
+			$code = rawurldecode( substr( $target, strlen( 'data:text/javascript,' ) ) );
+			// The body came from an inline script, so it cannot hold a closing
+			// tag; one that does is not FAZ's and is left to FlyingPress.
+			if ( false !== stripos( $code, '</script' ) ) {
+				return $tag;
+			}
+			// defer/async mean nothing on an inline script; FlyingPress added them.
+			$open = self::flying_press_tag_remove_attribute( $open, 'defer' );
+			$open = self::flying_press_tag_remove_attribute( $open, 'async' );
+			return $open . $code . '</script>';
+		}
+		return self::flying_press_tag_set_attribute( $open, 'src', $target ) . '</script>';
+	}
+
+	/**
+	 * Restore one `<link>` tag whose `href` FlyingPress parked in `data-href`.
+	 *
+	 * @param string $tag `<link …>` tag.
+	 * @return string
+	 */
+	private function flying_press_restore_link_tag( $tag ) {
+		$id = self::flying_press_tag_attribute( $tag, 'id' );
+		if ( null === $id || ! $this->is_own_asset_tag_id( $id, '-css' ) ) {
+			return $tag;
+		}
+		$data_href = self::flying_press_tag_attribute( $tag, 'data-href' );
+		if ( null === $data_href || '' === $data_href || null !== self::flying_press_tag_attribute( $tag, 'href' ) ) {
+			return $tag;
+		}
+		$open = self::flying_press_tag_remove_attribute( $tag, 'data-href' );
+		return self::flying_press_tag_set_attribute( $open, 'href', $data_href );
+	}
+
+	/**
+	 * Leave one diagnostic per day when the safety net had to act: it means
+	 * an optimiser pass is configured to delay FAZ, and the administrator can
+	 * stop the rewrite at the source.
+	 *
+	 * @param int $count Number of tags restored on this render.
+	 * @return void
+	 */
+	private function flying_press_note_restored_assets( $count ) {
+		$key = 'faz_flying_press_restored_assets';
+		if ( false !== get_transient( $key ) ) {
+			return;
+		}
+		set_transient(
+			$key,
+			array(
+				'count' => (int) $count,
+				'time'  => time(),
+			),
+			defined( 'DAY_IN_SECONDS' ) ? DAY_IN_SECONDS : 86400
+		);
+		error_log( 'FAZ Cookie Manager: FlyingPress rewrote ' . (int) $count . ' FAZ asset(s) for delayed loading ("Delay selected scripts", "Delay third-party scripts" or "Remove unused CSS"); FAZ restored them so the consent banner loads immediately. Add "faz-cookie-manager" to the FlyingPress exclusions and remove any "Delay selected" keyword that matches FAZ to stop the rewrite. Logged at most once a day.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+	}
+
+	/**
+	 * Read one attribute of an HTML start tag.
+	 *
+	 * @param string $tag  Start tag (or a complete element; only its first tag is read).
+	 * @param string $name Attribute name.
+	 * @return string|null The raw (still HTML-encoded) value, '' for a bare
+	 *                     boolean attribute, null when absent.
+	 */
+	private static function flying_press_tag_attribute( $tag, $name ) {
+		if ( ! preg_match( '/^<[^>]*>/', $tag, $start ) ) {
+			return null;
+		}
+		$pattern = '/\s' . preg_quote( $name, '/' ) . '(?:\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+)))?(?=[\s>\/])/i';
+		if ( ! preg_match( $pattern, $start[0], $m ) ) {
+			return null;
+		}
+		foreach ( array( 1, 2, 3 ) as $group ) {
+			if ( isset( $m[ $group ] ) && '' !== $m[ $group ] ) {
+				return $m[ $group ];
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Remove every occurrence of one attribute from an HTML start tag.
+	 *
+	 * @param string $tag  Start tag.
+	 * @param string $name Attribute name.
+	 * @return string
+	 */
+	private static function flying_press_tag_remove_attribute( $tag, $name ) {
+		$pattern = '/\s' . preg_quote( $name, '/' ) . '(?:\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s"\'>]+))?(?=[\s>\/])/i';
+		$result  = preg_replace( $pattern, '', $tag );
+		return is_string( $result ) ? $result : $tag;
+	}
+
+	/**
+	 * Append an attribute to an HTML start tag, keeping a raw value raw.
+	 *
+	 * @param string $tag   Start tag without the attribute.
+	 * @param string $name  Attribute name.
+	 * @param string $value Raw (already HTML-encoded) value.
+	 * @return string
+	 */
+	private static function flying_press_tag_set_attribute( $tag, $name, $value ) {
+		$quote     = false === strpos( $value, '"' ) ? '"' : "'";
+		$attribute = ' ' . $name . '=' . $quote . $value . $quote;
+		$result    = preg_replace_callback(
+			'/\s*(\/?)>$/',
+			static function ( $match ) use ( $attribute ) {
+				return $attribute . $match[1] . '>';
+			},
+			$tag,
+			1
+		);
+		return is_string( $result ) ? $result : $tag;
 	}
 
 	/**
