@@ -342,6 +342,70 @@ namespace {
 	faz_ob_ok( 1 === count( $log_lines ), '21 later restorations within the day do not log again' );
 	unlink( $log_file );
 
+	// ---------------------------------------------------------------------
+	// 4. The runtime keywords never reach the saved FLYING_PRESS_CONFIG.
+	// FlyingPress's Config::update_config() merges into the static config and
+	// saves the whole of it; modelled with an update_option() that runs the
+	// core pre_update_option_{$option} filter.
+	// ---------------------------------------------------------------------
+	$GLOBALS['faz_test_options'] = array();
+	$faz_update_option = static function ( $name, $value ) {
+		$old   = array_key_exists( $name, $GLOBALS['faz_test_options'] ) ? $GLOBALS['faz_test_options'][ $name ] : false;
+		$value = apply_filters( 'pre_update_option_' . $name, $value, $old, $name );
+		$GLOBALS['faz_test_options'][ $name ] = $value;
+	};
+	$faz_fp_update_config = static function ( array $changes ) use ( $faz_update_option ) {
+		\FlyingPress\Config::$config = array_merge( \FlyingPress\Config::$config, $changes );
+		$faz_update_option( 'FLYING_PRESS_CONFIG', \FlyingPress\Config::$config );
+	};
+
+	// A front-end request: the bridge injects, then FlyingPress re-saves.
+	$GLOBALS['faz_test_filters']                      = array();
+	$GLOBALS['faz_test_actions']                      = array();
+	$GLOBALS['faz_test_is_frontend']                  = true;
+	$saved                                            = $faz_fp5_config( array( 'css_rucss_include_selectors' => array( '.user-selector', 'faz-' ) ) );
+	$GLOBALS['faz_test_options']['FLYING_PRESS_CONFIG'] = $saved;
+	\FlyingPress\Config::$config                      = $saved;
+	$front_request = new Frontend( 'faz-cookie-manager', 'test' );
+	do_action( 'plugins_loaded' );
+	faz_ob_ok(
+		in_array( 'faz-cookie-manager', \FlyingPress\Config::$config['js_delay_excludes'], true ),
+		'22 precondition: the bridge injected the keywords in memory'
+	);
+	$faz_fp_update_config( array( 'cf_status' => 'not_setup' ) );
+	$persisted = $GLOBALS['faz_test_options']['FLYING_PRESS_CONFIG'];
+	faz_ob_ok(
+		array( 'first-party-rule' ) === $persisted['js_delay_excludes']
+			&& array( 'third-party-rule' ) === $persisted['js_delay_third_party_excludes'],
+		'23 a whole-config re-save does not persist the injected delay keywords'
+	);
+	faz_ob_ok(
+		array( '.user-selector', 'faz-' ) === $persisted['css_rucss_include_selectors'],
+		'24 a keyword the administrator had already saved is kept'
+	);
+	faz_ob_ok( 'not_setup' === $persisted['cf_status'], '25 the change FlyingPress meant to save is saved' );
+	faz_ob_ok(
+		in_array( 'faz-fw', \FlyingPress\Config::$config['js_delay_third_party_excludes'], true ),
+		'26 the in-memory config keeps the keywords for the rest of the render'
+	);
+	unset( $front_request );
+
+	// A FlyingPress dashboard save (REST): nothing was injected, so a FAZ
+	// keyword the administrator typed is saved as typed.
+	$GLOBALS['faz_test_filters']     = array();
+	$GLOBALS['faz_test_actions']     = array();
+	$GLOBALS['faz_test_is_frontend'] = false;
+	$GLOBALS['faz_test_options']['FLYING_PRESS_CONFIG'] = $faz_fp5_config();
+	\FlyingPress\Config::$config     = $faz_fp5_config();
+	$rest_request                    = new Frontend( 'faz-cookie-manager', 'test' );
+	do_action( 'plugins_loaded' );
+	$faz_fp_update_config( array( 'js_delay_excludes' => array( 'first-party-rule', 'faz-cookie-manager' ) ) );
+	faz_ob_ok(
+		array( 'first-party-rule', 'faz-cookie-manager' ) === $GLOBALS['faz_test_options']['FLYING_PRESS_CONFIG']['js_delay_excludes'],
+		'27 an exclusion the administrator saves in the FlyingPress dashboard is kept'
+	);
+	unset( $rest_request );
+
 	echo "\n" . ( 0 === $faz_fail ? "ALL PASS ({$faz_pass})\n" : "FAILED: {$faz_fail}, passed: {$faz_pass}\n" );
 	exit( 0 === $faz_fail ? 0 : 1 );
 }

@@ -437,7 +437,9 @@ class Frontend {
 			//     'js_delay_excludes' (Delay all JavaScript),
 			//     'js_delay_third_party_excludes' (Delay third-party scripts) and
 			//     'css_rucss_include_selectors' (Remove unused CSS) — on front-end
-			//     renders only.
+			//     renders only. pre_update_option_FLYING_PRESS_CONFIG strips them
+			//     again if FlyingPress re-saves its whole static config later in
+			//     the same request, so the saved option never carries them.
 			//   * flying_press_optimization:after — the safety net: whatever pass
 			//     still rewrote a FAZ tag ("Delay selected scripts" has no exclusion
 			//     list at all, and a FlyingPress release may add new passes), the
@@ -451,6 +453,7 @@ class Frontend {
 			add_filter( 'flying_press_exclude_from_minify:js', array( $this, 'flying_press_exclude_own_scripts' ) );
 			add_filter( 'flying_press_exclude_from_minify:css', array( $this, 'flying_press_exclude_own_scripts' ) );
 			add_filter( 'flying_press_optimization:after', array( $this, 'flying_press_restore_own_assets' ), 1000 );
+			add_filter( 'pre_update_option_FLYING_PRESS_CONFIG', array( $this, 'flying_press_strip_runtime_keywords' ), PHP_INT_MAX, 2 );
 			add_action( 'plugins_loaded', array( $this, 'flying_press_apply_runtime_delay_exclusions' ), PHP_INT_MAX, 0 );
 			// Re-apply on `wp` too (front-end page loads, after `init`): if
 			// FlyingPress populates its static config later than plugins_loaded,
@@ -9812,6 +9815,7 @@ class Frontend {
 			}
 			$updated = $this->flying_press_add_delay_exclusions_to_config( $config );
 			if ( $updated !== $config ) {
+				$this->flying_press_record_injected_keywords( $config, $updated );
 				$property->setValue( null, $updated );
 			}
 		} catch ( \Throwable $error ) {
@@ -9821,6 +9825,80 @@ class Frontend {
 			}
 			unset( $error );
 		}
+	}
+
+	/**
+	 * Keywords this request added to \FlyingPress\Config::$config, per list.
+	 *
+	 * @var array<string, string[]>
+	 */
+	private $flying_press_injected = array();
+
+	/**
+	 * Remember which keywords the runtime bridge added (and were not already
+	 * there), so flying_press_strip_runtime_keywords() removes exactly those.
+	 *
+	 * @param array $before Config before the patch.
+	 * @param array $after  Config after the patch.
+	 * @return void
+	 */
+	private function flying_press_record_injected_keywords( array $before, array $after ) {
+		foreach ( array_keys( $this->flying_press_runtime_keyword_map() ) as $key ) {
+			if ( ! isset( $after[ $key ] ) || ! is_array( $after[ $key ] ) ) {
+				continue;
+			}
+			$had   = isset( $before[ $key ] ) && is_array( $before[ $key ] ) ? $before[ $key ] : array();
+			$added = array_values( array_diff( $after[ $key ], $had ) );
+			if ( array() === $added ) {
+				continue;
+			}
+			$known                               = isset( $this->flying_press_injected[ $key ] ) ? $this->flying_press_injected[ $key ] : array();
+			$this->flying_press_injected[ $key ] = array_values( array_unique( array_merge( $known, $added ) ) );
+		}
+	}
+
+	/**
+	 * `pre_update_option_FLYING_PRESS_CONFIG`: keep the runtime keywords out of
+	 * the saved option.
+	 *
+	 * FlyingPress saves its WHOLE static config whenever anything calls
+	 * Config::update_config(): after migrate_config() on an upgrade request,
+	 * Cloudflare::on_config_updated() re-saves cf_* fields from the
+	 * `flying_press_update_config:after` action that runs on `init`, and the
+	 * license and WP-CLI paths do the same. On a front-end request that ran
+	 * after the bridge, that copy carries the FAZ keywords, and once saved
+	 * they would outlive FAZ itself. Only keywords THIS request injected are
+	 * removed, and only when the previously saved value did not already
+	 * contain them, so an exclusion the administrator typed in the FlyingPress
+	 * dashboard is never touched (that save is a REST request, on which the
+	 * bridge injects nothing).
+	 *
+	 * @param mixed $value     Value about to be saved.
+	 * @param mixed $old_value Value currently saved.
+	 * @return mixed
+	 */
+	public function flying_press_strip_runtime_keywords( $value, $old_value = array() ) {
+		if ( array() === $this->flying_press_injected || ! is_array( $value ) ) {
+			return $value;
+		}
+		$old = is_array( $old_value ) ? $old_value : array();
+		foreach ( $this->flying_press_injected as $key => $keywords ) {
+			if ( ! isset( $value[ $key ] ) || ! is_array( $value[ $key ] ) ) {
+				continue;
+			}
+			$saved = isset( $old[ $key ] ) && is_array( $old[ $key ] ) ? $old[ $key ] : array();
+			$kept  = array();
+			foreach ( $value[ $key ] as $entry ) {
+				if ( in_array( $entry, $keywords, true ) && ! in_array( $entry, $saved, true ) ) {
+					continue;
+				}
+				$kept[] = $entry;
+			}
+			if ( count( $kept ) !== count( $value[ $key ] ) ) {
+				$value[ $key ] = $kept;
+			}
+		}
+		return $value;
 	}
 
 	/**
