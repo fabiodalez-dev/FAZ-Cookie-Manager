@@ -4305,7 +4305,7 @@ class Frontend {
 		$noscript_stash = array();
 		if ( false !== stripos( $html, '<noscript' ) ) {
 			$result = preg_replace_callback(
-				'#<noscript(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>(.*?)</noscript(?=[\s/>])[^>]*>#is',
+				'#' . self::markup_skip( array( 'noscript' ) ) . '<noscript(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>(.*?)</noscript(?=[\s/>])[^>]*>#is',
 				function ( $m ) use ( $providers, $blocked_categories, &$noscript_stash, $stash_nonce ) {
 					$processed              = $this->process_noscript_tag( $m, $providers, $blocked_categories );
 					$key                    = '__FAZ_NOSCRIPT_STASH_' . $stash_nonce . '_' . count( $noscript_stash ) . '__';
@@ -4350,7 +4350,7 @@ class Frontend {
 		// them.
 		if ( false !== stripos( $html, '<image' ) || false !== stripos( $html, '<use' ) || false !== stripos( $html, '<feimage' ) ) {
 			$result = preg_replace_callback(
-				'#<(image|use|feImage)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'#' . self::markup_skip( array( 'image', 'use', 'feImage' ) ) . '<(image|use|feImage)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_svg_href_tag( $m, $providers, $blocked_categories );
 				},
@@ -4371,7 +4371,7 @@ class Frontend {
 		// pattern does; a plain `background=` lookup skipped it.
 		if ( preg_match( '/\bbackground\s*=/i', $html ) ) {
 			$result = preg_replace_callback(
-				'#<(body|table|thead|tbody|tfoot|tr|td|th)(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
+				'#' . self::markup_skip( array( 'body', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th' ) ) . '<(body|table|thead|tbody|tfoot|tr|td|th)(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_background_attr_tag( $m, $providers, $blocked_categories );
 				},
@@ -4387,7 +4387,7 @@ class Frontend {
 		// 2. Block <iframe> tags (YouTube, Facebook, Maps, etc.).
 		if ( false !== stripos( $html, '<iframe' ) ) {
 			$result = preg_replace_callback(
-				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
+				'#' . self::markup_skip( array( 'iframe' ) ) . '<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
 				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );
 				},
@@ -4408,7 +4408,7 @@ class Frontend {
 		//    inside a <style> (fonts, background-image, cursor, mask, @import).
 		if ( false !== stripos( $html, '<style' ) ) {
 			$result = preg_replace_callback(
-				'#<style(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</style(?=[\s/>])[^>]*>#is',
+				'#' . self::markup_skip( array( 'style' ) ) . '<style(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</style(?=[\s/>])[^>]*>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_style_tag( $m, $providers, $blocked_categories );
 				},
@@ -4434,7 +4434,7 @@ class Frontend {
 		// the fetch before any script runs.
 		if ( false !== stripos( $html, '<img' ) ) {
 			$result = preg_replace_callback(
-				'#<img(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
+				'#' . self::markup_skip( array( 'img' ) ) . '<img(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_img_tag( $m, $providers, $blocked_categories );
 				},
@@ -4463,9 +4463,12 @@ class Frontend {
 		// was the one layer not writing those keys. The tag name must be
 		// followed by whitespace, a slash or `>`, so <video-player> and
 		// <source-list> custom elements are not read as the media tag.
+		// Like every pass here it leaves comments and script bodies alone
+		// (markup_skip()): a `<video poster=\"…\">` inside a JS string is
+		// text, and parking it broke the string and the script around it.
 		if ( preg_match( '/<(?:video|audio|source|embed|object|track|input)(?=[\s\/>])/i', $html ) ) {
 			$result = preg_replace_callback(
-				'#<(video|audio|source|embed|object|track|input)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'#' . self::markup_skip( array( 'video', 'audio', 'source', 'embed', 'object', 'track', 'input' ) ) . '<(video|audio|source|embed|object|track|input)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_media_resource_tag( $m, $providers, $blocked_categories );
 				},
@@ -4500,7 +4503,7 @@ class Frontend {
 			// `rel="preload stylesheet"` (the standard async-CSS pair) both
 			// slipped past and fetched the provider pre-consent.
 			$result = preg_replace_callback(
-				'#<link(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
+				'#' . self::markup_skip( array( 'link' ) ) . '<link(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_link_tag( $m, $providers, $blocked_categories );
 				},
@@ -4526,29 +4529,16 @@ class Frontend {
 		// Runs after the src/href passes so a tag they already parked keeps
 		// its one category label.
 		//
-		// A <script> element is consumed whole by the first alternative and
-		// returned untouched: its body is JavaScript (or a template another
-		// script renders), and a tag-shaped substring inside a string literal
-		// is not an element. Rewriting it would insert double-quoted
-		// attributes into the literal and stop the whole inline script from
-		// parsing, a breakage far worse than the fetch it would prevent.
-		// The skip ends where the HTML parser ends the element ("</script"
-		// followed by whitespace, "/" or ">"). Comments and the other
-		// raw-text containers (style, textarea, title, xmp) are consumed the
-		// same way, first, so a "<script" the parser reads as text cannot
-		// open a skip that hides the real elements after it. A style
-		// attribute inside any of them is text too, so leaving it is right.
+		// Comments and the bodies of <script> and the other raw-text
+		// containers are skipped whole (markup_skip(), shared by every pass
+		// from step 0 on): a tag-shaped substring inside a string literal is
+		// not an element, and rewriting it stopped the whole inline script
+		// from parsing. This pass matches every tag itself, so the walk past
+		// each opening tag's attributes is its own pattern's.
 		if ( preg_match( '/\bstyle\s*=/i', $html ) ) {
-			$raw_text = '';
-			foreach ( array( 'script', 'style', 'textarea', 'title', 'xmp' ) as $raw_tag ) {
-				$raw_text .= '<' . $raw_tag . '(?=[\s/>])(?:' . self::ATTR_WALK . ')(?:/\s*+)?>.*?</' . $raw_tag . '(?=[\s/>])[^>]*+>|';
-			}
 			$result = preg_replace_callback(
-				'#<!--.*?-->|' . $raw_text . '<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'#' . self::markup_skip() . '<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
-					if ( ! isset( $m[1] ) || '' === $m[1] ) {
-						return $m[0];
-					}
 					return $this->process_style_attr_tag( $m, $providers, $blocked_categories );
 				},
 				$html
@@ -6077,7 +6067,7 @@ class Frontend {
 			return $html;
 		}
 		return preg_replace_callback(
-			'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+			'#' . self::markup_skip( array( 'iframe' ) ) . '<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 			function ( $m ) use ( $providers, $blocked_categories, &$stash, $marker ) {
 				return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, $stash, $marker );
 			},
@@ -6091,6 +6081,53 @@ class Frontend {
 		} catch ( \Exception $e ) {
 			return substr( md5( uniqid( '', true ) ), 0, 12 );
 		}
+	}
+
+	/**
+	 * The leading half of a buffer-pass pattern: what the HTML parser does not
+	 * read as an element, matched whole and skipped.
+	 *
+	 * Every pass here is a regex over the whole response, and a response
+	 * carries markup that is not markup: a comment, and the body of a
+	 * <script>, <style>, <textarea>, <title> or <xmp>, which the parser reads
+	 * as text. Inside a script it is usually a string literal —
+	 * `"<video poster=\"https://i.ytimg.com/vi/x/hq.jpg\">"` — and a pass that
+	 * parked the tag inside it wrote `data-faz-category="marketing"` into a
+	 * double-quoted literal, which ended the literal at the first injected
+	 * quote and stopped the WHOLE inline script from parsing. That included
+	 * the data scripts #322 deliberately leaves executable. A tag a script
+	 * writes is judged by the runtime when the script writes it; a blocked
+	 * script is restored only once its category is allowed. Either way the
+	 * server has nothing to do inside the body, and leaving it is right.
+	 *
+	 * The alternation is tried at every offset BEFORE the pass's own tag, and
+	 * (*SKIP)(*FAIL) moves the next attempt past the span without handing it
+	 * to the callback. With $targets given, every other opening tag is
+	 * consumed whole as well, through ATTR_WALK: a `<script` spelled inside an
+	 * attribute value (`<div data-tpl="<script>">`) is then never read as the
+	 * start of a skip that would hide every real element up to the next
+	 * `</script>`. A raw-text tag a pass targets itself (<style> for the
+	 * stylesheet pass) is left out of the skip. The skip ends where the
+	 * parser ends the element: "</tag" followed by whitespace, "/" or ">".
+	 *
+	 * @param string[]|null $targets Tag names the pass matches, or null when
+	 *                               the pass matches every tag itself.
+	 * @return string Pattern fragment ending in `|`, for the `#` delimiter
+	 *                with the `i` and `s` modifiers.
+	 */
+	private static function markup_skip( $targets = null ) {
+		$targets = null === $targets ? array() : array_map( 'strtolower', $targets );
+		$skip    = '<!--.*?-->';
+		foreach ( array( 'script', 'style', 'textarea', 'title', 'xmp' ) as $raw_tag ) {
+			if ( in_array( $raw_tag, $targets, true ) ) {
+				continue;
+			}
+			$skip .= '|<' . $raw_tag . '(?=[\s/>])(?:' . self::ATTR_WALK . ')(?:/\s*+)?>.*?</' . $raw_tag . '(?=[\s/>])[^>]*+>';
+		}
+		if ( ! empty( $targets ) ) {
+			$skip .= '|<(?!(?:' . implode( '|', $targets ) . ')(?=[\s/>]))[a-zA-Z][a-zA-Z0-9:_.-]*+(?=[\s/>])(?:' . self::ATTR_WALK . ')(?:/\s*+)?>';
+		}
+		return '(?:' . $skip . ')(*SKIP)(*FAIL)|';
 	}
 
 	private function process_link_tag( $m, $providers, $blocked_categories ) {
@@ -11191,7 +11228,7 @@ class Frontend {
 		// Block <iframe> tags in content.
 		if ( false !== stripos( $content, '<iframe' ) ) {
 			$result = preg_replace_callback(
-				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
+				'#' . self::markup_skip( array( 'iframe' ) ) . '<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
 				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );
 				},
