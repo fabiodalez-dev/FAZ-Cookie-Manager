@@ -346,6 +346,9 @@ class Cookie_Policy_Api {
 			return $this->missing_required_error( $missing );
 		}
 		update_option( self::OPTION, $clean, false );
+		// The [faz_cookie_policy] shortcode renders from this option, so the
+		// page that carries it stays stale in any page cache until purged.
+		do_action( 'faz_purge_page_cache' );
 		return new WP_REST_Response( array( 'saved' => true, 'data' => $clean ), 200 );
 	}
 

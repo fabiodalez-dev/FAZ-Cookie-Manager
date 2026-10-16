@@ -40,6 +40,12 @@ abstract class Services {
 		add_action( 'faz_after_update_settings', array( $this, 'clear_cache' ), 10, 1 );
 		add_action( 'faz_after_activate', array( $this, 'clear_cache' ) );
 		add_action( 'faz_clear_cache', array( $this, 'clear_cache' ) );
+		// Page cache only: fired by writes that change the rendered HTML without
+		// touching banners, cookies or settings — the IAB vendor selection and
+		// list (embedded in _fazConfig), the Cookie Policy generator data
+		// (rendered by its shortcode). faz_clear_cache would also drop the
+		// banner template and the frontend transients for no reason.
+		add_action( 'faz_purge_page_cache', array( $this, 'clear_cache' ) );
 	}
 	/**
 	 * Check if the the cache service is installed/active;
