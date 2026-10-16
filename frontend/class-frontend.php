@@ -979,6 +979,10 @@ class Frontend {
 						'pageUrl'   => $pv_url,
 						'pageTitle' => wp_get_document_title(),
 						'token'     => $pv_token,
+						// Where a fresh token comes from when the cached copy's
+						// has aged out of the window. Same for every visitor, so
+						// it is as cacheable as the rest of this object.
+						'tokenUrl'  => add_query_arg( 'action', Consent_Logger::TOKEN_REFRESH_ACTION, admin_url( 'admin-ajax.php' ) ),
 					)
 				);
 				// Pre-consent banner/pageview metrics are AGGREGATE-ONLY: no
@@ -992,9 +996,24 @@ class Frontend {
 				// measuring the consent mechanism itself.
 				$pv_js = "(function(){" .
 					"if(typeof _fazPageviewConfig==='undefined')return;" .
+					"function fazSend(b){return fetch(_fazPageviewConfig.restUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})}" .
+					// One refresh per page, shared by every event: a stale cached
+					// copy refuses the pageview and the banner_view together.
+					"var fazRefresh=null;" .
 					"function fazTrack(t){" .
-						"fetch(_fazPageviewConfig.restUrl,{method:'POST',headers:{'Content-Type':'application/json'}," .
-						"body:JSON.stringify({token:_fazPageviewConfig.token,page_url:_fazPageviewConfig.pageUrl,page_title:_fazPageviewConfig.pageTitle,event_type:t})}).catch(function(){});" .
+						"var b={token:_fazPageviewConfig.token,page_url:_fazPageviewConfig.pageUrl,page_title:_fazPageviewConfig.pageTitle,event_type:t};" .
+						// A 403 invalid_token means the HTML outlived the token
+						// window (Consent_Logger::handle_token_refresh()): fetch
+						// the current token once, resend once, never loop.
+						"fazSend(b).then(function(r){" .
+							"var u=_fazPageviewConfig.tokenUrl;" .
+							"if(!u||!r||r.status!==403||typeof r.json!=='function')return;" .
+							"return r.json().then(function(j){" .
+								"if(!j||j.code!=='invalid_token')return;" .
+								"fazRefresh=fazRefresh||fetch(u+(u.indexOf('?')<0?'?':'&')+'_='+Date.now(),{credentials:'same-origin',cache:'no-store'}).then(function(x){return x.json()}).then(function(x){return x&&x.success&&x.data&&x.data.pageview?String(x.data.pageview):''},function(){return ''});" .
+								"return fazRefresh.then(function(k){if(!k||k===b.token)return;_fazPageviewConfig.token=k;b.token=k;return fazSend(b)})" .
+							"})" .
+						"}).catch(function(){});" .
 					"}" .
 					"fazTrack('pageview');" .
 					"document.addEventListener('fazcookie_banner_loaded',function(){fazTrack('banner_view');});" .
@@ -1033,6 +1052,11 @@ class Frontend {
 						// (?p=, ?lang=) the inventory keys on. It varies by page,
 						// never by visitor, so a cached copy stays correct.
 						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::current_url() : '',
+						// Where the beacon fetches a current token when the one
+						// above is refused as stale — a page an edge cache kept
+						// past the token window. See
+						// Consent_Logger::handle_token_refresh().
+						'tokenUrl'       => add_query_arg( 'action', Consent_Logger::TOKEN_REFRESH_ACTION, admin_url( 'admin-ajax.php' ) ),
 					)
 				);
 					$inline_js = "document.addEventListener('fazcookie_consent_update',function(e){" .
@@ -1054,7 +1078,7 @@ class Frontend {
 						// put at risk.
 						"Promise.resolve().then(function(){" .
 						"var safeUrl=(function(){if(_fazConsentLog.pageUrl)return _fazConsentLog.pageUrl;try{var current=new URL(window.location.href);return current.origin+current.pathname+current.search}catch(err){var origin=window.location.origin||(window.location.protocol+'//'+window.location.host);return origin+(window.location.pathname||'')+(window.location.search||'')}})();" .
-						"fetch(_fazConsentLog.restUrl,{" .
+						"var fazSend=function(b){return fetch(_fazConsentLog.restUrl,{" .
 							"method:'POST'," .
 							// keepalive so the request survives the navigation that
 							// follows it. Withdrawal forces window.location.reload()
@@ -1067,7 +1091,9 @@ class Frontend {
 							// than one with gaps.
 							"keepalive:true," .
 							"headers:{'Content-Type':'application/json'}," .
-							"body:JSON.stringify({" .
+							"body:JSON.stringify(b)" .
+						"})};" .
+						"var p={" .
 								"consent_id:(function(){var m=document.cookie.match(/fazcookie-consent=([^;]+)/);if(!m)return '';var v=m[1];try{v=decodeURIComponent(v)}catch(err){}var p=v.match(/(?:^|,)consentid:([^,;]+)/);return p?p[1]:''})()," .
 								"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
 								"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});" .
@@ -1114,8 +1140,23 @@ class Frontend {
 								// the ruleset this visitor was actually enforced under.
 								"geo_bootstrap:(typeof window._fazGeoBootstrapResolved==='string'?window._fazGeoBootstrapResolved:'')," .
 								"token:_fazConsentLog.token" .
-						"})" .
-					"}).catch(function(){});" .
+						"};" .
+						// Stale-token recovery. The first post says it can refresh
+						// (can_refresh:1), so the server does not count its refusal
+						// as a lost record. On 403 invalid_token — HTML an edge
+						// cache kept past the token window — fetch the current
+						// token (Consent_Logger::handle_token_refresh()) and resend
+						// ONCE, without the flag. If the refresh fails, resend the
+						// original once anyway, so the refusal is still counted in
+						// System Status. Any other answer ends here.
+						"var u=_fazConsentLog.tokenUrl;" .
+						"return fazSend(u?Object.assign({can_refresh:1},p):p).then(function(r){" .
+							"if(!u||!r||r.status!==403||typeof r.json!=='function')return;" .
+							"return r.json().then(function(j){" .
+								"if(!j||j.code!=='invalid_token')return;" .
+								"return fetch(u+(u.indexOf('?')<0?'?':'&')+'_='+Date.now(),{credentials:'same-origin',cache:'no-store'}).then(function(x){return x.json()}).then(function(x){return x&&x.success&&x.data&&x.data.consent?String(x.data.consent):''},function(){return ''}).then(function(k){if(k&&k!==p.token){_fazConsentLog.token=k;p.token=k}return fazSend(p)})" .
+							"})" .
+						"});" .
 					"}).catch(function(){});" .
 				"});";
 				// 'before', not the default 'after', and both halves of that
@@ -12017,7 +12058,10 @@ class Frontend {
 		$settings        = $this->get_faz_settings();
 		$banner_control  = isset( $settings['banner_control'] ) ? (array) $settings['banner_control'] : array();
 		$per_cookie      = ! empty( $banner_control['per_cookie_consent'] ) && ! empty( $banner_control['per_service_consent'] );
-		$valid           = ( $per_cookie && function_exists( 'faz_get_valid_consent_cookie' ) ) ? (string) faz_get_valid_consent_cookie() : '';
+		// Scoped like get_service_consent() and get_blocked_categories(): a
+		// ck.* grant recorded under another banner/law must not outlive the
+		// cookie the rest of this request has already rejected.
+		$valid           = $per_cookie ? $this->get_scoped_valid_consent_cookie() : '';
 		$consent         = ( '' !== $valid && function_exists( 'faz_parse_consent_cookie' ) ) ? faz_parse_consent_cookie( $valid ) : array();
 		$signal_blocked = $per_cookie ? $this->get_signal_blocked_services( $valid ) : array();
 		if ( empty( $service_consent ) && ! $per_cookie ) {

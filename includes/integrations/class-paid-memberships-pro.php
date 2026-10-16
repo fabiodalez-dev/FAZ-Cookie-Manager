@@ -150,6 +150,10 @@ class Paid_Memberships_Pro {
 	 * cookie from a previous membership state.
 	 */
 	public function sync_consent_cookie() {
+		// Revision-only on purpose: this runs on init (priority 5), before any
+		// banner is selected, so no scope exists yet — the case the helper's
+		// null scope is documented for. The necessary-only state written below
+		// carries no scope and is valid under every banner.
 		$current_cookie    = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie() : '';
 		$is_pmp_managed    = function_exists( 'faz_is_pmp_managed_consent_cookie' ) ? faz_is_pmp_managed_consent_cookie( $current_cookie ) : false;
 		$has_vendor_cookie = ! empty( $_COOKIE['fazVendorConsent'] );

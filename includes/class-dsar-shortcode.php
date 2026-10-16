@@ -28,6 +28,17 @@ class DSAR_Shortcode {
 	use IP_Hasher;
 
 	const AJAX_ACTION = 'faz_dsar_submit';
+
+	/**
+	 * Read-only AJAX action that hands out a fresh nonce and signed stamp.
+	 *
+	 * frontend/js/faz-dsar.js calls it once, when the visitor starts filling
+	 * the form, and writes the result over the values the (possibly cached)
+	 * markup carried. See handle_refresh().
+	 *
+	 * @since 1.34.2
+	 */
+	const REFRESH_ACTION = 'faz_dsar_refresh';
 	const POST_TYPE   = 'faz_dsar';
 
 	/** Maximum allowed length for the free-text message field. */
@@ -166,6 +177,8 @@ class DSAR_Shortcode {
 		add_action( 'init', array( $this, 'register_post_type' ) );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_submit' ) );
 		add_action( 'wp_ajax_nopriv_' . self::AJAX_ACTION, array( $this, 'handle_submit' ) );
+		add_action( 'wp_ajax_' . self::REFRESH_ACTION, array( $this, 'handle_refresh' ) );
+		add_action( 'wp_ajax_nopriv_' . self::REFRESH_ACTION, array( $this, 'handle_refresh' ) );
 		// The shortcode callback enqueues the handler wherever the form is
 		// rendered server-side (posts, widgets, templates, builder elements);
 		// this hook only covers forms injected client-side after page load.
@@ -294,6 +307,10 @@ class DSAR_Shortcode {
 				'fazDsarConfig',
 				array(
 					'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
+					// Where the form fetches a current nonce and stamp before it
+					// is sent, so a copy a cache kept past their life still
+					// submits. See handle_refresh().
+					'refreshAction' => self::REFRESH_ACTION,
 					'errMsg'     => __( 'An error occurred. Please try again.', 'faz-cookie-manager' ),
 					'reqMsg'     => __( 'Please fill in all required fields.', 'faz-cookie-manager' ),
 					'emailMsg'   => __( 'Please enter a valid email address.', 'faz-cookie-manager' ),
@@ -483,6 +500,63 @@ class DSAR_Shortcode {
 		</div>
 		<?php
 		return ob_get_clean();
+	}
+
+	/**
+	 * AJAX handler that hands out a fresh nonce and signed stamp for the form.
+	 *
+	 * Why it exists. The form bakes an anonymous nonce (12 to 24 hours) and a
+	 * signed stamp (max_form_age(), 24 hours) into the page body. The page
+	 * cache veto (veto_page_cache()) keeps the page out of caches only where it
+	 * can see the form: a singular post whose content names the shortcode is
+	 * vetoed before output, and everything else only from render(), through
+	 * signals a cache honours only if it has not already decided — so a form
+	 * in a widget, a builder template (Bricks, Oxygen and Elementor keep theirs
+	 * in post meta), a block theme template or a synced pattern can still be
+	 * served from a cache, and an edge cache the plugin cannot reach ignores
+	 * the veto anyway. After a day every submission from such a copy was
+	 * refused, and "reload the page" returned the same copy: an Art. 12(2)
+	 * failure on the channel the site relies on. frontend/js/faz-dsar.js now
+	 * fetches current values from here when the visitor starts filling the
+	 * form and writes them over the cached ones, wherever the form was placed.
+	 *
+	 * Why it is safe. Read-only and unauthenticated, like the DNSMPI refresh
+	 * (Do_Not_Sell_Shortcode::handle_nonce_refresh()). The nonce and the stamp
+	 * are exactly what render() prints into a public page, so this hands out
+	 * nothing a GET of that page does not. None of the anti-bot costs is
+	 * weakened: the stamp's issue time is now, so the minimum dwell is counted
+	 * from this call (the response says how long, and the script waits it out
+	 * before sending); a proof-of-work challenge, when the gate is on, is a new
+	 * unpredictable salt the client must solve; and the honeypot name is derived
+	 * from the new stamp as always. The stamp is deliberately NOT single-use,
+	 * for the reason check_antibot() gives; the per-email, per-IP and site-wide
+	 * ceilings are what bound how many requests a client can file.
+	 *
+	 * admin-ajax.php sends nocache_headers() itself and every page cache
+	 * excludes it; the explicit no-store keeps the contract in this file.
+	 *
+	 * @since 1.34.2
+	 * @return void
+	 */
+	public function handle_refresh() {
+		if ( ! headers_sent() ) {
+			header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private' );
+		}
+		$stamp = self::issue_stamp();
+		wp_send_json_success(
+			array(
+				'nonce' => wp_create_nonce( self::AJAX_ACTION ),
+				't'     => (int) $stamp['t'],
+				'sig'   => (string) $stamp['sig'],
+				'hp'    => (string) $stamp['hp'],
+				'salt'  => (string) $stamp['salt'],
+				'diff'  => (int) $stamp['diff'],
+				// Seconds the script must let pass before sending, so the dwell
+				// check measured from this fresh stamp is met by a real person
+				// who submits straight away, instead of refused as "too fast".
+				'wait'  => $this->cap( 'faz_dsar_min_dwell_seconds', self::MIN_DWELL_SECONDS ),
+			)
+		);
 	}
 
 	/**
@@ -1018,10 +1092,12 @@ class DSAR_Shortcode {
 	 * to discover. Its job is only to stop a scraped stamp from being
 	 * replayable forever on a site that has raised `nonce_life`.
 	 *
-	 * Neither expiry is meant to be reached by a visitor: the page that
-	 * carries the form is kept out of full-page caches (veto_page_cache()),
-	 * because a cached copy older than the nonce would refuse every visitor
-	 * with a "refresh the page" that returns the same copy. Where that veto
+	 * Neither expiry is meant to be reached by a visitor: the script replaces
+	 * both values with current ones from handle_refresh() before sending, and
+	 * the page that carries the form is kept out of full-page caches where the
+	 * plugin can see it (veto_page_cache()), because a cached copy older than
+	 * the nonce would refuse every visitor with a "refresh the page" that
+	 * returns the same copy. Where the refresh cannot run and that veto
 	 * was filtered off, or a cache the plugin cannot reach kept the page
 	 * anyway, both refusals name the email fallback alongside the reload.
 	 *
@@ -1435,6 +1511,13 @@ class DSAR_Shortcode {
 	 * cache than the form's self-sufficiency, can filter the veto off; the
 	 * refusal messages then carry the email fallback, so a visitor handed a
 	 * stale copy is still told a way that works.
+	 *
+	 * Since 1.34.2 the veto is no longer what the form's validity rests on:
+	 * the script refreshes the nonce and the stamp from handle_refresh() before
+	 * sending, so a copy a cache kept anyway — a widget, a builder or block
+	 * template, a synced pattern, an edge cache the veto cannot reach — still
+	 * submits. The veto stays for a visitor without JavaScript, who posts what
+	 * the markup carried.
 	 *
 	 * @since 1.34.2
 	 * @return void

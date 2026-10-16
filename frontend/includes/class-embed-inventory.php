@@ -180,6 +180,11 @@ class Embed_Inventory {
 		// also aligns validity with full-page caches: a record lives as long as the
 		// cached HTML that created it, and is replaced when an uncached GPC render
 		// observes the new page.
+		// Revision-only on purpose: this class has no banner, so it has no
+		// scope to check (see Frontend::get_consent_cookie_scope()). The error
+		// is one-directional and safe: a cookie scoped to another banner reads
+		// here as consent, so the visit is not taken as an authoritative GPC
+		// snapshot and nothing is cleared; it never makes a snapshot delete rows.
 		$raw_consent  = function_exists( 'faz_get_valid_consent_cookie' ) ? (string) faz_get_valid_consent_cookie() : '';
 		$gpc_snapshot = self::$render_complete && '' === $raw_consent
 			&& isset( $_SERVER['HTTP_SEC_GPC'] )

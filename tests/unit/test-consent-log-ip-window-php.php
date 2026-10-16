@@ -50,8 +50,14 @@ namespace FazCookie\Admin\Modules\Consentlogs\Includes {
 			}
 			return $best;
 		}
+		/** The address hash a row written now would carry (log_consent() below stores it). */
+		public function current_ip_hash() {
+			return md5( 'ip|' . $GLOBALS['faz_client_ip'] );
+		}
 		public function log_consent( $data ) {
 			$row = array(
+				'ip_hash'    => $this->current_ip_hash(),
+				'created_at' => gmdate( 'Y-m-d H:i:s', FAZ_TEST_EPOCH + $GLOBALS['faz_fake_now'] ),
 				'log_id'     => count( self::$rows ) + 1,
 				'consent_id' => (string) $data['consent_id'],
 				'status'     => (string) $data['status'],
@@ -80,6 +86,7 @@ namespace {
 	// runner's output to its own assertions.
 	ini_set( 'error_log', sys_get_temp_dir() . '/faz-consent-ip-window-test.log' );
 
+	define( 'FAZ_TEST_EPOCH', 1760000000 );
 	$GLOBALS['faz_fake_now']   = 0;
 	$GLOBALS['faz_client_ip']  = '203.0.113.7';
 	$GLOBALS['faz_throttles']  = array();
@@ -103,11 +110,17 @@ namespace {
 		$GLOBALS['faz_throttles'][ $key ] = $now + (int) $ttl;
 		return false;
 	}
+	// The address the real helpers would resolve, and the clock log_consent()
+	// stamps rows with: both follow the fake ones above.
+	function faz_resolve_client_ip() { return $GLOBALS['faz_client_ip']; }
+	function faz_ip_cache_key( $ip ) { return md5( (string) $ip ); }
+	function current_time( $type, $gmt = 0 ) { return gmdate( 'Y-m-d H:i:s', FAZ_TEST_EPOCH + $GLOBALS['faz_fake_now'] ); }
 	function faz_advance( $seconds ) {
 		$GLOBALS['faz_fake_now'] += (int) $seconds;
 	}
 	function faz_reset() {
-		$GLOBALS['faz_fake_now']   = 0;
+		define( 'FAZ_TEST_EPOCH', 1760000000 );
+	$GLOBALS['faz_fake_now']   = 0;
 		$GLOBALS['faz_throttles']  = array();
 		$GLOBALS['faz_transients'] = array();
 		\FazCookie\Admin\Modules\Consentlogs\Includes\Controller::$rows = array();
@@ -259,6 +272,134 @@ namespace {
 	$post( $id, 'accepted' );
 	faz_advance( 6 );
 	ipw_check( 'throttled' === $post( '', 'rejected' ), 'a post without a consent_id inside the window is throttled' );
+
+	// 8b. Two visitors behind ONE address (NAT, CGNAT, a corporate proxy),
+	//     each withdrawing seconds after accepting: both withdrawals must
+	//     land. The exception's first use is keyed on the consent_id, so one
+	//     person's correction can never spend another person's.
+	faz_reset();
+	$visitor_a = 'shared-nat-visitor-a-0123456789abcdef';
+	$visitor_b = 'shared-nat-visitor-b-0123456789abcdef';
+	$post( $visitor_a, 'accepted' );           // t=0
+	faz_advance( 11 );
+	$post( $visitor_b, 'accepted' );           // t=11, IP window closed until t=21
+	faz_advance( 2 );
+	ipw_check( 'logged' === $post( $visitor_a, 'rejected' ), 'shared address: visitor A\'s withdrawal at t=13 lands' );
+	faz_advance( 2 );
+	ipw_check( 'logged' === $post( $visitor_b, 'rejected' ), 'and visitor B\'s withdrawal at t=15, from the same address, lands too' );
+	ipw_check( 'rejected' === $newest_status( $visitor_a ) && 'rejected' === $newest_status( $visitor_b ), 'both registers now say "rejected"' );
+
+	// 8c. A flood of K known ids from one address stays bounded. Each id's
+	//     first exception is free (once per 300 s); every later one draws on a
+	//     budget shared by the address, one per 10 s. Before, the per-id caps
+	//     alone let the address land K rows every 10 s by alternating.
+	faz_reset();
+	$ids = array( 'known-visitor-a-0123456789abcdef', 'known-visitor-b-0123456789abcdef', 'known-visitor-c-0123456789abcdef' );
+	foreach ( $ids as $known ) {
+		$post( $known, 'accepted' ); // t=0, 11, 22: each in its own IP window
+		faz_advance( 11 );
+	}
+	$post( 'window-opener-0123456789abcdef', 'accepted' ); // t=33: close the IP window again
+	faz_advance( 2 );
+	$landed = 0;
+	foreach ( $ids as $known ) {
+		$landed += 'logged' === $post( $known, 'partial', array( 'analytics' => 'no' ) ) ? 1 : 0;
+	}
+	ipw_check( 3 === $landed, 'round 1: each known id\'s first correction lands (got ' . $landed . ')' );
+	faz_advance( 2 );
+	ipw_check( 'throttled' === $post( $ids[0], 'rejected' ), 'a flip the per-id chgn cap refuses is refused' );
+	$shared = array_filter( array_keys( $GLOBALS['faz_throttles'] ), function ( $key ) { return 0 === strpos( $key, 'faz_consent_ip_chg_' ); } );
+	ipw_check( array() === array_values( $shared ), 'and neither the first corrections nor that refused candidate spent the address\'s shared budget' );
+	faz_advance( 9 );                                      // t=46: IP window open, chgn windows elapsed
+	$post( 'window-opener-2-0123456789abcdef', 'accepted' ); // close it again
+	faz_advance( 1 );
+	$landed = 0;
+	foreach ( $ids as $known ) {
+		$landed += 'logged' === $post( $known, 'rejected' ) ? 1 : 0;
+	}
+	ipw_check( 1 === $landed, 'round 2 inside one IP window: the address lands ONE further correction, not three (got ' . $landed . ')' );
+	faz_advance( 11 );
+	$post( 'window-opener-3-0123456789abcdef', 'accepted' );
+	faz_advance( 1 );
+	ipw_check( 'logged' === $post( $ids[2], 'accepted' ), 'and the shared budget comes back with the next window' );
+
+	// 8e. An address that has collected many ids cannot turn them into as many
+	//     free writes. Fifty rows written from this address moments ago, all
+	//     flipped inside one closed IP window: the free exceptions stop at the
+	//     per-address ceiling, then one shared-budget slot, then nothing.
+	faz_reset();
+	$post( 'window-opener-0123456789abcdef', 'accepted' ); // t=0: closes the IP window
+	for ( $i = 0; $i < 50; $i++ ) {
+		Controller::$rows[] = array(
+			'log_id' => 1000 + $i, 'consent_id' => 'collected-' . $i . '-0123456789abcdef', 'status' => 'accepted',
+			'categories' => array(), 'ip_hash' => md5( 'ip|' . $GLOBALS['faz_client_ip'] ),
+			'created_at' => gmdate( 'Y-m-d H:i:s', FAZ_TEST_EPOCH ),
+		);
+	}
+	faz_advance( 2 );
+	$landed = 0;
+	for ( $i = 0; $i < 50; $i++ ) {
+		$landed += 'logged' === $post( 'collected-' . $i . '-0123456789abcdef', 'rejected' ) ? 1 : 0;
+	}
+	$free    = defined( Consent_Logger::class . '::FREE_EXCEPTIONS_PER_ADDRESS' ) ? constant( Consent_Logger::class . '::FREE_EXCEPTIONS_PER_ADDRESS' ) : 5;
+	$ceiling = $free + 1;
+	ipw_check( $landed <= $ceiling, "fifty collected ids from one address land at most {$ceiling} rows in one window (got {$landed})" );
+	ipw_check( $ceiling === $landed, 'exactly the free ceiling plus the one shared slot: the rate does not grow with the number of ids' );
+
+	// 8f. A free exception corrects a RECENT row from THIS address. A row older
+	//     than the correction window, or written from another address, is an
+	//     id that was collected: it waits for the shared budget.
+	faz_reset();
+	$GLOBALS['faz_client_ip'] = '198.51.100.20';
+	foreach ( array( 'elsewhere-a-0123456789abcdef', 'elsewhere-b-0123456789abcdef', 'elsewhere-c-0123456789abcdef' ) as $other ) {
+		$post( $other, 'accepted' ); // written from another address, one per IP window
+		faz_advance( 11 );
+	}
+	$GLOBALS['faz_client_ip'] = '203.0.113.7';
+	$post( 'window-opener-0123456789abcdef', 'accepted' );
+	faz_advance( 2 );
+	$landed = 0;
+	foreach ( array( 'elsewhere-a-0123456789abcdef', 'elsewhere-b-0123456789abcdef', 'elsewhere-c-0123456789abcdef' ) as $other ) {
+		$landed += 'logged' === $post( $other, 'rejected' ) ? 1 : 0;
+	}
+	ipw_check( 1 === $landed, 'rows written from another address get no free exception here: one shared slot (got ' . $landed . ')' );
+	faz_reset();
+	foreach ( array( 'old-a-0123456789abcdef', 'old-b-0123456789abcdef', 'old-c-0123456789abcdef' ) as $old ) {
+		$post( $old, 'accepted' );
+		faz_advance( 11 );
+	}
+	faz_advance( 400 ); // every row is now older than the correction window
+	$post( 'window-opener-0123456789abcdef', 'accepted' );
+	faz_advance( 2 );
+	$landed = 0;
+	foreach ( array( 'old-a-0123456789abcdef', 'old-b-0123456789abcdef', 'old-c-0123456789abcdef' ) as $old ) {
+		$landed += 'logged' === $post( $old, 'rejected' ) ? 1 : 0;
+	}
+	ipw_check( 1 === $landed, 'rows older than the correction window get no free exception: one shared slot (got ' . $landed . ')' );
+
+	// 8d. A request the IP gate refuses arms nothing on its way out. It used to
+	//     fall through and arm the per-id window and the chg1 cap before the
+	//     verdict — two wp_options rows per request on a site without an
+	//     object cache, bought by minting a fresh consent_id each time.
+	faz_reset();
+	$post( $id, 'accepted' );
+	faz_advance( 2 );
+	$armed_before = array_keys( $GLOBALS['faz_throttles'] );
+	$refused      = 0;
+	for ( $i = 0; $i < 5; $i++ ) {
+		if ( 'throttled' === $post( 'flood-id-' . $i . '-0123456789abcdef', 'accepted' ) ) {
+			$refused++;
+		}
+	}
+	$armed_new = array_values( array_filter(
+		array_diff( array_keys( $GLOBALS['faz_throttles'] ), $armed_before ),
+		function ( $key ) { return 0 !== strpos( $key, 'faz_consent_refusal_' ); }
+	) );
+	ipw_check( 5 === $refused, 'five fresh ids from a throttled address are all refused' );
+	ipw_check( array() === $armed_new, 'and none of them armed a throttle window on the way out (armed: ' . implode( ', ', $armed_new ) . ')' );
+	$armed_before = array_keys( $GLOBALS['faz_throttles'] );
+	$post( $id, 'accepted' ); // a replay of the known id's own status
+	ipw_check( array() === array_values( array_diff( array_keys( $GLOBALS['faz_throttles'] ), $armed_before ) ), 'a throttled replay of a known id arms nothing either' );
 
 	// 9. The jurisdiction-bootstrap verdict the beacon sends must reach the
 	//    controller, and the key must be present even when the beacon sent

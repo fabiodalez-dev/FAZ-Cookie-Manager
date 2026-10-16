@@ -237,6 +237,41 @@ namespace {
 	$detector_hash->setAccessible( true );
 	faz_is( $detector_hash->invoke( $detector, $ip ), faz_expected_key( $ip ), 'Geo_Detector::hash_ip() is the helper, not a second formula' );
 
+	echo "\n\033[1mfaz_throttle_request() — the rate-limit windows\033[0m\n";
+
+	// The windows are the most frequent per-address rows of all: every consent
+	// POST, pageview event and AMP update arms one. They were keyed on a bare
+	// md5( ip ) while the helper's docblock said every per-address key went
+	// through it.
+	if ( ! function_exists( 'absint' ) ) {
+		function absint( $v ) { return abs( (int) $v ); }
+	}
+	if ( ! function_exists( 'wp_using_ext_object_cache' ) ) {
+		function wp_using_ext_object_cache() { return ! empty( $GLOBALS['__faz_ext_cache'] ); }
+	}
+	if ( ! function_exists( 'wp_cache_add' ) ) {
+		function wp_cache_add( $key, $value, $group = '', $ttl = 0 ) {
+			if ( isset( $GLOBALS['__faz_cache'][ $group ][ $key ] ) ) {
+				return false;
+			}
+			$GLOBALS['__faz_cache'][ $group ][ $key ] = $value;
+			return true;
+		}
+	}
+	$GLOBALS['__faz_transients'] = array();
+	$GLOBALS['__faz_cache']      = array();
+	$_SERVER = array( 'REMOTE_ADDR' => $ip );
+	faz_is( faz_throttle_request( 'faz_unit_window', 10 ), false, 'premise: the first request is not throttled, so a window is armed' );
+	$window_keys = faz_keys_with_prefix( 'faz_unit_window_' );
+	faz_is( in_array( 'faz_unit_window_' . md5( $ip ), $window_keys, true ), false, 'the window transient is NOT keyed on md5( ip )' );
+	faz_is( $window_keys, array( 'faz_unit_window_' . faz_expected_key( $ip ) ), 'the window transient is keyed on the salted, month-rotated digest' );
+	faz_is( faz_throttle_request( 'faz_unit_window', 10 ), true, 'and it is the key READ back: the second request inside the window is throttled' );
+	$GLOBALS['__faz_ext_cache'] = true;
+	faz_throttle_request( 'faz_unit_window', 10 );
+	$object_keys = isset( $GLOBALS['__faz_cache']['faz_throttle'] ) ? array_keys( $GLOBALS['__faz_cache']['faz_throttle'] ) : array();
+	faz_is( $object_keys, array( 'faz_unit_window_' . faz_expected_key( $ip ) ), 'with a persistent object cache the window uses the same digest' );
+	$GLOBALS['__faz_ext_cache'] = false;
+
 	@rmdir( rtrim( ABSPATH, '/' ) );
 
 	echo "\n--\n";
