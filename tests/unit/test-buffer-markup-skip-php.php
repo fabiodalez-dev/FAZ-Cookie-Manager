@@ -23,6 +23,19 @@
  *   4. A `<script` spelled inside an attribute value does not open a skip that
  *      would hide the real elements after it.
  *
+ * And what must NOT be skipped, because skipping it hides a real element that
+ * then ships live (each red against the regex skip of 2db1d058):
+ *   5. Comments end where the parser ends them: `<!-->`, `<!--->`, `--!>`. A
+ *      comment that never closes is judged, not skipped — over a megabyte of
+ *      it the old lazy span hit the PCRE limit and the pass shipped the page
+ *      unfiltered.
+ *   6. Inside <svg> and <math>, <title>, <style>, <script> and <textarea> are
+ *      elements with children: an <img> there breaks out and loads.
+ *   7. One-token constructs — an end tag with attributes, `<?…>`, `<!x…>`,
+ *      `</ …>`, a CDATA-shaped bogus comment — cannot open a skip, in any
+ *      pass, the script pass included (it already lost the tracker after
+ *      them on 42728bbc).
+ *
  * Run: php tests/unit/test-buffer-markup-skip-php.php
  *  or: bash scripts/run-unit-tests.sh
  *
@@ -257,6 +270,62 @@ namespace {
 	$out = faz_ob_run( '<html><body><div data-tpl="<script>"></div><img src="https://cdn.tracker.test/p.png"><video poster="https://i.ytimg.com/vi/x/hq.jpg"></video><script>var a = 1;</script></body></html>' );
 	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/p.png"' ), 'the <img> after it is still parked' );
 	assert_true( false !== strpos( $out, 'data-faz-poster="https://i.ytimg.com/vi/x/hq.jpg"' ), 'and so is the <video>' );
+
+	// ── What may NOT be skipped ────────────────────────────────────────────
+	// Every case below is one where reading too much as inert text hides a
+	// real element from the passes, so it ships live. Each carries an <img>,
+	// a <video> and a style attribute (the pass that matches every tag) after
+	// the construct, and a script for the step-1 pass.
+	$after   = '<img src="https://cdn.tracker.test/a.png"><video poster="https://i.ytimg.com/vi/x/hq.jpg"></video><div style="background:url(https://i.ytimg.com/vi/y/hq.jpg)"></div><script src="https://cdn.tracker.test/t.js"></script>';
+	$all_live_judged = function ( $out, $label ) {
+		assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/a.png"' ), $label . ': the <img> after it is parked' );
+		assert_true( false !== strpos( $out, 'data-faz-poster="https://i.ytimg.com/vi/x/hq.jpg"' ), $label . ': the <video> after it is parked' );
+		assert_true( false !== strpos( $out, 'data-faz-style=' ), $label . ': the style attribute after it is neutralised' );
+		preg_match_all( '#<script\b[^>]*cdn\.tracker\.test/t\.js[^>]*>#i', $out, $tags );
+		$live = array_filter( $tags[0], function ( $tag ) {
+			return false === strpos( $tag, 'type="text/plain"' );
+		} );
+		assert_true( ! empty( $tags[0] ) && empty( $live ), $label . ': the tracker script after it is not executable' );
+	};
+
+	echo "\n-- comments end where the parser ends them --\n";
+
+	// `<!-->` and `<!--->` are complete comments. Read as the start of one,
+	// they ran to the next `-->` on the page and hid everything between.
+	$all_live_judged( faz_ob_run( '<html><body><!-->' . $after . '<!-- later --></body></html>' ), '<!-->' );
+	$all_live_judged( faz_ob_run( '<html><body><!--->' . $after . '<!-- later --></body></html>' ), '<!--->' );
+	// `--!>` closes a comment too.
+	$all_live_judged( faz_ob_run( '<html><body><!-- a --!>' . $after . '<!-- later --></body></html>' ), '--!>' );
+	// A comment that never closes is not skipped at all: past a megabyte of
+	// it the passes still judge what follows, rather than leave it as it was.
+	$all_live_judged( faz_ob_run( '<html><body><!-- ' . str_repeat( 'x', 1200000 ) . $after . '</body></html>' ), 'an unclosed comment over 1 MB' );
+
+	echo "\n-- svg and math hold no raw text --\n";
+
+	foreach ( array( 'title', 'style', 'script', 'textarea' ) as $tag ) {
+		$out = faz_ob_run( '<html><body><svg><' . $tag . '><img src="https://cdn.tracker.test/a.png"></' . $tag . '></svg></body></html>' );
+		assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/a.png"' ), '<svg><' . $tag . '><img>: the img breaks out and loads, so it is parked' );
+	}
+	$out = faz_ob_run( '<html><body><math><mtext><style><video poster="https://i.ytimg.com/vi/x/hq.jpg"></video></style></mtext></math></body></html>' );
+	assert_true( false !== strpos( $out, 'data-faz-poster=' ), '<math> … <style><video>: parked' );
+	$body = 'var t = "<img src=\"https://cdn.tracker.test/p.png\">";';
+	$out  = faz_ob_run( '<html><body><svg><title>x</title></svg><script>' . $body . '</script></body></html>' );
+	assert_true( array( $body ) === faz_script_bodies( $out ), 'after </svg> a script body is text again' );
+
+	echo "\n-- one-token constructs cannot open a skip --\n";
+
+	// Each of these is ONE token to the tokenizer, and a `<script` inside it
+	// is not a script start. Read as one, it hid every real element up to
+	// the next </script>.
+	foreach ( array(
+		'an end tag with an attribute' => '</p title="<script>">',
+		'a processing instruction'     => '<?x <script src=https://cdn.tracker.test/x.js>?>',
+		'a <! bogus comment'           => '<!x <script>',
+		'a </ bogus comment'           => '</ <script>',
+		'a CDATA-shaped bogus comment' => '<![CDATA[ <script> ]]>',
+	) as $label => $construct ) {
+		$all_live_judged( faz_ob_run( '<html><body>' . $construct . $after . '<script>var a = 1;</script></body></html>' ), $label );
+	}
 
 	echo "\n";
 	if ( 0 === $tests_failed ) {

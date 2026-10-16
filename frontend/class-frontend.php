@@ -4292,7 +4292,15 @@ class Frontend {
 		// Both stashes mark their place with a per-request nonce the page
 		// cannot know: with a fixed marker, a paragraph that spelled
 		// `__FAZ_SRCDOC_STASH_0__` received the srcdoc token as live markup.
-		$stash_nonce   = $this->stash_nonce();
+		$stash_nonce = $this->stash_nonce();
+
+		// Comments and raw-text bodies are text to the parser, and no pass may
+		// rewrite inside them — find_inert_spans() says why and how they are
+		// found. Stashed before every other pass, put back after the last of
+		// them; the script and style passes are handed their bodies back.
+		$inert_stash = array();
+		$html        = $this->stash_inert_spans( $html, $stash_nonce, $inert_stash );
+
 		$srcdoc_stash  = array();
 		$srcdoc_marker = '';
 		$result        = $this->stash_iframe_srcdocs( $html, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker );
@@ -4305,7 +4313,7 @@ class Frontend {
 		$noscript_stash = array();
 		if ( false !== stripos( $html, '<noscript' ) ) {
 			$result = preg_replace_callback(
-				'#' . self::markup_skip( array( 'noscript' ) ) . '<noscript(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>(.*?)</noscript(?=[\s/>])[^>]*>#is',
+				'#<noscript(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>(.*?)</noscript(?=[\s/>])[^>]*>#is',
 				function ( $m ) use ( $providers, $blocked_categories, &$noscript_stash, $stash_nonce ) {
 					$processed              = $this->process_noscript_tag( $m, $providers, $blocked_categories );
 					$key                    = '__FAZ_NOSCRIPT_STASH_' . $stash_nonce . '_' . count( $noscript_stash ) . '__';
@@ -4324,9 +4332,16 @@ class Frontend {
 		// 1. Block <script> tags.
 		if ( false !== stripos( $html, '<script' ) ) {
 			$result = preg_replace_callback(
-				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_script_tag( $m, $providers, $blocked_categories );
+				'#' . self::script_token_skip() . '<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
+				function ( $m ) use ( $providers, $blocked_categories, &$inert_stash ) {
+					return $this->process_with_inert_body(
+						$m,
+						'script',
+						$inert_stash,
+						function ( $m ) use ( $providers, $blocked_categories ) {
+							return $this->process_script_tag( $m, $providers, $blocked_categories );
+						}
+					);
 				},
 				$html
 			);
@@ -4350,7 +4365,7 @@ class Frontend {
 		// them.
 		if ( false !== stripos( $html, '<image' ) || false !== stripos( $html, '<use' ) || false !== stripos( $html, '<feimage' ) ) {
 			$result = preg_replace_callback(
-				'#' . self::markup_skip( array( 'image', 'use', 'feImage' ) ) . '<(image|use|feImage)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'#<(image|use|feImage)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_svg_href_tag( $m, $providers, $blocked_categories );
 				},
@@ -4371,7 +4386,7 @@ class Frontend {
 		// pattern does; a plain `background=` lookup skipped it.
 		if ( preg_match( '/\bbackground\s*=/i', $html ) ) {
 			$result = preg_replace_callback(
-				'#' . self::markup_skip( array( 'body', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th' ) ) . '<(body|table|thead|tbody|tfoot|tr|td|th)(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
+				'#<(body|table|thead|tbody|tfoot|tr|td|th)(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_background_attr_tag( $m, $providers, $blocked_categories );
 				},
@@ -4387,7 +4402,7 @@ class Frontend {
 		// 2. Block <iframe> tags (YouTube, Facebook, Maps, etc.).
 		if ( false !== stripos( $html, '<iframe' ) ) {
 			$result = preg_replace_callback(
-				'#' . self::markup_skip( array( 'iframe' ) ) . '<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
+				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
 				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );
 				},
@@ -4408,9 +4423,16 @@ class Frontend {
 		//    inside a <style> (fonts, background-image, cursor, mask, @import).
 		if ( false !== stripos( $html, '<style' ) ) {
 			$result = preg_replace_callback(
-				'#' . self::markup_skip( array( 'style' ) ) . '<style(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</style(?=[\s/>])[^>]*>#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_style_tag( $m, $providers, $blocked_categories );
+				'#<style(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</style(?=[\s/>])[^>]*>#is',
+				function ( $m ) use ( $providers, $blocked_categories, &$inert_stash ) {
+					return $this->process_with_inert_body(
+						$m,
+						'style',
+						$inert_stash,
+						function ( $m ) use ( $providers, $blocked_categories ) {
+							return $this->process_style_tag( $m, $providers, $blocked_categories );
+						}
+					);
 				},
 				$html
 			);
@@ -4434,7 +4456,7 @@ class Frontend {
 		// the fetch before any script runs.
 		if ( false !== stripos( $html, '<img' ) ) {
 			$result = preg_replace_callback(
-				'#' . self::markup_skip( array( 'img' ) ) . '<img(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
+				'#<img(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_img_tag( $m, $providers, $blocked_categories );
 				},
@@ -4463,12 +4485,12 @@ class Frontend {
 		// was the one layer not writing those keys. The tag name must be
 		// followed by whitespace, a slash or `>`, so <video-player> and
 		// <source-list> custom elements are not read as the media tag.
-		// Like every pass here it leaves comments and script bodies alone
-		// (markup_skip()): a `<video poster=\"…\">` inside a JS string is
-		// text, and parking it broke the string and the script around it.
+		// Like every pass here it never sees comments or script bodies (the
+		// inert stash at the top): a `<video poster=\"…\">` inside a JS
+		// string is text, and parking it broke the string and the script.
 		if ( preg_match( '/<(?:video|audio|source|embed|object|track|input)(?=[\s\/>])/i', $html ) ) {
 			$result = preg_replace_callback(
-				'#' . self::markup_skip( array( 'video', 'audio', 'source', 'embed', 'object', 'track', 'input' ) ) . '<(video|audio|source|embed|object|track|input)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'#<(video|audio|source|embed|object|track|input)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_media_resource_tag( $m, $providers, $blocked_categories );
 				},
@@ -4503,7 +4525,7 @@ class Frontend {
 			// `rel="preload stylesheet"` (the standard async-CSS pair) both
 			// slipped past and fetched the provider pre-consent.
 			$result = preg_replace_callback(
-				'#' . self::markup_skip( array( 'link' ) ) . '<link(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
+				'#<link(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_link_tag( $m, $providers, $blocked_categories );
 				},
@@ -4530,14 +4552,12 @@ class Frontend {
 		// its one category label.
 		//
 		// Comments and the bodies of <script> and the other raw-text
-		// containers are skipped whole (markup_skip(), shared by every pass
-		// from step 0 on): a tag-shaped substring inside a string literal is
-		// not an element, and rewriting it stopped the whole inline script
-		// from parsing. This pass matches every tag itself, so the walk past
-		// each opening tag's attributes is its own pattern's.
+		// containers never reach this pass (the inert stash at the top): a
+		// tag-shaped substring inside a string literal is not an element, and
+		// rewriting it stopped the whole inline script from parsing.
 		if ( preg_match( '/\bstyle\s*=/i', $html ) ) {
 			$result = preg_replace_callback(
-				'#' . self::markup_skip() . '<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'#<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_style_attr_tag( $m, $providers, $blocked_categories );
 				},
@@ -4589,6 +4609,12 @@ class Frontend {
 		// Restore <noscript> blocks we stashed before the filter pass.
 		if ( ! empty( $noscript_stash ) ) {
 			$html = strtr( $html, $noscript_stash );
+		}
+		// Then the inert spans, which a restored <noscript> block can hold.
+		// Before the embed detectors below: they read the page as they always
+		// have, script bodies included.
+		if ( ! empty( $inert_stash ) ) {
+			$html = strtr( $html, $inert_stash );
 		}
 
 		// 7. Hide social/widget embed containers that depend on blocked scripts
@@ -6067,7 +6093,7 @@ class Frontend {
 			return $html;
 		}
 		return preg_replace_callback(
-			'#' . self::markup_skip( array( 'iframe' ) ) . '<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+			'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 			function ( $m ) use ( $providers, $blocked_categories, &$stash, $marker ) {
 				return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, $stash, $marker );
 			},
@@ -6084,50 +6110,251 @@ class Frontend {
 	}
 
 	/**
-	 * The leading half of a buffer-pass pattern: what the HTML parser does not
-	 * read as an element, matched whole and skipped.
+	 * Spans of a document the HTML parser reads as inert text: closed
+	 * comments, and the bodies of <script>, <style>, <textarea>, <title> and
+	 * <xmp> in HTML content.
 	 *
-	 * Every pass here is a regex over the whole response, and a response
-	 * carries markup that is not markup: a comment, and the body of a
-	 * <script>, <style>, <textarea>, <title> or <xmp>, which the parser reads
-	 * as text. Inside a script it is usually a string literal —
-	 * `"<video poster=\"https://i.ytimg.com/vi/x/hq.jpg\">"` — and a pass that
-	 * parked the tag inside it wrote `data-faz-category="marketing"` into a
-	 * double-quoted literal, which ended the literal at the first injected
-	 * quote and stopped the WHOLE inline script from parsing. That included
-	 * the data scripts #322 deliberately leaves executable. A tag a script
-	 * writes is judged by the runtime when the script writes it; a blocked
-	 * script is restored only once its category is allowed. Either way the
-	 * server has nothing to do inside the body, and leaving it is right.
+	 * Every pass in the output buffer is a regex over the whole response, and
+	 * a response carries markup that is not markup. Inside a script it is
+	 * usually a string literal — `"<video poster=\"https://i.ytimg.com/…\">"`
+	 * — and a pass that parked it wrote `data-faz-category="marketing"` into
+	 * a double-quoted literal, which ended the literal at the first injected
+	 * quote and stopped the WHOLE inline script from parsing, the data
+	 * scripts #322 leaves executable included. A tag a script writes is
+	 * judged by the runtime when it is written, and a blocked script is
+	 * restored only once its category is allowed, so the server has nothing
+	 * to do inside the body.
 	 *
-	 * The alternation is tried at every offset BEFORE the pass's own tag, and
-	 * (*SKIP)(*FAIL) moves the next attempt past the span without handing it
-	 * to the callback. With $targets given, every other opening tag is
-	 * consumed whole as well, through ATTR_WALK: a `<script` spelled inside an
-	 * attribute value (`<div data-tpl="<script>">`) is then never read as the
-	 * start of a skip that would hide every real element up to the next
-	 * `</script>`. A raw-text tag a pass targets itself (<style> for the
-	 * stylesheet pass) is left out of the skip. The skip ends where the
-	 * parser ends the element: "</tag" followed by whitespace, "/" or ">".
+	 * A regex alternation in front of each pass could not get this right:
+	 * the spans are a property of the HTML tokenizer, and imitating it
+	 * piecemeal hid real elements behind tokens it did not know. So this is
+	 * a small tokenizer, one linear walk, and every rule in it errs the same
+	 * way — when unsure, a span is NOT inert, and the passes see it:
 	 *
-	 * @param string[]|null $targets Tag names the pass matches, or null when
-	 *                               the pass matches every tag itself.
-	 * @return string Pattern fragment ending in `|`, for the `#` delimiter
-	 *                with the `i` and `s` modifiers.
+	 * - Every construct the tokenizer reads as one token is consumed whole
+	 *   first, so a `<script` written inside it never opens a span: start and
+	 *   end tags with their attributes (`</p title="<script>">` is an end tag
+	 *   with an attribute), bogus comments (`<?…>`, `<!…>`, `</ …>`, all up
+	 *   to the first `>`) and comments.
+	 * - A comment ends as the parser ends it: `<!-->`, `<!--->`, `-->` or
+	 *   `--!>`. One that never closes is not inert; the walk goes on after
+	 *   its `<!--`.
+	 * - Inside <svg> and <math> nothing is raw text: there <title>, <style>
+	 *   and <script> are elements with children, and an <img> in them breaks
+	 *   out and loads. The walk counts those containers open and closed and
+	 *   records no span while one is open (a breakout it does not model
+	 *   keeps it counting: more is judged, never less).
+	 * - A raw-text body ends at the first `</name` followed by whitespace,
+	 *   `/` or `>`, which is never later than where the parser ends it. A
+	 *   body with no end, or a <plaintext>, ends the walk: nothing after it
+	 *   is recorded.
+	 * - <iframe>, <noembed>, <noframes> and <noscript> bodies are raw text to
+	 *   the parser too and are walked past for that reason, but not recorded:
+	 *   the iframe and noscript passes read them.
+	 *
+	 * @param string $html Document.
+	 * @return array<int,array{0:int,1:int}>|null Offset/length pairs in
+	 *         document order, or null when the walk could not finish (a PCRE
+	 *         error), in which case nothing may be treated as inert.
 	 */
-	private static function markup_skip( $targets = null ) {
-		$targets = null === $targets ? array() : array_map( 'strtolower', $targets );
-		$skip    = '<!--.*?-->';
-		foreach ( array( 'script', 'style', 'textarea', 'title', 'xmp' ) as $raw_tag ) {
-			if ( in_array( $raw_tag, $targets, true ) ) {
+	private function find_inert_spans( $html ) {
+		$spans     = array();
+		$len       = strlen( $html );
+		$pos       = 0;
+		$foreign   = 0;
+		$dash_next = -1;
+		$bang_next = -1;
+		$recorded  = array( 'script', 'style', 'textarea', 'title', 'xmp' );
+		$walked    = array( 'iframe', 'noembed', 'noframes', 'noscript' );
+		$tag_re    = '#\G<([a-zA-Z][^\s/>]*+)' . self::ATTR_WALK . '(/\s*+)?>#';
+		$end_re    = '#\G</[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>#';
+		while ( $pos < $len ) {
+			$lt = strpos( $html, '<', $pos );
+			if ( false === $lt || $lt + 1 >= $len ) {
+				break;
+			}
+			$c = $html[ $lt + 1 ];
+			if ( '!' === $c && '<!--' === substr( $html, $lt, 4 ) ) {
+				$p = $lt + 4;
+				if ( $p < $len && '>' === $html[ $p ] ) {
+					$end = $p + 1;
+				} elseif ( '->' === substr( $html, $p, 2 ) ) {
+					$end = $p + 2;
+				} else {
+					if ( false !== $dash_next && $dash_next < $p ) {
+						$dash_next = strpos( $html, '-->', $p );
+					}
+					if ( false !== $bang_next && $bang_next < $p ) {
+						$bang_next = strpos( $html, '--!>', $p );
+					}
+					$a   = false === $dash_next ? PHP_INT_MAX : $dash_next + 3;
+					$b   = false === $bang_next ? PHP_INT_MAX : $bang_next + 4;
+					$end = min( $a, $b );
+				}
+				if ( PHP_INT_MAX === $end ) {
+					$pos = $p; // Never closed: not inert, keep walking.
+					continue;
+				}
+				$spans[] = array( $lt, $end - $lt );
+				$pos     = $end;
 				continue;
 			}
-			$skip .= '|<' . $raw_tag . '(?=[\s/>])(?:' . self::ATTR_WALK . ')(?:/\s*+)?>.*?</' . $raw_tag . '(?=[\s/>])[^>]*+>';
+			if ( '!' === $c || '?' === $c || ( '/' === $c && ( $lt + 2 >= $len || ! ctype_alpha( $html[ $lt + 2 ] ) ) ) ) {
+				// A bogus comment (or `</>`), one token up to the first `>`.
+				$gt = strpos( $html, '>', $lt + 2 );
+				if ( false === $gt ) {
+					break;
+				}
+				$pos = $gt + 1;
+				continue;
+			}
+			if ( '/' === $c ) {
+				$ok = preg_match( $end_re, $html, $m, 0, $lt );
+				if ( false === $ok ) {
+					return null;
+				}
+				if ( 0 === $ok ) {
+					break; // A tag still open at the end of the document.
+				}
+				if ( $foreign > 0 && preg_match( '#\G</(?:svg|math)(?=[\s/>])#i', $html, $unused, 0, $lt ) ) {
+					$foreign--;
+				}
+				$pos = $lt + strlen( $m[0] );
+				continue;
+			}
+			if ( ! ctype_alpha( $c ) ) {
+				$pos = $lt + 1; // A `<` that starts nothing is text.
+				continue;
+			}
+			$ok = preg_match( $tag_re, $html, $m, 0, $lt );
+			if ( false === $ok ) {
+				return null;
+			}
+			if ( 0 === $ok ) {
+				break;
+			}
+			$name  = strtolower( $m[1] );
+			$after = $lt + strlen( $m[0] );
+			$pos   = $after;
+			if ( 'svg' === $name || 'math' === $name ) {
+				if ( empty( $m[2] ) ) {
+					$foreign++;
+				}
+				continue;
+			}
+			if ( $foreign > 0 ) {
+				continue;
+			}
+			if ( 'plaintext' === $name ) {
+				break;
+			}
+			$is_recorded = in_array( $name, $recorded, true );
+			if ( ! $is_recorded && ! in_array( $name, $walked, true ) ) {
+				continue;
+			}
+			$ok = preg_match( '#</' . $name . '(?=[\s/>])#i', $html, $close, PREG_OFFSET_CAPTURE, $after );
+			if ( false === $ok ) {
+				return null;
+			}
+			if ( 0 === $ok ) {
+				break;
+			}
+			$close_at = $close[0][1];
+			if ( $is_recorded && $close_at > $after ) {
+				$spans[] = array( $after, $close_at - $after );
+			}
+			$pos = $close_at;
 		}
-		if ( ! empty( $targets ) ) {
-			$skip .= '|<(?!(?:' . implode( '|', $targets ) . ')(?=[\s/>]))[a-zA-Z][a-zA-Z0-9:_.-]*+(?=[\s/>])(?:' . self::ATTR_WALK . ')(?:/\s*+)?>';
+		return $spans;
+	}
+
+	/**
+	 * Leading alternation for the step-1 script pattern: every construct the
+	 * tokenizer reads as one token, consumed whole and skipped.
+	 *
+	 * The script pattern is the one pass that still has to find elements by
+	 * regex across the page, and a `<script` written INSIDE one of these
+	 * tokens is not a script start: `</p title="<script>">` is an end tag
+	 * with an attribute, and `<?x …>`, `<!x …>`, `</ …>` are bogus comments
+	 * that end at their first `>`. Matched there, the pattern took the real
+	 * tracker after it for the body of a script that does not exist, and the
+	 * tracker shipped live. Other opening tags are consumed through
+	 * ATTR_WALK for the same reason (a `<script` in an attribute value).
+	 * `<!--` is left out: a closed comment is already stashed, and one that
+	 * never closes is judged rather than skipped.
+	 * Every quantifier is possessive: nothing here can backtrack, so this
+	 * adds no PCRE-limit failure to the pass. Closed comments and raw-text
+	 * bodies are already out of the buffer (stash_inert_spans()).
+	 *
+	 * @return string Pattern fragment ending in `|`, for the `#` delimiter.
+	 */
+	private static function script_token_skip() {
+		return '(?:</[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
+			. '|<\?[^>]*+>|<!(?!--)[^>]*+>'
+			. '|</(?![a-zA-Z])[^>]*+>'
+			. '|<(?!script(?=[\s/>]))[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
+			. ')(*SKIP)(*FAIL)|';
+	}
+
+	/**
+	 * Replace every inert span with a marker no pass can match.
+	 *
+	 * The markers carry the request nonce, like the srcdoc and noscript
+	 * stashes, so the page cannot spell one. The script and style passes,
+	 * which must read a body, are handed it back by process_with_inert_body().
+	 *
+	 * @param string $html  Document.
+	 * @param string $nonce Per-request nonce.
+	 * @param array  $stash Marker => original text, filled here.
+	 * @return string Document with the spans stashed; unchanged when the walk
+	 *                could not finish.
+	 */
+	private function stash_inert_spans( $html, $nonce, array &$stash ) {
+		$stash = array();
+		$spans = $this->find_inert_spans( $html );
+		if ( empty( $spans ) ) {
+			return $html;
 		}
-		return '(?:' . $skip . ')(*SKIP)(*FAIL)|';
+		$out  = '';
+		$last = 0;
+		foreach ( $spans as $span ) {
+			$key           = '__FAZ_INERT_' . $nonce . '_' . count( $stash ) . '__';
+			$stash[ $key ] = substr( $html, $span[0], $span[1] );
+			$out          .= substr( $html, $last, $span[0] - $last ) . $key;
+			$last          = $span[0] + $span[1];
+		}
+		return $out . substr( $html, $last );
+	}
+
+	/**
+	 * Run a script or style pass on an element whose body is stashed.
+	 *
+	 * The processor is given the real body, and the body it returns (the
+	 * style pass rewrites CSS) goes back into the stash, so the passes after
+	 * this one still cannot see it. Should the result not have the shape the
+	 * processors build, it is returned as it is: the body is then visible to
+	 * the later passes, as it was before the stash existed.
+	 *
+	 * @param array    $m       Match: 0 element, 1 attributes, 2 body.
+	 * @param string   $tag     `script` or `style`.
+	 * @param array    $stash   Inert stash, updated in place.
+	 * @param callable $process Processor taking the match.
+	 * @return string
+	 */
+	private function process_with_inert_body( $m, $tag, array &$stash, $process ) {
+		$marker = isset( $m[2] ) ? $m[2] : '';
+		if ( '' === $marker || ! isset( $stash[ $marker ] ) ) {
+			return $process( $m );
+		}
+		$real   = $stash[ $marker ];
+		$m[0]   = str_replace( $marker, $real, $m[0] );
+		$m[2]   = $real;
+		$result = $process( $m );
+		if ( 1 === preg_match( '#^(<' . $tag . '(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>)(.*)(</' . $tag . '(?=[\s/>])[^>]*+>)$#is', $result, $r ) ) {
+			$stash[ $marker ] = $r[2];
+			return $r[1] . $marker . $r[3];
+		}
+		return $result;
 	}
 
 	private function process_link_tag( $m, $providers, $blocked_categories ) {
@@ -11206,7 +11433,11 @@ class Frontend {
 		// than delayed — and the leftovers became stray attributes on the frame.
 		// process_output_buffer() has had this protection since the same defect
 		// was found there; this entry point runs the same passes and did not.
-		$stash_nonce   = $this->stash_nonce();
+		$stash_nonce = $this->stash_nonce();
+		// Comments and script bodies are text; see process_output_buffer().
+		$inert_stash = array();
+		$content     = $this->stash_inert_spans( $content, $stash_nonce, $inert_stash );
+
 		$srcdoc_stash  = array();
 		$srcdoc_marker = '';
 		$stashed       = $this->stash_iframe_srcdocs( $content, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker );
@@ -11225,9 +11456,16 @@ class Frontend {
 		// them unblocked, which would violate consent requirements.
 		if ( false !== stripos( $content, '<script' ) ) {
 			$result = preg_replace_callback(
-				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_script_tag( $m, $providers, $blocked_categories );
+				'#' . self::script_token_skip() . '<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
+				function ( $m ) use ( $providers, $blocked_categories, &$inert_stash ) {
+					return $this->process_with_inert_body(
+						$m,
+						'script',
+						$inert_stash,
+						function ( $m ) use ( $providers, $blocked_categories ) {
+							return $this->process_script_tag( $m, $providers, $blocked_categories );
+						}
+					);
 				},
 				$content
 			);
@@ -11242,7 +11480,7 @@ class Frontend {
 		// Block <iframe> tags in content.
 		if ( false !== stripos( $content, '<iframe' ) ) {
 			$result = preg_replace_callback(
-				'#' . self::markup_skip( array( 'iframe' ) ) . '<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
+				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
 				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );
 				},
@@ -11254,6 +11492,10 @@ class Frontend {
 				error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in filter_content_blocking (iframes)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 				$content = preg_replace( '#<iframe\b[^>]*>.*?</iframe(?=[\s/>])[^>]*>#is', '', $content ) ?? $content;
 			}
+		}
+
+		if ( ! empty( $inert_stash ) ) {
+			$content = strtr( $content, $inert_stash );
 		}
 
 		// Hide social embed containers that depend on blocked scripts.
