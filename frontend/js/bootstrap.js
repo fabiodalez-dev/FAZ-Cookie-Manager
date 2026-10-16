@@ -100,6 +100,11 @@
     // puts one empty text node into a parked <style>, and that write must not
     // be judged by the very gate that is parking the element.
     var nativeAppend = Node.prototype.appendChild;
+    // Captured for the same reason: a held insertion takes its node out of
+    // where it is NOW (stash() below), and that move must not be judged — or
+    // held — by the wrapper that is holding the insertion.
+    var nativeRemoveChild = Node.prototype.removeChild;
+    var nativeFragment = Document.prototype.createDocumentFragment;
     function attr(el, name) {
         try {
             if (name === 'xlink:href') {
@@ -849,44 +854,157 @@
         // already judged.
         return sunk.has(node);
     }
+    // ---- Held insertions -------------------------------------------------
+    //
+    // A held insertion used to leave its node exactly where it was and return
+    // as if it had moved. Every DOM idiom that moves nodes until a source is
+    // empty then never ended:
+    //
+    //     while (src.firstChild) dst.appendChild(src.firstChild);
+    //
+    // src.firstChild stayed the same node, each call queued another task, and
+    // the loop ran synchronously until the tab ran out of memory. The runtime's
+    // own _fazRenderBanner() is written that way (DOMParser body → fragment),
+    // and a stale 1.34.0 runtime runs it while this file is still pending — a
+    // page cache serving script.min.js without its ?ver= is enough.
+    //
+    // So the move happens NOW and only the arrival waits. The node goes into a
+    // private DocumentFragment ("holder") owned by the node's OWN document —
+    // never this one: an <img> built by DOMParser is inert there, and adopting
+    // it into this document, even into a detached fragment, starts its fetch.
+    // What the page observes is what the call promised: the node left its old
+    // parent, the source empties, the loop ends. At the replay the HOLDER is
+    // inserted, so whatever the page put next to the node in the meantime goes
+    // with it, and a node the page has since moved or removed elsewhere has
+    // simply left the holder and is not dragged back.
+    //
+    // Deliberately not emulated: until the replay `node.parentNode` is the
+    // holder, not the destination, and the destination does not list it. Both
+    // were already untrue before this — the node then claimed its OLD parent —
+    // and nothing short of the insertion itself could make them true.
+    var records = new WeakMap();   // holder → the held insertion it belongs to
+    var into = new WeakMap();      // container → held insertions still queued for it
+    function isNode(n) { return !!n && typeof n === 'object' && typeof n.nodeType === 'number'; }
+    function contains(node, container) {
+        try { return !!(container && node.contains && node.contains(container)); } catch (e) { return false; }
+    }
+    function holderFor(node) {
+        var doc = node.nodeType === 9 ? node : (node.ownerDocument || d);
+        try { return nativeFragment.call(doc); } catch (e) { return nativeFragment.call(d); }
+    }
+    // A child the page has already given to `parent` through a held call: in
+    // the DOM the page is reasoning about, it IS a child of `parent`, so it is
+    // a valid reference node and a valid thing to remove.
+    function pendingChild(parent, node) {
+        var record = node && node.parentNode && records.get(node.parentNode);
+        return !!record && record.target === parent;
+    }
+    // A fragment with insertions still queued INTO it: inserting it now would
+    // move nothing, and the queued children would land in an orphan once they
+    // replay. Its insertion is held behind them instead, and forward() points
+    // them at the holder that takes the fragment's place.
+    function waitingFragment(n) { return !!n && n.nodeType === 11 && into.has(n); }
+    function forward(fragment, holder) {
+        var list = into.get(fragment);
+        if (!list) return;
+        into.delete(fragment);
+        waiting.delete(fragment);
+        list.forEach(function (record) { record.target = holder; });
+        into.set(holder, list);
+    }
+    function stash(node, record) {
+        var holder = holderFor(node);
+        records.set(holder, record);
+        if (node.nodeType === 11) {
+            // Inserting a fragment empties it; holding one has to as well.
+            forward(node, holder);
+            while (node.firstChild) moveInto(holder, node.firstChild);
+        } else {
+            moveInto(holder, node);
+        }
+        return holder;
+    }
+    function moveInto(holder, node) {
+        var from = node.parentNode;
+        // Leaving a <style> takes the node's text out of the sheet, and that
+        // can REVEAL a URL it was splitting — the removal rule below.
+        if (isStyle(from) && cssRisk(styleTextWithout(from, node), [])) {
+            return removeFromSheet(from, node, function () { nativeAppend.call(holder, node); });
+        }
+        nativeAppend.call(holder, node);
+    }
+    function enqueue(record, task) {
+        if (!immediate && record.target) {
+            var list = into.get(record.target);
+            if (!list) into.set(record.target, list = []);
+            list.push(record);
+        }
+        defer(task);
+    }
     // Delay dynamic insertions, retaining the actual nodes and their listeners.
     ['appendChild', 'insertBefore', 'replaceChild'].forEach(function (name) {
         replace(Node.prototype, name, function (original) {
             return function () {
                 var self = this, args = Array.prototype.slice.call(arguments);
+                var node = args[0], ref = name === 'appendChild' ? null : args[1];
                 var styleOwner = isStyle(self) ? self : null;
                 // replaceChild drops the old child, so the text it contributed
                 // stops counting — the same bookkeeping replaceWith needs.
-                var dropped = name === 'replaceChild' ? args[1] : null;
-                var carries = resources(args[0]).length
-                    || styleRisk(args[0])
-                    || !!(styleOwner && cssRisk(containerText(styleOwner, dropped, name), [args[0]]));
+                var dropped = name === 'replaceChild' ? ref : null;
+                var pendingRef = !!ref && pendingChild(self, ref);
+                var carries = resources(node).length
+                    || styleRisk(node)
+                    || waitingFragment(node)
+                    || pendingRef
+                    || !!(styleOwner && cssRisk(containerText(styleOwner, dropped, name), [node]));
                 if (!carries && !waiting.has(self)) return original.apply(self, args);
+                // A call the engine refuses is refused here too, with the
+                // engine's own error: holding it turned a synchronous
+                // NotFoundError or HierarchyRequestError into a node quietly
+                // dropped at the replay.
+                if (!isNode(node) || node.nodeType === 9 || node === ref || contains(node, self)
+                    || (name !== 'appendChild' && args.length < 2)
+                    || (name === 'replaceChild' && !ref)
+                    || (ref && ref.parentNode !== self && !pendingRef)) {
+                    return original.apply(self, args);
+                }
                 waiting.add(self);
-                defer(function (policy) {
-                    prepare(args[0], policy);
+                var record = { target: self };
+                var holder = stash(node, record);
+                // replaceChild: the old child leaves now, as the call says it
+                // does — a lazy loader's `while (el = q('.lazy')) el.replaceWith…`
+                // spins on it otherwise — and the replacement lands where it
+                // was. Two exceptions keep it until the replay: a child of a
+                // <style>, whose text is part of the sheet and could reveal or
+                // reorder a URL by leaving early; and one that is itself still
+                // waiting to arrive, which is not in the document to leave.
+                var anchor = ref, mode = name;
+                if (name === 'replaceChild' && !styleOwner && !pendingRef) {
+                    anchor = ref.nextSibling;
+                    nativeRemoveChild.call(self, ref);
+                    mode = 'insertBefore';
+                }
+                enqueue(record, function (policy) {
+                    var target = record.target;
+                    prepare(holder, policy);
                     // The reference node may have moved or been removed while
                     // this insertion waited. Replaying against it throws, and
                     // the node would be dropped with only a console warning,
                     // so fall back to appending into the same parent.
-                    var ref = args[1];
-                    var moved = name !== 'appendChild' && ref && ref.parentNode !== self;
+                    var moved = mode !== 'appendChild' && anchor && anchor.parentNode !== target;
                     var insert = function () {
-                        parkSheets(args[0], policy);
-                        if (moved) {
-                            if (name === 'replaceChild') Node.prototype.appendChild.call(self, args[0]);
-                            else Node.prototype.insertBefore.call(self, args[0], null);
-                            return;
-                        }
-                        self[name].apply(self, args);
+                        parkSheets(holder, policy);
+                        if (moved || mode === 'appendChild' || (mode === 'insertBefore' && !anchor)) return target.appendChild(holder);
+                        if (mode === 'insertBefore') return target.insertBefore(holder, anchor);
+                        target.replaceChild(holder, anchor);
                     };
                     if (!styleOwner) return insert();
                     // The anchor is the second argument for both insertBefore
                     // and replaceChild; an appendChild has none, and so does a
                     // reference that moved, since the fallback appends.
-                    deliverCss(policy, styleOwner, moved ? null : ref, moved ? 'appendChild' : name, [args[0]], insert);
+                    deliverCss(policy, styleOwner, moved ? null : anchor, moved ? 'appendChild' : mode, [holder], insert);
                 });
-                return name === 'replaceChild' ? args[1] : args[0];
+                return name === 'replaceChild' ? ref : node;
             };
         });
     });
@@ -902,23 +1020,71 @@
                 return function () {
                     var self = this, args = Array.prototype.slice.call(arguments);
                     var styleOwner = cssOwner(self, name);
+                    // before/after/replaceWith place the arguments next to
+                    // `self`, in its parent; the other three fill `self`.
+                    var sibling = name === 'before' || name === 'after' || name === 'replaceWith';
+                    var container = sibling ? self.parentNode : self;
                     // One joined string, in call order, judged against the text
                     // the owner will actually hold. Per-argument tests missed a
                     // URL split across two arguments of one call.
-                    var carries = args.some(function (n) { return resources(n).length || styleRisk(n); })
+                    var carries = args.some(function (n) { return resources(n).length || styleRisk(n) || waitingFragment(n); })
                         || !!(styleOwner && cssRisk(containerText(styleOwner, self, name), args));
-                    if (!carries) return original.apply(self, args);
-                    defer(function (policy) {
+                    // Queued behind an earlier held insertion into the same
+                    // container, as appendChild always was: otherwise a plain
+                    // append overtakes it and the sibling order inverts.
+                    if (!carries && !(container && waiting.has(container))) return original.apply(self, args);
+                    // A sibling call on a node with no parent does nothing at
+                    // all, nodes included; a node placed inside itself is the
+                    // engine's error to raise. Neither is held.
+                    if (!container || args.some(function (n) { return isNode(n) && (n.nodeType === 9 || contains(n, container)); })) {
+                        return original.apply(self, args);
+                    }
+                    waiting.add(container);
+                    var record = { target: container };
+                    // What the call removes, it removes now, for the reason
+                    // replaceChild gives — except inside a <style>, where the
+                    // text that goes is part of the sheet. The place it held is
+                    // its first following sibling that is not itself being
+                    // inserted (the specification's "viable next sibling"),
+                    // read before the arguments are taken out.
+                    var anchor = null, gone = false;
+                    if (name === 'replaceWith' && !styleOwner) {
+                        anchor = self.nextSibling;
+                        while (anchor && args.indexOf(anchor) !== -1) anchor = anchor.nextSibling;
+                        gone = true;
+                    }
+                    var parts = args.map(function (n) { return isNode(n) ? stash(n, record) : n; });
+                    if (gone && self.parentNode === container) nativeRemoveChild.call(container, self);
+                    // Emptying is safe in a <style> too: no text fetches nothing.
+                    if (name === 'replaceChildren') {
+                        while (self.firstChild) nativeRemoveChild.call(self, self.firstChild);
+                    }
+                    enqueue(record, function (policy) {
+                        var target = record.target;
                         var insert = function () {
-                            args.forEach(function (n) { prepare(n, policy); parkSheets(n, policy); });
-                            self[name].apply(self, args);
+                            parts.forEach(function (n) { prepare(n, policy); parkSheets(n, policy); });
+                            if (gone) {
+                                if (anchor && anchor.parentNode === target) return anchor.before.apply(anchor, parts);
+                                return target.append.apply(target, parts);
+                            }
+                            // The node a sibling call was anchored on may have
+                            // left while this waited; land in the parent then,
+                            // as a moved reference node does above.
+                            if (sibling) {
+                                if (self.parentNode === target) return self[name].apply(self, parts);
+                                return target.append.apply(target, parts);
+                            }
+                            // `target`, not `self`: a fragment that was itself
+                            // inserted while this waited has been forwarded to
+                            // the holder that took its place.
+                            target[name].apply(target, parts);
                         };
                         if (!styleOwner) return insert();
                         // before/after/replaceWith place the arguments against
                         // `self`, a child of the owner; the other three address
                         // the owner itself.
-                        var anchor = styleOwner === self ? null : self;
-                        deliverCss(policy, styleOwner, anchor, name, args, insert);
+                        var at = styleOwner === self ? null : self;
+                        deliverCss(policy, styleOwner, at, name, parts, insert);
                     });
                 };
             });
@@ -927,6 +1093,69 @@
     // Removing the node that split a URL reveals it — the same reason
     // `deleteData` is intercepted, one level up. `url(https:/*x*/ /t.test/a.png)`
     // becomes a live request once the comment node goes.
+    //
+    // The removal used to be HELD, and a held removal is the insertion bug in
+    // reverse: `while (style.firstChild) style.removeChild(style.firstChild)`
+    // removed nothing, queued a task per turn and never ended — on the safety
+    // release too, where a refused removal simply did not happen. It happens
+    // now. What is held instead is the SHEET: it is switched off before the
+    // node goes (suspendSheet), so the engine never parses the text the
+    // removal reveals, and switched back on by a queued task that judges the
+    // text it then holds the way every other route into a <style> is judged —
+    // parked, if the policy refuses a URL in it. The site's own rules in that
+    // one sheet are off for the length of the hold; that is the price, paid
+    // only by a script that removes part of a sheet whose remainder could
+    // fetch.
+    //
+    // Not the neutralised text in place of the removal: rewriting the live
+    // text turns the element's text nodes into one, which a page walking its
+    // children — the loop above — sees as a different sheet, and the
+    // judgement it needs is the runtime's, which does not exist yet.
+    var HELD_TYPE = 'text/faz-held';
+    var suspended = new WeakMap();
+    function suspendSheet(owner) {
+        if (suspended.has(owner)) return false;
+        suspended.set(owner, { had: nativeHas.call(owner, 'type'), type: attr(owner, 'type') });
+        // A type the engine does not know means no stylesheet at all — and it
+        // is read on the next change of the element's children, which is the
+        // removal that follows, never on the attribute write itself.
+        setAttr(owner, 'type', HELD_TYPE);
+        return true;
+    }
+    function resumeSheet(owner, policy) {
+        var saved = suspended.get(owner);
+        if (!saved) return;
+        suspended.delete(owner);
+        var text = styleText(owner);
+        var verdict = policy ? judgeCss(policy, text) : null;
+        // The safety release keeps its broad rule: no text that could fetch
+        // anything is applied without the runtime's judgement.
+        if (!verdict && policy && policy.sameOriginOnly && !allowedCss(policy, text)) verdict = { hit: '', whole: true };
+        if (verdict) {
+            // A sheet someone already parked keeps THEIR original in its
+            // marker; only the live stand-in is emptied.
+            if (nativeHas.call(owner, 'data-faz-css')) emptySheet(owner);
+            else parkCss(owner, text, policy, verdict);
+        }
+        if (attr(owner, 'type') === HELD_TYPE) {
+            if (saved.had) setAttr(owner, 'type', saved.type); else dropAttr(owner, 'type');
+        }
+        // The type is not re-read on its own: a change of the children is
+        // what makes the engine build the sheet again, so make one that leaves
+        // the children as they are.
+        try {
+            var touch = (owner.ownerDocument || d).createTextNode('');
+            nativeAppend.call(owner, touch);
+            nativeRemoveChild.call(owner, touch);
+        } catch (e) { /* an owner that takes no children has no sheet to rebuild */ }
+    }
+    // Off, then the removal, then the task that turns it back on — in that
+    // order, because on the safety release defer() runs the task at once.
+    function removeFromSheet(owner, node, remove) {
+        var first = suspendSheet(owner);
+        remove();
+        if (first) defer(function (policy) { resumeSheet(owner, policy); });
+    }
     ['remove'].forEach(function (name) {
         [Element.prototype, w.CharacterData && CharacterData.prototype].forEach(function (proto) {
             if (!proto || typeof proto[name] !== 'function') return;
@@ -935,9 +1164,7 @@
                     var node = this, owner = node.parentNode;
                     if (!isStyle(owner)) return original.call(node);
                     if (!cssRisk(styleTextWithout(owner, node), [])) return original.call(node);
-                    defer(function (policy) {
-                        deliverCss(policy, owner, node, 'without', [], function () { node[name].call(node); });
-                    });
+                    removeFromSheet(owner, node, function () { nativeRemoveChild.call(owner, node); });
                 };
             });
         });
@@ -945,11 +1172,16 @@
     replace(Node.prototype, 'removeChild', function (original) {
         return function (child) {
             var self = this;
-            if (!isStyle(self)) return original.call(self, child);
+            // A child the page gave this parent through a held call is its
+            // child as far as the page knows. Removing it cancels the arrival;
+            // the engine would have answered NotFoundError.
+            if (isNode(child) && child.parentNode !== self && pendingChild(self, child)) {
+                nativeRemoveChild.call(child.parentNode, child);
+                return child;
+            }
+            if (!isStyle(self) || !isNode(child) || child.parentNode !== self) return original.call(self, child);
             if (!cssRisk(styleTextWithout(self, child), [])) return original.call(self, child);
-            defer(function (policy) {
-                deliverCss(policy, self, child, 'without', [], function () { self.removeChild(child); });
-            });
+            removeFromSheet(self, child, function () { nativeRemoveChild.call(self, child); });
             return child;
         };
     });
@@ -1012,12 +1244,25 @@
                         || !!(styleOwner && cssRisk(containerText(styleOwner, null, name), [node]))
                         || !!(styleOwner && name === 'insertNode' && cssURL(rangeResult(range, styleOwner, node)));
                     if (!carries) return original.call(range, node);
+                    // What the engine refuses, with its own error; see the
+                    // Node wrappers above.
+                    if (!isNode(node) || node.nodeType === 9 || (name === 'surroundContents' && (node.nodeType === 10 || node.nodeType === 11))) {
+                        return original.call(range, node);
+                    }
+                    // The node leaves its old place now, as at every other
+                    // held insertion (stash() above). insertNode takes the
+                    // holder at the replay, so a fragment's children arrive
+                    // together; surroundContents needs the element itself, and
+                    // one the page has taken back since is not wrapped.
+                    var holder = stash(node, { target: null });
+                    var arg = name === 'insertNode' ? holder : node;
                     defer(function (policy) {
+                        if (name === 'surroundContents' && node.parentNode !== holder) return;
                         var owner = rangeStyleOwner(range);
                         var insert = function () {
-                            prepare(node, policy);
-                            parkSheets(node, policy);
-                            original.call(range, node);
+                            prepare(arg, policy);
+                            parkSheets(arg, policy);
+                            original.call(range, arg);
                         };
                         if (owner) {
                             // insertNode splices the node's text in at the
@@ -1028,9 +1273,9 @@
                             // part — judged on the whole of its text instead,
                             // which is the safe direction and costs a replay.
                             var result = name === 'insertNode'
-                                ? rangeResult(range, owner, node)
+                                ? rangeResult(range, owner, arg)
                                 : resultText(owner, null, 'append', []);
-                            return deliverCss(policy, owner, null, name, [node], insert, result);
+                            return deliverCss(policy, owner, null, name, [arg], insert, result);
                         }
                         if (name !== 'surroundContents' || !isStyle(node)) return insert();
                         // A fresh <style> wrapping page text: the sheet it
@@ -1061,9 +1306,11 @@
         // deleteData and removeChild do — `url(https:/*x*/ /t/a.png)` is a
         // valid URL once the comment goes — and these two were the one removal
         // route with no gate. Judged on the owner's text WITHOUT the range, as
-        // the other removals are. extractContents has to answer with a
-        // fragment at once; while the removal is held the answer is an empty
-        // one, the same shape of debt insertRule's index carries.
+        // the other removals are, and handled the way they are: the removal
+        // happens now, with the sheet switched off around it (removeFromSheet),
+        // so extractContents answers with the real fragment instead of an
+        // empty stand-in, and a range the page deletes again finds the text
+        // gone.
         ['deleteContents', 'extractContents'].forEach(function (name) {
             if (typeof Range.prototype[name] !== 'function') return;
             replace(Range.prototype, name, function (original) {
@@ -1072,25 +1319,41 @@
                     if (!owner) return original.call(range);
                     var result = rangeRemoved(range, owner);
                     if (result !== null && !cssURL(result)) return original.call(range);
-                    defer(function (policy) {
-                        var live = rangeStyleOwner(range);
-                        if (!live) return void original.call(range);
-                        deliverCss(policy, live, null, 'without', [], function () { original.call(range); }, rangeRemoved(range, live));
-                    });
-                    return name === 'extractContents' ? d.createDocumentFragment() : undefined;
+                    var out;
+                    removeFromSheet(owner, null, function () { out = original.call(range); });
+                    return out;
                 };
             });
         });
     }
     replace(Element.prototype, 'insertAdjacentElement', function (original) {
         return function (position, node) {
-            var el = this;
-            if (!resources(node).length && !styleRisk(node) && !waiting.has(el)) return original.call(el, position, node);
-            waiting.add(el);
-            defer(function (policy) {
-                prepare(node, policy);
-                parkSheets(node, policy);
-                el.insertAdjacentElement(position, node);
+            var el = this, where = String(position).toLowerCase();
+            var outside = where === 'beforebegin' || where === 'afterend';
+            var container = outside ? el.parentNode : el;
+            if (!resources(node).length && !styleRisk(node) && !(container && waiting.has(container))) return original.call(el, position, node);
+            // An unknown position, a non-element, a parentless element asked
+            // for a sibling, an element placed inside itself: the engine
+            // throws or does nothing, and so does this.
+            if (['beforebegin', 'afterbegin', 'beforeend', 'afterend'].indexOf(where) === -1 || !container
+                || !isNode(node) || node.nodeType !== 1 || contains(node, container)) {
+                return original.call(el, position, node);
+            }
+            waiting.add(container);
+            var record = { target: container };
+            var holder = stash(node, record);
+            enqueue(record, function (policy) {
+                var target = record.target;
+                prepare(holder, policy);
+                parkSheets(holder, policy);
+                // The holder is a fragment, which insertAdjacentElement does
+                // not take, so the four positions are spelled out against the
+                // element as it stands now — falling back to the container the
+                // call was made into once the element has left it.
+                if (where === 'afterbegin') return el.insertBefore(holder, el.firstChild);
+                if (where === 'beforeend') return el.appendChild(holder);
+                if (el.parentNode !== target) return target.appendChild(holder);
+                target.insertBefore(holder, where === 'beforebegin' ? el : el.nextSibling);
             });
             return node;
         };
@@ -2468,6 +2731,9 @@
         var tasks = queue;
         queue = [];
         immediate = safety;
+        // Every queued insertion is about to land: nothing is waiting INTO a
+        // container any more, and nothing will queue again on this path.
+        into = new WeakMap();
         replaying++;
         try { judgeScripts(safety); } finally { replaying--; }
         tasks.forEach(function (task) { run(task, safety); });
@@ -2587,6 +2853,7 @@
             var tasks = queue;
             queue = [];
             tasks.forEach(function (task) { run(task, policy); });
+            into = new WeakMap();
             if (late) immediate = policy;
         }
     };

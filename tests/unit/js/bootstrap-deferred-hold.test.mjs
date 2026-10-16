@@ -481,9 +481,17 @@ async function release(window) {
   eq('premise: the style now holds three text nodes', style.childNodes.length, 3);
   const before = style.textContent;
   style.removeChild(middle);
-  eq('removing the comment node that split the URL is held', style.textContent, before);
+  // The removal itself is not held any more — a held removal is what made
+  // `while (style.firstChild) style.removeChild(style.firstChild)` spin. It
+  // happens now, and the SHEET is what waits: switched off before the node
+  // went, so the engine never parsed the URL the removal revealed.
+  eq('removing the comment node that split the URL happens at once', middle.parentNode, null);
+  eq('the style keeps the rest of its text', style.textContent, before.replace('/*x*/', ''));
+  eq('and the sheet is switched off meanwhile', style.getAttribute('type'), 'text/faz-held');
+  eq('so the engine holds no stylesheet for it', style.sheet, null);
   runtimeHandoff(window);
-  ok('and the removal applies at handoff', style.textContent !== before);
+  eq('at handoff the original type comes back', style.getAttribute('type'), null);
+  ok('and the engine builds the sheet again', !!style.sheet);
 }
 
 {
@@ -548,7 +556,9 @@ console.log('\nbootstrap: a Range reaches the DOM through neither Node nor Paren
   range.selectNodeContents(style);
   eq('premise: the range spans the sheet text', range.toString(), '.p{background-image:url(https://tracker.test/r3.png)}');
   range.surroundContents(wrapper);
-  eq('Range.surroundContents inside a <style> is held: the wrapper is not inserted', wrapper.parentNode, null);
+  // Held means out of the document, not parentless: a held node waits in a
+  // private fragment, so a page loop moving nodes sees them leave.
+  eq('Range.surroundContents inside a <style> is held: the wrapper is not inserted', wrapper.isConnected, false);
   runtimeHandoff(window);
   eq('and the wrap applies at handoff', wrapper.parentNode, style);
   eq('with the sheet text moved inside the wrapper', wrapper.textContent, '.p{background-image:url(https://tracker.test/r3.png)}');
@@ -1514,7 +1524,7 @@ console.log('\nbootstrap: markup that never passes through a setter');
   const range = document.createRange();
   range.selectNodeContents(document.getElementById('list'));
   range.insertNode(img);
-  eq('a resource inserted through Range.insertNode is held out of the document', img.parentNode, null);
+  eq('a resource inserted through Range.insertNode is held out of the document', img.isConnected, false);
   await release(window);
   eq('and parked on the safety release', nativeGetAttribute.call(img, 'data-faz-src'), 'https://tracker.test/range.gif');
   eq('with no live src', nativeGetAttribute.call(img, 'src'), null);
@@ -1957,10 +1967,13 @@ for (const name of ['deleteContents', 'extractContents']) {
   range.setStart(node, before.indexOf('/*'));
   range.setEnd(node, before.indexOf('/*') + 7);
   const out = range[name]();
-  eq('Range.' + name + ' that would reveal a URL is held', document.getElementById('seed').textContent, before);
-  if (name === 'extractContents') eq('and answers with an empty fragment meanwhile', out && out.childNodes.length, 0);
+  // As removeChild above: the removal happens now, the sheet waits.
+  eq('Range.' + name + ' that would reveal a URL applies at once', document.getElementById('seed').textContent, '.p{background-image:url(https:tracker.test/a.png)}');
+  eq('with the sheet switched off until the runtime judges it', document.getElementById('seed').sheet, null);
+  if (name === 'extractContents') eq('and answers with the removed text, not an empty stand-in', out && out.textContent, '/*x*/ /');
   runtimeHandoff(window);
-  eq('and it applies at handoff', document.getElementById('seed').textContent, '.p{background-image:url(https:tracker.test/a.png)}');
+  eq('and it is still applied after the handoff', document.getElementById('seed').textContent, '.p{background-image:url(https:tracker.test/a.png)}');
+  eq('with the sheet switched back on', document.getElementById('seed').getAttribute('type'), null);
 }
 
 {
