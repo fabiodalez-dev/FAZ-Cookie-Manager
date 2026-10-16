@@ -1478,6 +1478,21 @@ class Activator {
 					do_action( 'rt_nginx_helper_purge_all' );
 				}
 			} ),
+			array( 'Proxy Cache Purge', function () {
+				// Not through the FAZ purge event the save adapter fires: this
+				// runs on init priority 5, before VarnishPurger::init()
+				// (priority 10) reads varnish_http_purge_events and hooks its
+				// listeners, so that event reached nothing here. The plugin's
+				// public execute_purge_no_id() needs neither: it queues the
+				// full-site `/?vhp-regex` URL on the instance, and the shutdown
+				// hook init() adds sends it — the same path as its own "Purge
+				// cache" button. Called after init (an activation), shutdown is
+				// already hooked and the result is the same.
+				$purger = isset( $GLOBALS['purger'] ) ? $GLOBALS['purger'] : null;
+				if ( $purger instanceof \VarnishPurger && is_callable( array( $purger, 'execute_purge_no_id' ) ) ) {
+					$purger->execute_purge_no_id( 0 );
+				}
+			} ),
 			array( 'Super Page Cache', function () {
 				if ( has_action( 'swcfpc_purge_cache' ) ) {
 					do_action( 'swcfpc_purge_cache' );

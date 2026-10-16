@@ -79,7 +79,17 @@ namespace {
 	}
 
 	// Proxy Cache Purge, WP-Optimize and Super Page Cache public symbols.
-	class VarnishPurger {}
+	// The shape of the real class: a public execute_purge_no_id() that queues
+	// the full-site `/?vhp-regex` URL, sent by execute_purge() on shutdown,
+	// and one instance in the global $purger.
+	class VarnishPurger {
+		public $purge_urls = array();
+		public function execute_purge_no_id( $post_id ) {
+			faz_pa_count( 'vhp_execute_purge_no_id' );
+			$this->purge_urls[] = 'http://example.test/?vhp-regex';
+		}
+	}
+	$GLOBALS['purger'] = new VarnishPurger();
 	class Faz_Pa_Wpo_Page_Cache {
 		public function purge() {
 			faz_pa_count( 'wpo_page_cache_purge' );
@@ -265,6 +275,19 @@ namespace {
 	faz_pa_ok(
 		1 === faz_pa_calls( 'rt_nginx_helper_purge_all' ) && 1 === faz_pa_calls( 'swcfpc_purge_cache' ),
 		'26 an upgrade purges Nginx Helper and Super Page Cache'
+	);
+
+	// Proxy Cache Purge on an upgrade. Activator::purge_page_caches() runs on
+	// init priority 5, before VarnishPurger::init() (priority 10) has hooked
+	// the event lists, so firing the FAZ event there reached nothing. Its
+	// public execute_purge_no_id() only queues the full purge, which the
+	// shutdown hook init() adds then sends; called after init it is the same.
+	$GLOBALS['faz_calls'] = array();
+	$GLOBALS['purger']->purge_urls = array();
+	Activator::purge_page_caches();
+	faz_pa_ok(
+		1 === faz_pa_calls( 'vhp_execute_purge_no_id' ) && array( 'http://example.test/?vhp-regex' ) === $GLOBALS['purger']->purge_urls,
+		'27 an upgrade queues a full Proxy Cache Purge through its own API'
 	);
 
 	echo "\n" . ( 0 === $faz_fail ? "ALL PASS ({$faz_pass})\n" : "FAILED: {$faz_fail}, passed: {$faz_pass}\n" );
