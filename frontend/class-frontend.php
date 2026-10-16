@@ -190,6 +190,18 @@ class Frontend {
 	private $whitelist_cache          = null;
 	private $service_consent_cache    = null;
 	/**
+	 * The visitor's OWN blocked set and per-service map, kept apart from the
+	 * render-time ones above. They differ only on a 'fallback' render (see
+	 * decide_visitor_state_cache_veto()), where the render blocks the shareable
+	 * union but the destructive cookie layers must still read what this visitor
+	 * actually granted. Null until get_blocked_categories() /
+	 * get_service_consent() fill them.
+	 *
+	 * @var array|null
+	 */
+	private $enforcement_blocked_categories_cache = null;
+	private $enforcement_service_consent_cache    = null;
+	/**
 	 * Per-request cache for get_consent_cookie_scope(). `false` = not computed
 	 * yet; null is a legitimate value (no scope check on this request).
 	 *
@@ -7828,7 +7840,10 @@ class Frontend {
 					$blocked[] = $slug;
 				}
 			}
-			$this->blocked_categories_cache = $blocked;
+			// The cookie layers stand down in this mode (see
+			// server_cookie_enforcement_permitted()), so no separate view.
+			$this->blocked_categories_cache             = $blocked;
+			$this->enforcement_blocked_categories_cache = $blocked;
 			return $blocked;
 		}
 
@@ -7841,6 +7856,14 @@ class Frontend {
 			$signals
 		);
 		$this->signal_blocked_categories = $signals;
+		// What the server-side cookie layers enforce: this visitor's own state,
+		// never the shareable union below. That union is a render-time
+		// over-block the client undoes from the consent cookie; a cookie the
+		// shredder deletes, or a Set-Cookie header the guard strips, cannot be
+		// undone, so applying the union there destroyed a consenting visitor's
+		// `_ga` on every page of a site whose veto was off. Their denials are in
+		// this set too, so a rejected category's cookies are still deleted.
+		$this->enforcement_blocked_categories_cache = $blocked;
 
 		// The visitor's state could not be kept out of the shared cache (see
 		// decide_visitor_state_cache_veto()), so this render may be stored and
@@ -7862,6 +7885,22 @@ class Frontend {
 		}
 		$this->blocked_categories_cache = $blocked;
 		return $blocked;
+	}
+
+	/**
+	 * The blocked-category set the destructive cookie layers enforce.
+	 *
+	 * Identical to get_blocked_categories() on every verdict but 'fallback',
+	 * where the render blocks the shareable union and this returns the
+	 * visitor's own set instead (see the comment where it is filled). Read by
+	 * is_cookie_allowed() and shred_non_consented_cookies() only — never by
+	 * anything that decides what the page itself executes.
+	 *
+	 * @return array Slugs of blocked categories.
+	 */
+	private function get_enforcement_blocked_categories() {
+		$render = $this->get_blocked_categories();
+		return is_array( $this->enforcement_blocked_categories_cache ) ? $this->enforcement_blocked_categories_cache : $render;
 	}
 
 	/**
@@ -8041,7 +8080,8 @@ class Frontend {
 		if ( null !== $this->service_consent_cache ) {
 			return $this->service_consent_cache;
 		}
-		$this->service_consent_cache = array();
+		$this->service_consent_cache             = array();
+		$this->enforcement_service_consent_cache = array();
 		// Jurisdiction shell: same invariance requirement as Cache Compatibility
 		// Mode — svc.* decisions live in the consent cookie, which cached HTML
 		// must not depend on. Enforced client-side instead.
@@ -8082,6 +8122,9 @@ class Frontend {
 				if ( 'yes' === $match[2] && isset( $signal_blocked_services[ $match[1] ] ) ) {
 					continue;
 				}
+				// The cookie layers honour the grant whatever the render does:
+				// see get_enforcement_service_consent().
+				$this->enforcement_service_consent_cache[ $match[1] ] = $match[2];
 				// Shareable fallback render (see get_blocked_categories()): an
 				// explicit svc.* NO still blocks this visitor's embed, a YES is
 				// left for script.js to release.
@@ -8092,6 +8135,22 @@ class Frontend {
 			}
 		}
 		return $this->service_consent_cache;
+	}
+
+	/**
+	 * Per-service decisions the destructive cookie layers enforce.
+	 *
+	 * get_service_consent() drops an svc.* YES on a 'fallback' render so the
+	 * shareable page does not execute the embed; the shredder and the
+	 * Set-Cookie guard must still honour it, for the same reason as
+	 * get_enforcement_blocked_categories(). Signal-blocked grants are excluded
+	 * here exactly as there.
+	 *
+	 * @return array [ 'google-analytics' => 'yes', 'hotjar' => 'no', ... ]
+	 */
+	private function get_enforcement_service_consent() {
+		$render = $this->get_service_consent();
+		return is_array( $this->enforcement_service_consent_cache ) ? $this->enforcement_service_consent_cache : $render;
 	}
 
 	/**
@@ -11926,7 +11985,7 @@ class Frontend {
 		// reach a foregone conclusion. Both conditions are required — a
 		// `svc.<id>:no` / `ck.<svc>.<cookie>:no` denial stays enforceable on a
 		// site where no category is blocked.
-		if ( empty( $this->get_blocked_categories() ) && empty( $this->get_service_cookie_decisions() ) ) {
+		if ( empty( $this->get_enforcement_blocked_categories() ) && empty( $this->get_service_cookie_decisions() ) ) {
 			return;
 		}
 
@@ -11992,7 +12051,7 @@ class Frontend {
 		// category is blocked — a consent regression, and one that a casual
 		// smoke test would miss because most sites configure no per-service
 		// consent at all.
-		if ( empty( $service_decisions ) && empty( $this->get_blocked_categories() ) ) {
+		if ( empty( $service_decisions ) && empty( $this->get_enforcement_blocked_categories() ) ) {
 			$this->cookie_allowed_cache[ $cache_key ] = true;
 			return true;
 		}
@@ -12032,7 +12091,7 @@ class Frontend {
 			$this->cookie_allowed_cache[ $cache_key ] = true;
 			return true;
 		}
-		if ( ! in_array( $category, $this->get_blocked_categories(), true ) ) {
+		if ( ! in_array( $category, $this->get_enforcement_blocked_categories(), true ) ) {
 			$this->cookie_allowed_cache[ $cache_key ] = true;
 			return true;
 		}
@@ -12054,7 +12113,7 @@ class Frontend {
 			return $this->service_cookie_decisions_cache;
 		}
 		$this->service_cookie_decisions_cache = array();
-		$service_consent = $this->get_service_consent();
+		$service_consent = $this->get_enforcement_service_consent();
 		$settings        = $this->get_faz_settings();
 		$banner_control  = isset( $settings['banner_control'] ) ? (array) $settings['banner_control'] : array();
 		$per_cookie      = ! empty( $banner_control['per_cookie_consent'] ) && ! empty( $banner_control['per_service_consent'] );

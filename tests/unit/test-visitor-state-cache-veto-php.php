@@ -27,6 +27,12 @@ namespace FazCookie\Frontend {
 	function headers_sent() {
 		return ! empty( $GLOBALS['vs_headers_sent'] );
 	}
+	function setcookie( $name, $value = '', $expires = 0 ) {
+		if ( '' === $value && $expires < 0 ) {
+			$GLOBALS['vs_deleted'][ $name ] = true;
+		}
+		return true;
+	}
 }
 namespace FazCookie\Includes {
 	class Geolocation {
@@ -43,6 +49,9 @@ namespace FazCookie\Includes {
 					'cookies'  => array( 'VISITOR_INFO1_LIVE' ),
 				),
 			);
+		}
+		public static function get_cookie_map() {
+			return array( 'VISITOR_INFO1_LIVE' => 'marketing' );
 		}
 	}
 }
@@ -94,6 +103,15 @@ namespace {
 		return $default;
 	}
 	function is_ssl() { return false; }
+	// The admin catalogue's cookie → category map, as the shredder reads it.
+	function get_transient( $key ) {
+		return 'faz_server_cookie_category_map_v2' === $key
+			? array( 'probe_ga' => 'analytics', 'probe_ad' => 'marketing', 'VISITOR_INFO1_LIVE' => 'marketing' )
+			: false;
+	}
+	function set_transient() { return true; }
+	function wp_cache_get() { return false; }
+	function wp_cache_set() { return true; }
 	function wp_unslash( $value ) { return $value; }
 	function set_url_scheme( $url, $scheme = null ) { return $url; }
 	function add_filter() { return true; }
@@ -130,6 +148,7 @@ namespace {
 
 	class Faz_VS_Frontend extends Frontend {
 		protected function is_banner_disabled_by_settings() { return false; }
+		protected function is_blocking_disabled_for_page() { return false; }
 	}
 
 	$passed = 0;
@@ -157,7 +176,12 @@ namespace {
 		$GLOBALS['vs_headers_sent'] = $headers_sent;
 		$_COOKIE = $cookies;
 		$_SERVER = $server;
+		$GLOBALS['vs_deleted']      = array();
 		$frontend = ( new ReflectionClass( Faz_VS_Frontend::class ) )->newInstanceWithoutConstructor();
+		// A banner was loaded on init: the visitor has a consent context.
+		$template = new ReflectionProperty( Frontend::class, 'template' );
+		$template->setAccessible( true );
+		$template->setValue( $frontend, array( 'html' => '<div></div>' ) );
 		$memo = new ReflectionProperty( Frontend::class, 'geo_bootstrap_active_cache' );
 		$memo->setAccessible( true );
 		$memo->setValue( $frontend, false );
@@ -177,6 +201,11 @@ namespace {
 		$m = new ReflectionMethod( Frontend::class, 'get_blocked_categories' );
 		$m->setAccessible( true );
 		return vs_sorted( $m->invoke( $frontend ) );
+	}
+	function vs_verdict( $frontend ) {
+		$p = new ReflectionProperty( Frontend::class, 'visitor_state_veto' );
+		$p->setAccessible( true );
+		return $p->getValue( $frontend );
 	}
 	function vs_services( $frontend ) {
 		$m = new ReflectionMethod( Frontend::class, 'get_service_consent' );
@@ -251,6 +280,37 @@ namespace {
 	$fe = vs_request( 'gdpr', array( 'fazcookie-consent' => $accept_all ) );
 	vs_check( ! vs_vetoed(), 'no veto: the render ignores visitor state' );
 	vs_check( $optional === vs_blocked( $fe ), 'every optional category blocked, as before' );
+
+	echo "The shareable render never deletes what the visitor consented to\n";
+	// The shredder runs on template_redirect, after send_headers decided the
+	// verdict. It must read the visitor's REAL state: the shareable union is a
+	// render-time over-block that script.js undoes on the client, but a cookie
+	// deleted on the server is gone, so applying the union there destroyed a
+	// consented visitor's `_ga` on every page of a site whose veto was off.
+	$GLOBALS['vs_settings']['geolocation']['geo_targeting'] = true;
+	$GLOBALS['vs_filters']['faz_veto_cache_for_visitor_state'] = false;
+	$fe = vs_request( 'gdpr', array( 'fazcookie-consent' => $accept_all, 'probe_ga' => '1', 'probe_ad' => '1' ) );
+	vs_check( $optional === vs_blocked( $fe ), 'fallback: the render is still the shareable one' );
+	vs_check( true === $fe->is_cookie_allowed( 'probe_ga' ) && true === $fe->is_cookie_allowed( 'probe_ad' ), 'fallback: an accepted category\'s cookie is allowed (Set-Cookie guard)' );
+	$fe->shred_non_consented_cookies();
+	vs_check( array() === $GLOBALS['vs_deleted'] && isset( $_COOKIE['probe_ga'] ), 'fallback: the shredder deletes none of an accept-all visitor\'s cookies' );
+
+	$fe = vs_request( 'gdpr', array( 'fazcookie-consent' => $reject_all, 'probe_ga' => '1' ) );
+	$fe->shred_non_consented_cookies();
+	vs_check( isset( $GLOBALS['vs_deleted']['probe_ga'] ), 'a rejected category\'s cookie is still deleted' );
+
+	$partial = 'consentid:abc,consent:yes,action:yes,necessary:yes,analytics:yes,marketing:no,svc.youtube:yes,rev:1';
+	$fe = vs_request( 'gdpr', array( 'fazcookie-consent' => $partial, 'probe_ga' => '1', 'probe_ad' => '1', 'VISITOR_INFO1_LIVE' => '1' ) );
+	vs_check( 'fallback' === vs_verdict( $fe ), 'partial consent with the veto off: fallback' );
+	$fe->shred_non_consented_cookies();
+	vs_check( isset( $GLOBALS['vs_deleted']['probe_ad'] ), 'fallback: the denied category\'s cookie is deleted' );
+	vs_check( ! isset( $GLOBALS['vs_deleted']['probe_ga'] ), 'fallback: the granted category\'s cookie survives' );
+	vs_check( ! isset( $GLOBALS['vs_deleted']['VISITOR_INFO1_LIVE'] ), 'fallback: a per-service YES inside a denied category survives' );
+	unset( $GLOBALS['vs_filters']['faz_veto_cache_for_visitor_state'] );
+
+	$fe = vs_request( 'ccpa', array( 'fazcookie-consent' => $ccpa_optout, 'probe_ad' => '1', 'probe_ga' => '1' ), array(), true );
+	$fe->shred_non_consented_cookies();
+	vs_check( isset( $GLOBALS['vs_deleted']['probe_ad'] ) && ! isset( $GLOBALS['vs_deleted']['probe_ga'] ), 'veto impossible under CCPA: the opt-out is still enforced on the cookies, nothing else' );
 
 	echo "visitor-state-cache-veto: {$passed} passed, {$failed} failed\n";
 	exit( $failed ? 1 : 0 );
