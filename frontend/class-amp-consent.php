@@ -121,6 +121,15 @@ class AMP_Consent {
 		if ( $this->is_cache_compatibility_enabled() ) {
 			return (bool) apply_filters( 'faz_country_dependent_banner_output', false, $settings );
 		}
+		// Same predicate as Frontend::is_country_dependent_output(): every
+		// dimension below reads the visitor's country, and without a source
+		// that is '' for everyone, so the amphtml document is invariant. The
+		// runtime test used to be Geo_Runtime::is_enabled() alone — on by
+		// default — which kept every AMP page of a source-less install out of
+		// the host cache and the Google/Bing AMP caches for nothing.
+		if ( ! Geolocation::has_country_source() ) {
+			return (bool) apply_filters( 'faz_country_dependent_banner_output', false, $settings );
+		}
 
 		if (
 			function_exists( 'faz_i18n_is_multilingual' )

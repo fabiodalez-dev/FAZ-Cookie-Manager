@@ -713,7 +713,7 @@ class Geolocation {
 		if ( ! $has_source && self::mod_geoip_configured() ) {
 			$has_source = true;
 		}
-		if ( ! $has_source && function_exists( 'geoip_country_code_by_name' ) ) {
+		if ( ! $has_source && self::php_geoip_has_country_database() ) {
 			$has_source = true;
 		}
 		// A callback on faz_visitor_country is a source in its own right:
@@ -749,6 +749,36 @@ class Geolocation {
 		 * @param bool $has_source Whether a country source was detected.
 		 */
 		return (bool) apply_filters( 'faz_has_country_signal_source', $has_source );
+	}
+
+	/**
+	 * Whether the PECL geoip extension can actually answer a country lookup.
+	 *
+	 * Loading the extension does not install its database: on many hosts the
+	 * module is compiled in and every lookup returns false. Counting the bare
+	 * function as a source made has_country_source() true there, and the page
+	 * cache was vetoed on every request of a site that resolves no country at
+	 * all. geoip_db_avail() is the extension's own answer and does no lookup;
+	 * the IPv6 country edition counts too, since the resolver passes either
+	 * address family. Without geoip_db_avail() (a very old build) the
+	 * function's presence is all there is to go on, as before.
+	 *
+	 * @since 1.34.2
+	 * @return bool
+	 */
+	public static function php_geoip_has_country_database() {
+		if ( ! function_exists( 'geoip_country_code_by_name' ) ) {
+			return false;
+		}
+		if ( ! function_exists( 'geoip_db_avail' ) ) {
+			return true;
+		}
+		foreach ( array( 'GEOIP_COUNTRY_EDITION', 'GEOIP_COUNTRY_EDITION_V6' ) as $edition ) {
+			if ( defined( $edition ) && @geoip_db_avail( constant( $edition ) ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- the extension warns when the edition is unknown.
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

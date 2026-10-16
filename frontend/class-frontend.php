@@ -2061,6 +2061,25 @@ class Frontend {
 			return (bool) apply_filters( 'faz_country_dependent_banner_output', false, $settings );
 		}
 
+		// Every dimension below varies the render by the visitor's COUNTRY, and
+		// all of them read it through Geolocation::get_visitor_country(). On an
+		// install with no way to resolve a country that call returns '' for
+		// every visitor: TCF gdprApplies stays true, the country→language
+		// fallback stays on the site language, "no banner outside targets"
+		// fails open, country-targeted banner rows fall back to the match-all
+		// row and the runtime resolves the one most-protective ruleset. The
+		// render is then invariant, and a no-store veto buys nothing while
+		// costing the publisher their whole page cache — on every request, on
+		// most shared hosting. So no source, no veto, whichever of the
+		// dimensions is configured; the filter below can still force it.
+		//
+		// Deliberately keyed on whether a source is CONFIGURED, not on whether
+		// this particular visitor resolved: with a source present the output is
+		// country-dependent even for a visitor the source happens to miss.
+		if ( ! $this->has_country_signal_source() ) {
+			return (bool) apply_filters( 'faz_country_dependent_banner_output', false, $settings );
+		}
+
 		$dependent = false;
 
 		// Country→language fallback (CodeRabbit review, 1.14.2): when the
@@ -2110,22 +2129,9 @@ class Frontend {
 		// cached response would leak one jurisdiction's defaults to another, so
 		// the output must always be treated as country-dependent while the flag
 		// is on — independent of any multi-banner geo-targeting configuration.
-		// The filter can explicitly override the UI-derived state.
-		//
-		// …but only when a country can actually be resolved. The runtime being
-		// on does not make the output vary by country on an install that has no
-		// way to determine one: every visitor resolves the same
-		// fallback-gdpr-most-protective ruleset, so the rendered page is
-		// invariant and the veto buys nothing while costing the publisher their
-		// entire page cache. That is precisely the complaint behind the
-		// LiteSpeed and FlyingPress reports this release answers, and with
-		// enforcement now on by default it would otherwise reach every install
-		// on a host without a geo source — which is most shared hosting.
-		//
-		// Deliberately keyed on whether a source is CONFIGURED, not on whether
-		// this particular visitor resolved: with a source present the output is
-		// country-dependent even for a visitor the source happens to miss.
-		if ( Geo_Runtime::is_enabled() && $this->has_country_signal_source() ) {
+		// The filter can explicitly override the UI-derived state. (Reached
+		// only with a country source: see the early return above.)
+		if ( Geo_Runtime::is_enabled() ) {
 			$dependent = true;
 		}
 
