@@ -22,6 +22,9 @@ const _fazStore = _fazStaticConfigMissing ? null : window._fazConfig;
 // Only a runtime that has its store claims it: without one the bootstrap is
 // still the only thing protecting the page.
 if (_fazStore) window._fazRuntimeStarted = true;
+// Must stay above `ref._fazConsentStore = new Map()`: the bootstrap reads a
+// consent store created before start() as a runtime that predates the handoff
+// and steps aside for it (adoptStale() in bootstrap.js).
 if (_fazStore && window._fazBootstrap) window._fazBootstrap.start();
 
 // Opt-out success message (US state laws / CCPA): after the visitor confirms an
@@ -78,12 +81,14 @@ ref._fazConsentStore = new Map();
 // visitors safely once FAZ_VERSION is bumped at release.
 // The suffix after the version is deliberate and is NOT a version bump: the
 // `?ver=` cache buster follows FAZ_VERSION, which this string cannot change. It
-// exists so a support session can see at a glance that a cache is serving the
-// pre-deferral bundle. A stale bundle is survivable now — it simply never calls
-// _fazBootstrap.start()/finish(), the bootstrap's DOMContentLoaded fallback
-// takes over, and the fallback no longer uninstalls anything, so the stale
-// runtime's own gates stay in place instead of being wiped.
-const _FAZ_BUILD = '1.34.1+deferred-bootstrap';
+// exists so a support session can see at a glance which bundle a cache is
+// serving. A stale bundle is survivable: one that predates the bootstrap never
+// calls _fazBootstrap.start()/finish(), and the bootstrap recognises it by the
+// consent store it creates (`ref._fazConsentStore` below) and hands over to it
+// before it installs its gates (adoptStale() in bootstrap.js). It used to be
+// survivable only on paper — that runtime's _fazRenderBanner() looped forever
+// on the bootstrap's held insertions, which never left their source.
+const _FAZ_BUILD = '1.34.2+bootstrap-held-insertions';
 
 /**
  * One-call frontend self-diagnosis for support: paste

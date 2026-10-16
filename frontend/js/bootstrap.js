@@ -45,7 +45,19 @@
  *   - srcdoc is judged by the absolute and protocol-relative URLs the markup
  *     names: a relative URL inside the sub-document resolves against the
  *     parent's origin and is released, as the redirect limit above says, and
- *     nothing inside that document is intercepted once it is parsed.
+ *     nothing inside that document is intercepted once it is parsed;
+ *   - a held insertion takes its node out of where it was at once, but the
+ *     node only ARRIVES at the handoff: until then its parentNode is a private
+ *     fragment and the destination does not list it (see stash()). A removal
+ *     out of a <style> whose remainder could fetch happens at once as well,
+ *     with that one sheet switched off until the remainder is judged (see
+ *     suspendSheet()). Text changes INSIDE a sheet — the data setters,
+ *     appendData and its siblings, textContent on a <style> — are still held
+ *     as a whole. A loop that waits on one of them to take effect stops
+ *     growing the queue at the fuse (LIMIT), but on the safety release a
+ *     refused one does not happen at all, so such a loop would not end there.
+ *     No such idiom is known to be in use; the insertion and removal idioms,
+ *     which are, end.
  */
 (function (w, d) {
     'use strict';
@@ -53,8 +65,21 @@
     // optimiser deferred this inline script past it. Arming now would put
     // these interceptors on top of the runtime's gates, release at once as if
     // the runtime were missing, and stay that way for the page view.
+    // A consent store on window.fazcookie is the same fact for a runtime that
+    // predates this file: it never sets _fazRuntimeStarted, but it creates
+    // that Map as its first act, so finding one means it has already run.
     if (w._fazBootstrap || w._fazRuntimeStarted || !w._fazConfig || !w._fazConfig._block) return;
+    if (w.fazcookie && w.fazcookie._fazConsentStore) return;
     var queue = [], undo = [], scripts = [], pending = true, handoffs = [], staged = new WeakMap();
+    // The fuse. Every held operation is a closure kept alive until the
+    // handoff, and nothing about a page bounds how many it makes: a loop that
+    // waits for a held insertion to take effect queued one per iteration,
+    // synchronously, until the tab ran out of memory (LiteSpeed serving the
+    // 1.34.0 runtime under 1.34.1 markup did exactly that inside
+    // _fazRenderBanner). Past this many, the bootstrap stops queuing and
+    // applies its safety policy instead (see defer()), and the lists below
+    // that grow with page activity are capped at the same figure.
+    var LIMIT = 5000;
     // Set by releaseSafely() only. From then on the interceptors stay installed
     // and every new decision is taken immediately against this policy instead
     // of being queued for a runtime that is not coming. Without it the natives
@@ -100,6 +125,11 @@
     // puts one empty text node into a parked <style>, and that write must not
     // be judged by the very gate that is parking the element.
     var nativeAppend = Node.prototype.appendChild;
+    // Captured for the same reason: a held insertion takes its node out of
+    // where it is NOW (stash() below), and that move must not be judged — or
+    // held — by the wrapper that is holding the insertion.
+    var nativeRemoveChild = Node.prototype.removeChild;
+    var nativeFragment = Document.prototype.createDocumentFragment;
     function attr(el, name) {
         try {
             if (name === 'xlink:href') {
@@ -125,6 +155,11 @@
     // One place that decides whether a task runs now or at the handoff, so no
     // call site has to know which of the two states the bootstrap is in.
     function defer(task) {
+        // Past the fuse the queue is released, not grown: the safety policy
+        // decides what is held so far and everything after it, which is what
+        // would happen at DOMContentLoaded anyway, only sooner. A runtime that
+        // arrives later still takes over (finish(), the `late` branch).
+        if (!immediate && queue.length >= LIMIT) releaseSafely('overflow');
         if (!immediate) return queue.push(task);
         run(task, immediate);
     }
@@ -241,6 +276,23 @@
     // the layer disagreement the three files keep falling into, fixed in the
     // other two first (9ab2ef77) and here last.
     var MARKUP_URL = /(?:https?:[\\\/]*|[\\\/]{2})[^\s"'<>)\\\/][^\s"'<>)]*/gi;
+    // Namespace names. They are spelled as URLs and are never fetched, and
+    // every inline SVG names one: `<svg xmlns="http://www.w3.org/2000/svg">`
+    // read as a cross-origin reference, so on the safety release a srcdoc
+    // carrying nothing but a first-party icon stayed parked for the page view.
+    // Matched by VALUE, not by stripping `xmlns="…"` from the text: an
+    // attribute-shaped string outside a tag is text to the tokenizer, and a
+    // regex that removed it there would swallow the real markup up to the
+    // next quote — `xmlns='</p><img src="https://t/x.png">'` is an image. An
+    // exact w3.org namespace name is not a destination anyone tracks with,
+    // wherever in the markup it appears.
+    var NAMESPACES = [
+        'http://www.w3.org/2000/svg', 'http://www.w3.org/1999/xlink', 'http://www.w3.org/1999/xhtml',
+        'http://www.w3.org/1998/Math/MathML', 'http://www.w3.org/XML/1998/namespace', 'http://www.w3.org/2000/xmlns/'
+    ];
+    function namespaceName(url) {
+        return NAMESPACES.indexOf(String(url).replace(/\\\//g, '/')) !== -1;
+    }
     function urlsIn(value) {
         var text = decodeMarkup(value);
         var found = text.match(MARKUP_URL) || [];
@@ -251,7 +303,7 @@
         // separate pass, the same union _fazMarkupUrls makes.
         var unescaped = text.replace(/\\\//g, '/');
         if (unescaped !== text) found = found.concat(unescaped.match(MARKUP_URL) || []);
-        return found;
+        return found.filter(function (url) { return !namespaceName(url); });
     }
     // A list is same-origin only when EVERY candidate is: the browser picks one
     // by viewport and pixel ratio, so a single remote entry is a request.
@@ -849,44 +901,157 @@
         // already judged.
         return sunk.has(node);
     }
+    // ---- Held insertions -------------------------------------------------
+    //
+    // A held insertion used to leave its node exactly where it was and return
+    // as if it had moved. Every DOM idiom that moves nodes until a source is
+    // empty then never ended:
+    //
+    //     while (src.firstChild) dst.appendChild(src.firstChild);
+    //
+    // src.firstChild stayed the same node, each call queued another task, and
+    // the loop ran synchronously until the tab ran out of memory. The runtime's
+    // own _fazRenderBanner() is written that way (DOMParser body → fragment),
+    // and a stale 1.34.0 runtime runs it while this file is still pending — a
+    // page cache serving script.min.js without its ?ver= is enough.
+    //
+    // So the move happens NOW and only the arrival waits. The node goes into a
+    // private DocumentFragment ("holder") owned by the node's OWN document —
+    // never this one: an <img> built by DOMParser is inert there, and adopting
+    // it into this document, even into a detached fragment, starts its fetch.
+    // What the page observes is what the call promised: the node left its old
+    // parent, the source empties, the loop ends. At the replay the HOLDER is
+    // inserted, so whatever the page put next to the node in the meantime goes
+    // with it, and a node the page has since moved or removed elsewhere has
+    // simply left the holder and is not dragged back.
+    //
+    // Deliberately not emulated: until the replay `node.parentNode` is the
+    // holder, not the destination, and the destination does not list it. Both
+    // were already untrue before this — the node then claimed its OLD parent —
+    // and nothing short of the insertion itself could make them true.
+    var records = new WeakMap();   // holder → the held insertion it belongs to
+    var into = new WeakMap();      // container → held insertions still queued for it
+    function isNode(n) { return !!n && typeof n === 'object' && typeof n.nodeType === 'number'; }
+    function contains(node, container) {
+        try { return !!(container && node.contains && node.contains(container)); } catch (e) { return false; }
+    }
+    function holderFor(node) {
+        var doc = node.nodeType === 9 ? node : (node.ownerDocument || d);
+        try { return nativeFragment.call(doc); } catch (e) { return nativeFragment.call(d); }
+    }
+    // A child the page has already given to `parent` through a held call: in
+    // the DOM the page is reasoning about, it IS a child of `parent`, so it is
+    // a valid reference node and a valid thing to remove.
+    function pendingChild(parent, node) {
+        var record = node && node.parentNode && records.get(node.parentNode);
+        return !!record && record.target === parent;
+    }
+    // A fragment with insertions still queued INTO it: inserting it now would
+    // move nothing, and the queued children would land in an orphan once they
+    // replay. Its insertion is held behind them instead, and forward() points
+    // them at the holder that takes the fragment's place.
+    function waitingFragment(n) { return !!n && n.nodeType === 11 && into.has(n); }
+    function forward(fragment, holder) {
+        var list = into.get(fragment);
+        if (!list) return;
+        into.delete(fragment);
+        waiting.delete(fragment);
+        list.forEach(function (record) { record.target = holder; });
+        into.set(holder, list);
+    }
+    function stash(node, record) {
+        var holder = holderFor(node);
+        records.set(holder, record);
+        if (node.nodeType === 11) {
+            // Inserting a fragment empties it; holding one has to as well.
+            forward(node, holder);
+            while (node.firstChild) moveInto(holder, node.firstChild);
+        } else {
+            moveInto(holder, node);
+        }
+        return holder;
+    }
+    function moveInto(holder, node) {
+        var from = node.parentNode;
+        // Leaving a <style> takes the node's text out of the sheet, and that
+        // can REVEAL a URL it was splitting — the removal rule below.
+        if (isStyle(from) && cssRisk(styleTextWithout(from, node), [])) {
+            return removeFromSheet(from, node, function () { nativeAppend.call(holder, node); });
+        }
+        nativeAppend.call(holder, node);
+    }
+    function enqueue(record, task) {
+        if (!immediate && record.target) {
+            var list = into.get(record.target);
+            if (!list) into.set(record.target, list = []);
+            list.push(record);
+        }
+        defer(task);
+    }
     // Delay dynamic insertions, retaining the actual nodes and their listeners.
     ['appendChild', 'insertBefore', 'replaceChild'].forEach(function (name) {
         replace(Node.prototype, name, function (original) {
             return function () {
                 var self = this, args = Array.prototype.slice.call(arguments);
+                var node = args[0], ref = name === 'appendChild' ? null : args[1];
                 var styleOwner = isStyle(self) ? self : null;
                 // replaceChild drops the old child, so the text it contributed
                 // stops counting — the same bookkeeping replaceWith needs.
-                var dropped = name === 'replaceChild' ? args[1] : null;
-                var carries = resources(args[0]).length
-                    || styleRisk(args[0])
-                    || !!(styleOwner && cssRisk(containerText(styleOwner, dropped, name), [args[0]]));
+                var dropped = name === 'replaceChild' ? ref : null;
+                var pendingRef = !!ref && pendingChild(self, ref);
+                var carries = resources(node).length
+                    || styleRisk(node)
+                    || waitingFragment(node)
+                    || pendingRef
+                    || !!(styleOwner && cssRisk(containerText(styleOwner, dropped, name), [node]));
                 if (!carries && !waiting.has(self)) return original.apply(self, args);
+                // A call the engine refuses is refused here too, with the
+                // engine's own error: holding it turned a synchronous
+                // NotFoundError or HierarchyRequestError into a node quietly
+                // dropped at the replay.
+                if (!isNode(node) || node.nodeType === 9 || node === ref || contains(node, self)
+                    || (name !== 'appendChild' && args.length < 2)
+                    || (name === 'replaceChild' && !ref)
+                    || (ref && ref.parentNode !== self && !pendingRef)) {
+                    return original.apply(self, args);
+                }
                 waiting.add(self);
-                defer(function (policy) {
-                    prepare(args[0], policy);
+                var record = { target: self };
+                var holder = stash(node, record);
+                // replaceChild: the old child leaves now, as the call says it
+                // does — a lazy loader's `while (el = q('.lazy')) el.replaceWith…`
+                // spins on it otherwise — and the replacement lands where it
+                // was. Two exceptions keep it until the replay: a child of a
+                // <style>, whose text is part of the sheet and could reveal or
+                // reorder a URL by leaving early; and one that is itself still
+                // waiting to arrive, which is not in the document to leave.
+                var anchor = ref, mode = name;
+                if (name === 'replaceChild' && !styleOwner && !pendingRef) {
+                    anchor = ref.nextSibling;
+                    nativeRemoveChild.call(self, ref);
+                    mode = 'insertBefore';
+                }
+                enqueue(record, function (policy) {
+                    var target = record.target;
+                    prepare(holder, policy);
                     // The reference node may have moved or been removed while
                     // this insertion waited. Replaying against it throws, and
                     // the node would be dropped with only a console warning,
                     // so fall back to appending into the same parent.
-                    var ref = args[1];
-                    var moved = name !== 'appendChild' && ref && ref.parentNode !== self;
+                    var moved = mode !== 'appendChild' && anchor && anchor.parentNode !== target;
                     var insert = function () {
-                        parkSheets(args[0], policy);
-                        if (moved) {
-                            if (name === 'replaceChild') Node.prototype.appendChild.call(self, args[0]);
-                            else Node.prototype.insertBefore.call(self, args[0], null);
-                            return;
-                        }
-                        self[name].apply(self, args);
+                        parkSheets(holder, policy);
+                        if (moved || mode === 'appendChild' || (mode === 'insertBefore' && !anchor)) return target.appendChild(holder);
+                        if (mode === 'insertBefore') return target.insertBefore(holder, anchor);
+                        target.replaceChild(holder, anchor);
                     };
                     if (!styleOwner) return insert();
                     // The anchor is the second argument for both insertBefore
                     // and replaceChild; an appendChild has none, and so does a
                     // reference that moved, since the fallback appends.
-                    deliverCss(policy, styleOwner, moved ? null : ref, moved ? 'appendChild' : name, [args[0]], insert);
+                    deliverCss(policy, styleOwner, moved ? null : anchor, moved ? 'appendChild' : mode, [holder], insert);
                 });
-                return name === 'replaceChild' ? args[1] : args[0];
+                return name === 'replaceChild' ? ref : node;
             };
         });
     });
@@ -902,23 +1067,71 @@
                 return function () {
                     var self = this, args = Array.prototype.slice.call(arguments);
                     var styleOwner = cssOwner(self, name);
+                    // before/after/replaceWith place the arguments next to
+                    // `self`, in its parent; the other three fill `self`.
+                    var sibling = name === 'before' || name === 'after' || name === 'replaceWith';
+                    var container = sibling ? self.parentNode : self;
                     // One joined string, in call order, judged against the text
                     // the owner will actually hold. Per-argument tests missed a
                     // URL split across two arguments of one call.
-                    var carries = args.some(function (n) { return resources(n).length || styleRisk(n); })
+                    var carries = args.some(function (n) { return resources(n).length || styleRisk(n) || waitingFragment(n); })
                         || !!(styleOwner && cssRisk(containerText(styleOwner, self, name), args));
-                    if (!carries) return original.apply(self, args);
-                    defer(function (policy) {
+                    // Queued behind an earlier held insertion into the same
+                    // container, as appendChild always was: otherwise a plain
+                    // append overtakes it and the sibling order inverts.
+                    if (!carries && !(container && waiting.has(container))) return original.apply(self, args);
+                    // A sibling call on a node with no parent does nothing at
+                    // all, nodes included; a node placed inside itself is the
+                    // engine's error to raise. Neither is held.
+                    if (!container || args.some(function (n) { return isNode(n) && (n.nodeType === 9 || contains(n, container)); })) {
+                        return original.apply(self, args);
+                    }
+                    waiting.add(container);
+                    var record = { target: container };
+                    // What the call removes, it removes now, for the reason
+                    // replaceChild gives — except inside a <style>, where the
+                    // text that goes is part of the sheet. The place it held is
+                    // its first following sibling that is not itself being
+                    // inserted (the specification's "viable next sibling"),
+                    // read before the arguments are taken out.
+                    var anchor = null, gone = false;
+                    if (name === 'replaceWith' && !styleOwner) {
+                        anchor = self.nextSibling;
+                        while (anchor && args.indexOf(anchor) !== -1) anchor = anchor.nextSibling;
+                        gone = true;
+                    }
+                    var parts = args.map(function (n) { return isNode(n) ? stash(n, record) : n; });
+                    if (gone && self.parentNode === container) nativeRemoveChild.call(container, self);
+                    // Emptying is safe in a <style> too: no text fetches nothing.
+                    if (name === 'replaceChildren') {
+                        while (self.firstChild) nativeRemoveChild.call(self, self.firstChild);
+                    }
+                    enqueue(record, function (policy) {
+                        var target = record.target;
                         var insert = function () {
-                            args.forEach(function (n) { prepare(n, policy); parkSheets(n, policy); });
-                            self[name].apply(self, args);
+                            parts.forEach(function (n) { prepare(n, policy); parkSheets(n, policy); });
+                            if (gone) {
+                                if (anchor && anchor.parentNode === target) return anchor.before.apply(anchor, parts);
+                                return target.append.apply(target, parts);
+                            }
+                            // The node a sibling call was anchored on may have
+                            // left while this waited; land in the parent then,
+                            // as a moved reference node does above.
+                            if (sibling) {
+                                if (self.parentNode === target) return self[name].apply(self, parts);
+                                return target.append.apply(target, parts);
+                            }
+                            // `target`, not `self`: a fragment that was itself
+                            // inserted while this waited has been forwarded to
+                            // the holder that took its place.
+                            target[name].apply(target, parts);
                         };
                         if (!styleOwner) return insert();
                         // before/after/replaceWith place the arguments against
                         // `self`, a child of the owner; the other three address
                         // the owner itself.
-                        var anchor = styleOwner === self ? null : self;
-                        deliverCss(policy, styleOwner, anchor, name, args, insert);
+                        var at = styleOwner === self ? null : self;
+                        deliverCss(policy, styleOwner, at, name, parts, insert);
                     });
                 };
             });
@@ -927,6 +1140,69 @@
     // Removing the node that split a URL reveals it — the same reason
     // `deleteData` is intercepted, one level up. `url(https:/*x*/ /t.test/a.png)`
     // becomes a live request once the comment node goes.
+    //
+    // The removal used to be HELD, and a held removal is the insertion bug in
+    // reverse: `while (style.firstChild) style.removeChild(style.firstChild)`
+    // removed nothing, queued a task per turn and never ended — on the safety
+    // release too, where a refused removal simply did not happen. It happens
+    // now. What is held instead is the SHEET: it is switched off before the
+    // node goes (suspendSheet), so the engine never parses the text the
+    // removal reveals, and switched back on by a queued task that judges the
+    // text it then holds the way every other route into a <style> is judged —
+    // parked, if the policy refuses a URL in it. The site's own rules in that
+    // one sheet are off for the length of the hold; that is the price, paid
+    // only by a script that removes part of a sheet whose remainder could
+    // fetch.
+    //
+    // Not the neutralised text in place of the removal: rewriting the live
+    // text turns the element's text nodes into one, which a page walking its
+    // children — the loop above — sees as a different sheet, and the
+    // judgement it needs is the runtime's, which does not exist yet.
+    var HELD_TYPE = 'text/faz-held';
+    var suspended = new WeakMap();
+    function suspendSheet(owner) {
+        if (suspended.has(owner)) return false;
+        suspended.set(owner, { had: nativeHas.call(owner, 'type'), type: attr(owner, 'type') });
+        // A type the engine does not know means no stylesheet at all — and it
+        // is read on the next change of the element's children, which is the
+        // removal that follows, never on the attribute write itself.
+        setAttr(owner, 'type', HELD_TYPE);
+        return true;
+    }
+    function resumeSheet(owner, policy) {
+        var saved = suspended.get(owner);
+        if (!saved) return;
+        suspended.delete(owner);
+        var text = styleText(owner);
+        var verdict = policy ? judgeCss(policy, text) : null;
+        // The safety release keeps its broad rule: no text that could fetch
+        // anything is applied without the runtime's judgement.
+        if (!verdict && policy && policy.sameOriginOnly && !allowedCss(policy, text)) verdict = { hit: '', whole: true };
+        if (verdict) {
+            // A sheet someone already parked keeps THEIR original in its
+            // marker; only the live stand-in is emptied.
+            if (nativeHas.call(owner, 'data-faz-css')) emptySheet(owner);
+            else parkCss(owner, text, policy, verdict);
+        }
+        if (attr(owner, 'type') === HELD_TYPE) {
+            if (saved.had) setAttr(owner, 'type', saved.type); else dropAttr(owner, 'type');
+        }
+        // The type is not re-read on its own: a change of the children is
+        // what makes the engine build the sheet again, so make one that leaves
+        // the children as they are.
+        try {
+            var touch = (owner.ownerDocument || d).createTextNode('');
+            nativeAppend.call(owner, touch);
+            nativeRemoveChild.call(owner, touch);
+        } catch (e) { /* an owner that takes no children has no sheet to rebuild */ }
+    }
+    // Off, then the removal, then the task that turns it back on — in that
+    // order, because on the safety release defer() runs the task at once.
+    function removeFromSheet(owner, node, remove) {
+        var first = suspendSheet(owner);
+        remove();
+        if (first) defer(function (policy) { resumeSheet(owner, policy); });
+    }
     ['remove'].forEach(function (name) {
         [Element.prototype, w.CharacterData && CharacterData.prototype].forEach(function (proto) {
             if (!proto || typeof proto[name] !== 'function') return;
@@ -935,9 +1211,7 @@
                     var node = this, owner = node.parentNode;
                     if (!isStyle(owner)) return original.call(node);
                     if (!cssRisk(styleTextWithout(owner, node), [])) return original.call(node);
-                    defer(function (policy) {
-                        deliverCss(policy, owner, node, 'without', [], function () { node[name].call(node); });
-                    });
+                    removeFromSheet(owner, node, function () { nativeRemoveChild.call(owner, node); });
                 };
             });
         });
@@ -945,11 +1219,16 @@
     replace(Node.prototype, 'removeChild', function (original) {
         return function (child) {
             var self = this;
-            if (!isStyle(self)) return original.call(self, child);
+            // A child the page gave this parent through a held call is its
+            // child as far as the page knows. Removing it cancels the arrival;
+            // the engine would have answered NotFoundError.
+            if (isNode(child) && child.parentNode !== self && pendingChild(self, child)) {
+                nativeRemoveChild.call(child.parentNode, child);
+                return child;
+            }
+            if (!isStyle(self) || !isNode(child) || child.parentNode !== self) return original.call(self, child);
             if (!cssRisk(styleTextWithout(self, child), [])) return original.call(self, child);
-            defer(function (policy) {
-                deliverCss(policy, self, child, 'without', [], function () { self.removeChild(child); });
-            });
+            removeFromSheet(self, child, function () { nativeRemoveChild.call(self, child); });
             return child;
         };
     });
@@ -1012,12 +1291,25 @@
                         || !!(styleOwner && cssRisk(containerText(styleOwner, null, name), [node]))
                         || !!(styleOwner && name === 'insertNode' && cssURL(rangeResult(range, styleOwner, node)));
                     if (!carries) return original.call(range, node);
+                    // What the engine refuses, with its own error; see the
+                    // Node wrappers above.
+                    if (!isNode(node) || node.nodeType === 9 || (name === 'surroundContents' && (node.nodeType === 10 || node.nodeType === 11))) {
+                        return original.call(range, node);
+                    }
+                    // The node leaves its old place now, as at every other
+                    // held insertion (stash() above). insertNode takes the
+                    // holder at the replay, so a fragment's children arrive
+                    // together; surroundContents needs the element itself, and
+                    // one the page has taken back since is not wrapped.
+                    var holder = stash(node, { target: null });
+                    var arg = name === 'insertNode' ? holder : node;
                     defer(function (policy) {
+                        if (name === 'surroundContents' && node.parentNode !== holder) return;
                         var owner = rangeStyleOwner(range);
                         var insert = function () {
-                            prepare(node, policy);
-                            parkSheets(node, policy);
-                            original.call(range, node);
+                            prepare(arg, policy);
+                            parkSheets(arg, policy);
+                            original.call(range, arg);
                         };
                         if (owner) {
                             // insertNode splices the node's text in at the
@@ -1028,9 +1320,9 @@
                             // part — judged on the whole of its text instead,
                             // which is the safe direction and costs a replay.
                             var result = name === 'insertNode'
-                                ? rangeResult(range, owner, node)
+                                ? rangeResult(range, owner, arg)
                                 : resultText(owner, null, 'append', []);
-                            return deliverCss(policy, owner, null, name, [node], insert, result);
+                            return deliverCss(policy, owner, null, name, [arg], insert, result);
                         }
                         if (name !== 'surroundContents' || !isStyle(node)) return insert();
                         // A fresh <style> wrapping page text: the sheet it
@@ -1061,9 +1353,11 @@
         // deleteData and removeChild do — `url(https:/*x*/ /t/a.png)` is a
         // valid URL once the comment goes — and these two were the one removal
         // route with no gate. Judged on the owner's text WITHOUT the range, as
-        // the other removals are. extractContents has to answer with a
-        // fragment at once; while the removal is held the answer is an empty
-        // one, the same shape of debt insertRule's index carries.
+        // the other removals are, and handled the way they are: the removal
+        // happens now, with the sheet switched off around it (removeFromSheet),
+        // so extractContents answers with the real fragment instead of an
+        // empty stand-in, and a range the page deletes again finds the text
+        // gone.
         ['deleteContents', 'extractContents'].forEach(function (name) {
             if (typeof Range.prototype[name] !== 'function') return;
             replace(Range.prototype, name, function (original) {
@@ -1072,25 +1366,41 @@
                     if (!owner) return original.call(range);
                     var result = rangeRemoved(range, owner);
                     if (result !== null && !cssURL(result)) return original.call(range);
-                    defer(function (policy) {
-                        var live = rangeStyleOwner(range);
-                        if (!live) return void original.call(range);
-                        deliverCss(policy, live, null, 'without', [], function () { original.call(range); }, rangeRemoved(range, live));
-                    });
-                    return name === 'extractContents' ? d.createDocumentFragment() : undefined;
+                    var out;
+                    removeFromSheet(owner, null, function () { out = original.call(range); });
+                    return out;
                 };
             });
         });
     }
     replace(Element.prototype, 'insertAdjacentElement', function (original) {
         return function (position, node) {
-            var el = this;
-            if (!resources(node).length && !styleRisk(node) && !waiting.has(el)) return original.call(el, position, node);
-            waiting.add(el);
-            defer(function (policy) {
-                prepare(node, policy);
-                parkSheets(node, policy);
-                el.insertAdjacentElement(position, node);
+            var el = this, where = String(position).toLowerCase();
+            var outside = where === 'beforebegin' || where === 'afterend';
+            var container = outside ? el.parentNode : el;
+            if (!resources(node).length && !styleRisk(node) && !(container && waiting.has(container))) return original.call(el, position, node);
+            // An unknown position, a non-element, a parentless element asked
+            // for a sibling, an element placed inside itself: the engine
+            // throws or does nothing, and so does this.
+            if (['beforebegin', 'afterbegin', 'beforeend', 'afterend'].indexOf(where) === -1 || !container
+                || !isNode(node) || node.nodeType !== 1 || contains(node, container)) {
+                return original.call(el, position, node);
+            }
+            waiting.add(container);
+            var record = { target: container };
+            var holder = stash(node, record);
+            enqueue(record, function (policy) {
+                var target = record.target;
+                prepare(holder, policy);
+                parkSheets(holder, policy);
+                // The holder is a fragment, which insertAdjacentElement does
+                // not take, so the four positions are spelled out against the
+                // element as it stands now — falling back to the container the
+                // call was made into once the element has left it.
+                if (where === 'afterbegin') return el.insertBefore(holder, el.firstChild);
+                if (where === 'beforeend') return el.appendChild(holder);
+                if (el.parentNode !== target) return target.appendChild(holder);
+                target.insertBefore(holder, where === 'beforebegin' ? el : el.nextSibling);
             });
             return node;
         };
@@ -1830,7 +2140,16 @@
     replace(w.Document && Document.prototype && typeof Document.prototype.createElement === 'function' ? Document.prototype : d, 'createElement', function (original) {
         return function () {
             var el = original.apply(this, arguments);
-            if (tagKey(el) === 'SCRIPT') scripts.push(el);
+            // Kept for judgeScripts() at the handoff, and only while there is
+            // one to come. On the safety release every script is judged where
+            // it is used — its src assignment and its insertion both decide
+            // immediately — and the list, which nothing drains on that path,
+            // grew by one element per createElement('script') for the rest of
+            // the page view. While pending it is bounded by the fuse.
+            if (tagKey(el) === 'SCRIPT' && !immediate) {
+                if (scripts.length >= LIMIT) releaseSafely('overflow');
+                else scripts.push(el);
+            }
             return el;
         };
     });
@@ -2131,6 +2450,17 @@
     // against the live provider rules next to it, so a conservative guess
     // delays nothing it should not.
     var PARK_CATEGORY = 'marketing';
+    // What the safety release parked, by origin alone and under that
+    // placeholder category. A runtime that arrives afterwards (finish(), the
+    // `late` branch) has the rules this file lacks, and these are the
+    // decisions it has to see again: an allowed CDN image is handed back, a
+    // refused one gets the category its consent actually turns on. Bounded
+    // like the queue; past the cap a park simply keeps its placeholder,
+    // which delays a restore and releases nothing.
+    var safetyParks = [];
+    function noteSafetyPark(el, key, value, script) {
+        if (safetyParks.length < LIMIT) safetyParks.push({ el: el, key: key, value: String(value), script: !!script });
+    }
     function parkCategory(policy, value) {
         if (policy && typeof policy.category === 'function') {
             try {
@@ -2158,6 +2488,7 @@
     // spellings keep their data-faz-href park, which
     // script[data-faz-href][data-faz-category] restores.
     function parkScriptSrc(el, src, policy) {
+        if (policy === safety) noteSafetyPark(el, 'src', src, true);
         var type = attr(el, 'type');
         if (type && type !== 'text/plain' && type !== 'javascript/blocked' && !nativeHas.call(el, 'data-faz-original-type')) {
             setAttr(el, 'data-faz-original-type', type);
@@ -2170,6 +2501,7 @@
     function parkAttribute(el, key, value, policy) {
         if (!el || el.nodeType !== 1) return;
         if (key === 'src' && tagKey(el) === 'SCRIPT') return parkScriptSrc(el, String(value), policy);
+        if (policy === safety) noteSafetyPark(el, key, value, false);
         var target = parkTarget(tagKey(el), key);
         setAttr(el, target.value, value);
         // A list restores by re-reading every candidate, so it carries no
@@ -2320,29 +2652,72 @@
             // read markup, so a parked srcdoc stays parked; the restore pass
             // of a later page view hands it back on the consent that allows it.
             defer(function (live) {
-                var refused, named = '';
-                if (key === 'srcdoc') {
-                    if (live && typeof live.markup === 'function') {
-                        named = String(live.markup(el, value) || '');
-                        refused = named !== '';
-                    } else {
-                        refused = true;
-                    }
-                } else {
-                    var urls = isList(key) ? candidates(value) : [value];
-                    refused = !(live && live.url) || urls.some(function (url) { return !!live.url(url); });
-                }
-                if (!refused) {
-                    dropAttr(el, target.value);
-                    if (target.category) dropAttr(el, target.category);
-                    if (el.nodeName === 'IFRAME' && el.classList) el.classList.remove('faz-hidden');
+                var verdict = parkVerdict(el, key, value, live);
+                if (!verdict.refused) {
+                    unpark(el, key, target);
                     return setAttr(el, key, value);
                 }
                 // Refused. Now someone can name the category the restore
                 // selectors need, so replace the placeholder with the real one.
-                if (target.category && live) setAttr(el, target.category, named || parkCategory(live, value));
+                if (target.category && live) setAttr(el, target.category, verdict.named || parkCategory(live, value));
+                if (live === safety) noteSafetyPark(el, key, value, false);
                 if (live && live.node) live.node(el);
             });
+        });
+    }
+    // The question guard() hands to whoever has the rules, and the one a late
+    // runtime is asked again about each safety park (reviewSafetyParks).
+    function parkVerdict(el, key, value, live) {
+        if (key === 'srcdoc') {
+            if (live && typeof live.markup === 'function') {
+                var named = String(live.markup(el, value) || '');
+                return { refused: named !== '', named: named };
+            }
+            return { refused: true, named: '' };
+        }
+        var urls = isList(key) ? candidates(value) : [value];
+        return { refused: !(live && live.url) || urls.some(function (url) { return !!live.url(url); }), named: '' };
+    }
+    function unpark(el, key, target) {
+        dropAttr(el, target.value);
+        if (target.category) dropAttr(el, target.category);
+        if (el.nodeName === 'IFRAME' && el.classList) el.classList.remove('faz-hidden');
+    }
+    // Each park the safety release made, judged again by the runtime that has
+    // just taken over. A park the page or the runtime has since changed is
+    // theirs and is left alone; so is a category somebody other than this
+    // file wrote. An allowed one is handed back through the LIVE setAttribute,
+    // which by now is the runtime's own gate, so it is judged a second time
+    // by the rules that apply from here on rather than written natively.
+    // Scripts are not re-inserted here — restoring one is the runtime's own
+    // pass (_fazUnblockServerSide), which reads the category; this corrects
+    // the category it will read.
+    function reviewSafetyParks(policy) {
+        var list = safetyParks;
+        safetyParks = [];
+        list.forEach(function (park) {
+            try {
+                var el = park.el;
+                if (park.script) {
+                    if (attr(el, 'type') === 'text/plain' && attr(el, 'src') === park.value && attr(el, 'data-faz-category') === PARK_CATEGORY) {
+                        setAttr(el, 'data-faz-category', parkCategory(policy, park.value));
+                    }
+                    return;
+                }
+                var target = parkTarget(tagKey(el), park.key);
+                if (attr(el, target.value) !== park.value) return;
+                var verdict = parkVerdict(el, park.key, park.value, policy);
+                if (!verdict.refused) {
+                    unpark(el, park.key, target);
+                    return el.setAttribute(park.key, park.value);
+                }
+                if (target.category && attr(el, target.category) === PARK_CATEGORY) {
+                    setAttr(el, target.category, verdict.named || parkCategory(policy, park.value));
+                }
+                if (policy.node) policy.node(el);
+            } catch (error) {
+                w.console.warn('[FAZ Cookie Manager] Re-evaluating a resource parked by the safety release failed; it stays parked', error);
+            }
         });
     }
     var observer = null;
@@ -2436,16 +2811,24 @@
             parsed = true;
         }
     }
-    function releaseSafely() {
+    // `reason` is 'overflow' when the fuse in defer() tripped; anything else —
+    // the DOMContentLoaded event itself, or nothing — is the runtime being
+    // missing, which is what the second message says.
+    function releaseSafely(reason) {
         if (!pending || immediate) return;
-        w.console.warn(
-            '[FAZ Cookie Manager] The consent runtime did not load before DOMContentLoaded, '
-            + 'so the consent banner will not appear on this page view. Third-party scripts, '
-            + 'iframes, images and embeds stay blocked; same-origin requests are released so the '
-            + "site's own JavaScript keeps working. Check the Network tab for a failed or blocked "
-            + 'request to frontend/js/script.min.js — the usual causes are an ad-blocker or filter-list '
-            + 'rule matching the "cookie" segment in the plugin path, a 404 after a partial update, a '
-            + 'minify/combine plugin that mangled the bundle, or a stale CDN copy.'
+        w.console.warn(reason === 'overflow'
+            ? '[FAZ Cookie Manager] More than ' + LIMIT + ' operations were held while waiting for the consent '
+                + 'runtime, so the bootstrap stopped queuing them and applied its safety policy instead of '
+                + 'letting the queue grow without bound: third-party scripts, iframes, images and embeds stay '
+                + "blocked and same-origin requests are released. The consent runtime still takes over if it "
+                + 'loads. A script on this page is inserting or requesting at a rate no consent window should see.'
+            : '[FAZ Cookie Manager] The consent runtime did not load before DOMContentLoaded, '
+                + 'so the consent banner will not appear on this page view. Third-party scripts, '
+                + 'iframes, images and embeds stay blocked; same-origin requests are released so the '
+                + "site's own JavaScript keeps working. Check the Network tab for a failed or blocked "
+                + 'request to frontend/js/script.min.js — the usual causes are an ad-blocker or filter-list '
+                + 'rule matching the "cookie" segment in the plugin path, a 404 after a partial update, a '
+                + 'minify/combine plugin that mangled the bundle, or a stale CDN copy.'
         );
         // What a visitor sees on this page view, stated plainly because the
         // answer is not "nothing": every embed the SERVER blocked keeps its
@@ -2468,6 +2851,9 @@
         var tasks = queue;
         queue = [];
         immediate = safety;
+        // Every queued insertion is about to land: nothing is waiting INTO a
+        // container any more, and nothing will queue again on this path.
+        into = new WeakMap();
         replaying++;
         try { judgeScripts(safety); } finally { replaying--; }
         tasks.forEach(function (task) { run(task, safety); });
@@ -2523,8 +2909,145 @@
     }
     // Deferred scripts always run before DOMContentLoaded, so still pending at
     // that point means the runtime is not coming.
+    //
+    // Once parsing is over that cannot be read off the event any more. This
+    // file is then itself running as a DEFERRED script — an optimiser rewrote
+    // the inline bootstrap (LiteSpeed "Load JS Deferred" turns it into a
+    // data: URI with `defer`) — and the runtime, deferred after it in the same
+    // ordered list, has not run yet. A microtask released before it every
+    // time, so the runtime always arrived "late" and every first-party request
+    // of the window went out under the origin-only policy instead of the real
+    // one. When the runtime's tag is in the document and has not run, its own
+    // load or error event is the signal, with a ceiling for a tag that never
+    // fires one (a delay-until-interaction loader that runs a copy instead).
+    var RUNTIME_WAIT_MS = 5000;
+    function runtimeTag() {
+        var tag = d.getElementById('faz-cookie-manager-js');
+        if (tag && tag.nodeName === 'SCRIPT') return tag;
+        var all = d.getElementsByTagName('script');
+        for (var i = 0; i < all.length; i++) {
+            var src = attr(all[i], 'src') || attr(all[i], 'data-src') || '';
+            if (/\/frontend\/js\/script(?:\.min)?\.js(?:[?#]|$)/.test(src)) return all[i];
+        }
+        return null;
+    }
+    function releaseAfterRuntime() {
+        // Every runtime leaves window.fazcookie behind once it has run — a
+        // store-less one included, which is exactly the one that never hands
+        // over — so its presence means there is nothing left to wait for.
+        var tag = w.fazcookie ? null : runtimeTag();
+        if (!tag) return void Promise.resolve().then(releaseSafely);
+        var done = false, timer = null;
+        var settle = function () {
+            if (done) return;
+            done = true;
+            tag.removeEventListener('load', settle);
+            tag.removeEventListener('error', settle);
+            if (timer) w.clearTimeout(timer);
+            // A microtask later, not now: the handoff of a stale runtime
+            // (adoptStale) is itself a microtask queued while it evaluated.
+            Promise.resolve().then(releaseSafely);
+        };
+        tag.addEventListener('load', settle);
+        tag.addEventListener('error', settle);
+        timer = w.setTimeout(settle, RUNTIME_WAIT_MS);
+    }
     if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', releaseSafely);
-    else Promise.resolve().then(releaseSafely);
+    else releaseAfterRuntime();
+
+    // A runtime from before this file — 1.34.0 and older — never calls
+    // start() or finish(). A page cache serving that bundle under current
+    // markup is not hypothetical: LiteSpeed's "Remove Query Strings" strips
+    // the ?ver= that is the only cache buster script.min.js has. Such a
+    // runtime installed its gates ON TOP of this file's wrappers, its init ran
+    // while this file was still pending, and _fazRenderBanner() — written as
+    // `while (body.firstChild) fragment.appendChild(body.firstChild)` — never
+    // ended. The held-insertion fix above makes that loop finish; this makes
+    // the old runtime work: it is recognised the moment it creates its
+    // consent store, which every version does as its first act once it has a
+    // configuration (`fazcookie._fazConsentStore = new Map()`), and the
+    // bootstrap steps aside exactly as start() would have it step aside —
+    // natives back BEFORE the runtime installs its gates, then the held queue
+    // drained, a microtask later, once the runtime has finished evaluating and
+    // its gates are in place. What that runtime does from there is what it
+    // did before the bootstrap existed.
+    //
+    // The store is the signal, not window.fazcookie itself: a runtime without
+    // a configuration creates the object and stops, and that one must leave
+    // the bootstrap in charge (the static-config failure path in script.js).
+    var adopting = false;
+    function adoptStale() {
+        if (!pending || adopting) return;
+        adopting = true;
+        w.console.warn('[FAZ Cookie Manager] A consent runtime older than this page is running: it predates the '
+            + 'bootstrap handoff, so a page cache or optimiser is serving a stale frontend/js/script.min.js (a '
+            + '"remove query strings" option drops the ?ver= cache buster). The bootstrap hands enforcement to that '
+            + 'runtime. Purge the page and JS caches so the current runtime is served.');
+        w._fazBootstrap.start();
+        Promise.resolve().then(function () { if (pending) w._fazBootstrap.finish(stalePolicy()); });
+    }
+    // The handoff policy, built from what an old runtime exposes. Its
+    // functions are top-level declarations in a classic script, so they are
+    // globals once it has evaluated; each is used only if it is there, and a
+    // missing matcher leaves `url` out — which makes the backstop keep what
+    // it parked (restored by that runtime's own pass, on consent) rather than
+    // hand it back unjudged.
+    function stalePolicy() {
+        var fn = function (name) { return typeof w[name] === 'function' ? w[name] : null; };
+        var parkNode = fn('_fazParkResourceElementIfBlocked');
+        var blocks = fn('_fazShouldBlockProvider');
+        var listed = fn('_fazIsUserWhitelisted');
+        var category = fn('_fazImgCategory');
+        var policy = {
+            stale: true,
+            script: function () {},
+            node: function (el) {
+                if (!parkNode || tagKey(el) === 'SCRIPT') return;
+                try { parkNode(el); } catch (e) { /* that runtime's own observer still sees the insertion */ }
+            }
+        };
+        if (blocks) policy.url = function (url) { return !(listed && listed(String(url))) && !!blocks(String(url)); };
+        if (category) policy.category = function (url) { return category(String(url)); };
+        return policy;
+    }
+    (function () {
+        var own = Object.getOwnPropertyDescriptor(w, 'fazcookie');
+        // Someone else's accessor, or a `var fazcookie` (not configurable):
+        // not ours to wrap. The stale case then goes unrecognised and falls
+        // back to the safety release, which the fixes above keep bounded.
+        if (own && (!own.configurable || own.get || own.set)) return;
+        var value = own ? own.value : undefined;
+        var armed = [];
+        function arm(obj) {
+            if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) return;
+            if (Object.prototype.hasOwnProperty.call(obj, '_fazConsentStore')) return;
+            try {
+                Object.defineProperty(obj, '_fazConsentStore', {
+                    configurable: true, enumerable: false,
+                    get: function () { return undefined; },
+                    set: function (store) {
+                        Object.defineProperty(obj, '_fazConsentStore', { configurable: true, enumerable: true, writable: true, value: store });
+                        adoptStale();
+                    }
+                });
+                armed.push(obj);
+            } catch (e) { /* a frozen object: nothing will be stored on it either */ }
+        }
+        Object.defineProperty(w, 'fazcookie', {
+            configurable: true, enumerable: own ? own.enumerable : true,
+            get: function () { return value; },
+            set: function (next) { value = next; arm(next); }
+        });
+        arm(value);
+        undo.push(function () {
+            armed.forEach(function (obj) {
+                var trap = Object.getOwnPropertyDescriptor(obj, '_fazConsentStore');
+                if (trap && trap.get) delete obj._fazConsentStore;
+            });
+            if (own || value !== undefined) Object.defineProperty(w, 'fazcookie', { configurable: true, enumerable: true, writable: true, value: value });
+            else delete w.fazcookie;
+        });
+    })();
 
     w._fazBootstrap = {
         start: function () {
@@ -2587,7 +3110,16 @@
             var tasks = queue;
             queue = [];
             tasks.forEach(function (task) { run(task, policy); });
-            if (late) immediate = policy;
+            into = new WeakMap();
+            if (late) {
+                immediate = policy;
+                // What the safety release parked under its placeholder is
+                // decided again by the rules that exist now. A policy with
+                // no URL matcher (a stale runtime that exposes none) cannot
+                // say anything new, and the parks stay as they are.
+                if (typeof policy.url === 'function') reviewSafetyParks(policy);
+            }
+            safetyParks = [];
         }
     };
 })(window, document);
