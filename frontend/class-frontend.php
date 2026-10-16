@@ -291,6 +291,13 @@ class Frontend {
 	private $visitor_state_veto = null;
 
 	/**
+	 * Whether maybe_apply_ab_test() vetoed the page cache for its split.
+	 *
+	 * @var bool
+	 */
+	private $ab_test_cache_vetoed = false;
+
+	/**
 	 * Per-request memo for is_geo_bootstrap_cache_active() (null = not yet
 	 * computed). The readiness check touches banner/ruleset storage, so every
 	 * consumer in a request must share one verdict.
@@ -1830,6 +1837,20 @@ class Frontend {
 			return $default_banner;
 		}
 
+		// The split is per visitor (a random draw before any action, the
+		// recorded __scope.banner after), so the page it produces must not be
+		// stored: a page cache freezes the first MISS's variant into the copy
+		// every later visitor receives, the experiment then measures one arm,
+		// and the record of which banner a visitor saw stops matching the one
+		// served. Keep this response out of shared caches; when that is not
+		// possible (output already started) serve the normally-routed banner,
+		// which is the same for everyone. Moving the draw into script.js is the
+		// cache-friendly alternative, and a larger change than this fix.
+		if ( ! $this->send_page_cache_veto( 'FAZ Cookie Manager A/B banner test' ) ) {
+			return $default_banner;
+		}
+		$this->ab_test_cache_vetoed = true;
+
 		// Reuse the assignment already present in the strictly-necessary consent
 		// record. Creating a standalone A/B cookie before the visitor acts would
 		// itself be non-essential tracking under opt-in regimes. Before any action
@@ -2678,7 +2699,7 @@ class Frontend {
 		// The page follows this visitor's consent state (decided on
 		// send_headers, see decide_visitor_state_cache_veto()). A 'fallback'
 		// verdict rendered the shareable form, which FlyingPress may keep.
-		if ( 'vetoed' === $this->visitor_state_veto ) {
+		if ( 'vetoed' === $this->visitor_state_veto || $this->ab_test_cache_vetoed ) {
 			return false;
 		}
 		if ( $this->is_country_dependent_output() ) {
@@ -2742,7 +2763,7 @@ class Frontend {
 		// including the ones with no country source, where nothing above fires.
 		// Decided here, before any output, so the render that follows
 		// (get_blocked_categories(), get_service_consent()) reads one verdict.
-		$this->decide_visitor_state_cache_veto( $country_vetoed || $this->bot_variance_cache_vetoed );
+		$this->decide_visitor_state_cache_veto( $country_vetoed || $this->bot_variance_cache_vetoed || $this->ab_test_cache_vetoed );
 	}
 
 	/**
