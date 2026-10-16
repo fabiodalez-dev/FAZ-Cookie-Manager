@@ -54,7 +54,7 @@ const FULL_TEST_CODEX_REPORT = process.env.FULL_TEST_CODEX_REPORT
 const MIN_ACTIVE_TARGET_PLUGINS = 20;
 
 const TARGET_CONFIGS: TargetConfig[] = [
-  { label: 'Site Kit by Google', installSlugs: ['google-site-kit'], probePattern: 'google-site-kit', expectedCategory: 'analytics' },
+  { label: 'Site Kit by Google', installSlugs: ['google-site-kit'], probePattern: 'google_gtagjs-js', expectedCategory: 'analytics' },
   { label: 'MonsterInsights', installSlugs: ['google-analytics-for-wordpress'], probePattern: 'monsterinsights', expectedCategory: 'analytics' },
   { label: 'ExactMetrics', installSlugs: ['exactmetrics-google-analytics-dashboard-for-wp'], probePattern: 'exactmetrics', expectedCategory: 'analytics' },
   { label: 'Analytify', installSlugs: ['analytify-google-analytics-dashboard'], probePattern: 'analytify', expectedCategory: 'analytics' },
