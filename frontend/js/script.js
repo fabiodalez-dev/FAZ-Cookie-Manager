@@ -7743,14 +7743,70 @@ function _fazExtractEndpoint(url) {
  * took its passthrough branch, and the identical call with a string was
  * dropped. The bootstrap's hold window stringifies (local() does String(url)),
  * and so does the handoff policy at the end of this file; the live gates now
- * judge the same text those two do.
+ * judge the same text those two do. _fazNetworkTarget() below is where that
+ * reading is done, together with what is then passed on to the native.
  */
-function _fazRequestTarget(input) {
-    if (input == null) return "";
-    if (typeof input === "string") return input;
-    // A Request carries its (already absolute) URL in .url.
-    if (typeof input.url === "string") return input.url;
-    try { return String(input); } catch (e) { return ""; }
+
+// The brand-checked readers of Request#url and URL#href, captured once. A
+// genuine Request or URL answers through them; anything else — including an
+// object built on Request.prototype with an own `url` — makes them throw.
+var _fazRequestUrlGetter = (function () {
+    try {
+        var d = typeof Request === "function" && Object.getOwnPropertyDescriptor(Request.prototype, "url");
+        return d && typeof d.get === "function" ? d.get : null;
+    } catch (e) { return null; }
+})();
+var _fazUrlHrefGetter = (function () {
+    try {
+        var d = typeof URL === "function" && Object.getOwnPropertyDescriptor(URL.prototype, "href");
+        return d && typeof d.get === "function" ? d.get : null;
+    } catch (e) { return null; }
+})();
+
+/**
+ * What a network gate judges, and what it then hands to the native.
+ *
+ * The decision used to be taken on a string read from the input while the
+ * native received the input itself, and read it again. Any object whose
+ * stringification has state — a toString() that answers the first-party API
+ * once and the tracker the second time — was judged on one URL and sent to
+ * another. Likewise an object with an own `url` property: the gate read
+ * `.url`, while fetch() stringifies anything that is not a real Request.
+ *
+ * So the native receives exactly the text that was judged, except for a
+ * genuine Request (brand-checked, not duck-typed): its URL lives in an
+ * internal slot that cannot change, and it carries method, headers and body
+ * a string would drop. A URL is reduced to its href at judgement time — the
+ * object is mutable, the string is not.
+ *
+ * `error` is set when the input cannot be stringified at all; the caller
+ * rethrows it rather than hand the native a value it would stringify a
+ * second time, possibly differently.
+ *
+ * @param {*} input
+ * @return {{url: string, pass: *, error: *}}
+ */
+function _fazNetworkTarget(input) {
+    if (input == null) return { url: "", pass: input, error: null };
+    if (typeof input === "string") return { url: input, pass: input, error: null };
+    if (_fazRequestUrlGetter && typeof input === "object") {
+        try {
+            var requestUrl = _fazRequestUrlGetter.call(input);
+            if (typeof requestUrl === "string") return { url: requestUrl, pass: input, error: null };
+        } catch (e) { /* not a Request */ }
+    }
+    if (_fazUrlHrefGetter && typeof input === "object") {
+        try {
+            var href = _fazUrlHrefGetter.call(input);
+            if (typeof href === "string") return { url: href, pass: href, error: null };
+        } catch (e) { /* not a URL */ }
+    }
+    try {
+        var text = String(input);
+        return { url: text, pass: text, error: null };
+    } catch (e) {
+        return { url: "", pass: input, error: e };
+    }
 }
 
 /**
@@ -7767,12 +7823,14 @@ function _fazRequestTarget(input) {
     if (navigator.sendBeacon) {
         var _fazOrigSendBeacon = navigator.sendBeacon.bind(navigator);
         navigator.sendBeacon = function (url, data) {
-            var target = _fazRequestTarget(url);
+            var judged = _fazNetworkTarget(url);
+            if (judged.error) throw judged.error;
+            var target = judged.url;
             var endpoint = _fazExtractEndpoint(target);
             if (endpoint && !_fazIsUserWhitelisted(target) && _fazShouldBlockProvider(endpoint)) {
                 return true; // Pretend success — silently drop.
             }
-            return _fazOrigSendBeacon(url, data);
+            return _fazOrigSendBeacon(judged.pass, data);
         };
     }
 
@@ -7780,12 +7838,14 @@ function _fazRequestTarget(input) {
     if (window.fetch) {
         var _fazOrigFetch = window.fetch.bind(window);
         window.fetch = function (input, init) {
-            var url = _fazRequestTarget(input);
+            var judged = _fazNetworkTarget(input);
+            if (judged.error) return Promise.reject(judged.error);
+            var url = judged.url;
             var endpoint = _fazExtractEndpoint(url);
             if (endpoint && !_fazIsUserWhitelisted(url) && _fazShouldBlockProvider(endpoint)) {
                 return Promise.resolve(new Response("", { status: 200, statusText: "Blocked by consent" }));
             }
-            return _fazOrigFetch(input, init);
+            return _fazOrigFetch(judged.pass, init);
         };
     }
 
@@ -7799,10 +7859,14 @@ function _fazRequestTarget(input) {
             try { delete this.readyState; } catch (e) { /* non-configurable fallback */ }
             try { delete this.responseText; } catch (e) { /* non-configurable fallback */ }
         }
-        var target = _fazRequestTarget(url);
+        var judged = _fazNetworkTarget(url);
+        if (judged.error) throw judged.error;
+        var target = judged.url;
         var endpoint = _fazExtractEndpoint(target);
         this._fazBlocked = !!(endpoint && !_fazIsUserWhitelisted(target) && _fazShouldBlockProvider(endpoint));
-        return _fazOrigXHROpen.apply(this, arguments);
+        var args = Array.prototype.slice.call(arguments);
+        if (args.length > 1) args[1] = judged.pass;
+        return _fazOrigXHROpen.apply(this, args);
     };
     var _fazOrigXHRSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.send = function (body) {
@@ -7826,7 +7890,10 @@ function _fazRequestTarget(input) {
     if (typeof WebSocket !== 'undefined') {
         var _fazOrigWebSocket = window.WebSocket;
         window.WebSocket = function (url, protocols) {
-            var target = _fazRequestTarget(url);
+            var judged = _fazNetworkTarget(url);
+            if (judged.error) throw judged.error;
+            var target = judged.url;
+            url = judged.pass;
             var endpoint = _fazExtractEndpoint(target);
             if (endpoint && !_fazIsUserWhitelisted(target) && _fazShouldBlockProvider(endpoint)) {
                 // Build a mock that immediately transitions to CLOSED.

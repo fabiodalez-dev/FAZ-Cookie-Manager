@@ -106,7 +106,9 @@ console.log('network gates: a URL object is judged like the same string');
 
   const own = await window.fetch(new window.URL(OWN_API));
   eq('fetch(new URL(own api)) still goes out', own.statusText, 'network');
-  eq('with the URL object handed to the native unchanged', reached.fetch[0] instanceof window.URL, true);
+  // The native receives the href that was judged, not the (mutable) object:
+  // see network-gate-judged-target.test.mjs.
+  eq('with the judged href handed to the native', reached.fetch[0], OWN_API);
   // A Request keeps working: it has .url and always did.
   const req = new window.Request(GA);
   const asRequest = await window.fetch(req);
