@@ -104,16 +104,28 @@ class Cache_Compatibility {
 	 * Define the page-cache bypass constants the WordPress caches read.
 	 *
 	 * DONOTCACHEPAGE (WP Rocket, W3TC, WP Super Cache, Cache Enabler, SG
-	 * Optimizer, Breeze …), DONOTCACHEOBJECT and DONOTCACHEDB (W3TC), and
-	 * LSCACHE_NO_CACHE, which LiteSpeed Cache checks on its own besides the
-	 * `litespeed_control_set_nocache` action. Constants cannot be undefined,
-	 * so a value someone else already set is left as it is.
+	 * Optimizer, Breeze …) and LSCACHE_NO_CACHE, which LiteSpeed Cache checks
+	 * on its own besides the `litespeed_control_set_nocache` action. Constants
+	 * cannot be undefined, so a value someone else already set is left as it is.
+	 *
+	 * Every caller is a PAGE veto: the response varies by visitor (consent
+	 * state, country, crawler) and must not be stored as a page. W3 Total
+	 * Cache's DONOTCACHEOBJECT and DONOTCACHEDB are deliberately not defined
+	 * here. They switch off W3TC's object and database caches for the whole
+	 * request, and nothing those caches hold varies by visitor — option rows,
+	 * the banner template, query results keyed by their SQL. The first page
+	 * veto (country routing) copied them from the admin no-cache stack, where
+	 * stale settings on an edit screen are the concern; once the veto also
+	 * covered every consenting visitor, that copy made each of their page views
+	 * run every query uncached on a site that had paid for an object cache.
+	 * The admin screens (Admin::send_admin_nocache_headers()) and the plugin's
+	 * REST routes still define them for that freshness reason.
 	 *
 	 * @since 1.34.2
 	 * @return void
 	 */
 	public static function define_no_cache_constants() {
-		foreach ( array( 'DONOTCACHEPAGE', 'DONOTCACHEOBJECT', 'DONOTCACHEDB', 'LSCACHE_NO_CACHE' ) as $constant ) {
+		foreach ( array( 'DONOTCACHEPAGE', 'LSCACHE_NO_CACHE' ) as $constant ) {
 			if ( ! defined( $constant ) ) {
 				define( $constant, true );
 			}

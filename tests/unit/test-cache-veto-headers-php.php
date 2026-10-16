@@ -89,7 +89,11 @@ namespace {
 	veto_assert_full_set( 'crawler veto' );
 	veto_check( in_array( 'User-Agent', veto_header( 'Vary' ), true ), 'crawler veto: Vary: User-Agent kept' );
 	veto_check( defined( 'LSCACHE_NO_CACHE' ) && LSCACHE_NO_CACHE, 'LSCACHE_NO_CACHE defined for LiteSpeed Cache' );
-	veto_check( defined( 'DONOTCACHEPAGE' ) && defined( 'DONOTCACHEOBJECT' ) && defined( 'DONOTCACHEDB' ), 'DONOTCACHE* constants defined' );
+	veto_check( defined( 'DONOTCACHEPAGE' ), 'DONOTCACHEPAGE defined' );
+	// A page veto keeps the PAGE out of the cache; W3TC's object and database
+	// caches hold nothing visitor-specific, and switching them off made every
+	// consenting visitor's page view run uncached (see define_no_cache_constants()).
+	veto_check( ! defined( 'DONOTCACHEOBJECT' ) && ! defined( 'DONOTCACHEDB' ), 'W3TC object and database caches are left on' );
 
 	$GLOBALS['veto_headers']      = array();
 	$GLOBALS['veto_actions']      = array();
