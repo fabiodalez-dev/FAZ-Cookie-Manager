@@ -260,6 +260,56 @@ namespace {
 	faz_advance( 6 );
 	ipw_check( 'throttled' === $post( '', 'rejected' ), 'a post without a consent_id inside the window is throttled' );
 
+	// 8b. The exception is rationed per ADDRESS, not only per consent_id. Each
+	//     id carries its own chg1/chgn caps, so on their own they let an
+	//     address holding K known ids land K rows every 10 s by alternating
+	//     their statuses — where the IP gate alone lets one through.
+	faz_reset();
+	$ids = array( 'known-visitor-a-0123456789abcdef', 'known-visitor-b-0123456789abcdef', 'known-visitor-c-0123456789abcdef' );
+	foreach ( $ids as $known ) {
+		$post( $known, 'accepted' ); // each lands in its own IP window
+		faz_advance( 11 );
+	}
+	// t=33: the IP window was armed at t=22 and is open again. Arm it with a
+	// visitor the register has never seen, so no id's own caps are touched.
+	$post( 'window-opener-0123456789abcdef', 'accepted' );
+	faz_advance( 2 );
+	$landed = 0;
+	foreach ( $ids as $known ) {
+		if ( 'logged' === $post( $known, 'partial', array( 'analytics' => 'no' ) ) ) {
+			$landed++;
+		}
+	}
+	ipw_check( 1 === $landed, 'three known ids flipping from one address inside one window land ONE exception, not three (got ' . $landed . ')' );
+	faz_advance( 11 );
+	$post( 'window-opener-2-0123456789abcdef', 'accepted' ); // close the IP window again
+	faz_advance( 1 );
+	ipw_check( 'logged' === $post( $ids[2], 'rejected' ), 'and the exception comes back with the next window' );
+
+	// 8c. A request the IP gate refuses arms nothing on its way out. It used to
+	//     fall through and arm the per-id window and the chg1 cap before the
+	//     verdict — two wp_options rows per request on a site without an
+	//     object cache, bought by minting a fresh consent_id each time.
+	faz_reset();
+	$post( $id, 'accepted' );
+	faz_advance( 2 );
+	$armed_before = array_keys( $GLOBALS['faz_throttles'] );
+	$refused      = 0;
+	for ( $i = 0; $i < 5; $i++ ) {
+		if ( 'throttled' === $post( 'flood-id-' . $i . '-0123456789abcdef', 'accepted' ) ) {
+			$refused++;
+		}
+	}
+	$armed_new = array_values( array_filter(
+		array_diff( array_keys( $GLOBALS['faz_throttles'] ), $armed_before ),
+		function ( $key ) { return 0 !== strpos( $key, 'faz_consent_refusal_' ); }
+	) );
+	ipw_check( 5 === $refused, 'five fresh ids from a throttled address are all refused' );
+	ipw_check( array() === $armed_new, 'and none of them armed a throttle window on the way out (armed: ' . implode( ', ', $armed_new ) . ')' );
+	$armed_before = array_keys( $GLOBALS['faz_throttles'] );
+	$post( $id, 'accepted' ); // a replay of the known id's own status
+	ipw_check( array() === array_values( array_diff( array_keys( $GLOBALS['faz_throttles'] ), $armed_before ) ), 'a throttled replay of a known id arms nothing either' );
+
 	// 9. The jurisdiction-bootstrap verdict the beacon sends must reach the
 	//    controller, and the key must be present even when the beacon sent
 	//    nothing: its presence is how the controller tells the browser path

@@ -638,6 +638,37 @@ class Consent_Logger {
 			// block exists to stop charging for.
 			$previous_row   = Controller::get_instance()->get_log_by_consent_id( $sanitized_consent_id );
 			$previous       = $this->last_logged_status( $previous_row );
+
+			// An address already over its window is answered HERE, before any of
+			// the windows below is armed, unless this request is the one shape
+			// the IP gate yields to (see $same_visitor_change further down). The
+			// lookup above is the only work it costs. Every refused request used
+			// to fall through and arm the per-id window and the chg1 cap before
+			// the verdict — two transients, i.e. two wp_options rows on a site
+			// without a persistent object cache — so a client that kept minting
+			// fresh consent_ids from one address bought two writes per request
+			// on the very path this gate exists to make cheap.
+			//
+			// And the exception itself is rationed per address. It is keyed on
+			// the consent_id, so on its own it bounded nothing across ids: an
+			// address holding K ids the register already knew could land K rows
+			// every 10 seconds by alternating their statuses, where the IP gate
+			// alone lets through one. One exception per address per window keeps
+			// the case it was written for — one visitor correcting a decision
+			// seconds after making it — and caps the address at two rows per
+			// window instead of K. Two visitors behind one NAT both correcting
+			// inside the same 10 seconds is what this costs: the second waits
+			// for the window, exactly as a second fresh visitor already does.
+			// The key sits under the `faz_consent_ip_` prefix on purpose, so
+			// whatever resets the IP window resets its exception with it.
+			if ( $is_ip_throttled ) {
+				$is_candidate = is_array( $previous_row ) && '' !== $status && $status !== $previous;
+				if ( ! $is_candidate || faz_throttle_request( 'faz_consent_ip_chg', 10 ) ) {
+					self::record_refusal( self::CAUSE_THROTTLED );
+					return rest_ensure_response( array( 'throttled' => true ) );
+				}
+			}
+
 			$status_changed = '' !== $status && $status !== $previous;
 
 			// A GPC exception minted from a blocked embed does not change the
@@ -692,7 +723,8 @@ class Consent_Logger {
 			// The IP gate yields to exactly one shape of request: the SAME
 			// consent_id the log already holds a row for, posting an allowlisted
 			// status that differs from that row's — a later decision by a visitor
-			// the register knows, already bounded by the chg1/chgn caps. It does
+			// the register knows, already bounded by the chg1/chgn caps and
+			// rationed to one per address per window above. It does
 			// not yield to a first-ever row (a flooder would mint a fresh id per
 			// request), to a replay of the same status, to a status outside the
 			// allowlist, or to a new GPC exception on an unchanged status. A
