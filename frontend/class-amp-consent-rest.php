@@ -1087,6 +1087,15 @@ class AMP_Consent_Rest {
 	 * produce, so the existing cookie is now read and its unowned keys carried
 	 * forward.
 	 *
+	 * No fazVendorConsent record is written: an AMP page never shows the IAB
+	 * vendor list, so no vendor consent exists. On a canonical page with TCF
+	 * active, script.js and faz_is_vendor_record_stale() therefore both treat
+	 * this cookie as a decision that still has to be asked, and the visitor
+	 * answers the full banner once there. Keeping the categories while asking
+	 * for the vendors alone would need a vendor-only prompt the banner does not
+	 * have; re-asking the whole choice is the conservative form of the same
+	 * IAB rule (vendor consent only through the CMP that disclosed them).
+	 *
 	 * @param string $state           accepted|rejected.
 	 * @param array  $purposes        Purpose slug => bool.
 	 * @param array  $context         Resolved banner context.

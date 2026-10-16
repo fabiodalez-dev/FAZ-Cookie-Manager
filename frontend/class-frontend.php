@@ -209,6 +209,12 @@ class Frontend {
 	 */
 	private $consent_cookie_scope_cache = false;
 	/**
+	 * Per-request memo for is_vendor_record_stale(), keyed by cookie.
+	 *
+	 * @var array<string,bool>
+	 */
+	private $vendor_record_stale_cache = array();
+	/**
 	 * Categories blocked by a binding privacy signal on THIS request.
 	 *
 	 * Populated by get_blocked_categories(); read by get_service_consent(),
@@ -7806,7 +7812,42 @@ class Frontend {
 		if ( ! function_exists( 'faz_get_valid_consent_cookie' ) ) {
 			return '';
 		}
-		return (string) faz_get_valid_consent_cookie( '', $this->get_consent_cookie_scope() );
+		$cookie = (string) faz_get_valid_consent_cookie( '', $this->get_consent_cookie_scope() );
+		if ( '' !== $cookie && $this->is_vendor_record_stale( $cookie ) ) {
+			return '';
+		}
+		return $cookie;
+	}
+
+	/**
+	 * Whether script.js will discard this decided cookie on this page because
+	 * the visitor never saw every vendor now selected for IAB TCF (see
+	 * faz_is_vendor_record_stale()).
+	 *
+	 * Treated like a scope change: the server reads the cookie as absent on the
+	 * same request the client invalidates it, instead of rendering the accepted
+	 * categories' trackers executable one page view before the re-prompt. It is
+	 * NOT deleted here, nor on `init` as a stale revision is: the endpoint and
+	 * pages AMP serves never show a vendor list, run at `init` before an AMP
+	 * request can be recognised, and would destroy on every AMP page view the
+	 * cookie the AMP flow had just written. The client deletes it on the
+	 * canonical page, where it re-prompts.
+	 *
+	 * Only where the CMP can run: a page with a banner loaded (script.js is
+	 * there to re-prompt). The law is the active banner's, as
+	 * _fazCurrentLaw() reads it.
+	 *
+	 * @param string $cookie Revision- and scope-valid consent cookie.
+	 * @return bool
+	 */
+	private function is_vendor_record_stale( $cookie ) {
+		if ( ! $this->template || ! $this->banner || ! function_exists( 'faz_is_vendor_record_stale' ) ) {
+			return false;
+		}
+		if ( ! isset( $this->vendor_record_stale_cache[ $cookie ] ) ) {
+			$this->vendor_record_stale_cache[ $cookie ] = faz_is_vendor_record_stale( $cookie, (string) $this->banner->get_law() );
+		}
+		return $this->vendor_record_stale_cache[ $cookie ];
 	}
 
 	/**
