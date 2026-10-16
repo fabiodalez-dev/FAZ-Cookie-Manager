@@ -2,6 +2,20 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## Unreleased
+
+- PR #333 review: isolate consent, vendor and opt-out cookies by network/site on every multisite topology, including subdirectories and custom cookie domains. Choices survive A → B → A without sharing optional grants.
+- PR #333 review: require a nonce-protected administrator attestation of consent-ID ownership before privacy tools touch consent history. Typed IDs remain unverified claims; confirmations are bound to the exact request, email and identifier.
+- PR #333 review: propagate consent-history read/delete failures as WordPress errors so incomplete operations remain retryable, flush pending GPP log capture on pagehide, reject optional grants in the PMP exemption, and recognize large JSON data without unbounded regex backtracking.
+
+
+- Fix #330: shared-domain consent on multisite is bound to the network and site in PHP, classic, REST, AMP, Google Consent Mode and TCF. Existing shared multisite cookies require a fresh choice; single-site cookies keep their fingerprint.
+- Fix #329: remove unsupported GPP declarations from rulesets and schema. FAZ does not provide a GPP CMP; consent logs may capture a string from an external CMP using its asynchronous v1.1 `ping` API.
+- Fix #328: generate suggested privacy-policy text from live settings, disclosing consent identifiers, salted IP and user-agent hashes, feature cookies, aggregate counters, geolocation, optional ipinfo disclosure and privacy-request retention. Withdrawal instructions follow the verified configured route.
+- Fix #327: show a selectable consent ID in preferences, accept it in privacy requests and link it to the admin history search. WordPress privacy tools export or erase every matching decision. The `faz_consent_log_erasure_retain` filter can retain consent records while reporting retention; erased requests lose the ID.
+- Fix #326: sign server-parked iframe documents and require a response-local proof before runtime restoration. Runtime and bootstrap parks carry the same proof; forged sentinels no longer exempt live resources. Signed fragments are revalidated on repeated server passes. Asynchronous fragments from a different response remain inert unless parked by the current runtime.
+- Fix #322: preserve inline JSON variable declarations such as Query Monitor data regardless of script ID, while still checking executable code. Limit the Site Kit provider and template to its Google tag, leaving Site Kit application scripts available.
+
 ## [1.34.1] - 2026-10-10
 
 ### Added

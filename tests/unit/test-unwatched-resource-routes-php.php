@@ -74,6 +74,7 @@ namespace FazCookie\Frontend\Includes {
 
 namespace {
 
+	function wp_salt( $scheme = 'auth' ) { return 'srcdoc-test-' . $scheme; }
 	// ---------- Bootstrap ----------
 
 	if ( ! defined( 'ABSPATH' ) ) {
@@ -369,7 +370,7 @@ namespace {
 	// Already parked: protected from the inner passes too, and not re-judged.
 	$fe   = faz_ob_frontend( $providers, $blocked );
 	$html = '<html><body><iframe class="faz-hidden" data-faz-category="marketing" data-faz-srcdoc="<img src=&quot;https://cdn.tracker.test/pixel.png&quot;>"></iframe></body></html>';
-	assert_true( faz_ob_run( $fe, $html ) === $html, 'a parked srcdoc is not rewritten a second time, inside or out' );
+	assert_true( false !== strpos( faz_ob_run( $fe, $html ), 'data-faz-untrusted-srcdoc=' ), 'an unsigned legacy park is demoted rather than activated' );
 
 	echo "\n-- iframe srcdoc: src goes with it --\n";
 
@@ -426,7 +427,7 @@ namespace {
 	// judged.
 	$fe  = faz_ob_frontend( $providers, $blocked );
 	$out = faz_ob_run( $fe, '<html><body><iframe data-faz-srcdoc="x" srcdoc="<img src=https://cdn.tracker.test/p.png>"></iframe></body></html>' );
-	assert_true( false !== strpos( $out, 'data-faz-srcdoc="x"' ), 'the parked token survives byte-for-byte' );
+	assert_true( false !== strpos( $out, 'data-faz-untrusted-srcdoc="x"' ), 'the unsigned parked value stays inert' );
 	assert_true( false !== strpos( $out, 'data-faz-srcdoc="<img src=https://cdn.tracker.test/p.png>"' ), 'and the live one is parked, byte-for-byte' );
 	assert_true( ! preg_match( '/(?<![\w-])srcdoc=/i', $out ), 'nothing is left live' );
 	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'with one category' );
@@ -766,7 +767,7 @@ namespace {
 	$fe  = faz_ob_frontend( $providers, $blocked );
 	$out = faz_ob_run( $fe, '<html><body><iframe data-faz-srcdoc="x" src="https://cdn.tracker.test/f"></iframe></body></html>' );
 	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/f"' ), 'with no live srcdoc the src is not inert and is parked' );
-	assert_true( false !== strpos( $out, 'data-faz-srcdoc="x"' ), 'and the stashed token comes back' );
+	assert_true( false !== strpos( $out, 'data-faz-untrusted-srcdoc="x"' ), 'and the unsigned token comes back inert' );
 
 	echo "\n-- M5: a forged empty sentinel --\n";
 
@@ -989,6 +990,41 @@ namespace {
 	$fe   = $faz_content_frontend( $providers, $blocked );
 	$html = '<p>x</p><iframe srcdoc="<p>hi</p><img src=&quot;/local.png&quot;>"></iframe>';
 	assert_true( $faz_content_run( $fe, $html ) === $html, 'a first-party srcdoc is returned untouched' );
+
+	// Only FAZ-signed parks are eligible for runtime activation.
+	$fe = $faz_content_frontend( $providers, $blocked );
+	$forged = '<iframe data-faz-category="marketing" data-faz-srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>';
+	$out = $faz_content_run( $fe, $forged );
+	assert_true( false === strpos( $out, ' data-faz-srcdoc=' ), 'forged parked input is demoted' );
+	assert_true( false === strpos( $out, ' srcdoc=' ), 'forged parked input never becomes live' );
+	$parked = $faz_content_run( $fe, '<iframe srcdoc="<img src=&quot;https://cdn.tracker.test/p.png&quot;>"></iframe>' );
+	assert_true( false !== strpos( $parked, 'data-faz-srcdoc-sig=' ), 'server park carries a signature' );
+	assert_true( false !== strpos( $parked, 'data-faz-srcdoc-key=' ), 'server park carries the response proof' );
+	assert_true( $faz_content_run( $fe, $parked ) === $parked, 'signed park survives a second pass byte for byte' );
+	$refresh = new ReflectionMethod( Frontend::class, 'refresh_srcdoc_proofs' );
+	$refresh->setAccessible( true );
+	$old_proof = preg_replace( '/data-faz-srcdoc-key="[^"]*"/', 'data-faz-srcdoc-key="previous-response"', $parked );
+	$refreshed = $refresh->invoke( $fe, $old_proof );
+	assert_true( '' !== faz_raw_attr( $refreshed, 'data-faz-srcdoc-key' ) && faz_raw_attr( $refreshed, 'data-faz-srcdoc-key' ) === faz_raw_attr( $parked, 'data-faz-srcdoc-key' ), 'refreshed fragment carries the current non-empty proof' );
+	assert_true( false !== strpos( $refreshed, ' data-faz-srcdoc=' ) && false === strpos( $refreshed, 'previous-response' ), 'signed cached fragments receive the current proof even without blocking' );
+	$tampered = str_replace( 'data-faz-category="marketing"', 'data-faz-category="necessary"', $parked );
+	assert_true( false === strpos( $faz_content_run( $fe, $tampered ), ' data-faz-srcdoc=' ), 'category tampering invalidates the signature' );
+	$tampered = str_replace( '/p.png', '/other.png', $parked );
+	assert_true( false === strpos( $faz_content_run( $fe, $tampered ), ' data-faz-srcdoc=' ), 'document tampering invalidates the signature' );
+
+	// Query Monitor uses an arbitrary id rather than WP's js-extra suffix.
+	$fe = $faz_content_frontend( array( 'gtag(' => 'marketing', 'google_gtagjs-js' => 'marketing' ), $blocked );
+	$data = '<script id="query-monitor-inline-data">var QueryMonitorData = {"handles":["gtag(","google_gtagjs-js"]};</script>';
+	assert_true( $faz_content_run( $fe, $data ) === $data, 'data-only config remains executable under any script id' );
+	$executable = str_replace( ';</script>', ';gtag("config","x");</script>', $data );
+	assert_true( false !== strpos( $faz_content_run( $fe, $executable ), 'type="text/plain"' ), 'a data assignment followed by tracking code is still blocked' );
+	$json_check = new ReflectionMethod( Frontend::class, 'is_json_data_assignment' );
+	$json_check->setAccessible( true );
+	$large_json = 'var QueryMonitorData = ' . json_encode( array( 'handles' => str_repeat( 'gtag(', 600000 ) ) ) . ';';
+	assert_true( $json_check->invoke( $fe, $large_json ), 'multi-megabyte JSON remains data-only without PCRE backtracking' );
+	foreach ( array( 'var x={"gtag(":1};gtag("config","x");', 'var x=fetch("https://tracker.test");', 'var x={"f":function(){gtag()}};' ) as $code ) {
+		assert_true( ! $json_check->invoke( $fe, $code ), 'executable code is never exempted as JSON data' );
+	}
 
 	// ---------- result ----------
 

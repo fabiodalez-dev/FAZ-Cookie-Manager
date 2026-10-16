@@ -720,8 +720,8 @@ class AMP_Consent_Rest {
 	 * @return bool
 	 */
 	private static function is_dnsmpi_active() {
-		return isset( $_COOKIE['fazcookie-dnsmpi'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+		return isset( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-dnsmpi' ) : 'fazcookie-dnsmpi' ] )
+			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-dnsmpi' ) : 'fazcookie-dnsmpi' ] ) );
 	}
 
 	/**
@@ -785,7 +785,7 @@ class AMP_Consent_Rest {
 			'purposes'          => self::get_purposes(),
 			'expiry_days'       => $expiry_days,
 			'revision'          => max( 1, absint( $revision ) ),
-			'scope_fingerprint' => substr( wp_hash( $slug . '|' . $law, 'auth' ), 0, 32 ),
+			'scope_fingerprint' => faz_scope_fingerprint( $slug, $law ),
 		);
 	}
 
@@ -1095,8 +1095,8 @@ class AMP_Consent_Rest {
 	 */
 	public static function build_cookie_value( $state, $purposes, $context, $consent_id, $expires, $existing_cookie = null, $gpc_active = null ) {
 		if ( null === $existing_cookie ) {
-			$existing_cookie = isset( $_COOKIE['fazcookie-consent'] )
-				? sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-consent'] ) )
+			$existing_cookie = isset( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-consent' ) : 'fazcookie-consent' ] )
+				? sanitize_text_field( wp_unslash( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-consent' ) : 'fazcookie-consent' ] ) )
 				: '';
 		}
 		if ( null === $gpc_active ) {

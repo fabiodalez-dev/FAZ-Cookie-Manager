@@ -699,6 +699,28 @@ class Controller {
 	}
 
 	/**
+	 * All decisions for an identifier, for authenticated privacy tools.
+	 *
+	 * @param string $consent_id Verified consent identifier.
+	 * @return array|\WP_Error History or a retryable database error.
+	 */
+	public function get_logs_by_consent_id( $consent_id ) {
+		global $wpdb;
+		$table = $this->get_table_name();
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE consent_id = %s ORDER BY created_at DESC, log_id DESC", $consent_id ), ARRAY_A ); // phpcs:ignore WordPress.DB
+		if ( ! empty( $wpdb->last_error ) ) {
+			return new \WP_Error( 'faz_consent_history_query', __( 'Consent history could not be read. Please retry the privacy request.', 'faz-cookie-manager' ) );
+		}
+		return (array) $rows;
+	}
+
+	/** Erase the complete history, not just the latest decision. */
+	public function delete_logs_by_consent_id( $consent_id ) {
+		global $wpdb;
+		return $wpdb->delete( $this->get_table_name(), array( 'consent_id' => $consent_id ), array( '%s' ) ); // phpcs:ignore WordPress.DB
+	}
+
+	/**
 	 * The immediately preceding decision for a consent id.
 	 *
 	 * A decision without the exception breaks its carry chain. Searching past

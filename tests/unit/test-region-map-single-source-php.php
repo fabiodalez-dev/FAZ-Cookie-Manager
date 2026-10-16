@@ -238,7 +238,7 @@ function faz_rm_php_sources( $root ) {
 		if ( 'php' !== strtolower( $file->getExtension() ) ) {
 			continue;
 		}
-		if ( preg_match( '#/(tests|node_modules|vendor|\.git|build|dist)/#', $path ) ) {
+		if ( preg_match( '#/(tests|node_modules|vendor|\.git|\.claude|\.codex|build|dist)/#', $path ) ) {
 			continue;
 		}
 		$files[] = $path;

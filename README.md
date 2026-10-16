@@ -968,7 +968,7 @@ Only the most recent release is listed here. The complete history is in [CHANGEL
 - **Feature**: Geo-routing v2 — 47 jurisdictional rule-set JSON files cover EU/UK + 19 US-state privacy laws + 18 international jurisdictions (LGPD/PIPL/APPI/PIPA/POPIA/PDPA/etc.) + most-protective fallback for unknown/VPN visitors. New `admin/modules/geo-routing/` module with REST API (`/faz/v1/geo/*`) and admin tab UI.
 - **Feature**: VPN/proxy detection via ipinfo.io (opt-in, gated by admin DPF/SCC attestation). When VPN detected → most-protective ruleset forced. API key encrypted at rest via `wp_salt('auth')`.
 - **Feature**: Field-by-field per-country admin override via dot-notation deltas (e.g. `signals.cmv2.ad_storage`). PIPL Art. 38-43 cross-border attestation UI (audit-trail only).
-- **Migration**: `wp_faz_consent_logs` gains 7 NULL-default columns recording the geo/signal/TCF/GPP context at consent time. Online DDL on InnoDB 5.7.6+ / MariaDB 10.3+. Idempotent partial-failure recovery via `faz_geo_v2_migration_pending` option.
+- **Migration**: `wp_faz_consent_logs` gains 7 NULL-default columns recording the geo/signal/TCF context at consent time, plus a GPP string captured from an external CMP when present (FAZ does not generate GPP signals). Online DDL on InnoDB 5.7.6+ / MariaDB 10.3+. Idempotent partial-failure recovery via `faz_geo_v2_migration_pending` option.
 - **Compatibility**: 68 new unit tests, zero baseline regression. New filters: `faz_geo_rulesets_dir`, `faz_geo_admin_override_country`, `faz_geo_lookup_cache_ttl`. All new admin features are opt-in — installs upgrading from 1.14.x see no behavior change until they configure the geo-routing tab.
 
 ### 1.14.3 — 2026-05-19

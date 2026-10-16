@@ -70,6 +70,7 @@ $payload    = $method->invoke( $controller );
 
 $client_i18n_keys = array(
 	'privacy_region_label',
+	'consent_id',
 	'consent_saved',
 	'optout_preferences_label',
 	'customise_consent_preferences_label',
