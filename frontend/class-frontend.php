@@ -390,6 +390,14 @@ class Frontend {
 			// `text/plain`.
 			add_filter( 'script_loader_tag', array( $this, 'tag_own_scripts_nooptimize' ), 20, 2 );
 
+			// LiteSpeed "Remove Query Strings" (optm-qs_rm) strips `?ver=` from
+			// every internal .js/.css URL, so after an update the browser and
+			// the CDN keep the previous runtime under the unchanged URL. Its own
+			// escape is `_litespeed_rm_qs=0` in the URL. Priority 10 runs before
+			// LiteSpeed's own script_loader_src / style_loader_src (999).
+			add_filter( 'script_loader_src', array( $this, 'keep_own_asset_version_query' ), 10, 2 );
+			add_filter( 'style_loader_src', array( $this, 'keep_own_asset_version_query' ), 10, 2 );
+
 			// On a handle this plugin defers itself, `data-no-defer="1"` and the
 			// LiteSpeed defer-exclusion below read like a contradiction and are
 			// not one: they say "do not APPLY YOUR deferral to this", which is
@@ -412,14 +420,6 @@ class Frontend {
 			// consent banner stays hidden until the visitor interacts with
 			// the page, which breaks first-visit compliance.
 			add_filter( 'litespeed_optm_gm_js_exc', array( $this, 'litespeed_exclude_own_scripts' ) );
-
-			// LiteSpeed "Remove Query Strings" (optm-qs_rm) strips `?ver=` from
-			// every internal .js/.css URL, so after an update the browser and
-			// the CDN keep the previous runtime under the unchanged URL. Its own
-			// escape is `_litespeed_rm_qs=0` in the URL. Priority 10 runs before
-			// LiteSpeed's own script_loader_src / style_loader_src (999).
-			add_filter( 'script_loader_src', array( $this, 'keep_own_asset_version_query' ), 10, 2 );
-			add_filter( 'style_loader_src', array( $this, 'keep_own_asset_version_query' ), 10, 2 );
 
 			// `-js-extra` (wp_localize_script payload) and `-js-translations`
 			// inline tags do NOT travel through `script_loader_tag` — they
@@ -9953,64 +9953,6 @@ class Frontend {
 	}
 
 	/**
-	 * Mark FAZ's versioned asset URLs as exempt from LiteSpeed's query-string
-	 * removal.
-	 *
-	 * LiteSpeed Cache's "Remove Query Strings" drops everything after `?` from
-	 * internal `.js?` / `.css?` URLs (Optimize::remove_query_strings()), which
-	 * is the `?ver=` that changes on every FAZ release. The URL of script.min.js
-	 * then stays identical across updates, and the browser, the CDN and
-	 * QUIC.cloud keep serving the previous runtime against the new markup until
-	 * their TTL ends — a consent runtime one version behind the server that
-	 * renders its config. LiteSpeed skips any URL containing
-	 * `_litespeed_rm_qs=0`.
-	 *
-	 * Added unconditionally rather than only when LSCWP_V is defined: the
-	 * parameter is inert everywhere else (a static file ignores its query
-	 * string), the markup stays the same whether or not LiteSpeed is active —
-	 * so a page cached before LiteSpeed was switched on is not a different
-	 * document — and nothing depends on the order in which LiteSpeed is
-	 * loaded. Only URLs that already carry a query string are touched; the
-	 * content-hashed config-<md5>.js and banner-<md5>.css have none and carry
-	 * their version in the file name.
-	 *
-	 * @param string $src    Asset URL.
-	 * @param string $handle Registered handle.
-	 * @return string
-	 */
-	public function keep_own_asset_version_query( $src, $handle = '' ) {
-		if ( ! is_string( $src ) || '' === $src || is_admin() ) {
-			return $src;
-		}
-		if ( false === strpos( $src, '?' ) || false !== strpos( $src, '_litespeed_rm_qs=' ) ) {
-			return $src;
-		}
-		if ( ! $this->is_own_script_handle( (string) $handle ) && ! $this->is_own_asset_url( $src ) ) {
-			return $src;
-		}
-		return $src . '&_litespeed_rm_qs=0';
-	}
-
-	/**
-	 * Whether a URL points inside this plugin's directory (scheme-insensitive:
-	 * a TLS-terminating proxy can make the two spellings differ).
-	 *
-	 * Covers own stylesheets enqueued under handles without the plugin prefix
-	 * (faz-legal-links, faz-cookie-table-shortcode).
-	 *
-	 * @param string $url Asset URL.
-	 * @return bool
-	 */
-	private function is_own_asset_url( $url ) {
-		if ( ! defined( 'FAZ_PLUGIN_URL' ) || '' === (string) FAZ_PLUGIN_URL ) {
-			return false;
-		}
-		$base = preg_replace( '#^https?:#i', '', (string) FAZ_PLUGIN_URL );
-		$url  = preg_replace( '#^https?:#i', '', (string) $url );
-		return '' !== $base && 0 === strpos( $url, $base );
-	}
-
-	/**
 	 * Keep FAZ's compiled banner stylesheet out of CSS optimisation pipelines.
 	 *
 	 * LiteSpeed recognises `data-no-optimize="1"` on stylesheet links before it
@@ -10651,6 +10593,64 @@ class Frontend {
 
 		// Preserve any previously set Vary tokens (e.g. Cookie added elsewhere).
 		header( 'Vary: Accept-Language', false );
+	}
+
+	/**
+	 * Mark FAZ's versioned asset URLs as exempt from LiteSpeed's query-string
+	 * removal.
+	 *
+	 * LiteSpeed Cache's "Remove Query Strings" drops everything after `?` from
+	 * internal `.js?` / `.css?` URLs (Optimize::remove_query_strings()), which
+	 * is the `?ver=` that changes on every FAZ release. The URL of script.min.js
+	 * then stays identical across updates, and the browser, the CDN and
+	 * QUIC.cloud keep serving the previous runtime against the new markup until
+	 * their TTL ends — a consent runtime one version behind the server that
+	 * renders its config. LiteSpeed skips any URL containing
+	 * `_litespeed_rm_qs=0`.
+	 *
+	 * Added unconditionally rather than only when LSCWP_V is defined: the
+	 * parameter is inert everywhere else (a static file ignores its query
+	 * string), the markup stays the same whether or not LiteSpeed is active —
+	 * so a page cached before LiteSpeed was switched on is not a different
+	 * document — and nothing depends on the order in which LiteSpeed is
+	 * loaded. Only URLs that already carry a query string are touched; the
+	 * content-hashed config-<md5>.js and banner-<md5>.css have none and carry
+	 * their version in the file name.
+	 *
+	 * @param string $src    Asset URL.
+	 * @param string $handle Registered handle.
+	 * @return string
+	 */
+	public function keep_own_asset_version_query( $src, $handle = '' ) {
+		if ( ! is_string( $src ) || '' === $src || is_admin() ) {
+			return $src;
+		}
+		if ( false === strpos( $src, '?' ) || false !== strpos( $src, '_litespeed_rm_qs=' ) ) {
+			return $src;
+		}
+		if ( ! $this->is_own_script_handle( (string) $handle ) && ! $this->is_own_asset_url( $src ) ) {
+			return $src;
+		}
+		return $src . '&_litespeed_rm_qs=0';
+	}
+
+	/**
+	 * Whether a URL points inside this plugin's directory (scheme-insensitive:
+	 * a TLS-terminating proxy can make the two spellings differ).
+	 *
+	 * Covers own stylesheets enqueued under handles without the plugin prefix
+	 * (faz-legal-links, faz-cookie-table-shortcode).
+	 *
+	 * @param string $url Asset URL.
+	 * @return bool
+	 */
+	private function is_own_asset_url( $url ) {
+		if ( ! defined( 'FAZ_PLUGIN_URL' ) || '' === (string) FAZ_PLUGIN_URL ) {
+			return false;
+		}
+		$base = preg_replace( '#^https?:#i', '', (string) FAZ_PLUGIN_URL );
+		$url  = preg_replace( '#^https?:#i', '', (string) $url );
+		return '' !== $base && 0 === strpos( $url, $base );
 	}
 
 	/**
