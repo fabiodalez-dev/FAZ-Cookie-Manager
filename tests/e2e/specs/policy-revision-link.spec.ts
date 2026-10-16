@@ -61,6 +61,11 @@ function currentReviewHash(): string {
 type PolicySettings = Record<string, unknown> & { company?: Record<string, unknown> };
 
 let settingsSnapshot: PolicySettings | null = null;
+// The stored option itself, base64 JSON. The REST restore below can be refused:
+// a site whose settings never named a contact email fails the controller gate
+// that every save now applies, and that 400 used to leave the bumped company
+// name on the site for every later suite.
+let rawSettingsSnapshot = '';
 
 test.describe.configure({ mode: 'serial' });
 test.skip(!WP_PATH, 'requires WP_PATH for consent-revision setup and teardown');
@@ -103,7 +108,14 @@ async function bumpPolicyVersion(page: Page, marker: string): Promise<void> {
   bumpCounter += 1;
   const next = {
     ...current.data,
-    company: { ...company, name: `${baseName} [rev ${marker} ${bumpCounter}-${revisionRunId}]` },
+    // Saving needs the controller named and reachable (company name + contact
+    // email) for every jurisdiction; a site that never filled the email in is
+    // refused with 400, so give it one rather than depend on the site's data.
+    company: {
+      ...company,
+      name: `${baseName} [rev ${marker} ${bumpCounter}-${revisionRunId}]`,
+      email: String(company.email ?? '').trim() || 'privacy@example.test',
+    },
   };
   const saved = await fazApiPost<{ saved: boolean }>(page, nonce, 'cookie-policy/settings', next);
   expect(saved.status).toBe(200);
@@ -192,6 +204,11 @@ test.beforeAll(async ({ browser, wpCreds }) => {
     const current = await fazApiGet<PolicySettings>(page, nonce, 'cookie-policy/settings');
     settingsSnapshot = current.status === 200 ? current.data : null;
   });
+  if (WP_PATH) {
+    rawSettingsSnapshot = wpEval(
+      "echo base64_encode( wp_json_encode( array( 'exists' => false !== get_option( 'faz_cookie_policy_data', false ), 'value' => get_option( 'faz_cookie_policy_data', null ) ) ) );",
+    ).trim().split('\n').pop() || '';
+  }
 });
 
 test.afterAll(async ({ browser, wpCreds }) => {
@@ -200,6 +217,14 @@ test.afterAll(async ({ browser, wpCreds }) => {
     const nonce = await getAdminNonce(page);
     if (settingsSnapshot) {
       await fazApiPost(page, nonce, 'cookie-policy/settings', settingsSnapshot);
+    }
+    if (rawSettingsSnapshot) {
+      // Authoritative: puts back exactly what was stored, whether or not the
+      // REST save above was accepted.
+      wpEval(
+        `$snap = json_decode( base64_decode( '${rawSettingsSnapshot}' ), true ); ` +
+        "if ( empty( $snap['exists'] ) ) { delete_option( 'faz_cookie_policy_data' ); } else { update_option( 'faz_cookie_policy_data', $snap['value'] ); } echo 'ok';",
+      );
     }
     // Restoring the settings moves the hash back to a value nobody has
     // acknowledged, so acknowledge once more — otherwise the next suite that

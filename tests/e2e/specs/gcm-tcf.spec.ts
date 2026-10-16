@@ -553,6 +553,9 @@ test.describe('GCM and IAB TCF behavior', () => {
         $id  = 0;
         if ( is_array( $gvl ) && ! empty( $gvl['vendors'] ) ) {
           foreach ( $gvl['vendors'] as $vid => $v ) {
+            // A deleted vendor is never served to the CMP, so it could not
+            // carry an LI bit whatever the visitor chose.
+            if ( \\FazCookie\\Includes\\Gvl::is_vendor_deleted( $v ) ) { continue; }
             if ( ! empty( $v['legIntPurposes'] ) ) { $id = (int) $vid; break; }
           }
         }
