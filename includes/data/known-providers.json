@@ -122,10 +122,7 @@
     "google-sitekit": {
         "label": "Site Kit by Google",
         "category": "analytics",
-        "patterns": [
-            "google-site-kit",
-            "googlesitekit",
-            "google_gtagjs-js"
+        "patterns": ["google_gtagjs-js"
         ],
         "cookies": []
     },

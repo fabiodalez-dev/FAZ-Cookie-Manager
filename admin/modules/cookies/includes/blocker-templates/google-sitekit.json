@@ -1,11 +1,9 @@
 {
     "id": "google-sitekit",
     "name": "Site Kit by Google",
-    "description": "Blocks Site Kit by Google analytics tracking, page-view collection, and session data.",
+    "description": "Blocks the gtag.js tag Site Kit by Google prints for Google Analytics. Site Kit's own plugin scripts (admin bar, dashboard, consent-mode bridge) are left alone: they are not trackers, and blocking them broke the admin bar.",
     "category": "analytics",
     "patterns": [
-        "google-site-kit",
-        "googlesitekit",
         "google_gtagjs-js"
     ],
     "cookies": []
