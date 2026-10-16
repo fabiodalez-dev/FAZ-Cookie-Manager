@@ -813,7 +813,12 @@ function annotate(type: string, description: string): void {
  * Browser flow (f)
  * ------------------------------------------------------------------------ */
 
-const THIRD_PARTY = /(?:googletagmanager\.com|google-analytics\.com|facebook\.com|facebook\.net|youtube\.com|youtube-nocookie\.com|ytimg\.com)/i;
+// Matched against the request HOST only. The provider-matrix fixture serves its
+// same-origin copies at paths like /faz-e2e-provider-script/connect.facebook.net/…,
+// and a regex over the whole URL aborted those too, so the restored script the
+// test waits for could never load.
+const THIRD_PARTY_HOST = /(?:^|\.)(?:googletagmanager\.com|google-analytics\.com|facebook\.com|facebook\.net|youtube\.com|youtube-nocookie\.com|ytimg\.com)$/i;
+const THIRD_PARTY = (url: URL): boolean => THIRD_PARTY_HOST.test(url.hostname);
 
 async function evaluateWithin<T>(page: Page, fn: () => T | Promise<T>, ms: number): Promise<{ ok: true; value: T } | { ok: false }> {
   let timer: ReturnType<typeof setTimeout> | undefined;

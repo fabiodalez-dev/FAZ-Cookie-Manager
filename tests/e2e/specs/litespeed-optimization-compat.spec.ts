@@ -79,9 +79,14 @@
  * The fixture then removes every LiteSpeed exclusion callback FAZ registers and
  * strips data-no-defer / data-no-optimize / data-no-minify / data-cfasync /
  * data-ao-skip from FAZ's tags. The script and stylesheet tests (03–07, 09,
- * 10, 15, 16) and the delayed-runtime browser runs (18, 19) must then go red;
- * the html_min / media / localize / qs_rm tests may stay green, since those
- * passes never relied on FAZ's hints.
+ * 10, 15, 16) and the Guest Optimization browser run (19) must then go red —
+ * measured on 2026-10-16, one test at a time, all ten red for the stated
+ * reason. The js_defer=2 browser run (18) stays green under the switch: on its
+ * own js_defer=2 delays only two inline helpers (faz-cookie-manager-js-before
+ * and the a11y -js-extra), not the runtime, so a visitor still gets a working
+ * banner. Test 04 is the one that catches that rewrite. The html_min / media /
+ * localize / qs_rm tests may stay green, since those passes never relied on
+ * FAZ's hints.
  * Test 24 does exactly this inside the run, under js_defer=2, and asserts the
  * handle check reports violations; if it ever goes green with the switch on,
  * the check itself is broken. afterAll deletes the option either way.
@@ -598,7 +603,10 @@ function lsSet(key: LsKey, value: string): void {
 }
 
 function lsPurge(): void {
-  wp(['litespeed-purge', 'all']);
+  // `wp litespeed-purge all` goes through a loopback REST call that answers
+  // 400 on a non-LiteSpeed server (nginx here), so fire LSCWP's own purge
+  // hook from inside WordPress instead. It purges the same stores.
+  wp(['eval', 'do_action( "litespeed_purge_all" ); echo "purged";']);
 }
 
 /** Every LS_KEYS option to 0 except the ones named, then the lab's drive mode. */
@@ -693,7 +701,12 @@ function readCapturedLog(): string {
  * Browser flow (f)
  * ------------------------------------------------------------------------ */
 
-const THIRD_PARTY = /(?:googletagmanager\.com|google-analytics\.com|facebook\.com|facebook\.net|youtube\.com|youtube-nocookie\.com|ytimg\.com)/i;
+// Matched against the request HOST only. The provider-matrix fixture serves its
+// same-origin copies at paths like /faz-e2e-provider-script/connect.facebook.net/…,
+// and a regex over the whole URL aborted those too, so the restored script the
+// test waits for could never load.
+const THIRD_PARTY_HOST = /(?:^|\.)(?:googletagmanager\.com|google-analytics\.com|facebook\.com|facebook\.net|youtube\.com|youtube-nocookie\.com|ytimg\.com)$/i;
+const THIRD_PARTY = (url: URL): boolean => THIRD_PARTY_HOST.test(url.hostname);
 
 async function evaluateWithin<T>(page: Page, fn: () => T | Promise<T>, ms: number): Promise<{ ok: true; value: T } | { ok: false }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
