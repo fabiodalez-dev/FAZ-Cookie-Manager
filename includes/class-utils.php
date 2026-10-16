@@ -1206,7 +1206,12 @@ if ( ! function_exists( 'faz_is_bot' ) ) {
 		$bot_patterns = array(
 			'Googlebot', 'Bingbot', 'Slurp', 'DuckDuckBot', 'Baiduspider',
 			'YandexBot', 'facebot', 'ia_archiver', 'Twitterbot', 'LinkedInBot',
-			'Pinterest', 'WhatsApp', 'TelegramBot', 'Applebot', 'AdsBot-Google',
+			// Pinterest's crawlers only: `Pinterestbot/1.0` (desktop and
+			// mobile) and the rich-pin fetcher `Pinterest/0.2`. A bare
+			// 'Pinterest' also matched the in-app browser of the Pinterest
+			// app (`… [Pinterest/iOS]`, `… [Pinterest/Android]`), i.e. people,
+			// who were then served the banner-less crawler render.
+			'Pinterestbot', 'Pinterest/0.', 'WhatsApp', 'TelegramBot', 'Applebot', 'AdsBot-Google',
 			'Mediapartners-Google', 'Google-InspectionTool', 'Storebot-Google',
 			'SemrushBot', 'AhrefsBot', 'MJ12bot', 'DotBot', 'PetalBot',
 			'Bytespider', 'GPTBot', 'ChatGPT-User', 'ClaudeBot', 'PerplexityBot',

@@ -86,13 +86,9 @@ class AMP_Consent {
 		// same nocache directive.
 		if ( $this->is_country_dependent_output() ) {
 			if ( ! headers_sent() ) {
-				header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
-				header( 'Pragma: no-cache' );
-				header( 'X-LiteSpeed-Cache-Control: no-cache' );
+				$this->send_no_store_headers();
 			}
-			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-				define( 'DONOTCACHEPAGE', true );
-			}
+			\FazCookie\Includes\Cache_Compatibility::define_no_cache_constants();
 			do_action( 'litespeed_control_set_nocache', 'FAZ AMP country-dependent banner' );
 		}
 
@@ -123,6 +119,15 @@ class AMP_Consent {
 	private function is_country_dependent_output() {
 		$settings = $this->get_faz_settings();
 		if ( $this->is_cache_compatibility_enabled() ) {
+			return (bool) apply_filters( 'faz_country_dependent_banner_output', false, $settings );
+		}
+		// Same predicate as Frontend::is_country_dependent_output(): every
+		// dimension below reads the visitor's country, and without a source
+		// that is '' for everyone, so the amphtml document is invariant. The
+		// runtime test used to be Geo_Runtime::is_enabled() alone — on by
+		// default — which kept every AMP page of a source-less install out of
+		// the host cache and the Google/Bing AMP caches for nothing.
+		if ( ! Geolocation::has_country_source() ) {
 			return (bool) apply_filters( 'faz_country_dependent_banner_output', false, $settings );
 		}
 
@@ -167,6 +172,20 @@ class AMP_Consent {
 	}
 
 	/**
+	 * Send the shared no-store header set (Cache_Compatibility::NO_STORE_HEADERS).
+	 *
+	 * An amphtml document is cached by the host, by a CDN and by the Google and
+	 * Bing AMP caches; the last three read headers only.
+	 *
+	 * @return void
+	 */
+	private function send_no_store_headers() {
+		foreach ( \FazCookie\Includes\Cache_Compatibility::NO_STORE_HEADERS as $name => $value ) {
+			header( $name . ': ' . $value );
+		}
+	}
+
+	/**
 	 * Whether the AMP consent UI may be withheld from this crawler.
 	 *
 	 * `hide_from_bots` makes the amphtml document depend on the User-Agent, and
@@ -202,16 +221,9 @@ class AMP_Consent {
 		if ( headers_sent() ) {
 			return false;
 		}
-		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
-		header( 'Pragma: no-cache' );
-		header( 'X-LiteSpeed-Cache-Control: no-cache' );
+		$this->send_no_store_headers();
 		header( 'Vary: User-Agent', false );
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', true );
-		}
-		if ( ! defined( 'DONOTCACHEOBJECT' ) ) {
-			define( 'DONOTCACHEOBJECT', true );
-		}
+		\FazCookie\Includes\Cache_Compatibility::define_no_cache_constants();
 		return true;
 	}
 

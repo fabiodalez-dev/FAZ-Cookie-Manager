@@ -269,6 +269,34 @@ class Frontend {
 	 * @var bool
 	 */
 	private $bot_variance_cache_vetoed = false;
+
+	/**
+	 * Verdict of decide_visitor_state_cache_veto() for this request.
+	 *
+	 *   null         not decided (no send_headers pass for a front-end page:
+	 *                REST, CLI, unit harnesses) — the visitor's state is
+	 *                honoured as before;
+	 *   'invariant'  Cache Compatibility / the strict shell already make the
+	 *                render visitor-invariant;
+	 *   'baseline'   the visitor's state blocks exactly what a first visit
+	 *                blocks, so the render is the shareable one anyway;
+	 *   'vetoed'     the render follows the visitor's state and the response
+	 *                is kept out of every shared cache;
+	 *   'fallback'   the veto could not be installed (or was filtered off), so
+	 *                the render is the shareable one: nothing granted beyond a
+	 *                first visit, every denial still honoured.
+	 *
+	 * @var string|null
+	 */
+	private $visitor_state_veto = null;
+
+	/**
+	 * Whether maybe_apply_ab_test() vetoed the page cache for its split.
+	 *
+	 * @var bool
+	 */
+	private $ab_test_cache_vetoed = false;
+
 	/**
 	 * Per-request memo for is_geo_bootstrap_cache_active() (null = not yet
 	 * computed). The readiness check touches banner/ruleset storage, so every
@@ -361,6 +389,14 @@ class Frontend {
 			// so we don't tag a tag we may have already re-typed to
 			// `text/plain`.
 			add_filter( 'script_loader_tag', array( $this, 'tag_own_scripts_nooptimize' ), 20, 2 );
+
+			// LiteSpeed "Remove Query Strings" (optm-qs_rm) strips `?ver=` from
+			// every internal .js/.css URL, so after an update the browser and
+			// the CDN keep the previous runtime under the unchanged URL. Its own
+			// escape is `_litespeed_rm_qs=0` in the URL. Priority 10 runs before
+			// LiteSpeed's own script_loader_src / style_loader_src (999).
+			add_filter( 'script_loader_src', array( $this, 'keep_own_asset_version_query' ), 10, 2 );
+			add_filter( 'style_loader_src', array( $this, 'keep_own_asset_version_query' ), 10, 2 );
 
 			// On a handle this plugin defers itself, `data-no-defer="1"` and the
 			// LiteSpeed defer-exclusion below read like a contradiction and are
@@ -909,12 +945,25 @@ class Frontend {
 				// window drift apart in issue #292.
 				$pv_token = Pageviews_Api::current_token();
 
+				// The URL is baked into HTML that page caches replay to everyone
+				// (LiteSpeed, WP Rocket and most CDNs drop gclid/utm_*/fbclid from
+				// the cache key, so a page warmed by an ad click is served under
+				// the clean URL). The raw REQUEST_URI therefore put one visitor's
+				// click identifiers into every later visitor's pageview beacon.
+				// faz_normalize_page_url() keeps the routing parameters that tell
+				// pages apart and drops campaign and session ones — the same
+				// spelling the consent log and the embed inventory use.
+				$pv_url = home_url( add_query_arg( array(), false ) );
+				if ( function_exists( 'faz_normalize_page_url' ) ) {
+					$pv_url = faz_normalize_page_url( $pv_url );
+				}
+
 				wp_localize_script(
 					$script_handle,
 					'_fazPageviewConfig',
 					array(
 						'restUrl'   => rest_url( 'faz/v1/pageviews' ),
-						'pageUrl'   => home_url( add_query_arg( array(), false ) ),
+						'pageUrl'   => $pv_url,
 						'pageTitle' => wp_get_document_title(),
 						'token'     => $pv_token,
 					)
@@ -1809,6 +1858,20 @@ class Frontend {
 			return $default_banner;
 		}
 
+		// The split is per visitor (a random draw before any action, the
+		// recorded __scope.banner after), so the page it produces must not be
+		// stored: a page cache freezes the first MISS's variant into the copy
+		// every later visitor receives, the experiment then measures one arm,
+		// and the record of which banner a visitor saw stops matching the one
+		// served. Keep this response out of shared caches; when that is not
+		// possible (output already started) serve the normally-routed banner,
+		// which is the same for everyone. Moving the draw into script.js is the
+		// cache-friendly alternative, and a larger change than this fix.
+		if ( ! $this->send_page_cache_veto( 'FAZ Cookie Manager A/B banner test' ) ) {
+			return $default_banner;
+		}
+		$this->ab_test_cache_vetoed = true;
+
 		// Reuse the assignment already present in the strictly-necessary consent
 		// record. Creating a standalone A/B cookie before the visitor acts would
 		// itself be non-essential tracking under opt-in regimes. Before any action
@@ -2019,6 +2082,25 @@ class Frontend {
 			return (bool) apply_filters( 'faz_country_dependent_banner_output', false, $settings );
 		}
 
+		// Every dimension below varies the render by the visitor's COUNTRY, and
+		// all of them read it through Geolocation::get_visitor_country(). On an
+		// install with no way to resolve a country that call returns '' for
+		// every visitor: TCF gdprApplies stays true, the country→language
+		// fallback stays on the site language, "no banner outside targets"
+		// fails open, country-targeted banner rows fall back to the match-all
+		// row and the runtime resolves the one most-protective ruleset. The
+		// render is then invariant, and a no-store veto buys nothing while
+		// costing the publisher their whole page cache — on every request, on
+		// most shared hosting. So no source, no veto, whichever of the
+		// dimensions is configured; the filter below can still force it.
+		//
+		// Deliberately keyed on whether a source is CONFIGURED, not on whether
+		// this particular visitor resolved: with a source present the output is
+		// country-dependent even for a visitor the source happens to miss.
+		if ( ! $this->has_country_signal_source() ) {
+			return (bool) apply_filters( 'faz_country_dependent_banner_output', false, $settings );
+		}
+
 		$dependent = false;
 
 		// Country→language fallback (CodeRabbit review, 1.14.2): when the
@@ -2068,22 +2150,9 @@ class Frontend {
 		// cached response would leak one jurisdiction's defaults to another, so
 		// the output must always be treated as country-dependent while the flag
 		// is on — independent of any multi-banner geo-targeting configuration.
-		// The filter can explicitly override the UI-derived state.
-		//
-		// …but only when a country can actually be resolved. The runtime being
-		// on does not make the output vary by country on an install that has no
-		// way to determine one: every visitor resolves the same
-		// fallback-gdpr-most-protective ruleset, so the rendered page is
-		// invariant and the veto buys nothing while costing the publisher their
-		// entire page cache. That is precisely the complaint behind the
-		// LiteSpeed and FlyingPress reports this release answers, and with
-		// enforcement now on by default it would otherwise reach every install
-		// on a host without a geo source — which is most shared hosting.
-		//
-		// Deliberately keyed on whether a source is CONFIGURED, not on whether
-		// this particular visitor resolved: with a source present the output is
-		// country-dependent even for a visitor the source happens to miss.
-		if ( Geo_Runtime::is_enabled() && $this->has_country_signal_source() ) {
+		// The filter can explicitly override the UI-derived state. (Reached
+		// only with a country source: see the early return above.)
+		if ( Geo_Runtime::is_enabled() ) {
 			$dependent = true;
 		}
 
@@ -2154,17 +2223,37 @@ class Frontend {
 		//    be wrong in exactly that case.
 		// 2. Cache Compatibility Mode blocks every non-necessary category
 		//    regardless of law, so nothing may be assumed consented.
-		$runtime_ruleset = $this->get_runtime_ruleset();
+		return self::resolve_wp_consent_type(
+			$this->get_runtime_ruleset(),
+			$this->is_cache_compatibility_enabled(),
+			$this->banner ? (string) $this->banner->get_law() : ''
+		);
+	}
+
+	/**
+	 * The WP Consent API type for a resolved ruleset, mode and banner law.
+	 *
+	 * One rule for the two places that answer it: the page render
+	 * (filter_wp_consent_type(), shipped in the store as `_wpConsentType`) and
+	 * the public banner endpoint (`wpConsentType`), which replaces the store
+	 * after a language swap or the jurisdiction bootstrap. Without the second,
+	 * a cached strict shell kept its `optin` verdict after the live payload
+	 * resolved a CCPA banner, and wca.js, where the stricter verdict wins, kept
+	 * declaring opt-in for the rest of the page view.
+	 *
+	 * @param array|null $runtime_ruleset     Ruleset resolved for the visitor.
+	 * @param bool       $cache_compatibility Whether Cache Compatibility applies.
+	 * @param string     $law                 Law of the banner being served.
+	 * @return string 'optin' or 'optout'.
+	 */
+	public static function resolve_wp_consent_type( $runtime_ruleset, $cache_compatibility, $law ) {
 		if ( null !== $runtime_ruleset && 'ccpa' !== Geo_Runtime::model_to_law( $runtime_ruleset ) ) {
 			return 'optin';
 		}
-		if ( $this->is_cache_compatibility_enabled() ) {
+		if ( $cache_compatibility ) {
 			return 'optin';
 		}
-		if ( $this->banner && 'ccpa' === $this->banner->get_law() ) {
-			return 'optout';
-		}
-		return 'optin';
+		return 'ccpa' === $law ? 'optout' : 'optin';
 	}
 
 	/**
@@ -2205,15 +2294,7 @@ class Frontend {
 		if ( $this->is_geo_bootstrap_cache_active() ) {
 			return;
 		}
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', true );
-		}
-		if ( ! defined( 'DONOTCACHEOBJECT' ) ) {
-			define( 'DONOTCACHEOBJECT', true );
-		}
-		if ( ! defined( 'DONOTCACHEDB' ) ) {
-			define( 'DONOTCACHEDB', true );
-		}
+		\FazCookie\Includes\Cache_Compatibility::define_no_cache_constants();
 	}
 
 	/**
@@ -2309,26 +2390,166 @@ class Frontend {
 		// header, not from a response-side `Cache-Control: no-store` (see the
 		// rest_pre_dispatch note in faz-cookie-manager.php). Fire it either way:
 		// it only records intent, which LSCWP applies when it buffers output.
-		do_action( 'litespeed_control_set_nocache', 'FAZ Cookie Manager crawler-only banner render' );
-		if ( headers_sent() ) {
+		if ( ! $this->send_page_cache_veto( 'FAZ Cookie Manager crawler-only banner render', 'User-Agent' ) ) {
 			// Output has already started, so the directive the edge cache reads
 			// can no longer be set. Report the veto as absent: the caller then
 			// renders the banner instead, which costs a crawler a few KB of
 			// markup. The other direction costs a human their consent notice.
 			return false;
 		}
-		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
-		header( 'Pragma: no-cache' );
-		header( 'X-LiteSpeed-Cache-Control: no-cache' );
-		header( 'Vary: User-Agent', false );
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', true );
-		}
-		if ( ! defined( 'DONOTCACHEOBJECT' ) ) {
-			define( 'DONOTCACHEOBJECT', true );
-		}
 		$this->bot_variance_cache_vetoed = true;
 		return true;
+	}
+
+	/**
+	 * Keep THIS response out of every shared cache: the one veto every
+	 * per-request variance in this class uses.
+	 *
+	 * Three things in one call, because each cache family listens to a
+	 * different one and a veto that speaks to only some of them is a page that
+	 * one of the others keeps:
+	 *
+	 *  - `litespeed_control_set_nocache` — LiteSpeed Cache decides from this
+	 *    action (and LSCACHE_NO_CACHE), not from a response-side no-store.
+	 *    Fired first and unconditionally: it only records intent, which LSCWP
+	 *    applies when it buffers the output, so it still counts when the
+	 *    headers below can no longer be sent.
+	 *  - the response headers in Cache_Compatibility::NO_STORE_HEADERS, for
+	 *    the caches that only read headers (CDNs, Varnish, nginx, QUIC.cloud);
+	 *  - the DONOTCACHE* constants the WordPress page caches read.
+	 *
+	 * FlyingPress reads none of the three; flying_press_is_cacheable() answers
+	 * it from the same memoised verdicts.
+	 *
+	 * @param string $reason Diagnostic label passed to LiteSpeed.
+	 * @param string $vary   Optional request header the variance is keyed on.
+	 * @return bool False when headers were already sent, i.e. the edge caches
+	 *              could not be told. Callers must then render the variant
+	 *              that is safe to share.
+	 */
+	private function send_page_cache_veto( $reason, $vary = '' ) {
+		do_action( 'litespeed_control_set_nocache', $reason );
+		if ( headers_sent() ) {
+			return false;
+		}
+		foreach ( \FazCookie\Includes\Cache_Compatibility::NO_STORE_HEADERS as $name => $value ) {
+			header( $name . ': ' . $value );
+		}
+		if ( '' !== $vary ) {
+			header( 'Vary: ' . $vary, false );
+		}
+		\FazCookie\Includes\Cache_Compatibility::define_no_cache_constants();
+		return true;
+	}
+
+	/**
+	 * Keep a render that follows THIS visitor's consent state out of every
+	 * shared cache, or make the render one that is safe to share.
+	 *
+	 * get_blocked_categories() reads three things from the request: the
+	 * consent cookie, Sec-GPC and the Do-Not-Sell cookie. Its output is only
+	 * visitor-invariant under Cache Compatibility Mode or the strict-shell
+	 * bootstrap, and Cache Compatibility pauses itself while Geo-Targeting is
+	 * on (the default) — while send_geo_cache_headers() vetoes the cache only
+	 * when the output varies by COUNTRY, which it cannot on a site with no
+	 * country source. So on most installs a returning visitor who had accepted
+	 * marketing, arriving on a page-cache MISS, produced a page with the
+	 * trackers server-side EXECUTABLE, the page cache stored it, and every
+	 * later visitor — first visits under GDPR included — was served those
+	 * trackers before any consent. No client code can undo a script that has
+	 * already run. The mirror case is milder but real: a Sec-GPC or Do Not Sell
+	 * MISS stored a page with the sell/share categories blocked for everyone.
+	 *
+	 * The baseline is what a first visit with no signal renders: that is the
+	 * one copy every visitor may share, because script.js releases from it
+	 * whatever the visitor's own cookie grants. Whenever the visitor's state
+	 * yields a different block set (or carries per-service decisions), the
+	 * response gets the full page-cache veto before any output. If the veto
+	 * cannot be installed — headers already sent, or a publisher who filtered
+	 * it off — the render falls back to the shareable form instead (the union
+	 * of the baseline and the visitor's own denials; see
+	 * get_blocked_categories()), the same way the crawler veto falls back to
+	 * rendering the banner.
+	 *
+	 * Net effect: cache HITs serve the baseline page to everyone and the
+	 * runtime unblocks for those who consented; MISSes from visitors whose
+	 * state changes the render are not stored.
+	 *
+	 * @param bool $already_vetoed Whether another veto already keeps this
+	 *                             response out of shared caches.
+	 * @return string The verdict stored in $visitor_state_veto.
+	 */
+	private function decide_visitor_state_cache_veto( $already_vetoed = false ) {
+		if ( null !== $this->visitor_state_veto ) {
+			return $this->visitor_state_veto;
+		}
+		if ( $this->is_cache_compatibility_enabled() || $this->is_geo_bootstrap_cache_active() ) {
+			$this->visitor_state_veto = 'invariant';
+			return $this->visitor_state_veto;
+		}
+		if ( ! $this->visitor_state_changes_render() ) {
+			$this->visitor_state_veto = 'baseline';
+			return $this->visitor_state_veto;
+		}
+		if ( $already_vetoed ) {
+			$this->visitor_state_veto = 'vetoed';
+			return $this->visitor_state_veto;
+		}
+		/**
+		 * Whether a render that follows the visitor's consent state may be kept
+		 * out of shared page caches.
+		 *
+		 * Returning false keeps every page cacheable and makes the server render
+		 * the shareable form for every visitor instead: nothing granted beyond
+		 * a first visit is released server-side (script.js releases it from the
+		 * consent cookie), every denial is still honoured.
+		 *
+		 * @since 1.34.2
+		 * @param bool $veto Default true.
+		 */
+		$wanted = (bool) apply_filters( 'faz_veto_cache_for_visitor_state', true );
+		$this->visitor_state_veto = ( $wanted && $this->send_page_cache_veto( 'FAZ Cookie Manager visitor-specific consent render' ) )
+			? 'vetoed'
+			: 'fallback';
+		return $this->visitor_state_veto;
+	}
+
+	/**
+	 * Whether the visitor's consent cookie, Sec-GPC or Do-Not-Sell cookie makes
+	 * the server-side blocking differ from a first visit.
+	 *
+	 * Compared on the computed block set, not on the presence of a cookie: a
+	 * GDPR visitor who rejected everything, or a GPC signal under an opt-in
+	 * law (sell/share already blocked), renders exactly the baseline, and that
+	 * page may be cached like any other.
+	 *
+	 * @return bool
+	 */
+	private function visitor_state_changes_render() {
+		$consent = $this->get_scoped_valid_consent_cookie();
+		$gpc     = $this->request_has_gpc();
+		$dnsmpi  = $this->request_has_dnsmpi();
+		if ( '' === $consent && ! $gpc && ! $dnsmpi ) {
+			return false;
+		}
+		$categories = \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items();
+		$unused     = array();
+		$actual     = $this->compute_blocked_categories( $categories, $consent, $gpc, $dnsmpi, $unused );
+		$baseline   = $this->compute_blocked_categories( $categories, '', false, false, $unused );
+		if ( $actual !== $baseline ) {
+			return true;
+		}
+		// svc.* decisions move individual embeds across the category verdict
+		// (a YES releases one in a blocked category, a NO holds one in an
+		// allowed category). A first visit has none.
+		if ( '' !== $consent ) {
+			$settings = $this->get_faz_settings();
+			if ( ! empty( $settings['banner_control']['per_service_consent'] )
+				&& preg_match( '/(?:^|,)svc\.[a-z0-9_-]+:(?:yes|no)(?=,|$)/', $consent ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -2522,6 +2743,12 @@ class Frontend {
 		if ( $this->is_bot_variant_render() ) {
 			return false;
 		}
+		// The page follows this visitor's consent state (decided on
+		// send_headers, see decide_visitor_state_cache_veto()). A 'fallback'
+		// verdict rendered the shareable form, which FlyingPress may keep.
+		if ( 'vetoed' === $this->visitor_state_veto || $this->ab_test_cache_vetoed ) {
+			return false;
+		}
 		if ( $this->is_country_dependent_output() ) {
 			// The jurisdiction bootstrap renders one strict, visitor-invariant
 			// document and resolves the live law through a no-store REST request
@@ -2566,27 +2793,24 @@ class Frontend {
 		// freezes for everyone. Resolving it on `send_headers` also means the
 		// verdict is already memoised by the time wp_head asks.
 		$this->bot_suppression_applies();
-		if ( ! $this->is_country_dependent_output() || headers_sent() ) {
-			return;
-		}
 
 		// The strict shell is identical for every visitor and contains no
 		// executable optional resources. Do not emit Vary/Set-Cookie/no-cache:
 		// every compliant page cache and CDN should share this one document.
-		if ( $this->is_geo_bootstrap_cache_active() ) {
-			return;
+		$country_vetoed = false;
+		if ( $this->is_country_dependent_output() && ! headers_sent() && ! $this->is_geo_bootstrap_cache_active() ) {
+			$this->maybe_disable_country_page_cache();
+			$country_vetoed = $this->send_page_cache_veto(
+				'FAZ country-dependent banner',
+				apply_filters( 'faz_trust_cf_ipcountry_header', false ) ? 'CF-IPCountry' : ''
+			);
 		}
 
-		$this->maybe_disable_country_page_cache();
-		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
-		header( 'Pragma: no-cache' );
-		header( 'X-LiteSpeed-Cache-Control: no-cache' );
-		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
-			header( 'Vary: CF-IPCountry', false );
-		}
-		if ( defined( 'LSCWP_V' ) ) {
-			do_action( 'litespeed_control_set_nocache', 'FAZ country-dependent banner' );
-		}
+		// Then the visitor-state dimension, which exists on every install —
+		// including the ones with no country source, where nothing above fires.
+		// Decided here, before any output, so the render that follows
+		// (get_blocked_categories(), get_service_consent()) reads one verdict.
+		$this->decide_visitor_state_cache_veto( $country_vetoed || $this->bot_variance_cache_vetoed || $this->ab_test_cache_vetoed );
 	}
 
 	/**
@@ -2997,8 +3221,19 @@ class Frontend {
 		// response (see $gcm_default_emitted).
 		$this->gcm_default_emitted = true;
 
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; the id is a plugin constant passed through esc_attr and every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
-		echo '<script id="' . esc_attr( $this->gcm_default_script_id() ) . '">' . $js . "</script>\n";
+		// The same optimizer opt-outs every other FAZ script carries
+		// (tag_own_scripts_nooptimize / tag_own_inline_attributes_nooptimize).
+		// This tag is echoed, so neither filter sees it, and it is the one that
+		// matters most: a delay-until-interaction or defer pass (LiteSpeed Guest
+		// Mode, WP Rocket, Autoptimize, Cloudflare Rocket Loader) would move the
+		// denied `consent default` behind the gtag snippets it must precede,
+		// and Google treats a tag that fires without a default as granted.
+		$hints = apply_filters( 'faz_auto_exclude_cache_plugins', true )
+			? ' data-no-defer="1" data-no-optimize="1" data-no-minify="1" data-cfasync="false" data-ao-skip="1"'
+			: '';
+
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; the id is a plugin constant passed through esc_attr, $hints is a literal, and every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
+		echo '<script id="' . esc_attr( $this->gcm_default_script_id() ) . '"' . $hints . '>' . $js . "</script>\n";
 	}
 
 	/**
@@ -7276,7 +7511,55 @@ class Frontend {
 			return $blocked;
 		}
 
-		$consent = $this->get_scoped_valid_consent_cookie();
+		$signals = array();
+		$blocked = $this->compute_blocked_categories(
+			$categories,
+			$this->get_scoped_valid_consent_cookie(),
+			$this->request_has_gpc(),
+			$this->request_has_dnsmpi(),
+			$signals
+		);
+		$this->signal_blocked_categories = $signals;
+
+		// The visitor's state could not be kept out of the shared cache (see
+		// decide_visitor_state_cache_veto()), so this render may be stored and
+		// replayed to everyone: block whatever a first visit blocks AND whatever
+		// this visitor's own state blocks. Their denials (a CCPA opt-out, GPC,
+		// Do Not Sell, a ruleset-granted category they switched off) are still
+		// enforced on their page; their grants beyond the first-visit default
+		// are not, and script.js releases those client-side from the consent
+		// cookie, exactly as it does on a Cache Compatibility page. A replay of
+		// this copy can therefore only over-block, which the client undoes for
+		// every visitor — never under-block, which nothing can undo.
+		if ( 'fallback' === $this->visitor_state_veto ) {
+			$unused  = array();
+			$blocked = $this->union_blocked_categories(
+				$categories,
+				$blocked,
+				$this->compute_blocked_categories( $categories, '', false, false, $unused )
+			);
+		}
+		$this->blocked_categories_cache = $blocked;
+		return $blocked;
+	}
+
+	/**
+	 * The blocked-category set for one visitor state, with no memo and no
+	 * cache decision: get_blocked_categories() asks it for the visitor's real
+	 * state, decide_visitor_state_cache_veto() also asks it for the first-visit
+	 * baseline the two are compared against.
+	 *
+	 * @param array  $categories    Category rows from Category_Controller.
+	 * @param string $consent       Valid, scoped consent cookie, or ''.
+	 * @param bool   $gpc_optout    Whether the request carries Sec-GPC: 1.
+	 * @param bool   $dnsmpi_optout Whether the Do-Not-Sell cookie is set.
+	 * @param array  $signals       Out: slug => 'gpc'|'dnsmpi' for categories a
+	 *                              signal (not the cookie) blocked.
+	 * @return array Slugs of blocked categories, in catalogue order.
+	 */
+	private function compute_blocked_categories( $categories, $consent, $gpc_optout, $dnsmpi_optout, &$signals ) {
+		$blocked = array();
+		$signals = array();
 
 		// CCPA/CPRA is an OPT-OUT regime: personal data may be sold/shared — and
 		// the corresponding scripts may run — UNTIL the visitor exercises the
@@ -7309,9 +7592,7 @@ class Frontend {
 		// including when a prior consent cookie grants them. GPC is a visitor
 		// signal, not a publisher-configurable preference, and therefore is never
 		// gated on the banner toggle or binary law.
-		$gpc_header_on = isset( $_SERVER['HTTP_SEC_GPC'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
-		$gpc_optout = $gpc_header_on;
+		// (Read by request_has_gpc().)
 
 		// Standalone "Do Not Sell or Share My Personal Information" opt-out: the
 		// [faz_do_not_sell] form sets the `fazcookie-dnsmpi` cookie. That cookie
@@ -7325,8 +7606,7 @@ class Frontend {
 		// whenever it is present covers that mode too; under a pure opt-in law
 		// the sell/share categories are already blocked, so this is a no-op
 		// there.
-		$dnsmpi_optout = isset( $_COOKIE['fazcookie-dnsmpi'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+		// (Read by request_has_dnsmpi().)
 
 		foreach ( $categories as $cat_data ) {
 			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data );
@@ -7338,12 +7618,12 @@ class Frontend {
 			// overriding any consent-cookie value (mirrors the GPC override).
 			if ( $dnsmpi_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
 				$blocked[] = $slug;
-				$this->signal_blocked_categories[ $slug ] = 'dnsmpi';
+				$signals[ $slug ] = 'dnsmpi';
 				continue;
 			}
 			if ( $gpc_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
 				$blocked[] = $slug;
-				$this->signal_blocked_categories[ $slug ] = 'gpc';
+				$signals[ $slug ] = 'gpc';
 				continue;
 			}
 			if ( empty( $consent ) ) {
@@ -7387,8 +7667,46 @@ class Frontend {
 				}
 			}
 		}
-		$this->blocked_categories_cache = $blocked;
 		return $blocked;
+	}
+
+	/**
+	 * Union of two blocked-category lists, in catalogue order.
+	 *
+	 * @param array $categories Category rows.
+	 * @param array $first      Slugs.
+	 * @param array $second     Slugs.
+	 * @return array
+	 */
+	private function union_blocked_categories( $categories, $first, $second ) {
+		$union = array();
+		foreach ( $categories as $cat_data ) {
+			$slug = ( new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data ) )->get_slug();
+			if ( in_array( $slug, $first, true ) || in_array( $slug, $second, true ) ) {
+				$union[] = $slug;
+			}
+		}
+		return $union;
+	}
+
+	/**
+	 * Whether the request carries a Global Privacy Control signal (Sec-GPC: 1).
+	 *
+	 * @return bool
+	 */
+	private function request_has_gpc() {
+		return isset( $_SERVER['HTTP_SEC_GPC'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
+	}
+
+	/**
+	 * Whether the visitor submitted the Do Not Sell or Share form.
+	 *
+	 * @return bool
+	 */
+	private function request_has_dnsmpi() {
+		return isset( $_COOKIE['fazcookie-dnsmpi'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
 	}
 
 	/**
@@ -7443,6 +7761,12 @@ class Frontend {
 				if ( 'yes' === $match[2] && isset( $signal_blocked_services[ $match[1] ] ) ) {
 					continue;
 				}
+				// Shareable fallback render (see get_blocked_categories()): an
+				// explicit svc.* NO still blocks this visitor's embed, a YES is
+				// left for script.js to release.
+				if ( 'yes' === $match[2] && 'fallback' === $this->visitor_state_veto ) {
+					continue;
+				}
 				$this->service_consent_cache[ $match[1] ] = $match[2];
 			}
 		}
@@ -7459,10 +7783,8 @@ class Frontend {
 	 * @return array<string,bool>
 	 */
 	private function get_signal_blocked_services( $consent ) {
-		$gpc_header = isset( $_SERVER['HTTP_SEC_GPC'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
-		$dnsmpi_req = isset( $_COOKIE['fazcookie-dnsmpi'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+		$gpc_header     = $this->request_has_gpc();
+		$dnsmpi_req     = $this->request_has_dnsmpi();
 		$signal_blocked = array();
 		if ( $gpc_header || $dnsmpi_req ) {
 			$this->get_blocked_categories();
@@ -10223,16 +10545,22 @@ class Frontend {
 	}
 
 	/**
-	 * Emit `Vary: Accept-Language` when client-side browser-language detection
-	 * is active.
+	 * Emit `Vary: Accept-Language` only when an integrator asks for it.
 	 *
-	 * Caches and CDNs that honour Vary can then key the cached response by
-	 * Accept-Language. When a URL-based multilingual plugin
-	 * (WPML/Polylang/TranslatePress/Weglot) is active, browser detection is
-	 * not used, so the header is not needed. The emission follows
-	 * faz_browser_detect_enabled() so the two escape hatches
-	 * (faz_disable_browser_language_detection and the plugin/language checks)
-	 * stay consistent — disabling detection also stops cache fragmentation.
+	 * The HTML does not depend on Accept-Language. faz_current_language() never
+	 * reads the header (issue #67: the server renders the site default, or the
+	 * URL language of a multilingual plugin), and the browser-preferred
+	 * language is resolved in script.js from navigator.languages, which swaps
+	 * the banner through the REST endpoint. faz_detect_browser_language() is
+	 * not called on any render path. The header therefore described a variance
+	 * that does not exist, and its only effect was to split every cached URL
+	 * into one entry per Accept-Language spelling (hundreds of distinct values
+	 * in real traffic) on the caches that honour Vary — Cloudflare, Varnish,
+	 * LiteSpeed — a lower hit rate for an identical document.
+	 *
+	 * Kept behind `faz_send_vary_header` (now default false) for a site whose
+	 * own theme or plugins do vary the page by Accept-Language and relied on
+	 * FAZ to announce it.
 	 *
 	 * @return void
 	 */
@@ -10254,16 +10582,75 @@ class Frontend {
 			return;
 		}
 		/**
-		 * Short-circuit the Vary header emission.
+		 * Whether to announce `Vary: Accept-Language`.
 		 *
-		 * @param bool $enabled Whether to emit the header. Defaults to true.
+		 * @since 1.34.2 Defaults to false: FAZ's HTML does not vary by it.
+		 * @param bool $enabled Whether to emit the header. Defaults to false.
 		 */
-		if ( false === apply_filters( 'faz_send_vary_header', true ) ) {
+		if ( true !== apply_filters( 'faz_send_vary_header', false ) ) {
 			return;
 		}
 
 		// Preserve any previously set Vary tokens (e.g. Cookie added elsewhere).
 		header( 'Vary: Accept-Language', false );
+	}
+
+	/**
+	 * Mark FAZ's versioned asset URLs as exempt from LiteSpeed's query-string
+	 * removal.
+	 *
+	 * LiteSpeed Cache's "Remove Query Strings" drops everything after `?` from
+	 * internal `.js?` / `.css?` URLs (Optimize::remove_query_strings()), which
+	 * is the `?ver=` that changes on every FAZ release. The URL of script.min.js
+	 * then stays identical across updates, and the browser, the CDN and
+	 * QUIC.cloud keep serving the previous runtime against the new markup until
+	 * their TTL ends — a consent runtime one version behind the server that
+	 * renders its config. LiteSpeed skips any URL containing
+	 * `_litespeed_rm_qs=0`.
+	 *
+	 * Added unconditionally rather than only when LSCWP_V is defined: the
+	 * parameter is inert everywhere else (a static file ignores its query
+	 * string), the markup stays the same whether or not LiteSpeed is active —
+	 * so a page cached before LiteSpeed was switched on is not a different
+	 * document — and nothing depends on the order in which LiteSpeed is
+	 * loaded. Only URLs that already carry a query string are touched; the
+	 * content-hashed config-<md5>.js and banner-<md5>.css have none and carry
+	 * their version in the file name.
+	 *
+	 * @param string $src    Asset URL.
+	 * @param string $handle Registered handle.
+	 * @return string
+	 */
+	public function keep_own_asset_version_query( $src, $handle = '' ) {
+		if ( ! is_string( $src ) || '' === $src || is_admin() ) {
+			return $src;
+		}
+		if ( false === strpos( $src, '?' ) || false !== strpos( $src, '_litespeed_rm_qs=' ) ) {
+			return $src;
+		}
+		if ( ! $this->is_own_script_handle( (string) $handle ) && ! $this->is_own_asset_url( $src ) ) {
+			return $src;
+		}
+		return $src . '&_litespeed_rm_qs=0';
+	}
+
+	/**
+	 * Whether a URL points inside this plugin's directory (scheme-insensitive:
+	 * a TLS-terminating proxy can make the two spellings differ).
+	 *
+	 * Covers own stylesheets enqueued under handles without the plugin prefix
+	 * (faz-legal-links, faz-cookie-table-shortcode).
+	 *
+	 * @param string $url Asset URL.
+	 * @return bool
+	 */
+	private function is_own_asset_url( $url ) {
+		if ( ! defined( 'FAZ_PLUGIN_URL' ) || '' === (string) FAZ_PLUGIN_URL ) {
+			return false;
+		}
+		$base = preg_replace( '#^https?:#i', '', (string) FAZ_PLUGIN_URL );
+		$url  = preg_replace( '#^https?:#i', '', (string) $url );
+		return '' !== $base && 0 === strpos( $url, $base );
 	}
 
 	/**
