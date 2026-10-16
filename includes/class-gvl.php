@@ -676,5 +676,14 @@ class Gvl {
 				error_log( 'FAZ GVL cron: purposes download failed - ' . $purposes_result['message'] ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			}
 		}
+
+		// gvlVersion, purposes and vendor names are embedded in every page, so
+		// the refreshed list reaches visitors only once the page caches are
+		// purged (the cache module is loaded on cron for this). A non-zero
+		// version means the stored list was replaced, even when the copy on
+		// disk could not be written afterwards.
+		if ( ! empty( $result['version'] ) ) {
+			do_action( 'faz_purge_page_cache' );
+		}
 	}
 }

@@ -57,6 +57,14 @@ class Admin {
 	public static $existing_modules;
 
 	/**
+	 * Whether the cache module was already instantiated by the cron/WP-CLI
+	 * path, so load_modules() does not register its purge listeners twice.
+	 *
+	 * @var bool
+	 */
+	private static $cache_module_loaded = false;
+
+	/**
 	 * Submenu pages config.
 	 *
 	 * @var array
@@ -177,10 +185,41 @@ class Admin {
 			$this->load_modules();
 			return;
 		}
+		// WP-Cron and WP-CLI write the same data an admin save does — the
+		// scheduled scan creates cookies (faz_after_create_cookie, faz_clear_cache),
+		// the weekly GVL refresh replaces the vendor list the page embeds, and
+		// WP-CLI commands run the same controllers — but neither context loads
+		// the admin modules, so no cache adapter was listening and every page
+		// cache kept the old banner until it expired. Load the cache module
+		// alone there: it only registers purge listeners on faz_* hooks, no
+		// REST routes and no admin UI.
+		if ( wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			$this->load_cache_module();
+		}
 		// Deferred load: hook into rest_api_init so routes are still registered
 		// if WordPress processes a REST request that was not detected above
 		// (e.g. internal REST calls without REST_REQUEST defined).
 		add_action( 'rest_api_init', array( $this, 'load_modules' ), 1 );
+	}
+
+	/**
+	 * Instantiate only the cache module (purge listeners), exactly once.
+	 *
+	 * @return void
+	 */
+	public function load_cache_module() {
+		if ( self::$cache_module_loaded || ! in_array( 'cache', (array) self::$modules, true ) ) {
+			return;
+		}
+		self::$cache_module_loaded = true;
+		$class_name                = 'FazCookie\\Admin\\Modules\\Cache\\Cache';
+		if ( ! class_exists( $class_name ) ) {
+			return;
+		}
+		$module_obj = new $class_name( 'cache' );
+		if ( $module_obj->is_active() ) {
+			self::$active_modules['cache'] = true;
+		}
 	}
 
 	/**
@@ -197,6 +236,9 @@ class Admin {
 		$loaded = true;
 
 		foreach ( self::$modules as $module ) {
+			if ( 'cache' === $module && self::$cache_module_loaded ) {
+				continue; // Already loaded by the cron/WP-CLI path.
+			}
 			$parts      = explode( '_', $module );
 			$class      = implode( '_', $parts );
 			$class_name = 'FazCookie\\Admin\\Modules\\' . ucfirst( $module ) . '\\' . ucfirst( $class );
