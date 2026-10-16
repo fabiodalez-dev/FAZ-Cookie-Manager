@@ -107,6 +107,7 @@ class Admin {
 		add_action( 'admin_notices', array( $this, 'scheduled_scan_notice' ) );
 		add_action( 'admin_notices', array( $this, 'smash_balloon_notice' ) );
 		add_action( 'admin_notices', array( $this, 'unmatched_vendors_notice' ) );
+		add_action( 'admin_notices', array( $this, 'tcf_gvl_missing_notice' ) );
 		add_action( 'admin_notices', array( $this, 'redundant_geo_routing_notice' ) );
 		add_action( 'admin_notices', array( $this, 'geo_enforcement_migration_notice' ) );
 		add_action( 'admin_notices', array( $this, 'functional_optout_migration_notice' ) );
@@ -2199,6 +2200,54 @@ class Admin {
 		);
 
 		delete_transient( 'faz_scan_new_cookies' );
+	}
+
+	/**
+	 * Say so when IAB TCF is switched on but cannot run for lack of a GVL.
+	 *
+	 * The frontend activates the CMP only with a stored Global Vendor List
+	 * (class-frontend.php gates both the enqueue and the store on
+	 * Gvl::has_data()). That gate is right — without a list there is nothing
+	 * to disclose and no valid TC string — but it was silent: the setting read
+	 * "enabled", no __tcfapi existed on the site, and nothing in the admin said
+	 * why. The list arrives through a scheduled download after TCF is enabled
+	 * (Settings::maybe_bootstrap_gvl), the weekly cron or the "Update GVL Now"
+	 * button (the download normally lands within seconds of the first request
+	 * after the save, so the button is a shortcut, not a requirement, unless
+	 * WP-Cron is disabled); until then this notice is shown on the plugin's
+	 * screens and on the WordPress dashboard. Not dismissible: it goes away by
+	 * itself once the list is stored, and hiding it would bring the silent
+	 * state back.
+	 *
+	 * @return void
+	 */
+	public function tcf_gvl_missing_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$screen       = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		$on_dashboard = $screen && isset( $screen->id ) && 'dashboard' === $screen->id;
+		if ( ! $on_dashboard && ! faz_is_admin_page() ) {
+			return;
+		}
+		$settings = get_option( 'faz_settings', array() );
+		if ( ! is_array( $settings ) || empty( $settings['iab']['enabled'] ) ) {
+			return;
+		}
+		if ( ! class_exists( '\\FazCookie\\Includes\\Gvl' ) || \FazCookie\Includes\Gvl::get_instance()->has_data() ) {
+			return;
+		}
+		// Worded with existing catalogue strings on purpose: a new msgid would
+		// ship untranslated until the next catalogue resync, and this notice
+		// matters most to exactly the sites that run TCF in other languages.
+		printf(
+			'<div class="notice notice-warning" id="faz-tcf-gvl-missing-notice"><p><strong>%s</strong> &mdash; %s</p><p>%s</p><p><a href="%s" class="button button-small">%s</a></p></div>',
+			esc_html__( 'IAB TCF', 'faz-cookie-manager' ),
+			esc_html__( 'GVL data not available. Please update GVL first.', 'faz-cookie-manager' ),
+			esc_html__( 'No GVL data downloaded yet. Click "Update GVL Now" to download.', 'faz-cookie-manager' ),
+			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-gvl' ) ),
+			esc_html__( 'Go to Vendor List', 'faz-cookie-manager' )
+		);
 	}
 
 	/**
