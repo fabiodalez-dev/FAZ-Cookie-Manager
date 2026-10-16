@@ -738,8 +738,18 @@ test.describe('GCM and IAB TCF behavior', () => {
         await expect.poll(async () => (await liContext.cookies()).some(
           (cookie) => cookie.name === 'euconsent-v2',
         ), { timeout: 5_000 }).toBe(false);
+        // Objected vendors travel as one `v:<bitfield>` pair (bit id-1, six
+        // bits per base64url character); records from before 1.34.2 used one
+        // `<id>:no` pair per vendor. Either form records the objection.
+        const objectsTo = (value: string, vid: number): boolean => value.split(',').some((pair) => {
+          if (pair === `${vid}:no`) return true;
+          if (!pair.startsWith('v:')) return false;
+          const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+          const char = alphabet.indexOf(pair.slice(2).charAt(Math.floor((vid - 1) / 6)));
+          return char !== -1 && (char & (32 >> ((vid - 1) % 6))) !== 0;
+        });
         expect((await liContext.cookies()).some(
-          (cookie) => cookie.name === 'fazVendorLI' && cookie.value.split(',').includes(`${liVendorId}:no`),
+          (cookie) => cookie.name === 'fazVendorLI' && objectsTo(cookie.value, Number(liVendorId)),
         ), 'Reject All records the objection for the LI vendor').toBe(true);
       } finally {
         await liContext.clearCookies();

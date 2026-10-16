@@ -618,8 +618,13 @@ const _fazConsentRevisionInvalidated =
 // that placeholder here would delete a perfectly valid consent on every page
 // load. Defer only the scope check until the no-store payload has installed the
 // real banner/law; revision invalidation remains immediate.
+// The TCF vendor list is checked at the same point and with the same deferral:
+// it decides by the active law, which the cached shell only advertises.
 const _fazConsentInvalidated = _fazConsentRevisionInvalidated ||
-    (!_fazGeoBootstrapPending() && _fazConsentScopeChanged());
+    (!_fazGeoBootstrapPending() && (
+        _fazConsentScopeChanged() ||
+        (_fazHasConsentCookie && _fazVendorRecordStale(fazcookieConsentMap.action, fazcookieConsentMap.undecided))
+    ));
 if (_fazConsentInvalidated) {
     _fazInvalidateStoredConsent();
 }
@@ -968,7 +973,10 @@ function _fazInitOperations() {
     _fazAttachShortCodeStyles();
     _fazSetShowMoreLess();
     var _fazStoredAction = ref._fazGetFromStore("action");
-    if (_fazStoredAction && _fazConsentScopeChanged()) {
+    if (_fazStoredAction && (
+        _fazConsentScopeChanged() ||
+        _fazVendorRecordStale(_fazStoredAction, ref._fazGetFromStore("undecided"))
+    )) {
         _fazInvalidateStoredConsent();
         _fazStoredAction = null;
     }
@@ -9581,33 +9589,207 @@ function _fazRenderVendorSection() {
 }
 
 /**
- * Read vendor consent from cookie.
+ * Byte budget for each of the two vendor records (fazVendorConsent and
+ * fazVendorLI). They travel in the same Cookie header as fazcookie-consent
+ * (up to 3500 bytes) and euconsent-v2, and the common server limit is on the
+ * whole header line (nginx large_client_header_buffers 8k, Apache
+ * LimitRequestFieldSize 8190): a record allowed to grow to 3800 bytes, as the
+ * old per-pair format was, put the header past that on its own. The compact
+ * format needs one character per six vendor ids, so this holds a list whose
+ * highest id is above 3000 even for a custom choice.
+ *
+ * A function, not a const: the record is read at module start-up (see
+ * _fazVendorRecordStale), above any const declared down here.
+ *
+ * @return {number}
+ */
+function _fazVendorRecordBudget() {
+    return 1200;
+}
+
+/**
+ * Encode a set of vendor ids as a base64url bitfield: bit (id - 1), most
+ * significant bit first, six bits per character — the alphabet and bit order
+ * the TC string itself uses. Trailing all-zero characters are dropped, so an
+ * empty set encodes to "".
+ *
+ * @param {number[]} ids
+ * @return {string}
+ */
+function _fazEncodeVendorBits(ids) {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const set = {};
+    let max = 0;
+    for (let i = 0; i < ids.length; i++) {
+        const id = parseInt(ids[i], 10);
+        if (!(id > 0) || id > 65535) continue;
+        set[id] = true;
+        if (id > max) max = id;
+    }
+    let out = '';
+    for (let base = 1; base <= max; base += 6) {
+        let value = 0;
+        for (let bit = 0; bit < 6; bit++) value = (value << 1) | (set[base + bit] ? 1 : 0);
+        out += alphabet.charAt(value);
+    }
+    return out.replace(/A+$/, '');
+}
+
+/**
+ * Decode _fazEncodeVendorBits() output. Returns null when the text is not a
+ * bitfield at all, so a damaged record is told apart from an empty set.
+ *
+ * @param {string} text
+ * @return {number[]|null}
+ */
+function _fazDecodeVendorBits(text) {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    if (typeof text !== 'string') return null;
+    const ids = [];
+    for (let i = 0; i < text.length; i++) {
+        const value = alphabet.indexOf(text.charAt(i));
+        if (value === -1) return null;
+        for (let bit = 0; bit < 6; bit++) {
+            if (value & (32 >> bit)) ids.push(i * 6 + bit + 1);
+        }
+    }
+    return ids;
+}
+
+/**
+ * Parse a fazVendorConsent value.
+ *
+ * Two formats are read:
+ *  - compact (written since 1.34.2): `d:<bitfield>,c:<bitfield|*>`. `d` is
+ *    every vendor DISCLOSED in the preference center when the visitor chose,
+ *    `c` the ones consented, `*` meaning all of the disclosed ones (Accept All).
+ *  - per pair (earlier releases): `id:yes|no`, one pair per disclosed vendor.
+ *
+ * The per-pair format needed about nine bytes per vendor, and the record was
+ * not written at all past 3800 bytes: with ~420 selected vendors Accept All
+ * produced no record, so tcf-cmp.js (which consents only what the record
+ * says) signalled no vendor consent at all, and the visitor was never asked
+ * again. The compact one is bounded by the highest vendor id, not the count.
+ *
+ * @param {string} raw Cookie value.
+ * @return {{disclosed: Object<number, boolean>, consent: Object<number, boolean>}|null}
+ *         null when there is no usable record.
+ */
+function _fazParseVendorRecord(raw) {
+    if (typeof raw !== 'string' || raw === '') return null;
+    const disclosed = {};
+    const consent = {};
+    let compactDisclosed = null;
+    let compactConsent = null;
+    let legacy = false;
+    raw.split(',').forEach(function (pair) {
+        const idx = pair.indexOf(':');
+        if (idx === -1) return;
+        const key = pair.substring(0, idx).trim();
+        const value = pair.substring(idx + 1).trim();
+        if (key === 'd') { compactDisclosed = value; return; }
+        if (key === 'c') { compactConsent = value; return; }
+        const id = parseInt(key, 10);
+        if (!(id > 0)) return;
+        legacy = true;
+        disclosed[id] = true;
+        consent[id] = value === 'yes';
+    });
+    if (compactDisclosed !== null) {
+        const disclosedIds = _fazDecodeVendorBits(compactDisclosed);
+        if (!disclosedIds) return null;
+        const all = compactConsent === '*';
+        const consentIds = all ? [] : (_fazDecodeVendorBits(compactConsent || '') || []);
+        const granted = {};
+        consentIds.forEach(function (id) { granted[id] = true; });
+        const out = { disclosed: {}, consent: {} };
+        disclosedIds.forEach(function (id) {
+            out.disclosed[id] = true;
+            // A consent bit for a vendor that was not disclosed is ignored.
+            out.consent[id] = all || granted[id] === true;
+        });
+        return out;
+    }
+    return legacy ? { disclosed: disclosed, consent: consent } : null;
+}
+
+/**
+ * The fazVendorConsent record of this browser, parsed, or null.
+ *
+ * @return {{disclosed: Object<number, boolean>, consent: Object<number, boolean>}|null}
+ */
+function _fazReadVendorRecord() {
+    const match = document.cookie.match(/(?:^|;\s*)fazVendorConsent=([^;]*)/);
+    return match ? _fazParseVendorRecord(match[1]) : null;
+}
+
+/**
+ * Read vendor consent from cookie: id → consented, for every vendor the
+ * record names (both formats, see _fazParseVendorRecord).
  */
 function _fazReadVendorConsent() {
-    const result = {};
-    const match = document.cookie.match(/fazVendorConsent=([^;]+)/);
-    if (!match) return result;
-    match[1].split(',').forEach(function(pair) {
-        const kv = pair.split(':');
-        if (kv.length === 2) {
-            result[parseInt(kv[0], 10)] = kv[1].trim() === 'yes';
-        }
-    });
-    return result;
+    const record = _fazReadVendorRecord();
+    return record ? record.consent : {};
+}
+
+/**
+ * Whether a visitor who already decided has to be asked again because of the
+ * TCF vendor list.
+ *
+ * The vendor record is the proof of what was disclosed. A selected vendor
+ * missing from it was never shown to this visitor — the operator added it,
+ * the first GVL download auto-selected the list, or TCF was switched on after
+ * the visitor had answered (then there is no record at all) — and tcf-cmp.js
+ * rightly signals no consent for it. Without a new question that is the
+ * visitor's state for the rest of the cookie's life, and the operator who
+ * added the vendor gets nothing for it, silently. So the choice is asked
+ * again, through the same invalidation a consent-revision bump uses.
+ *
+ * A vendor REMOVED from the list does not trigger it: the remaining vendors'
+ * consents were given knowing about them, and a smaller recipient list asks
+ * for nothing new. That is why the record carries the disclosed set itself
+ * and not a hash of it — a hash cannot tell an addition from a removal.
+ *
+ * Not for an opt-out law (the CCPA family): there the consumer's earlier
+ * decision stands and 11 CCR 7026(k) is against asking again — the same
+ * exception the undecided-record re-prompt makes. Not for a record a privacy
+ * signal created before the visitor answered (undecided), which keeps showing
+ * the banner anyway, nor for a non-`yes` action (the PMP member state).
+ *
+ * @param {string} action    The stored `action`.
+ * @param {string} undecided The stored `undecided` marker.
+ * @return {boolean}
+ */
+function _fazVendorRecordStale(action, undecided) {
+    if (!_fazStore || !_fazStore._iabEnabled) return false;
+    const vendors = _fazStore._iabVendors;
+    if (!Array.isArray(vendors) || !vendors.length) return false;
+    if (action !== 'yes' || undecided === '1') return false;
+    if (_fazCurrentLaw() === 'ccpa') return false;
+    const record = _fazReadVendorRecord();
+    if (!record) return true;
+    for (let i = 0; i < vendors.length; i++) {
+        const id = parseInt(vendors[i] && vendors[i].id, 10);
+        if (id > 0 && record.disclosed[id] !== true) return true;
+    }
+    return false;
 }
 
 /**
  * Read the Right-to-Object record from the fazVendorLI cookie.
  *
- * Format: fazVendorLI=p2:no,p7:yes,755:no — `p<purposeId>` for the purpose
- * switches, `<vendorId>` for the vendor switches (only objected vendors are
- * written), `no` meaning the visitor objected. Returns null when there is no
- * record, so callers can apply the default (see _fazLIDefaultEstablished).
+ * Format: fazVendorLI=p2:no,p7:yes,v:<bitfield> — `p<purposeId>` for the
+ * purpose switches, `no` meaning the visitor objected; `v` the vendors the
+ * visitor objected to, as a bitfield (_fazEncodeVendorBits). Records written
+ * before 1.34.2 carry one `<vendorId>:no` pair per objected vendor instead;
+ * both are read. Only objected vendors are recorded, so an absent vendor means
+ * "not objected". Returns null when there is no record, so callers can apply
+ * the default (see _fazLIDefaultEstablished).
  *
  * @return {{purposes: Object<number, boolean>, vendors: Object<number, boolean>}|null}
  */
 function _fazReadVendorLI() {
-    const match = document.cookie.match(/fazVendorLI=([^;]+)/);
+    const match = document.cookie.match(/(?:^|;\s*)fazVendorLI=([^;]+)/);
     if (!match) return null;
     const result = { purposes: {}, vendors: {} };
     match[1].split(',').forEach(function(pair) {
@@ -9615,7 +9797,11 @@ function _fazReadVendorLI() {
         if (kv.length !== 2) return;
         const key = kv[0].trim();
         const established = kv[1].trim() === 'yes';
-        if (key.charAt(0) === 'p') {
+        if (key === 'v') {
+            (_fazDecodeVendorBits(kv[1].trim()) || []).forEach(function (vid) {
+                result.vendors[vid] = false;
+            });
+        } else if (key.charAt(0) === 'p') {
             const pid = parseInt(key.substring(1), 10);
             if (!isNaN(pid)) result.purposes[pid] = established;
         } else {
@@ -9705,25 +9891,34 @@ function _fazUpdateVendorCheckboxStates() {
 /**
  * Save vendor consent and the Right-to-Object record based on choice.
  *
- * fazVendorConsent: one `id:yes|no` per disclosed vendor. tcf-cmp.js treats a
- * vendor absent from this record as NOT consented — the record is the proof
- * the vendor was disclosed when the visitor chose.
+ * fazVendorConsent: `d:<bitfield>,c:<bitfield|*>` (see _fazParseVendorRecord)
+ * — every vendor disclosed in the preference center, and the ones consented.
+ * tcf-cmp.js treats a vendor absent from `d` as NOT consented: the record is
+ * the proof the vendor was disclosed when the visitor chose, and
+ * _fazVendorRecordStale() asks again when the list has grown since.
  *
  * fazVendorLI: `p<purposeId>:yes|no` for every legitimate-interest purpose on
- * the page and `<vendorId>:no` for every vendor the visitor objected to (a
- * vendor switched off counts as objected). Reject All objects to all of it;
- * Accept All objects to nothing. Only objected vendors are written so the
- * record stays small; an absent vendor key means "not objected".
+ * the page and `v:<bitfield>` of the vendors the visitor objected to (a vendor
+ * switched off counts as objected). Reject All objects to all of it; Accept
+ * All objects to nothing. Only objected vendors are recorded; an absent
+ * vendor means "not objected".
+ *
+ * Both records used one pair per vendor, about nine bytes each, and were not
+ * written past 3800 bytes — Accept All with a few hundred selected vendors
+ * left NO vendor record, which tcf-cmp.js reads as no vendor consent.
  *
  * @param {string} choice 'all', 'reject', or 'custom'
  */
 function _fazSaveVendorConsent(choice) {
     if (!_fazStore._iabEnabled || !_fazStore._iabVendors || !_fazStore._iabVendors.length) return;
 
-    const parts = [];
-    const liVendorParts = [];
+    const disclosedIds = [];
+    const consentedIds = [];
+    const liObjectedIds = [];
     const liPurposeIds = [];
     _fazStore._iabVendors.forEach(function(vendor) {
+        const vid = parseInt(vendor && vendor.id, 10);
+        if (!(vid > 0)) return;
         let value = 'no';
         const cb = document.getElementById('fazVendorSwitch' + vendor.id);
         if (choice === 'all') {
@@ -9734,7 +9929,8 @@ function _fazSaveVendorConsent(choice) {
             // Custom: read checkbox state.
             value = (cb && cb.checked) ? 'yes' : 'no';
         }
-        parts.push(vendor.id + ':' + value);
+        disclosedIds.push(vid);
+        if (value === 'yes') consentedIds.push(vid);
 
         const lis = vendor.legIntPurposes || [];
         if (!lis.length) return;
@@ -9751,7 +9947,7 @@ function _fazSaveVendorConsent(choice) {
             // Vendor off → objected, whatever the LI switch says.
             liEstablished = value === 'yes' && (liCb ? liCb.checked : true);
         }
-        if (!liEstablished) liVendorParts.push(vendor.id + ':no');
+        if (!liEstablished) liObjectedIds.push(vid);
     });
 
     liPurposeIds.sort(function(a, b) { return a - b; });
@@ -9776,25 +9972,30 @@ function _fazSaveVendorConsent(choice) {
         domain = ';domain=' + _fazStore._rootDomain;
     }
     const secure = location.protocol === 'https:' ? ';Secure' : '';
+    const budget = _fazVendorRecordBudget();
 
     if (liPurposeParts.length) {
         // Purposes first: they are few (at most 24) and an objection to every
-        // purpose already ends every vendor's LI, so if the vendor list does not
-        // fit the budget the purpose-level record alone still carries the
-        // visitor's objections.
+        // purpose already ends every vendor's LI, so if the vendor bitfield
+        // does not fit the budget the purpose-level record alone still carries
+        // the visitor's objections.
+        const liVendorParts = liObjectedIds.length ? ['v:' + _fazEncodeVendorBits(liObjectedIds)] : [];
         let liPayload = liPurposeParts.concat(liVendorParts).join(',');
-        if (liPayload.length > 3800) {
+        if (liPayload.length > budget) {
             console.warn('fazVendorLI record too large (' + liPayload.length + ' bytes), keeping purpose-level objections only.');
             liPayload = liPurposeParts.join(',');
         }
         document.cookie = 'fazVendorLI=' + liPayload + ';expires=' + date.toUTCString() + ';path=/' + domain + ';SameSite=Lax' + secure;
     }
 
-    const payload = parts.join(',');
-    if (payload.length > 3800) {
-        // Not written: tcf-cmp.js then treats every vendor as not consented
-        // (fail closed) rather than trusting a truncated record.
-        console.warn('fazVendorConsent cookie too large (' + payload.length + ' bytes), vendor consent may not persist reliably.');
+    const payload = 'd:' + _fazEncodeVendorBits(disclosedIds) + ',c:' +
+        (consentedIds.length === disclosedIds.length ? '*' : _fazEncodeVendorBits(consentedIds));
+    if (payload.length > budget) {
+        // Not written, and the previous record removed: tcf-cmp.js then treats
+        // every vendor as not consented (fail closed). Leaving the old record
+        // in place would keep an earlier Accept All standing after a Reject.
+        console.warn('fazVendorConsent cookie too large (' + payload.length + ' bytes), vendor consent not recorded.');
+        _fazDeleteCookie('fazVendorConsent');
         return;
     }
     document.cookie = 'fazVendorConsent=' + payload + ';expires=' + date.toUTCString() + ';path=/' + domain + ';SameSite=Lax' + secure;

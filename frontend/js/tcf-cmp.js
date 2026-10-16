@@ -188,23 +188,67 @@
 	}
 
 	/**
-	 * Read vendor-level consent from cookie (if present).
-	 * Format: fazVendorConsent=1:yes,2:no,5:yes
+	 * Decode a vendor bitfield written by script.js (_fazEncodeVendorBits):
+	 * bit (id - 1), most significant first, six bits per base64url character —
+	 * the TC string's own alphabet and order. null when the text is not one.
+	 */
+	function decodeVendorBits(text) {
+		if (typeof text !== "string") return null;
+		var ids = [];
+		for (var i = 0; i < text.length; i++) {
+			var value = BASE64URL.indexOf(text.charAt(i));
+			if (value === -1) return null;
+			for (var bit = 0; bit < 6; bit++) {
+				if (value & (32 >> bit)) ids.push(i * 6 + bit + 1);
+			}
+		}
+		return ids;
+	}
+
+	/**
+	 * Read vendor-level consent from cookie (if present): id → consented, for
+	 * every vendor the record names. Two formats (script.js
+	 * _fazParseVendorRecord is the twin):
+	 *   compact  fazVendorConsent=d:<bitfield>,c:<bitfield|*>
+	 *            d = vendors disclosed when the visitor chose, c = consented,
+	 *            "*" = every disclosed vendor (Accept All);
+	 *   legacy   fazVendorConsent=1:yes,2:no,5:yes (one pair per disclosed vendor).
+	 * The legacy record was not written at all past 3800 bytes, i.e. Accept All
+	 * with a few hundred selected vendors left none and every vendor read as
+	 * not consented. A damaged compact record reads as no record (fail closed).
 	 */
 	function readVendorConsent() {
 		var consentPairs = readConsentCookiePairs();
 		if (!consentPairs || isConsentCookieStale(consentPairs)) return {};
 
 		var vendorConsent = {};
-		var match = document.cookie.match(/fazVendorConsent=([^;]+)/);
+		var match = document.cookie.match(/(?:^|;\s*)fazVendorConsent=([^;]*)/);
 		if (!match) return vendorConsent;
 
+		var compactDisclosed = null;
+		var compactConsent = null;
+		var legacy = {};
 		var pairs = match[1].split(",");
 		for (var i = 0; i < pairs.length; i++) {
-			var kv = pairs[i].split(":");
-			if (kv.length === 2) {
-				vendorConsent[parseInt(kv[0], 10)] = kv[1].trim() === "yes";
-			}
+			var idx = pairs[i].indexOf(":");
+			if (idx === -1) continue;
+			var key = pairs[i].substring(0, idx).trim();
+			var value = pairs[i].substring(idx + 1).trim();
+			if (key === "d") { compactDisclosed = value; continue; }
+			if (key === "c") { compactConsent = value; continue; }
+			var id = parseInt(key, 10);
+			if (id > 0) legacy[id] = value === "yes";
+		}
+		if (compactDisclosed === null) return legacy;
+
+		var disclosedIds = decodeVendorBits(compactDisclosed);
+		if (!disclosedIds) return vendorConsent;
+		var all = compactConsent === "*";
+		var granted = {};
+		var consentIds = all ? [] : (decodeVendorBits(compactConsent || "") || []);
+		for (var c = 0; c < consentIds.length; c++) granted[consentIds[c]] = true;
+		for (var d = 0; d < disclosedIds.length; d++) {
+			vendorConsent[disclosedIds[d]] = all || granted[disclosedIds[d]] === true;
 		}
 		return vendorConsent;
 	}
@@ -265,10 +309,13 @@
 	 * Read the Right-to-Object record written by script.js when the visitor
 	 * saves the IAB section of the preference center.
 	 *
-	 * Format: fazVendorLI=p2:no,p7:yes,755:no
+	 * Format: fazVendorLI=p2:no,p7:yes,v:<bitfield>
 	 *   p<purposeId>  → purpose-level switch
-	 *   <vendorId>    → vendor-level switch (only objected vendors are written,
-	 *                   so an absent vendor key means "not objected")
+	 *   v             → bitfield of the vendors the visitor objected to (only
+	 *                   objected vendors are recorded, so an absent vendor
+	 *                   means "not objected")
+	 *   <vendorId>    → the same, one `<vendorId>:no` pair per objected vendor,
+	 *                   as records written before 1.34.2 carry it
 	 *   "no" = the visitor objected, "yes" = legitimate interest stays established.
 	 *
 	 * Returns null when there is no record at all — the visitor never saw the
@@ -279,7 +326,7 @@
 		var consentPairs = readConsentCookiePairs();
 		if (!consentPairs || isConsentCookieStale(consentPairs)) return null;
 
-		var match = document.cookie.match(/fazVendorLI=([^;]+)/);
+		var match = document.cookie.match(/(?:^|;\s*)fazVendorLI=([^;]+)/);
 		if (!match) return null;
 
 		var record = { purposes: {}, vendors: {} };
@@ -289,7 +336,10 @@
 			if (kv.length !== 2) continue;
 			var key = kv[0].trim();
 			var established = kv[1].trim() === "yes";
-			if (key.charAt(0) === "p") {
+			if (key === "v") {
+				var objected = decodeVendorBits(kv[1].trim()) || [];
+				for (var o = 0; o < objected.length; o++) record.vendors[objected[o]] = false;
+			} else if (key.charAt(0) === "p") {
 				var pid = parseInt(key.substring(1), 10);
 				if (!isNaN(pid)) record.purposes[pid] = established;
 			} else {

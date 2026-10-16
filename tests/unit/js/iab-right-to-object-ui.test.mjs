@@ -98,14 +98,26 @@ function boot({ cookies = [] } = {}) {
   return window;
 }
 
-/** fazVendorLI pairs as a map, or null when the cookie is absent. */
+/**
+ * fazVendorLI pairs as a map, or null when the cookie is absent. The objected
+ * vendors travel as one `v:<bitfield>` pair (bit id-1, six bits per base64url
+ * character); they are expanded here to `<vendorId>: 'no'`, the shape the
+ * per-pair format of earlier releases had, so the assertions read the same.
+ */
+const B64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 function readLI(window) {
   const m = window.document.cookie.match(/fazVendorLI=([^;]+)/);
   if (!m) return null;
   const out = {};
   m[1].split(',').forEach((pair) => {
     const idx = pair.indexOf(':');
-    out[pair.slice(0, idx)] = pair.slice(idx + 1);
+    const key = pair.slice(0, idx);
+    const value = pair.slice(idx + 1);
+    if (key !== 'v') { out[key] = value; return; }
+    for (let i = 0; i < value.length; i += 1) {
+      const bits = B64URL.indexOf(value.charAt(i));
+      for (let b = 0; b < 6; b += 1) if (bits & (32 >> b)) out[String(i * 6 + b + 1)] = 'no';
+    }
   });
   return out;
 }
@@ -194,8 +206,9 @@ function run() {
     w.document.getElementById('fazVendorLISwitch755').checked = true;
     w._fazSaveVendorConsent('custom');
     const li = readLI(w);
-    const vc = w.document.cookie.match(/fazVendorConsent=([^;]+)/);
-    eq('vendor off: consent record says no', vc ? vc[1].indexOf('755:no') !== -1 : false, true);
+    // Read through the runtime's own parser: the record is a bitfield now.
+    const vc = w._fazReadVendorConsent();
+    eq('vendor off: consent record says no', vc[755], false);
     eq('vendor off: LI record says objected', li && li['755'], 'no');
   }
 
