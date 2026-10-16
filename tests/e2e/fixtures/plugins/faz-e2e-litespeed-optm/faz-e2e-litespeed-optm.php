@@ -40,6 +40,15 @@
  *       Forces FAZ's `faz_country_dependent_banner_output` filter true, so the
  *       country-variant cache veto can be exercised without a geo database.
  *
+ *   faz_e2e_no_country_source = 'yes'
+ *       Makes the install one with NO way to resolve a visitor country: the
+ *       Cloudflare header is untrusted (beating the dev fake-CF mu-plugin) and
+ *       `faz_has_country_signal_source` answers false. That is the state of
+ *       most shared hosting, and the one in which, with Cache Compatibility
+ *       Mode at its default (off), FAZ's country veto is silent and the page is
+ *       left to the page cache — so it is the state the consent-cache tests
+ *       must run in.
+ *
  *   faz_e2e_fp_preload_only = '<JSON array of URLs>'
  *       Narrows FlyingPress's preload crawl to these URLs, so
  *       `wp flying-press preload-cache` warms only the page under test instead
@@ -103,6 +112,16 @@ if ( faz_e2e_optm_flag( 'faz_e2e_ls_mark_cacheable' ) ) {
 
 if ( faz_e2e_optm_flag( 'faz_e2e_force_country_dependent' ) ) {
 	add_filter( 'faz_country_dependent_banner_output', '__return_true', PHP_INT_MAX );
+}
+
+/* -------------------------------------------------------------------------
+ * "No country source" switch.
+ * ---------------------------------------------------------------------- */
+
+if ( faz_e2e_optm_flag( 'faz_e2e_no_country_source' ) ) {
+	add_filter( 'faz_trust_cf_ipcountry_header', '__return_false', PHP_INT_MAX );
+	add_filter( 'faz_trust_geoip_country_code', '__return_false', PHP_INT_MAX );
+	add_filter( 'faz_has_country_signal_source', '__return_false', PHP_INT_MAX );
 }
 
 /* -------------------------------------------------------------------------

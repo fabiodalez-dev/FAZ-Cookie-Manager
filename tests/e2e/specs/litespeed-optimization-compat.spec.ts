@@ -41,6 +41,26 @@
  * set, against a control page that must stay cacheable; (h) no PHP warning,
  * notice or FAZ diagnostic was logged while all of this ran.
  *
+ * Two contracts were added after the 2026-10-16 cache review showed the file
+ * could not see the defects that actually reached sites:
+ *   (i)  test 14 no longer stops at "the markup survived qs_rm": every FAZ asset
+ *        that carries ?ver= must still carry the SAME ver= and
+ *        `_litespeed_rm_qs=0` after "Remove Query Strings". Without that the
+ *        runtime URL is identical across releases and a cache keeps serving the
+ *        old runtime under new HTML (runtime-skew-freeze.spec.ts RS-02 shows
+ *        what that does to the page);
+ *   (j)  tests 26–29 run with Cache Compatibility Mode and Geo-Targeting at the
+ *        plugin's OWN defaults (compatibility off, geo on) and no country
+ *        source, and ask LiteSpeed itself — requests carry `X-LSCache: on` so
+ *        LSCWP emits the X-LiteSpeed-Cache-Control a LiteSpeed server obeys —
+ *        whether a page rendered for a visitor who accepted everything (alone,
+ *        with Sec-GPC: 1, with fazcookie-dnsmpi=1) may be shared. It may only if
+ *        it is the most-protective render. Tests 01–25 keep compatibility ON on
+ *        purpose (see beforeAll), which is exactly why they could never see it.
+ * The browser runs (17–19) now use the shared main-thread watchdog
+ * (utils/main-thread-watchdog.ts: heartbeat gaps, long tasks, heap, element
+ * count over the whole page view) instead of three setTimeout(0) samples.
+ *
  * ENVIRONMENT
  * -----------
  * The test site is nginx + PHP-FPM, not a LiteSpeed server. LSCWP's optimiser
@@ -58,6 +78,13 @@
  * HOW TO RUN THIS FILE
  * --------------------
  *     npm run test:e2e:litespeed
+ *
+ * The file is serial: on a build where one test is red, every later test is
+ * reported as skipped, not passed. To see each verdict on such a build, run the
+ * tests one at a time (beforeAll still prepares the environment):
+ *     npm run test:e2e:litespeed -- -g " 14 "
+ * Set FAZ_E2E_REQUIRE_CACHE_PLUGINS=1 to turn the "plugin not installed" /
+ * "workers > 1" skips into failures (release gate).
  *
  * It activates LiteSpeed Cache globally and rewrites its options, so it needs
  * the install to itself: it gates on `testInfo.config.workers === 1` and skips
@@ -92,7 +119,7 @@
  * the check itself is broken. afterAll deletes the option either way.
  */
 import { gunzipSync } from 'node:zlib';
-import { request as playwrightRequest, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { request as playwrightRequest, type Browser, type BrowserContext } from '@playwright/test';
 import { test, expect } from '../fixtures/wp-fixture';
 import {
   wp,
@@ -109,11 +136,17 @@ import {
 import { resetDefaultBannerState } from '../utils/seed-defaults';
 import { acquireSharedWordPressLock, releaseSharedWordPressLock } from '../utils/shared-wordpress-lock';
 import { clickFirstVisible } from '../utils/ui';
+import { assertMainThreadHealthy, installMainThreadWatchdog } from '../utils/main-thread-watchdog';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 /** Falsifiability run: hold the lab's protection-stripping switch on for the whole file. */
 const BREAK_RUN = process.env.FAZ_E2E_BREAK_FAZ_EXCLUSIONS === '1';
 const BREAK_STATE = BREAK_RUN ? 'yes' : 'no';
+/**
+ * Release gate: turn the environment skips below into failures, so a run that
+ * silently lacked the plugin (or ran with workers > 1) cannot be read as green.
+ */
+const REQUIRE_PLUGIN = process.env.FAZ_E2E_REQUIRE_CACHE_PLUGINS === '1';
 const HUMAN_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const CRAWLER_UA = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
@@ -129,6 +162,7 @@ const LAB_OPTIONS = [
   'faz_e2e_force_country_dependent',
   'faz_e2e_capture_errors',
   'faz_e2e_fp_preload_only',
+  'faz_e2e_no_country_source',
 ];
 
 /** The FAZ handles the field reports were about; others found in the baseline are checked too. */
@@ -217,6 +251,11 @@ let matrixUrl = '';
 let dsarUrl = '';
 let baselineHtml = '';
 let baseline: Baseline | null = null;
+/** LSCWP's own `cache` switch, needed only by the X-LSCache (ADC emulation) tests; restored in afterAll. */
+let lsCacheSnapshot: string | null = null;
+let lsCacheChanged = false;
+/** The anonymous render under the DEFAULT settings (tests 26–29). */
+let strictBase: Baseline | null = null;
 
 test.describe.configure({ mode: 'serial', timeout: 240_000 });
 
@@ -571,6 +610,118 @@ function controlTag(html: string, kind: 'img' | 'iframe'): ScriptTag | undefined
   return voidTags(html, kind).find((tag) => tag.attrs['data-faz-e2e-probe'] === `control-${kind}`);
 }
 
+
+/* ---------------------------------------------------------------------------
+ * Query-string removal (c) and the consent cache oracle (b)
+ * ------------------------------------------------------------------------ */
+
+type VersionedAsset = { id: string; url: string; ver: string };
+
+function queryOf(url: string): URLSearchParams {
+  try {
+    return new URL(decodeEntities(url), WP_BASE).searchParams;
+  } catch {
+    return new URLSearchParams();
+  }
+}
+
+/** Every FAZ <script src> / <link href> whose URL carries ?ver= (the content-hashed files carry none). */
+function fazVersionedAssets(html: string): VersionedAsset[] {
+  const out: VersionedAsset[] = [];
+  for (const [id, tag] of fazScriptsById(html)) {
+    const src = tag.attrs.src ?? '';
+    const ver = src ? queryOf(src).get('ver') : null;
+    if (ver) out.push({ id, url: src, ver });
+  }
+  for (const tag of voidTags(html, 'link')) {
+    const id = tag.attrs.id ?? '';
+    const href = tag.attrs.href ?? '';
+    const ver = href ? queryOf(href).get('ver') : null;
+    if (isFazId(id) && ver) out.push({ id, url: href, ver });
+  }
+  return out;
+}
+
+/** Non-FAZ asset URLs still carrying ?ver= — the qs_rm positive control. */
+function nonFazVersionedCount(html: string): number {
+  let count = 0;
+  for (const tag of [...scriptTags(html), ...voidTags(html, 'link')]) {
+    if (isFazId(tag.attrs.id)) continue;
+    const url = tag.attrs.src ?? tag.attrs.href ?? '';
+    if (url && queryOf(url).get('ver')) count += 1;
+  }
+  return count;
+}
+
+/**
+ * (c) After LSCWP "Remove Query Strings", each FAZ asset must still name its
+ * version: `ver=` unchanged and `_litespeed_rm_qs=0` (the one marker
+ * Optimize::remove_query_strings() honours, optimize.cls.php). Without it the
+ * runtime URL is the same for every release, so a browser, the LiteSpeed ADC
+ * or a CDN keeps serving the previous runtime under new HTML — the skew
+ * runtime-skew-freeze.spec.ts RS-02 shows freezing the page.
+ */
+function qsRmViolations(html: string, expected: VersionedAsset[]): string[] {
+  const problems: string[] = [];
+  const scripts = fazScriptsById(html);
+  const links = new Map(voidTags(html, 'link').filter((tag) => isFazId(tag.attrs.id)).map((tag) => [tag.attrs.id, tag] as const));
+  for (const asset of expected) {
+    const tag = scripts.get(asset.id) ?? links.get(asset.id);
+    const url = tag ? (tag.attrs.src ?? tag.attrs.href ?? '') : '';
+    if (!url) {
+      problems.push(`${asset.id}: missing from the qs_rm page`);
+      continue;
+    }
+    const query = queryOf(url);
+    if (query.get('ver') !== asset.ver) problems.push(`${asset.id}: ver=${asset.ver} became ${query.get('ver') ?? '(stripped)'} — ${short(url)}`);
+    if (query.get('_litespeed_rm_qs') !== '0') problems.push(`${asset.id}: no _litespeed_rm_qs=0, so LiteSpeed strips its version — ${short(url)}`);
+  }
+  return problems;
+}
+
+type CacheVerdict = { liteSpeed: string[]; cacheControl: string[]; vetoed: boolean; publicCacheable: boolean };
+
+function headerValues(page: Fetched, name: string): string[] {
+  return page.headerList
+    .filter((header) => header.name.toLowerCase() === name)
+    .flatMap((header) => header.value.split('\n'))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+/**
+ * What a LiteSpeed server would do with this response. LSCWP behaves as if
+ * behind a LiteSpeed ADC when the request carries `X-LSCache` (litespeed-cache.php:
+ * LITESPEED_SERVER_TYPE = ADC → LITESPEED_ALLOWED → LITESPEED_ON) and then emits
+ * its own X-LiteSpeed-Cache-Control (Core::send_headers / Control::output), which
+ * is the header the server obeys. "Vetoed" means every such value says no-cache
+ * or private; "public" means the shared cache keeps it for the next visitor.
+ */
+function cacheVerdict(page: Fetched): CacheVerdict {
+  const liteSpeed = headerValues(page, 'x-litespeed-cache-control');
+  const cacheControl = headerValues(page, 'cache-control');
+  const vetoed = liteSpeed.length > 0 && liteSpeed.every((value) => /no-cache|private/i.test(value) && !/\bpublic\b/i.test(value));
+  const publicCacheable = liteSpeed.some((value) => /\bpublic\b/i.test(value)) && !liteSpeed.some((value) => /no-cache/i.test(value));
+  return { liteSpeed, cacheControl, vetoed, publicCacheable };
+}
+
+/**
+ * (b) A response the shared cache may keep must be safe for EVERY later
+ * visitor, and the only render that is, is the most-protective one: every
+ * script the anonymous render blocked is still text/plain. A parser-inserted
+ * executable tracker runs before any client code can stop it, so a cached
+ * "accepted" page is a tracker for the next visitor that nothing can undo.
+ * Either answer is accepted: the response is vetoed for LiteSpeed, or it is the
+ * most-protective render (the invariant-render fix).
+ */
+function consentCacheViolations(page: Fetched, strict: Baseline): string[] {
+  const verdict = cacheVerdict(page);
+  if (verdict.vetoed) return [];
+  const leaks = blockedScriptViolations(page.html, strict);
+  const header = verdict.liteSpeed.join(' | ') || '(no X-LiteSpeed-Cache-Control)';
+  return leaks.map((leak) => `cacheable for LiteSpeed [${header}] while ${leak}`);
+}
+
 /* ---------------------------------------------------------------------------
  * Environment helpers
  * ------------------------------------------------------------------------ */
@@ -609,6 +760,17 @@ function lsPurge(): void {
   wp(['eval', 'do_action( "litespeed_purge_all" ); echo "purged";']);
 }
 
+/** LSCWP options outside LS_KEYS (read and restored on their own, never zeroed by applyLs). */
+function lsRawGet(key: string): string {
+  const lines = wp(['litespeed-option', 'get', key]).split('\n').map((line) => line.trim()).filter(Boolean);
+  const value = lines[lines.length - 1] ?? '0';
+  return value === "''" || value === '' ? '0' : value;
+}
+
+function lsRawSet(key: string, value: string): void {
+  wp(['litespeed-option', 'set', key, value], { allowRetry: false });
+}
+
 /** Every LS_KEYS option to 0 except the ones named, then the lab's drive mode. */
 function applyLs(settings: LsSettings, mode: LsMode): void {
   for (const key of LS_KEYS) {
@@ -634,6 +796,58 @@ function patchFazSettings(php: string): void {
   `);
 }
 
+/**
+ * The cache-relevant settings back to the plugin's OWN defaults (read from
+ * Settings::get_defaults(), not hardcoded here): Cache Compatibility Mode off,
+ * Geo-Targeting on, the geo bootstrap shell off, hide_from_bots on — and TCF
+ * off, which would make every page country-dependent and veto it for an
+ * unrelated reason.
+ */
+function applyDefaultCacheSettings(): void {
+  patchFazSettings(`
+    $d = \\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings::get_instance()->get_defaults();
+    $s['banner_control']['cache_compatibility'] = $d['banner_control']['cache_compatibility'];
+    $s['banner_control']['hide_from_bots']      = $d['banner_control']['hide_from_bots'];
+    $s['geolocation']['geo_targeting']          = $d['geolocation']['geo_targeting'];
+    $s['geolocation']['cache_geo_bootstrap']    = $d['geolocation']['cache_geo_bootstrap'];
+    if ( ! isset( $s['iab'] ) || ! is_array( $s['iab'] ) ) { $s['iab'] = array(); }
+    $s['iab']['enabled'] = isset( $d['iab']['enabled'] ) ? $d['iab']['enabled'] : false;
+  `);
+}
+
+function readCacheSettings(): Record<string, unknown> {
+  const raw = wpEval(`
+    $s = get_option( 'faz_settings', array() );
+    echo wp_json_encode( array(
+      'cache_compatibility' => isset( $s['banner_control']['cache_compatibility'] ) ? $s['banner_control']['cache_compatibility'] : null,
+      'geo_targeting'       => isset( $s['geolocation']['geo_targeting'] ) ? $s['geolocation']['geo_targeting'] : null,
+      'default_cache_compatibility' => \\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings::get_instance()->get_defaults()['banner_control']['cache_compatibility'],
+      'default_geo_targeting'       => \\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings::get_instance()->get_defaults()['geolocation']['geo_targeting'],
+    ) );
+  `).trim();
+  return JSON.parse(raw || '{}') as Record<string, unknown>;
+}
+
+/** Synthetic "accepted everything" cookie, same shape as wp-env's seedConsentedCookie(). */
+function consentCookieValue(): string {
+  const rev = parseInt(wpEval('echo faz_get_consent_revision();').trim(), 10) || 1;
+  return (
+    'consentid%3Ae2e-ls-cache%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes' +
+    `%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`
+  );
+}
+
+/** Whether FAZ's own validator accepts that cookie — otherwise a "baseline" render would prove nothing. */
+function serverAcceptsConsent(cookieValue: string): boolean {
+  const b64 = Buffer.from(decodeURIComponent(cookieValue), 'utf8').toString('base64');
+  return (
+    wpEval(`
+      $c = base64_decode( '${b64}' );
+      echo ( function_exists( 'faz_get_valid_consent_cookie' ) && '' !== faz_get_valid_consent_cookie( $c ) && ! apply_filters( 'faz_strict_scope_fingerprint', false ) ) ? '1' : '0';
+    `).trim() === '1'
+  );
+}
+
 function decodeBody(body: Buffer): string {
   if (body.length > 2 && body[0] === 0x1f && body[1] === 0x8b) {
     return gunzipSync(body).toString('utf8');
@@ -641,7 +855,7 @@ function decodeBody(body: Buffer): string {
   return body.toString('utf8');
 }
 
-type Fetched = { status: number; headers: Record<string, string>; html: string };
+type Fetched = { status: number; headers: Record<string, string>; headerList: { name: string; value: string }[]; html: string };
 
 /** One request from a cookie-less client, so LSCWP always sees a first-time guest. */
 async function fetchPage(url: string, init: { userAgent?: string; headers?: Record<string, string> } = {}): Promise<Fetched> {
@@ -651,7 +865,7 @@ async function fetchPage(url: string, init: { userAgent?: string; headers?: Reco
       headers: { 'User-Agent': init.userAgent ?? HUMAN_UA, ...(init.headers ?? {}) },
       timeout: 60_000,
     });
-    return { status: resp.status(), headers: resp.headers(), html: decodeBody(await resp.body()) };
+    return { status: resp.status(), headers: resp.headers(), headerList: resp.headersArray(), html: decodeBody(await resp.body()) };
   } finally {
     await ctx.dispose();
   }
@@ -677,8 +891,8 @@ function readProbe(token: string): Record<string, string> {
   return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, string>) : {};
 }
 
-async function probedRequest(url: string, token: string, userAgent = HUMAN_UA): Promise<Fetched> {
-  const response = await fetchPage(url, { userAgent, headers: { 'X-Faz-E2E-Probe': token } });
+async function probedRequest(url: string, token: string, userAgent = HUMAN_UA, extraHeaders: Record<string, string> = {}): Promise<Fetched> {
+  const response = await fetchPage(url, { userAgent, headers: { ...extraHeaders, 'X-Faz-E2E-Probe': token } });
   await expect
     .poll(() => readProbe(token).ls ?? '', { timeout: 10_000, message: `the lab never recorded LiteSpeed's verdict for ${token}` })
     .not.toBe('');
@@ -708,28 +922,6 @@ function readCapturedLog(): string {
 const THIRD_PARTY_HOST = /(?:^|\.)(?:googletagmanager\.com|google-analytics\.com|facebook\.com|facebook\.net|youtube\.com|youtube-nocookie\.com|ytimg\.com)$/i;
 const THIRD_PARTY = (url: URL): boolean => THIRD_PARTY_HOST.test(url.hostname);
 
-async function evaluateWithin<T>(page: Page, fn: () => T | Promise<T>, ms: number): Promise<{ ok: true; value: T } | { ok: false }> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<{ ok: false }>((resolve) => {
-    timer = setTimeout(() => resolve({ ok: false }), ms);
-  });
-  const evaluation = page.evaluate(fn).then((value) => ({ ok: true as const, value }));
-  evaluation.catch(() => undefined);
-  try {
-    return await Promise.race([evaluation, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-async function assertResponsive(page: Page, label: string): Promise<void> {
-  for (let i = 0; i < 3; i += 1) {
-    const answer = await evaluateWithin(page, () => new Promise<number>((resolve) => setTimeout(() => resolve(1), 0)), 3_000);
-    expect(answer.ok, `${label}: the main thread did not answer a trivial evaluate within 3s (frozen page)`).toBe(true);
-    await page.waitForTimeout(250);
-  }
-}
-
 function restoreProbeKey(base: Baseline): string {
   const preferred = ['facebook-pixel', 'ga-monsterinsights', 'hotjar', 'linkedin', 'tiktok', 'hubspot', 'clarity', 'microsoft-ads'];
   const blockedKeys = new Set(base.blocked.map((entry) => entry.key));
@@ -743,6 +935,9 @@ function restoreProbeKey(base: Baseline): string {
 async function visitorFlow(browser: Browser, url: string, label: string, base: Baseline): Promise<void> {
   const provider = restoreProbeKey(base);
   const context: BrowserContext = await browser.newContext({ baseURL: WP_BASE });
+  // Installed before the first navigation: the watchdog measures the whole
+  // page view (heartbeat gaps, long tasks, heap), not three instants after it.
+  await installMainThreadWatchdog(context);
   const thirdPartyBeforeConsent: string[] = [];
   let consented = false;
   try {
@@ -759,7 +954,7 @@ async function visitorFlow(browser: Browser, url: string, label: string, base: B
       timeout: 20_000,
     });
     await page.waitForFunction(() => typeof (window as unknown as { fazcookie?: unknown }).fazcookie === 'object', undefined, { timeout: 20_000 });
-    await assertResponsive(page, `${label} (before consent)`);
+    await assertMainThreadHealthy(page, `${label} (before consent)`);
 
     const consentBefore = (await context.cookies(WP_BASE)).find((cookie) => cookie.name === 'fazcookie-consent');
     expect(consentBefore, `${label}: no consent cookie before a choice`).toBeUndefined();
@@ -790,7 +985,7 @@ async function visitorFlow(browser: Browser, url: string, label: string, base: B
         { timeout: 20_000, message: `${label}: the blocked "${provider}" script must run once consent is given` },
       )
       .toBe(true);
-    await assertResponsive(page, `${label} (after consent)`);
+    await assertMainThreadHealthy(page, `${label} (after consent)`);
   } finally {
     await context.close();
   }
@@ -837,6 +1032,10 @@ test.beforeAll(async ({}, testInfo) => {
   }
 
   resetDefaultBannerState();
+  // Forced for 01–25 only: they test the OPTIMISER, which LSCWP bypasses on any
+  // request FAZ vetoes, and on faz-test the dev fake-CF source makes every page
+  // country-dependent (vetoed) unless compatibility is on. Not the default —
+  // the default-settings contract is tested separately in 26–29.
   patchFazSettings(`
     $s['geolocation']['geo_targeting'] = false;
     $s['banner_control']['cache_compatibility'] = true;
@@ -850,6 +1049,7 @@ test.beforeAll(async ({}, testInfo) => {
   setOption('faz_e2e_optm_probe_page', PROVIDER_MATRIX_PAGE_SLUG);
   setOption('faz_e2e_capture_errors', 'yes');
   setOption('faz_e2e_break_faz_exclusions', BREAK_STATE);
+  setOption('faz_e2e_no_country_source', 'no');
   wpEval(`@unlink( WP_CONTENT_DIR . '/faz-e2e-optm-php.log' );`);
 
   dsarPageCreated = wpEval(`echo get_page_by_path( '${DSAR_SLUG}', OBJECT, 'page' ) ? '0' : '1';`).trim() === '1';
@@ -877,6 +1077,10 @@ test.afterAll(() => {
           if (original !== undefined && lsCurrent[key] !== original) {
             cleanup(`restore LiteSpeed option ${key}`, () => lsSet(key, original));
           }
+        }
+        if (lsCacheChanged && lsCacheSnapshot !== null) {
+          const original = lsCacheSnapshot;
+          cleanup('restore LiteSpeed option cache', () => lsRawSet('cache', original));
         }
         cleanup('purge LiteSpeed', lsPurge);
       }
@@ -923,6 +1127,10 @@ test.afterAll(() => {
 });
 
 test.beforeEach(() => {
+  if (REQUIRE_PLUGIN) {
+    expect(exclusiveRun, `FAZ_E2E_REQUIRE_CACHE_PLUGINS=1: this file must run with --workers=1 (got ${String(configuredWorkers)})`).toBe(true);
+    expect(lsInstalled, 'FAZ_E2E_REQUIRE_CACHE_PLUGINS=1: LiteSpeed Cache (litespeed-cache) must be installed on this environment').toBe(true);
+  }
   test.skip(
     !exclusiveRun,
     `this file was run with workers=${String(configuredWorkers)} — it activates LiteSpeed Cache and rewrites its options, ` +
@@ -1073,14 +1281,25 @@ test.describe('LiteSpeed Cache page optimisation leaves FAZ intact', () => {
     expect(fazHandleViolations(html, base)).toEqual([]);
   });
 
-  test('14 optm-qs_rm: FAZ assets keep their path, order and defer when query strings are stripped', async () => {
+  // FAILS on 42728bbc: no FAZ URL carries _litespeed_rm_qs=0
+  // (`grep -rn _litespeed_rm_qs` finds nothing outside tests), so LSCWP's
+  // remove_query_strings() strips ?ver= from script.min.js and every other
+  // versioned FAZ asset. Green once the qs_rm fix (B2 in the 2026-10-16 cache
+  // review, part of the fix/1342c-* series) appends _litespeed_rm_qs=0.
+  test('14 optm-qs_rm: FAZ assets keep their path, order and defer, and keep a version-bearing URL (ver= intact + _litespeed_rm_qs=0)', async () => {
     const base = requireBaseline();
     const html = await lsRender({ 'optm-qs_rm': 1 }, 'cacheable');
-    const verCount = (html.match(/\b(?:src|href)=["']?[^"'\s>]*[?&](?:amp;)?ver=/gi) ?? []).length;
-    expect(verCount, 'positive control: qs_rm must strip at least one ?ver= query string').toBeLessThan(base.verCount);
+    expect(
+      nonFazVersionedCount(html),
+      'positive control: qs_rm must strip ?ver= from at least one non-FAZ asset on this request',
+    ).toBeLessThan(nonFazVersionedCount(baselineHtml));
     expect(fazHandleViolations(html, base)).toEqual([]);
     expect(bootstrapOrderViolations(html)).toEqual([]);
     expect(bannerAssetViolations(html, base)).toEqual([]);
+    const versioned = fazVersionedAssets(baselineHtml);
+    test.info().annotations.push({ type: 'faz-versioned-assets', description: versioned.map((asset) => `${asset.id} ver=${asset.ver}`).join(', ') });
+    expect(versioned.map((asset) => asset.id), 'the baseline must carry script.min.js with ?ver=').toContain('faz-cookie-manager-js');
+    expect(qsRmViolations(html, versioned)).toEqual([]);
   });
 
   test('15 Guest Mode (guest + guest_optm options): every FAZ handle stays live under Guest Optimization', async () => {
@@ -1204,5 +1423,143 @@ test.describe('LiteSpeed Cache page optimisation leaves FAZ intact', () => {
     const throttle = /FAZ Cookie Manager: refused a consent record because the request was rate-limited/;
     const offending = lines.filter((line) => /PHP (?:Warning|Notice|Fatal error|Parse error)|FAZ Cookie Manager:/.test(line) && !throttle.test(line));
     expect(offending).toEqual([]);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * (b) Consent-dependent HTML under the DEFAULT settings
+ *
+ * Every test above runs with Cache Compatibility Mode forced ON (beforeAll),
+ * because they are about the optimiser rewriting FAZ markup and need a page
+ * LiteSpeed is allowed to optimise; with the dev fake-CF source on faz-test and
+ * compatibility off, FAZ's country veto would bypass the optimiser and every
+ * positive control would fail. That choice also hid the one cache defect that
+ * matters most: with compatibility at its default (OFF) and geo-targeting at its
+ * default (ON) on an install with no country source, get_blocked_categories()
+ * reads the visitor's consent cookie / Sec-GPC / fazcookie-dnsmpi, and
+ * send_geo_cache_headers() emits no veto because the output is not
+ * country-dependent. A visitor who accepted everything then MISSes into a page
+ * whose trackers are executable, LiteSpeed keeps it public, and every later
+ * visitor — including one who never consented — gets that copy.
+ *
+ * This block runs with the plugin's own defaults for those switches, with the
+ * lab's "no country source" switch on (the shared-hosting case), and asks
+ * LiteSpeed itself: requests carry `X-LSCache: on`, which makes LSCWP behave as
+ * behind a LiteSpeed ADC and emit the X-LiteSpeed-Cache-Control header a real
+ * server would obey.
+ *
+ * FAILS on 42728bbc: 27, 28 and 29 (public + executable trackers, see the
+ * oracle consentCacheViolations()). 26 is the control and passes there. Green
+ * with fix/1342c-cache-veto (veto when the render is not the most-protective
+ * one) or with an invariant default render; either satisfies the oracle.
+ * ------------------------------------------------------------------------ */
+
+const LSCACHE_REQUEST: Record<string, string> = { 'X-LSCache': 'on' };
+
+/**
+ * The anonymous render under the default settings, taken once. Lazily, so any
+ * of 27–29 can be run on its own with -g (the file is serial: on a build where
+ * an earlier test is red, the later ones are skipped and must be run singly).
+ */
+async function anonymousDefaultRender(): Promise<Fetched> {
+  applyLs({}, 'cacheable');
+  const page = await probedRequest(matrixUrl, newToken('dflt-anon'), HUMAN_UA, LSCACHE_REQUEST);
+  expect(page.status).toBe(200);
+  return page;
+}
+
+async function requireStrictBase(): Promise<Baseline> {
+  if (!strictBase) {
+    strictBase = buildBaseline((await anonymousDefaultRender()).html);
+  }
+  return strictBase;
+}
+
+function annotateVerdict(label: string, page: Fetched): void {
+  const verdict = cacheVerdict(page);
+  test.info().annotations.push({
+    type: `cache-verdict-${label}`,
+    description: `X-LiteSpeed-Cache-Control=[${verdict.liteSpeed.join(' | ')}] Cache-Control=[${verdict.cacheControl.join(' | ')}]`,
+  });
+}
+
+test.describe('Consent-dependent HTML stays out of the shared LiteSpeed cache under the DEFAULT settings', () => {
+  test.beforeAll(() => {
+    if (!exclusiveRun || !lsInstalled || !setupDone) {
+      return;
+    }
+    lsCacheSnapshot = lsRawGet('cache');
+    if (lsCacheSnapshot !== '1') {
+      lsRawSet('cache', '1');
+      lsCacheChanged = true;
+    }
+    applyDefaultCacheSettings();
+    setOption('faz_e2e_no_country_source', 'yes');
+  });
+
+  test('26 default settings, control: the anonymous render is the most-protective one and LiteSpeed may cache it', async () => {
+    const settings = readCacheSettings();
+    test.info().annotations.push({ type: 'cache-settings', description: JSON.stringify(settings) });
+    expect(settings.cache_compatibility, 'Cache Compatibility Mode must be at its default for this block').toBe(settings.default_cache_compatibility);
+    expect(settings.geo_targeting, 'Geo-Targeting must be at its default for this block').toBe(settings.default_geo_targeting);
+    const page = await anonymousDefaultRender();
+    annotateVerdict('anonymous', page);
+    const verdict = cacheVerdict(page);
+    expect(
+      verdict.liteSpeed.length,
+      'positive control: with X-LSCache: on, LSCWP must behave as behind a LiteSpeed ADC and emit X-LiteSpeed-Cache-Control',
+    ).toBeGreaterThan(0);
+    expect(
+      verdict.publicCacheable,
+      'an anonymous render under the default settings must stay publicly cacheable — otherwise 27–29 prove nothing (and the whole site would be uncacheable)',
+    ).toBe(true);
+    strictBase = buildBaseline(page.html);
+    const strictKeys = strictBase.blocked.map((entry) => entry.key);
+    for (const entry of requireBaseline().blocked) {
+      expect(strictKeys, `the anonymous default render must block "${entry.key}" exactly as the Cache Compatibility render does`).toContain(entry.key);
+    }
+  });
+
+  test('27 default settings: a visitor who accepted everything gets a response that is vetoed for LiteSpeed or is the most-protective render', async () => {
+    const strict = await requireStrictBase();
+    applyLs({}, 'cacheable');
+    const cookie = consentCookieValue();
+    expect(serverAcceptsConsent(cookie), "precondition: FAZ's own validator must accept the synthetic accept-all cookie").toBe(true);
+    const page = await probedRequest(matrixUrl, newToken('dflt-consent'), HUMAN_UA, {
+      ...LSCACHE_REQUEST,
+      Cookie: `fazcookie-consent=${cookie}`,
+    });
+    expect(page.status).toBe(200);
+    annotateVerdict('accept-all', page);
+    expect(consentCacheViolations(page, strict)).toEqual([]);
+  });
+
+  test('28 default settings: accepted everything + Sec-GPC: 1 — vetoed for LiteSpeed or the most-protective render', async () => {
+    const strict = await requireStrictBase();
+    applyLs({}, 'cacheable');
+    const cookie = consentCookieValue();
+    expect(serverAcceptsConsent(cookie), "precondition: FAZ's own validator must accept the synthetic accept-all cookie").toBe(true);
+    const page = await probedRequest(matrixUrl, newToken('dflt-gpc'), HUMAN_UA, {
+      ...LSCACHE_REQUEST,
+      'Sec-GPC': '1',
+      Cookie: `fazcookie-consent=${cookie}`,
+    });
+    expect(page.status).toBe(200);
+    annotateVerdict('accept-all+gpc', page);
+    expect(consentCacheViolations(page, strict)).toEqual([]);
+  });
+
+  test('29 default settings: accepted everything + fazcookie-dnsmpi=1 — vetoed for LiteSpeed or the most-protective render', async () => {
+    const strict = await requireStrictBase();
+    applyLs({}, 'cacheable');
+    const cookie = consentCookieValue();
+    expect(serverAcceptsConsent(cookie), "precondition: FAZ's own validator must accept the synthetic accept-all cookie").toBe(true);
+    const page = await probedRequest(matrixUrl, newToken('dflt-dnsmpi'), HUMAN_UA, {
+      ...LSCACHE_REQUEST,
+      Cookie: `fazcookie-consent=${cookie}; fazcookie-dnsmpi=1`,
+    });
+    expect(page.status).toBe(200);
+    annotateVerdict('accept-all+dnsmpi', page);
+    expect(consentCacheViolations(page, strict)).toEqual([]);
   });
 });

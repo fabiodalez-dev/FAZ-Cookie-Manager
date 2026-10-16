@@ -58,9 +58,35 @@
  * excludes as X-Faz-Fp-* headers), plus faz-e2e-provider-matrix for the
  * same-origin blocked scripts whose execution the browser tests observe.
  *
+ * CLOUD OPTIMIZER. The FlyingPress copy on the test site answers its Cloud
+ * Optimizer with `{}` (a licence shim's pre_http_request at priority 10), so
+ * external_domains, used_css and content_visibility_targets were always empty
+ * and the tests of the passes that read them (08, 14, 15, 16) could not fail;
+ * 11 could not either, because FlyingPress self-hosts only library CDNs. The
+ * fixture faz-e2e-fp-cloud-mock now answers at priority 20 with a deterministic
+ * set (fake CDN host cdn.faz-e2e.test + www.google.com; a used CSS with a marker
+ * rule and, like the real service, every rule matching the request's
+ * css_rucss_include_selectors; lazy-render targets outside <script> bodies),
+ * extends flying_press_selfhost_external_domains, prints a non-FAZ control
+ * script on the fake CDN, and can move FAZ's own assets onto that host. Each
+ * of those tests now carries a hard positive control instead of an annotation.
+ * Two field reports got their own tests: 25 (FAZ served from a CDN, delayed by
+ * "Delay third-party scripts") and 26 (a reCAPTCHA URL in FAZ's inline config).
+ * Red on 42728bbc, statically: 14 and 16 (RUCSS moves the FAZ banner sheet to
+ * data-href and the used CSS has no FAZ selector), 25 and 26 (FAZ never feeds
+ * js_delay_third_party_excludes). Green with fix/1342c-flyingpress.
+ * Browser runs use the shared main-thread watchdog (utils/main-thread-watchdog.ts).
+ *
  * HOW TO RUN THIS FILE
  * --------------------
  *     npm run test:e2e:flyingpress-optm
+ *
+ * The file is serial: on a build where one test is red, every later test is
+ * reported as skipped, not passed. To see each verdict on such a build, run the
+ * tests one at a time (beforeAll still prepares the environment):
+ *     npm run test:e2e:flyingpress-optm -- -g " 14 "
+ * Set FAZ_E2E_REQUIRE_CACHE_PLUGINS=1 to turn the "plugin not installed" /
+ * "workers > 1" skips into failures (release gate).
  *
  * It activates FlyingPress globally and rewrites FLYING_PRESS_CONFIG, so it
  * needs the install to itself: it gates on `testInfo.config.workers === 1` and
@@ -95,7 +121,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import { request as playwrightRequest, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { request as playwrightRequest, type Browser, type BrowserContext } from '@playwright/test';
 import { test, expect } from '../fixtures/wp-fixture';
 import {
   wp,
@@ -113,11 +139,17 @@ import {
 import { resetDefaultBannerState } from '../utils/seed-defaults';
 import { acquireSharedWordPressLock, releaseSharedWordPressLock } from '../utils/shared-wordpress-lock';
 import { clickFirstVisible } from '../utils/ui';
+import { assertMainThreadHealthy, installMainThreadWatchdog } from '../utils/main-thread-watchdog';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 /** Falsifiability run: hold the lab's protection-stripping switch on for the whole file. */
 const BREAK_RUN = process.env.FAZ_E2E_BREAK_FAZ_EXCLUSIONS === '1';
 const BREAK_STATE = BREAK_RUN ? 'yes' : 'no';
+/**
+ * Release gate: turn the environment skips below into failures, so a run that
+ * silently lacked the plugin (or ran with workers > 1) cannot be read as green.
+ */
+const REQUIRE_PLUGIN = process.env.FAZ_E2E_REQUIRE_CACHE_PLUGINS === '1';
 const HUMAN_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const CRAWLER_UA = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
@@ -125,6 +157,10 @@ const CRAWLER_UA = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.c
 const LAB_PLUGIN = 'faz-e2e-litespeed-optm';
 const MATRIX_PLUGIN = 'faz-e2e-provider-matrix';
 const FP_PROBE_PLUGIN = 'faz-e2e-fp-probe';
+/** Deterministic Cloud Optimizer answer + fake CDN + self-host stand-ins (see the plugin header). */
+const CLOUD_MOCK_PLUGIN = 'faz-e2e-fp-cloud-mock';
+const CLOUD_MOCK_OPTIONS = ['faz_e2e_fp_cdn_assets', 'faz_e2e_fp_selfhost_extra', 'faz_e2e_fp_cdn_control_page', 'faz_e2e_fp_mock_last'];
+const FAKE_CDN_HOST = 'cdn.faz-e2e.test';
 const LAB_OPTIONS = [
   'faz_e2e_ls_guest_optm',
   'faz_e2e_ls_mark_cacheable',
@@ -133,6 +169,7 @@ const LAB_OPTIONS = [
   'faz_e2e_force_country_dependent',
   'faz_e2e_capture_errors',
   'faz_e2e_fp_preload_only',
+  'faz_e2e_no_country_source',
 ];
 /** Dedicated pages, so a background preload of one never pollutes another's cache assertion. */
 const PAGES = {
@@ -223,6 +260,7 @@ let lsWasActive = false;
 let labWasActive = false;
 let matrixWasActive = false;
 let probeWasActive = false;
+let cloudMockWasActive = false;
 let auditLabWasActive = false;
 let settingsSnapshot = '';
 let fpConfigSnapshot = '';
@@ -818,6 +856,24 @@ function readCapturedLog(): string {
   return raw ? Buffer.from(raw, 'base64').toString('utf8') : '';
 }
 
+function normaliseCss(text: string): string {
+  return text.replace(/\s+/g, ' ').replace(/\s*([{},>+~])\s*/g, '$1').trim();
+}
+
+/** Every selector of the FAZ banner stylesheet that names FAZ (contains "faz"), as written. */
+async function fazBannerSelectors(href: string): Promise<string[]> {
+  const url = new URL(decodeEntities(href), WP_BASE).toString();
+  const css = (await fetchPage(url)).html.replace(/\/\*[\s\S]*?\*\//g, '');
+  const out = new Set<string>();
+  const re = /([^{}]+)\{([^{}]*)\}/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(css)) !== null) {
+    const selector = match[1].trim();
+    if (selector && !selector.startsWith('@') && /faz/i.test(selector)) out.add(selector);
+  }
+  return [...out];
+}
+
 function annotate(type: string, description: string): void {
   test.info().annotations.push({ type, description });
 }
@@ -833,26 +889,35 @@ function annotate(type: string, description: string): void {
 const THIRD_PARTY_HOST = /(?:^|\.)(?:googletagmanager\.com|google-analytics\.com|facebook\.com|facebook\.net|youtube\.com|youtube-nocookie\.com|ytimg\.com)$/i;
 const THIRD_PARTY = (url: URL): boolean => THIRD_PARTY_HOST.test(url.hostname);
 
-async function evaluateWithin<T>(page: Page, fn: () => T | Promise<T>, ms: number): Promise<{ ok: true; value: T } | { ok: false }> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<{ ok: false }>((resolve) => {
-    timer = setTimeout(() => resolve({ ok: false }), ms);
-  });
-  const evaluation = page.evaluate(fn).then((value) => ({ ok: true as const, value }));
-  evaluation.catch(() => undefined);
-  try {
-    return await Promise.race([evaluation, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
+/**
+ * The fake CDN host only exists in the PHP fixture's world. In a browser it is
+ * answered here: the control library gets a stand-in, every other path (FAZ's
+ * own assets, when faz_e2e_fp_cdn_assets moves them there) is proxied to the
+ * real site, the way a pull CDN would serve it.
+ */
+async function routeFakeCdn(context: BrowserContext): Promise<void> {
+  await context.route(
+    (url) => url.hostname === FAKE_CDN_HOST,
+    async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname.startsWith('/faz-e2e/')) {
+        await route.fulfill({ status: 200, contentType: 'application/javascript', body: 'window.__fazE2eCdnControl = true;' });
+        return;
+      }
+      const origin = new URL(WP_BASE);
+      url.protocol = origin.protocol;
+      url.host = origin.host;
+      await route.fulfill({ response: await route.fetch({ url: url.toString() }) });
+    },
+  );
 }
 
-async function assertResponsive(page: Page, label: string): Promise<void> {
-  for (let i = 0; i < 3; i += 1) {
-    const answer = await evaluateWithin(page, () => new Promise<number>((resolve) => setTimeout(() => resolve(1), 0)), 3_000);
-    expect(answer.ok, `${label}: the main thread did not answer a trivial evaluate within 3s (frozen page)`).toBe(true);
-    await page.waitForTimeout(250);
-  }
+/** A visitor context: watchdog installed before the first navigation, fake CDN answered. */
+async function visitorContext(browser: Browser): Promise<BrowserContext> {
+  const context = await browser.newContext({ baseURL: WP_BASE });
+  await installMainThreadWatchdog(context);
+  await routeFakeCdn(context);
+  return context;
 }
 
 function restoreProbeKey(base: Baseline): string {
@@ -873,7 +938,7 @@ function restoreProbeKey(base: Baseline): string {
  * and FAZ's runtime is what has to park it when the loader assigns it.
  */
 async function scrollWithoutConsent(browser: Browser, url: string, label: string): Promise<void> {
-  const context: BrowserContext = await browser.newContext({ baseURL: WP_BASE });
+  const context: BrowserContext = await visitorContext(browser);
   const blocked: string[] = [];
   try {
     await context.route(THIRD_PARTY, async (route) => {
@@ -909,7 +974,7 @@ async function scrollWithoutConsent(browser: Browser, url: string, label: string
 
 async function visitorFlow(browser: Browser, url: string, label: string, base: Baseline, expectHit = false): Promise<void> {
   const provider = restoreProbeKey(base);
-  const context: BrowserContext = await browser.newContext({ baseURL: WP_BASE });
+  const context: BrowserContext = await visitorContext(browser);
   const thirdPartyBeforeConsent: string[] = [];
   let consented = false;
   try {
@@ -929,7 +994,7 @@ async function visitorFlow(browser: Browser, url: string, label: string, base: B
       timeout: 20_000,
     });
     await page.waitForFunction(() => typeof (window as unknown as { fazcookie?: unknown }).fazcookie === 'object', undefined, { timeout: 20_000 });
-    await assertResponsive(page, `${label} (before consent)`);
+    await assertMainThreadHealthy(page, `${label} (before consent)`);
 
     const consentBefore = (await context.cookies(WP_BASE)).find((cookie) => cookie.name === 'fazcookie-consent');
     expect(consentBefore, `${label}: no consent cookie before a choice`).toBeUndefined();
@@ -960,7 +1025,7 @@ async function visitorFlow(browser: Browser, url: string, label: string, base: B
         { timeout: 20_000, message: `${label}: the blocked "${provider}" script must run once consent is given` },
       )
       .toBe(true);
-    await assertResponsive(page, `${label} (after consent)`);
+    await assertMainThreadHealthy(page, `${label} (after consent)`);
   } finally {
     await context.close();
   }
@@ -991,6 +1056,7 @@ test.beforeAll(async ({}, testInfo) => {
   labWasActive = isPluginActive(LAB_PLUGIN);
   matrixWasActive = isPluginActive(MATRIX_PLUGIN);
   probeWasActive = isPluginActive(FP_PROBE_PLUGIN);
+  cloudMockWasActive = isPluginActive(CLOUD_MOCK_PLUGIN);
   auditLabWasActive = isPluginActive('faz-e2e-audit-lab');
   settingsSnapshot = wpEval(`echo base64_encode( serialize( get_option( 'faz_settings', array() ) ) );`).trim();
   // Taken before activation: loading FlyingPress can rewrite its own option
@@ -1020,6 +1086,7 @@ test.beforeAll(async ({}, testInfo) => {
   ensureFixturePlugin(MATRIX_PLUGIN);
   ensureFixturePlugin(LAB_PLUGIN);
   ensureFixturePlugin(FP_PROBE_PLUGIN);
+  ensureFixturePlugin(CLOUD_MOCK_PLUGIN);
   ensureProviderMatrixPage();
   resetProviderMatrixState();
   matrixUrl = readProviderMatrixUrl().trim();
@@ -1035,7 +1102,12 @@ test.beforeAll(async ({}, testInfo) => {
   setOption('faz_e2e_optm_probe_page', PROVIDER_MATRIX_PAGE_SLUG);
   setOption('faz_e2e_capture_errors', 'yes');
   setOption('faz_e2e_break_faz_exclusions', BREAK_STATE);
+  setOption('faz_e2e_no_country_source', 'no');
   setOption('faz_e2e_force_country_dependent', 'no');
+  setOption('faz_e2e_fp_cdn_assets', 'no');
+  setOption('faz_e2e_fp_selfhost_extra', 'yes');
+  setOption('faz_e2e_fp_cdn_control_page', PROVIDER_MATRIX_PAGE_SLUG);
+  wpEval(`delete_option( 'faz_e2e_fp_mock_last' );`);
   // Every page this file uses, and nothing else: `wp flying-press
   // preload-cache` and the preload a MISS schedules then warm only these.
   setOption('faz_e2e_fp_preload_only', JSON.stringify([matrixUrl, ...Object.values(pageUrls)]));
@@ -1065,7 +1137,7 @@ test.afterAll(() => {
       cleanup('remove lab options and probe records', () => {
         wpEval(`
           global $wpdb;
-          foreach ( (array) json_decode( '${JSON.stringify(LAB_OPTIONS)}', true ) as $name ) { delete_option( $name ); }
+          foreach ( (array) json_decode( '${JSON.stringify([...LAB_OPTIONS, ...CLOUD_MOCK_OPTIONS])}', true ) as $name ) { delete_option( $name ); }
           $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'faz\\\\_e2e\\\\_optm\\\\_probe\\\\_%'" );
           @unlink( WP_CONTENT_DIR . '/faz-e2e-optm-php.log' );
         `);
@@ -1088,6 +1160,7 @@ test.afterAll(() => {
       if (!labWasActive && isPluginActive(LAB_PLUGIN)) cleanup('deactivate the lab fixture', () => wp(['plugin', 'deactivate', LAB_PLUGIN]));
       if (!matrixWasActive && isPluginActive(MATRIX_PLUGIN)) cleanup('deactivate the provider matrix', () => wp(['plugin', 'deactivate', MATRIX_PLUGIN]));
       if (!probeWasActive && isPluginActive(FP_PROBE_PLUGIN)) cleanup('deactivate the FlyingPress probe', () => wp(['plugin', 'deactivate', FP_PROBE_PLUGIN]));
+      if (!cloudMockWasActive && isPluginActive(CLOUD_MOCK_PLUGIN)) cleanup('deactivate the Cloud Optimizer mock', () => wp(['plugin', 'deactivate', CLOUD_MOCK_PLUGIN]));
       // Unconditional: FlyingPress's page cache serves stale HTML to whatever
       // spec runs next. Deactivated BEFORE the config restore, because every
       // load of the plugin may rewrite its own option.
@@ -1115,6 +1188,10 @@ test.afterAll(() => {
 });
 
 test.beforeEach(() => {
+  if (REQUIRE_PLUGIN) {
+    expect(exclusiveRun, `FAZ_E2E_REQUIRE_CACHE_PLUGINS=1: this file must run with --workers=1 (got ${String(configuredWorkers)})`).toBe(true);
+    expect(fpInstalled, 'FAZ_E2E_REQUIRE_CACHE_PLUGINS=1: FlyingPress (flying-press) must be installed on this environment').toBe(true);
+  }
   test.skip(
     !exclusiveRun,
     `this file was run with workers=${String(configuredWorkers)} — it activates FlyingPress and rewrites FLYING_PRESS_CONFIG, ` +
@@ -1218,11 +1295,23 @@ test.describe('FlyingPress page optimisation leaves FAZ intact', () => {
     expect(blockedScriptViolations(hit.html, base)).toEqual([]);
   });
 
+  // Could not fail before: the Cloud Optimizer answered `{}`, external_domains
+  // was empty and nothing was ever delayed as third-party. The mock now names
+  // the fake CDN and www.google.com, and the fake-CDN control script must be
+  // delayed. Whether 42728bbc goes red here depends on whether the stored
+  // whitelist puts www.google.com/recaptcha into the inline _fazConfig — test 26
+  // forces that case.
   test('08 third-party delay (method defer), HIT copy: FAZ stays live and the blocked Google tag stays text/plain', async () => {
     const base = requireBaseline();
     applyFp({ js_delay: true, js_delay_method: 'defer', js_delay_third_party: true });
     const { hit } = await fpCopies(matrixUrl);
-    annotate('third-party-delay-evidence', `${(hit.html.match(DELAYED_UI) ?? []).length} script(s) delayed until interaction on the HIT copy (depends on Cloud Optimizer external_domains)`);
+    annotate('third-party-delay-evidence', `${(hit.html.match(DELAYED_UI) ?? []).length} script(s) delayed until interaction on the HIT copy`);
+    const control = scriptTags(hit.html).find((tag) => tag.attrs.id === 'faz-e2e-cdn-control-js');
+    expect(control, 'the fake-CDN control script must be on the page').toBeDefined();
+    expect(
+      control?.attrs['data-loading-method'],
+      'positive control: the third-party delay must hold the fake-CDN control script until interaction (external_domains from the Cloud Optimizer mock)',
+    ).toBe('user-interaction');
     expect(fazHandleViolations(hit.html, base)).toEqual([]);
     expect(bootstrapOrderViolations(hit.html)).toEqual([]);
     expect(blockedScriptViolations(hit.html, base)).toEqual([]);
@@ -1272,6 +1361,19 @@ test.describe('FlyingPress page optimisation leaves FAZ intact', () => {
         ? `self-hosted: ${selfHosted.map((tag) => `${tag.attrs['data-origin-src']} (type=${tag.attrs.type ?? ''})`).join(', ')}`
         : 'FlyingPress self-hosted no script on this run (download may have failed)',
     );
+    // Positive controls, both deterministic now: FlyingPress's own list holds
+    // only library CDNs, so the mock extends flying_press_selfhost_external_domains
+    // with the fake CDN and www.googletagmanager.com and serves both downloads.
+    expect(
+      selfHosted.some((tag) => tag.attrs.id === 'faz-e2e-cdn-control-js'),
+      'positive control: the fake-CDN control library must have been self-hosted',
+    ).toBe(true);
+    const gtag = scriptTags(hit.html).find((tag) => tag.attrs['data-faz-e2e-probe'] === 'gtag');
+    expect(gtag, 'the Google tag probe must still be on the page').toBeDefined();
+    expect(gtag?.attrs['data-origin-src'] ?? '', 'the blocked Google tag must have gone through the self-host pass').toMatch(/googletagmanager\.com/i);
+    expect((gtag?.attrs.type ?? '').toLowerCase(), 'a self-hosted Google tag must still be text/plain').toBe('text/plain');
+    const gtagBaseline = base.blocked.find((entry) => entry.key === 'gtag');
+    expect(gtag?.attrs['data-faz-category'], 'the self-hosted Google tag keeps its category').toBe(gtagBaseline?.category);
     for (const tag of selfHosted) {
       if (/googletagmanager\.com/i.test(tag.attrs['data-origin-src'])) {
         expect((tag.attrs.type ?? '').toLowerCase(), 'a self-hosted Google tag must still be text/plain').toBe('text/plain');
@@ -1303,19 +1405,74 @@ test.describe('FlyingPress page optimisation leaves FAZ intact', () => {
     await scrollWithoutConsent(browser, matrixUrl, 'FlyingPress lazy_load + youtube_placeholder (HIT)');
   });
 
-  test('14 remove unused CSS (css_rucss), HIT copy: the banner stylesheet and template survive', async () => {
+  // FAILS on 42728bbc: with a non-empty used_css, CSS::load_used_css() moves
+  // EVERY <link rel=stylesheet> to data-href (FlyingPress has no exclusion
+  // there), the FAZ banner sheet included, and nothing FAZ asks the Cloud
+  // Optimizer to keep (no css_rucss_include_selectors). The banner then
+  // renders unstyled until the visitor's first interaction. Green with
+  // fix/1342c-flyingpress (either keep the FAZ sheet live, or make the used CSS
+  // carry every FAZ selector).
+  test('14 remove unused CSS (css_rucss), HIT copy: the banner sheet stays live or every FAZ selector is in the used CSS, and the banner is styled with no interaction', async ({ browser }) => {
     const base = requireBaseline();
     applyFp({ css_rucss: true });
     const { hit } = await fpCopies(matrixUrl);
-    annotate('rucss-evidence', /data-href=|flying-press-used-css|id=["']?flying-press-css/i.test(hit.html) ? 'used-CSS markup present' : 'no used-CSS markup detected (Cloud Optimizer may not have returned any)');
-    expect(bannerAssetViolations(hit.html, base)).toEqual([]);
+    const usedCss = voidTags(hit.html, 'style').find((tag) => tag.attrs.id === 'flying-press-css')?.content ?? '';
+    expect(usedCss, 'positive control: FlyingPress must inject the Cloud Optimizer used CSS (style#flying-press-css)').toContain('.e2e-rucss-marker');
+    const deferredOthers = voidTags(hit.html, 'link').filter((tag) => 'data-href' in tag.attrs && !isFazId(tag.attrs.id));
+    expect(deferredOthers.length, 'positive control: RUCSS must defer at least one non-FAZ stylesheet to data-href').toBeGreaterThan(0);
     expect(fazHandleViolations(hit.html, base)).toEqual([]);
+    const template = scriptTags(hit.html).find((tag) => tag.attrs.id === 'fazBannerTemplate');
+    expect(template?.content ?? '', 'the banner template must survive').toContain('data-faz-tag');
+    if (base.cssKind === 'link') {
+      const fazLink = voidTags(hit.html, 'link').find((tag) => tag.attrs.id === 'faz-cookie-manager-css-css');
+      const deferred = !fazLink || 'data-href' in fazLink.attrs || !fazLink.attrs.href;
+      annotate('faz-banner-sheet', deferred ? 'deferred to data-href — judged on the used CSS' : 'kept live');
+      if (deferred) {
+        const selectors = await fazBannerSelectors(base.cssHref);
+        expect(selectors.length, 'the FAZ banner stylesheet must contain FAZ selectors').toBeGreaterThan(0);
+        const used = normaliseCss(usedCss);
+        const missing = selectors.filter((selector) => !used.includes(`${normaliseCss(selector)}{`));
+        expect(missing, `the FAZ banner sheet is deferred until interaction, so all ${selectors.length} FAZ selectors must be in the used CSS`).toEqual([]);
+      }
+    } else {
+      expect(bannerAssetViolations(hit.html, base)).toEqual([]);
+    }
+
+    const context = await visitorContext(browser);
+    try {
+      const page = await context.newPage();
+      const response = await page.goto(matrixUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      expect((response?.headers()['x-flying-press-cache'] ?? '').toUpperCase(), 'the visitor must get the cached RUCSS copy').toBe('HIT');
+      await expect(page.locator('[data-faz-tag="notice"]').first(), 'banner must be in the DOM').toBeAttached({ timeout: 20_000 });
+      await expect
+        .poll(
+          () =>
+            page.evaluate(() => {
+              const el = document.querySelector('.faz-consent-container');
+              return el ? getComputedStyle(el).position : 'absent';
+            }),
+          { timeout: 10_000, message: 'with no interaction the banner container must already be styled (position: fixed from the FAZ sheet)' },
+        )
+        .toBe('fixed');
+      await assertMainThreadHealthy(page, 'FlyingPress RUCSS (HIT)');
+    } finally {
+      await context.close();
+    }
   });
 
+  // Could not fail before: lazy_render only acts on the Cloud Optimizer's
+  // content_visibility_targets, which were empty. The mock targets every
+  // div/section/article/footer outside <script> bodies, so the pass now runs
+  // (positive control) and the banner template — whose markup FlyingPress also
+  // stamps with data-uid — must come out byte-identical.
   test('15 lazy_render, HIT copy: the banner template and FAZ handles survive', async () => {
     const base = requireBaseline();
     applyFp({ lazy_render: true });
     const { hit } = await fpCopies(matrixUrl);
+    expect(hit.html, 'positive control: lazy_render must apply content-visibility to at least one element').toMatch(/content-visibility:\s*auto/);
+    const templateNow = scriptTags(hit.html).find((tag) => tag.attrs.id === 'fazBannerTemplate')?.content;
+    const templateBase = scriptTags(baselineHtml).find((tag) => tag.attrs.id === 'fazBannerTemplate')?.content;
+    expect(templateNow, 'the banner template must come out of lazy_render byte-identical').toBe(templateBase);
     expect(bannerAssetViolations(hit.html, base)).toEqual([]);
     expect(fazHandleViolations(hit.html, base)).toEqual([]);
     expect(bootstrapOrderViolations(hit.html)).toEqual([]);
@@ -1451,5 +1608,97 @@ test.describe('FlyingPress page optimisation leaves FAZ intact', () => {
     const throttle = /FAZ Cookie Manager: refused a consent record because the request was rate-limited/;
     const offending = lines.filter((line) => /PHP (?:Warning|Notice|Fatal error|Parse error)|FAZ Cookie Manager:/.test(line) && !throttle.test(line));
     expect(offending).toEqual([]);
+  });
+  // FAILS on 42728bbc: FAZ feeds its keywords only into js_delay_excludes
+  // (flying_press_apply_runtime_delay_exclusions / flying_press_exclude_own_scripts);
+  // FlyingPress's third-party pass reads js_delay_third_party_excludes, which no
+  // FAZ filter touches, and matches external_domains as a substring of the whole
+  // tag. Every FAZ <script src> on the CDN host therefore becomes
+  // data-loading-method="user-interaction": banner and runtime start on the
+  // first interaction or after FlyingPress's 10 s fallback. Green with
+  // fix/1342c-flyingpress (bridge extended to the third-party excludes, plus the
+  // flying_press_optimization:after safety net).
+  test('25 FAZ assets on a CDN host + third-party delay (method defer), HIT copy: no FAZ handle is delayed until interaction and the banner appears without one', async ({ browser }) => {
+    const base = requireBaseline();
+    setOption('faz_e2e_fp_cdn_assets', 'yes');
+    try {
+      applyFp({ js_delay: true, js_delay_method: 'defer', js_delay_third_party: true });
+      const { miss, preload, hit } = await fpCopies(matrixUrl);
+      const runtimeMiss = fazScriptsById(miss.html).get('faz-cookie-manager-js');
+      expect(runtimeMiss?.attrs.src ?? '', 'precondition: script.min.js must be served from the fake CDN host').toContain(FAKE_CDN_HOST);
+      const control = scriptTags(hit.html).find((tag) => tag.attrs.id === 'faz-e2e-cdn-control-js');
+      expect(control?.attrs['data-loading-method'], 'positive control: a non-FAZ script on the same CDN host must be delayed as third-party').toBe('user-interaction');
+      const delayed = [...fazScriptsById(hit.html)].filter(([, tag]) => 'data-loading-method' in tag.attrs).map(([id]) => id);
+      expect(delayed, 'no FAZ handle may be delayed until interaction').toEqual([]);
+      expect(fazHandleViolations(preload.html, base)).toEqual([]);
+      expect(fazHandleViolations(hit.html, base)).toEqual([]);
+      expect(bootstrapOrderViolations(hit.html)).toEqual([]);
+
+      const context = await visitorContext(browser);
+      try {
+        const page = await context.newPage();
+        const response = await page.goto(matrixUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+        expect((response?.headers()['x-flying-press-cache'] ?? '').toUpperCase(), 'the visitor must get the cached copy').toBe('HIT');
+        // 6 s: well under FlyingPress's 10 s fallback for user-interaction
+        // scripts, well over a deferred runtime on an idle page.
+        await expect(page.locator('[data-faz-tag="notice"]').first(), 'banner must appear with no interaction').toBeVisible({ timeout: 6_000 });
+        await assertMainThreadHealthy(page, 'FAZ on a CDN host (HIT)');
+      } finally {
+        await context.close();
+      }
+    } finally {
+      setOption('faz_e2e_fp_cdn_assets', 'no');
+      fpPurge();
+    }
+  });
+
+  // FAILS on 42728bbc: the whitelist pattern lands in the inline _fazConfig
+  // (_userWhitelist), the tag faz-cookie-manager-js-extra then contains
+  // "www.google.com" (an external_domains keyword), and the third-party pass
+  // delays -js-extra until interaction while script.min.js runs on time without
+  // its configuration — no banner for that page view. Green with
+  // fix/1342c-flyingpress.
+  test('26 a reCAPTCHA URL inside FAZ\'s inline config + third-party delay (method defer), HIT copy: neither -js-extra nor script.min.js is delayed and the banner appears', async ({ browser }) => {
+    const base = requireBaseline();
+    const before = wpEval(`
+      $s = get_option( 'faz_settings', array() );
+      echo base64_encode( wp_json_encode( isset( $s['script_blocking']['whitelist_patterns'] ) ? $s['script_blocking']['whitelist_patterns'] : null ) );
+    `).trim();
+    patchFazSettings(`
+      if ( ! isset( $s['script_blocking'] ) || ! is_array( $s['script_blocking'] ) ) { $s['script_blocking'] = array(); }
+      $list = ( isset( $s['script_blocking']['whitelist_patterns'] ) && is_array( $s['script_blocking']['whitelist_patterns'] ) ) ? $s['script_blocking']['whitelist_patterns'] : array();
+      if ( ! in_array( 'www.google.com/recaptcha/', $list, true ) ) { $list[] = 'www.google.com/recaptcha/'; }
+      $s['script_blocking']['whitelist_patterns'] = $list;
+    `);
+    try {
+      applyFp({ js_delay: true, js_delay_method: 'defer', js_delay_third_party: true });
+      const { miss, hit } = await fpCopies(matrixUrl);
+      const extraMiss = fazScriptsById(miss.html).get('faz-cookie-manager-js-extra');
+      expect(extraMiss?.content ?? '', 'precondition: the inline _fazConfig must name www.google.com/recaptcha').toMatch(/www\.google\.com\\?\/recaptcha/);
+      const control = scriptTags(hit.html).find((tag) => tag.attrs.id === 'faz-e2e-cdn-control-js');
+      expect(control?.attrs['data-loading-method'], 'positive control: the third-party delay must have run on this copy').toBe('user-interaction');
+      const tags = fazScriptsById(hit.html);
+      expect(tags.get('faz-cookie-manager-js-extra')?.attrs['data-loading-method'], '-js-extra (the inline _fazConfig) must not be delayed until interaction').toBeUndefined();
+      expect(tags.get('faz-cookie-manager-js')?.attrs['data-loading-method'], 'script.min.js must not be delayed until interaction').toBeUndefined();
+      expect(fazHandleViolations(hit.html, base)).toEqual([]);
+      expect(bootstrapOrderViolations(hit.html)).toEqual([]);
+
+      const context = await visitorContext(browser);
+      try {
+        const page = await context.newPage();
+        const response = await page.goto(matrixUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+        expect((response?.headers()['x-flying-press-cache'] ?? '').toUpperCase(), 'the visitor must get the cached copy').toBe('HIT');
+        await expect(page.locator('[data-faz-tag="notice"]').first(), 'banner must appear with no interaction').toBeVisible({ timeout: 6_000 });
+        await assertMainThreadHealthy(page, 'reCAPTCHA in _fazConfig (HIT)');
+      } finally {
+        await context.close();
+      }
+    } finally {
+      patchFazSettings(`
+        $prior = json_decode( base64_decode( '${before}' ), true );
+        if ( null === $prior ) { unset( $s['script_blocking']['whitelist_patterns'] ); } else { $s['script_blocking']['whitelist_patterns'] = $prior; }
+      `);
+      fpPurge();
+    }
   });
 });
