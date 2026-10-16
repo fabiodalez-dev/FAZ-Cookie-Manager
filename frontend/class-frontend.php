@@ -269,6 +269,27 @@ class Frontend {
 	 * @var bool
 	 */
 	private $bot_variance_cache_vetoed = false;
+
+	/**
+	 * Verdict of decide_visitor_state_cache_veto() for this request.
+	 *
+	 *   null         not decided (no send_headers pass for a front-end page:
+	 *                REST, CLI, unit harnesses) — the visitor's state is
+	 *                honoured as before;
+	 *   'invariant'  Cache Compatibility / the strict shell already make the
+	 *                render visitor-invariant;
+	 *   'baseline'   the visitor's state blocks exactly what a first visit
+	 *                blocks, so the render is the shareable one anyway;
+	 *   'vetoed'     the render follows the visitor's state and the response
+	 *                is kept out of every shared cache;
+	 *   'fallback'   the veto could not be installed (or was filtered off), so
+	 *                the render is the shareable one: nothing granted beyond a
+	 *                first visit, every denial still honoured.
+	 *
+	 * @var string|null
+	 */
+	private $visitor_state_veto = null;
+
 	/**
 	 * Per-request memo for is_geo_bootstrap_cache_active() (null = not yet
 	 * computed). The readiness check touches banner/ruleset storage, so every
@@ -2354,6 +2375,116 @@ class Frontend {
 	}
 
 	/**
+	 * Keep a render that follows THIS visitor's consent state out of every
+	 * shared cache, or make the render one that is safe to share.
+	 *
+	 * get_blocked_categories() reads three things from the request: the
+	 * consent cookie, Sec-GPC and the Do-Not-Sell cookie. Its output is only
+	 * visitor-invariant under Cache Compatibility Mode or the strict-shell
+	 * bootstrap, and Cache Compatibility pauses itself while Geo-Targeting is
+	 * on (the default) — while send_geo_cache_headers() vetoes the cache only
+	 * when the output varies by COUNTRY, which it cannot on a site with no
+	 * country source. So on most installs a returning visitor who had accepted
+	 * marketing, arriving on a page-cache MISS, produced a page with the
+	 * trackers server-side EXECUTABLE, the page cache stored it, and every
+	 * later visitor — first visits under GDPR included — was served those
+	 * trackers before any consent. No client code can undo a script that has
+	 * already run. The mirror case is milder but real: a Sec-GPC or Do Not Sell
+	 * MISS stored a page with the sell/share categories blocked for everyone.
+	 *
+	 * The baseline is what a first visit with no signal renders: that is the
+	 * one copy every visitor may share, because script.js releases from it
+	 * whatever the visitor's own cookie grants. Whenever the visitor's state
+	 * yields a different block set (or carries per-service decisions), the
+	 * response gets the full page-cache veto before any output. If the veto
+	 * cannot be installed — headers already sent, or a publisher who filtered
+	 * it off — the render falls back to the shareable form instead (the union
+	 * of the baseline and the visitor's own denials; see
+	 * get_blocked_categories()), the same way the crawler veto falls back to
+	 * rendering the banner.
+	 *
+	 * Net effect: cache HITs serve the baseline page to everyone and the
+	 * runtime unblocks for those who consented; MISSes from visitors whose
+	 * state changes the render are not stored.
+	 *
+	 * @param bool $already_vetoed Whether another veto already keeps this
+	 *                             response out of shared caches.
+	 * @return string The verdict stored in $visitor_state_veto.
+	 */
+	private function decide_visitor_state_cache_veto( $already_vetoed = false ) {
+		if ( null !== $this->visitor_state_veto ) {
+			return $this->visitor_state_veto;
+		}
+		if ( $this->is_cache_compatibility_enabled() || $this->is_geo_bootstrap_cache_active() ) {
+			$this->visitor_state_veto = 'invariant';
+			return $this->visitor_state_veto;
+		}
+		if ( ! $this->visitor_state_changes_render() ) {
+			$this->visitor_state_veto = 'baseline';
+			return $this->visitor_state_veto;
+		}
+		if ( $already_vetoed ) {
+			$this->visitor_state_veto = 'vetoed';
+			return $this->visitor_state_veto;
+		}
+		/**
+		 * Whether a render that follows the visitor's consent state may be kept
+		 * out of shared page caches.
+		 *
+		 * Returning false keeps every page cacheable and makes the server render
+		 * the shareable form for every visitor instead: nothing granted beyond
+		 * a first visit is released server-side (script.js releases it from the
+		 * consent cookie), every denial is still honoured.
+		 *
+		 * @since 1.34.2
+		 * @param bool $veto Default true.
+		 */
+		$wanted = (bool) apply_filters( 'faz_veto_cache_for_visitor_state', true );
+		$this->visitor_state_veto = ( $wanted && $this->send_page_cache_veto( 'FAZ Cookie Manager visitor-specific consent render' ) )
+			? 'vetoed'
+			: 'fallback';
+		return $this->visitor_state_veto;
+	}
+
+	/**
+	 * Whether the visitor's consent cookie, Sec-GPC or Do-Not-Sell cookie makes
+	 * the server-side blocking differ from a first visit.
+	 *
+	 * Compared on the computed block set, not on the presence of a cookie: a
+	 * GDPR visitor who rejected everything, or a GPC signal under an opt-in
+	 * law (sell/share already blocked), renders exactly the baseline, and that
+	 * page may be cached like any other.
+	 *
+	 * @return bool
+	 */
+	private function visitor_state_changes_render() {
+		$consent = $this->get_scoped_valid_consent_cookie();
+		$gpc     = $this->request_has_gpc();
+		$dnsmpi  = $this->request_has_dnsmpi();
+		if ( '' === $consent && ! $gpc && ! $dnsmpi ) {
+			return false;
+		}
+		$categories = \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items();
+		$unused     = array();
+		$actual     = $this->compute_blocked_categories( $categories, $consent, $gpc, $dnsmpi, $unused );
+		$baseline   = $this->compute_blocked_categories( $categories, '', false, false, $unused );
+		if ( $actual !== $baseline ) {
+			return true;
+		}
+		// svc.* decisions move individual embeds across the category verdict
+		// (a YES releases one in a blocked category, a NO holds one in an
+		// allowed category). A first visit has none.
+		if ( '' !== $consent ) {
+			$settings = $this->get_faz_settings();
+			if ( ! empty( $settings['banner_control']['per_service_consent'] )
+				&& preg_match( '/(?:^|,)svc\.[a-z0-9_-]+:(?:yes|no)(?=,|$)/', $consent ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Whether the banner may actually be withheld from this crawler.
 	 *
 	 * Suppression and the cache veto are one decision, not two: the render may
@@ -2544,6 +2675,12 @@ class Frontend {
 		if ( $this->is_bot_variant_render() ) {
 			return false;
 		}
+		// The page follows this visitor's consent state (decided on
+		// send_headers, see decide_visitor_state_cache_veto()). A 'fallback'
+		// verdict rendered the shareable form, which FlyingPress may keep.
+		if ( 'vetoed' === $this->visitor_state_veto ) {
+			return false;
+		}
 		if ( $this->is_country_dependent_output() ) {
 			// The jurisdiction bootstrap renders one strict, visitor-invariant
 			// document and resolves the live law through a no-store REST request
@@ -2588,22 +2725,24 @@ class Frontend {
 		// freezes for everyone. Resolving it on `send_headers` also means the
 		// verdict is already memoised by the time wp_head asks.
 		$this->bot_suppression_applies();
-		if ( ! $this->is_country_dependent_output() || headers_sent() ) {
-			return;
-		}
 
 		// The strict shell is identical for every visitor and contains no
 		// executable optional resources. Do not emit Vary/Set-Cookie/no-cache:
 		// every compliant page cache and CDN should share this one document.
-		if ( $this->is_geo_bootstrap_cache_active() ) {
-			return;
+		$country_vetoed = false;
+		if ( $this->is_country_dependent_output() && ! headers_sent() && ! $this->is_geo_bootstrap_cache_active() ) {
+			$this->maybe_disable_country_page_cache();
+			$country_vetoed = $this->send_page_cache_veto(
+				'FAZ country-dependent banner',
+				apply_filters( 'faz_trust_cf_ipcountry_header', false ) ? 'CF-IPCountry' : ''
+			);
 		}
 
-		$this->maybe_disable_country_page_cache();
-		$this->send_page_cache_veto(
-			'FAZ country-dependent banner',
-			apply_filters( 'faz_trust_cf_ipcountry_header', false ) ? 'CF-IPCountry' : ''
-		);
+		// Then the visitor-state dimension, which exists on every install —
+		// including the ones with no country source, where nothing above fires.
+		// Decided here, before any output, so the render that follows
+		// (get_blocked_categories(), get_service_consent()) reads one verdict.
+		$this->decide_visitor_state_cache_veto( $country_vetoed || $this->bot_variance_cache_vetoed );
 	}
 
 	/**
@@ -7293,7 +7432,55 @@ class Frontend {
 			return $blocked;
 		}
 
-		$consent = $this->get_scoped_valid_consent_cookie();
+		$signals = array();
+		$blocked = $this->compute_blocked_categories(
+			$categories,
+			$this->get_scoped_valid_consent_cookie(),
+			$this->request_has_gpc(),
+			$this->request_has_dnsmpi(),
+			$signals
+		);
+		$this->signal_blocked_categories = $signals;
+
+		// The visitor's state could not be kept out of the shared cache (see
+		// decide_visitor_state_cache_veto()), so this render may be stored and
+		// replayed to everyone: block whatever a first visit blocks AND whatever
+		// this visitor's own state blocks. Their denials (a CCPA opt-out, GPC,
+		// Do Not Sell, a ruleset-granted category they switched off) are still
+		// enforced on their page; their grants beyond the first-visit default
+		// are not, and script.js releases those client-side from the consent
+		// cookie, exactly as it does on a Cache Compatibility page. A replay of
+		// this copy can therefore only over-block, which the client undoes for
+		// every visitor — never under-block, which nothing can undo.
+		if ( 'fallback' === $this->visitor_state_veto ) {
+			$unused  = array();
+			$blocked = $this->union_blocked_categories(
+				$categories,
+				$blocked,
+				$this->compute_blocked_categories( $categories, '', false, false, $unused )
+			);
+		}
+		$this->blocked_categories_cache = $blocked;
+		return $blocked;
+	}
+
+	/**
+	 * The blocked-category set for one visitor state, with no memo and no
+	 * cache decision: get_blocked_categories() asks it for the visitor's real
+	 * state, decide_visitor_state_cache_veto() also asks it for the first-visit
+	 * baseline the two are compared against.
+	 *
+	 * @param array  $categories    Category rows from Category_Controller.
+	 * @param string $consent       Valid, scoped consent cookie, or ''.
+	 * @param bool   $gpc_optout    Whether the request carries Sec-GPC: 1.
+	 * @param bool   $dnsmpi_optout Whether the Do-Not-Sell cookie is set.
+	 * @param array  $signals       Out: slug => 'gpc'|'dnsmpi' for categories a
+	 *                              signal (not the cookie) blocked.
+	 * @return array Slugs of blocked categories, in catalogue order.
+	 */
+	private function compute_blocked_categories( $categories, $consent, $gpc_optout, $dnsmpi_optout, &$signals ) {
+		$blocked = array();
+		$signals = array();
 
 		// CCPA/CPRA is an OPT-OUT regime: personal data may be sold/shared — and
 		// the corresponding scripts may run — UNTIL the visitor exercises the
@@ -7326,9 +7513,7 @@ class Frontend {
 		// including when a prior consent cookie grants them. GPC is a visitor
 		// signal, not a publisher-configurable preference, and therefore is never
 		// gated on the banner toggle or binary law.
-		$gpc_header_on = isset( $_SERVER['HTTP_SEC_GPC'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
-		$gpc_optout = $gpc_header_on;
+		// (Read by request_has_gpc().)
 
 		// Standalone "Do Not Sell or Share My Personal Information" opt-out: the
 		// [faz_do_not_sell] form sets the `fazcookie-dnsmpi` cookie. That cookie
@@ -7342,8 +7527,7 @@ class Frontend {
 		// whenever it is present covers that mode too; under a pure opt-in law
 		// the sell/share categories are already blocked, so this is a no-op
 		// there.
-		$dnsmpi_optout = isset( $_COOKIE['fazcookie-dnsmpi'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+		// (Read by request_has_dnsmpi().)
 
 		foreach ( $categories as $cat_data ) {
 			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data );
@@ -7355,12 +7539,12 @@ class Frontend {
 			// overriding any consent-cookie value (mirrors the GPC override).
 			if ( $dnsmpi_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
 				$blocked[] = $slug;
-				$this->signal_blocked_categories[ $slug ] = 'dnsmpi';
+				$signals[ $slug ] = 'dnsmpi';
 				continue;
 			}
 			if ( $gpc_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
 				$blocked[] = $slug;
-				$this->signal_blocked_categories[ $slug ] = 'gpc';
+				$signals[ $slug ] = 'gpc';
 				continue;
 			}
 			if ( empty( $consent ) ) {
@@ -7404,8 +7588,46 @@ class Frontend {
 				}
 			}
 		}
-		$this->blocked_categories_cache = $blocked;
 		return $blocked;
+	}
+
+	/**
+	 * Union of two blocked-category lists, in catalogue order.
+	 *
+	 * @param array $categories Category rows.
+	 * @param array $first      Slugs.
+	 * @param array $second     Slugs.
+	 * @return array
+	 */
+	private function union_blocked_categories( $categories, $first, $second ) {
+		$union = array();
+		foreach ( $categories as $cat_data ) {
+			$slug = ( new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data ) )->get_slug();
+			if ( in_array( $slug, $first, true ) || in_array( $slug, $second, true ) ) {
+				$union[] = $slug;
+			}
+		}
+		return $union;
+	}
+
+	/**
+	 * Whether the request carries a Global Privacy Control signal (Sec-GPC: 1).
+	 *
+	 * @return bool
+	 */
+	private function request_has_gpc() {
+		return isset( $_SERVER['HTTP_SEC_GPC'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
+	}
+
+	/**
+	 * Whether the visitor submitted the Do Not Sell or Share form.
+	 *
+	 * @return bool
+	 */
+	private function request_has_dnsmpi() {
+		return isset( $_COOKIE['fazcookie-dnsmpi'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
 	}
 
 	/**
@@ -7460,6 +7682,12 @@ class Frontend {
 				if ( 'yes' === $match[2] && isset( $signal_blocked_services[ $match[1] ] ) ) {
 					continue;
 				}
+				// Shareable fallback render (see get_blocked_categories()): an
+				// explicit svc.* NO still blocks this visitor's embed, a YES is
+				// left for script.js to release.
+				if ( 'yes' === $match[2] && 'fallback' === $this->visitor_state_veto ) {
+					continue;
+				}
 				$this->service_consent_cache[ $match[1] ] = $match[2];
 			}
 		}
@@ -7476,10 +7704,8 @@ class Frontend {
 	 * @return array<string,bool>
 	 */
 	private function get_signal_blocked_services( $consent ) {
-		$gpc_header = isset( $_SERVER['HTTP_SEC_GPC'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
-		$dnsmpi_req = isset( $_COOKIE['fazcookie-dnsmpi'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+		$gpc_header     = $this->request_has_gpc();
+		$dnsmpi_req     = $this->request_has_dnsmpi();
 		$signal_blocked = array();
 		if ( $gpc_header || $dnsmpi_req ) {
 			$this->get_blocked_categories();
