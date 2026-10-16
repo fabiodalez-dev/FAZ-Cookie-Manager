@@ -126,7 +126,10 @@ function run() {
     eq('a per-vendor LI switch is rendered for the LI vendor', !!d.getElementById('fazVendorLISwitch755'), true);
     eq('no per-vendor LI switch for a vendor without LI purposes', !!d.getElementById('fazVendorLISwitch12'), false);
     const p2 = d.getElementById('fazPurposeLISwitch2');
-    eq('a fresh visitor sees LI established (switch on) — TCF default', p2 ? p2.checked : null, true);
+    // Never pre-ticked: a switch that arrives on decides for the visitor.
+    eq('a fresh visitor sees the LI switch off (not pre-ticked)', p2 ? p2.checked : null, false);
+    const v755 = d.getElementById('fazVendorLISwitch755');
+    eq('and the per-vendor LI switch off as well', v755 ? v755.checked : null, false);
     eq('the purpose switch is labelled as a legitimate-interest control',
       p2 ? /legitimate interest/i.test(p2.getAttribute('aria-label') || '') : false, true);
     eq('the vendor consent switch is still there', !!d.getElementById('fazVendorSwitch755'), true);
@@ -156,16 +159,31 @@ function run() {
   }
 
   // 4. Custom save reads the switches: object to purpose 2, keep the rest.
+  //    The visitor turns on what they keep; nothing arrives on.
   {
     const w = boot();
     w._fazRenderVendorSection();
     w.document.getElementById('fazVendorSwitch755').checked = true;
     w.document.getElementById('fazPurposeLISwitch2').checked = false;
+    w.document.getElementById('fazPurposeLISwitch7').checked = true;
+    w.document.getElementById('fazVendorLISwitch755').checked = true;
     w._fazSaveVendorConsent('custom');
     const li = readLI(w);
     eq('custom save: purpose 2 objection is recorded', li && li.p2, 'no');
     eq('custom save: purpose 7 stays established', li && li.p7, 'yes');
     eq('custom save: vendor LI stays established', li !== null && li['755'] !== 'no', true);
+  }
+
+  // 4b. Saving without touching the switches records an objection: the
+  //     default the visitor saw (off) is what they saved.
+  {
+    const w = boot();
+    w._fazRenderVendorSection();
+    w.document.getElementById('fazVendorSwitch755').checked = true;
+    w._fazSaveVendorConsent('custom');
+    const li = readLI(w);
+    eq('untouched custom save: purpose 2 is objected', li && li.p2, 'no');
+    eq('untouched custom save: vendor LI is objected', li && li['755'], 'no');
   }
 
   // 5. A vendor switched OFF loses LI as well, whatever its LI switch says.

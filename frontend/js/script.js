@@ -9359,9 +9359,10 @@ function _fazRenderVendorSection() {
     const existingLI = _fazReadVendorLI();
     const liDefault = _fazLIDefaultEstablished();
     // Whether legitimate interest is still established for a purpose or a
-    // vendor: the record decides when there is one; otherwise the TCF default
-    // (established) — except after a legacy Reject All, which is an objection
-    // to all of it (see _fazLIDefaultEstablished and tcf-cmp.js).
+    // vendor: the record decides when there is one; otherwise the default of
+    // _fazLIDefaultEstablished() — off before any action (never pre-ticked),
+    // and for an earlier choice made before the switches existed, whatever
+    // that choice signalled.
     const liEstablished = function (map, id) {
         if (existingLI) return !map || map[id] !== false;
         return liDefault;
@@ -9628,17 +9629,25 @@ function _fazReadVendorLI() {
 /**
  * Default state of the legitimate-interest switches when no record exists.
  *
- * Under TCF, legitimate interest is established until the visitor objects, so
- * a visitor who has not acted yet sees the switches on. A visitor who already
- * acted but has no record made that choice before the switches existed; when
- * that choice granted nothing beyond strictly-necessary — Reject All — it is
- * read as an objection to everything, which is the EDPB/CNIL reading and the
- * one tcf-cmp.js applies to the signal. Anything else keeps the default.
+ * A visitor who has not acted yet sees the switches OFF. TCF treats legitimate
+ * interest as established until the visitor objects, but a switch that arrives
+ * already on is a pre-ticked box to the visitor and to every regulator that
+ * reads the screen (EDPB 03/2022 on deceptive patterns, Garante 2021): the
+ * preference centre must not decide for them. Nothing is signalled before an
+ * action anyway; the first action decides — Accept All establishes every
+ * legitimate interest, Reject All objects to all of it, and saving the
+ * preference centre records exactly what the switches show.
+ *
+ * A visitor who already acted but has no record made that choice before the
+ * switches existed; when that choice granted nothing beyond strictly-necessary
+ * — Reject All — it is read as an objection to everything, which is the
+ * EDPB/CNIL reading and the one tcf-cmp.js applies to the signal. Any other
+ * earlier choice keeps legitimate interest established, as it was signalled.
  *
  * @return {boolean} true = established (switch on).
  */
 function _fazLIDefaultEstablished() {
-    if (ref._fazGetFromStore('action') !== 'yes' || ref._fazGetFromStore('undecided') === '1') return true;
+    if (ref._fazGetFromStore('action') !== 'yes' || ref._fazGetFromStore('undecided') === '1') return false;
     const categories = _fazStore._categories || [];
     for (let i = 0; i < categories.length; i++) {
         const category = categories[i];
