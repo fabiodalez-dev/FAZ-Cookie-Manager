@@ -65,7 +65,11 @@
     // optimiser deferred this inline script past it. Arming now would put
     // these interceptors on top of the runtime's gates, release at once as if
     // the runtime were missing, and stay that way for the page view.
+    // A consent store on window.fazcookie is the same fact for a runtime that
+    // predates this file: it never sets _fazRuntimeStarted, but it creates
+    // that Map as its first act, so finding one means it has already run.
     if (w._fazBootstrap || w._fazRuntimeStarted || !w._fazConfig || !w._fazConfig._block) return;
+    if (w.fazcookie && w.fazcookie._fazConsentStore) return;
     var queue = [], undo = [], scripts = [], pending = true, handoffs = [], staged = new WeakMap();
     // The fuse. Every held operation is a closure kept alive until the
     // handoff, and nothing about a page bounds how many it makes: a loop that
@@ -2851,6 +2855,100 @@
     // that point means the runtime is not coming.
     if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', releaseSafely);
     else Promise.resolve().then(releaseSafely);
+
+    // A runtime from before this file — 1.34.0 and older — never calls
+    // start() or finish(). A page cache serving that bundle under current
+    // markup is not hypothetical: LiteSpeed's "Remove Query Strings" strips
+    // the ?ver= that is the only cache buster script.min.js has. Such a
+    // runtime installed its gates ON TOP of this file's wrappers, its init ran
+    // while this file was still pending, and _fazRenderBanner() — written as
+    // `while (body.firstChild) fragment.appendChild(body.firstChild)` — never
+    // ended. The held-insertion fix above makes that loop finish; this makes
+    // the old runtime work: it is recognised the moment it creates its
+    // consent store, which every version does as its first act once it has a
+    // configuration (`fazcookie._fazConsentStore = new Map()`), and the
+    // bootstrap steps aside exactly as start() would have it step aside —
+    // natives back BEFORE the runtime installs its gates, then the held queue
+    // drained, a microtask later, once the runtime has finished evaluating and
+    // its gates are in place. What that runtime does from there is what it
+    // did before the bootstrap existed.
+    //
+    // The store is the signal, not window.fazcookie itself: a runtime without
+    // a configuration creates the object and stops, and that one must leave
+    // the bootstrap in charge (the static-config failure path in script.js).
+    var adopting = false;
+    function adoptStale() {
+        if (!pending || adopting) return;
+        adopting = true;
+        w.console.warn('[FAZ Cookie Manager] A consent runtime older than this page is running: it predates the '
+            + 'bootstrap handoff, so a page cache or optimiser is serving a stale frontend/js/script.min.js (a '
+            + '"remove query strings" option drops the ?ver= cache buster). The bootstrap hands enforcement to that '
+            + 'runtime. Purge the page and JS caches so the current runtime is served.');
+        w._fazBootstrap.start();
+        Promise.resolve().then(function () { if (pending) w._fazBootstrap.finish(stalePolicy()); });
+    }
+    // The handoff policy, built from what an old runtime exposes. Its
+    // functions are top-level declarations in a classic script, so they are
+    // globals once it has evaluated; each is used only if it is there, and a
+    // missing matcher leaves `url` out — which makes the backstop keep what
+    // it parked (restored by that runtime's own pass, on consent) rather than
+    // hand it back unjudged.
+    function stalePolicy() {
+        var fn = function (name) { return typeof w[name] === 'function' ? w[name] : null; };
+        var parkNode = fn('_fazParkResourceElementIfBlocked');
+        var blocks = fn('_fazShouldBlockProvider');
+        var listed = fn('_fazIsUserWhitelisted');
+        var category = fn('_fazImgCategory');
+        var policy = {
+            stale: true,
+            script: function () {},
+            node: function (el) {
+                if (!parkNode || tagKey(el) === 'SCRIPT') return;
+                try { parkNode(el); } catch (e) { /* that runtime's own observer still sees the insertion */ }
+            }
+        };
+        if (blocks) policy.url = function (url) { return !(listed && listed(String(url))) && !!blocks(String(url)); };
+        if (category) policy.category = function (url) { return category(String(url)); };
+        return policy;
+    }
+    (function () {
+        var own = Object.getOwnPropertyDescriptor(w, 'fazcookie');
+        // Someone else's accessor, or a `var fazcookie` (not configurable):
+        // not ours to wrap. The stale case then goes unrecognised and falls
+        // back to the safety release, which the fixes above keep bounded.
+        if (own && (!own.configurable || own.get || own.set)) return;
+        var value = own ? own.value : undefined;
+        var armed = [];
+        function arm(obj) {
+            if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) return;
+            if (Object.prototype.hasOwnProperty.call(obj, '_fazConsentStore')) return;
+            try {
+                Object.defineProperty(obj, '_fazConsentStore', {
+                    configurable: true, enumerable: false,
+                    get: function () { return undefined; },
+                    set: function (store) {
+                        Object.defineProperty(obj, '_fazConsentStore', { configurable: true, enumerable: true, writable: true, value: store });
+                        adoptStale();
+                    }
+                });
+                armed.push(obj);
+            } catch (e) { /* a frozen object: nothing will be stored on it either */ }
+        }
+        Object.defineProperty(w, 'fazcookie', {
+            configurable: true, enumerable: own ? own.enumerable : true,
+            get: function () { return value; },
+            set: function (next) { value = next; arm(next); }
+        });
+        arm(value);
+        undo.push(function () {
+            armed.forEach(function (obj) {
+                var trap = Object.getOwnPropertyDescriptor(obj, '_fazConsentStore');
+                if (trap && trap.get) delete obj._fazConsentStore;
+            });
+            if (own || value !== undefined) Object.defineProperty(w, 'fazcookie', { configurable: true, enumerable: true, writable: true, value: value });
+            else delete w.fazcookie;
+        });
+    })();
 
     w._fazBootstrap = {
         start: function () {

@@ -24,7 +24,10 @@
  *      removeChild out of a <style>, on the hold and on the safety release;
  *   c. the fuse: the queue never grows past its limit, and on the safety
  *      release created scripts are no longer retained;
- *   d. a namespace name (xmlns) is not a request.
+ *   d. a namespace name (xmlns) is not a request;
+ *   e. the real 1.34.0 runtime under this bootstrap: no loop, banner mounted
+ *      (git tag v1.34.0; reported as SKIPPED where the tag is not fetched), and
+ *      the same contract against a minimal stand-in that always runs.
  *
  * Every loop below is bounded by a counter, so the unfixed code FAILS here
  * instead of hanging the runner. Point FAZ_BOOTSTRAP_UNDER_TEST at another
@@ -35,6 +38,7 @@
 
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -58,6 +62,13 @@ function eq(label, actual, expected) {
   }
 }
 function ok(label, cond) { eq(label, !!cond, true); }
+
+// A render that loops is stopped by guardFragmentAppends() below with a throw
+// inside a microtask; recorded here so it fails its case instead of ending
+// the run.
+const unhandled = [];
+process.on('unhandledRejection', (error) => { unhandled.push(error); });
+const looped = () => unhandled.some((e) => /looped/.test(String(e && e.message)));
 
 const SITE = 'http://site.test/';
 const MAX = 200; // far more turns than any loop here needs; reaching it is the bug
@@ -398,6 +409,119 @@ await scenario(async () => {
   ok('an SVG that only names its namespaces is applied on the safety release', String(nativeGetAttribute.call(icon, 'srcdoc') || '').indexOf('<svg') === 0);
   eq('one that also names a third party stays parked', nativeGetAttribute.call(tracked, 'srcdoc'), null);
   eq('and an attribute-shaped string outside a tag hides nothing', nativeGetAttribute.call(trick, 'srcdoc'), null);
+});
+
+console.log('\ne. a runtime that predates the handoff');
+
+// The contract, in the shape every runtime before 1.34.1 has: it creates its
+// consent store, installs its own gates over whatever Node.prototype holds,
+// and renders the banner from a microtask — never calling start()/finish().
+const STALE_STAND_IN = `
+window.fazcookie = window.fazcookie || {};
+var ref = window.fazcookie;
+ref._fazConsentStore = new Map();
+(function () {
+  var below = Node.prototype.appendChild;
+  window.__staleBelow = below;
+  Node.prototype.appendChild = function () { window.__staleGate = (window.__staleGate || 0) + 1; return below.apply(this, arguments); };
+})();
+function _fazRenderBanner() {
+  var template = document.getElementById('fazBannerTemplate');
+  var doc = new DOMParser().parseFromString(template.innerHTML, 'text/html');
+  var fragment = document.createDocumentFragment();
+  while (doc.body.firstChild) fragment.appendChild(doc.body.firstChild);
+  document.body.insertBefore(fragment, document.body.firstChild);
+}
+Promise.resolve().then(_fazRenderBanner);
+`;
+const BANNER = '<div class="faz-consent-container" id="faz-consent"><div class="faz-consent-bar" data-faz-tag="notice"><img class="faz-logo" src="https://third.example/logo.png" alt=""><p data-faz-tag="title">We value your privacy</p><button data-faz-tag="accept-button">Accept</button></div></div>';
+
+// A loop guard that survives the bootstrap stepping aside: an OWN property on
+// DocumentFragment.prototype, which start() does not know about, delegating to
+// whatever Node.prototype holds at the time.
+function guardFragmentAppends(window) {
+  const counter = { calls: 0 };
+  Object.defineProperty(window.DocumentFragment.prototype, 'appendChild', {
+    configurable: true, writable: true,
+    value: function () {
+      counter.calls += 1;
+      if (counter.calls > 1000) throw new Error('fragment.appendChild looped');
+      return window.Node.prototype.appendChild.apply(this, arguments);
+    },
+  });
+  return counter;
+}
+
+await scenario(async () => {
+  const page = boot({ body: `<template id="fazBannerTemplate">${BANNER}</template><p id="content">content</p>` });
+  const { window, document, warnings, fetched } = page;
+  const wrapper = window.Node.prototype.appendChild;
+  window.fetch(SITE + 'wp-json/cart'); // held during the download
+  const counter = guardFragmentAppends(window);
+  page.setReady('interactive'); // a deferred runtime runs after parsing
+  let thrown = '';
+  try { window.eval(STALE_STAND_IN); } catch (e) { thrown = e.message; }
+  for (let i = 0; i < 5; i += 1) await new Promise((r) => setTimeout(r, 0));
+  eq('stand-in: evaluates without error', thrown, '');
+  ok('stand-in: the banner render did not loop', counter.calls < 1000 && !looped());
+  eq('stand-in: the banner is mounted at the top of the page', document.body.firstElementChild && document.body.firstElementChild.id, 'faz-consent');
+  ok('stand-in: its gate was installed over the NATIVE, not over the bootstrap wrapper', window.__staleBelow !== wrapper);
+  ok('stand-in: the hand-over is reported', warnings.some((l) => l.indexOf('older than this page') !== -1));
+  ok('stand-in: what the bootstrap held during the download is released', fetched.indexOf(SITE + 'wp-json/cart') !== -1);
+  window._fazBootstrap.finish({ script() {}, node() {}, url() { return false; } });
+  ok('stand-in: the bootstrap is fully handed over (a later finish is a repeat)', warnings.some((l) => l.indexOf('already drained') !== -1));
+});
+
+await scenario(async () => {
+  // A runtime with no configuration creates the object and stops; that is
+  // the one the bootstrap must keep protecting the page from.
+  const { window, nativeGetAttribute, warnings } = boot();
+  window.eval('window.fazcookie = window.fazcookie || {};');
+  await new Promise((r) => setTimeout(r, 0));
+  ok('a store-less runtime is not handed the page', !warnings.some((l) => l.indexOf('older than this page') !== -1));
+  const img = window.document.createElement('img');
+  img.src = 'https://tracker.test/still-held.gif';
+  eq('and resources are still held', nativeGetAttribute.call(img, 'src'), null);
+});
+
+await scenario(async () => {
+  let stale = null;
+  try {
+    stale = execFileSync('git', ['show', 'v1.34.0:frontend/js/script.js'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 });
+  } catch (e) { stale = null; }
+  if (!stale) {
+    skipped += 1;
+    console.log('  \x1b[33mSKIP\x1b[0m the real 1.34.0 runtime: tag v1.34.0 is not in this clone (git fetch --tags); the stand-in above covers the contract');
+  } else {
+    const page = boot({ body: `<template id="fazBannerTemplate">${BANNER}</template><p id="content">content</p>` });
+    const { window, document, warnings } = page;
+    Object.assign(window._fazConfig, {
+      _block: '1', _language: 'en', _defaultLanguage: 'en', _availableLanguages: ['en'], _languageMap: {}, _browserDetect: false,
+      _activeLaw: 'gdpr', _bannerSlug: 'gdpr', _expiry: 180, _consentRevision: 1, _i18n: {}, _tags: [], _shortCodes: [],
+      _bannerConfig: {
+        settings: { applicableLaw: 'gdpr', type: 'box', preferenceCenterType: 'popup', position: 'bottom-left' },
+        behaviours: { reloadBannerOnAccept: false },
+        config: { revisitConsent: { status: false }, categoryPreview: { status: false } },
+      },
+      _categories: [
+        { slug: 'necessary', isNecessary: true, defaultConsent: { gdpr: true, ccpa: true }, cookies: [] },
+        { slug: 'marketing', isNecessary: false, defaultConsent: { gdpr: false, ccpa: false }, cookies: [] },
+      ],
+      _services: [], _providersToBlock: [], _userWhitelist: [], _serviceCatalogue: {},
+      _perServiceConsent: false, _perCookieConsent: false,
+    });
+    const counter = guardFragmentAppends(window);
+    page.setReady('interactive');
+    let thrown = '';
+    try { window.eval(stale); } catch (e) { thrown = e.message; }
+    for (let i = 0; i < 10; i += 1) await new Promise((r) => setTimeout(r, 0));
+    eq('1.34.0: evaluates without error', thrown, '');
+    ok('1.34.0: _fazRenderBanner() did not loop', counter.calls < 1000 && !looped());
+    eq('1.34.0: the banner is mounted at the top of the page', document.body.firstElementChild && document.body.firstElementChild.id, 'faz-consent');
+    ok('1.34.0: with its logo in the document', !!document.querySelector('#faz-consent img.faz-logo'));
+    ok('1.34.0: the hand-over is reported', warnings.some((l) => l.indexOf('older than this page') !== -1));
+    ok('1.34.0: and it is not mistaken for a missing runtime', document.documentElement.className.indexOf('faz-consent-runtime-missing') === -1);
+  }
 });
 
 console.log('');
