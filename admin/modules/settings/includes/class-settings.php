@@ -498,12 +498,29 @@ class Settings extends Store {
 		$result = $gvl->download();
 		if ( empty( $result['success'] ) ) {
 			error_log( 'FAZ GVL bootstrap: download failed - ' . ( isset( $result['message'] ) ? $result['message'] : '' ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		}
+		// A zero version means nothing was stored. A non-zero one with success
+		// false means the list is in the option but the copy on disk failed:
+		// has_data() is true from now on and the CMP activates, so that case
+		// continues like a success.
+		if ( empty( $result['version'] ) ) {
 			return;
 		}
 		$lang = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
 		if ( 'en' !== $lang ) {
 			$gvl->download_purposes( $lang );
 		}
+		// Every page rendered since TCF was switched on was rendered without the
+		// CMP: the frontend gates tcf-cmp.js, the __tcfapi stub and the vendor
+		// data on has_data(). A page cache that stored one of those pages keeps
+		// serving it with no CMP until it is purged, which on a long TTL means
+		// TC strings never reach the ad stack. Drop the stored banner template
+		// too, as every other GVL write path does: download() prunes the vendor
+		// selection against the new list.
+		if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+			faz_clear_banner_template_cache();
+		}
+		do_action( 'faz_purge_page_cache' );
 	}
 
 	/**

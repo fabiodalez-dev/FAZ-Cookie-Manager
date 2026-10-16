@@ -46,8 +46,13 @@ namespace FazCookie\Includes {
 		public function has_data() {
 			return self::$has_data;
 		}
+		public static $result = null;
 		public function download() {
 			self::$downloads++;
+			if ( is_array( self::$result ) ) {
+				self::$has_data = ! empty( self::$result['version'] );
+				return self::$result;
+			}
 			self::$has_data = true;
 			return array( 'success' => true, 'message' => 'ok', 'version' => 180, 'vendor_count' => 1 );
 		}
@@ -59,6 +64,9 @@ namespace FazCookie\Includes {
 			self::$has_data  = $has_data;
 			self::$downloads = 0;
 			self::$purposes  = array();
+			self::$result    = null;
+			$GLOBALS['faz_test_actions']         = array();
+			$GLOBALS['faz_test_template_clears'] = 0;
 		}
 	}
 }
@@ -75,7 +83,15 @@ namespace {
 		$GLOBALS['faz_test_options'][ $name ] = $value;
 		return true;
 	}
-	function do_action() {}
+	$GLOBALS['faz_test_actions']         = array();
+	$GLOBALS['faz_test_template_clears'] = 0;
+	function do_action( $hook ) {
+		$GLOBALS['faz_test_actions'][] = $hook;
+	}
+	function faz_clear_banner_template_cache() {
+		++$GLOBALS['faz_test_template_clears'];
+	}
+	ini_set( 'error_log', '/dev/null' ); // phpcs:ignore WordPress.PHP.IniSet.Risky
 	function apply_filters( $tag, $value ) {
 		return $value;
 	}
@@ -169,9 +185,27 @@ namespace {
 	Settings::run_gvl_bootstrap();
 	assert_eq( Gvl::$downloads, 1, 'the event downloads the GVL once' );
 	assert_eq( Gvl::$purposes, array( 'it' ), 'and the purpose translations for the default language come with it' );
+	// Pages cached between the switch and this event were rendered without the
+	// CMP (the frontend gates it on has_data()); they keep shipping no CMP and
+	// no __tcfapi until the page caches are told the list has arrived.
+	assert_eq( in_array( 'faz_purge_page_cache', $GLOBALS['faz_test_actions'], true ), true, 'a successful download purges the page caches' );
+	assert_eq( $GLOBALS['faz_test_template_clears'], 1, 'and drops the stored banner template' );
 
+	$GLOBALS['faz_test_actions'] = array();
 	Settings::run_gvl_bootstrap();
 	assert_eq( Gvl::$downloads, 1, 'a second run finds the list stored and downloads nothing' );
+	assert_eq( $GLOBALS['faz_test_actions'], array(), 'and purges nothing' );
+
+	faz_flip_iab( false, true, false );
+	Gvl::$result = array( 'success' => false, 'message' => 'HTTP 503 from IAB', 'version' => 0, 'vendor_count' => 0 );
+	Settings::run_gvl_bootstrap();
+	assert_eq( in_array( 'faz_purge_page_cache', $GLOBALS['faz_test_actions'], true ), false, 'a failed download purges nothing' );
+	assert_eq( $GLOBALS['faz_test_template_clears'], 0, 'and keeps the banner template' );
+
+	faz_flip_iab( false, true, false );
+	Gvl::$result = array( 'success' => false, 'message' => 'GVL saved to option but file write failed', 'version' => 180, 'vendor_count' => 1 );
+	Settings::run_gvl_bootstrap();
+	assert_eq( in_array( 'faz_purge_page_cache', $GLOBALS['faz_test_actions'], true ), true, 'a list stored in the option but not on disk still activates the CMP, so it still purges' );
 
 	faz_flip_iab( false, true, true );
 	assert_eq( faz_scheduled_bootstraps(), 0, 'iab.enabled off → on with a GVL already stored: nothing scheduled' );
