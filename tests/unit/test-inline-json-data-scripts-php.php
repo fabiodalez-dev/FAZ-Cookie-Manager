@@ -261,6 +261,13 @@ namespace {
 	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $src ) );
 	assert_true( $is_parked( $out ), 'an external script is judged by its src, whatever its body says' );
 
+	// Only the body stops being evidence; the tag's identity does not. A
+	// -js-before attached to a tracker handle follows the tracker even when
+	// all it holds is a data assignment.
+	$idd = '<script id="gtag-config-js-before">window.gtagConfig = {"anonymize_ip":true};</script>';
+	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $idd ) );
+	assert_true( $is_parked( $out ), 'a data-only body is still blocked when the tag id names a tracker' );
+
 	// ── Second layer: wp_inline_script_attributes ──────────────────────────
 	// Query Monitor 4.x prints its payload with wp_print_inline_script_tag(),
 	// so it never reaches the output-buffer pass above as an unjudged tag: the
@@ -312,6 +319,7 @@ namespace {
 	assert_true( $typed_plain( $filtered( 'loader', "gtag('config','G-TEST');" ) ), 'filter: a tracker call is still retyped' );
 	assert_true( $typed_plain( $filtered( 'mixed', 'var cfg = {"id":"G-TEST"}; gtag("config", cfg.id);' ) ), 'filter: data followed by a call is still retyped' );
 	assert_true( $typed_plain( $filtered( 'paq', 'var _paq = window._paq = window._paq || []; _paq.push(["trackPageView"]);' ) ), 'filter: the Matomo queue is still retyped' );
+	assert_true( $typed_plain( $filtered( 'gtag-config-js-before', 'window.gtagConfig = {"anonymize_ip":true};' ) ), 'filter: a data-only body is still retyped when the id names a tracker' );
 
 	echo "\n";
 	if ( 0 === $tests_failed ) {

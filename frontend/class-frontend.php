@@ -4674,9 +4674,14 @@ class Frontend {
 		// handles and callbacks — a handle like google_gtagjs carries the
 		// `gtag` signature — so the whole payload was re-typed and its admin
 		// bar stopped working (GitHub issue #322). The tracker that reads such
-		// data is judged on its own tag.
+		// data is judged on its own tag. Only the BODY stops being evidence:
+		// the tag's identity still counts, as it does in the inline-attributes
+		// filter, so a -js-before/-after of a tracker handle follows the
+		// tracker. This matcher reads an inline script through its body, so
+		// for a data-only body the code signatures are looked for in the id.
+		$match_body = $content;
 		if ( '' === $this->extract_tag_attr( $attrs, 'src' ) && $this->is_inline_json_data_assignment( $content ) ) {
-			return $full;
+			$match_body = (string) $this->extract_tag_attr( $attrs, 'id' );
 		}
 
 		// Never block whitelisted scripts.
@@ -4700,10 +4705,10 @@ class Frontend {
 			return $full;
 		}
 
-		$matched_category = $this->match_script_to_provider( $attrs, $content, $providers, $blocked_categories );
+		$matched_category = $this->match_script_to_provider( $attrs, $match_body, $providers, $blocked_categories );
 		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
 			// Category is allowed — but per-service consent might still block it.
-			$svc_blocked = $this->check_per_service_blocking( $attrs, $content );
+			$svc_blocked = $this->check_per_service_blocking( $attrs, $match_body );
 			if ( true !== $svc_blocked ) {
 				return $full;
 			}
@@ -4713,7 +4718,7 @@ class Frontend {
 			}
 		} else {
 			// Category is blocked — but per-service consent might allow this specific service.
-			$svc_blocked = $this->check_per_service_blocking( $attrs, $content );
+			$svc_blocked = $this->check_per_service_blocking( $attrs, $match_body );
 			if ( false === $svc_blocked ) {
 				return $full; // Per-service says allow.
 			}
@@ -10090,13 +10095,15 @@ class Frontend {
 			return false;
 		}
 		// A body made only of JSON assignments defines data and sends nothing,
-		// the same rule process_script_tag() applies (#322). Query Monitor 4.x
-		// prints its payload through wp_print_inline_script_tag(), so this
-		// filter judges it before the output buffer ever does; without the
-		// rule here the two layers disagreed and QueryMonitorData was retyped.
-		if ( $this->is_inline_json_data_assignment( (string) $content ) ) {
-			return false;
-		}
+		// the same rule process_script_tag() applies (#322): its TEXT is never
+		// evidence, so code signatures are not looked for in it. The script's
+		// identity still is — a -js-before/-after attached to a tracker handle
+		// follows the tracker whatever its body holds. Query Monitor 4.x prints
+		// its payload through wp_print_inline_script_tag(), so this filter
+		// judges it before the output buffer does; without the rule here the
+		// two layers disagreed and QueryMonitorData was retyped.
+		$body_is_data = $this->is_inline_json_data_assignment( (string) $content );
+		$body         = $body_is_data ? '' : (string) $content;
 
 		$providers = $this->get_provider_category_map();
 		if ( empty( $providers ) ) {
@@ -10126,7 +10133,7 @@ class Frontend {
 					// URL-fragment pattern with no src context — skip to avoid false positives.
 					continue;
 				}
-				$matched = false !== stripos( $content, $pattern );
+				$matched = '' !== $body && false !== stripos( $body, $pattern );
 			}
 			if ( ! $matched ) {
 				continue;
@@ -10143,7 +10150,7 @@ class Frontend {
 			return false;
 		}
 		$should_block = in_array( $matched_category, $blocked, true );
-		$svc_blocked = $this->check_per_service_blocking( $attrs, $content );
+		$svc_blocked = $this->check_per_service_blocking( $attrs, $body );
 		if ( false === $svc_blocked ) {
 			$should_block = false;
 		} elseif ( true === $svc_blocked ) {
