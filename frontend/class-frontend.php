@@ -209,6 +209,14 @@ class Frontend {
 	 */
 	private $markup_fail_closed_cache = null;
 	/**
+	 * Sale/sharing categories a first visit under an opt-out law allows but
+	 * every render parks; see sale_share_parked_by_default(). Null until
+	 * computed.
+	 *
+	 * @var array|null
+	 */
+	private $sale_share_parked_cache = null;
+	/**
 	 * Per-request cache for get_consent_cookie_scope(). `false` = not computed
 	 * yet; null is a legitimate value (no scope check on this request).
 	 *
@@ -2617,6 +2625,14 @@ class Frontend {
 		$unused     = array();
 		$actual     = $this->compute_blocked_categories( $categories, $consent, $gpc, $dnsmpi, $unused );
 		$baseline   = $this->compute_blocked_categories( $categories, '', false, false, $unused );
+		// Both renders park the opt-out law's sale/sharing categories (see
+		// sale_share_parked_by_default()), so they are compared with it: a
+		// GPC, Do Not Sell or opted-out visitor then renders the baseline.
+		$parked = $this->sale_share_parked_by_default( $categories );
+		if ( ! empty( $parked ) ) {
+			$actual   = $this->union_blocked_categories( $categories, $actual, $parked );
+			$baseline = $this->union_blocked_categories( $categories, $baseline, $parked );
+		}
 		if ( $actual !== $baseline ) {
 			return true;
 		}
@@ -8297,16 +8313,108 @@ class Frontend {
 				$this->compute_blocked_categories( $categories, '', false, false, $unused )
 			);
 		}
+		// Under an opt-out law the render parks the sale/sharing categories a
+		// first visit allows, for every visitor: see
+		// sale_share_parked_by_default(). A render-time over-block like the
+		// union above, so the cookie layers keep reading the visitor's own set.
+		$parked = $this->sale_share_parked_by_default( $categories );
+		if ( ! empty( $parked ) ) {
+			$blocked = $this->union_blocked_categories( $categories, $blocked, $parked );
+		}
 		$this->blocked_categories_cache = $blocked;
 		return $blocked;
 	}
 
 	/**
+	 * The sale/sharing categories every render parks under an opt-out law,
+	 * although a visitor with no signal may run them.
+	 *
+	 * CCPA/CPRA is an opt-out regime, so a first visit blocks nothing it may
+	 * sell or share (see compute_blocked_categories()). But that first-visit
+	 * render is the page a shared cache keeps and replays, and the visitor it
+	 * is replayed to may carry Sec-GPC: 1, navigator.globalPrivacyControl or
+	 * a `fazcookie-dnsmpi` cookie: a binding opt-out (CPPA Reg. §7025, Cal.
+	 * Civ. Code §1798.120) that the server never saw, because the cache
+	 * answered. The sale/sharing scripts in that copy were executable from
+	 * the parser, before script.js could apply the opt-out. The visitor-state
+	 * veto keeps the signalled visitor's own page out of the cache; it cannot
+	 * change the page a HIT serves them.
+	 *
+	 * So the render parks those categories (text/plain + data-faz-category,
+	 * the shape of every server-side block) for everyone, and script.js
+	 * releases them on its first pass when none of the three signals and no
+	 * recorded opt-out is present: _fazSetInitialState() on a first visit, the
+	 * restore pass for a recorded choice, both reading the categories from the
+	 * consent store, which GPC and Do Not Sell set to "no" before any unblock
+	 * runs. Without a signal they still run; with one they never do. The cost
+	 * is the block-then-release delay: the scripts run when the runtime
+	 * starts (DOMContentLoaded, or the restore pass for a returning visitor)
+	 * instead of from the parser.
+	 *
+	 * The page is then the same for a signalled and an unsignalled visitor,
+	 * so a GPC or Do Not Sell first visit no longer needs the visitor-state
+	 * veto and can be cached like any other.
+	 *
+	 * Only where script.js is the one releasing: the active banner's law is
+	 * `ccpa` (the law _fazGetLaw() reads, so the runtime treats the page as
+	 * opt-out and runs its restore pass on a first visit). Under a GDPR-law
+	 * banner the runtime releases nothing before consent, so parking a
+	 * category an opt-out ruleset grants there would hold it until the
+	 * visitor clicks; it is left as before. Not on AMP, which has no runtime.
+	 * Cache Compatibility and the strict shell park every category already.
+	 *
+	 * @param array $categories Category rows.
+	 * @return array Slugs, in catalogue order.
+	 */
+	private function sale_share_parked_by_default( $categories ) {
+		if ( null !== $this->sale_share_parked_cache ) {
+			return $this->sale_share_parked_cache;
+		}
+		$parked = array();
+		if ( $this->banner && 'ccpa' === $this->banner->get_law() && ! apply_filters( 'faz_is_amp_request', false ) ) {
+			/**
+			 * Whether a render under an opt-out law parks the sale/sharing
+			 * categories a first visit allows, for script.js to release when
+			 * the visitor carries no GPC, Do Not Sell or recorded opt-out.
+			 *
+			 * Returning false ships them executable from the parser again,
+			 * which a cached copy then replays to visitors whose opt-out
+			 * signal the server never saw.
+			 *
+			 * @since 1.34.3
+			 *
+			 * @param bool $park Default true.
+			 */
+			$park = (bool) apply_filters( 'faz_ccpa_park_sell_share_by_default', true );
+			if ( $park ) {
+				$unused   = array();
+				$baseline = $this->compute_blocked_categories( $categories, '', false, false, $unused );
+				foreach ( $categories as $cat_data ) {
+					$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data );
+					$slug     = $category->get_slug();
+					if ( 'necessary' === $slug || in_array( $slug, $baseline, true ) ) {
+						continue;
+					}
+					if ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) {
+						$parked[] = $slug;
+					}
+				}
+			}
+		}
+		if ( $this->banner ) {
+			$this->sale_share_parked_cache = $parked;
+		}
+		return $parked;
+	}
+
+	/**
 	 * The blocked-category set the destructive cookie layers enforce.
 	 *
-	 * Identical to get_blocked_categories() on every verdict but 'fallback',
-	 * where the render blocks the shareable union and this returns the
-	 * visitor's own set instead (see the comment where it is filled). Read by
+	 * Identical to get_blocked_categories() except on a 'fallback' verdict,
+	 * where the render blocks the shareable union, and under an opt-out law,
+	 * where it also parks the sale/sharing categories a first visit allows
+	 * (sale_share_parked_by_default()); this returns the visitor's own set
+	 * (see the comment where it is filled). Read by
 	 * is_cookie_allowed() and shred_non_consented_cookies() only — never by
 	 * anything that decides what the page itself executes.
 	 *
@@ -8345,6 +8453,11 @@ class Frontend {
 		// mirrors the client-side default (script.js sets every category to
 		// "yes" on a CCPA first visit) and removes the block→unblock flash that a
 		// blanket pre-consent block would otherwise cause under an opt-out law.
+		// This is the visitor's state, and what the cookie layers enforce. The
+		// RENDER still parks the sale/sharing categories among these, for
+		// script.js to release, because a cached copy of it is replayed to
+		// visitors whose GPC or Do Not Sell signal the server never saw: see
+		// sale_share_parked_by_default().
 		$is_optout_law = ( $this->banner && 'ccpa' === $this->banner->get_law() );
 
 		// Runtime geo-routing: when a ruleset is
@@ -12403,7 +12516,7 @@ class Frontend {
 		// Both questions are asked of the visitor view (see
 		// is_cookie_allowed_for_visitor()): the cookies being deleted are the
 		// ones already in THIS visitor's browser, so their own grants decide.
-		$visitor_view = 'fallback' === $this->visitor_state_veto;
+		$visitor_view = $this->render_overblocks_visitor();
 		$blocked      = $visitor_view ? $this->get_enforcement_blocked_categories() : $this->get_blocked_categories();
 		if ( empty( $blocked ) && empty( $this->get_service_cookie_decisions( $visitor_view ) ) ) {
 			return;
@@ -12466,13 +12579,32 @@ class Frontend {
 	 * applying the union here destroyed a consenting visitor's `_ga` on every
 	 * page of a site whose visitor-state veto was off. Their denials are part
 	 * of their own state, so a rejected category's cookies are still deleted.
-	 * On every other verdict the two views are the same set.
+	 * The opt-out-law render that parks the sale/sharing categories is the
+	 * same kind of over-block and is read the same way (see
+	 * render_overblocks_visitor()); everywhere else the two views are one set.
 	 *
 	 * @param string $name Cookie name.
 	 * @return bool
 	 */
 	private function is_cookie_allowed_for_visitor( $name ) {
-		return $this->cookie_allowed_in_view( $name, '', 'fallback' === $this->visitor_state_veto );
+		return $this->cookie_allowed_in_view( $name, '', $this->render_overblocks_visitor() );
+	}
+
+	/**
+	 * Whether this render blocks more than the visitor's own state does: a
+	 * 'fallback' render (the shareable union), or an opt-out-law render that
+	 * parks the sale/sharing categories for script.js to release (see
+	 * sale_share_parked_by_default()). Either over-block is undone on the
+	 * client; a cookie deleted on its strength is not, so the shredder reads
+	 * the visitor's own set whenever this is true.
+	 *
+	 * @return bool
+	 */
+	private function render_overblocks_visitor() {
+		if ( 'fallback' === $this->visitor_state_veto ) {
+			return true;
+		}
+		return $this->get_blocked_categories() !== $this->get_enforcement_blocked_categories();
 	}
 
 	/**

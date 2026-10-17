@@ -259,15 +259,49 @@ namespace {
 	unset( $GLOBALS['vs_filters']['faz_veto_cache_for_visitor_state'] );
 
 	echo "Opt-out signals under CCPA\n";
+	// The first-visit render parks the sale/sharing category (script.js
+	// releases it when no signal is present), so a cached copy replayed to a
+	// GPC or Do Not Sell visitor never runs it. That render is also what a
+	// signalled visitor gets, so their page no longer needs the veto.
 	$fe = vs_request( 'ccpa', array() );
-	vs_check( ! vs_vetoed() && array() === vs_blocked( $fe ), 'CCPA first visit: nothing blocked, nothing vetoed' );
+	vs_check( ! vs_vetoed() && array( 'marketing' ) === vs_blocked( $fe ), 'CCPA first visit: sale/share parked for the runtime to release, nothing vetoed' );
+	$enforced = new ReflectionMethod( Frontend::class, 'get_enforcement_blocked_categories' );
+	$enforced->setAccessible( true );
+	vs_check( array() === $enforced->invoke( $fe ), 'and the visitor\'s own state still blocks nothing (CCPA: no opt-out, no block)' );
 
 	$fe = vs_request( 'ccpa', array(), array( 'HTTP_SEC_GPC' => '1' ) );
-	vs_check( vs_vetoed(), 'Sec-GPC under CCPA blocks sell/share: that render is not stored for everyone' );
+	vs_check( ! vs_vetoed() && 'baseline' === vs_verdict( $fe ), 'Sec-GPC under CCPA renders the baseline: cacheable' );
 	vs_check( array( 'marketing' ) === vs_blocked( $fe ), 'and the GPC visitor still gets sell/share blocked' );
 
 	$fe = vs_request( 'ccpa', array( 'fazcookie-dnsmpi' => '1' ) );
-	vs_check( vs_vetoed(), 'Do Not Sell cookie under CCPA: vetoed' );
+	vs_check( ! vs_vetoed() && array( 'marketing' ) === vs_blocked( $fe ), 'Do Not Sell cookie under CCPA: the baseline, sell/share blocked' );
+
+	$fe = vs_request( 'ccpa', array( 'fazcookie-consent' => $ccpa_optout ) );
+	vs_check( ! vs_vetoed() && array( 'marketing' ) === vs_blocked( $fe ), 'a recorded CCPA opt-out: the baseline, sell/share blocked' );
+
+	// A CCPA visitor who granted sale/sharing renders the same parked page and
+	// script.js releases it from their cookie; the shredder keeps their cookies.
+	// (No svc.* entry: per-service decisions are a variance of their own.)
+	$ccpa_grant = 'consentid:abc,consent:yes,action:yes,necessary:yes,analytics:yes,marketing:yes,rev:1';
+	$fe = vs_request( 'ccpa', array( 'fazcookie-consent' => $ccpa_grant, 'probe_ad' => '1', 'probe_ga' => '1' ) );
+	vs_check( ! vs_vetoed() && array( 'marketing' ) === vs_blocked( $fe ), 'a CCPA grant renders the parked baseline: cacheable' );
+	$fe->shred_non_consented_cookies();
+	vs_check( array() === $GLOBALS['vs_deleted'], 'and the shredder deletes none of that visitor\'s cookies (the parking is a render-time over-block)' );
+
+	$fe = vs_request( 'ccpa', array( 'probe_ad' => '1' ) );
+	$fe->shred_non_consented_cookies();
+	vs_check( ! isset( $GLOBALS['vs_deleted']['probe_ad'] ), 'CCPA first visit: the shredder leaves a sale/share cookie alone (no opt-out yet)' );
+
+	// faz_ccpa_park_sell_share_by_default=false: the previous render, and the
+	// veto keeping the signalled visitor's own page out of the cache.
+	$GLOBALS['vs_filters']['faz_ccpa_park_sell_share_by_default'] = false;
+	$fe = vs_request( 'ccpa', array() );
+	vs_check( ! vs_vetoed() && array() === vs_blocked( $fe ), 'filter off: CCPA first visit blocks nothing, as before' );
+	$fe = vs_request( 'ccpa', array(), array( 'HTTP_SEC_GPC' => '1' ) );
+	vs_check( vs_vetoed() && array( 'marketing' ) === vs_blocked( $fe ), 'filter off: Sec-GPC under CCPA is vetoed, as before' );
+	$fe = vs_request( 'ccpa', array( 'fazcookie-dnsmpi' => '1' ) );
+	vs_check( vs_vetoed(), 'filter off: Do Not Sell cookie under CCPA is vetoed, as before' );
+	unset( $GLOBALS['vs_filters']['faz_ccpa_park_sell_share_by_default'] );
 
 	$fe = vs_request( 'ccpa', array(), array( 'HTTP_SEC_GPC' => '1' ), true );
 	vs_check( array( 'marketing' ) === vs_blocked( $fe ), 'veto impossible: the GPC opt-out is still enforced (a denial is never dropped)' );
