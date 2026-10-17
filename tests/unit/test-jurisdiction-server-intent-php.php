@@ -4,6 +4,12 @@
  * choices, and independently asserted GPC/DNSMPI signals. The catalogue/HTTP
  * boundary is stubbed; Frontend and Geo_Runtime enforcement are unmodified.
  * Resolving a country is covered separately by test-ruleset-resolver.php.
+ *
+ * The visitor's intent is the set the cookie layers enforce
+ * (get_enforcement_blocked_categories()). The render adds, under a CCPA-law
+ * banner, the sale/sharing category a first visit allows: it is parked for
+ * script.js to release, so a cached copy never runs it for a GPC or Do Not
+ * Sell visitor the server did not see (sale_share_parked_by_default()).
  */
 namespace FazCookie\Includes {
     class Geolocation {
@@ -56,6 +62,8 @@ namespace {
     $class = new ReflectionClass( Frontend::class );
     $method = $class->getMethod( 'get_blocked_categories' );
     $method->setAccessible( true );
+    $enforcement = $class->getMethod( 'get_enforcement_blocked_categories' );
+    $enforcement->setAccessible( true );
     $memo = new ReflectionProperty( Geo_Runtime::class, 'ruleset_memo' );
     $memo->setAccessible( true );
     function assign_intent_property( $object, $name, $value ) {
@@ -71,6 +79,12 @@ namespace {
         if ( $actual === $expected ) { $passed++; return; }
         $failed++;
         echo 'FAIL ' . $label . ': ' . json_encode( array( 'actual' => $actual, 'expected' => $expected ) ) . "\n";
+    }
+    /** Render and intent for one state: intent as before, the render with the parked set added. */
+    function same_render_and_intent( $frontend, $parked, $denied, $label ) {
+        global $method, $enforcement;
+        same_blocked( $method->invoke( $frontend ), array_values( array_unique( array_merge( $denied, $parked ) ) ), $label . '/render' );
+        same_blocked( $enforcement->invoke( $frontend ), $denied, $label );
     }
     $optional = array( 'functional', 'analytics', 'marketing', 'profiling' );
     $rulesets = 0;
@@ -94,7 +108,9 @@ namespace {
             foreach ( $optional as $slug ) {
                 if ( ! in_array( $ruleset['ui']['default_categories'][ $slug ], array( 'granted', 'granted-locked' ), true ) ) { $denied[] = $slug; }
             }
-            same_blocked( $method->invoke( $frontend ), $denied, $ruleset['id'] . '/' . $law . '/first-visit' );
+            // marketing is the one sale/sharing category of this catalogue.
+            $parked = ( 'ccpa' === $law && ! in_array( 'marketing', $denied, true ) ) ? array( 'marketing' ) : array();
+            same_render_and_intent( $frontend, $parked, $denied, $ruleset['id'] . '/' . $law . '/first-visit' );
             for ( $mask = 0; $mask < 16; $mask++ ) {
                 for ( $signal = 0; $signal < 4; $signal++ ) {
                     $parts = array( 'action:yes', 'consent:yes', 'necessary:yes' );
@@ -108,7 +124,7 @@ namespace {
                     $_COOKIE = $signal & 2 ? array( 'fazcookie-dnsmpi' => '1' ) : array();
                     $GLOBALS['intent_cookie'] = implode( ',', $parts );
                     assign_intent_property( $frontend, 'blocked_categories_cache', null );
-                    same_blocked( $method->invoke( $frontend ), $denied, $ruleset['id'] . '/' . $law . '/choices-' . $mask . '/signal-' . $signal );
+                    same_render_and_intent( $frontend, $parked, $denied, $ruleset['id'] . '/' . $law . '/choices-' . $mask . '/signal-' . $signal );
                 }
             }
             // A newer catalogue category, or any non-yes value, must not

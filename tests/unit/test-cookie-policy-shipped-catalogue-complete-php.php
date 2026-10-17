@@ -186,6 +186,18 @@ foreach ( array( 'gdpr-strict', 'lgpd-brazil' ) as $jurisdiction ) {
 	);
 }
 
+// The POPIA policy used the calque "nepodstatných" (literally "irrelevant")
+// for "non-essential"; it now says "nepovinných", like gdpr-strict and
+// lgpd-brazil. Both the gettext path and the bundled cs.md must agree.
+$bundled   = (string) file_get_contents( Generator::resolve_template_path( 'popia-southafrica', 'cs' ) );
+$effective = Template_Translations::apply( 'popia-southafrica', 'cs', $bundled );
+foreach ( array( 'gettext' => $effective, 'cs.md' => $bundled ) as $faz_path => $faz_text ) {
+	mo_assert(
+		false !== strpos( $faz_text, 'nepovinných' ) && false === stripos( $faz_text, 'nepodstatn' ),
+		"cs_CZ popia-southafrica ({$faz_path}) — non-essential cookies are \"nepovinné\", never \"nepodstatné\""
+	);
+}
+
 echo "\n--\n";
 echo "Tests:  {$tests_run}\n";
 echo "Passed: {$tests_passed}\n";

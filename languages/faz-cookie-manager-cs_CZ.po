@@ -3148,9 +3148,9 @@ msgstr ""
 "\n"
 "U **absolutně nezbytných** souborů cookie je zpracování oprávněné, protože je nezbytné k prosazování našich oprávněných zájmů při provozování bezpečných a funkčních webových stránek (článek 11 odst. 1 písm. f) zákona POPIA) a nepřevažuje nad vašimi zájmy či právy.\n"
 "\n"
-"U **nepodstatných kategorií nakonfigurovaných v našem banneru pro soubory cookie** je zpracování založeno na vašem **souhlasu** podle § 11 odst. 1 písm. a) zákona POPIA – dobrovolném, konkrétním a informovaném vyjádření vůle – získaném před nastavením těchto souborů cookie. § 11 odst. 1 písm. b) až f) zákona POPIA připouští i jiné zákonné důvody; tato politika pro uvedené nastavené kategorie využívá souhlas a musí být upravena, pokud se naše skutečné zpracování opírá o jiný důvod.\n"
+"U **nepovinných kategorií nakonfigurovaných v našem banneru pro soubory cookie** je zpracování založeno na vašem **souhlasu** podle § 11 odst. 1 písm. a) zákona POPIA – dobrovolném, konkrétním a informovaném vyjádření vůle – získaném před nastavením těchto souborů cookie. § 11 odst. 1 písm. b) až f) zákona POPIA připouští i jiné zákonné důvody; tato politika pro uvedené nastavené kategorie využívá souhlas a musí být upravena, pokud se naše skutečné zpracování opírá o jiný důvod.\n"
 "\n"
-"Osobní údaje shromážděné prostřednictvím těchto technologií mohou zahrnovat online identifikátory, informace o zařízení a prohlížeči, události související s používáním, přibližnou polohu a preference popsané v tabulce souborů cookie a v našich samostatných zásadách ochrany osobních údajů. Poskytování údajů prostřednictvím nepodstatných technologií je dobrovolné; pokud je odmítnete, nebudou fungovat související analytické, personalizační nebo reklamní funkce. Zpracování nezbytné pro poskytování a zabezpečení webových stránek je nezbytné pro tyto technické funkce a jeho blokování může zabránit fungování některých částí webu.\n"
+"Osobní údaje shromážděné prostřednictvím těchto technologií mohou zahrnovat online identifikátory, informace o zařízení a prohlížeči, události související s používáním, přibližnou polohu a preference popsané v tabulce souborů cookie a v našich samostatných zásadách ochrany osobních údajů. Poskytování údajů prostřednictvím nepovinných technologií je dobrovolné; pokud je odmítnete, nebudou fungovat související analytické, personalizační nebo reklamní funkce. Zpracování nezbytné pro poskytování a zabezpečení webových stránek je nezbytné pro tyto technické funkce a jeho blokování může zabránit fungování některých částí webu.\n"
 "\n"
 "Souhlas můžete kdykoli odvolat pomocí odkazu \"Nastavení souborů cookie\" nebo vymazáním souborů cookie (POPIA, § 11 odst. 2 písm. b)). Odvolání nemá vliv na zákonnost zpracování provedeného před jeho odvoláním."
 
@@ -6661,7 +6661,7 @@ msgstr "GDPR / ePrivacy (EU, EHP, UK)"
 
 #: admin/views/setup.php:117
 msgid "For visitors in the European Union, EEA, or United Kingdom. Non-essential cookies stay blocked until the visitor actively opts in — nothing is pre-ticked, and Accept and Reject carry equal weight."
-msgstr "Pro návštěvníky z Evropské unie, EHP nebo Spojeného království. Nepodstatné soubory cookie zůstávají zablokovány, dokud návštěvník aktivně nevyjádří souhlas – žádné políčko není předem zaškrtnuto a možnosti \"Přijmout\" a \"Odmítnout\" mají stejnou váhu."
+msgstr "Pro návštěvníky z Evropské unie, EHP nebo Spojeného království. Nepovinné soubory cookie zůstávají zablokovány, dokud návštěvník aktivně nevyjádří souhlas – žádné políčko není předem zaškrtnuto a možnosti \"Přijmout\" a \"Odmítnout\" mají stejnou váhu."
 
 #: admin/views/setup.php:118
 msgid "Opt-in model: no cookie is set before consent."
@@ -6714,11 +6714,11 @@ msgstr "Zobrazují se tlačítka Přijmout a Odmítnout s rovnocenným vážení
 
 #: admin/views/setup.php:138
 msgid "For visitors covered by South Africa's Protection of Personal Information Act. This conservative preset uses voluntary, specific and informed consent under section 11(1)(a) for non-essential cookies. POPIA also permits other lawful justifications under section 11(1)(b)-(f), which must be assessed and documented separately."
-msgstr "Pro návštěvníky, na které se vztahuje jihoafrický zákon o ochraně osobních údajů (POPIA). Toto konzervativní přednastavení vychází z dobrovolného, konkrétního a informovaného souhlasu podle § 11 odst. 1 písm. a) v případě nepodstatných souborů cookie. Zákon POPIA rovněž připouští další zákonné důvody podle § 11 odst. 1 písm. b) až f), které je nutné posoudit a zdokumentovat samostatně."
+msgstr "Pro návštěvníky, na které se vztahuje jihoafrický zákon o ochraně osobních údajů (POPIA). Toto konzervativní přednastavení vychází z dobrovolného, konkrétního a informovaného souhlasu podle § 11 odst. 1 písm. a) v případě nepovinných souborů cookie. Zákon POPIA rovněž připouští další zákonné důvody podle § 11 odst. 1 písm. b) až f), které je nutné posoudit a zdokumentovat samostatně."
 
 #: admin/views/setup.php:139
 msgid "Consent-based preset: non-essential cookies stay blocked until consent."
-msgstr "Předvolba založená na souhlasu: nepodstatné soubory cookie zůstávají blokovány, dokud není udělen souhlas."
+msgstr "Předvolba založená na souhlasu: nepovinné soubory cookie zůstávají blokovány, dokud není udělen souhlas."
 
 #: admin/views/setup.php:160
 msgid "Per-service consent toggles"

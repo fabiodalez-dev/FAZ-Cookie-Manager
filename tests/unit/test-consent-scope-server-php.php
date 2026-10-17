@@ -197,7 +197,12 @@ namespace {
 
 	$_COOKIE = array( 'fazcookie-consent' => $ccpa_us );
 	$frontend = fresh_frontend( $class, 'us-2', 'ccpa' );
-	scope_same( $blocked->invoke( $frontend ), array(), 'back under the US banner the CCPA record is honoured again' );
+	$enforced = $class->getMethod( 'get_enforcement_blocked_categories' );
+	$enforced->setAccessible( true );
+	scope_same( $enforced->invoke( $frontend ), array(), 'back under the US banner the CCPA record is honoured again' );
+	// The render parks the sale/sharing category under a CCPA banner whatever
+	// the record says, and script.js releases it from that record.
+	scope_same( $blocked->invoke( $frontend ), array( 'marketing' ), 'and the render parks sale/share for script.js to release from it' );
 
 	$_COOKIE = array( 'fazcookie-consent' => $grants );
 	$frontend = fresh_frontend( $class, 'eu-1', 'gdpr' );
