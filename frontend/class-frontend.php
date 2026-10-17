@@ -202,6 +202,13 @@ class Frontend {
 	private $enforcement_blocked_categories_cache = null;
 	private $enforcement_service_consent_cache    = null;
 	/**
+	 * Memo of the `faz_output_buffer_fail_closed` filter, read the first
+	 * time a markup pass fails (see run_markup_pass()). Null until then.
+	 *
+	 * @var bool|null
+	 */
+	private $markup_fail_closed_cache = null;
+	/**
 	 * Per-request cache for get_consent_cookie_scope(). `false` = not computed
 	 * yet; null is a legitimate value (no scope check on this request).
 	 *
@@ -4534,12 +4541,14 @@ class Frontend {
 			@ini_set( 'pcre.recursion_limit', '100000' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,Squiz.PHP.DiscouragedFunctions.Discouraged -- same rationale as the backtrack_limit raise above; needed to keep the script-blocking regex pass safe on very large pages.
 		}
 
-		// preg_replace_callback returns null on PCRE error (e.g. backtrack limit
-		// exceeded with very large page builders like Bricks). Graceful degradation:
-		// serve unfiltered HTML (page works without consent blocking) rather than
-		// stripping all markup (broken page) or throwing (crash). Log the error
-		// so site owners can diagnose and raise pcre.backtrack_limit if needed.
-		$pcre_failed = false;
+		// preg_replace_callback returns null for the whole document on a PCRE
+		// error (backtrack or recursion limit, JIT stack). Serving the buffer
+		// as it was then left every element that pass judges executable, the
+		// trackers included, so a failed pass is re-run over a linear walk
+		// with the same callback: run_markup_pass() says why and how, and the
+		// `faz_output_buffer_fail_closed` filter restores the old skip. The
+		// kinds that failed are logged once, at the end.
+		$failed_passes = array();
 
 		// Block tracking pixel <img> inside <noscript> FIRST — BEFORE the stash.
 		// Meta Pixel, GA, Adobe Analytics etc. embed `<img>` beacons inside
@@ -4612,36 +4621,34 @@ class Frontend {
 
 		$srcdoc_stash  = array();
 		$srcdoc_marker = '';
-		$result        = $this->stash_iframe_srcdocs( $html, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker );
-		if ( null === $result ) {
-			$pcre_failed = true;
-		} else {
+		$result        = $this->stash_iframe_srcdocs( $html, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker, $failed_passes );
+		if ( null !== $result ) {
 			$html = $result;
 		}
 
 		$noscript_stash = array();
 		if ( false !== stripos( $html, '<noscript' ) ) {
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<noscript(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>(.*?)</noscript(?=[\s/>])[^>]*>#is',
+				'noscript',
 				function ( $m ) use ( $providers, $blocked_categories, &$noscript_stash, $stash_nonce ) {
 					$processed              = $this->process_noscript_tag( $m, $providers, $blocked_categories );
 					$key                    = '__FAZ_NOSCRIPT_STASH_' . $stash_nonce . '_' . count( $noscript_stash ) . '__';
 					$noscript_stash[ $key ] = $processed;
 					return $key;
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 1. Block <script> tags.
 		if ( false !== stripos( $html, '<script' ) ) {
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#' . self::script_token_skip() . '<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
+				'script',
 				function ( $m ) use ( $providers, $blocked_categories, &$inert_stash ) {
 					return $this->process_with_inert_body(
 						$m,
@@ -4652,13 +4659,9 @@ class Frontend {
 						}
 					);
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 1-bis. The SVG namespace. <image> is an <img> by another name and
@@ -4673,18 +4676,16 @@ class Frontend {
 		// <use-case> and <image-gallery> custom elements through and mutilated
 		// them.
 		if ( false !== stripos( $html, '<image' ) || false !== stripos( $html, '<use' ) || false !== stripos( $html, '<feimage' ) ) {
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<(image|use|feImage)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'svg',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_svg_href_tag( $m, $providers, $blocked_categories );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 1-ter. The legacy `background` presentation attribute. It fetches an
@@ -4693,35 +4694,31 @@ class Frontend {
 		// tests/browser-intent/write-stream-differential.spec.ts.
 		// The pre-check accepts the same `background = "…"` spacing the
 		// pattern does; a plain `background=` lookup skipped it.
-		if ( preg_match( '/\bbackground\s*=/i', $html ) ) {
-			$result = preg_replace_callback(
+		if ( 0 !== preg_match( '/\bbackground\s*=/i', $html ) ) {
+			$html = $this->run_markup_pass(
+				$html,
 				'#<(body|table|thead|tbody|tfoot|tr|td|th)(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
+				'background',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_background_attr_tag( $m, $providers, $blocked_categories );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 2. Block <iframe> tags (YouTube, Facebook, Maps, etc.).
 		if ( false !== stripos( $html, '<iframe' ) ) {
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
+				'iframe',
 				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 3. (Moved above the stash — see "Block tracking pixel <img> inside
@@ -4731,8 +4728,10 @@ class Frontend {
 		// 4. Block inline CSS url()/@import channels — any blocked-provider target
 		//    inside a <style> (fonts, background-image, cursor, mask, @import).
 		if ( false !== stripos( $html, '<style' ) ) {
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<style(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</style(?=[\s/>])[^>]*>#is',
+				'style',
 				function ( $m ) use ( $providers, $blocked_categories, &$inert_stash ) {
 					return $this->process_with_inert_body(
 						$m,
@@ -4743,13 +4742,9 @@ class Frontend {
 						}
 					);
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 4b. Block tracking <img> pixels rendered directly in the document.
@@ -4764,18 +4759,16 @@ class Frontend {
 		// MutationObserver backstop cannot undo it: the preload scanner dispatches
 		// the fetch before any script runs.
 		if ( false !== stripos( $html, '<img' ) ) {
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<img(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
+				'img',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_img_tag( $m, $providers, $blocked_categories );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 4c. Media, plug-in, text-track and image-button elements.
@@ -4797,19 +4790,17 @@ class Frontend {
 		// Like every pass here it never sees comments or script bodies (the
 		// inert stash at the top): a `<video poster=\"…\">` inside a JS
 		// string is text, and parking it broke the string and the script.
-		if ( preg_match( '/<(?:video|audio|source|embed|object|track|input)(?=[\s\/>])/i', $html ) ) {
-			$result = preg_replace_callback(
+		if ( 0 !== preg_match( '/<(?:video|audio|source|embed|object|track|input)(?=[\s\/>])/i', $html ) ) {
+			$html = $this->run_markup_pass(
+				$html,
 				'#<(video|audio|source|embed|object|track|input)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'media',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_media_resource_tag( $m, $providers, $blocked_categories );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 5. Block fetching <link> tags: stylesheet AND the preload family.
@@ -4833,18 +4824,16 @@ class Frontend {
 			// `<link rel=preload …>` (unquoted, which HTML allows) and
 			// `rel="preload stylesheet"` (the standard async-CSS pair) both
 			// slipped past and fetched the provider pre-consent.
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<link(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
+				'link',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_link_tag( $m, $providers, $blocked_categories );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 5b. Inline `style` attributes, on whatever tag carries one.
@@ -4864,25 +4853,25 @@ class Frontend {
 		// containers never reach this pass (the inert stash at the top): a
 		// tag-shaped substring inside a string literal is not an element, and
 		// rewriting it stopped the whole inline script from parsing.
-		if ( preg_match( '/\bstyle\s*=/i', $html ) ) {
-			$result = preg_replace_callback(
+		if ( 0 !== preg_match( '/\bstyle\s*=/i', $html ) ) {
+			$html = $this->run_markup_pass(
+				$html,
 				'#<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'style-attr',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_style_attr_tag( $m, $providers, $blocked_categories );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 6. Block <script data-faz-waitfor="category"> (deferred dependency scripts).
 		if ( false !== stripos( $html, 'data-faz-waitfor' ) ) {
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
+				'waitfor',
 				function ( $m ) use ( $blocked_categories ) {
 					$attrs    = $m[1];
 					$content  = $m[2];
@@ -4894,19 +4883,12 @@ class Frontend {
 					$new_attrs = $this->set_script_type_plain( $attrs );
 					return '<script' . $new_attrs . '>' . $content . '</script>';
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
-		if ( $pcre_failed ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( 'FAZ Cookie Manager: PCRE error in output buffer — script blocking skipped. Consider raising pcre.backtrack_limit (current: ' . ini_get( 'pcre.backtrack_limit' ) . ').' );
-		}
+		$this->log_markup_pass_failure( $failed_passes, 'output buffer' );
 
 		if ( false !== $old_backtrack && '' !== $old_backtrack ) {
 			@ini_set( 'pcre.backtrack_limit', (string) $old_backtrack ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,Squiz.PHP.DiscouragedFunctions.Discouraged -- restoring the original PCRE backtrack_limit value captured before the script-blocking pass (paired with the temporary raise above).
@@ -4945,7 +4927,9 @@ class Frontend {
 			$html = strtr( $html, $srcdoc_stash );
 		}
 
-		if ( ! $pcre_failed ) {
+		// A pass the linear fallback re-ran has judged every element, so the
+		// placeholder set is the page's; a skipped one has not.
+		if ( empty( $failed_passes ) || $this->markup_fail_closed() ) {
 			Embed_Inventory::complete_render();
 		}
 		return $html;
@@ -6396,21 +6380,36 @@ class Frontend {
 	 * @param string $stash_nonce        Per-request nonce the page cannot know.
 	 * @param array  $stash              Marker => original token, filled here.
 	 * @param string $marker             Marker prefix, set here.
-	 * @return string|null Markup with the tokens stashed, or null on PCRE error.
+	 * @param array  $failed             Optional: the failed pass kinds, appended to.
+	 * @return string|null Markup with the tokens stashed. On a PCRE error the
+	 *                     linear fallback stashes them (run_markup_pass()); null
+	 *                     only when `faz_output_buffer_fail_closed` is false.
 	 */
-	private function stash_iframe_srcdocs( $html, $providers, $blocked_categories, $stash_nonce, array &$stash, &$marker ) {
+	private function stash_iframe_srcdocs( $html, $providers, $blocked_categories, $stash_nonce, array &$stash, &$marker, &$failed = null ) {
 		$marker = '__FAZ_SRCDOC_' . $stash_nonce . '_';
 		$stash  = array();
 		if ( false === stripos( $html, 'srcdoc' ) ) {
 			return $html;
 		}
-		return preg_replace_callback(
+		$failures = array();
+		$unused   = array();
+		$result   = $this->run_markup_pass(
+			$html,
 			'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+			'srcdoc',
 			function ( $m ) use ( $providers, $blocked_categories, &$stash, $marker ) {
 				return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, $stash, $marker );
 			},
-			$html
+			$failures,
+			$unused,
+			function () {
+				return null;
+			}
 		);
+		if ( is_array( $failed ) ) {
+			$failed = array_merge( $failed, $failures );
+		}
+		return $result;
 	}
 
 	private function stash_nonce() {
@@ -6636,6 +6635,378 @@ class Frontend {
 			$last          = $span[0] + $span[1];
 		}
 		return $out . substr( $html, $last );
+	}
+
+	/**
+	 * What the linear fallback of each markup pass looks for, and the shape
+	 * of the match array the pass's callback is written against.
+	 *
+	 * Shapes, as the pass's own pattern captures them:
+	 * - body:    0 element, 1 attributes, 2 body (script, style).
+	 * - inner:   0 element, 1 body (noscript).
+	 * - iframe:  0 element, 1 attributes, 2 body; no 2 when self-closed.
+	 * - open:    0 tag, 1 attributes with the closing slash (img, link).
+	 * - open2:   0 tag, 1 attributes, 2 slash (the srcdoc stash).
+	 * - open3:   0 tag, 1 name, 2 attributes, 3 slash (svg, media, style attr).
+	 * - named:   0 tag, 1 name, 2 attributes (background).
+	 *
+	 * `*` stands for every element whose name the style-attribute pass
+	 * accepts.
+	 */
+	const LINEAR_PASS_KINDS = array(
+		'srcdoc'     => array( 'tags' => array( 'iframe' ), 'shape' => 'open2' ),
+		'noscript'   => array( 'tags' => array( 'noscript' ), 'shape' => 'inner' ),
+		'script'     => array( 'tags' => array( 'script' ), 'shape' => 'body' ),
+		'svg'        => array( 'tags' => array( 'image', 'use', 'feimage' ), 'shape' => 'open3' ),
+		'background' => array( 'tags' => array( 'body', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th' ), 'shape' => 'named' ),
+		'iframe'     => array( 'tags' => array( 'iframe' ), 'shape' => 'iframe' ),
+		'style'      => array( 'tags' => array( 'style' ), 'shape' => 'body' ),
+		'img'        => array( 'tags' => array( 'img' ), 'shape' => 'open' ),
+		'media'      => array( 'tags' => array( 'video', 'audio', 'source', 'embed', 'object', 'track', 'input' ), 'shape' => 'open3' ),
+		'link'       => array( 'tags' => array( 'link' ), 'shape' => 'open' ),
+		'style-attr' => array( 'tags' => '*', 'shape' => 'open3' ),
+		'waitfor'    => array( 'tags' => array( 'script' ), 'shape' => 'body' ),
+	);
+
+	/**
+	 * Run one markup pass, and stay fail-closed when PCRE gives up on it.
+	 *
+	 * preg_replace_callback() returns null for the WHOLE document when it
+	 * hits a limit anywhere in it (a megabyte of unterminated inline script
+	 * exhausts pcre.backtrack_limit in the lazy body of the script pattern),
+	 * and every element it had already judged is lost with it. Serving the
+	 * buffer as it was then shipped every server-rendered tracker on the
+	 * page executable before consent: the one failure a consent layer must
+	 * not turn into an allow.
+	 *
+	 * So the same callback is run again over a linear walk of the document
+	 * (linear_markup_pass()), which finds the same elements with string
+	 * functions and nothing that can backtrack. Each element is judged by
+	 * the processor that judges it on the regex path, so the decision (and
+	 * the parked shape the runtime restores after consent: text/plain,
+	 * data-faz-src, data-faz-category) is the one a working pass produces,
+	 * whitelist, necessary category and own-asset exemptions included.
+	 *
+	 * The callbacks of the failed run may already have written into the
+	 * inert stash; it is put back as it was before the run, so the body of
+	 * a <style> the CSS pass rewrote is not rewritten a second time.
+	 *
+	 * The `faz_output_buffer_fail_closed` filter (default true) returns the
+	 * previous behaviour: `$legacy` when given, the document unchanged
+	 * otherwise.
+	 *
+	 * @param string        $html        Document.
+	 * @param string        $pattern     The pass's pattern.
+	 * @param string        $kind        Key of LINEAR_PASS_KINDS.
+	 * @param callable      $callback    The pass's callback.
+	 * @param array         $failed      Kinds that failed, with the PCRE error code, appended to.
+	 * @param array         $inert_stash Inert stash shared with the callbacks.
+	 * @param callable|null $legacy      Behaviour with fail-closed turned off.
+	 * @return string
+	 */
+	private function run_markup_pass( $html, $pattern, $kind, $callback, array &$failed, array &$inert_stash, $legacy = null ) {
+		$snapshot = $inert_stash;
+		$result   = preg_replace_callback( $pattern, $callback, $html );
+		if ( null !== $result ) {
+			return $result;
+		}
+		$failed[]    = $kind . ' (PCRE error ' . preg_last_error() . ')';
+		$inert_stash = $snapshot;
+		if ( ! $this->markup_fail_closed() ) {
+			return null === $legacy ? $html : $legacy( $html );
+		}
+		return $this->linear_markup_pass( $html, $kind, $callback );
+	}
+
+	/**
+	 * Whether a failed markup pass falls back to the linear walk.
+	 *
+	 * @return bool
+	 */
+	private function markup_fail_closed() {
+		if ( null === $this->markup_fail_closed_cache ) {
+			/**
+			 * Whether a markup pass that PCRE could not complete (backtrack or
+			 * recursion limit, JIT stack) is re-run over a linear walk of the
+			 * document instead of being skipped.
+			 *
+			 * Skipping it serves the page with every element that pass judges
+			 * left as the server rendered it, trackers included. Return false
+			 * only to restore that behaviour.
+			 *
+			 * @since 1.34.3
+			 *
+			 * @param bool $fail_closed Default true.
+			 */
+			$this->markup_fail_closed_cache = (bool) apply_filters( 'faz_output_buffer_fail_closed', true );
+		}
+		return $this->markup_fail_closed_cache;
+	}
+
+	/**
+	 * Log, at most once an hour, that a markup pass fell back.
+	 *
+	 * A page that trips the limit trips it on every request; one line per
+	 * request said nothing the first one had not, and filled the log.
+	 *
+	 * @param array  $failed  Kinds that failed.
+	 * @param string $context Entry point, for the log line.
+	 * @return void
+	 */
+	private function log_markup_pass_failure( array $failed, $context ) {
+		if ( empty( $failed ) ) {
+			return;
+		}
+		$key = 'faz_markup_pcre_fail_logged';
+		if ( false !== get_transient( $key ) ) {
+			return;
+		}
+		set_transient( $key, 1, HOUR_IN_SECONDS );
+		$what = $this->markup_fail_closed()
+			? 'the elements were judged by the linear fallback'
+			: 'blocking was SKIPPED for those elements (faz_output_buffer_fail_closed is false)';
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( 'FAZ Cookie Manager: ' . $context . ' pass(es) ' . implode( ', ', array_unique( $failed ) ) . '; ' . $what . '. pcre.backtrack_limit is ' . ini_get( 'pcre.backtrack_limit' ) . '. Logged at most once an hour.' );
+	}
+
+	/**
+	 * The linear walk behind run_markup_pass(): find the elements a pass
+	 * looks for with string functions only, build the match its pattern
+	 * would have captured, and hand it to the pass's callback.
+	 *
+	 * The walk reads the document as the HTML tokenizer does, as
+	 * find_inert_spans() does, and errs the same way, toward judging:
+	 * - every tag, start or end, is consumed with its attributes, so a
+	 *   `<script` inside an attribute value never opens an element;
+	 * - bogus comments (`<?…>`, `<!…>`, `</ …>`) end at their first `>`; a
+	 *   `<!--` is walked into, not skipped (a closed comment is already in
+	 *   the inert stash, and a tag inside one that is not gets judged, which
+	 *   is harmless in text);
+	 * - the bodies of script, style, textarea, title and xmp are text and
+	 *   are walked past, except inside svg and math, where they are not;
+	 * - a body with no end runs to the end of the document. For a script
+	 *   that is what the parser does as well (the element is never run), and
+	 *   for an iframe it is the frame the parser builds, src included.
+	 *
+	 * Cost is one strpos per `<` plus a strcspn per attribute: no pattern,
+	 * so nothing in it can exhaust a PCRE limit.
+	 *
+	 * @param string   $html     Document.
+	 * @param string   $kind     Key of LINEAR_PASS_KINDS.
+	 * @param callable $callback The pass's callback.
+	 * @return string
+	 */
+	private function linear_markup_pass( $html, $kind, $callback ) {
+		$spec    = self::LINEAR_PASS_KINDS[ $kind ];
+		$tags    = $spec['tags'];
+		$shape   = $spec['shape'];
+		$raw     = array( 'script', 'style', 'textarea', 'title', 'xmp' );
+		$len     = strlen( $html );
+		$out     = '';
+		$last    = 0;
+		$pos     = 0;
+		$foreign = 0;
+		while ( $pos < $len ) {
+			$lt = strpos( $html, '<', $pos );
+			if ( false === $lt || $lt + 1 >= $len ) {
+				break;
+			}
+			$c = $html[ $lt + 1 ];
+			if ( '!' === $c || '?' === $c ) {
+				if ( '<!--' === substr( $html, $lt, 4 ) ) {
+					$pos = $lt + 4;
+					continue;
+				}
+				$gt = strpos( $html, '>', $lt + 2 );
+				if ( false === $gt ) {
+					break;
+				}
+				$pos = $gt + 1;
+				continue;
+			}
+			$is_end  = '/' === $c;
+			$name_at = $is_end ? $lt + 2 : $lt + 1;
+			if ( $name_at >= $len || ! ctype_alpha( $html[ $name_at ] ) ) {
+				if ( ! $is_end ) {
+					$pos = $lt + 1; // A `<` that starts nothing is text.
+					continue;
+				}
+				$gt = strpos( $html, '>', $lt + 2 ); // `</ …>`: a bogus comment.
+				if ( false === $gt ) {
+					break;
+				}
+				$pos = $gt + 1;
+				continue;
+			}
+			$name_len = strcspn( $html, " \t\n\x0B\f\r/>", $name_at );
+			$name_end = $name_at + $name_len;
+			$name     = substr( $html, $name_at, $name_len );
+			$lower    = strtolower( $name );
+			$tag      = self::linear_tag_end( $html, $name_end, $len );
+			if ( null === $tag ) {
+				break; // A tag still open at the end: the rest is inside it.
+			}
+			$gt    = $tag[0];
+			$slash = $tag[1];
+			if ( $is_end ) {
+				if ( $foreign > 0 && ( 'svg' === $lower || 'math' === $lower ) ) {
+					$foreign--;
+				}
+				$pos = $gt + 1;
+				continue;
+			}
+
+			$attrs_end = false === $slash ? $gt : $slash;
+			$end       = $gt + 1;
+			if ( '*' === $tags ) {
+				$is_target = $name_len === strspn( $name, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:_.-' );
+			} else {
+				$is_target = in_array( $lower, $tags, true );
+			}
+			$has_body = 'body' === $shape || 'inner' === $shape || ( 'iframe' === $shape && false === $slash );
+
+			if ( $is_target ) {
+				$attrs = substr( $html, $name_end, $attrs_end - $name_end );
+				if ( $has_body ) {
+					$close = self::linear_close_tag( $html, $lower, $gt + 1, $len );
+					$body  = null === $close ? substr( $html, $gt + 1 ) : substr( $html, $gt + 1, $close[0] - $gt - 1 );
+					$end   = null === $close ? $len : $close[1];
+					$full  = substr( $html, $lt, $end - $lt );
+					$m     = 'inner' === $shape ? array( $full, $body ) : array( $full, $attrs, $body );
+				} else {
+					$full = substr( $html, $lt, $end - $lt );
+					switch ( $shape ) {
+						case 'open':
+							$m = array( $full, substr( $html, $name_end, $gt - $name_end ) );
+							break;
+						case 'open2':
+							$m = array( $full, $attrs, false === $slash ? '' : '/' );
+							break;
+						case 'named':
+							$m = array( $full, $name, $attrs );
+							break;
+						case 'iframe':
+							$m = array( $full, $attrs );
+							break;
+						default: // open3.
+							$m = array( $full, $name, $attrs, false === $slash ? '' : '/' );
+					}
+				}
+				$out .= substr( $html, $last, $lt - $last ) . (string) call_user_func( $callback, $m );
+				$last = $end;
+				$pos  = $end;
+				if ( $has_body ) {
+					continue;
+				}
+			} else {
+				$pos = $end;
+			}
+
+			if ( 'svg' === $lower || 'math' === $lower ) {
+				if ( false === $slash ) {
+					$foreign++;
+				}
+				continue;
+			}
+			if ( 0 === $foreign && in_array( $lower, $raw, true ) ) {
+				$close = self::linear_close_tag( $html, $lower, $end, $len );
+				if ( null === $close ) {
+					break; // A body with no end: the rest is text.
+				}
+				$pos = $close[0];
+			}
+		}
+		if ( 0 === $last ) {
+			return $html;
+		}
+		return $out . substr( $html, $last );
+	}
+
+	/**
+	 * Where a tag ends, read as ATTR_WALK reads it, without a pattern.
+	 *
+	 * @param string $html Document.
+	 * @param int    $p    Offset just past the tag name.
+	 * @param int    $len  Document length.
+	 * @return array{0:int,1:int|false}|null Offset of the closing `>`, and of
+	 *         the self-closing slash before it (false when there is none);
+	 *         null when the tag never ends.
+	 */
+	private static function linear_tag_end( $html, $p, $len ) {
+		$ws    = " \t\n\x0B\f\r";
+		$slash = false;
+		while ( $p < $len ) {
+			$p += strspn( $html, $ws, $p );
+			if ( $p >= $len ) {
+				return null;
+			}
+			$c = $html[ $p ];
+			if ( '>' === $c ) {
+				return array( $p, $slash );
+			}
+			$slash = false;
+			if ( '/' === $c ) {
+				$q = $p + 1 + strspn( $html, $ws, $p + 1 );
+				if ( $q < $len && '>' === $html[ $q ] ) {
+					$slash = $p;
+				}
+				++$p;
+				continue;
+			}
+			$n = strcspn( $html, $ws . "\"'>/=", $p );
+			if ( 0 === $n ) {
+				++$p; // A stray quote or `=`, one character, as ATTR_WALK reads it.
+				continue;
+			}
+			$p += $n;
+			$q  = $p + strspn( $html, $ws, $p );
+			if ( $q >= $len || '=' !== $html[ $q ] ) {
+				continue;
+			}
+			$v = $q + 1 + strspn( $html, $ws, $q + 1 );
+			if ( $v >= $len ) {
+				return null;
+			}
+			$quote = $html[ $v ];
+			if ( '"' === $quote || "'" === $quote ) {
+				$close = strpos( $html, $quote, $v + 1 );
+				// Unterminated: ATTR_WALK reads the `=` and the quote as stray
+				// characters and goes on, and so does this.
+				$p = false === $close ? $q + 1 : $close + 1;
+				continue;
+			}
+			$p = '>' === $quote ? $v : $v + strcspn( $html, $ws . '>', $v );
+		}
+		return null;
+	}
+
+	/**
+	 * The end tag of a raw-text or iframe body: `</name` followed by
+	 * whitespace, `/` or `>`, through its `>`.
+	 *
+	 * @param string $html Document.
+	 * @param string $name Lower-case element name.
+	 * @param int    $from Offset to search from.
+	 * @param int    $len  Document length.
+	 * @return array{0:int,1:int}|null Offset of `</`, offset just past `>`;
+	 *         null when there is none.
+	 */
+	private static function linear_close_tag( $html, $name, $from, $len ) {
+		$needle = '</' . $name;
+		$step   = strlen( $needle );
+		$at     = stripos( $html, $needle, $from );
+		while ( false !== $at ) {
+			$next = $at + $step;
+			if ( $next >= $len ) {
+				return null;
+			}
+			if ( false !== strpos( " \t\n\x0B\f\r/>", $html[ $next ] ) ) {
+				$gt = strpos( $html, '>', $next );
+				return false === $gt ? null : array( $at, $gt + 1 );
+			}
+			$at = stripos( $html, $needle, $next );
+		}
+		return null;
 	}
 
 	/**
@@ -12399,11 +12770,11 @@ class Frontend {
 
 		$srcdoc_stash  = array();
 		$srcdoc_marker = '';
-		$stashed       = $this->stash_iframe_srcdocs( $content, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker );
+		$failed_passes = array();
+		$stashed       = $this->stash_iframe_srcdocs( $content, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker, $failed_passes );
 		if ( null === $stashed ) {
-			// Fail-secure, as the passes below: a srcdoc that cannot be walked
-			// is a document whose fetches nothing downstream can gate.
-			error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in filter_content_blocking (srcdoc)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			// Fail-closed turned off: the srcdoc stays in place and the passes
+			// below see it, as before the stash existed.
 			$srcdoc_stash  = array();
 			$srcdoc_marker = '';
 		} else {
@@ -12411,11 +12782,16 @@ class Frontend {
 		}
 
 		// Block <script> tags in content.
-		// Fail-secure: on PCRE error, strip scripts entirely rather than serving
-		// them unblocked, which would violate consent requirements.
+		// On a PCRE error the same callback is re-run over the linear walk
+		// (run_markup_pass()). The strip that used to stand here was a second
+		// lazy regex over the same markup, which fails on the same input and
+		// then returned the content unfiltered; it is kept only for
+		// `faz_output_buffer_fail_closed` set to false.
 		if ( false !== stripos( $content, '<script' ) ) {
-			$result = preg_replace_callback(
+			$content = $this->run_markup_pass(
+				$content,
 				'#' . self::script_token_skip() . '<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
+				'script',
 				function ( $m ) use ( $providers, $blocked_categories, &$inert_stash ) {
 					return $this->process_with_inert_body(
 						$m,
@@ -12426,32 +12802,31 @@ class Frontend {
 						}
 					);
 				},
-				$content
+				$failed_passes,
+				$inert_stash,
+				function ( $content ) {
+					return preg_replace( '#<script\b[^>]*>.*?</script(?=[\s/>])[^>]*>#is', '', $content ) ?? $content;
+				}
 			);
-			if ( null !== $result ) {
-				$content = $result;
-			} else {
-				error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in filter_content_blocking (scripts)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				$content = preg_replace( '#<script\b[^>]*>.*?</script(?=[\s/>])[^>]*>#is', '', $content ) ?? $content;
-			}
 		}
 
 		// Block <iframe> tags in content.
 		if ( false !== stripos( $content, '<iframe' ) ) {
-			$result = preg_replace_callback(
+			$content = $this->run_markup_pass(
+				$content,
 				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
+				'iframe',
 				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );
 				},
-				$content
+				$failed_passes,
+				$inert_stash,
+				function ( $content ) {
+					return preg_replace( '#<iframe\b[^>]*>.*?</iframe(?=[\s/>])[^>]*>#is', '', $content ) ?? $content;
+				}
 			);
-			if ( null !== $result ) {
-				$content = $result;
-			} else {
-				error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in filter_content_blocking (iframes)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				$content = preg_replace( '#<iframe\b[^>]*>.*?</iframe(?=[\s/>])[^>]*>#is', '', $content ) ?? $content;
-			}
 		}
+		$this->log_markup_pass_failure( $failed_passes, 'content filter' );
 
 		if ( ! empty( $inert_stash ) ) {
 			$content = strtr( $content, $inert_stash );
