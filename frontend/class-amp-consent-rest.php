@@ -499,7 +499,10 @@ class AMP_Consent_Rest {
 		}
 
 		$incoming_state = self::sanitize_state( $request->get_param( 'consentStateValue' ) );
-		$cookie         = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie() : '';
+		// Scoped explicitly, with the same strict scope state_from_cookie()
+		// applies, so this read cannot be mistaken for the revision-only one
+		// the callers that run before banner selection use.
+		$cookie         = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie( '', self::cookie_scope( $context ) ) : '';
 		$server_state   = self::state_from_cookie( $cookie, $context );
 
 		// A signed state returned by checkConsentHref binds AMP's local cache to
@@ -1084,6 +1087,15 @@ class AMP_Consent_Rest {
 	 * produce, so the existing cookie is now read and its unowned keys carried
 	 * forward.
 	 *
+	 * No fazVendorConsent record is written: an AMP page never shows the IAB
+	 * vendor list, so no vendor consent exists. On a canonical page with TCF
+	 * active, script.js and faz_is_vendor_record_stale() therefore both treat
+	 * this cookie as a decision that still has to be asked, and the visitor
+	 * answers the full banner once there. Keeping the categories while asking
+	 * for the vendors alone would need a vendor-only prompt the banner does not
+	 * have; re-asking the whole choice is the conservative form of the same
+	 * IAB rule (vendor consent only through the CMP that disclosed them).
+	 *
 	 * @param string $state           accepted|rejected.
 	 * @param array  $purposes        Purpose slug => bool.
 	 * @param array  $context         Resolved banner context.
@@ -1271,6 +1283,26 @@ class AMP_Consent_Rest {
 	}
 
 	/**
+	 * The consent-cookie scope of the AMP banner in a resolved context.
+	 *
+	 * AMP always knows its exact banner, so the check is strict: every scope key
+	 * present and matching. One definition, read by the update handler and by
+	 * state_from_cookie().
+	 *
+	 * @since 1.34.2
+	 * @param array $context Resolved AMP context (slug, law, scope_fingerprint).
+	 * @return array
+	 */
+	public static function cookie_scope( $context ) {
+		return array(
+			'slug'        => (string) $context['slug'],
+			'law'         => (string) $context['law'],
+			'fingerprint' => (string) $context['scope_fingerprint'],
+			'strict'      => true,
+		);
+	}
+
+	/**
 	 * Read a standard FAZ cookie only when scope, revision and TTL are current.
 	 *
 	 * @return array|false
@@ -1301,13 +1333,7 @@ class AMP_Consent_Rest {
 		if ( ! function_exists( 'faz_consent_cookie_scope_changed' ) ) {
 			return false;
 		}
-		$scope = array(
-			'slug'        => (string) $context['slug'],
-			'law'         => (string) $context['law'],
-			'fingerprint' => (string) $context['scope_fingerprint'],
-			'strict'      => true,
-		);
-		if ( faz_consent_cookie_scope_changed( $parsed, $scope ) ) {
+		if ( faz_consent_cookie_scope_changed( $parsed, self::cookie_scope( $context ) ) ) {
 			return false;
 		}
 		$has_absolute_expiry = isset( $parsed['exp'] );

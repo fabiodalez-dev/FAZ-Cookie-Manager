@@ -103,6 +103,9 @@ class Activator {
 		// every install still using the floating widget.
 		add_action( 'faz_daily_cleanup', array( 'FazCookie\Includes\Withdrawal_Path', 'cron_verify' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
+		// One-off GVL download scheduled when TCF is enabled without a list
+		// (Settings::maybe_bootstrap_gvl) — kept out of the settings request.
+		add_action( 'faz_gvl_bootstrap', array( 'FazCookie\Admin\Modules\Settings\Includes\Settings', 'run_gvl_bootstrap' ) );
 		add_action( 'faz_weekly_definitions_update', array( 'FazCookie\Includes\Cookie_Definitions', 'cron_update' ) );
 		add_action( 'faz_after_update_settings', array( 'FazCookie\Includes\Cookie_Definitions', 'schedule_updates' ) );
 		add_action( 'faz_scheduled_scan', array( __CLASS__, 'run_scheduled_scan' ) );
@@ -167,7 +170,7 @@ class Activator {
 			self::normalize_legacy_functional_optout_flags();
 			self::move_sourcebuster_to_marketing();
 			self::reset_stale_per_cookie_consent();
-			self::refresh_necessary_disclosure_text();
+			$all_complete = self::refresh_necessary_disclosure_text() && $all_complete;
 			self::demote_bulky_autoloaded_options();
 			self::refresh_cookie_translation_caches();
 			self::remove_dead_site_settings();
@@ -1424,6 +1427,9 @@ class Activator {
 				}
 			} ),
 			array( 'W3 Total Cache', function () {
+				// Every W3TC cache, not just pages: an upgrade ships new JS/CSS
+				// that its minify and CDN caches may hold. A save only needs the
+				// page cache (see the W3_Total_Cache adapter).
 				if ( function_exists( 'w3tc_flush_all' ) ) {
 					w3tc_flush_all();
 				}
@@ -1434,8 +1440,12 @@ class Activator {
 				}
 			} ),
 			array( 'Cache Enabler', function () {
+				// Same API as the Cache_Enabler adapter: the 1.6.0+ action, and
+				// the deprecated ce_clear_cache only for older builds.
 				if ( has_action( 'cache_enabler_clear_complete_cache' ) ) {
 					do_action( 'cache_enabler_clear_complete_cache' );
+				} elseif ( has_action( 'ce_clear_cache' ) ) {
+					do_action( 'ce_clear_cache' );
 				}
 			} ),
 			array( 'SG Optimizer', function () {
@@ -1461,6 +1471,31 @@ class Activator {
 			array( 'WP-Optimize', function () {
 				if ( class_exists( 'WP_Optimize' ) && function_exists( 'wpo_cache_flush' ) ) {
 					wpo_cache_flush();
+				}
+			} ),
+			array( 'Nginx Helper', function () {
+				if ( has_action( 'rt_nginx_helper_purge_all' ) ) {
+					do_action( 'rt_nginx_helper_purge_all' );
+				}
+			} ),
+			array( 'Proxy Cache Purge', function () {
+				// Not through the FAZ purge event the save adapter fires: this
+				// runs on init priority 5, before VarnishPurger::init()
+				// (priority 10) reads varnish_http_purge_events and hooks its
+				// listeners, so that event reached nothing here. The plugin's
+				// public execute_purge_no_id() needs neither: it queues the
+				// full-site `/?vhp-regex` URL on the instance, and the shutdown
+				// hook init() adds sends it — the same path as its own "Purge
+				// cache" button. Called after init (an activation), shutdown is
+				// already hooked and the result is the same.
+				$purger = isset( $GLOBALS['purger'] ) ? $GLOBALS['purger'] : null;
+				if ( $purger instanceof \VarnishPurger && is_callable( array( $purger, 'execute_purge_no_id' ) ) ) {
+					$purger->execute_purge_no_id( 0 );
+				}
+			} ),
+			array( 'Super Page Cache', function () {
+				if ( has_action( 'swcfpc_purge_cache' ) ) {
+					do_action( 'swcfpc_purge_cache' );
 				}
 			} ),
 			array( 'Comet Cache', function () {
@@ -2484,15 +2519,23 @@ class Activator {
 	 * restores the old sentence; withheld while the tables are missing; a failed
 	 * write throws so the batch withholds its version marker and retries.
 	 *
-	 * @return void
+	 * "Retried" has to be true, and until the return value it was not: a step
+	 * that declined (helpers not loaded, tables missing) returned quietly, the
+	 * batch wrote its version marker anyway, and the fast path in
+	 * run_pending_migrations() never called this again until a release bumped
+	 * MIGRATIONS_VERSION. It now reports the decline the way
+	 * seed_own_consent_cookie() does, and the batch withholds the marker.
+	 *
+	 * @return bool True when the step is done (now or on an earlier run); false
+	 *              when it declined and must be retried.
 	 * @throws \RuntimeException When a row cannot be written.
 	 */
 	public static function refresh_necessary_disclosure_text() {
 		if ( get_option( 'faz_necessary_disclosure_text_done' ) ) {
-			return;
+			return true;
 		}
 		if ( ! function_exists( 'faz_read_json_file' ) ) {
-			return; // Utilities not loaded in this context: retried later.
+			return false; // Utilities not loaded in this context: retried later.
 		}
 		global $wpdb;
 		$cookies    = $wpdb->prefix . 'faz_cookies';
@@ -2500,7 +2543,7 @@ class Activator {
 		foreach ( array( $cookies, $categories ) as $table ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the upgrade path.
 			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
-				return; // No table yet: retried on the next run, marker not set.
+				return false; // No table yet: retried on the next run, marker not set.
 			}
 		}
 
@@ -2595,6 +2638,7 @@ class Activator {
 		}
 		wp_cache_delete( 'faz_category_contents_en', 'faz_category_contents' );
 		update_option( 'faz_necessary_disclosure_text_done', 1, false );
+		return true;
 	}
 
 	/**

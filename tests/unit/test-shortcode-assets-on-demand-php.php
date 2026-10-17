@@ -130,6 +130,7 @@ namespace {
 
 	require_once FAZ_PLUGIN_BASEPATH . 'includes/class-formatting.php';
 	require_once FAZ_PLUGIN_BASEPATH . 'includes/class-ip-hasher.php';
+	require_once FAZ_PLUGIN_BASEPATH . 'includes/class-cache-compatibility.php';
 	require_once FAZ_PLUGIN_BASEPATH . 'includes/class-dsar-shortcode.php';
 	require_once FAZ_PLUGIN_BASEPATH . 'includes/class-do-not-sell-shortcode.php';
 	require_once FAZ_PLUGIN_BASEPATH . 'admin/modules/cookie-policy-generator/class-cookie-policy-generator.php';

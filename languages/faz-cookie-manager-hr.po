@@ -930,31 +930,31 @@ msgstr "Signal privatnosti, banner bez odgovora"
 
 #: admin/class-admin.php:809
 msgid "Region the consent was enforced under (ISO 3166-2)."
-msgstr ""
+msgstr "Regija prema čijim je pravilima privola primijenjena (ISO 3166-2)."
 
 #: admin/class-admin.php:810
 msgid "Country the consent was enforced under (ISO 3166-1)."
-msgstr ""
+msgstr "Država prema čijim je pravilima privola primijenjena (ISO 3166-1)."
 
 #: admin/class-admin.php:811
 msgid "Jurisdiction ruleset applied at consent time."
-msgstr ""
+msgstr "Skup pravila jurisdikcije primijenjen u trenutku davanja privole."
 
 #: admin/class-admin.php:812
 msgid "The request carried a Global Privacy Control signal (Sec-GPC: 1)."
-msgstr ""
+msgstr "Zahtjev je sadržavao signal Global Privacy Control (Sec-GPC: 1)."
 
 #: admin/class-admin.php:813
 msgid "The request carried a Do Not Track signal (DNT: 1)."
-msgstr ""
+msgstr "Zahtjev je sadržavao signal Do Not Track (DNT: 1)."
 
 #: admin/class-admin.php:814
 msgid "IAB TCF TC String recorded with this consent:"
-msgstr ""
+msgstr "IAB TCF TC String zabilježen uz ovu privolu:"
 
 #: admin/class-admin.php:815
 msgid "IAB GPP string recorded with this consent:"
-msgstr ""
+msgstr "IAB GPP string zabilježen uz ovu privolu:"
 
 #: admin/class-admin.php:816
 msgid "Failed to load consent logs."
@@ -2389,39 +2389,39 @@ msgstr "URL stranice na kojoj je dana privola."
 
 #: admin/modules/consentlogs/api/class-api.php:481
 msgid "Date the consent was logged, in the site timezone (Y-m-d H:i:s, no offset)."
-msgstr ""
+msgstr "Datum bilježenja privole, u vremenskoj zoni web-stranice (Y-m-d H:i:s, bez pomaka)."
 
 #: admin/modules/consentlogs/api/class-api.php:487
 msgid "The same instant in UTC, RFC 3339."
-msgstr ""
+msgstr "Isti trenutak u UTC-u, RFC 3339."
 
 #: admin/modules/consentlogs/api/class-api.php:498
 msgid "ISO 3166-1 alpha-2 country the consent was enforced under; empty when unknown."
-msgstr ""
+msgstr "Država prema ISO 3166-1 alpha-2 prema čijim je pravilima privola primijenjena; prazno ako nije poznata."
 
 #: admin/modules/consentlogs/api/class-api.php:504
 msgid "ISO 3166-2 region the consent was enforced under; empty when unknown."
-msgstr ""
+msgstr "Regija prema ISO 3166-2 prema čijim je pravilima privola primijenjena; prazno ako nije poznata."
 
 #: admin/modules/consentlogs/api/class-api.php:510
 msgid "Identifier of the jurisdiction ruleset applied at consent time; empty when none was enforced."
-msgstr ""
+msgstr "Identifikator skupa pravila jurisdikcije primijenjenog u trenutku davanja privole; prazno ako nijedan nije primijenjen."
 
 #: admin/modules/consentlogs/api/class-api.php:516
 msgid "Whether the request carried a Global Privacy Control signal (1) or not (0)."
-msgstr ""
+msgstr "Je li zahtjev sadržavao signal Global Privacy Control (1) ili nije (0)."
 
 #: admin/modules/consentlogs/api/class-api.php:522
 msgid "Whether the request carried a Do Not Track signal (1) or not (0)."
-msgstr ""
+msgstr "Je li zahtjev sadržavao signal Do Not Track (1) ili nije (0)."
 
 #: admin/modules/consentlogs/api/class-api.php:528
 msgid "IAB TCF TC String recorded with the consent, when the TCF CMP is enabled."
-msgstr ""
+msgstr "IAB TCF TC String zabilježen uz privolu, kada je TCF CMP omogućen."
 
 #: admin/modules/consentlogs/api/class-api.php:534
 msgid "IAB GPP string recorded with the consent, when a GPP API is present."
-msgstr ""
+msgstr "IAB GPP string zabilježen uz privolu, kada je prisutan GPP API."
 
 #: admin/modules/cookie-policy-generator/api/class-cookie-policy-api.php:210
 msgid "The consent revision could not be updated safely. Retry the operation."
@@ -2472,15 +2472,15 @@ msgstr "Neki od gore navedenih kolačića mogu prenositi vaše osobne podatke u 
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1038
 msgid "Some cookies listed above may transfer your personal data outside Brazil. Under Articles 33 to 36 of the LGPD, such transfers require a valid transfer mechanism (for example a destination country recognised by the ANPD as providing an adequate level of protection, standard contractual clauses approved by the ANPD, or your specific and highlighted consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
-msgstr ""
+msgstr "Neki od gore navedenih kolačića mogu prenositi vaše osobne podatke izvan Brazila. Prema člancima od 33. do 36. LGPD-a, takvi prijenosi zahtijevaju valjan mehanizam prijenosa (na primjer odredišnu državu za koju je ANPD utvrdio da pruža primjerenu razinu zaštite, standardne ugovorne klauzule koje je odobrio ANPD ili vašu posebnu i istaknutu privolu). Država primateljica i zaštitna mjera koju je naveo voditelj ove stranice navedeni su u nastavku kako biste mogli donijeti informiranu odluku."
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1040
 msgid "Some cookies listed above may transfer your personal information outside South Africa. Under section 72 of POPIA, such transfers require a valid ground (for example a recipient bound by a law, binding corporate rules or a binding agreement that provides a substantially similar level of protection, or your consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
-msgstr ""
+msgstr "Neki od gore navedenih kolačića mogu prenositi vaše osobne informacije izvan Južnoafričke Republike. Prema odjeljku 72. POPIA-e, takvi prijenosi zahtijevaju valjanu osnovu (na primjer primatelja obvezanog zakonom, obvezujućim korporativnim pravilima ili obvezujućim sporazumom koji pružaju bitno sličnu razinu zaštite, ili vašu privolu). Država primateljica i zaštitna mjera koju je naveo voditelj ove stranice navedeni su u nastavku kako biste mogli donijeti informiranu odluku."
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1042
 msgid "Some cookies listed above may transfer your personal information to a country other than the one you are browsing from. The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
-msgstr ""
+msgstr "Neki od gore navedenih kolačića mogu prenositi vaše osobne informacije u državu različitu od one iz koje pregledavate stranicu. Država primateljica i zaštitna mjera koju je naveo voditelj ove stranice navedeni su u nastavku kako biste mogli donijeti informiranu odluku."
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1063
 msgid "Transfers personal data outside the EU/EEA"
@@ -2492,27 +2492,27 @@ msgstr "prenosi osobne podatke izvan EU-a/EGP-a"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1067
 msgid "Transfers personal data outside Brazil"
-msgstr ""
+msgstr "Prenosi osobne podatke izvan Brazila"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1068
 msgid "transfers personal data outside Brazil"
-msgstr ""
+msgstr "prenosi osobne podatke izvan Brazila"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1071
 msgid "Transfers personal information outside South Africa"
-msgstr ""
+msgstr "Prenosi osobne informacije izvan Južnoafričke Republike"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1072
 msgid "transfers personal information outside South Africa"
-msgstr ""
+msgstr "prenosi osobne informacije izvan Južnoafričke Republike"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1075
 msgid "Transfers personal data to another country"
-msgstr ""
+msgstr "Prenosi osobne podatke u drugu državu"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1076
 msgid "transfers personal data to another country"
-msgstr ""
+msgstr "prenosi osobne podatke u drugu državu"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1388
 msgid "None declared."
@@ -2643,6 +2643,9 @@ msgid ""
 "\n"
 "Records of the consent choices you make in our cookie banner are kept for {{CONSENT_RECORD_RETENTION}} from collection, so that we can demonstrate the consent we rely on. Other data collected through cookies, including analytics data, is kept only for as long as its purpose requires and, where no shorter cookie-specific period is shown, for no longer than the declared fallback period of {{RETENTION_PERIOD}}. Strictly necessary cookies are retained only for the duration of the session or as required for the technical function they serve. See the table above for the specific lifetime of each cookie."
 msgstr ""
+"## Koliko dugo čuvamo podatke\n"
+"\n"
+"Zapisi o izborima privole koje napravite u našem banneru za kolačiće čuvaju se {{CONSENT_RECORD_RETENTION}} od prikupljanja kako bismo mogli dokazati privolu na koju se oslanjamo. Ostali podaci prikupljeni putem kolačića, uključujući analitičke podatke, čuvaju se samo onoliko dugo koliko to zahtijeva njihova svrha i, ako nije naveden kraći rok specifičan za pojedini kolačić, ne dulje od navedenog zamjenskog roka od {{RETENTION_PERIOD}}. Strogo nužni kolačići čuvaju se samo tijekom trajanja sesije ili onoliko koliko je potrebno za tehničku funkciju kojoj služe. Pogledajte tablicu iznad za točno trajanje svakog kolačića."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:83
 msgctxt "Cookie policy template: gdpr-strict / section-7"
@@ -2985,6 +2988,14 @@ msgid ""
 "\n"
 "We do **not** process sensitive personal data (Art. 5, II) via cookies without specific and highlighted consent (Art. 11 LGPD)."
 msgstr ""
+"## Kategorije obrađenih osobnih podataka (Art. 5, I)\n"
+"\n"
+"- **Mrežni identifikatori** — IP adresa (jednosmjerno hashirana saltom specifičnim za web-stranicu), identifikatori uređaja, identifikatori sesije\n"
+"- **Podaci o pregledavanju** — posjećene stranice, vrijeme zadržavanja, interakcije\n"
+"- **Približna lokacija** — država/regija na temelju IP adrese (ne precizni GPS)\n"
+"- **Preferencije** — kategorije privole, jezik\n"
+"\n"
+"**Ne** obrađujemo osjetljive osobne podatke (Art. 5, II) putem kolačića bez posebne i istaknute privole (Art. 11 LGPD)."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:292
 msgctxt "Cookie policy template: lgpd-brazil / section-4"
@@ -3300,7 +3311,7 @@ msgstr "Opis kategorije kolačića."
 
 #: admin/modules/cookies/api/class-categories-api.php:282
 msgid "Whether the category is granted before any consent action (an admin-declared consent-exempt category, e.g. first-party anonymised analytics). True pre-grants it client-side only; the server-side blocker keeps its scripts blocked under an opt-in law until the visitor acts."
-msgstr ""
+msgstr "Je li kategorija odobrena prije bilo kakve radnje privole (kategorija koju je administrator proglasio izuzetom od privole, npr. anonimizirana analitika prve strane). Vrijednost true odobrava je unaprijed samo na strani klijenta; blokiranje na strani poslužitelja drži njezine skripte blokiranima prema opt-in zakonu dok posjetitelj ne poduzme radnju."
 
 #: admin/modules/cookies/api/class-categories-api.php:287
 msgid "Category display priority."
@@ -3824,7 +3835,7 @@ msgstr ""
 
 #: admin/modules/settings/includes/class-policy-page.php:81
 msgid "The cookie policy page was saved as a draft because the company name and privacy contact email are not set yet. Fill them in on the Cookie Policy page, then publish the page and link it from the Cookie Banner page."
-msgstr ""
+msgstr "Stranica pravila o kolačićima spremljena je kao skica jer naziv tvrtke i e-mail za kontakt o privatnosti još nisu postavljeni. Ispunite ih na stranici Pravila o kolačićima, zatim objavite stranicu i povežite je sa stranice Banner za kolačiće."
 
 #: admin/modules/settings/includes/class-policy-page.php:83
 msgid "The cookie policy page was created, but the banner could not be linked to it. Set the privacy link on the Cookie Banner page."
@@ -4845,7 +4856,7 @@ msgstr "URL stranice"
 
 #: admin/views/consent-logs.php:93
 msgid "Context"
-msgstr ""
+msgstr "Kontekst"
 
 #: admin/views/consent-logs.php:97 admin/views/cookies.php:71
 #: admin/views/cookies.php:183 admin/views/dashboard.php:199
@@ -5052,7 +5063,7 @@ msgstr "Koristi se samo kao deklaracija u pravilima kada se ne primjenjuje krać
 
 #: admin/views/cookie-policy.php:289
 msgid "The period the policy states for consent records is the consent log retention set under Settings."
-msgstr ""
+msgstr "Razdoblje koje pravila navode za zapise o privolama jest razdoblje čuvanja zapisnika privola postavljeno u Postavkama."
 
 #: admin/views/cookie-policy.php:292
 msgid "Separate Privacy Policy URL (required for POPIA)"
@@ -7037,11 +7048,11 @@ msgstr ""
 
 #: admin/views/setup.php:464
 msgid "Create the cookie policy page when setup finishes"
-msgstr ""
+msgstr "Izradi stranicu pravila o kolačićima po završetku postavljanja"
 
 #: admin/views/setup.php:465
 msgid "The page is created from the standard template in the selected language. It is published immediately, visible to visitors, only when your company name and privacy contact email are already saved on the Cookie Policy page; otherwise it is saved as a draft for you to complete and publish. An existing generated page in that language is reused and custom banner links are kept."
-msgstr ""
+msgstr "Stranica se izrađuje iz standardnog predloška na odabranom jeziku. Odmah se objavljuje i postaje vidljiva posjetiteljima samo ako su naziv vaše tvrtke i e-mail za kontakt o privatnosti već spremljeni na stranici Pravila o kolačićima; u suprotnom se sprema kao skica koju trebate dovršiti i objaviti. Već generirana stranica na tom jeziku ponovno se koristi, a prilagođene poveznice bannera zadržavaju se."
 
 #: admin/views/setup.php:468
 msgid "No cookie policy template ships in the selected language for this law, so the page cannot be created here. Write the policy on the Cookie Policy page instead."
@@ -7445,37 +7456,37 @@ msgstr "Banner se automatski zatvara za %d s..."
 #: frontend/class-frontend.php:3495
 #: frontend/modules/banner-rest/class-banner-rest.php:616
 msgid "Consent"
-msgstr ""
+msgstr "Privola"
 
 #: frontend/class-frontend.php:3496
 #: frontend/modules/banner-rest/class-banner-rest.php:617
 msgid "Cookie retention"
-msgstr ""
+msgstr "Trajanje kolačića"
 
 #: frontend/class-frontend.php:3497
 #: frontend/modules/banner-rest/class-banner-rest.php:618
 msgid "Features"
-msgstr ""
+msgstr "Značajke"
 
 #: frontend/class-frontend.php:3498
 #: frontend/modules/banner-rest/class-banner-rest.php:619
 msgid "Legitimate Interest"
-msgstr ""
+msgstr "Legitimni interes"
 
 #: frontend/class-frontend.php:3499
 #: frontend/modules/banner-rest/class-banner-rest.php:620
 msgid "Some vendors process your data on the basis of legitimate interest rather than consent. You have the right to object: switch a purpose off to object to that processing."
-msgstr ""
+msgstr "Neki dobavljači obrađuju vaše podatke na temelju legitimnog interesa umjesto privole. Imate pravo na prigovor: isključite svrhu kako biste uložili prigovor na tu obradu."
 
 #: frontend/class-frontend.php:3500
 #: frontend/modules/banner-rest/class-banner-rest.php:621
 msgid "IAB Vendor Consent"
-msgstr ""
+msgstr "Privola za IAB dobavljače"
 
 #: frontend/class-frontend.php:3501
 #: frontend/modules/banner-rest/class-banner-rest.php:622
 msgid "Allow processing based on legitimate interest"
-msgstr ""
+msgstr "Dopusti obradu na temelju legitimnog interesa"
 
 #. translators: %s: service name (e.g., "YouTube", "Google Maps")
 #: frontend/includes/class-placeholder-builder.php:218
@@ -7551,7 +7562,7 @@ msgstr "Ovaj kolačić može prenijeti osobne podatke u zemlju bez odluke EU-a o
 #: frontend/modules/shortcodes/class-shortcodes.php:1088
 #: includes/class-cookie-table-shortcode.php:241
 msgid "This cookie may transfer personal data to another country."
-msgstr ""
+msgstr "Ovaj kolačić može prenijeti osobne podatke u drugu državu."
 
 #: frontend/views/banner-preview-frame.php:32
 msgid "Banner Preview"
@@ -7604,7 +7615,7 @@ msgstr "Privola za kolačiće (FAZ Cookie Manager)"
 
 #: includes/class-cli.php:438
 msgid "This site uses the FAZ Cookie Manager plugin to collect and manage cookie consent. When you interact with the cookie banner, we record your consent choice (accepted, rejected, or partial), a random consent identifier that is also stored in the consent cookie in your browser, a hashed version of your IP address, a hashed version of your browser user agent, and the page URL where consent was given. This data is stored locally on our server and retained for the period configured in the plugin settings (default: 12 months)."
-msgstr ""
+msgstr "Ova stranica koristi plugin FAZ Cookie Manager za prikupljanje i upravljanje privolama za kolačiće. Kada koristite banner za kolačiće, bilježimo vaš odabir privole (prihvaćeno, odbijeno ili djelomično), nasumični identifikator privole koji se pohranjuje i u kolačiću privole u vašem pregledniku, hashiranu verziju vaše IP adrese, hashiranu verziju korisničkog agenta vašeg preglednika i URL stranice na kojoj je privola dana. Ti se podaci pohranjuju lokalno na našem poslužitelju i čuvaju tijekom razdoblja konfiguriranog u postavkama plugina (zadano: 12 mjeseci)."
 
 #: includes/class-cli.php:439
 msgid "You can change your cookie preferences at any time using the cookie icon in the bottom corner of the page."
@@ -8047,7 +8058,7 @@ msgstr "— Odaberite vrstu zahtjeva —"
 
 #: includes/class-dsar-shortcode.php:472
 msgid "Exercising more than one right? Choose one here and name the others in the message below — a single submission covers them all."
-msgstr ""
+msgstr "Želite ostvariti više od jednog prava? Ovdje odaberite jedno, a ostala navedite u poruci ispod — jedno slanje obuhvaća sva."
 
 #: includes/class-dsar-shortcode.php:476
 msgid "Additional Information"
@@ -8059,7 +8070,7 @@ msgstr "Neobavezno: navedite dodatni kontekst koji nam pomaže identificirati va
 
 #: includes/class-dsar-shortcode.php:505
 msgid "Invalid security token. Please refresh the page and try again, or email us directly to exercise your rights."
-msgstr ""
+msgstr "Nevažeći sigurnosni token. Osvježite stranicu i pokušajte ponovo ili nam se za ostvarivanje svojih prava obratite izravno e-poštom."
 
 #: includes/class-dsar-shortcode.php:526
 msgid "Please enter your full name."
@@ -8091,7 +8102,7 @@ msgstr "Podnošenje odbijeno."
 
 #: includes/class-dsar-shortcode.php:801
 msgid "Too many requests. Please wait 1 hour before submitting again, or email us directly to exercise your rights."
-msgstr ""
+msgstr "Previše zahtjeva. Pričekajte 1 sat prije ponovnog slanja ili nam se za ostvarivanje svojih prava obratite izravno e-poštom."
 
 #: includes/class-dsar-shortcode.php:814
 msgid "This form has reached its daily limit for security reasons. Your request still matters: please email us directly to exercise your rights, and we will respond within the statutory deadline."
@@ -8107,7 +8118,7 @@ msgstr ""
 
 #: includes/class-dsar-shortcode.php:1374
 msgid "This form has expired. Please reload the page and submit it again, or email us directly to exercise your rights."
-msgstr ""
+msgstr "Ovaj je obrazac istekao. Ponovno učitajte stranicu i pošaljite ga ponovo ili nam se za ostvarivanje svojih prava obratite izravno e-poštom."
 
 #. translators: %s: site name
 #: includes/class-dsar-shortcode.php:1544
@@ -8339,7 +8350,7 @@ msgstr "Poruka"
 
 #: includes/class-utils.php:1411
 msgid "FAZ Cookie Manager consent logs hold a pseudonymised IP (a salted one-way hash) and no email address, so they cannot be linked to an email address and nothing is erased there; they auto-purge after the configured retention period."
-msgstr ""
+msgstr "Zapisi privola FAZ Cookie Managera sadrže pseudonimiziranu IP adresu (jednosmjerni hash sa saltom) i nikakvu e-mail adresu, pa se ne mogu povezati s e-mail adresom i u njima se ništa ne briše; automatski se brišu nakon konfiguriranog razdoblja čuvanja."
 
 #. translators: %d: number of privacy-request records redacted.
 #: includes/class-utils.php:1531
@@ -8436,55 +8447,6 @@ msgstr "Gumb"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Poveznica"
-
-#~ msgid "Date the consent was logged."
-#~ msgstr "Datum bilježenja privole."
-
-#~ msgctxt "Cookie policy template: gdpr-strict / section-6"
-#~ msgid ""
-#~ "## How long we keep data\n"
-#~ "\n"
-#~ "Consent records and analytics data are retained for {{RETENTION_PERIOD}} from collection. Strictly necessary cookies are retained only for the duration of the session or as required for the technical function they serve. See the table above for the specific lifetime of each cookie."
-#~ msgstr ""
-#~ "## Koliko dugo čuvamo podatke\n"
-#~ "\n"
-#~ "Zapisi o privolama i analitički podaci čuvaju se {{RETENTION_PERIOD}} od prikupljanja. Strogo nužni kolačići čuvaju se samo tijekom trajanja sesije ili onoliko koliko je potrebno za tehničku funkciju kojoj služe. Pogledajte tablicu iznad za točno trajanje svakog kolačića."
-
-#~ msgctxt "Cookie policy template: lgpd-brazil / section-3"
-#~ msgid ""
-#~ "## Categories of personal data processed (Art. 5, I)\n"
-#~ "\n"
-#~ "- **Online identifiers** — IP (hashed with monthly salt), device IDs, session IDs\n"
-#~ "- **Browsing data** — pages visited, dwell time, interactions\n"
-#~ "- **Approximate location** — country/region from IP (not precise GPS)\n"
-#~ "- **Preferences** — consent categories, language\n"
-#~ "\n"
-#~ "We do **not** process sensitive personal data (Art. 5, II) via cookies without specific and highlighted consent (Art. 11 LGPD)."
-#~ msgstr ""
-#~ "## Kategorije obrađenih osobnih podataka (Art. 5, I)\n"
-#~ "\n"
-#~ "- **Mrežni identifikatori** — IP adresa (hashirana s mjesečnim saltom), identifikatori uređaja, identifikatori sesije\n"
-#~ "- **Podaci o pregledavanju** — posjećene stranice, vrijeme zadržavanja, interakcije\n"
-#~ "- **Približna lokacija** — država/regija na temelju IP adrese (ne precizni GPS)\n"
-#~ "- **Preferencije** — kategorije privole, jezik\n"
-#~ "\n"
-#~ "**Ne** obrađujemo osjetljive osobne podatke (Art. 5, II) putem kolačića bez posebne i istaknute privole (Art. 11 LGPD)."
-
-#~ msgid "Whether prior consent is required."
-#~ msgstr "Je li potrebna prethodna privola."
-
-#~ msgid "This site uses the FAZ Cookie Manager plugin to collect and manage cookie consent. When you interact with the cookie banner, we record your consent choice (accepted, rejected, or partial), a hashed version of your IP address, your browser user agent, and the page URL where consent was given. This data is stored locally on our server and retained for the period configured in the plugin settings (default: 12 months)."
-#~ msgstr "Ova stranica koristi plugin FAZ Cookie Manager za prikupljanje i upravljanje privolama za kolačiće. Kada koristite banner za kolačiće, bilježimo vaš odabir privole (prihvaćeno, odbijeno ili djelomično), hashiranu verziju vaše IP adrese, korisnički agent vašeg preglednika i URL stranice na kojoj je privola dana. Ti se podaci pohranjuju lokalno na našem poslužitelju i čuvaju tijekom razdoblja konfiguriranog u postavkama plugina (zadano: 12 mjeseci)."
-
-#~ msgid "Too many requests. Please wait 1 hour before submitting again."
-#~ msgstr "Previše zahtjeva. Pričekajte 1 sat prije ponovnog slanja."
-
-#, fuzzy
-#~ msgid "This form has expired. Please reload the page and submit it again."
-#~ msgstr "Neispravan nonce. Molimo osvježite stranicu i pokušajte ponovno."
-
-#~ msgid "FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses; they auto-purge after the configured retention period."
-#~ msgstr "Zapisi privola FAZ Cookie Managera koriste anonimizirane IP hash vrijednosti i ne mogu se povezati s e-mail adresama; automatski se brišu nakon konfiguriranog razdoblja čuvanja."
 
 #, php-format
 #~ msgid "View logged request: %s"

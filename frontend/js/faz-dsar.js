@@ -13,6 +13,17 @@
  *   ajaxUrl / error strings  — window.fazDsarConfig (set by wp_localize_script)
  *   nonce + action           — hidden inputs already in form HTML
  *   form data                — FormData(form) captures all inputs including nonce
+ *
+ * Fresh nonce and stamp. The markup carries an anonymous nonce (12 to 24 h)
+ * and a signed stamp (24 h). A copy a page cache kept longer — a form in a
+ * widget, a builder or block template, a synced pattern, an edge cache the
+ * server-side veto cannot reach — refused every submission. So when the
+ * visitor starts filling the form the script fetches current values from the
+ * no-store `refreshAction` (DSAR_Shortcode::handle_refresh()) and writes them
+ * over the cached ones; on submit it waits for that refresh, then for the
+ * minimum dwell the server counts from the new stamp, then sends. A refresh
+ * that fails leaves the markup's values in place, which is what was sent
+ * before, and is tried again on the next submit.
  */
 (function () {
 	// ── Proof of work ────────────────────────────────────────────────────────
@@ -249,6 +260,87 @@
 		}
 	}
 
+	// ── Fresh nonce and stamp ────────────────────────────────────────────────
+
+	function setHidden(form, name, value) {
+		var el = form.querySelector('[name="' + name + '"]');
+		if (!el) {
+			el = document.createElement('input');
+			el.type = 'hidden';
+			el.name = name;
+			form.insertBefore(el, form.firstChild);
+		}
+		el.value = String(value);
+	}
+
+	function dropField(form, name) {
+		var el = form.querySelector('[name="' + name + '"]');
+		if (el && el.parentNode) { el.parentNode.removeChild(el); }
+	}
+
+	/**
+	 * Write a refreshed nonce and stamp over the values the markup carried.
+	 * Every field the stamp signs is replaced together — issue time, signature,
+	 * proof-of-work salt and difficulty — because the server verifies them as
+	 * one, and the honeypot is renamed because its name derives from the time.
+	 */
+	function applyFresh(form, d) {
+		setHidden(form, 'nonce', d.nonce);
+		if (d.sig) {
+			setHidden(form, 'faz_dsar_t', d.t);
+			setHidden(form, 'faz_dsar_s', d.sig);
+		} else {
+			dropField(form, 'faz_dsar_t');
+			dropField(form, 'faz_dsar_s');
+		}
+		if (d.salt && d.diff > 0) {
+			setHidden(form, 'faz_pow_salt', d.salt);
+			setHidden(form, 'faz_pow_diff', d.diff);
+			setHidden(form, 'faz_pow_n', '');
+		} else {
+			dropField(form, 'faz_pow_salt');
+			dropField(form, 'faz_pow_diff');
+			dropField(form, 'faz_pow_n');
+		}
+		var hp = form.querySelector('.faz-dsar-honeypot input');
+		if (hp && /^faz_hp_[A-Za-z0-9_]+$/.test(String(d.hp || ''))) {
+			hp.name = d.hp;
+		}
+	}
+
+	/**
+	 * Fetch current values once per form; resolves true when they were applied.
+	 * Never rejects: a failed refresh leaves the markup's values in place and
+	 * clears the memo, so the next submit tries again.
+	 */
+	function refreshForm(form) {
+		if (form._fazDsarRefresh) { return form._fazDsarRefresh; }
+		var config = window.fazDsarConfig || {};
+		var ajaxUrl = config.ajaxUrl || '';
+		if (!ajaxUrl || !config.refreshAction || typeof fetch !== 'function') {
+			return Promise.resolve(false);
+		}
+		var url = ajaxUrl + (ajaxUrl.indexOf('?') < 0 ? '?' : '&') +
+			'action=' + encodeURIComponent(config.refreshAction) + '&_=' + Date.now();
+		form._fazDsarRefresh = fetch(url, { credentials: 'same-origin', cache: 'no-store' })
+			.then(function (r) { return r.json(); })
+			.then(function (res) {
+				var d = res && res.success ? res.data : null;
+				if (!d || !d.nonce) { throw new Error('no refresh'); }
+				applyFresh(form, d);
+				var wait = parseInt(d.wait, 10);
+				// The dwell is counted by the server from the new stamp, in whole
+				// seconds; a quarter second of margin covers the rounding.
+				form._fazDsarReadyAt = Date.now() + (wait > 0 ? wait * 1000 + 250 : 0);
+				return true;
+			})
+			.catch(function () {
+				form._fazDsarRefresh = null;
+				return false;
+			});
+		return form._fazDsarRefresh;
+	}
+
 	function handleSubmit(e) {
 		e.preventDefault();
 
@@ -317,14 +409,20 @@
 		// synchronous loop, so without this the browser would never paint the
 		// disabled button and the form would look unresponsive for the duration
 		// instead of busy. Everything after the yield is the send.
-		window.setTimeout(function () {
-			try {
-				answerChallenge(form);
-			} catch (err) {
-				// No answer is a valid submission: the server accepts one.
-			}
-			sendSubmission(form, notice, btn, ajaxUrl, errMsg);
-		}, 0);
+		//
+		// Before that, the fresh nonce and stamp (started when the visitor began
+		// filling the form, or now), and the dwell the server counts from them.
+		refreshForm(form).then(function () {
+			var delay = Math.max(0, (form._fazDsarReadyAt || 0) - Date.now());
+			window.setTimeout(function () {
+				try {
+					answerChallenge(form);
+				} catch (err) {
+					// No answer is a valid submission: the server accepts one.
+				}
+				sendSubmission(form, notice, btn, ajaxUrl, errMsg);
+			}, delay);
+		});
 	}
 
 	function sendSubmission(form, notice, btn, ajaxUrl, errMsg) {
@@ -377,6 +475,12 @@
 		if (form._fazDsarAttached) { return; }
 		form._fazDsarAttached = true;
 		form.addEventListener('submit', handleSubmit);
+		// Start the refresh when the visitor starts on the form, so it is done
+		// — and the dwell mostly served — by the time they press Send.
+		var start = function () { refreshForm(form); };
+		form.addEventListener('focusin', start);
+		form.addEventListener('input', start);
+		form.addEventListener('pointerdown', start);
 	}
 
 	// Attach to any .faz-dsar-form already in the DOM.

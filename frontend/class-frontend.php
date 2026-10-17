@@ -190,12 +190,45 @@ class Frontend {
 	private $whitelist_cache          = null;
 	private $service_consent_cache    = null;
 	/**
+	 * The visitor's OWN blocked set and per-service map, kept apart from the
+	 * render-time ones above. They differ only on a 'fallback' render (see
+	 * decide_visitor_state_cache_veto()), where the render blocks the shareable
+	 * union but the destructive cookie layers must still read what this visitor
+	 * actually granted. Null until get_blocked_categories() /
+	 * get_service_consent() fill them.
+	 *
+	 * @var array|null
+	 */
+	private $enforcement_blocked_categories_cache = null;
+	private $enforcement_service_consent_cache    = null;
+	/**
+	 * Memo of the `faz_output_buffer_fail_closed` filter, read the first
+	 * time a markup pass fails (see run_markup_pass()). Null until then.
+	 *
+	 * @var bool|null
+	 */
+	private $markup_fail_closed_cache = null;
+	/**
+	 * Sale/sharing categories a first visit under an opt-out law allows but
+	 * every render parks; see sale_share_parked_by_default(). Null until
+	 * computed.
+	 *
+	 * @var array|null
+	 */
+	private $sale_share_parked_cache = null;
+	/**
 	 * Per-request cache for get_consent_cookie_scope(). `false` = not computed
 	 * yet; null is a legitimate value (no scope check on this request).
 	 *
 	 * @var array|null|false
 	 */
 	private $consent_cookie_scope_cache = false;
+	/**
+	 * Per-request memo for is_vendor_record_stale(), keyed by cookie.
+	 *
+	 * @var array<string,bool>
+	 */
+	private $vendor_record_stale_cache = array();
 	/**
 	 * Categories blocked by a binding privacy signal on THIS request.
 	 *
@@ -212,6 +245,8 @@ class Frontend {
 	private $settings_option_cache    = null;
 	private $always_allowed_cache     = null;
 	private $service_cookie_decisions_cache = null;
+	/** @var array|null Visitor-view twin of the above, filled only on a 'fallback' render. */
+	private $visitor_service_cookie_decisions_cache = null;
 	private $whitelisted_cookie_patterns_cache = null;
 	private $catalog_cookie_categories_cache = null;
 	/**
@@ -269,6 +304,34 @@ class Frontend {
 	 * @var bool
 	 */
 	private $bot_variance_cache_vetoed = false;
+
+	/**
+	 * Verdict of decide_visitor_state_cache_veto() for this request.
+	 *
+	 *   null         not decided (no send_headers pass for a front-end page:
+	 *                REST, CLI, unit harnesses) — the visitor's state is
+	 *                honoured as before;
+	 *   'invariant'  Cache Compatibility / the strict shell already make the
+	 *                render visitor-invariant;
+	 *   'baseline'   the visitor's state blocks exactly what a first visit
+	 *                blocks, so the render is the shareable one anyway;
+	 *   'vetoed'     the render follows the visitor's state and the response
+	 *                is kept out of every shared cache;
+	 *   'fallback'   the veto could not be installed (or was filtered off), so
+	 *                the render is the shareable one: nothing granted beyond a
+	 *                first visit, every denial still honoured.
+	 *
+	 * @var string|null
+	 */
+	private $visitor_state_veto = null;
+
+	/**
+	 * Whether maybe_apply_ab_test() vetoed the page cache for its split.
+	 *
+	 * @var bool
+	 */
+	private $ab_test_cache_vetoed = false;
+
 	/**
 	 * Per-request memo for is_geo_bootstrap_cache_active() (null = not yet
 	 * computed). The readiness check touches banner/ruleset storage, so every
@@ -362,6 +425,14 @@ class Frontend {
 			// `text/plain`.
 			add_filter( 'script_loader_tag', array( $this, 'tag_own_scripts_nooptimize' ), 20, 2 );
 
+			// LiteSpeed "Remove Query Strings" (optm-qs_rm) strips `?ver=` from
+			// every internal .js/.css URL, so after an update the browser and
+			// the CDN keep the previous runtime under the unchanged URL. Its own
+			// escape is `_litespeed_rm_qs=0` in the URL. Priority 10 runs before
+			// LiteSpeed's own script_loader_src / style_loader_src (999).
+			add_filter( 'script_loader_src', array( $this, 'keep_own_asset_version_query' ), 10, 2 );
+			add_filter( 'style_loader_src', array( $this, 'keep_own_asset_version_query' ), 10, 2 );
+
 			// On a handle this plugin defers itself, `data-no-defer="1"` and the
 			// LiteSpeed defer-exclusion below read like a contradiction and are
 			// not one: they say "do not APPLY YOUR deferral to this", which is
@@ -429,11 +500,21 @@ class Frontend {
 			//     exclusion list straight from Config::$config['js_delay_excludes']
 			//     with no filter, so on 5.x these two add_filter() calls are inert
 			//     but must stay for 4.x installs.
-			//   * flying_press_exclude_from_minify:js — still present in 5.x and 4.x.
+			//   * flying_press_exclude_from_minify:js / :css — still present in 5.x
+			//     and 4.x (CSS::minify() reads the :css one).
 			//   * flying_press_apply_runtime_delay_exclusions() (below) — the 5.x
 			//     path: it injects the same keywords into the in-memory
-			//     Config::$config['js_delay_excludes'] (front-end renders only, never
-			//     persisting/overwriting the saved option).
+			//     Config::$config lists FlyingPress 5 reads without a filter —
+			//     'js_delay_excludes' (Delay all JavaScript),
+			//     'js_delay_third_party_excludes' (Delay third-party scripts) and
+			//     'css_rucss_include_selectors' (Remove unused CSS) — on front-end
+			//     renders only. pre_update_option_FLYING_PRESS_CONFIG strips them
+			//     again if FlyingPress re-saves its whole static config later in
+			//     the same request, so the saved option never carries them.
+			//   * flying_press_optimization:after — the safety net: whatever pass
+			//     still rewrote a FAZ tag ("Delay selected scripts" has no exclusion
+			//     list at all, and a FlyingPress release may add new passes), the
+			//     tag is restored to load immediately before FlyingPress caches it.
 			// FlyingPress older than 4.16 (no delay/defer filter) falls back to the
 			// manual "Delay JavaScript" keyword exclusion documented in readme.txt.
 			// Registered in the always-run frontend composition root — the admin
@@ -441,6 +522,9 @@ class Frontend {
 			add_filter( 'flying_press_exclude_from_delay:js', array( $this, 'flying_press_exclude_own_scripts' ) );
 			add_filter( 'flying_press_exclude_from_defer:js', array( $this, 'flying_press_exclude_own_scripts' ) );
 			add_filter( 'flying_press_exclude_from_minify:js', array( $this, 'flying_press_exclude_own_scripts' ) );
+			add_filter( 'flying_press_exclude_from_minify:css', array( $this, 'flying_press_exclude_own_scripts' ) );
+			add_filter( 'flying_press_optimization:after', array( $this, 'flying_press_restore_own_assets' ), 1000 );
+			add_filter( 'pre_update_option_FLYING_PRESS_CONFIG', array( $this, 'flying_press_strip_runtime_keywords' ), PHP_INT_MAX, 2 );
 			add_action( 'plugins_loaded', array( $this, 'flying_press_apply_runtime_delay_exclusions' ), PHP_INT_MAX, 0 );
 			// Re-apply on `wp` too (front-end page loads, after `init`): if
 			// FlyingPress populates its static config later than plugins_loaded,
@@ -909,14 +993,31 @@ class Frontend {
 				// window drift apart in issue #292.
 				$pv_token = Pageviews_Api::current_token();
 
+				// The URL is baked into HTML that page caches replay to everyone
+				// (LiteSpeed, WP Rocket and most CDNs drop gclid/utm_*/fbclid from
+				// the cache key, so a page warmed by an ad click is served under
+				// the clean URL). The raw REQUEST_URI therefore put one visitor's
+				// click identifiers into every later visitor's pageview beacon.
+				// faz_normalize_page_url() keeps the routing parameters that tell
+				// pages apart and drops campaign and session ones — the same
+				// spelling the consent log and the embed inventory use.
+				$pv_url = home_url( add_query_arg( array(), false ) );
+				if ( function_exists( 'faz_normalize_page_url' ) ) {
+					$pv_url = faz_normalize_page_url( $pv_url );
+				}
+
 				wp_localize_script(
 					$script_handle,
 					'_fazPageviewConfig',
 					array(
 						'restUrl'   => rest_url( 'faz/v1/pageviews' ),
-						'pageUrl'   => home_url( add_query_arg( array(), false ) ),
+						'pageUrl'   => $pv_url,
 						'pageTitle' => wp_get_document_title(),
 						'token'     => $pv_token,
+						// Where a fresh token comes from when the cached copy's
+						// has aged out of the window. Same for every visitor, so
+						// it is as cacheable as the rest of this object.
+						'tokenUrl'  => add_query_arg( 'action', Consent_Logger::TOKEN_REFRESH_ACTION, admin_url( 'admin-ajax.php' ) ),
 					)
 				);
 				// Pre-consent banner/pageview metrics are AGGREGATE-ONLY: no
@@ -930,9 +1031,24 @@ class Frontend {
 				// measuring the consent mechanism itself.
 				$pv_js = "(function(){" .
 					"if(typeof _fazPageviewConfig==='undefined')return;" .
+					"function fazSend(b){return fetch(_fazPageviewConfig.restUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})}" .
+					// One refresh per page, shared by every event: a stale cached
+					// copy refuses the pageview and the banner_view together.
+					"var fazRefresh=null;" .
 					"function fazTrack(t){" .
-						"fetch(_fazPageviewConfig.restUrl,{method:'POST',headers:{'Content-Type':'application/json'}," .
-						"body:JSON.stringify({token:_fazPageviewConfig.token,page_url:_fazPageviewConfig.pageUrl,page_title:_fazPageviewConfig.pageTitle,event_type:t})}).catch(function(){});" .
+						"var b={token:_fazPageviewConfig.token,page_url:_fazPageviewConfig.pageUrl,page_title:_fazPageviewConfig.pageTitle,event_type:t};" .
+						// A 403 invalid_token means the HTML outlived the token
+						// window (Consent_Logger::handle_token_refresh()): fetch
+						// the current token once, resend once, never loop.
+						"fazSend(b).then(function(r){" .
+							"var u=_fazPageviewConfig.tokenUrl;" .
+							"if(!u||!r||r.status!==403||typeof r.json!=='function')return;" .
+							"return r.json().then(function(j){" .
+								"if(!j||j.code!=='invalid_token')return;" .
+								"fazRefresh=fazRefresh||fetch(u+(u.indexOf('?')<0?'?':'&')+'_='+Date.now(),{credentials:'same-origin',cache:'no-store'}).then(function(x){return x.json()}).then(function(x){return x&&x.success&&x.data&&x.data.pageview?String(x.data.pageview):''},function(){return ''});" .
+								"return fazRefresh.then(function(k){if(!k||k===b.token)return;_fazPageviewConfig.token=k;b.token=k;return fazSend(b)})" .
+							"})" .
+						"}).catch(function(){});" .
 					"}" .
 					"fazTrack('pageview');" .
 					"document.addEventListener('fazcookie_banner_loaded',function(){fazTrack('banner_view');});" .
@@ -971,6 +1087,11 @@ class Frontend {
 						// (?p=, ?lang=) the inventory keys on. It varies by page,
 						// never by visitor, so a cached copy stays correct.
 						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::current_url() : '',
+						// Where the beacon fetches a current token when the one
+						// above is refused as stale — a page an edge cache kept
+						// past the token window. See
+						// Consent_Logger::handle_token_refresh().
+						'tokenUrl'       => add_query_arg( 'action', Consent_Logger::TOKEN_REFRESH_ACTION, admin_url( 'admin-ajax.php' ) ),
 					)
 				);
 					$inline_js = "document.addEventListener('fazcookie_consent_update',function(e){" .
@@ -992,7 +1113,7 @@ class Frontend {
 						// put at risk.
 						"Promise.resolve().then(function(){" .
 						"var safeUrl=(function(){if(_fazConsentLog.pageUrl)return _fazConsentLog.pageUrl;try{var current=new URL(window.location.href);return current.origin+current.pathname+current.search}catch(err){var origin=window.location.origin||(window.location.protocol+'//'+window.location.host);return origin+(window.location.pathname||'')+(window.location.search||'')}})();" .
-						"fetch(_fazConsentLog.restUrl,{" .
+						"var fazSend=function(b){return fetch(_fazConsentLog.restUrl,{" .
 							"method:'POST'," .
 							// keepalive so the request survives the navigation that
 							// follows it. Withdrawal forces window.location.reload()
@@ -1005,7 +1126,9 @@ class Frontend {
 							// than one with gaps.
 							"keepalive:true," .
 							"headers:{'Content-Type':'application/json'}," .
-							"body:JSON.stringify({" .
+							"body:JSON.stringify(b)" .
+						"})};" .
+						"var p={" .
 								"consent_id:(function(){var m=document.cookie.match(/fazcookie-consent=([^;]+)/);if(!m)return '';var v=m[1];try{v=decodeURIComponent(v)}catch(err){}var p=v.match(/(?:^|,)consentid:([^,;]+)/);return p?p[1]:''})()," .
 								"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
 								"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});" .
@@ -1052,8 +1175,23 @@ class Frontend {
 								// the ruleset this visitor was actually enforced under.
 								"geo_bootstrap:(typeof window._fazGeoBootstrapResolved==='string'?window._fazGeoBootstrapResolved:'')," .
 								"token:_fazConsentLog.token" .
-						"})" .
-					"}).catch(function(){});" .
+						"};" .
+						// Stale-token recovery. The first post says it can refresh
+						// (can_refresh:1), so the server does not count its refusal
+						// as a lost record. On 403 invalid_token — HTML an edge
+						// cache kept past the token window — fetch the current
+						// token (Consent_Logger::handle_token_refresh()) and resend
+						// ONCE, without the flag. If the refresh fails, resend the
+						// original once anyway, so the refusal is still counted in
+						// System Status. Any other answer ends here.
+						"var u=_fazConsentLog.tokenUrl;" .
+						"return fazSend(u?Object.assign({can_refresh:1},p):p).then(function(r){" .
+							"if(!u||!r||r.status!==403||typeof r.json!=='function')return;" .
+							"return r.json().then(function(j){" .
+								"if(!j||j.code!=='invalid_token')return;" .
+								"return fetch(u+(u.indexOf('?')<0?'?':'&')+'_='+Date.now(),{credentials:'same-origin',cache:'no-store'}).then(function(x){return x.json()}).then(function(x){return x&&x.success&&x.data&&x.data.consent?String(x.data.consent):''},function(){return ''}).then(function(k){if(k&&k!==p.token){_fazConsentLog.token=k;p.token=k}return fazSend(p)})" .
+							"})" .
+						"});" .
 					"}).catch(function(){});" .
 				"});";
 				// 'before', not the default 'after', and both halves of that
@@ -1809,6 +1947,20 @@ class Frontend {
 			return $default_banner;
 		}
 
+		// The split is per visitor (a random draw before any action, the
+		// recorded __scope.banner after), so the page it produces must not be
+		// stored: a page cache freezes the first MISS's variant into the copy
+		// every later visitor receives, the experiment then measures one arm,
+		// and the record of which banner a visitor saw stops matching the one
+		// served. Keep this response out of shared caches; when that is not
+		// possible (output already started) serve the normally-routed banner,
+		// which is the same for everyone. Moving the draw into script.js is the
+		// cache-friendly alternative, and a larger change than this fix.
+		if ( ! $this->send_page_cache_veto( 'FAZ Cookie Manager A/B banner test' ) ) {
+			return $default_banner;
+		}
+		$this->ab_test_cache_vetoed = true;
+
 		// Reuse the assignment already present in the strictly-necessary consent
 		// record. Creating a standalone A/B cookie before the visitor acts would
 		// itself be non-essential tracking under opt-in regimes. Before any action
@@ -2019,6 +2171,25 @@ class Frontend {
 			return (bool) apply_filters( 'faz_country_dependent_banner_output', false, $settings );
 		}
 
+		// Every dimension below varies the render by the visitor's COUNTRY, and
+		// all of them read it through Geolocation::get_visitor_country(). On an
+		// install with no way to resolve a country that call returns '' for
+		// every visitor: TCF gdprApplies stays true, the country→language
+		// fallback stays on the site language, "no banner outside targets"
+		// fails open, country-targeted banner rows fall back to the match-all
+		// row and the runtime resolves the one most-protective ruleset. The
+		// render is then invariant, and a no-store veto buys nothing while
+		// costing the publisher their whole page cache — on every request, on
+		// most shared hosting. So no source, no veto, whichever of the
+		// dimensions is configured; the filter below can still force it.
+		//
+		// Deliberately keyed on whether a source is CONFIGURED, not on whether
+		// this particular visitor resolved: with a source present the output is
+		// country-dependent even for a visitor the source happens to miss.
+		if ( ! $this->has_country_signal_source() ) {
+			return (bool) apply_filters( 'faz_country_dependent_banner_output', false, $settings );
+		}
+
 		$dependent = false;
 
 		// Country→language fallback (CodeRabbit review, 1.14.2): when the
@@ -2068,22 +2239,9 @@ class Frontend {
 		// cached response would leak one jurisdiction's defaults to another, so
 		// the output must always be treated as country-dependent while the flag
 		// is on — independent of any multi-banner geo-targeting configuration.
-		// The filter can explicitly override the UI-derived state.
-		//
-		// …but only when a country can actually be resolved. The runtime being
-		// on does not make the output vary by country on an install that has no
-		// way to determine one: every visitor resolves the same
-		// fallback-gdpr-most-protective ruleset, so the rendered page is
-		// invariant and the veto buys nothing while costing the publisher their
-		// entire page cache. That is precisely the complaint behind the
-		// LiteSpeed and FlyingPress reports this release answers, and with
-		// enforcement now on by default it would otherwise reach every install
-		// on a host without a geo source — which is most shared hosting.
-		//
-		// Deliberately keyed on whether a source is CONFIGURED, not on whether
-		// this particular visitor resolved: with a source present the output is
-		// country-dependent even for a visitor the source happens to miss.
-		if ( Geo_Runtime::is_enabled() && $this->has_country_signal_source() ) {
+		// The filter can explicitly override the UI-derived state. (Reached
+		// only with a country source: see the early return above.)
+		if ( Geo_Runtime::is_enabled() ) {
 			$dependent = true;
 		}
 
@@ -2154,17 +2312,37 @@ class Frontend {
 		//    be wrong in exactly that case.
 		// 2. Cache Compatibility Mode blocks every non-necessary category
 		//    regardless of law, so nothing may be assumed consented.
-		$runtime_ruleset = $this->get_runtime_ruleset();
+		return self::resolve_wp_consent_type(
+			$this->get_runtime_ruleset(),
+			$this->is_cache_compatibility_enabled(),
+			$this->banner ? (string) $this->banner->get_law() : ''
+		);
+	}
+
+	/**
+	 * The WP Consent API type for a resolved ruleset, mode and banner law.
+	 *
+	 * One rule for the two places that answer it: the page render
+	 * (filter_wp_consent_type(), shipped in the store as `_wpConsentType`) and
+	 * the public banner endpoint (`wpConsentType`), which replaces the store
+	 * after a language swap or the jurisdiction bootstrap. Without the second,
+	 * a cached strict shell kept its `optin` verdict after the live payload
+	 * resolved a CCPA banner, and wca.js, where the stricter verdict wins, kept
+	 * declaring opt-in for the rest of the page view.
+	 *
+	 * @param array|null $runtime_ruleset     Ruleset resolved for the visitor.
+	 * @param bool       $cache_compatibility Whether Cache Compatibility applies.
+	 * @param string     $law                 Law of the banner being served.
+	 * @return string 'optin' or 'optout'.
+	 */
+	public static function resolve_wp_consent_type( $runtime_ruleset, $cache_compatibility, $law ) {
 		if ( null !== $runtime_ruleset && 'ccpa' !== Geo_Runtime::model_to_law( $runtime_ruleset ) ) {
 			return 'optin';
 		}
-		if ( $this->is_cache_compatibility_enabled() ) {
+		if ( $cache_compatibility ) {
 			return 'optin';
 		}
-		if ( $this->banner && 'ccpa' === $this->banner->get_law() ) {
-			return 'optout';
-		}
-		return 'optin';
+		return 'ccpa' === $law ? 'optout' : 'optin';
 	}
 
 	/**
@@ -2205,15 +2383,7 @@ class Frontend {
 		if ( $this->is_geo_bootstrap_cache_active() ) {
 			return;
 		}
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', true );
-		}
-		if ( ! defined( 'DONOTCACHEOBJECT' ) ) {
-			define( 'DONOTCACHEOBJECT', true );
-		}
-		if ( ! defined( 'DONOTCACHEDB' ) ) {
-			define( 'DONOTCACHEDB', true );
-		}
+		\FazCookie\Includes\Cache_Compatibility::define_no_cache_constants();
 	}
 
 	/**
@@ -2309,26 +2479,174 @@ class Frontend {
 		// header, not from a response-side `Cache-Control: no-store` (see the
 		// rest_pre_dispatch note in faz-cookie-manager.php). Fire it either way:
 		// it only records intent, which LSCWP applies when it buffers output.
-		do_action( 'litespeed_control_set_nocache', 'FAZ Cookie Manager crawler-only banner render' );
-		if ( headers_sent() ) {
+		if ( ! $this->send_page_cache_veto( 'FAZ Cookie Manager crawler-only banner render', 'User-Agent' ) ) {
 			// Output has already started, so the directive the edge cache reads
 			// can no longer be set. Report the veto as absent: the caller then
 			// renders the banner instead, which costs a crawler a few KB of
 			// markup. The other direction costs a human their consent notice.
 			return false;
 		}
-		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
-		header( 'Pragma: no-cache' );
-		header( 'X-LiteSpeed-Cache-Control: no-cache' );
-		header( 'Vary: User-Agent', false );
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', true );
-		}
-		if ( ! defined( 'DONOTCACHEOBJECT' ) ) {
-			define( 'DONOTCACHEOBJECT', true );
-		}
 		$this->bot_variance_cache_vetoed = true;
 		return true;
+	}
+
+	/**
+	 * Keep THIS response out of every shared cache: the one veto every
+	 * per-request variance in this class uses.
+	 *
+	 * Three things in one call, because each cache family listens to a
+	 * different one and a veto that speaks to only some of them is a page that
+	 * one of the others keeps:
+	 *
+	 *  - `litespeed_control_set_nocache` — LiteSpeed Cache decides from this
+	 *    action (and LSCACHE_NO_CACHE), not from a response-side no-store.
+	 *    Fired first and unconditionally: it only records intent, which LSCWP
+	 *    applies when it buffers the output, so it still counts when the
+	 *    headers below can no longer be sent.
+	 *  - the response headers in Cache_Compatibility::NO_STORE_HEADERS, for
+	 *    the caches that only read headers (CDNs, Varnish, nginx, QUIC.cloud);
+	 *  - the DONOTCACHE* constants the WordPress page caches read.
+	 *
+	 * FlyingPress reads none of the three; flying_press_is_cacheable() answers
+	 * it from the same memoised verdicts.
+	 *
+	 * @param string $reason Diagnostic label passed to LiteSpeed.
+	 * @param string $vary   Optional request header the variance is keyed on.
+	 * @return bool False when headers were already sent, i.e. the edge caches
+	 *              could not be told. Callers must then render the variant
+	 *              that is safe to share.
+	 */
+	private function send_page_cache_veto( $reason, $vary = '' ) {
+		do_action( 'litespeed_control_set_nocache', $reason );
+		if ( headers_sent() ) {
+			return false;
+		}
+		foreach ( \FazCookie\Includes\Cache_Compatibility::NO_STORE_HEADERS as $name => $value ) {
+			header( $name . ': ' . $value );
+		}
+		if ( '' !== $vary ) {
+			header( 'Vary: ' . $vary, false );
+		}
+		\FazCookie\Includes\Cache_Compatibility::define_no_cache_constants();
+		return true;
+	}
+
+	/**
+	 * Keep a render that follows THIS visitor's consent state out of every
+	 * shared cache, or make the render one that is safe to share.
+	 *
+	 * get_blocked_categories() reads three things from the request: the
+	 * consent cookie, Sec-GPC and the Do-Not-Sell cookie. Its output is only
+	 * visitor-invariant under Cache Compatibility Mode or the strict-shell
+	 * bootstrap, and Cache Compatibility pauses itself while Geo-Targeting is
+	 * on (the default) — while send_geo_cache_headers() vetoes the cache only
+	 * when the output varies by COUNTRY, which it cannot on a site with no
+	 * country source. So on most installs a returning visitor who had accepted
+	 * marketing, arriving on a page-cache MISS, produced a page with the
+	 * trackers server-side EXECUTABLE, the page cache stored it, and every
+	 * later visitor — first visits under GDPR included — was served those
+	 * trackers before any consent. No client code can undo a script that has
+	 * already run. The mirror case is milder but real: a Sec-GPC or Do Not Sell
+	 * MISS stored a page with the sell/share categories blocked for everyone.
+	 *
+	 * The baseline is what a first visit with no signal renders: that is the
+	 * one copy every visitor may share, because script.js releases from it
+	 * whatever the visitor's own cookie grants. Whenever the visitor's state
+	 * yields a different block set (or carries per-service decisions), the
+	 * response gets the full page-cache veto before any output. If the veto
+	 * cannot be installed — headers already sent, or a publisher who filtered
+	 * it off — the render falls back to the shareable form instead (the union
+	 * of the baseline and the visitor's own denials; see
+	 * get_blocked_categories()), the same way the crawler veto falls back to
+	 * rendering the banner.
+	 *
+	 * Net effect: cache HITs serve the baseline page to everyone and the
+	 * runtime unblocks for those who consented; MISSes from visitors whose
+	 * state changes the render are not stored.
+	 *
+	 * @param bool $already_vetoed Whether another veto already keeps this
+	 *                             response out of shared caches.
+	 * @return string The verdict stored in $visitor_state_veto.
+	 */
+	private function decide_visitor_state_cache_veto( $already_vetoed = false ) {
+		if ( null !== $this->visitor_state_veto ) {
+			return $this->visitor_state_veto;
+		}
+		if ( $this->is_cache_compatibility_enabled() || $this->is_geo_bootstrap_cache_active() ) {
+			$this->visitor_state_veto = 'invariant';
+			return $this->visitor_state_veto;
+		}
+		if ( ! $this->visitor_state_changes_render() ) {
+			$this->visitor_state_veto = 'baseline';
+			return $this->visitor_state_veto;
+		}
+		if ( $already_vetoed ) {
+			$this->visitor_state_veto = 'vetoed';
+			return $this->visitor_state_veto;
+		}
+		/**
+		 * Whether a render that follows the visitor's consent state may be kept
+		 * out of shared page caches.
+		 *
+		 * Returning false keeps every page cacheable and makes the server render
+		 * the shareable form for every visitor instead: nothing granted beyond
+		 * a first visit is released server-side (script.js releases it from the
+		 * consent cookie), every denial is still honoured.
+		 *
+		 * @since 1.34.2
+		 * @param bool $veto Default true.
+		 */
+		$wanted = (bool) apply_filters( 'faz_veto_cache_for_visitor_state', true );
+		$this->visitor_state_veto = ( $wanted && $this->send_page_cache_veto( 'FAZ Cookie Manager visitor-specific consent render' ) )
+			? 'vetoed'
+			: 'fallback';
+		return $this->visitor_state_veto;
+	}
+
+	/**
+	 * Whether the visitor's consent cookie, Sec-GPC or Do-Not-Sell cookie makes
+	 * the server-side blocking differ from a first visit.
+	 *
+	 * Compared on the computed block set, not on the presence of a cookie: a
+	 * GDPR visitor who rejected everything, or a GPC signal under an opt-in
+	 * law (sell/share already blocked), renders exactly the baseline, and that
+	 * page may be cached like any other.
+	 *
+	 * @return bool
+	 */
+	private function visitor_state_changes_render() {
+		$consent = $this->get_scoped_valid_consent_cookie();
+		$gpc     = $this->request_has_gpc();
+		$dnsmpi  = $this->request_has_dnsmpi();
+		if ( '' === $consent && ! $gpc && ! $dnsmpi ) {
+			return false;
+		}
+		$categories = \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items();
+		$unused     = array();
+		$actual     = $this->compute_blocked_categories( $categories, $consent, $gpc, $dnsmpi, $unused );
+		$baseline   = $this->compute_blocked_categories( $categories, '', false, false, $unused );
+		// Both renders park the opt-out law's sale/sharing categories (see
+		// sale_share_parked_by_default()), so they are compared with it: a
+		// GPC, Do Not Sell or opted-out visitor then renders the baseline.
+		$parked = $this->sale_share_parked_by_default( $categories );
+		if ( ! empty( $parked ) ) {
+			$actual   = $this->union_blocked_categories( $categories, $actual, $parked );
+			$baseline = $this->union_blocked_categories( $categories, $baseline, $parked );
+		}
+		if ( $actual !== $baseline ) {
+			return true;
+		}
+		// svc.* decisions move individual embeds across the category verdict
+		// (a YES releases one in a blocked category, a NO holds one in an
+		// allowed category). A first visit has none.
+		if ( '' !== $consent ) {
+			$settings = $this->get_faz_settings();
+			if ( ! empty( $settings['banner_control']['per_service_consent'] )
+				&& preg_match( '/(?:^|,)svc\.[a-z0-9_-]+:(?:yes|no)(?=,|$)/', $consent ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -2522,6 +2840,12 @@ class Frontend {
 		if ( $this->is_bot_variant_render() ) {
 			return false;
 		}
+		// The page follows this visitor's consent state (decided on
+		// send_headers, see decide_visitor_state_cache_veto()). A 'fallback'
+		// verdict rendered the shareable form, which FlyingPress may keep.
+		if ( 'vetoed' === $this->visitor_state_veto || $this->ab_test_cache_vetoed ) {
+			return false;
+		}
 		if ( $this->is_country_dependent_output() ) {
 			// The jurisdiction bootstrap renders one strict, visitor-invariant
 			// document and resolves the live law through a no-store REST request
@@ -2566,27 +2890,24 @@ class Frontend {
 		// freezes for everyone. Resolving it on `send_headers` also means the
 		// verdict is already memoised by the time wp_head asks.
 		$this->bot_suppression_applies();
-		if ( ! $this->is_country_dependent_output() || headers_sent() ) {
-			return;
-		}
 
 		// The strict shell is identical for every visitor and contains no
 		// executable optional resources. Do not emit Vary/Set-Cookie/no-cache:
 		// every compliant page cache and CDN should share this one document.
-		if ( $this->is_geo_bootstrap_cache_active() ) {
-			return;
+		$country_vetoed = false;
+		if ( $this->is_country_dependent_output() && ! headers_sent() && ! $this->is_geo_bootstrap_cache_active() ) {
+			$this->maybe_disable_country_page_cache();
+			$country_vetoed = $this->send_page_cache_veto(
+				'FAZ country-dependent banner',
+				apply_filters( 'faz_trust_cf_ipcountry_header', false ) ? 'CF-IPCountry' : ''
+			);
 		}
 
-		$this->maybe_disable_country_page_cache();
-		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
-		header( 'Pragma: no-cache' );
-		header( 'X-LiteSpeed-Cache-Control: no-cache' );
-		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
-			header( 'Vary: CF-IPCountry', false );
-		}
-		if ( defined( 'LSCWP_V' ) ) {
-			do_action( 'litespeed_control_set_nocache', 'FAZ country-dependent banner' );
-		}
+		// Then the visitor-state dimension, which exists on every install —
+		// including the ones with no country source, where nothing above fires.
+		// Decided here, before any output, so the render that follows
+		// (get_blocked_categories(), get_service_consent()) reads one verdict.
+		$this->decide_visitor_state_cache_veto( $country_vetoed || $this->bot_variance_cache_vetoed || $this->ab_test_cache_vetoed );
 	}
 
 	/**
@@ -2997,8 +3318,19 @@ class Frontend {
 		// response (see $gcm_default_emitted).
 		$this->gcm_default_emitted = true;
 
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; the id is a plugin constant passed through esc_attr and every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
-		echo '<script id="' . esc_attr( $this->gcm_default_script_id() ) . '">' . $js . "</script>\n";
+		// The same optimizer opt-outs every other FAZ script carries
+		// (tag_own_scripts_nooptimize / tag_own_inline_attributes_nooptimize).
+		// This tag is echoed, so neither filter sees it, and it is the one that
+		// matters most: a delay-until-interaction or defer pass (LiteSpeed Guest
+		// Mode, WP Rocket, Autoptimize, Cloudflare Rocket Loader) would move the
+		// denied `consent default` behind the gtag snippets it must precede,
+		// and Google treats a tag that fires without a default as granted.
+		$hints = apply_filters( 'faz_auto_exclude_cache_plugins', true )
+			? ' data-no-defer="1" data-no-optimize="1" data-no-minify="1" data-cfasync="false" data-ao-skip="1"'
+			: '';
+
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; the id is a plugin constant passed through esc_attr, $hints is a literal, and every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
+		echo '<script id="' . esc_attr( $this->gcm_default_script_id() ) . '"' . $hints . '>' . $js . "</script>\n";
 	}
 
 	/**
@@ -4225,12 +4557,14 @@ class Frontend {
 			@ini_set( 'pcre.recursion_limit', '100000' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,Squiz.PHP.DiscouragedFunctions.Discouraged -- same rationale as the backtrack_limit raise above; needed to keep the script-blocking regex pass safe on very large pages.
 		}
 
-		// preg_replace_callback returns null on PCRE error (e.g. backtrack limit
-		// exceeded with very large page builders like Bricks). Graceful degradation:
-		// serve unfiltered HTML (page works without consent blocking) rather than
-		// stripping all markup (broken page) or throwing (crash). Log the error
-		// so site owners can diagnose and raise pcre.backtrack_limit if needed.
-		$pcre_failed = false;
+		// preg_replace_callback returns null for the whole document on a PCRE
+		// error (backtrack or recursion limit, JIT stack). Serving the buffer
+		// as it was then left every element that pass judges executable, the
+		// trackers included, so a failed pass is re-run over a linear walk
+		// with the same callback: run_markup_pass() says why and how, and the
+		// `faz_output_buffer_fail_closed` filter restores the old skip. The
+		// kinds that failed are logged once, at the end.
+		$failed_passes = array();
 
 		// Block tracking pixel <img> inside <noscript> FIRST — BEFORE the stash.
 		// Meta Pixel, GA, Adobe Analytics etc. embed `<img>` beacons inside
@@ -4292,49 +4626,58 @@ class Frontend {
 		// Both stashes mark their place with a per-request nonce the page
 		// cannot know: with a fixed marker, a paragraph that spelled
 		// `__FAZ_SRCDOC_STASH_0__` received the srcdoc token as live markup.
-		$stash_nonce   = $this->stash_nonce();
+		$stash_nonce = $this->stash_nonce();
+
+		// Comments and raw-text bodies are text to the parser, and no pass may
+		// rewrite inside them — find_inert_spans() says why and how they are
+		// found. Stashed before every other pass, put back after the last of
+		// them; the script and style passes are handed their bodies back.
+		$inert_stash = array();
+		$html        = $this->stash_inert_spans( $html, $stash_nonce, $inert_stash );
+
 		$srcdoc_stash  = array();
 		$srcdoc_marker = '';
-		$result        = $this->stash_iframe_srcdocs( $html, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker );
-		if ( null === $result ) {
-			$pcre_failed = true;
-		} else {
+		$result        = $this->stash_iframe_srcdocs( $html, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker, $failed_passes );
+		if ( null !== $result ) {
 			$html = $result;
 		}
 
 		$noscript_stash = array();
 		if ( false !== stripos( $html, '<noscript' ) ) {
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<noscript(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>(.*?)</noscript(?=[\s/>])[^>]*>#is',
+				'noscript',
 				function ( $m ) use ( $providers, $blocked_categories, &$noscript_stash, $stash_nonce ) {
 					$processed              = $this->process_noscript_tag( $m, $providers, $blocked_categories );
 					$key                    = '__FAZ_NOSCRIPT_STASH_' . $stash_nonce . '_' . count( $noscript_stash ) . '__';
 					$noscript_stash[ $key ] = $processed;
 					return $key;
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 1. Block <script> tags.
 		if ( false !== stripos( $html, '<script' ) ) {
-			$result = preg_replace_callback(
-				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_script_tag( $m, $providers, $blocked_categories );
+			$html = $this->run_markup_pass(
+				$html,
+				'#' . self::script_token_skip() . '<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
+				'script',
+				function ( $m ) use ( $providers, $blocked_categories, &$inert_stash ) {
+					return $this->process_with_inert_body(
+						$m,
+						'script',
+						$inert_stash,
+						function ( $m ) use ( $providers, $blocked_categories ) {
+							return $this->process_script_tag( $m, $providers, $blocked_categories );
+						}
+					);
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 1-bis. The SVG namespace. <image> is an <img> by another name and
@@ -4349,18 +4692,16 @@ class Frontend {
 		// <use-case> and <image-gallery> custom elements through and mutilated
 		// them.
 		if ( false !== stripos( $html, '<image' ) || false !== stripos( $html, '<use' ) || false !== stripos( $html, '<feimage' ) ) {
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<(image|use|feImage)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'svg',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_svg_href_tag( $m, $providers, $blocked_categories );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 1-ter. The legacy `background` presentation attribute. It fetches an
@@ -4369,35 +4710,31 @@ class Frontend {
 		// tests/browser-intent/write-stream-differential.spec.ts.
 		// The pre-check accepts the same `background = "…"` spacing the
 		// pattern does; a plain `background=` lookup skipped it.
-		if ( preg_match( '/\bbackground\s*=/i', $html ) ) {
-			$result = preg_replace_callback(
+		if ( 0 !== preg_match( '/\bbackground\s*=/i', $html ) ) {
+			$html = $this->run_markup_pass(
+				$html,
 				'#<(body|table|thead|tbody|tfoot|tr|td|th)(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
+				'background',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_background_attr_tag( $m, $providers, $blocked_categories );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 2. Block <iframe> tags (YouTube, Facebook, Maps, etc.).
 		if ( false !== stripos( $html, '<iframe' ) ) {
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
+				'iframe',
 				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 3. (Moved above the stash — see "Block tracking pixel <img> inside
@@ -4407,18 +4744,23 @@ class Frontend {
 		// 4. Block inline CSS url()/@import channels — any blocked-provider target
 		//    inside a <style> (fonts, background-image, cursor, mask, @import).
 		if ( false !== stripos( $html, '<style' ) ) {
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<style(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</style(?=[\s/>])[^>]*>#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_style_tag( $m, $providers, $blocked_categories );
+				'style',
+				function ( $m ) use ( $providers, $blocked_categories, &$inert_stash ) {
+					return $this->process_with_inert_body(
+						$m,
+						'style',
+						$inert_stash,
+						function ( $m ) use ( $providers, $blocked_categories ) {
+							return $this->process_style_tag( $m, $providers, $blocked_categories );
+						}
+					);
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 4b. Block tracking <img> pixels rendered directly in the document.
@@ -4433,18 +4775,16 @@ class Frontend {
 		// MutationObserver backstop cannot undo it: the preload scanner dispatches
 		// the fetch before any script runs.
 		if ( false !== stripos( $html, '<img' ) ) {
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<img(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
+				'img',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_img_tag( $m, $providers, $blocked_categories );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 4c. Media, plug-in, text-track and image-button elements.
@@ -4463,19 +4803,20 @@ class Frontend {
 		// was the one layer not writing those keys. The tag name must be
 		// followed by whitespace, a slash or `>`, so <video-player> and
 		// <source-list> custom elements are not read as the media tag.
-		if ( preg_match( '/<(?:video|audio|source|embed|object|track|input)(?=[\s\/>])/i', $html ) ) {
-			$result = preg_replace_callback(
+		// Like every pass here it never sees comments or script bodies (the
+		// inert stash at the top): a `<video poster=\"…\">` inside a JS
+		// string is text, and parking it broke the string and the script.
+		if ( 0 !== preg_match( '/<(?:video|audio|source|embed|object|track|input)(?=[\s\/>])/i', $html ) ) {
+			$html = $this->run_markup_pass(
+				$html,
 				'#<(video|audio|source|embed|object|track|input)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'media',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_media_resource_tag( $m, $providers, $blocked_categories );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 5. Block fetching <link> tags: stylesheet AND the preload family.
@@ -4499,18 +4840,16 @@ class Frontend {
 			// `<link rel=preload …>` (unquoted, which HTML allows) and
 			// `rel="preload stylesheet"` (the standard async-CSS pair) both
 			// slipped past and fetched the provider pre-consent.
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<link(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
+				'link',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_link_tag( $m, $providers, $blocked_categories );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 5b. Inline `style` attributes, on whatever tag carries one.
@@ -4526,44 +4865,29 @@ class Frontend {
 		// Runs after the src/href passes so a tag they already parked keeps
 		// its one category label.
 		//
-		// A <script> element is consumed whole by the first alternative and
-		// returned untouched: its body is JavaScript (or a template another
-		// script renders), and a tag-shaped substring inside a string literal
-		// is not an element. Rewriting it would insert double-quoted
-		// attributes into the literal and stop the whole inline script from
-		// parsing, a breakage far worse than the fetch it would prevent.
-		// The skip ends where the HTML parser ends the element ("</script"
-		// followed by whitespace, "/" or ">"). Comments and the other
-		// raw-text containers (style, textarea, title, xmp) are consumed the
-		// same way, first, so a "<script" the parser reads as text cannot
-		// open a skip that hides the real elements after it. A style
-		// attribute inside any of them is text too, so leaving it is right.
-		if ( preg_match( '/\bstyle\s*=/i', $html ) ) {
-			$raw_text = '';
-			foreach ( array( 'script', 'style', 'textarea', 'title', 'xmp' ) as $raw_tag ) {
-				$raw_text .= '<' . $raw_tag . '(?=[\s/>])(?:' . self::ATTR_WALK . ')(?:/\s*+)?>.*?</' . $raw_tag . '(?=[\s/>])[^>]*+>|';
-			}
-			$result = preg_replace_callback(
-				'#<!--.*?-->|' . $raw_text . '<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+		// Comments and the bodies of <script> and the other raw-text
+		// containers never reach this pass (the inert stash at the top): a
+		// tag-shaped substring inside a string literal is not an element, and
+		// rewriting it stopped the whole inline script from parsing.
+		if ( 0 !== preg_match( '/\bstyle\s*=/i', $html ) ) {
+			$html = $this->run_markup_pass(
+				$html,
+				'#<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'style-attr',
 				function ( $m ) use ( $providers, $blocked_categories ) {
-					if ( ! isset( $m[1] ) || '' === $m[1] ) {
-						return $m[0];
-					}
 					return $this->process_style_attr_tag( $m, $providers, $blocked_categories );
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
 		// 6. Block <script data-faz-waitfor="category"> (deferred dependency scripts).
 		if ( false !== stripos( $html, 'data-faz-waitfor' ) ) {
-			$result = preg_replace_callback(
+			$html = $this->run_markup_pass(
+				$html,
 				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
+				'waitfor',
 				function ( $m ) use ( $blocked_categories ) {
 					$attrs    = $m[1];
 					$content  = $m[2];
@@ -4575,19 +4899,12 @@ class Frontend {
 					$new_attrs = $this->set_script_type_plain( $attrs );
 					return '<script' . $new_attrs . '>' . $content . '</script>';
 				},
-				$html
+				$failed_passes,
+				$inert_stash
 			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
 		}
 
-		if ( $pcre_failed ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( 'FAZ Cookie Manager: PCRE error in output buffer — script blocking skipped. Consider raising pcre.backtrack_limit (current: ' . ini_get( 'pcre.backtrack_limit' ) . ').' );
-		}
+		$this->log_markup_pass_failure( $failed_passes, 'output buffer' );
 
 		if ( false !== $old_backtrack && '' !== $old_backtrack ) {
 			@ini_set( 'pcre.backtrack_limit', (string) $old_backtrack ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,Squiz.PHP.DiscouragedFunctions.Discouraged -- restoring the original PCRE backtrack_limit value captured before the script-blocking pass (paired with the temporary raise above).
@@ -4599,6 +4916,12 @@ class Frontend {
 		// Restore <noscript> blocks we stashed before the filter pass.
 		if ( ! empty( $noscript_stash ) ) {
 			$html = strtr( $html, $noscript_stash );
+		}
+		// Then the inert spans, which a restored <noscript> block can hold.
+		// Before the embed detectors below: they read the page as they always
+		// have, script bodies included.
+		if ( ! empty( $inert_stash ) ) {
+			$html = strtr( $html, $inert_stash );
 		}
 
 		// 7. Hide social/widget embed containers that depend on blocked scripts
@@ -4620,7 +4943,9 @@ class Frontend {
 			$html = strtr( $html, $srcdoc_stash );
 		}
 
-		if ( ! $pcre_failed ) {
+		// A pass the linear fallback re-ran has judged every element, so the
+		// placeholder set is the page's; a skipped one has not.
+		if ( empty( $failed_passes ) || $this->markup_fail_closed() ) {
 			Embed_Inventory::complete_render();
 		}
 		return $html;
@@ -4873,11 +5198,15 @@ class Frontend {
 		// rendered — but the facade's own Play button removes srcdoc, and the
 		// src it activates had been gated by nothing: the frame navigated to
 		// the provider with no consent. So a blocked src is parked here too,
-		// in place and hidden like every parked frame, which is the rule the
-		// runtime's own park applies to the same frame; the srcdoc stays
-		// live, byte-for-byte, and restore 2b hands src back on consent.
-		// Parked WITHOUT the placeholder wrap: that sent the bare stash marker
-		// through wp_kses, which stripped it, so the srcdoc never came back.
+		// in place; the srcdoc stays live, byte-for-byte, and restore 2b
+		// hands src back on consent. Parked WITHOUT the placeholder wrap:
+		// that sent the bare stash marker through wp_kses, which stripped it,
+		// so the srcdoc never came back. And NOT hidden: what the frame shows
+		// is the allowed srcdoc, and with src parked nothing in it can reach
+		// the provider. Hiding it left a hole where the site put its facade
+		// and took away the only thing on the page that said a video was
+		// there; the banner and the revisit widget remain the way to consent.
+		// The runtime's park leaves a frame with a live srcdoc visible too.
 		// A parked srcdoc already took src with it. The marker carries the
 		// request nonce, so the page cannot spell it.
 		$live_srcdoc = '' !== $srcdoc_marker && false !== strpos( $attrs, $srcdoc_marker . 'LIVE_' );
@@ -4908,10 +5237,9 @@ class Frontend {
 				return $full; // No live src: the allowed srcdoc alone, nothing to park.
 			}
 			$new_attrs = $this->label_category_first( $new_attrs, $matched_category );
-			$frame     = isset( $m[2] )
+			return isset( $m[2] )
 				? '<iframe' . $new_attrs . '>' . $m[2] . '</iframe>'
 				: '<iframe' . $new_attrs . '/>';
-			return self::faz_add_hidden_class( $frame );
 		}
 		$new_attrs = $this->label_category_first( $new_attrs, $matched_category );
 
@@ -6068,21 +6396,36 @@ class Frontend {
 	 * @param string $stash_nonce        Per-request nonce the page cannot know.
 	 * @param array  $stash              Marker => original token, filled here.
 	 * @param string $marker             Marker prefix, set here.
-	 * @return string|null Markup with the tokens stashed, or null on PCRE error.
+	 * @param array  $failed             Optional: the failed pass kinds, appended to.
+	 * @return string|null Markup with the tokens stashed. On a PCRE error the
+	 *                     linear fallback stashes them (run_markup_pass()); null
+	 *                     only when `faz_output_buffer_fail_closed` is false.
 	 */
-	private function stash_iframe_srcdocs( $html, $providers, $blocked_categories, $stash_nonce, array &$stash, &$marker ) {
+	private function stash_iframe_srcdocs( $html, $providers, $blocked_categories, $stash_nonce, array &$stash, &$marker, &$failed = null ) {
 		$marker = '__FAZ_SRCDOC_' . $stash_nonce . '_';
 		$stash  = array();
 		if ( false === stripos( $html, 'srcdoc' ) ) {
 			return $html;
 		}
-		return preg_replace_callback(
+		$failures = array();
+		$unused   = array();
+		$result   = $this->run_markup_pass(
+			$html,
 			'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+			'srcdoc',
 			function ( $m ) use ( $providers, $blocked_categories, &$stash, $marker ) {
 				return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, $stash, $marker );
 			},
-			$html
+			$failures,
+			$unused,
+			function () {
+				return null;
+			}
 		);
+		if ( is_array( $failed ) ) {
+			$failed = array_merge( $failed, $failures );
+		}
+		return $result;
 	}
 
 	private function stash_nonce() {
@@ -6091,6 +6434,626 @@ class Frontend {
 		} catch ( \Exception $e ) {
 			return substr( md5( uniqid( '', true ) ), 0, 12 );
 		}
+	}
+
+	/**
+	 * Spans of a document the HTML parser reads as inert text: closed
+	 * comments, and the bodies of <script>, <style>, <textarea>, <title> and
+	 * <xmp> in HTML content.
+	 *
+	 * Every pass in the output buffer is a regex over the whole response, and
+	 * a response carries markup that is not markup. Inside a script it is
+	 * usually a string literal — `"<video poster=\"https://i.ytimg.com/…\">"`
+	 * — and a pass that parked it wrote `data-faz-category="marketing"` into
+	 * a double-quoted literal, which ended the literal at the first injected
+	 * quote and stopped the WHOLE inline script from parsing, the data
+	 * scripts #322 leaves executable included. A tag a script writes is
+	 * judged by the runtime when it is written, and a blocked script is
+	 * restored only once its category is allowed, so the server has nothing
+	 * to do inside the body.
+	 *
+	 * A regex alternation in front of each pass could not get this right:
+	 * the spans are a property of the HTML tokenizer, and imitating it
+	 * piecemeal hid real elements behind tokens it did not know. So this is
+	 * a small tokenizer, one linear walk, and every rule in it errs the same
+	 * way — when unsure, a span is NOT inert, and the passes see it:
+	 *
+	 * - Every construct the tokenizer reads as one token is consumed whole
+	 *   first, so a `<script` written inside it never opens a span: start and
+	 *   end tags with their attributes (`</p title="<script>">` is an end tag
+	 *   with an attribute), bogus comments (`<?…>`, `<!…>`, `</ …>`, all up
+	 *   to the first `>`) and comments.
+	 * - A comment ends as the parser ends it: `<!-->`, `<!--->`, `-->` or
+	 *   `--!>`. One that never closes is not inert; the walk goes on after
+	 *   its `<!--`.
+	 * - Inside <svg> and <math> nothing is raw text: there <title>, <style>
+	 *   and <script> are elements with children, and an <img> in them breaks
+	 *   out and loads. The walk counts those containers open and closed and
+	 *   records no span while one is open (a breakout it does not model
+	 *   keeps it counting: more is judged, never less).
+	 * - A raw-text body ends at the first `</name` followed by whitespace,
+	 *   `/` or `>`, which is never later than where the parser ends it. A
+	 *   body with no end, or a <plaintext>, ends the walk: nothing after it
+	 *   is recorded.
+	 * - <iframe>, <noembed>, <noframes> and <noscript> bodies are raw text to
+	 *   the parser too and are walked past for that reason, but not recorded:
+	 *   the iframe and noscript passes read them.
+	 *
+	 * @param string $html Document.
+	 * @return array<int,array{0:int,1:int}>|null Offset/length pairs in
+	 *         document order, or null when the walk could not finish (a PCRE
+	 *         error), in which case nothing may be treated as inert.
+	 */
+	private function find_inert_spans( $html ) {
+		$spans     = array();
+		$len       = strlen( $html );
+		$pos       = 0;
+		$foreign   = 0;
+		$dash_next = -1;
+		$bang_next = -1;
+		$recorded  = array( 'script', 'style', 'textarea', 'title', 'xmp' );
+		$walked    = array( 'iframe', 'noembed', 'noframes', 'noscript' );
+		$tag_re    = '#\G<([a-zA-Z][^\s/>]*+)' . self::ATTR_WALK . '(/\s*+)?>#';
+		$end_re    = '#\G</[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>#';
+		while ( $pos < $len ) {
+			$lt = strpos( $html, '<', $pos );
+			if ( false === $lt || $lt + 1 >= $len ) {
+				break;
+			}
+			$c = $html[ $lt + 1 ];
+			if ( '!' === $c && '<!--' === substr( $html, $lt, 4 ) ) {
+				$p = $lt + 4;
+				if ( $p < $len && '>' === $html[ $p ] ) {
+					$end = $p + 1;
+				} elseif ( '->' === substr( $html, $p, 2 ) ) {
+					$end = $p + 2;
+				} else {
+					if ( false !== $dash_next && $dash_next < $p ) {
+						$dash_next = strpos( $html, '-->', $p );
+					}
+					if ( false !== $bang_next && $bang_next < $p ) {
+						$bang_next = strpos( $html, '--!>', $p );
+					}
+					$a   = false === $dash_next ? PHP_INT_MAX : $dash_next + 3;
+					$b   = false === $bang_next ? PHP_INT_MAX : $bang_next + 4;
+					$end = min( $a, $b );
+				}
+				if ( PHP_INT_MAX === $end ) {
+					$pos = $p; // Never closed: not inert, keep walking.
+					continue;
+				}
+				$spans[] = array( $lt, $end - $lt );
+				$pos     = $end;
+				continue;
+			}
+			if ( '!' === $c || '?' === $c || ( '/' === $c && ( $lt + 2 >= $len || ! ctype_alpha( $html[ $lt + 2 ] ) ) ) ) {
+				// A bogus comment (or `</>`), one token up to the first `>`.
+				$gt = strpos( $html, '>', $lt + 2 );
+				if ( false === $gt ) {
+					break;
+				}
+				$pos = $gt + 1;
+				continue;
+			}
+			if ( '/' === $c ) {
+				$ok = preg_match( $end_re, $html, $m, 0, $lt );
+				if ( false === $ok ) {
+					return null;
+				}
+				if ( 0 === $ok ) {
+					break; // A tag still open at the end of the document.
+				}
+				if ( $foreign > 0 && preg_match( '#\G</(?:svg|math)(?=[\s/>])#i', $html, $unused, 0, $lt ) ) {
+					$foreign--;
+				}
+				$pos = $lt + strlen( $m[0] );
+				continue;
+			}
+			if ( ! ctype_alpha( $c ) ) {
+				$pos = $lt + 1; // A `<` that starts nothing is text.
+				continue;
+			}
+			$ok = preg_match( $tag_re, $html, $m, 0, $lt );
+			if ( false === $ok ) {
+				return null;
+			}
+			if ( 0 === $ok ) {
+				break;
+			}
+			$name  = strtolower( $m[1] );
+			$after = $lt + strlen( $m[0] );
+			$pos   = $after;
+			if ( 'svg' === $name || 'math' === $name ) {
+				if ( empty( $m[2] ) ) {
+					$foreign++;
+				}
+				continue;
+			}
+			if ( $foreign > 0 ) {
+				continue;
+			}
+			if ( 'plaintext' === $name ) {
+				break;
+			}
+			$is_recorded = in_array( $name, $recorded, true );
+			if ( ! $is_recorded && ! in_array( $name, $walked, true ) ) {
+				continue;
+			}
+			$ok = preg_match( '#</' . $name . '(?=[\s/>])#i', $html, $close, PREG_OFFSET_CAPTURE, $after );
+			if ( false === $ok ) {
+				return null;
+			}
+			if ( 0 === $ok ) {
+				break;
+			}
+			$close_at = $close[0][1];
+			if ( $is_recorded && $close_at > $after ) {
+				$spans[] = array( $after, $close_at - $after );
+			}
+			$pos = $close_at;
+		}
+		return $spans;
+	}
+
+	/**
+	 * Leading alternation for the step-1 script pattern: every construct the
+	 * tokenizer reads as one token, consumed whole and skipped.
+	 *
+	 * The script pattern is the one pass that still has to find elements by
+	 * regex across the page, and a `<script` written INSIDE one of these
+	 * tokens is not a script start: `</p title="<script>">` is an end tag
+	 * with an attribute, and `<?x …>`, `<!x …>`, `</ …>` are bogus comments
+	 * that end at their first `>`. Matched there, the pattern took the real
+	 * tracker after it for the body of a script that does not exist, and the
+	 * tracker shipped live. Other opening tags are consumed through
+	 * ATTR_WALK for the same reason (a `<script` in an attribute value).
+	 * `<!--` is left out: a closed comment is already stashed, and one that
+	 * never closes is judged rather than skipped.
+	 * Every quantifier is possessive: nothing here can backtrack, so this
+	 * adds no PCRE-limit failure to the pass. Closed comments and raw-text
+	 * bodies are already out of the buffer (stash_inert_spans()).
+	 *
+	 * @return string Pattern fragment ending in `|`, for the `#` delimiter.
+	 */
+	private static function script_token_skip() {
+		return '(?:</[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
+			. '|<\?[^>]*+>|<!(?!--)[^>]*+>'
+			. '|</(?![a-zA-Z])[^>]*+>'
+			. '|<(?!script(?=[\s/>]))[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
+			. ')(*SKIP)(*FAIL)|';
+	}
+
+	/**
+	 * Replace every inert span with a marker no pass can match.
+	 *
+	 * The markers carry the request nonce, like the srcdoc and noscript
+	 * stashes, so the page cannot spell one. The script and style passes,
+	 * which must read a body, are handed it back by process_with_inert_body().
+	 *
+	 * @param string $html  Document.
+	 * @param string $nonce Per-request nonce.
+	 * @param array  $stash Marker => original text, filled here.
+	 * @return string Document with the spans stashed; unchanged when the walk
+	 *                could not finish.
+	 */
+	private function stash_inert_spans( $html, $nonce, array &$stash ) {
+		$stash = array();
+		$spans = $this->find_inert_spans( $html );
+		if ( empty( $spans ) ) {
+			return $html;
+		}
+		$out  = '';
+		$last = 0;
+		foreach ( $spans as $span ) {
+			$key           = '__FAZ_INERT_' . $nonce . '_' . count( $stash ) . '__';
+			$stash[ $key ] = substr( $html, $span[0], $span[1] );
+			$out          .= substr( $html, $last, $span[0] - $last ) . $key;
+			$last          = $span[0] + $span[1];
+		}
+		return $out . substr( $html, $last );
+	}
+
+	/**
+	 * What the linear fallback of each markup pass looks for, and the shape
+	 * of the match array the pass's callback is written against.
+	 *
+	 * Shapes, as the pass's own pattern captures them:
+	 * - body:    0 element, 1 attributes, 2 body (script, style).
+	 * - inner:   0 element, 1 body (noscript).
+	 * - iframe:  0 element, 1 attributes, 2 body; no 2 when self-closed.
+	 * - open:    0 tag, 1 attributes with the closing slash (img, link).
+	 * - open2:   0 tag, 1 attributes, 2 slash (the srcdoc stash).
+	 * - open3:   0 tag, 1 name, 2 attributes, 3 slash (svg, media, style attr).
+	 * - named:   0 tag, 1 name, 2 attributes (background).
+	 *
+	 * `*` stands for every element whose name the style-attribute pass
+	 * accepts.
+	 */
+	const LINEAR_PASS_KINDS = array(
+		'srcdoc'     => array( 'tags' => array( 'iframe' ), 'shape' => 'open2' ),
+		'noscript'   => array( 'tags' => array( 'noscript' ), 'shape' => 'inner' ),
+		'script'     => array( 'tags' => array( 'script' ), 'shape' => 'body' ),
+		'svg'        => array( 'tags' => array( 'image', 'use', 'feimage' ), 'shape' => 'open3' ),
+		'background' => array( 'tags' => array( 'body', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th' ), 'shape' => 'named' ),
+		'iframe'     => array( 'tags' => array( 'iframe' ), 'shape' => 'iframe' ),
+		'style'      => array( 'tags' => array( 'style' ), 'shape' => 'body' ),
+		'img'        => array( 'tags' => array( 'img' ), 'shape' => 'open' ),
+		'media'      => array( 'tags' => array( 'video', 'audio', 'source', 'embed', 'object', 'track', 'input' ), 'shape' => 'open3' ),
+		'link'       => array( 'tags' => array( 'link' ), 'shape' => 'open' ),
+		'style-attr' => array( 'tags' => '*', 'shape' => 'open3' ),
+		'waitfor'    => array( 'tags' => array( 'script' ), 'shape' => 'body' ),
+	);
+
+	/**
+	 * Run one markup pass, and stay fail-closed when PCRE gives up on it.
+	 *
+	 * preg_replace_callback() returns null for the WHOLE document when it
+	 * hits a limit anywhere in it (a megabyte of unterminated inline script
+	 * exhausts pcre.backtrack_limit in the lazy body of the script pattern),
+	 * and every element it had already judged is lost with it. Serving the
+	 * buffer as it was then shipped every server-rendered tracker on the
+	 * page executable before consent: the one failure a consent layer must
+	 * not turn into an allow.
+	 *
+	 * So the same callback is run again over a linear walk of the document
+	 * (linear_markup_pass()), which finds the same elements with string
+	 * functions and nothing that can backtrack. Each element is judged by
+	 * the processor that judges it on the regex path, so the decision (and
+	 * the parked shape the runtime restores after consent: text/plain,
+	 * data-faz-src, data-faz-category) is the one a working pass produces,
+	 * whitelist, necessary category and own-asset exemptions included.
+	 *
+	 * The callbacks of the failed run may already have written into the
+	 * inert stash; it is put back as it was before the run, so the body of
+	 * a <style> the CSS pass rewrote is not rewritten a second time.
+	 *
+	 * The `faz_output_buffer_fail_closed` filter (default true) returns the
+	 * previous behaviour: `$legacy` when given, the document unchanged
+	 * otherwise.
+	 *
+	 * @param string        $html        Document.
+	 * @param string        $pattern     The pass's pattern.
+	 * @param string        $kind        Key of LINEAR_PASS_KINDS.
+	 * @param callable      $callback    The pass's callback.
+	 * @param array         $failed      Kinds that failed, with the PCRE error code, appended to.
+	 * @param array         $inert_stash Inert stash shared with the callbacks.
+	 * @param callable|null $legacy      Behaviour with fail-closed turned off.
+	 * @return string
+	 */
+	private function run_markup_pass( $html, $pattern, $kind, $callback, array &$failed, array &$inert_stash, $legacy = null ) {
+		$snapshot = $inert_stash;
+		$result   = preg_replace_callback( $pattern, $callback, $html );
+		if ( null !== $result ) {
+			return $result;
+		}
+		$failed[]    = $kind . ' (PCRE error ' . preg_last_error() . ')';
+		$inert_stash = $snapshot;
+		if ( ! $this->markup_fail_closed() ) {
+			return null === $legacy ? $html : $legacy( $html );
+		}
+		return $this->linear_markup_pass( $html, $kind, $callback );
+	}
+
+	/**
+	 * Whether a failed markup pass falls back to the linear walk.
+	 *
+	 * @return bool
+	 */
+	private function markup_fail_closed() {
+		if ( null === $this->markup_fail_closed_cache ) {
+			/**
+			 * Whether a markup pass that PCRE could not complete (backtrack or
+			 * recursion limit, JIT stack) is re-run over a linear walk of the
+			 * document instead of being skipped.
+			 *
+			 * Skipping it serves the page with every element that pass judges
+			 * left as the server rendered it, trackers included. Return false
+			 * only to restore that behaviour.
+			 *
+			 * @since 1.34.2
+			 *
+			 * @param bool $fail_closed Default true.
+			 */
+			$this->markup_fail_closed_cache = (bool) apply_filters( 'faz_output_buffer_fail_closed', true );
+		}
+		return $this->markup_fail_closed_cache;
+	}
+
+	/**
+	 * Log, at most once an hour, that a markup pass fell back.
+	 *
+	 * A page that trips the limit trips it on every request; one line per
+	 * request said nothing the first one had not, and filled the log.
+	 *
+	 * @param array  $failed  Kinds that failed.
+	 * @param string $context Entry point, for the log line.
+	 * @return void
+	 */
+	private function log_markup_pass_failure( array $failed, $context ) {
+		if ( empty( $failed ) ) {
+			return;
+		}
+		$key = 'faz_markup_pcre_fail_logged';
+		if ( false !== get_transient( $key ) ) {
+			return;
+		}
+		set_transient( $key, 1, HOUR_IN_SECONDS );
+		$what = $this->markup_fail_closed()
+			? 'the elements were judged by the linear fallback'
+			: 'blocking was SKIPPED for those elements (faz_output_buffer_fail_closed is false)';
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( 'FAZ Cookie Manager: ' . $context . ' pass(es) ' . implode( ', ', array_unique( $failed ) ) . '; ' . $what . '. pcre.backtrack_limit is ' . ini_get( 'pcre.backtrack_limit' ) . '. Logged at most once an hour.' );
+	}
+
+	/**
+	 * The linear walk behind run_markup_pass(): find the elements a pass
+	 * looks for with string functions only, build the match its pattern
+	 * would have captured, and hand it to the pass's callback.
+	 *
+	 * The walk reads the document as the HTML tokenizer does, as
+	 * find_inert_spans() does, and errs the same way, toward judging:
+	 * - every tag, start or end, is consumed with its attributes, so a
+	 *   `<script` inside an attribute value never opens an element;
+	 * - bogus comments (`<?…>`, `<!…>`, `</ …>`) end at their first `>`; a
+	 *   `<!--` is walked into, not skipped (a closed comment is already in
+	 *   the inert stash, and a tag inside one that is not gets judged, which
+	 *   is harmless in text);
+	 * - the bodies of script, style, textarea, title and xmp are text and
+	 *   are walked past, except inside svg and math, where they are not;
+	 * - a body with no end runs to the end of the document. For a script
+	 *   that is what the parser does as well (the element is never run), and
+	 *   for an iframe it is the frame the parser builds, src included.
+	 *
+	 * Cost is one strpos per `<` plus a strcspn per attribute: no pattern,
+	 * so nothing in it can exhaust a PCRE limit.
+	 *
+	 * @param string   $html     Document.
+	 * @param string   $kind     Key of LINEAR_PASS_KINDS.
+	 * @param callable $callback The pass's callback.
+	 * @return string
+	 */
+	private function linear_markup_pass( $html, $kind, $callback ) {
+		$spec    = self::LINEAR_PASS_KINDS[ $kind ];
+		$tags    = $spec['tags'];
+		$shape   = $spec['shape'];
+		$raw     = array( 'script', 'style', 'textarea', 'title', 'xmp' );
+		$len     = strlen( $html );
+		$out     = '';
+		$last    = 0;
+		$pos     = 0;
+		$foreign = 0;
+		while ( $pos < $len ) {
+			$lt = strpos( $html, '<', $pos );
+			if ( false === $lt || $lt + 1 >= $len ) {
+				break;
+			}
+			$c = $html[ $lt + 1 ];
+			if ( '!' === $c || '?' === $c ) {
+				if ( '<!--' === substr( $html, $lt, 4 ) ) {
+					$pos = $lt + 4;
+					continue;
+				}
+				$gt = strpos( $html, '>', $lt + 2 );
+				if ( false === $gt ) {
+					break;
+				}
+				$pos = $gt + 1;
+				continue;
+			}
+			$is_end  = '/' === $c;
+			$name_at = $is_end ? $lt + 2 : $lt + 1;
+			if ( $name_at >= $len || ! ctype_alpha( $html[ $name_at ] ) ) {
+				if ( ! $is_end ) {
+					$pos = $lt + 1; // A `<` that starts nothing is text.
+					continue;
+				}
+				$gt = strpos( $html, '>', $lt + 2 ); // `</ …>`: a bogus comment.
+				if ( false === $gt ) {
+					break;
+				}
+				$pos = $gt + 1;
+				continue;
+			}
+			$name_len = strcspn( $html, " \t\n\x0B\f\r/>", $name_at );
+			$name_end = $name_at + $name_len;
+			$name     = substr( $html, $name_at, $name_len );
+			$lower    = strtolower( $name );
+			$tag      = self::linear_tag_end( $html, $name_end, $len );
+			if ( null === $tag ) {
+				break; // A tag still open at the end: the rest is inside it.
+			}
+			$gt    = $tag[0];
+			$slash = $tag[1];
+			if ( $is_end ) {
+				if ( $foreign > 0 && ( 'svg' === $lower || 'math' === $lower ) ) {
+					$foreign--;
+				}
+				$pos = $gt + 1;
+				continue;
+			}
+
+			$attrs_end = false === $slash ? $gt : $slash;
+			$end       = $gt + 1;
+			if ( '*' === $tags ) {
+				$is_target = $name_len === strspn( $name, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:_.-' );
+			} else {
+				$is_target = in_array( $lower, $tags, true );
+			}
+			$has_body = 'body' === $shape || 'inner' === $shape || ( 'iframe' === $shape && false === $slash );
+
+			if ( $is_target ) {
+				$attrs = substr( $html, $name_end, $attrs_end - $name_end );
+				if ( $has_body ) {
+					$close = self::linear_close_tag( $html, $lower, $gt + 1, $len );
+					$body  = null === $close ? substr( $html, $gt + 1 ) : substr( $html, $gt + 1, $close[0] - $gt - 1 );
+					$end   = null === $close ? $len : $close[1];
+					$full  = substr( $html, $lt, $end - $lt );
+					$m     = 'inner' === $shape ? array( $full, $body ) : array( $full, $attrs, $body );
+				} else {
+					$full = substr( $html, $lt, $end - $lt );
+					switch ( $shape ) {
+						case 'open':
+							$m = array( $full, substr( $html, $name_end, $gt - $name_end ) );
+							break;
+						case 'open2':
+							$m = array( $full, $attrs, false === $slash ? '' : '/' );
+							break;
+						case 'named':
+							$m = array( $full, $name, $attrs );
+							break;
+						case 'iframe':
+							$m = array( $full, $attrs );
+							break;
+						default: // open3.
+							$m = array( $full, $name, $attrs, false === $slash ? '' : '/' );
+					}
+				}
+				$out .= substr( $html, $last, $lt - $last ) . (string) call_user_func( $callback, $m );
+				$last = $end;
+				$pos  = $end;
+				if ( $has_body ) {
+					continue;
+				}
+			} else {
+				$pos = $end;
+			}
+
+			if ( 'svg' === $lower || 'math' === $lower ) {
+				if ( false === $slash ) {
+					$foreign++;
+				}
+				continue;
+			}
+			if ( 0 === $foreign && in_array( $lower, $raw, true ) ) {
+				$close = self::linear_close_tag( $html, $lower, $end, $len );
+				if ( null === $close ) {
+					break; // A body with no end: the rest is text.
+				}
+				$pos = $close[0];
+			}
+		}
+		if ( 0 === $last ) {
+			return $html;
+		}
+		return $out . substr( $html, $last );
+	}
+
+	/**
+	 * Where a tag ends, read as ATTR_WALK reads it, without a pattern.
+	 *
+	 * @param string $html Document.
+	 * @param int    $p    Offset just past the tag name.
+	 * @param int    $len  Document length.
+	 * @return array{0:int,1:int|false}|null Offset of the closing `>`, and of
+	 *         the self-closing slash before it (false when there is none);
+	 *         null when the tag never ends.
+	 */
+	private static function linear_tag_end( $html, $p, $len ) {
+		$ws    = " \t\n\x0B\f\r";
+		$slash = false;
+		while ( $p < $len ) {
+			$p += strspn( $html, $ws, $p );
+			if ( $p >= $len ) {
+				return null;
+			}
+			$c = $html[ $p ];
+			if ( '>' === $c ) {
+				return array( $p, $slash );
+			}
+			$slash = false;
+			if ( '/' === $c ) {
+				$q = $p + 1 + strspn( $html, $ws, $p + 1 );
+				if ( $q < $len && '>' === $html[ $q ] ) {
+					$slash = $p;
+				}
+				++$p;
+				continue;
+			}
+			$n = strcspn( $html, $ws . "\"'>/=", $p );
+			if ( 0 === $n ) {
+				++$p; // A stray quote or `=`, one character, as ATTR_WALK reads it.
+				continue;
+			}
+			$p += $n;
+			$q  = $p + strspn( $html, $ws, $p );
+			if ( $q >= $len || '=' !== $html[ $q ] ) {
+				continue;
+			}
+			$v = $q + 1 + strspn( $html, $ws, $q + 1 );
+			if ( $v >= $len ) {
+				return null;
+			}
+			$quote = $html[ $v ];
+			if ( '"' === $quote || "'" === $quote ) {
+				$close = strpos( $html, $quote, $v + 1 );
+				// Unterminated: ATTR_WALK reads the `=` and the quote as stray
+				// characters and goes on, and so does this.
+				$p = false === $close ? $q + 1 : $close + 1;
+				continue;
+			}
+			$p = '>' === $quote ? $v : $v + strcspn( $html, $ws . '>', $v );
+		}
+		return null;
+	}
+
+	/**
+	 * The end tag of a raw-text or iframe body: `</name` followed by
+	 * whitespace, `/` or `>`, through its `>`.
+	 *
+	 * @param string $html Document.
+	 * @param string $name Lower-case element name.
+	 * @param int    $from Offset to search from.
+	 * @param int    $len  Document length.
+	 * @return array{0:int,1:int}|null Offset of `</`, offset just past `>`;
+	 *         null when there is none.
+	 */
+	private static function linear_close_tag( $html, $name, $from, $len ) {
+		$needle = '</' . $name;
+		$step   = strlen( $needle );
+		$at     = stripos( $html, $needle, $from );
+		while ( false !== $at ) {
+			$next = $at + $step;
+			if ( $next >= $len ) {
+				return null;
+			}
+			if ( false !== strpos( " \t\n\x0B\f\r/>", $html[ $next ] ) ) {
+				$gt = strpos( $html, '>', $next );
+				return false === $gt ? null : array( $at, $gt + 1 );
+			}
+			$at = stripos( $html, $needle, $next );
+		}
+		return null;
+	}
+
+	/**
+	 * Run a script or style pass on an element whose body is stashed.
+	 *
+	 * The processor is given the real body, and the body it returns (the
+	 * style pass rewrites CSS) goes back into the stash, so the passes after
+	 * this one still cannot see it. Should the result not have the shape the
+	 * processors build, it is returned as it is: the body is then visible to
+	 * the later passes, as it was before the stash existed.
+	 *
+	 * @param array    $m       Match: 0 element, 1 attributes, 2 body.
+	 * @param string   $tag     `script` or `style`.
+	 * @param array    $stash   Inert stash, updated in place.
+	 * @param callable $process Processor taking the match.
+	 * @return string
+	 */
+	private function process_with_inert_body( $m, $tag, array &$stash, $process ) {
+		$marker = isset( $m[2] ) ? $m[2] : '';
+		if ( '' === $marker || ! isset( $stash[ $marker ] ) ) {
+			return $process( $m );
+		}
+		$real   = $stash[ $marker ];
+		$m[0]   = str_replace( $marker, $real, $m[0] );
+		$m[2]   = $real;
+		$result = $process( $m );
+		if ( 1 === preg_match( '#^(<' . $tag . '(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>)(.*)(</' . $tag . '(?=[\s/>])[^>]*+>)$#is', $result, $r ) ) {
+			$stash[ $marker ] = $r[2];
+			return $r[1] . $marker . $r[3];
+		}
+		return $result;
 	}
 
 	private function process_link_tag( $m, $providers, $blocked_categories ) {
@@ -7236,7 +8199,42 @@ class Frontend {
 		if ( ! function_exists( 'faz_get_valid_consent_cookie' ) ) {
 			return '';
 		}
-		return (string) faz_get_valid_consent_cookie( '', $this->get_consent_cookie_scope() );
+		$cookie = (string) faz_get_valid_consent_cookie( '', $this->get_consent_cookie_scope() );
+		if ( '' !== $cookie && $this->is_vendor_record_stale( $cookie ) ) {
+			return '';
+		}
+		return $cookie;
+	}
+
+	/**
+	 * Whether script.js will discard this decided cookie on this page because
+	 * the visitor never saw every vendor now selected for IAB TCF (see
+	 * faz_is_vendor_record_stale()).
+	 *
+	 * Treated like a scope change: the server reads the cookie as absent on the
+	 * same request the client invalidates it, instead of rendering the accepted
+	 * categories' trackers executable one page view before the re-prompt. It is
+	 * NOT deleted here, nor on `init` as a stale revision is: the endpoint and
+	 * pages AMP serves never show a vendor list, run at `init` before an AMP
+	 * request can be recognised, and would destroy on every AMP page view the
+	 * cookie the AMP flow had just written. The client deletes it on the
+	 * canonical page, where it re-prompts.
+	 *
+	 * Only where the CMP can run: a page with a banner loaded (script.js is
+	 * there to re-prompt). The law is the active banner's, as
+	 * _fazCurrentLaw() reads it.
+	 *
+	 * @param string $cookie Revision- and scope-valid consent cookie.
+	 * @return bool
+	 */
+	private function is_vendor_record_stale( $cookie ) {
+		if ( ! $this->template || ! $this->banner || ! function_exists( 'faz_is_vendor_record_stale' ) ) {
+			return false;
+		}
+		if ( ! isset( $this->vendor_record_stale_cache[ $cookie ] ) ) {
+			$this->vendor_record_stale_cache[ $cookie ] = faz_is_vendor_record_stale( $cookie, (string) $this->banner->get_law() );
+		}
+		return $this->vendor_record_stale_cache[ $cookie ];
 	}
 
 	/**
@@ -7272,11 +8270,178 @@ class Frontend {
 					$blocked[] = $slug;
 				}
 			}
-			$this->blocked_categories_cache = $blocked;
+			// The cookie layers stand down in this mode (see
+			// server_cookie_enforcement_permitted()), so no separate view.
+			$this->blocked_categories_cache             = $blocked;
+			$this->enforcement_blocked_categories_cache = $blocked;
 			return $blocked;
 		}
 
-		$consent = $this->get_scoped_valid_consent_cookie();
+		$signals = array();
+		$blocked = $this->compute_blocked_categories(
+			$categories,
+			$this->get_scoped_valid_consent_cookie(),
+			$this->request_has_gpc(),
+			$this->request_has_dnsmpi(),
+			$signals
+		);
+		$this->signal_blocked_categories = $signals;
+		// What the server-side cookie layers enforce: this visitor's own state,
+		// never the shareable union below. That union is a render-time
+		// over-block the client undoes from the consent cookie; a cookie the
+		// shredder deletes, or a Set-Cookie header the guard strips, cannot be
+		// undone, so applying the union there destroyed a consenting visitor's
+		// `_ga` on every page of a site whose veto was off. Their denials are in
+		// this set too, so a rejected category's cookies are still deleted.
+		$this->enforcement_blocked_categories_cache = $blocked;
+
+		// The visitor's state could not be kept out of the shared cache (see
+		// decide_visitor_state_cache_veto()), so this render may be stored and
+		// replayed to everyone: block whatever a first visit blocks AND whatever
+		// this visitor's own state blocks. Their denials (a CCPA opt-out, GPC,
+		// Do Not Sell, a ruleset-granted category they switched off) are still
+		// enforced on their page; their grants beyond the first-visit default
+		// are not, and script.js releases those client-side from the consent
+		// cookie, exactly as it does on a Cache Compatibility page. A replay of
+		// this copy can therefore only over-block, which the client undoes for
+		// every visitor — never under-block, which nothing can undo.
+		if ( 'fallback' === $this->visitor_state_veto ) {
+			$unused  = array();
+			$blocked = $this->union_blocked_categories(
+				$categories,
+				$blocked,
+				$this->compute_blocked_categories( $categories, '', false, false, $unused )
+			);
+		}
+		// Under an opt-out law the render parks the sale/sharing categories a
+		// first visit allows, for every visitor: see
+		// sale_share_parked_by_default(). A render-time over-block like the
+		// union above, so the cookie layers keep reading the visitor's own set.
+		$parked = $this->sale_share_parked_by_default( $categories );
+		if ( ! empty( $parked ) ) {
+			$blocked = $this->union_blocked_categories( $categories, $blocked, $parked );
+		}
+		$this->blocked_categories_cache = $blocked;
+		return $blocked;
+	}
+
+	/**
+	 * The sale/sharing categories every render parks under an opt-out law,
+	 * although a visitor with no signal may run them.
+	 *
+	 * CCPA/CPRA is an opt-out regime, so a first visit blocks nothing it may
+	 * sell or share (see compute_blocked_categories()). But that first-visit
+	 * render is the page a shared cache keeps and replays, and the visitor it
+	 * is replayed to may carry Sec-GPC: 1, navigator.globalPrivacyControl or
+	 * a `fazcookie-dnsmpi` cookie: a binding opt-out (CPPA Reg. §7025, Cal.
+	 * Civ. Code §1798.120) that the server never saw, because the cache
+	 * answered. The sale/sharing scripts in that copy were executable from
+	 * the parser, before script.js could apply the opt-out. The visitor-state
+	 * veto keeps the signalled visitor's own page out of the cache; it cannot
+	 * change the page a HIT serves them.
+	 *
+	 * So the render parks those categories (text/plain + data-faz-category,
+	 * the shape of every server-side block) for everyone, and script.js
+	 * releases them on its first pass when none of the three signals and no
+	 * recorded opt-out is present: _fazSetInitialState() on a first visit, the
+	 * restore pass for a recorded choice, both reading the categories from the
+	 * consent store, which GPC and Do Not Sell set to "no" before any unblock
+	 * runs. Without a signal they still run; with one they never do. The cost
+	 * is the block-then-release delay: the scripts run when the runtime
+	 * starts (DOMContentLoaded, or the restore pass for a returning visitor)
+	 * instead of from the parser.
+	 *
+	 * The page is then the same for a signalled and an unsignalled visitor,
+	 * so a GPC or Do Not Sell first visit no longer needs the visitor-state
+	 * veto and can be cached like any other.
+	 *
+	 * Only where script.js is the one releasing: the active banner's law is
+	 * `ccpa` (the law _fazGetLaw() reads, so the runtime treats the page as
+	 * opt-out and runs its restore pass on a first visit). Under a GDPR-law
+	 * banner the runtime releases nothing before consent, so parking a
+	 * category an opt-out ruleset grants there would hold it until the
+	 * visitor clicks; it is left as before. Not on AMP, which has no runtime.
+	 * Cache Compatibility and the strict shell park every category already.
+	 *
+	 * @param array $categories Category rows.
+	 * @return array Slugs, in catalogue order.
+	 */
+	private function sale_share_parked_by_default( $categories ) {
+		if ( null !== $this->sale_share_parked_cache ) {
+			return $this->sale_share_parked_cache;
+		}
+		$parked = array();
+		if ( $this->banner && 'ccpa' === $this->banner->get_law() && ! apply_filters( 'faz_is_amp_request', false ) ) {
+			/**
+			 * Whether a render under an opt-out law parks the sale/sharing
+			 * categories a first visit allows, for script.js to release when
+			 * the visitor carries no GPC, Do Not Sell or recorded opt-out.
+			 *
+			 * Returning false ships them executable from the parser again,
+			 * which a cached copy then replays to visitors whose opt-out
+			 * signal the server never saw.
+			 *
+			 * @since 1.34.2
+			 *
+			 * @param bool $park Default true.
+			 */
+			$park = (bool) apply_filters( 'faz_ccpa_park_sell_share_by_default', true );
+			if ( $park ) {
+				$unused   = array();
+				$baseline = $this->compute_blocked_categories( $categories, '', false, false, $unused );
+				foreach ( $categories as $cat_data ) {
+					$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data );
+					$slug     = $category->get_slug();
+					if ( 'necessary' === $slug || in_array( $slug, $baseline, true ) ) {
+						continue;
+					}
+					if ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) {
+						$parked[] = $slug;
+					}
+				}
+			}
+		}
+		if ( $this->banner ) {
+			$this->sale_share_parked_cache = $parked;
+		}
+		return $parked;
+	}
+
+	/**
+	 * The blocked-category set the destructive cookie layers enforce.
+	 *
+	 * Identical to get_blocked_categories() except on a 'fallback' verdict,
+	 * where the render blocks the shareable union, and under an opt-out law,
+	 * where it also parks the sale/sharing categories a first visit allows
+	 * (sale_share_parked_by_default()); this returns the visitor's own set
+	 * (see the comment where it is filled). Read by
+	 * is_cookie_allowed() and shred_non_consented_cookies() only — never by
+	 * anything that decides what the page itself executes.
+	 *
+	 * @return array Slugs of blocked categories.
+	 */
+	private function get_enforcement_blocked_categories() {
+		$render = $this->get_blocked_categories();
+		return is_array( $this->enforcement_blocked_categories_cache ) ? $this->enforcement_blocked_categories_cache : $render;
+	}
+
+	/**
+	 * The blocked-category set for one visitor state, with no memo and no
+	 * cache decision: get_blocked_categories() asks it for the visitor's real
+	 * state, decide_visitor_state_cache_veto() also asks it for the first-visit
+	 * baseline the two are compared against.
+	 *
+	 * @param array  $categories    Category rows from Category_Controller.
+	 * @param string $consent       Valid, scoped consent cookie, or ''.
+	 * @param bool   $gpc_optout    Whether the request carries Sec-GPC: 1.
+	 * @param bool   $dnsmpi_optout Whether the Do-Not-Sell cookie is set.
+	 * @param array  $signals       Out: slug => 'gpc'|'dnsmpi' for categories a
+	 *                              signal (not the cookie) blocked.
+	 * @return array Slugs of blocked categories, in catalogue order.
+	 */
+	private function compute_blocked_categories( $categories, $consent, $gpc_optout, $dnsmpi_optout, &$signals ) {
+		$blocked = array();
+		$signals = array();
 
 		// CCPA/CPRA is an OPT-OUT regime: personal data may be sold/shared — and
 		// the corresponding scripts may run — UNTIL the visitor exercises the
@@ -7288,6 +8453,11 @@ class Frontend {
 		// mirrors the client-side default (script.js sets every category to
 		// "yes" on a CCPA first visit) and removes the block→unblock flash that a
 		// blanket pre-consent block would otherwise cause under an opt-out law.
+		// This is the visitor's state, and what the cookie layers enforce. The
+		// RENDER still parks the sale/sharing categories among these, for
+		// script.js to release, because a cached copy of it is replayed to
+		// visitors whose GPC or Do Not Sell signal the server never saw: see
+		// sale_share_parked_by_default().
 		$is_optout_law = ( $this->banner && 'ccpa' === $this->banner->get_law() );
 
 		// Runtime geo-routing: when a ruleset is
@@ -7309,9 +8479,7 @@ class Frontend {
 		// including when a prior consent cookie grants them. GPC is a visitor
 		// signal, not a publisher-configurable preference, and therefore is never
 		// gated on the banner toggle or binary law.
-		$gpc_header_on = isset( $_SERVER['HTTP_SEC_GPC'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
-		$gpc_optout = $gpc_header_on;
+		// (Read by request_has_gpc().)
 
 		// Standalone "Do Not Sell or Share My Personal Information" opt-out: the
 		// [faz_do_not_sell] form sets the `fazcookie-dnsmpi` cookie. That cookie
@@ -7325,8 +8493,7 @@ class Frontend {
 		// whenever it is present covers that mode too; under a pure opt-in law
 		// the sell/share categories are already blocked, so this is a no-op
 		// there.
-		$dnsmpi_optout = isset( $_COOKIE['fazcookie-dnsmpi'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+		// (Read by request_has_dnsmpi().)
 
 		foreach ( $categories as $cat_data ) {
 			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data );
@@ -7338,12 +8505,12 @@ class Frontend {
 			// overriding any consent-cookie value (mirrors the GPC override).
 			if ( $dnsmpi_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
 				$blocked[] = $slug;
-				$this->signal_blocked_categories[ $slug ] = 'dnsmpi';
+				$signals[ $slug ] = 'dnsmpi';
 				continue;
 			}
 			if ( $gpc_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
 				$blocked[] = $slug;
-				$this->signal_blocked_categories[ $slug ] = 'gpc';
+				$signals[ $slug ] = 'gpc';
 				continue;
 			}
 			if ( empty( $consent ) ) {
@@ -7387,8 +8554,46 @@ class Frontend {
 				}
 			}
 		}
-		$this->blocked_categories_cache = $blocked;
 		return $blocked;
+	}
+
+	/**
+	 * Union of two blocked-category lists, in catalogue order.
+	 *
+	 * @param array $categories Category rows.
+	 * @param array $first      Slugs.
+	 * @param array $second     Slugs.
+	 * @return array
+	 */
+	private function union_blocked_categories( $categories, $first, $second ) {
+		$union = array();
+		foreach ( $categories as $cat_data ) {
+			$slug = ( new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data ) )->get_slug();
+			if ( in_array( $slug, $first, true ) || in_array( $slug, $second, true ) ) {
+				$union[] = $slug;
+			}
+		}
+		return $union;
+	}
+
+	/**
+	 * Whether the request carries a Global Privacy Control signal (Sec-GPC: 1).
+	 *
+	 * @return bool
+	 */
+	private function request_has_gpc() {
+		return isset( $_SERVER['HTTP_SEC_GPC'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
+	}
+
+	/**
+	 * Whether the visitor submitted the Do Not Sell or Share form.
+	 *
+	 * @return bool
+	 */
+	private function request_has_dnsmpi() {
+		return isset( $_COOKIE['fazcookie-dnsmpi'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
 	}
 
 	/**
@@ -7402,7 +8607,8 @@ class Frontend {
 		if ( null !== $this->service_consent_cache ) {
 			return $this->service_consent_cache;
 		}
-		$this->service_consent_cache = array();
+		$this->service_consent_cache             = array();
+		$this->enforcement_service_consent_cache = array();
 		// Jurisdiction shell: same invariance requirement as Cache Compatibility
 		// Mode — svc.* decisions live in the consent cookie, which cached HTML
 		// must not depend on. Enforced client-side instead.
@@ -7443,10 +8649,35 @@ class Frontend {
 				if ( 'yes' === $match[2] && isset( $signal_blocked_services[ $match[1] ] ) ) {
 					continue;
 				}
+				// The cookie layers honour the grant whatever the render does:
+				// see get_enforcement_service_consent().
+				$this->enforcement_service_consent_cache[ $match[1] ] = $match[2];
+				// Shareable fallback render (see get_blocked_categories()): an
+				// explicit svc.* NO still blocks this visitor's embed, a YES is
+				// left for script.js to release.
+				if ( 'yes' === $match[2] && 'fallback' === $this->visitor_state_veto ) {
+					continue;
+				}
 				$this->service_consent_cache[ $match[1] ] = $match[2];
 			}
 		}
 		return $this->service_consent_cache;
+	}
+
+	/**
+	 * Per-service decisions the destructive cookie layers enforce.
+	 *
+	 * get_service_consent() drops an svc.* YES on a 'fallback' render so the
+	 * shareable page does not execute the embed; the shredder and the
+	 * Set-Cookie guard must still honour it, for the same reason as
+	 * get_enforcement_blocked_categories(). Signal-blocked grants are excluded
+	 * here exactly as there.
+	 *
+	 * @return array [ 'google-analytics' => 'yes', 'hotjar' => 'no', ... ]
+	 */
+	private function get_enforcement_service_consent() {
+		$render = $this->get_service_consent();
+		return is_array( $this->enforcement_service_consent_cache ) ? $this->enforcement_service_consent_cache : $render;
 	}
 
 	/**
@@ -7459,10 +8690,8 @@ class Frontend {
 	 * @return array<string,bool>
 	 */
 	private function get_signal_blocked_services( $consent ) {
-		$gpc_header = isset( $_SERVER['HTTP_SEC_GPC'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
-		$dnsmpi_req = isset( $_COOKIE['fazcookie-dnsmpi'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+		$gpc_header     = $this->request_has_gpc();
+		$dnsmpi_req     = $this->request_has_dnsmpi();
 		$signal_blocked = array();
 		if ( $gpc_header || $dnsmpi_req ) {
 			$this->get_blocked_categories();
@@ -9353,44 +10582,6 @@ class Frontend {
 	}
 
 	/**
-	 * Detect inline scripts that carry only config/i18n payload — never tracker code.
-	 *
-	 * WordPress core emits two ID shapes that are guaranteed to be data-only:
-	 *
-	 *   - `<handle>-js-extra`        — `wp_localize_script()` output. Always a
-	 *                                  `var NAME = { … };` assignment. No function
-	 *                                  calls, no network I/O, no tracker pixels.
-	 *   - `<handle>-js-translations` — `wp_set_script_translations()` output.
-	 *                                  Always `wp.i18n.setLocaleData( JSON, domain );`
-	 *                                  reaching only into WP's in-memory i18n store.
-	 *
-	 * Neither shape can host an analytics call. Yet `match_script_to_provider()`
-	 * runs a `stripos( $content, $pattern )` substring match against the body of
-	 * the inline script, which means any localised string or config key that
-	 * incidentally contains a provider name (e.g. trx_addons emits the config key
-	 * `animate_to_mc4wp_form_submitted`, RankMath localises `addtoany`, Yoast
-	 * carries `gtag` in instruction strings) will trigger a false-positive block.
-	 * The block rewrites the tag to `type="text/plain"`, the `var NAME = …`
-	 * assignment never runs, and downstream code that reads the global crashes
-	 * with `ReferenceError: NAME is not defined`.
-	 *
-	 * `-js-before` and `-js-after` are NOT exempted — `wp_add_inline_script()`
-	 * with those positions accepts arbitrary executable code (a third-party
-	 * plugin may legitimately emit a tracker call this way), so they still
-	 * route through the regular provider matcher.
-	 *
-	 * The exemption applies to inline tags from any plugin, not just our own,
-	 * because the convention is enforced by WordPress core: only `wp_localize_script`
-	 * produces the `-js-extra` suffix, and only `wp_set_script_translations`
-	 * produces the `-js-translations` suffix. A malicious plugin choosing one of
-	 * those IDs to hide a tracker has the entire rest of the page to exfiltrate
-	 * from — the assumption "the IDs WP core appends mark data, not behaviour"
-	 * is the same one WordPress itself relies on.
-	 *
-	 * @param string $id Inline script tag ID.
-	 * @return bool
-	 */
-	/**
 	 * Whether an inline script body only assigns JSON values.
 	 *
 	 * Accepted: one or more `var NAME = <JSON>`, `let NAME = <JSON>`,
@@ -9402,7 +10593,7 @@ class Frontend {
 	 * function, a single-quoted string, a reference to another variable or a
 	 * call is not data and the script is judged as usual. A declaration list
 	 * (`var a = {…}, b = …`) is rejected too: the part after the comma can be
-	 * any expression.
+	 * any expression. So is an assignment to `location`, which navigates.
 	 *
 	 * @param string $content Inline script body.
 	 * @return bool
@@ -9426,7 +10617,21 @@ class Frontend {
 			if ( $pos >= $len ) {
 				return $seen > 0;
 			}
-			if ( ! preg_match( '/\G(?:(?:var|let|const)\s+|window\.)[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*/', $body, $m, 0, $pos ) ) {
+			if ( ! preg_match( '/\G(?:(?:var|let|const)\s+|window\.)([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*/', $body, $m, 0, $pos ) ) {
+				return false;
+			}
+			// `location` is a global whose assignment is an action, not a
+			// definition: `var location = "https://…"` at top level and
+			// `window.location = …` both go through the Location setter and
+			// navigate the page, whatever JSON value is given (an object
+			// navigates to its string form). Exempted, that navigation ran
+			// before consent and outside every provider and custom rule, so it
+			// is judged as code. The grammar above already refuses every other
+			// spelling (`document.location`, `top.location`, `window["…"]`).
+			// Event handler names need no entry: an IDL handler takes a
+			// callable or null, and JSON can spell neither a function nor
+			// source to compile.
+			if ( 'location' === $m[1] ) {
 				return false;
 			}
 			$pos += strlen( $m[0] );
@@ -9510,6 +10715,44 @@ class Frontend {
 		return false;
 	}
 
+	/**
+	 * Detect inline scripts that carry only config/i18n payload — never tracker code.
+	 *
+	 * WordPress core emits two ID shapes that are guaranteed to be data-only:
+	 *
+	 *   - `<handle>-js-extra`        — `wp_localize_script()` output. Always a
+	 *                                  `var NAME = { … };` assignment. No function
+	 *                                  calls, no network I/O, no tracker pixels.
+	 *   - `<handle>-js-translations` — `wp_set_script_translations()` output.
+	 *                                  Always `wp.i18n.setLocaleData( JSON, domain );`
+	 *                                  reaching only into WP's in-memory i18n store.
+	 *
+	 * Neither shape can host an analytics call. Yet `match_script_to_provider()`
+	 * runs a `stripos( $content, $pattern )` substring match against the body of
+	 * the inline script, which means any localised string or config key that
+	 * incidentally contains a provider name (e.g. trx_addons emits the config key
+	 * `animate_to_mc4wp_form_submitted`, RankMath localises `addtoany`, Yoast
+	 * carries `gtag` in instruction strings) will trigger a false-positive block.
+	 * The block rewrites the tag to `type="text/plain"`, the `var NAME = …`
+	 * assignment never runs, and downstream code that reads the global crashes
+	 * with `ReferenceError: NAME is not defined`.
+	 *
+	 * `-js-before` and `-js-after` are NOT exempted — `wp_add_inline_script()`
+	 * with those positions accepts arbitrary executable code (a third-party
+	 * plugin may legitimately emit a tracker call this way), so they still
+	 * route through the regular provider matcher.
+	 *
+	 * The exemption applies to inline tags from any plugin, not just our own,
+	 * because the convention is enforced by WordPress core: only `wp_localize_script`
+	 * produces the `-js-extra` suffix, and only `wp_set_script_translations`
+	 * produces the `-js-translations` suffix. A malicious plugin choosing one of
+	 * those IDs to hide a tracker has the entire rest of the page to exfiltrate
+	 * from — the assumption "the IDs WP core appends mark data, not behaviour"
+	 * is the same one WordPress itself relies on.
+	 *
+	 * @param string $id Inline script tag ID.
+	 * @return bool
+	 */
 	private function is_wp_localize_or_translations_inline_id( $id ) {
 		if ( ! is_string( $id ) || '' === $id ) {
 			return false;
@@ -9669,28 +10912,80 @@ class Frontend {
 	}
 
 	/**
-	 * Add FAZ to FlyingPress v5's Delay All JavaScript runtime config.
+	 * The FlyingPress 5 runtime-config lists FAZ adds itself to, and the
+	 * keywords it adds to each one.
+	 *
+	 * Verified against FlyingPress 5.5.0 and 5.6.5 (same code in both):
+	 *
+	 *   - `js_delay_excludes` — JavaScript::delay_scripts(), the "Delay all
+	 *     JavaScript" pass. Keywords are matched with stripos() against the
+	 *     whole `<script>` tag, so `faz-cookie-manager` hits the id of every
+	 *     FAZ tag (`faz-cookie-manager-js`, `-js-extra`, `-js-before`,
+	 *     `-gcm-default-js-before`) and `faz-fw` the alternative-asset family.
+	 *   - `js_delay_third_party_excludes` — JavaScript::delay_third_party_scripts(),
+	 *     "Delay third-party scripts". It first keeps the tags that mention any
+	 *     domain in the Cloud Optimizer's `external_domains`, and then honours
+	 *     ONLY this list. A FAZ asset served from a CDN host (BunnyCDN on the
+	 *     site that reported it) counts as third-party, and so does the inline
+	 *     `_fazConfig`, whose default whitelist contains `www.google.com/recaptcha`:
+	 *     without this list the banner waited for the first interaction, or
+	 *     script.js ran with no `_fazConfig` and showed nothing at all.
+	 *   - `css_rucss_include_selectors` — "Remove unused CSS". The dashboard
+	 *     describes it as keywords that force matching selectors into the
+	 *     generated used CSS, and the value travels to the Cloud Optimizer in
+	 *     Config::safe_config(). The banner's states (`.faz-modal.faz-modal-open`,
+	 *     `.faz-switch input:checked`, …) are not on screen when the page is
+	 *     analysed, so they were dropped while CSS::load_used_css() turned the
+	 *     banner stylesheet into a `data-href` link that loads only on
+	 *     interaction. `faz-` is a substring of every FAZ selector, `#faz-consent`
+	 *     and `[data-faz-tag]` included.
+	 *
+	 * "Delay selected scripts" (`js_delay_selected_includes`) has no exclusion
+	 * list; flying_press_restore_own_assets() covers it.
+	 *
+	 * @return array<string, string[]>
+	 */
+	private function flying_press_runtime_keyword_map() {
+		$script_keywords = array( 'faz-cookie-manager', 'faz-fw' );
+		return array(
+			'js_delay_excludes'             => $script_keywords,
+			'js_delay_third_party_excludes' => $script_keywords,
+			'css_rucss_include_selectors'   => array( 'faz-' ),
+		);
+	}
+
+	/**
+	 * Add FAZ to FlyingPress v5's runtime optimisation config.
 	 *
 	 * FlyingPress v5 no longer consumes the v4 delay/defer filters while
-	 * optimizing HTML; it reads `js_delay_excludes` from Config::$config.
-	 * The helper only receives FlyingPress's already-loaded static value; FAZ
-	 * deliberately does not filter or write the `FLYING_PRESS_CONFIG` option,
-	 * so disabling FAZ restores the administrator's exact configuration.
-	 * Empty/unmigrated or older config shapes are left untouched.
+	 * optimizing HTML; it reads the lists in flying_press_runtime_keyword_map()
+	 * straight from Config::$config. The helper only receives FlyingPress's
+	 * already-loaded static value; FAZ deliberately does not filter or write the
+	 * `FLYING_PRESS_CONFIG` option, so disabling FAZ restores the administrator's
+	 * exact configuration. Empty/unmigrated or older config shapes are left
+	 * untouched, and so is every list that is missing or not an array.
 	 *
 	 * @param mixed $config FlyingPress configuration option.
 	 * @return mixed
 	 */
 	public function flying_press_add_delay_exclusions_to_config( $config ) {
-		// Require an ARRAY value, not just the key: array_key_exists() alone would
-		// let a non-array js_delay_excludes (null, or a delimited string as some
-		// cache plugins use) reach flying_press_exclude_own_scripts(), which
-		// coerces non-arrays to array() and would silently drop the administrator's
-		// original value. Leave any unexpected shape untouched.
-		if ( ! is_array( $config ) || ! isset( $config['js_delay_excludes'] ) || ! is_array( $config['js_delay_excludes'] ) ) {
+		if ( ! is_array( $config ) ) {
 			return $config;
 		}
-		$config['js_delay_excludes'] = $this->flying_press_exclude_own_scripts( $config['js_delay_excludes'] );
+		foreach ( $this->flying_press_runtime_keyword_map() as $key => $keywords ) {
+			// Require an ARRAY value, not just the key: a non-array list (null, or
+			// a delimited string as some cache plugins use) would be coerced to
+			// array() by the merge and silently drop the administrator's original
+			// value. Leave any unexpected shape untouched.
+			if ( ! isset( $config[ $key ] ) || ! is_array( $config[ $key ] ) ) {
+				continue;
+			}
+			foreach ( $keywords as $keyword ) {
+				if ( ! in_array( $keyword, $config[ $key ], true ) ) {
+					$config[ $key ][] = $keyword;
+				}
+			}
+		}
 		return $config;
 	}
 
@@ -9750,6 +11045,7 @@ class Frontend {
 			}
 			$updated = $this->flying_press_add_delay_exclusions_to_config( $config );
 			if ( $updated !== $config ) {
+				$this->flying_press_record_injected_keywords( $config, $updated );
 				$property->setValue( null, $updated );
 			}
 		} catch ( \Throwable $error ) {
@@ -9759,6 +11055,297 @@ class Frontend {
 			}
 			unset( $error );
 		}
+	}
+
+	/**
+	 * Keywords this request added to \FlyingPress\Config::$config, per list.
+	 *
+	 * @var array<string, string[]>
+	 */
+	private $flying_press_injected = array();
+
+	/**
+	 * Remember which keywords the runtime bridge added (and were not already
+	 * there), so flying_press_strip_runtime_keywords() removes exactly those.
+	 *
+	 * @param array $before Config before the patch.
+	 * @param array $after  Config after the patch.
+	 * @return void
+	 */
+	private function flying_press_record_injected_keywords( array $before, array $after ) {
+		foreach ( array_keys( $this->flying_press_runtime_keyword_map() ) as $key ) {
+			if ( ! isset( $after[ $key ] ) || ! is_array( $after[ $key ] ) ) {
+				continue;
+			}
+			$had   = isset( $before[ $key ] ) && is_array( $before[ $key ] ) ? $before[ $key ] : array();
+			$added = array_values( array_diff( $after[ $key ], $had ) );
+			if ( array() === $added ) {
+				continue;
+			}
+			$known                               = isset( $this->flying_press_injected[ $key ] ) ? $this->flying_press_injected[ $key ] : array();
+			$this->flying_press_injected[ $key ] = array_values( array_unique( array_merge( $known, $added ) ) );
+		}
+	}
+
+	/**
+	 * `pre_update_option_FLYING_PRESS_CONFIG`: keep the runtime keywords out of
+	 * the saved option.
+	 *
+	 * FlyingPress saves its WHOLE static config whenever anything calls
+	 * Config::update_config(): after migrate_config() on an upgrade request,
+	 * Cloudflare::on_config_updated() re-saves cf_* fields from the
+	 * `flying_press_update_config:after` action that runs on `init`, and the
+	 * license and WP-CLI paths do the same. On a front-end request that ran
+	 * after the bridge, that copy carries the FAZ keywords, and once saved
+	 * they would outlive FAZ itself. Only keywords THIS request injected are
+	 * removed, and only when the previously saved value did not already
+	 * contain them, so an exclusion the administrator typed in the FlyingPress
+	 * dashboard is never touched (that save is a REST request, on which the
+	 * bridge injects nothing).
+	 *
+	 * @param mixed $value     Value about to be saved.
+	 * @param mixed $old_value Value currently saved.
+	 * @return mixed
+	 */
+	public function flying_press_strip_runtime_keywords( $value, $old_value = array() ) {
+		if ( array() === $this->flying_press_injected || ! is_array( $value ) ) {
+			return $value;
+		}
+		$old = is_array( $old_value ) ? $old_value : array();
+		foreach ( $this->flying_press_injected as $key => $keywords ) {
+			if ( ! isset( $value[ $key ] ) || ! is_array( $value[ $key ] ) ) {
+				continue;
+			}
+			$saved = isset( $old[ $key ] ) && is_array( $old[ $key ] ) ? $old[ $key ] : array();
+			$kept  = array();
+			foreach ( $value[ $key ] as $entry ) {
+				if ( in_array( $entry, $keywords, true ) && ! in_array( $entry, $saved, true ) ) {
+					continue;
+				}
+				$kept[] = $entry;
+			}
+			if ( count( $kept ) !== count( $value[ $key ] ) ) {
+				$value[ $key ] = $kept;
+			}
+		}
+		return $value;
+	}
+
+	/**
+	 * `flying_press_optimization:after` safety net: undo any FlyingPress rewrite
+	 * that still reached a FAZ tag.
+	 *
+	 * The exclusion lists above cover the passes that have one. "Delay selected
+	 * scripts" has none (an include keyword such as `gtag` or `recaptcha` that
+	 * happens to match the GCM default or the `_fazConfig` whitelist delays
+	 * it), "Remove unused CSS" rewrites every stylesheet link, and a future
+	 * FlyingPress release may add a pass or rename a list. The filter runs on
+	 * the finished HTML right before FlyingPress writes it to its page cache,
+	 * so whatever is restored here is also what the cache serves.
+	 *
+	 * Only tags whose id belongs to FAZ are touched, and only when they carry
+	 * FlyingPress's own markers:
+	 *   - `<script data-loading-method=… data-src=…>` → `src` restored, the
+	 *     markers removed; a `data:text/javascript,` source (how FlyingPress
+	 *     carries an inline script) becomes the inline body again;
+	 *   - `<script defer src="data:text/javascript,…">` (the "defer" delay
+	 *     method on an inline script) → inline again;
+	 *   - a `type` that is not a script type (an optimiser's parking type)
+	 *     on such a tag is dropped, which means text/javascript;
+	 *   - `<link data-href=…>` without `href` → `href` restored.
+	 *
+	 * @param mixed $html Optimised page HTML.
+	 * @return mixed
+	 */
+	public function flying_press_restore_own_assets( $html ) {
+		if ( ! is_string( $html ) || '' === $html || false === stripos( $html, 'faz-' ) ) {
+			return $html;
+		}
+		$restored = 0;
+
+		$scripts = preg_replace_callback(
+			'#<script\b([^>]*)>(.*?)</script>#is',
+			function ( $match ) use ( &$restored ) {
+				$result = $this->flying_press_restore_script_tag( $match[0], '<script' . $match[1] . '>' );
+				if ( $result !== $match[0] ) {
+					++$restored;
+				}
+				return $result;
+			},
+			$html
+		);
+		if ( is_string( $scripts ) ) {
+			$html = $scripts;
+		}
+
+		$links = preg_replace_callback(
+			'#<link\b[^>]*>#i',
+			function ( $match ) use ( &$restored ) {
+				$result = $this->flying_press_restore_link_tag( $match[0] );
+				if ( $result !== $match[0] ) {
+					++$restored;
+				}
+				return $result;
+			},
+			$html
+		);
+		if ( is_string( $links ) ) {
+			$html = $links;
+		}
+
+		if ( $restored > 0 ) {
+			$this->flying_press_note_restored_assets( $restored );
+		}
+		return $html;
+	}
+
+	/**
+	 * Restore one `<script>` tag (see flying_press_restore_own_assets()).
+	 *
+	 * @param string $tag      Complete tag, `<script …>…</script>`.
+	 * @param string $open_tag Its opening tag.
+	 * @return string The restored tag, or $tag unchanged.
+	 */
+	private function flying_press_restore_script_tag( $tag, $open_tag ) {
+		$id = self::flying_press_tag_attribute( $open_tag, 'id' );
+		if ( null === $id || ! ( $this->is_own_asset_tag_id( $id, '-js' ) || $this->is_own_inline_script_id( $id ) ) ) {
+			return $tag;
+		}
+		$data_src = self::flying_press_tag_attribute( $open_tag, 'data-src' );
+		$src      = self::flying_press_tag_attribute( $open_tag, 'src' );
+		$delayed  = null !== self::flying_press_tag_attribute( $open_tag, 'data-loading-method' ) || null !== $data_src;
+		$inlined  = is_string( $src ) && 0 === stripos( $src, 'data:text/javascript,' );
+		if ( ! $delayed && ! $inlined ) {
+			return $tag;
+		}
+		$target = null !== $data_src ? $data_src : $src;
+		if ( ! is_string( $target ) || '' === $target ) {
+			return $tag;
+		}
+
+		$open = self::flying_press_tag_remove_attribute( $open_tag, 'data-loading-method' );
+		$open = self::flying_press_tag_remove_attribute( $open, 'data-src' );
+		$open = self::flying_press_tag_remove_attribute( $open, 'src' );
+		$type = self::flying_press_tag_attribute( $open, 'type' );
+		if ( null !== $type && ! in_array( strtolower( trim( $type ) ), array( '', 'text/javascript', 'application/javascript', 'module' ), true ) ) {
+			$open = self::flying_press_tag_remove_attribute( $open, 'type' );
+		}
+
+		if ( 0 === stripos( $target, 'data:text/javascript,' ) ) {
+			$code = rawurldecode( substr( $target, strlen( 'data:text/javascript,' ) ) );
+			// The body came from an inline script, so it cannot hold a closing
+			// tag; one that does is not FAZ's and is left to FlyingPress.
+			if ( false !== stripos( $code, '</script' ) ) {
+				return $tag;
+			}
+			// defer/async mean nothing on an inline script; FlyingPress added them.
+			$open = self::flying_press_tag_remove_attribute( $open, 'defer' );
+			$open = self::flying_press_tag_remove_attribute( $open, 'async' );
+			return $open . $code . '</script>';
+		}
+		return self::flying_press_tag_set_attribute( $open, 'src', $target ) . '</script>';
+	}
+
+	/**
+	 * Restore one `<link>` tag whose `href` FlyingPress parked in `data-href`.
+	 *
+	 * @param string $tag `<link …>` tag.
+	 * @return string
+	 */
+	private function flying_press_restore_link_tag( $tag ) {
+		$id = self::flying_press_tag_attribute( $tag, 'id' );
+		if ( null === $id || ! $this->is_own_asset_tag_id( $id, '-css' ) ) {
+			return $tag;
+		}
+		$data_href = self::flying_press_tag_attribute( $tag, 'data-href' );
+		if ( null === $data_href || '' === $data_href || null !== self::flying_press_tag_attribute( $tag, 'href' ) ) {
+			return $tag;
+		}
+		$open = self::flying_press_tag_remove_attribute( $tag, 'data-href' );
+		return self::flying_press_tag_set_attribute( $open, 'href', $data_href );
+	}
+
+	/**
+	 * Leave one diagnostic per day when the safety net had to act: it means
+	 * an optimiser pass is configured to delay FAZ, and the administrator can
+	 * stop the rewrite at the source.
+	 *
+	 * @param int $count Number of tags restored on this render.
+	 * @return void
+	 */
+	private function flying_press_note_restored_assets( $count ) {
+		$key = 'faz_flying_press_restored_assets';
+		if ( false !== get_transient( $key ) ) {
+			return;
+		}
+		set_transient(
+			$key,
+			array(
+				'count' => (int) $count,
+				'time'  => time(),
+			),
+			defined( 'DAY_IN_SECONDS' ) ? DAY_IN_SECONDS : 86400
+		);
+		error_log( 'FAZ Cookie Manager: FlyingPress rewrote ' . (int) $count . ' FAZ asset(s) for delayed loading ("Delay selected scripts", "Delay third-party scripts" or "Remove unused CSS"); FAZ restored them so the consent banner loads immediately. Add "faz-cookie-manager" to the FlyingPress exclusions and remove any "Delay selected" keyword that matches FAZ to stop the rewrite. Logged at most once a day.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+	}
+
+	/**
+	 * Read one attribute of an HTML start tag.
+	 *
+	 * @param string $tag  Start tag (or a complete element; only its first tag is read).
+	 * @param string $name Attribute name.
+	 * @return string|null The raw (still HTML-encoded) value, '' for a bare
+	 *                     boolean attribute, null when absent.
+	 */
+	private static function flying_press_tag_attribute( $tag, $name ) {
+		if ( ! preg_match( '/^<[^>]*>/', $tag, $start ) ) {
+			return null;
+		}
+		$pattern = '/\s' . preg_quote( $name, '/' ) . '(?:\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+)))?(?=[\s>\/])/i';
+		if ( ! preg_match( $pattern, $start[0], $m ) ) {
+			return null;
+		}
+		foreach ( array( 1, 2, 3 ) as $group ) {
+			if ( isset( $m[ $group ] ) && '' !== $m[ $group ] ) {
+				return $m[ $group ];
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Remove every occurrence of one attribute from an HTML start tag.
+	 *
+	 * @param string $tag  Start tag.
+	 * @param string $name Attribute name.
+	 * @return string
+	 */
+	private static function flying_press_tag_remove_attribute( $tag, $name ) {
+		$pattern = '/\s' . preg_quote( $name, '/' ) . '(?:\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s"\'>]+))?(?=[\s>\/])/i';
+		$result  = preg_replace( $pattern, '', $tag );
+		return is_string( $result ) ? $result : $tag;
+	}
+
+	/**
+	 * Append an attribute to an HTML start tag, keeping a raw value raw.
+	 *
+	 * @param string $tag   Start tag without the attribute.
+	 * @param string $name  Attribute name.
+	 * @param string $value Raw (already HTML-encoded) value.
+	 * @return string
+	 */
+	private static function flying_press_tag_set_attribute( $tag, $name, $value ) {
+		$quote     = false === strpos( $value, '"' ) ? '"' : "'";
+		$attribute = ' ' . $name . '=' . $quote . $value . $quote;
+		$result    = preg_replace_callback(
+			'/\s*(\/?)>$/',
+			static function ( $match ) use ( $attribute ) {
+				return $attribute . $match[1] . '>';
+			},
+			$tag,
+			1
+		);
+		return is_string( $result ) ? $result : $tag;
 	}
 
 	/**
@@ -10223,16 +11810,22 @@ class Frontend {
 	}
 
 	/**
-	 * Emit `Vary: Accept-Language` when client-side browser-language detection
-	 * is active.
+	 * Emit `Vary: Accept-Language` only when an integrator asks for it.
 	 *
-	 * Caches and CDNs that honour Vary can then key the cached response by
-	 * Accept-Language. When a URL-based multilingual plugin
-	 * (WPML/Polylang/TranslatePress/Weglot) is active, browser detection is
-	 * not used, so the header is not needed. The emission follows
-	 * faz_browser_detect_enabled() so the two escape hatches
-	 * (faz_disable_browser_language_detection and the plugin/language checks)
-	 * stay consistent — disabling detection also stops cache fragmentation.
+	 * The HTML does not depend on Accept-Language. faz_current_language() never
+	 * reads the header (issue #67: the server renders the site default, or the
+	 * URL language of a multilingual plugin), and the browser-preferred
+	 * language is resolved in script.js from navigator.languages, which swaps
+	 * the banner through the REST endpoint. faz_detect_browser_language() is
+	 * not called on any render path. The header therefore described a variance
+	 * that does not exist, and its only effect was to split every cached URL
+	 * into one entry per Accept-Language spelling (hundreds of distinct values
+	 * in real traffic) on the caches that honour Vary — Cloudflare, Varnish,
+	 * LiteSpeed — a lower hit rate for an identical document.
+	 *
+	 * Kept behind `faz_send_vary_header` (now default false) for a site whose
+	 * own theme or plugins do vary the page by Accept-Language and relied on
+	 * FAZ to announce it.
 	 *
 	 * @return void
 	 */
@@ -10254,16 +11847,75 @@ class Frontend {
 			return;
 		}
 		/**
-		 * Short-circuit the Vary header emission.
+		 * Whether to announce `Vary: Accept-Language`.
 		 *
-		 * @param bool $enabled Whether to emit the header. Defaults to true.
+		 * @since 1.34.2 Defaults to false: FAZ's HTML does not vary by it.
+		 * @param bool $enabled Whether to emit the header. Defaults to false.
 		 */
-		if ( false === apply_filters( 'faz_send_vary_header', true ) ) {
+		if ( true !== apply_filters( 'faz_send_vary_header', false ) ) {
 			return;
 		}
 
 		// Preserve any previously set Vary tokens (e.g. Cookie added elsewhere).
 		header( 'Vary: Accept-Language', false );
+	}
+
+	/**
+	 * Mark FAZ's versioned asset URLs as exempt from LiteSpeed's query-string
+	 * removal.
+	 *
+	 * LiteSpeed Cache's "Remove Query Strings" drops everything after `?` from
+	 * internal `.js?` / `.css?` URLs (Optimize::remove_query_strings()), which
+	 * is the `?ver=` that changes on every FAZ release. The URL of script.min.js
+	 * then stays identical across updates, and the browser, the CDN and
+	 * QUIC.cloud keep serving the previous runtime against the new markup until
+	 * their TTL ends — a consent runtime one version behind the server that
+	 * renders its config. LiteSpeed skips any URL containing
+	 * `_litespeed_rm_qs=0`.
+	 *
+	 * Added unconditionally rather than only when LSCWP_V is defined: the
+	 * parameter is inert everywhere else (a static file ignores its query
+	 * string), the markup stays the same whether or not LiteSpeed is active —
+	 * so a page cached before LiteSpeed was switched on is not a different
+	 * document — and nothing depends on the order in which LiteSpeed is
+	 * loaded. Only URLs that already carry a query string are touched; the
+	 * content-hashed config-<md5>.js and banner-<md5>.css have none and carry
+	 * their version in the file name.
+	 *
+	 * @param string $src    Asset URL.
+	 * @param string $handle Registered handle.
+	 * @return string
+	 */
+	public function keep_own_asset_version_query( $src, $handle = '' ) {
+		if ( ! is_string( $src ) || '' === $src || is_admin() ) {
+			return $src;
+		}
+		if ( false === strpos( $src, '?' ) || false !== strpos( $src, '_litespeed_rm_qs=' ) ) {
+			return $src;
+		}
+		if ( ! $this->is_own_script_handle( (string) $handle ) && ! $this->is_own_asset_url( $src ) ) {
+			return $src;
+		}
+		return $src . '&_litespeed_rm_qs=0';
+	}
+
+	/**
+	 * Whether a URL points inside this plugin's directory (scheme-insensitive:
+	 * a TLS-terminating proxy can make the two spellings differ).
+	 *
+	 * Covers own stylesheets enqueued under handles without the plugin prefix
+	 * (faz-legal-links, faz-cookie-table-shortcode).
+	 *
+	 * @param string $url Asset URL.
+	 * @return bool
+	 */
+	private function is_own_asset_url( $url ) {
+		if ( ! defined( 'FAZ_PLUGIN_URL' ) || '' === (string) FAZ_PLUGIN_URL ) {
+			return false;
+		}
+		$base = preg_replace( '#^https?:#i', '', (string) FAZ_PLUGIN_URL );
+		$url  = preg_replace( '#^https?:#i', '', (string) $url );
+		return '' !== $base && 0 === strpos( $url, $base );
 	}
 
 	/**
@@ -10860,7 +12512,13 @@ class Frontend {
 		// reach a foregone conclusion. Both conditions are required — a
 		// `svc.<id>:no` / `ck.<svc>.<cookie>:no` denial stays enforceable on a
 		// site where no category is blocked.
-		if ( empty( $this->get_blocked_categories() ) && empty( $this->get_service_cookie_decisions() ) ) {
+		//
+		// Both questions are asked of the visitor view (see
+		// is_cookie_allowed_for_visitor()): the cookies being deleted are the
+		// ones already in THIS visitor's browser, so their own grants decide.
+		$visitor_view = $this->render_overblocks_visitor();
+		$blocked      = $visitor_view ? $this->get_enforcement_blocked_categories() : $this->get_blocked_categories();
+		if ( empty( $blocked ) && empty( $this->get_service_cookie_decisions( $visitor_view ) ) ) {
 			return;
 		}
 
@@ -10870,7 +12528,7 @@ class Frontend {
 		$domain_candidates = array_values( array_unique( array_filter( array( $current_host, $shared_domain ) ) ) );
 
 		foreach ( array_keys( $_COOKIE ) as $name ) {
-			if ( ! $this->is_cookie_allowed( $name ) ) {
+			if ( ! $this->is_cookie_allowed_for_visitor( $name ) ) {
 				setcookie( $name, '', -1, '/' );
 				foreach ( $domain_candidates as $domain ) {
 					setcookie( $name, '', -1, '/', $domain );
@@ -10895,13 +12553,70 @@ class Frontend {
 	 * token can break authentication or checkout. The scanner inventories them;
 	 * once classified, this guard enforces their category automatically.
 	 *
+	 * This public entry point answers for the RESPONSE being built: on a
+	 * 'fallback' render (see decide_visitor_state_cache_veto()) it reads the
+	 * shareable block set, because that response may be stored by a cache that
+	 * also keeps its headers (nginx with fastcgi_ignore_headers Set-Cookie, some
+	 * CDNs) and a Set-Cookie for a category a first visit has not granted would
+	 * be replayed to every later visitor. script.js sets those cookies after
+	 * consent instead. The shredder, which deletes cookies already in this
+	 * visitor's browser, asks is_cookie_allowed_for_visitor().
+	 *
 	 * @param string $name   Cookie name.
 	 * @param string $domain Optional cookie domain (reserved for future rules).
 	 * @return bool
 	 */
 	public function is_cookie_allowed( $name, $domain = '' ) {
+		return $this->cookie_allowed_in_view( $name, $domain, false );
+	}
+
+	/**
+	 * Whether a cookie already in the visitor's browser may stay there.
+	 *
+	 * Same policy as is_cookie_allowed(), read against the visitor's OWN state
+	 * on a 'fallback' render instead of the shareable union. That union is a
+	 * render-time over-block the client undoes; a deletion is not undone, and
+	 * applying the union here destroyed a consenting visitor's `_ga` on every
+	 * page of a site whose visitor-state veto was off. Their denials are part
+	 * of their own state, so a rejected category's cookies are still deleted.
+	 * The opt-out-law render that parks the sale/sharing categories is the
+	 * same kind of over-block and is read the same way (see
+	 * render_overblocks_visitor()); everywhere else the two views are one set.
+	 *
+	 * @param string $name Cookie name.
+	 * @return bool
+	 */
+	private function is_cookie_allowed_for_visitor( $name ) {
+		return $this->cookie_allowed_in_view( $name, '', $this->render_overblocks_visitor() );
+	}
+
+	/**
+	 * Whether this render blocks more than the visitor's own state does: a
+	 * 'fallback' render (the shareable union), or an opt-out-law render that
+	 * parks the sale/sharing categories for script.js to release (see
+	 * sale_share_parked_by_default()). Either over-block is undone on the
+	 * client; a cookie deleted on its strength is not, so the shredder reads
+	 * the visitor's own set whenever this is true.
+	 *
+	 * @return bool
+	 */
+	private function render_overblocks_visitor() {
+		if ( 'fallback' === $this->visitor_state_veto ) {
+			return true;
+		}
+		return $this->get_blocked_categories() !== $this->get_enforcement_blocked_categories();
+	}
+
+	/**
+	 * @param string $name         Cookie name.
+	 * @param string $domain       Optional cookie domain.
+	 * @param bool   $visitor_view Read the visitor's own state (fallback shredder).
+	 * @return bool
+	 */
+	private function cookie_allowed_in_view( $name, $domain, $visitor_view ) {
 		$name      = sanitize_text_field( (string) $name );
-		$cache_key = strtolower( $name . '|' . (string) $domain );
+		$cache_key = ( $visitor_view ? 'visitor|' : '' ) . strtolower( $name . '|' . (string) $domain );
+		$blocked_categories = $visitor_view ? $this->get_enforcement_blocked_categories() : $this->get_blocked_categories();
 		if ( isset( $this->cookie_allowed_cache[ $cache_key ] ) ) {
 			return $this->cookie_allowed_cache[ $cache_key ];
 		}
@@ -10910,7 +12625,7 @@ class Frontend {
 			return true;
 		}
 
-		$service_decisions = $this->get_service_cookie_decisions();
+		$service_decisions = $this->get_service_cookie_decisions( $visitor_view );
 
 		// Nothing is blocked and no explicit per-service/per-cookie decision
 		// exists: every remaining path in this method provably returns true, so
@@ -10926,7 +12641,7 @@ class Frontend {
 		// category is blocked — a consent regression, and one that a casual
 		// smoke test would miss because most sites configure no per-service
 		// consent at all.
-		if ( empty( $service_decisions ) && empty( $this->get_blocked_categories() ) ) {
+		if ( empty( $service_decisions ) && empty( $blocked_categories ) ) {
 			$this->cookie_allowed_cache[ $cache_key ] = true;
 			return true;
 		}
@@ -10966,7 +12681,7 @@ class Frontend {
 			$this->cookie_allowed_cache[ $cache_key ] = true;
 			return true;
 		}
-		if ( ! in_array( $category, $this->get_blocked_categories(), true ) ) {
+		if ( ! in_array( $category, $blocked_categories, true ) ) {
 			$this->cookie_allowed_cache[ $cache_key ] = true;
 			return true;
 		}
@@ -10982,21 +12697,46 @@ class Frontend {
 		return false;
 	}
 
-	/** @return array<string,array<int,string>> */
-	private function get_service_cookie_decisions() {
-		if ( null !== $this->service_cookie_decisions_cache ) {
-			return $this->service_cookie_decisions_cache;
+	/**
+	 * @param bool $visitor_view Read the visitor's own svc.* grants (see
+	 *                           is_cookie_allowed_for_visitor()); only differs
+	 *                           from the render view on a 'fallback' render.
+	 * @return array<string,array<int,string>>
+	 */
+	private function get_service_cookie_decisions( $visitor_view = false ) {
+		if ( $visitor_view && 'fallback' === $this->visitor_state_veto ) {
+			if ( null === $this->visitor_service_cookie_decisions_cache ) {
+				$this->visitor_service_cookie_decisions_cache = $this->compute_service_cookie_decisions( $this->get_enforcement_service_consent() );
+			}
+			return $this->visitor_service_cookie_decisions_cache;
 		}
-		$this->service_cookie_decisions_cache = array();
-		$service_consent = $this->get_service_consent();
+		if ( null === $this->service_cookie_decisions_cache ) {
+			// On a 'fallback' render get_service_consent() has already dropped
+			// the svc.* grants; a ck.* grant read straight from the cookie must
+			// not reopen a Set-Cookie on that cacheable response either.
+			$this->service_cookie_decisions_cache = $this->compute_service_cookie_decisions( $this->get_service_consent(), 'fallback' === $this->visitor_state_veto );
+		}
+		return $this->service_cookie_decisions_cache;
+	}
+
+	/**
+	 * @param array $service_consent Per-service map (render or visitor view).
+	 * @param bool  $denials_only    Keep only the 'no' decisions.
+	 * @return array<string,array<int,string>>
+	 */
+	private function compute_service_cookie_decisions( $service_consent, $denials_only = false ) {
+		$decisions       = array();
 		$settings        = $this->get_faz_settings();
 		$banner_control  = isset( $settings['banner_control'] ) ? (array) $settings['banner_control'] : array();
 		$per_cookie      = ! empty( $banner_control['per_cookie_consent'] ) && ! empty( $banner_control['per_service_consent'] );
-		$valid           = ( $per_cookie && function_exists( 'faz_get_valid_consent_cookie' ) ) ? (string) faz_get_valid_consent_cookie() : '';
+		// Scoped like get_service_consent() and get_blocked_categories(): a
+		// ck.* grant recorded under another banner/law must not outlive the
+		// cookie the rest of this request has already rejected.
+		$valid           = $per_cookie ? $this->get_scoped_valid_consent_cookie() : '';
 		$consent         = ( '' !== $valid && function_exists( 'faz_parse_consent_cookie' ) ) ? faz_parse_consent_cookie( $valid ) : array();
 		$signal_blocked = $per_cookie ? $this->get_signal_blocked_services( $valid ) : array();
 		if ( empty( $service_consent ) && ! $per_cookie ) {
-			return $this->service_cookie_decisions_cache;
+			return $decisions;
 		}
 		foreach ( $this->get_enforceable_services() as $service ) {
 			$svc_id = isset( $service['id'] ) ? sanitize_key( $service['id'] ) : '';
@@ -11007,19 +12747,19 @@ class Frontend {
 			foreach ( $service['cookies'] as $cookie_pattern ) {
 				$cookie_pattern = sanitize_text_field( (string) $cookie_pattern );
 				$decision       = $this->resolve_service_cookie_decision( $svc_id, $cookie_pattern, $svc_decision, $consent, $per_cookie );
-				if ( 'yes' === $decision && isset( $signal_blocked[ $svc_id ] ) ) {
+				if ( 'yes' === $decision && ( $denials_only || isset( $signal_blocked[ $svc_id ] ) ) ) {
 					continue;
 				}
 				if ( '' === $cookie_pattern || ! in_array( $decision, array( 'yes', 'no' ), true ) ) {
 					continue;
 				}
-				if ( ! isset( $this->service_cookie_decisions_cache[ $cookie_pattern ] ) ) {
-					$this->service_cookie_decisions_cache[ $cookie_pattern ] = array();
+				if ( ! isset( $decisions[ $cookie_pattern ] ) ) {
+					$decisions[ $cookie_pattern ] = array();
 				}
-				$this->service_cookie_decisions_cache[ $cookie_pattern ][] = $decision;
+				$decisions[ $cookie_pattern ][] = $decision;
 			}
 		}
-		return $this->service_cookie_decisions_cache;
+		return $decisions;
 	}
 
 	/** @return string[] */
@@ -11155,14 +12895,18 @@ class Frontend {
 		// than delayed — and the leftovers became stray attributes on the frame.
 		// process_output_buffer() has had this protection since the same defect
 		// was found there; this entry point runs the same passes and did not.
-		$stash_nonce   = $this->stash_nonce();
+		$stash_nonce = $this->stash_nonce();
+		// Comments and script bodies are text; see process_output_buffer().
+		$inert_stash = array();
+		$content     = $this->stash_inert_spans( $content, $stash_nonce, $inert_stash );
+
 		$srcdoc_stash  = array();
 		$srcdoc_marker = '';
-		$stashed       = $this->stash_iframe_srcdocs( $content, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker );
+		$failed_passes = array();
+		$stashed       = $this->stash_iframe_srcdocs( $content, $providers, $blocked_categories, $stash_nonce, $srcdoc_stash, $srcdoc_marker, $failed_passes );
 		if ( null === $stashed ) {
-			// Fail-secure, as the passes below: a srcdoc that cannot be walked
-			// is a document whose fetches nothing downstream can gate.
-			error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in filter_content_blocking (srcdoc)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			// Fail-closed turned off: the srcdoc stays in place and the passes
+			// below see it, as before the stash existed.
 			$srcdoc_stash  = array();
 			$srcdoc_marker = '';
 		} else {
@@ -11170,39 +12914,54 @@ class Frontend {
 		}
 
 		// Block <script> tags in content.
-		// Fail-secure: on PCRE error, strip scripts entirely rather than serving
-		// them unblocked, which would violate consent requirements.
+		// On a PCRE error the same callback is re-run over the linear walk
+		// (run_markup_pass()). The strip that used to stand here was a second
+		// lazy regex over the same markup, which fails on the same input and
+		// then returned the content unfiltered; it is kept only for
+		// `faz_output_buffer_fail_closed` set to false.
 		if ( false !== stripos( $content, '<script' ) ) {
-			$result = preg_replace_callback(
-				'#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_script_tag( $m, $providers, $blocked_categories );
+			$content = $this->run_markup_pass(
+				$content,
+				'#' . self::script_token_skip() . '<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>(.*?)</script(?=[\s/>])[^>]*>#is',
+				'script',
+				function ( $m ) use ( $providers, $blocked_categories, &$inert_stash ) {
+					return $this->process_with_inert_body(
+						$m,
+						'script',
+						$inert_stash,
+						function ( $m ) use ( $providers, $blocked_categories ) {
+							return $this->process_script_tag( $m, $providers, $blocked_categories );
+						}
+					);
 				},
-				$content
+				$failed_passes,
+				$inert_stash,
+				function ( $content ) {
+					return preg_replace( '#<script\b[^>]*>.*?</script(?=[\s/>])[^>]*>#is', '', $content ) ?? $content;
+				}
 			);
-			if ( null !== $result ) {
-				$content = $result;
-			} else {
-				error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in filter_content_blocking (scripts)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				$content = preg_replace( '#<script\b[^>]*>.*?</script(?=[\s/>])[^>]*>#is', '', $content ) ?? $content;
-			}
 		}
 
 		// Block <iframe> tags in content.
 		if ( false !== stripos( $content, '<iframe' ) ) {
-			$result = preg_replace_callback(
+			$content = $this->run_markup_pass(
+				$content,
 				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
+				'iframe',
 				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );
 				},
-				$content
+				$failed_passes,
+				$inert_stash,
+				function ( $content ) {
+					return preg_replace( '#<iframe\b[^>]*>.*?</iframe(?=[\s/>])[^>]*>#is', '', $content ) ?? $content;
+				}
 			);
-			if ( null !== $result ) {
-				$content = $result;
-			} else {
-				error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in filter_content_blocking (iframes)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				$content = preg_replace( '#<iframe\b[^>]*>.*?</iframe(?=[\s/>])[^>]*>#is', '', $content ) ?? $content;
-			}
+		}
+		$this->log_markup_pass_failure( $failed_passes, 'content filter' );
+
+		if ( ! empty( $inert_stash ) ) {
+			$content = strtr( $content, $inert_stash );
 		}
 
 		// Hide social embed containers that depend on blocked scripts.

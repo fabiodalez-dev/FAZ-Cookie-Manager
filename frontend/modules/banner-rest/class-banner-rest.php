@@ -298,6 +298,9 @@ class Banner_Rest {
 			'scopeFingerprint' => substr( wp_hash( $banner->get_slug() . '|' . $active_law, 'auth' ), 0, 32 ),
 			'consentExpiry'    => Frontend::normalize_consent_expiry( $active_law, $configured_expiry ),
 			'runtimeGeo'       => ( null !== $runtime_ruleset ),
+			// The WP Consent API regime for the banner actually returned; the
+			// client replaces the shell's `_wpConsentType` with it.
+			'wpConsentType'    => Frontend::resolve_wp_consent_type( $runtime_ruleset, $cache_compatibility, $active_law ),
 			'html'             => $html,
 			'styles'           => Frontend::prepare_banner_styles( $styles ),
 			'shortCodes'       => $short_codes,
@@ -310,11 +313,11 @@ class Banner_Rest {
 		// banner) by the visitor's jurisdiction, so it must never be cached
 		// across visitors — force no-store while the flag is on.
 		if ( $this->is_country_dependent_output( $controller ) ) {
-			$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
-			$response->header( 'Pragma', 'no-cache' );
-			$response->header( 'X-LiteSpeed-Cache-Control', 'no-cache' );
-			$response->header( 'CDN-Cache-Control', 'no-store' );
-			$response->header( 'Cloudflare-CDN-Cache-Control', 'no-store' );
+			// The shared veto set (private, no-store, the CDN-targeted and
+			// Surrogate-Control spellings) — see Cache_Compatibility.
+			foreach ( \FazCookie\Includes\Cache_Compatibility::NO_STORE_HEADERS as $name => $value ) {
+				$response->header( $name, $value );
+			}
 			$response->header( 'X-FAZ-Jurisdiction', 'live' );
 			if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
 				$response->header( 'Vary', 'CF-IPCountry' );

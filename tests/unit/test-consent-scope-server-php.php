@@ -70,7 +70,7 @@ namespace {
 			return array(
 				'general'        => array( 'consent_revision' => 1 ),
 				'geolocation'    => array( 'geo_targeting' => ! empty( $GLOBALS['scope_test_geo_routing'] ) ),
-				'banner_control' => array( 'per_service_consent' => true ),
+				'banner_control' => array( 'per_service_consent' => true, 'per_cookie_consent' => ! empty( $GLOBALS['scope_test_per_cookie'] ) ),
 			);
 		}
 		return $default;
@@ -197,7 +197,12 @@ namespace {
 
 	$_COOKIE = array( 'fazcookie-consent' => $ccpa_us );
 	$frontend = fresh_frontend( $class, 'us-2', 'ccpa' );
-	scope_same( $blocked->invoke( $frontend ), array(), 'back under the US banner the CCPA record is honoured again' );
+	$enforced = $class->getMethod( 'get_enforcement_blocked_categories' );
+	$enforced->setAccessible( true );
+	scope_same( $enforced->invoke( $frontend ), array(), 'back under the US banner the CCPA record is honoured again' );
+	// The render parks the sale/sharing category under a CCPA banner whatever
+	// the record says, and script.js releases it from that record.
+	scope_same( $blocked->invoke( $frontend ), array( 'marketing' ), 'and the render parks sale/share for script.js to release from it' );
 
 	$_COOKIE = array( 'fazcookie-consent' => $grants );
 	$frontend = fresh_frontend( $class, 'eu-1', 'gdpr' );
@@ -220,6 +225,25 @@ namespace {
 	$_COOKIE = array();
 	$frontend = fresh_frontend( $class, 'eu-1', 'gdpr' );
 	scope_same( $blocked->invoke( $frontend ), $optional, 'first visit under GDPR blocks every optional category (unchanged)' );
+
+	// get_service_cookie_decisions() — the per-cookie (ck.*) decisions the
+	// shredder enforces — read the cookie without the scope, so a ck.* grant
+	// recorded under another banner/law kept allowing that cookie on the very
+	// request where every other server layer had rejected the record.
+	echo "Frontend::get_service_cookie_decisions() under a changed scope\n";
+	$GLOBALS['scope_test_per_cookie'] = true;
+	$decisions = $class->getMethod( 'get_service_cookie_decisions' );
+	$decisions->setAccessible( true );
+	$ck_grant = ',ck.youtube.VISITOR_INFO1_LIVE:yes';
+	$_COOKIE  = array( 'fazcookie-consent' => $ccpa_us . $ck_grant );
+	$frontend = fresh_frontend( $class, 'eu-1', 'gdpr' );
+	$verdict  = $decisions->invoke( $frontend );
+	scope_same( isset( $verdict['VISITOR_INFO1_LIVE'] ) && in_array( 'yes', $verdict['VISITOR_INFO1_LIVE'], true ), false, 'GDPR banner + CCPA-scoped ck.* grant: the per-cookie grant is not honoured' );
+	$_COOKIE  = array( 'fazcookie-consent' => $gdpr_eu . $ck_grant );
+	$frontend = fresh_frontend( $class, 'eu-1', 'gdpr' );
+	$verdict  = $decisions->invoke( $frontend );
+	scope_same( isset( $verdict['VISITOR_INFO1_LIVE'] ) ? $verdict['VISITOR_INFO1_LIVE'] : array(), array( 'yes' ), 'the same grant recorded under this banner is honoured' );
+	$GLOBALS['scope_test_per_cookie'] = false;
 
 	echo "consent-scope-server: {$passed} passed, {$failed} failed\n";
 	exit( $failed ? 1 : 0 );

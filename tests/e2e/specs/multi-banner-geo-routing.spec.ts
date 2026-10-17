@@ -897,15 +897,20 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
 
       echo wp_json_encode( array(
         'DONOTCACHEPAGE'   => defined( 'DONOTCACHEPAGE' ) && DONOTCACHEPAGE,
-        'DONOTCACHEOBJECT' => defined( 'DONOTCACHEOBJECT' ) && DONOTCACHEOBJECT,
-        'DONOTCACHEDB'     => defined( 'DONOTCACHEDB' ) && DONOTCACHEDB,
+        'LSCACHE_NO_CACHE' => defined( 'LSCACHE_NO_CACHE' ) && LSCACHE_NO_CACHE,
+        'DONOTCACHEOBJECT' => defined( 'DONOTCACHEOBJECT' ),
+        'DONOTCACHEDB'     => defined( 'DONOTCACHEDB' ),
       ) );
     `).trim();
 
     const data = JSON.parse(result);
     expect(data.DONOTCACHEPAGE, 'DONOTCACHEPAGE defined for country-dependent request').toBe(true);
-    expect(data.DONOTCACHEOBJECT, 'DONOTCACHEOBJECT defined for country-dependent request').toBe(true);
-    expect(data.DONOTCACHEDB, 'DONOTCACHEDB defined for country-dependent request').toBe(true);
+    expect(data.LSCACHE_NO_CACHE, 'LSCACHE_NO_CACHE defined for country-dependent request').toBe(true);
+    // A page veto keeps the PAGE out of the cache. W3TC's object and database
+    // caches hold nothing country-specific, so they are left on (see
+    // Cache_Compatibility::define_no_cache_constants()).
+    expect(data.DONOTCACHEOBJECT, 'DONOTCACHEOBJECT not defined by the page veto').toBe(false);
+    expect(data.DONOTCACHEDB, 'DONOTCACHEDB not defined by the page veto').toBe(false);
   });
 
   test('GEO-26: public banner REST emits no-store + LiteSpeed control when output is country-dependent', () => {

@@ -71,6 +71,13 @@ namespace {
 	$GLOBALS['faz_mig_boom'] = '';
 
 	function get_option( $name, $default = false ) {
+		// The Necessary-disclosure migration needs the cookie tables, which
+		// this harness does not stand up, and since it reports a decline the
+		// batch would withhold its marker. It is driven for real by
+		// test-necessary-disclosure-php.php; here it counts as already done.
+		if ( 'faz_necessary_disclosure_text_done' === $name && ! array_key_exists( $name, $GLOBALS['faz_mig_options'] ) ) {
+			return 1;
+		}
 		return array_key_exists( $name, $GLOBALS['faz_mig_options'] )
 			? $GLOBALS['faz_mig_options'][ $name ]
 			: $default;

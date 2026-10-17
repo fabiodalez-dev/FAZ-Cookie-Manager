@@ -119,6 +119,10 @@ class Cache extends Modules {
 			'cache_enabler',
 			'litespeed_cache',
 			'flying_press',
+			'nginx_helper',
+			'proxy_cache_purge',
+			'wp_optimize',
+			'super_page_cache',
 		);
 	}
 }

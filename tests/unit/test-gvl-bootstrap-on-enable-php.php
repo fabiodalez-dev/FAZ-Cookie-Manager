@@ -14,7 +14,13 @@
  *
  * Settings::update() is the one write path every iab.enabled change goes
  * through (settings REST, onboarding wizard, import), so the bootstrap lives
- * there: when the flag flips from off to on and no GVL is stored, download it.
+ * there: when TCF is on and no GVL is stored, get one.
+ *
+ * Asynchronously. The download used to run inside the settings save — the
+ * full GVL with a 60 s timeout plus the purpose translations with 30 s more,
+ * inside a REST request — so a slow IAB endpoint hung or timed out "Save" for
+ * settings that had been stored. The save now schedules a single WP-Cron
+ * event (at most one pending) and returns; the event downloads.
  *
  * Run from project root:
  *   php tests/unit/test-gvl-bootstrap-on-enable-php.php
@@ -40,8 +46,13 @@ namespace FazCookie\Includes {
 		public function has_data() {
 			return self::$has_data;
 		}
+		public static $result = null;
 		public function download() {
 			self::$downloads++;
+			if ( is_array( self::$result ) ) {
+				self::$has_data = ! empty( self::$result['version'] );
+				return self::$result;
+			}
 			self::$has_data = true;
 			return array( 'success' => true, 'message' => 'ok', 'version' => 180, 'vendor_count' => 1 );
 		}
@@ -53,6 +64,9 @@ namespace FazCookie\Includes {
 			self::$has_data  = $has_data;
 			self::$downloads = 0;
 			self::$purposes  = array();
+			self::$result    = null;
+			$GLOBALS['faz_test_actions']         = array();
+			$GLOBALS['faz_test_template_clears'] = 0;
 		}
 	}
 }
@@ -69,7 +83,15 @@ namespace {
 		$GLOBALS['faz_test_options'][ $name ] = $value;
 		return true;
 	}
-	function do_action() {}
+	$GLOBALS['faz_test_actions']         = array();
+	$GLOBALS['faz_test_template_clears'] = 0;
+	function do_action( $hook ) {
+		$GLOBALS['faz_test_actions'][] = $hook;
+	}
+	function faz_clear_banner_template_cache() {
+		++$GLOBALS['faz_test_template_clears'];
+	}
+	ini_set( 'error_log', '/dev/null' ); // phpcs:ignore WordPress.PHP.IniSet.Risky
 	function apply_filters( $tag, $value ) {
 		return $value;
 	}
@@ -87,6 +109,19 @@ namespace {
 	}
 	function faz_default_language() {
 		return 'it';
+	}
+	$GLOBALS['faz_test_events'] = array();
+	function wp_next_scheduled( $hook ) {
+		foreach ( $GLOBALS['faz_test_events'] as $event ) {
+			if ( $event['hook'] === $hook ) {
+				return $event['time'];
+			}
+		}
+		return false;
+	}
+	function wp_schedule_single_event( $time, $hook ) {
+		$GLOBALS['faz_test_events'][] = array( 'time' => $time, 'hook' => $hook );
+		return true;
 	}
 
 	require_once __DIR__ . '/../../includes/class-formatting.php';
@@ -111,7 +146,7 @@ namespace {
 	}
 
 	/** Store a previous faz_settings with the given iab.enabled, then update() to the new one. */
-	function faz_flip_iab( $previous_enabled, $new_enabled, $has_data ) {
+	function faz_flip_iab( $previous_enabled, $new_enabled, $has_data, $keep_events = false ) {
 		$settings = new Settings();
 		$base     = $settings->get_defaults();
 		$base['iab']['cmp_id'] = 123;
@@ -120,30 +155,75 @@ namespace {
 		$GLOBALS['faz_test_options']['faz_settings'] = $prev;
 		Settings::clear_cache();
 		Gvl::reset( $has_data );
+		if ( ! $keep_events ) {
+			$GLOBALS['faz_test_events'] = array();
+		}
 
 		$next = $base;
 		$next['iab']['enabled'] = $new_enabled;
 		$settings->update( $next );
 	}
 
+	function faz_scheduled_bootstraps() {
+		return count(
+			array_filter(
+				$GLOBALS['faz_test_events'],
+				function ( $event ) {
+					return Settings::GVL_BOOTSTRAP_HOOK === $event['hook'];
+				}
+			)
+		);
+	}
+
 	echo "\n\033[1mGVL bootstrap when IAB TCF is switched on\033[0m\n\n";
 
 	faz_flip_iab( false, true, false );
-	assert_eq( Gvl::$downloads, 1, 'iab.enabled off → on with no GVL stored: the GVL is downloaded once' );
-	assert_eq( Gvl::$purposes, array( 'it' ), 'and the purpose translations for the default language come with it' );
+	assert_eq( Gvl::$downloads, 0, 'iab.enabled off → on with no GVL stored: the save itself downloads nothing' );
+	assert_eq( faz_scheduled_bootstraps(), 1, 'it schedules one bootstrap event instead' );
 	assert_eq( get_option( 'faz_settings' )['iab']['enabled'], true, 'the setting itself is saved' );
 
+	Settings::run_gvl_bootstrap();
+	assert_eq( Gvl::$downloads, 1, 'the event downloads the GVL once' );
+	assert_eq( Gvl::$purposes, array( 'it' ), 'and the purpose translations for the default language come with it' );
+	// Pages cached between the switch and this event were rendered without the
+	// CMP (the frontend gates it on has_data()); they keep shipping no CMP and
+	// no __tcfapi until the page caches are told the list has arrived.
+	assert_eq( in_array( 'faz_purge_page_cache', $GLOBALS['faz_test_actions'], true ), true, 'a successful download purges the page caches' );
+	assert_eq( $GLOBALS['faz_test_template_clears'], 1, 'and drops the stored banner template' );
+
+	$GLOBALS['faz_test_actions'] = array();
+	Settings::run_gvl_bootstrap();
+	assert_eq( Gvl::$downloads, 1, 'a second run finds the list stored and downloads nothing' );
+	assert_eq( $GLOBALS['faz_test_actions'], array(), 'and purges nothing' );
+
+	faz_flip_iab( false, true, false );
+	Gvl::$result = array( 'success' => false, 'message' => 'HTTP 503 from IAB', 'version' => 0, 'vendor_count' => 0 );
+	Settings::run_gvl_bootstrap();
+	assert_eq( in_array( 'faz_purge_page_cache', $GLOBALS['faz_test_actions'], true ), false, 'a failed download purges nothing' );
+	assert_eq( $GLOBALS['faz_test_template_clears'], 0, 'and keeps the banner template' );
+
+	faz_flip_iab( false, true, false );
+	Gvl::$result = array( 'success' => false, 'message' => 'GVL saved to option but file write failed', 'version' => 180, 'vendor_count' => 1 );
+	Settings::run_gvl_bootstrap();
+	assert_eq( in_array( 'faz_purge_page_cache', $GLOBALS['faz_test_actions'], true ), true, 'a list stored in the option but not on disk still activates the CMP, so it still purges' );
+
 	faz_flip_iab( false, true, true );
-	assert_eq( Gvl::$downloads, 0, 'iab.enabled off → on with a GVL already stored: nothing is re-downloaded on save' );
+	assert_eq( faz_scheduled_bootstraps(), 0, 'iab.enabled off → on with a GVL already stored: nothing scheduled' );
 
 	faz_flip_iab( true, true, false );
-	assert_eq( Gvl::$downloads, 0, 'iab.enabled already on: an ordinary settings save never triggers a download (the weekly cron owns refreshes)' );
+	assert_eq( faz_scheduled_bootstraps(), 1, 'TCF already on but still no GVL (an earlier download failed): the save schedules a retry' );
+	assert_eq( Gvl::$downloads, 0, 'without downloading in the request' );
+
+	faz_flip_iab( true, true, false, true );
+	assert_eq( faz_scheduled_bootstraps(), 1, 'a bootstrap already pending is not scheduled twice' );
 
 	faz_flip_iab( true, false, false );
-	assert_eq( Gvl::$downloads, 0, 'iab.enabled on → off: no download' );
+	assert_eq( faz_scheduled_bootstraps(), 0, 'iab.enabled on → off: nothing scheduled' );
+	Settings::run_gvl_bootstrap();
+	assert_eq( Gvl::$downloads, 0, 'and an event left over from before downloads nothing while TCF is off' );
 
 	faz_flip_iab( false, false, false );
-	assert_eq( Gvl::$downloads, 0, 'iab.enabled stays off: no download' );
+	assert_eq( faz_scheduled_bootstraps(), 0, 'iab.enabled stays off: nothing scheduled' );
 
 	echo "\n" . ( $tests_failed > 0 ? "\033[31m" : "\033[32m" ) . "{$tests_passed}/{$tests_run} passed\033[0m\n";
 	exit( $tests_failed > 0 ? 1 : 0 );

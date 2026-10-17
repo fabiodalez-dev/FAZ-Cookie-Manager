@@ -266,5 +266,30 @@ console.log('\nboth files: the real runtime judges a backstop-parked srcdoc at t
   eq('visible again', t.classList.contains('faz-hidden'), false);
 }
 
+console.log('\nsafety release: a lite-embed facade (live srcdoc) stays visible');
+// The engine ignores src while srcdoc is present, so parking a remote src on a
+// frame whose srcdoc is first-party leaves it showing that document: the
+// "lite embed" facade (a thumbnail and a play button) that stands in for the
+// player. The server and the runtime (_fazHasLiveSrcdoc) leave such a frame
+// visible; the bootstrap hid it, and the facade vanished whenever the
+// bootstrap was the one that parked.
+{
+  const { document, nativeGetAttribute } = boot();
+  document.getElementById('w').innerHTML = '<iframe src="https://tracker.test/embed" srcdoc="&lt;a href=&quot;/watch&quot;&gt;&lt;img src=&quot;/thumb.jpg&quot;&gt;&lt;/a&gt;"></iframe>';
+  await new Promise((r) => setTimeout(r, 0));
+  const frame = document.querySelector('iframe');
+  eq('the remote src is parked', nativeGetAttribute.call(frame, 'data-faz-src'), 'https://tracker.test/embed');
+  eq('the first-party srcdoc stays live', nativeGetAttribute.call(frame, 'srcdoc'), '<a href="/watch"><img src="/thumb.jpg"></a>');
+  eq('and the facade stays visible', frame.classList.contains('faz-hidden'), false);
+}
+{
+  const { document, nativeGetAttribute } = boot();
+  document.getElementById('w').innerHTML = '<iframe src="https://tracker.test/embed" srcdoc="&lt;img src=&quot;https://tracker.test/px&quot;&gt;"></iframe>';
+  await new Promise((r) => setTimeout(r, 0));
+  const frame = document.querySelector('iframe');
+  eq('premise: both are parked', nativeGetAttribute.call(frame, 'srcdoc') === null && !!nativeGetAttribute.call(frame, 'data-faz-src'), true);
+  eq('a frame left with nothing to show is hidden', frame.classList.contains('faz-hidden'), true);
+}
+
 console.log(`\nbootstrap-srcdoc-spellings: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

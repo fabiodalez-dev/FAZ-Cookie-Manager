@@ -1089,8 +1089,13 @@ if ( ! function_exists( 'faz_throttle_request' ) ) {
 			return false;
 		}
 
-		$ip_hash = md5( $client_ip );
-		$key     = $prefix . '_' . $ip_hash;
+		// The same digest every other per-address key uses (faz_ip_cache_key()).
+		// Without a persistent object cache this key is a wp_options row, and a
+		// bare md5( ip ) there is reversed by enumerating IPv4 in seconds. The
+		// digest rotates monthly, so a window armed in the last seconds of a
+		// month closes early once: one extra request per address per month,
+		// against a window the E2E suites pin by prefix, not by suffix.
+		$key = $prefix . '_' . faz_ip_cache_key( $client_ip );
 
 		if ( wp_using_ext_object_cache() ) {
 			// Persistent object cache — atomic wp_cache_add().
@@ -1118,7 +1123,9 @@ if ( ! function_exists( 'faz_ip_cache_key' ) ) {
 	 * were keyed that way while Geo_Detector and Ipinfo_Client keyed their
 	 * object-cache copies on a salted, month-rotated sha256, so one rule
 	 * (spec 001, Constitution VIII / NFR-03) was written two ways and only
-	 * one of them met it. Every per-address cache key goes through here now.
+	 * one of them met it. Every per-address cache key goes through here now,
+	 * the rate-limit windows of faz_throttle_request() included (until 1.34.2
+	 * they were the one exception, keyed on a bare md5 of the address).
 	 *
 	 * The digest is bound to this site's nonce salt, so it cannot be computed
 	 * without the install's secrets, and to the current month, so an old row
@@ -1206,7 +1213,12 @@ if ( ! function_exists( 'faz_is_bot' ) ) {
 		$bot_patterns = array(
 			'Googlebot', 'Bingbot', 'Slurp', 'DuckDuckBot', 'Baiduspider',
 			'YandexBot', 'facebot', 'ia_archiver', 'Twitterbot', 'LinkedInBot',
-			'Pinterest', 'WhatsApp', 'TelegramBot', 'Applebot', 'AdsBot-Google',
+			// Pinterest's crawlers only: `Pinterestbot/1.0` (desktop and
+			// mobile) and the rich-pin fetcher `Pinterest/0.2`. A bare
+			// 'Pinterest' also matched the in-app browser of the Pinterest
+			// app (`… [Pinterest/iOS]`, `… [Pinterest/Android]`), i.e. people,
+			// who were then served the banner-less crawler render.
+			'Pinterestbot', 'Pinterest/0.', 'WhatsApp', 'TelegramBot', 'Applebot', 'AdsBot-Google',
 			'Mediapartners-Google', 'Google-InspectionTool', 'Storebot-Google',
 			'SemrushBot', 'AhrefsBot', 'MJ12bot', 'DotBot', 'PetalBot',
 			'Bytespider', 'GPTBot', 'ChatGPT-User', 'ClaudeBot', 'PerplexityBot',

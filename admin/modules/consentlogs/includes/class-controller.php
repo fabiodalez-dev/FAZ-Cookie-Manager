@@ -880,6 +880,20 @@ class Controller {
 	}
 
 	/**
+	 * The address hash a row written by this request would carry.
+	 *
+	 * Lets the consent endpoint tell whether the row a request corrects was
+	 * written from the same address, with the formula log_consent() stores,
+	 * without a second copy of it.
+	 *
+	 * @since 1.34.2
+	 * @return string '' when the address cannot be resolved.
+	 */
+	public function current_ip_hash() {
+		return $this->hash_ip( $this->get_visitor_ip() );
+	}
+
+	/**
 	 * Get a single consent log by consent_id.
 	 *
 	 * @param string $consent_id The consent ID to look up.
@@ -1062,11 +1076,21 @@ class Controller {
 		// migration (or on an install where it is pending), never shifted.
 		// created_at is exported twice on purpose: the stored site-time value
 		// and the same instant in UTC — see created_at_gmt().
+		//
+		// The first ten columns are exactly the 1.34.1 header, names included,
+		// and every new column comes after them. 'Created At' keeps its name and
+		// its value (site time, as it always was) rather than being renamed to
+		// say so: an integration that reads the export by column name — a
+		// spreadsheet lookup, a DPIA script, an import into a CMP or a SIEM —
+		// would otherwise lose the timestamp silently on upgrade, which is a
+		// worse failure than a label that does not name its clock. The clock is
+		// named by the column beside it, 'Created At (UTC)', which carries the
+		// same instant with its offset resolved.
 		fputcsv(
 			$handle,
 			array(
 				'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent Hash', 'URL', 'Banner Slug', 'Policy Revision',
-				'Created At (Site Time)', 'Created At (UTC)',
+				'Created At', 'Created At (UTC)',
 				'Country', 'Region', 'Ruleset', 'GPC Received', 'DNT Received', 'TC String', 'GPP String',
 			),
 			',',

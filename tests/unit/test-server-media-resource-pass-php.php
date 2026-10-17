@@ -25,10 +25,11 @@
  *      out byte-identical; <input> is only an image button when type=image;
  *      custom elements whose name starts like a media tag are untouched.
  *   3. The "lite embed" frame — an ALLOWED srcdoc next to a BLOCKED src —
- *      has its src parked (no placeholder, hidden like every parked frame),
- *      which is the rule the runtime applies to the same frame. The engine
- *      ignores src while srcdoc is present, but the facade's own Play
- *      button removes srcdoc and activates a src nothing had gated.
+ *      has its src parked, with no placeholder and NOT hidden: the frame
+ *      shows the allowed facade, and hiding it left a hole in the page. The
+ *      runtime applies the same rule to the same frame. The engine ignores
+ *      src while srcdoc is present, but the facade's own Play button removes
+ *      srcdoc and activates a src nothing had gated.
  *   4. An <img> whose src is a data: URI is not parked: the browser decodes
  *      it in place and an SVG shown through <img> can neither fetch nor
  *      run script, so a provider URL inside the payload is text, not a
@@ -302,7 +303,7 @@ namespace {
 	assert_true( ! faz_has_live_attr( $out, 'src' ), 'and not left live for the facade\'s Play button to activate' );
 	assert_true( '"<button class=play>Play</button>"' === faz_raw_attr( $out, 'srcdoc' ), 'the allowed srcdoc stays live, byte-for-byte' );
 	assert_true( false !== strpos( $out, 'data-faz-category="marketing"' ), 'under the src\'s category' );
-	assert_true( false !== strpos( $out, 'faz-hidden' ), 'hidden, as the runtime hides a frame whose src it parks' );
+	assert_true( false === strpos( $out, 'faz-hidden' ), 'and left visible: it shows the allowed facade, not the parked src, so hiding it only left a hole' );
 	assert_true( false === strpos( $out, 'faz-placeholder' ), 'with no placeholder wrap: the srcdoc marker would not survive wp_kses on the way into the template' );
 	assert_true( false !== strpos( $out, 'width="300"></iframe>' ), 'the remaining attributes and the closing tag survive' );
 

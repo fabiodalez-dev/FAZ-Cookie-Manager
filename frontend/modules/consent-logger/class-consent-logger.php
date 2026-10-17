@@ -67,11 +67,107 @@ class Consent_Logger {
 	const REJECTION_OPTION = 'faz_consent_token_rejections';
 
 	/**
+	 * How recent a row must be for its correction to be a free IP-gate exception.
+	 *
+	 * Seconds; the same 300 s the per-consent_id change caps use.
+	 *
+	 * @since 1.34.2
+	 */
+	const CORRECTION_WINDOW = 300;
+
+	/**
+	 * Free IP-gate exceptions one address may take per CORRECTION_WINDOW.
+	 *
+	 * A cumulative ceiling, not a single-use token: it bounds how many rows an
+	 * address can land past its closed window without a shared-budget slot,
+	 * whatever the number of consent_ids it holds. Five covers a household or a
+	 * small office behind one address correcting at once; past it, corrections
+	 * still land at the shared one-per-10-seconds rate.
+	 *
+	 * @since 1.34.2
+	 */
+	const FREE_EXCEPTIONS_PER_ADDRESS = 5;
+
+	/**
+	 * Read-only AJAX action that hands out the current origin tokens.
+	 *
+	 * The inline beacons (consent log and pageview, printed by
+	 * Frontend::enqueue_scripts()) call it once when a POST is refused with
+	 * `invalid_token`, then resend with the fresh value. See
+	 * handle_token_refresh().
+	 *
+	 * @since 1.34.2
+	 */
+	const TOKEN_REFRESH_ACTION = 'faz_origin_tokens';
+
+	/**
 	 * Constructor - register hooks.
 	 */
 	public function __construct() {
 		// Public REST route.
 		add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
+		add_action( 'wp_ajax_' . self::TOKEN_REFRESH_ACTION, array( $this, 'handle_token_refresh' ) );
+		add_action( 'wp_ajax_nopriv_' . self::TOKEN_REFRESH_ACTION, array( $this, 'handle_token_refresh' ) );
+	}
+
+	/**
+	 * Hand out the origin tokens a page rendered right now would carry.
+	 *
+	 * Why it exists. The tokens ship inside cacheable HTML, and the endpoints
+	 * accept them for a bounded window (TOKEN_MAX_AGE, 7 days by default, 30 at
+	 * most through the filter). A page an edge cache keeps longer — a CDN that
+	 * is never purged, an APO entry held "until changed" — carries a token
+	 * the endpoint refuses, and every consent record posted from it is lost:
+	 * the call is fire-and-forget, so the visitor sees a working banner and
+	 * the Art. 7(1) record simply never lands. Widening the window would only
+	 * move that cliff, and it is already as wide as a token's age can say
+	 * anything about the page. So the beacon recovers instead: on a 403
+	 * `invalid_token` it asks here for the current value and resends once,
+	 * whatever the age of the cached copy.
+	 *
+	 * Why it is safe. It is read-only and unauthenticated, like the DNSMPI
+	 * nonce refresh (Do_Not_Sell_Shortcode::handle_nonce_refresh()): every
+	 * value it returns is already printed into every public page this site
+	 * renders, so it exposes nothing a GET of any page does not. The token was
+	 * never the control against a forged record — is_same_origin_request() and
+	 * the per-IP and per-consent_id throttles are, and a fresh token bypasses
+	 * none of them. A cross-site page cannot read the JSON (no CORS header) and
+	 * cannot execute it.
+	 *
+	 * Why admin-ajax and not a REST route. Several page caches cache GET REST
+	 * responses by default (LiteSpeed's "Cache REST API" among them) and some
+	 * CDNs ignore query strings, so a REST GET could come back as stale as the
+	 * page it is meant to repair. admin-ajax.php sends nocache_headers() itself
+	 * and every page cache excludes it; the explicit no-store below keeps the
+	 * contract in this file rather than in that convention.
+	 *
+	 * Why it has no rate limit. It does no database I/O at all — two keyed
+	 * hashes and a settings read that WordPress has already autoloaded — and
+	 * faz_throttle_request() would ADD a wp_options write per request on a site
+	 * without a persistent object cache, turning the cheapest endpoint the
+	 * plugin has into a write path, while refusing the second visitor behind a
+	 * shared address who needs the same value. Bootstrapping WordPress is the
+	 * cost floor, and no throttle inside WordPress lowers it.
+	 *
+	 * Each token is returned only when its beacon is enabled, with the same
+	 * strict reads Frontend::enqueue_scripts() uses to print them.
+	 *
+	 * @since 1.34.2
+	 * @return void
+	 */
+	public function handle_token_refresh() {
+		\FazCookie\Includes\Cache_Compatibility::send_no_store_headers();
+		$settings = get_option( 'faz_settings', array() );
+		$settings = is_array( $settings ) ? $settings : array();
+		$tokens   = array();
+		if ( isset( $settings['consent_logs']['status'] ) && true === $settings['consent_logs']['status'] ) {
+			$tokens['consent'] = self::current_token();
+		}
+		if ( isset( $settings['pageview_tracking'] ) && true === $settings['pageview_tracking']
+			&& class_exists( '\\FazCookie\\Admin\\Modules\\Pageviews\\Api\\Api' ) ) {
+			$tokens['pageview'] = \FazCookie\Admin\Modules\Pageviews\Api\Api::current_token();
+		}
+		wp_send_json_success( $tokens );
 	}
 
 	/**
@@ -111,6 +207,16 @@ class Consent_Logger {
 					'token' => array(
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
+					),
+					// Set by the inline beacon on its FIRST post: "if my token
+					// is refused, I will fetch a fresh one and resend". A
+					// stale-token refusal of such a post is not a lost record,
+					// so it is not counted; the resend is sent without it and
+					// is counted under whatever cause refuses it. See
+					// handle_token_refresh().
+					'can_refresh' => array(
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
 					),
 					'consent_id' => array(
 						'type'              => 'string',
@@ -555,7 +661,17 @@ class Consent_Logger {
 		$token = $request->get_param( 'token' );
 		if ( ! empty( $token ) ) {
 			if ( ! self::token_is_valid( $token ) ) {
-				self::record_refusal( self::CAUSE_STALE_TOKEN );
+				// A beacon that announced it can refresh will resend with a
+				// current token (handle_token_refresh()), so this refusal is not
+				// yet a lost record and System Status must not report it as one.
+				// The resend carries no flag: if it is refused too, it is counted
+				// under its own cause, and if the refresh itself fails the beacon
+				// resends the original, which is counted here as before. A client
+				// that sets the flag on junk only removes itself from a tally
+				// that exists for real visitors' records.
+				if ( 1 !== (int) $request->get_param( 'can_refresh' ) ) {
+					self::record_refusal( self::CAUSE_STALE_TOKEN );
+				}
 				return new \WP_Error(
 					'invalid_token',
 					'Invalid origin token.',
@@ -638,6 +754,26 @@ class Consent_Logger {
 			// block exists to stop charging for.
 			$previous_row   = Controller::get_instance()->get_log_by_consent_id( $sanitized_consent_id );
 			$previous       = $this->last_logged_status( $previous_row );
+
+			// An address already over its window is answered HERE, before any of
+			// the windows below is armed, unless this request could be the one
+			// shape the IP gate yields to (see $same_visitor_change further down):
+			// a consent_id the register already holds a row for, posting an
+			// allowlisted status different from that row's. The lookup above is
+			// the only work a refusal costs. Every refused request used to fall
+			// through and arm the per-id window and the chg1 cap before the
+			// verdict — two transients, i.e. two wp_options rows on a site without
+			// a persistent object cache — so a client that kept minting fresh
+			// consent_ids from one address bought two writes per request on the
+			// very path this gate exists to make cheap.
+			if ( $is_ip_throttled ) {
+				$is_candidate = is_array( $previous_row ) && '' !== $status && $status !== $previous;
+				if ( ! $is_candidate ) {
+					self::record_refusal( self::CAUSE_THROTTLED );
+					return rest_ensure_response( array( 'throttled' => true ) );
+				}
+			}
+
 			$status_changed = '' !== $status && $status !== $previous;
 
 			// A GPC exception minted from a blocked embed does not change the
@@ -677,6 +813,37 @@ class Consent_Logger {
 					// A change already landed in this window — throttle the rest.
 					$status_changed = ! faz_throttle_request( 'faz_consent_chgn_' . $hash, 10 );
 				}
+
+				// Through a closed IP window the change also needs the address's
+				// leave, and it is asked for only now, after the per-id caps have
+				// accepted it, so a candidate they refuse spends nothing.
+				//
+				// A FREE exception is the case the exception exists for: one
+				// visitor correcting, from where they are, a decision they made
+				// moments ago. So it is granted only when the row being corrected
+				// was written from this same address inside the correction window
+				// (is_recent_row_from_this_address()), only once per consent_id
+				// (faz_consent_ip_x_<id>, 300 s), and only FREE_EXCEPTIONS_PER_ADDRESS
+				// times per address per window (a cumulative counter, see
+				// claim_free_exception()). Two visitors behind one NAT, CGNAT or
+				// corporate proxy each withdrawing seconds after accepting both
+				// land — one person's correction never consumes another's — while
+				// an address that has accumulated K ids cannot turn them into K
+				// free writes: the counter caps it whatever K is. Everything else
+				// draws on the budget the address shares, one per 10 s
+				// (faz_consent_ip_chg). The rate per address is therefore a
+				// constant, at most FREE_EXCEPTIONS_PER_ADDRESS per 300 s plus one
+				// per 10 s, not a function of how many ids it holds. All three keys
+				// sit under the `faz_consent_ip_` prefix, so whatever resets the IP
+				// window resets its exceptions with it.
+				if ( $status_changed && $is_ip_throttled ) {
+					$is_free = $this->is_recent_row_from_this_address( $previous_row )
+						&& ! faz_throttle_request( 'faz_consent_ip_x_' . $hash, self::CORRECTION_WINDOW )
+						&& self::claim_free_exception();
+					if ( ! $is_free && faz_throttle_request( 'faz_consent_ip_chg', 10 ) ) {
+						$status_changed = false;
+					}
+				}
 			}
 
 			$is_consent_throttled = $status_changed ? false : $window_closed;
@@ -692,7 +859,8 @@ class Consent_Logger {
 			// The IP gate yields to exactly one shape of request: the SAME
 			// consent_id the log already holds a row for, posting an allowlisted
 			// status that differs from that row's — a later decision by a visitor
-			// the register knows, already bounded by the chg1/chgn caps. It does
+			// the register knows, already bounded by the chg1/chgn caps and,
+			// past each id's first, by the per-address budget above. It does
 			// not yield to a first-ever row (a flooder would mint a fresh id per
 			// request), to a replay of the same status, to a status outside the
 			// allowlist, or to a new GPC exception on an unchanged status. A
@@ -743,6 +911,74 @@ class Consent_Logger {
 		}
 
 		return rest_ensure_response( $result );
+	}
+
+	/**
+	 * Whether a row was written from this request's address, and recently.
+	 *
+	 * The free IP-gate exception is for a visitor correcting their own
+	 * decision moments after making it. A row older than the correction window,
+	 * or one written from another address, is not that: it is an id that was
+	 * collected, and correcting it waits for the shared budget like any other
+	 * request. A row with no address hash (the address could not be resolved
+	 * when it was written) proves nothing either way and is treated the same.
+	 *
+	 * @param array|null $row Newest row for the consent id.
+	 * @return bool
+	 */
+	private function is_recent_row_from_this_address( $row ) {
+		if ( ! is_array( $row ) || empty( $row['ip_hash'] ) || empty( $row['created_at'] ) ) {
+			return false;
+		}
+		$controller = Controller::get_instance();
+		if ( ! method_exists( $controller, 'current_ip_hash' ) ) {
+			return false;
+		}
+		$here = (string) $controller->current_ip_hash();
+		if ( '' === $here || ! hash_equals( (string) $row['ip_hash'], $here ) ) {
+			return false;
+		}
+		// Both sides are site-time strings (log_consent() writes created_at with
+		// current_time( 'mysql' )), so their difference is the row's age.
+		$written = strtotime( (string) $row['created_at'] );
+		$now     = strtotime( (string) current_time( 'mysql' ) );
+		if ( false === $written || false === $now ) {
+			return false;
+		}
+		$age = $now - $written;
+		return $age >= 0 && $age <= self::CORRECTION_WINDOW;
+	}
+
+	/**
+	 * Take one of this address's free IP-gate exceptions, if any is left.
+	 *
+	 * A counter with a fixed window: the first claim opens it for
+	 * CORRECTION_WINDOW seconds and each claim adds one, up to
+	 * FREE_EXCEPTIONS_PER_ADDRESS. Keyed with faz_ip_cache_key(), like the
+	 * throttle windows. Without a persistent object cache the read and the
+	 * write are two statements, so two claims in the same instant can both
+	 * read the same count: the overshoot is bounded by the concurrency of one
+	 * address, the same judgement record_refusal() documents for its gate.
+	 *
+	 * @return bool True when a free exception was granted.
+	 */
+	private static function claim_free_exception() {
+		$ip = function_exists( 'faz_resolve_client_ip' ) ? (string) faz_resolve_client_ip() : '';
+		if ( '' === $ip || ! function_exists( 'faz_ip_cache_key' ) ) {
+			return false;
+		}
+		$key   = 'faz_consent_ip_free_' . faz_ip_cache_key( $ip );
+		$now   = time();
+		$state = get_transient( $key );
+		if ( ! is_array( $state ) || ! isset( $state['until'], $state['n'] ) || (int) $state['until'] <= $now ) {
+			$state = array( 'n' => 0, 'until' => $now + self::CORRECTION_WINDOW );
+		}
+		if ( (int) $state['n'] >= self::FREE_EXCEPTIONS_PER_ADDRESS ) {
+			return false;
+		}
+		$state['n'] = (int) $state['n'] + 1;
+		set_transient( $key, $state, max( 1, (int) $state['until'] - $now ) );
+		return true;
 	}
 
 	/**

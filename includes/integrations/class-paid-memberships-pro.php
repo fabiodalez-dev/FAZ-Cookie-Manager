@@ -150,9 +150,13 @@ class Paid_Memberships_Pro {
 	 * cookie from a previous membership state.
 	 */
 	public function sync_consent_cookie() {
+		// Revision-only on purpose: this runs on init (priority 5), before any
+		// banner is selected, so no scope exists yet — the case the helper's
+		// null scope is documented for. The necessary-only state written below
+		// carries no scope and is valid under every banner.
 		$current_cookie    = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie() : '';
 		$is_pmp_managed    = function_exists( 'faz_is_pmp_managed_consent_cookie' ) ? faz_is_pmp_managed_consent_cookie( $current_cookie ) : false;
-		$has_vendor_cookie = ! empty( $_COOKIE['fazVendorConsent'] );
+		$has_vendor_cookie = ! empty( $_COOKIE['fazVendorConsent'] ) || ! empty( $_COOKIE['fazVendorLI'] );
 		$has_tcf_cookie    = ! empty( $_COOKIE['euconsent-v2'] );
 		$is_exempted       = $this->is_current_user_exempted();
 
@@ -183,9 +187,10 @@ class Paid_Memberships_Pro {
 			}
 			if ( ( $is_pmp_managed || $pmp_vendor_marker ) && function_exists( 'faz_expire_browser_cookie' ) ) {
 				faz_expire_browser_cookie( 'fazVendorConsent' );
+				faz_expire_browser_cookie( 'fazVendorLI' );
 				faz_expire_browser_cookie( 'euconsent-v2' );
 				faz_expire_browser_cookie( 'fazVendorSource' );
-				unset( $_COOKIE['fazVendorConsent'], $_COOKIE['euconsent-v2'], $_COOKIE['fazVendorSource'] );
+				unset( $_COOKIE['fazVendorConsent'], $_COOKIE['fazVendorLI'], $_COOKIE['euconsent-v2'], $_COOKIE['fazVendorSource'] );
 			}
 			return;
 		}
@@ -226,8 +231,12 @@ class Paid_Memberships_Pro {
 		// value is stable, so this logs once and cannot flood on page reloads.
 		$is_new_state = ( '' === $current_cookie || ( $is_pmp_managed && $current_cookie !== $desired_cookie ) );
 
+		// The vendor records and the TC string of an earlier choice do not
+		// describe the necessary-only state written below; the Right-to-Object
+		// record (fazVendorLI) included, or its objections would be re-applied.
 		if ( function_exists( 'faz_expire_browser_cookie' ) ) {
 			faz_expire_browser_cookie( 'fazVendorConsent' );
+			faz_expire_browser_cookie( 'fazVendorLI' );
 			faz_expire_browser_cookie( 'euconsent-v2' );
 		}
 		// Companion marker: flag that this member's vendor/TCF state is

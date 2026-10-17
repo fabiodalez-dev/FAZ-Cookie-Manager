@@ -25,6 +25,9 @@
  *   4. Controls: a script that LOADS the tracker is still blocked; data plus
  *      any statement is still judged; a JS object literal that is not JSON
  *      (a function inside) is still judged; Matomo's `_paq` queue is blocked.
+ *   5. An assignment to `location` (`var location = "https://…"`,
+ *      `window.location = …`) is judged as code in both layers: it navigates
+ *      the page, so it is an action, not a definition.
  *
  * Run: php tests/unit/test-inline-json-data-scripts-php.php
  */
@@ -268,6 +271,23 @@ namespace {
 	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $idd ) );
 	assert_true( $is_parked( $out ), 'a data-only body is still blocked when the tag id names a tracker' );
 
+	// An assignment to `location` is not a definition: it navigates the page
+	// through the Location setter, whatever JSON value it is given. Exempted,
+	// the navigation ran before consent and skipped every rule that reads the
+	// body — here the code signature the URL carries.
+	foreach ( array(
+		'var location'    => '<script>var location = "https://site.test/out?fbq(1)";</script>',
+		'window.location' => '<script>window.location = "https://site.test/out?gtag=1"</script>',
+		'an object value' => '<script>window.location = {"href":"https://site.test/out?gtag=1"};</script>',
+		'after a data assignment' => "<script>var cfg = {\"a\":1};\nvar location = \"https://site.test/out?fbq(1)\";</script>",
+	) as $label => $nav ) {
+		$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $nav ) );
+		assert_true( $is_parked( $out ), 'an assignment to location is judged as code: ' . $label );
+	}
+	$near = '<script>var locationData = {"next":"fbq(1)"}; window.myLocation = {"u":"gtag"};</script>';
+	$out  = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $near ) );
+	assert_true( $is_live( $out, $near ), 'names that only contain "location" are still data' );
+
 	// ── Second layer: wp_inline_script_attributes ──────────────────────────
 	// Query Monitor 4.x prints its payload with wp_print_inline_script_tag(),
 	// so it never reaches the output-buffer pass above as an unjudged tag: the
@@ -320,6 +340,9 @@ namespace {
 	assert_true( $typed_plain( $filtered( 'mixed', 'var cfg = {"id":"G-TEST"}; gtag("config", cfg.id);' ) ), 'filter: data followed by a call is still retyped' );
 	assert_true( $typed_plain( $filtered( 'paq', 'var _paq = window._paq = window._paq || []; _paq.push(["trackPageView"]);' ) ), 'filter: the Matomo queue is still retyped' );
 	assert_true( $typed_plain( $filtered( 'gtag-config-js-before', 'window.gtagConfig = {"anonymize_ip":true};' ) ), 'filter: a data-only body is still retyped when the id names a tracker' );
+	assert_true( $typed_plain( $filtered( 'nav', 'var location = "https://site.test/out?fbq(1)";' ) ), 'filter: var location = JSON is retyped like any code' );
+	assert_true( $typed_plain( $filtered( 'nav2', 'window.location = "https://site.test/out?gtag=1"' ) ), 'filter: window.location = JSON is retyped like any code' );
+	assert_true( ! $typed_plain( $filtered( 'near', 'var locationData = {"next":"fbq(1)"};' ) ), 'filter: a name that only contains "location" keeps its type' );
 
 	echo "\n";
 	if ( 0 === $tests_failed ) {

@@ -335,6 +335,190 @@ function faz_is_consent_cookie_stale( $cookie = '' ) {
 }
 
 /**
+ * Decode a vendor bitfield written by _fazEncodeVendorBits() in
+ * frontend/js/script.js: base64url, six bits per character, bit (id - 1) most
+ * significant first — the alphabet and bit order of the TC string.
+ *
+ * Mirrors _fazDecodeVendorBits(): null when the text is not a bitfield at all
+ * (so a damaged record is told apart from an empty set), an empty list for "".
+ *
+ * @param string $text Bitfield.
+ * @return int[]|null
+ */
+function faz_decode_vendor_bits( $text ) {
+	if ( ! is_string( $text ) ) {
+		return null;
+	}
+	$alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+	$ids      = array();
+	$length   = strlen( $text );
+	for ( $i = 0; $i < $length; $i++ ) {
+		$value = strpos( $alphabet, $text[ $i ] );
+		if ( false === $value ) {
+			return null;
+		}
+		for ( $bit = 0; $bit < 6; $bit++ ) {
+			if ( $value & ( 32 >> $bit ) ) {
+				$ids[] = $i * 6 + $bit + 1;
+			}
+		}
+	}
+	return $ids;
+}
+
+/**
+ * Parse a fazVendorConsent value, the server twin of _fazParseVendorRecord()
+ * in frontend/js/script.js (and of the reader in tcf-cmp.js).
+ *
+ * Two formats:
+ *  - compact (since 1.34.2): `d:<bitfield>,c:<bitfield|*>` — `d` the vendors
+ *    DISCLOSED when the visitor chose, `c` the ones consented, `*` all of the
+ *    disclosed ones. A consent bit for an undisclosed vendor is ignored;
+ *  - per pair (earlier releases): `id:yes|no`, one pair per disclosed vendor.
+ *
+ * @param string $raw Cookie value.
+ * @return array{disclosed:array<int,bool>,consent:array<int,bool>}|null Null
+ *         when there is no usable record.
+ */
+function faz_parse_vendor_consent_record( $raw ) {
+	if ( ! is_string( $raw ) || '' === $raw ) {
+		return null;
+	}
+	$disclosed         = array();
+	$consent           = array();
+	$compact_disclosed = null;
+	$compact_consent   = null;
+	$legacy            = false;
+	foreach ( explode( ',', $raw ) as $pair ) {
+		$idx = strpos( $pair, ':' );
+		if ( false === $idx ) {
+			continue;
+		}
+		$key   = trim( substr( $pair, 0, $idx ) );
+		$value = trim( (string) substr( $pair, $idx + 1 ) );
+		if ( 'd' === $key ) {
+			$compact_disclosed = $value;
+			continue;
+		}
+		if ( 'c' === $key ) {
+			$compact_consent = $value;
+			continue;
+		}
+		// parseInt(): leading digits, optional sign, the rest ignored.
+		if ( ! preg_match( '/^([+-]?)(\d+)/', $key, $m ) || '-' === $m[1] ) {
+			continue;
+		}
+		$id = (int) $m[2];
+		if ( $id <= 0 ) {
+			continue;
+		}
+		$legacy            = true;
+		$disclosed[ $id ] = true;
+		$consent[ $id ]   = 'yes' === $value;
+	}
+	if ( null !== $compact_disclosed ) {
+		$disclosed_ids = faz_decode_vendor_bits( $compact_disclosed );
+		if ( null === $disclosed_ids ) {
+			return null;
+		}
+		$all         = '*' === $compact_consent;
+		$consent_ids = $all ? array() : faz_decode_vendor_bits( null === $compact_consent ? '' : $compact_consent );
+		$granted     = array_fill_keys( is_array( $consent_ids ) ? $consent_ids : array(), true );
+		$out         = array(
+			'disclosed' => array(),
+			'consent'   => array(),
+		);
+		foreach ( $disclosed_ids as $id ) {
+			$out['disclosed'][ $id ] = true;
+			$out['consent'][ $id ]   = $all || isset( $granted[ $id ] );
+		}
+		return $out;
+	}
+	return $legacy ? array(
+		'disclosed' => $disclosed,
+		'consent'   => $consent,
+	) : null;
+}
+
+/**
+ * Whether a decided consent cookie must be asked again because the visitor
+ * was never shown every vendor now selected for IAB TCF.
+ *
+ * The server twin of _fazVendorRecordStale() in frontend/js/script.js. The
+ * client re-prompts such a visitor, but only after its runtime has started;
+ * a server that still read the cookie as valid had already rendered the
+ * accepted categories' trackers EXECUTABLE in that same page view, and a
+ * script that has run cannot be recalled. Callers that render a page on which
+ * the CMP runs treat a cookie this returns true for as absent, exactly as they
+ * treat a scope change (see Frontend::get_scoped_valid_consent_cookie()).
+ *
+ * Same rules, in the same order: TCF active (enabled, a registered CMP ID,
+ * a stored GVL) with at least one live selected vendor; a decided record
+ * (`action:yes`, no `undecided:1`); not an opt-out law (`ccpa`, where 11 CCR
+ * 7026(k) is against asking again); then stale when there is no vendor record
+ * or a live selected vendor is missing from its disclosed set. A vendor
+ * REMOVED from the selection never makes it stale.
+ *
+ * A cookie written by the AMP consent endpoint carries no vendor record: AMP
+ * never shows the vendor list, so no vendor consent exists for it, and on a
+ * canonical page with TCF active it is re-asked like any other record that
+ * lacks one (see the note in class-amp-consent-rest.php).
+ *
+ * @param string      $cookie Raw consent cookie (already revision/scope valid).
+ * @param string      $law    Law of the banner being served.
+ * @param string|null $record Raw fazVendorConsent value; null reads the request.
+ * @return bool
+ */
+function faz_is_vendor_record_stale( $cookie, $law, $record = null ) {
+	$cookie = (string) $cookie;
+	if ( '' === $cookie || 'ccpa' === (string) $law ) {
+		return false;
+	}
+	$settings = get_option( 'faz_settings', array() );
+	if ( ! is_array( $settings ) || empty( $settings['iab']['enabled'] ) ) {
+		return false;
+	}
+	if ( ! isset( $settings['iab']['cmp_id'] ) || absint( $settings['iab']['cmp_id'] ) < 2 ) {
+		return false;
+	}
+	$parsed = faz_parse_consent_cookie( $cookie );
+	if ( ! isset( $parsed['action'] ) || 'yes' !== $parsed['action'] ) {
+		return false;
+	}
+	if ( isset( $parsed['undecided'] ) && '1' === $parsed['undecided'] ) {
+		return false;
+	}
+	$selected = get_option( 'faz_gvl_selected_vendors', array() );
+	if ( ! is_array( $selected ) || empty( $selected ) ) {
+		return false;
+	}
+	if ( null === $record ) {
+		$record = isset( $_COOKIE['fazVendorConsent'] ) ? sanitize_text_field( wp_unslash( (string) $_COOKIE['fazVendorConsent'] ) ) : '';
+	}
+	$vendor_record = faz_parse_vendor_consent_record( (string) $record );
+
+	// Only the selected vendors this record does not disclose can make it
+	// stale; when there are none the GVL itself is never loaded.
+	$undisclosed = array();
+	foreach ( $selected as $id ) {
+		$id = absint( $id );
+		if ( $id > 0 && ( null === $vendor_record || empty( $vendor_record['disclosed'][ $id ] ) ) ) {
+			$undisclosed[] = $id;
+		}
+	}
+	if ( empty( $undisclosed ) || ! class_exists( '\\FazCookie\\Includes\\Gvl' ) ) {
+		return false;
+	}
+	$gvl = \FazCookie\Includes\Gvl::get_instance();
+	if ( ! $gvl->has_data() ) {
+		return false;
+	}
+	// A live vendor is one the GVL still carries and has not marked deleted —
+	// the list the preference center shows (_iabVendors).
+	return ! empty( $gvl->get_vendors( $undisclosed ) );
+}
+
+/**
  * Read a scope key from a parsed consent cookie, honouring the legacy slot.
  *
  * Mirrors _fazReadScopedCookieValue() in frontend/js/script.js. Cookies written
@@ -573,10 +757,16 @@ function faz_expire_browser_cookie( $name ) {
 /**
  * Clear all consent-tracking cookies that must stay in sync.
  *
+ * The same set _fazInvalidateStoredConsent() in script.js deletes. fazVendorLI
+ * (the IAB Right-to-Object record) belongs to it: left behind, the objections
+ * of a choice that no longer exists outlived it and were applied to the next
+ * one, so a visitor who never objected under the new choice still signalled
+ * the old objections.
+ *
  * @return void
  */
 function faz_clear_consent_tracking_cookies() {
-	foreach ( array( 'fazcookie-consent', 'fazVendorConsent', 'euconsent-v2' ) as $cookie_name ) {
+	foreach ( array( 'fazcookie-consent', 'fazVendorConsent', 'fazVendorLI', 'euconsent-v2' ) as $cookie_name ) {
 		faz_expire_browser_cookie( $cookie_name );
 	}
 }
@@ -752,9 +942,11 @@ add_filter( 'rest_pre_dispatch', function ( $result, $server, $request ) {
 		return $result;
 	}
 	do_action( 'litespeed_control_set_nocache', 'FAZ Cookie Manager REST route' );
-	if ( ! headers_sent() ) {
+	// The one no-store set every FAZ veto sends (CDN-targeted directives
+	// included); LiteSpeed's header keeps the no-vary token these routes
+	// always carried.
+	if ( \FazCookie\Includes\Cache_Compatibility::send_no_store_headers() ) {
 		header( 'X-LiteSpeed-Cache-Control: no-cache, no-vary', true );
-		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private', true );
 	}
 	if ( ! defined( 'DONOTCACHEPAGE' ) ) {
 		define( 'DONOTCACHEPAGE', true );

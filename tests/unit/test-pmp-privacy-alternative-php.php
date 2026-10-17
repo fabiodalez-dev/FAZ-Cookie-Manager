@@ -110,6 +110,52 @@ namespace {
 	$checks['no recorded action is not a choice']                    = false === call_user_func( $own, array( 'consent' => 'no' ) );
 	$checks['the PMP-managed state itself is not a choice']          = false === call_user_func( $own, array( 'action' => 'auto', 'source' => 'pmp' ) );
 
+	// Teardown covers the Right-to-Object record too. fazVendorLI holds the
+	// objections of a choice; when that choice is replaced by the managed
+	// state, or cleared when membership ends, objections left behind are
+	// re-applied to whatever the visitor decides next.
+	$GLOBALS['faz_pmp_expired'] = array();
+	function faz_expire_browser_cookie( $name ) {
+		$GLOBALS['faz_pmp_expired'][] = $name;
+		unset( $_COOKIE[ $name ] );
+	}
+	function faz_set_browser_cookie( $name, $value ) {
+		$_COOKIE[ $name ] = $value;
+	}
+	function faz_get_valid_consent_cookie() {
+		return isset( $_COOKIE['fazcookie-consent'] ) ? $_COOKIE['fazcookie-consent'] : '';
+	}
+	function faz_is_pmp_managed_consent_cookie( $cookie ) {
+		$parsed = faz_parse_consent_cookie( $cookie );
+		return isset( $parsed['source'] ) && 'pmp' === $parsed['source'];
+	}
+	function faz_clear_consent_tracking_cookies() {
+		foreach ( array( 'fazcookie-consent', 'fazVendorConsent', 'fazVendorLI', 'euconsent-v2' ) as $name ) {
+			faz_expire_browser_cookie( $name );
+		}
+	}
+	function do_action() {}
+	function do_action_deprecated() {}
+	function get_current_user_id() { return 7; }
+	if ( ! defined( 'DAY_IN_SECONDS' ) ) {
+		define( 'DAY_IN_SECONDS', 86400 );
+	}
+	$pmp_double = new class() extends \FazCookie\Includes\Integrations\Paid_Memberships_Pro {
+		public $exempt = false;
+		public function __construct() {}
+		public function is_current_user_exempted() { return $this->exempt; }
+	};
+
+	$_COOKIE = array( 'fazVendorSource' => 'pmp', 'fazVendorConsent' => 'd:4,c:*', 'fazVendorLI' => 'p2:no,v:g' );
+	$pmp_double->sync_consent_cookie();
+	$checks['membership ended: the Right-to-Object record is cleared with the vendor record'] = ! isset( $_COOKIE['fazVendorLI'] ) && ! isset( $_COOKIE['fazVendorConsent'] );
+
+	$pmp_double->exempt = true;
+	$_COOKIE = array( 'fazcookie-consent' => $value, 'fazVendorLI' => 'p2:no,v:g' );
+	$GLOBALS['faz_pmp_expired'] = array();
+	$pmp_double->sync_consent_cookie();
+	$checks['exempt member with the managed state already set: a leftover fazVendorLI alone triggers the refresh and is cleared'] = in_array( 'fazVendorLI', $GLOBALS['faz_pmp_expired'], true ) && ! isset( $_COOKIE['fazVendorLI'] );
+
 	$failed = 0;
 	foreach ( $checks as $label => $passed ) {
 		if ( $passed ) {

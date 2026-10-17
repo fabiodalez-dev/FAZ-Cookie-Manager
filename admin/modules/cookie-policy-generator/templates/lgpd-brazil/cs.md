@@ -18,7 +18,7 @@ Tyto Zásady používání cookies popisují, jak společnost **{{COMPANY_NAME}}
 
 Pro **nezbytně nutné** cookies: oprávněný zájem (čl. 7, IX) a smluvní nebo technická povinnost (čl. 7, V).
 
-Pro **všechny ostatní** kategorie: **výslovný souhlas** subjektu údajů (čl. 7, I), udělený prostřednictvím lišty souhlasu s cookies ještě před uložením jakéhokoli nepodstatného cookies.
+Pro **všechny ostatní** kategorie: **výslovný souhlas** subjektu údajů (čl. 7, I), udělený prostřednictvím lišty souhlasu s cookies ještě před uložením jakýchkoli nepovinných cookies.
 
 Souhlas lze kdykoli odvolat (čl. 8, § 5) prostřednictvím odkazu „Nastavení cookies".
 

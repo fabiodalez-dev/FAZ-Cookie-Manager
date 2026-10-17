@@ -164,6 +164,31 @@ assert_eq(
 	'6 měsíců',
 	'format_retention(cs, 6) = "6 měsíců"'
 );
+// Count forms. Until 1.34.2 every language but Dutch and Croatian printed one
+// plural for every count: "1 months", "1 mesi", "2 měsíců".
+$faz_month_forms = array(
+	'en'    => array( 1 => '1 month', 2 => '2 months', 12 => '12 months' ),
+	'it'    => array( 1 => '1 mese', 2 => '2 mesi', 12 => '12 mesi' ),
+	'de'    => array( 1 => '1 Monat', 2 => '2 Monate', 12 => '12 Monate' ),
+	'es'    => array( 1 => '1 mes', 2 => '2 meses', 12 => '12 meses' ),
+	'pt-BR' => array( 1 => '1 mês', 2 => '2 meses', 12 => '12 meses' ),
+	'fr'    => array( 1 => '1 mois', 2 => '2 mois', 12 => '12 mois' ),
+	'bg'    => array( 1 => '1 месец', 2 => '2 месеца', 12 => '12 месеца' ),
+	'cs'    => array( 1 => '1 měsíc', 2 => '2 měsíce', 4 => '4 měsíce', 5 => '5 měsíců', 22 => '22 měsíců' ),
+	'nl'    => array( 1 => '1 maand', 2 => '2 maanden' ),
+	'hr'    => array( 1 => '1 mjesec', 2 => '2 mjeseca', 5 => '5 mjeseci', 21 => '21 mjesec' ),
+	'qx'    => array( 1 => '1 month', 3 => '3 months' ),
+);
+foreach ( $faz_month_forms as $faz_lang => $faz_cases ) {
+	foreach ( $faz_cases as $faz_n => $faz_expected ) {
+		assert_eq(
+			faz_call_renderer( 'format_retention', array( array( 'retention_months' => $faz_n ), $faz_lang ) ),
+			$faz_expected,
+			"format_retention({$faz_lang}, {$faz_n}) = \"{$faz_expected}\""
+		);
+	}
+}
+
 // Boundary: 0 months is clamped to the 12-month default (months <= 0 → 12).
 assert_eq(
 	faz_call_renderer( 'format_retention', array( array( 'retention_months' => 0 ), 'cs' ) ),
