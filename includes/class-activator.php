@@ -2589,7 +2589,7 @@ class Activator {
 				}
 				return '';
 			};
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table is $wpdb->prefix + literal (escaped via esc_sql); id/column names are literals from $targets above; value bound via %s; one-shot migration read.
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table is $wpdb->prefix + literal (escaped via esc_sql); id/column names are literals from $targets above; value bound via %s; one-shot migration read.
 			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT `' . $target['id'] . '`, description FROM `' . esc_sql( $target['table'] ) . '` WHERE ' . $target['column'] . ' = %s', $target['key'] ), ARRAY_A );
 			foreach ( (array) $rows as $row ) {
 				$stored  = (string) ( $row['description'] ?? '' );
