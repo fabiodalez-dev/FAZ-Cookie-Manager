@@ -354,7 +354,13 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 		: array();
 	?>
 	<?php if ( ! empty( $faz_silent_providers ) ) : ?>
-	<div class="faz-card">
+	<?php
+	// data-faz-copy="omit": this card is the shipped catalogue, the same on
+	// every install, not a reading of this site. In a copied report it only
+	// added a few hundred lines of third-party domains, enough for forums and
+	// chat services to refuse the message as spam.
+	?>
+	<div class="faz-card" data-faz-copy="omit">
 		<div class="faz-card-header"><h3><?php esc_html_e( 'May be blocked without a visible placeholder', 'faz-cookie-manager' ); ?></h3></div>
 		<div class="faz-card-body">
 			<p class="faz-help">
