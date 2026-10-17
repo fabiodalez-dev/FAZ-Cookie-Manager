@@ -1777,7 +1777,12 @@ async function _fazMaybeSwapLanguage() {
     if (!detected || detected === _fazStore._language) return false;
     if (!_fazStore._bannerEndpoint) return false;
     try {
-        var payload = await _fazFetchBannerForLanguage(_fazStore._bannerEndpoint, detected, 500);
+        // The swap runs after paint, with the default-language banner already
+        // visible and interactive, and _fazInit() re-checks that no choice was
+        // made before re-rendering. So the wait protects nothing: a 500 ms cap
+        // only dropped the translation on hosts whose REST round trip is
+        // slower (one uncached WordPress REST call is ~0.4 s on its own).
+        var payload = await _fazFetchBannerForLanguage(_fazStore._bannerEndpoint, detected, 4000);
         if (payload) {
             _fazApplyBannerPayload(payload);
             return true; // caller re-renders the visible banner in the new language
