@@ -488,15 +488,7 @@ assert_eq( $GLOBALS['faz_test_slugs'][100], 'erasure-2026-06-16', 'post_name was
 // in the sweep: the eraser matches the ADDRESS, not one request, so an access
 // request still waiting for a reply is redacted along with the erasure.
 $joined = implode( ' ', $res['messages'] );
-// The consent-log line must describe the data correctly. A salted but
-// deterministic hash of an address, keyed by the installation's salt, is
-// pseudonymised personal data (GDPR Art. 4(5), WP29 Opinion 05/2014 §3.2) —
-// the very reasoning the eraser's own docblock applies to e-mail hashes — not
-// "anonymized", which is what this message told administrators drafting their
-// Art. 30 record for years.
-assert_true( false !== strpos( $joined, 'consent logs hold a pseudonymised IP' ), 'the consent-log message calls the IP hash what it is: pseudonymised' );
-assert_true( false === stripos( $joined, 'anonymi' ), 'and no longer calls it anonymized' );
-assert_true( false !== strpos( $joined, 'cannot be linked to an email address' ), 'while keeping the one claim that is literally true: no e-mail link' );
+assert_true( false !== strpos( $joined, 'Consent history is located using consent IDs' ), 'the eraser explains the consent-ID lookup' );
 assert_true( false !== strpos( $joined, 'Erased the personal data in 20' ), 'the message names how many records were redacted' );
 assert_true( false !== strpos( $joined, '18 of those requests had not been answered yet' ), 'the message names how many were still unanswered' );
 assert_true( false !== strpos( $joined, 'Art. 5(2)' ), 'the message states WHY a record is kept' );

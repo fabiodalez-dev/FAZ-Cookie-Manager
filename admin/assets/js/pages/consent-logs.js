@@ -33,6 +33,8 @@
 	var totalItems = 0;
 
 	FAZ.ready(function () {
+		var consentId = new URLSearchParams(window.location.search).get('consent_id');
+		if (consentId) document.getElementById('faz-log-search').value = consentId;
 		loadStats();
 		loadLogs();
 

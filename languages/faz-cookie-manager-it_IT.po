@@ -8456,56 +8456,266 @@ msgstr "Pulsante"
 msgid "Link"
 msgstr "Collegamento"
 
-#~ msgid "Date the consent was logged."
-#~ msgstr "Data in cui il consenso è stato registrato."
+#: admin/modules/consentlogs/includes/class-controller.php:943
+msgid "Consent history could not be read. Please retry the privacy request."
+msgstr ""
 
-#~ msgctxt "Cookie policy template: gdpr-strict / section-6"
-#~ msgid ""
-#~ "## How long we keep data\n"
-#~ "\n"
-#~ "Consent records and analytics data are retained for {{RETENTION_PERIOD}} from collection. Strictly necessary cookies are retained only for the duration of the session or as required for the technical function they serve. See the table above for the specific lifetime of each cookie."
-#~ msgstr ""
-#~ "## Periodo di conservazione\n"
-#~ "\n"
-#~ "I registri di consenso e i dati analitici sono conservati per {{RETENTION_PERIOD}} dalla raccolta. I cookie strettamente necessari sono conservati per la durata della sessione o per il tempo necessario alla loro funzione tecnica. Consulta la tabella per la durata specifica di ogni cookie."
+#: admin/views/settings.php:106
+msgid "Scope the consent cookie to your registrable domain (e.g. .example.com) so it is shared across www, shop, app, etc. Recommended only when all subdomains belong to you and are covered by the same privacy policy. Public-suffix-aware for multi-level TLDs (.co.uk, .com.au). On multisite, each site requires its own consent even when the cookie domain is shared."
+msgstr ""
 
-#~ msgctxt "Cookie policy template: lgpd-brazil / section-3"
-#~ msgid ""
-#~ "## Categories of personal data processed (Art. 5, I)\n"
-#~ "\n"
-#~ "- **Online identifiers** — IP (hashed with monthly salt), device IDs, session IDs\n"
-#~ "- **Browsing data** — pages visited, dwell time, interactions\n"
-#~ "- **Approximate location** — country/region from IP (not precise GPS)\n"
-#~ "- **Preferences** — consent categories, language\n"
-#~ "\n"
-#~ "We do **not** process sensitive personal data (Art. 5, II) via cookies without specific and highlighted consent (Art. 11 LGPD)."
-#~ msgstr ""
-#~ "## Categorie di dati personali trattati (Art. 5, I)\n"
-#~ "\n"
-#~ "- **Identificativi online** — IP (con hash e salt mensile), ID del dispositivo, ID di sessione\n"
-#~ "- **Dati di navigazione** — pagine visitate, tempo di permanenza, interazioni\n"
-#~ "- **Posizione approssimativa** — Paese/regione dall'IP (non GPS preciso)\n"
-#~ "- **Preferenze** — categorie di consenso, lingua\n"
-#~ "\n"
-#~ "**Non** trattiamo dati personali sensibili (Art. 5, II) tramite cookie senza consenso specifico ed evidenziato (Art. 11 LGPD)."
+#: includes/class-dsar-admin.php:139
+msgid "View consent history"
+msgstr ""
 
-#~ msgid "Whether prior consent is required."
-#~ msgstr "Se è richiesto il consenso preventivo."
+#: includes/class-dsar-admin.php:201
+msgid "Ownership of this consent ID has been independently verified."
+msgstr ""
 
-#~ msgid "Create and publish the cookie policy when setup finishes"
-#~ msgstr "Crea e pubblica la Cookie Policy al termine della configurazione"
+#: includes/class-dsar-admin.php:203
+msgid "Independently verify that this consent ID belongs to the requester before confirming it below. Email confirmation alone does not prove ownership. Consent history is excluded from automated exports and erasure until verified."
+msgstr ""
 
-#~ msgid "The page is published immediately, visible to visitors, from the standard template in the selected language. Fill in your company details on the Cookie Policy page, otherwise the published policy will be incomplete. An existing generated page in that language is reused and custom banner links are kept."
-#~ msgstr "La pagina viene pubblicata subito, visibile ai visitatori, a partire dal modello standard nella lingua selezionata. Inserisci i dati della tua azienda nella pagina Informativa cookie, altrimenti l'informativa pubblicata sarà incompleta. Una pagina già generata in quella lingua viene riutilizzata e i link personalizzati del banner vengono mantenuti."
+#: includes/class-dsar-admin.php:205
+msgid "Confirm independently verified consent ID"
+msgstr ""
+
+#: includes/class-dsar-admin.php:279
+msgid "You are not allowed to verify consent ownership."
+msgstr ""
+
+#: includes/class-dsar-admin.php:390
+msgid "Consent ownership verification recorded."
+msgstr ""
+
+#: includes/class-dsar-shortcode.php:493
+msgid "Consent ID (optional)"
+msgstr ""
+
+#: includes/class-dsar-shortcode.php:495
+msgid "Find this ID in your cookie preferences to help us locate your consent history."
+msgstr ""
+
+#: includes/class-dsar-shortcode.php:600
+msgid "Please enter a valid consent ID."
+msgstr ""
+
+#: includes/class-dsar-shortcode.php:2027
+msgid "Consent ID:"
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:22
+msgid "You can change or withdraw your cookie choices using the cookie settings link in the site footer."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:23
+msgid "You can change or withdraw your cookie choices using the floating cookie settings button."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:29
+msgid "This site uses FAZ Cookie Manager to collect and manage cookie choices."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:30
+msgid "The fazcookie-consent cookie stores your choices, their scope and policy revision, and a persistent consent ID for the configured cookie lifetime; the ID is kept when you withdraw consent."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:31
+msgid "Your consent ID is shown in cookie preferences and can be supplied with a privacy request to locate your consent history; export or erasure of that history requires independent ownership verification and is subject to applicable retention requirements."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:32
+msgid "If you use the Do Not Sell or Share control, fazcookie-dnsmpi records that opt-out."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:35
+msgid "On WordPress multisite, these consent cookie names include a network and site suffix so each site keeps a separate choice."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:38
+msgid "Consent records are stored on this site with the consent ID, decision, category and service choices, date, page URL with non-routing query parameters removed, banner and policy revision, and applicable region and privacy signals."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:39
+msgid "When available, consent records also contain the TCF string and a GPP string supplied by an external CMP; FAZ does not generate GPP signals."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:40
+msgid "The IP address and browser user agent in consent records are stored as stable salted SHA-256 hashes, rather than their raw values; these are pseudonymous identifiers."
+msgstr ""
+
+#. translators: %d: retention in months.
+#: includes/class-privacy-policy-text.php:42
+#, php-format
+msgid "Consent records are retained for %d months."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:45
+msgid "With IAB TCF enabled, euconsent-v2 stores the consent string and fazVendorConsent stores vendor choices."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:46
+msgid "The fazVendorLI cookie stores your objections to legitimate-interest processing."
+msgstr "Il cookie fazVendorLI memorizza le tue opposizioni al trattamento basato sul legittimo interesse."
+
+#: includes/class-privacy-policy-text.php:49
+msgid "IP-based geolocation selects the applicable cookie rules and banner, using available server or trusted proxy country information."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:51
+msgid "Geolocation can also use the MaxMind database stored locally on this server, without sending the visitor IP to MaxMind."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:54
+msgid "The enabled ipinfo.io VPN/proxy lookup sends the visitor IP address in cleartext to ipinfo.io and caches the classification under a hashed IP key."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:58
+msgid "Pageview measurement stores aggregate counters by page URL, page title and event type, without a visitor identifier."
+msgstr ""
+
+#. translators: %d: retention in months.
+#: includes/class-privacy-policy-text.php:62
+#, php-format
+msgid "Pageview counters are retained for %d months."
+msgstr ""
+
+#: includes/class-privacy-policy-text.php:63
+msgid "Pageview counters have no automatic retention limit."
+msgstr ""
+
+#. translators: %d: retention in months.
+#: includes/class-privacy-policy-text.php:66
+#, php-format
+msgid "If you submit a privacy request through the site form, we store your name, email, request type, message, status and any consent ID you supply in a private request record for %d months; erasure removes identifying details unless applicable retention requirements require otherwise."
+msgstr ""
+
+#: includes/class-utils.php:1352
+msgid "Category and service decisions"
+msgstr ""
+
+#: includes/class-utils.php:1354
+msgid "Banner"
+msgstr ""
+
+#: includes/class-utils.php:1355
+msgid "Policy revision"
+msgstr ""
+
+#: includes/class-utils.php:1357
+msgid "Salted IP hash"
+msgstr ""
+
+#: includes/class-utils.php:1358
+msgid "Salted user-agent hash"
+msgstr ""
+
+#: includes/class-utils.php:1359
+msgid "TCF string"
+msgstr ""
+
+#: includes/class-utils.php:1360
+msgid "GPP string from external CMP"
+msgstr ""
+
+#: includes/class-utils.php:1361
+msgid "Country at consent"
+msgstr ""
+
+#: includes/class-utils.php:1362
+msgid "Region at consent"
+msgstr ""
+
+#: includes/class-utils.php:1363
+msgid "Ruleset at consent"
+msgstr ""
+
+#: includes/class-utils.php:1364
+msgid "GPC signal"
+msgstr ""
+
+#: includes/class-utils.php:1365
+msgid "Do Not Track signal"
+msgstr ""
+
+#: includes/class-utils.php:1372
+msgid "Consent history (FAZ Cookie Manager)"
+msgstr ""
+
+#: includes/class-utils.php:1461
+msgid "Consent history is located using consent IDs supplied with privacy requests. Other records expire under the configured retention policy. You can change or withdraw your cookie choices through the cookie preferences."
+msgstr ""
+
+#: includes/class-utils.php:1509
+msgid "Consent history was not erased because ownership of the supplied consent ID has not been independently verified."
+msgstr ""
+
+#: includes/class-utils.php:1514
+msgid "Consent records were retained under the site retention policy."
+msgstr ""
+
+#: includes/class-utils.php:1520
+msgid "Consent history could not be erased. Please retry this request."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:451
+msgid "Date the consent was logged."
+msgstr "Data in cui il consenso è stato registrato."
+
+#: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:76
+msgctxt "Cookie policy template: gdpr-strict / section-6"
+msgid ""
+"## How long we keep data\n"
+"\n"
+"Consent records and analytics data are retained for {{RETENTION_PERIOD}} from collection. Strictly necessary cookies are retained only for the duration of the session or as required for the technical function they serve. See the table above for the specific lifetime of each cookie."
+msgstr ""
+"## Periodo di conservazione\n"
+"\n"
+"I registri di consenso e i dati analitici sono conservati per {{RETENTION_PERIOD}} dalla raccolta. I cookie strettamente necessari sono conservati per la durata della sessione o per il tempo necessario alla loro funzione tecnica. Consulta la tabella per la durata specifica di ogni cookie."
+
+#: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:280
+msgctxt "Cookie policy template: lgpd-brazil / section-3"
+msgid ""
+"## Categories of personal data processed (Art. 5, I)\n"
+"\n"
+"- **Online identifiers** — IP (hashed with monthly salt), device IDs, session IDs\n"
+"- **Browsing data** — pages visited, dwell time, interactions\n"
+"- **Approximate location** — country/region from IP (not precise GPS)\n"
+"- **Preferences** — consent categories, language\n"
+"\n"
+"We do **not** process sensitive personal data (Art. 5, II) via cookies without specific and highlighted consent (Art. 11 LGPD)."
+msgstr ""
+"## Categorie di dati personali trattati (Art. 5, I)\n"
+"\n"
+"- **Identificativi online** — IP (con hash e salt mensile), ID del dispositivo, ID di sessione\n"
+"- **Dati di navigazione** — pagine visitate, tempo di permanenza, interazioni\n"
+"- **Posizione approssimativa** — Paese/regione dall'IP (non GPS preciso)\n"
+"- **Preferenze** — categorie di consenso, lingua\n"
+"\n"
+"**Non** trattiamo dati personali sensibili (Art. 5, II) tramite cookie senza consenso specifico ed evidenziato (Art. 11 LGPD)."
+
+#: admin/modules/cookies/api/class-categories-api.php:282
+msgid "Whether prior consent is required."
+msgstr "Se è richiesto il consenso preventivo."
+
+#: admin/views/setup.php:464
+msgid "Create and publish the cookie policy when setup finishes"
+msgstr "Crea e pubblica la Cookie Policy al termine della configurazione"
+
+#: admin/views/setup.php:465
+msgid "The page is published immediately, visible to visitors, from the standard template in the selected language. Fill in your company details on the Cookie Policy page, otherwise the published policy will be incomplete. An existing generated page in that language is reused and custom banner links are kept."
+msgstr "La pagina viene pubblicata subito, visibile ai visitatori, a partire dal modello standard nella lingua selezionata. Inserisci i dati della tua azienda nella pagina Informativa cookie, altrimenti l'informativa pubblicata sarà incompleta. Una pagina già generata in quella lingua viene riutilizzata e i link personalizzati del banner vengono mantenuti."
+
+#: includes/class-dsar-shortcode.php:781
+msgid "Too many requests. Please wait 1 hour before submitting again."
+msgstr "Troppe richieste. Attendi 1 ora prima di inviare di nuovo."
+
+#: includes/class-dsar-shortcode.php:1338
+msgid "This form has expired. Please reload the page and submit it again."
+msgstr "Questo modulo è scaduto. Ricarica la pagina e invialo di nuovo."
 
 #~ msgid "This site uses the FAZ Cookie Manager plugin to collect and manage cookie consent. When you interact with the cookie banner, we record your consent choice (accepted, rejected, or partial), a hashed version of your IP address, your browser user agent, and the page URL where consent was given. This data is stored locally on our server and retained for the period configured in the plugin settings (default: 12 months)."
 #~ msgstr "Questo sito utilizza il plugin FAZ Cookie Manager per raccogliere e gestire il consenso ai cookie. Quando interagisci con il banner dei cookie, registriamo la tua scelta di consenso (accettato, rifiutato o parziale), una versione con hash del tuo indirizzo IP, il tuo user agent del browser e l'URL della pagina in cui è stato dato il consenso. Questi dati vengono archiviati localmente sul nostro server e conservati per il periodo configurato nelle impostazioni del plugin (impostazione predefinita: 12 mesi)."
-
-#~ msgid "Too many requests. Please wait 1 hour before submitting again."
-#~ msgstr "Troppe richieste. Attendi 1 ora prima di inviare di nuovo."
-
-#~ msgid "This form has expired. Please reload the page and submit it again."
-#~ msgstr "Questo modulo è scaduto. Ricarica la pagina e invialo di nuovo."
 
 #~ msgid "FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses; they auto-purge after the configured retention period."
 #~ msgstr "I registri dei consensi di FAZ Cookie Manager utilizzano hash IP anonimizzati e non possono essere collegati a indirizzi e-mail; vengono eliminati automaticamente dopo il periodo di conservazione configurato."

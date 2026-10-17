@@ -102,7 +102,7 @@ ref._diag = function () {
     var notice = null;
     try { notice = _fazGetBanner(); } catch (e) { /* not ready */ }
     var hasConsentCookie = false;
-    try { hasConsentCookie = /(?:^|;\s*)fazcookie-consent=/.test(document.cookie); } catch (e) { /* noop */ }
+    try { hasConsentCookie = document.cookie.split(';').some(function(part){return part.trim().indexOf(_fazCookieName('fazcookie-consent') + '=') === 0;}); } catch (e) { /* noop */ }
     var store = (typeof _fazStore === 'object' && _fazStore) ? _fazStore : {};
     return {
         build: _FAZ_BUILD,
@@ -121,15 +121,25 @@ ref._diag = function () {
     };
 };
 
+function _fazCookieName(name) {
+    return (_fazStore._cookieNames || {})[name] || name;
+}
+function _fazIsConsentCookieName(name) {
+    return /^(?:fazcookie-consent|fazVendorConsent|fazVendorLI|euconsent-v2|fazcookie-dnsmpi|fazVendorSource)(?:-n[0-9]+-b[0-9]+)?$/.test(name);
+}
+
 ref._fazGetCookieMap = function () {
     const cookieMap = {};
     try {
         document.cookie.split(";").forEach((cookie) => {
-            const [key, value] = cookie.split("=");
-            if (!key) return;
-            cookieMap[key.trim()] = value;
+            const sep = cookie.indexOf("=");
+            if (sep < 1) return;
+            cookieMap[cookie.slice(0, sep).trim()] = cookie.slice(sep + 1);
         });
     } catch (_unused) { /* malformed cookie string */ }
+    Object.keys(_fazStore._cookieNames || {}).forEach(function(base) {
+        cookieMap[base] = cookieMap[_fazCookieName(base)] || "";
+    });
     return cookieMap;
 };
 
@@ -155,6 +165,7 @@ ref._fazSetInStore = function (key, value) {
  * @returns {void}
  */
 ref._fazPersistConsentCookie = function () {
+    _fazUpdateConsentId();
     // Build a service-id → category-slug map so we can skip redundant
     // `svc.<id>:<category-value>` entries below. On installs with many
     // registered services (the default shipped catalog has ~160), the
@@ -538,7 +549,7 @@ function _fazCurrentScopeFingerprint() {
     return (_fazStore && typeof _fazStore._scopeFingerprint === 'string') ? _fazStore._scopeFingerprint : "";
 }
 function _fazConsentScopeChanged() {
-    if (!_fazHasConsentCookie || !_fazStore || !_fazStore._geoRouting) return false;
+    if (!_fazHasConsentCookie || !_fazStore || !(_fazStore._geoRouting || _fazStore._siteScopeBound)) return false;
     // The PMP membership alternative is a server-refreshed, necessary-only
     // privacy state, not consent. It is safe across every banner/law scope and
     // deliberately carries no user identifier or scope fingerprint. Requiring
@@ -549,7 +560,8 @@ function _fazConsentScopeChanged() {
     if (
         fazcookieConsentMap.source === "pmp" &&
         fazcookieConsentMap.action === "auto" &&
-        fazcookieConsentMap.consent === "no"
+        fazcookieConsentMap.consent === "no" &&
+        !Object.keys(fazcookieConsentMap).some(function(key){return key !== "necessary" && /^yes(?::|$)/.test(fazcookieConsentMap[key]);})
     ) return false;
     const currentBannerSlug = _fazCurrentBannerSlug();
     const currentLaw = _fazCurrentLaw();
@@ -567,7 +579,7 @@ function _fazConsentScopeChanged() {
     // "no integrity signal" → invalidate so the visitor is re-prompted
     // with a freshly-signed cookie. Pre-1.14.0 visitors get re-prompted
     // ONE TIME after enabling strict mode, then never again.
-    if (_fazStrictScopeFp() && !storedFp) return true;
+    if ((_fazStrictScopeFp() || _fazStore._siteScopeBound) && !storedFp) return true;
     // Pre-1.14.0 cookies have no scope keys — treat that as
     // "upgrade case, no scope info known" and let the existing consent
     // stand. Without this guard, every returning visitor on an install
@@ -719,7 +731,7 @@ if (!_fazConsentInvalidated && _fazStore._perServiceConsent && _fazStore._servic
  * @returns {string}
  */
 ref._fazGetCookie = function (name) {
-    const prefix = name + '=';
+    const prefix = _fazCookieName(name) + '=';
     const cookies = document.cookie.split('; ');
     for (var i = 0; i < cookies.length; i++) {
         if (cookies[i].indexOf(prefix) === 0) {
@@ -747,7 +759,7 @@ ref._fazSetCookie = function (name, value, days = 0, domain = _fazStore._rootDom
         days === 0 ? 0 : date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
     const secure = location.protocol === 'https:' ? ' Secure;' : '';
     const cookieValue = name === "fazcookie-consent" ? encodeURIComponent(value) : value;
-    const cookieStr = `${name}=${cookieValue}; expires=${new Date(
+    const cookieStr = `${_fazCookieName(name)}=${cookieValue}; expires=${new Date(
         toSetTime
     ).toUTCString()}; path=/;${domain}; SameSite=Lax;${secure}`;
     // Issue #112: warn when the encoded consent cookie grows past 3.5 KB
@@ -1194,7 +1206,7 @@ function _fazGpcActive() {
  */
 function _fazDnsmpiCookieActive() {
     return document.cookie.split(";").some(function (part) {
-        return part.trim().indexOf("fazcookie-dnsmpi=1") === 0;
+        return part.trim() === _fazCookieName("fazcookie-dnsmpi") + "=1";
     });
 }
 
@@ -1645,6 +1657,7 @@ function _fazApplyBannerPayload(payload) {
     if (Array.isArray(payload.tags)) {
         _fazStore._tags = payload.tags;
     }
+    if (typeof payload.siteScopeBound === "boolean") _fazStore._siteScopeBound = payload.siteScopeBound;
     if (payload.scopeFingerprint) {
         _fazStore._scopeFingerprint = String(payload.scopeFingerprint);
     }
@@ -2907,7 +2920,7 @@ function _fazRemoveDeadCookies(category) {
         // This server-provided protection also outranks granular denials.
         if (neverDelete === true) continue;
         // Never delete the plugin's own consent-mechanism cookies.
-        if (cookieID === "fazcookie-consent" || cookieID === "fazVendorConsent" || cookieID === "fazVendorLI" || cookieID === "euconsent-v2") continue;
+        if (_fazIsConsentCookieName(cookieID)) continue;
         var serviceDecision = _fazGetServiceCookieDecision(cookieID);
         // An explicit per-service/per-cookie decision outranks a general
         // whitelist: yes preserves the cookie, no must still delete it. The
@@ -4605,6 +4618,7 @@ function _fazGateResourceSetAttribute(proto, opts) {
             var markupCat = _fazMarkupBlockedCategory(el, value);
             if (markupCat) {
                 native.call(el, opts.markupParkAttr, String(value));
+                native.call(el, "data-faz-srcdoc-key", _fazStore._srcdocKey || "");
                 native.call(el, "data-faz-category", markupCat);
                 // A parked srcdoc frame is an empty frame in the layout
                 // exactly like a parked-src one; hide it the same way.
@@ -4734,6 +4748,7 @@ function _fazGateSrcdocSetter(proto) {
                 var cat = _fazMarkupBlockedCategory(this, val);
                 if (cat) {
                     this.setAttribute("data-faz-srcdoc", String(val));
+                    this.setAttribute("data-faz-srcdoc-key", _fazStore._srcdocKey || "");
                     this.setAttribute("data-faz-category", cat);
                     if (this.classList) this.classList.add("faz-hidden");
                     return; // park the document; the engine never parses it
@@ -4847,7 +4862,7 @@ function _fazParkResourceElementIfBlocked(el) {
             || tag === "video" || tag === "audio" || tag === "embed" || tag === "track" || inputImage) {
             var src = el.getAttribute("src");
             var parkedFrameSrc = false;
-            if (src && !el.getAttribute("data-faz-src") && _fazImgShouldBlock(el, src)) {
+            if (src && _fazImgShouldBlock(el, src)) {
                 el.setAttribute("data-faz-src", src);
                 el.setAttribute("data-faz-category", _fazImgCategory(src));
                 el.removeAttribute("src");
@@ -4863,12 +4878,13 @@ function _fazParkResourceElementIfBlocked(el) {
                 el.removeAttribute("poster");
             }
             var doc = el.getAttribute("srcdoc");
-            if (doc && !el.getAttribute("data-faz-srcdoc")) {
+            if (doc) {
                 // srcdoc is a document, not a URL: judged whole, because what
                 // it names is fetched by a parser this side cannot intercept.
                 var docCat = _fazMarkupBlockedCategory(el, doc);
                 if (docCat) {
                     el.setAttribute("data-faz-srcdoc", doc);
+                    el.setAttribute("data-faz-srcdoc-key", _fazStore._srcdocKey || "");
                     el.setAttribute("data-faz-category", docCat);
                     el.removeAttribute("srcdoc");
                     if (el.classList) el.classList.add("faz-hidden");
@@ -6883,11 +6899,14 @@ function _fazUnblockServerSide() {
     document.querySelectorAll('iframe[data-faz-srcdoc][data-faz-category]')
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
+            if (!_fazStore._srcdocKey || el.getAttribute("data-faz-srcdoc-key") !== _fazStore._srcdocKey) return;
             var doc = el.getAttribute("data-faz-srcdoc");
             if (_fazShouldBlockResource(cat, doc, el.getAttribute("data-faz-service") || "")) return;
             el.setAttribute("srcdoc", doc);
             if (!el.getAttribute("srcdoc")) return; // the gate re-parked it
             el.removeAttribute("data-faz-srcdoc");
+            el.removeAttribute("data-faz-srcdoc-key");
+            el.removeAttribute("data-faz-srcdoc-sig");
             el.classList.remove("faz-hidden");
         });
 
@@ -8258,6 +8277,7 @@ function _fazAfterConsent() {
  * to ensure deletion regardless of how the cookie was originally set.
  */
 function _fazDeleteCookie(name) {
+    name = _fazCookieName(name);
     var paths = ['/', window.location.pathname];
     var hostname = window.location.hostname;
     var rootDomain = _fazStore._rootDomain || '';
@@ -8317,7 +8337,7 @@ function _fazCleanupRevokedCookies() {
         if (!cookieName) continue;
 
         // Never delete the plugin's own cookies.
-        if (protectedCookies.indexOf(cookieName) !== -1) continue;
+        if (_fazIsConsentCookieName(cookieName) || protectedCookies.indexOf(cookieName) !== -1) continue;
 
         var serviceDecision = _fazGetServiceCookieDecision(cookieName);
         // A general whitelist only overrides category denial. Explicit
@@ -8673,7 +8693,34 @@ function _fazSetFocus(tagName) {
     element.focus();
 }
 
+function _fazUpdateConsentId() {
+    var anchor = document.querySelector('[data-faz-tag="detail-powered-by"]');
+    var detail = document.querySelector('[data-faz-tag="detail"]');
+    var body = detail && (detail.querySelector('.faz-preference-body-wrapper') || detail);
+    var parent = body || (anchor && anchor.parentNode);
+    var line = document.querySelector('[data-faz-tag="detail-consent-id"]');
+    if (!line && parent) {
+        line = document.createElement('label');
+        line.setAttribute('data-faz-tag', 'detail-consent-id');
+        var label = document.createElement('span');
+        label.textContent = (_fazStore._i18n || {}).consent_id || 'Consent ID';
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.readOnly = true;
+        input.addEventListener('click', function () { input.select(); });
+        line.appendChild(label);
+        line.appendChild(input);
+        if (body) body.appendChild(line);
+        else parent.insertBefore(line, anchor);
+    }
+    if (!line) return;
+    var id = ref._fazGetFromStore('consentid');
+    line.hidden = !id;
+    var field = line.querySelector('input');
+    if (field) field.value = id;
+}
 function _fazSetPoweredBy() {
+    _fazUpdateConsentId();
     // Layout handled via CSS: [data-faz-tag="detail-powered-by"], [data-faz-tag="optout-powered-by"] { display: flex; justify-content: flex-end; align-items: center; }
 }
 function _fazWatchBannerElement() {
@@ -9828,8 +9875,7 @@ function _fazParseVendorRecord(raw) {
  * @return {{disclosed: Object<number, boolean>, consent: Object<number, boolean>}|null}
  */
 function _fazReadVendorRecord() {
-    const match = document.cookie.match(/(?:^|;\s*)fazVendorConsent=([^;]*)/);
-    return match ? _fazParseVendorRecord(match[1]) : null;
+    return _fazParseVendorRecord((ref._fazGetCookieMap()[_fazCookieName("fazVendorConsent")] || ""));
 }
 
 /**
@@ -9898,10 +9944,10 @@ function _fazVendorRecordStale(action, undecided) {
  * @return {{purposes: Object<number, boolean>, vendors: Object<number, boolean>}|null}
  */
 function _fazReadVendorLI() {
-    const match = document.cookie.match(/(?:^|;\s*)fazVendorLI=([^;]+)/);
-    if (!match) return null;
+    const value = (ref._fazGetCookieMap()[_fazCookieName("fazVendorLI")] || "");
+    if (!value) return null;
     const result = { purposes: {}, vendors: {} };
-    match[1].split(',').forEach(function(pair) {
+    value.split(',').forEach(function(pair) {
         const kv = pair.split(':');
         if (kv.length !== 2) return;
         const key = kv[0].trim();
@@ -10094,7 +10140,7 @@ function _fazSaveVendorConsent(choice) {
             console.warn('fazVendorLI record too large (' + liPayload.length + ' bytes), keeping purpose-level objections only.');
             liPayload = liPurposeParts.join(',');
         }
-        document.cookie = 'fazVendorLI=' + liPayload + ';expires=' + date.toUTCString() + ';path=/' + domain + ';SameSite=Lax' + secure;
+        document.cookie = _fazCookieName('fazVendorLI') + '=' + liPayload + ';expires=' + date.toUTCString() + ';path=/' + domain + ';SameSite=Lax' + secure;
     }
 
     const payload = 'd:' + _fazEncodeVendorBits(disclosedIds) + ',c:' +
@@ -10107,7 +10153,7 @@ function _fazSaveVendorConsent(choice) {
         _fazDeleteCookie('fazVendorConsent');
         return;
     }
-    document.cookie = 'fazVendorConsent=' + payload + ';expires=' + date.toUTCString() + ';path=/' + domain + ';SameSite=Lax' + secure;
+    document.cookie = _fazCookieName('fazVendorConsent') + '=' + payload + ';expires=' + date.toUTCString() + ';path=/' + domain + ';SameSite=Lax' + secure;
 }
 
 /**

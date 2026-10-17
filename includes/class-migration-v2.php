@@ -96,7 +96,7 @@ class Migration_V2 {
 	 * - signal_gpc_received    : 0/1 flag
 	 * - signal_dnt_received    : 0/1 flag
 	 * - tc_string              : IAB TC String (large)
-	 * - gpp_string             : IAB GPP container string (large)
+	 * - gpp_string             : GPP string captured from an external CMP (FAZ does not generate it)
 	 *
 	 * @return array<string,string>
 	 */
@@ -112,6 +112,7 @@ class Migration_V2 {
 			// docs). NULL is still implicitly allowed because the column is
 			// declared NULL; we just don't write DEFAULT NULL.
 			'tc_string'             => "TEXT NULL",
+			// Passive capture from an external GPP CMP; FAZ does not produce GPP strings.
 			'gpp_string'            => "TEXT NULL",
 		);
 	}

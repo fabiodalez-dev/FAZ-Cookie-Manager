@@ -50,6 +50,7 @@ namespace {
     function sanitize_text_field( $value ) { return trim( strip_tags( $value ) ); }
     function wp_hash( $data, $scheme = 'auth' ) { return hash_hmac( 'md5', (string) $data, 'intent-salt-' . $scheme ); }
     // This is the validated-cookie input boundary, NOT the parser under test.
+    function faz_scope_fingerprint( $slug, $law ) { return substr( wp_hash( $slug . '|' . $law, 'auth' ), 0, 32 ); }
     function faz_get_valid_consent_cookie() { return $GLOBALS['intent_cookie']; }
     require dirname( __DIR__, 2 ) . '/frontend/includes/class-geo-runtime.php';
     // Shared cache-compat predicate + the verified-withdrawal-route predicate

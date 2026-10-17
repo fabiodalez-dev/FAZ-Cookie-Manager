@@ -2566,6 +2566,7 @@
         if (policy === safety) noteSafetyPark(el, key, value, false);
         var target = parkTarget(tagKey(el), key);
         setAttr(el, target.value, value);
+        if (key === 'srcdoc') setAttr(el, 'data-faz-srcdoc-key', (window._fazConfig || {})._srcdocKey || '');
         // A list restores by re-reading every candidate, so it carries no
         // category of its own; writing one there would collide with a src/href
         // park on the same element.

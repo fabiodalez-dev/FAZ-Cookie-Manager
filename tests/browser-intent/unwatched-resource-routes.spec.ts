@@ -53,7 +53,7 @@ for (const consent of ['refused', 'accept']) {
       }
       if (path === '/runtime.js') return route.fulfill({ contentType: 'text/javascript', body: runtime });
       const config = {
-        _block: '1', _staticConfigRequired: true, _aggressiveCssUrlBlocking: true, _activeLaw: 'gdpr',
+        _srcdocKey: 'browser-response-proof', _block: '1', _staticConfigRequired: true, _aggressiveCssUrlBlocking: true, _activeLaw: 'gdpr',
         _categories: [{ slug: 'necessary', isNecessary: true }, { slug: 'analytics', isNecessary: false }],
         _services: [], _userWhitelist: [], _perServiceConsent: false, _perCookieConsent: false, i18n: {},
       };
@@ -70,7 +70,7 @@ for (const consent of ['refused', 'accept']) {
              spellings park into one attribute, so there is one restore branch. -->
         <svg><image id="server-parked" data-faz-category="analytics" data-faz-href="https://tracker.example.test/server.svg" width="1" height="1"/></svg>
         <table id="server-bg" data-faz-category="analytics" data-faz-background="https://tracker.example.test/server-bg.png"><tr><td>bg</td></tr></table>
-        <iframe id="server-doc" data-faz-category="analytics" data-faz-srcdoc="&lt;img src=&quot;https://tracker.example.test/doc.png&quot;&gt;"></iframe>
+        <iframe id="server-doc" data-faz-srcdoc-key="browser-response-proof" data-faz-category="analytics" data-faz-srcdoc="&lt;img src=&quot;https://tracker.example.test/doc.png&quot;&gt;"></iframe>
         <svg id="holder"></svg>
         <script>
           var SVGNS='http://www.w3.org/2000/svg', XLINK='http://www.w3.org/1999/xlink';

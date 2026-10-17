@@ -237,9 +237,9 @@ $builtin = Cookie_Database::lookup( 'fazcookie-consent' );
 nd_eq( is_array( $builtin ) ? $builtin['description'] : null, $en_ck['fazcookie-consent']['description'], 'Cookie_Database built-in record matches the English catalogue entry' );
 
 // The suggested privacy-policy paragraph lists what the consent log stores.
-$cli = (string) file_get_contents( $root . '/includes/class-cli.php' );
-nd_eq( 1 === preg_match( "/esc_html__\\( 'This site uses the FAZ Cookie Manager plugin[^']*consent identifier/", $cli ), true, 'suggested privacy-policy text mentions the consent identifier' );
-nd_eq( 1 === preg_match( "/esc_html__\\( 'This site uses the FAZ Cookie Manager plugin[^']*hashed version of your browser user agent/", $cli ), true, 'suggested privacy-policy text says the user agent is hashed, as it is stored' );
+$privacy_text = (string) file_get_contents( $root . '/includes/class-privacy-policy-text.php' );
+nd_eq( false !== strpos( $privacy_text, 'persistent consent ID' ), true, 'suggested privacy-policy text mentions the consent identifier' );
+nd_eq( false !== strpos( $privacy_text, 'browser user agent' ) && false !== strpos( $privacy_text, 'salted SHA-256 hashes' ), true, 'suggested privacy-policy text says the user agent is hashed, as it is stored' );
 
 // ---------------------------------------------------------------------------
 // 2. Upgrade migration.

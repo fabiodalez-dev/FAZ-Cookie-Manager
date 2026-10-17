@@ -614,9 +614,9 @@ async function testPriorBlocking(browser) {
 		const parsed = parseConsentCookie(consent.value);
 		test('BL05 Granular consent respected (functional=yes)',
 			parsed.functional === 'yes', `functional=${parsed.functional}`);
-		const adDenied = parsed.advertisement !== 'yes';
-		test('BL05b Non-accepted categories denied (advertisement)',
-			adDenied, `advertisement=${parsed.advertisement || 'no'}`);
+		const adDenied = parsed.marketing !== 'yes';
+		test('BL05b Non-accepted categories denied (marketing)',
+			adDenied, `marketing=${parsed.marketing || 'no'}`);
 	} else {
 		test('BL05 Granular consent', false, 'no consent cookie found');
 	}
@@ -832,7 +832,7 @@ async function testRevocation(browser) {
 		const consentAfterRevoke = await getConsentCookie(ctx);
 		if (consentAfterRevoke) {
 			const parsed = parseConsentCookie(consentAfterRevoke.value);
-			const allDenied = ['analytics', 'advertisement', 'functional', 'performance']
+			const allDenied = ['analytics', 'marketing', 'functional', 'performance']
 				.every(cat => parsed[cat] !== 'yes');
 			test('R05 Revocation removes non-necessary consent', allDenied,
 				Object.entries(parsed).filter(([k]) => !['consentid', 'consent', 'action', 'necessary'].includes(k))
@@ -1481,7 +1481,7 @@ async function testFunctionalScenarios(browser) {
 		const consent = await getConsentCookie(ctx);
 		if (consent) {
 			const parsed = parseConsentCookie(consent.value);
-			const noneGranted = ['analytics', 'advertisement', 'functional', 'performance']
+			const noneGranted = ['analytics', 'marketing', 'functional', 'performance']
 				.every(k => parsed[k] !== 'yes');
 			test('TF03b Reject All: no non-necessary cookies granted', noneGranted);
 		}
@@ -1556,8 +1556,8 @@ async function testFunctionalScenarios(browser) {
 		if (consent) {
 			const parsed = parseConsentCookie(consent.value);
 			test('TF06 Granular: functional=yes', parsed.functional === 'yes');
-			test('TF06b Granular: advertisement=no', parsed.advertisement !== 'yes',
-				`advertisement=${parsed.advertisement || 'no'}`);
+			test('TF06b Granular: marketing=no', parsed.marketing !== 'yes',
+				`marketing=${parsed.marketing || 'no'}`);
 		} else {
 			test('TF06 Granular preferences', false, 'no consent cookie');
 		}
@@ -2385,7 +2385,7 @@ async function testTogglePersistence(browser) {
 		const p1 = c1 ? parseConsentCookie(decodeURIComponent(c1.value)) : {};
 		// Necessary should be "yes", all others "no"
 		const necessaryYes = p1['necessary'] === 'yes';
-		const othersNo = ['functional', 'analytics', 'performance', 'advertisement', 'uncategorized']
+		const othersNo = ['functional', 'analytics', 'performance', 'marketing', 'uncategorized']
 			.every(k => !p1[k] || p1[k] === 'no');
 		test('TP02 Reject All: necessary=yes, others=no', necessaryYes && othersNo,
 			`necessary=${p1['necessary']}, functional=${p1['functional']}`);
@@ -2396,7 +2396,7 @@ async function testTogglePersistence(browser) {
 		const c2 = cookies2.find(c => c.name === 'fazcookie-consent');
 		const p2 = c2 ? parseConsentCookie(decodeURIComponent(c2.value)) : {};
 		const rejectPersists = p2['necessary'] === 'yes' &&
-			['functional', 'analytics', 'performance', 'advertisement', 'uncategorized']
+			['functional', 'analytics', 'performance', 'marketing', 'uncategorized']
 				.every(k => !p2[k] || p2[k] === 'no');
 		test('TP02b Reject All persists after reload', rejectPersists);
 		await ctx.close();

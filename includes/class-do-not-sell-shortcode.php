@@ -339,7 +339,7 @@ class Do_Not_Sell_Shortcode {
 
 		// Idempotency: if the browser already carries the opt-out cookie, skip
 		// creating a duplicate log entry and re-sending the admin notification.
-		if ( isset( $_COOKIE[ self::COOKIE_NAME ] ) && '1' === $_COOKIE[ self::COOKIE_NAME ] ) {
+		if ( isset( $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] ) && '1' === $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] ) {
 			wp_send_json_success(
 				array( 'message' => __( 'You have already opted out. We will not sell or share your personal information.', 'faz-cookie-manager' ) )
 			);
@@ -396,7 +396,7 @@ class Do_Not_Sell_Shortcode {
 		}
 
 		// Idempotency: if the opt-out cookie is already absent, nothing to do.
-		$has_optout_cookie = isset( $_COOKIE[ self::COOKIE_NAME ] ) && '1' === $_COOKIE[ self::COOKIE_NAME ];
+		$has_optout_cookie = isset( $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] ) && '1' === $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ];
 
 		// Rate limiting: atomic DB-backed lock plus 60-second transient window.
 		$rl_key   = 'faz_dnsmpi_rsc_rl_'   . substr( $this->hash_ip(), 0, 16 );
@@ -485,7 +485,7 @@ class Do_Not_Sell_Shortcode {
 		// could not see the opt-out, so _fazUnblockServerSide() restored the
 		// very scripts the server had blocked for it (the stored consent still
 		// said "yes"), undoing the opt-out one tick after page load.
-		setcookie( self::COOKIE_NAME, '1', array(
+		setcookie( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME, '1', array(
 			'expires'  => $expires,
 			'path'     => '/',
 			'domain'   => '',
@@ -503,7 +503,7 @@ class Do_Not_Sell_Shortcode {
 	 * subsequent calls within the same PHP process see the cleared state.
 	 */
 	private function clear_optout_cookie() {
-		setcookie( self::COOKIE_NAME, '', array(
+		setcookie( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME, '', array(
 			'expires'  => time() - 3600,
 			'path'     => '/',
 			'domain'   => '',
@@ -511,8 +511,8 @@ class Do_Not_Sell_Shortcode {
 			'httponly' => true,
 			'samesite' => 'Lax',
 		) );
-		if ( isset( $_COOKIE[ self::COOKIE_NAME ] ) ) {
-			unset( $_COOKIE[ self::COOKIE_NAME ] );
+		if ( isset( $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] ) ) {
+			unset( $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] );
 		}
 	}
 

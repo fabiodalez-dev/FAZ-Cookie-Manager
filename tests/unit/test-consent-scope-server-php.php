@@ -75,6 +75,9 @@ namespace {
 		}
 		return $default;
 	}
+	function is_multisite() { return ! empty( $GLOBALS['scope_test_multisite'] ); }
+	function get_current_network_id() { return 1; }
+	function get_current_blog_id() { return 1; }
 	function is_ssl() { return false; }
 	function wp_unslash( $value ) { return $value; }
 	function set_url_scheme( $url, $scheme = null ) { return $url; }
@@ -244,6 +247,22 @@ namespace {
 	$verdict  = $decisions->invoke( $frontend );
 	scope_same( isset( $verdict['VISITOR_INFO1_LIVE'] ) ? $verdict['VISITOR_INFO1_LIVE'] : array(), array( 'yes' ), 'the same grant recorded under this banner is honoured' );
 	$GLOBALS['scope_test_per_cookie'] = false;
+
+	// Multisite naming and the geo scope comparator must agree: a valid
+	// site-bound cookie is not spuriously discarded by the server's geo check.
+	$GLOBALS['scope_test_multisite'] = true;
+	$own = $grants . ',__scope.banner:eu-1,__scope.law:gdpr,__scope.fp:' . faz_scope_fingerprint( 'eu-1', 'gdpr' );
+	$_COOKIE = array( faz_consent_cookie_name() => $own );
+	scope_same( $blocked->invoke( fresh_frontend( $class, 'eu-1', 'gdpr' ) ), array(), 'geo-routed multisite honours a valid cookie with its network/blog fingerprint' );
+	$dnsmpi = $class->getMethod( 'request_has_dnsmpi' );
+	$dnsmpi->setAccessible( true );
+	$_COOKIE = array( faz_consent_cookie_name( 'fazcookie-dnsmpi' ) => '1' );
+	scope_same( $dnsmpi->invoke( fresh_frontend( $class, 'eu-1', 'gdpr' ) ), true, 'the server honours this site’s namespaced Do Not Sell request' );
+	$_COOKIE = array( 'fazcookie-dnsmpi-n1-b2' => '1' );
+	scope_same( $dnsmpi->invoke( fresh_frontend( $class, 'eu-1', 'gdpr' ) ), false, 'another site’s Do Not Sell state is not imported' );
+	$GLOBALS['scope_test_multisite'] = false;
+	$forged_pmp = 'source:pmp,action:auto,consent:no,necessary:yes,marketing:yes,__scope.law:ccpa';
+	scope_same( faz_get_valid_consent_cookie( $forged_pmp, $gdpr ), '', 'a PMP marker with optional grants cannot bypass a law mismatch' );
 
 	echo "consent-scope-server: {$passed} passed, {$failed} failed\n";
 	exit( $failed ? 1 : 0 );

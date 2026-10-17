@@ -1,0 +1,448 @@
+{
+  "report": "FAZ-1.34.1-compliance-review.md",
+  "report_sha256": "b33a04287623e8e0fa4231ed2607bdd4f874ef96f66d2e3832e774a3bb3a6f9f",
+  "date": "2026-10-18",
+  "branch": "fix/1342-compliance-review",
+  "integrates": [
+    "PR #334",
+    "PR #333"
+  ],
+  "count_note": "52 numbered confirmed findings (C1, H1-H12, M1-M21, L1-L18), plus 4 gaps. The introductory totals in the source report do not match its numbered entries.",
+  "checks": [
+    {
+      "id": "C1",
+      "check": "AMP opt-in senza banner GDPR",
+      "evidence": [
+        "tests/unit/test-amp-consent-bridge-php.php"
+      ]
+    },
+    {
+      "id": "H1",
+      "check": "Validità del consenso per legge e banner prima dei tracker",
+      "evidence": [
+        "tests/unit/test-consent-scope-server-php.php",
+        "tests/unit/js/gcm-scope-invalidation.test.mjs"
+      ]
+    },
+    {
+      "id": "H2",
+      "check": "Media, object, embed, track, input e poster",
+      "evidence": [
+        "tests/unit/test-server-media-resource-pass-php.php",
+        "tests/unit/js/media-embed-object-gate.test.mjs"
+      ]
+    },
+    {
+      "id": "H3",
+      "check": "CSS compatto, escape e URL aperti lato server",
+      "evidence": [
+        "tests/unit/test-inline-style-blocking-php.php"
+      ]
+    },
+    {
+      "id": "H4",
+      "check": "Attributi style server e ripristino",
+      "evidence": [
+        "tests/unit/test-inline-style-attribute-pass-php.php",
+        "tests/unit/js/server-park-restore-parity.test.mjs"
+      ]
+    },
+    {
+      "id": "H5",
+      "check": "Replay della coda arguments dello stub TCF",
+      "evidence": [
+        "tests/unit/js/tcf-stub-queue-replay.test.mjs"
+      ]
+    },
+    {
+      "id": "H6",
+      "check": "TC string della stessa decisione nel log",
+      "evidence": [
+        "tests/unit/js/consent-log-tc-string.test.mjs",
+        "tests/unit/js/consent-log-combined-signals.test.mjs"
+      ]
+    },
+    {
+      "id": "H7",
+      "check": "Right to Object per purpose e vendor, incluso Reject All",
+      "evidence": [
+        "tests/unit/js/tcf-right-to-object.test.mjs",
+        "tests/unit/js/iab-right-to-object-ui.test.mjs"
+      ]
+    },
+    {
+      "id": "H8",
+      "check": "Consenso vendor esplicito, record compatto e nuova disclosure",
+      "evidence": [
+        "tests/unit/js/tcf-vendor-consent-explicit-only.test.mjs",
+        "tests/unit/js/tcf-vendor-record-compact.test.mjs",
+        "tests/unit/test-vendor-record-stale-php.php"
+      ]
+    },
+    {
+      "id": "H9",
+      "check": "Default GCM Advanced immune alle regole custom",
+      "evidence": [
+        "tests/unit/test-gcm-default-blocker-php.php"
+      ]
+    },
+    {
+      "id": "H10",
+      "check": "Il filtro paese conta come sorgente per il veto cache",
+      "evidence": [
+        "tests/unit/test-geolocation-source-status-php.php",
+        "tests/unit/test-geo-cache-bootstrap-php.php"
+      ]
+    },
+    {
+      "id": "H11",
+      "check": "Revoca dello stesso visitatore entro la finestra IP",
+      "evidence": [
+        "tests/unit/test-consent-log-ip-window-php.php"
+      ]
+    },
+    {
+      "id": "H12",
+      "check": "DSAR sotto cache: veto, refresh del nonce e contatto alternativo",
+      "evidence": [
+        "tests/unit/test-dsar-cache-veto-php.php",
+        "tests/unit/js/dsar-cache-refresh.test.mjs"
+      ]
+    },
+    {
+      "id": "M1",
+      "check": "GPC non prolunga la scadenza a ogni visita",
+      "evidence": [
+        "tests/unit/js/gpc-priority.test.mjs"
+      ]
+    },
+    {
+      "id": "M2",
+      "check": "Polarità prior_consent e limite del blocco server documentati",
+      "evidence": [
+        "tests/unit/test-prior-consent-description-php.php"
+      ]
+    },
+    {
+      "id": "M3",
+      "check": "Oggetti URL nei gate di rete",
+      "evidence": [
+        "tests/unit/js/network-gate-url-object.test.mjs",
+        "tests/unit/js/network-gate-judged-target.test.mjs"
+      ]
+    },
+    {
+      "id": "M4",
+      "check": "Whitelist runtime ancorata a host e path",
+      "evidence": [
+        "tests/unit/js/whitelist-matcher-parity.test.mjs"
+      ]
+    },
+    {
+      "id": "M5",
+      "check": "Backslash negli URL srcdoc del bootstrap",
+      "evidence": [
+        "tests/unit/js/bootstrap-srcdoc-spellings.test.mjs"
+      ]
+    },
+    {
+      "id": "M6",
+      "check": "Stylesheet nei noscript",
+      "evidence": [
+        "tests/unit/test-output-buffer-noscript-php.php"
+      ]
+    },
+    {
+      "id": "M7",
+      "check": "Regole custom conservate sotto esenzione gateway",
+      "evidence": [
+        "tests/unit/test-client-provider-explicit-rules-php.php"
+      ]
+    },
+    {
+      "id": "M8",
+      "check": "Created e LastUpdated uguali a precisione giorno",
+      "evidence": [
+        "tests/unit/js/tcf-timestamps-day-level.test.mjs"
+      ]
+    },
+    {
+      "id": "M9",
+      "check": "Download GVL al cambio e CMP sospeso senza dati",
+      "evidence": [
+        "tests/unit/test-gvl-bootstrap-on-enable-php.php",
+        "tests/unit/test-tcf-gvl-missing-notice-php.php"
+      ]
+    },
+    {
+      "id": "M10",
+      "check": "Vendor eliminati esclusi da lista e segnali",
+      "evidence": [
+        "tests/unit/test-gvl-deleted-vendors-php.php",
+        "tests/unit/js/tcf-vendor-consent-explicit-only.test.mjs"
+      ]
+    },
+    {
+      "id": "M11",
+      "check": "Verdetto server nella WP Consent API, anche dopo REST",
+      "evidence": [
+        "tests/unit/test-wp-consent-type-store-php.php",
+        "tests/unit/js/wca-consent-type-server-verdict.test.mjs",
+        "tests/unit/js/wp-consent-type-rest-payload.test.mjs"
+      ]
+    },
+    {
+      "id": "M12",
+      "check": "Log della giurisdizione effettivamente applicata",
+      "evidence": [
+        "tests/unit/test-consentlog-geo-audit-php.php"
+      ]
+    },
+    {
+      "id": "M13",
+      "check": "Sentinella Cloudflare T1 al fallback",
+      "evidence": [
+        "tests/unit/test-geo-tor-sentinel-php.php"
+      ]
+    },
+    {
+      "id": "M14",
+      "check": "Chiavi IP salate condivise per geolocalizzazione",
+      "evidence": [
+        "tests/unit/test-geo-ip-cache-key-php.php"
+      ]
+    },
+    {
+      "id": "M15",
+      "check": "gdprApplies dal ruleset TCF, inclusa CH",
+      "evidence": [
+        "tests/unit/test-tcf-config-geo-php.php"
+      ]
+    },
+    {
+      "id": "M16",
+      "check": "Colonne di audit in CSV, REST e dettaglio admin",
+      "evidence": [
+        "tests/unit/test-consentlog-audit-surface-php.php",
+        "tests/unit/js/consent-logs-context-column.test.mjs"
+      ]
+    },
+    {
+      "id": "M17",
+      "check": "Identità e contatto del titolare richiesti alla pubblicazione",
+      "evidence": [
+        "tests/unit/test-cookie-policy-generator.php",
+        "tests/unit/test-cookie-policy-golden-render.php"
+      ]
+    },
+    {
+      "id": "M18",
+      "check": "Do Not Sell indipendente dal visitatore e recupero nonce",
+      "evidence": [
+        "tests/unit/test-dnsmpi-cache-invariance-php.php",
+        "tests/unit/js/dnsmpi-form-cache-state.test.mjs"
+      ]
+    },
+    {
+      "id": "M19",
+      "check": "Trasferimenti sotto il regime della policy",
+      "evidence": [
+        "tests/unit/test-third-country-transfer-php.php"
+      ]
+    },
+    {
+      "id": "M20",
+      "check": "Trasferimenti nello shortcode tabella legacy",
+      "evidence": [
+        "tests/unit/test-cookie-table-shortcode-transfer-php.php"
+      ]
+    },
+    {
+      "id": "M21",
+      "check": "Tabelle lingua complete, incluse nl e hr",
+      "evidence": [
+        "tests/unit/test-cookie-policy-language-tables-php.php",
+        "tests/unit/test-cookie-policy-shipped-catalogue-complete-php.php"
+      ]
+    },
+    {
+      "id": "L1",
+      "check": "Ripristino degli URL data consentiti",
+      "evidence": [
+        "tests/unit/js/server-park-restore-parity.test.mjs"
+      ]
+    },
+    {
+      "id": "L2",
+      "check": "Facciata srcdoc visibile con src remoto parcheggiato",
+      "evidence": [
+        "tests/unit/js/bootstrap-srcdoc-spellings.test.mjs",
+        "tests/unit/test-buffer-markup-skip-php.php"
+      ]
+    },
+    {
+      "id": "L3",
+      "check": "Runtime tardivo dopo la safety release",
+      "evidence": [
+        "tests/unit/js/bootstrap-deferred-hold.test.mjs"
+      ]
+    },
+    {
+      "id": "L4",
+      "check": "Script rifiutato in una forma ripristinabile",
+      "evidence": [
+        "tests/unit/js/bootstrap-deferred-hold.test.mjs",
+        "tests/unit/js/server-park-restore-parity.test.mjs"
+      ]
+    },
+    {
+      "id": "L5",
+      "check": "Attributi di hardening nei template placeholder",
+      "evidence": [
+        "tests/unit/test-placeholder-template-attrs-php.php"
+      ]
+    },
+    {
+      "id": "L6",
+      "check": "publisherCC sconosciuto senza default IT",
+      "evidence": [
+        "tests/unit/test-tcf-config-geo-php.php",
+        "tests/unit/js/tcf-publisher-cc.test.mjs"
+      ]
+    },
+    {
+      "id": "L7",
+      "check": "Commenti coerenti con il fallback NPA",
+      "evidence": [
+        "tests/unit/test-gcm-npa-fallback-docs-php.php"
+      ]
+    },
+    {
+      "id": "L8",
+      "check": "Hash IP descritto come pseudonimizzato",
+      "evidence": [
+        "tests/unit/test-compliance-php.php"
+      ]
+    },
+    {
+      "id": "L9",
+      "check": "TF14, TF15 e C01b verificano il record del visitatore",
+      "evidence": [
+        "tests/unit/../compliance/compliance-tests.mjs"
+      ]
+    },
+    {
+      "id": "L10",
+      "check": "Data UTC RFC 3339, schema e purge coerenti",
+      "evidence": [
+        "tests/unit/test-consentlog-audit-surface-php.php"
+      ]
+    },
+    {
+      "id": "L11",
+      "check": "Route per ID DNSMPI con trattino",
+      "evidence": [
+        "tests/unit/test-consentlog-audit-surface-php.php"
+      ]
+    },
+    {
+      "id": "L12",
+      "check": "Fallback email per throttle DSAR",
+      "evidence": [
+        "tests/unit/test-dsar-cache-veto-php.php"
+      ]
+    },
+    {
+      "id": "L13",
+      "check": "Nessuna promessa di rotazione mensile del salt dei log",
+      "evidence": [
+        "tests/unit/test-lgpd-ip-hash-disclosure-php.php"
+      ]
+    },
+    {
+      "id": "L14",
+      "check": "Periodo dei consent record dalla retention dei log",
+      "evidence": [
+        "tests/unit/test-cookie-policy-golden-render.php"
+      ]
+    },
+    {
+      "id": "L15",
+      "check": "Etichette della tabella nella lingua della policy",
+      "evidence": [
+        "tests/unit/test-cookie-policy-locale-labels-php.php"
+      ]
+    },
+    {
+      "id": "L16",
+      "check": "Cookie necessari e identificatore descritti correttamente",
+      "evidence": [
+        "tests/unit/test-necessary-disclosure-php.php",
+        "tests/unit/test-privacy-policy-text-php.php"
+      ]
+    },
+    {
+      "id": "L17",
+      "check": "Stato CLI per-service e per-cookie dai settings",
+      "evidence": [
+        "tests/unit/test-settings-retention-ui-php.php"
+      ]
+    },
+    {
+      "id": "L18",
+      "check": "User meta rimossi su uninstall con rimozione dati",
+      "evidence": [
+        "tests/unit/test-uninstall-user-meta-php.php"
+      ]
+    },
+    {
+      "id": "G1",
+      "check": "ID consenso visibile e storia accessibile dopo verifica titolarità",
+      "evidence": [
+        "tests/unit/test-consent-id-privacy-tools-php.php",
+        "tests/unit/js/multisite-and-consent-id.test.mjs"
+      ]
+    },
+    {
+      "id": "G2",
+      "check": "Privacy policy suggerita dai settings effettivi",
+      "evidence": [
+        "tests/unit/test-privacy-policy-text-php.php"
+      ]
+    },
+    {
+      "id": "G3",
+      "check": "Nessuna promessa GPP nativa; cattura passiva da CMP esterno",
+      "evidence": [
+        "tests/unit/test-region-map-single-source-php.php",
+        "tests/unit/js/gpp-passive-capture.test.mjs"
+      ]
+    },
+    {
+      "id": "G4",
+      "check": "Isolamento multisito di cookie e fingerprint",
+      "evidence": [
+        "tests/unit/test-multisite-consent-scope-php.php",
+        "tests/unit/test-consent-scope-server-php.php",
+        "tests/unit/js/multisite-tcf-records.test.mjs"
+      ]
+    }
+  ],
+  "decisions": {
+    "M2": "The report permits documenting the server limit. prior_consent remains a client pre-grant; PHP blocking is deliberately stricter under an opt-in law. REST description and README state this limit.",
+    "L10": "Legacy created_at remains site time for compatibility; created_at_gmt supplies RFC 3339 UTC, the schema is accurate, and cleanup uses the same site clock as storage.",
+    "G3": "FAZ does not generate GPP. Unsupported ruleset/schema declarations were removed. External CMP strings are captured using ping, bounded by a timeout and a pagehide flush."
+  },
+  "integration_regressions": [
+    "Namespaced compact vendor and Right-to-Object records survive A → B → A.",
+    "The PHP geo comparator uses the multisite fingerprint and the namespaced DNSMPI signal.",
+    "PMP necessary-only exemption cannot authorize an optional grant from another scope.",
+    "Decision/ID snapshot, fresh TC string, passive GPP, unload flush and stale-token recovery coexist in the logger.",
+    "Forged parking attributes cannot exempt a live iframe src.",
+    "A JSON assignment to location is evaluated as code."
+  ],
+  "not_in_scope": [
+    "The 5 refuted findings in section 3 require no corrective change.",
+    "Headless content.rendered and translation-provider language resolution were explicitly unverified in the source report and are not included in the 56 entries."
+  ]
+}

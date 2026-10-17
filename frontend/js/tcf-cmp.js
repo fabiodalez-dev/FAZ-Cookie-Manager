@@ -30,6 +30,19 @@
 	/**
 	 * Push a value as `length` bits into the bits array (MSB first).
 	 */
+	function cookieName(name) {
+		return ((window._fazConfig || {})._cookieNames || {})[name] || name;
+	}
+	function readCookie(name) {
+		var prefix = cookieName(name) + '=';
+		var parts = document.cookie.split(';');
+		for (var i = 0; i < parts.length; i++) {
+			var part = parts[i].trim();
+			if (part.indexOf(prefix) === 0) return [part, part.substring(prefix.length)];
+		}
+		return null;
+	}
+
 	function pushBits(bits, value, length) {
 		if (length > 32) {
 			var highLen = length - 32;
@@ -116,7 +129,7 @@
 	}
 
 	function readTcTimestamps() {
-		var match = document.cookie.match(/euconsent-v2=([^;]+)/);
+		var match = readCookie("euconsent-v2");
 		if (!match) return null;
 		var coreSegment = match[1].split(".")[0];
 		if (!coreSegment) return null;
@@ -130,7 +143,7 @@
 	}
 
 	function readConsentCookiePairs() {
-		var match = document.cookie.match(/fazcookie-consent=([^;]+)/);
+		var match = readCookie("fazcookie-consent");
 		if (!match) return null;
 		var value = match[1];
 		try {
@@ -154,6 +167,11 @@
 	function isConsentCookieStale(pairs) {
 		if (!pairs) return false;
 		var config = window._fazConfig || {};
+		// A pending geo lookup cannot authorize the cached shell's consent.
+		if (config._siteScopeBound && !(pairs.source === 'pmp' && pairs.action === 'auto' && pairs.consent === 'no' && !Object.keys(pairs).some(function(key){return key !== 'necessary' && /^yes(?::|$)/.test(pairs[key]);}))) {
+			if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
+			if (!config._scopeFingerprint || pairs['__scope.fp'] !== config._scopeFingerprint) return true;
+		}
 		// Coerce because wp_localize_script may stringify integers.
 		var serverRevisionRaw = config && config._consentRevision;
 		var serverRevision = parseInt(serverRevisionRaw, 10);
@@ -222,7 +240,7 @@
 		if (!consentPairs || isConsentCookieStale(consentPairs)) return {};
 
 		var vendorConsent = {};
-		var match = document.cookie.match(/(?:^|;\s*)fazVendorConsent=([^;]*)/);
+		var match = readCookie("fazVendorConsent");
 		if (!match) return vendorConsent;
 
 		var compactDisclosed = null;
@@ -326,7 +344,7 @@
 		var consentPairs = readConsentCookiePairs();
 		if (!consentPairs || isConsentCookieStale(consentPairs)) return null;
 
-		var match = document.cookie.match(/(?:^|;\s*)fazVendorLI=([^;]+)/);
+		var match = readCookie("fazVendorLI");
 		if (!match) return null;
 
 		var record = { purposes: {}, vendors: {} };
@@ -628,12 +646,12 @@
 			domain = ";domain=" + window._fazConfig._rootDomain;
 		}
 		var secure = location.protocol === "https:" ? ";Secure" : "";
-		document.cookie = "euconsent-v2=" + tcString + ";expires=" + date.toUTCString() + ";path=/" + domain + ";SameSite=Lax" + secure;
+		document.cookie = cookieName("euconsent-v2") + "=" + tcString + ";expires=" + date.toUTCString() + ";path=/" + domain + ";SameSite=Lax" + secure;
 	}
 
 	function clearEuconsentCookie() {
 		var secure = location.protocol === "https:" ? ";Secure" : "";
-		var expired = "euconsent-v2=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+		var expired = cookieName("euconsent-v2") + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
 		document.cookie = expired + ";SameSite=Lax" + secure;
 		if (window._fazConfig && window._fazConfig._rootDomain) {
 			document.cookie = expired + ";domain=" + window._fazConfig._rootDomain + ";SameSite=Lax" + secure;

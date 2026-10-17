@@ -490,6 +490,12 @@ class DSAR_Shortcode {
 				</div>
 
 				<div class="faz-dsar-field">
+					<label for="<?php echo esc_attr( $id ); ?>-consent-id"><?php esc_html_e( 'Consent ID (optional)', 'faz-cookie-manager' ); ?></label>
+					<input type="text" id="<?php echo esc_attr( $id ); ?>-consent-id" name="dsar_consent_id" maxlength="190" pattern="[A-Za-z0-9=+\/]{1,190}" autocomplete="off" aria-describedby="<?php echo esc_attr( $id ); ?>-consent-help">
+					<small id="<?php echo esc_attr( $id ); ?>-consent-help"><?php esc_html_e( 'Find this ID in your cookie preferences to help us locate your consent history.', 'faz-cookie-manager' ); ?></small>
+				</div>
+
+				<div class="faz-dsar-field">
 					<label for="<?php echo esc_attr( $id ); ?>-msg"><?php esc_html_e( 'Additional Information', 'faz-cookie-manager' ); ?></label>
 					<textarea id="<?php echo esc_attr( $id ); ?>-msg" name="dsar_message" maxlength="<?php echo esc_attr( self::MESSAGE_MAX_LENGTH ); ?>" placeholder="<?php esc_attr_e( 'Optional: provide any additional context to help us identify your data.', 'faz-cookie-manager' ); ?>"></textarea>
 				</div>
@@ -589,6 +595,11 @@ class DSAR_Shortcode {
 		$email       = isset( $_POST['dsar_email'] ) ? sanitize_email( wp_unslash( $_POST['dsar_email'] ) ) : '';
 		$type        = isset( $_POST['dsar_type'] ) ? sanitize_key( wp_unslash( $_POST['dsar_type'] ) ) : '';
 		$message     = isset( $_POST['dsar_message'] ) ? sanitize_textarea_field( wp_unslash( $_POST['dsar_message'] ) ) : '';
+		$consent_id  = isset( $_POST['dsar_consent_id'] ) && is_string( $_POST['dsar_consent_id'] ) ? wp_unslash( $_POST['dsar_consent_id'] ) : '';
+		if ( ( isset( $_POST['dsar_consent_id'] ) && ! is_string( $_POST['dsar_consent_id'] ) ) || ! self::valid_consent_id( $consent_id ) ) {
+			wp_send_json_error( __( 'Please enter a valid consent ID.', 'faz-cookie-manager' ) );
+			return;
+		}
 		// Recipient is always the site admin — not sourced from client input.
 		$admin_email = (string) get_option( 'admin_email' );
 
@@ -624,6 +635,7 @@ class DSAR_Shortcode {
 				'email'   => $email,
 				'type'    => $type,
 				'message' => $message,
+				'consent_id' => $consent_id,
 			)
 		);
 		if ( is_wp_error( $guard ) ) {
@@ -641,7 +653,7 @@ class DSAR_Shortcode {
 		$this->record_submission( $email );
 
 		try {
-			$post_id = $this->store_request( $name, $email, $type, $message );
+			$post_id = $this->store_request( $name, $email, $type, $message, $consent_id );
 			if ( ! $post_id ) {
 				$this->release_submission( $email );
 				// DB error — roll back the lock AND its window so the user can
@@ -1939,12 +1951,17 @@ class DSAR_Shortcode {
 		return $count;
 	}
 
+	/** Validate the exact alphabet used by the consent-log identifier. */
+	public static function valid_consent_id( $value ) {
+		return is_string( $value ) && ( '' === $value || 1 === preg_match( '#^[A-Za-z0-9=+/]{1,190}$#D', $value ) );
+	}
+
 	/**
 	 * Store the request as a private post so it survives email failures.
 	 *
 	 * @return int Post ID.
 	 */
-	private function store_request( $name, $email, $type, $message ) {
+	private function store_request( $name, $email, $type, $message, $consent_id = '' ) {
 		$type_labels = array(
 			'access'      => 'Access',
 			'erasure'     => 'Erasure',
@@ -1965,6 +1982,7 @@ class DSAR_Shortcode {
 					'_dsar_email'   => $email,
 					'_dsar_type'    => $type,
 					'_dsar_message' => $message,
+					'_dsar_consent_id' => $consent_id,
 					'_dsar_status'  => 'pending',
 				),
 			),
@@ -2004,6 +2022,10 @@ class DSAR_Shortcode {
 		);
 
 		if ( $post_id ) {
+			$consent_id = (string) get_post_meta( $post_id, '_dsar_consent_id', true );
+			if ( '' !== $consent_id ) {
+				$body .= "\n\n" . __( 'Consent ID:', 'faz-cookie-manager' ) . ' ' . $consent_id;
+			}
 			$body .= "\n\n" . sprintf(
 				/* translators: %s: admin URL to the request post */
 				__( 'Open the request to handle it (you can turn it into a WordPress erasure or export request from there): %s', 'faz-cookie-manager' ),

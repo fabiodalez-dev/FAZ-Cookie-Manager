@@ -471,7 +471,19 @@
 		});
 	}
 
+	function prefillConsentId(form) {
+		var field = form.querySelector('[name="dsar_consent_id"]');
+		if (!field || field.value) return;
+		var consent = typeof window.getFazConsent === 'function' ? window.getFazConsent() : {};
+		if (consent.consentID) field.value = consent.consentID;
+	}
+	['fazcookie_banner_loaded', 'fazcookie_consent_update'].forEach(function (event) {
+		document.addEventListener(event, function () {
+			document.querySelectorAll('.faz-dsar-form').forEach(prefillConsentId);
+		});
+	});
 	function attachToForm(form) {
+		prefillConsentId(form);
 		if (form._fazDsarAttached) { return; }
 		form._fazDsarAttached = true;
 		form.addEventListener('submit', handleSubmit);

@@ -142,6 +142,9 @@ function main() {
   r = run(`${PMP},__scope.law:ccpa`, euConfig());
   eq('the PMP necessary-only state is valid under every scope (its denied state is pushed)', last(r.updates) && last(r.updates).ad_storage, 'denied');
 
+  r = run(`${PMP.replace('marketing:no', 'marketing:yes')},__scope.law:ccpa`, euConfig());
+  eq('a forged PMP marker with an optional grant cannot bypass the law scope', r.updates.length, 0);
+
   // --- Invalidation after a restore must reach Google on the same page -----
   r = run(GDPR_EU, euConfig({ _consentRevision: '1' }), { after: null });
   eq('restore, then the runtime deletes the cookie: two updates were pushed', r.updates.length, 2);

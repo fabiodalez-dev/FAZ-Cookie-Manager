@@ -1086,6 +1086,7 @@ class Frontend {
 						// only origin + path and dropped the routing parameters
 						// (?p=, ?lang=) the inventory keys on. It varies by page,
 						// never by visitor, so a cached copy stays correct.
+						'cookieNames'    => function_exists( 'faz_consent_cookie_names' ) ? faz_consent_cookie_names() : array(),
 						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::current_url() : '',
 						// Where the beacon fetches a current token when the one
 						// above is refused as stale — a page an edge cache kept
@@ -1098,20 +1099,10 @@ class Frontend {
 						"var d=e.detail||{};" .
 						"if(!d.action||d.action==='init')return;" .
 						"if(typeof _fazConsentLog==='undefined')return;" .
-						// The payload is built in a microtask, not inside the
-						// handler. This listener is registered at parse time, so
-						// it is the FIRST on the event; the TCF CMP (tcf-cmp.js,
-						// deferred) and the GPP module register later, and they
-						// are the ones that write euconsent-v2 / the GPP string
-						// for this very decision. Listeners run in registration
-						// order, so a synchronous read here saw the cookie as it
-						// stood BEFORE the decision: the first Accept logged an
-						// empty tc_string and a later Reject logged the Accept-All
-						// string. A microtask runs after every listener of this
-						// dispatch and still before any navigation a listener
-						// may have requested, so the keepalive POST below is not
-						// put at risk.
-						"Promise.resolve().then(function(){" .
+						// Snapshot the decision and ID before another action or navigation
+						// changes the cookie. Only the TC string waits until the CMP's
+						// later listener has written this decision. A synchronous pagehide
+						// flush still starts the keepalive request before the page leaves.
 						"var safeUrl=(function(){if(_fazConsentLog.pageUrl)return _fazConsentLog.pageUrl;try{var current=new URL(window.location.href);return current.origin+current.pathname+current.search}catch(err){var origin=window.location.origin||(window.location.protocol+'//'+window.location.host);return origin+(window.location.pathname||'')+(window.location.search||'')}})();" .
 						"var fazSend=function(b){return fetch(_fazConsentLog.restUrl,{" .
 							"method:'POST'," .
@@ -1128,8 +1119,9 @@ class Frontend {
 							"headers:{'Content-Type':'application/json'}," .
 							"body:JSON.stringify(b)" .
 						"})};" .
-						"var p={" .
-								"consent_id:(function(){var m=document.cookie.match(/fazcookie-consent=([^;]+)/);if(!m)return '';var v=m[1];try{v=decodeURIComponent(v)}catch(err){}var p=v.match(/(?:^|,)consentid:([^,;]+)/);return p?p[1]:''})()," .
+						"function readCookie(name){var names=_fazConsentLog.cookieNames||{};var prefix=(names[name]||name)+'=';var parts=document.cookie.split(';');for(var i=0;i<parts.length;i++){var p=parts[i].trim();if(p.indexOf(prefix)===0)return [p,p.substring(prefix.length)]}return null}" .
+						"var payload={" .
+								"consent_id:(function(){var m=readCookie('fazcookie-consent');if(!m)return '';var v=m[1];try{v=decodeURIComponent(v)}catch(err){}var p=v.match(/(?:^|,)consentid:([^,;]+)/);return p?p[1]:''})()," .
 								"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
 								"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});" .
 									// P1-3: fold the granular per-service (svc.*) and per-cookie
@@ -1147,7 +1139,7 @@ class Frontend {
 									// audit key meta.gpc_exception.<id>:yes — the log keeps only
 									// yes/no values, and meta.* stays out of the dashboard's
 									// per-category acceptance chart.
-									"try{var cm=document.cookie.match(/fazcookie-consent=([^;]+)/);if(cm){var cv=cm[1];try{cv=decodeURIComponent(cv)}catch(er){}cv.split(',').forEach(function(pr){var ci=pr.indexOf(':');if(ci<1)return;var ck=pr.substring(0,ci);if(ck.indexOf('svc.')===0||ck.indexOf('ck.')===0){c[ck]=pr.substring(ci+1)}else if(ck.indexOf('gpcx.')===0&&pr.substring(ci+1)==='1'){c['meta.gpc_exception.'+ck.substring(5)]='yes'}else if(ck==='undecided'&&pr.substring(ci+1)==='1'){c['meta.signal_only']='yes'}})}}catch(er){}" .
+									"try{var cm=readCookie('fazcookie-consent');if(cm){var cv=cm[1];try{cv=decodeURIComponent(cv)}catch(er){}cv.split(',').forEach(function(pr){var ci=pr.indexOf(':');if(ci<1)return;var ck=pr.substring(0,ci);if(ck.indexOf('svc.')===0||ck.indexOf('ck.')===0){c[ck]=pr.substring(ci+1)}else if(ck.indexOf('gpcx.')===0&&pr.substring(ci+1)==='1'){c['meta.gpc_exception.'+ck.substring(5)]='yes'}else if(ck==='undecided'&&pr.substring(ci+1)==='1'){c['meta.signal_only']='yes'}})}}catch(er){}" .
 										// Age-gate accountability (GDPR Art. 5(2)/7(1)): when the
 										// visitor affirmed they meet the digital age of consent, fold
 										// the reserved meta.age_affirmed:yes key into the logged
@@ -1160,14 +1152,10 @@ class Frontend {
 								"banner_slug:_fazConsentLog.bannerSlug||''," .
 								"policy_revision:_fazConsentLog.policyRevision||1," .
 								// TCF TC string (euconsent-v2 cookie) and GPP string
-								// (__gpp API), forwarded so the tc_string / gpp_string
-								// audit columns are populated for TCF/GPP-enabled sites.
-								// Both are read in the microtask opened above, i.e.
-								// after the CMP wrote them for THIS decision, so the
-								// row carries the string that was actually set (or
-								// an empty value when the CMP cleared the cookie).
-								"tc_string:(function(){var m=document.cookie.match(/euconsent-v2=([^;]+)/);return m?m[1]:''})()," .
-								"gpp_string:(function(){try{if(typeof window.__gpp!=='function')return '';var s='';window.__gpp('getGPPData',function(d){if(d&&d.gppString)s=d.gppString});return s}catch(e){return ''}})()," .
+								// captured passively from an external CMP (__gpp API).
+								// FAZ does not implement GPP or generate a GPP string.
+								"tc_string:''," .
+								"gpp_string:''," .
 								// Jurisdiction-bootstrap verdict ('live' or
 								// 'strict-fallback', set by script.js before the
 								// banner mounts; absent on a page that was never the
@@ -1176,22 +1164,17 @@ class Frontend {
 								"geo_bootstrap:(typeof window._fazGeoBootstrapResolved==='string'?window._fazGeoBootstrapResolved:'')," .
 								"token:_fazConsentLog.token" .
 						"};" .
-						// Stale-token recovery. The first post says it can refresh
-						// (can_refresh:1), so the server does not count its refusal
-						// as a lost record. On 403 invalid_token — HTML an edge
-						// cache kept past the token window — fetch the current
-						// token (Consent_Logger::handle_token_refresh()) and resend
-						// ONCE, without the flag. If the refresh fails, resend the
-						// original once anyway, so the refusal is still counted in
-						// System Status. Any other answer ends here.
+						"var sent=false,timer,tcReady=false;function captureTc(){if(tcReady)return;tcReady=true;var m=readCookie('euconsent-v2');payload.tc_string=m?m[1]:''}function send(gppString){if(sent)return;captureTc();sent=true;clearTimeout(timer);window.removeEventListener('pagehide',flush);payload.gpp_string=typeof gppString==='string'?gppString:'';" .
 						"var u=_fazConsentLog.tokenUrl;" .
-						"return fazSend(u?Object.assign({can_refresh:1},p):p).then(function(r){" .
+						"return fazSend(u?Object.assign({can_refresh:1},payload):payload).then(function(r){" .
 							"if(!u||!r||r.status!==403||typeof r.json!=='function')return;" .
 							"return r.json().then(function(j){" .
 								"if(!j||j.code!=='invalid_token')return;" .
-								"return fetch(u+(u.indexOf('?')<0?'?':'&')+'_='+Date.now(),{credentials:'same-origin',cache:'no-store'}).then(function(x){return x.json()}).then(function(x){return x&&x.success&&x.data&&x.data.consent?String(x.data.consent):''},function(){return ''}).then(function(k){if(k&&k!==p.token){_fazConsentLog.token=k;p.token=k}return fazSend(p)})" .
+								"return fetch(u+(u.indexOf('?')<0?'?':'&')+'_='+Date.now(),{credentials:'same-origin',cache:'no-store'}).then(function(x){return x.json()}).then(function(x){return x&&x.success&&x.data&&x.data.consent?String(x.data.consent):''},function(){return ''}).then(function(k){if(k&&k!==payload.token){_fazConsentLog.token=k;payload.token=k}return fazSend(payload)})" .
 							"})" .
-						"});" .
+						"}).catch(function(){});" .
+						"}function flush(){send('')}" .
+						"window.addEventListener('pagehide',flush);Promise.resolve().then(function(){if(sent)return;captureTc();if(typeof window.__gpp!=='function'){flush();return}timer=setTimeout(flush,150);try{window.__gpp('ping',function(data,success){if(success!==false)send(data&&data.gppString)})}catch(err){flush()}" .
 					"}).catch(function(){});" .
 				"});";
 				// 'before', not the default 'after', and both halves of that
@@ -3777,7 +3760,10 @@ class Frontend {
 			// tampering attempt invalidates and re-prompts. Truncated to
 			// 32 hex chars — enough collision resistance for an integrity
 			// check, short enough to stay light in the cookie.
-			'_scopeFingerprint'  => substr( wp_hash( $banner->get_slug() . '|' . $banner->get_law(), 'auth' ), 0, 32 ),
+			'_srcdocKey'         => self::srcdoc_key(),
+			'_cookieNames'       => function_exists( 'faz_consent_cookie_names' ) ? faz_consent_cookie_names() : array(),
+			'_siteScopeBound'    => faz_consent_site_bound(),
+			'_scopeFingerprint'  => faz_scope_fingerprint( $banner->get_slug(), $banner->get_law() ),
 			/**
 			 * Strict-fingerprint mode (issue #106).
 			 *
@@ -3801,6 +3787,7 @@ class Frontend {
 			'_tags'         => $this->prepare_tags(),
 			'_shortCodes'   => $this->prepare_shortcodes( $banner->get_settings() ),
 			'_i18n'         => array(
+				'consent_id' => __( 'Consent ID', 'faz-cookie-manager' ),
 				'privacy_region_label'                  => __( 'We value your privacy', 'faz-cookie-manager' ),
 				'consent_saved'                         => __( 'Your cookie preferences have been saved.', 'faz-cookie-manager' ),
 				'optout_preferences_label'              => __( 'Opt-out Preferences', 'faz-cookie-manager' ),
@@ -4532,18 +4519,18 @@ class Frontend {
 		// Cast to string to satisfy PHP 8.1+ strict typing for strpos().
 		$html = (string) $html;
 		if ( '' === $html ) {
-			return $html;
+			return $this->refresh_srcdoc_proofs( $html );
 		}
 
 		$blocked_categories = $this->get_blocked_categories();
 		$has_service_consent = ! empty( $this->get_service_consent() );
 		if ( empty( $blocked_categories ) && ! $has_service_consent ) {
-			return $html;
+			return $this->refresh_srcdoc_proofs( $html );
 		}
 
 		$providers = $this->get_provider_category_map();
 		if ( empty( $providers ) ) {
-			return $html;
+			return $this->refresh_srcdoc_proofs( $html );
 		}
 
 		$old_backtrack = ini_get( 'pcre.backtrack_limit' );
@@ -4989,7 +4976,7 @@ class Frontend {
 		// (e.g. trx_addons emits `animate_to_mc4wp_form_submitted` which
 		// would otherwise match the `mc4wp` MailChimp pattern and crash
 		// the page with `ReferenceError: TRX_ADDONS_STORAGE is not defined`).
-		if ( $this->is_wp_localize_or_translations_inline_id( $id ) ) {
+		if ( $this->is_wp_localize_or_translations_inline_id( $id ) || ( ! $this->has_attr_token( $attrs, 'src' ) && $this->is_json_data_assignment( $content ) ) ) {
 			return $full;
 		}
 		// The same shape printed under any other id, or none: an inline body
@@ -5733,6 +5720,21 @@ class Frontend {
 		return '<' . $tag . $this->label_category_first( $parked, $matched_category ) . '>';
 	}
 
+	/** Response-local proof for server parks; deliberately excluded from static config. */
+	private static function srcdoc_key() {
+		static $key;
+		if ( null === $key ) {
+			$key = bin2hex( random_bytes( 24 ) );
+		}
+		return $key;
+	}
+
+	private function srcdoc_signature( $value, $category ) {
+		// Sign the DOM attribute value, independent of quoting/entity spelling.
+		$raw = ( strlen( $value ) >= 2 && ( '"' === $value[0] || "'" === $value[0] ) ) ? substr( $value, 1, -1 ) : $value;
+		return hash_hmac( 'sha256', $category . '|' . html_entity_decode( $raw, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), wp_salt( 'auth' ) );
+	}
+
 	/**
 	 * Process a media, plug-in, text-track or image-button element for the
 	 * attributes the parser fetches from.
@@ -6004,6 +6006,13 @@ class Frontend {
 		// token is protected, not re-judged; a live one next to it is judged
 		// all the same, because the parked one is no verdict on it and the
 		// engine loads the live one.
+		$category = $this->extract_tag_attr( $attrs, 'data-faz-category' );
+		$signature = $this->extract_tag_attr( $attrs, 'data-faz-srcdoc-sig' );
+		// Strip every old proof before rebuilding one for the current response.
+		foreach ( array_reverse( $this->tokenize_tag_attrs( $attrs, array( 'data-faz-srcdoc-sig', 'data-faz-srcdoc-key' ) ) ) as $proof ) {
+			$proof_start = $proof['offset'] > 0 && ' ' === $attrs[ $proof['offset'] - 1 ] ? $proof['offset'] - 1 : $proof['offset'];
+			$attrs = substr_replace( $attrs, '', $proof_start, $proof['length'] + $proof['offset'] - $proof_start );
+		}
 		$tokens = $this->tokenize_tag_attrs( $attrs, array( 'srcdoc', 'data-faz-srcdoc' ) );
 		if ( array() === $tokens ) {
 			return $full;
@@ -6022,7 +6031,16 @@ class Frontend {
 		$rest = $attrs;
 		foreach ( $tokens as $i => $token ) {
 			$tokens[ $i ]['marker'] = $marker_prefix . ( 'srcdoc' === $token['key'] ? 'LIVE_' : 'KEPT_' ) . count( $stash ) . '__';
-			$stash[ $tokens[ $i ]['marker'] ] = substr( $attrs, $token['offset'], $token['length'] );
+			$original = substr( $attrs, $token['offset'], $token['length'] );
+			if ( 'data-faz-srcdoc' === $token['key'] ) {
+				if ( null === $doc && null !== $token['value'] && '' !== $category && hash_equals( $this->srcdoc_signature( $token['value'], $category ), $signature ) ) {
+					$original .= ' data-faz-srcdoc-sig="' . $signature . '" data-faz-srcdoc-key="' . self::srcdoc_key() . '"';
+				} else {
+					// Inert input stays inert; never promote it to a live srcdoc.
+					$original = 'data-faz-untrusted-srcdoc=' . ( $token['value'] ?? '""' );
+				}
+			}
+			$stash[ $tokens[ $i ]['marker'] ] = $original;
 		}
 		for ( $i = count( $tokens ) - 1; $i >= 0; $i-- ) {
 			// Padded where the token was glued to its neighbour: the marker is
@@ -6088,7 +6106,7 @@ class Frontend {
 
 		foreach ( $tokens as $token ) {
 			if ( 'srcdoc' === $token['key'] ) {
-				$stash[ $token['marker'] ] = 'data-faz-srcdoc=' . $token['value'];
+				$stash[ $token['marker'] ] = 'data-faz-srcdoc=' . $token['value'] . ' data-faz-srcdoc-sig="' . $this->srcdoc_signature( $token['value'], $matched_category ) . '" data-faz-srcdoc-key="' . self::srcdoc_key() . '"';
 			}
 		}
 		// src goes with it, on its token in $rest, where the markers are plain
@@ -6426,6 +6444,14 @@ class Frontend {
 			$failed = array_merge( $failed, $failures );
 		}
 		return $result;
+	}
+
+	/** Refresh authenticated cached fragments even when no categories are blocked. */
+	private function refresh_srcdoc_proofs( $html ) {
+		$stash = array();
+		$marker = '';
+		$result = $this->stash_iframe_srcdocs( $html, array(), array(), $this->stash_nonce(), $stash, $marker );
+		return null === $result ? $html : strtr( $result, $stash );
 	}
 
 	private function stash_nonce() {
@@ -8181,7 +8207,7 @@ class Frontend {
 			$scope = array(
 				'slug'        => $slug,
 				'law'         => $law,
-				'fingerprint' => substr( wp_hash( $slug . '|' . $law, 'auth' ), 0, 32 ),
+				'fingerprint' => faz_scope_fingerprint( $slug, $law ),
 				'strict'      => (bool) apply_filters( 'faz_strict_scope_fingerprint', false ),
 			);
 		}
@@ -8592,8 +8618,9 @@ class Frontend {
 	 * @return bool
 	 */
 	private function request_has_dnsmpi() {
-		return isset( $_COOKIE['fazcookie-dnsmpi'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+		$name = function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-dnsmpi' ) : 'fazcookie-dnsmpi';
+		return isset( $_COOKIE[ $name ] )
+			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE[ $name ] ) );
 	}
 
 	/**
@@ -10117,7 +10144,8 @@ class Frontend {
 		// collapses — the revision is here for exactly this case.
 		// v5: the compact labels wrap instead of clipping, the buttons follow
 		// DOM order and the classic chevron keeps its padding. Same reason.
-		$cache_key = 'faz_boosted_css_v5_' . FAZ_VERSION . '_' . $layout . '_' . md5( $raw_css );
+		// v7: style the consent identifier in both inline and detached modals.
+		$cache_key = 'faz_boosted_css_v7_' . FAZ_VERSION . '_' . $layout . '_' . md5( $raw_css );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
 			return $cached;
@@ -10149,6 +10177,9 @@ class Frontend {
 			. '.faz-modal [data-faz-tag="detail-category-description"]{color:var(--faz-detail-category-description-color,#212121);}'
 			. '#faz-consent [data-faz-tag="audit-table"],'
 			. '.faz-modal [data-faz-tag="audit-table"]{color:var(--faz-audit-table-color,#212121);}';
+		$css_fixes .= '#faz-consent [data-faz-tag="detail-consent-id"],.faz-modal [data-faz-tag="detail-consent-id"]{display:block;margin:12px 24px;font-size:12px;color:var(--faz-detail-description-color,#212121);}'
+			. '#faz-consent [data-faz-tag="detail-consent-id"][hidden],.faz-modal [data-faz-tag="detail-consent-id"][hidden]{display:none;}'
+			. '#faz-consent [data-faz-tag="detail-consent-id"] input,.faz-modal [data-faz-tag="detail-consent-id"] input{display:block;width:100%;max-width:100%;margin-top:4px;padding:6px 8px;border:1px solid #c5c7cb;border-radius:4px;background:transparent;color:inherit;font-size:12px;}';
 		// [faz_cookie_settings] "manage consent preferences" button (not the
 		// floating .faz-btn-revisit widget). Rendered inside page content
 		// (outside #faz-consent), so it can't inherit the banner's scoped
@@ -10579,6 +10610,22 @@ class Frontend {
 			return false;
 		}
 		return $this->is_own_script_handle( $handle );
+	}
+
+	/** Only a single global variable declaration whose value is JSON. */
+	private function is_json_data_assignment( $content ) {
+		if ( ! preg_match( '/^\s*(?:var|let|const)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=/', $content, $m ) ) {
+			return false;
+		}
+		if ( 'location' === $m[1] ) {
+			return false;
+		}
+		$value = rtrim( substr( $content, strlen( $m[0] ) ) );
+		if ( ';' === substr( $value, -1 ) ) {
+			$value = substr( $value, 0, -1 );
+		}
+		json_decode( $value );
+		return JSON_ERROR_NONE === json_last_error();
 	}
 
 	/**
@@ -11669,7 +11716,7 @@ class Frontend {
 		// wp_localize_script / wp_set_script_translations payloads carry only
 		// config data or translation strings — never executable tracker code.
 		// See is_wp_localize_or_translations_inline_id() for the full rationale.
-		if ( $this->is_wp_localize_or_translations_inline_id( $id ) ) {
+		if ( $this->is_wp_localize_or_translations_inline_id( $id ) || ( ! $this->has_attr_token( $attrs, 'src' ) && $this->is_json_data_assignment( $content ) ) ) {
 			return false;
 		}
 
@@ -12204,7 +12251,7 @@ class Frontend {
 			return true;
 		}
 		$patterns = array(
-			'fazcookie-consent', 'fazcookie-dnsmpi', 'faz_scan_session',
+			'fazcookie-consent*', 'fazcookie-dnsmpi*', 'fazVendorConsent*', 'fazVendorLI*', 'euconsent-v2*', 'fazVendorSource*', 'faz_scan_session',
 			'wordpress_*', 'wp-settings-*', 'wp-settings-time-*', 'wp-postpass_*',
 			'comment_author_*', 'wp_lang', 'wordpress_test_cookie',
 			'wp_woocommerce_session_*', 'woocommerce_*', 'wc_cart_hash_*', 'wc_fragments_*',

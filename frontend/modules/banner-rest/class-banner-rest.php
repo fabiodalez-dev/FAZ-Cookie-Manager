@@ -295,7 +295,8 @@ class Banner_Rest {
 			'activeLaw'        => $active_law,
 			'bannerConfig'     => Frontend::prepare_banner_config( $banner ),
 			'tags'             => Frontend::prepare_banner_tags( $banner ),
-			'scopeFingerprint' => substr( wp_hash( $banner->get_slug() . '|' . $active_law, 'auth' ), 0, 32 ),
+			'siteScopeBound'   => faz_consent_site_bound(),
+			'scopeFingerprint' => faz_scope_fingerprint( $banner->get_slug(), $active_law ),
 			'consentExpiry'    => Frontend::normalize_consent_expiry( $active_law, $configured_expiry ),
 			'runtimeGeo'       => ( null !== $runtime_ruleset ),
 			// The WP Consent API regime for the banner actually returned; the
@@ -598,6 +599,7 @@ class Banner_Rest {
 		$age_min  = isset( $settings['age_gate']['min_age'] ) ? absint( $settings['age_gate']['min_age'] ) : 16;
 		return array(
 			'privacy_region_label'                => __( 'We value your privacy', 'faz-cookie-manager' ),
+			'consent_id'                          => __( 'Consent ID', 'faz-cookie-manager' ),
 			'consent_saved'                       => __( 'Your cookie preferences have been saved.', 'faz-cookie-manager' ),
 			'optout_preferences_label'            => __( 'Opt-out Preferences', 'faz-cookie-manager' ),
 			'customise_consent_preferences_label' => __( 'Customise Consent Preferences', 'faz-cookie-manager' ),

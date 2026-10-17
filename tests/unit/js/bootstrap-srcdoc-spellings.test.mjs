@@ -49,7 +49,7 @@ function boot() {
   const dom = new JSDOM('<!DOCTYPE html><html><head></head><body><div id="w"></div></body></html>', { runScripts: 'outside-only', url: SITE });
   const { window } = dom;
   Object.defineProperty(window.document, 'readyState', { value: 'loading', configurable: true });
-  window._fazConfig = { _block: true };
+  window._fazConfig = { _block: true, _srcdocKey: 'test-response-proof' };
   const nativeGetAttribute = window.Element.prototype.getAttribute;
   window.eval(bootstrapCode);
   return { window, document: window.document, nativeGetAttribute };
@@ -172,7 +172,7 @@ function bootHeld() {
   const dom = new JSDOM('<!DOCTYPE html><html><head></head><body><div id="w"></div></body></html>', { runScripts: 'outside-only', url: SITE });
   const { window } = dom;
   Object.defineProperty(window.document, 'readyState', { value: 'loading', configurable: true });
-  window._fazConfig = { _block: true };
+  window._fazConfig = { _block: true, _srcdocKey: 'test-response-proof' };
   const nativeGetAttribute = window.Element.prototype.getAttribute;
   window.document.addEventListener('DOMContentLoaded', function (event) { event.stopImmediatePropagation(); }, true);
   window.eval(bootstrapCode);
@@ -242,6 +242,7 @@ console.log('\nboth files: the real runtime judges a backstop-parked srcdoc at t
   const { window, document, nativeGetAttribute } = bootHeld();
   window._fazConfig = {
     _block: '1',
+    _srcdocKey: 'test-response-proof',
     _categories: [{ slug: 'necessary', isNecessary: true }, { slug: 'marketing', isNecessary: false }],
     _services: [],
     _providersToBlock: [{ re: 'tracker.test', categories: ['marketing'], service: 'tracker' }],
