@@ -448,8 +448,23 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
   });
 
   test('DSAR-13: request with tampered nonce is rejected server-side', async ({ page }) => {
+    // The form now fetches a fresh nonce before it sends (a cached page's
+    // nonce expires), so a value written into the hidden input would simply
+    // be replaced. Tamper with the request on the wire instead: that is what
+    // the server has to reject.
+    await page.route('**/admin-ajax.php*', async (route) => {
+      const request = route.request();
+      const body = request.postData() || '';
+      if (request.method() !== 'POST' || !body.includes('faz_dsar_submit')) {
+        return route.continue();
+      }
+      const tampered = body.includes('name="nonce"')
+        ? body.replace(/(name="nonce"\r\n\r\n)[^\r\n]*/, '$1bad-nonce-value')
+        : body.replace(/(^|&)nonce=[^&]*/, '$1nonce=bad-nonce-value');
+      expect(tampered, 'the submit request must carry a nonce to tamper with').not.toBe(body);
+      return route.continue({ postData: tampered });
+    });
     await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
-    await page.locator('input[name="nonce"]').evaluate((el: HTMLInputElement) => { el.value = 'bad-nonce-value'; });
     await page.locator('input[name="dsar_name"]').fill('Hacker');
     await page.locator('input[name="dsar_email"]').fill('hacker@example.com');
     await page.locator('select[name="dsar_type"]').selectOption('access');

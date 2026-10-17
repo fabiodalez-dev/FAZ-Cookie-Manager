@@ -336,6 +336,10 @@ function faz_e2e_optm_strip_faz_exclusions() {
 		'flying_press_exclude_from_delay:js'    => array( 'flying_press_exclude_own_scripts' ),
 		'flying_press_exclude_from_defer:js'    => array( 'flying_press_exclude_own_scripts' ),
 		'flying_press_exclude_from_minify:js'   => array( 'flying_press_exclude_own_scripts' ),
+		'flying_press_exclude_from_minify:css'  => array( 'flying_press_exclude_own_scripts' ),
+		// The restore net undoes whatever FlyingPress still rewrote, so a
+		// stripped run would look clean without this: remove it too.
+		'flying_press_optimization:after'       => array( 'flying_press_restore_own_assets' ),
 		'plugins_loaded'                        => array( 'flying_press_apply_runtime_delay_exclusions' ),
 		'wp'                                    => array( 'flying_press_apply_runtime_delay_exclusions' ),
 		'flying_press_update_config:after'      => array( 'flying_press_apply_runtime_delay_exclusions' ),
