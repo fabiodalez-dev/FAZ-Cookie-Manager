@@ -279,11 +279,12 @@ type Baseline = {
 };
 
 function decodeEntities(value: string): string {
+  // &amp; last: decoding it first would turn a literal "&amp;quot;" into a quote.
   return value
-    .replace(/&amp;/g, '&')
-    .replace(/&#0?38;/g, '&')
     .replace(/&quot;/g, '"')
-    .replace(/&#0?39;/g, "'");
+    .replace(/&#0?39;/g, "'")
+    .replace(/&#0?38;/g, '&')
+    .replace(/&amp;/g, '&');
 }
 
 /** Attribute map of one tag's attribute source; tolerant of html_min's unquoted values. */
@@ -302,7 +303,7 @@ function parseAttrs(source: string): Attrs {
 
 function scriptTags(html: string): ScriptTag[] {
   const tags: ScriptTag[] = [];
-  const re = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
+  const re = /<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi;
   let match: RegExpExecArray | null;
   while ((match = re.exec(html)) !== null) {
     tags.push({ index: match.index, attrs: parseAttrs(match[1]), content: match[2] });
@@ -542,7 +543,14 @@ function blockedScriptViolations(html: string, base: Baseline): string[] {
 const PARKED_TARGET = /(?:youtube(?:-nocookie)?\.com\/embed|facebook\.com\/tr)/i;
 
 function withoutScripts(html: string): string {
-  return html.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
+  // Repeat until stable, so a removal cannot splice a new <script> together.
+  let out = html;
+  let prev;
+  do {
+    prev = out;
+    out = out.replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, '');
+  } while (out !== prev);
+  return out;
 }
 
 /** Every attribute that would make the browser load a blocked embed, as `attr=value`. */

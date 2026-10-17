@@ -169,7 +169,8 @@ async function fetchText(url: string): Promise<string> {
 }
 
 function scriptTagById(html: string, id: string): { attrs: string; body: string } | null {
-  const re = new RegExp(`<script\\b([^>]*\\bid=["']${id.replace(/[-]/g, '\\-')}["'][^>]*)>([\\s\\S]*?)<\\/script\\s*>`, 'i');
+  const escaped = id.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+  const re = new RegExp(`<script\\b([^>]*\\bid=["']${escaped}["'][^>]*)>([\\s\\S]*?)<\\/script\\b[^>]*>`, 'i');
   const match = re.exec(html);
   return match ? { attrs: match[1], body: match[2] } : null;
 }
