@@ -12,8 +12,13 @@
  *   2. "If users click 'Alle ablehnen' I don't see unpersonalized ads
  *        loading. Shouldn't it fallback to unpersonalized ads?"
  *      → When marketing is denied, AdSense should still be able to serve
- *        non-personalized ads (ad_storage=granted, ad_user_data=denied,
- *        ad_personalization=denied).
+ *        non-personalized ads. Shipped behaviour (since the 1.17.2 compliance
+ *        pass, asserted by R2 below):
+ *        ad_storage / ad_user_data / ad_personalization all stay denied — no
+ *        ad cookies without consent — and the plugin signals npa=1 for legacy
+ *        tags; Consent Mode v2 serves cookieless non-personalized ads in that
+ *        state. (1.11.0 granted ad_storage here; that was reversed as unlawful
+ *        in the EEA/UK/CH.)
  *   3. "Upon revisiting the Website, ads don't load. It only happens either
  *        after a couple refreshes; or If you reaccept the Cookies."
  *      → Race condition on revisit: GCM emits `default denied` first, then

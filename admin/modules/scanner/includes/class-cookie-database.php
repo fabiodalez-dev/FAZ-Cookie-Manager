@@ -251,7 +251,11 @@ class Cookie_Database {
 		'fazcookie-consent'       => array(
 			'category'    => 'necessary',
 			'duration'    => '6 months',
-			'description' => 'Cookie consent preferences set by the visitor.',
+			// Must equal the `fazcookie-consent` entry of cookies/en.json: the
+			// seeded row is recognised as stock wording, and so translated, only
+			// while the two agree. The identifier is named because it is one:
+			// the consent log keys its record of the visitor's choice on it.
+			'description' => 'Stores the visitor\'s cookie consent choices and a random consent identifier used to keep a record of that choice.',
 		),
 		'brikpanel_vid'           => array(
 			'category'    => 'analytics',

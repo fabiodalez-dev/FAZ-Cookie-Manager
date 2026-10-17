@@ -391,8 +391,16 @@ namespace {
 	$GLOBALS['faz_test_options']['faz_settings'] = array( 'banner_control' => array( 'cache_compatibility' => false ) );
 	assert_eq(
 		$amp_method->invoke( $amp ),
+		false,
+		'cache_compatibility OFF, no country source → AMP page is invariant, no cache-bust'
+	);
+	// The AMP country dimensions all read the visitor country; they vary the
+	// document only where a country source exists (1.34.2).
+	\FazCookie\Includes\Geolocation::$hasSource = true;
+	assert_eq(
+		$amp_method->invoke( $amp ),
 		true,
-		'cache_compatibility OFF → AMP country-dependent cache-bust is unchanged'
+		'cache_compatibility OFF + country source → AMP country-dependent cache-bust is unchanged'
 	);
 	assert_eq(
 		$rest_method->invoke( $rest, Controller::get_instance() ),
@@ -422,6 +430,12 @@ namespace {
 		true,
 		'cache_compatibility OFF → AMP cache-busts for global geo no_banner'
 	);
+	\FazCookie\Includes\Geolocation::$hasSource = false;
+	assert_eq(
+		$amp_method->invoke( $amp ),
+		false,
+		'… but not on an install with no country source (every visitor gets the banner)'
+	);
 
 	// OFF (or absent) → unchanged behaviour: country-dependent only when a
 	// real trigger is active. Controller + Geo_Runtime stubs report "no".
@@ -436,9 +450,33 @@ namespace {
 			'banner_control' => array( 'cache_compatibility' => false ),
 			'iab'            => array( 'enabled' => true ),
 		) ),
-		true,
-		'OFF + IAB enabled → country-dependent (cache-bust active, unchanged)'
+		false,
+		'OFF + IAB enabled, no country source → not country-dependent (gdprApplies is the same for everyone)'
 	);
+	\FazCookie\Includes\Geolocation::$hasSource = true;
+	assert_eq(
+		faz_is_dependent( array(
+			'banner_control' => array( 'cache_compatibility' => false ),
+			'iab'            => array( 'enabled' => true ),
+		) ),
+		true,
+		'OFF + IAB enabled + country source → country-dependent (cache-bust active, unchanged)'
+	);
+	\FazCookie\Includes\Geolocation::$hasSource = false;
+	Controller::$countryDependent = true;
+	assert_eq(
+		faz_is_dependent( array( 'banner_control' => array( 'cache_compatibility' => false ) ) ),
+		false,
+		'country-targeted banner rows, no country source → not country-dependent (every visitor gets the match-all row)'
+	);
+	\FazCookie\Includes\Geolocation::$hasSource = true;
+	assert_eq(
+		faz_is_dependent( array( 'banner_control' => array( 'cache_compatibility' => false ) ) ),
+		true,
+		'country-targeted banner rows + country source → country-dependent'
+	);
+	\FazCookie\Includes\Geolocation::$hasSource = false;
+	Controller::$countryDependent = false;
 	assert_eq(
 		faz_is_dependent( array() ),
 		false,
@@ -531,6 +569,14 @@ namespace {
 
 	assert_eq(
 		faz_fp_frontend( $dependent_settings )->flying_press_is_cacheable( true ),
+		true,
+		'IAB on but no country source → invariant output, FlyingPress may cache'
+	);
+	// From here on the dependence is real: a country source exists.
+	\FazCookie\Includes\Geolocation::$hasSource = true;
+
+	assert_eq(
+		faz_fp_frontend( $dependent_settings )->flying_press_is_cacheable( true ),
 		false,
 		'country-dependent output → FlyingPress caching vetoed'
 	);
@@ -571,6 +617,7 @@ namespace {
 		'admin request → no veto'
 	);
 	$GLOBALS['faz_test_is_admin'] = false;
+	\FazCookie\Includes\Geolocation::$hasSource = false;
 
 	// ---------------------------------------------------------------------
 	// Crawler-variant render (kalabron.com, o2switch/LiteSpeed): hide_from_bots

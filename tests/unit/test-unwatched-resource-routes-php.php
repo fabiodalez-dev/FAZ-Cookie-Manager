@@ -661,11 +661,16 @@ namespace {
 	assert_true( faz_ob_run( $fe, $html ) === $html, 'a same-origin <image srcset> comes out byte-identical' );
 
 	// The "lite embed" pattern: an allowed srcdoc with a blocked src. The src
-	// is inert while srcdoc is present, so there is nothing to park, and the
-	// placeholder wrap used to destroy the srcdoc on its way through wp_kses.
+	// is inert while srcdoc is present — but the facade's own Play button
+	// removes srcdoc and activates it, so the src is parked (the rule the
+	// runtime applies to the same frame) while the srcdoc stays live. No
+	// placeholder wrap: it used to destroy the srcdoc marker on its way
+	// through wp_kses.
 	$fe   = faz_ob_frontend( $providers, $blocked );
-	$html = '<html><body><iframe srcdoc="<p>lite</p>" src="https://cdn.tracker.test/f.html" width="300"></iframe></body></html>';
-	assert_true( faz_ob_run( $fe, $html ) === $html, 'an allowed srcdoc with a blocked src comes out byte-identical' );
+	$out  = faz_ob_run( $fe, '<html><body><iframe srcdoc="<p>lite</p>" src="https://cdn.tracker.test/f.html" width="300"></iframe></body></html>' );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/f.html"' ) && ! preg_match( '/(?<![\w-])src=/i', $out ), 'an allowed srcdoc with a blocked src has the src parked' );
+	assert_true( false !== strpos( $out, 'srcdoc="<p>lite</p>"' ), 'and the srcdoc left live, byte-for-byte' );
+	assert_true( false !== strpos( $out, 'width="300"></iframe>' ), 'with the rest of the tag intact' );
 
 	// Two live srcdoc tokens: the parser keeps the first, so the first is
 	// judged — and once the first is parked the second would become THE

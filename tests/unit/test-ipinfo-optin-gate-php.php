@@ -110,6 +110,9 @@ namespace FazCookie\Admin\Modules\Geo_Routing\Includes {
 }
 
 namespace {
+	// The cache key is the shared faz_ip_cache_key() from the helpers file
+	// since 1.34.2, so the helpers are loaded for real alongside the client.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-utils.php';
 	require_once dirname( __DIR__, 2 ) . '/admin/modules/geo-routing/includes/class-ipinfo-client.php';
 
 	use FazCookie\Admin\Modules\Geo_Routing\Includes\Ipinfo_Client;

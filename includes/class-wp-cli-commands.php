@@ -389,8 +389,15 @@ class WP_CLI_Commands {
 			array( 'Key' => 'Pageview Tracking',   'Value' => ! empty( $settings['pageview_tracking'] ) ? 'Yes' : 'No' ),
 			array( 'Key' => 'Auto Scan',           'Value' => ! empty( $settings['scanner']['auto_scan'] ) ? ( $settings['scanner']['scan_frequency'] ?? 'On' ) : 'Off' ),
 			array( 'Key' => 'Geo-Targeting',       'Value' => ! empty( $settings['geolocation']['geo_targeting'] ) ? 'Yes' : 'No' ),
-			// 1.18.2: force-disabled regardless of the saved option — report the effective (off) state, not the stored value.
-			array( 'Key' => 'Per-Service Consent', 'Value' => 'No (disabled in 1.18.2)' ),
+			// Read both flags from the option, like every other row. The
+			// 1.18.2 mask that forced them off was removed in 1.20.0 (see
+			// Activator::reset_stale_per_cookie_consent()); the admin System
+			// Status page already reads them live, and this table is the one
+			// an operator attaches to a DPIA, so it must say the same thing.
+			// The sanitiser forces per_cookie false whenever per_service is
+			// off, so a plain read IS the effective state.
+			array( 'Key' => 'Per-Service Consent', 'Value' => ! empty( $settings['banner_control']['per_service_consent'] ) ? 'Yes' : 'No' ),
+			array( 'Key' => 'Per-Cookie Consent',  'Value' => ! empty( $settings['banner_control']['per_cookie_consent'] ) ? 'Yes' : 'No' ),
 			array( 'Key' => 'Bot Detection',       'Value' => ( ! isset( $settings['banner_control']['hide_from_bots'] ) || ! empty( $settings['banner_control']['hide_from_bots'] ) ) ? 'Yes' : 'No' ),
 			array( 'Key' => 'Banners',             'Value' => $banner_count ),
 			array( 'Key' => 'Cookie Categories',   'Value' => $category_count ),

@@ -1,7 +1,7 @@
 {
     "necessary": {
         "name": "Nezbytné",
-        "description": "<p>Nezbytné cookies jsou zásadní pro základní funkce webu a bez nich nemůže web fungovat zamýšleným způsobem. Tyto cookies neukládají žádné osobní údaje.</p>"
+        "description": "<p>Nezbytné cookies jsou zásadní pro základní funkce webu a bez nich nemůže web fungovat zamýšleným způsobem. Nepoužívají se k reklamě ani ke sledování napříč jinými weby. Cookie souhlasu ukládá náhodný identifikátor, díky kterému můžeme vést záznam o volbě, kterou jste provedli.</p>"
     },
     "functional": {
         "name": "Funkční",

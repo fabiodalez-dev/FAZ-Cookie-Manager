@@ -89,10 +89,12 @@ defined( 'ABSPATH' ) || exit;
 						<th><?php esc_html_e( 'Categories', 'faz-cookie-manager' ); ?></th>
 						<th style="width:110px;"><?php esc_html_e( 'IP Hash', 'faz-cookie-manager' ); ?></th>
 						<th><?php esc_html_e( 'Page URL', 'faz-cookie-manager' ); ?></th>
+						<?php // The jurisdiction, privacy signals and TC/GPP strings recorded with the row (Migration_V2): the evidence a TCF or CPRA question is answered from. ?>
+						<th><?php esc_html_e( 'Context', 'faz-cookie-manager' ); ?></th>
 					</tr>
 				</thead>
 				<tbody id="faz-logs-body">
-					<tr><td colspan="6" class="faz-text-center faz-text-muted" style="padding:40px;"><?php esc_html_e( 'Loading...', 'faz-cookie-manager' ); ?></td></tr>
+					<tr><td colspan="7" class="faz-text-center faz-text-muted" style="padding:40px;"><?php esc_html_e( 'Loading...', 'faz-cookie-manager' ); ?></td></tr>
 				</tbody>
 			</table>
 		</div>

@@ -28,6 +28,17 @@ class DSAR_Shortcode {
 	use IP_Hasher;
 
 	const AJAX_ACTION = 'faz_dsar_submit';
+
+	/**
+	 * Read-only AJAX action that hands out a fresh nonce and signed stamp.
+	 *
+	 * frontend/js/faz-dsar.js calls it once, when the visitor starts filling
+	 * the form, and writes the result over the values the (possibly cached)
+	 * markup carried. See handle_refresh().
+	 *
+	 * @since 1.34.2
+	 */
+	const REFRESH_ACTION = 'faz_dsar_refresh';
 	const POST_TYPE   = 'faz_dsar';
 
 	/** Maximum allowed length for the free-text message field. */
@@ -151,17 +162,30 @@ class DSAR_Shortcode {
 	 */
 	const MAX_STORED_PER_DAY = 500;
 
+	/**
+	 * Whether this request has already been kept out of the page cache.
+	 *
+	 * One veto per request, however many forms the page renders.
+	 *
+	 * @since 1.34.2
+	 * @var bool
+	 */
+	private $page_cache_vetoed = false;
+
 	public function __construct() {
 		add_shortcode( 'faz_dsar_form', array( $this, 'render' ) );
 		add_action( 'init', array( $this, 'register_post_type' ) );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_submit' ) );
 		add_action( 'wp_ajax_nopriv_' . self::AJAX_ACTION, array( $this, 'handle_submit' ) );
+		add_action( 'wp_ajax_' . self::REFRESH_ACTION, array( $this, 'handle_refresh' ) );
+		add_action( 'wp_ajax_nopriv_' . self::REFRESH_ACTION, array( $this, 'handle_refresh' ) );
 		// The shortcode callback enqueues the handler wherever the form is
 		// rendered server-side (posts, widgets, templates, builder elements);
 		// this hook only covers forms injected client-side after page load.
 		// The handler stays a separate file either way: an inline <script>
 		// injected via innerHTML is silently ignored by browsers.
 		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue_assets' ) );
+		add_action( 'template_redirect', array( $this, 'maybe_veto_page_cache_early' ) );
 		add_action( 'faz_after_activate', array( $this, 'assign_capabilities' ) );
 		// Starts the clock the unstamped-submission grace window is measured
 		// against (see stampless_still_possible()).
@@ -283,6 +307,10 @@ class DSAR_Shortcode {
 				'fazDsarConfig',
 				array(
 					'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
+					// Where the form fetches a current nonce and stamp before it
+					// is sent, so a copy a cache kept past their life still
+					// submits. See handle_refresh().
+					'refreshAction' => self::REFRESH_ACTION,
 					'errMsg'     => __( 'An error occurred. Please try again.', 'faz-cookie-manager' ),
 					'reqMsg'     => __( 'Please fill in all required fields.', 'faz-cookie-manager' ),
 					'emailMsg'   => __( 'Please enter a valid email address.', 'faz-cookie-manager' ),
@@ -347,6 +375,7 @@ class DSAR_Shortcode {
 		);
 
 		$this->enqueue_dsar_assets();
+		$this->veto_page_cache();
 		wp_register_style( 'faz-dsar', false, array(), FAZ_VERSION );
 		wp_enqueue_style( 'faz-dsar' );
 		wp_add_inline_style( 'faz-dsar', '
@@ -367,6 +396,7 @@ class DSAR_Shortcode {
 .faz-dsar-notice.error   { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
 .faz-dsar-wrap .faz-field-error { display: block; color: #721c24; font-size: 0.85em; margin-top: 3px; font-weight: 500; }
 .faz-dsar-required-note { font-size: 13px; color: #545454; margin: 0 0 12px; }
+.faz-dsar-wrap .faz-dsar-field-hint { font-size: 13px; color: #545454; margin: 4px 0 0; }
 .faz-dsar-honeypot { display: none !important; }
 		' );
 
@@ -444,12 +474,19 @@ class DSAR_Shortcode {
 
 				<div class="faz-dsar-field">
 					<label for="<?php echo esc_attr( $id ); ?>-type"><?php esc_html_e( 'Request Type', 'faz-cookie-manager' ); ?> *</label>
-					<select id="<?php echo esc_attr( $id ); ?>-type" name="dsar_type" required aria-required="true">
+					<select id="<?php echo esc_attr( $id ); ?>-type" name="dsar_type" required aria-required="true" aria-describedby="<?php echo esc_attr( $id ); ?>-type-hint">
 						<option value=""><?php esc_html_e( '— Select a request type —', 'faz-cookie-manager' ); ?></option>
 						<?php foreach ( $request_types as $val => $label ) : ?>
 							<option value="<?php echo esc_attr( $val ); ?>"><?php echo esc_html( $label ); ?></option>
 						<?php endforeach; ?>
 					</select>
+					<?php
+					// The select takes one right and the per-email throttle
+					// holds a second submission for an hour, so a person who
+					// wants two rights needs to be told, here, that one
+					// message carries them all — not after the refusal.
+					?>
+					<p class="faz-dsar-field-hint" id="<?php echo esc_attr( $id ); ?>-type-hint"><?php esc_html_e( 'Exercising more than one right? Choose one here and name the others in the message below — a single submission covers them all.', 'faz-cookie-manager' ); ?></p>
 				</div>
 
 				<div class="faz-dsar-field">
@@ -466,6 +503,61 @@ class DSAR_Shortcode {
 	}
 
 	/**
+	 * AJAX handler that hands out a fresh nonce and signed stamp for the form.
+	 *
+	 * Why it exists. The form bakes an anonymous nonce (12 to 24 hours) and a
+	 * signed stamp (max_form_age(), 24 hours) into the page body. The page
+	 * cache veto (veto_page_cache()) keeps the page out of caches only where it
+	 * can see the form: a singular post whose content names the shortcode is
+	 * vetoed before output, and everything else only from render(), through
+	 * signals a cache honours only if it has not already decided — so a form
+	 * in a widget, a builder template (Bricks, Oxygen and Elementor keep theirs
+	 * in post meta), a block theme template or a synced pattern can still be
+	 * served from a cache, and an edge cache the plugin cannot reach ignores
+	 * the veto anyway. After a day every submission from such a copy was
+	 * refused, and "reload the page" returned the same copy: an Art. 12(2)
+	 * failure on the channel the site relies on. frontend/js/faz-dsar.js now
+	 * fetches current values from here when the visitor starts filling the
+	 * form and writes them over the cached ones, wherever the form was placed.
+	 *
+	 * Why it is safe. Read-only and unauthenticated, like the DNSMPI refresh
+	 * (Do_Not_Sell_Shortcode::handle_nonce_refresh()). The nonce and the stamp
+	 * are exactly what render() prints into a public page, so this hands out
+	 * nothing a GET of that page does not. None of the anti-bot costs is
+	 * weakened: the stamp's issue time is now, so the minimum dwell is counted
+	 * from this call (the response says how long, and the script waits it out
+	 * before sending); a proof-of-work challenge, when the gate is on, is a new
+	 * unpredictable salt the client must solve; and the honeypot name is derived
+	 * from the new stamp as always. The stamp is deliberately NOT single-use,
+	 * for the reason check_antibot() gives; the per-email, per-IP and site-wide
+	 * ceilings are what bound how many requests a client can file.
+	 *
+	 * admin-ajax.php sends nocache_headers() itself and every page cache
+	 * excludes it; the explicit no-store keeps the contract in this file.
+	 *
+	 * @since 1.34.2
+	 * @return void
+	 */
+	public function handle_refresh() {
+		Cache_Compatibility::send_no_store_headers();
+		$stamp = self::issue_stamp();
+		wp_send_json_success(
+			array(
+				'nonce' => wp_create_nonce( self::AJAX_ACTION ),
+				't'     => (int) $stamp['t'],
+				'sig'   => (string) $stamp['sig'],
+				'hp'    => (string) $stamp['hp'],
+				'salt'  => (string) $stamp['salt'],
+				'diff'  => (int) $stamp['diff'],
+				// Seconds the script must let pass before sending, so the dwell
+				// check measured from this fresh stamp is met by a real person
+				// who submits straight away, instead of refused as "too fast".
+				'wait'  => $this->cap( 'faz_dsar_min_dwell_seconds', self::MIN_DWELL_SECONDS ),
+			)
+		);
+	}
+
+	/**
 	 * AJAX handler for form submission.
 	 */
 	public function handle_submit() {
@@ -477,7 +569,12 @@ class DSAR_Shortcode {
 		// throw or return, where the implicit-exit assumption breaks. Be
 		// symmetric and defensive everywhere.
 		if ( ! check_ajax_referer( self::AJAX_ACTION, 'nonce', false ) ) {
-			wp_send_json_error( __( 'Invalid security token. Please refresh the page and try again.', 'faz-cookie-manager' ) );
+			// "Refresh" is the remedy on a live page. On a page a cache kept
+			// past the nonce's life — which veto_page_cache() prevents, but a
+			// site can filter the veto off, and a cache it cannot reach may
+			// exist — a refresh returns the same markup, so the message also
+			// names the one channel that always works.
+			wp_send_json_error( __( 'Invalid security token. Please refresh the page and try again, or email us directly to exercise your rights.', 'faz-cookie-manager' ) );
 			return;
 		}
 
@@ -763,10 +860,17 @@ class DSAR_Shortcode {
 			return $this->reject( 'faz_dsar_gate', $message, $context );
 		}
 
+		// This layer keys on the visitor's own address, so it can only ever
+		// hold the same person — but that person may be exercising a second
+		// right (access, then erasure) or correcting the type they picked. The
+		// hour is a bound on confirmation mail aimed at an unverified address
+		// and stays; what the refusal must not do is strand them, so it names
+		// the fallback the other ceilings name. The form itself says, next to
+		// the request type, that one message can carry several rights.
 		if ( '' !== $email && false !== get_transient( $this->email_rl_key( $email ) ) ) {
 			return $this->reject(
 				'faz_dsar_email_throttled',
-				__( 'Too many requests. Please wait 1 hour before submitting again.', 'faz-cookie-manager' ),
+				__( 'Too many requests. Please wait 1 hour before submitting again, or email us directly to exercise your rights.', 'faz-cookie-manager' ),
 				$context
 			);
 		}
@@ -815,9 +919,10 @@ class DSAR_Shortcode {
 	 * covered by one HMAC over `wp_salt()`, which is what makes them usable
 	 * without keeping a row per visitor: the server recomputes the signature
 	 * from the posted values and either they are the ones it issued or they are
-	 * not. No challenge table, no session, no cookie, nothing to clean up, and
-	 * nothing a page cache can get wrong beyond serving an older stamp, which
-	 * is a case the age window already handles.
+	 * not. No challenge table, no session, no cookie, nothing to clean up. A
+	 * page cache can only serve an older stamp — and the page that carries
+	 * one is kept out of the page cache by veto_page_cache(), so an older
+	 * stamp reaches the age window only on a site that filtered the veto off.
 	 *
 	 * @since 1.34.1
 	 * @return array {
@@ -979,12 +1084,20 @@ class DSAR_Shortcode {
 	 * How long a stamped form stays submittable.
 	 *
 	 * 24 hours, which is deliberately NOT tighter than the nonce rendered
-	 * beside it: WordPress accepts an anonymous nonce for 12 to 24 hours, so on
-	 * a page served from cache for longer than that the nonce is what fails
-	 * first, with its own "refresh the page" message, and this window never
-	 * becomes a second, earlier expiry that an admin would have to discover.
-	 * Its job is only to stop a scraped stamp from being replayable forever on
-	 * a site that has raised `nonce_life`.
+	 * beside it: WordPress accepts an anonymous nonce for 12 to 24 hours, so
+	 * when a form is older than that the nonce is what fails first, and this
+	 * window never becomes a second, earlier expiry that an admin would have
+	 * to discover. Its job is only to stop a scraped stamp from being
+	 * replayable forever on a site that has raised `nonce_life`.
+	 *
+	 * Neither expiry is meant to be reached by a visitor: the script replaces
+	 * both values with current ones from handle_refresh() before sending, and
+	 * the page that carries the form is kept out of full-page caches where the
+	 * plugin can see it (veto_page_cache()), because a cached copy older than
+	 * the nonce would refuse every visitor with a "refresh the page" that
+	 * returns the same copy. Where the refresh cannot run and that veto
+	 * was filtered off, or a cache the plugin cannot reach kept the page
+	 * anyway, both refusals name the email fallback alongside the reload.
 	 *
 	 * @since 1.34.1
 	 * @return int Seconds; 0 disables the upper bound.
@@ -1205,11 +1318,13 @@ class DSAR_Shortcode {
 		// difficulty, so it is a function of the issue second alone and even
 		// uncached renders collide inside that second. Spending it on first use
 		// therefore refuses the second DATA SUBJECT, not the second attempt: on
-		// a full-page-cached site one submission locks the form for everyone
-		// until the cache turns over. That trades an Art. 12(2) failure for a
-		// replay worth one GET to an attacker, who is still bounded by the
-		// per-email, per-IP and site-wide ceilings — those, not the stamp, are
-		// what cap how many requests one client can file.
+		// a site that filtered veto_page_cache() off, or whose cache ignored
+		// it, one submission would lock the form for everyone until the cache
+		// turns over, and even on an uncached site two visitors served in the
+		// same second would share one stamp. That trades an Art. 12(2) failure
+		// for a replay worth one GET to an attacker, who is still bounded by
+		// the per-email, per-IP and site-wide ceilings — those, not the stamp,
+		// are what cap how many requests one client can file.
 		//
 		// A site that wants a genuinely per-visitor gate hangs one on
 		// `faz_dsar_pre_submit` (see its PHPDoc): Turnstile and hCaptcha mint a
@@ -1319,11 +1434,121 @@ class DSAR_Shortcode {
 	 * because they are one situation for the visitor and have one remedy, and
 	 * because telling a bot which of the three it tripped is free information.
 	 *
+	 * The remedy is the reload — and, since 1.34.2, the email fallback beside
+	 * it, for the one case where a reload changes nothing: a page a cache kept
+	 * past the stamp's life. veto_page_cache() keeps the form out of page
+	 * caches, but the veto can be filtered off and a cache beyond the plugin's
+	 * reach can ignore it; a refusal that only says "reload" would then be an
+	 * instruction the visitor cannot follow.
+	 *
 	 * @since 1.34.1
 	 * @return string
 	 */
 	private function stale_form_message() {
-		return __( 'This form has expired. Please reload the page and submit it again.', 'faz-cookie-manager' );
+		return __( 'This form has expired. Please reload the page and submit it again, or email us directly to exercise your rights.', 'faz-cookie-manager' );
+	}
+
+	/**
+	 * Veto the page cache before output when the queried page carries the form.
+	 *
+	 * The shortcode's own render runs inside the_content, after the theme has
+	 * printed <head>, so its no-store header can almost never be sent there;
+	 * only the constant, the LiteSpeed action and the FlyingPress filter get
+	 * through. Caches that read only response headers (a reverse proxy, an
+	 * edge cache) need the header, so a singular page whose content names the
+	 * shortcode is vetoed here, on template_redirect, while headers can still
+	 * be sent. A form placed elsewhere (a widget, a template) is still vetoed
+	 * by render() through the signals that do not need headers.
+	 *
+	 * @since 1.34.2
+	 */
+	public function maybe_veto_page_cache_early() {
+		if ( ! is_singular() ) {
+			return;
+		}
+		$post = get_queried_object();
+		if ( ! is_object( $post ) || ! isset( $post->post_content ) ) {
+			return;
+		}
+		if ( has_shortcode( (string) $post->post_content, 'faz_dsar_form' ) ) {
+			$this->veto_page_cache();
+		}
+	}
+
+	/**
+	 * Keep the page that renders the form out of full-page caches.
+	 *
+	 * The form bakes an anonymous nonce (valid 12 to 24 hours) and a signed
+	 * stamp (24 hours) into the page body. A full-page cache that keeps the
+	 * page longer than that — LiteSpeed's default public TTL is seven days,
+	 * Cloudflare APO holds HTML until purged, WP Rocket's lifespan can be
+	 * raised — hands every later visitor the expired copy: each submission is
+	 * refused, the refusal says to refresh, and the refresh returns the same
+	 * copy. Nothing is stored, no mail is sent, and the admin sees nothing,
+	 * which fails GDPR Art. 12(2) on the one channel the site relies on.
+	 *
+	 * So the page is not cached. The same signals the plugin already sends
+	 * for a country-dependent banner (see Frontend::veto_page_cache_for_bot_variance()):
+	 * the `DONOTCACHEPAGE` / `LSCACHE_NO_CACHE` constants that WP Rocket, W3
+	 * Total Cache, WP Super Cache, Cache Enabler, SG Optimizer and LiteSpeed
+	 * read when they decide at shutdown; the `litespeed_control_set_nocache` action,
+	 * which LSCache honours whenever it is fired because it only records
+	 * intent; the `flying_press_is_cacheable` filter, the only signal
+	 * FlyingPress reads; and Cache_Compatibility::NO_STORE_HEADERS for the
+	 * edge — sent only while headers can still be sent, which on most themes
+	 * they cannot by the time a shortcode runs, since `<head>` went out
+	 * first. The header half is therefore best-effort; the constant, action
+	 * and filter half is what does the work, and all three are registered
+	 * regardless of output state.
+	 *
+	 * Cache Compatibility Mode is not consulted: its promise is a
+	 * visitor-invariant page, and this page is invariant across visitors but
+	 * not across time — the nonce expires. The veto is scoped to the page
+	 * that renders the form, which is one page on almost every site. A site
+	 * that renders the form in a sitewide widget, and would rather keep its
+	 * cache than the form's self-sufficiency, can filter the veto off; the
+	 * refusal messages then carry the email fallback, so a visitor handed a
+	 * stale copy is still told a way that works.
+	 *
+	 * Since 1.34.2 the veto is no longer what the form's validity rests on:
+	 * the script refreshes the nonce and the stamp from handle_refresh() before
+	 * sending, so a copy a cache kept anyway — a widget, a builder or block
+	 * template, a synced pattern, an edge cache the veto cannot reach — still
+	 * submits. The veto stays for a visitor without JavaScript, who posts what
+	 * the markup carried.
+	 *
+	 * @since 1.34.2
+	 * @return void
+	 */
+	private function veto_page_cache() {
+		if ( $this->page_cache_vetoed ) {
+			return;
+		}
+		/**
+		 * Whether a page that renders [faz_dsar_form] is kept out of full-page caches.
+		 *
+		 * Default true. Returning false restores caching of the page, at the
+		 * cost of the form refusing every visitor once the cached copy is
+		 * older than the nonce rendered into it (12 to 24 hours).
+		 *
+		 * @since 1.34.2
+		 * @param bool $veto True to keep the page uncached.
+		 */
+		if ( ! apply_filters( 'faz_dsar_veto_page_cache', true ) ) {
+			return;
+		}
+		$this->page_cache_vetoed = true;
+
+		// The same constants and headers every page veto uses
+		// (Cache_Compatibility), so an edge that reads only CDN-Cache-Control
+		// or Surrogate-Control is told too.
+		Cache_Compatibility::define_no_cache_constants();
+		do_action( 'litespeed_control_set_nocache', 'FAZ Cookie Manager data subject request form' );
+		// Registered at render time, which is before FlyingPress asks: it
+		// decides from its buffered output at shutdown.
+		add_filter( 'flying_press_is_cacheable', '__return_false' );
+
+		Cache_Compatibility::send_no_store_headers();
 	}
 
 	/**

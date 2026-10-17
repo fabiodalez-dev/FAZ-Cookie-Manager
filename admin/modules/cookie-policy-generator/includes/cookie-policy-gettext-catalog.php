@@ -76,7 +76,7 @@ Each third party is an independent data controller for the cookies it sets; plea
 		_x(
 			'## How long we keep data
 
-Consent records and analytics data are retained for {{RETENTION_PERIOD}} from collection. Strictly necessary cookies are retained only for the duration of the session or as required for the technical function they serve. See the table above for the specific lifetime of each cookie.',
+Records of the consent choices you make in our cookie banner are kept for {{CONSENT_RECORD_RETENTION}} from collection, so that we can demonstrate the consent we rely on. Other data collected through cookies, including analytics data, is kept only for as long as its purpose requires and, where no shorter cookie-specific period is shown, for no longer than the declared fallback period of {{RETENTION_PERIOD}}. Strictly necessary cookies are retained only for the duration of the session or as required for the technical function they serve. See the table above for the specific lifetime of each cookie.',
 			'Cookie policy template: gdpr-strict / section-6',
 			'faz-cookie-manager'
 		),
@@ -280,7 +280,7 @@ You may withdraw consent at any time (Art. 8, § 5) via the "Cookie settings" li
 		_x(
 			'## Categories of personal data processed (Art. 5, I)
 
-- **Online identifiers** — IP (hashed with monthly salt), device IDs, session IDs
+- **Online identifiers** — IP (one-way hashed with a site-specific salt), device IDs, session IDs
 - **Browsing data** — pages visited, dwell time, interactions
 - **Approximate location** — country/region from IP (not precise GPS)
 - **Preferences** — consent categories, language

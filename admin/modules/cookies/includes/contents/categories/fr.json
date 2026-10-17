@@ -1,7 +1,7 @@
 {
     "necessary": {
         "name": "Nécessaire",
-        "description": "<p>Les cookies nécessaires sont cruciaux pour les fonctions de base du site Web et celui-ci ne fonctionnera pas comme prévu sans eux. Ces cookies ne stockent aucune donnée personnellement identifiable.</p>"
+        "description": "<p>Les cookies nécessaires sont cruciaux pour les fonctions de base du site Web et celui-ci ne fonctionnera pas comme prévu sans eux. Ils ne sont pas utilisés à des fins publicitaires ni pour vous suivre sur d'autres sites. Le cookie de consentement stocke un identifiant aléatoire qui nous permet de conserver une trace du choix que vous avez fait.</p>"
     },
     "functional": {
         "name": "Fonctionnelle",

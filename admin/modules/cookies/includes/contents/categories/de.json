@@ -1,7 +1,7 @@
 {
     "necessary": {
         "name": "Notwendige",
-        "description": "<p>Notwendige Cookies sind für die Grundfunktionen der Website von entscheidender Bedeutung. Ohne sie kann die Website nicht in der vorgesehenen Weise funktionieren. Diese Cookies speichern keine personenbezogenen Daten.</p>"
+        "description": "<p>Notwendige Cookies sind für die Grundfunktionen der Website von entscheidender Bedeutung. Ohne sie kann die Website nicht in der vorgesehenen Weise funktionieren. Sie werden weder für Werbung noch zur websiteübergreifenden Nachverfolgung verwendet. Das Einwilligungs-Cookie speichert eine zufällige Kennung, mit der wir einen Nachweis Ihrer Auswahl führen können.</p>"
     },
     "functional": {
         "name": "Funktionale",

@@ -87,10 +87,11 @@ function boot({ ready = 'loading', seed = '', holdDcl = false } = {}) {
   if (holdDcl) {
     // jsdom fires its own DOMContentLoaded on the microtask queue, which is
     // also where the observer delivers its records — so by the time a backstop
-    // park exists the safety release has already decided, and a handoff after
-    // it is ignored by design. A case that needs the HANDOFF side of a backstop
-    // park silences jsdom's event here, before the bootstrap registers its own
-    // listeners; the one release() dispatches is marked and let through.
+    // park exists the safety release has already decided, and the backstop's
+    // deferred decision has run against the safety policy. A case that needs
+    // the HANDOFF side of a backstop park silences jsdom's event here, before
+    // the bootstrap registers its own listeners; the one release() dispatches
+    // is marked and let through.
     window.document.addEventListener('DOMContentLoaded', function (event) {
       if (!event.__fromTest) event.stopImmediatePropagation();
     }, true);
@@ -480,9 +481,17 @@ async function release(window) {
   eq('premise: the style now holds three text nodes', style.childNodes.length, 3);
   const before = style.textContent;
   style.removeChild(middle);
-  eq('removing the comment node that split the URL is held', style.textContent, before);
+  // The removal itself is not held any more — a held removal is what made
+  // `while (style.firstChild) style.removeChild(style.firstChild)` spin. It
+  // happens now, and the SHEET is what waits: switched off before the node
+  // went, so the engine never parsed the URL the removal revealed.
+  eq('removing the comment node that split the URL happens at once', middle.parentNode, null);
+  eq('the style keeps the rest of its text', style.textContent, before.replace('/*x*/', ''));
+  eq('and the sheet is switched off meanwhile', style.getAttribute('type'), 'text/faz-held');
+  eq('so the engine holds no stylesheet for it', style.sheet, null);
   runtimeHandoff(window);
-  ok('and the removal applies at handoff', style.textContent !== before);
+  eq('at handoff the original type comes back', style.getAttribute('type'), null);
+  ok('and the engine builds the sheet again', !!style.sheet);
 }
 
 {
@@ -547,7 +556,9 @@ console.log('\nbootstrap: a Range reaches the DOM through neither Node nor Paren
   range.selectNodeContents(style);
   eq('premise: the range spans the sheet text', range.toString(), '.p{background-image:url(https://tracker.test/r3.png)}');
   range.surroundContents(wrapper);
-  eq('Range.surroundContents inside a <style> is held: the wrapper is not inserted', wrapper.parentNode, null);
+  // Held means out of the document, not parentless: a held node waits in a
+  // private fragment, so a page loop moving nodes sees them leave.
+  eq('Range.surroundContents inside a <style> is held: the wrapper is not inserted', wrapper.isConnected, false);
   runtimeHandoff(window);
   eq('and the wrap applies at handoff', wrapper.parentNode, style);
   eq('with the sheet text moved inside the wrapper', wrapper.textContent, '.p{background-image:url(https://tracker.test/r3.png)}');
@@ -1513,7 +1524,7 @@ console.log('\nbootstrap: markup that never passes through a setter');
   const range = document.createRange();
   range.selectNodeContents(document.getElementById('list'));
   range.insertNode(img);
-  eq('a resource inserted through Range.insertNode is held out of the document', img.parentNode, null);
+  eq('a resource inserted through Range.insertNode is held out of the document', img.isConnected, false);
   await release(window);
   eq('and parked on the safety release', nativeGetAttribute.call(img, 'data-faz-src'), 'https://tracker.test/range.gif');
   eq('with no live src', nativeGetAttribute.call(img, 'src'), null);
@@ -1956,10 +1967,13 @@ for (const name of ['deleteContents', 'extractContents']) {
   range.setStart(node, before.indexOf('/*'));
   range.setEnd(node, before.indexOf('/*') + 7);
   const out = range[name]();
-  eq('Range.' + name + ' that would reveal a URL is held', document.getElementById('seed').textContent, before);
-  if (name === 'extractContents') eq('and answers with an empty fragment meanwhile', out && out.childNodes.length, 0);
+  // As removeChild above: the removal happens now, the sheet waits.
+  eq('Range.' + name + ' that would reveal a URL applies at once', document.getElementById('seed').textContent, '.p{background-image:url(https:tracker.test/a.png)}');
+  eq('with the sheet switched off until the runtime judges it', document.getElementById('seed').sheet, null);
+  if (name === 'extractContents') eq('and answers with the removed text, not an empty stand-in', out && out.textContent, '/*x*/ /');
   runtimeHandoff(window);
-  eq('and it applies at handoff', document.getElementById('seed').textContent, '.p{background-image:url(https:tracker.test/a.png)}');
+  eq('and it is still applied after the handoff', document.getElementById('seed').textContent, '.p{background-image:url(https:tracker.test/a.png)}');
+  eq('with the sheet switched back on', document.getElementById('seed').getAttribute('type'), null);
 }
 
 {
@@ -2135,11 +2149,128 @@ console.log('\nhandoff: a policy.script that throws is a refusal, and the queue 
     });
   } catch (e) { thrown = e; }
   eq('a throwing policy.script does not escape finish()', thrown, null);
-  eq('the script it threw on is stamped inert', nativeGetAttribute.call(script, 'type'), 'javascript/blocked');
-  eq('with its staged src parked, not replayed', nativeGetAttribute.call(script, 'data-faz-src'), 'https://tracker.test/throws.js');
-  eq('and no live src', nativeGetAttribute.call(script, 'src'), null);
+  // The form is the server's: type="text/plain" with the URL LIVE and a
+  // category. It is the only shape the runtime's _fazUnblockServerSide()
+  // selects for an external script (`script[type="text/plain"]
+  // [data-faz-category]`, src read by _fazBuildRestoredScript). The previous
+  // form — src moved into data-faz-src under javascript/blocked — matched no
+  // restore selector, so a script merely refused at the handoff stayed dead
+  // after the visitor consented. A text/plain script never fetches.
+  eq('the script it threw on is stamped inert', nativeGetAttribute.call(script, 'type'), 'text/plain');
+  eq('with its staged src written live under the inert type', nativeGetAttribute.call(script, 'src'), 'https://tracker.test/throws.js');
+  eq('and a category, which every restore selector requires', nativeGetAttribute.call(script, 'data-faz-category'), 'marketing');
+  eq('and nowhere a restore pass does not look', nativeGetAttribute.call(script, 'data-faz-src'), null);
+  ok("the runtime's own restore selector finds it",
+    Array.prototype.indexOf.call(document.querySelectorAll('script[type="text/plain"][data-faz-category]'), script) !== -1);
   await Promise.resolve();
   eq('while the queue still drains: the held first-party fetch went out', fetched.length, 1);
+}
+
+// The same form on the safety release, for both places the URL can be: the
+// live attribute (setAttribute, held) and the staged setter (script.src = …).
+{
+  const { window, document, nativeGetAttribute } = boot();
+  const viaProp = document.createElement('script');
+  viaProp.src = 'https://tracker.test/prop.js';
+  document.head.appendChild(viaProp);
+  const viaAttr = document.createElement('script');
+  viaAttr.setAttribute('src', 'https://tracker.test/attr.js');
+  document.head.appendChild(viaAttr);
+  const own = document.createElement('script');
+  own.src = SITE + 'wp-content/themes/t/app.js';
+  document.head.appendChild(own);
+  window.console.warn = function () {};
+  await new Promise((r) => setTimeout(r, 0)); // jsdom's DOMContentLoaded: the safety release
+  for (const [label, el, url] of [['the staged src', viaProp, 'https://tracker.test/prop.js'], ['the held setAttribute src', viaAttr, 'https://tracker.test/attr.js']]) {
+    eq('safety release: ' + label + ' is parked as text/plain', nativeGetAttribute.call(el, 'type'), 'text/plain');
+    eq('with the URL live', nativeGetAttribute.call(el, 'src'), url);
+    eq('and a category', nativeGetAttribute.call(el, 'data-faz-category'), 'marketing');
+    eq('and not under data-faz-src', nativeGetAttribute.call(el, 'data-faz-src'), null);
+  }
+  eq("the site's own script is released untouched", nativeGetAttribute.call(own, 'type'), null);
+  eq('with its src', nativeGetAttribute.call(own, 'src'), SITE + 'wp-content/themes/t/app.js');
+}
+
+// End to end with the real runtime: a script the runtime's own policy.script
+// refuses (it throws on an element whose `src` property cannot be redefined)
+// is parked by refuseScript, backed up by the runtime's observer and comes
+// back as an executable clone on the consent that allows it. On the old form
+// nothing selected it: no live script for that URL ever appeared.
+{
+  const runtimeCode = readFileSync(resolve(HERE, '../../../frontend/js/script.js'), 'utf8');
+  const { window, document, nativeGetAttribute } = boot();
+  window._fazConfig = {
+    _block: '1',
+    _categories: [{ slug: 'necessary', isNecessary: true }, { slug: 'marketing', isNecessary: false }],
+    _services: [],
+    _providersToBlock: [{ re: 'tracker.test', categories: ['marketing'], service: 'tracker' }],
+    _userWhitelist: [], _perServiceConsent: false, _perCookieConsent: false, i18n: {},
+    _bannerConfig: { settings: { applicableLaw: 'gdpr' }, behaviours: {} },
+  };
+  window.fazcookie = { _fazGetFromStore: () => undefined };
+  const URL_ = 'https://tracker.test/refused.js';
+  const script = document.createElement('script');
+  Object.defineProperty(script, 'src', { value: URL_, writable: true, configurable: false });
+  script.setAttribute('src', URL_);
+  document.head.appendChild(script);
+  const warnings = [];
+  window.console.warn = function () { warnings.push(Array.prototype.join.call(arguments, ' ')); };
+  const realAdd = document.addEventListener.bind(document);
+  document.addEventListener = (type, ...rest) => (type === 'DOMContentLoaded' ? undefined : realAdd(type, ...rest));
+  window.eval(runtimeCode); // start() + finish() with the real policy
+  document.addEventListener = realAdd;
+  ok('premise: the runtime refused the script', warnings.some((l) => l.indexOf('Deferred script decision failed') !== -1));
+  await new Promise((r) => setTimeout(r, 0)); // the runtime's observer backs it up
+  eq('premise: no live script for that URL before consent',
+    Array.prototype.some.call(document.querySelectorAll('script'), (s) => nativeGetAttribute.call(s, 'src') === URL_ && !/plain|blocked/.test(nativeGetAttribute.call(s, 'type') || '')), false);
+  window.fazcookie._fazGetFromStore = (k) => (k === 'marketing' ? 'yes' : k === 'consent' ? 'yes' : undefined);
+  window.eval('_fazUnblock()');
+  await new Promise((r) => setTimeout(r, 0));
+  const live = Array.prototype.filter.call(document.querySelectorAll('script'), (s) => nativeGetAttribute.call(s, 'src') === URL_ && (nativeGetAttribute.call(s, 'type') || 'text/javascript') === 'text/javascript');
+  eq('after consent the refused script is back as an executable clone', live.length, 1);
+}
+
+console.log('\nhandoff after the safety release: the runtime takes over');
+
+// finish() returned early whenever the safety release had already decided,
+// before the handoffs that disconnect the observer and rebind the retained
+// wrappers, and before `pending` flipped — so a runtime that arrived late
+// (an optimiser re-running this inline script after parsing, or delaying
+// script.js past DOMContentLoaded) ran beside a bootstrap still enforcing by
+// origin for the whole page view: every cross-origin resource inserted
+// through markup was parked under "marketing" without the runtime's rules,
+// a fetch reference a library had captured during the window answered
+// "Blocked by consent" for an allowed API, and <html> kept
+// faz-consent-runtime-missing with the banner on screen.
+{
+  const { window, document, fetched, nativeGetAttribute } = boot({ ready: 'complete' });
+  const capturedFetch = window.fetch; // what a library keeps from the window
+  await Promise.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+  eq('premise: the safety release happened', window._fazBootstrap.released, true);
+  ok('premise: the marker class is on <html>', document.documentElement.className.indexOf('faz-consent-runtime-missing') !== -1);
+  const warnings = [];
+  window.console.warn = function () { warnings.push(Array.prototype.join.call(arguments, ' ')); };
+  window._fazBootstrap.start();
+  window._fazBootstrap.finish({
+    script: function () {},
+    node: function () {},
+    url: function () { return false; },
+    category: function () { return 'functional'; },
+  });
+  ok('the late handoff is reported as a takeover', warnings.some((l) => l.indexOf('takes over') !== -1));
+  ok('and not as ignored', !warnings.some((l) => l.indexOf('ignored') !== -1));
+  eq('released is cleared', window._fazBootstrap.released, false);
+  eq('the marker class is removed', document.documentElement.className.indexOf('faz-consent-runtime-missing'), -1);
+  document.getElementById('list').innerHTML = '<img src="https://cdn.the-site.com/hero.jpg">';
+  await new Promise((r) => setTimeout(r, 0));
+  const img = document.querySelector('#list img');
+  eq('markup inserted after the late handoff is no longer parked by origin', nativeGetAttribute.call(img, 'src'), 'https://cdn.the-site.com/hero.jpg');
+  eq('and carries no placeholder category', nativeGetAttribute.call(img, 'data-faz-category'), null);
+  await capturedFetch('https://api.the-site.com/v1/ping');
+  eq('a fetch reference captured during the window reaches the live fetch', fetched.length, 1);
+  window._fazBootstrap.finish({ script: function () {}, node: function () {}, url: function () { return false; } });
+  ok('a second handoff after the takeover is still reported as a repeat', warnings.some((l) => l.indexOf('already drained') !== -1));
 }
 
 console.log('\nhandoff: the policy matches URLs the way the runtime does');

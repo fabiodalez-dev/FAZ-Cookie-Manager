@@ -1,7 +1,7 @@
 {
     "necessary": {
         "name": "Tarvittavat",
-        "description": "<p>Tarvittavat evästeet ovat ratkaisevan tärkeitä verkkosivuston perustoiminnoille, eikä verkkosivusto toimi tarkoitetulla tavalla ilman niitä. Nämä evästeet eivät tallenna henkilökohtaisia tietoja.</p>"
+        "description": "<p>Tarvittavat evästeet ovat ratkaisevan tärkeitä verkkosivuston perustoiminnoille, eikä verkkosivusto toimi tarkoitetulla tavalla ilman niitä. Niitä ei käytetä mainontaan eikä sinun seuraamiseesi muilla sivustoilla. Suostumuseväste tallentaa satunnaisen tunnisteen, jonka avulla voimme säilyttää tiedon tekemästäsi valinnasta.</p>"
     },
     "functional": {
         "name": "Toiminnalliset",

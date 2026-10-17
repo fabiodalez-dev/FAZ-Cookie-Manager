@@ -14,6 +14,11 @@ namespace {
 		public static function clearall() {}
 	}
 
+	class VarnishPurger {
+		/** @return mixed */
+		public function execute_purge_no_id( $post_id = 0 ) {}
+	}
+
 	/** @return mixed */
 	function rocket_clean_domain() {}
 

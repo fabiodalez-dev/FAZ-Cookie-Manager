@@ -79,11 +79,50 @@ class Renderer {
 	 */
 	private static $public_cookie_rows_cache = null;
 
+	/**
+	 * Jurisdictions whose scaffolds state how long the consent log is kept, and
+	 * therefore receive the {{CONSENT_RECORD_RETENTION}} placeholder.
+	 *
+	 * @var string[]
+	 */
+	const CONSENT_RECORD_RETENTION_JURISDICTIONS = array( 'gdpr-strict', 'lgpd-brazil' );
+
+	/**
+	 * Object-cache key of the rendered cookie table for one document.
+	 *
+	 * The table text depends on the jurisdiction as well as the language (the
+	 * no-country transfer fallback names the document's regime), so both are
+	 * part of the key. Every writer and every invalidation goes through here so
+	 * the two can never drift apart again.
+	 *
+	 * @param string $lang         Policy language.
+	 * @param string $jurisdiction Policy jurisdiction.
+	 * @return string
+	 */
+	public static function cookie_list_cache_key( $lang, $jurisdiction ) {
+		return 'faz_cookie_policy_list_' . $lang . '_' . $jurisdiction;
+	}
+
+	/**
+	 * Delete the cookie-table object-cache entries of the given languages, for
+	 * every jurisdiction a document can be rendered in.
+	 *
+	 * @param string[] $languages Policy languages.
+	 * @return void
+	 */
+	public static function delete_cookie_list_cache( array $languages ) {
+		foreach ( $languages as $language ) {
+			foreach ( Generator::JURISDICTIONS as $jurisdiction ) {
+				wp_cache_delete( self::cookie_list_cache_key( $language, $jurisdiction ), 'faz_cookie_policy' );
+			}
+		}
+	}
+
 	/** Invalidate declarations after an administrator changes their visibility. */
 	public static function clear_cookie_declaration_cache() {
 		$languages = array_unique( array_merge( faz_selected_languages(), array( faz_current_language() ) ) );
+		self::delete_cookie_list_cache( $languages );
 		foreach ( $languages as $language ) {
-			wp_cache_delete( 'faz_cookie_policy_list_' . $language, 'faz_cookie_policy' );
 			wp_cache_delete( 'faz_cookie_policy_transfers_' . $language, 'faz_cookie_policy' );
 		}
 		self::$cookie_list_cache        = array();
@@ -146,8 +185,20 @@ class Renderer {
 		// override changes the legal regime, but it must never bypass that
 		// regime's mandatory fields (notably the POPIA operator and Information
 		// Officer details).
+		//
+		// Since 1.34.2 the controller identity is required for every
+		// jurisdiction, but that gate belongs to PUBLISHING (REST save, wizard,
+		// policy page). At render time only POPIA refuses, as before: a
+		// GDPR/CCPA/LGPD page already live on an upgraded site keeps rendering
+		// for visitors, because blanking it would remove the cookie inventory
+		// and the withdrawal instructions on an automatic update. The
+		// administrator sees the actionable notice above the document.
+		$admin_notice = '';
 		if ( $doc->missing_required_settings( $jurisdiction, $settings ) ) {
-			return self::incomplete_configuration_notice();
+			if ( 'popia-southafrica' === $jurisdiction ) {
+				return self::incomplete_configuration_notice();
+			}
+			$admin_notice = self::incomplete_configuration_notice();
 		}
 
 		// FR-03 step 3: load scaffold.
@@ -249,10 +300,11 @@ class Renderer {
 			$html = str_replace( $sentinel, (string) $html_value, $html );
 		}
 
-		// International data transfers (Schrems II) section — appended just
-		// before the disclaimer and gated on >=1 flagged cookie, so a site with
-		// no flagged transfer renders byte-identically to a pre-feature install.
-		$html .= self::international_transfers_section( $lang );
+		// International data transfers section — appended just before the
+		// disclaimer and gated on >=1 flagged cookie, so a site with no flagged
+		// transfer renders byte-identically to a pre-feature install. Framed in
+		// the transfer regime of THIS document's jurisdiction (see the method).
+		$html .= self::international_transfers_section( $lang, $jurisdiction );
 
 		// Disclaimer block. Admin-configurable since 1.16.2: visibility
 		// + text are stored in the `disclaimer` sub-array of the
@@ -287,7 +339,7 @@ class Renderer {
 				$allowed[ $tag ]['aria-level'] = true;
 			}
 		}
-		return $wrapper_open . wp_kses( $html, $allowed ) . $wrapper_close;
+		return $admin_notice . $wrapper_open . wp_kses( $html, $allowed ) . $wrapper_close;
 	}
 
 	/**
@@ -405,8 +457,8 @@ class Renderer {
 			'COMPANY_REGISTRY'       => esc_html( self::scalar_string( $company['registry'] ?? '' ) ),
 			'DPO_EMAIL'              => esc_html( self::scalar_string( $dpo['email'] ?? '' ) ),
 			'DPO_NAME'               => esc_html( self::scalar_string( $dpo['name'] ?? '' ) ),
-			'COOKIE_CATEGORIES'      => self::build_cookie_list_html( $lang ),
-			'THIRD_PARTY_SERVICES'   => self::build_services_list( $settings ),
+			'COOKIE_CATEGORIES'      => self::build_cookie_list_html( $lang, $jurisdiction ),
+			'THIRD_PARTY_SERVICES'   => self::build_services_list( $settings, $lang ),
 			'LAST_UPDATED_DATE'      => esc_html( self::format_date( $lang ) ),
 			'COOKIE_POLICY_URL'      => esc_url( self::current_url() ),
 			'PRIVACY_POLICY_URL'     => esc_url( self::privacy_policy_url( $settings ) ),
@@ -424,6 +476,17 @@ class Renderer {
 		$transfer_rows = self::collect_transfer_disclosures( $lang );
 		if ( ! empty( $transfer_rows ) ) {
 			$data['INTERNATIONAL_TRANSFERS_FP'] = sha1( (string) wp_json_encode( $transfer_rows ) );
+		}
+
+		// The consent-record period is the consent log's own purge window
+		// (faz_settings.consent_logs.retention, read by
+		// Activator::run_retention_cleanup()), never the policy's declared
+		// fallback: two settings on two screens must not be published as one
+		// figure. Only the scaffolds that state it carry the key, so a policy
+		// whose text does not mention the consent log keeps an unchanged version
+		// hash when the purge window moves.
+		if ( in_array( $jurisdiction, self::CONSENT_RECORD_RETENTION_JURISDICTIONS, true ) ) {
+			$data['CONSENT_RECORD_RETENTION'] = esc_html( self::format_months( self::consent_log_retention_months(), $lang ) );
 		}
 
 		// Jurisdiction-specific official body refs.
@@ -463,11 +526,22 @@ class Renderer {
 	 * Build the cookie list HTML (FR-06). Pulled from wp_faz_cookies +
 	 * wp_faz_cookie_categories, cached 5 min.
 	 *
-	 * @param string $lang For category-name translation when available.
+	 * The cache key carries BOTH the language and the jurisdiction: the only
+	 * jurisdiction-dependent text in the table is the no-country transfer
+	 * fallback ("outside the EU/EEA" / "outside Brazil" / …), but two documents
+	 * rendered on one request (or within the 5-minute object-cache window) must
+	 * never be served each other's labels.
+	 *
+	 * @param string $lang         For category-name translation when available.
+	 * @param string $jurisdiction Effective jurisdiction of the document the
+	 *                             table is embedded in; decides the wording of
+	 *                             the no-country transfer fallback. Defaults to
+	 *                             gdpr-strict, the historical behaviour.
 	 * @return string HTML <ul>/<dl> markup.
 	 */
-	private static function build_cookie_list_html( $lang ) {
-		$cache_key = 'faz_cookie_policy_list_' . $lang;
+	private static function build_cookie_list_html( $lang, $jurisdiction = 'gdpr-strict' ) {
+		$jurisdiction = is_string( $jurisdiction ) && '' !== $jurisdiction ? $jurisdiction : 'gdpr-strict';
+		$cache_key    = self::cookie_list_cache_key( $lang, $jurisdiction );
 		if ( isset( self::$cookie_list_cache[ $cache_key ] ) ) {
 			return self::$cookie_list_cache[ $cache_key ];
 		}
@@ -498,35 +572,28 @@ class Renderer {
 				$grouped[ $cat ][] = $row;
 			}
 
-			// Localised table-column headings. Translators handled via
-			// gettext; default English used when locale strings are
-			// unavailable (Cookie Policy renderer may be called outside
-			// admin pages where __() context isn't always loaded).
+			// Every fixed gettext label of the table — the four column headings,
+			// the "N cookies" counter and the two transfer labels — is resolved
+			// in the POLICY language, under one locale switch. The body, the
+			// category names, the date and the disclaimer already follow $lang;
+			// until 1.34.2 the headings alone went through esc_html__() against
+			// the ambient request locale, so an Italian policy on an en_US site
+			// ([faz_cookie_policy_complete lang="it"], the admin default
+			// language, the preview endpoint) carried English headings over an
+			// Italian table. switch_to_policy_locale() is a no-op when the
+			// ambient locale already matches (WPML/Polylang per-page), so the
+			// common case stays byte-identical. The English msgid is still what
+			// an untranslated site gets.
+			$switched     = self::switch_to_policy_locale( $lang );
 			$col_cookie   = esc_html__( 'Cookie', 'faz-cookie-manager' );
 			$col_domain   = esc_html__( 'Domain', 'faz-cookie-manager' );
 			$col_duration = esc_html__( 'Duration', 'faz-cookie-manager' );
 			$col_desc     = esc_html__( 'Description', 'faz-cookie-manager' );
 			$cookies_lbl  = esc_html__( 'cookies', 'faz-cookie-manager' );
-
-			$has_transfer = false;
-			foreach ( $rows as $row ) {
-				$transfer = self::decode_transfer_meta( $row['cookie_meta'] ?? '' );
-				if ( ! empty( $transfer['enabled'] ) ) {
-					$has_transfer = true;
-					break;
-				}
-			}
-			$transfer_to_fmt  = '';
-			$transfer_outside = '';
-			if ( $has_transfer ) {
-				// Resolve the fixed transfer labels only when at least one row uses
-				// them; unflagged inventories avoid an unnecessary locale switch.
-				$transfer_switched = self::switch_to_policy_locale( $lang );
-				/* translators: %s: recipient country name. */
-				$transfer_to_fmt  = esc_html__( 'Transfers personal data to: %s', 'faz-cookie-manager' );
-				$transfer_outside = esc_html__( 'Transfers personal data outside the EU/EEA', 'faz-cookie-manager' );
-				self::restore_policy_locale( $transfer_switched );
-			}
+			/* translators: %s: recipient country name. */
+			$transfer_to_fmt  = esc_html__( 'Transfers personal data to: %s', 'faz-cookie-manager' );
+			$transfer_outside = self::transfer_outside_label( $jurisdiction, true );
+			self::restore_policy_locale( $switched );
 
 			$parts = array();
 			foreach ( $grouped as $cat_name => $items ) {
@@ -586,10 +653,11 @@ class Renderer {
 					$parts[]  = '<td data-label="' . $col_duration . '">' . ( '' !== $duration ? esc_html( $duration ) : '&mdash;' ) . '</td>';
 					// Cookie description may contain HTML inside the JSON value.
 					$desc_cell = wp_kses_post( $desc );
-					// Third-country (Schrems II) per-row indicator. Neutral, purely
-					// transparency: names the recipient country (or a generic
-					// outside-EU/EEA line) so the row is self-explanatory; the
-					// dedicated section below carries the full Art. 44-49 framing.
+					// Third-country per-row indicator. Neutral, purely transparency:
+					// names the recipient country (or, when none is named, the
+					// "outside <this jurisdiction's territory>" line) so the row is
+					// self-explanatory; the dedicated section below carries the
+					// regime framing of the document's jurisdiction.
 					$transfer = self::decode_transfer_meta( $row['cookie_meta'] ?? '' );
 					if ( ! empty( $transfer['enabled'] ) ) {
 						$t_country = self::resolve_i18n_array( $transfer['countries'], $lang );
@@ -712,14 +780,14 @@ class Renderer {
 
 	/**
 	 * Resolve an already-decoded multilingual map ({ <lang> => string }) to the
-	 * active language. Same fallback chain as
-	 * Cookie_Table_Shortcode::resolve_transfer_text() (active language →
+	 * active language. Same fallback chain as the banner's
+	 * Shortcodes::resolve_transfer_text() and the legacy table's
+	 * Cookie_Table_Shortcode::localize() (active language →
 	 * faz_default_language() → first non-empty entry) so the transfer
-	 * country/safeguard text matches between the banner preference-center and
-	 * the [faz_cookie_policy_complete] page on sites whose default language
-	 * isn't 'en'. Value is already a PHP array (the transfer countries/safeguard
-	 * sub-objects arrive decoded from the cookie meta JSON, not as a raw JSON
-	 * string).
+	 * country/safeguard text matches across the three declaration surfaces on
+	 * sites whose default language isn't 'en'. Value is already a PHP array (the
+	 * transfer countries/safeguard sub-objects arrive decoded from the cookie
+	 * meta JSON, not as a raw JSON string).
 	 *
 	 * @param mixed  $map  Multilingual array, or a plain string.
 	 * @param string $lang Preferred language code.
@@ -877,12 +945,22 @@ class Renderer {
 	/**
 	 * Build the "International data transfers" policy section.
 	 *
-	 * Emits a neutral GDPR Art. 44-49 framing paragraph followed by a per-cookie
-	 * list of recipient country + admin-described safeguard. It states the FACT
-	 * that a transfer occurs and surfaces the safeguard — it NEVER asserts the
-	 * transfer is legally valid (that is the site controller's responsibility).
-	 * Returns '' when no cookie is flagged (empty-state), so the section and its
-	 * accountability fingerprint are absent on a default-OFF install.
+	 * Emits a neutral framing paragraph in the transfer regime of the document's
+	 * jurisdiction, followed by a per-cookie list of recipient country +
+	 * admin-described safeguard. It states the FACT that a transfer occurs and
+	 * surfaces the safeguard — it NEVER asserts the transfer is legally valid
+	 * (that is the site controller's responsibility). Returns '' when no cookie
+	 * is flagged (empty-state), so the section and its accountability
+	 * fingerprint are absent on a default-OFF install.
+	 *
+	 * Until 1.34.2 the paragraph was hard-wired to GDPR Art. 44-49 and "EU
+	 * adequacy decision" for every jurisdiction, so an LGPD policy — whose own
+	 * scaffold cites Art. 33-36 LGPD — or a POPIA policy (section 72) ended up
+	 * citing two incompatible transfer regimes in one document, and a CCPA
+	 * policy told Californian readers about a European framework with no
+	 * bearing on them. The intro and the no-country row label now come from
+	 * transfer_intro() / transfer_outside_label(), keyed on $jurisdiction; the
+	 * GDPR text is unchanged.
 	 *
 	 * The fixed section labels are resolved in the policy language via the same
 	 * switch_to_locale( faz_wp_locale( $lang ) ) mechanism the banner template
@@ -892,22 +970,25 @@ class Renderer {
 	 * from $lang when the policy is rendered via the [faz_cookie_policy_complete
 	 * lang="…"] attribute or the preview REST endpoint).
 	 *
-	 * @param string $lang Active policy language.
+	 * @param string $lang         Active policy language.
+	 * @param string $jurisdiction Effective jurisdiction of the document; defaults
+	 *                             to gdpr-strict, the historical behaviour.
 	 * @return string HTML section, or '' when nothing is flagged.
 	 */
-	private static function international_transfers_section( $lang ) {
+	private static function international_transfers_section( $lang, $jurisdiction = 'gdpr-strict' ) {
 		$rows = self::collect_transfer_disclosures( $lang );
 		if ( empty( $rows ) ) {
 			return '';
 		}
+		$jurisdiction = is_string( $jurisdiction ) && '' !== $jurisdiction ? $jurisdiction : 'gdpr-strict';
 
 		// Resolve every fixed label in the policy language up front (see docblock),
 		// then build the markup after restoring the locale.
 		$switched         = self::switch_to_policy_locale( $lang );
 		$heading          = esc_html__( 'International data transfers', 'faz-cookie-manager' );
-		$intro            = esc_html__( 'Some cookies listed above may transfer your personal data to a country outside the EU/EEA that does not have an EU adequacy decision. Under Articles 44 to 49 of the GDPR, such transfers require a valid transfer mechanism (for example an adequacy decision, Standard Contractual Clauses, or your explicit and informed consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice.', 'faz-cookie-manager' );
+		$intro            = self::transfer_intro( $jurisdiction );
 		$recipient_label  = esc_html__( 'Recipient country:', 'faz-cookie-manager' );
-		$outside_label    = esc_html__( 'transfers personal data outside the EU/EEA', 'faz-cookie-manager' );
+		$outside_label    = self::transfer_outside_label( $jurisdiction, false );
 		$safeguard_label  = esc_html__( 'Safeguard:', 'faz-cookie-manager' );
 		self::restore_policy_locale( $switched );
 
@@ -931,6 +1012,69 @@ class Renderer {
 		$parts[] = '</ul>';
 		$parts[] = '</section>';
 		return "\n" . implode( "\n", $parts );
+	}
+
+	/**
+	 * Framing paragraph of the "International data transfers" section, in the
+	 * transfer regime of the document's jurisdiction.
+	 *
+	 * Each text states the fact of a transfer and the mechanisms that regime
+	 * recognises; none asserts that the operator's transfer is valid. The CCPA
+	 * has no transfer-regime concept, so its document (and any jurisdiction not
+	 * listed here — the safe default is to name NO regime rather than the wrong
+	 * one) gets the neutral paragraph with no legal citation.
+	 *
+	 * Must be called inside switch_to_policy_locale()/restore_policy_locale()
+	 * so the string resolves in the policy language.
+	 *
+	 * @param string $jurisdiction Effective jurisdiction.
+	 * @return string Escaped paragraph text.
+	 */
+	private static function transfer_intro( $jurisdiction ) {
+		switch ( $jurisdiction ) {
+			case 'gdpr-strict':
+				return esc_html__( 'Some cookies listed above may transfer your personal data to a country outside the EU/EEA that does not have an EU adequacy decision. Under Articles 44 to 49 of the GDPR, such transfers require a valid transfer mechanism (for example an adequacy decision, Standard Contractual Clauses, or your explicit and informed consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice.', 'faz-cookie-manager' );
+			case 'lgpd-brazil':
+				return esc_html__( 'Some cookies listed above may transfer your personal data outside Brazil. Under Articles 33 to 36 of the LGPD, such transfers require a valid transfer mechanism (for example a destination country recognised by the ANPD as providing an adequate level of protection, standard contractual clauses approved by the ANPD, or your specific and highlighted consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice.', 'faz-cookie-manager' );
+			case 'popia-southafrica':
+				return esc_html__( 'Some cookies listed above may transfer your personal information outside South Africa. Under section 72 of POPIA, such transfers require a valid ground (for example a recipient bound by a law, binding corporate rules or a binding agreement that provides a substantially similar level of protection, or your consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice.', 'faz-cookie-manager' );
+			default:
+				return esc_html__( 'Some cookies listed above may transfer your personal information to a country other than the one you are browsing from. The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice.', 'faz-cookie-manager' );
+		}
+	}
+
+	/**
+	 * Label for a flagged cookie whose recipient country the operator did not
+	 * name: "outside <the territory this document's law covers>". Used in the
+	 * per-row table indicator (sentence case) and in the section list after the
+	 * dash (lower case). Jurisdictions without a transfer territory in this
+	 * document (CCPA, or anything unknown) get the neutral "another country".
+	 *
+	 * Must be called inside switch_to_policy_locale()/restore_policy_locale().
+	 *
+	 * @param string $jurisdiction  Effective jurisdiction.
+	 * @param bool   $sentence_case True for the table cell, false for the list item.
+	 * @return string Escaped label.
+	 */
+	private static function transfer_outside_label( $jurisdiction, $sentence_case ) {
+		switch ( $jurisdiction ) {
+			case 'gdpr-strict':
+				return $sentence_case
+					? esc_html__( 'Transfers personal data outside the EU/EEA', 'faz-cookie-manager' )
+					: esc_html__( 'transfers personal data outside the EU/EEA', 'faz-cookie-manager' );
+			case 'lgpd-brazil':
+				return $sentence_case
+					? esc_html__( 'Transfers personal data outside Brazil', 'faz-cookie-manager' )
+					: esc_html__( 'transfers personal data outside Brazil', 'faz-cookie-manager' );
+			case 'popia-southafrica':
+				return $sentence_case
+					? esc_html__( 'Transfers personal information outside South Africa', 'faz-cookie-manager' )
+					: esc_html__( 'transfers personal information outside South Africa', 'faz-cookie-manager' );
+			default:
+				return $sentence_case
+					? esc_html__( 'Transfers personal data to another country', 'faz-cookie-manager' )
+					: esc_html__( 'transfers personal data to another country', 'faz-cookie-manager' );
+		}
 	}
 
 	/**
@@ -1103,13 +1247,18 @@ class Renderer {
 	/**
 	 * Build a comma-separated services list from settings.
 	 *
-	 * @param array $settings
+	 * The "None declared." fallback is the one gettext string on this path and
+	 * is resolved in the policy language (switch_to_policy_locale), like every
+	 * other fixed label of the document — not in the ambient request locale.
+	 *
+	 * @param array  $settings
+	 * @param string $lang Policy language; decides the locale of the fallback.
 	 * @return string
 	 */
-	private static function build_services_list( array $settings ) {
+	private static function build_services_list( array $settings, $lang = 'en' ) {
 		$services = (array) ( $settings['third_party_services'] ?? array() );
 		if ( empty( $services ) ) {
-			return esc_html__( 'None declared.', 'faz-cookie-manager' );
+			return self::none_declared_label( $lang );
 		}
 		// Display-name map. Brand names are verbatim (registered marks).
 		// Grouped here in the same category buckets used by the admin form
@@ -1225,7 +1374,20 @@ class Renderer {
 				$display[] = $names[ $svc ];
 			}
 		}
-		return $display ? implode( ', ', array_map( 'esc_html', $display ) ) : esc_html__( 'None declared.', 'faz-cookie-manager' );
+		return $display ? implode( ', ', array_map( 'esc_html', $display ) ) : self::none_declared_label( $lang );
+	}
+
+	/**
+	 * "None declared." resolved in the policy language.
+	 *
+	 * @param string $lang Policy language.
+	 * @return string Escaped label.
+	 */
+	private static function none_declared_label( $lang ) {
+		$switched = self::switch_to_policy_locale( $lang );
+		$label    = esc_html__( 'None declared.', 'faz-cookie-manager' );
+		self::restore_policy_locale( $switched );
+		return $label;
 	}
 
 	/**
@@ -1268,6 +1430,8 @@ class Renderer {
 				'pt-BR' => 'Esta política de cookies foi gerada pelo FAZ Cookie Manager a partir de um modelo para a jurisdição %s. Os modelos não constituem aconselhamento jurídico. O administrador deste site permanece como controlador dos dados conforme a lei aplicável e é responsável pela exatidão e adequação do conteúdo publicado. Para orientação específica da jurisdição, consulte: %s.',
 				'bg'    => 'Тази политика за бисквитки е генерирана от FAZ Cookie Manager въз основа на образец за юрисдикция %s. Образците не представляват правен съвет. Администраторът на този сайт остава администратор на лични данни съгласно приложимото право и носи отговорност за точността и адекватността на публикуваното съдържание. За насоки, специфични за юрисдикцията, направете справка с: %s.',
 				'cs'    => 'Tyto zásady používání cookies byly vygenerovány pluginem FAZ Cookie Manager na základě šablony pro jurisdikci %s. Šablony nepředstavují právní poradenství. Provozovatel tohoto webu zůstává správcem osobních údajů ve smyslu platných právních předpisů a odpovídá za správnost a přiměřenost zveřejněného obsahu. Pro informace specifické pro danou jurisdikci se obraťte na: %s.',
+				'nl'    => 'Dit cookiebeleid is gegenereerd door FAZ Cookie Manager op basis van een sjabloon voor het rechtsgebied %s. Sjablonen vormen geen juridisch advies. De beheerder van deze website blijft de verwerkingsverantwoordelijke in de zin van het toepasselijke recht en is verantwoordelijk voor de juistheid en toereikendheid van de gepubliceerde inhoud. Raadpleeg voor richtsnoeren die specifiek zijn voor het rechtsgebied: %s.',
+				'hr'    => 'Ova pravila o kolačićima generirao je FAZ Cookie Manager na temelju predloška za jurisdikciju %s. Predlošci ne predstavljaju pravni savjet. Administrator ove web stranice ostaje voditelj obrade osobnih podataka u skladu s mjerodavnim pravom i odgovoran je za točnost i primjerenost objavljenog sadržaja. Za smjernice specifične za jurisdikciju pogledajte: %s.',
 			);
 			$tpl = $texts[ $lang ] ?? $texts['en'];
 			$jurisdiction_label = self::jurisdiction_display_name( $jurisdiction, $lang );
@@ -1445,8 +1609,12 @@ class Renderer {
 				// Czech dates take an ordinal day (trailing dot) and decline the
 				// month into the genitive — month_names() returns those forms.
 				return sprintf( '%d. %s %s', $day, $month_name, $year );       // 3. června 2026
+			case 'hr':
+				// Croatian, like Czech, uses an ordinal day and the genitive
+				// month, and also closes the ordinal year with a dot.
+				return sprintf( '%d. %s %s.', $day, $month_name, $year );      // 3. lipnja 2026.
 			default:
-				return sprintf( '%d %s %s', $day, $month_name, $year );        // it / fr: 3 giugno 2026
+				return sprintf( '%d %s %s', $day, $month_name, $year );        // it / fr / nl: 3 giugno 2026
 		}
 	}
 
@@ -1469,6 +1637,9 @@ class Renderer {
 			// ("3. června 2026"), and month_names() is only ever consumed by
 			// format_date(), so storing the genitive here keeps the date correct.
 			'cs'    => array( 'ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince' ),
+			'nl'    => array( 'januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december' ),
+			// Genitive forms, for the same reason as Czech ("3. lipnja 2026.").
+			'hr'    => array( 'siječnja', 'veljače', 'ožujka', 'travnja', 'svibnja', 'lipnja', 'srpnja', 'kolovoza', 'rujna', 'listopada', 'studenoga', 'prosinca' ),
 		);
 		return $names[ $lang ] ?? $names['en'];
 	}
@@ -1484,17 +1655,102 @@ class Renderer {
 		$value  = $settings['retention_months'] ?? 12;
 		$months = is_scalar( $value ) ? (int) $value : 12;
 		if ( $months <= 0 ) { $months = 12; }
+		return self::format_months( $months, $lang );
+	}
+
+	/**
+	 * Months the consent log is kept before the daily purge deletes it.
+	 *
+	 * Mirrors Activator::run_retention_cleanup(), which reads the same option
+	 * key with the same default; Settings::sanitize_option() clamps the stored
+	 * value to 1-120, and a hand-written non-positive value falls back to the
+	 * default here rather than publishing "0 months".
+	 *
+	 * @return int
+	 */
+	private static function consent_log_retention_months() {
+		$settings = get_option( 'faz_settings' );
+		$value    = is_array( $settings ) && isset( $settings['consent_logs'] ) && is_array( $settings['consent_logs'] )
+			? ( $settings['consent_logs']['retention'] ?? 12 )
+			: 12;
+		$months   = is_scalar( $value ) ? (int) $value : 12;
+		return $months > 0 ? $months : 12;
+	}
+
+	/**
+	 * Format a month count as a localised "%d months" string.
+	 *
+	 * Each language takes its own count form, by the CLDR plural rule of that
+	 * language: until 1.34.2 only Dutch and Croatian did, so a site keeping
+	 * records for one month published "1 months", "1 mesi", "1 Monate", and a
+	 * Czech policy said "2 měsíců" where Czech says "2 měsíce".
+	 *
+	 * Deliberately not _n(). The policy is rendered in the TEMPLATE language,
+	 * which is chosen per policy and is often not the site's WordPress locale,
+	 * and _n() answers in the locale: an Italian policy on an English site
+	 * would get the English plural. The words live with the rest of the
+	 * template text, keyed by template language, as the month names do.
+	 *
+	 * @param int    $months Positive month count.
+	 * @param string $lang   Template language code.
+	 * @return string
+	 */
+	private static function format_months( $months, $lang ) {
+		$months = (int) $months;
+		$one    = 1 === $months;
 		$labels = array(
-			'en'    => '%d months',
-			'it'    => '%d mesi',
+			'en'    => $one ? '%d month' : '%d months',
+			'it'    => $one ? '%d mese' : '%d mesi',
+			// French counts 0 and 1 as singular; "mois" is invariable anyway.
 			'fr'    => '%d mois',
-			'de'    => '%d Monate',
-			'es'    => '%d meses',
-			'pt-BR' => '%d meses',
-			'bg'    => '%d месеца',
-			'cs'    => '%d měsíců',
+			'de'    => $one ? '%d Monat' : '%d Monate',
+			'es'    => $one ? '%d mes' : '%d meses',
+			'pt-BR' => $one ? '%d mês' : '%d meses',
+			'bg'    => $one ? '%d месец' : '%d месеца',
+			'cs'    => self::czech_month_label( $months ),
+			'nl'    => $one ? '%d maand' : '%d maanden',
+			'hr'    => self::croatian_month_label( $months ),
 		);
-		return sprintf( $labels[ $lang ] ?? '%d months', $months );
+		return sprintf( $labels[ $lang ] ?? $labels['en'], $months );
+	}
+
+	/**
+	 * Czech count form for "month": 1 takes the singular ("měsíc"), exactly
+	 * 2-4 the few form ("měsíce"), everything else — 0, 5 and up, and 22, 23,
+	 * 24, which Czech does not treat like 2-4 — the genitive plural
+	 * ("měsíců"). CLDR: one = 1; few = 2..4; other.
+	 *
+	 * @param int $months Month count (positive).
+	 * @return string sprintf() pattern with one %d.
+	 */
+	private static function czech_month_label( $months ) {
+		if ( 1 === $months ) {
+			return '%d měsíc';
+		}
+		if ( $months >= 2 && $months <= 4 ) {
+			return '%d měsíce';
+		}
+		return '%d měsíců';
+	}
+
+	/**
+	 * Croatian count form for "month": 1, 21, 31… take the singular
+	 * ("mjesec"), 2-4, 22-24… the paucal ("mjeseca"), everything else —
+	 * including 11-14 — the genitive plural ("mjeseci").
+	 *
+	 * @param int $months Month count (positive).
+	 * @return string sprintf() pattern with one %d.
+	 */
+	private static function croatian_month_label( $months ) {
+		$mod10  = $months % 10;
+		$mod100 = $months % 100;
+		if ( 1 === $mod10 && 11 !== $mod100 ) {
+			return '%d mjesec';
+		}
+		if ( $mod10 >= 2 && $mod10 <= 4 && ( $mod100 < 12 || $mod100 > 14 ) ) {
+			return '%d mjeseca';
+		}
+		return '%d mjeseci';
 	}
 
 	/**
@@ -1506,10 +1762,10 @@ class Renderer {
 	 */
 	private static function jurisdiction_display_name( $jurisdiction, $lang ) {
 		$names = array(
-			'gdpr-strict'       => array( 'en' => 'GDPR (EU/EEA/UK)', 'it' => 'GDPR (UE/SEE/UK)', 'fr' => 'RGPD (UE/EEE/UK)', 'de' => 'DSGVO (EU/EWR/UK)', 'es' => 'RGPD (UE/EEE/UK)', 'pt-BR' => 'GDPR (UE/EEE/UK)', 'bg' => 'GDPR (ЕС/ЕИП/Обединеното кралство)', 'cs' => 'GDPR (EU/EHP/UK)' ),
-			'ccpa-california'   => array( 'en' => 'CCPA/CPRA (California)', 'it' => 'CCPA/CPRA (California)', 'fr' => 'CCPA/CPRA (Californie)', 'de' => 'CCPA/CPRA (Kalifornien)', 'es' => 'CCPA/CPRA (California)', 'pt-BR' => 'CCPA/CPRA (Califórnia)', 'bg' => 'CCPA/CPRA (Калифорния)', 'cs' => 'CCPA/CPRA (Kalifornie)' ),
-			'lgpd-brazil'       => array( 'en' => 'LGPD (Brazil)', 'it' => 'LGPD (Brasile)', 'fr' => 'LGPD (Brésil)', 'de' => 'LGPD (Brasilien)', 'es' => 'LGPD (Brasil)', 'pt-BR' => 'LGPD (Brasil)', 'bg' => 'LGPD (Бразилия)', 'cs' => 'LGPD (Brazílie)' ),
-			'popia-southafrica' => array( 'en' => 'POPIA (South Africa)', 'it' => 'POPIA (Sudafrica)', 'fr' => 'POPIA (Afrique du Sud)', 'de' => 'POPIA (Südafrika)', 'es' => 'POPIA (Sudáfrica)', 'pt-BR' => 'POPIA (África do Sul)', 'bg' => 'POPIA (Южна Африка)', 'cs' => 'POPIA (Jihoafrická republika)' ),
+			'gdpr-strict'       => array( 'en' => 'GDPR (EU/EEA/UK)', 'it' => 'GDPR (UE/SEE/UK)', 'fr' => 'RGPD (UE/EEE/UK)', 'de' => 'DSGVO (EU/EWR/UK)', 'es' => 'RGPD (UE/EEE/UK)', 'pt-BR' => 'GDPR (UE/EEE/UK)', 'bg' => 'GDPR (ЕС/ЕИП/Обединеното кралство)', 'cs' => 'GDPR (EU/EHP/UK)', 'nl' => 'AVG (EU/EER/VK)', 'hr' => 'GDPR (EU/EGP/UK)' ),
+			'ccpa-california'   => array( 'en' => 'CCPA/CPRA (California)', 'it' => 'CCPA/CPRA (California)', 'fr' => 'CCPA/CPRA (Californie)', 'de' => 'CCPA/CPRA (Kalifornien)', 'es' => 'CCPA/CPRA (California)', 'pt-BR' => 'CCPA/CPRA (Califórnia)', 'bg' => 'CCPA/CPRA (Калифорния)', 'cs' => 'CCPA/CPRA (Kalifornie)', 'nl' => 'CCPA/CPRA (Californië)', 'hr' => 'CCPA/CPRA (Kalifornija)' ),
+			'lgpd-brazil'       => array( 'en' => 'LGPD (Brazil)', 'it' => 'LGPD (Brasile)', 'fr' => 'LGPD (Brésil)', 'de' => 'LGPD (Brasilien)', 'es' => 'LGPD (Brasil)', 'pt-BR' => 'LGPD (Brasil)', 'bg' => 'LGPD (Бразилия)', 'cs' => 'LGPD (Brazílie)', 'nl' => 'LGPD (Brazilië)', 'hr' => 'LGPD (Brazil)' ),
+			'popia-southafrica' => array( 'en' => 'POPIA (South Africa)', 'it' => 'POPIA (Sudafrica)', 'fr' => 'POPIA (Afrique du Sud)', 'de' => 'POPIA (Südafrika)', 'es' => 'POPIA (Sudáfrica)', 'pt-BR' => 'POPIA (África do Sul)', 'bg' => 'POPIA (Южна Африка)', 'cs' => 'POPIA (Jihoafrická republika)', 'nl' => 'POPIA (Zuid-Afrika)', 'hr' => 'POPIA (Južna Afrika)' ),
 		);
 		return $names[ $jurisdiction ][ $lang ] ?? $names[ $jurisdiction ]['en'] ?? $jurisdiction;
 	}
@@ -1532,6 +1788,8 @@ class Renderer {
 			'pt-BR' => 'Português (Brasil)',
 			'bg'    => 'Български',
 			'cs'    => 'Čeština',
+			'nl'    => 'Nederlands',
+			'hr'    => 'Hrvatski',
 		);
 		return $names[ $lang ] ?? $lang;
 	}

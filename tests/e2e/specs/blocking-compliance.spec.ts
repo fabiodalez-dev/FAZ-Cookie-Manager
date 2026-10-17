@@ -754,10 +754,15 @@ test.describe('Blocking compliance coverage', () => {
       await postSettings(page, nonce, {
         script_blocking: {
           ...(original.script_blocking ?? {}),
+          // The collector serves every provider from this site's own host
+          // (/faz-e2e-provider-collect/<provider path>). A pattern that starts
+          // with a hostname is host-anchored on both layers, so
+          // `clarity.ms/tag/…` cannot match a 127.0.0.1 URL; the pattern names
+          // the collector path instead, which is a plain path fragment.
           whitelist_patterns: [
             ...originalWhitelist,
-            'connect.facebook.net/en_US/fbevents.js',
-            'clarity.ms/tag/faz-matrix.js',
+            'faz-e2e-provider-collect/connect.facebook.net/en_US/fbevents.js',
+            'faz-e2e-provider-collect/clarity.ms/tag/faz-matrix.js',
           ],
         },
       });

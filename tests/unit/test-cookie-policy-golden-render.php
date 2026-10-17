@@ -490,10 +490,26 @@ function faz_fx_cookie_rows_with_transfer() {
 $fixtures = array(
 	array(
 		'name'    => 'gdpr-empty-install',
-		'why'     => 'fresh install: no saved option, baseline defaults only, empty inventory',
+		// The controller gate covers every jurisdiction when a policy is
+		// PUBLISHED (REST save, wizard, policy page), but at render time only
+		// POPIA refuses. A GDPR/CCPA/LGPD page that is already live on an
+		// upgraded site keeps rendering for visitors, as it did in 1.34.1:
+		// blanking it would take the cookie inventory and the withdrawal
+		// instructions off a live site on an automatic update. The
+		// administrator sees the actionable notice above the document.
+		'why'     => 'fresh install: no saved option, baseline defaults only — the administrator sees the notice above the document',
 		'option'  => null,
 		'atts'    => array(),
 		'rows'    => array(),
+		'expect'  => 'document_with_notice',
+	),
+	array(
+		'name'     => 'gdpr-empty-install-visitor',
+		'why'      => 'the same install seen by an anonymous visitor: the published document stays, with no admin hint',
+		'option'   => null,
+		'atts'     => array(),
+		'rows'     => array(),
+		'is_admin' => false,
 	),
 	array(
 		'name'    => 'gdpr-full-en',
@@ -535,10 +551,13 @@ $fixtures = array(
 	array(
 		'name'    => 'gdpr-empty-label-lines',
 		'why'     => 'blank optional fields must not leave orphan "**Label:**" rows (1.16.2, Gooloo)',
+		// Name and contact email are the two fields every jurisdiction now
+		// requires, so they are filled in; address, registry and the DPO rows
+		// stay blank — those are the optional labels this fixture is about.
 		'option'  => array(
 			'jurisdiction' => 'gdpr-strict',
 			'language'     => 'en',
-			'company'      => array( 'name' => 'Minimal Ltd', 'address' => '', 'email' => '', 'registry' => '' ),
+			'company'      => array( 'name' => 'Minimal Ltd', 'address' => '', 'email' => 'privacy@minimal.test', 'registry' => '' ),
 			'dpo'          => array( 'name' => '', 'email' => '' ),
 		),
 		'atts'    => array(),
@@ -747,6 +766,13 @@ if ( ! $faz_update_mode ) {
 					"{$name}: article wrapper carries lang, jurisdiction and a version hash"
 				);
 				break;
+			case 'document_with_notice':
+				assert_true(
+					0 === strpos( $html, '<div class="faz-cookie-policy-empty' )
+						&& false !== strpos( $html, '<article class="faz-cookie-policy"' ),
+					"{$name}: administrator sees the notice first and the document after it"
+				);
+				break;
 			case 'notice':
 				assert_true(
 					false !== strpos( $html, 'faz-cookie-policy-empty' )
@@ -856,9 +882,88 @@ if ( ! $faz_update_mode ) {
 	);
 
 	// Never publish the admin email / site name without an explicit save.
+	// Since 1.34.2 an incomplete controller identity refuses publishing on
+	// every jurisdiction, but a page that is already live keeps rendering for
+	// visitors (only POPIA refuses at render time, as before): the visitor
+	// gets the document, never the admin notice.
 	assert_true(
-		'' !== $rendered_all['gdpr-empty-install'],
-		'an unconfigured install still renders something rather than a blank page'
+		false !== strpos( $rendered_all['gdpr-empty-install'], 'faz-cookie-policy-empty' ),
+		'an unconfigured install shows the administrator the notice'
+	);
+	assert_true(
+		false !== strpos( $rendered_all['gdpr-empty-install-visitor'], '<article class="faz-cookie-policy"' )
+			&& false === strpos( $rendered_all['gdpr-empty-install-visitor'], 'faz-cookie-policy-empty' ),
+		'a live GDPR page on an upgraded install still renders for anonymous visitors, without the admin notice'
+	);
+
+	// The consent records the policy talks about are the plugin's own consent
+	// log, purged by Activator::run_retention_cleanup() on
+	// faz_settings.consent_logs.retention. The policy's "declared fallback"
+	// field (retention_months) is a different setting, and the admin help says
+	// it "does not change consent-log … retention". Until 1.34.2 the GDPR
+	// scaffold (and the pt-BR LGPD one) still printed the fallback figure as
+	// the consent-record period, so moving the purge window left the published
+	// period wrong. Distinct values (37 vs 12) make the two sources visible.
+	$faz_retention_render = function ( $jurisdiction, $lang, $consent_months ) {
+		$GLOBALS['faz_test_state']['options']       = array(
+			'faz_cookie_policy_data' => array_merge( faz_fx_company(), array(
+				'jurisdiction'     => $jurisdiction,
+				'language'         => $lang,
+				'retention_months' => 12,
+			) ),
+		);
+		if ( null !== $consent_months ) {
+			$GLOBALS['faz_test_state']['options']['faz_settings'] = array(
+				'consent_logs' => array( 'status' => true, 'retention' => $consent_months ),
+			);
+		}
+		$GLOBALS['faz_test_state']['locale']        = 'en_US';
+		$GLOBALS['faz_test_state']['locale_stack']  = array();
+		$GLOBALS['faz_test_state']['translate']     = false;
+		$GLOBALS['faz_test_state']['is_admin_user'] = true;
+		$GLOBALS['wpdb']->rows           = faz_fx_cookie_rows();
+		$GLOBALS['wpdb']->tables_present = true;
+		faz_reset_renderer_statics();
+		return Renderer::render( array( 'lang' => $lang ) );
+	};
+	$faz_consent_period = array(
+		'en' => '37 months', 'it' => '37 mesi', 'fr' => '37 mois', 'de' => '37 Monate',
+		'es' => '37 meses', 'bg' => '37 месеца', 'cs' => '37 měsíců', 'nl' => '37 maanden',
+		'hr' => '37 mjeseci', 'pt-BR' => '37 meses',
+	);
+	foreach ( $faz_consent_period as $faz_l => $faz_period ) {
+		$faz_html = $faz_retention_render( 'gdpr-strict', $faz_l, 37 );
+		assert_true(
+			false !== strpos( $faz_html, $faz_period ),
+			"gdpr-strict/{$faz_l}: consent-record period follows the consent-log purge setting ({$faz_period})"
+		);
+	}
+	$faz_html = $faz_retention_render( 'lgpd-brazil', 'pt-BR', 37 );
+	assert_true(
+		false !== strpos( $faz_html, '37 meses' ),
+		'lgpd-brazil/pt-BR: consent-record period follows the consent-log purge setting (37 meses)'
+	);
+	$faz_html = $faz_retention_render( 'gdpr-strict', 'en', 37 );
+	assert_true(
+		false === strpos( $faz_html, 'Consent records and analytics data are retained for 12 months' ),
+		'gdpr-strict/en: the fallback figure is no longer presented as the consent-record period'
+	);
+	assert_true(
+		false !== strpos( $faz_html, '12 months' ),
+		'gdpr-strict/en: the declared fallback period is still stated'
+	);
+	$faz_default = $faz_retention_render( 'gdpr-strict', 'en', null );
+	assert_true(
+		false !== strpos( $faz_default, 'kept for 12 months' ),
+		'gdpr-strict/en: with no saved settings the consent-record period is the purge default (12 months)'
+	);
+	assert_true(
+		$hash_of( $faz_retention_render( 'gdpr-strict', 'en', 37 ) ) !== $hash_of( $faz_retention_render( 'gdpr-strict', 'en', 24 ) ),
+		'version hash changes when the consent-log retention, which the GDPR text states, changes'
+	);
+	assert_true(
+		$hash_of( $faz_retention_render( 'ccpa-california', 'en', 37 ) ) === $hash_of( $faz_retention_render( 'ccpa-california', 'en', 24 ) ),
+		'version hash of a CCPA policy, whose text does not state it, ignores the consent-log retention'
 	);
 }
 

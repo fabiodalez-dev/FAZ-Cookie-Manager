@@ -1,7 +1,7 @@
 {
     "necessary": {
         "name": "niezbędny",
-        "description": "<p>Niezbędne pliki cookie mają kluczowe znaczenie dla podstawowych funkcji witryny i witryna nie będzie działać w zamierzony sposób bez nich. Te pliki cookie nie przechowują żadnych danych umożliwiających identyfikację osoby.</p>"
+        "description": "<p>Niezbędne pliki cookie mają kluczowe znaczenie dla podstawowych funkcji witryny i witryna nie będzie działać w zamierzony sposób bez nich. Nie są wykorzystywane do celów reklamowych ani do śledzenia Cię w innych witrynach. Plik cookie zgody przechowuje losowy identyfikator, który pozwala nam prowadzić rejestr dokonanego przez Ciebie wyboru.</p>"
     },
     "functional": {
         "name": "Funkcjonalny",

@@ -233,6 +233,13 @@ namespace FazCookie\Admin\Modules\Banners\Includes {
 		public function get_active_banner_by_slug( $slug ) { return self::$banner && self::$banner->get_slug() === $slug ? self::$banner : false; }
 		public function get_active_banner() { return null === self::$any_active ? self::$banner : self::$any_active; }
 		public function get_active_banner_for_country() { return self::$banner; }
+		// The law-matching lookup the geo runtime makes when the resolved
+		// ruleset's model disagrees with the country-selected banner's law.
+		// false is the "no banner for that law exists" answer of the real
+		// controller, and it is the state this suite needs most: a wizard
+		// "US only" install has a single CCPA row and nothing for 'gdpr'.
+		public static $law_banner = false;
+		public function get_active_banner_for_law( $law, $country = '' ) { return self::$law_banner; }
 		public function has_country_dependent_banners() { return false; }
 	}
 }
@@ -264,6 +271,19 @@ namespace FazCookie\Admin\Modules\Consentlogs\Includes {
 }
 
 namespace {
+	// The bridge delegates its scope judgement to the bootstrap predicate every
+	// server surface shares (faz_consent_cookie_scope_changed). Load the SHIPPED
+	// function — not a transcription of it — without booting the plugin, whose
+	// other cookie helpers this suite stubs for its fixtures.
+	$faz_bootstrap_source = file_get_contents( dirname( __DIR__, 2 ) . '/faz-cookie-manager.php' );
+	foreach ( array( 'faz_read_scoped_cookie_value', 'faz_consent_cookie_scope_changed' ) as $faz_shared_fn ) {
+		if ( ! preg_match( '/\nfunction ' . $faz_shared_fn . '\(.*?\n}\n/s', $faz_bootstrap_source, $faz_shared_match ) ) {
+			fwrite( STDERR, "shared scope predicate {$faz_shared_fn}() not found in faz-cookie-manager.php\n" );
+			exit( 1 );
+		}
+		eval( $faz_shared_match[0] ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- loads the shipped function verbatim.
+	}
+	unset( $faz_bootstrap_source, $faz_shared_fn, $faz_shared_match );
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-amp-consent-rest.php';
 	// Shared with Frontend, Amp_Consent, Banner_Rest and the language seams: the
 	// one predicate that decides whether Cache Compatibility Mode applies. The
@@ -624,6 +644,17 @@ namespace {
 			"an AMP cookie written under '{$raw_law}' is readable back under the same scope"
 		);
 	}
+
+	// ── One scope predicate, strict on AMP ──────────────────────────────────
+	// The classic blocker and this bridge now share faz_consent_cookie_scope_changed();
+	// the bridge keeps its strict reading: a record from another banner is no
+	// decision here, and neither is one that carries no scope at all.
+	$other_context = $amp_context;
+	$other_context['slug']              = 'other-banner';
+	$other_context['scope_fingerprint'] = substr( wp_hash( 'other-banner|' . $amp_context['law'], 'auth' ), 0, 32 );
+	$other_cookie = AMP_Consent_Rest::build_cookie_value( 'accepted', array( 'analytics' => true ), $other_context, 'cid', time() + 3600, '' );
+	amp_same( AMP_Consent_Rest::state_from_cookie( $other_cookie, $amp_context ), false, 'a cookie recorded under another banner is not read as a decision for this one' );
+	amp_same( AMP_Consent_Rest::state_from_cookie( 'action:yes,consent:yes,rev:2,necessary:yes,analytics:yes', $amp_context ), false, 'a cookie with no scope keys is not a decision on AMP (strict: no upgrade tolerance)' );
 
 	// ── A record a privacy signal created is not a decision ─────────────────
 	// script.js marks the record GPC or a Do Not Sell request creates before
@@ -1296,6 +1327,57 @@ namespace {
 	$amp_footer_html = ob_get_clean();
 	amp_ok( false !== strpos( $amp_footer_html, '"postPromptUI":"faz-amp-post-consent"' ), 'verified normal footer does not remove AMP postPromptUI' );
 	amp_ok( false !== strpos( $amp_footer_html, 'on="tap:faz-amp-consent.prompt"' ), 'AMP still renders a native reopen action' );
+
+	// ── Opt-in ruleset, no GDPR banner: blocking and the prompt must survive ──
+	// A wizard "US only" install has one banner, law 'ccpa'. With geo-targeting
+	// on, the resolved ruleset (here the stub's opt-in model, which is also what
+	// the unresolved-country fallback 'fallback-gdpr-most-protective' yields)
+	// maps to 'gdpr', the laws disagree, and get_active_banner_for_law('gdpr')
+	// finds nothing. The classic page keeps the CCPA banner so server-side
+	// blocking still runs and hides only its UI. The AMP bridge returned false
+	// instead, and false means "nothing to do" to both consumers: no
+	// <amp-consent>, no ob_start(), no data-block-on-consent-purposes — every
+	// amp-analytics/amp-ad/amp-pixel ran unconditionally on an opt-in visitor,
+	// and the AMP caches then served that document to everyone. The AMP prompt
+	// is already opt-in shaped (Accept/Reject/Save, unticked purposes, the check
+	// endpoint answers consentRequired:true), so rendering it over the CCPA
+	// banner's scope misrepresents nothing.
+	$GLOBALS['faz_test_options']['faz_settings']['geolocation']['geo_targeting'] = true;
+	$banner->law        = 'ccpa';
+	$banner->properties = array(
+		'settings' => array( 'applicableLaw' => 'ccpa', 'ruleSet' => array() ),
+		'config'   => array(),
+	);
+	Banner_Controller::$banner     = $banner;
+	Banner_Controller::$law_banner = false;
+	$amp = ( new ReflectionClass( AMP_Consent::class ) )->newInstanceWithoutConstructor();
+	$faz_render_guard->setValue( null, false );
+	ob_start();
+	$amp->output_amp_consent();
+	$faz_ccpa_only_html = ob_get_clean();
+	amp_ok( false !== strpos( $faz_ccpa_only_html, '<amp-consent id="faz-amp-consent"' ), 'an opt-in ruleset with no GDPR banner still renders the <amp-consent> instance' );
+	amp_ok( preg_match( '#<script type="application/json">(.*?)</script>#s', $faz_ccpa_only_html, $faz_ccpa_only_json ) === 1, 'and that instance carries a JSON configuration' );
+	$faz_ccpa_only_config = isset( $faz_ccpa_only_json[1] ) ? json_decode( $faz_ccpa_only_json[1], true ) : array();
+	amp_same( isset( $faz_ccpa_only_config['consentRequired'] ) ? $faz_ccpa_only_config['consentRequired'] : null, 'remote', 'the kept banner still asks the server whether consent is required' );
+	amp_same( isset( $faz_ccpa_only_config['policy']['default']['timeout']['fallbackAction'] ) ? $faz_ccpa_only_config['policy']['default']['timeout']['fallbackAction'] : null, 'reject', 'and still fails closed on an unreachable endpoint' );
+	amp_ok( false !== strpos( $faz_ccpa_only_html, 'reject(purposeConsentDefault=false)' ) && false !== strpos( $faz_ccpa_only_html, 'accept(purposeConsentDefault=true)' ), 'the opt-in shaped prompt (Accept and Reject) is what the visitor sees, not an opt-out notice' );
+
+	// The late markup pass is the only thing that gates AMP components; it
+	// must start a buffer and classify what flows through it.
+	$faz_ob_level = ob_get_level();
+	ob_start();
+	$amp->start_component_blocking_buffer();
+	$faz_blocking_started = ( ob_get_level() === $faz_ob_level + 2 );
+	echo '<amp-analytics type="gtag"></amp-analytics><amp-pixel src="https://t.example/p"></amp-pixel>';
+	if ( $faz_blocking_started ) {
+		ob_end_flush();
+	}
+	$faz_ccpa_only_blocked = ob_get_clean();
+	amp_ok( $faz_blocking_started, 'an opt-in ruleset with no GDPR banner still starts the component blocking buffer' );
+	amp_ok( false !== strpos( $faz_ccpa_only_blocked, '<amp-analytics data-block-on-consent-purposes="analytics"' ), 'and amp-analytics leaves it gated on the analytics purpose' );
+	amp_ok( false !== strpos( $faz_ccpa_only_blocked, '<amp-pixel data-block-on-consent' ), 'and amp-pixel leaves it gated as well' );
+	$banner->law        = 'gdpr';
+	$banner->properties = null;
 
 	echo "Passed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );

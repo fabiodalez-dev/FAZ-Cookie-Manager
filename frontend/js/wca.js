@@ -2,6 +2,34 @@ const consentType = {
     gdpr: 'optin',
     ccpa: 'optout',
 };
+// The WP Consent API regime for this visitor. The server computes it in
+// filter_wp_consent_type() — the same method that answers wp_get_consent_type
+// in PHP — and ships it in the store as _wpConsentType. That verdict is the
+// regime actually being ENFORCED, which is not always the banner's label: under
+// runtime geo-routing an opt-in ruleset may be served with a kept CCPA banner
+// (fail-closed branch, UI suppressed), and Cache Compatibility Mode blocks
+// every category regardless of law. Deriving the type from the label here
+// overrode the server's correction for every JS Consent-API consumer, because
+// wp_has_consent() prefers window.wp_consent_type over the PHP fallback.
+//
+// The stricter answer wins when the two disagree, so a wrong label can never
+// loosen the regime; without a verdict (older cached page, filtered store) the
+// label mapping is unchanged.
+function resolveConsentType(activeLaw) {
+    const fromLabel = activeLaw && consentType[activeLaw] ? consentType[activeLaw] : 'optin';
+    // script.js aliases a `_fazCfg` payload to `_fazConfig` at load; read both
+    // so the verdict is found whichever name the page localised.
+    const store = typeof _fazConfig !== 'undefined' && _fazConfig
+        ? _fazConfig
+        : (typeof _fazCfg !== 'undefined' && _fazCfg ? _fazCfg : null);
+    const verdict = store && (store._wpConsentType === 'optin' || store._wpConsentType === 'optout')
+        ? store._wpConsentType
+        : null;
+    if (!verdict) {
+        return fromLabel;
+    }
+    return verdict === 'optin' || fromLabel === 'optin' ? 'optin' : 'optout';
+}
 // FAZ category → WP Consent API category mapping.
 //   - `functional`  → 'preferences'
 //   - `analytics`   → ['statistics', 'statistics-anonymous']
@@ -35,12 +63,15 @@ function applyConsentToWpApi() {
     if ((consentData.isUserActionCompleted === false) && gskEnabled && !Object.values(categories).slice(1).includes(true)) {
         return;
     }
-    const signature = JSON.stringify([consentData.activeLaw, consentData.isUserActionCompleted, categories]);
+    // The regime is part of the state: the store's verdict can change on the
+    // same law and categories (the banner REST payload replaces it).
+    const type = resolveConsentType(consentData.activeLaw);
+    const signature = JSON.stringify([consentData.activeLaw, type, consentData.isUserActionCompleted, categories]);
     if (signature === lastAppliedConsent) {
         return;
     }
     lastAppliedConsent = signature;
-    window.wp_consent_type = consentData.activeLaw ? consentType[consentData.activeLaw] : 'optin';
+    window.wp_consent_type = type;
     let event = new CustomEvent('wp_consent_type_defined');
     document.dispatchEvent( event );
     Object.entries(categories).forEach(([key, value]) => {

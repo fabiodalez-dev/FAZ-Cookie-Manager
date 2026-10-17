@@ -24,7 +24,7 @@ Používáme rovněž podobné technologie, jako jsou **localStorage**, **sessio
 
 Pro **nezbytně nutné** cookies je právním základem zpracování náš oprávněný zájem podle čl. 6 odst. 1 písm. f) GDPR a technická výjimka podle čl. 5 odst. 3 směrnice o soukromí v elektronických komunikacích.
 
-Pro **všechny ostatní** kategorie cookies je právním základem váš **výslovný souhlas** podle čl. 6 odst. 1 písm. a) a čl. 7 GDPR, který je od vás vyžadován prostřednictvím lišty souhlasu s cookies ještě před uložením jakéhokoli nezbytně nutného cookies.
+Pro **všechny ostatní** kategorie cookies je právním základem váš **výslovný souhlas** podle čl. 6 odst. 1 písm. a) a čl. 7 GDPR, který je od vás vyžadován prostřednictvím lišty souhlasu s cookies ještě před uložením jakýchkoli nepovinných cookies.
 
 Souhlas můžete kdykoli odvolat pomocí odkazu „Nastavení cookies" nebo vymazáním cookies ve vašem prohlížeči; odvolání souhlasu nemá vliv na zákonnost zpracování provedeného před odvoláním (čl. 7 odst. 3 GDPR).
 
@@ -42,7 +42,7 @@ Každá třetí strana je ve vztahu ke cookies, které ukládá, samostatným sp
 
 ## Doba uchovávání údajů
 
-Záznamy o souhlasech a analytická data uchováváme po dobu {{RETENTION_PERIOD}} od jejich shromáždění. Nezbytně nutné cookies jsou uchovávány pouze po dobu trvání relace nebo po dobu nezbytnou pro technickou funkci, které slouží. Konkrétní životnost každého cookie je uvedena v tabulce výše.
+Záznamy o volbách souhlasu, které provedete v naší liště cookies, uchováváme po dobu {{CONSENT_RECORD_RETENTION}} od jejich shromáždění, abychom mohli prokázat souhlas, o který se opíráme. Ostatní údaje shromážděné prostřednictvím cookies, včetně analytických dat, uchováváme pouze po dobu nezbytnou pro jejich účel a, není-li uvedena kratší konkrétní doba, nejdéle po deklarovanou náhradní dobu {{RETENTION_PERIOD}}. Nezbytně nutné cookies jsou uchovávány pouze po dobu trvání relace nebo po dobu nezbytnou pro technickou funkci, které slouží. Konkrétní životnost každého cookie je uvedena v tabulce výše.
 
 ## Vaše práva
 

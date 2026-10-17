@@ -300,6 +300,12 @@ class Api extends Rest_Controller {
 			}
 		}
 
+		if ( ! empty( $result['version'] ) ) {
+			// gvlVersion, purposes and vendor names are embedded in every page;
+			// a non-zero version means the stored list was replaced.
+			do_action( 'faz_purge_page_cache' );
+		}
+
 		$status = $result['success'] ? 200 : 500;
 		return new WP_REST_Response( $result, $status );
 	}
@@ -401,6 +407,9 @@ class Api extends Rest_Controller {
 
 		// Clear banner template cache (base + language variants) so frontend picks up new vendor data.
 		faz_clear_banner_template_cache();
+		// The selected vendors also travel in the _fazConfig every page embeds,
+		// so a cached page keeps announcing the old list until it is purged.
+		do_action( 'faz_purge_page_cache' );
 
 		// Re-check unmatched vendors now that the selection changed.
 		\FazCookie\Includes\Activator::maybe_check_unmatched_vendors();

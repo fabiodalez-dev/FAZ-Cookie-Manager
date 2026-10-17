@@ -93,7 +93,7 @@
         "description": "Google reCAPTCHA käyttää tätä ihmisten ja bottien erottamiseen."
     },
     "fazcookie-consent": {
-        "description": "Kävijän asettamat evästesuostumuksen asetukset."
+        "description": "Tallentaa kävijän evästesuostumusvalinnat ja satunnaisen suostumustunnisteen, jonka avulla valinnasta säilytetään tieto."
     },
     "_clck": {
         "description": "Microsoft Clarityn eväste analytiikkaan."

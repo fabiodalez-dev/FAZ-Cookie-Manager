@@ -187,13 +187,18 @@ test.describe('Release verify: AMP consent bridge', () => {
     expect(Object.prototype.hasOwnProperty.call(body, 'consentString')).toBe(false);
   });
 
-  test('a banner without a stored consentExpiry yields a 180-day lifetime, not 182', async ({ request, wpBaseURL }) => {
+  test('a banner without a stored consentExpiry yields the canonical fallback lifetime (180 days GDPR-family, 365 CCPA), not 182', async ({ request, wpBaseURL }) => {
     const ctx = readAmpContext();
     assertPreconditions(ctx);
-    expect(
-      ctx.law,
-      'Premise: the fallback under test is the GDPR-family one (180 days); a CCPA banner takes the 365-day fallback and cannot exercise it.',
-    ).not.toBe('ccpa');
+    // The fallback depends on the active banner's law. The GDPR family falls
+    // back to 180 days (the 182-day outlier is the bug this release fixed); a
+    // CCPA banner takes the 365-day floor. This test used to refuse a CCPA
+    // banner outright, but the AMP bridge now keeps the country-selected CCPA
+    // banner when the resolved ruleset is opt-in and no GDPR banner exists
+    // (instead of dropping <amp-consent> and blocking altogether), so a
+    // CCPA-only install is a legitimate state this suite may run against and
+    // its own fallback deserves the same check.
+    const fallbackDays = ctx.law === 'ccpa' ? 365 : 180;
 
     // Snapshot the active banner's raw settings longtext — byte-exact via
     // base64, restored verbatim through $wpdb->update (never re-encoded).
@@ -280,11 +285,12 @@ test.describe('Release verify: AMP consent bridge', () => {
       expect(body.consentStateValue).toBe('accepted');
       const expiresAt = body.sharedData?.fazExpiresAt;
       expect(typeof expiresAt, 'an update writes an absolute deadline, so fazExpiresAt must be published').toBe('number');
-      // The lifetime must be the canonical 180 days…
-      expect(expiresAt).toBeGreaterThanOrEqual(before + 180 * DAY_IN_SECONDS - CLOCK_SLACK_SECONDS);
-      expect(expiresAt).toBeLessThanOrEqual(after + 180 * DAY_IN_SECONDS + CLOCK_SLACK_SECONDS);
-      // …and specifically NOT the old 182-day outlier (which lands 2 days later).
-      expect(expiresAt, 'a 182-day fallback would put the deadline ~2 days past this bound').toBeLessThan(before + 181 * DAY_IN_SECONDS);
+      // The lifetime must be the canonical fallback for this banner's law…
+      expect(expiresAt).toBeGreaterThanOrEqual(before + fallbackDays * DAY_IN_SECONDS - CLOCK_SLACK_SECONDS);
+      expect(expiresAt).toBeLessThanOrEqual(after + fallbackDays * DAY_IN_SECONDS + CLOCK_SLACK_SECONDS);
+      // …and, for the GDPR family, specifically NOT the old 182-day outlier
+      // (which lands 2 days later). The same bound holds trivially for CCPA.
+      expect(expiresAt, `a ${fallbackDays + 2}-day fallback would put the deadline ~2 days past this bound`).toBeLessThan(before + (fallbackDays + 1) * DAY_IN_SECONDS);
     } finally {
       const restored = wpEval(`
         global $wpdb;

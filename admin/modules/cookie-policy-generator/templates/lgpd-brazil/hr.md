@@ -22,7 +22,7 @@ Privolu možete povući u svakom trenutku (čl. 8., § 5.) putem poveznice "Post
 
 ## Kategorije osobnih podataka koji se obrađuju (čl. 5., I)
 
-- **Mrežni identifikatori** — IP (heširan s mjesečnim saltom), identifikatori uređaja, identifikatori sesije
+- **Mrežni identifikatori** — IP (jednosmjerno heširan saltom specifičnim za web-stranicu), identifikatori uređaja, identifikatori sesije
 - **Podaci o pregledavanju** — posjećene stranice, trajanje zadržavanja, interakcije
 - **Približna lokacija** — država/regija na temelju IP adrese (ne precizni GPS)
 - **Postavke** — kategorije privole, jezik

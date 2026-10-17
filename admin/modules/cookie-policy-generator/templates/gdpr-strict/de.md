@@ -42,7 +42,7 @@ Jeder Drittanbieter ist eigenständiger Verantwortlicher für die von ihm gesetz
 
 ## Speicherdauer
 
-Einwilligungsprotokolle und Analyse-Daten werden für {{RETENTION_PERIOD}} ab Erhebung aufbewahrt. Strikt notwendige Cookies werden nur für die Dauer der Sitzung oder für die Dauer ihrer technischen Funktion aufbewahrt. Spezifische Lebensdauern siehe Tabelle.
+Nachweise über die in unserem Cookie-Banner getroffenen Einwilligungsentscheidungen werden für {{CONSENT_RECORD_RETENTION}} ab Erhebung aufbewahrt, damit wir die Einwilligung nachweisen können, auf die wir uns stützen. Andere über Cookies erhobene Daten, einschließlich Analyse-Daten, werden nur so lange aufbewahrt, wie es ihr Zweck erfordert, und — sofern keine kürzere Cookie-spezifische Dauer angegeben ist — höchstens für den erklärten Auffangzeitraum von {{RETENTION_PERIOD}}. Strikt notwendige Cookies werden nur für die Dauer der Sitzung oder für die Dauer ihrer technischen Funktion aufbewahrt. Spezifische Lebensdauern siehe Tabelle.
 
 ## Ihre Rechte
 

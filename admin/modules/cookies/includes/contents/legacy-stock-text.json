@@ -1,0 +1,42 @@
+{
+    "_comment": "Stock wording shipped by earlier releases and since replaced. A stored value equal to one of these (tags stripped, whitespace and case folded) was never edited by an administrator, so the upgrade migration may replace it with the current stock text. Never remove an entry: an install can upgrade from any earlier release.",
+    "categories": {
+        "necessary": {
+            "description": [
+                "<p>Nezbytné cookies jsou zásadní pro základní funkce webu a bez nich nemůže web fungovat zamýšleným způsobem. Tyto cookies neukládají žádné osobní údaje.</p>",
+                "<p>Notwendige Cookies sind für die Grundfunktionen der Website von entscheidender Bedeutung. Ohne sie kann die Website nicht in der vorgesehenen Weise funktionieren. Diese Cookies speichern keine personenbezogenen Daten.</p>",
+                "<p>Necessary cookies are required to enable the basic features of this site, such as providing secure log-in or adjusting your consent preferences. These cookies do not store any personally identifiable data.</p>",
+                "<p>Las cookies necesarias son cruciales para las funciones básicas del sitio web y el sitio web no funcionará de la forma prevista sin ellas. Estas cookies no almacenan ningún dato de identificación personal.</p>",
+                "<p>Tarvittavat evästeet ovat ratkaisevan tärkeitä verkkosivuston perustoiminnoille, eikä verkkosivusto toimi tarkoitetulla tavalla ilman niitä. Nämä evästeet eivät tallenna henkilökohtaisia tietoja.</p>",
+                "<p>Les cookies nécessaires sont cruciaux pour les fonctions de base du site Web et celui-ci ne fonctionnera pas comme prévu sans eux. Ces cookies ne stockent aucune donnée personnellement identifiable.</p>",
+                "<p>A szükséges sütik döntő fontosságúak a weboldal alapvető funkciói szempontjából, és a weboldal ezek nélkül nem fog megfelelően működni. Ezek a sütik nem tárolnak személyazonosításra alkalmas adatokat.</p>",
+                "<p>I cookie necessari sono fondamentali per le funzioni di base del sito Web e il sito Web non funzionerà nel modo previsto senza di essi. Questi cookie non memorizzano dati identificativi personali.</p>",
+                "<p>Noodzakelijke cookies zijn vereist om de basisfuncties van deze site mogelijk te maken, zoals het aanbieden van een veilige login of het aanpassen van je toestemmingsvoorkeuren. Deze cookies slaan geen persoonlijk identificeerbare gegevens op.</p>",
+                "<p>Niezbędne pliki cookie mają kluczowe znaczenie dla podstawowych funkcji witryny i witryna nie będzie działać w zamierzony sposób bez nich. Te pliki cookie nie przechowują żadnych danych umożliwiających identyfikację osoby.</p>",
+                "<p>Os cookies necessários são cruciais para as funções básicas do site e o site não funcionará como pretendido sem eles. Esses cookies não armazenam nenhum dado pessoalmente identificável.</p>",
+                "<p>Os cookies necessários são cruciais para as funções básicas do site e o site não funcionará da maneira pretendida sem eles. Esses cookies não armazenam nenhum dado de identificação pessoal.</p>",
+                "<p>Необходимые файлы cookie обеспечивают работу основных функций сайта, таких как безопасный вход и сохранение настроек согласия. Эти файлы cookie не хранят персональные данные, позволяющие установить вашу личность.</p>",
+                "<p>Необхідні файли cookie забезпечують роботу основних функцій сайту, як-от безпечний вхід і збереження налаштувань згоди. Ці файли cookie не зберігають персональних даних, що дають змогу встановити вашу особу.</p>"
+            ]
+        }
+    },
+    "cookies": {
+        "fazcookie-consent": {
+            "description": [
+                "Предпочитания за съгласие за бисквитки, зададени от посетителя.",
+                "Předvolby souhlasu s cookies nastavené návštěvníkem.",
+                "Vom Besucher festgelegte Cookie-Einwilligungseinstellungen.",
+                "Cookie consent preferences set by the visitor.",
+                "Preferencias de consentimiento de cookies establecidas por el visitante.",
+                "Kävijän asettamat evästesuostumuksen asetukset.",
+                "Préférences de consentement aux cookies définies par le visiteur.",
+                "Postavke privole za kolačiće koje je odredio posjetitelj.",
+                "A látogató által megadott sütihozzájárulási beállítások.",
+                "Memorizza le preferenze sui cookie impostate dal visitatore.",
+                "Cookievoorkeuren zoals ingesteld door de bezoeker.",
+                "Preferencje zgody na pliki cookie ustawione przez odwiedzającego.",
+                "Preferências de consentimento de cookies definidas pelo visitante."
+            ]
+        }
+    }
+}

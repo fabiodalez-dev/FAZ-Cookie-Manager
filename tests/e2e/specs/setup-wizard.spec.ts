@@ -560,6 +560,20 @@ test.describe('Guided setup wizard', () => {
 test.describe('Wizard policy pages and page-link search', () => {
   test('publishes an Italian shortcode page and reuses it on retry', async ({ page, loginAsAdmin }) => {
     const snap = snapshot();
+    // ensure() adopts a published page that already carries the same shortcode,
+    // which is right for a real site but means a page left behind by an earlier
+    // run decides the outcome here. Hide those pages (private: not adopted,
+    // not deleted) for the duration of the test and put them back afterwards.
+    const shelved: number[] = JSON.parse(wpEval(`
+      global $wpdb;
+      $ids = array();
+      foreach ( get_posts( array( 'post_type' => 'page', 'post_status' => 'publish', 's' => '[faz_cookie_policy_complete lang="it" jurisdiction="gdpr-strict"]', 'posts_per_page' => -1, 'fields' => 'ids' ) ) as $pid ) {
+        $wpdb->update( $wpdb->posts, array( 'post_status' => 'private' ), array( 'ID' => (int) $pid ) );
+        clean_post_cache( (int) $pid );
+        $ids[] = (int) $pid;
+      }
+      echo wp_json_encode( $ids );
+    `).trim().split('\n').pop() || '[]');
     try {
       forceIncomplete();
       await loginAsAdmin(page);
@@ -567,7 +581,7 @@ test.describe('Wizard policy pages and page-link search', () => {
       await page.locator('#faz-setup-next').click();
       await page.locator('#faz-setup-lang').selectOption('it');
       for (let n = 2; n < 8; n++) await page.locator('#faz-setup-next').click();
-      // The page is published straight from the template, so the box ships
+      // The page is created straight from the template, so the box ships
       // unticked and its language note appears only once it is ticked.
       const createPage = page.locator('#faz-setup-create-cookie-page');
       await expect(createPage).not.toBeChecked();
@@ -587,13 +601,40 @@ test.describe('Wizard policy pages and page-link search', () => {
         $b = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->get_active_banner();
         echo wp_json_encode(array('status' => $p->post_status, 'content' => $p->post_content, 'link' => $b->get_contents('it')['notice']['elements']['privacyLink']));
       `));
-      expect(stored.status).toBe('publish');
+      // The wizard publishes only when the saved Cookie Policy settings already
+      // name the controller (company name + contact email): that is the same
+      // gate the renderer applies, so a page it published without them would
+      // render nothing for visitors. Otherwise the page is parked as a draft,
+      // the banner is NOT pointed at it, and the warning says what to fill in.
+      // Read the gate from the site rather than assuming the test site's data.
+      const missing: string[] = JSON.parse(wpEval(`
+        echo wp_json_encode(\\FazCookie\\Admin\\Modules\\Cookie_Policy_Generator\\Includes\\Generator::missing_required_settings('gdpr-strict', (array) get_option('faz_cookie_policy_data', array())));
+      `));
+      const expectedStatus = missing.length ? 'draft' : 'publish';
+      expect(stored.status).toBe(expectedStatus);
+      expect(result.cookie_page.status).toBe(expectedStatus);
       expect(stored.content).toContain('lang="it"');
-      expect(stored.link).toBe(result.cookie_page.url);
+      if (expectedStatus === 'publish') {
+        expect(stored.link).toBe(result.cookie_page.url);
+      } else {
+        expect(stored.link).not.toBe(result.cookie_page.url);
+        expect(String(result.warning)).toContain('draft');
+      }
       const repeat = wpEval(`wp_set_current_user(1); delete_option('faz_setup_policy_page_it_gdpr-strict'); echo wp_json_encode(\\FazCookie\\Admin\\Modules\\Settings\\Includes\\Policy_Page::ensure('it', 'gdpr'));`);
       expect(JSON.parse(repeat).id).toBe(id);
       await page.waitForURL(/page=faz-cookie-manager$/, { timeout: 15_000 });
-    } finally { restore(snap); }
+    } finally {
+      restore(snap);
+      if (shelved.length) {
+        wpEval(`
+          global $wpdb;
+          foreach ( array( ${shelved.join(', ')} ) as $pid ) {
+            $wpdb->update( $wpdb->posts, array( 'post_status' => 'publish' ), array( 'ID' => (int) $pid ) );
+            clean_post_cache( (int) $pid );
+          }
+        `);
+      }
+    }
   });
 
   test('privacy autocomplete selects a published page using the keyboard', async ({ page, loginAsAdmin }) => {

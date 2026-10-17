@@ -32,7 +32,7 @@ Você pode revogar seu consentimento a qualquer momento (Art. 8, § 5º LGPD) at
 
 Tratamos as seguintes categorias por meio de cookies:
 
-- **Identificadores online** — endereço IP (hash com sal mensal), identificadores de dispositivo, identificadores de sessão
+- **Identificadores online** — endereço IP (hash irreversível com um sal específico do site), identificadores de dispositivo, identificadores de sessão
 - **Dados de navegação** — páginas visitadas, tempo de permanência, interações
 - **Localização aproximada** — país/região derivada do IP (não GPS preciso)
 - **Preferências** — categorias de consentimento, idioma
@@ -53,7 +53,7 @@ Cada terceiro é controlador autônomo dos cookies que define. Os destinatários
 
 ## Prazo de retenção (Art. 15-16 LGPD)
 
-Registros de consentimento e dados analíticos são retidos por {{RETENTION_PERIOD}} a partir da coleta, salvo prazo maior exigido por lei ou para fins legítimos. Cookies estritamente necessários são retidos pelo tempo da sessão ou da função técnica que servem.
+Os registros das escolhas de consentimento feitas no nosso banner de cookies são retidos por {{CONSENT_RECORD_RETENTION}} a partir da coleta, para que possamos comprovar o consentimento em que nos baseamos. Os demais dados coletados por meio de cookies, inclusive dados analíticos, são retidos somente pelo tempo necessário à sua finalidade e, quando não houver um prazo específico menor, por no máximo o período residual declarado de {{RETENTION_PERIOD}}, salvo prazo maior exigido por lei ou para fins legítimos. Cookies estritamente necessários são retidos pelo tempo da sessão ou da função técnica que servem.
 
 ## Direitos do titular (Art. 18 LGPD)
 

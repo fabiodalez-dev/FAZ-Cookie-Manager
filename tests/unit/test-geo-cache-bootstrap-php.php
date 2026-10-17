@@ -53,6 +53,9 @@ namespace FazCookie\Includes {
 			if ( ! $has_source && \function_exists( 'geoip_country_code_by_name' ) ) {
 				$has_source = true;
 			}
+			if ( ! $has_source && \function_exists( 'has_filter' ) && \has_filter( 'faz_visitor_country' ) ) {
+				$has_source = true;
+			}
 			if ( ! $has_source ) {
 				$has_source = (bool) self::$has_database;
 			}
@@ -156,6 +159,11 @@ namespace {
 	function add_filter( $tag, $callback ) {
 		$GLOBALS['faz_geo_bootstrap_filters'][ $tag ][] = $callback;
 		return true;
+	}
+	// Presence of a callback, as WordPress answers it. The double above asks it
+	// for faz_visitor_country, like the real predicate.
+	function has_filter( $tag ) {
+		return ! empty( $GLOBALS['faz_geo_bootstrap_filters'][ $tag ] );
 	}
 	function add_action() {
 		return true;
@@ -328,6 +336,19 @@ namespace {
 		'the mod_geoip header still counts as a source where the module cannot be enumerated'
 	);
 	unset( $_SERVER['GEOIP_COUNTRY_CODE'] );
+
+	// A callback on faz_visitor_country is a source in its own right: it is the
+	// only route the plugin offers an edge that is not Cloudflare, the runtime
+	// routes on whatever it returns, and source_status() already reported it as
+	// working. The veto has to follow, or the first visitor's render is cached
+	// and served to the next one from another jurisdiction.
+	add_filter( 'faz_visitor_country', static function () { return 'IT'; } );
+	faz_geo_bootstrap_same(
+		$off->flying_press_is_cacheable( true ),
+		false,
+		'a faz_visitor_country callback counts as a source, so the country-dependent render is not cached'
+	);
+	unset( $GLOBALS['faz_geo_bootstrap_filters']['faz_visitor_country'] );
 
 	faz_geo_bootstrap_reset();
 	$saved_opt_in_settings = array(

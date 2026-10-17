@@ -93,7 +93,7 @@
         "description": "Používá jej Google reCAPTCHA k rozlišení lidí a robotů."
     },
     "fazcookie-consent": {
-        "description": "Předvolby souhlasu s cookies nastavené návštěvníkem."
+        "description": "Ukládá volby souhlasu s cookies provedené návštěvníkem a náhodný identifikátor souhlasu, který slouží k vedení záznamu o této volbě."
     },
     "_clck": {
         "description": "Soubor cookie Microsoft Clarity pro analytiku."

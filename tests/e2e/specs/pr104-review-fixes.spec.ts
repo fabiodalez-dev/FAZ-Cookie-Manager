@@ -305,17 +305,17 @@ test.describe('PR104 — F-SEC-02 GEOIP_COUNTRY_CODE opt-in filter', () => {
 
       $_SERVER['REMOTE_ADDR'] = '8.8.8.8';
       // Clear any cached lookup for that IP from previous tests.
-      delete_transient( 'faz_geo_' . md5( '8.8.8.8' ) );
+      delete_transient( 'faz_geo_' . faz_ip_cache_key( '8.8.8.8' ) );
 
       // Filter OFF, header present: header MUST be ignored. detect_country
       // then falls through to PHP geoip/MaxMind/ip-api which, without
       // those configured in CI, returns ''.
       $_SERVER['GEOIP_COUNTRY_CODE'] = 'IT';
-      delete_transient( 'faz_geo_' . md5( '8.8.8.8' ) );
+      delete_transient( 'faz_geo_' . faz_ip_cache_key( '8.8.8.8' ) );
       $off = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
 
       // Filter ON: header IS consumed and steers the result.
-      delete_transient( 'faz_geo_' . md5( '8.8.8.8' ) );
+      delete_transient( 'faz_geo_' . faz_ip_cache_key( '8.8.8.8' ) );
       // Clearing the transient is no longer enough: this branch added a
       // per-request memo (Geolocation::\$country_cache) that is consulted
       // BEFORE the transient, so the second resolution would return the ''
@@ -327,7 +327,7 @@ test.describe('PR104 — F-SEC-02 GEOIP_COUNTRY_CODE opt-in filter', () => {
       remove_filter( 'faz_trust_geoip_country_code', $closure, 10 );
 
       unset( $_SERVER['GEOIP_COUNTRY_CODE'], $_SERVER['REMOTE_ADDR'] );
-      delete_transient( 'faz_geo_' . md5( '8.8.8.8' ) );
+      delete_transient( 'faz_geo_' . faz_ip_cache_key( '8.8.8.8' ) );
       echo wp_json_encode( array( 'off' => $off, 'on' => $on ) );
     `).trim();
     const data = JSON.parse(result);

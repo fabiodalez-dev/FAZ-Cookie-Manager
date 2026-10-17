@@ -1,7 +1,7 @@
 {
   "necessary": {
     "name": "Noodzakelijk",
-    "description": "<p>Noodzakelijke cookies zijn vereist om de basisfuncties van deze site mogelijk te maken, zoals het aanbieden van een veilige login of het aanpassen van je toestemmingsvoorkeuren. Deze cookies slaan geen persoonlijk identificeerbare gegevens op.</p>"
+    "description": "<p>Noodzakelijke cookies zijn vereist om de basisfuncties van deze site mogelijk te maken, zoals het aanbieden van een veilige login of het aanpassen van je toestemmingsvoorkeuren. Ze worden niet gebruikt voor advertenties of om je over andere sites te volgen. De toestemmingscookie slaat een willekeurige identificatiecode op waarmee wij een registratie bijhouden van de keuze die je hebt gemaakt.</p>"
   },
   "functional": {
     "name": "Functioneel",

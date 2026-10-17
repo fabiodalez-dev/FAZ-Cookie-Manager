@@ -81,6 +81,13 @@ $client_i18n_keys = array(
 	'age_confirm_label',
 	'age_confirm_error',
 	'optout_autoclose_countdown',
+	'iab_consent',
+	'iab_cookie_retention',
+	'iab_features',
+	'iab_legitimate_interest',
+	'iab_legitimate_interest_note',
+	'iab_vendor_consent',
+	'iab_vendor_legitimate_interest_label',
 );
 
 banner_rest_i18n_eq(

@@ -1077,9 +1077,15 @@ class Shortcodes {
 				. ' <strong>' . esc_html( $country ) . '</strong></span>';
 		} else {
 			// enabled but no recipient country named → single neutral line, no
-			// orphan "Label:" fragment (edge case in the design).
+			// orphan "Label:" fragment (edge case in the design). "Without an EU
+			// adequacy decision" is GDPR's concept: it is kept for a GDPR banner
+			// and replaced by a regime-neutral line for every other law (CCPA,
+			// POPIA, the GDPR+CCPA mix), whose visitors it would describe in a
+			// framework that does not apply to them.
 			$parts[] = '<span class="faz-audit-transfer-country">'
-				. esc_html__( 'This cookie may transfer personal data to a country without an EU adequacy decision.', 'faz-cookie-manager' )
+				. ( 'gdpr' === $this->law
+					? esc_html__( 'This cookie may transfer personal data to a country without an EU adequacy decision.', 'faz-cookie-manager' )
+					: esc_html__( 'This cookie may transfer personal data to another country.', 'faz-cookie-manager' ) )
 				. '</span>';
 		}
 		if ( '' !== $safeguard ) {
