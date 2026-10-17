@@ -32,6 +32,9 @@
 	 */
 	var BLOCK_TAGS = 'br,div,p,li,tr,dt,dd,section,header,footer,blockquote,pre,ul,ol,table,h1,h2,h3,h4,h5,h6';
 
+	/** What the page shows a reader but the report leaves out. */
+	var OMIT = '.faz-help,[data-faz-copy="omit"]';
+
 	/**
 	 * An element's text as the lines a reader would actually see.
 	 *
@@ -45,6 +48,13 @@
 			return [];
 		}
 		var clone = el.cloneNode( true );
+		// Help text explains a row to whoever is looking at the page; it is
+		// not part of the state being reported. Copying it turned one row into
+		// a paragraph and made the snapshot too long to paste where it is
+		// usually pasted: a forum post, a chat message, a GitHub issue.
+		clone.querySelectorAll( OMIT ).forEach( function ( node ) {
+			node.parentNode.removeChild( node );
+		} );
 		clone.querySelectorAll( BLOCK_TAGS ).forEach( function ( node ) {
 			node.parentNode.insertBefore( document.createTextNode( '\n' ), node );
 			node.parentNode.insertBefore( document.createTextNode( '\n' ), node.nextSibling );
@@ -73,6 +83,9 @@
 		var text = 'FAZ Cookie Manager — System Status\n' + '='.repeat( 50 ) + '\n\n';
 
 		document.querySelectorAll( '#faz-system-status .faz-card' ).forEach( function ( card ) {
+			if ( card.matches( '[data-faz-copy="omit"]' ) ) {
+				return;
+			}
 			var heading = card.querySelector( '.faz-card-header h3' );
 			if ( heading ) {
 				text += flat( heading ) + '\n' + '-'.repeat( 30 ) + '\n';
