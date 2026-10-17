@@ -6750,7 +6750,7 @@ class Frontend {
 			 * left as the server rendered it, trackers included. Return false
 			 * only to restore that behaviour.
 			 *
-			 * @since 1.34.3
+			 * @since 1.34.2
 			 *
 			 * @param bool $fail_closed Default true.
 			 */
@@ -8381,7 +8381,7 @@ class Frontend {
 			 * which a cached copy then replays to visitors whose opt-out
 			 * signal the server never saw.
 			 *
-			 * @since 1.34.3
+			 * @since 1.34.2
 			 *
 			 * @param bool $park Default true.
 			 */
