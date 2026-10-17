@@ -87,8 +87,17 @@ test.describe('CPRA sale/sharing flags in the category editor (1.17.2)', () => {
     const shareCb = marketing.locator('.faz-cat-edit-share');
     await expect(shareCb).toBeChecked();
     await shareCb.uncheck();
+    // Wait for the marketing row's own write to come back, not a fixed delay:
+    // the editor fires one write per category in parallel, and under load a
+    // 1.5 s sleep read the column before the write had landed. wp.apiFetch
+    // sends a PUT as POST + X-HTTP-Method-Override, so match on the URL.
+    const catId = await marketing.getAttribute('data-cat-id');
+    const saved = page.waitForResponse(
+      (r) => r.request().method() !== 'GET' && /cookies\/categories\/(\d+)(?:[?&#]|$)/.exec(r.url())?.[1] === catId,
+      { timeout: 30_000 },
+    );
     await page.click('#faz-save-categories');
-    await page.waitForTimeout(1500);
+    expect((await saved).ok(), 'the marketing category PUT must succeed').toBe(true);
 
     expect(marketingShareFlag(), 'marketing share_personal_data must persist as 0 after unchecking Share').toBe('0');
   });
