@@ -228,7 +228,7 @@ ok(
 const copiedTokens = text.split(/[\s,]+/);
 ok(
   'the provider catalogue card is not copied',
-  !text.includes('May be blocked without a visible placeholder') && !copiedTokens.includes('kaltura.com') && !copiedTokens.includes('fonts.googleapis.com'),
+  !text.includes('May be blocked without a visible placeholder') && copiedTokens.every((token) => token !== 'kaltura.com' && token !== 'fonts.googleapis.com'),
   lines
 );
 

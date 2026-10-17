@@ -167,9 +167,9 @@
 	function isConsentCookieStale(pairs) {
 		if (!pairs) return false;
 		var config = window._fazConfig || {};
-		// A pending geo lookup cannot authorize the cached shell's consent.
+		// A cached shell is provisional on every topology, not just multisite.
+		if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
 		if (config._siteScopeBound && !(pairs.source === 'pmp' && pairs.action === 'auto' && pairs.consent === 'no' && !Object.keys(pairs).some(function(key){return key !== 'necessary' && /^yes(?::|$)/.test(pairs[key]);}))) {
-			if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
 			if (!config._scopeFingerprint || pairs['__scope.fp'] !== config._scopeFingerprint) return true;
 		}
 		// Coerce because wp_localize_script may stringify integers.
@@ -177,7 +177,36 @@
 		var serverRevision = parseInt(serverRevisionRaw, 10);
 		if (isNaN(serverRevision) || serverRevision < 1) serverRevision = 1;
 		var storedRevision = parseInt(pairs.rev, 10);
-		return serverRevision > 1 && (isNaN(storedRevision) || storedRevision < serverRevision);
+		return (serverRevision > 1 && (isNaN(storedRevision) || storedRevision < serverRevision)) || isConsentCookieOutOfScope(pairs, config);
+	}
+
+	// Share the banner/law decision with PHP, GCM and the main runtime.
+	function readScopedCookieValue(parsed, key, legacyKey, strict) {
+	    var primary = parsed[key] || "";
+	    if (primary || strict) return primary;
+	    var legacy = parsed[legacyKey] || "";
+	    if (!legacy || /^(yes|no)(:.*)?$/i.test(legacy)) return "";
+	    return legacy;
+	}
+
+	function isConsentCookieOutOfScope(parsed, config) {
+	    if (!config) return false;
+	    if (parsed.source === "pmp" && parsed.action === "auto" && parsed.consent === "no" && !Object.keys(parsed).some(function(key) { return key !== "necessary" && /^yes(?::|$)/.test(parsed[key]); })) return false;
+	    var strict = !!config._strictScopeFp;
+	    var currentSlug = config._bannerSlug ? String(config._bannerSlug) : "";
+	    var currentLaw = config._activeLaw ? String(config._activeLaw) : "";
+	    var currentFp = typeof config._scopeFingerprint === "string" ? config._scopeFingerprint : "";
+	    var storedFp = parsed["__scope.fp"] || "";
+	    var storedSlug = readScopedCookieValue(parsed, "__scope.banner", "banner", strict);
+	    var storedLaw = readScopedCookieValue(parsed, "__scope.law", "law", strict);
+	    if (strict && !storedFp) return true;
+	    // Pre-1.14 cookie, no scope recorded: the existing consent stands.
+	    if (!storedSlug && !storedLaw && !storedFp) return false;
+	    if (storedFp && currentFp && storedFp !== currentFp) return true;
+	    return !!(
+	        (currentSlug && storedSlug && storedSlug !== currentSlug) ||
+	        (currentLaw && storedLaw && storedLaw !== currentLaw)
+	    );
 	}
 
 	/**

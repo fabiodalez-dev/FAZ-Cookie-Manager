@@ -269,9 +269,10 @@ function parseConsentCookieParts() {
 function isConsentCookieStale(parsed) {
     if (!parsed) return false;
     var config = window._fazConfig || {};
-    // A pending geo lookup cannot authorize the cached shell's consent.
+    // The shell's fingerprint is provisional on every topology. Restore
+    // nothing until the no-store payload has installed the visitor's scope.
+    if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
     if (config._siteScopeBound && !(parsed.source === 'pmp' && parsed.action === 'auto' && parsed.consent === 'no' && !Object.keys(parsed).some(function(key){return key !== 'necessary' && /^yes(?::|$)/.test(parsed[key]);}))) {
-        if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
         if (!config._scopeFingerprint || parsed['__scope.fp'] !== config._scopeFingerprint) return true;
     }
     // wp_localize_script often stringifies numeric values ("1" instead of 1),
@@ -303,13 +304,14 @@ function readScopedCookieValue(parsed, key, legacyKey, strict) {
 // US, the page now served under the GDPR banner), Google would be told
 // ad_storage/analytics_storage granted for a visitor the runtime is about to
 // classify as unconsented — and in Advanced Consent Mode nothing else gates
-// the Google tags for that page view. Same gate (_geoRouting), same strict
-// flag, same legacy tolerance, same PMP exception as the runtime, so both
+// the Google tags for that page view. Same strict flag, legacy tolerance
+// and necessary-only PMP exception as the runtime, so both
 // layers reject the same cookie on the same page. The cached jurisdiction
 // shell advertises a placeholder scope until the live payload lands, so the
-// check is skipped there exactly as the runtime defers it.
+// cookie is held at the baseline until that scope resolves. Cache variance
+// (_geoRouting) is not a prerequisite for checking a recorded scope.
 function isConsentCookieOutOfScope(parsed, config) {
-    if (!config || !config._geoRouting || config._geoBootstrap) return false;
+    if (!config) return false;
     if (parsed.source === "pmp" && parsed.action === "auto" && parsed.consent === "no" && !Object.keys(parsed).some(function(key) { return key !== "necessary" && /^yes(?::|$)/.test(parsed[key]); })) return false;
     var strict = !!config._strictScopeFp;
     var currentSlug = config._bannerSlug ? String(config._bannerSlug) : "";

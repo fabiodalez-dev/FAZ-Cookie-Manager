@@ -8189,10 +8189,10 @@ class Frontend {
 	 * Passing this scope makes both layers reject the same cookie on the same
 	 * request.
 	 *
-	 * Mirrors the client exactly: the check applies only when the output varies
-	 * by country (`_geoRouting`), the fingerprint is the `_scopeFingerprint`
-	 * formula, and strict mode follows the same `faz_strict_scope_fingerprint`
-	 * filter. Null means "revision-only", as before.
+	 * Mirrors the client independently of page-cache variance. Even without a
+	 * country source a recorded scope must match the active banner and law.
+	 * Strict mode follows `faz_strict_scope_fingerprint`; null means no banner
+	 * has been selected yet, so only revision/site binding can be checked.
 	 *
 	 * @return array|null
 	 */
@@ -8201,7 +8201,7 @@ class Frontend {
 			return $this->consent_cookie_scope_cache;
 		}
 		$scope = null;
-		if ( $this->banner && $this->is_country_dependent_output() ) {
+		if ( $this->banner ) {
 			$slug  = (string) $this->banner->get_slug();
 			$law   = (string) $this->banner->get_law();
 			$scope = array(

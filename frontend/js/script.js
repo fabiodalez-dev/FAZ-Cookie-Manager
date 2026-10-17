@@ -549,7 +549,7 @@ function _fazCurrentScopeFingerprint() {
     return (_fazStore && typeof _fazStore._scopeFingerprint === 'string') ? _fazStore._scopeFingerprint : "";
 }
 function _fazConsentScopeChanged() {
-    if (!_fazHasConsentCookie || !_fazStore || !(_fazStore._geoRouting || _fazStore._siteScopeBound)) return false;
+    if (!_fazHasConsentCookie || !_fazStore) return false;
     // The PMP membership alternative is a server-refreshed, necessary-only
     // privacy state, not consent. It is safe across every banner/law scope and
     // deliberately carries no user identifier or scope fingerprint. Requiring

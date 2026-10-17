@@ -21,7 +21,8 @@
       "check": "Validità del consenso per legge e banner prima dei tracker",
       "evidence": [
         "tests/unit/test-consent-scope-server-php.php",
-        "tests/unit/js/gcm-scope-invalidation.test.mjs"
+        "tests/unit/js/gcm-scope-invalidation.test.mjs",
+        "tests/unit/js/tcf-scope-read.test.mjs"
       ]
     },
     {
@@ -439,7 +440,8 @@
     "PMP necessary-only exemption cannot authorize an optional grant from another scope.",
     "Decision/ID snapshot, fresh TC string, passive GPP, unload flush and stale-token recovery coexist in the logger.",
     "Forged parking attributes cannot exempt a live iframe src.",
-    "A JSON assignment to location is evaluated as code."
+    "A JSON assignment to location is evaluated as code.",
+    "Recorded banner/law scope is validated even without country-dependent output; GCM and TCF hold cached-shell grants until the live scope resolves. PHP, runtime, GCM and TCF regressions were observed failing before this correction."
   ],
   "not_in_scope": [
     "The 5 refuted findings in section 3 require no corrective change.",

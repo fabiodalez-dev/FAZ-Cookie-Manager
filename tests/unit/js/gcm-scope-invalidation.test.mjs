@@ -63,7 +63,7 @@ const PMP = 'action:auto,consent:no,necessary:yes,analytics:no,marketing:no,rev:
  * Run gcm.js with a cookie and a config; optionally change the cookie and fire
  * the runtime's event. Returns every `consent update` pushed to the data layer.
  */
-function run(cookie, config, { after = undefined, gacm = false } = {}) {
+function run(cookie, config, { after = undefined, gacm = false, resolveGeo = false } = {}) {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
     runScripts: 'outside-only',
     url: 'http://localhost/',
@@ -86,6 +86,7 @@ function run(cookie, config, { after = undefined, gacm = false } = {}) {
 
   window.eval(readFileSync(GCM_PATH, 'utf8'));
 
+  if (resolveGeo) config._geoBootstrapResolved = 'live';
   if (after !== undefined) {
     if (after === null) {
       // _fazInvalidateStoredConsent() deletes the cookie before the event.
@@ -119,10 +120,17 @@ function main() {
   eq('back under the US banner the CCPA record is restored again', last(r.updates) && last(r.updates).ad_storage, 'granted');
 
   r = run(CCPA_US, euConfig({ _geoRouting: '' }));
-  eq('single-banner install (_geoRouting off): scope is not compared, as in script.js', last(r.updates) && last(r.updates).ad_storage, 'granted');
+  eq('without a country source a foreign-law cookie is not restored', r.updates.length, 0);
 
   r = run(CCPA_US, euConfig({ _geoBootstrap: '1' }));
-  eq('cached jurisdiction shell advertises a placeholder scope: check deferred, as in script.js', last(r.updates) && last(r.updates).ad_storage, 'granted');
+  eq('cached jurisdiction shell cannot restore grants before its scope is resolved', r.updates.length, 0);
+
+  r = run(GDPR_EU, euConfig({ _geoBootstrap: '1' }), {after: GDPR_EU, resolveGeo: true});
+  eq('the matching cookie restores only after the live scope arrives', r.updates.length, 1);
+  eq('the resolved matching scope keeps its grants', last(r.updates) && last(r.updates).ad_storage, 'granted');
+
+  r = run(CCPA_US, euConfig({ _geoBootstrap: '1' }), {after: CCPA_US, resolveGeo: true});
+  eq('the resolved foreign scope never restores the old grants', r.updates.length, 0);
 
   r = run(GRANTS, euConfig());
   eq('pre-1.14 cookie without scope keys is honoured (upgrade case)', last(r.updates) && last(r.updates).ad_storage, 'granted');

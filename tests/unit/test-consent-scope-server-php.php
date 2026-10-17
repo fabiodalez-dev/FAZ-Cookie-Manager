@@ -216,12 +216,14 @@ namespace {
 	scope_same( $blocked->invoke( $frontend ), $optional, 'faz_strict_scope_fingerprint makes the server re-prompt a fingerprint-less cookie, like the client' );
 	$GLOBALS['scope_test_strict'] = false;
 
-	// The gate mirrors the client: with no country-dependent output the runtime
-	// never compares scopes (_geoRouting false), so neither must the server.
+	// Cache variance and consent validity are different decisions. No country
+	// source must not authorize a record from another banner or law.
 	$GLOBALS['scope_test_geo_routing'] = false;
 	$_COOKIE = array( 'fazcookie-consent' => $ccpa_us );
 	$frontend = fresh_frontend( $class, 'eu-1', 'gdpr' );
-	scope_same( $blocked->invoke( $frontend ), array(), 'single-banner install (no geo routing): scope is not compared, as in script.js' );
+	scope_same( $blocked->invoke( $frontend ), $optional, 'without a country source a foreign-law cookie remains invalid' );
+	$_COOKIE = array( 'fazcookie-consent' => $gdpr_eu );
+	scope_same( $blocked->invoke( fresh_frontend( $class, 'eu-1', 'gdpr' ) ), array(), 'without a country source the matching consent is still valid' );
 	$GLOBALS['scope_test_geo_routing'] = true;
 
 	// No cookie at all under the GDPR banner still blocks everything optional.

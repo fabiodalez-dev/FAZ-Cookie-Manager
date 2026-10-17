@@ -143,6 +143,7 @@ namespace {
 	require dirname( __DIR__, 2 ) . '/includes/class-cache-compatibility.php';
 	require dirname( __DIR__, 2 ) . '/includes/class-withdrawal-path.php';
 	require dirname( __DIR__, 2 ) . '/frontend/includes/class-embed-inventory.php';
+	require __DIR__ . '/helpers/load-consent-scope.php';
 	require dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 
 	use FazCookie\Frontend\Frontend;

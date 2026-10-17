@@ -48,11 +48,10 @@ for (const file of ['gcm.js', 'tcf-cmp.js']) {
   const fn = tail.slice(0, tail.indexOf('\n' + (file === 'tcf-cmp.js' ? '\t}' : '}')) + (file === 'tcf-cmp.js' ? 3 : 2));
   const w = new JSDOM('', {runScripts:'outside-only'}).window;
   w._fazConfig={_siteScopeBound:true, _scopeFingerprint:'this-site'};
-  if (file === 'gcm.js') {
-    for (const name of ['readScopedCookieValue', 'isConsentCookieOutOfScope']) {
-      const source = js.slice(js.indexOf('function ' + name + '('));
-      w.eval(source.slice(0, source.indexOf('\n}') + 2));
-    }
+  for (const name of ['readScopedCookieValue', 'isConsentCookieOutOfScope']) {
+    const dependency = js.slice(js.indexOf('function ' + name + '('));
+    const closing = file === 'tcf-cmp.js' ? '\n\t}' : '\n}';
+    w.eval(dependency.slice(0, dependency.indexOf(closing) + closing.length));
   }
   w.eval(fn);
   assert.equal(w.isConsentCookieStale({'__scope.fp':'foreign-site'}), true); ++passed;
@@ -103,5 +102,17 @@ for (const topology of ['subdirectory','subdomain']) {
  assert.equal(b2.fazcookie._fazGetFromStore('analytics'),'no'); ++passed;
  assert.equal(b2.getFazConsent().consentID,'visitorB'); ++passed;
  b2.close();
+}
+
+{
+ const w=new JSDOM('',{runScripts:'outside-only',url:'https://site.test/'}).window;
+ w._fazConfig={_geoRouting:false,_siteScopeBound:false,_scopeFingerprint:'new-banner',_bannerSlug:'eu-1',_activeLaw:'gdpr',_categories:[{slug:'necessary',isNecessary:true},{slug:'marketing'}],_bannerConfig:{settings:{applicableLaw:'gdpr'}}};
+ w.document.cookie='fazcookie-consent='+encodeURIComponent('action:yes,consent:yes,marketing:yes,__scope.banner:us-1,__scope.law:ccpa,__scope.fp:old-banner');
+ const add=w.document.addEventListener.bind(w.document);
+ w.document.addEventListener=(type,...args)=>type==='DOMContentLoaded'?undefined:add(type,...args);
+ w.eval(source);
+ assert.equal(w.fazcookie._fazGetFromStore('action'),'','scope validation does not depend on cache variance'); ++passed;
+ assert.notEqual(w.fazcookie._fazGetFromStore('marketing'),'yes'); ++passed;
+ w.close();
 }
 console.log(`${passed} passed, 0 failed`);
