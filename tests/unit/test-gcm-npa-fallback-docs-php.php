@@ -83,7 +83,11 @@ ok( false !== stripos( $comment, 'npa' ), 'Gcm_Settings names the npa signal the
 // 2. Geo_Runtime::apply_cmv2_to_gcm() docblock.
 $geo_src = file_get_contents( $root . '/frontend/includes/class-geo-runtime.php' );
 ok( false === stripos( $geo_src, 'out of sync' ), 'Geo_Runtime no longer claims the fallback keeps marketing and ad_storage out of sync' );
-ok( 1 === preg_match( '/ad_storage[^\n]*denied/i', $geo_src ) || 1 === preg_match( '/in sync/i', $geo_src ), 'Geo_Runtime describes the mirrors as the keys gcm.js reads, with ad_storage following marketing' );
+// Read from the docblock itself: any line of the file naming ad_storage and
+// denied, or saying "in sync", satisfied the check against the whole source.
+$geo_doc = faz_comment_above( $geo_src, 'public static function apply_cmv2_to_gcm' );
+ok( '' !== $geo_doc, 'Geo_Runtime::apply_cmv2_to_gcm() has a docblock' );
+ok( 1 === preg_match( '/ad_storage[^\n]*denied/i', $geo_doc ) && 1 === preg_match( '/in sync/i', $geo_doc ), 'Geo_Runtime::apply_cmv2_to_gcm() describes the mirrors as the keys gcm.js reads, with ad_storage following marketing' );
 
 // 3. E2E spec header.
 $spec_src = file_get_contents( $root . '/tests/e2e/specs/user-reports-regression.spec.ts' );
