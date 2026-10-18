@@ -1533,6 +1533,7 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 				}
 				delete_post_meta( $post_id, '_dsar_consent_id' );
 				delete_post_meta( $post_id, '_dsar_consent_id_verified' );
+				delete_post_meta( $post_id, '_dsar_consent_id_cookie' );
 
 				/**
 				 * Whether to keep a dated, non-identifying record of an erased request.

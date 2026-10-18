@@ -200,6 +200,7 @@ class DSAR_Admin {
 			if ( '' !== faz_dsar_verified_consent_id( $post->ID, $email ) ) {
 				echo '<p>' . esc_html__( 'Ownership of this consent ID has been independently verified.', 'faz-cookie-manager' ) . '</p>';
 			} else {
+				echo self::consent_cookie_note( $post->ID ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- assembled from esc_html__() in consent_cookie_note().
 				echo '<p>' . esc_html__( 'Independently verify that this consent ID belongs to the requester before confirming it below. Email confirmation alone does not prove ownership. Consent history is excluded from automated exports and erasure until verified.', 'faz-cookie-manager' ) . '</p>';
 				if ( current_user_can( 'manage_privacy_options' ) ) {
 					self::action_link( $post->ID, 'verify_consent_id', __( 'Confirm independently verified consent ID', 'faz-cookie-manager' ) );
@@ -597,6 +598,31 @@ class DSAR_Admin {
 	 */
 	public static function nonce_action( $post_id, $action ) {
 		return self::ACTION . '_' . (int) $post_id . '_' . sanitize_key( $action );
+	}
+
+	/**
+	 * What the submission said about the declared consent ID, for the
+	 * administrator deciding whether to verify it.
+	 *
+	 * Recorded at submission by DSAR_Shortcode::consent_cookie_match(): whether
+	 * the ID equals the consent cookie of the browser that sent the request. A
+	 * match is not proof and a mismatch is not a refusal, so neither changes
+	 * what the verification button does; a mismatch is shown as a warning.
+	 * Records from before 1.34.2 carry no outcome and show nothing.
+	 *
+	 * @param int $post_id DSAR record ID.
+	 * @return string Escaped HTML, or '' when there is nothing to say.
+	 */
+	public static function consent_cookie_note( $post_id ) {
+		switch ( (string) get_post_meta( $post_id, '_dsar_consent_id_cookie', true ) ) {
+			case 'match':
+				return '<p>' . esc_html__( 'This consent ID matches the consent cookie of the browser that submitted the request. That supports, but does not prove, that it belongs to the requester.', 'faz-cookie-manager' ) . '</p>';
+			case 'mismatch':
+				return '<div class="notice notice-warning inline"><p><strong>' . esc_html__( 'Warning:', 'faz-cookie-manager' ) . '</strong> ' . esc_html__( 'This consent ID does not match the consent cookie of the browser that submitted the request. It may belong to someone else or be mistyped: verify ownership with particular care before confirming it.', 'faz-cookie-manager' ) . '</p></div>';
+			case 'no_cookie':
+				return '<p>' . esc_html__( 'The browser that submitted the request had no consent cookie, so the consent ID could not be compared with it.', 'faz-cookie-manager' ) . '</p>';
+		}
+		return '';
 	}
 
 	/**

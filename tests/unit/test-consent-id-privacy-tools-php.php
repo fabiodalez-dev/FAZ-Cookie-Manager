@@ -141,4 +141,41 @@ try { $admin->handle_action(); throw new RuntimeException('unexpected permission
 catch (RuntimeException $error) { privacy_check(strpos($error->getMessage(),'not allowed')!==false,'DSAR editing alone cannot attest consent ownership'); }
 privacy_check($GLOBALS['checked_nonce']===\FazCookie\Includes\DSAR_Admin::nonce_action(1,'verify_consent_id'), 'ownership verification checks a record/action-specific nonce');
 privacy_check(faz_dsar_verified_consent_id(1,'visitor@example.test')==='', 'rejected verification cannot grant data access');
+// Issue #327: the declared consent ID is compared at submission with the
+// consent cookie of the browser that sends the request, and only the outcome
+// is stored and shown next to the verification button.
+if ( ! function_exists( 'faz_parse_consent_cookie' ) ) {
+ function faz_parse_consent_cookie() {
+  $raw = (string) ( $_COOKIE['fazcookie-consent'] ?? '' ); $out = array();
+  foreach ( explode( ',', $raw ) as $pair ) { $kv = explode( ':', $pair, 2 ); if ( 2 === count( $kv ) ) $out[ trim( $kv[0] ) ] = trim( $kv[1] ); }
+  return $out;
+ }
+}
+$shortcode = \FazCookie\Includes\DSAR_Shortcode::class;
+privacy_check( method_exists( $shortcode, 'consent_cookie_match' ), 'the submission compares the declared ID with the submitting browser' );
+if ( method_exists( $shortcode, 'consent_cookie_match' ) ) {
+ $_COOKIE = array( 'fazcookie-consent' => 'action:yes,consentid:visitor123,necessary:yes' );
+ privacy_check( 'match' === $shortcode::consent_cookie_match( 'visitor123' ), 'the same ID as the browser cookie is a match' );
+ privacy_check( 'mismatch' === $shortcode::consent_cookie_match( 'anotherVisitor' ), 'another ID is a mismatch' );
+ privacy_check( '' === $shortcode::consent_cookie_match( '' ), 'no declared ID records nothing' );
+ $_COOKIE = array();
+ privacy_check( 'no_cookie' === $shortcode::consent_cookie_match( 'visitor123' ), 'a browser without a consent cookie is recorded as such' );
+}
+$admin_class = \FazCookie\Includes\DSAR_Admin::class;
+privacy_check( method_exists( $admin_class, 'consent_cookie_note' ), 'the administrator is shown the outcome' );
+if ( method_exists( $admin_class, 'consent_cookie_note' ) ) {
+ $GLOBALS['meta'][7] = array( '_dsar_consent_id_cookie' => 'mismatch' );
+ $note = $admin_class::consent_cookie_note( 7 );
+ privacy_check( false !== strpos( $note, 'notice-warning' ) && false !== strpos( $note, 'does not match' ), 'a mismatch is shown as a warning' );
+ $GLOBALS['meta'][7] = array( '_dsar_consent_id_cookie' => 'match' );
+ privacy_check( false !== strpos( $admin_class::consent_cookie_note( 7 ), 'matches the consent cookie' ) && false === strpos( $admin_class::consent_cookie_note( 7 ), 'notice-warning' ), 'a match is shown as support, without a warning' );
+ $GLOBALS['meta'][7] = array( '_dsar_consent_id_cookie' => 'no_cookie' );
+ privacy_check( false !== strpos( $admin_class::consent_cookie_note( 7 ), 'no consent cookie' ), 'a missing cookie is said so' );
+ $GLOBALS['meta'][7] = array();
+ privacy_check( '' === $admin_class::consent_cookie_note( 7 ), 'a record from before the comparison shows nothing' );
+ unset( $GLOBALS['meta'][7] );
+}
+seed_privacy(); $GLOBALS['meta'][1]['_dsar_consent_id_cookie']='match';
+faz_privacy_eraser('visitor@example.test');
+privacy_check(!isset($GLOBALS['meta'][1]['_dsar_consent_id_cookie']), 'the erasure removes the comparison outcome with the ID');
 echo "ALL PASS ($checks consent ID privacy checks)\n";

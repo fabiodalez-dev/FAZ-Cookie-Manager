@@ -1982,6 +1982,33 @@ class DSAR_Shortcode {
 	 *
 	 * @return int Post ID.
 	 */
+	/**
+	 * Compare a declared consent ID with the consent cookie of the browser
+	 * that submits the request.
+	 *
+	 * Not proof of ownership -- a cookie can be copied, and a requester may
+	 * write from another device -- but a signal the administrator should see
+	 * next to the verification button: a match says the ID was read from the
+	 * submitting browser's own record; a mismatch that the request names
+	 * someone else's history or a mistyped ID. Only the outcome is stored,
+	 * never the cookie's ID.
+	 *
+	 * @param string $consent_id Declared, already validated consent ID.
+	 * @return string '' (nothing declared), 'match', 'mismatch' or 'no_cookie'.
+	 */
+	public static function consent_cookie_match( $consent_id ) {
+		$consent_id = (string) $consent_id;
+		if ( '' === $consent_id ) {
+			return '';
+		}
+		$parsed = function_exists( 'faz_parse_consent_cookie' ) ? faz_parse_consent_cookie() : array();
+		$stored = isset( $parsed['consentid'] ) ? (string) $parsed['consentid'] : '';
+		if ( '' === $stored ) {
+			return 'no_cookie';
+		}
+		return hash_equals( $stored, $consent_id ) ? 'match' : 'mismatch';
+	}
+
 	private function store_request( $name, $email, $type, $message, $consent_id = '' ) {
 		$type_labels = array(
 			'access'      => 'Access',
@@ -2004,6 +2031,7 @@ class DSAR_Shortcode {
 					'_dsar_type'    => $type,
 					'_dsar_message' => $message,
 					'_dsar_consent_id' => $consent_id,
+					'_dsar_consent_id_cookie' => self::consent_cookie_match( $consent_id ),
 					'_dsar_status'  => 'pending',
 				),
 			),
