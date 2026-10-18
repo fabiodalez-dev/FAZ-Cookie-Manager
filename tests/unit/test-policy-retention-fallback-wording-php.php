@@ -31,6 +31,13 @@ foreach ( glob( $root . '/*/*.md' ) as $file ) {
 	$lang = basename( $file, '.md' );
 	$juris = basename( dirname( $file ) );
 	if ( ! isset( $markers[ $lang ] ) ) {
+		// A scaffold added in a language with no marker must not pass unread:
+		// "every shipped scaffold" includes it.
+		if ( false !== strpos( (string) file_get_contents( $file ), '{{RETENTION_PERIOD}}' ) ) {
+			++$checks;
+			++$failed;
+			echo "  FAIL {$juris}/{$lang}.md carries {{RETENTION_PERIOD}} but no fallback marker is defined for '{$lang}'\n";
+		}
 		continue;
 	}
 	foreach ( file( $file ) as $n => $line ) {
