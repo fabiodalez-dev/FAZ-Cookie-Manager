@@ -125,6 +125,12 @@ namespace {
 	function wp_salt( $scheme = 'auth' ) {
 		return 'unit-test-salt-' . $scheme;
 	}
+	// Multisite naming as faz-cookie-manager.php applies it: on a network every
+	// consent-tracking cookie carries the network and blog ids.
+	$GLOBALS['__faz_multisite'] = false;
+	function faz_consent_cookie_name( $name = 'fazcookie-consent' ) {
+		return empty( $GLOBALS['__faz_multisite'] ) ? $name : $name . '-n1-b2';
+	}
 
 	require_once dirname( __DIR__, 2 ) . '/includes/class-ip-hasher.php';
 	require_once dirname( __DIR__, 2 ) . '/includes/class-do-not-sell-shortcode.php';
@@ -186,6 +192,17 @@ namespace {
 	$cfg = isset( $GLOBALS['__faz_localized']['fazDnsmpiConfig'] ) ? $GLOBALS['__faz_localized']['fazDnsmpiConfig'] : array();
 	check( isset( $cfg['cookieName'] ) && Do_Not_Sell_Shortcode::COOKIE_NAME === $cfg['cookieName'], 'the script is told the cookie name' );
 	check( isset( $cfg['nonceAction'] ) && 'faz_dnsmpi_nonce' === $cfg['nonceAction'], 'and the nonce refresh action' );
+
+	// On multisite the server writes and reads `fazcookie-dnsmpi-n<net>-b<blog>`
+	// (faz_consent_cookie_name()). Told the bare name, the script read a cookie
+	// that never exists there and showed the opt-out form to a visitor who had
+	// already opted out on this site.
+	$GLOBALS['__faz_multisite'] = true;
+	$GLOBALS['__faz_localized'] = array();
+	$dns->render( array() );
+	$cfg = isset( $GLOBALS['__faz_localized']['fazDnsmpiConfig'] ) ? $GLOBALS['__faz_localized']['fazDnsmpiConfig'] : array();
+	check( isset( $cfg['cookieName'] ) && 'fazcookie-dnsmpi-n1-b2' === $cfg['cookieName'], 'multisite: the script is told the per-site cookie name the server writes' );
+	$GLOBALS['__faz_multisite'] = false;
 
 	// ── 2. A stale nonce is recoverable, not a dead end ─────────────────────
 

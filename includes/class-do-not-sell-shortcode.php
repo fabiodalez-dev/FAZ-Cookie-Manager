@@ -102,7 +102,7 @@ class Do_Not_Sell_Shortcode {
 					// nonce comes from when the one in the (possibly cached)
 					// markup has expired. See render().
 					'nonceAction'    => self::NONCE_ACTION,
-					'cookieName'     => self::COOKIE_NAME,
+					'cookieName'     => function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME,
 					'successMsg'     => __( 'Your opt-out request has been received. We will not sell or share your personal information.', 'faz-cookie-manager' ),
 					'rescindSuccess' => __( 'Your opt-out has been withdrawn. You may submit a new request at any time.', 'faz-cookie-manager' ),
 					'errMsg'         => __( 'An error occurred. Please try again.', 'faz-cookie-manager' ),
