@@ -275,6 +275,21 @@ namespace {
 	geo_eq( $out['signal_dnt_received'] ?? null, 0, 'signal_dnt_received comes from the request' );
 	geo_eq( $out['tc_string'] ?? null, 'CPyyyAAA.AAAA', 'tc_string is kept' );
 	geo_eq( $out['gpp_string'] ?? null, 'DBABLA~1', 'gpp_string is kept' );
+	// The GPP string comes from whatever CMP runs on the page (FAZ generates
+	// none) and is stored in the accountability record as given: only the
+	// shape of a GPP string — base64url segments joined by `~`, `.` for the
+	// sub-sections — is kept, bounded in length.
+	foreach ( array(
+		'free text'        => 'hello world <b>x</b>',
+		'a script payload' => '"><script>alert(1)</script>',
+		'an oversized one' => 'DB' . str_repeat( 'A', 5000 ),
+		'a URL'            => 'https://tracker.test/x?y=1',
+	) as $faz_label => $faz_gpp ) {
+		$out = $fields( array( 'gpp_string' => $faz_gpp ) );
+		geo_ok( ! array_key_exists( 'gpp_string', $out ), 'gpp_string not shaped like a GPP string is not stored (' . $faz_label . ')' );
+	}
+	$out = $fields( array( 'gpp_string' => 'DBABMA~CPXxRfAPXxRfAAfKABENB-CgAAAAAAAAAAYgAAAAAAAA.YAAAAAAAAAA' ) );
+	geo_eq( $out['gpp_string'] ?? null, 'DBABMA~CPXxRfAPXxRfAAfKABENB-CgAAAAAAAAAAYgAAAAAAAA.YAAAAAAAAAA', 'a real GPP string with sections and sub-sections is kept' );
 
 	// 7. A caller that supplies the context it enforced still wins (AMP or an
 	//    integration that resolved it already).

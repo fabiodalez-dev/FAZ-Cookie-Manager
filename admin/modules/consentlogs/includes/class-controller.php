@@ -570,9 +570,16 @@ class Controller {
 				$out['tc_string'] = $tc;
 			}
 		}
+		// The GPP string is NOT produced by this plugin: it is read from
+		// whatever CMP runs on the page and lands in the accountability
+		// record as given. Unlike the TCF string, which this plugin's own CMP
+		// writes, it is therefore kept only when it has the shape of a GPP
+		// string -- base64url segments joined by `~`, with `.` between the
+		// sub-sections of a section -- and a bounded length, so free text, a
+		// URL or markup posted in its place is not stored as evidence.
 		if ( isset( $data['gpp_string'] ) && is_string( $data['gpp_string'] ) ) {
 			$gpp = sanitize_text_field( wp_unslash( $data['gpp_string'] ) );
-			if ( '' !== $gpp ) {
+			if ( '' !== $gpp && strlen( $gpp ) <= 4096 && preg_match( '/^[A-Za-z0-9_-]+(?:[~.][A-Za-z0-9_-]*)*$/', $gpp ) ) {
 				$out['gpp_string'] = $gpp;
 			}
 		}
