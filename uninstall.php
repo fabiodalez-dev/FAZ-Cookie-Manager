@@ -180,6 +180,9 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				'faz_migrated_advert_to_marketing',
 				'faz_ccpa_gpc_migrated',
 				'faz_share_personal_data_column_added',
+				'faz_consent_log_gmt_column_added',
+				'faz_consent_log_gmt_done',
+				'faz_consent_log_gmt_cursor',
 				'faz_reset_stale_per_cookie_consent_done',
 				'faz_normalize_legacy_functional_optout_done',
 				'faz_functional_optout_notice',
@@ -219,6 +222,12 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 			);
 			foreach ( $faz_options as $option_name ) {
 				delete_option( $option_name );
+			}
+			// The created_at_gmt backfill continuation (1.34.2). Deactivation
+			// clears it too; an uninstall that follows a failed deactivation
+			// must not leave the event behind.
+			if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+				wp_clear_scheduled_hook( 'faz_consent_log_gmt_backfill' );
 			}
 
 			// Clean up Do Not Sell / DSAR atomic lock options (created by add_option,

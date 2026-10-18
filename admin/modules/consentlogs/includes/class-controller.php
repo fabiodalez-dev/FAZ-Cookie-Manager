@@ -117,6 +117,7 @@ class Controller {
 			banner_slug varchar(190) DEFAULT '',
 			policy_revision bigint(20) NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL,
+			created_at_gmt datetime DEFAULT NULL,
 			PRIMARY KEY  (log_id),
 			KEY idx_consent_id (consent_id),
 			KEY idx_status (status),
@@ -442,6 +443,13 @@ class Controller {
 			'created_at'      => current_time( 'mysql' ),
 		);
 		$insert_format = array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s' );
+		// The same instant in UTC (1.34.2). Written only once the column is
+		// known to exist (Activator::ensure_consent_log_gmt_column() sets the
+		// flag), so an install still waiting for its migration keeps inserting.
+		if ( get_option( 'faz_consent_log_gmt_column_added' ) ) {
+			$insert_data['created_at_gmt'] = current_time( 'mysql', true );
+			$insert_format[]               = '%s';
+		}
 
 		// Append v2 columns only when geo-routing v2 has resolved data
 		// AND the migration completed successfully on this install. Two
@@ -772,6 +780,29 @@ class Controller {
 		}
 		$gmt = get_gmt_from_date( $created_at, 'Y-m-d\TH:i:s\Z' );
 		return is_string( $gmt ) ? $gmt : '';
+	}
+
+	/**
+	 * The UTC instant of a consent-log row, RFC 3339.
+	 *
+	 * Reads the stored created_at_gmt column (1.34.2) and falls back to the
+	 * value computed from created_at, with the site's time zone, only for a
+	 * row that has none: written before the migration added the column, not
+	 * yet reached by its backfill, or with an unparseable created_at.
+	 *
+	 * @since 1.34.2
+	 * @param array $row Consent-log row.
+	 * @return string `Y-m-d\TH:i:s\Z`, or '' when neither is available.
+	 */
+	public static function row_created_at_gmt( $row ) {
+		$stored = is_array( $row ) && isset( $row['created_at_gmt'] ) && is_string( $row['created_at_gmt'] ) ? trim( $row['created_at_gmt'] ) : '';
+		if ( '' !== $stored && 0 !== strpos( $stored, '0000-00-00' ) ) {
+			$timestamp = strtotime( $stored . ' UTC' );
+			if ( false !== $timestamp ) {
+				return gmdate( 'Y-m-d\TH:i:s\Z', $timestamp );
+			}
+		}
+		return self::created_at_gmt( is_array( $row ) && isset( $row['created_at'] ) ? $row['created_at'] : '' );
 	}
 
 	/**
@@ -1187,7 +1218,7 @@ class Controller {
 							isset( $item['banner_slug'] ) ? $item['banner_slug'] : '',
 							isset( $item['policy_revision'] ) ? $item['policy_revision'] : 1,
 							$item['created_at'],
-							self::created_at_gmt( $item['created_at'] ),
+							self::row_created_at_gmt( $item ),
 							isset( $item['country_at_consent'] ) ? (string) $item['country_at_consent'] : '',
 							isset( $item['region_at_consent'] ) ? (string) $item['region_at_consent'] : '',
 							isset( $item['ruleset_id_at_consent'] ) ? (string) $item['ruleset_id_at_consent'] : '',

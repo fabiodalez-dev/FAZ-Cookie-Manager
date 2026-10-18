@@ -1354,6 +1354,7 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 						'banner_slug' => __( 'Banner', 'faz-cookie-manager' ),
 						'policy_revision' => __( 'Policy revision', 'faz-cookie-manager' ),
 						'created_at' => __( 'Date', 'faz-cookie-manager' ),
+						'created_at_gmt' => __( 'Date (UTC)', 'faz-cookie-manager' ),
 						'ip_hash' => __( 'Salted IP hash', 'faz-cookie-manager' ),
 						'user_agent' => __( 'Salted user-agent hash', 'faz-cookie-manager' ),
 						'tc_string' => __( 'TCF string', 'faz-cookie-manager' ),
@@ -1365,6 +1366,9 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 						'signal_dnt_received' => __( 'Do Not Track signal', 'faz-cookie-manager' ),
 					);
 					foreach ( $logs as $log ) {
+						// The stored UTC instant, or the one computed for a row
+						// without it (see Controller::row_created_at_gmt()).
+						$log['created_at_gmt'] = \FazCookie\Admin\Modules\Consentlogs\Includes\Controller::row_created_at_gmt( $log );
 						$data = array();
 						foreach ( $labels as $field => $label ) {
 							$data[] = array( 'name' => $label, 'value' => isset( $log[ $field ] ) ? ( is_array( $log[ $field ] ) ? wp_json_encode( $log[ $field ] ) : (string) $log[ $field ] ) : '' );

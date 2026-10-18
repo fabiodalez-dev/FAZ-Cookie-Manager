@@ -207,7 +207,7 @@ class Api extends Rest_Controller {
 	 */
 	private function with_created_at_gmt( $item ) {
 		if ( is_array( $item ) && array_key_exists( 'created_at', $item ) ) {
-			$item['created_at_gmt'] = Controller::created_at_gmt( $item['created_at'] );
+			$item['created_at_gmt'] = Controller::row_created_at_gmt( $item );
 		}
 		return $item;
 	}

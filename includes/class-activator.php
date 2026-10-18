@@ -109,6 +109,7 @@ class Activator {
 		add_action( 'faz_weekly_definitions_update', array( 'FazCookie\Includes\Cookie_Definitions', 'cron_update' ) );
 		add_action( 'faz_after_update_settings', array( 'FazCookie\Includes\Cookie_Definitions', 'schedule_updates' ) );
 		add_action( 'faz_scheduled_scan', array( __CLASS__, 'run_scheduled_scan' ) );
+		add_action( self::GMT_BACKFILL_HOOK, array( __CLASS__, 'run_consent_log_gmt_backfill' ) );
 		add_action( 'faz_after_update_settings', array( __CLASS__, 'reschedule_auto_scan' ) );
 		// F009: keep the IAB unmatched-vendors transient fresh on every
 		// cookie write path (create / update / delete) — not just update.
@@ -132,7 +133,17 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.10.15.1';
+	const MIGRATIONS_VERSION = '2026.10.18.1';
+
+	/**
+	 * Continuation event of the created_at_gmt backfill on large tables.
+	 */
+	const GMT_BACKFILL_HOOK = 'faz_consent_log_gmt_backfill';
+
+	/**
+	 * Rows converted per backfill batch.
+	 */
+	const GMT_BACKFILL_BATCH = 500;
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -166,6 +177,7 @@ class Activator {
 			self::add_recaptcha_gstatic_pattern();
 			self::enable_gpc_on_ccpa_banners();
 			self::ensure_share_personal_data_column();
+			$all_complete = self::ensure_consent_log_gmt_column() && $all_complete;
 			self::clear_necessary_optout_flags();
 			self::normalize_legacy_functional_optout_flags();
 			self::move_sourcebuster_to_marketing();
@@ -2252,6 +2264,122 @@ class Activator {
 		}
 		Category_Controller::get_instance()->delete_cache();
 		update_option( 'faz_share_personal_data_column_added', 1, false );
+	}
+
+	/**
+	 * Add wp_faz_consent_logs.created_at_gmt and backfill it (1.34.2).
+	 *
+	 * created_at is the site's wall clock (current_time('mysql')): unambiguous
+	 * inside the site, ambiguous once a record leaves it, and off by an hour
+	 * around a DST change. The new column holds the same instant in UTC and is
+	 * written on every insert from now on (Controller::log_consent()).
+	 *
+	 * Upgrade path, idempotent and SQLite-friendly, in the shape of
+	 * ensure_share_personal_data_column(): SHOW COLUMNS decides, and the one
+	 * ALTER adds a NULL-able column and nothing else, so no existing column and
+	 * no existing value is touched. Fresh installs get the column from the
+	 * CREATE TABLE in Controller::maybe_create_table().
+	 *
+	 * Backfill: the existing rows are converted in PHP (get_gmt_from_date(), so
+	 * no database time-zone function is needed) in batches of
+	 * GMT_BACKFILL_BATCH by ascending log_id, from a stored cursor. Only rows
+	 * whose created_at_gmt is still NULL are read and written, and only that
+	 * column is written. The conversion uses the site's CURRENT time zone,
+	 * which is the only information an old row carries: a row written before
+	 * the time-zone setting was changed is converted with the new one. One
+	 * batch runs per admin load; larger tables continue through a single
+	 * self-rescheduling cron event, so no request does the whole table. Rows
+	 * with an unparseable created_at keep NULL, and the readers fall back to
+	 * the computed value for any row without one.
+	 *
+	 * @return bool True once the column exists and the backfill is complete.
+	 */
+	public static function ensure_consent_log_gmt_column() {
+		if ( get_option( 'faz_consent_log_gmt_done' ) ) {
+			return true;
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_consent_logs';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the upgrade path.
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+			// No table yet: Controller::maybe_create_table() creates it with the
+			// column. Not marked done, so the flag below is set once it exists.
+			return true;
+		}
+		if ( ! get_option( 'faz_consent_log_gmt_column_added' ) ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal; SHOW COLUMNS probe, no user input.
+			$has_column = $wpdb->get_var( 'SHOW COLUMNS FROM `' . esc_sql( $table ) . "` LIKE 'created_at_gmt'" );
+			if ( ! $has_column ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.SchemaChange -- $table is $wpdb->prefix + literal "faz_consent_logs"; the column definition is a fixed literal; one-shot DDL on the upgrade path.
+				$result = $wpdb->query( 'ALTER TABLE `' . esc_sql( $table ) . '` ADD COLUMN `created_at_gmt` datetime NULL DEFAULT NULL AFTER `created_at`' );
+				if ( false === $result ) {
+					throw new \RuntimeException( 'FAZ: failed to add the created_at_gmt column; migration will retry.' );
+				}
+			}
+			update_option( 'faz_consent_log_gmt_column_added', 1, false );
+		}
+		if ( ! self::backfill_consent_log_gmt() ) {
+			if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( self::GMT_BACKFILL_HOOK ) ) {
+				wp_schedule_single_event( time() + 60, self::GMT_BACKFILL_HOOK );
+			}
+			return false;
+		}
+		update_option( 'faz_consent_log_gmt_done', 1, false );
+		delete_option( 'faz_consent_log_gmt_cursor' );
+		if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+			wp_clear_scheduled_hook( self::GMT_BACKFILL_HOOK );
+		}
+		return true;
+	}
+
+	/**
+	 * Convert one batch of rows without created_at_gmt.
+	 *
+	 * @return bool True when no row is left to convert.
+	 */
+	private static function backfill_consent_log_gmt() {
+		global $wpdb;
+		$table  = $wpdb->prefix . 'faz_consent_logs';
+		$cursor = (int) get_option( 'faz_consent_log_gmt_cursor', 0 );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is $wpdb->prefix + literal; bounds bound via prepare(%d); one-shot upgrade backfill.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT log_id, created_at FROM {$table} WHERE log_id > %d AND created_at_gmt IS NULL ORDER BY log_id ASC LIMIT %d", $cursor, self::GMT_BACKFILL_BATCH ), ARRAY_A );
+		if ( ! is_array( $rows ) ) {
+			throw new \RuntimeException( 'FAZ: created_at_gmt backfill could not read the consent log; it will retry.' );
+		}
+		foreach ( $rows as $row ) {
+			$cursor     = max( $cursor, (int) $row['log_id'] );
+			$created_at = isset( $row['created_at'] ) ? trim( (string) $row['created_at'] ) : '';
+			if ( '' === $created_at || 0 === strpos( $created_at, '0000-00-00' ) || false === strtotime( $created_at ) ) {
+				continue;
+			}
+			$gmt = get_gmt_from_date( $created_at, 'Y-m-d H:i:s' );
+			if ( ! is_string( $gmt ) || '' === $gmt ) {
+				continue;
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot upgrade backfill of the plugin's own table.
+			$wpdb->update( $table, array( 'created_at_gmt' => $gmt ), array( 'log_id' => (int) $row['log_id'] ), array( '%s' ), array( '%d' ) );
+		}
+		update_option( 'faz_consent_log_gmt_cursor', $cursor, false );
+		return count( $rows ) < self::GMT_BACKFILL_BATCH;
+	}
+
+	/**
+	 * Cron continuation of the created_at_gmt backfill: a few batches per run,
+	 * rescheduled by ensure_consent_log_gmt_column() until complete.
+	 *
+	 * @return void
+	 */
+	public static function run_consent_log_gmt_backfill() {
+		try {
+			for ( $i = 0; $i < 10; $i++ ) {
+				if ( self::ensure_consent_log_gmt_column() ) {
+					return;
+				}
+			}
+		} catch ( \Throwable $e ) {
+			// Retried by the next admin load or the rescheduled event.
+			return;
+		}
 	}
 
 	/**

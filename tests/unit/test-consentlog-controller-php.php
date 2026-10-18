@@ -93,7 +93,7 @@ namespace {
 		function wp_generate_password( $len = 24, $special = false ) { return str_repeat( 'x', (int) $len ); }
 	}
 	if ( ! function_exists( 'current_time' ) ) {
-		function current_time( $type ) { return '2026-06-19 12:00:00'; }
+		function current_time( $type, $gmt = 0 ) { return $gmt ? '2026-06-19 10:00:00' : '2026-06-19 12:00:00'; }
 	}
 	if ( ! function_exists( 'faz_get_valid_consent_cookie' ) ) {
 		// The carry gate (I-1) consults the cookie the request carried; these
@@ -582,6 +582,21 @@ namespace {
 	ok( false !== strpos( $gpc_csv_q, '%\\"meta.gpc_exception_served.%' ), 'stream_csv: ...and the served-verdict prefix' );
 	ok( false !== strpos( $gpc_csv_q, '%\\"meta.gpc_exception_carried.%' ), 'stream_csv: ...and the carried-verdict prefix' );
 	ok( false === strpos( $gpc_csv_q, "status = 'gpc_exception'" ), 'stream_csv: it is never treated as a real status column value either' );
+
+	// ============================================================
+	// L10 — every insert records the UTC instant once the column exists
+	// ============================================================
+	echo "-- created_at_gmt (L10) --\n";
+	unset( $GLOBALS['__faz_options']['faz_consent_log_gmt_column_added'] );
+	$ctrl->log_consent( array( 'consent_id' => 'cid-gmt-pending', 'status' => 'accepted', 'categories' => array( 'necessary' => 'yes' ) ) );
+	$row = end( $GLOBALS['wpdb']->rows );
+	ok( ! array_key_exists( 'created_at_gmt', $row ), 'before the migration added the column, inserts do not name it' );
+	$GLOBALS['__faz_options']['faz_consent_log_gmt_column_added'] = 1;
+	$ctrl->log_consent( array( 'consent_id' => 'cid-gmt', 'status' => 'accepted', 'categories' => array( 'necessary' => 'yes' ) ) );
+	$row = end( $GLOBALS['wpdb']->rows );
+	eq( $row['created_at_gmt'] ?? null, '2026-06-19 10:00:00', 'an insert writes created_at_gmt with current_time( mysql, true )' );
+	eq( $row['created_at'] ?? null, '2026-06-19 12:00:00', 'next to the unchanged site-time created_at' );
+	unset( $GLOBALS['__faz_options']['faz_consent_log_gmt_column_added'] );
 
 	// ---------- summary ----------
 	echo "\n--\nTests:  $run\nPassed: $pass\nFailed: $fail\n\n";
