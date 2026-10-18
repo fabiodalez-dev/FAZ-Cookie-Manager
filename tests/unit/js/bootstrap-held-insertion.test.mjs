@@ -32,7 +32,7 @@
  *   g. a runtime that takes over after the safety release re-judges what the
  *      release parked under its placeholder category;
  *   h. a call made through a node still in its holder lands on the safety
- *      release and when the fuse trips between the two calls, and
+ *      release and when the fuse trips inside that call, for every idiom, and
  *      Range.insertNode of a fragment with a held child waits for it;
  *   i. before()/after() listing their own node, and replaceChild(a, a) on a
  *      pending child, behave as the engine does.
@@ -730,34 +730,37 @@ for (const [label, act, expected] of IDIOMS) {
     eq('safety release: ' + label + ' through the holder lands in the real parent, in order', JSON.stringify(ids(list)), JSON.stringify(expected));
   });
 }
-await scenario(async () => {
-  // The fuse trips on the second call itself: the queue is full when
-  // A.replaceWith(B) is held, so the release runs inside that call. How many
-  // tasks one call queues is the bootstrap's business, so the case walks the
-  // fill level across the limit and asserts on every fill where the release
-  // fell between the two calls.
-  let between = 0;
-  let lost = [];
-  for (let fill = 4990; fill <= 5000; fill += 1) {
-    const { window, document } = boot();
-    for (let i = 0; i < fill; i += 1) window.fetch('https://tracker.test/beacon?' + i);
-    const list = document.getElementById('list');
-    const a = document.createElement('img');
-    a.id = 'a';
-    a.src = 'https://third.example/a.png';
-    list.appendChild(a);
-    const before = window._fazBootstrap.released === true;
-    const b = document.createElement('img');
-    b.id = 'b';
-    b.src = 'https://third.example/b.png';
-    a.replaceWith(b);
-    if (before || window._fazBootstrap.released !== true) continue;
-    between += 1;
-    if (JSON.stringify(ids(list)) !== JSON.stringify(['b'])) lost.push(fill);
-  }
-  ok('premise: at some fill level the fuse trips inside A.replaceWith(B)', between > 0);
-  eq('fuse between the two calls: B replaces A in the real parent at every such fill level', JSON.stringify(lost), '[]');
-});
+// The fuse trips on the second call itself: the queue is full when the call
+// through the holder is held, so the release runs inside that call. How many
+// tasks one call queues is the bootstrap's business, and differs between the
+// idioms, so each case walks the fill level across the limit and asserts on
+// every fill where the release fell between the two calls, reading the
+// children of the real parent.
+for (const [label, act, expected] of IDIOMS) {
+  await scenario(async () => {
+    let between = 0;
+    const lost = [];
+    for (let fill = 4980; fill <= 5000; fill += 1) {
+      const { window, document } = boot();
+      for (let i = 0; i < fill; i += 1) window.fetch('https://tracker.test/beacon?' + i);
+      const list = document.getElementById('list');
+      const a = document.createElement('img');
+      a.id = 'a';
+      a.src = 'https://third.example/a.png';
+      list.appendChild(a);
+      const before = window._fazBootstrap.released === true;
+      const b = document.createElement('img');
+      b.id = 'b';
+      b.src = 'https://third.example/b.png';
+      act(a, b);
+      if (before || window._fazBootstrap.released !== true) continue;
+      between += 1;
+      if (JSON.stringify(ids(list)) !== JSON.stringify(expected)) lost.push(fill + ':' + ids(list).join(','));
+    }
+    ok('premise: at some fill level the fuse trips inside ' + label, between > 0);
+    eq('fuse inside ' + label + ': the real parent holds ' + expected.join(',') + ' at every such fill level', JSON.stringify(lost), '[]');
+  });
+}
 
 // Range.insertNode of a fragment that still has a held insertion queued INTO
 // it: the Node and ParentNode wrappers hold such a fragment behind the queued

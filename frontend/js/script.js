@@ -626,7 +626,7 @@ function _fazInvalidateStoredConsent() {
     // so gcm.js (synchronous in <head>) has already read the cookie and may
     // have restored its grants. This function dispatches no event: gcm.js
     // reconciles on the first fazcookie_consent_ready of the page load, finds
-    // the cookie gone and falls back to the denied baseline. TCF and consent
+    // the cookie gone and falls back to the region baseline. TCF and consent
     // forwarding run after this point and never see the stale state.
     ["fazcookie-consent", "fazVendorConsent", "fazVendorLI", "euconsent-v2"].forEach(_fazDeleteCookie);
     // Wipe the entries that gate the banner so showBanner() logic triggers.

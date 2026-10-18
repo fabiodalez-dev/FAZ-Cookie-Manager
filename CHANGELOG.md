@@ -2,7 +2,7 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
-## [1.34.2] - Unreleased
+## [1.34.2] - 2026-10-18
 
 ### Added
 - Your consent ID is now shown in the cookie preferences, the data request form has an optional Consent ID field filled in automatically, and administrators can open the matching consent history from the request. The request also records whether the ID matches the consent cookie of the browser that sent it, and warns the administrator when it does not (#327). WordPress export and erasure tools include that history once the administrator confirms the ID belongs to the requester (filter: faz_consent_log_erasure_retain).

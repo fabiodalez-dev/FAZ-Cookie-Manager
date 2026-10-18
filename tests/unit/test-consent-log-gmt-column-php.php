@@ -139,6 +139,34 @@ namespace {
 		gmt_check( ! empty( $GLOBALS['opts']['faz_consent_log_gmt_column_added'] ), 'and inserts are told the column exists' );
 	}
 
+	// The cron continuation survives a failed read. WordPress removes a single
+	// event before it runs the callback, and the migration batch no longer
+	// re-enters this step once its version is recorded: the old catch, which
+	// returned without scheduling anything, ended the backfill for good on the
+	// first database error, with the rows it had not reached left on NULL.
+	class Gmt_Test_DB_Read_Fails extends Gmt_Test_DB {
+		public $fail_reads = 1;
+		public function get_results( $sql, $out ) {
+			if ( $this->fail_reads > 0 ) { --$this->fail_reads; return null; }
+			return parent::get_results( $sql, $out );
+		}
+	}
+	$wpdb3 = new Gmt_Test_DB_Read_Fails();
+	$wpdb3->columns[] = 'created_at_gmt';
+	for ( $i = 1; $i <= 1200; $i++ ) { $wpdb3->rows[ $i ] = array( 'created_at' => '2026-01-15 10:00:00', 'created_at_gmt' => null ); }
+	$GLOBALS['wpdb'] = $wpdb3;
+	$GLOBALS['opts'] = array( 'faz_consent_log_gmt_column_added' => 1 );
+	$GLOBALS['scheduled'] = array(); // The running event, already unscheduled by wp-cron.
+	if ( method_exists( $A, 'run_consent_log_gmt_backfill' ) ) {
+		$A::run_consent_log_gmt_backfill();
+		gmt_check( 0 === $wpdb3->fail_reads && null === $wpdb3->rows[1]['created_at_gmt'], 'PRECONDITION: the cron run hit a failed read before converting anything' );
+		gmt_check( ! empty( $GLOBALS['scheduled']['faz_consent_log_gmt_backfill'] ), 'a cron run whose read fails schedules its own retry' );
+		$A::run_consent_log_gmt_backfill();
+		$left = 0;
+		foreach ( $wpdb3->rows as $row ) { if ( null === $row['created_at_gmt'] ) { ++$left; } }
+		gmt_check( 0 === $left && ! empty( $GLOBALS['opts']['faz_consent_log_gmt_done'] ), 'and the retry finishes the backfill' );
+	}
+
 	// Readers: the column first, the computed value only for rows without one.
 	if ( ! function_exists( 'did_action' ) ) { function did_action( $h ) { return 1; } }
 	if ( ! function_exists( 'add_action' ) ) { function add_action( ...$a ) { return true; } }

@@ -708,7 +708,7 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
-### 1.34.2 — unreleased
+### 1.34.2 — 2026-10-18
 
 - Added: Your consent ID is now shown in the cookie preferences, the data request form has an optional Consent ID field filled in automatically, and administrators can open the matching consent history from the request. The request also records whether the ID matches the consent cookie of the browser that sent it, and warns the administrator when it does not (#327). WordPress export and erasure tools include that history once the administrator confirms the ID belongs to the requester (filter: faz_consent_log_erasure_retain).
 - Added: The suggested privacy policy text is now built from the features actually enabled on the site, including consent IDs, hashed IP and browser data, retention periods, geolocation, the optional ipinfo.io lookup and privacy requests.

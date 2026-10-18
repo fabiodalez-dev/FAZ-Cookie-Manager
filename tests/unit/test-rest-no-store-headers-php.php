@@ -77,6 +77,18 @@ namespace {
 		$served = $filter( false, null, new Rest_Headers_Request( $route ) );
 		rest_check( false === $served, $route . ': the filter does not take over serving' );
 		rest_check( $expected === $GLOBALS['rest_headers'], $route . ': sends Cache_Compatibility::NO_STORE_HEADERS, CDN-targeted directives included' );
+		// Spelled out, not read from the constant: the comparison above
+		// follows the constant, so a CDN directive dropped from it would
+		// leave that check green while edges were free to store the answer.
+		foreach ( array( 'CDN-Cache-Control', 'Cloudflare-CDN-Cache-Control', 'Surrogate-Control' ) as $edge ) {
+			$sent = false;
+			foreach ( $GLOBALS['rest_headers'] as $line ) {
+				if ( 1 === preg_match( '/^' . preg_quote( $edge, '/' ) . ':\s*no-store\s*$/i', $line ) ) {
+					$sent = true;
+				}
+			}
+			rest_check( $sent, $route . ': sends ' . $edge . ': no-store' );
+		}
 	}
 	foreach ( array( '/faz/v1/banner/en', '/wp/v2/posts' ) as $route ) {
 		$GLOBALS['rest_headers'] = array();
