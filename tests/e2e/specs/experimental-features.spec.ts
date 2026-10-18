@@ -520,7 +520,9 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
   test('DSAR-17: all form fields reachable via keyboard Tab navigation', async ({ page }) => {
     await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
     await page.locator('input[name="dsar_name"]').click();
-    const fieldNames = ['dsar_name', 'dsar_email', 'dsar_type', 'dsar_message'];
+    // The optional Consent ID field (#327) sits between the request type and the
+    // message, so it is part of the keyboard path too.
+    const fieldNames = ['dsar_name', 'dsar_email', 'dsar_type', 'dsar_consent_id', 'dsar_message'];
     for (const name of fieldNames) {
       const focused = await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name ?? '');
       expect(focused).toBe(name);

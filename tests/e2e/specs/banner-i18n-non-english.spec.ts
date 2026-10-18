@@ -127,6 +127,7 @@ test.describe('Banner i18n — non-English locale renders translated copy', () =
     // builders cannot silently drift apart again.
     expect(Object.keys(payload.i18n)).toEqual([
       'privacy_region_label',
+      'consent_id',
       'consent_saved',
       'optout_preferences_label',
       'customise_consent_preferences_label',
@@ -153,6 +154,8 @@ test.describe('Banner i18n — non-English locale renders translated copy', () =
       'Il banner si chiude automaticamente tra 0 s...',
     );
     expect(payload.i18n.cookie_consent_label).toBe('Consenso ai cookie');
+    // #327: the consent ID shown in the preferences rides the payload as well.
+    expect(payload.i18n.consent_id).toBe('ID consenso');
     expect(payload.i18n.third_party_cookie_note).toContain('non possono essere rimossi singolarmente');
   });
 });
