@@ -85,6 +85,42 @@ class Renderer {
 	 *
 	 * @var string[]
 	 */
+	/**
+	 * "None declared." in each template language: the services list when no
+	 * third-party service is declared. Used when the site has no translation
+	 * in the policy locale (policy_label()); the six with a catalogue match it.
+	 */
+	const NONE_DECLARED_LABELS = array(
+		'en'    => 'None declared.',
+		'it'    => 'Nessuna dichiarata.',
+		'fr'    => 'Aucune déclarée.',
+		'de'    => 'Keine angegeben.',
+		'es'    => 'Ninguno declarado.',
+		'pt-BR' => 'Nenhum declarado.',
+		'bg'    => 'Няма декларирани.',
+		'cs'    => 'Žádná deklarovaná.',
+		'nl'    => 'Geen opgegeven.',
+		'hr'    => 'Nije navedena.',
+	);
+
+	/**
+	 * "No cookies declared." in each template language: the "Cookies used"
+	 * section when the inventory is empty, which otherwise left its heading
+	 * standing over nothing.
+	 */
+	const NO_COOKIES_DECLARED_LABELS = array(
+		'en'    => 'No cookies declared.',
+		'it'    => 'Nessun cookie dichiarato.',
+		'fr'    => 'Aucun cookie déclaré.',
+		'de'    => 'Keine Cookies angegeben.',
+		'es'    => 'Ninguna cookie declarada.',
+		'pt-BR' => 'Nenhum cookie declarado.',
+		'bg'    => 'Няма декларирани бисквитки.',
+		'cs'    => 'Žádné deklarované soubory cookie.',
+		'nl'    => 'Geen cookies opgegeven.',
+		'hr'    => 'Nema navedenih kolačića.',
+	);
+
 	const CONSENT_RECORD_RETENTION_JURISDICTIONS = array( 'gdpr-strict', 'lgpd-brazil' );
 
 	/**
@@ -560,7 +596,10 @@ class Renderer {
 		$rows = self::load_public_cookie_rows();
 
 		if ( empty( $rows ) ) {
-			$html = '';
+			// Say so, in the policy language: an empty string left the
+			// "Cookies used" heading standing over nothing, next to a services
+			// section that does say "None declared.".
+			$html = '<p>' . self::no_cookies_declared_label( $lang ) . '</p>';
 		} else {
 			$grouped = array();
 			foreach ( $rows as $row ) {
@@ -1407,8 +1446,8 @@ class Renderer {
 	/**
 	 * Build a comma-separated services list from settings.
 	 *
-	 * The "None declared." fallback is the one gettext string on this path and
-	 * is resolved in the policy language (switch_to_policy_locale), like every
+	 * The "None declared." fallback is the one fixed label on this path and is
+	 * resolved in the policy language (none_declared_label()), like every
 	 * other fixed label of the document — not in the ambient request locale.
 	 *
 	 * @param array  $settings
@@ -1544,10 +1583,67 @@ class Renderer {
 	 * @return string Escaped label.
 	 */
 	private static function none_declared_label( $lang ) {
-		$switched = self::switch_to_policy_locale( $lang );
-		$label    = esc_html__( 'None declared.', 'faz-cookie-manager' );
+		$switched   = self::switch_to_policy_locale( $lang );
+		$active     = self::policy_locale_active( $lang );
+		$translated = __( 'None declared.', 'faz-cookie-manager' );
 		self::restore_policy_locale( $switched );
-		return $label;
+		return esc_html( self::policy_label( $lang, 'None declared.', $translated, $active, self::NONE_DECLARED_LABELS ) );
+	}
+
+	/**
+	 * "No cookies declared." resolved in the policy language: what the
+	 * "Cookies used" section says when the inventory is empty.
+	 *
+	 * @param string $lang Policy language.
+	 * @return string Escaped sentence.
+	 */
+	private static function no_cookies_declared_label( $lang ) {
+		$switched   = self::switch_to_policy_locale( $lang );
+		$active     = self::policy_locale_active( $lang );
+		$translated = __( 'No cookies declared.', 'faz-cookie-manager' );
+		self::restore_policy_locale( $switched );
+		return esc_html( self::policy_label( $lang, 'No cookies declared.', $translated, $active, self::NO_COOKIES_DECLARED_LABELS ) );
+	}
+
+	/**
+	 * Pick a fixed label of the document in the policy language.
+	 *
+	 * gettext answers only for the locale WordPress is actually in. A policy
+	 * language with no installed locale (pt-BR, es and bg ship no catalogue,
+	 * and switch_to_locale() refuses a locale the site has not installed)
+	 * got the English msgid, or, when the switch failed under another ambient
+	 * locale, that locale's translation: an Italian label inside a Brazilian
+	 * policy. So a translation is used only when the policy locale is the
+	 * active one and it says something other than the msgid; otherwise the
+	 * label shipped for the template language, as the date and the
+	 * disclaimer are; otherwise the msgid.
+	 *
+	 * @param string $lang       Policy language.
+	 * @param string $msgid      English source string.
+	 * @param string $translated __() of $msgid under the policy locale.
+	 * @param bool   $active     Whether the policy locale was the active one.
+	 * @param array  $bundled    Template language => label.
+	 * @return string Unescaped label.
+	 */
+	private static function policy_label( $lang, $msgid, $translated, $active, array $bundled ) {
+		if ( $active && is_string( $translated ) && '' !== $translated && $msgid !== $translated ) {
+			return $translated;
+		}
+		return isset( $bundled[ $lang ] ) ? $bundled[ $lang ] : $msgid;
+	}
+
+	/**
+	 * Whether the WordPress locale in force is the one of the policy language.
+	 *
+	 * @param string $lang Policy language.
+	 * @return bool
+	 */
+	private static function policy_locale_active( $lang ) {
+		if ( ! function_exists( 'faz_wp_locale' ) || ! function_exists( 'get_locale' ) ) {
+			return false;
+		}
+		$target = faz_wp_locale( (string) $lang );
+		return '' !== $target && $target === get_locale();
 	}
 
 	/**

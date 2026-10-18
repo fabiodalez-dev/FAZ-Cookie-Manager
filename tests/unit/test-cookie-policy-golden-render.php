@@ -808,6 +808,26 @@ if ( ! $faz_update_mode ) {
 		}
 	}
 
+	// No heading may stand over nothing, and no fixed label may stay English
+	// in a document in another language. An empty inventory left "Cookies
+	// used" over the next heading, and the pt-BR policy printed "None
+	// declared." under its services sentence.
+	foreach ( $rendered_all as $name => $html ) {
+		if ( false === strpos( $html, '<article class="faz-cookie-policy"' ) ) {
+			continue;
+		}
+		assert_true(
+			0 === preg_match( '#</h([1-6])>\s*(?:<h[1-6][\s>]|</article>|<div class="faz-cookie-policy-disclaimer")#', $html ),
+			"{$name}: no heading stands over nothing"
+		);
+		if ( 1 === preg_match( '/<article [^>]*lang="(?!en")[^"]+"/', $html ) ) {
+			assert_true(
+				false === strpos( $html, 'None declared.' ) && false === strpos( $html, 'No cookies declared.' ),
+				"{$name}: the empty-list labels are in the document language"
+			);
+		}
+	}
+
 	// The wordpress-internal category must never surface publicly, in any
 	// fixture — the standing rule in CLAUDE.md.
 	foreach ( $rendered_all as $name => $html ) {
