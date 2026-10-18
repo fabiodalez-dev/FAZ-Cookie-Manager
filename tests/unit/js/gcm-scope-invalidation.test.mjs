@@ -144,8 +144,28 @@ function main() {
   r = run(CCPA_US, euConfig({ _bannerSlug: 'us-2', _activeLaw: 'ccpa', _scopeFingerprint: US_FP }));
   eq('back under the US banner the CCPA record is restored again', last(r.updates) && last(r.updates).ad_storage, 'granted');
 
-  r = run(CCPA_US, euConfig({ _geoRouting: '' }));
-  eq('without a country source a foreign-law cookie is not restored', r.updates.length, 0);
+  // --- Without geographic routing only the law decides ----------------------
+  const single = { _geoRouting: '', _geoBootstrap: '' };
+  r = run(CCPA_US, euConfig(single));
+  eq('single banner, no geo routing: a record given under another law is not restored', r.updates.length, 0);
+
+  r = run(`${GRANTS},__scope.banner:eu-old-1,__scope.law:gdpr,__scope.fp:${US_FP}`, euConfig(single));
+  eq('single banner, no geo routing: new slug and fingerprint, same law -> the grants stand', last(r.updates) && last(r.updates).ad_storage, 'granted');
+
+  r = run(`${GRANTS},__scope.banner:eu-old-1,__scope.law:gdpr,__scope.fp:${US_FP}`, euConfig());
+  eq('with geo routing the same record is refused (full banner/law/fingerprint check)', r.updates.length, 0);
+
+  r = run(`${GRANTS},__scope.banner:eu-old-1,__scope.law:gdpr`, euConfig(single, { _strictScopeFp: '1' }));
+  eq('strict fingerprint mode still requires a fingerprint without geo routing', r.updates.length, 0);
+
+  r = run(`${GRANTS},__scope.banner:eu-old-1,__scope.law:gdpr,__scope.fp:${US_FP}`, euConfig(Object.assign({ _siteScopeBound: '1' }, single)));
+  eq('multisite, no geo routing: a fingerprinted record survives a new banner slug', last(r.updates) && last(r.updates).ad_storage, 'granted');
+
+  r = run(`${GRANTS},__scope.banner:eu-1,__scope.law:gdpr,__scope.fp:${US_FP}`, euConfig(Object.assign({ _siteScopeBound: '1' }, single)));
+  eq('multisite: same banner and law under a foreign fingerprint is another site and is refused', r.updates.length, 0);
+
+  r = run(`${GRANTS},__scope.banner:eu-1,__scope.law:gdpr`, euConfig(Object.assign({ _siteScopeBound: '1' }, single)));
+  eq('multisite: a record without the site fingerprint is still refused', r.updates.length, 0);
 
   // --- The cached jurisdiction shell: the real runtime sequence -------------
   r = run(GDPR_EU, euConfig({ _geoBootstrap: '1' }), { ready: null });

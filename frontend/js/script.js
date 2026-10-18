@@ -587,6 +587,27 @@ function _fazConsentScopeChanged() {
     // after upgrade — a UX regression and an unnecessary GDPR-
     // accountability dent (the prior valid consent gets discarded).
     if (!storedBannerSlug && !storedLaw && !storedFp) return false;
+    // Without geographic routing (no country-dependent output and no cached
+    // jurisdiction shell) every visitor is served the same banner, so the
+    // record only stops answering the current question when the LAW changes.
+    // A new banner slug — an A/B test that ended, a banner deleted and
+    // re-created — or a new fingerprint after the AUTH salts were rotated is
+    // not a different regime and must not re-prompt every visitor. Twin rule
+    // in faz_consent_cookie_scope_changed(), gcm.js and tcf-cmp.js.
+    if (!(_fazStore._geoRouting || _fazStore._geoBootstrap)) {
+        // Multisite site binding still holds where this layer can verify it: a
+        // record naming the banner and law served here must carry exactly the
+        // published fingerprint (the HMAC the server checks). A record from an
+        // older banner slug is verified by the server
+        // (faz_is_consent_cookie_stale); the cookie name carries the site ids.
+        if (
+            _fazStore._siteScopeBound &&
+            fazcookieConsentMap[_FAZ_SCOPE_BANNER_KEY] === currentBannerSlug &&
+            fazcookieConsentMap[_FAZ_SCOPE_LAW_KEY] === currentLaw &&
+            storedFp !== currentFp
+        ) return true;
+        return !!(currentLaw && storedLaw && storedLaw !== currentLaw);
+    }
     // F-SEC-03 fingerprint check: when the cookie carries __scope.fp AND
     // the server publishes a fingerprint for the active scope, a
     // mismatch means either (a) the scope actually changed and the

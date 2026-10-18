@@ -169,9 +169,7 @@
 		var config = window._fazConfig || {};
 		// A cached shell is provisional on every topology, not just multisite.
 		if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
-		if (config._siteScopeBound && !(pairs.source === 'pmp' && pairs.action === 'auto' && pairs.consent === 'no' && !Object.keys(pairs).some(function(key){return key !== 'necessary' && /^yes(?::|$)/.test(pairs[key]);}))) {
-			if (!config._scopeFingerprint || pairs['__scope.fp'] !== config._scopeFingerprint) return true;
-		}
+		if (config._siteScopeBound && !isPmpNecessaryOnly(pairs) && isSiteBindingBroken(pairs, config)) return true;
 		// Coerce because wp_localize_script may stringify integers.
 		var serverRevisionRaw = config && config._consentRevision;
 		var serverRevision = parseInt(serverRevisionRaw, 10);
@@ -189,9 +187,24 @@
 	    return legacy;
 	}
 
+	// Multisite site binding, twin of gcm.js and script.js: the fingerprint must
+	// be present and, when the record names the banner and law served here,
+	// equal the published one. Other records are verified by the server's HMAC.
+	function isSiteBindingBroken(parsed, config) {
+	    var storedFp = parsed["__scope.fp"] || "";
+	    if (!storedFp) return true;
+	    var sameScope = (parsed["__scope.banner"] || "") === (config._bannerSlug ? String(config._bannerSlug) : "") &&
+	        (parsed["__scope.law"] || "") === (config._activeLaw ? String(config._activeLaw) : "");
+	    return sameScope && storedFp !== (config._scopeFingerprint || "");
+	}
+
+	function isPmpNecessaryOnly(parsed) {
+	    return parsed.source === "pmp" && parsed.action === "auto" && parsed.consent === "no" && !Object.keys(parsed).some(function(key) { return key !== "necessary" && /^yes(?::|$)/.test(parsed[key]); });
+	}
+
 	function isConsentCookieOutOfScope(parsed, config) {
 	    if (!config) return false;
-	    if (parsed.source === "pmp" && parsed.action === "auto" && parsed.consent === "no" && !Object.keys(parsed).some(function(key) { return key !== "necessary" && /^yes(?::|$)/.test(parsed[key]); })) return false;
+	    if (isPmpNecessaryOnly(parsed)) return false;
 	    var strict = !!config._strictScopeFp;
 	    var currentSlug = config._bannerSlug ? String(config._bannerSlug) : "";
 	    var currentLaw = config._activeLaw ? String(config._activeLaw) : "";
@@ -202,6 +215,11 @@
 	    if (strict && !storedFp) return true;
 	    // Pre-1.14 cookie, no scope recorded: the existing consent stands.
 	    if (!storedSlug && !storedLaw && !storedFp) return false;
+	    // Without geographic routing only a change of law re-asks: a new banner
+	    // slug or fingerprint (A/B test ended, salts rotated) does not.
+	    if (!(config._geoRouting || config._geoBootstrap)) {
+	        return !!(currentLaw && storedLaw && storedLaw !== currentLaw);
+	    }
 	    if (storedFp && currentFp && storedFp !== currentFp) return true;
 	    return !!(
 	        (currentSlug && storedSlug && storedSlug !== currentSlug) ||

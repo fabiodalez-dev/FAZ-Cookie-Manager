@@ -611,14 +611,22 @@ function faz_read_scoped_cookie_value( $parsed, $key, $legacy_key, $strict ) {
  *  - the Paid Memberships Pro privacy alternative (source:pmp, action:auto,
  *    consent:no) is a server-refreshed necessary-only state, never consent,
  *    and carries no scope on purpose: it is valid under every scope;
+ *  - without geographic routing (`routed` false) every visitor is served the
+ *    same banner, so only a change of LAW invalidates. A new banner slug (an
+ *    A/B test ended, a banner re-created) or a new fingerprint (AUTH salts
+ *    rotated) is not a different regime; strict mode still requires the
+ *    fingerprint to be present, as the client does;
  *  - strict mode (`faz_strict_scope_fingerprint`, and always on AMP): every
  *    scope key must be present and hash_equals the active scope;
  *  - a cookie with no scope keys at all is a pre-1.14 upgrade case and stands;
  *  - a fingerprint present on both sides decides on its own (tamper check);
  *  - otherwise the banner slug and law decide when both sides know them.
  *
+ * `routed` defaults to true, so a caller that does not say (the AMP bridge,
+ * which is pinned to one banner) keeps the full comparison.
+ *
  * @param array $parsed Parsed cookie (faz_parse_consent_cookie()).
- * @param array $scope  { slug, law, fingerprint, strict } of the active banner.
+ * @param array $scope  { slug, law, fingerprint, strict, routed } of the active banner.
  * @return bool True when the record belongs to another scope.
  */
 function faz_consent_cookie_scope_changed( $parsed, $scope ) {
@@ -637,6 +645,14 @@ function faz_consent_cookie_scope_changed( $parsed, $scope ) {
 	$stored_fp     = isset( $parsed['__scope.fp'] ) ? (string) $parsed['__scope.fp'] : '';
 	$stored_banner = faz_read_scoped_cookie_value( $parsed, '__scope.banner', 'banner', $strict );
 	$stored_law    = faz_read_scoped_cookie_value( $parsed, '__scope.law', 'law', $strict );
+	$routed        = ! array_key_exists( 'routed', $scope ) || ! empty( $scope['routed'] );
+
+	if ( ! $routed ) {
+		if ( $strict && '' === $stored_fp ) {
+			return true;
+		}
+		return '' !== $law && '' !== $stored_law && ! hash_equals( $law, $stored_law );
+	}
 
 	if ( $strict ) {
 		return '' === $stored_fp

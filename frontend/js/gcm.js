@@ -272,9 +272,7 @@ function isConsentCookieStale(parsed) {
     // The shell's fingerprint is provisional on every topology. Restore
     // nothing until the no-store payload has installed the visitor's scope.
     if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
-    if (config._siteScopeBound && !(parsed.source === 'pmp' && parsed.action === 'auto' && parsed.consent === 'no' && !Object.keys(parsed).some(function(key){return key !== 'necessary' && /^yes(?::|$)/.test(parsed[key]);}))) {
-        if (!config._scopeFingerprint || parsed['__scope.fp'] !== config._scopeFingerprint) return true;
-    }
+    if (config._siteScopeBound && !isPmpNecessaryOnly(parsed) && isSiteBindingBroken(parsed, config)) return true;
     // wp_localize_script often stringifies numeric values ("1" instead of 1),
     // so we can't rely on typeof === "number". Coerce and fall back to 1.
     var serverRevisionRaw = config && config._consentRevision;
@@ -308,11 +306,30 @@ function readScopedCookieValue(parsed, key, legacyKey, strict) {
 // and necessary-only PMP exception as the runtime, so both
 // layers reject the same cookie on the same page. The cached jurisdiction
 // shell advertises a placeholder scope until the live payload lands, so the
-// cookie is held at the baseline until that scope resolves. Cache variance
-// (_geoRouting) is not a prerequisite for checking a recorded scope.
+// cookie is held at the baseline until that scope resolves. With geographic
+// routing (country-dependent output or the jurisdiction bootstrap) banner,
+// law and fingerprint must all match; without it only the law is compared.
+// Multisite: the record must carry the site-bound fingerprint, and where this
+// layer can recompute it — the record names the banner and law served here, so
+// the published _scopeFingerprint is the HMAC the server would check — it must
+// match. A record written under another banner slug cannot be verified here;
+// the server verifies its HMAC (faz_is_consent_cookie_stale), and the cookie
+// name already carries the network and blog ids. Twin of script.js.
+function isSiteBindingBroken(parsed, config) {
+    var storedFp = parsed["__scope.fp"] || "";
+    if (!storedFp) return true;
+    var sameScope = (parsed["__scope.banner"] || "") === (config._bannerSlug ? String(config._bannerSlug) : "") &&
+        (parsed["__scope.law"] || "") === (config._activeLaw ? String(config._activeLaw) : "");
+    return sameScope && storedFp !== (config._scopeFingerprint || "");
+}
+
+function isPmpNecessaryOnly(parsed) {
+    return parsed.source === "pmp" && parsed.action === "auto" && parsed.consent === "no" && !Object.keys(parsed).some(function(key) { return key !== "necessary" && /^yes(?::|$)/.test(parsed[key]); });
+}
+
 function isConsentCookieOutOfScope(parsed, config) {
     if (!config) return false;
-    if (parsed.source === "pmp" && parsed.action === "auto" && parsed.consent === "no" && !Object.keys(parsed).some(function(key) { return key !== "necessary" && /^yes(?::|$)/.test(parsed[key]); })) return false;
+    if (isPmpNecessaryOnly(parsed)) return false;
     var strict = !!config._strictScopeFp;
     var currentSlug = config._bannerSlug ? String(config._bannerSlug) : "";
     var currentLaw = config._activeLaw ? String(config._activeLaw) : "";
@@ -323,6 +340,13 @@ function isConsentCookieOutOfScope(parsed, config) {
     if (strict && !storedFp) return true;
     // Pre-1.14 cookie, no scope recorded: the existing consent stands.
     if (!storedSlug && !storedLaw && !storedFp) return false;
+    // Without geographic routing every visitor gets the same banner, so only
+    // a change of LAW makes the record answer a different question. A new
+    // banner slug (an A/B test ended, a banner re-created) or a new fingerprint
+    // (AUTH salts rotated) does not.
+    if (!(config._geoRouting || config._geoBootstrap)) {
+        return !!(currentLaw && storedLaw && storedLaw !== currentLaw);
+    }
     if (storedFp && currentFp && storedFp !== currentFp) return true;
     return !!(
         (currentSlug && storedSlug && storedSlug !== currentSlug) ||

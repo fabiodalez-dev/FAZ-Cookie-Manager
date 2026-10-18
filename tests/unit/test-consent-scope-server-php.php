@@ -224,7 +224,29 @@ namespace {
 	scope_same( $blocked->invoke( $frontend ), $optional, 'without a country source a foreign-law cookie remains invalid' );
 	$_COOKIE = array( 'fazcookie-consent' => $gdpr_eu );
 	scope_same( $blocked->invoke( fresh_frontend( $class, 'eu-1', 'gdpr' ) ), array(), 'without a country source the matching consent is still valid' );
+	// One banner for everyone: only a change of law is a new question. An A/B
+	// test that ended, a banner re-created under a new slug, or AUTH salts
+	// rotated must not re-prompt the whole audience.
+	$renamed = $grants . ',__scope.banner:eu-old-7,__scope.law:gdpr,__scope.fp:' . fp( 'eu-old-7', 'gdpr' );
+	$_COOKIE = array( 'fazcookie-consent' => $renamed );
+	scope_same( $blocked->invoke( fresh_frontend( $class, 'eu-1', 'gdpr' ) ), array(), 'single banner, no geo routing: a new banner slug with the same law keeps the consent' );
+	$rotated = $grants . ',__scope.banner:eu-1,__scope.law:gdpr,__scope.fp:' . str_repeat( 'f', 32 );
+	$_COOKIE = array( 'fazcookie-consent' => $rotated );
+	scope_same( $blocked->invoke( fresh_frontend( $class, 'eu-1', 'gdpr' ) ), array(), 'single banner, no geo routing: a fingerprint from rotated salts keeps the consent' );
+	$GLOBALS['scope_test_strict'] = true;
+	$_COOKIE = array( 'fazcookie-consent' => $grants . ',__scope.banner:eu-1,__scope.law:gdpr' );
+	scope_same( $blocked->invoke( fresh_frontend( $class, 'eu-1', 'gdpr' ) ), $optional, 'single banner, strict mode: a record without a fingerprint is still refused' );
+	$GLOBALS['scope_test_strict'] = false;
 	$GLOBALS['scope_test_geo_routing'] = true;
+	$_COOKIE = array( 'fazcookie-consent' => $renamed );
+	scope_same( $blocked->invoke( fresh_frontend( $class, 'eu-1', 'gdpr' ) ), $optional, 'with geo routing the same renamed-banner record is refused (full check)' );
+	$_COOKIE = array( 'fazcookie-consent' => $rotated );
+	scope_same( $blocked->invoke( fresh_frontend( $class, 'eu-1', 'gdpr' ) ), $optional, 'with geo routing a foreign fingerprint is refused (full check)' );
+	// The predicate itself: `routed` absent keeps the full check (AMP bridge).
+	$unrouted = array_merge( $gdpr, array( 'routed' => false ) );
+	scope_same( faz_consent_cookie_scope_changed( faz_parse_consent_cookie( $renamed ), $unrouted ), false, 'predicate, routed=false: slug and fingerprint do not decide' );
+	scope_same( faz_consent_cookie_scope_changed( faz_parse_consent_cookie( $ccpa_us ), $unrouted ), true, 'predicate, routed=false: a different law still invalidates' );
+	scope_same( faz_consent_cookie_scope_changed( faz_parse_consent_cookie( $renamed ), $gdpr ), true, 'predicate, routed not given: the full comparison applies' );
 
 	// No cookie at all under the GDPR banner still blocks everything optional.
 	$_COOKIE = array();

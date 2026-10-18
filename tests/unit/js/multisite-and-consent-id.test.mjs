@@ -48,7 +48,7 @@ for (const file of ['gcm.js', 'tcf-cmp.js']) {
   const fn = tail.slice(0, tail.indexOf('\n' + (file === 'tcf-cmp.js' ? '\t}' : '}')) + (file === 'tcf-cmp.js' ? 3 : 2));
   const w = new JSDOM('', {runScripts:'outside-only'}).window;
   w._fazConfig={_siteScopeBound:true, _scopeFingerprint:'this-site'};
-  for (const name of ['readScopedCookieValue', 'isConsentCookieOutOfScope']) {
+  for (const name of ['readScopedCookieValue', 'isPmpNecessaryOnly', 'isSiteBindingBroken', 'isConsentCookieOutOfScope']) {
     const dependency = js.slice(js.indexOf('function ' + name + '('));
     const closing = file === 'tcf-cmp.js' ? '\n\t}' : '\n}';
     w.eval(dependency.slice(0, dependency.indexOf(closing) + closing.length));

@@ -8189,8 +8189,13 @@ class Frontend {
 	 * Passing this scope makes both layers reject the same cookie on the same
 	 * request.
 	 *
-	 * Mirrors the client independently of page-cache variance. Even without a
-	 * country source a recorded scope must match the active banner and law.
+	 * Mirrors the client independently of page-cache variance: a record given
+	 * under another law is never consent here. How much of the scope must
+	 * match depends on geographic routing (`_geoRouting` / `_geoBootstrap` on
+	 * the client). With routing, banner, law and fingerprint all decide.
+	 * Without it every visitor gets the same banner, so only the law does: a
+	 * new banner slug or a fingerprint changed by rotated AUTH salts is not a
+	 * new regime and must not re-prompt the whole audience.
 	 * Strict mode follows `faz_strict_scope_fingerprint`; null means no banner
 	 * has been selected yet, so only revision/site binding can be checked.
 	 *
@@ -8209,6 +8214,7 @@ class Frontend {
 				'law'         => $law,
 				'fingerprint' => faz_scope_fingerprint( $slug, $law ),
 				'strict'      => (bool) apply_filters( 'faz_strict_scope_fingerprint', false ),
+				'routed'      => $this->is_country_dependent_output() || $this->is_geo_bootstrap_cache_active(),
 			);
 		}
 		$this->consent_cookie_scope_cache = $scope;
