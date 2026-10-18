@@ -1,0 +1,35 @@
+<p>FAZ Cookie Manager 1.34.2 è nata come una revisione e si è trasformata in un rilascio corposo. Il giorno dopo la 1.34.1 ho fatto girare una revisione completa della conformità su tutto il plugin, non solo sulle ultime modifiche, e sono uscite cinquantadue segnalazioni confermate. Nello stesso momento sul forum di wordpress.org arrivavano tre storie che con quella revisione non c'entravano niente, e che invece si sono rivelate le più importanti: un banner sparito con LiteSpeed, un sito che si bloccava a metà caricamento, un banner che con FlyingPress compariva solo al primo clic.</p>
+
+<h2>La pagina che non finiva mai di caricarsi</h2>
+
+<p>Un utente su hosting o2switch ha scritto che con la 1.34.1 e la cache di LiteSpeed attiva le pagine si fermavano a metà, il sito non rispondeva più ai clic e dopo un po' il browser segnalava memoria esaurita. Con la 1.34.0 tutto funzionava, e anche con l'opzione «Ad-blocker compatibility mode» accesa. Quell'ultimo dettaglio era la chiave: quella modalità spegne proprio il piccolo script che la 1.34.1 mette in testa alla pagina per trattenere i contenuti di terze parti finché non arriva il motore del consenso.</p>
+
+<p>Il difetto era semplice e brutto. Quando una pagina provava a spostare un elemento con dentro un'immagine o un iframe mentre quello script era in attesa, il plugin metteva lo spostamento in coda ma lasciava l'elemento dov'era. Un ciclo del tipo «finché c'è un primo figlio, spostalo altrove», scritto in mille librerie, non finiva quindi mai: ogni giro trovava lo stesso primo figlio e aggiungeva un'altra voce alla coda. La memoria cresceva fino a far cadere la scheda.</p>
+
+<p>Restava da capire perché solo con LiteSpeed. L'opzione «Remove Query Strings» toglie il <code>?ver=</code> dagli indirizzi degli script, e senza il numero di versione browser e cache continuavano a servire il motore della 1.34.0 sotto la pagina nuova. Il motore vecchio non conosce il passaggio di consegne con lo script in testa e costruisce il banner proprio con quel ciclo. Ho riprodotto il blocco in un Chromium vero, con la pagina nuova e il motore vecchio: DOMContentLoaded non arrivava mai.</p>
+
+<p>Ora un elemento trattenuto lascia subito il suo posto, la coda ha un limite massimo, un motore vecchio viene riconosciuto e riceve la pagina invece di combatterci contro, e gli indirizzi di FAZ conservano la versione anche con «Remove Query Strings». A chi ha avuto il problema, per ora, consiglio di tenere accesa la modalità di compatibilità e di spegnerla dopo l'aggiornamento.</p>
+
+<h2>La cache che conservava il consenso degli altri</h2>
+
+<p>Il difetto più serio di questo rilascio l'ho trovato guardando la cache in generale, non un plugin in particolare. Con le impostazioni predefinite il plugin prepara sul server una pagina diversa per chi ha già accettato i cookie: gli script dei servizi accettati partono subito, senza aspettare il browser. Se però quel visitatore era il primo a chiedere una pagina dopo una pulizia della cache, la sua versione, tracker compresi, veniva salvata e servita a tutti, anche a chi non aveva ancora scelto nulla. Lo stesso valeva al contrario per chi in California esercita l'opt-out con il segnale Global Privacy Control.</p>
+
+<p>Adesso una risposta costruita sullo stato di un singolo visitatore non finisce più in una cache condivisa. La pagina in cache è sempre quella più prudente, e il browser sblocca il resto per chi ha dato il consenso. Sotto la legge californiana gli script di vendita e condivisione dei dati restano trattenuti anche nella pagina in cache, e vengono rilasciati solo a chi non si è opposto. Costa un attimo di attesa al primo caricamento, ed è il prezzo giusto.</p>
+
+<h2>FlyingPress e il primo clic</h2>
+
+<p>Un altro utente vedeva in PageSpeed una serie di errori «jQuery is not defined». Quelli non dipendevano dal plugin: FlyingPress trattava jQuery, servito da una CDN, come uno script di terze parti e lo ritardava, mentre gli script del tema partivano prima. Guardando la sua pagina però ho visto un problema che era mio. Anche gli script di FAZ venivano ritardati fino alla prima interazione, e il banner compariva solo dopo un clic o uno scorrimento. FAZ si escludeva dal ritardo normale di FlyingPress ma non da quello per le terze parti. Ora si esclude da entrambi e dalla rimozione del CSS inutilizzato, e se un passaggio di ottimizzazione riscrive comunque un tag di FAZ, il plugin lo ripristina prima che la pagina vada in cache.</p>
+
+<h2>Cinquantadue segnalazioni</h2>
+
+<p>La revisione della conformità ha trovato una sola segnalazione critica: sulle pagine AMP di un sito configurato solo per gli Stati Uniti, un visitatore europeo perdeva sia il banner sia il blocco. Il resto riguardava soprattutto punti in cui due parti del plugin davano risposte diverse alla stessa domanda. Il server bloccava qualcosa che il browser lasciava passare, o viceversa. Oppure il motore TCF dichiarava ai fornitori pubblicitari un consenso che il visitatore non aveva mai visto chiedere. Ognuna ha un test che fallisce sul codice vecchio e passa su quello nuovo. Su alcune sono servite più correzioni di quante pensassi, perché la prima correzione apriva un varco diverso: in un caso la funzione che toglieva i commenti CSS, per esempio, cancellava anche l'indirizzo di un tracker scritto in una certa forma.</p>
+
+<p>Da questo rilascio è anche disponibile il diritto di opposizione previsto dal TCF, il consent ID è visibile al visitatore e può accompagnare una richiesta di accesso ai propri dati, e su WordPress multisite ogni sito conserva la propria scelta. Le traduzioni perse in ceco, tedesco, francese, croato e olandese sono tornate, e la policy ceca ora chiede il consenso per i cookie facoltativi, grazie a un contributo esterno.</p>
+
+<h2>Le revisioni automatiche e i loro limiti</h2>
+
+<p>Una parte di questo lavoro è passata da due revisori automatici, CodeRabbit e Pullfrog, e da una revisione di sicurezza che controlla ogni commit. Mi hanno segnalato difetti reali, alcuni proprio nelle correzioni appena scritte. Hanno però anche un limite pratico che ho imparato a rispettare: su una modifica di trecento file CodeRabbit si è semplicemente rifiutato di guardare. Pubblicare lo stesso, contando su una revisione che non c'era stata, era la scorciatoia sbagliata. Ho diviso il lavoro in parti più piccole e ho aspettato che ogni parte venisse letta davvero.</p>
+
+<h2>Cosa fare dopo l'aggiornamento</h2>
+
+<p>Niente, nella maggior parte dei casi. L'aggiornamento svuota le cache supportate, e i siti che usano LiteSpeed, FlyingPress, WP Rocket, W3 Total Cache, Nginx Helper o Proxy Cache Purge ripartono da pagine nuove. Chi su o2switch aveva acceso la modalità di compatibilità per il blocco della pagina può spegnerla e svuotare la cache. Chi usa FlyingPress con una CDN dovrebbe vedere il banner al primo caricamento, senza dover toccare le esclusioni.</p>
