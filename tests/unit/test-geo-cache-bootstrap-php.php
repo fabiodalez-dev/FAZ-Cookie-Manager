@@ -50,7 +50,7 @@ namespace FazCookie\Includes {
 			if ( ! $has_source && self::mod_geoip_configured() ) {
 				$has_source = true;
 			}
-			if ( ! $has_source && \function_exists( 'geoip_country_code_by_name' ) ) {
+			if ( ! $has_source && self::php_geoip_has_country_database() ) {
 				$has_source = true;
 			}
 			if ( ! $has_source && \function_exists( 'has_filter' ) && \has_filter( 'faz_visitor_country' ) ) {
@@ -60,6 +60,23 @@ namespace FazCookie\Includes {
 				$has_source = (bool) self::$has_database;
 			}
 			return (bool) \apply_filters( 'faz_has_country_signal_source', $has_source );
+		}
+
+		// Same as the real one: the PECL extension counts only with a country
+		// database behind it (test-geoip-extension-source pins that).
+		public static function php_geoip_has_country_database() {
+			if ( ! \function_exists( 'geoip_country_code_by_name' ) ) {
+				return false;
+			}
+			if ( ! \function_exists( 'geoip_db_avail' ) ) {
+				return true;
+			}
+			foreach ( array( 'GEOIP_COUNTRY_EDITION', 'GEOIP_COUNTRY_EDITION_V6' ) as $edition ) {
+				if ( \defined( $edition ) && @\geoip_db_avail( \constant( $edition ) ) ) {
+					return true;
+				}
+			}
+			return false;
 		}
 
 		public static function mod_geoip_configured() {
