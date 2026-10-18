@@ -167,7 +167,14 @@
 	function isConsentCookieStale(pairs) {
 		if (!pairs) return false;
 		var config = window._fazConfig || {};
-		// A cached shell is provisional on every topology, not just multisite.
+		// Defensive only. The server never activates the cached jurisdiction
+		// shell while IAB TCF is on (Frontend::get_geo_bootstrap_status() returns
+		// reason 'iab', pinned by test-geo-cache-bootstrap-php.php), and this
+		// file is enqueued only when TCF is on, so a page that loads the CMP has
+		// no pending geographic scope to wait for. The gate stays fail-closed for
+		// a `faz_store_data` filter that forces _geoBootstrap anyway; such a
+		// setup gets no re-announcement after resolution (no tcloaded, no
+		// euconsent-v2 rewrite) and is not supported.
 		if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
 		if (config._siteScopeBound && !isPmpNecessaryOnly(pairs) && isSiteBindingBroken(pairs, config)) return true;
 		// Coerce because wp_localize_script may stringify integers.
