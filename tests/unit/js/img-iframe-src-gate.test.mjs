@@ -630,12 +630,15 @@ eq('SA7b: data-faz-src cleared on <source> after restore', saSrc.getAttribute('d
 resetConsent();
 // SA7c (review major) — everything the DEFERRED BOOTSTRAP can park has to be
 // restorable from the same keys. bootstrap.js parks video, audio, embed, track,
-// input[type=image], object[data] and the poster frame of a media element,
-// because its element list is this runtime's own; the restore pass covered only
-// img, source, iframe and link. A resource held during the download window and
-// then consented to therefore stayed dead for the rest of the page view. The
-// parks below are written natively, which is exactly how the bootstrap leaves
-// them for this runtime to find.
+// input[type=image], object[data] and the poster frame of a media element
+// during the download window; the restore pass covered only img, source,
+// iframe and link, so a resource held during the download window and then
+// consented to stayed dead for the rest of the page view. The parks below are
+// written natively, which is exactly how the bootstrap leaves them for this
+// runtime to find. (The runtime's own gates for these six element types came
+// later and are pinned in media-embed-object-gate.test.mjs; before them the
+// bootstrap's hold was only a delay, since the replay landed on the native
+// setter.)
 const native = w.Element.prototype.setAttribute;
 const parkedByBootstrap = {};
 ['video', 'audio', 'embed', 'track'].forEach(function (tag) {

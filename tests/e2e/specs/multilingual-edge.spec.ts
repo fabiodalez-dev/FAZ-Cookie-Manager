@@ -13,9 +13,11 @@ import {
  *
  * Covers gaps identified by the graph audit over the issue #67 / PR #68
  * work:
- *   - `send_vary_header` is a cache-safety choke point — if it silently
- *     stops emitting `Vary: Accept-Language`, CDNs would start serving the
- *     wrong language to users and the #67 regression reappears.
+ *   - `send_vary_header` no longer emits `Vary: Accept-Language` by default
+ *     (since 1.34.2, opt in with `faz_send_vary_header`): the server HTML is
+ *     the same for every Accept-Language and the language is resolved
+ *     client-side, so the header only fragmented the cache. The spec pins
+ *     the default so it does not silently come back.
  *   - `_fazResolveBrowserLanguage` has three decision branches (exact
  *     match / region stripping / no match) that the existing happy-path
  *     spec only probes implicitly.
@@ -66,14 +68,18 @@ test.describe.serial('Multilingual edge cases', () => {
     await context.close();
   });
 
-  test('send_vary_header emits "Vary: Accept-Language" when browser detection is active', async ({ request, wpBaseURL }) => {
-    // Fresh request from a non-admin, non-AJAX context — send_headers fires
-    // and the hook should append Accept-Language to Vary.
+  test('send_vary_header does not emit "Vary: Accept-Language" by default, even with browser detection active', async ({ request, wpBaseURL }) => {
+    // Fresh request from a non-admin, non-AJAX context — send_headers fires.
+    // The server HTML is the same for every Accept-Language (the language is
+    // resolved client-side, see multilingual-cache.spec.ts), so announcing the
+    // header only split each cached URL into one entry per spelling on the
+    // caches that honour Vary. Since 1.34.2 it is sent only when the
+    // `faz_send_vary_header` filter opts in.
     const response = await request.get(wpBaseURL, {
       headers: { 'Accept-Language': 'en-US,en;q=0.9' },
     });
-    const vary = response.headers()['vary'] ?? '';
-    expect(vary, 'Vary header must contain Accept-Language for CDN correctness').toMatch(/Accept-Language/i);
+    const vary = (response.headers()['vary'] ?? '').toLowerCase();
+    expect(vary, 'Vary must not carry Accept-Language unless faz_send_vary_header opts in').not.toContain('accept-language');
   });
 
   test('_fazResolveBrowserLanguage strips region when only the base language is available', async ({ browser, wpBaseURL }) => {

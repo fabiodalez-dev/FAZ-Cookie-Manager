@@ -138,7 +138,17 @@ test.describe('Banner i18n — non-English locale renders translated copy', () =
       'age_confirm_label',
       'age_confirm_error',
       'optout_autoclose_countdown',
+      'iab_consent',
+      'iab_cookie_retention',
+      'iab_features',
+      'iab_legitimate_interest',
+      'iab_legitimate_interest_note',
+      'iab_vendor_consent',
+      'iab_vendor_legitimate_interest_label',
     ]);
+    // The IAB section is rendered client-side too, so its labels have to ride
+    // the same payload or a swapped banner shows them in the old language.
+    expect(payload.i18n.iab_legitimate_interest).toBe('Legittimo interesse');
     expect(payload.i18n.optout_autoclose_countdown).toBe(
       'Il banner si chiude automaticamente tra 0 s...',
     );

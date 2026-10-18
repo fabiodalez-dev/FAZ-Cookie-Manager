@@ -40,7 +40,7 @@ function fold(cookieValue) {
     runScripts: 'outside-only', url: 'https://log.example.test/',
   });
   dom.window.document.cookie = `fazcookie-consent=${encodeURIComponent(cookieValue)}; path=/`;
-  return dom.window.eval(`(function(){var c={};${snippet}return c;})()`);
+  return dom.window.eval(`(function(){var _fazConsentLog={};${PHP.split('\n').find(l=>l.trim().startsWith('"function readCookie')).trim().slice(1,-3)}var c={};${snippet}return c;})()`);
 }
 
 console.log('consent-log fold (jsdom, snippet extracted from class-frontend.php)');

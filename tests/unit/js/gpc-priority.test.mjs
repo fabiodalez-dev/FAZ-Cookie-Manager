@@ -85,5 +85,39 @@ console.log('GPC priority and targeted revocation (jsdom)');
   check('the GPC audit marker survives an explicit consent action', store.get('gpc') === '1');
 }
 
+// A returning GPC visitor whose stored state already carries the opt-out: the
+// signal changes nothing, so nothing may be written. Every write to the
+// consent cookie re-issues it with a fresh `expires` (now + lifetime), which
+// turned the configured 182-day lifetime into a sliding window for GPC
+// browsers — a Brave visitor who returned once a month was never re-asked,
+// while the same choice in a non-GPC browser expired on schedule. The DNSMPI
+// twin returns before any write; this pins the GPC path to the same rule.
+{
+  const window = loadFrontend();
+  const store = window.fazcookie._fazConsentStore;
+  store.set('action', 'yes'); store.set('consent', 'no');
+  store.set('necessary', 'yes'); store.set('marketing', 'no'); store.set('analytics', 'yes'); store.set('profiling', 'no');
+  store.set('gpc', '1');
+  // TCF on with one vendor and no vendor grant recorded: the vendor cookie
+  // has nothing to revoke, so it must not be re-issued either.
+  window._fazConfig._iabEnabled = true;
+  window._fazConfig._iabVendors = [{ id: 1, name: 'Vendor One' }];
+  const cookieDesc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(window.document), 'cookie')
+    || Object.getOwnPropertyDescriptor(window.Document.prototype, 'cookie');
+  const writes = [];
+  Object.defineProperty(window.document, 'cookie', {
+    configurable: true,
+    get() { return cookieDesc.get.call(this); },
+    set(v) { writes.push(String(v).split(';')[0]); return cookieDesc.set.call(this, v); },
+  });
+  const changed = window.eval('_fazApplyGpcOptOut()');
+  check('an already-applied signal reports no change', changed === false);
+  check('and writes the consent cookie zero times (no sliding expiry)',
+    writes.filter((w) => w.indexOf('fazcookie-consent=') === 0).length === 0);
+  check('and does not rewrite the vendor cookie either',
+    writes.filter((w) => w.indexOf('fazVendorConsent=') === 0).length === 0);
+  check('the stored state is untouched', store.get('marketing') === 'no' && store.get('analytics') === 'yes' && store.get('gpc') === '1');
+}
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);

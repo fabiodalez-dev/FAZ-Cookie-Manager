@@ -339,12 +339,12 @@ async function openPreferenceCenter(page: Page): Promise<void> {
   expect(opened).toBeTruthy();
 }
 
-async function savePreferences(page: Page): Promise<void> {
+async function savePreferences(page: Page, timeoutMs?: number): Promise<void> {
   const saved = await clickFirstVisible(page, [
     '[data-faz-tag="detail-save-button"] button',
     '[data-faz-tag="detail-save-button"]',
     '.faz-btn-preferences',
-  ]);
+  ], timeoutMs);
   expect(saved).toBeTruthy();
 }
 
@@ -894,7 +894,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
     }
   });
 
-  test('TCF preserves created timestamp, advances lastUpdated on real changes, and finishes with cmpStatus=loaded', async ({ browser }) => {
+  test('TCF writes Created and LastUpdated as one day-level value, refreshes both on real changes, and finishes with cmpStatus=loaded', async ({ browser }) => {
     const originalSettings = backupSettingsOption();
     // Also snapshot the active banner row — the wpEval block below
     // persists type=classic / preferenceCenterType=pushdown /
@@ -959,10 +959,16 @@ test.describe('PR audit regressions (2026-04-19)', () => {
         const initialTs = parseTcString(initialTc.tcString);
         expect(initialTs).not.toBeNull();
 
-        // TCF lastUpdated has decisecond resolution. Wait past one decisecond
-        // bucket before mutating consent so the new write lands in a strictly
-        // later bucket. 200ms ≥ 2 deciseconds covers wall-clock + JS jitter.
-        await page.waitForTimeout(200);
+        // IAB TC String format (Core String, "What happened to Created and
+        // LastUpdated?"): the two fields hold the SAME value, the UTC midnight
+        // of the day the string was last updated, in deciseconds. 864000
+        // deciseconds make one day. An earlier version of this test pinned the
+        // opposite (Created preserved, LastUpdated at decisecond resolution),
+        // which is what an IAB validator fails a CMP for.
+        const DECISECONDS_PER_DAY = 864000;
+        expect(initialTs?.created).toBe(initialTs?.lastUpdated);
+        expect((initialTs?.lastUpdated ?? 1) % DECISECONDS_PER_DAY).toBe(0);
+
         await page.evaluate(() => {
           if (typeof window.revisitFazConsent === 'function') {
             window.revisitFazConsent();
@@ -970,39 +976,91 @@ test.describe('PR audit regressions (2026-04-19)', () => {
         });
         await openPreferenceCenter(page);
         await setCategoryToggle(page, 'analytics', false);
-        await savePreferences(page);
-        await page.waitForFunction(() => typeof (window as any).__tcfapi === 'function', undefined, { timeout: 10_000 });
 
-        // Under suite-wide load, the cookie write that backs the new TCString
-        // can race the immediate getTCData read. Poll the value until the
-        // lastUpdated decisecond strictly advances past initial — this is
-        // robust to PHP-FPM stalls, raf coalescing, and decisecond bucket
-        // alignment without relying on a fixed sleep.
-        const initialLast = initialTs?.lastUpdated ?? 0;
-        let updatedTc: { ping: any; tcData: any } | null = null;
+        // Register a TCF listener the way a vendor tag does, and record what
+        // it is handed on useractioncomplete together with the euconsent-v2
+        // cookie read inside the same callback. sessionStorage carries the
+        // record across the reload described below; the marker tells the old
+        // document from the new one.
+        await page.evaluate(() => {
+          try { sessionStorage.removeItem('faz-e2e-tc-uac'); } catch (e) { /* asserted below */ }
+          (window as any).__fazE2EBeforeSave = true;
+          window.__tcfapi('addEventListener', 2, (data: any, ok: boolean) => {
+            if (!ok || !data || data.eventStatus !== 'useractioncomplete') return;
+            const m = document.cookie.match(/(?:^|;\s*)euconsent-v2=([^;]+)/);
+            try {
+              const seen = JSON.parse(sessionStorage.getItem('faz-e2e-tc-uac') || '[]');
+              seen.push({ tcString: data.tcString, cookie: m ? m[1] : '' });
+              sessionStorage.setItem('faz-e2e-tc-uac', JSON.stringify(seen));
+            } catch (e) { /* asserted below */ }
+          });
+        });
+
+        // Switching off a category the visitor had granted RELOADS the page:
+        // script.js (_fazAfterConsent) reloads on every granted -> denied
+        // transition, because a script that already ran cannot be unloaded.
+        // The previous version of this test polled straight through that
+        // reload and failed three different ways depending on where the
+        // reload fell: the Save click outlived its 2 s budget waiting for the
+        // scheduled navigation; `ping` was answered by the inline stub of the
+        // NEW document ("stub", the IAB-specified answer before the CMP
+        // loads) while the queued getTCData was answered after it loaded; or
+        // the separate cookie read ran in a context the navigation destroyed.
+        // None of them was a disagreement between the cookie and the API.
+        // So: give the click room for the navigation, wait for the new
+        // document with the CMP loaded, and read everything in ONE evaluate.
+        await savePreferences(page, 15_000);
         await expect
           .poll(
-            async () => {
-              updatedTc = await page.evaluate(
-                async () =>
-                  new Promise<any>((resolve) => {
-                    const pingP = new Promise<any>((r) => window.__tcfapi('ping', 2, r));
-                    const tcDataP = new Promise<any>((r) => window.__tcfapi('getTCData', 2, r));
-                    Promise.all([pingP, tcDataP]).then(([ping, tcData]) => resolve({ ping, tcData }));
-                  }),
-              );
-              const ts = parseTcString(updatedTc!.tcData.tcString);
-              return ts !== null && ts.lastUpdated > initialLast;
-            },
-            { timeout: 10_000 },
+            async () =>
+              page
+                .evaluate(() => {
+                  if ((window as any).__fazE2EBeforeSave) return 'page before the reload';
+                  if (typeof window.__tcfapi !== 'function') return 'no __tcfapi';
+                  let status = '';
+                  window.__tcfapi('ping', 2, (p: any) => { status = p && p.cmpStatus; });
+                  return status;
+                })
+                .catch(() => 'navigating'),
+            { timeout: 20_000 },
           )
-          .toBe(true);
+          .toBe('loaded');
 
-        const updatedTs = parseTcString(updatedTc!.tcData.tcString);
+        const updatedTc = await page.evaluate(
+          () =>
+            new Promise<any>((resolve) => {
+              window.__tcfapi('ping', 2, (ping: any) => {
+                window.__tcfapi('getTCData', 2, (tcData: any) => {
+                  const cookies = document.cookie.split(/;\s*/).filter((c) => c.indexOf('euconsent-v2=') === 0);
+                  let uac: any[] = [];
+                  try { uac = JSON.parse(sessionStorage.getItem('faz-e2e-tc-uac') || '[]'); } catch (e) { /* stays empty */ }
+                  resolve({ ping, tcData, cookies: cookies.map((c) => c.substring('euconsent-v2='.length)), uac });
+                });
+              });
+            }),
+        );
+
+        expect(updatedTc.ping.cmpStatus).toBe('loaded');
+        // Turning analytics off clears Purpose 10, so the string must change.
+        expect(updatedTc.tcData.tcString).not.toBe(initialTc.tcString);
+        const updatedTs = parseTcString(updatedTc.tcData.tcString);
         expect(updatedTs).not.toBeNull();
-        expect(updatedTc!.ping.cmpStatus).toBe('loaded');
-        expect(updatedTs?.created).toBe(initialTs?.created);
-        expect((updatedTs?.lastUpdated ?? 0) > (initialTs?.lastUpdated ?? 0)).toBe(true);
+        // The re-consent is an update: both fields are refreshed together to
+        // the (day-level) time of this decision. Created is NOT preserved
+        // from the first string; within one UTC day the two strings carry the
+        // same day, across midnight the later one is strictly later.
+        expect(updatedTs?.created).toBe(updatedTs?.lastUpdated);
+        expect((updatedTs?.lastUpdated ?? 1) % DECISECONDS_PER_DAY).toBe(0);
+        expect((updatedTs?.lastUpdated ?? 0) >= (initialTs?.lastUpdated ?? 0)).toBe(true);
+        // The cookie handed to vendors is the string getTCData returns, and
+        // there is one of it.
+        expect(updatedTc.cookies).toEqual([updatedTc.tcData.tcString]);
+        // On the page where the visitor saved, the listener got exactly one
+        // useractioncomplete, the cookie already held its string inside that
+        // callback, and it is the string the reloaded page reports.
+        expect(updatedTc.uac).toHaveLength(1);
+        expect(updatedTc.uac[0].cookie).toBe(updatedTc.uac[0].tcString);
+        expect(updatedTc.uac[0].tcString).toBe(updatedTc.tcData.tcString);
       } finally {
         await visitor.close();
       }

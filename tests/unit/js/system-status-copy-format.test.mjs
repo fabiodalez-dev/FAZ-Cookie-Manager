@@ -108,6 +108,16 @@ function copiedText() {
             </table>
           </div>
         </div>
+        <div class="faz-card" data-faz-copy="omit">
+          <div class="faz-card-header"><h3>May be blocked without a visible placeholder</h3></div>
+          <div class="faz-card-body">
+            <p class="faz-help">These catalogued services declare no cookies.</p>
+            <div style="font-size:13px;line-height:1.8;">
+              <strong>Kaltura</strong> <code>marketing</code> kaltura.com, cdnapisec.kaltura.com<br>
+              <strong>Google Fonts</strong> <code>functional</code> fonts.googleapis.com
+            </div>
+          </div>
+        </div>
         <div class="faz-card">
           <div class="faz-card-header"><h3>Active Plugins</h3></div>
           <div class="faz-card-body">
@@ -154,9 +164,12 @@ ok(
 const refused = rowLines.find((l) => l.startsWith('Consent Records Refused: ')) || '';
 ok('it keeps the count', refused.includes('2.002 in the last 7 days'));
 ok('it keeps the per-cause breakdown', refused.includes('Stale origin token: 1.998'));
+// The help text explains the row to someone looking at the page. In a pasted
+// report it turned one row into a paragraph, so it is left out.
 ok(
-  'and it keeps the help sentence rather than dropping it',
-  refused.includes('accepted token window')
+  'the help sentence is not copied',
+  !text.includes('accepted token window'),
+  refused
 );
 
 // The view echoes the per-cause <div> straight after "…ago.", with nothing
@@ -205,6 +218,17 @@ ok(
 ok(
   'rather than the first two read as a label and a value',
   !text.includes('wordpress_test_cookie: necessary'),
+  lines
+);
+
+// The catalogue card is the same on every install. Its third-party domains made
+// forums and chat services refuse the pasted report as spam. The fixture
+// prints plain domain tokens, not URLs: test exact copied tokens so this
+// assertion cannot be mistaken for URL authorization by a security analyzer.
+const copiedTokens = text.split(/[\s,]+/);
+ok(
+  'the provider catalogue card is not copied',
+  !text.includes('May be blocked without a visible placeholder') && copiedTokens.every((token) => token !== 'kaltura.com' && token !== 'fonts.googleapis.com'),
   lines
 );
 

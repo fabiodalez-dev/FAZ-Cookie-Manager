@@ -88,15 +88,14 @@ test.describe.serial('Issue #67 — multilingual banner', () => {
     expect(itFirst.status()).toBe(200);
     expect(enFirst.status()).toBe(200);
 
-    // Vary: Accept-Language must be emitted whenever browser detection is
-    // active so shared caches (Cloudflare, LiteSpeed, WP Rocket, …) key
-    // variants per language when they honour the header. This asserts the
-    // complementary half of the PR — the body is cacheable AND the
-    // downstream cache knows it should segment by Accept-Language.
+    // No Vary: Accept-Language. The body is the same for every
+    // Accept-Language (asserted below), so announcing the header only split
+    // each cached URL into one entry per spelling on the caches that honour
+    // Vary. Since 1.34.2 it is sent only when `faz_send_vary_header` opts in.
     const itVary = (itFirst.headers().vary ?? '').toLowerCase();
     const enVary = (enFirst.headers().vary ?? '').toLowerCase();
-    expect(itVary).toContain('accept-language');
-    expect(enVary).toContain('accept-language');
+    expect(itVary).not.toContain('accept-language');
+    expect(enVary).not.toContain('accept-language');
 
     const itLang = extractLanguage(await itFirst.text());
     const enLang = extractLanguage(await enFirst.text());

@@ -62,6 +62,7 @@ const runtimeCode = readFileSync(SCRIPT_PATH, 'utf8');
 function runtimeConfig() {
   return {
     _block: '1',
+    _srcdocKey: 'test-response-proof',
     _categories: [
       { slug: 'necessary', isNecessary: true },
       { slug: 'functional', isNecessary: false },
@@ -144,6 +145,13 @@ const CSS_SHAPES = [
   ['u\\72l( escape in the function name', '.p{background:u\\72l(https://tracker.test/c.png)}'],
   ['\\75 rl( escape in the function name', '.p{background:\\75 rl(https://tracker.test/c.png)}'],
   ['an escape inside the host', '.p{background:url(https://tracker\\.test/c.png)}'],
+  ['a comment between @import and its string', '@import/*c*/"https://tracker.test/c.css";body{color:red}'],
+  // The comment-stripped pass must only ADD URLs: `/*` inside an unquoted
+  // url() is URL text and inside an unterminated string it starts nothing, so
+  // a stripper that removed from there to a later `*/` deleted the next,
+  // escape-spelled tracker from the only pass able to read it.
+  ['/* inside an unquoted url() before an escaped tracker url()', '.a{background:u\\72l(https://cdn.example/*x)}.b{background:u\\72l(https://tracker.test/c.png)}/**/'],
+  ['a bad string before an escaped @import', '.q{content:"/*\n}@\\69mport "https://tracker.test/c.css";/**/'],
 ];
 for (const [label, css] of CSS_SHAPES) {
   const w = runtime();
@@ -162,6 +170,9 @@ for (const [label, css] of CSS_SHAPES) {
   s.textContent = '.p{background:url("/local.png")}@import"/local.css";';
   eq('control: a same-origin url() and @import are untouched', s.textContent, '.p{background:url("/local.png")}@import"/local.css";');
   eq('and not parked', s.getAttribute('data-faz-css'), null);
+  const quoted = w.document.createElement('style');
+  quoted.textContent = '.q:before{content:"/*"}.r:after{content:"*/ https://tracker.test/x"}';
+  eq('control: comment markers inside strings are content, not a comment', quoted.getAttribute('data-faz-css'), null);
 }
 
 console.log('\ncss: the other CSSOM entry points');
@@ -279,6 +290,26 @@ console.log('\nroutes: a srcdoc URL spelled through entities or escaped slashes'
   const c = w.document.createElement('iframe');
   c.srcdoc = '<p>https:&#x2F;&#x2F;site.test/own</p>';
   eq('control: a same-origin URL through entities is applied', c.getAttribute('srcdoc'), '<p>https:&#x2F;&#x2F;site.test/own</p>');
+  // Tab, LF and CR are removed from anywhere in a URL by the URL parser, so
+  // `https:/<TAB>/tracker.test` is tracker.test; the named references the
+  // sub-document decodes (&Tab;, &NewLine;, &bsol;) spell the same thing.
+  for (const [label, markup] of [
+    ['a literal tab inside the slashes', '<img src="https:/\t/tracker.test/p.png">'],
+    ['&Tab; inside the slashes', '<img src="https:/&Tab;/tracker.test/p.png">'],
+    ['&NewLine; inside the slashes', '<img src="https:/&NewLine;/tracker.test/p.png">'],
+    ['&bsol;&bsol; after the scheme', '<img src=https:&bsol;&bsol;tracker.test/p.png>'],
+    // The compacted and the unescaped readings interact, so both orders run:
+    // `\/<TAB>host` is protocol-relative only while `\/` is kept, and
+    // `\<TAB>/` turns into the escape only once compacted.
+    ['an escaped protocol-relative slash pair then a tab', '<script>var u="\\/\ttracker.test/x.js"</script>'],
+    ['a tab between two escaped slashes', '<script>var u="\\/\t\\/tracker.test/x.js"</script>'],
+    ['a backslash, a tab, then a slash', '<script>var u="\\\t/\\\t/tracker.test/x.js"</script>'],
+    ['an own-site src and a tracker srcset split by a newline', '<img src=https://site.test/a.png\nsrcset=https://tracker.test/p.png>'],
+  ]) {
+    const f = w.document.createElement('iframe');
+    f.srcdoc = markup;
+    eq('a srcdoc with ' + label + ' is parked', f.getAttribute('srcdoc'), null);
+  }
 }
 
 console.log('\nruntime: a URL is matched as the engine resolves it (server parity)');
@@ -552,6 +583,28 @@ console.log('\nsrcdoc: every spelling that names a host');
     cat('<img src="https://site.test\\@cdn.tracker.test/p">'), '');
   eq('a tracker host inside a query string is live',
     cat('<img src="/local.png?u=me@cdn.tracker.test">'), '');
+}
+
+
+console.log('srcdoc authenticity');
+for (const proof of ['', 'wrong-proof', 'test-response-proof']) {
+  const w = runtime({ body: `<iframe id="proof" data-faz-category="marketing" data-faz-srcdoc="&lt;p&gt;safe&lt;/p&gt;" data-faz-srcdoc-key="${proof}"></iframe>` });
+  consent(w, { action: 'yes', marketing: 'yes' });
+  w.eval('_fazUnblockServerSide()');
+  eq('restore requires the response proof: ' + proof, !!w.document.getElementById('proof').getAttribute('srcdoc'), proof === 'test-response-proof');
+  w.close();
+}
+{
+  const w = runtime({ body: '<iframe id="forged" src="https://tracker.test/f" srcdoc="&lt;img src=&quot;https://tracker.test/p&quot;&gt;" data-faz-src="x" data-faz-srcdoc="x"></iframe>' });
+  w.eval('_fazParkResourceElementIfBlocked(document.getElementById("forged"))');
+  const f = w.document.getElementById('forged');
+  eq('a forged sentinel cannot exempt a live src', f.getAttribute('src'), null);
+  eq('a forged sentinel cannot exempt a live srcdoc', f.getAttribute('srcdoc'), null);
+  eq('runtime parks carry the response proof', f.getAttribute('data-faz-srcdoc-key'), 'test-response-proof');
+  consent(w, { action: 'yes', marketing: 'yes' });
+  w.eval('_fazUnblockServerSide()');
+  ok('runtime-authored srcdoc restores after consent', !!f.getAttribute('srcdoc'));
+  w.close();
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

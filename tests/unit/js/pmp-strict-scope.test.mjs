@@ -71,6 +71,13 @@ console.log('PMP privacy state / strict geo scope');
   check('forged optional grant is cleared by strict scope validation', window.fazcookie._fazGetFromStore('analytics') === '');
 }
 
+
+for (const grant of ['analytics:yes', 'svc.maps:yes', 'ck.maps.id:yes', 'custom:yes:123']) {
+ const window=load('action:auto,consent:no,necessary:yes,rev:7,source:pmp,'+grant);
+ check('PMP marker cannot exempt an optional grant: '+grant, window.fazcookie._fazGetFromStore('action')==='');
+ window.close();
+}
+
 console.log(
   failed === 0
     ? `\n  \x1b[32m${passed} passed, 0 failed\x1b[0m`

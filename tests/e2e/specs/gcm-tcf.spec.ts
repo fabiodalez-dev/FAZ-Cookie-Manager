@@ -553,6 +553,9 @@ test.describe('GCM and IAB TCF behavior', () => {
         $id  = 0;
         if ( is_array( $gvl ) && ! empty( $gvl['vendors'] ) ) {
           foreach ( $gvl['vendors'] as $vid => $v ) {
+            // A deleted vendor is never served to the CMP, so it could not
+            // carry an LI bit whatever the visitor chose.
+            if ( \\FazCookie\\Includes\\Gvl::is_vendor_deleted( $v ) ) { continue; }
             if ( ! empty( $v['legIntPurposes'] ) ) { $id = (int) $vid; break; }
           }
         }
@@ -676,11 +679,15 @@ test.describe('GCM and IAB TCF behavior', () => {
         (cookie) => cookie.name === 'euconsent-v2',
       )).toBe(false);
 
-      // The other state: one selected vendor declaring LI purposes. Reject
-      // withdraws every consent, but LI is not consent — it ends only on a
-      // Right to Object — so the TC string still carries LI and the cookie is
-      // deliberately kept. Without this, a silent flip back to clearing it
-      // (which would drop valid LI signals) would go unnoticed.
+      // The other state: one selected vendor declaring LI purposes. Accept All
+      // leaves legitimate interest established (TCF default) and the TC
+      // string carries the LI bits. Reject All is the visitor's objection to
+      // all of it (IAB TCF Policies, Appendix B; GDPR Art. 21): the CMP must
+      // emit a negative LI signal, and with nothing granted and nothing
+      // established there is no TC string left to persist, so euconsent-v2 is
+      // cleared exactly as in the no-vendor state above. Before the
+      // Right-to-Object controls existed the LI bits stayed on after Reject
+      // and this test pinned that; it now pins the objection.
       test.skip(liVendorId === 0, 'the Global Vendor List is not downloaded on this site');
       wpEval(`update_option( 'faz_gvl_selected_vendors', array( ${liVendorId} ) ); delete_option( 'faz_banner_template' );`);
       const liContext = await browser.newContext();
@@ -697,6 +704,17 @@ test.describe('GCM and IAB TCF behavior', () => {
           '.faz-btn-accept',
         ])).toBeTruthy();
         await liPage.waitForFunction(() => document.cookie.includes('euconsent-v2='), undefined, { timeout: 5_000 });
+        const afterAccept = await liPage.evaluate((vid) => new Promise<{ vendorLI: boolean; anyPurposeLI: boolean }>((resolve) => {
+          window.__tcfapi('getTCData', 2, (data: any) => {
+            const li = (data && data.purpose && data.purpose.legitimateInterests) || {};
+            resolve({
+              vendorLI: !!(data && data.vendor && data.vendor.legitimateInterests && data.vendor.legitimateInterests[String(vid)]),
+              anyPurposeLI: Object.keys(li).some((k) => li[k] === true),
+            });
+          });
+        }), liVendorId);
+        expect(afterAccept.vendorLI, 'Accept All leaves the LI vendor established (TCF default)').toBe(true);
+        expect(afterAccept.anyPurposeLI, 'Accept All leaves its LI purposes established').toBe(true);
         await liPage.evaluate(() => {
           if (typeof window.revisitFazConsent === 'function') window.revisitFazConsent();
         });
@@ -706,10 +724,33 @@ test.describe('GCM and IAB TCF behavior', () => {
           '[data-faz-tag="reject-button"]',
           '.faz-btn-reject',
         ])).toBeTruthy();
-        await liPage.waitForTimeout(1_000);
-        expect((await liContext.cookies()).some(
+        const afterReject = await liPage.evaluate((vid) => new Promise<{ vendorLI: boolean; anyPurposeLI: boolean }>((resolve) => {
+          window.__tcfapi('getTCData', 2, (data: any) => {
+            const li = (data && data.purpose && data.purpose.legitimateInterests) || {};
+            resolve({
+              vendorLI: !!(data && data.vendor && data.vendor.legitimateInterests && data.vendor.legitimateInterests[String(vid)]),
+              anyPurposeLI: Object.keys(li).some((k) => li[k] === true),
+            });
+          });
+        }), liVendorId);
+        expect(afterReject.vendorLI, 'Reject All objects to the vendor\'s legitimate interest').toBe(false);
+        expect(afterReject.anyPurposeLI, 'Reject All leaves no LI purpose established').toBe(false);
+        await expect.poll(async () => (await liContext.cookies()).some(
           (cookie) => cookie.name === 'euconsent-v2',
-        ), 'a selected LI vendor keeps the TC string after Reject').toBe(true);
+        ), { timeout: 5_000 }).toBe(false);
+        // Objected vendors travel as one `v:<bitfield>` pair (bit id-1, six
+        // bits per base64url character); records from before 1.34.2 used one
+        // `<id>:no` pair per vendor. Either form records the objection.
+        const objectsTo = (value: string, vid: number): boolean => value.split(',').some((pair) => {
+          if (pair === `${vid}:no`) return true;
+          if (!pair.startsWith('v:')) return false;
+          const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+          const char = alphabet.indexOf(pair.slice(2).charAt(Math.floor((vid - 1) / 6)));
+          return char !== -1 && (char & (32 >> ((vid - 1) % 6))) !== 0;
+        });
+        expect((await liContext.cookies()).some(
+          (cookie) => cookie.name === 'fazVendorLI' && objectsTo(cookie.value, Number(liVendorId)),
+        ), 'Reject All records the objection for the LI vendor').toBe(true);
       } finally {
         await liContext.clearCookies();
         await liContext.close();
