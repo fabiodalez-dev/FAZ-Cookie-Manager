@@ -49,11 +49,30 @@ foreach ( (array) $shipped as $file ) {
 }
 gpp_check( count( (array) $shipped ) > 40 && array() === $with, 'no shipped rule set declares signals.gpp (' . implode( ', ', $with ) . ')' );
 
-$runtime = '';
-foreach ( array( '/frontend/includes/class-geo-runtime.php', '/frontend/class-frontend.php', '/admin/modules/geo-routing/includes/class-ruleset-loader.php', '/admin/modules/geo-routing/includes/class-ruleset-resolver.php' ) as $path ) {
-	$runtime .= (string) file_get_contents( $root . $path );
+// No runtime code may read the key, however it gets there: a pattern for
+// `['signals']['gpp']` missed `$signals = $ruleset['signals']; $signals['gpp']`.
+// So the check is that no PHP file of the plugin, and no front-end script,
+// names a `gpp` key at all: a quoted 'gpp' / "gpp" (array access or literal)
+// in PHP, `.gpp` or ['gpp'] in JS.
+$readers = array();
+$files   = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ) );
+foreach ( $files as $file ) {
+	$path = str_replace( '\\', '/', substr( (string) $file, strlen( $root ) ) );
+	if ( preg_match( '#^/(?:tests|vendor|node_modules|\.git|graphify-out|\.code-review-graph)/#', $path ) ) {
+		continue;
+	}
+	if ( preg_match( '/\.php$/', $path ) ) {
+		$pattern = '/([\'"])gpp\1/';
+	} elseif ( preg_match( '#^/frontend/js/[^/]+(?<!\.min)\.js$#', $path ) ) {
+		$pattern = '/\.gpp\b|\[\s*([\'"])gpp\1\s*\]/';
+	} else {
+		continue;
+	}
+	if ( preg_match( $pattern, (string) file_get_contents( (string) $file ) ) ) {
+		$readers[] = ltrim( $path, '/' );
+	}
 }
-gpp_check( ! preg_match( "/\\[\\s*'signals'\\s*\\]\\s*\\[\\s*'gpp'\\s*\\]/", $runtime ), 'nothing at runtime reads signals.gpp' );
+gpp_check( array() === $readers, 'nothing at runtime names a gpp key (' . implode( ', ', $readers ) . ')' );
 
 echo "ruleset-gpp-deprecated: " . ( $checks - $failed ) . " passed, {$failed} failed\n";
 exit( $failed ? 1 : 0 );
