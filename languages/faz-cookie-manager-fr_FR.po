@@ -2528,7 +2528,7 @@ msgstr "transfère des données personnelles vers un autre pays"
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1588
 msgid "None declared."
-msgstr "Aucune déclarée."
+msgstr "Aucun déclaré."
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1603
 msgid "No cookies declared."
