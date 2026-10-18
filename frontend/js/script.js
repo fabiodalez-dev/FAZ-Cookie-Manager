@@ -4500,6 +4500,13 @@ _fazGateSrcSetter(window.HTMLMediaElement && HTMLMediaElement.prototype, false);
 _fazGateSrcSetter(window.HTMLEmbedElement && HTMLEmbedElement.prototype, false);
 _fazGateSrcSetter(window.HTMLTrackElement && HTMLTrackElement.prototype, false);
 _fazGateSrcSetter(window.HTMLInputElement && HTMLInputElement.prototype, false);
+// <source> inside <video>/<audio>/<picture> declares its own `src` on
+// HTMLSourceElement, so the HTMLMediaElement gate above never saw
+// `source.src = 'https://player.vimeo.com/…'`: assigned after the handoff it
+// stayed live, and assigned during the download window it was held by the
+// bootstrap and replayed onto the native setter. Its srcset already had a gate
+// (_fazGateSrcsetSetter below); this is the src half.
+_fazGateSrcSetter(window.HTMLSourceElement && HTMLSourceElement.prototype, false);
 
 /**
  * Same gate for the `href` PROPERTY setter on <link>, so a stylesheet a script

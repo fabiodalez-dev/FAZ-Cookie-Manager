@@ -1574,9 +1574,13 @@
     }
     // During a normal handoff the runtime's permanent interceptors decide what
     // may load, so everything replays — which is only true while the runtime
-    // gates every key in `attrs` below (it does; the test named at RESOURCES
-    // pins it). During a safety release there are no such interceptors and no
-    // provider rules, so only same-origin work runs.
+    // gates every key in `attrs` below. That has been wrong before: <source src>
+    // was held here with no runtime gate on HTMLSourceElement until 1.34.2, so
+    // its replay reached the native setter. media-embed-object-gate.test.mjs
+    // replays held assignments through the handoff, <source src> included, and
+    // a key added to `attrs` needs a case there. During a safety release there
+    // are no such interceptors and no provider rules, so only same-origin work
+    // runs.
     function allowed(policy, url, key) { return !policy || !policy.sameOriginOnly || localValue(key, url); }
     // CSS TEXT is not released by origin on the safety release, because judging
     // that means re-implementing the browser's CSS parser: escapes, comments
@@ -2204,10 +2208,11 @@
     // Detached images can fetch before insertion. Hold URL assignments too;
     // replay uses the runtime's own property/setAttribute interceptors, and
     // the runtime installs one for every key in this map — src on
-    // img/iframe/media/embed/track/input, poster, object data, href, srcset,
-    // srcdoc, background and the SVG spellings. A key held here without a
-    // runtime gate would replay onto the native setter, so adding one means
-    // adding its gate in script.js first.
+    // img/iframe/source/media/embed/track/input, poster, object data, href,
+    // srcset, srcdoc, background and the SVG spellings. A key held here
+    // without a runtime gate replays onto the native setter (what happened to
+    // <source src> before 1.34.2), so adding one means adding its gate in
+    // script.js first and a handoff case in media-embed-object-gate.test.mjs.
     //
     // `srcdoc` is in the list now, and it used to be deliberately absent with
     // the note "it belongs in both files or neither" — so it went into both.

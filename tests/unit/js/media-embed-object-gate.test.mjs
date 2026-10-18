@@ -132,6 +132,21 @@ console.log('runtime: the property setters');
   input.src = YT_POSTER;
   eq('input[type=image].src is parked', input.getAttribute('data-faz-src'), YT_POSTER);
   eq('with no live src', input.getAttribute('src'), null);
+  // <source> inside a <video>/<audio>: its `src` lives on HTMLSourceElement,
+  // not on HTMLMediaElement, so the media gate never saw it.
+  const source = document.createElement('source');
+  source.src = VIMEO_MP4;
+  eq('source.src = vimeo direct file is parked', source.getAttribute('data-faz-src'), VIMEO_MP4);
+  eq('with no live src', source.getAttribute('src'), null);
+  const holder = document.createElement('video');
+  const inPlace = document.createElement('source');
+  holder.appendChild(inPlace);
+  document.body.appendChild(holder);
+  inPlace.src = VIMEO_MP4;
+  eq('a connected <source>.src assignment is parked too', inPlace.getAttribute('src'), null);
+  const ownSource = document.createElement('source');
+  ownSource.src = OWN_MP4;
+  eq('a same-origin source src stays live', ownSource.getAttribute('src'), OWN_MP4);
   // Controls: same-origin and non-provider cross-origin stay live.
   const own = document.createElement('video');
   own.src = OWN_MP4;
@@ -293,6 +308,9 @@ console.log('\nboth files: an assignment held by the bootstrap is judged at the 
   embed.setAttribute('src', YT_EMBED);
   const own = document.createElement('video');
   own.src = OWN_MP4;
+  const source = document.createElement('source');
+  source.src = VIMEO_MP4;
+  video.appendChild(source);
   document.body.appendChild(video);
   document.body.appendChild(object);
   document.body.appendChild(embed);
@@ -308,6 +326,10 @@ console.log('\nboth files: an assignment held by the bootstrap is judged at the 
   eq('held embed.setAttribute("src") is parked at the handoff', nativeGetAttribute.call(embed, 'data-faz-src'), YT_EMBED);
   eq('and not applied', nativeGetAttribute.call(embed, 'src'), null);
   eq('the site\'s own held video.src is applied', nativeGetAttribute.call(own, 'src'), OWN_MP4);
+  eq('held source.src is parked at the handoff', nativeGetAttribute.call(source, 'data-faz-src'), VIMEO_MP4);
+  eq('and not applied', nativeGetAttribute.call(source, 'src'), null);
+  source.src = VIMEO_MP4;
+  eq('a source.src assignment after the handoff is judged by the runtime', nativeGetAttribute.call(source, 'src'), null);
 }
 
 console.log(`\nmedia-embed-object-gate: ${passed} passed, ${failed} failed`);
