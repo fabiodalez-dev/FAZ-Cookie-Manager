@@ -1153,11 +1153,16 @@
                         if (mode === 'insertBefore') return target.insertBefore(holder, anchor);
                         target.replaceChild(holder, anchor);
                     };
-                    if (!styleOwner) return insert();
+                    // land() may have pointed this record at a <style> after it
+                    // was queued against a holder, which is no sheet: the owner
+                    // is read from the destination it replays into, so text
+                    // reaching a sheet is always judged as CSS.
+                    var owner = styleOwner || (isStyle(target) ? target : null);
+                    if (!owner) return insert();
                     // The anchor is the second argument for both insertBefore
                     // and replaceChild; an appendChild has none, and so does a
                     // reference that moved, since the fallback appends.
-                    deliverCss(policy, styleOwner, moved ? null : anchor, moved ? 'appendChild' : mode, [holder], insert);
+                    deliverCss(policy, owner, moved ? null : anchor, moved ? 'appendChild' : mode, [holder], insert);
                 });
                 return name === 'replaceChild' ? ref : node;
             };
@@ -1234,12 +1239,19 @@
                             // the holder that took its place.
                             target[name].apply(target, parts);
                         };
-                        if (!styleOwner) return insert();
+                        // As above: a record land() pointed at a <style> is
+                        // judged against the sheet it now replays into.
+                        var owner = styleOwner || (isStyle(target) ? target : null);
+                        if (!owner) return insert();
                         // before/after/replaceWith place the arguments against
                         // `self`, a child of the owner; the other three address
-                        // the owner itself.
-                        var at = styleOwner === self ? null : self;
-                        deliverCss(policy, styleOwner, at, name, parts, insert);
+                        // the owner itself. When `self` has left the owner the
+                        // insert appends, and is judged as an append.
+                        var at = owner === self ? null : self;
+                        var how = name;
+                        if (at && at.parentNode !== owner) { at = null; how = 'append'; }
+                        else if (!at && owner !== self) how = 'append';
+                        deliverCss(policy, owner, at, how, parts, insert);
                     });
                 };
             });

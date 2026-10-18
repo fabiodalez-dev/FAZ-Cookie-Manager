@@ -464,6 +464,25 @@ await scenario(async () => {
   eq('a fragment, then a call through the node it carried: both land in order', JSON.stringify(ids(list)), JSON.stringify(['b', 'a']));
 });
 
+await scenario(async () => {
+  // A call landed into a <style> by land() must still be judged as CSS: the
+  // record was queued against the holder, which is not a sheet, so it carried
+  // no style owner and replayed straight into the sheet.
+  const { window, document } = boot({ head: '<style id="s"></style>' });
+  const sheet = document.getElementById('s');
+  const img = document.createElement('img');
+  img.src = 'https://third.example/x.png';
+  sheet.appendChild(img); // held, the sheet is its destination
+  const holder = img.parentNode;
+  const img2 = document.createElement('img');
+  img2.src = 'https://third.example/y.png';
+  holder.appendChild(img2); // held through the holder
+  holder.appendChild(document.createTextNode('@import url(https://tracker.test/c.css);')); // queued behind it
+  handoff(window, { url: (u) => String(u).indexOf('tracker.test') !== -1 });
+  ok('a stylesheet text landed into a <style> through a holder is judged: the tracker @import is not live', sheet.textContent.indexOf('tracker.test/c.css') === -1);
+  ok('and the refused text is parked where the runtime restores from', !!sheet.getAttribute('data-faz-css'));
+});
+
 console.log('\ne. a runtime that predates the handoff');
 
 // The contract, in the shape every runtime before 1.34.1 has: it creates its
