@@ -224,8 +224,10 @@ namespace {
 	faz_request( 'T1' );
 	faz_is( Geolocation::get_visitor_country(), '', 'T1 from a Cloudflare peer: no country — the relay is NOT geolocated in its place' );
 	faz_is( Geolocation::get_country(), '', 'get_country() agrees: no source may answer for an address the edge called a relay' );
-	faz_is( $GLOBALS['__faz_transients'], array(), 'and nothing is memoised for the relay address' );
 	faz_is( Geolocation::get_visitor_region(), '', 'nor is a region resolved for it' );
+	// After the region call: detect_region() memoises even an empty answer,
+	// so this is the write a relay address would get.
+	faz_is( $GLOBALS['__faz_transients'], array(), 'and nothing, country or region, is memoised for the relay address' );
 
 	// The fixture contract survives: faz_visitor_country keeps the last word.
 	faz_request( 'T1' );
