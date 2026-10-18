@@ -523,7 +523,10 @@ $fixtures = array(
 		'name'     => 'lgpd-empty-visitor',
 		'why'      => 'LGPD scaffold (pt-BR) with no controller saved: same rule in another language',
 		'option'   => array( 'jurisdiction' => 'lgpd-brazil', 'language' => 'pt-BR' ),
-		'atts'     => array(),
+		// The renderer takes the language from the shortcode attribute (then
+		// default_lang, then the site locale); `language` in the option is not
+		// read, so without this the fixture rendered the English scaffold.
+		'atts'     => array( 'lang' => 'pt-BR' ),
 		'rows'     => array(),
 		'is_admin' => false,
 	),
@@ -923,6 +926,10 @@ if ( ! $faz_update_mode ) {
 			$faz_empty . ': and the rest of the document is still there'
 		);
 	}
+	assert_true(
+		isset( $rendered_all['lgpd-empty-visitor'] ) && false !== strpos( $rendered_all['lgpd-empty-visitor'], 'lang="pt-BR"' ),
+		'lgpd-empty-visitor: the empty-controller rule is exercised on the pt-BR scaffold, not the English one'
+	);
 
 	// The consent records the policy talks about are the plugin's own consent
 	// log, purged by Activator::run_retention_cleanup() on
