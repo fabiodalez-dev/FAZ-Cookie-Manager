@@ -471,11 +471,22 @@
 		});
 	}
 
+	// getFazConsent() is a page global: a missing, stale or replaced runtime
+	// can return null or throw. Either used to abort attachToForm() before the
+	// submit handler was registered, and the form fell back to a plain browser
+	// submit. Only a non-empty string is an identifier worth prefilling.
 	function prefillConsentId(form) {
 		var field = form.querySelector('[name="dsar_consent_id"]');
 		if (!field || field.value) return;
-		var consent = typeof window.getFazConsent === 'function' ? window.getFazConsent() : {};
-		if (consent.consentID) field.value = consent.consentID;
+		var consent = null;
+		try {
+			consent = typeof window.getFazConsent === 'function' ? window.getFazConsent() : null;
+		} catch (err) {
+			consent = null;
+		}
+		if (consent && typeof consent.consentID === 'string' && consent.consentID) {
+			field.value = consent.consentID;
+		}
 	}
 	['fazcookie_banner_loaded', 'fazcookie_consent_update'].forEach(function (event) {
 		document.addEventListener(event, function () {
