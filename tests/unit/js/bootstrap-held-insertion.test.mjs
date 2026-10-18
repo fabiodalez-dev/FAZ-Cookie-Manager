@@ -33,7 +33,9 @@
  *      release parked under its placeholder category;
  *   h. a call made through a node still in its holder lands on the safety
  *      release and when the fuse trips between the two calls, and
- *      Range.insertNode of a fragment with a held child waits for it.
+ *      Range.insertNode of a fragment with a held child waits for it;
+ *   i. before()/after() listing their own node, and replaceChild(a, a) on a
+ *      pending child, behave as the engine does.
  *
  * Every loop below is bounded by a counter, so the unfixed code FAILS here
  * instead of hanging the runner. Point FAZ_BOOTSTRAP_UNDER_TEST at another
@@ -782,6 +784,51 @@ for (const mode of ['handoff', 'safety']) {
       JSON.stringify(ids(p)), JSON.stringify(['#hello', 'img', 'plain', '# world']));
   });
 }
+
+console.log('\ni. a node listed among its own sibling call, and replaceChild(a, a), as the engine treats them');
+
+// `s.before(held, s)`: at the replay `s` sat in the holder, so the call fell
+// back to appending at the end of the parent. The engine places the nodes
+// where `s` was, before its first following sibling that is not itself being
+// inserted, and the same for after().
+for (const [label, act, expected] of [
+  ['s.before(img, s)', (s, img) => s.before(img, s), ['img', 's', 'u']],
+  ['s.after(img, s)', (s, img) => s.after(img, s), ['p', 'img', 's', 'u']],
+]) {
+  for (const mode of ['handoff', 'safety']) {
+    await scenario(async () => {
+      const { window, document } = boot({ body: '<ul id="list"></ul>' });
+      const list = document.getElementById('list');
+      if (label.indexOf('after') !== -1) { const p = document.createElement('li'); p.id = 'p'; list.appendChild(p); }
+      const sNode = document.createElement('li'); sNode.id = 's'; list.appendChild(sNode);
+      const u = document.createElement('li'); u.id = 'u'; list.appendChild(u);
+      const img = document.createElement('img');
+      img.id = 'img';
+      img.src = 'https://third.example/x.png';
+      act(sNode, img);
+      if (mode === 'handoff') handoff(window); else await release(window);
+      eq(mode + ': ' + label + ' lands where the engine puts it', JSON.stringify(ids(list)), JSON.stringify(expected));
+    });
+  }
+}
+await scenario(async () => {
+  // replaceChild(a, a) on a child the page gave the parent through a held
+  // call: a no-op to the engine, a NotFoundError here, because the native
+  // call saw `a` in its holder instead of in the parent.
+  const { window, document } = boot();
+  const list = document.getElementById('list');
+  const a = document.createElement('img');
+  a.id = 'a';
+  a.src = 'https://third.example/a.png';
+  list.appendChild(a);
+  let threw = '';
+  let returned = null;
+  try { returned = list.replaceChild(a, a); } catch (e) { threw = e.name; }
+  eq('replaceChild(a, a) on a pending child does not throw', threw, '');
+  ok('and returns the child, as the engine does', returned === a);
+  handoff(window);
+  eq('a still lands once', JSON.stringify(ids(list)), JSON.stringify(['a']));
+});
 
 console.log('');
 console.log(`bootstrap-held-insertion: ${passed} passed, ${failed} failed${skipped ? `, ${skipped} skipped` : ''}`);
