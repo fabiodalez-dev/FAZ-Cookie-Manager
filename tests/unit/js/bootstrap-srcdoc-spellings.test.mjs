@@ -97,6 +97,35 @@ for (const [label, markup] of SPELLINGS) {
   eq('the srcdoc PROPERTY with a backslash spelling is parked too', nativeGetAttribute.call(frame, 'srcdoc'), null);
 }
 
+// The sub-document decodes named character references, so `&bsol;` is a
+// backslash and `&Tab;` / `&NewLine;` the characters the URL parser strips.
+// decodeMarkup() decoded numeric references and `&sol;` / `&colon;` only.
+console.log('\nsafety release: named character references');
+const NAMED = [
+  ['&bsol;&bsol; after the scheme', '<img src=https:&bsol;&bsol;tracker.test/px>'],
+  ['&bsol;&bsol; with no scheme', '<img src=&bsol;&bsol;tracker.test/px>'],
+  ['&Tab; inside the slashes', '<img src="https:/&Tab;/tracker.test/px">'],
+  ['&NewLine; inside the slashes', '<img src="https:/&NewLine;/tracker.test/px">'],
+];
+for (const [label, markup] of NAMED) {
+  const probe = new JSDOM('', { url: SITE }).window.document.createElement('template');
+  probe.innerHTML = markup;
+  eq('premise: ' + label + ' names tracker.test to the parser', new URL(probe.content.querySelector('img').getAttribute('src').replace(/[\t\n\r]/g, ''), SITE).host, 'tracker.test');
+  const { window, document, nativeGetAttribute } = boot();
+  const frame = document.createElement('iframe');
+  frame.setAttribute('srcdoc', markup);
+  document.getElementById('w').appendChild(frame);
+  await release(window);
+  eq('srcdoc with ' + label + ' is parked on the safety release', nativeGetAttribute.call(frame, 'srcdoc'), null);
+}
+{
+  const { window, document, nativeGetAttribute } = boot();
+  const frame = document.createElement('iframe');
+  frame.setAttribute('srcdoc', '<p>a &lt;/textarea&gt; &amp; <img src="/own.png"></p>');
+  await release(window);
+  eq('control: a srcdoc with references and only a relative URL is released', nativeGetAttribute.call(frame, 'srcdoc'), '<p>a &lt;/textarea&gt; &amp; <img src="/own.png"></p>');
+}
+
 console.log('\nsafety release: what the site itself names is released');
 for (const [label, markup] of [
   ['a plain https URL (control)', '<img src="https://tracker.test/px">'],

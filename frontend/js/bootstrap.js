@@ -301,8 +301,40 @@
     // parser strips from anywhere in a URL before it reads a scheme or a host
     // (`https:/\t/tracker` is tracker), as the server pass strips them. The
     // JSON escape `\/` is deliberately NOT undone here: see urlsIn().
+    // Named references too: the sub-document decodes `&bsol;` to a backslash
+    // and `&Tab;` / `&NewLine;` to the characters stripped below, and the list
+    // the parser knows is long. A <textarea> parsed by the native DOMParser
+    // (captured here, as the predicate below captures its own) decodes every
+    // reference the way the parser does without building any element from
+    // the markup; a `</textarea` in the text is kept as text. The numeric and
+    // `&sol;` / `&colon;` replacements stay as the fallback where no parser is
+    // available.
+    var MarkupParser = typeof w.DOMParser === 'function' ? w.DOMParser : null;
+    var markupParse = MarkupParser && MarkupParser.prototype && typeof MarkupParser.prototype.parseFromString === 'function'
+        ? MarkupParser.prototype.parseFromString
+        : null;
+    var textareaValue = (function () {
+        try {
+            var desc = w.HTMLTextAreaElement && Object.getOwnPropertyDescriptor(w.HTMLTextAreaElement.prototype, 'value');
+            return desc && typeof desc.get === 'function' ? desc.get : null;
+        } catch (e) { return null; }
+    }());
+    function decodeReferences(text) {
+        if (!markupParse || text.indexOf('&') === -1) return text;
+        try {
+            for (var pass = 0; pass < 2; pass++) {
+                var doc = markupParse.call(new MarkupParser(), '<textarea>\n' + text.replace(/<\/(textarea)/gi, '&lt;/$1') + '</textarea>', 'text/html');
+                var area = doc && doc.getElementsByTagName('textarea')[0];
+                if (!area) return text;
+                var decoded = String(textareaValue ? textareaValue.call(area) : area.value);
+                if (decoded === text) break;
+                text = decoded;
+            }
+        } catch (e) { /* the replacements below still run */ }
+        return text;
+    }
     function decodeMarkup(value) {
-        return String(value == null ? '' : value)
+        return decodeReferences(String(value == null ? '' : value))
             .replace(/&#x([0-9a-f]+);?/gi, function (match, hex) {
                 try { return String.fromCodePoint(parseInt(hex, 16)); } catch (e) { return match; }
             })

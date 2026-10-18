@@ -290,6 +290,19 @@ console.log('\nroutes: a srcdoc URL spelled through entities or escaped slashes'
   const c = w.document.createElement('iframe');
   c.srcdoc = '<p>https:&#x2F;&#x2F;site.test/own</p>';
   eq('control: a same-origin URL through entities is applied', c.getAttribute('srcdoc'), '<p>https:&#x2F;&#x2F;site.test/own</p>');
+  // Tab, LF and CR are removed from anywhere in a URL by the URL parser, so
+  // `https:/<TAB>/tracker.test` is tracker.test; the named references the
+  // sub-document decodes (&Tab;, &NewLine;, &bsol;) spell the same thing.
+  for (const [label, markup] of [
+    ['a literal tab inside the slashes', '<img src="https:/\t/tracker.test/p.png">'],
+    ['&Tab; inside the slashes', '<img src="https:/&Tab;/tracker.test/p.png">'],
+    ['&NewLine; inside the slashes', '<img src="https:/&NewLine;/tracker.test/p.png">'],
+    ['&bsol;&bsol; after the scheme', '<img src=https:&bsol;&bsol;tracker.test/p.png>'],
+  ]) {
+    const f = w.document.createElement('iframe');
+    f.srcdoc = markup;
+    eq('a srcdoc with ' + label + ' is parked', f.getAttribute('srcdoc'), null);
+  }
 }
 
 console.log('\nruntime: a URL is matched as the engine resolves it (server parity)');

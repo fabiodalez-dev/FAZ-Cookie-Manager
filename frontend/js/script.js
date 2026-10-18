@@ -4606,6 +4606,13 @@ function _fazMarkupUrls(markup) {
     push(text.match(MARKUP_URL) || []);
     var unescaped = text.replace(/\\\//g, "/");
     if (unescaped !== text) push(unescaped.match(MARKUP_URL) || []);
+    // Tab, LF and CR are removed from anywhere in a URL by the URL parser
+    // (`https:/<TAB>/tracker.test` is tracker.test), as the bootstrap and the
+    // server strip them. Another pass, not in place: removing them from the
+    // whole markup can join two neighbouring tokens, and the passes above
+    // still read those apart.
+    var compact = unescaped.replace(/[\t\n\r]/g, "");
+    if (compact !== unescaped) push(compact.match(MARKUP_URL) || []);
     return found;
 }
 function _fazMarkupBlockedCategory(el, markup) {
