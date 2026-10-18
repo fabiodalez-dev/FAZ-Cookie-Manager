@@ -10,13 +10,25 @@ class Privacy_Policy_Text {
 	public static function environment( $settings ) {
 		$ipinfo = new \FazCookie\Admin\Modules\Geo_Routing\Includes\Ipinfo_Client();
 		return array(
-			'withdrawal_satisfied' => Withdrawal_Path::satisfies_revisit_requirement( $settings ),
+			// The ROUTE the administrator configured, not the state of its last
+			// verification: published policy text must not change by itself when
+			// a probe goes stale or a cron run is missed.
+			'withdrawal_footer' => Withdrawal_Path::PATH_FOOTER_LINK === Withdrawal_Path::configured_path( $settings ),
 			'multisite' => function_exists( 'is_multisite' ) && is_multisite(),
 			'has_mmdb' => Geolocation::has_database(),
 			'ipinfo_active' => $ipinfo->is_optin_active() && '' !== $ipinfo->get_api_key(),
 		);
 	}
 
+	/**
+	 * How the visitor withdraws, for policy copy.
+	 *
+	 * @param bool $footer Whether the configured withdrawal route is the footer
+	 *                     link (Withdrawal_Path::configured_path()). Deliberately
+	 *                     not whether that link was verified recently: the text
+	 *                     must describe the site's design and stay stable.
+	 * @return string
+	 */
 	public static function withdrawal_sentence( $footer ) {
 		return $footer
 			? __( 'You can change or withdraw your cookie choices using the cookie settings link in the site footer.', 'faz-cookie-manager' )
@@ -64,7 +76,7 @@ class Privacy_Policy_Text {
 		}
 		/* translators: %d: retention in months. */
 		$facts['dsar'] = sprintf( __( 'If you submit a privacy request through the site form, we store your name, email, request type, message, status and any consent ID you supply in a private request record for %d months; erasure removes identifying details unless applicable retention requirements require otherwise.', 'faz-cookie-manager' ), max( 1, (int) ( $settings['dsar']['retention'] ?? 24 ) ) );
-		$facts['withdrawal'] = self::withdrawal_sentence( ! empty( $env['withdrawal_satisfied'] ) );
+		$facts['withdrawal'] = self::withdrawal_sentence( ! empty( $env['withdrawal_footer'] ) );
 		return $facts;
 	}
 

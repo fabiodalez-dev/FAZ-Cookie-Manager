@@ -9,7 +9,14 @@ $GLOBALS['policy_options']=array();
 function get_option($key,$default=false) {return $GLOBALS['policy_options'][$key] ?? $default;}
 class PolicySecrets { public static function decrypt($value){return $value;} }
 class PolicyGeo { public static function has_database(){return true;} }
-class PolicyWithdrawal { public static function satisfies_revisit_requirement($settings){return ($settings['banner_control']['withdrawal_path'] ?? '')==='footer_link';} }
+// The footer route is configured but its verification is never satisfied, as
+// on a site whose probe went stale: the policy text must still describe the
+// configured route instead of flipping to the floating button by itself.
+class PolicyWithdrawal {
+ const PATH_FOOTER_LINK='footer_link';
+ public static function configured_path($settings=null){return ($settings['banner_control']['withdrawal_path'] ?? '')==='footer_link' ? 'footer_link' : 'widget';}
+ public static function satisfies_revisit_requirement($settings=null){return false;}
+}
 class_alias(PolicySecrets::class,'FazCookie\\Admin\\Modules\\Geo_Routing\\Includes\\Secrets');
 class_alias(PolicyGeo::class,'FazCookie\\Includes\\Geolocation');
 class_alias(PolicyWithdrawal::class,'FazCookie\\Includes\\Withdrawal_Path');
@@ -23,7 +30,7 @@ $facts=Policy::facts($off,array());
 foreach(array('logs','hashes','tcf','geo','maxmind','ipinfo','pageviews') as $key) policy_check(!isset($facts[$key]),'disabled feature omitted: '.$key);
 policy_check(strpos($facts['withdrawal'],'floating')!==false,'default route is floating button');
 $settings=array('consent_logs'=>array('status'=>true,'retention'=>9),'iab'=>array('enabled'=>true),'geolocation'=>array('geo_targeting'=>true),'pageview_tracking'=>true,'pageviews'=>array('retention'=>3),'dsar'=>array('retention'=>18));
-$facts=Policy::facts($settings,array('withdrawal_satisfied'=>true,'has_mmdb'=>true,'ipinfo_active'=>true));
+$facts=Policy::facts($settings,array('withdrawal_footer'=>true,'has_mmdb'=>true,'ipinfo_active'=>true));
 foreach(array('fazcookie-consent','consent ID','fazcookie-dnsmpi') as $cookie) policy_check(strpos(implode(' ',$facts),$cookie)!==false,'core identifier disclosed: '.$cookie);
 policy_check(strpos($facts['tcf'],'euconsent-v2')!==false && strpos($facts['tcf'],'fazVendorConsent')!==false,'TCF cookies disclosed');
 policy_check(strpos($facts['tcf_li'],'fazVendorLI')!==false,'Right-to-Object cookie disclosed');
@@ -31,7 +38,10 @@ policy_check(strpos($facts['hashes'],'salted SHA-256')!==false && strpos($facts[
 policy_check(strpos($facts['log_retention'],'9 months')!==false,'configured log retention');
 policy_check(strpos($facts['pageview_retention'],'3 months')!==false,'configured counter retention');
 policy_check(strpos($facts['dsar'],'18 months')!==false && strpos($facts['dsar'],'consent ID')!==false,'configured DSAR storage and identifier');
-policy_check(strpos($facts['withdrawal'],'site footer')!==false,'verified footer route');
+policy_check(strpos($facts['withdrawal'],'site footer')!==false,'configured footer route');
+$footer_settings=$settings+array('banner_control'=>array('withdrawal_path'=>'footer_link'));
+policy_check(strpos(Policy::facts($footer_settings,Policy::environment($footer_settings))['withdrawal'],'site footer')!==false,'a footer route whose verification lapsed is still described as the footer link');
+policy_check(strpos(Policy::facts($settings,Policy::environment($settings))['withdrawal'],'floating')!==false,'the widget route is described as the floating button');
 policy_check(strpos($facts['ipinfo'],'cleartext')!==false,'external raw IP disclosure');
 policy_check(strpos($facts['pageviews'],'without a visitor identifier')!==false,'aggregate counter disclosure');
 $settings['pageviews']['retention']=0;

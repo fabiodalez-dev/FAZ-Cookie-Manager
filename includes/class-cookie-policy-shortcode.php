@@ -91,7 +91,7 @@ class Cookie_Policy_Shortcode {
 		<?php endif; ?>
 
 		<h2><?php esc_html_e( 'How to Manage Cookies', 'faz-cookie-manager' ); ?></h2>
-		<p><?php echo esc_html( Privacy_Policy_Text::withdrawal_sentence( Withdrawal_Path::satisfies_revisit_requirement() ) ); ?></p>
+		<p><?php echo esc_html( Privacy_Policy_Text::withdrawal_sentence( Withdrawal_Path::PATH_FOOTER_LINK === Withdrawal_Path::configured_path() ) ); ?></p>
 		<p><button type="button" class="faz-consent-trigger faz-policy-manage-btn"><?php esc_html_e( 'Manage Cookie Preferences', 'faz-cookie-manager' ); ?></button></p>
 		<p><?php esc_html_e( 'You can also control cookies through your browser settings. Most browsers allow you to:', 'faz-cookie-manager' ); ?></p>
 		<ul>
