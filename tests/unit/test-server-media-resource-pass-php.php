@@ -386,6 +386,40 @@ namespace {
 	assert_true( false !== strpos( $out, '<i data-x=\'<iframe srcdoc="<img src=https://cdn.tracker.test/q.png>"></iframe>\'></i>' ), 'a quoted srcdoc is left as it was' );
 	assert_true( 1 === substr_count( $out, 'data-faz-srcdoc=' ) && false !== strpos( $out, 'data-faz-srcdoc="<img src=https://cdn.tracker.test/p.png>"' ), 'while the real srcdoc after it is parked' );
 
+	echo "\n-- media and style attributes inside end tags and bogus comments --\n";
+
+	// The media and style-attribute passes walk every OPENING tag, which kept
+	// a quoted value inside one whole, but nothing consumed the other tokens
+	// the tokenizer reads in one piece: an end tag with an attribute, `<?…>`,
+	// `<!x…>` and `</ …>`. The regex then moved on one character at a time,
+	// started a match at the `<video` or `<b style` inside the value or the
+	// comment, and the double-quoted keys it wrote closed the value early.
+	$tokens = array(
+		'video in an end tag\'s attribute'      => '<p>a</p title="<video poster=\'https://i.ytimg.com/a.jpg\'>">',
+		'embed in an end tag\'s attribute'      => '<p>a</p data-x=\'<embed src="https://www.youtube.com/embed/ID">\'>',
+		'video in a processing instruction'    => '<?x <video poster="https://i.ytimg.com/a.jpg">',
+		'video in a bogus <!x comment'         => '<!x <video poster="https://i.ytimg.com/a.jpg">',
+		'video in a </ bogus comment'          => '</ <video poster="https://i.ytimg.com/a.jpg">',
+		'style attribute in an end tag\'s value' => '<p>a</p title="<b style=\'background:url(https://i.ytimg.com/a.jpg)\'>">',
+		'style attribute in a bogus comment'   => '<!x <b style="background:url(https://i.ytimg.com/a.jpg)">',
+	);
+	foreach ( $tokens as $what => $snippet ) {
+		$fe   = faz_ob_frontend( $providers, $blocked );
+		$html = '<html><body>' . $snippet . '</body></html>';
+		assert_true( faz_ob_run( $fe, $html ) === $html, $what . ': byte-identical' );
+	}
+
+	// The real elements after such a token are judged as before.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><p>a</p title="<video poster=\'https://i.ytimg.com/a.jpg\'>"><video poster="https://i.ytimg.com/vi/ID/hqdefault.jpg"></video></body></html>' );
+	assert_true( false !== strpos( $out, '</p title="<video poster=\'https://i.ytimg.com/a.jpg\'>">' ), 'the end tag is left as it was' );
+	assert_true( '"https://i.ytimg.com/vi/ID/hqdefault.jpg"' === faz_raw_attr( $out, 'data-faz-poster' ) && 1 === substr_count( $out, 'data-faz-poster=' ), 'while the real <video> after it is parked, and only that one' );
+
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><!x <b style="background:url(https://i.ytimg.com/a.jpg)"><div style="background:url(https://i.ytimg.com/vi/ID/hq.jpg)">x</div></body></html>' );
+	assert_true( false !== strpos( $out, '<!x <b style="background:url(https://i.ytimg.com/a.jpg)">' ), 'the bogus comment is left as it was' );
+	assert_true( false === strpos( $out, '<div style="background:url(https://i.ytimg.com/vi/ID/hq.jpg)">' ), 'while the real style attribute after it is still gated' );
+
 	// Upper-case and unquoted spellings of the real tags still match.
 	$fe  = faz_ob_frontend( $providers, $blocked );
 	$out = faz_ob_run( $fe, '<html><body><IMG SRC=https://cdn.tracker.test/p.png><IFRAME SRC=https://www.youtube.com/embed/ID></IFRAME></body></html>' );
