@@ -1539,9 +1539,9 @@
     // single-character form (`\.` is "."). `u\72l(`, `\75 rl(` and
     // `tracker\.example.test` all spell something a regex on the raw text does
     // not see and the engine fetches.
-    function normaliseCss(text) {
-        return String(text == null ? '' : text)
-            .replace(CSS_COMMENT, '$1')
+    function normaliseCss(text, keepComments) {
+        var value = String(text == null ? '' : text);
+        return (keepComments ? value : value.replace(CSS_COMMENT, '$1'))
             // One whitespace after the hex digits belongs to the escape, and
             // CRLF counts as ONE: the tokenizer's preprocessing folds it into
             // a single newline before the escape consumes it, so eating only
@@ -1555,8 +1555,17 @@
     }
     // Every URL the text can be read to name, on the raw text and on the
     // normalised one.
+    // The comment-stripped pass can only ADD URLs, never stand in for the
+    // others: CSS_COMMENT cannot tell where the tokenizer is, and removes text
+    // the engine keeps — `/*` inside an unquoted url(…) is part of the URL,
+    // and an unterminated string ends at the newline, so a `/*` inside it
+    // starts nothing. Stripping there deleted a live @import or url() from the
+    // copy being judged. The escape-decoded pass therefore also runs on the
+    // text with its comments kept, and the three sets are united.
     function cssUrlsAll(text) {
-        return cssUrls(text).concat(cssUrls(normaliseCss(text), false, true));
+        return cssUrls(text)
+            .concat(cssUrls(normaliseCss(text, true), false, true))
+            .concat(cssUrls(normaliseCss(text), false, true));
     }
     // The narrow question, for a sheet whose text is complete and whose author
     // is the parser: does it name a URL that can reach a third party? Judged on

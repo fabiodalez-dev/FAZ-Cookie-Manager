@@ -7351,16 +7351,25 @@ class Frontend {
 	private function css_urls( $css ) {
 		$css  = (string) $css;
 		$urls = $this->css_urls_raw( $css, false );
-		// Comments go before escapes are decoded, as the tokenizer does: to it
-		// `@import/*c*/"https://…"` is an @import of that string, which no
-		// pattern read while the comment sat between the two. A comment is a
-		// comment only outside a string, so whole strings are consumed first and
-		// given back untouched (twin of _fazCssStripComments() and of
-		// CSS_COMMENT in bootstrap.js).
+		$decoded = $this->css_decode_escapes( $css );
+		$passes  = array( $decoded );
+		// A comment between two tokens is nothing to the tokenizer, so
+		// `@import/*c*/"https://…"` imports that string, and no pattern read it
+		// while the comment sat in the way: one more pass on the text with its
+		// comments removed (before escapes are decoded, as the tokenizer does;
+		// twin of _fazCssUrls() and of cssUrlsAll() in bootstrap.js). That pass
+		// can only ADD URLs: the stripper cannot tell where the tokenizer is,
+		// and `/*` inside an unquoted url(…) or an unterminated string is text
+		// the engine keeps, so the passes above still read the original.
 		$uncommented = preg_replace( '/("(?:[^"\\\\\n]|\\\\[\s\S])*"|\'(?:[^\'\\\\\n]|\\\\[\s\S])*\')|\/\*[\s\S]*?\*\//', '$1', $css );
-		$decoded = $this->css_decode_escapes( null === $uncommented ? $css : $uncommented );
-		if ( $decoded !== $css ) {
-			foreach ( $this->css_urls_raw( $decoded, true ) as $url ) {
+		if ( null !== $uncommented ) {
+			$passes[] = $this->css_decode_escapes( $uncommented );
+		}
+		foreach ( array_unique( $passes ) as $text ) {
+			if ( $text === $css ) {
+				continue;
+			}
+			foreach ( $this->css_urls_raw( $text, true ) as $url ) {
 				if ( ! in_array( $url, $urls, true ) ) {
 					$urls[] = $url;
 				}

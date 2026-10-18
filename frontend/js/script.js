@@ -5111,17 +5111,25 @@ function _fazCssStripComments(css) {
 }
 function _fazCssUrls(css) {
     var urls = _fazCssUrlsRaw(css);
-    // Comments go before escapes are decoded, as the tokenizer does: a comment
-    // between two tokens is nothing to it, so `@import/*c*/"https://…"` is an
-    // @import of that string, which no pattern read while the comment was in
-    // the way. An escaped `\2f\2a` is never a comment, hence the order.
-    var decoded = _fazCssDecodeEscapes(_fazCssStripComments(css));
-    if (decoded !== css) {
-        var more = _fazCssUrlsRaw(decoded, true);
+    var add = function (text) {
+        if (text === css) return;
+        var more = _fazCssUrlsRaw(text, true);
         for (var i = 0; i < more.length; i++) {
             if (urls.indexOf(more[i]) === -1) urls.push(more[i]);
         }
-    }
+    };
+    var decoded = _fazCssDecodeEscapes(css);
+    add(decoded);
+    // A comment between two tokens is nothing to the tokenizer, so
+    // `@import/*c*/"https://…"` imports that string, and no pattern read it
+    // while the comment was in the way: one more pass on the text with its
+    // comments removed (before escapes are decoded, as the tokenizer does).
+    // That pass can only ADD URLs. The stripper cannot tell where the
+    // tokenizer is: `/*` inside an unquoted url(…) is part of the URL, and
+    // inside an unterminated string it starts nothing, so stripping there
+    // deletes text the engine keeps. The passes above still read it.
+    var uncommented = _fazCssDecodeEscapes(_fazCssStripComments(css));
+    if (uncommented !== decoded) add(uncommented);
     return urls;
 }
 

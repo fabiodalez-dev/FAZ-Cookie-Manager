@@ -140,6 +140,18 @@ namespace {
 	ok( false !== strpos( $out, 'data-faz-css=' ), 'an @import with a comment before its string is parked' );
 	ok( false === strpos( (string) $live_css( $out ), 'fonts.googleapis.com' ), 'and the provider URL is gone from the live text' );
 	eq( data_faz_css( $out ), $commented, 'and the original is recoverable' );
+	// The comment-stripped pass only ADDS URLs: `/*` inside an unquoted url()
+	// is URL text, inside an unterminated string it starts nothing, and a
+	// stripper that removed from there to a later `*/` deleted the next,
+	// escape-spelled provider URL from the only pass able to read it.
+	foreach ( array(
+		'/* inside an unquoted url() before an escaped provider url()' => '.a{background:u\72l(https://cdn.example/*x)}.b{background:u\72l(https://fonts.gstatic.com/x.woff2)}/**/',
+		'a bad string before an escaped @import'                       => ".q{content:\"/*\n}@\\69mport \"https://fonts.googleapis.com/css2?family=Inter\";/**/",
+	) as $label => $hidden ) {
+		$out = process_style( $hidden );
+		ok( false !== strpos( $out, 'data-faz-css=' ), $label . ': parked' );
+		ok( false === strpos( (string) $live_css( $out ), 'fonts.g' ), $label . ': the provider URL is gone from the live text' );
+	}
 	$quoted = '.q:before{content:"/*"}.r:after{content:"*/ https://fonts.googleapis.com/x"}';
 	ok( false === strpos( process_style( $quoted ), 'data-faz-css=' ), 'comment markers inside strings are content, not a comment' );
 

@@ -146,6 +146,12 @@ const CSS_SHAPES = [
   ['\\75 rl( escape in the function name', '.p{background:\\75 rl(https://tracker.test/c.png)}'],
   ['an escape inside the host', '.p{background:url(https://tracker\\.test/c.png)}'],
   ['a comment between @import and its string', '@import/*c*/"https://tracker.test/c.css";body{color:red}'],
+  // The comment-stripped pass must only ADD URLs: `/*` inside an unquoted
+  // url() is URL text and inside an unterminated string it starts nothing, so
+  // a stripper that removed from there to a later `*/` deleted the next,
+  // escape-spelled tracker from the only pass able to read it.
+  ['/* inside an unquoted url() before an escaped tracker url()', '.a{background:u\\72l(https://cdn.example/*x)}.b{background:u\\72l(https://tracker.test/c.png)}/**/'],
+  ['a bad string before an escaped @import', '.q{content:"/*\n}@\\69mport "https://tracker.test/c.css";/**/'],
 ];
 for (const [label, css] of CSS_SHAPES) {
   const w = runtime();
