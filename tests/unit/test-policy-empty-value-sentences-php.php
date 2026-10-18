@@ -14,12 +14,23 @@
  * de/es/fr/it) was kept as a "horizontal rule" — the markdown converter has
  * no such syntax — and printed a literal `****`.
  *
+ * Dropping the sentence was itself wrong for the opening one. The controller
+ * name is its SUBJECT (`explains how **{{COMPANY_NAME}}** ("we" …) uses
+ * cookies …, in compliance with the California Consumer Privacy Act …`), and
+ * the same sentence is the only place the document states the law it is
+ * written under. So with no name saved the policy no longer said which law
+ * applied. Renderer::name_unnamed_controller() now names the controller with
+ * a neutral formula in the template language before substitution; only the
+ * sentences that exist to give a contact value (an email, `contact us at
+ * ****`) are still dropped.
+ *
  * Pinned here, against every shipped template, with COMPANY_NAME and
  * COMPANY_EMAIL empty and every other placeholder filled:
  *   - no `****` survives anywhere;
  *   - every line the stripper changed is a whole sentence, never one that
  *     starts in lower case, on `Civ.`, `UE ` or a closing bracket;
- *   - the CCPA and gdpr-strict es openings are dropped whole;
+ *   - in all 40 scaffolds the opening sentence stays whole, names the
+ *     controller with the formula of its language and cites its law;
  *   - the neighbours of a dropped sentence stay byte for byte.
  *
  * Run: php tests/unit/test-policy-empty-value-sentences-php.php
@@ -65,13 +76,22 @@ $strip = new ReflectionMethod( Renderer::class, 'strip_empty_value_sentences' );
 $strip->setAccessible( true );
 $labels = new ReflectionMethod( Renderer::class, 'strip_empty_label_lines' );
 $labels->setAccessible( true );
+// The step that names an unnamed controller runs on the scaffold before
+// substitution. Looked up softly so that, on a build without it, the checks
+// below fail one by one instead of the whole file stopping on a fatal.
+$naming = null;
+if ( method_exists( Renderer::class, 'name_unnamed_controller' ) ) {
+	$naming = new ReflectionMethod( Renderer::class, 'name_unnamed_controller' );
+	$naming->setAccessible( true );
+}
+evs_check( null !== $naming, 'Renderer names an unnamed controller before substitution' );
 
 /**
  * The scaffold with every placeholder filled except the controller's name and
  * email, through the same two passes render() applies before this one.
  */
 function evs_substituted( $file ) {
-	global $labels;
+	global $labels, $naming;
 	$scaffold = (string) file_get_contents( $file );
 	preg_match_all( '/\{\{([A-Z_]+)\}\}/', $scaffold, $m );
 	$data = array();
@@ -80,6 +100,9 @@ function evs_substituted( $file ) {
 	}
 	$data['COMPANY_NAME']  = '';
 	$data['COMPANY_EMAIL'] = '';
+	if ( null !== $naming ) {
+		$scaffold = $naming->invoke( null, $scaffold, basename( $file, '.md' ), $data['COMPANY_NAME'] );
+	}
 	return $labels->invoke( null, Generator::substitute( $scaffold, $data ) );
 }
 
@@ -109,10 +132,82 @@ foreach ( $templates as $file ) {
 evs_check( array() === $survivors, 'no template renders a literal **** with the controller name and email empty', implode( ', ', $survivors ) );
 evs_check( array() === $fragments, 'every sentence the stripper leaves is whole: none starts mid-citation or in lower case', implode( ' | ', $fragments ) );
 
+// The opening sentence carries the controller as its subject and is the one
+// place the document cites its law. With no name saved it must stay, whole,
+// with the controller named by the neutral formula of the template language.
+// The formulas are spelled out here rather than read from the renderer, so a
+// change to them is a deliberate edit in two places. Two scaffolds put a word
+// before the name that only fits a company name — the Czech `společnost`
+// ("the company") and the Portuguese article `a` — and it goes with it.
+$evs_formula = array(
+	'en'    => 'the operator of this website',
+	'it'    => 'il titolare di questo sito',
+	'de'    => 'der Betreiber dieser Website',
+	'fr'    => "l'exploitant de ce site",
+	'es'    => 'el titular de este sitio web',
+	'pt-BR' => 'o responsável por este site',
+	'nl'    => 'de beheerder van deze website',
+	'cs'    => 'provozovatel tohoto webu',
+	'hr'    => 'voditelj ove web stranice',
+	'bg'    => 'операторът на този уебсайт',
+);
+$evs_law = array(
+	'gdpr-strict'       => '2016/679',
+	'ccpa-california'   => 'CCPA',
+	'lgpd-brazil'       => 'LGPD',
+	'popia-southafrica' => 'POPIA',
+);
+$openings = 0;
+foreach ( $templates as $file ) {
+	$jur  = basename( dirname( $file ) );
+	$lang = basename( $file, '.md' );
+	$name = $jur . '/' . $lang;
+	$src  = '';
+	foreach ( explode( "\n", (string) file_get_contents( $file ) ) as $source_line ) {
+		if ( false !== strpos( $source_line, '**{{COMPANY_NAME}}**' ) ) {
+			$src = $source_line;
+			break;
+		}
+	}
+	if ( '' === $src || ! isset( $evs_formula[ $lang ], $evs_law[ $jur ] ) ) {
+		evs_check( false, "{$name}: the scaffold has an opening that names the controller" );
+		continue;
+	}
+	$expected = preg_replace( '/(?:(?<=\s)(?:společnost|a) )?\*\*\{\{COMPANY_NAME\}\}\*\*/u', $evs_formula[ $lang ], $src );
+	$out      = $strip->invoke( null, evs_substituted( $file ) );
+	$ok       = false !== strpos( "\n" . $out . "\n", "\n" . $expected . "\n" )
+		&& false !== strpos( $expected, $evs_law[ $jur ] )
+		&& false === strpos( $expected, '****' );
+	evs_check( $ok, "{$name}: with no name saved the opening stays whole, names the controller neutrally and cites " . $evs_law[ $jur ], mb_substr( $expected, 0, 110 ) );
+	$openings += $ok ? 1 : 0;
+}
+evs_check( 40 === $openings, "all 40 openings survive an empty controller name ({$openings})" );
+
+// Grammar the substitution alone would get wrong: the Czech `jak společnost
+// provozovatel` and the Portuguese `como a o responsável`.
+$cs = $strip->invoke( null, evs_substituted( $root . '/admin/modules/cookie-policy-generator/templates/gdpr-strict/cs.md' ) );
+evs_check( false !== strpos( $cs, 'jak provozovatel tohoto webu („my“' ) && false === strpos( $cs, 'společnost provozovatel' ), 'gdpr-strict/cs: `společnost` goes with the missing name' );
+$pt = $strip->invoke( null, evs_substituted( $root . '/admin/modules/cookie-policy-generator/templates/popia-southafrica/pt-BR.md' ) );
+evs_check( false !== strpos( $pt, 'explica como o responsável por este site («nós»' ) && false === strpos( $pt, 'como a o ' ), 'popia-southafrica/pt-BR: the article before the missing name goes with it' );
+
+// The ones that were cut mid-citation before stay whole now as well.
 $ccpa = $strip->invoke( null, evs_substituted( $root . '/admin/modules/cookie-policy-generator/templates/ccpa-california/en.md' ) );
-evs_check( false === strpos( $ccpa, 'Notice at Collection and Cookie Policy explains' ) && false === strpos( $ccpa, 'Civ. Code §§ 1798.100 et seq.)' ), 'ccpa-california/en: the opening sentence is dropped whole' );
+evs_check(
+	false !== strpos( $ccpa, 'This Notice at Collection and Cookie Policy explains how the operator of this website ("we", "us", "our") collects' )
+		&& false !== strpos( $ccpa, 'in compliance with the California Consumer Privacy Act of 2018' )
+		&& false !== strpos( $ccpa, 'Civ. Code §§ 1798.100 et seq.)' ),
+	'ccpa-california/en: the opening names the operator and cites the California Consumer Privacy Act'
+);
 $es = $strip->invoke( null, evs_substituted( $root . '/admin/modules/cookie-policy-generator/templates/gdpr-strict/es.md' ) );
-evs_check( false === strpos( $es, 'UE 2016/679) y la Directiva ePrivacy' ), 'gdpr-strict/es: the opening sentence is dropped whole' );
+evs_check( false !== strpos( $es, 'explica cómo el titular de este sitio web ("nosotros") utiliza' ) && false !== strpos( $es, 'UE 2016/679) y la Directiva ePrivacy' ), 'gdpr-strict/es: the opening stays whole with the citation' );
+
+// A saved name is left exactly where the scaffold puts it.
+if ( null !== $naming ) {
+	$src = (string) file_get_contents( $root . '/admin/modules/cookie-policy-generator/templates/gdpr-strict/cs.md' );
+	evs_check( $src === $naming->invoke( null, $src, 'cs', 'Acme s.r.o.' ), 'a saved name leaves the scaffold untouched' );
+	evs_check( $src !== $naming->invoke( null, $src, 'cs', '  ' ), 'a name of blanks counts as no name' );
+	evs_check( "- **Data controller:** {{COMPANY_NAME}}\n" === $naming->invoke( null, "- **Data controller:** {{COMPANY_NAME}}\n", 'en', '' ), 'a label row holding only the name is left for the label stripper to drop' );
+}
 $de = $strip->invoke( null, evs_substituted( $root . '/admin/modules/cookie-policy-generator/templates/ccpa-california/de.md' ) );
 evs_check( false === strpos( $de, '****' ) && 1 !== preg_match( '/^##[^\n]*\n\s*\z/m', $de ), 'ccpa-california/de: the lone emptied contact line goes, and the heading above it with it' );
 

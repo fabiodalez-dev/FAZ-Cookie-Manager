@@ -847,6 +847,62 @@ if ( ! $faz_update_mode ) {
 		);
 	}
 
+	// No controller saved: the opening sentence names the controller as its
+	// subject and is the one place each document cites its law. Dropping it
+	// for want of a name took the law out of the policy, and the two E2E
+	// checks of v1-17-2-features.spec.ts (7: the CCPA page says "California
+	// Consumer Privacy Act"; 7b: the pt_BR page says "Política de Cookies",
+	// the H1 being stripped) had nothing left to find. Rendered end to end for
+	// every language of the three jurisdictions that render without a name;
+	// POPIA refuses an incomplete configuration outright (popia-incomplete-*),
+	// and its scaffolds are covered at pipeline level by
+	// test-policy-empty-value-sentences-php.php.
+	$faz_formula = array(
+		'en'    => 'the operator of this website',
+		'it'    => 'il titolare di questo sito',
+		'de'    => 'der Betreiber dieser Website',
+		'fr'    => "l'exploitant de ce site",
+		'es'    => 'el titular de este sitio web',
+		'pt-BR' => 'o responsável por este site',
+		'nl'    => 'de beheerder van deze website',
+		'cs'    => 'provozovatel tohoto webu',
+		'hr'    => 'voditelj ove web stranice',
+		'bg'    => 'операторът на този уебсайт',
+	);
+	$faz_law = array( 'gdpr-strict' => '2016/679', 'ccpa-california' => 'CCPA', 'lgpd-brazil' => 'LGPD' );
+	$faz_unnamed_ok = 0;
+	$faz_unnamed    = array();
+	foreach ( $faz_law as $faz_jur => $faz_marker ) {
+		foreach ( $faz_formula as $faz_lang => $faz_phrase ) {
+			$GLOBALS['faz_test_state']['options']       = array( 'faz_cookie_policy_data' => array( 'jurisdiction' => $faz_jur ) );
+			$GLOBALS['faz_test_state']['locale']        = 'en_US';
+			$GLOBALS['faz_test_state']['locale_stack']  = array();
+			$GLOBALS['faz_test_state']['translate']     = false;
+			$GLOBALS['faz_test_state']['is_admin_user'] = false;
+			$GLOBALS['wpdb']->rows           = array();
+			$GLOBALS['wpdb']->tables_present = true;
+			faz_reset_renderer_statics();
+			$faz_text = html_entity_decode( strip_tags( Renderer::render( array( 'lang' => 'pt-BR' === $faz_lang ? 'pt_BR' : $faz_lang, 'jurisdiction' => $faz_jur ) ) ), ENT_QUOTES, 'UTF-8' );
+			$faz_unnamed[ $faz_jur . '/' . $faz_lang ] = $faz_text;
+			// The formula is followed by the rest of the opening and the law it
+			// cites, in the same paragraph.
+			if ( 1 === preg_match( '/' . preg_quote( $faz_phrase, '/' ) . '[^\n]*' . preg_quote( $faz_marker, '/' ) . '/u', $faz_text ) && false === strpos( $faz_text, '****' ) ) {
+				++$faz_unnamed_ok;
+			} else {
+				echo "      {$faz_jur}/{$faz_lang}: no opening with the neutral formula and {$faz_marker}\n";
+			}
+		}
+	}
+	assert_true( 30 === $faz_unnamed_ok, "with no controller saved, all 30 GDPR/CCPA/LGPD documents keep an opening that names the controller neutrally and cites the law ({$faz_unnamed_ok}/30)" );
+	assert_true(
+		false !== strpos( $faz_unnamed['ccpa-california/en'], 'California Consumer Privacy Act' ),
+		'E2E v1-17-2 test 7: the CCPA document with no controller saved says "California Consumer Privacy Act"'
+	);
+	assert_true(
+		false !== strpos( $faz_unnamed['lgpd-brazil/pt-BR'], 'Política de Cookies' ) && false === strpos( $faz_unnamed['lgpd-brazil/pt-BR'], 'Last updated:' ),
+		'E2E v1-17-2 test 7b: the lang="pt_BR" LGPD document with no controller saved says "Política de Cookies" and nothing English'
+	);
+
 	// The wordpress-internal category must never surface publicly, in any
 	// fixture — the standing rule in CLAUDE.md.
 	foreach ( $rendered_all as $name => $html ) {

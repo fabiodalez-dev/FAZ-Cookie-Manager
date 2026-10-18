@@ -80,6 +80,48 @@ class Renderer {
 	private static $public_cookie_rows_cache = null;
 
 	/**
+	 * How the policy names its controller when no name is saved, in each
+	 * template language.
+	 *
+	 * Every scaffold opens with the controller as the SUBJECT of the sentence
+	 * that also states the law the document is written under (`explains how
+	 * **{{COMPANY_NAME}}** ("we" …) uses cookies …, in compliance with the
+	 * California Consumer Privacy Act …`). Dropping that sentence for want of
+	 * a name took the applicable law out of the document. Each formula is a
+	 * nominative subject that agrees with the verb that follows it in every
+	 * scaffold of its language, and none of them names a legal role (the
+	 * same phrase serves the GDPR, CCPA, LGPD and POPIA texts).
+	 *
+	 * Deliberately not gettext: the formula has to fit the bundled sentence
+	 * it is inserted into, and a translation written without that sentence
+	 * in view could break the grammar the scaffold relies on.
+	 */
+	const UNNAMED_CONTROLLER_LABELS = array(
+		'en'    => 'the operator of this website',
+		'it'    => 'il titolare di questo sito',
+		'fr'    => "l'exploitant de ce site",
+		'de'    => 'der Betreiber dieser Website',
+		'es'    => 'el titular de este sitio web',
+		'pt-BR' => 'o responsável por este site',
+		'bg'    => 'операторът на този уебсайт',
+		'cs'    => 'provozovatel tohoto webu',
+		'nl'    => 'de beheerder van deze website',
+		'hr'    => 'voditelj ove web stranice',
+	);
+
+	/**
+	 * Words a scaffold puts before the controller name that only fit a
+	 * company name, removed with it: `jak společnost **{{COMPANY_NAME}}**`
+	 * ("how the company …") in Czech, and the article of `como a
+	 * **{{COMPANY_NAME}}**` in Portuguese, which would otherwise read
+	 * `společnost provozovatel` and `a o responsável`.
+	 */
+	const UNNAMED_CONTROLLER_LEAD_WORDS = array(
+		'cs'    => array( 'společnost' ),
+		'pt-BR' => array( 'a' ),
+	);
+
+	/**
 	 * "None declared." in each template language: the services list when no
 	 * third-party service is declared. Used when the site has no translation
 	 * in the policy locale (policy_label()); the six with a catalogue match it.
@@ -267,6 +309,16 @@ class Renderer {
 		// FR-03 step 5: build data.
 		$data = $doc->build_data( $settings, $jurisdiction, $lang );
 
+		// With no controller name saved, the opening sentence names the
+		// controller with a neutral formula instead of an empty bold value, so
+		// the sentence — and the law it cites — stays in the document. Done on
+		// the scaffold, so the version hash follows the text visitors read.
+		$scaffold = self::name_unnamed_controller(
+			$scaffold,
+			$lang,
+			isset( $data['COMPANY_NAME'] ) && is_scalar( $data['COMPANY_NAME'] ) ? (string) $data['COMPANY_NAME'] : ''
+		);
+
 		// FR-03 step 6+7: substitute + convert.
 		//
 		// HTML-valued tokens (COOKIE_CATEGORIES, THIRD_PARTY_SERVICES) MUST NOT
@@ -308,11 +360,12 @@ class Renderer {
 		// trailing whitespace/em-dashes/commas, visually broken on the public
 		// policy page. Reported by Gooloo on 1.16.1.
 		$markdown = self::strip_empty_label_lines( $markdown );
-		// Same defect in running prose: `how **{{COMPANY_NAME}}** ("we" …)` and
-		// `contact us at **{{COMPANY_EMAIL}}**` printed `how ****` and
-		// `contact us at ****` to visitors when the controller identity was not
-		// saved yet. The sentence carrying the empty value is dropped instead;
-		// the administrator still gets the incomplete-configuration notice.
+		// Same defect in running prose: `contact us at **{{COMPANY_EMAIL}}**`
+		// printed `contact us at ****` to visitors when the contact was not
+		// saved yet. A sentence that exists only to give that value is dropped;
+		// the controller name never reaches this step empty, because
+		// name_unnamed_controller() already replaced it. The administrator
+		// still gets the incomplete-configuration notice.
 		$markdown = self::strip_empty_value_sentences( $markdown );
 		// Same class of defect for inline links: an empty URL placeholder
 		// would otherwise leave literal `[label]()` markdown in the output
@@ -1257,6 +1310,44 @@ class Renderer {
 		// brackets so nested/malformed pairs are left untouched.
 		$cleaned = preg_replace( '/\[([^\]\[\n]*)\]\([ \t]*\)/', '$1', $markdown );
 		return null === $cleaned ? $markdown : $cleaned;
+	}
+
+	/**
+	 * Name the controller in the scaffold when no name is saved.
+	 *
+	 * Replaces the bold `**{{COMPANY_NAME}}**` of running prose — in the
+	 * shipped scaffolds, the subject of the opening sentence — with the
+	 * neutral formula of the template language, taking with it a lead word
+	 * that only fits a company name (UNNAMED_CONTROLLER_LEAD_WORDS). The
+	 * formula is plain text: bold marked the saved name, not the sentence.
+	 *
+	 * Label rows (`- **Data controller:** {{COMPANY_NAME}}`) are not bold
+	 * around the placeholder and are left alone: a row whose only content is
+	 * the missing name is dropped by strip_empty_label_lines(), as before.
+	 *
+	 * @param string $scaffold     Scaffold markdown, before substitution.
+	 * @param string $lang         Template language.
+	 * @param string $company_name Escaped controller name from build_data().
+	 * @return string
+	 */
+	private static function name_unnamed_controller( $scaffold, $lang, $company_name ) {
+		if ( '' !== trim( (string) $company_name ) || false === strpos( $scaffold, '**{{COMPANY_NAME}}**' ) ) {
+			return $scaffold;
+		}
+		$formula = isset( self::UNNAMED_CONTROLLER_LABELS[ $lang ] ) ? self::UNNAMED_CONTROLLER_LABELS[ $lang ] : self::UNNAMED_CONTROLLER_LABELS['en'];
+		$lead    = '';
+		if ( isset( self::UNNAMED_CONTROLLER_LEAD_WORDS[ $lang ] ) ) {
+			$words = array_map(
+				function ( $word ) {
+					return preg_quote( $word, '/' );
+				},
+				self::UNNAMED_CONTROLLER_LEAD_WORDS[ $lang ]
+			);
+			// A whole word, preceded by whitespace: never the tail of another.
+			$lead = '(?:(?<=\s)(?:' . implode( '|', $words ) . ')[ \t]+)?';
+		}
+		$named = preg_replace( '/' . $lead . '\*\*\{\{COMPANY_NAME\}\}\*\*/u', $formula, $scaffold );
+		return null === $named ? $scaffold : $named;
 	}
 
 	/**
