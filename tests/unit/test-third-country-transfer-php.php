@@ -640,7 +640,7 @@ assert_eq( count( $faz_list_keys() ), count( Generator::JURISDICTIONS ), 'cache:
 Renderer::clear_cookie_declaration_cache();
 assert_eq( $faz_list_keys(), array(), 'cache: clear_cookie_declaration_cache() removes the jurisdiction-keyed cookie-table entries' );
 
-// Restore the two-row inventory for the shared-query check below.
+// Restore a flagged `_ga` inventory for the shared-query check below.
 $wpdb->cookies_rows = array(
 	array(
 		'cookie_name'   => '_ga',

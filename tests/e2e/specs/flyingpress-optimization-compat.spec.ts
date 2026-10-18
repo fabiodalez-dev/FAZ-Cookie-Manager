@@ -401,7 +401,6 @@ function buildBaseline(html: string): Baseline {
 
 const EXECUTABLE_TYPES = new Set(['', 'text/javascript', 'application/javascript', 'module']);
 
-/** (a) every baseline FAZ handle is still a live, unmodified script. */
 /**
  * `src` as the baseline would have it when the page itself moved FAZ's assets
  * to another host: a URL on `cdnHost` is re-based onto the origin of the
@@ -422,6 +421,8 @@ function rebaseCdnSrc(src: string, expectedSrc: string, cdnHost?: string): strin
 }
 
 /**
+ * (a) every baseline FAZ handle is still a live, unmodified script.
+ *
  * @param options.cdnHost A host the scenario itself serves FAZ assets from
  *   (test 25's script_loader_src filter): the change to that host is the
  *   premise, not a violation, so src is compared with it re-based onto the

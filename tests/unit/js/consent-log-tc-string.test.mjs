@@ -127,7 +127,8 @@ function purposeBits(tcString) {
     const v = chars.indexOf(ch);
     for (let b = 5; b >= 0; b--) bits.push((v >> b) & 1);
   }
-  // PurposesConsent: 24 bits at offset 152 of the core segment.
+  // PurposesConsent: 24 bits at offset 152 of the core segment; only the
+  // first 11 (the defined purposes) are compared.
   return bits.slice(152, 152 + 11).join('');
 }
 
