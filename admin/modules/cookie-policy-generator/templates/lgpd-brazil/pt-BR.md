@@ -69,7 +69,7 @@ Você possui os seguintes direitos:
 - **VIII — Informação** sobre a possibilidade de não fornecer consentimento e suas consequências
 - **IX — Revogação do consentimento** (Art. 8, § 5º)
 
-Para exercer estes direitos, contate o controlador em **{{COMPANY_EMAIL}}** ou o Encarregado de Dados indicado no topo desta política. Responderemos em prazo razoável conforme Art. 19 LGPD.
+Para exercer estes direitos, contate o controlador em **{{COMPANY_EMAIL}}** ou o Encarregado de Dados indicado no topo desta política. A confirmação da existência de tratamento e o acesso aos dados são fornecidos de imediato, em formato simplificado, ou por meio de declaração clara e completa, no prazo de até 15 dias contados da data da sua requisição (Art. 19 LGPD). As demais solicitações são atendidas sem custos, nos prazos e nos termos previstos em regulamento (Art. 18, § 5º LGPD).
 
 ## Autoridade Nacional de Proteção de Dados (ANPD)
 

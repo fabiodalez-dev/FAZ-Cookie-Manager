@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: FAZ Cookie Manager 1.34.1\n"
+"Project-Id-Version: FAZ Cookie Manager 1.34.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-18T11:04:45+00:00\n"
+"POT-Creation-Date: 2026-10-18T14:42:27+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
@@ -139,13 +139,13 @@ msgid "Cookie Name"
 msgstr ""
 
 #: admin/class-admin.php:586
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:595
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:634
 #: admin/views/cookies.php:176 includes/class-cookie-table-shortcode.php:280
 msgid "Domain"
 msgstr ""
 
 #: admin/class-admin.php:587
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:596
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:635
 #: admin/views/cookies.php:177
 #: frontend/modules/shortcodes/class-shortcodes.php:285
 #: includes/class-cookie-table-shortcode.php:281
@@ -157,7 +157,7 @@ msgid "e.g. 1 year"
 msgstr ""
 
 #: admin/class-admin.php:589
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:597
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:636
 #: admin/views/banner.php:830 admin/views/banner.php:878
 #: admin/views/cookies.php:66 admin/views/cookies.php:178
 #: admin/views/cookies.php:295
@@ -2447,96 +2447,100 @@ msgstr ""
 msgid "Complete all fields required for the selected jurisdiction before saving or previewing the Cookie Policy."
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:594
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:633
 #: admin/views/system-status.php:213
 #: frontend/modules/shortcodes/class-shortcodes.php:283
 #: includes/class-cookie-table-shortcode.php:279
 msgid "Cookie"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:598
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:637
 msgid "cookies"
 msgstr ""
 
 #. translators: %s: recipient country name.
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:600
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:639
 #, php-format
 msgid "Transfers personal data to: %s"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:994
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1033
 msgid "International data transfers"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:996
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1035
 msgid "Recipient country:"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:998
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1037
 #: frontend/modules/shortcodes/class-shortcodes.php:1134
 #: includes/class-cookie-table-shortcode.php:246
 msgid "Safeguard:"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1042
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1081
 msgid "Some cookies listed above may transfer your personal data to a country outside the EU/EEA that does not have an EU adequacy decision. Under Articles 44 to 49 of the GDPR, such transfers require a valid transfer mechanism (for example an adequacy decision, Standard Contractual Clauses, or your explicit and informed consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1044
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1083
 msgid "Some cookies listed above may transfer your personal data outside Brazil. Under Articles 33 to 36 of the LGPD, such transfers require a valid transfer mechanism (for example a destination country recognised by the ANPD as providing an adequate level of protection, standard contractual clauses approved by the ANPD, or your specific and highlighted consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1046
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1085
 msgid "Some cookies listed above may transfer your personal information outside South Africa. Under section 72 of POPIA, such transfers require a valid ground (for example a recipient bound by a law, binding corporate rules or a binding agreement that provides a substantially similar level of protection, or your consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1048
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1087
 msgid "Some cookies listed above may transfer your personal information to a country other than the one you are browsing from. The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1069
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1108
 msgid "Transfers personal data outside the EU/EEA"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1070
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1109
 msgid "transfers personal data outside the EU/EEA"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1073
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1112
 msgid "Transfers personal data outside Brazil"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1074
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1113
 msgid "transfers personal data outside Brazil"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1077
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1116
 msgid "Transfers personal information outside South Africa"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1078
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1117
 msgid "transfers personal information outside South Africa"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1081
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1120
 msgid "Transfers personal data to another country"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1082
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1121
 msgid "transfers personal data to another country"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1470
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1588
 msgid "None declared."
 msgstr ""
 
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1603
+msgid "No cookies declared."
+msgstr ""
+
 #. translators: 1: jurisdiction, 2: lang
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1539
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1713
 #, php-format
 msgid "FAZ Cookie Policy: no template scaffold found for jurisdiction \"%1$s\" and language \"%2$s\". Configure the generator under FAZ Cookie Manager → Cookie Policy."
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1557
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1731
 msgid "FAZ Cookie Policy: complete the fields required for the selected jurisdiction before publishing this policy."
 msgstr ""
 
@@ -6030,7 +6034,7 @@ msgstr ""
 msgid "Daily"
 msgstr ""
 
-#: admin/views/settings.php:444 includes/class-activator.php:747
+#: admin/views/settings.php:444 includes/class-activator.php:750
 msgid "Weekly"
 msgstr ""
 
@@ -7348,15 +7352,15 @@ msgstr ""
 msgid "Manage Cookie Preferences"
 msgstr ""
 
-#: includes/class-activator.php:753
+#: includes/class-activator.php:756
 msgid "Once Daily (FAZ)"
 msgstr ""
 
-#: includes/class-activator.php:759
+#: includes/class-activator.php:762
 msgid "Once Weekly (FAZ)"
 msgstr ""
 
-#: includes/class-activator.php:765
+#: includes/class-activator.php:768
 msgid "Once Monthly (FAZ)"
 msgstr ""
 
@@ -8052,30 +8056,30 @@ msgstr ""
 msgid "OVERDUE by %s — WP-Cron may not be running"
 msgstr ""
 
-#: includes/class-geolocation.php:1167
+#: includes/class-geolocation.php:1182
 msgid "MaxMind license key is required."
 msgstr ""
 
 #. translators: %s: error message
-#: includes/class-geolocation.php:1194
+#: includes/class-geolocation.php:1209
 #, php-format
 msgid "Download failed: %s"
 msgstr ""
 
-#: includes/class-geolocation.php:1255
+#: includes/class-geolocation.php:1270
 msgid "PharData extension is required to extract the database."
 msgstr ""
 
-#: includes/class-geolocation.php:1276 includes/class-geolocation.php:1308
+#: includes/class-geolocation.php:1291 includes/class-geolocation.php:1323
 msgid "Failed to copy database file."
 msgstr ""
 
-#: includes/class-geolocation.php:1331
+#: includes/class-geolocation.php:1346
 msgid "No .mmdb file found in the archive."
 msgstr ""
 
 #. translators: %s: error message
-#: includes/class-geolocation.php:1350
+#: includes/class-geolocation.php:1365
 #, php-format
 msgid "Extraction failed: %s"
 msgstr ""

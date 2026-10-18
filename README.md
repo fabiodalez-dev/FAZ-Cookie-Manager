@@ -749,6 +749,7 @@ Only the most recent release is listed here. The complete history is in [CHANGEL
 - Fixed: The browser-language switch gave up after 500 ms, so visitors on slower hosts kept the default-language banner.
 - Fixed: System Status "Copy" included help text and the full provider catalogue, which forums rejected as spam; it now copies the readings only.
 - Fixed: The Czech cookie policy said consent was asked before strictly necessary cookies were set; it now says before optional ones, in the templates and in the translated policy strings (thanks to vvvamik, #331).
+- Fixed: Generated cookie policies no longer leave the "Cookies used" heading empty when no cookie is declared: it now says so, and that note and the "None declared." note under third-party services are written in the policy's language, Brazilian Portuguese, Spanish and Bulgarian included, instead of English. The Brazilian LGPD policy now gives the Art. 19 deadlines for confirmation and access (immediately in simplified form, or a full statement within 15 days) instead of promising a "reasonable period".
 
 ### 1.34.1 — 2026-10-10
 

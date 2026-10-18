@@ -63,15 +63,19 @@ $GLOBALS['faz_catalogue']    = array(
 );
 
 function faz_wp_locale( $lang ) {
-	$map = array( 'en' => 'en_US', 'it' => 'it_IT' );
+	$map = array( 'en' => 'en_US', 'it' => 'it_IT', 'pt-BR' => 'pt_BR', 'es' => 'es_ES', 'bg' => 'bg_BG', 'de' => 'de_DE', 'fr' => 'fr_FR', 'nl' => 'nl_NL', 'cs' => 'cs_CZ', 'hr' => 'hr' );
 	return isset( $map[ $lang ] ) ? $map[ $lang ] : $lang;
 }
 function get_locale() {
 	return $GLOBALS['faz_locale'];
 }
+$GLOBALS['faz_unavailable_locales'] = array();
 function switch_to_locale( $locale ) {
 	if ( $locale === $GLOBALS['faz_locale'] ) {
 		return false; // core: already in that locale
+	}
+	if ( in_array( $locale, $GLOBALS['faz_unavailable_locales'], true ) ) {
+		return false; // core: the locale is not installed
 	}
 	$GLOBALS['faz_locale_stack'][] = $GLOBALS['faz_locale'];
 	$GLOBALS['faz_locale']         = $locale;
@@ -294,6 +298,54 @@ assert_eq( $services->invoke( null, array(), 'it' ), 'Nessuno dichiarato.', '"No
 assert_eq( $GLOBALS['faz_locale'], 'en_US', 'the ambient locale is restored after the services fallback' );
 assert_eq( $services->invoke( null, array(), 'en' ), 'None declared.', '"None declared." stays English for lang="en"' );
 assert_eq( $services->invoke( null, array( 'third_party_services' => array( 'ga4' ) ), 'it' ), 'Google Analytics 4', 'a declared service list is unaffected by the language' );
+
+// 5. A policy language the site has no translation for (pt-BR, es, bg on an
+//    English site, or any template language whose WordPress locale is not
+//    installed) printed the English msgid, and under an Italian ambient
+//    locale whose switch failed it printed the ITALIAN label inside a
+//    Brazilian policy. The label shipped for the template language is used.
+$faz_template_langs = array( 'en', 'it', 'de', 'fr', 'es', 'pt-BR', 'bg', 'cs', 'nl', 'hr' );
+$GLOBALS['faz_locale']              = 'en_US';
+$GLOBALS['faz_unavailable_locales'] = array( 'pt_BR', 'es_ES', 'bg_BG', 'de_DE', 'fr_FR', 'nl_NL', 'cs_CZ', 'hr' );
+$faz_seen = array();
+foreach ( $faz_template_langs as $faz_l ) {
+	$faz_label = $services->invoke( null, array(), $faz_l );
+	if ( 'en' === $faz_l ) {
+		assert_eq( $faz_label, 'None declared.', '"None declared." for lang="en"' );
+	} else {
+		assert_true( 'None declared.' !== $faz_label && '' !== $faz_label, '"None declared." is localised for lang="' . $faz_l . '" when the site has no ' . $faz_l . ' translation (got ' . $faz_label . ')' );
+	}
+	$faz_seen[ $faz_label ] = true;
+}
+assert_eq( count( $faz_seen ), count( $faz_template_langs ), 'every template language has its own "None declared." label' );
+assert_eq( $services->invoke( null, array(), 'pt-BR' ), 'Nenhum declarado.', 'the pt-BR LGPD policy says "Nenhum declarado."' );
+$GLOBALS['faz_locale'] = 'it_IT';
+assert_eq( $services->invoke( null, array(), 'pt-BR' ), 'Nenhum declarado.', 'an Italian ambient locale does not leak into a pt-BR policy when the switch fails' );
+assert_eq( $GLOBALS['faz_locale'], 'it_IT', 'and the ambient locale is untouched' );
+$GLOBALS['faz_unavailable_locales'] = array();
+$GLOBALS['faz_locale']              = 'en_US';
+assert_eq( $services->invoke( null, array(), 'it' ), 'Nessuno dichiarato.', 'a translation the site has still wins over the shipped label' );
+
+// 6. An empty inventory: the "Cookies used" heading stood over nothing. The
+//    list now says so, in the policy language.
+$faz_rows_saved     = $wpdb->cookies_rows;
+$wpdb->cookies_rows = array();
+$GLOBALS['faz_unavailable_locales'] = array( 'pt_BR', 'es_ES', 'bg_BG', 'de_DE', 'fr_FR', 'nl_NL', 'cs_CZ', 'hr' );
+$faz_seen = array();
+foreach ( $faz_template_langs as $faz_l ) {
+	$reset();
+	$faz_html = $cookie_list->invoke( null, $faz_l, 'gdpr-strict' );
+	assert_true( 1 === preg_match( '#^<p>[^<]+</p>$#', $faz_html ), 'an empty inventory renders one paragraph for lang="' . $faz_l . '" (got ' . var_export( $faz_html, true ) . ')' );
+	$faz_seen[ $faz_html ] = true;
+}
+assert_eq( count( $faz_seen ), count( $faz_template_langs ), 'every template language has its own empty-inventory sentence' );
+$reset();
+assert_eq( $cookie_list->invoke( null, 'en', 'gdpr-strict' ), '<p>No cookies declared.</p>', 'English empty-inventory sentence' );
+$reset();
+assert_eq( $cookie_list->invoke( null, 'pt-BR', 'lgpd-brazil' ), '<p>Nenhum cookie declarado.</p>', 'pt-BR empty-inventory sentence' );
+$GLOBALS['faz_unavailable_locales'] = array();
+$wpdb->cookies_rows = $faz_rows_saved;
+$reset();
 
 // ---------------------------------------------------------------------------
 echo "\n--\n";
