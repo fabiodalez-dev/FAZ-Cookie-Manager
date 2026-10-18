@@ -6337,6 +6337,23 @@ function _fazMutationObserver(mutations) {
                 // known to be present, so block-first sites get granular control
                 // here too. Presentation-only. #134/#146.
                 _fazRevealService(_fazResolveServiceId(blockingTarget, nodeService));
+                // A "lite embed": the frame shows its own srcdoc document (the
+                // site's facade with a play button) and has no live src, which
+                // the engine would ignore while srcdoc is there anyway. Its src
+                // is already parked in data-faz-src for the restore pass, so
+                // there is nothing to hide and nothing to back up — the server
+                // and the src setter keep such a frame visible, and replacing it
+                // with the consent placeholder took the site's facade away.
+                if (
+                    node.nodeName.toLowerCase() === "iframe" &&
+                    _fazHasLiveSrcdoc(node) &&
+                    !node.getAttribute("src") &&
+                    node.getAttribute("data-faz-src")
+                ) {
+                    if (!node.getAttribute("data-faz-category")) node.setAttribute("data-faz-category", nodeCategory || _fazImgCategory(node.getAttribute("data-faz-src")));
+                    node.classList.remove("faz-hidden");
+                    continue;
+                }
                 const uniqueID = ref._fazRandomString(8, false);
                 if (node.nodeName.toLowerCase() === "iframe")
                     _fazAddPlaceholder(node, uniqueID);
