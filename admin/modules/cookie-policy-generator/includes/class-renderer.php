@@ -1289,11 +1289,22 @@ class Renderer {
 			$out .= preg_match( '/^\s*(?:[-*+]|\d+\.|#{1,6})?\s*$/', $kept ) ? '' : rtrim( $kept );
 		}
 		// A heading whose only sentence went (the scaffold's closing
-		// "Contact" section) would stand over nothing: drop it too. Only when
-		// what follows is the end or a heading of the same or a higher level,
-		// so a heading directly followed by its own subsections stays.
-		$cleaned = preg_replace( '/^(#{1,6})[ \t][^\n]*\n(?:[ \t]*\n)*(?=\z|(?!\1#)#+[ \t])/m', '', $out );
-		return null === $cleaned ? $out : $cleaned;
+		// "Contact" section) would stand over nothing: drop it too.
+		return self::strip_headings_over_nothing( $out );
+	}
+
+	/**
+	 * Drop a heading left standing over nothing by the strip helpers.
+	 *
+	 * Only when what follows is the end or a heading of the same or a higher
+	 * level, so a heading directly followed by its own subsections stays.
+	 *
+	 * @param string $markdown Policy markdown.
+	 * @return string
+	 */
+	private static function strip_headings_over_nothing( $markdown ) {
+		$cleaned = preg_replace( '/^(#{1,6})[ \t][^\n]*\n(?:[ \t]*\n)*(?=\z|(?!\1#)#+[ \t])/m', '', $markdown );
+		return null === $cleaned ? $markdown : $cleaned;
 	}
 
 	/**
@@ -1302,6 +1313,12 @@ class Renderer {
 	 * Strips list items that render as a bold label with no value (plus any
 	 * trailing dashes/dots/commas), then collapses the blank lines the
 	 * deletion leaves behind. Falls back to the original markdown on PCRE error.
+	 *
+	 * When every item of a list goes, the sentence that introduced it goes
+	 * too, and so does a heading left over nothing: with no controller saved
+	 * the GDPR and POPIA scaffolds otherwise told visitors "The data
+	 * controller … is:" and stopped there. A list that keeps one item keeps
+	 * its introduction.
 	 *
 	 * @param string $markdown Raw policy markdown.
 	 * @return string Cleaned markdown.
@@ -1312,18 +1329,79 @@ class Renderer {
 		}
 		// `[\s\-—–·,]*` allows a mixture of whitespace, ASCII hyphen,
 		// en-dash, em-dash, middle dot and comma in the trailing run.
-		// `m` flag = ^/$ match per line.
+		// `m` flag = ^/$ match per line. Each removed item is first marked
+		// with a byte no scaffold carries, so the lists it emptied can be
+		// found; the mark is then removed exactly where the item was.
+		$mark    = "\x1A";
 		$pattern = '/^[ \t]*[-*][ \t]+\*\*[^*\n]+:\*\*[\s\-—–·,]*\r?$/mu';
-		$cleaned = preg_replace( $pattern, '', $markdown );
-		if ( null === $cleaned ) {
-			// Regex error (e.g. PCRE compile fail under exotic PHP build).
-			// Fall back to the un-cleaned source rather than nuking the policy.
-			return $markdown;
+		$marked  = false === strpos( $markdown, $mark ) ? preg_replace( $pattern, $mark, $markdown ) : null;
+		if ( null === $marked ) {
+			$marked = preg_replace( $pattern, '', $markdown );
+			if ( null === $marked ) {
+				// Regex error (e.g. PCRE compile fail under exotic PHP build).
+				// Fall back to the un-cleaned source rather than nuking the policy.
+				return $markdown;
+			}
+		}
+		$cleaned = $marked;
+		if ( false !== strpos( $marked, $mark ) ) {
+			$lines   = explode( "\n", $marked );
+			$dropped = false;
+			$count   = count( $lines );
+			for ( $i = 0; $i < $count; $i++ ) {
+				if ( $mark !== rtrim( $lines[ $i ], "\r" ) ) {
+					continue;
+				}
+				// The list around this item: contiguous item lines, removed or not.
+				$first = $i;
+				while ( $first > 0 && self::is_list_line( $lines[ $first - 1 ], $mark ) ) {
+					--$first;
+				}
+				$last = $i;
+				while ( $last + 1 < $count && self::is_list_line( $lines[ $last + 1 ], $mark ) ) {
+					++$last;
+				}
+				$i     = $last;
+				$whole = true;
+				for ( $k = $first; $k <= $last; $k++ ) {
+					if ( $mark !== rtrim( $lines[ $k ], "\r" ) ) {
+						$whole = false;
+						break;
+					}
+				}
+				if ( ! $whole ) {
+					continue;
+				}
+				$intro = $first - 1;
+				while ( $intro >= 0 && '' === trim( $lines[ $intro ] ) ) {
+					--$intro;
+				}
+				if ( $intro >= 0 && ':' === substr( rtrim( $lines[ $intro ] ), -1 ) && 1 !== preg_match( '/^[ \t]*(?:#|[-*+][ \t]|\d+\.[ \t])/', $lines[ $intro ] ) ) {
+					$lines[ $intro ] = $mark;
+					$dropped         = true;
+				}
+			}
+			$cleaned = str_replace( $mark, '', implode( "\n", $lines ) );
+			if ( $dropped ) {
+				$cleaned = self::strip_headings_over_nothing( $cleaned );
+			}
 		}
 		// Collapse the 2+ blank lines the deletion may have left behind so
 		// the markdown parser doesn't render extra paragraph spacing.
 		$cleaned = (string) preg_replace( "/(\r?\n){3,}/", "\n\n", $cleaned );
 		return $cleaned;
+	}
+
+	/**
+	 * Whether a markdown line is a list item, or one strip_empty_label_lines()
+	 * marked as removed.
+	 *
+	 * @param string $line Line, without its newline.
+	 * @param string $mark The removal mark.
+	 * @return bool
+	 */
+	private static function is_list_line( $line, $mark ) {
+		return $mark === rtrim( $line, "\r" ) || 1 === preg_match( '/^[ \t]*[-*+][ \t]/', $line );
 	}
 
 	/**

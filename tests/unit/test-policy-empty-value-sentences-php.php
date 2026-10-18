@@ -131,5 +131,43 @@ evs_check(
 );
 evs_check( "Text\n\n## Next\n" === $strip->invoke( null, "Text\n\n## Next\n" ), 'text without an empty value is returned unchanged' );
 
+// No controller saved at all: the label list goes, and the sentence that
+// introduced it ("The data controller … is:") must go with it rather than
+// stop on its colon in front of the next heading.
+$orphans = array();
+$kept    = array();
+foreach ( $templates as $file ) {
+	$name     = basename( dirname( $file ) ) . '/' . basename( $file );
+	$scaffold = (string) file_get_contents( $file );
+	preg_match_all( '/\{\{([A-Z_]+)\}\}/', $scaffold, $m );
+	$data = array();
+	foreach ( array_unique( $m[1] ) as $token ) {
+		$data[ $token ] = 0 === strpos( $token, 'COMPANY_' ) || 0 === strpos( $token, 'DPO_' ) || 0 === strpos( $token, 'INFO_OFFICER' ) ? '' : 'Filled' . $token;
+	}
+	$out = $strip->invoke( null, $labels->invoke( null, Generator::substitute( $scaffold, $data ) ) );
+	if ( preg_match( '/^(?![ \t]*(?:#|[-*+][ \t]))[^\n]*:[ \t]*\n(?:[ \t]*\n)*(?=#|\z)/mu', $out, $hit ) ) {
+		$orphans[] = $name . ' => ' . mb_substr( trim( $hit[0] ), 0, 50 );
+	}
+	// Control: with only the name saved the list keeps an item, and its
+	// introduction stays.
+	$data['COMPANY_NAME'] = 'Acme Srl';
+	$named                = $labels->invoke( null, Generator::substitute( $scaffold, $data ) );
+	if ( preg_match( '/^[^\n#\-*][^\n]*:[ \t]*\n\n[-*][ \t]+\*\*[^*\n]+:\*\*[ \t]*Acme Srl/mu', $named ) ) {
+		$kept[] = $name;
+	}
+}
+evs_check( array() === $orphans, 'with no controller saved, no sentence is left ending on its colon over an emptied list', implode( ' | ', $orphans ) );
+evs_check( count( $kept ) >= 20, 'control: with the name saved, the list introduction stays (' . count( $kept ) . ' scaffolds)' );
+evs_check(
+	"Intro:\n\n- **A:** x\n\n## Next\n" === $labels->invoke( null, "Intro:\n\n- **A:** x\n- **B:** \n\n## Next\n" ),
+	'a list that keeps one item keeps its introduction',
+	var_export( $labels->invoke( null, "Intro:\n\n- **A:** x\n- **B:** \n\n## Next\n" ), true )
+);
+evs_check(
+	"Text.\n\n## Next\n\nBody.\n" === $labels->invoke( null, "Text.\n\n## Who\n\nIntro:\n\n- **A:** \n- **B:** \n\n## Next\n\nBody.\n" ),
+	'an emptied list takes its introduction and the heading left over nothing',
+	var_export( $labels->invoke( null, "Text.\n\n## Who\n\nIntro:\n\n- **A:** \n- **B:** \n\n## Next\n\nBody.\n" ), true )
+);
+
 echo "policy-empty-value-sentences: " . ( $checks - $failed ) . " passed, {$failed} failed\n";
 exit( $failed ? 1 : 0 );
