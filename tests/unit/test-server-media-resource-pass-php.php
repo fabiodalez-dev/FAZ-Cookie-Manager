@@ -327,6 +327,23 @@ namespace {
 	$out = faz_ob_run( $fe, '<html><body><iframe src="' . $doc . '"></iframe></body></html>' );
 	assert_true( '"' . $doc . '"' === faz_raw_attr( $out, 'data-faz-src' ), 'a data: iframe whose document loads a tracker IS parked: nothing gates the sub-document once it is parsed' );
 
+	echo "\n-- tag-shaped text inside another tag's attribute value is not an element --\n";
+
+	// Tooltip and popover libraries keep HTML in data-* and title. The media
+	// pattern started a match at `<video` wherever it stood, so a value like
+	// the one below was rewritten in place: the parked attributes it injected
+	// carry double quotes, which closed the outer value early and broke the
+	// markup. The linear fallback already left such values alone; the pass now
+	// walks whole opening tags, as the style-attribute pass does.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><body><span class="tip" data-tip=\'<video poster="https://i.ytimg.com/vi/ID/hq.jpg">x\'>hover</span><span title="<embed src=\'https://www.youtube.com/embed/ID\'>">t</span></body></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'media tags quoted inside data-tip and title come out byte-identical' );
+
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><span data-tip=\'<video poster="https://i.ytimg.com/a.jpg">\'>h</span><video poster="https://i.ytimg.com/vi/ID/hqdefault.jpg"></video></body></html>' );
+	assert_true( false !== strpos( $out, 'data-tip=\'<video poster="https://i.ytimg.com/a.jpg">\'' ), 'the quoted one is left as it was' );
+	assert_true( '"https://i.ytimg.com/vi/ID/hqdefault.jpg"' === faz_raw_attr( $out, 'data-faz-poster' ), 'while the real <video> after it is still parked' );
+
 	echo "\n";
 	if ( 0 === $tests_failed ) {
 		echo "ALL PASS ({$tests_passed})\n";

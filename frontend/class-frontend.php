@@ -4794,10 +4794,17 @@ class Frontend {
 		// Like every pass here it never sees comments or script bodies (the
 		// inert stash at the top): a `<video poster=\"…\">` inside a JS
 		// string is text, and parking it broke the string and the script.
+		// Every opening tag is walked, as in the style-attribute pass, and the
+		// callback keeps only the media ones: a pattern anchored on the media
+		// names started a match wherever `<video` stood, including inside
+		// another tag's quoted value (`data-tip='<video poster="…">'`, the way
+		// tooltip libraries keep HTML), and the double-quoted keys it wrote
+		// there closed that value early. Walked whole, a quoted value is part
+		// of its own tag, which is how the linear fallback already read it.
 		if ( 0 !== preg_match( '/<(?:video|audio|source|embed|object|track|input)(?=[\s\/>])/i', $html ) ) {
 			$html = $this->run_markup_pass(
 				$html,
-				'#<(video|audio|source|embed|object|track|input)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'#<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				'media',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_media_resource_tag( $m, $providers, $blocked_categories );
@@ -5833,6 +5840,11 @@ class Frontend {
 		$attrs = isset( $m[2] ) ? $m[2] : '';
 		$close = isset( $m[3] ) ? $m[3] : '';
 		$full  = isset( $m[0] ) ? $m[0] : '';
+
+		// The pass walks every opening tag; only these fetch through it.
+		if ( ! in_array( $tag, array( 'video', 'audio', 'source', 'embed', 'object', 'track', 'input' ), true ) ) {
+			return $full;
+		}
 
 		switch ( $tag ) {
 			case 'video':
