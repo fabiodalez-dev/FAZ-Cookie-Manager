@@ -2988,7 +2988,12 @@ class Activator {
 	 *
 	 * @param string $slug          Category slug.
 	 * @param array  $fallback_data Default name/description if not in Category_Controller defaults.
-	 * @param bool   $prior_consent Whether prior consent is required. Default false.
+	 * @param bool   $prior_consent Whether the category is ACTIVE BEFORE consent
+	 *                              (the stored `prior_consent` flag, which
+	 *                              Geo_Runtime::default_consent() reads as the
+	 *                              GDPR default), i.e. NOT whether consent is
+	 *                              required first. Default false: off until
+	 *                              the visitor consents.
 	 * @param bool   $visibility    Whether visible on frontend. Default true.
 	 */
 	private static function ensure_category_by_slug( $slug, $fallback_data, $prior_consent = false, $visibility = true ) {
