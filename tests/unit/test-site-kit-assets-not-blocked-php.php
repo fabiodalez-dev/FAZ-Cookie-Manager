@@ -148,18 +148,6 @@ namespace {
 		return $m->invoke( $fe, $html );
 	}
 
-	function faz_raw_attr( $html, $name ) {
-		if ( preg_match( '/(?<![\w:-])' . preg_quote( $name, '/' ) . '=("[^"]*"|\'[^\']*\'|[^\s>]+)/i', $html, $m ) ) {
-			return $m[1];
-		}
-		return null;
-	}
-
-	/** The markup with every data-faz-style value blanked: what the ENGINE reads as live. */
-	function faz_live_part( $html ) {
-		return preg_replace( '/data-faz-style=("[^"]*"|\'[^\']*\')/i', 'data-faz-style=""', $html );
-	}
-
 	$catalogue = json_decode( file_get_contents( dirname( __DIR__, 2 ) . '/includes/data/known-providers.json' ), true );
 	$providers = array();
 	foreach ( (array) ( $catalogue['providers'] ?? $catalogue ) as $service ) {

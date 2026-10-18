@@ -119,8 +119,7 @@ namespace {
 		$GLOBALS['faz_fake_now'] += (int) $seconds;
 	}
 	function faz_reset() {
-		define( 'FAZ_TEST_EPOCH', 1760000000 );
-	$GLOBALS['faz_fake_now']   = 0;
+		$GLOBALS['faz_fake_now']   = 0;
 		$GLOBALS['faz_throttles']  = array();
 		$GLOBALS['faz_transients'] = array();
 		\FazCookie\Admin\Modules\Consentlogs\Includes\Controller::$rows = array();

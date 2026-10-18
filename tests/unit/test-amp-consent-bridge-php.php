@@ -263,21 +263,9 @@ namespace FazCookie\Admin\Modules\Consentlogs\Includes {
 
 namespace {
 	// The bridge delegates its scope judgement to the bootstrap predicate every
-	// server surface shares (faz_consent_cookie_scope_changed). Load the SHIPPED
-	// function — not a transcription of it — without booting the plugin, whose
-	// other cookie helpers this suite stubs for its fixtures.
-	$faz_bootstrap_source = file_get_contents( dirname( __DIR__, 2 ) . '/faz-cookie-manager.php' );
-	foreach ( array( 'faz_read_scoped_cookie_value', 'faz_consent_cookie_scope_changed' ) as $faz_shared_fn ) {
-		if ( function_exists( $faz_shared_fn ) ) {
-			continue;
-		}
-		if ( ! preg_match( '/\nfunction ' . $faz_shared_fn . '\(.*?\n}\n/s', $faz_bootstrap_source, $faz_shared_match ) ) {
-			fwrite( STDERR, "shared scope predicate {$faz_shared_fn}() not found in faz-cookie-manager.php\n" );
-			exit( 1 );
-		}
-		eval( $faz_shared_match[0] ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- loads the shipped function verbatim.
-	}
-	unset( $faz_bootstrap_source, $faz_shared_fn, $faz_shared_match );
+	// server surface shares (faz_consent_cookie_scope_changed). The SHIPPED
+	// function, not a transcription of it, is already loaded by
+	// helpers/load-consent-scope.php above, with faz_read_scoped_cookie_value().
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-amp-consent-rest.php';
 	// Shared with Frontend, Amp_Consent, Banner_Rest and the language seams: the
 	// one predicate that decides whether Cache Compatibility Mode applies. The

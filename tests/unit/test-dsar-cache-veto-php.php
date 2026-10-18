@@ -499,12 +499,15 @@ namespace {
 	$stamp                 = FazCookie\Includes\DSAR_Shortcode::issue_stamp();
 	$GLOBALS['__faz_now'] += 8;
 	$_POST                 = browser_post( $stamp );
-	check( true === $dsar->guard_submission( ctx() ), 'the first right (access) is accepted' );
+	check( true === $dsar->guard_submission( ctx() ), 'the first right (erasure) is accepted' );
 	$dsar->record_submission( 'subject@example.test' );
-	$second         = ctx();
-	$second['type'] = 'erasure';
-	$verdict        = $dsar->guard_submission( $second );
-	check( 'faz_dsar_email_throttled' === err_code( $verdict ), 'the second right (erasure) inside the hour is held by the per-email throttle' );
+	// ctx() and browser_post() both default to erasure: the second right has
+	// to be set on both, or this is the same right submitted twice.
+	$second             = ctx();
+	$second['type']     = 'access';
+	$_POST['dsar_type'] = 'access';
+	$verdict            = $dsar->guard_submission( $second );
+	check( 'faz_dsar_email_throttled' === err_code( $verdict ), 'the second right (access) inside the hour is held by the per-email throttle' );
 	check( false !== strpos( err_msg( $verdict ), '1 hour' ), 'the message still states the hour (F003)' );
 	check( false !== strpos( err_msg( $verdict ), 'email us directly' ), 'and names the email fallback like the other ceilings' );
 
