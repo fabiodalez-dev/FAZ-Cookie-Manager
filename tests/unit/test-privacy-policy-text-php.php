@@ -48,6 +48,13 @@ $settings['pageviews']['retention']=0;
 policy_check(strpos(Policy::facts($settings,array())['pageview_retention'],'no automatic')!==false,'unlimited retention disclosed');
 $root=dirname(__DIR__,2);
 foreach(array('MaxMind','ipinfo.io') as $provider) policy_check(strpos(file_get_contents($root.'/readme.txt'),$provider)!==false,'service documented in readme');
+// L8: the stored IP is a stable salted hash, i.e. pseudonymised, never
+// "anonymised" — in the generated text (above) and in the documentation.
+foreach(array('readme.txt','README.md') as $doc) {
+ $text=file_get_contents($root.'/'.$doc);
+ policy_check(strpos($text,'pseudonymised IP (salted one-way hash)')!==false,$doc.' describes the logged IP as pseudonymised');
+ policy_check(!preg_match('/^[^\n]*consent[ -]?(?:log|record)[^\n]*anonymi[sz]ed[^\n]*$/im',$text),$doc.' never calls the consent-log IP anonymised');
+}
 policy_check(strpos(Policy::build($settings,array()),'<h2>')===0,'builder produces policy HTML');
 
 foreach(array(false,true) as $optin) foreach(array('', 'configured-key') as $key) {
