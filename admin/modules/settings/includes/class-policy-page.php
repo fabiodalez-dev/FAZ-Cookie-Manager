@@ -78,7 +78,12 @@ class Policy_Page {
 			if ( 'publish' !== $page['status'] ) {
 				// Parked: the renderer would publish nothing for a visitor anyway
 				// (same gate), so the public banner is not pointed at the draft.
-				$warnings[] = __( 'The cookie policy page was saved as a draft because the company name and privacy contact email are not set yet. Fill them in on the Cookie Policy page, then publish the page and link it from the Cookie Banner page.', 'faz-cookie-manager' );
+				// POPIA's gate asks for more than the two-field floor, and naming
+				// only the name and email told an administrator who had saved
+				// them that nothing was left to do.
+				$warnings[] = 'popia' === $law
+					? __( 'The cookie policy page was saved as a draft because the details POPIA requires are not all set yet: the company name, address and privacy contact email, the Information Officer\'s name and email, and the privacy policy URL. Fill them in on the Cookie Policy page, then publish the page and link it from the Cookie Banner page.', 'faz-cookie-manager' )
+					: __( 'The cookie policy page was saved as a draft because the company name and privacy contact email are not set yet. Fill them in on the Cookie Policy page, then publish the page and link it from the Cookie Banner page.', 'faz-cookie-manager' );
 			} elseif ( ! self::link_banner( $language, $page['url'] ) ) {
 				$warnings[] = __( 'The cookie policy page was created, but the banner could not be linked to it. Set the privacy link on the Cookie Banner page.', 'faz-cookie-manager' );
 			}

@@ -462,7 +462,7 @@ $faz_setup_step_titles = array(
 						<input type="checkbox" id="faz-setup-create-cookie-page">
 						<span class="faz-setup-toggle-body">
 							<span class="faz-setup-toggle-label"><?php esc_html_e( 'Create the cookie policy page when setup finishes', 'faz-cookie-manager' ); ?></span>
-							<span class="faz-setup-toggle-help"><?php esc_html_e( 'The page is created from the standard template in the selected language. It is published immediately, visible to visitors, only when your company name and privacy contact email are already saved on the Cookie Policy page; otherwise it is saved as a draft for you to complete and publish. An existing generated page in that language is reused and custom banner links are kept.', 'faz-cookie-manager' ); ?></span>
+							<span class="faz-setup-toggle-help"><?php esc_html_e( 'The page is created from the standard template in the selected language. It is published immediately, visible to visitors, only when the company details the selected law requires are already saved on the Cookie Policy page: the company name and privacy contact email, and for South Africa (POPIA) also the company address, the Information Officer\'s name and email and the privacy policy URL. Otherwise it is saved as a draft for you to complete and publish. An existing generated page in that language is reused and custom banner links are kept.', 'faz-cookie-manager' ); ?></span>
 						</span>
 					</label>
 					<p id="faz-setup-policy-unavailable" class="faz-setup-inline-note" hidden><?php esc_html_e( 'No cookie policy template ships in the selected language for this law, so the page cannot be created here. Write the policy on the Cookie Policy page instead.', 'faz-cookie-manager' ); ?></p>
