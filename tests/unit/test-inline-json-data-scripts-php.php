@@ -171,18 +171,6 @@ namespace {
 		return $m->invoke( $fe, $html );
 	}
 
-	function faz_raw_attr( $html, $name ) {
-		if ( preg_match( '/(?<![\w:-])' . preg_quote( $name, '/' ) . '=("[^"]*"|\'[^\']*\'|[^\s>]+)/i', $html, $m ) ) {
-			return $m[1];
-		}
-		return null;
-	}
-
-	/** The markup with every data-faz-style value blanked: what the ENGINE reads as live. */
-	function faz_live_part( $html ) {
-		return preg_replace( '/data-faz-style=("[^"]*"|\'[^\']*\')/i', 'data-faz-style=""', $html );
-	}
-
 	// Inline bodies are matched against CODE SIGNATURES only (patterns with no
 	// '.' or '/'); URL fragments are applied to src attributes. That is what
 	// broke Query Monitor: its JSON names the page's handles and callbacks,
@@ -230,7 +218,7 @@ namespace {
 	$out  = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $crlf ) );
 	assert_true( $is_live( $out, $crlf ), 'the same data with CRLF line endings stays untouched' );
 
-		$str = '<script>var Notes = {"text":"}; fbq(\\"track\\"); var z = {\\"a\\":1"};</script>';
+	$str = '<script>var Notes = {"text":"}; fbq(\\"track\\"); var z = {\\"a\\":1"};</script>';
 	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $str ) );
 	assert_true( $is_live( $out, $str ), 'code-looking text inside a JSON string is still just a string' );
 
