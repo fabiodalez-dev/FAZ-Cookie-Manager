@@ -454,6 +454,86 @@ namespace {
 		'the previously declined step is what actually got done on the retry'
 	);
 
+	// --- The created_at_gmt backfill does not hold the batch open ------------
+	//
+	// ensure_consent_log_gmt_column() reports false until every existing row
+	// is converted, 500 per call. Folded into the batch result it withheld
+	// faz_migrations_version, so every admin_init — admin-ajax included, nopriv
+	// requests too — re-ran the whole batch, a 500-row backfill and the
+	// faz_clear_cache in the `finally`, which the page-cache adapters turn into
+	// a site-wide purge. Once the column exists the batch is complete; the
+	// backfill continues on its own cron event and the readers fall back for
+	// the rows it has not reached.
+	if ( ! defined( 'ARRAY_A' ) ) {
+		define( 'ARRAY_A', 'ARRAY_A' );
+	}
+	if ( ! function_exists( 'get_gmt_from_date' ) ) {
+		function get_gmt_from_date( $date, $format = 'Y-m-d H:i:s' ) { return $date; }
+	}
+	if ( ! function_exists( 'wp_next_scheduled' ) ) {
+		function wp_next_scheduled( $hook ) { return isset( $GLOBALS['faz_geo_cron'][ $hook ] ) ? $GLOBALS['faz_geo_cron'][ $hook ] : false; }
+	}
+	if ( ! function_exists( 'wp_schedule_single_event' ) ) {
+		function wp_schedule_single_event( $time, $hook ) { $GLOBALS['faz_geo_cron'][ $hook ] = $time; return true; }
+	}
+	if ( ! function_exists( 'wp_clear_scheduled_hook' ) ) {
+		function wp_clear_scheduled_hook( $hook ) { unset( $GLOBALS['faz_geo_cron'][ $hook ] ); return 1; }
+	}
+	class Faz_Geo_Wpdb_Gmt_Pending extends Faz_Geo_Wpdb {
+		public $backfill_reads = 0;
+		public function prepare( $q ) {
+			$args = array_slice( func_get_args(), 1 );
+			foreach ( $args as $a ) { $q = preg_replace( '/%[sd]/', is_int( $a ) ? (string) $a : "'" . $a . "'", $q, 1 ); }
+			return $q;
+		}
+		public function get_var( $q = null ) {
+			if ( false !== strpos( (string) $q, "SHOW TABLES LIKE 'wp_faz_consent_logs'" ) ) { return 'wp_faz_consent_logs'; }
+			if ( false !== stripos( (string) $q, 'SHOW COLUMNS FROM `wp_faz_consent_logs`' ) ) { return 'created_at_gmt'; }
+			return null;
+		}
+		public function get_results( $q = null, $o = null ) {
+			if ( false === strpos( (string) $q, 'created_at_gmt IS NULL' ) ) { return array(); }
+			++$this->backfill_reads;
+			// A large table: every batch is full, so the backfill is never done
+			// within one request.
+			$rows = array();
+			for ( $i = 1; $i <= 500; $i++ ) { $rows[] = array( 'log_id' => (string) ( $this->backfill_reads * 1000 + $i ), 'created_at' => '2026-01-15 10:00:00' ); }
+			return $rows;
+		}
+	}
+	$GLOBALS['wpdb']                  = new Faz_Geo_Wpdb_Gmt_Pending();
+	$GLOBALS['faz_geo_options']       = array();
+	$GLOBALS['faz_geo_actions']       = array();
+	$GLOBALS['faz_geo_cron']          = array();
+	$GLOBALS['faz_geo_refuse_option'] = '';
+	$previous_level = error_reporting( E_ALL & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED );
+	Activator::run_pending_migrations();
+	geo_check(
+		1 === $GLOBALS['wpdb']->backfill_reads,
+		'PRECONDITION: the batch reached the created_at_gmt backfill, and a batch of it ran'
+	);
+	geo_check(
+		Activator::MIGRATIONS_VERSION === get_option( 'faz_migrations_version' ),
+		'a backfill still in progress does not withhold faz_migrations_version'
+	);
+	geo_check(
+		! empty( $GLOBALS['faz_geo_cron'][ Activator::GMT_BACKFILL_HOOK ] ),
+		'the rest of the backfill is left to its cron continuation'
+	);
+	$GLOBALS['faz_geo_actions'] = array();
+	for ( $i = 0; $i < 5; $i++ ) {
+		Activator::run_pending_migrations();
+	}
+	error_reporting( $previous_level );
+	geo_check(
+		! in_array( 'faz_clear_cache', $GLOBALS['faz_geo_actions'], true ),
+		'later admin loads take the fast path: no faz_clear_cache (page-cache purge) per request'
+	);
+	geo_check(
+		1 === $GLOBALS['wpdb']->backfill_reads,
+		'and run no backfill batch of their own'
+	);
+
 	echo "\n" . $run . ' checks, ' . $failed . " failed\n";
 	exit( $failed > 0 ? 1 : 0 );
 }
