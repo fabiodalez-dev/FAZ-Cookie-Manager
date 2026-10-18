@@ -735,6 +735,13 @@ async function testConsentManagement(browser) {
 
 	// C01 — Proof of consent logged (check via admin API)
 	{
+		// C04b logged a rejection from this same address under another consent
+		// id, and the fixed waits since then add up to about 6 s plus page loads.
+		// The per-IP window (10 s) drops a NEW id from the same address inside
+		// it, so the acceptance below could be dropped and C01b, which looks for
+		// this click's own row, would fail with no defect. Let the window close
+		// first, as TF14 and TF15 do.
+		await new Promise((resolve) => setTimeout(resolve, 11000));
 		const { ctx, page } = await freshPage(browser);
 
 		// First, generate consent
