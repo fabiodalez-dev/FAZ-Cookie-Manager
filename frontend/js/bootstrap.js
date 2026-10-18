@@ -1410,8 +1410,13 @@
                     // only the splice completes (`…:u` + `rl(https://…)` + `}`).
                     // So the spliced text is asked too, exactly as the engine
                     // will read it.
+                    // waitingFragment(): a fragment with a held insertion still
+                    // queued INTO it, as in the Node and ParentNode wrappers.
+                    // Inserted natively it lands empty, and the held child
+                    // later replays into the orphaned fragment and is lost.
                     var carries = resources(node).length
                         || styleRisk(node)
+                        || waitingFragment(node)
                         || cssURL(surrounded())
                         || !!(styleOwner && cssRisk(containerText(styleOwner, null, name), [node]))
                         || !!(styleOwner && name === 'insertNode' && cssURL(rangeResult(range, styleOwner, node)));
@@ -3010,12 +3015,20 @@
         var tasks = queue;
         queue = [];
         immediate = safety;
-        // Every queued insertion is about to land: nothing is waiting INTO a
-        // container any more, and nothing will queue again on this path.
-        into = new WeakMap();
         replaying++;
         try { judgeScripts(safety); } finally { replaying--; }
+        // The queued tasks run BEFORE the map of insertions queued into each
+        // container is dropped, the order finish() uses. land() reads that map
+        // to repoint a later call made through a node still in its holder
+        // (`a.replaceWith(b)`, `a.parentNode.replaceChild(b, a)`, `a.before(b)`)
+        // at the node's real destination. Dropped first, it found nothing, and
+        // the second node replayed into the emptied, orphaned holder: lost,
+        // neither parked nor refused. The fuse in defer() takes this path too,
+        // so the loss depended on where the fuse happened to fall.
         tasks.forEach(function (task) { run(task, safety); });
+        // Every queued insertion has landed: nothing is waiting INTO a
+        // container any more, and nothing will queue again on this path.
+        into = new WeakMap();
     }
     // Every script the page created, judged one by one and each on its own,
     // the way run() treats a task. A policy that threw on one element used to

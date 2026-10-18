@@ -30,7 +30,10 @@
  *      the same contract against a minimal stand-in that always runs;
  *   f. a bootstrap that runs deferred waits for the runtime's tag;
  *   g. a runtime that takes over after the safety release re-judges what the
- *      release parked under its placeholder category.
+ *      release parked under its placeholder category;
+ *   h. a call made through a node still in its holder lands on the safety
+ *      release and when the fuse trips between the two calls, and
+ *      Range.insertNode of a fragment with a held child waits for it.
  *
  * Every loop below is bounded by a counter, so the unfixed code FAILS here
  * instead of hanging the runner. Point FAZ_BOOTSTRAP_UNDER_TEST at another
@@ -700,6 +703,85 @@ await scenario(async () => {
   eq('a refused one stays parked', nativeGetAttribute.call(document.getElementById('px'), 'src'), null);
   eq('under the category its consent really turns on', nativeGetAttribute.call(document.getElementById('px'), 'data-faz-category'), 'analytics');
 });
+
+console.log('\nh. calls through a holder, and a waiting fragment, on the safety release and at the fuse');
+
+// releaseSafely() used to reset the "queued into this container" map BEFORE
+// replaying the queue, the reverse of finish(). land() then found nothing to
+// repoint, so a second held call made through a node still in its holder
+// replayed into the emptied, orphaned holder and its node was lost — neither
+// parked nor refused. The same release runs when the fuse trips, so whether
+// the node survived depended on where the fuse fell.
+for (const [label, act, expected] of IDIOMS) {
+  await scenario(async () => {
+    const { window, document } = boot();
+    const list = document.getElementById('list');
+    const a = document.createElement('img');
+    a.id = 'a';
+    a.src = 'https://third.example/a.png';
+    list.appendChild(a);
+    const b = document.createElement('iframe');
+    b.id = 'b';
+    b.src = 'https://third.example/b.html';
+    act(a, b);
+    await release(window);
+    eq('safety release: ' + label + ' through the holder lands in the real parent, in order', JSON.stringify(ids(list)), JSON.stringify(expected));
+  });
+}
+await scenario(async () => {
+  // The fuse trips on the second call itself: the queue is full when
+  // A.replaceWith(B) is held, so the release runs inside that call. How many
+  // tasks one call queues is the bootstrap's business, so the case walks the
+  // fill level across the limit and asserts on every fill where the release
+  // fell between the two calls.
+  let between = 0;
+  let lost = [];
+  for (let fill = 4990; fill <= 5000; fill += 1) {
+    const { window, document } = boot();
+    for (let i = 0; i < fill; i += 1) window.fetch('https://tracker.test/beacon?' + i);
+    const list = document.getElementById('list');
+    const a = document.createElement('img');
+    a.id = 'a';
+    a.src = 'https://third.example/a.png';
+    list.appendChild(a);
+    const before = window._fazBootstrap.released === true;
+    const b = document.createElement('img');
+    b.id = 'b';
+    b.src = 'https://third.example/b.png';
+    a.replaceWith(b);
+    if (before || window._fazBootstrap.released !== true) continue;
+    between += 1;
+    if (JSON.stringify(ids(list)) !== JSON.stringify(['b'])) lost.push(fill);
+  }
+  ok('premise: at some fill level the fuse trips inside A.replaceWith(B)', between > 0);
+  eq('fuse between the two calls: B replaces A in the real parent at every such fill level', JSON.stringify(lost), '[]');
+});
+
+// Range.insertNode of a fragment that still has a held insertion queued INTO
+// it: the Node and ParentNode wrappers hold such a fragment behind the queued
+// call, the Range wrapper did not. The empty fragment went in natively and the
+// held image later landed in the orphaned fragment.
+for (const mode of ['handoff', 'safety']) {
+  await scenario(async () => {
+    const { window, document } = boot({ body: '<p id="p">hello world</p>' });
+    const p = document.getElementById('p');
+    const range = document.createRange();
+    range.setStart(p.firstChild, 5);
+    range.collapse(true);
+    const f = document.createDocumentFragment();
+    const img = document.createElement('img');
+    img.id = 'img';
+    img.src = 'https://third.example/x.png';
+    f.appendChild(img);
+    const plain = document.createElement('b');
+    plain.id = 'plain';
+    f.appendChild(plain);
+    range.insertNode(f);
+    if (mode === 'handoff') handoff(window); else await release(window);
+    eq(mode + ': Range.insertNode of a waiting fragment lands every child at the boundary, in order',
+      JSON.stringify(ids(p)), JSON.stringify(['#hello', 'img', 'plain', '# world']));
+  });
+}
 
 console.log('');
 console.log(`bootstrap-held-insertion: ${passed} passed, ${failed} failed${skipped ? `, ${skipped} skipped` : ''}`);
