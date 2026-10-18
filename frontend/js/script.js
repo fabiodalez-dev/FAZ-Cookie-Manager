@@ -4896,6 +4896,16 @@ _fazGateSrcsetSetter(window.HTMLSourceElement && HTMLSourceElement.prototype);
 // the property setter nor setAttribute was called. Async relative to parsing, so
 // not a hard guarantee against the first fetch — the synchronous setter/setAttribute
 // gates cover the runtime-assignment case; this is the backstop for parsed markup.
+// A park key already on the element is not evidence that it was parked: a
+// LIVE attribute next to it is what fetches, so it is judged regardless (the
+// server's rule too: "a bare sentinel does not exempt"). For the same reason
+// a category already on the element only labels the park when that category
+// is itself still blocked; an allowed one written into the markup would hand
+// the parked provider URL back at the very first restore pass.
+function _fazLabelParkCategory(el, category) {
+    var current = el.getAttribute("data-faz-category");
+    if (!current || !_fazIsCategoryToBeBlocked(current)) el.setAttribute("data-faz-category", category);
+}
 function _fazParkResourceElementIfBlocked(el) {
     if (!el || el.nodeType !== 1 || !el.getAttribute) return;
     var tag = (el.nodeName || "").toLowerCase();
@@ -4917,9 +4927,9 @@ function _fazParkResourceElementIfBlocked(el) {
             // i.vimeocdn.com poster is a request to the provider with the
             // visitor's IP and referrer, judged like the src next to it.
             var poster = tag === "video" ? el.getAttribute("poster") : null;
-            if (poster && !el.getAttribute("data-faz-poster") && _fazImgShouldBlock(el, poster)) {
+            if (poster && _fazImgShouldBlock(el, poster)) {
                 el.setAttribute("data-faz-poster", poster);
-                if (!el.getAttribute("data-faz-category")) el.setAttribute("data-faz-category", _fazImgCategory(poster));
+                _fazLabelParkCategory(el, _fazImgCategory(poster));
                 el.removeAttribute("poster");
             }
             var doc = el.getAttribute("srcdoc");
@@ -4940,7 +4950,7 @@ function _fazParkResourceElementIfBlocked(el) {
             // embed" facade), and is left visible like the server leaves it.
             if (parkedFrameSrc && el.classList && !_fazHasLiveSrcdoc(el)) el.classList.add("faz-hidden");
             var ss = el.getAttribute("srcset");
-            if (ss && !el.getAttribute("data-faz-srcset")) {
+            if (ss) {
                 var c = _fazSrcsetBlockedCategory(el, ss);
                 if (c) { el.setAttribute("data-faz-srcset", ss); el.setAttribute("data-faz-srcset-category", c); el.removeAttribute("srcset"); }
             }
@@ -4949,7 +4959,7 @@ function _fazParkResourceElementIfBlocked(el) {
             // youtube.com/embed it is the whole player. Parked under its own
             // key, which the restore pass admits back as absolute http(s) only.
             var data = el.getAttribute("data");
-            if (data && !el.getAttribute("data-faz-data") && _fazImgShouldBlock(el, data)) {
+            if (data && _fazImgShouldBlock(el, data)) {
                 el.setAttribute("data-faz-data", data);
                 el.setAttribute("data-faz-category", _fazImgCategory(data));
                 el.removeAttribute("data");
@@ -4963,7 +4973,7 @@ function _fazParkResourceElementIfBlocked(el) {
             // attribute and is not spelled `xlink:href` in the DOM.
             var svgHref = el.getAttribute("href") || el.getAttribute("xlink:href")
                 || (typeof el.getAttributeNS === "function" ? el.getAttributeNS("http://www.w3.org/1999/xlink", "href") : null);
-            if (svgHref && !el.getAttribute("data-faz-href") && _fazImgShouldBlock(el, svgHref)) {
+            if (svgHref && _fazImgShouldBlock(el, svgHref)) {
                 el.setAttribute("data-faz-href", svgHref);
                 el.setAttribute("data-faz-category", _fazImgCategory(svgHref));
                 el.removeAttribute("href");
@@ -4974,7 +4984,7 @@ function _fazParkResourceElementIfBlocked(el) {
         // Any element at all, so it is checked outside the tag branches: the
         // attribute is what fetches, not the tag.
         var bg = el.getAttribute("background");
-        if (bg && !el.getAttribute("data-faz-background") && _fazImgShouldBlock(el, bg)) {
+        if (bg && _fazImgShouldBlock(el, bg)) {
             el.setAttribute("data-faz-background", bg);
             el.setAttribute("data-faz-category", _fazImgCategory(bg));
             el.removeAttribute("background");
@@ -5001,7 +5011,7 @@ function _fazParkResourceElementIfBlocked(el) {
             for (var ri = 0; ri < rels.length; ri++) {
                 if (relTokens.indexOf(rels[ri]) !== -1) { gated = true; break; }
             }
-            if (gated && href && !el.getAttribute("data-faz-href") && _fazImgShouldBlock(el, href)) {
+            if (gated && href && _fazImgShouldBlock(el, href)) {
                 el.setAttribute("data-faz-href", href);
                 el.setAttribute("data-faz-category", _fazImgCategory(href));
                 el.removeAttribute("href");
@@ -5015,13 +5025,11 @@ function _fazParkResourceElementIfBlocked(el) {
             // never even looked at. The list helper walks every candidate, which
             // is the same reason the srcset path already uses it.
             var iss = el.getAttribute("imagesrcset");
-            if (gated && iss && !el.getAttribute("data-faz-imagesrcset")) {
+            if (gated && iss) {
                 var issCat = _fazSrcsetBlockedCategory(el, iss);
                 if (issCat) {
                     el.setAttribute("data-faz-imagesrcset", iss);
-                    if (!el.getAttribute("data-faz-category")) {
-                        el.setAttribute("data-faz-category", issCat);
-                    }
+                    _fazLabelParkCategory(el, issCat);
                     el.removeAttribute("imagesrcset");
                 }
             }
