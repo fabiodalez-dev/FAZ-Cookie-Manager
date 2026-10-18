@@ -1978,11 +1978,6 @@ class DSAR_Shortcode {
 	}
 
 	/**
-	 * Store the request as a private post so it survives email failures.
-	 *
-	 * @return int Post ID.
-	 */
-	/**
 	 * Compare a declared consent ID with the consent cookie of the browser
 	 * that submits the request.
 	 *
@@ -2009,6 +2004,11 @@ class DSAR_Shortcode {
 		return hash_equals( $stored, $consent_id ) ? 'match' : 'mismatch';
 	}
 
+	/**
+	 * Store the request as a private post so it survives email failures.
+	 *
+	 * @return int Post ID.
+	 */
 	private function store_request( $name, $email, $type, $message, $consent_id = '' ) {
 		$type_labels = array(
 			'access'      => 'Access',

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-18T09:50:56+00:00\n"
+"POT-Creation-Date: 2026-10-18T11:04:45+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -82,7 +82,7 @@ msgstr "Geo-routing"
 msgid "Cookie Policy"
 msgstr "Informativa cookie"
 
-#: admin/class-admin.php:317 admin/class-admin.php:2896 admin/views/base.php:25
+#: admin/class-admin.php:317 admin/class-admin.php:2900 admin/views/base.php:25
 #: admin/views/dashboard.php:255 includes/blocks/editor.js:27
 #: includes/blocks/editor.js:60 includes/blocks/editor.js:93
 msgid "Settings"
@@ -100,12 +100,12 @@ msgstr "Stato del sistema"
 msgid "Setup"
 msgstr "Configurazione"
 
-#: admin/class-admin.php:563 admin/class-admin.php:2869
+#: admin/class-admin.php:563 admin/class-admin.php:2873
 #: admin/views/consent-logs.php:27 admin/views/consent-logs.php:52
 msgid "Accepted"
 msgstr "Accettato"
 
-#: admin/class-admin.php:564 admin/class-admin.php:2873
+#: admin/class-admin.php:564 admin/class-admin.php:2877
 #: admin/views/consent-logs.php:34 admin/views/consent-logs.php:53
 msgid "Rejected"
 msgstr "Rifiutato"
@@ -2201,17 +2201,17 @@ msgstr[1] "%d cookie di Sourcebuster erano stati salvati o importati in un'altra
 msgid "Open the cookie list"
 msgstr "Apri l'elenco dei cookie"
 
-#: admin/class-admin.php:2813
+#: admin/class-admin.php:2817
 msgid "Cookie Consent Overview"
 msgstr "Panoramica consenso cookie"
 
 #. translators: %d: number of consent interactions in last 30 days
-#: admin/class-admin.php:2880
+#: admin/class-admin.php:2884
 #, php-format
 msgid "%d consent interactions in the last 30 days."
 msgstr "%d interazioni di consenso negli ultimi 30 giorni."
 
-#: admin/class-admin.php:2884
+#: admin/class-admin.php:2888
 msgid "View details"
 msgstr "Visualizza dettagli"
 
@@ -2526,17 +2526,17 @@ msgstr "Trasferisce dati personali in un altro Paese"
 msgid "transfers personal data to another country"
 msgstr "trasferisce dati personali in un altro Paese"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1447
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1470
 msgid "None declared."
 msgstr "Nessuna dichiarata."
 
 #. translators: 1: jurisdiction, 2: lang
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1516
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1539
 #, php-format
 msgid "FAZ Cookie Policy: no template scaffold found for jurisdiction \"%1$s\" and language \"%2$s\". Configure the generator under FAZ Cookie Manager → Cookie Policy."
 msgstr "FAZ Cookie Policy: nessun modello trovato per la giurisdizione \"%1$s\" e la lingua \"%2$s\". Configura il generatore in FAZ Cookie Manager → Cookie Policy."
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1534
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1557
 msgid "FAZ Cookie Policy: complete the fields required for the selected jurisdiction before publishing this policy."
 msgstr "FAZ Cookie Policy: compila i campi richiesti dalla giurisdizione selezionata prima di pubblicare questa policy."
 
@@ -3841,23 +3841,27 @@ msgstr "Non è disponibile un modello di informativa cookie nella lingua selezio
 msgid "Setup is complete, but the cookie policy page was not created: %s"
 msgstr "La configurazione è completata, ma la pagina dell'informativa cookie non è stata creata: %s"
 
-#: admin/modules/settings/includes/class-policy-page.php:81
+#: admin/modules/settings/includes/class-policy-page.php:85
+msgid "The cookie policy page was saved as a draft because the details POPIA requires are not all set yet: the company name, address and privacy contact email, the Information Officer's name and email, and the privacy policy URL. Fill them in on the Cookie Policy page, then publish the page and link it from the Cookie Banner page."
+msgstr "La pagina della Cookie Policy è stata salvata come bozza perché non sono ancora impostati tutti i dati richiesti dal POPIA: nome, indirizzo ed email di contatto per la privacy dell'azienda, nome ed email dell'Information Officer e URL della privacy policy. Compilali nella pagina Cookie Policy, poi pubblica la pagina e collegala dalla pagina Banner dei cookie."
+
+#: admin/modules/settings/includes/class-policy-page.php:86
 msgid "The cookie policy page was saved as a draft because the company name and privacy contact email are not set yet. Fill them in on the Cookie Policy page, then publish the page and link it from the Cookie Banner page."
 msgstr "La pagina della Cookie Policy è stata salvata come bozza perché il nome dell'azienda e l'email di contatto per la privacy non sono ancora impostati. Compilali nella pagina Cookie Policy, poi pubblica la pagina e collegala dalla pagina Banner dei cookie."
 
-#: admin/modules/settings/includes/class-policy-page.php:83
+#: admin/modules/settings/includes/class-policy-page.php:88
 msgid "The cookie policy page was created, but the banner could not be linked to it. Set the privacy link on the Cookie Banner page."
 msgstr "La pagina dell'informativa cookie è stata creata, ma non è stato possibile collegarla al banner. Imposta il link all'informativa nella pagina Banner cookie."
 
-#: admin/modules/settings/includes/class-policy-page.php:177
+#: admin/modules/settings/includes/class-policy-page.php:182
 msgid "Cookie policy creation is already in progress. Please try again shortly."
 msgstr "La creazione della Cookie Policy è già in corso. Riprova tra poco."
 
-#: admin/modules/settings/includes/class-policy-page.php:215
+#: admin/modules/settings/includes/class-policy-page.php:220
 msgid "The cookie policy page could not be created. Please try again."
 msgstr "Impossibile creare la pagina della Cookie Policy. Riprova."
 
-#: admin/modules/settings/includes/class-policy-page.php:237
+#: admin/modules/settings/includes/class-policy-page.php:242
 msgid "The cookie policy page is not public. Publish it without password protection in Pages, then link it from the Cookie Banner page."
 msgstr "La pagina dell'informativa cookie non è pubblica. Pubblicala senza protezione con password in Pagine, poi collegala dalla pagina Banner cookie."
 
@@ -6276,7 +6280,7 @@ msgstr "Frequenza di scansione"
 msgid "Daily"
 msgstr "Giornaliero"
 
-#: admin/views/settings.php:444 includes/class-activator.php:738
+#: admin/views/settings.php:444 includes/class-activator.php:747
 msgid "Weekly"
 msgstr "Settimanale"
 
@@ -7049,8 +7053,8 @@ msgid "Create the cookie policy page when setup finishes"
 msgstr "Crea la pagina della Cookie Policy al termine della configurazione"
 
 #: admin/views/setup.php:465
-msgid "The page is created from the standard template in the selected language. It is published immediately, visible to visitors, only when your company name and privacy contact email are already saved on the Cookie Policy page; otherwise it is saved as a draft for you to complete and publish. An existing generated page in that language is reused and custom banner links are kept."
-msgstr "La pagina viene creata dal modello standard nella lingua selezionata. Viene pubblicata subito, visibile ai visitatori, solo se il nome dell'azienda e l'email di contatto per la privacy sono già salvati nella pagina Cookie Policy; altrimenti viene salvata come bozza da completare e pubblicare. Una pagina già generata in quella lingua viene riutilizzata e i link personalizzati del banner vengono mantenuti."
+msgid "The page is created from the standard template in the selected language. It is published immediately, visible to visitors, only when the company details the selected law requires are already saved on the Cookie Policy page: the company name and privacy contact email, and for South Africa (POPIA) also the company address, the Information Officer's name and email and the privacy policy URL. Otherwise it is saved as a draft for you to complete and publish. An existing generated page in that language is reused and custom banner links are kept."
+msgstr "La pagina viene creata dal modello standard nella lingua selezionata. Viene pubblicata subito, visibile ai visitatori, solo se i dati aziendali richiesti dalla legge selezionata sono già salvati nella pagina Cookie Policy: il nome dell'azienda e l'email di contatto per la privacy e, per il Sudafrica (POPIA), anche l'indirizzo dell'azienda, nome ed email dell'Information Officer e l'URL della privacy policy. Altrimenti viene salvata come bozza da completare e pubblicare. Una pagina già generata in quella lingua viene riutilizzata e i link personalizzati del banner vengono mantenuti."
 
 #: admin/views/setup.php:468
 msgid "No cookie policy template ships in the selected language for this law, so the page cannot be created here. Write the policy on the Cookie Policy page instead."
@@ -7594,19 +7598,19 @@ msgstr "Un pulsante che apre le preferenze di consenso ai cookie."
 msgid "Manage Cookie Preferences"
 msgstr "Gestisci le preferenze sui cookie"
 
-#: includes/class-activator.php:744
+#: includes/class-activator.php:753
 msgid "Once Daily (FAZ)"
 msgstr "Una volta al giorno (FAZ)"
 
-#: includes/class-activator.php:750
+#: includes/class-activator.php:759
 msgid "Once Weekly (FAZ)"
 msgstr "Una volta alla settimana (FAZ)"
 
-#: includes/class-activator.php:756
+#: includes/class-activator.php:765
 msgid "Once Monthly (FAZ)"
 msgstr "Una volta al mese (FAZ)"
 
-#: includes/class-cli.php:448 includes/class-cli.php:457
+#: includes/class-cli.php:446 includes/class-cli.php:455
 msgid "FAZ Cookie Manager — Consent Logs & Privacy Requests"
 msgstr "FAZ Cookie Manager — Registri consensi e richieste privacy"
 
@@ -8465,7 +8469,7 @@ msgstr "I contatori delle visualizzazioni di pagina non hanno un limite di conse
 msgid "If you submit a privacy request through the site form, we store your name, email, request type, message, status and any consent ID you supply in a private request record for %d months; erasure removes identifying details unless applicable retention requirements require otherwise."
 msgstr "Se invii una richiesta privacy tramite il modulo del sito, conserviamo il tuo nome, l'email, il tipo di richiesta, il messaggio, lo stato e l'eventuale ID consenso che fornisci in un record riservato della richiesta per %d mesi; la cancellazione rimuove i dati identificativi, salvo diversi obblighi di conservazione applicabili."
 
-#: includes/class-privacy-policy-text.php:84
+#: includes/class-privacy-policy-text.php:101
 msgid "Cookie Consent (FAZ Cookie Manager)"
 msgstr "Cookie Consent (FAZ Cookie Manager)"
 
@@ -8664,6 +8668,9 @@ msgstr "Pulsante"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Collegamento"
+
+#~ msgid "The page is created from the standard template in the selected language. It is published immediately, visible to visitors, only when your company name and privacy contact email are already saved on the Cookie Policy page; otherwise it is saved as a draft for you to complete and publish. An existing generated page in that language is reused and custom banner links are kept."
+#~ msgstr "La pagina viene creata dal modello standard nella lingua selezionata. Viene pubblicata subito, visibile ai visitatori, solo se il nome dell'azienda e l'email di contatto per la privacy sono già salvati nella pagina Cookie Policy; altrimenti viene salvata come bozza da completare e pubblicare. Una pagina già generata in quella lingua viene riutilizzata e i link personalizzati del banner vengono mantenuti."
 
 #~ msgctxt "Cookie policy template: ccpa-california / section-7"
 #~ msgid ""

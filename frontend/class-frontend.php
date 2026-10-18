@@ -4712,10 +4712,12 @@ class Frontend {
 		}
 
 		// 2. Block <iframe> tags (YouTube, Facebook, Maps, etc.).
+		// iframe_pass_pattern() skips every other token whole first, so an
+		// <iframe> quoted in a tooltip's value is text, not a frame.
 		if ( false !== stripos( $html, '<iframe' ) ) {
 			$html = $this->run_markup_pass(
 				$html,
-				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
+				self::iframe_pass_pattern(),
 				'iframe',
 				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );
@@ -4762,10 +4764,13 @@ class Frontend {
 		// and for a beacon the request IS the tracking event, so the client-side
 		// MutationObserver backstop cannot undo it: the preload scanner dispatches
 		// the fetch before any script runs.
+		// tag_token_skip() consumes every other token whole first: an `<img`
+		// inside another tag's quoted value (`data-html="<img src='…'>"`) is
+		// part of that value, and rewriting it there broke the markup.
 		if ( false !== stripos( $html, '<img' ) ) {
 			$html = $this->run_markup_pass(
 				$html,
-				'#<img(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
+				'#' . self::tag_token_skip( 'img' ) . '<img(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
 				'img',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_img_tag( $m, $providers, $blocked_categories );
@@ -4794,10 +4799,17 @@ class Frontend {
 		// Like every pass here it never sees comments or script bodies (the
 		// inert stash at the top): a `<video poster=\"…\">` inside a JS
 		// string is text, and parking it broke the string and the script.
+		// Every opening tag is walked, as in the style-attribute pass, and the
+		// callback keeps only the media ones: a pattern anchored on the media
+		// names started a match wherever `<video` stood, including inside
+		// another tag's quoted value (`data-tip='<video poster="…">'`, the way
+		// tooltip libraries keep HTML), and the double-quoted keys it wrote
+		// there closed that value early. Walked whole, a quoted value is part
+		// of its own tag, which is how the linear fallback already read it.
 		if ( 0 !== preg_match( '/<(?:video|audio|source|embed|object|track|input)(?=[\s\/>])/i', $html ) ) {
 			$html = $this->run_markup_pass(
 				$html,
-				'#<(video|audio|source|embed|object|track|input)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'#<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				'media',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_media_resource_tag( $m, $providers, $blocked_categories );
@@ -5834,6 +5846,11 @@ class Frontend {
 		$close = isset( $m[3] ) ? $m[3] : '';
 		$full  = isset( $m[0] ) ? $m[0] : '';
 
+		// The pass walks every opening tag; only these fetch through it.
+		if ( ! in_array( $tag, array( 'video', 'audio', 'source', 'embed', 'object', 'track', 'input' ), true ) ) {
+			return $full;
+		}
+
 		switch ( $tag ) {
 			case 'video':
 				$wanted = array(
@@ -6506,7 +6523,7 @@ class Frontend {
 		$unused   = array();
 		$result   = $this->run_markup_pass(
 			$html,
-			'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+			'#' . self::tag_token_skip( 'iframe' ) . '<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 			'srcdoc',
 			function ( $m ) use ( $providers, $blocked_categories, &$stash, $marker ) {
 				return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, $stash, $marker );
@@ -6576,11 +6593,19 @@ class Frontend {
 	 *   keeps it counting: more is judged, never less).
 	 * - A raw-text body ends at the first `</name` followed by whitespace,
 	 *   `/` or `>`, which is never later than where the parser ends it. A
-	 *   body with no end, or a <plaintext>, ends the walk: nothing after it
-	 *   is recorded.
-	 * - <iframe>, <noembed>, <noframes> and <noscript> bodies are raw text to
-	 *   the parser too and are walked past for that reason, but not recorded:
-	 *   the iframe and noscript passes read them.
+	 *   body with no end ends the walk: nothing after it is recorded.
+	 * - <iframe>, <noembed> and <noframes> bodies are raw text to the parser
+	 *   and are recorded like the others; only the BODY is, so the iframe
+	 *   pass still sees the opening tag it parks, and the body comes back
+	 *   inside its placeholder. Walked past without being recorded, a quoted
+	 *   value of a tag-shaped string in one of them (`<noembed><a title="`)
+	 *   ran past the end tag in the opening-tag walk of the media and
+	 *   style-attribute passes and swallowed the real <video> after it,
+	 *   which shipped live.
+	 * - <noscript> is walked past but not recorded: the noscript pass reads
+	 *   its body.
+	 * - Everything after <plaintext> is text to the end of the document, and
+	 *   is recorded as one span.
 	 *
 	 * @param string $html Document.
 	 * @return array<int,array{0:int,1:int}>|null Offset/length pairs in
@@ -6594,8 +6619,8 @@ class Frontend {
 		$foreign   = 0;
 		$dash_next = -1;
 		$bang_next = -1;
-		$recorded  = array( 'script', 'style', 'textarea', 'title', 'xmp' );
-		$walked    = array( 'iframe', 'noembed', 'noframes', 'noscript' );
+		$recorded  = array( 'script', 'style', 'textarea', 'title', 'xmp', 'iframe', 'noembed', 'noframes' );
+		$walked    = array( 'noscript' );
 		$tag_re    = '#\G<([a-zA-Z][^\s/>]*+)' . self::ATTR_WALK . '(/\s*+)?>#';
 		$end_re    = '#\G</[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>#';
 		while ( $pos < $len ) {
@@ -6676,6 +6701,9 @@ class Frontend {
 				continue;
 			}
 			if ( 'plaintext' === $name ) {
+				if ( $after < $len ) {
+					$spans[] = array( $after, $len - $after );
+				}
 				break;
 			}
 			$is_recorded = in_array( $name, $recorded, true );
@@ -6699,31 +6727,61 @@ class Frontend {
 	}
 
 	/**
-	 * Leading alternation for the step-1 script pattern: every construct the
-	 * tokenizer reads as one token, consumed whole and skipped.
+	 * Leading alternation for the passes that find one element by name: every
+	 * construct the tokenizer reads as one token, consumed whole and skipped.
 	 *
-	 * The script pattern is the one pass that still has to find elements by
-	 * regex across the page, and a `<script` written INSIDE one of these
-	 * tokens is not a script start: `</p title="<script>">` is an end tag
-	 * with an attribute, and `<?x …>`, `<!x …>`, `</ …>` are bogus comments
-	 * that end at their first `>`. Matched there, the pattern took the real
-	 * tracker after it for the body of a script that does not exist, and the
-	 * tracker shipped live. Other opening tags are consumed through
-	 * ATTR_WALK for the same reason (a `<script` in an attribute value).
+	 * A pattern anchored on a tag name starts a match wherever the name
+	 * stands, and a `<script`, `<img` or `<iframe` written INSIDE one of these
+	 * tokens is not an element: `</p title="<script>">` is an end tag with an
+	 * attribute, `<div data-html="<img src='…'>">` is a tooltip library
+	 * keeping HTML in a value, and `<?x …>`, `<!x …>`, `</ …>` are bogus
+	 * comments that end at their first `>`. Matched there, the script pattern
+	 * took the real tracker after it for the body of a script that does not
+	 * exist, and the tracker shipped live; the img and iframe patterns wrote
+	 * double-quoted data-faz-* keys (or a whole placeholder) into the value,
+	 * which closed it early and broke the markup. Other opening tags are
+	 * consumed through ATTR_WALK for the same reason, which is how the linear
+	 * fallback (linear_markup_pass()) already reads them, so both paths agree.
 	 * `<!--` is left out: a closed comment is already stashed, and one that
 	 * never closes is judged rather than skipped.
 	 * Every quantifier is possessive: nothing here can backtrack, so this
-	 * adds no PCRE-limit failure to the pass. Closed comments and raw-text
+	 * adds no PCRE-limit failure to a pass. Closed comments and raw-text
 	 * bodies are already out of the buffer (stash_inert_spans()).
+	 *
+	 * @param string $name Lower-case name of the element the pass looks for.
+	 * @return string Pattern fragment ending in `|`, for the `#` delimiter.
+	 */
+	private static function tag_token_skip( $name ) {
+		return '(?:</[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
+			. '|<\?[^>]*+>|<!(?!--)[^>]*+>'
+			. '|</(?![a-zA-Z])[^>]*+>'
+			. '|<(?!' . $name . '(?=[\s/>]))[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
+			. ')(*SKIP)(*FAIL)|';
+	}
+
+	/**
+	 * tag_token_skip() for the step-1 script pattern.
 	 *
 	 * @return string Pattern fragment ending in `|`, for the `#` delimiter.
 	 */
 	private static function script_token_skip() {
-		return '(?:</[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
-			. '|<\?[^>]*+>|<!(?!--)[^>]*+>'
-			. '|</(?![a-zA-Z])[^>]*+>'
-			. '|<(?!script(?=[\s/>]))[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
-			. ')(*SKIP)(*FAIL)|';
+		return self::tag_token_skip( 'script' );
+	}
+
+	/**
+	 * The <iframe> element pattern, shared by both entry points.
+	 *
+	 * Groups as process_iframe_tag() reads them: 1 attributes, 2 body (absent
+	 * when self-closed). Led by tag_token_skip(), and closed by a skip of an
+	 * <iframe> opening tag that has no end tag, so a value inside that tag is
+	 * not read as a second frame either.
+	 *
+	 * @return string
+	 */
+	private static function iframe_pass_pattern() {
+		return '#' . self::tag_token_skip( 'iframe' )
+			. '<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)'
+			. '|<iframe(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>(*SKIP)(*FAIL)#is';
 	}
 
 	/**
@@ -7304,7 +7362,7 @@ class Frontend {
 		$original = (string) $css;
 
 		$rewritten = preg_replace_callback(
-			'/url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)\s]+))\s*\)/i',
+			'/url\(\s*(?:"([^"]*+)"|\'([^\']*+)\'|([^)\s]++))\s*\)/i',
 			function ( $m ) use ( $block_url, $inert_url ) {
 				$url = isset( $m[1] ) && '' !== $m[1] ? $m[1] : ( isset( $m[2] ) && '' !== $m[2] ? $m[2] : ( isset( $m[3] ) ? $m[3] : '' ) );
 				if ( ! $block_url( $url ) ) {
@@ -7314,14 +7372,44 @@ class Frontend {
 			},
 			$original
 		);
-		// PCRE error (backtrack/recursion limit on crafted or very large CSS)
-		// returns null. Fail OPEN: reset categories and return the ORIGINAL CSS
-		// so process_style_tag leaves the <style> untouched, instead of emitting
-		// an empty <style> body that strips every rule. Also never pass a null
-		// subject into the next pass (deprecated / TypeError on PHP 8.1+).
+		// A PCRE error (backtrack or stack limit on crafted or very large CSS)
+		// returns null, and a null subject must never reach the next pass
+		// (deprecated / TypeError on PHP 8.1+). The patterns are possessive, so
+		// a long string or data URI is one step, not one stack frame per
+		// character; this is the last resort. It used to fail OPEN, returning
+		// the original text with no category, which threw away what the earlier
+		// passes had neutralised: a long image-set() string after a Google
+		// Fonts @import shipped the @import live. Now the text is judged as a
+		// whole: a pass that already met a blocked URL, or a blocked URL the
+		// residual reader finds in the original, parks the sheet whole (empty
+		// live text, the original restored on consent). Only text that names
+		// nothing blocked is left as it was.
+		// When the residual reader cannot read the text either (it runs the
+		// same engine under the same limits), a blocked provider named anywhere
+		// in it is enough: a plain substring test needs no regex, and a sheet
+		// parked here is restored on consent, while one left live fetches.
+		$fail_closed = function () use ( $original, $providers, $blocked_categories, &$categories ) {
+			$residual = $this->css_blocked_category( $original, $providers, $blocked_categories );
+			if ( false !== $residual ) {
+				$categories[] = $residual;
+			}
+			if ( empty( $categories ) ) {
+				$decoded = $this->css_decode_escapes( $original );
+				foreach ( $providers as $pattern => $category ) {
+					if ( '' === (string) $pattern || ! in_array( $category, (array) $blocked_categories, true ) ) {
+						continue;
+					}
+					if ( false !== stripos( $original, (string) $pattern ) || ( is_string( $decoded ) && false !== stripos( $decoded, (string) $pattern ) ) ) {
+						$categories[] = $category;
+						break;
+					}
+				}
+			}
+			$categories = array_values( array_unique( $categories ) );
+			return empty( $categories ) ? $original : '';
+		};
 		if ( null === $rewritten ) {
-			$categories = array();
-			return $original;
+			return $fail_closed();
 		}
 
 		// `\s*`, not `\s+`: the at-keyword may be followed directly by the
@@ -7330,7 +7418,7 @@ class Frontend {
 		// after the at-keyword: `@importurl(` would be a different, unknown
 		// at-rule, and `@import url("data:…")` is valid in its place.
 		$rewritten = preg_replace_callback(
-			'/(@import\s*)(["\'])([^"\']+)\2/i',
+			'/(@import\s*)(["\'])([^"\']++)\2/i',
 			function ( $m ) use ( $block_url, $inert_url ) {
 				if ( ! $block_url( $m[3] ) ) {
 					return $m[0];
@@ -7340,8 +7428,7 @@ class Frontend {
 			$rewritten
 		);
 		if ( null === $rewritten ) {
-			$categories = array();
-			return $original;
+			return $fail_closed();
 		}
 
 		// image-set() and src() name a file with a bare string and no url()
@@ -7349,10 +7436,10 @@ class Frontend {
 		// nested url() is reached; a first-party candidate next to the blocked
 		// one stays.
 		$rewritten = preg_replace_callback(
-			'/((?:-webkit-)?(?:image-set|src)\()((?:[^()]|\([^()]*\))*)(\))/i',
+			'/((?:-webkit-)?(?:image-set|src)\()((?:[^()]++|\([^()]*+\))*+)(\))/i',
 			function ( $m ) use ( $block_url, $inert_url ) {
 				$inner = preg_replace_callback(
-					'/"((?:[^"\\\\]|\\\\[\s\S])*)"|\'((?:[^\'\\\\]|\\\\[\s\S])*)\'/',
+					'/"((?:[^"\\\\]++|\\\\[\s\S])*+)"|\'((?:[^\'\\\\]++|\\\\[\s\S])*+)\'/',
 					function ( $s ) use ( $block_url, $inert_url ) {
 						$url = isset( $s[1] ) && '' !== $s[1] ? $s[1] : ( isset( $s[2] ) ? $s[2] : '' );
 						return $block_url( $url ) ? '"' . $inert_url . '"' : $s[0];
@@ -7364,8 +7451,7 @@ class Frontend {
 			$rewritten
 		);
 		if ( null === $rewritten ) {
-			$categories = array();
-			return $original;
+			return $fail_closed();
 		}
 
 		// The judgement: does the engine still fetch a blocked URL from what
@@ -7428,7 +7514,7 @@ class Frontend {
 		// can only ADD URLs: the stripper cannot tell where the tokenizer is,
 		// and `/*` inside an unquoted url(…) or an unterminated string is text
 		// the engine keeps, so the passes above still read the original.
-		$uncommented = preg_replace( '/("(?:[^"\\\\\n]|\\\\[\s\S])*"|\'(?:[^\'\\\\\n]|\\\\[\s\S])*\')|\/\*[\s\S]*?\*\//', '$1', $css );
+		$uncommented = preg_replace( '/("(?:[^"\\\\\n]++|\\\\[\s\S])*+"|\'(?:[^\'\\\\\n]++|\\\\[\s\S])*+\')|\/\*[^*]*+\*++(?:[^\/*][^*]*+\*++)*+\//', '$1', $css );
 		if ( null !== $uncommented ) {
 			$passes[] = $this->css_decode_escapes( $uncommented );
 		}
@@ -7464,21 +7550,25 @@ class Frontend {
 			return $urls;
 		}
 		$url_pattern = $decoded
-			? '/url\(\s*(?:"((?:[^"\\\\]|\\\\[\s\S])*)"|\'((?:[^\'\\\\]|\\\\[\s\S])*)\'|([^)]+?))\s*\)/i'
-			: '/url\(\s*(?:"((?:[^"\\\\]|\\\\[\s\S])*)"|\'((?:[^\'\\\\]|\\\\[\s\S])*)\'|([^)\s]+))\s*\)/i';
+			? '/url\(\s*(?:"((?:[^"\\\\]++|\\\\[\s\S])*+)"|\'((?:[^\'\\\\]++|\\\\[\s\S])*+)\'|([^)]++))\)/i'
+			: '/url\(\s*(?:"((?:[^"\\\\]++|\\\\[\s\S])*+)"|\'((?:[^\'\\\\]++|\\\\[\s\S])*+)\'|([^)\s]++))\s*\)/i';
 		if ( preg_match_all( $url_pattern, $css, $found, PREG_SET_ORDER ) ) {
 			foreach ( $found as $f ) {
-				$urls[] = isset( $f[1] ) && '' !== $f[1] ? $f[1] : ( isset( $f[2] ) && '' !== $f[2] ? $f[2] : ( isset( $f[3] ) ? $f[3] : '' ) );
+				// The decoded bare branch runs to the closing paren in one
+				// possessive step; the whitespace before the paren, which a
+				// lazy body used to leave out, is trimmed here instead.
+				$bare   = isset( $f[3] ) ? ( $decoded ? rtrim( $f[3], " \t\n\r\f" ) : $f[3] ) : '';
+				$urls[] = isset( $f[1] ) && '' !== $f[1] ? $f[1] : ( isset( $f[2] ) && '' !== $f[2] ? $f[2] : $bare );
 			}
 		}
-		if ( preg_match_all( '/@import\s*(["\'])((?:(?!\1)[^\\\\]|\\\\[\s\S])+)\1/i', $css, $found, PREG_SET_ORDER ) ) {
+		if ( preg_match_all( '/@import\s*(["\'])((?:(?:(?!\1)[^\\\\])++|\\\\[\s\S])++)\1/i', $css, $found, PREG_SET_ORDER ) ) {
 			foreach ( $found as $f ) {
 				$urls[] = $f[2];
 			}
 		}
-		if ( preg_match_all( '/(?:-webkit-)?(?:image-set|src)\(((?:[^()]|\([^()]*\))*)\)/i', $css, $found, PREG_SET_ORDER ) ) {
+		if ( preg_match_all( '/(?:-webkit-)?(?:image-set|src)\(((?:[^()]++|\([^()]*+\))*+)\)/i', $css, $found, PREG_SET_ORDER ) ) {
 			foreach ( $found as $f ) {
-				if ( preg_match_all( '/"((?:[^"\\\\]|\\\\[\s\S])*)"|\'((?:[^\'\\\\]|\\\\[\s\S])*)\'/', $f[1], $strings, PREG_SET_ORDER ) ) {
+				if ( preg_match_all( '/"((?:[^"\\\\]++|\\\\[\s\S])*+)"|\'((?:[^\'\\\\]++|\\\\[\s\S])*+)\'/', $f[1], $strings, PREG_SET_ORDER ) ) {
 					foreach ( $strings as $s ) {
 						$urls[] = isset( $s[1] ) && '' !== $s[1] ? $s[1] : ( isset( $s[2] ) ? $s[2] : '' );
 					}
@@ -7488,7 +7578,7 @@ class Frontend {
 		// A url( left OPEN: the tokenizer reads to the end of the text as the
 		// URL, and the engine fetches it. Anchored at the end, so only a
 		// genuinely unclosed token matches.
-		if ( preg_match( '/url\(\s*(?:"((?:[^"\\\\]|\\\\[\s\S])*)|\'((?:[^\'\\\\]|\\\\[\s\S])*)|([^)\s]*))\s*$/i', $css, $open ) ) {
+		if ( preg_match( '/url\(\s*(?:"((?:[^"\\\\]++|\\\\[\s\S])*+)|\'((?:[^\'\\\\]++|\\\\[\s\S])*+)|([^)\s]*+))\s*$/i', $css, $open ) ) {
 			$value = isset( $open[1] ) && '' !== $open[1] ? $open[1] : ( isset( $open[2] ) && '' !== $open[2] ? $open[2] : ( isset( $open[3] ) ? $open[3] : '' ) );
 			if ( '' !== $value ) {
 				$urls[] = $value;
@@ -13097,7 +13187,7 @@ class Frontend {
 		if ( false !== stripos( $content, '<iframe' ) ) {
 			$content = $this->run_markup_pass(
 				$content,
-				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
+				self::iframe_pass_pattern(),
 				'iframe',
 				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );

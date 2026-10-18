@@ -265,6 +265,13 @@ namespace {
 	assert_true( ! faz_is_live_tracker( $out ), 'the tracker in post content is not served executable' );
 	assert_true( false !== strpos( $out, 'type="text/plain" src="https://connect.facebook.net/en_US/fbevents.js"' ), 'it is parked, not stripped: the runtime can restore it after consent' );
 
+	// The content filter runs the same iframe pattern: an <iframe> quoted in a
+	// tooltip's value is text, the real one after it is still a frame.
+	$quoted  = '<p data-html=\'<iframe src="https://www.youtube.com/embed/Q"></iframe>\'>x</p>';
+	$out     = faz_ob_frontend( $providers, $blocked )->filter_content_blocking( $quoted . '<iframe src="https://www.youtube.com/embed/ID"></iframe>' );
+	assert_true( 0 === strpos( $out, $quoted ), 'the_content: an <iframe> quoted in another tag\'s value is left as it was' );
+	assert_true( 1 === substr_count( $out, 'data-faz-src="https://www.youtube.com/embed/ID"' ) && 1 === substr_count( $out, 'faz-placeholder"' ), 'the_content: the real <iframe> after it is parked behind one placeholder' );
+
 	echo "\n-- 5. faz_output_buffer_fail_closed = false: the old skip --\n";
 
 	$GLOBALS['faz_test_filters']['faz_output_buffer_fail_closed'] = false;

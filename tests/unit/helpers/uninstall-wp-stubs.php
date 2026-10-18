@@ -55,13 +55,19 @@ function get_sites( $args = array() ) {
 	return array_slice( $ids, $offset, $number );
 }
 
+// A stack, as in WordPress: restore_current_blog() returns to the blog that
+// was current before the matching switch, not to the main site.
 function switch_to_blog( $blog_id ) {
+	$GLOBALS['faz_t_blog_stack'][] = (int) $GLOBALS['faz_t_current_blog'];
 	$GLOBALS['faz_t_current_blog'] = (int) $blog_id;
 	return true;
 }
 
 function restore_current_blog() {
-	$GLOBALS['faz_t_current_blog'] = 1;
+	if ( empty( $GLOBALS['faz_t_blog_stack'] ) ) {
+		return false;
+	}
+	$GLOBALS['faz_t_current_blog'] = array_pop( $GLOBALS['faz_t_blog_stack'] );
 	return true;
 }
 

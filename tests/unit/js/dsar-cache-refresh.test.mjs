@@ -46,7 +46,7 @@ const FRESH = { nonce: 'fresh-nonce', t: 1760086400, sig: 'freshsig', hp: 'faz_h
  * A form as the shortcode renders it, from a copy a cache kept for days:
  * every value is stale. `refresh` scripts the GET; POSTs are captured.
  */
-function mount({ refresh, withAction = true, pow = true } = {}) {
+function mount({ refresh, post = null, withAction = true, pow = true } = {}) {
   const challenge = pow
     ? `<input type="hidden" name="faz_pow_salt" value="oldsaltoldsalt00">
        <input type="hidden" name="faz_pow_diff" value="1">
@@ -90,7 +90,8 @@ function mount({ refresh, withAction = true, pow = true } = {}) {
     captured.__at = Date.now();
     posts.push(captured);
     resolvePost();
-    return Promise.resolve({ json: () => Promise.resolve({ success: true, data: { message: 'ok' } }) });
+    const reply = post ? post(captured, posts.length) : { success: true, data: { message: 'ok' } };
+    return Promise.resolve({ json: () => Promise.resolve(reply) });
   };
   window.eval(SOURCE);
   const form = window.document.querySelector('.faz-dsar-form');
@@ -142,16 +143,29 @@ console.log('— fields the server no longer signs are removed, not left stale')
 
 console.log('— a failed refresh changes nothing and is tried again');
 {
+  // The server answers as it does for a copy a cache kept past the nonce's
+  // life: the stale values are refused, the form stays on screen and the
+  // button comes back, and the visitor's next click must refresh again.
   let n = 0;
-  const m = mount({ refresh: () => { n += 1; return n === 1 ? Promise.reject(new Error('offline')) : answer(FRESH)(); } });
+  const m = mount({
+    refresh: () => { n += 1; return n === 1 ? Promise.reject(new Error('offline')) : answer(FRESH)(); },
+    post: (p) => (p.nonce === 'fresh-nonce'
+      ? { success: true, data: { message: 'ok' } }
+      : { success: false, data: { message: 'Security check failed. Please refresh the page and try again.' } }),
+  });
+  const btn = m.form.querySelector('button');
   await m.submit();
   const first = m.posts[0] || {};
   check('the markup\'s own values are posted when the refresh fails', first.nonce === 'stale-nonce' && first.faz_dsar_s === 'stalesig' && STALE_HP in first);
-  m.form.querySelector('button').disabled = false;
+  for (let i = 0; i < 50 && btn.disabled; i++) await settle();
+  check('the refusal gives the visitor the button back', btn.disabled === false);
+  check('and leaves the form on screen', m.form.style.display !== 'none');
   await m.submit();
   const second = m.posts[1] || {};
   check('the next submit tries the refresh again', m.gets.length === 2);
-  check('and posts the fresh values', second.nonce === 'fresh-nonce');
+  check('and posts the fresh values', second.nonce === 'fresh-nonce' && second.faz_dsar_s === 'freshsig');
+  await settle();
+  check('which the server accepts: the form is replaced by the confirmation', m.form.style.display === 'none');
 }
 
 console.log('— without the refresh action the form behaves as before');

@@ -25,7 +25,9 @@ namespace FazCookie\Frontend {
 		return ! empty( $GLOBALS['vs_headers_sent'] );
 	}
 	function setcookie( $name, $value = '', $expires = 0 ) {
-		if ( '' === $value && $expires < 0 ) {
+		// A deletion is an empty value with an expiry in the past: -1, as the
+		// shredder writes it, or a timestamp before now, as WordPress does.
+		if ( '' === $value && ( $expires < 0 || ( $expires > 0 && $expires < time() ) ) ) {
 			$GLOBALS['vs_deleted'][ $name ] = true;
 		}
 		return true;
@@ -297,7 +299,9 @@ namespace {
 	vr_check( ! vs_vetoed(), 'and, being the baseline, it stays cacheable' );
 	$fe = vs_request( 'gdpr', array( 'fazcookie-consent' => $decided, 'fazVendorConsent' => $only_one ) );
 	vr_check( array( 'analytics', 'marketing' ) === vs_blocked( $fe ), 'a vendor added since the choice: same' );
-	vr_check( isset( $_COOKIE['fazcookie-consent'] ), 'the cookie is not deleted server-side (script.js deletes it where it re-prompts)' );
+	// $_COOKIE is the request; a server-side deletion is a Set-Cookie, which
+	// the setcookie() double records.
+	vr_check( isset( $_COOKIE['fazcookie-consent'] ) && empty( $GLOBALS['vs_deleted'] ), 'the cookie is not deleted server-side (script.js deletes it where it re-prompts)' );
 	$fe = vs_request( 'gdpr', array( 'fazcookie-consent' => $decided ), array(), false, false );
 	vr_check( array() === vs_blocked( $fe ), 'no banner loaded (no script.js to re-prompt, e.g. AMP): the cookie is honoured as before' );
 	$ccpa = 'consentid:abc,consent:no,action:yes,necessary:yes,analytics:yes,marketing:no,rev:1';

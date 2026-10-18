@@ -33,6 +33,7 @@ namespace {
 	function is_wp_error( $v ) { return $v instanceof WP_Error; }
 	function current_user_can( $cap ) { return $GLOBALS['allowed']; }
 	function sanitize_key( $s ) { return strtolower( $s ); }
+	function wp_parse_url( $url, $component = -1 ) { return parse_url( $url, $component ); }
 	function sanitize_title( $s ) { return strtolower( $s ); }
 	function wp_strip_all_tags( $s ) { return strip_tags( $s ); }
 	// The Cookie Policy settings live in their own option and decide whether the
@@ -188,6 +189,20 @@ namespace {
 	check( 'draft' === ( $parked['cookie_page']['status'] ?? '' ), 'controller gate: the result reports the draft status' );
 	check( '' === $banner_link() && 0 === $GLOBALS['cache_cleared'], 'controller gate: the public banner is never pointed at the draft' );
 	check( false !== stripos( (string) $parked['warning'], 'draft' ), 'controller gate: the warning names the draft and what to fill in' );
+	// POPIA asks for more than the two-field floor (section 18: the address,
+	// the Information Officer and the privacy policy), so with only the name and
+	// email saved the page is still parked — and the warning has to say what is
+	// missing, not ask again for the two fields the administrator already gave.
+	$GLOBALS['options'] = $GLOBALS['posts'] = $GLOBALS['post_meta'] = array();
+	$GLOBALS['policy_data'] = array( 'company' => array( 'name' => 'ACME', 'email' => 'privacy@acme.test' ) );
+	$GLOBALS['banner_store'] = array( 'en' => array( 'notice' => array( 'elements' => array( 'privacyLink' => '' ) ) ) );
+	$popia = Policy_Page::apply_to_setup( array( 'success' => true, 'warning' => '' ), 'en', 'popia' );
+	check( 'draft' === ( $popia['cookie_page']['status'] ?? '' ), 'controller gate (POPIA): name and email alone still park the page as a draft' );
+	check( false !== stripos( (string) $popia['warning'], 'Information Officer' ) && false !== stripos( (string) $popia['warning'], 'address' ) && false !== stripos( (string) $popia['warning'], 'privacy policy' ), 'controller gate (POPIA): the warning names the address, the Information Officer and the privacy policy URL it still needs' );
+	$GLOBALS['policy_data'] = array();
+	$GLOBALS['options'] = $GLOBALS['posts'] = $GLOBALS['post_meta'] = array();
+	$GLOBALS['banner_store'] = array( 'it' => array( 'notice' => array( 'elements' => array( 'privacyLink' => '' ) ) ) );
+	$parked = Policy_Page::apply_to_setup( array( 'success' => true, 'warning' => '' ), 'it', 'gdpr' );
 	// Retrying while still incomplete returns the same parked draft: no duplicate,
 	// no publish, same warning — also after the tracking option is lost.
 	$count = count( $GLOBALS['posts'] );

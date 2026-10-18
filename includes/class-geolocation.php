@@ -90,14 +90,24 @@ class Geolocation {
 	 *                                 batch GeoIP lookups) — without this, the geo
 	 *                                 fallback chain silently re-resolved REMOTE_ADDR
 	 *                                 and ignored the caller's explicit IP.
+	 *                                 An address other than the request's is
+	 *                                 resolved without the request's country
+	 *                                 headers, which describe the visitor
+	 *                                 being served, not that address.
 	 *                                 Pass null/empty to fall back to client IP.
 	 * @return string Two-letter country code or empty string.
 	 */
 	public static function get_country( $ip_override = null ) {
-		$ip = is_string( $ip_override ) && '' !== $ip_override ? $ip_override : self::get_client_ip();
+		$request_ip = self::get_client_ip();
+		$ip         = is_string( $ip_override ) && '' !== $ip_override ? $ip_override : $request_ip;
 		if ( empty( $ip ) || in_array( $ip, array( '127.0.0.1', '::1' ), true ) ) {
 			return '';
 		}
+		// CF-IPCountry, its T1 verdict and mod_geoip's GEOIP_COUNTRY_CODE all
+		// describe the connection being served. An explicit address that is
+		// not that connection's (a test, a cron, a batch lookup) belongs to
+		// somebody else, and the header would hand it this visitor's country.
+		$own_address = $ip === $request_ip;
 
 		if ( isset( self::$country_cache[ $ip ] ) ) {
 			return self::$country_cache[ $ip ];
@@ -106,7 +116,7 @@ class Geolocation {
 		// A header is in play: resolve it per request and share nothing. See
 		// country_header_in_play() — the key here is the address, and an
 		// address is not always one visitor.
-		$header_in_play = self::country_header_in_play();
+		$header_in_play = $own_address && self::country_header_in_play();
 
 		// Salted and month-rotated, never a bare digest of the address: a
 		// transient is a row in wp_options on most hosts, and md5 of an IPv4
@@ -120,7 +130,7 @@ class Geolocation {
 			}
 		}
 
-		$country = self::detect_country( $ip );
+		$country = self::detect_country( $ip, $own_address );
 
 		// Cache for 1 hour, unless a header contributed to the answer.
 		if ( ! empty( $country ) && ! $header_in_play ) {
@@ -419,15 +429,19 @@ class Geolocation {
 	/**
 	 * Run the detection chain.
 	 *
-	 * @param string $ip Client IP address.
+	 * @param string $ip          IP address to resolve.
+	 * @param bool   $own_address Whether $ip is the address of the request
+	 *                            being served. The request's headers are read
+	 *                            only then; another address is resolved from
+	 *                            the address-based sources alone.
 	 * @return string Two-letter country code or empty string.
 	 */
-	private static function detect_country( $ip ) {
+	private static function detect_country( $ip, $own_address = true ) {
 		// The edge says the forwarded address is a Tor relay. There is no
 		// country to resolve, and the relay's must not be resolved instead:
 		// every source below would answer with the relay's, and the visitor
 		// would be routed by where the relay sits. No vote is cast.
-		if ( self::cf_reports_anonymiser() ) {
+		if ( $own_address && self::cf_reports_anonymiser() ) {
 			return '';
 		}
 
@@ -438,7 +452,7 @@ class Geolocation {
 		$votes = array();
 
 		// 1. Cloudflare CF-IPCountry header.
-		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) && self::cf_peer_is_trusted() && ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) {
+		if ( $own_address && apply_filters( 'faz_trust_cf_ipcountry_header', false ) && self::cf_peer_is_trusted() && ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) {
 			$code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) );
 			if ( self::is_valid_country_code( $code ) && 'XX' !== $code ) {
 				$votes['cf']  = $code;
@@ -452,7 +466,8 @@ class Geolocation {
 		//    and silently steer geo-routing. Default false → no behaviour
 		//    change for real mod_geoip installs that opt in explicitly.
 		if (
-			apply_filters( 'faz_trust_geoip_country_code', false )
+			$own_address
+			&& apply_filters( 'faz_trust_geoip_country_code', false )
 			&& ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] )
 		) {
 			$code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['GEOIP_COUNTRY_CODE'] ) ) );

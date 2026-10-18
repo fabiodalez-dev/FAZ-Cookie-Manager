@@ -97,7 +97,11 @@ console.log('createElement guard: parking types are not original types');
   const s = w.document.createElement('script');
   s.setAttribute('type', ' Text/Plain ');
   s.setAttribute('data-fazcookie', 'fazcookie-analytics');
+  // Without the block the attribute is never written, and the check below
+  // would pass for the wrong reason.
+  eq('premise: blocked', s.getAttribute('type'), 'javascript/blocked');
   eq('" Text/Plain " is a parking type too', s.getAttribute('data-faz-original-type'), null);
+  eq('and restores runnable', restore(w, s), 'text/javascript');
 }
 
 // 4. A real author type is still remembered and given back.

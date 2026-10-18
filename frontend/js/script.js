@@ -624,10 +624,10 @@ function _fazConsentScopeChanged() {
 function _fazInvalidateStoredConsent() {
     // Delete all consent-tracking cookies immediately. This runtime is deferred,
     // so gcm.js (synchronous in <head>) has already read the cookie and may
-    // have restored its grants; it applies the same scope/revision check itself
-    // and, when its fazcookie_consent_update listener re-reads a cookie that is
-    // now gone, falls back to the denied baseline. TCF and consent forwarding
-    // run after this point and never see the stale state.
+    // have restored its grants. This function dispatches no event: gcm.js
+    // reconciles on the first fazcookie_consent_ready of the page load, finds
+    // the cookie gone and falls back to the denied baseline. TCF and consent
+    // forwarding run after this point and never see the stale state.
     ["fazcookie-consent", "fazVendorConsent", "fazVendorLI", "euconsent-v2"].forEach(_fazDeleteCookie);
     // Wipe the entries that gate the banner so showBanner() logic triggers.
     // We keep `consentid` so cross-session analytics can still correlate if

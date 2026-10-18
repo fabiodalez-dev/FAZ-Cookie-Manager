@@ -115,4 +115,24 @@ for (const topology of ['subdirectory','subdomain']) {
  assert.notEqual(w.fazcookie._fazGetFromStore('marketing'),'yes'); ++passed;
  w.close();
 }
+// The prefill reads a page global. A runtime that is missing, stale or
+// replaced by another script can hand back null or throw; that used to abort
+// attachToForm() before the submit handler was registered, so the request form
+// fell back to a plain browser submit with none of its checks.
+for (const [label, impl] of [['returns null', () => null], ['throws', () => { throw new Error('boom'); }], ['returns a non-string id', () => ({ consentID: 42 })]]) {
+  const w = new JSDOM('<form class="faz-dsar-form"><input name="dsar_consent_id"></form>', { runScripts: 'outside-only', url: 'https://site.test/' }).window;
+  w.getFazConsent = impl;
+  const errors = [];
+  w.addEventListener('error', (e) => errors.push(e.message));
+  let thrown = '';
+  try { w.eval(readFileSync(new URL('../../../frontend/js/faz-dsar.js', import.meta.url), 'utf8')); } catch (e) { thrown = e.message; }
+  const form = w.document.querySelector('form');
+  assert.equal(thrown, '', 'faz-dsar.js loads when getFazConsent() ' + label); ++passed;
+  assert.equal(form._fazDsarAttached, true, 'the form is still attached when getFazConsent() ' + label); ++passed;
+  assert.equal(form.elements.dsar_consent_id.value, '', 'and no identifier is invented when getFazConsent() ' + label); ++passed;
+  let threwOnEvent = '';
+  try { w.document.dispatchEvent(new w.Event('fazcookie_consent_update')); } catch (e) { threwOnEvent = e.message; }
+  assert.deepEqual(errors, [], 'the consent-update listener does not throw when getFazConsent() ' + label); ++passed;
+  w.close();
+}
 console.log(`${passed} passed, 0 failed`);

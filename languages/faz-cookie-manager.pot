@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-18T09:50:56+00:00\n"
+"POT-Creation-Date: 2026-10-18T11:04:45+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
@@ -82,7 +82,7 @@ msgstr ""
 msgid "Cookie Policy"
 msgstr ""
 
-#: admin/class-admin.php:317 admin/class-admin.php:2896 admin/views/base.php:25
+#: admin/class-admin.php:317 admin/class-admin.php:2900 admin/views/base.php:25
 #: admin/views/dashboard.php:255 includes/blocks/editor.js:27
 #: includes/blocks/editor.js:60 includes/blocks/editor.js:93
 msgid "Settings"
@@ -100,12 +100,12 @@ msgstr ""
 msgid "Setup"
 msgstr ""
 
-#: admin/class-admin.php:563 admin/class-admin.php:2869
+#: admin/class-admin.php:563 admin/class-admin.php:2873
 #: admin/views/consent-logs.php:27 admin/views/consent-logs.php:52
 msgid "Accepted"
 msgstr ""
 
-#: admin/class-admin.php:564 admin/class-admin.php:2873
+#: admin/class-admin.php:564 admin/class-admin.php:2877
 #: admin/views/consent-logs.php:34 admin/views/consent-logs.php:53
 msgid "Rejected"
 msgstr ""
@@ -2201,17 +2201,17 @@ msgstr[1] ""
 msgid "Open the cookie list"
 msgstr ""
 
-#: admin/class-admin.php:2813
+#: admin/class-admin.php:2817
 msgid "Cookie Consent Overview"
 msgstr ""
 
 #. translators: %d: number of consent interactions in last 30 days
-#: admin/class-admin.php:2880
+#: admin/class-admin.php:2884
 #, php-format
 msgid "%d consent interactions in the last 30 days."
 msgstr ""
 
-#: admin/class-admin.php:2884
+#: admin/class-admin.php:2888
 msgid "View details"
 msgstr ""
 
@@ -2526,17 +2526,17 @@ msgstr ""
 msgid "transfers personal data to another country"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1447
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1470
 msgid "None declared."
 msgstr ""
 
 #. translators: 1: jurisdiction, 2: lang
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1516
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1539
 #, php-format
 msgid "FAZ Cookie Policy: no template scaffold found for jurisdiction \"%1$s\" and language \"%2$s\". Configure the generator under FAZ Cookie Manager → Cookie Policy."
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1534
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1557
 msgid "FAZ Cookie Policy: complete the fields required for the selected jurisdiction before publishing this policy."
 msgstr ""
 
@@ -3591,23 +3591,27 @@ msgstr ""
 msgid "Setup is complete, but the cookie policy page was not created: %s"
 msgstr ""
 
-#: admin/modules/settings/includes/class-policy-page.php:81
+#: admin/modules/settings/includes/class-policy-page.php:85
+msgid "The cookie policy page was saved as a draft because the details POPIA requires are not all set yet: the company name, address and privacy contact email, the Information Officer's name and email, and the privacy policy URL. Fill them in on the Cookie Policy page, then publish the page and link it from the Cookie Banner page."
+msgstr ""
+
+#: admin/modules/settings/includes/class-policy-page.php:86
 msgid "The cookie policy page was saved as a draft because the company name and privacy contact email are not set yet. Fill them in on the Cookie Policy page, then publish the page and link it from the Cookie Banner page."
 msgstr ""
 
-#: admin/modules/settings/includes/class-policy-page.php:83
+#: admin/modules/settings/includes/class-policy-page.php:88
 msgid "The cookie policy page was created, but the banner could not be linked to it. Set the privacy link on the Cookie Banner page."
 msgstr ""
 
-#: admin/modules/settings/includes/class-policy-page.php:177
+#: admin/modules/settings/includes/class-policy-page.php:182
 msgid "Cookie policy creation is already in progress. Please try again shortly."
 msgstr ""
 
-#: admin/modules/settings/includes/class-policy-page.php:215
+#: admin/modules/settings/includes/class-policy-page.php:220
 msgid "The cookie policy page could not be created. Please try again."
 msgstr ""
 
-#: admin/modules/settings/includes/class-policy-page.php:237
+#: admin/modules/settings/includes/class-policy-page.php:242
 msgid "The cookie policy page is not public. Publish it without password protection in Pages, then link it from the Cookie Banner page."
 msgstr ""
 
@@ -6026,7 +6030,7 @@ msgstr ""
 msgid "Daily"
 msgstr ""
 
-#: admin/views/settings.php:444 includes/class-activator.php:738
+#: admin/views/settings.php:444 includes/class-activator.php:747
 msgid "Weekly"
 msgstr ""
 
@@ -6799,7 +6803,7 @@ msgid "Create the cookie policy page when setup finishes"
 msgstr ""
 
 #: admin/views/setup.php:465
-msgid "The page is created from the standard template in the selected language. It is published immediately, visible to visitors, only when your company name and privacy contact email are already saved on the Cookie Policy page; otherwise it is saved as a draft for you to complete and publish. An existing generated page in that language is reused and custom banner links are kept."
+msgid "The page is created from the standard template in the selected language. It is published immediately, visible to visitors, only when the company details the selected law requires are already saved on the Cookie Policy page: the company name and privacy contact email, and for South Africa (POPIA) also the company address, the Information Officer's name and email and the privacy policy URL. Otherwise it is saved as a draft for you to complete and publish. An existing generated page in that language is reused and custom banner links are kept."
 msgstr ""
 
 #: admin/views/setup.php:468
@@ -7344,19 +7348,19 @@ msgstr ""
 msgid "Manage Cookie Preferences"
 msgstr ""
 
-#: includes/class-activator.php:744
+#: includes/class-activator.php:753
 msgid "Once Daily (FAZ)"
 msgstr ""
 
-#: includes/class-activator.php:750
+#: includes/class-activator.php:759
 msgid "Once Weekly (FAZ)"
 msgstr ""
 
-#: includes/class-activator.php:756
+#: includes/class-activator.php:765
 msgid "Once Monthly (FAZ)"
 msgstr ""
 
-#: includes/class-cli.php:448 includes/class-cli.php:457
+#: includes/class-cli.php:446 includes/class-cli.php:455
 msgid "FAZ Cookie Manager — Consent Logs & Privacy Requests"
 msgstr ""
 
@@ -8162,7 +8166,7 @@ msgstr ""
 msgid "If you submit a privacy request through the site form, we store your name, email, request type, message, status and any consent ID you supply in a private request record for %d months; erasure removes identifying details unless applicable retention requirements require otherwise."
 msgstr ""
 
-#: includes/class-privacy-policy-text.php:84
+#: includes/class-privacy-policy-text.php:101
 msgid "Cookie Consent (FAZ Cookie Manager)"
 msgstr ""
 

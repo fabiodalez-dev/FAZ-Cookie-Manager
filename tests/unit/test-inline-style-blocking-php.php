@@ -153,7 +153,16 @@ namespace {
 		ok( false === strpos( (string) $live_css( $out ), 'fonts.g' ), $label . ': the provider URL is gone from the live text' );
 	}
 	$quoted = '.q:before{content:"/*"}.r:after{content:"*/ https://fonts.googleapis.com/x"}';
-	ok( false === strpos( process_style( $quoted ), 'data-faz-css=' ), 'comment markers inside strings are content, not a comment' );
+	ok( false === strpos( process_style( $quoted ), 'data-faz-css=' ), 'a provider URL written inside a string is content, not a fetch' );
+	// The markers themselves: between two strings holding `/*` and `*/` sits
+	// a URL only the comment-stripped pass can read (an @import with a comment
+	// before its string, still the first rule after @charset). A stripper
+	// that took the markers for a comment removed that URL along with them,
+	// and the sheet stayed live.
+	$quoted = '@charset "/*";@import/*c*/"https://fonts.googleapis.com/css2?family=Inter";.s:after{content:"*/"}';
+	$out    = process_style( $quoted );
+	ok( false !== strpos( $out, 'data-faz-css=' ), 'comment markers inside strings are content, not a comment: the URL between them is still judged' );
+	ok( false === strpos( (string) $live_css( $out ), 'fonts.g' ), 'and the provider URL is gone from the live text' );
 
 	$escaped_fn = '@font-face{font-family:x;src:u\72l(https://fonts.gstatic.com/x.woff2)}';
 	$out        = process_style( $escaped_fn );
@@ -181,6 +190,73 @@ namespace {
 	$clean = '.p{background:u\72l(/wp-content/a.png)}@import"/theme.css";';
 	eq( process_style( $clean ), '<style id="theme-fonts">' . $clean . '</style>', 'first-party escapes and a tight first-party @import are left alone' );
 	eq( process_style( $tight, array() ), '<style id="theme-fonts">' . $tight . '</style>', 'a tight @import whose category is allowed is left alone' );
+
+	// ---------- a long string inside image-set()/src()/url() ----------
+	//
+	// The nested-body and string patterns matched one character per
+	// iteration, so a quoted base64 data URI of a few KB exhausted the PCRE
+	// stack (JIT on: ~9 KB; JIT off: ~5 KB). preg_replace_callback() returned
+	// null and the function returned the ORIGINAL text with no category: the
+	// @import neutralised by the pass before was thrown away and Google Fonts
+	// loaded with no consent. The residual reader had the same patterns, so a
+	// long url("data:…") made it drop every url() it should have judged.
+	$long_payload = 'data:image/png;base64,' . str_repeat( 'iVBORw0KGgoAAAANSUhEUg', 2000 );
+	foreach ( array( '1', '0' ) as $jit ) {
+		ini_set( 'pcre.jit', $jit );
+		$label = 'pcre.jit=' . $jit . ': ';
+
+		$big = '@import url(https://fonts.googleapis.com/css?family=X);.a{background-image:image-set("' . $long_payload . '" 1x)}';
+		$out = process_style( $big );
+		ok( false !== strpos( $out, 'data-faz-css=' ), $label . 'a long image-set() string does not undo the @import neutralisation' );
+		ok( false === strpos( (string) $live_css( $out ), 'fonts.googleapis.com' ), $label . 'and the provider URL is gone from the live text' );
+		ok( data_faz_css( $out ) === $big, $label . 'the original is recoverable' );
+
+		$big_src = '@font-face{font-family:F;src:url(https://fonts.gstatic.com/f.woff2)}.b{content:src(\'' . $long_payload . '\')}';
+		$out     = process_style( $big_src );
+		ok( false === strpos( (string) $live_css( $out ), 'fonts.gstatic.com' ), $label . 'a long src() string does not undo the url() neutralisation' );
+
+		// The residual reader: an escaped url( only the decoded copy shows,
+		// next to a long quoted data URI.
+		$big_residual = '.c{background:url("' . $long_payload . '")}.d{background:u\72l("https://fonts.googleapis.com/x.png")}';
+		$out          = process_style( $big_residual );
+		ok( false !== strpos( $out, 'data-faz-css=' ), $label . 'an escaped provider url( next to a long quoted data URI is still judged and parked' );
+		ok( '' === $live_css( $out ), $label . 'whole, since only the decoded copy names it' );
+
+		// Control: a long first-party data URI alone is left alone.
+		$big_clean = '.e{background-image:image-set("' . $long_payload . '" 1x)}';
+		ok( process_style( $big_clean ) === '<style id="theme-fonts">' . $big_clean . '</style>', $label . 'a long data URI with nothing to block is left alone' );
+
+		// An unquoted url( of 2 MB before an escaped provider url(, and a url(
+		// left open after a long quoted data URI: the lazy and greedy bodies
+		// these went through exhausted the backtrack limit.
+		$huge = str_repeat( 'a', 2000000 );
+		$out  = process_style( '.f{background:url(' . $huge . ')}.g{background:u\72l(https://fonts.googleapis.com/x.png)}' );
+		ok( false !== strpos( $out, 'data-faz-css=' ) && '' === $live_css( $out ), $label . 'an escaped provider url( after a 2 MB unquoted url( is parked whole' );
+		$out = process_style( '.h{background:url("' . str_repeat( $long_payload, 50 ) . '")}.i{background:url(https://fonts.googleapis.com/q' );
+		ok( false !== strpos( $out, 'data-faz-css=' ) && '' === $live_css( $out ), $label . 'a provider url( left open after a 2 MB quoted data URI is parked whole' );
+	}
+	ini_restore( 'pcre.jit' );
+
+	// The last resort: a PCRE limit no pattern can stay under. The text is
+	// parked whole when it names a blocked provider, and left alone when it
+	// names none — never returned live with the provider in it.
+	$neutralize = function ( $css ) {
+		$fe     = fe_for_inline_style_test();
+		$method = new \ReflectionMethod( Frontend::class, 'neutralize_blocked_css_urls' );
+		$method->setAccessible( true );
+		$cats   = array();
+		$out    = $method->invokeArgs( $fe, array( $css, array( 'fonts.googleapis.com' => 'functional' ), array( 'functional' ), &$cats ) );
+		return array( $out, $cats );
+	};
+	ini_set( 'pcre.jit', '0' );
+	ini_set( 'pcre.backtrack_limit', '1' );
+	list( $limited, $limited_cats ) = $neutralize( '@import url(https://fonts.googleapis.com/css?family=X);.a{color:red}' );
+	list( $limited_clean, $limited_clean_cats ) = $neutralize( '.a{background:url(/local.png)}' );
+	ini_restore( 'pcre.backtrack_limit' );
+	ini_restore( 'pcre.jit' );
+	ok( '' === $limited && array( 'functional' ) === $limited_cats, 'every pass failing on a PCRE limit parks a sheet that names a blocked provider' );
+	ok( '.a{background:url(/local.png)}' === $limited_clean && array() === $limited_clean_cats, 'and leaves a sheet that names none as it was' );
+
 
 	if ( 0 === $failed ) {
 		echo "\033[32mALL PASS\033[0m - {$passed}/{$run}\n";

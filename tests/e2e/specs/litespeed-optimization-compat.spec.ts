@@ -1476,9 +1476,22 @@ async function anonymousDefaultRender(): Promise<Fetched> {
   return page;
 }
 
+/**
+ * The strict baseline, with the precondition 27–29 rest on checked every time:
+ * consentCacheViolations() only flags scripts this baseline blocks, so an
+ * anonymous render that blocked nothing would turn each of them green on a
+ * page full of executable trackers. Test 26 asserts the same, but under
+ * `-g " 27 "` it does not run.
+ */
 async function requireStrictBase(): Promise<Baseline> {
   if (!strictBase) {
     strictBase = buildBaseline((await anonymousDefaultRender()).html);
+  }
+  const reference = requireBaseline().blocked;
+  expect(reference.length, 'precondition: the Cache Compatibility baseline must block at least one probe').toBeGreaterThan(0);
+  const strictKeys = strictBase.blocked.map((entry) => entry.key);
+  for (const entry of reference) {
+    expect(strictKeys, `precondition: the anonymous default render must block "${entry.key}" exactly as the Cache Compatibility render does`).toContain(entry.key);
   }
   return strictBase;
 }
@@ -1522,10 +1535,7 @@ test.describe('Consent-dependent HTML stays out of the shared LiteSpeed cache un
       'an anonymous render under the default settings must stay publicly cacheable — otherwise 27–29 prove nothing (and the whole site would be uncacheable)',
     ).toBe(true);
     strictBase = buildBaseline(page.html);
-    const strictKeys = strictBase.blocked.map((entry) => entry.key);
-    for (const entry of requireBaseline().blocked) {
-      expect(strictKeys, `the anonymous default render must block "${entry.key}" exactly as the Cache Compatibility render does`).toContain(entry.key);
-    }
+    await requireStrictBase();
   });
 
   test('27 default settings: a visitor who accepted everything gets a response that is vetoed for LiteSpeed or is the most-protective render', async () => {

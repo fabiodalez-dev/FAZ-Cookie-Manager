@@ -177,7 +177,16 @@ class Activator {
 			self::add_recaptcha_gstatic_pattern();
 			self::enable_gpc_on_ccpa_banners();
 			self::ensure_share_personal_data_column();
-			$all_complete = self::ensure_consent_log_gmt_column() && $all_complete;
+			// Not folded into $all_complete: the step reports false until the
+			// LAST row is converted, 500 per call, and holding the version
+			// marker back on that re-ran this whole batch — and the
+			// faz_clear_cache below, a site-wide page-cache purge through the
+			// cache adapters — on every admin_init, admin-ajax and its nopriv
+			// requests included, for as long as the backfill lasted. What the
+			// batch needs is the column, and a failed ALTER still throws; the
+			// rows continue on GMT_BACKFILL_HOOK, which this call schedules,
+			// and the readers fall back for the rows it has not reached.
+			self::ensure_consent_log_gmt_column();
 			self::clear_necessary_optout_flags();
 			self::normalize_legacy_functional_optout_flags();
 			self::move_sourcebuster_to_marketing();
@@ -2286,9 +2295,10 @@ class Activator {
 	 * whose created_at_gmt is still NULL are read and written, and only that
 	 * column is written. The conversion uses the site's CURRENT time zone,
 	 * which is the only information an old row carries: a row written before
-	 * the time-zone setting was changed is converted with the new one. One
-	 * batch runs per admin load; larger tables continue through a single
-	 * self-rescheduling cron event, so no request does the whole table. Rows
+	 * the time-zone setting was changed is converted with the new one. The
+	 * migration batch runs one batch; larger tables continue through a single
+	 * self-rescheduling cron event, so no request does the whole table, and
+	 * the batch does not wait for it (see run_pending_migrations()). Rows
 	 * with an unparseable created_at keep NULL, and the readers fall back to
 	 * the computed value for any row without one.
 	 *

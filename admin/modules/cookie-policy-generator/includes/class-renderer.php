@@ -1225,8 +1225,11 @@ class Renderer {
 	 *
 	 * A scaffold sentence such as `contact us at **{{COMPANY_EMAIL}}**.` reads
 	 * `contact us at ****.` when the field is empty. Only the sentence holding
-	 * the empty value goes; the rest of the paragraph stays byte for byte, and
-	 * a line that is nothing but a horizontal rule is left alone.
+	 * the empty value goes; the rest of the paragraph stays byte for byte. A
+	 * line that is nothing but the emptied value (`**{{COMPANY_EMAIL}}**`
+	 * alone under a contact heading) goes too: markdown_to_html() has no
+	 * horizontal-rule syntax, so such a line is never a rule, and keeping it
+	 * printed a literal `****` to visitors.
 	 *
 	 * @param string $markdown Substituted policy markdown.
 	 * @return string Cleaned markdown.
@@ -1242,35 +1245,66 @@ class Renderer {
 		$out = '';
 		foreach ( $lines as $i => $line ) {
 			// Even offsets are lines, odd ones the newline that followed them.
-			if ( 1 === $i % 2 || false === strpos( $line, '****' ) || preg_match( '/^\s*\*{3,}\s*$/', $line ) ) {
+			if ( 1 === $i % 2 || false === strpos( $line, '****' ) ) {
 				$out .= $line;
 				continue;
 			}
 			// Split after sentence-ending punctuation followed by a capital,
 			// keeping the whitespace so the surviving sentences are rejoined byte
-			// for byte. The capital is what keeps `Reg. 2016/679` and
-			// `Art. 12(3)` inside their sentence.
+			// for byte. The capital keeps `Art. 12(3)` inside its sentence.
 			$parts = preg_split( '/(?<=[.!?])(\s+)(?=\p{Lu})/u', $line, -1, PREG_SPLIT_DELIM_CAPTURE );
 			if ( false === $parts ) {
 				$out .= $line;
 				continue;
 			}
-			$kept = '';
+			// A capital after a dot is not enough: the legal citations carry
+			// abbreviations followed by one (`Cal. Civ. Code`, `Reg. UE
+			// 2016/679`). Split there, the sentence holding the empty value
+			// lost only its head and the policy opened on `Civ. Code §§ …)` or
+			// `UE 2016/679) …`. A part that ends in a short abbreviation — one
+			// letter, or a capital and up to two lower-case letters (`Cal.`,
+			// `Civ.`, `Reg.`, `Art.`, `Nr.`, `Inc.`, `z.`), or the French
+			// `Règl.` — is joined to the next. Joining two real sentences only
+			// removes more when one of them holds the empty value, which is the
+			// safe direction.
+			$sentences = array();
 			for ( $j = 0, $n = count( $parts ); $j < $n; $j += 2 ) {
-				if ( false !== strpos( $parts[ $j ], '****' ) ) {
+				$gap  = isset( $parts[ $j + 1 ] ) ? $parts[ $j + 1 ] : '';
+				$last = count( $sentences ) - 1;
+				if ( $last >= 0 && preg_match( '/(?:^|[^\p{L}])(?:\p{L}|\p{Lu}\p{Ll}{1,2}|Règl)\.$/u', $sentences[ $last ][0] ) ) {
+					$sentences[ $last ][0] .= $sentences[ $last ][1] . $parts[ $j ];
+					$sentences[ $last ][1]  = $gap;
 					continue;
 				}
-				$kept .= $parts[ $j ] . ( isset( $parts[ $j + 1 ] ) ? $parts[ $j + 1 ] : '' );
+				$sentences[] = array( $parts[ $j ], $gap );
+			}
+			$kept = '';
+			foreach ( $sentences as $sentence ) {
+				if ( false !== strpos( $sentence[0], '****' ) ) {
+					continue;
+				}
+				$kept .= $sentence[0] . $sentence[1];
 			}
 			// A list marker or heading prefix left alone carries nothing.
 			$out .= preg_match( '/^\s*(?:[-*+]|\d+\.|#{1,6})?\s*$/', $kept ) ? '' : rtrim( $kept );
 		}
 		// A heading whose only sentence went (the scaffold's closing
-		// "Contact" section) would stand over nothing: drop it too. Only when
-		// what follows is the end or a heading of the same or a higher level,
-		// so a heading directly followed by its own subsections stays.
-		$cleaned = preg_replace( '/^(#{1,6})[ \t][^\n]*\n(?:[ \t]*\n)*(?=\z|(?!\1#)#+[ \t])/m', '', $out );
-		return null === $cleaned ? $out : $cleaned;
+		// "Contact" section) would stand over nothing: drop it too.
+		return self::strip_headings_over_nothing( $out );
+	}
+
+	/**
+	 * Drop a heading left standing over nothing by the strip helpers.
+	 *
+	 * Only when what follows is the end or a heading of the same or a higher
+	 * level, so a heading directly followed by its own subsections stays.
+	 *
+	 * @param string $markdown Policy markdown.
+	 * @return string
+	 */
+	private static function strip_headings_over_nothing( $markdown ) {
+		$cleaned = preg_replace( '/^(#{1,6})[ \t][^\n]*\n(?:[ \t]*\n)*(?=\z|(?!\1#)#+[ \t])/m', '', $markdown );
+		return null === $cleaned ? $markdown : $cleaned;
 	}
 
 	/**
@@ -1279,6 +1313,12 @@ class Renderer {
 	 * Strips list items that render as a bold label with no value (plus any
 	 * trailing dashes/dots/commas), then collapses the blank lines the
 	 * deletion leaves behind. Falls back to the original markdown on PCRE error.
+	 *
+	 * When every item of a list goes, the sentence that introduced it goes
+	 * too, and so does a heading left over nothing: with no controller saved
+	 * the GDPR and POPIA scaffolds otherwise told visitors "The data
+	 * controller … is:" and stopped there. A list that keeps one item keeps
+	 * its introduction.
 	 *
 	 * @param string $markdown Raw policy markdown.
 	 * @return string Cleaned markdown.
@@ -1289,18 +1329,79 @@ class Renderer {
 		}
 		// `[\s\-—–·,]*` allows a mixture of whitespace, ASCII hyphen,
 		// en-dash, em-dash, middle dot and comma in the trailing run.
-		// `m` flag = ^/$ match per line.
+		// `m` flag = ^/$ match per line. Each removed item is first marked
+		// with a byte no scaffold carries, so the lists it emptied can be
+		// found; the mark is then removed exactly where the item was.
+		$mark    = "\x1A";
 		$pattern = '/^[ \t]*[-*][ \t]+\*\*[^*\n]+:\*\*[\s\-—–·,]*\r?$/mu';
-		$cleaned = preg_replace( $pattern, '', $markdown );
-		if ( null === $cleaned ) {
-			// Regex error (e.g. PCRE compile fail under exotic PHP build).
-			// Fall back to the un-cleaned source rather than nuking the policy.
-			return $markdown;
+		$marked  = false === strpos( $markdown, $mark ) ? preg_replace( $pattern, $mark, $markdown ) : null;
+		if ( null === $marked ) {
+			$marked = preg_replace( $pattern, '', $markdown );
+			if ( null === $marked ) {
+				// Regex error (e.g. PCRE compile fail under exotic PHP build).
+				// Fall back to the un-cleaned source rather than nuking the policy.
+				return $markdown;
+			}
+		}
+		$cleaned = $marked;
+		if ( false !== strpos( $marked, $mark ) ) {
+			$lines   = explode( "\n", $marked );
+			$dropped = false;
+			$count   = count( $lines );
+			for ( $i = 0; $i < $count; $i++ ) {
+				if ( $mark !== rtrim( $lines[ $i ], "\r" ) ) {
+					continue;
+				}
+				// The list around this item: contiguous item lines, removed or not.
+				$first = $i;
+				while ( $first > 0 && self::is_list_line( $lines[ $first - 1 ], $mark ) ) {
+					--$first;
+				}
+				$last = $i;
+				while ( $last + 1 < $count && self::is_list_line( $lines[ $last + 1 ], $mark ) ) {
+					++$last;
+				}
+				$i     = $last;
+				$whole = true;
+				for ( $k = $first; $k <= $last; $k++ ) {
+					if ( $mark !== rtrim( $lines[ $k ], "\r" ) ) {
+						$whole = false;
+						break;
+					}
+				}
+				if ( ! $whole ) {
+					continue;
+				}
+				$intro = $first - 1;
+				while ( $intro >= 0 && '' === trim( $lines[ $intro ] ) ) {
+					--$intro;
+				}
+				if ( $intro >= 0 && ':' === substr( rtrim( $lines[ $intro ] ), -1 ) && 1 !== preg_match( '/^[ \t]*(?:#|[-*+][ \t]|\d+\.[ \t])/', $lines[ $intro ] ) ) {
+					$lines[ $intro ] = $mark;
+					$dropped         = true;
+				}
+			}
+			$cleaned = str_replace( $mark, '', implode( "\n", $lines ) );
+			if ( $dropped ) {
+				$cleaned = self::strip_headings_over_nothing( $cleaned );
+			}
 		}
 		// Collapse the 2+ blank lines the deletion may have left behind so
 		// the markdown parser doesn't render extra paragraph spacing.
 		$cleaned = (string) preg_replace( "/(\r?\n){3,}/", "\n\n", $cleaned );
 		return $cleaned;
+	}
+
+	/**
+	 * Whether a markdown line is a list item, or one strip_empty_label_lines()
+	 * marked as removed.
+	 *
+	 * @param string $line Line, without its newline.
+	 * @param string $mark The removal mark.
+	 * @return bool
+	 */
+	private static function is_list_line( $line, $mark ) {
+		return $mark === rtrim( $line, "\r" ) || 1 === preg_match( '/^[ \t]*[-*+][ \t]/', $line );
 	}
 
 	/**

@@ -9,10 +9,13 @@
  * overrides Cache-Control does not override the targeted headers — so the
  * response a veto was meant to keep private could still be stored.
  *
- * This suite drives the real veto sites (Frontend crawler veto, Frontend
- * country veto constants, AMP crawler veto) with header() captured through a
- * namespaced stub and asserts the full set: `private`, CDN-Cache-Control,
- * Cloudflare-CDN-Cache-Control, Surrogate-Control, and LSCACHE_NO_CACHE.
+ * This suite drives the real veto sites (the Frontend crawler veto and the
+ * AMP crawler veto) with header() captured through a namespaced stub and
+ * asserts the full set: `private`, CDN-Cache-Control,
+ * Cloudflare-CDN-Cache-Control, Surrogate-Control, LSCACHE_NO_CACHE and
+ * DONOTCACHEPAGE. The Frontend country veto sends the same set through the
+ * same send_page_cache_veto(); when it fires is pinned in
+ * test-geo-cache-bootstrap-php.php.
  *
  * Run: php tests/unit/test-cache-veto-headers-php.php
  */
@@ -89,7 +92,7 @@ namespace {
 	veto_assert_full_set( 'crawler veto' );
 	veto_check( in_array( 'User-Agent', veto_header( 'Vary' ), true ), 'crawler veto: Vary: User-Agent kept' );
 	veto_check( defined( 'LSCACHE_NO_CACHE' ) && LSCACHE_NO_CACHE, 'LSCACHE_NO_CACHE defined for LiteSpeed Cache' );
-	veto_check( defined( 'DONOTCACHEPAGE' ), 'DONOTCACHEPAGE defined' );
+	veto_check( defined( 'DONOTCACHEPAGE' ) && true === DONOTCACHEPAGE, 'DONOTCACHEPAGE defined as true' );
 	// A page veto keeps the PAGE out of the cache; W3TC's object and database
 	// caches hold nothing visitor-specific, and switching them off made every
 	// consenting visitor's page view run uncached (see define_no_cache_constants()).

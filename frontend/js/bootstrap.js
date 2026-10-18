@@ -1112,6 +1112,11 @@
                     || pendingRef
                     || !!(styleOwner && cssRisk(containerText(styleOwner, dropped, name), [node]));
                 if (!carries && !waiting.has(self)) return original.apply(self, args);
+                // A child the page already gave `self` through a held call,
+                // put in its own place: a no-op to the engine. Passed through,
+                // the native call saw the node in its holder and threw
+                // NotFoundError.
+                if (node === ref && pendingRef) return node;
                 // A call the engine refuses is refused here too, with the
                 // engine's own error: holding it turned a synchronous
                 // NotFoundError or HierarchyRequestError into a node quietly
@@ -1207,11 +1212,21 @@
                     // its first following sibling that is not itself being
                     // inserted (the specification's "viable next sibling"),
                     // read before the arguments are taken out.
-                    var anchor = null, gone = false;
+                    var anchor = null, gone = false, listed = false;
                     if (name === 'replaceWith' && !styleOwner) {
                         anchor = self.nextSibling;
                         while (anchor && args.indexOf(anchor) !== -1) anchor = anchor.nextSibling;
                         gone = true;
+                    } else if ((name === 'before' || name === 'after') && !styleOwner && args.indexOf(self) !== -1) {
+                        // `s.before(x, s)`: `s` is one of the nodes being
+                        // moved, so it is in a holder at the replay and cannot
+                        // anchor the call. The engine places the nodes before
+                        // the first sibling, from `s` (before) or after it
+                        // (after), that is not itself being inserted; read now,
+                        // like the replaceWith anchor above.
+                        anchor = name === 'before' ? self : self.nextSibling;
+                        while (anchor && args.indexOf(anchor) !== -1) anchor = anchor.nextSibling;
+                        listed = true;
                     }
                     var parts = args.map(function (n) { return isNode(n) ? stash(n, record) : n; });
                     if (gone && self.parentNode === container) nativeRemoveChild.call(container, self);
@@ -1223,7 +1238,7 @@
                         var target = record.target;
                         var insert = function () {
                             parts.forEach(function (n) { prepare(n, policy); parkSheets(n, policy); land(n, target); });
-                            if (gone) {
+                            if (gone || listed) {
                                 if (anchor && anchor.parentNode === target) return anchor.before.apply(anchor, parts);
                                 return target.append.apply(target, parts);
                             }
@@ -1249,7 +1264,7 @@
                         // receives it at the head can complete, or hide, a URL
                         // across the junction with the existing text.
                         var at = null, how = name;
-                        if (gone) {
+                        if (gone || listed) {
                             if (anchor && anchor.parentNode === target) { at = anchor; how = 'insertBefore'; }
                             else how = 'append';
                         } else if (sibling) {
@@ -1410,8 +1425,13 @@
                     // only the splice completes (`…:u` + `rl(https://…)` + `}`).
                     // So the spliced text is asked too, exactly as the engine
                     // will read it.
+                    // waitingFragment(): a fragment with a held insertion still
+                    // queued INTO it, as in the Node and ParentNode wrappers.
+                    // Inserted natively it lands empty, and the held child
+                    // later replays into the orphaned fragment and is lost.
                     var carries = resources(node).length
                         || styleRisk(node)
+                        || waitingFragment(node)
                         || cssURL(surrounded())
                         || !!(styleOwner && cssRisk(containerText(styleOwner, null, name), [node]))
                         || !!(styleOwner && name === 'insertNode' && cssURL(rangeResult(range, styleOwner, node)));
@@ -3010,12 +3030,20 @@
         var tasks = queue;
         queue = [];
         immediate = safety;
-        // Every queued insertion is about to land: nothing is waiting INTO a
-        // container any more, and nothing will queue again on this path.
-        into = new WeakMap();
         replaying++;
         try { judgeScripts(safety); } finally { replaying--; }
+        // The queued tasks run BEFORE the map of insertions queued into each
+        // container is dropped, the order finish() uses. land() reads that map
+        // to repoint a later call made through a node still in its holder
+        // (`a.replaceWith(b)`, `a.parentNode.replaceChild(b, a)`, `a.before(b)`)
+        // at the node's real destination. Dropped first, it found nothing, and
+        // the second node replayed into the emptied, orphaned holder: lost,
+        // neither parked nor refused. The fuse in defer() takes this path too,
+        // so the loss depended on where the fuse happened to fall.
         tasks.forEach(function (task) { run(task, safety); });
+        // Every queued insertion has landed: nothing is waiting INTO a
+        // container any more, and nothing will queue again on this path.
+        into = new WeakMap();
     }
     // Every script the page created, judged one by one and each on its own,
     // the way run() treats a task. A policy that threw on one element used to

@@ -2768,6 +2768,12 @@ class Admin {
 	 * Send no-cache headers for all faz/v1 REST responses so HTTP caches
 	 * (LiteSpeed, Nginx proxy, CDNs) never serve stale cookie/category data.
 	 *
+	 * The set is Cache_Compatibility::NO_STORE_HEADERS, the one every other
+	 * FAZ "do not store" response sends. A local copy of three lines used to
+	 * stand here, without CDN-Cache-Control, Cloudflare-CDN-Cache-Control or
+	 * Surrogate-Control, so an edge rule overriding Cache-Control could still
+	 * store a REST answer while the readme said otherwise.
+	 *
 	 * @return void
 	 */
 	public function add_rest_nocache_headers() {
@@ -2782,9 +2788,7 @@ class Admin {
 					&& 0 !== strpos( $route, '/faz/v1/banner' )
 					&& ! headers_sent()
 				) {
-					header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
-					header( 'Pragma: no-cache' );
-					header( 'X-LiteSpeed-Cache-Control: no-cache' );
+					\FazCookie\Includes\Cache_Compatibility::send_no_store_headers();
 				}
 				return $served;
 			},

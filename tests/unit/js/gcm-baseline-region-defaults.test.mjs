@@ -54,8 +54,17 @@ function row(regions, overrides = {}) {
   }, overrides);
 }
 
-/** Restore a granted record, then invalidate it the way the runtime does. */
-function invalidateAfterRestore(defaultSettings, { advanced = false, npa = false } = {}) {
+/**
+ * Restore a granted record, then invalidate it the way the runtime does.
+ *
+ * _fazInvalidateStoredConsent() deletes the cookie and dispatches nothing; the
+ * runtime then announces the state it settled on with fazcookie_consent_ready
+ * ('init', the record being gone), and that is the event gcm.js reconciles a
+ * discarded restore on. `via: 'update'` replays the other path that reaches the
+ * baseline — a live change whose cookie no longer parses — so the two can be
+ * held to the same answer.
+ */
+function invalidateAfterRestore(defaultSettings, { advanced = false, npa = false, via = 'ready' } = {}) {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { runScripts: 'outside-only', url: 'http://localhost/' });
   const { window } = dom;
   window.document.cookie = `fazcookie-consent=${encodeURIComponent(GRANTS)}`;
@@ -70,7 +79,11 @@ function invalidateAfterRestore(defaultSettings, { advanced = false, npa = false
   window.eval(GCM);
   const before = window.dataLayer.length;
   window.document.cookie = 'fazcookie-consent=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-  window.document.dispatchEvent(new window.CustomEvent('fazcookie_consent_update'));
+  if (via === 'update') {
+    window.document.dispatchEvent(new window.CustomEvent('fazcookie_consent_update'));
+  } else {
+    window.document.dispatchEvent(new window.CustomEvent('fazcookie_consent_ready', { detail: { action: 'init', accepted: [], rejected: [] } }));
+  }
   const calls = window.dataLayer.map((a) => Array.prototype.slice.call(a));
   const updates = calls.filter((c) => c[0] === 'consent' && c[1] === 'update').map((c) => c[2]);
   const after = calls.slice(before);
@@ -119,6 +132,15 @@ console.log('gcm.js: the invalidation baseline follows the configured defaults')
   const r = invalidateAfterRestore([row('All', { analytics: 'granted' })], { npa: true });
   const npa = r.after.filter((c) => c[0] === 'set' && c[1] && typeof c[1] === 'object' && 'npa' in c[1]).map((c) => c[1].npa);
   eq('non-personalized-ads fallback: npa back to 1 with ad_storage denied', npa[npa.length - 1], 1);
+}
+
+// 6. A live change whose record no longer parses lands on the same baseline.
+{
+  const settings = [row('US', { analytics: 'granted' }), row('All', { analytics: 'granted', functional: 'granted' })];
+  const ready = invalidateAfterRestore(settings);
+  const update = invalidateAfterRestore(settings, { via: 'update' });
+  eq('premise: the runtime path reaches a baseline', ready.after.some((c) => c[0] === 'consent' && c[1] === 'update'), true);
+  eq('the live-change path sends the same baseline as the runtime path', JSON.stringify(update.baseline), JSON.stringify(ready.baseline));
 }
 
 console.log(`\ngcm-baseline-region-defaults: ${passed} passed, ${failed} failed`);

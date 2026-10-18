@@ -81,6 +81,18 @@ namespace {
 		@unlink( $f );
 	}
 
+	$GLOBALS['faz_test_actions']         = array();
+	$GLOBALS['faz_test_template_clears'] = 0;
+	function do_action( $tag ) {
+		$GLOBALS['faz_test_actions'][] = $tag;
+	}
+	function faz_clear_banner_template_cache() {
+		++$GLOBALS['faz_test_template_clears'];
+	}
+	function faz_default_language() {
+		return 'en';
+	}
+
 	require_once dirname( __DIR__, 2 ) . '/includes/class-gvl.php';
 
 	use FazCookie\Includes\Gvl;
@@ -166,6 +178,29 @@ namespace {
 	unset( $GLOBALS['faz_test_options']['faz_gvl_selected_vendors'] );
 	$gvl->download();
 	assert_eq( array_key_exists( 'faz_gvl_selected_vendors', $GLOBALS['faz_test_options'] ), false, 'download never creates the selection option when it does not exist' );
+
+	// ---------------------------------------------------------------------
+	// Weekly cron, same list version: a vendor whose deletedDate has passed
+	// since the last tick is pruned from the selection, and the selected
+	// vendors travel in every page's _fazConfig. cron_update() purged only on
+	// a version change, so the cached pages kept announcing the deleted vendor.
+	// ---------------------------------------------------------------------
+	echo "\nGvl::cron_update() when the pruning changes the selection\n";
+	$GLOBALS['faz_test_options']['faz_settings']             = array( 'iab' => array( 'enabled' => true ) );
+	$GLOBALS['faz_test_options'][ Gvl::META_KEY ]            = array( 'version' => 180 );
+	$GLOBALS['faz_test_options']['faz_gvl_selected_vendors'] = array( 1, 68 );
+	$GLOBALS['faz_test_actions']                             = array();
+	$GLOBALS['faz_test_template_clears']                     = 0;
+	Gvl::cron_update();
+	assert_eq( get_option( 'faz_gvl_selected_vendors' ), array( 1 ), 'PRECONDITION: the deleted vendor is pruned on the same list version' );
+	assert_eq( in_array( 'faz_purge_page_cache', $GLOBALS['faz_test_actions'], true ), true, 'the page caches are purged, so cached pages stop announcing it' );
+	assert_eq( $GLOBALS['faz_test_template_clears'] > 0, true, 'and the stored banner template is dropped' );
+
+	$GLOBALS['faz_test_actions']         = array();
+	$GLOBALS['faz_test_template_clears'] = 0;
+	Gvl::cron_update();
+	assert_eq( in_array( 'faz_purge_page_cache', $GLOBALS['faz_test_actions'], true ), false, 'an unchanged selection on the same version purges nothing' );
+	assert_eq( $GLOBALS['faz_test_template_clears'], 0, 'and leaves the banner template alone' );
 
 	// Clean the temp upload dir.
 	$dir = wp_upload_dir()['basedir'];

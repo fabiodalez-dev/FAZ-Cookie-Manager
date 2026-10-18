@@ -31,6 +31,13 @@ foreach ( glob( $root . '/*/*.md' ) as $file ) {
 	$lang = basename( $file, '.md' );
 	$juris = basename( dirname( $file ) );
 	if ( ! isset( $markers[ $lang ] ) ) {
+		// A scaffold added in a language with no marker must not pass unread:
+		// "every shipped scaffold" includes it.
+		if ( false !== strpos( (string) file_get_contents( $file ), '{{RETENTION_PERIOD}}' ) ) {
+			++$checks;
+			++$failed;
+			echo "  FAIL {$juris}/{$lang}.md carries {{RETENTION_PERIOD}} but no fallback marker is defined for '{$lang}'\n";
+		}
 		continue;
 	}
 	foreach ( file( $file ) as $n => $line ) {
@@ -41,6 +48,17 @@ foreach ( glob( $root . '/*/*.md' ) as $file ) {
 		if ( false === mb_strpos( $line, $markers[ $lang ] ) ) {
 			++$failed;
 			echo "  FAIL {$juris}/{$lang}.md:" . ( $n + 1 ) . " presents the fallback figure as the retention period\n";
+		}
+		// LGPD: a period longer than the declared fallback is allowed only where
+		// the law requires it or Art. 16 permits it. pt-BR, the native version,
+		// said "ou para fins legítimos", a broader exception than any other
+		// language and than Art. 16 itself.
+		if ( 'lgpd-brazil' === $juris ) {
+			++$checks;
+			if ( 1 !== preg_match( '/\b16\.? (?:da )?LGPD/u', $line ) || false !== mb_strpos( $line, 'fins legítimos' ) ) {
+				++$failed;
+				echo "  FAIL {$juris}/{$lang}.md:" . ( $n + 1 ) . " allows a longer period on a ground other than the law or Art. 16 LGPD\n";
+			}
 		}
 	}
 }

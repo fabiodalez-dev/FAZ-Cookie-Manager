@@ -170,7 +170,8 @@ namespace {
 
 	// The live state is the opt-out mechanism: the one the law requires the
 	// page to offer, and the one the visitor with no cookie needs.
-	check( false !== strpos( $without, 'class="faz-dnsmpi-form"' ), 'the opt-out form is rendered live' );
+	$optout_at = strpos( $without, 'class="faz-dnsmpi-form"' );
+	check( false !== $optout_at, 'the opt-out form is rendered' );
 	check( false !== strpos( $without, 'name="action" value="faz_dnsmpi_optout"' ), 'with its action' );
 	check( false !== strpos( $without, 'name="nonce"  value="nonce-faz_dnsmpi_optout"' ), 'and its nonce' );
 
@@ -178,8 +179,12 @@ namespace {
 	// to swap in when document.cookie says the visitor has opted out.
 	$tpl_at = strpos( $without, '<template class="faz-dnsmpi-rescind-template"' );
 	check( false !== $tpl_at, 'the rescind state is rendered inside a <template>' );
+	$tpl_end = false !== $tpl_at ? strpos( $without, '</template>', $tpl_at ) : false;
+	// Anchored on both ends of the template: a form after </template> is as
+	// live as one before <template>.
+	check( false !== $optout_at && false !== $tpl_at && false !== $tpl_end && ( $optout_at < $tpl_at || $optout_at > $tpl_end ), 'the opt-out form is live, outside the template' );
 	$rescind_at = strpos( $without, 'class="faz-dnsmpi-rescind-form"' );
-	check( false !== $rescind_at && false !== $tpl_at && $rescind_at > $tpl_at, 'and the rescind form is inside it, not live' );
+	check( false !== $rescind_at && false !== $tpl_end && $rescind_at > $tpl_at && $rescind_at < $tpl_end, 'and the rescind form is inside it, not live' );
 	check( false !== strpos( $without, 'name="nonce"  value="nonce-faz_dnsmpi_rescind"' ), 'with its own nonce' );
 	check( false !== strpos( $without, 'You have already submitted an opt-out request' ), 'and the standing notice' );
 	check( 1 === substr_count( $without, '<template ' ) && 1 === substr_count( $without, '</template>' ), 'exactly one template, closed' );

@@ -172,6 +172,15 @@ console.log('— the visible state follows document.cookie, not the cached rende
 }
 
 {
+  // The exact cookie name with a value other than 1: the server only honours '1'.
+  const { window } = mount({ cookie: 'fazcookie-dnsmpi=0;path=/' });
+  await ready(window);
+  const doc = window.document;
+  check('fazcookie-dnsmpi=0 does not count as an opt-out: the opt-out form stays live', doc.querySelector('.faz-dnsmpi-form') !== null);
+  check('fazcookie-dnsmpi=0: the rescind form is not swapped in', doc.querySelector('.faz-dnsmpi-rescind-form') === null);
+}
+
+{
   // A page builder injecting the shortcode HTML after load.
   const { window } = mount({ body: '', cookie: 'fazcookie-dnsmpi=1;path=/' });
   await ready(window);

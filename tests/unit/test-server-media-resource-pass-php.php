@@ -112,6 +112,11 @@ namespace {
 			return -1 === $component ? parse_url( (string) $url ) : parse_url( (string) $url, $component ); // phpcs:ignore
 		}
 	}
+	if ( ! function_exists( 'wp_salt' ) ) {
+		function wp_salt( $scheme = 'auth' ) {
+			return 'test-salt-' . $scheme;
+		}
+	}
 	if ( ! function_exists( 'get_transient' ) ) {
 		function get_transient( $key ) {
 			return false;
@@ -326,6 +331,107 @@ namespace {
 	$fe  = faz_ob_frontend( $providers, $blocked );
 	$out = faz_ob_run( $fe, '<html><body><iframe src="' . $doc . '"></iframe></body></html>' );
 	assert_true( '"' . $doc . '"' === faz_raw_attr( $out, 'data-faz-src' ), 'a data: iframe whose document loads a tracker IS parked: nothing gates the sub-document once it is parsed' );
+
+	echo "\n-- tag-shaped text inside another tag's attribute value is not an element --\n";
+
+	// Tooltip and popover libraries keep HTML in data-* and title. The media
+	// pattern started a match at `<video` wherever it stood, so a value like
+	// the one below was rewritten in place: the parked attributes it injected
+	// carry double quotes, which closed the outer value early and broke the
+	// markup. The linear fallback already left such values alone; the pass now
+	// walks whole opening tags, as the style-attribute pass does.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><body><span class="tip" data-tip=\'<video poster="https://i.ytimg.com/vi/ID/hq.jpg">x\'>hover</span><span title="<embed src=\'https://www.youtube.com/embed/ID\'>">t</span></body></html>';
+	assert_true( faz_ob_run( $fe, $html ) === $html, 'media tags quoted inside data-tip and title come out byte-identical' );
+
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><span data-tip=\'<video poster="https://i.ytimg.com/a.jpg">\'>h</span><video poster="https://i.ytimg.com/vi/ID/hqdefault.jpg"></video></body></html>' );
+	assert_true( false !== strpos( $out, 'data-tip=\'<video poster="https://i.ytimg.com/a.jpg">\'' ), 'the quoted one is left as it was' );
+	assert_true( '"https://i.ytimg.com/vi/ID/hqdefault.jpg"' === faz_raw_attr( $out, 'data-faz-poster' ), 'while the real <video> after it is still parked' );
+
+	echo "\n-- <img> and <iframe> quoted inside another tag's attribute value --\n";
+
+	// The <img>, <iframe> and srcdoc patterns were anchored on their tag
+	// names, so a match started wherever `<img` or `<iframe` stood, inside a
+	// tooltip's data-html or a title included. The double-quoted keys they
+	// wrote there closed the outer value early and broke the markup, and the
+	// placeholder the iframe pass wraps a frame in landed inside the value.
+	$quoted = array(
+		'img in a double-quoted data-html'   => '<div data-html="<img src=\'https://cdn.tracker.test/p.png\'>">x</div>',
+		'img in a single-quoted data-tip'    => '<span data-tip=\'<img src="https://cdn.tracker.test/p.png" width="1">\'>h</span>',
+		'iframe in a title'                  => '<span title=\'<iframe src="https://www.youtube.com/embed/ID"></iframe>\'>t</span>',
+		'self-closed iframe in a data-*'     => '<a data-embed=\'<iframe src="https://www.youtube.com/embed/ID"/>\' href="/v">v</a>',
+		'iframe srcdoc in a data-*'          => '<i data-x=\'<iframe srcdoc="<img src=https://cdn.tracker.test/p.png>"></iframe>\'></i>',
+		'img in an end tag\'s attribute'     => '<p>a</p title="<img src=\'https://cdn.tracker.test/p.png\'>">',
+	);
+	foreach ( $quoted as $what => $snippet ) {
+		$fe   = faz_ob_frontend( $providers, $blocked );
+		$html = '<html><body>' . $snippet . '</body></html>';
+		assert_true( faz_ob_run( $fe, $html ) === $html, $what . ': byte-identical' );
+	}
+
+	// The real tags after a quoted one are judged as before.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><div data-html="<img src=\'https://cdn.tracker.test/q.png\'>">x</div><img src="https://cdn.tracker.test/p.png" width="1"></body></html>' );
+	assert_true( false !== strpos( $out, '<div data-html="<img src=\'https://cdn.tracker.test/q.png\'>">x</div>' ), 'the quoted <img> is left as it was' );
+	assert_true( '"https://cdn.tracker.test/p.png"' === faz_raw_attr( $out, 'data-faz-src' ) && 1 === substr_count( $out, 'data-faz-src=' ), 'while the real <img> after it is parked, and only that one' );
+
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><span title=\'<iframe src="https://www.youtube.com/embed/Q"></iframe>\'>t</span><iframe src="https://www.youtube.com/embed/ID" width="560"></iframe></body></html>' );
+	assert_true( false !== strpos( $out, '<span title=\'<iframe src="https://www.youtube.com/embed/Q"></iframe>\'>t</span>' ), 'the quoted <iframe> is left as it was' );
+	assert_true( '"https://www.youtube.com/embed/ID"' === faz_raw_attr( $out, 'data-faz-src' ) && 1 === substr_count( $out, 'faz-placeholder"' ), 'while the real <iframe> after it is parked behind one placeholder' );
+
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><i data-x=\'<iframe srcdoc="<img src=https://cdn.tracker.test/q.png>"></iframe>\'></i><iframe srcdoc="<img src=https://cdn.tracker.test/p.png>"></iframe></body></html>' );
+	assert_true( false !== strpos( $out, '<i data-x=\'<iframe srcdoc="<img src=https://cdn.tracker.test/q.png>"></iframe>\'></i>' ), 'a quoted srcdoc is left as it was' );
+	assert_true( 1 === substr_count( $out, 'data-faz-srcdoc=' ) && false !== strpos( $out, 'data-faz-srcdoc="<img src=https://cdn.tracker.test/p.png>"' ), 'while the real srcdoc after it is parked' );
+
+	// Upper-case and unquoted spellings of the real tags still match.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><IMG SRC=https://cdn.tracker.test/p.png><IFRAME SRC=https://www.youtube.com/embed/ID></IFRAME></body></html>' );
+	assert_true( 2 === substr_count( $out, 'data-faz-src=' ), 'upper-case unquoted <IMG> and <IFRAME> are still parked' );
+
+	echo "\n-- the raw-text bodies of iframe, noembed, noframes and plaintext --\n";
+
+	// The browser reads these bodies as text up to their end tag (plaintext:
+	// to the end of the document). The opening-tag walk did not: a quoted
+	// value of a tag-shaped string inside the body ran past the end tag and
+	// swallowed the real media element after it, which then shipped live.
+	foreach ( array( 'noembed', 'noframes' ) as $raw ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><body><' . $raw . '><a title="</' . $raw . '><video src="https://cdn.tracker.test/v.mp4"></video></body></html>' );
+		assert_true( '"https://cdn.tracker.test/v.mp4"' === faz_raw_attr( $out, 'data-faz-src' ) && false === strpos( $out, '<video src=' ), "a <video> after an open quote in a <{$raw}> body is still parked" );
+		assert_true( false !== strpos( $out, '<' . $raw . '><a title="</' . $raw . '>' ), "and the <{$raw}> body comes back as it was" );
+
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><body><' . $raw . '><a title="<video src=https://cdn.tracker.test/v.mp4>"></' . $raw . '><video src="https://cdn.tracker.test/v.mp4"></video></body></html>' );
+		assert_true( 1 === substr_count( $out, 'data-faz-src=' ) && false !== strpos( $out, '<a title="<video src=https://cdn.tracker.test/v.mp4>">' ), "<{$raw}>: the text in the body is left alone, the real <video> after it is parked" );
+	}
+
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><iframe src="/local.html"><a title="</iframe><video src="https://cdn.tracker.test/v.mp4"></video></body></html>' );
+	assert_true( '"https://cdn.tracker.test/v.mp4"' === faz_raw_attr( $out, 'data-faz-src' ) && false === strpos( $out, '<video src=' ), 'a <video> after an open quote in an <iframe> fallback body is still parked' );
+	assert_true( false !== strpos( $out, '<iframe src="/local.html"><a title="</iframe>' ), 'and the first-party iframe comes back as it was' );
+
+	// The iframe pass still sees the opening tag and parks a blocked frame,
+	// with its fallback body restored inside the placeholder.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><iframe src="https://www.youtube.com/embed/ID" width="560"><p>fallback</p></iframe></body></html>' );
+	assert_true( '"https://www.youtube.com/embed/ID"' === faz_raw_attr( $out, 'data-faz-src' ) && false !== strpos( $out, 'faz-placeholder' ), 'a blocked iframe with a body is still parked behind its placeholder' );
+	assert_true( false !== strpos( $out, '<p>fallback</p></iframe>' ) && false === strpos( $out, '__FAZ_' ), 'with its fallback body restored and no stash marker left' );
+
+	// Everything after <plaintext> is text to the parser: nothing there is an
+	// element, so nothing there is rewritten.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><body><video src="https://cdn.tracker.test/a.mp4"></video><plaintext><video src="https://cdn.tracker.test/b.mp4"></video></body></html>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true( '"https://cdn.tracker.test/a.mp4"' === faz_raw_attr( $out, 'data-faz-src' ), 'a <video> before <plaintext> is parked' );
+	assert_true( false !== strpos( $out, '<plaintext><video src="https://cdn.tracker.test/b.mp4"></video></body></html>' ), 'and the text after <plaintext> is left as it was' );
+
+	// Foreign content: inside <svg> nothing is raw text, so nothing is stashed.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><svg><noembed><video src="https://cdn.tracker.test/s.mp4"></video></noembed></svg></body></html>' );
+	assert_true( '"https://cdn.tracker.test/s.mp4"' === faz_raw_attr( $out, 'data-faz-src' ), 'inside <svg> a <noembed> body is not raw text and its <video> is still judged' );
 
 	echo "\n";
 	if ( 0 === $tests_failed ) {
