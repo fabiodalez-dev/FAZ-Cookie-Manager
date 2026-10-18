@@ -4678,11 +4678,12 @@ class Frontend {
 		// <feImage> fetches through href exactly as <image> does. The tag name
 		// must be followed by whitespace, a slash or `>`: a word boundary let
 		// <use-case> and <image-gallery> custom elements through and mutilated
-		// them.
+		// them. Led by tag_token_skip(), as the img pass is: an `<image href>`
+		// inside another tag's quoted value is part of that value.
 		if ( false !== stripos( $html, '<image' ) || false !== stripos( $html, '<use' ) || false !== stripos( $html, '<feimage' ) ) {
 			$html = $this->run_markup_pass(
 				$html,
-				'#<(image|use|feImage)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'#' . self::tag_token_skip( '(?:image|use|feimage)' ) . '<(image|use|feImage)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				'svg',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_svg_href_tag( $m, $providers, $blocked_categories );
@@ -4697,11 +4698,13 @@ class Frontend {
 		// it — measured fetching in all three engines by
 		// tests/browser-intent/write-stream-differential.spec.ts.
 		// The pre-check accepts the same `background = "…"` spacing the
-		// pattern does; a plain `background=` lookup skipped it.
+		// pattern does; a plain `background=` lookup skipped it. Led by
+		// tag_token_skip(): a `<td background>` quoted inside another tag's
+		// value, or inside a bogus comment, is not an element.
 		if ( 0 !== preg_match( '/\bbackground\s*=/i', $html ) ) {
 			$html = $this->run_markup_pass(
 				$html,
-				'#<(body|table|thead|tbody|tfoot|tr|td|th)(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
+				'#' . self::tag_token_skip( '(?:body|table|thead|tbody|tfoot|tr|td|th)' ) . '<(body|table|thead|tbody|tfoot|tr|td|th)(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
 				'background',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_background_attr_tag( $m, $providers, $blocked_categories );
@@ -6753,7 +6756,9 @@ class Frontend {
 	 * adds no PCRE-limit failure to a pass. Closed comments and raw-text
 	 * bodies are already out of the buffer (stash_inert_spans()).
 	 *
-	 * @param string $name Lower-case name of the element the pass looks for.
+	 * @param string $name Lower-case name of the element the pass looks for,
+	 *                     or a non-capturing group of names for a pass that
+	 *                     looks for several.
 	 * @return string Pattern fragment ending in `|`, for the `#` delimiter.
 	 */
 	private static function tag_token_skip( $name ) {

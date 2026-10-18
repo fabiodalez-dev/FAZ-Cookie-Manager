@@ -409,6 +409,26 @@ namespace {
 		assert_true( faz_ob_run( $fe, $html ) === $html, $what . ': byte-identical' );
 	}
 
+	// The SVG href and `background` passes were anchored on their tag names
+	// with nothing consumed before them, the shape the img pass had: an
+	// `<image href>` or a `<td background>` inside another tag's value was
+	// rewritten in place.
+	$named = array(
+		'svg image in a title'                  => '<p title="<svg><image href=\'https://cdn.tracker.test/p.png\'/></svg>">x</p>',
+		'svg use in an end tag\'s attribute'    => '<p>a</p data-x=\'<use href="https://cdn.tracker.test/s.svg#i"/>\'>',
+		'td background in a data-*'             => '<p data-row=\'<td background="https://cdn.tracker.test/p.png">\'>x</p>',
+		'body background in a bogus comment'    => '<!x <body background="https://cdn.tracker.test/p.png">',
+	);
+	foreach ( $named as $what => $snippet ) {
+		$fe   = faz_ob_frontend( $providers, $blocked );
+		$html = '<html><body>' . $snippet . '</body></html>';
+		assert_true( faz_ob_run( $fe, $html ) === $html, $what . ': byte-identical' );
+	}
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><p title="<image href=\'https://cdn.tracker.test/q.png\'>">x</p><svg><image href="https://cdn.tracker.test/p.png"/></svg><table><tr><td background="https://cdn.tracker.test/t.png">c</td></tr></table></body></html>' );
+	assert_true( false !== strpos( $out, '<p title="<image href=\'https://cdn.tracker.test/q.png\'>">x</p>' ), 'the quoted <image> is left as it was' );
+	assert_true( '"https://cdn.tracker.test/p.png"' === faz_raw_attr( $out, 'data-faz-href' ) && '"https://cdn.tracker.test/t.png"' === faz_raw_attr( $out, 'data-faz-background' ) && ! faz_has_live_attr( $out, 'background' ), 'while the real <image> and <td background> after it are still parked' );
+
 	// The real elements after such a token are judged as before.
 	$fe  = faz_ob_frontend( $providers, $blocked );
 	$out = faz_ob_run( $fe, '<html><body><p>a</p title="<video poster=\'https://i.ytimg.com/a.jpg\'>"><video poster="https://i.ytimg.com/vi/ID/hqdefault.jpg"></video></body></html>' );
