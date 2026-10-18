@@ -5724,7 +5724,17 @@ class Frontend {
 	private static function srcdoc_key() {
 		static $key;
 		if ( null === $key ) {
-			$key = bin2hex( random_bytes( 24 ) );
+			// random_bytes() throws when the system has no usable entropy source
+			// (rare, but seen on locked-down hosts). This runs inside the page
+			// render, so an uncaught exception would take the whole front end
+			// down with it. wp_generate_password() falls back to WordPress's own
+			// generator; alphanumeric only, so the value stays attribute-safe
+			// exactly like the hex form.
+			try {
+				$key = bin2hex( random_bytes( 24 ) );
+			} catch ( \Throwable $e ) {
+				$key = function_exists( 'wp_generate_password' ) ? wp_generate_password( 48, false, false ) : hash( 'sha256', uniqid( '', true ) . wp_salt( 'auth' ) );
+			}
 		}
 		return $key;
 	}
