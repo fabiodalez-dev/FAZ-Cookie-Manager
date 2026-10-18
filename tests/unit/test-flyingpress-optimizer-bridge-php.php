@@ -390,6 +390,29 @@ namespace {
 	);
 	unset( $front_request );
 
+	// The same with the Remove-unused-CSS list: above, `faz-` was already
+	// saved there, so nothing was injected into it and its strip path never
+	// ran. Saved without it, the keyword is injected for the render and must
+	// not reach the database.
+	$GLOBALS['faz_test_filters']                      = array();
+	$GLOBALS['faz_test_actions']                      = array();
+	$GLOBALS['faz_test_is_frontend']                  = true;
+	$saved                                            = $faz_fp5_config( array( 'css_rucss_include_selectors' => array( '.user-selector' ) ) );
+	$GLOBALS['faz_test_options']['FLYING_PRESS_CONFIG'] = $saved;
+	\FlyingPress\Config::$config                      = $saved;
+	$front_request = new Frontend( 'faz-cookie-manager', 'test' );
+	do_action( 'plugins_loaded' );
+	faz_ob_ok(
+		in_array( 'faz-', \FlyingPress\Config::$config['css_rucss_include_selectors'], true ),
+		'26a precondition: faz- is injected into the Remove-unused-CSS list in memory'
+	);
+	$faz_fp_update_config( array( 'cf_status' => 'not_setup' ) );
+	faz_ob_ok(
+		array( '.user-selector' ) === $GLOBALS['faz_test_options']['FLYING_PRESS_CONFIG']['css_rucss_include_selectors'],
+		'26b a whole-config re-save does not persist the injected faz- selector'
+	);
+	unset( $front_request );
+
 	// A FlyingPress dashboard save (REST): nothing was injected, so a FAZ
 	// keyword the administrator typed is saved as typed.
 	$GLOBALS['faz_test_filters']     = array();
