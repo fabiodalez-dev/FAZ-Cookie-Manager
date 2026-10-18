@@ -301,6 +301,38 @@ namespace {
 	$own = ( new Geo_Detector( new Faz_Recording_Ipinfo() ) )->detect( (string) $resolve_ip->invoke( new Geo_Detector( new Faz_Recording_Ipinfo() ) ) );
 	faz_is( $own['source'], 'cf_anonymiser', 'an explicit address that IS the request\'s keeps the edge\'s Tor verdict' );
 
+	// The country header is the request's too: another address does not get it.
+	faz_request( 'DE' );
+	$other = ( new Geo_Detector( new Faz_Recording_Ipinfo() ) )->detect( '198.51.100.7' );
+	faz_is( array( $other['country'], $other['source'] ), array( 'JP', 'geolocation_fallback' ), 'CF-IPCountry of the request is not given to an explicit, different address' );
+
+	faz_request( 'DE' );
+	$own = ( new Geo_Detector( new Faz_Recording_Ipinfo() ) )->detect( (string) $resolve_ip->invoke( new Geo_Detector( new Faz_Recording_Ipinfo() ) ) );
+	faz_is( array( $own['country'], $own['source'] ), array( 'DE', 'cf_header' ), 'control: an explicit address that IS the request\'s still reads the header' );
+
+	echo "\n\033[1mGeolocation::get_country() — an explicit address is judged on its own\033[0m\n";
+	$client_ip = new ReflectionMethod( Geolocation::class, 'get_client_ip' );
+	$client_ip->setAccessible( true );
+
+	faz_request( 'DE' );
+	faz_is( Geolocation::get_country( '198.51.100.7' ), 'JP', 'CF-IPCountry: DE of the request is not the country of another address' );
+	faz_is( count( $GLOBALS['__faz_transients'] ), 1, 'and that address\'s own answer is memoised, since no header contributed to it' );
+
+	faz_request( 'T1' );
+	faz_is( Geolocation::get_country( '198.51.100.7' ), 'JP', 'the request\'s T1 verdict is not applied to another address either' );
+
+	faz_request( 'XX' );
+	$_SERVER['GEOIP_COUNTRY_CODE'] = 'FR';
+	faz_set_filter( 'faz_trust_geoip_country_code', true );
+	faz_is( Geolocation::get_country( '198.51.100.7' ), 'JP', 'nor is mod_geoip\'s GEOIP_COUNTRY_CODE, which describes the request\'s address as well' );
+
+	faz_request( 'DE' );
+	faz_is( Geolocation::get_country( (string) $client_ip->invoke( null ) ), 'DE', 'control: an explicit address that IS the request\'s still reads the header' );
+	faz_is( $GLOBALS['__faz_transients'], array(), 'and, header-derived, is not memoised' );
+
+	faz_request( 'DE' );
+	faz_is( Geolocation::get_country(), 'DE', 'control: no explicit address, the header answers as before' );
+
 	@rmdir( rtrim( ABSPATH, '/' ) );
 
 	echo "\n--\n";

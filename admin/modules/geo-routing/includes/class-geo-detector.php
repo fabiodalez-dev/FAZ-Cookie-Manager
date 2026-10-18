@@ -122,9 +122,11 @@ class Geo_Detector {
 			return $cached;
 		}
 
-		// 2. CF-IPCountry header.
-		$cf_country = $this->get_cf_country();
-		$cf_region  = $this->get_cf_region();
+		// 2. CF-IPCountry header, for the request's own address only: like
+		// the T1 verdict above, it describes the connection being served,
+		// not an explicit address a caller asks about.
+		$cf_country = $verdict_applies ? $this->get_cf_country() : '';
+		$cf_region  = $verdict_applies ? $this->get_cf_region() : '';
 
 		// 3. ipinfo VPN gate.
 		$vpn_result = $this->ipinfo->lookup( $ip );
