@@ -80,20 +80,14 @@ class Renderer {
 	private static $public_cookie_rows_cache = null;
 
 	/**
-	 * Jurisdictions whose scaffolds state how long the consent log is kept, and
-	 * therefore receive the {{CONSENT_RECORD_RETENTION}} placeholder.
-	 *
-	 * @var string[]
-	 */
-	/**
 	 * "None declared." in each template language: the services list when no
 	 * third-party service is declared. Used when the site has no translation
 	 * in the policy locale (policy_label()); the six with a catalogue match it.
 	 */
 	const NONE_DECLARED_LABELS = array(
 		'en'    => 'None declared.',
-		'it'    => 'Nessuna dichiarata.',
-		'fr'    => 'Aucune déclarée.',
+		'it'    => 'Nessuno dichiarato.',
+		'fr'    => 'Aucun déclaré.',
 		'de'    => 'Keine angegeben.',
 		'es'    => 'Ninguno declarado.',
 		'pt-BR' => 'Nenhum declarado.',
@@ -121,6 +115,12 @@ class Renderer {
 		'hr'    => 'Nema navedenih kolačića.',
 	);
 
+	/**
+	 * Jurisdictions whose scaffolds state how long the consent log is kept, and
+	 * therefore receive the {{CONSENT_RECORD_RETENTION}} placeholder.
+	 *
+	 * @var string[]
+	 */
 	const CONSENT_RECORD_RETENTION_JURISDICTIONS = array( 'gdpr-strict', 'lgpd-brazil' );
 
 	/**
