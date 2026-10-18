@@ -4712,10 +4712,12 @@ class Frontend {
 		}
 
 		// 2. Block <iframe> tags (YouTube, Facebook, Maps, etc.).
+		// iframe_pass_pattern() skips every other token whole first, so an
+		// <iframe> quoted in a tooltip's value is text, not a frame.
 		if ( false !== stripos( $html, '<iframe' ) ) {
 			$html = $this->run_markup_pass(
 				$html,
-				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
+				self::iframe_pass_pattern(),
 				'iframe',
 				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );
@@ -4762,10 +4764,13 @@ class Frontend {
 		// and for a beacon the request IS the tracking event, so the client-side
 		// MutationObserver backstop cannot undo it: the preload scanner dispatches
 		// the fetch before any script runs.
+		// tag_token_skip() consumes every other token whole first: an `<img`
+		// inside another tag's quoted value (`data-html="<img src='…'>"`) is
+		// part of that value, and rewriting it there broke the markup.
 		if ( false !== stripos( $html, '<img' ) ) {
 			$html = $this->run_markup_pass(
 				$html,
-				'#<img(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
+				'#' . self::tag_token_skip( 'img' ) . '<img(?=[\s/>])(' . self::ATTR_WALK . '(?:/\s*+)?)>#is',
 				'img',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_img_tag( $m, $providers, $blocked_categories );
@@ -6518,7 +6523,7 @@ class Frontend {
 		$unused   = array();
 		$result   = $this->run_markup_pass(
 			$html,
-			'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+			'#' . self::tag_token_skip( 'iframe' ) . '<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 			'srcdoc',
 			function ( $m ) use ( $providers, $blocked_categories, &$stash, $marker ) {
 				return $this->process_iframe_srcdoc_tag( $m, $providers, $blocked_categories, $stash, $marker );
@@ -6722,31 +6727,61 @@ class Frontend {
 	}
 
 	/**
-	 * Leading alternation for the step-1 script pattern: every construct the
-	 * tokenizer reads as one token, consumed whole and skipped.
+	 * Leading alternation for the passes that find one element by name: every
+	 * construct the tokenizer reads as one token, consumed whole and skipped.
 	 *
-	 * The script pattern is the one pass that still has to find elements by
-	 * regex across the page, and a `<script` written INSIDE one of these
-	 * tokens is not a script start: `</p title="<script>">` is an end tag
-	 * with an attribute, and `<?x …>`, `<!x …>`, `</ …>` are bogus comments
-	 * that end at their first `>`. Matched there, the pattern took the real
-	 * tracker after it for the body of a script that does not exist, and the
-	 * tracker shipped live. Other opening tags are consumed through
-	 * ATTR_WALK for the same reason (a `<script` in an attribute value).
+	 * A pattern anchored on a tag name starts a match wherever the name
+	 * stands, and a `<script`, `<img` or `<iframe` written INSIDE one of these
+	 * tokens is not an element: `</p title="<script>">` is an end tag with an
+	 * attribute, `<div data-html="<img src='…'>">` is a tooltip library
+	 * keeping HTML in a value, and `<?x …>`, `<!x …>`, `</ …>` are bogus
+	 * comments that end at their first `>`. Matched there, the script pattern
+	 * took the real tracker after it for the body of a script that does not
+	 * exist, and the tracker shipped live; the img and iframe patterns wrote
+	 * double-quoted data-faz-* keys (or a whole placeholder) into the value,
+	 * which closed it early and broke the markup. Other opening tags are
+	 * consumed through ATTR_WALK for the same reason, which is how the linear
+	 * fallback (linear_markup_pass()) already reads them, so both paths agree.
 	 * `<!--` is left out: a closed comment is already stashed, and one that
 	 * never closes is judged rather than skipped.
 	 * Every quantifier is possessive: nothing here can backtrack, so this
-	 * adds no PCRE-limit failure to the pass. Closed comments and raw-text
+	 * adds no PCRE-limit failure to a pass. Closed comments and raw-text
 	 * bodies are already out of the buffer (stash_inert_spans()).
+	 *
+	 * @param string $name Lower-case name of the element the pass looks for.
+	 * @return string Pattern fragment ending in `|`, for the `#` delimiter.
+	 */
+	private static function tag_token_skip( $name ) {
+		return '(?:</[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
+			. '|<\?[^>]*+>|<!(?!--)[^>]*+>'
+			. '|</(?![a-zA-Z])[^>]*+>'
+			. '|<(?!' . $name . '(?=[\s/>]))[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
+			. ')(*SKIP)(*FAIL)|';
+	}
+
+	/**
+	 * tag_token_skip() for the step-1 script pattern.
 	 *
 	 * @return string Pattern fragment ending in `|`, for the `#` delimiter.
 	 */
 	private static function script_token_skip() {
-		return '(?:</[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
-			. '|<\?[^>]*+>|<!(?!--)[^>]*+>'
-			. '|</(?![a-zA-Z])[^>]*+>'
-			. '|<(?!script(?=[\s/>]))[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>'
-			. ')(*SKIP)(*FAIL)|';
+		return self::tag_token_skip( 'script' );
+	}
+
+	/**
+	 * The <iframe> element pattern, shared by both entry points.
+	 *
+	 * Groups as process_iframe_tag() reads them: 1 attributes, 2 body (absent
+	 * when self-closed). Led by tag_token_skip(), and closed by a skip of an
+	 * <iframe> opening tag that has no end tag, so a value inside that tag is
+	 * not read as a second frame either.
+	 *
+	 * @return string
+	 */
+	private static function iframe_pass_pattern() {
+		return '#' . self::tag_token_skip( 'iframe' )
+			. '<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)'
+			. '|<iframe(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>(*SKIP)(*FAIL)#is';
 	}
 
 	/**
@@ -13152,7 +13187,7 @@ class Frontend {
 		if ( false !== stripos( $content, '<iframe' ) ) {
 			$content = $this->run_markup_pass(
 				$content,
-				'#<iframe(?=[\s/>])(' . self::ATTR_WALK . ')(?:>(.*?)</iframe(?=[\s/>])[^>]*>|/\s*+>)#is',
+				self::iframe_pass_pattern(),
 				'iframe',
 				function ( $m ) use ( $providers, $blocked_categories, $srcdoc_marker ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories, $srcdoc_marker );

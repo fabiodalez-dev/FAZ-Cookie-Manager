@@ -112,6 +112,11 @@ namespace {
 			return -1 === $component ? parse_url( (string) $url ) : parse_url( (string) $url, $component ); // phpcs:ignore
 		}
 	}
+	if ( ! function_exists( 'wp_salt' ) ) {
+		function wp_salt( $scheme = 'auth' ) {
+			return 'test-salt-' . $scheme;
+		}
+	}
 	if ( ! function_exists( 'get_transient' ) ) {
 		function get_transient( $key ) {
 			return false;
@@ -343,6 +348,48 @@ namespace {
 	$out = faz_ob_run( $fe, '<html><body><span data-tip=\'<video poster="https://i.ytimg.com/a.jpg">\'>h</span><video poster="https://i.ytimg.com/vi/ID/hqdefault.jpg"></video></body></html>' );
 	assert_true( false !== strpos( $out, 'data-tip=\'<video poster="https://i.ytimg.com/a.jpg">\'' ), 'the quoted one is left as it was' );
 	assert_true( '"https://i.ytimg.com/vi/ID/hqdefault.jpg"' === faz_raw_attr( $out, 'data-faz-poster' ), 'while the real <video> after it is still parked' );
+
+	echo "\n-- <img> and <iframe> quoted inside another tag's attribute value --\n";
+
+	// The <img>, <iframe> and srcdoc patterns were anchored on their tag
+	// names, so a match started wherever `<img` or `<iframe` stood, inside a
+	// tooltip's data-html or a title included. The double-quoted keys they
+	// wrote there closed the outer value early and broke the markup, and the
+	// placeholder the iframe pass wraps a frame in landed inside the value.
+	$quoted = array(
+		'img in a double-quoted data-html'   => '<div data-html="<img src=\'https://cdn.tracker.test/p.png\'>">x</div>',
+		'img in a single-quoted data-tip'    => '<span data-tip=\'<img src="https://cdn.tracker.test/p.png" width="1">\'>h</span>',
+		'iframe in a title'                  => '<span title=\'<iframe src="https://www.youtube.com/embed/ID"></iframe>\'>t</span>',
+		'self-closed iframe in a data-*'     => '<a data-embed=\'<iframe src="https://www.youtube.com/embed/ID"/>\' href="/v">v</a>',
+		'iframe srcdoc in a data-*'          => '<i data-x=\'<iframe srcdoc="<img src=https://cdn.tracker.test/p.png>"></iframe>\'></i>',
+		'img in an end tag\'s attribute'     => '<p>a</p title="<img src=\'https://cdn.tracker.test/p.png\'>">',
+	);
+	foreach ( $quoted as $what => $snippet ) {
+		$fe   = faz_ob_frontend( $providers, $blocked );
+		$html = '<html><body>' . $snippet . '</body></html>';
+		assert_true( faz_ob_run( $fe, $html ) === $html, $what . ': byte-identical' );
+	}
+
+	// The real tags after a quoted one are judged as before.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><div data-html="<img src=\'https://cdn.tracker.test/q.png\'>">x</div><img src="https://cdn.tracker.test/p.png" width="1"></body></html>' );
+	assert_true( false !== strpos( $out, '<div data-html="<img src=\'https://cdn.tracker.test/q.png\'>">x</div>' ), 'the quoted <img> is left as it was' );
+	assert_true( '"https://cdn.tracker.test/p.png"' === faz_raw_attr( $out, 'data-faz-src' ) && 1 === substr_count( $out, 'data-faz-src=' ), 'while the real <img> after it is parked, and only that one' );
+
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><span title=\'<iframe src="https://www.youtube.com/embed/Q"></iframe>\'>t</span><iframe src="https://www.youtube.com/embed/ID" width="560"></iframe></body></html>' );
+	assert_true( false !== strpos( $out, '<span title=\'<iframe src="https://www.youtube.com/embed/Q"></iframe>\'>t</span>' ), 'the quoted <iframe> is left as it was' );
+	assert_true( '"https://www.youtube.com/embed/ID"' === faz_raw_attr( $out, 'data-faz-src' ) && 1 === substr_count( $out, 'faz-placeholder"' ), 'while the real <iframe> after it is parked behind one placeholder' );
+
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><i data-x=\'<iframe srcdoc="<img src=https://cdn.tracker.test/q.png>"></iframe>\'></i><iframe srcdoc="<img src=https://cdn.tracker.test/p.png>"></iframe></body></html>' );
+	assert_true( false !== strpos( $out, '<i data-x=\'<iframe srcdoc="<img src=https://cdn.tracker.test/q.png>"></iframe>\'></i>' ), 'a quoted srcdoc is left as it was' );
+	assert_true( 1 === substr_count( $out, 'data-faz-srcdoc=' ) && false !== strpos( $out, 'data-faz-srcdoc="<img src=https://cdn.tracker.test/p.png>"' ), 'while the real srcdoc after it is parked' );
+
+	// Upper-case and unquoted spellings of the real tags still match.
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><IMG SRC=https://cdn.tracker.test/p.png><IFRAME SRC=https://www.youtube.com/embed/ID></IFRAME></body></html>' );
+	assert_true( 2 === substr_count( $out, 'data-faz-src=' ), 'upper-case unquoted <IMG> and <IFRAME> are still parked' );
 
 	echo "\n-- the raw-text bodies of iframe, noembed, noframes and plaintext --\n";
 
