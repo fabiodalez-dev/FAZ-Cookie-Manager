@@ -439,6 +439,7 @@ namespace {
 	$out = faz_ob_run( $fe, '<html><body><!x <b style="background:url(https://i.ytimg.com/a.jpg)"><div style="background:url(https://i.ytimg.com/vi/ID/hq.jpg)">x</div></body></html>' );
 	assert_true( false !== strpos( $out, '<!x <b style="background:url(https://i.ytimg.com/a.jpg)">' ), 'the bogus comment is left as it was' );
 	assert_true( false === strpos( $out, '<div style="background:url(https://i.ytimg.com/vi/ID/hq.jpg)">' ), 'while the real style attribute after it is still gated' );
+	assert_true( '"background:url(https://i.ytimg.com/vi/ID/hq.jpg)"' === faz_raw_attr( $out, 'data-faz-style' ) && 1 === substr_count( $out, 'data-faz-style=' ), 'and its declarations are parked in data-faz-style, once' );
 
 	// Upper-case and unquoted spellings of the real tags still match.
 	$fe  = faz_ob_frontend( $providers, $blocked );
