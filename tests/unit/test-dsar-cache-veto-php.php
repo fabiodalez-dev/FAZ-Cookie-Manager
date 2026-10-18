@@ -457,6 +457,20 @@ namespace {
 	$msg = isset( $GLOBALS['__faz_json'][0]['data'] ) ? (string) $GLOBALS['__faz_json'][0]['data'] : '';
 	check( false !== stripos( $msg, 'refresh' ), 'the message still says to refresh (it works on an uncached page)' );
 	check( false !== strpos( $msg, 'email us directly' ), 'AND names the email fallback, for the page a refresh cannot change' );
+	// Every refusal goes through reject(), so a site watching faz_dsar_rejected
+	// (alerting, an audit log) sees the one a stale cache produces most.
+	$hits = fired( 'faz_dsar_rejected' );
+	check( 1 === count( $hits ) && 'faz_dsar_nonce' === $hits[0][1], 'the expired-nonce refusal fires faz_dsar_rejected (faz_dsar_nonce)' );
+
+	// A malformed consent ID is refused the same way, and names the way out.
+	reset_state();
+	$_POST = array( 'nonce' => 'nonce-faz_dsar_submit', 'dsar_name' => 'Ada', 'dsar_email' => 'ada@example.test', 'dsar_type' => 'access', 'dsar_consent_id' => '<not an id>' );
+	$dsar->handle_submit();
+	$msg  = isset( $GLOBALS['__faz_json'][0]['data'] ) ? (string) $GLOBALS['__faz_json'][0]['data'] : '';
+	$hits = fired( 'faz_dsar_rejected' );
+	check( 1 === count( $hits ) && 'faz_dsar_consent_id' === $hits[0][1], 'an invalid consent ID fires faz_dsar_rejected (faz_dsar_consent_id)' );
+	check( isset( $hits[0][2]['consent_id'] ) && '' === $hits[0][2]['consent_id'], 'without passing the raw, unvalidated value on' );
+	check( false !== strpos( $msg, 'email us directly' ), 'and the refusal names the email fallback' );
 
 	// The stamp, when a site has raised nonce_life past the stamp window.
 	reset_state();

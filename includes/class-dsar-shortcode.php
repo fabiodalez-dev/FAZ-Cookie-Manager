@@ -580,7 +580,11 @@ class DSAR_Shortcode {
 			// site can filter the veto off, and a cache it cannot reach may
 			// exist — a refresh returns the same markup, so the message also
 			// names the one channel that always works.
-			wp_send_json_error( __( 'Invalid security token. Please refresh the page and try again, or email us directly to exercise your rights.', 'faz-cookie-manager' ) );
+			// Through reject() like every other refusal, so faz_dsar_rejected
+			// fires for the one a stale cache produces most. Nothing from the
+			// request is trusted yet, so no field travels with it.
+			$refused = $this->reject( 'faz_dsar_nonce', __( 'Invalid security token. Please refresh the page and try again, or email us directly to exercise your rights.', 'faz-cookie-manager' ), array() );
+			wp_send_json_error( $refused->get_error_message() );
 			return;
 		}
 
@@ -597,7 +601,21 @@ class DSAR_Shortcode {
 		$message     = isset( $_POST['dsar_message'] ) ? sanitize_textarea_field( wp_unslash( $_POST['dsar_message'] ) ) : '';
 		$consent_id  = isset( $_POST['dsar_consent_id'] ) && is_string( $_POST['dsar_consent_id'] ) ? wp_unslash( $_POST['dsar_consent_id'] ) : '';
 		if ( ( isset( $_POST['dsar_consent_id'] ) && ! is_string( $_POST['dsar_consent_id'] ) ) || ! self::valid_consent_id( $consent_id ) ) {
-			wp_send_json_error( __( 'Please enter a valid consent ID.', 'faz-cookie-manager' ) );
+			// The field is optional, so the way out is to leave it empty; the
+			// email fallback is named as on every other refusal. The raw value
+			// failed validation and is not passed to the action.
+			$refused = $this->reject(
+				'faz_dsar_consent_id',
+				__( 'Please enter a valid consent ID or leave the field empty. You can also email us directly to exercise your rights.', 'faz-cookie-manager' ),
+				array(
+					'name'       => $name,
+					'email'      => $email,
+					'type'       => $type,
+					'message'    => $message,
+					'consent_id' => '',
+				)
+			);
+			wp_send_json_error( $refused->get_error_message() );
 			return;
 		}
 		// Recipient is always the site admin — not sourced from client input.
@@ -1717,7 +1735,10 @@ class DSAR_Shortcode {
 		 * Fires when a DSAR submission is refused.
 		 *
 		 * @since 1.34.1
-		 * @param string $code    One of faz_dsar_gate, faz_dsar_email_throttled,
+		 * @since 1.34.2 Also for an expired nonce (faz_dsar_nonce) and a
+		 *               malformed consent ID (faz_dsar_consent_id).
+		 * @param string $code    One of faz_dsar_nonce, faz_dsar_consent_id,
+		 *                        faz_dsar_gate, faz_dsar_email_throttled,
 		 *                        faz_dsar_site_throttled, faz_dsar_ip_throttled,
 		 *                        faz_dsar_stamp, faz_dsar_too_fast,
 		 *                        faz_dsar_stale, faz_dsar_honeypot, faz_dsar_pow.
