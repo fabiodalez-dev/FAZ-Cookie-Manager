@@ -1288,10 +1288,12 @@ namespace {
 	$GLOBALS['faz_test_cookie'] = 'action:yes,consent:yes,rev:2,__scope.banner:main-banner,__scope.law:gdpr,__scope.fp:' . faz_scope_fingerprint( 'main-banner', 'gdpr' ) . ',analytics:yes';
 	$own_cookie = $GLOBALS['faz_test_cookie'];
 	amp_same( faz_get_valid_consent_cookie(), $own_cookie, 'AMP uses the production cookie validator for its own blog' );
+	$own = $bridge->handle_check( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'accepted' ) ) );
+	amp_same( $own->get_data()['consentStateValue'], 'accepted', 'control: on its own blog the bridge restores the acceptance' );
 	$GLOBALS['amp_blog'] = 2;
 	$foreign = $bridge->handle_check( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'accepted' ) ) );
 	amp_same( faz_get_valid_consent_cookie(), '', 'AMP rejects the other blog through production validation' );
-	amp_ok( $foreign->get_data()['consentStateValue'] !== 'accepted', 'AMP does not restore acceptance from another blog' );
+	amp_same( $foreign->get_data()['consentStateValue'], 'unknown', 'AMP does not restore acceptance from another blog' );
 	$GLOBALS['amp_blog'] = 1;
 	$GLOBALS['amp_network'] = 2;
 	amp_same( faz_get_valid_consent_cookie(), '', 'AMP rejects a foreign network fingerprint' );
@@ -1398,7 +1400,9 @@ namespace {
 	$faz_optin_days = isset( $GLOBALS['faz_test_set_cookie']['expires'] ) ? (int) round( ( $GLOBALS['faz_test_set_cookie']['expires'] - time() ) / DAY_IN_SECONDS ) : -1;
 	amp_ok( $faz_optin_days > 0 && $faz_optin_days <= 182, 'an AMP Accept under an opt-in ruleset over the kept CCPA banner lives at most 182 days (got ' . $faz_optin_days . ')' );
 	amp_ok( false !== strpos( (string) $GLOBALS['faz_test_cookie'], '__scope.law:ccpa' ), 'and its scope still names the banner it was given on' );
-	// A record from before this fix: same scope, 365 days still to run.
+	$faz_fresh_check = $bridge->handle_check( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'accepted' ) ) );
+	amp_same( $faz_fresh_check->get_data()['consentStateValue'], 'accepted', 'control: the record just written reads back as a decision' );
+	// A record from before this fix: same scope, 300 days still to run.
 	$GLOBALS['faz_test_cookie'] = preg_replace( '/exp:\d+/', 'exp:' . ( time() + 300 * DAY_IN_SECONDS ), (string) $GLOBALS['faz_test_cookie'] );
 	$faz_long_check = $bridge->handle_check( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'accepted' ) ) );
 	amp_same( $faz_long_check->get_data()['consentStateValue'], 'unknown', 'a record with more lifetime left than the opt-in cap is not honoured by the check' );
