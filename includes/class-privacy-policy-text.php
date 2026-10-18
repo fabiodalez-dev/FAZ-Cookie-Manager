@@ -80,6 +80,23 @@ class Privacy_Policy_Text {
 		return $facts;
 	}
 
+	/**
+	 * The suggested policy content for the stored settings, as the admin_init
+	 * hook hands it to wp_add_privacy_policy_content().
+	 *
+	 * The value comes straight from get_option(), whose default applies only
+	 * when the option is missing: a stored value that is not an array (a bad
+	 * import, a damaged row) reached build( array $settings ) as a TypeError
+	 * on every wp-admin request. It is read as the defaults instead.
+	 *
+	 * @param mixed $settings Stored faz_settings value.
+	 * @return string
+	 */
+	public static function suggested_content( $settings ) {
+		$settings = is_array( $settings ) ? $settings : array();
+		return self::build( $settings, self::environment( $settings ) );
+	}
+
 	public static function build( array $settings, array $env ) {
 		$html = '<h2>' . esc_html__( 'Cookie Consent (FAZ Cookie Manager)', 'faz-cookie-manager' ) . '</h2>';
 		foreach ( self::facts( $settings, $env ) as $sentence ) {

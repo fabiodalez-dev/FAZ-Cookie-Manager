@@ -432,9 +432,7 @@ class CLI {
 			if ( ! function_exists( 'wp_add_privacy_policy_content' ) ) {
 				return;
 			}
-			$settings = get_option( 'faz_settings', array() );
-			$content = Privacy_Policy_Text::build( $settings, Privacy_Policy_Text::environment( $settings ) );
-			wp_add_privacy_policy_content( 'FAZ Cookie Manager', $content );
+			wp_add_privacy_policy_content( 'FAZ Cookie Manager', Privacy_Policy_Text::suggested_content( get_option( 'faz_settings', array() ) ) );
 		});
 
 		// Consume every plugin's registered privacy-policy content (FAZ's own

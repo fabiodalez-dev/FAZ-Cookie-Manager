@@ -65,4 +65,19 @@ foreach(array(false,true) as $optin) foreach(array('', 'configured-key') as $key
  policy_check((strpos($html,'ipinfo.io')!==false)===($optin && $key!==''), 'full builder follows the external-service gate');
  foreach(Policy::facts($settings,$env) as $sentence) policy_check(strpos($html,esc_html($sentence))!==false,'build renders the complete fact set');
 }
+// The admin_init hook that hands this copy to WordPress read faz_settings
+// straight into build(array $settings). A stored value that is not an array
+// (a bad import, a damaged row) was a TypeError on every wp-admin request.
+policy_check(method_exists(Policy::class,'suggested_content'),'one entry point for the suggested policy content');
+if (method_exists(Policy::class,'suggested_content')) {
+ foreach(array('a string','',null,42,false) as $bad) {
+  $thrown='';
+  try { $out=Policy::suggested_content($bad); } catch (\Throwable $e) { $thrown=get_class($e); $out=''; }
+  policy_check(''===$thrown,'a non-array faz_settings ('.var_export($bad,true).') does not throw');
+  policy_check($out===Policy::build(array(),Policy::environment(array())),'and yields the copy for default settings');
+ }
+ policy_check(Policy::suggested_content($settings)===Policy::build($settings,Policy::environment($settings)),'an array is used as it is');
+}
+$cli=(string)file_get_contents(dirname(__DIR__,2).'/includes/class-cli.php');
+policy_check(false!==strpos($cli,"Privacy_Policy_Text::suggested_content( get_option( 'faz_settings', array() ) )"),'the admin_init hook goes through it');
 echo "ALL PASS ($checks policy text checks)\n";
