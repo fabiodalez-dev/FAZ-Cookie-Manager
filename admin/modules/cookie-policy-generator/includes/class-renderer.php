@@ -272,6 +272,12 @@ class Renderer {
 		// trailing whitespace/em-dashes/commas, visually broken on the public
 		// policy page. Reported by Gooloo on 1.16.1.
 		$markdown = self::strip_empty_label_lines( $markdown );
+		// Same defect in running prose: `how **{{COMPANY_NAME}}** ("we" …)` and
+		// `contact us at **{{COMPANY_EMAIL}}**` printed `how ****` and
+		// `contact us at ****` to visitors when the controller identity was not
+		// saved yet. The sentence carrying the empty value is dropped instead;
+		// the administrator still gets the incomplete-configuration notice.
+		$markdown = self::strip_empty_value_sentences( $markdown );
 		// Same class of defect for inline links: an empty URL placeholder
 		// would otherwise leave literal `[label]()` markdown in the output
 		// (markdown_to_html only builds an anchor when the URL is non-empty).
@@ -1212,6 +1218,59 @@ class Renderer {
 		// brackets so nested/malformed pairs are left untouched.
 		$cleaned = preg_replace( '/\[([^\]\[\n]*)\]\([ \t]*\)/', '$1', $markdown );
 		return null === $cleaned ? $markdown : $cleaned;
+	}
+
+	/**
+	 * Remove the sentences that carry an empty bold value (`****`).
+	 *
+	 * A scaffold sentence such as `contact us at **{{COMPANY_EMAIL}}**.` reads
+	 * `contact us at ****.` when the field is empty. Only the sentence holding
+	 * the empty value goes; the rest of the paragraph stays byte for byte, and
+	 * a line that is nothing but a horizontal rule is left alone.
+	 *
+	 * @param string $markdown Substituted policy markdown.
+	 * @return string Cleaned markdown.
+	 */
+	private static function strip_empty_value_sentences( $markdown ) {
+		if ( false === strpos( $markdown, '****' ) ) {
+			return $markdown;
+		}
+		$lines = preg_split( '/(\r\n|\n)/', $markdown, -1, PREG_SPLIT_DELIM_CAPTURE );
+		if ( false === $lines ) {
+			return $markdown;
+		}
+		$out = '';
+		foreach ( $lines as $i => $line ) {
+			// Even offsets are lines, odd ones the newline that followed them.
+			if ( 1 === $i % 2 || false === strpos( $line, '****' ) || preg_match( '/^\s*\*{3,}\s*$/', $line ) ) {
+				$out .= $line;
+				continue;
+			}
+			// Split after sentence-ending punctuation followed by a capital,
+			// keeping the whitespace so the surviving sentences are rejoined byte
+			// for byte. The capital is what keeps `Reg. 2016/679` and
+			// `Art. 12(3)` inside their sentence.
+			$parts = preg_split( '/(?<=[.!?])(\s+)(?=\p{Lu})/u', $line, -1, PREG_SPLIT_DELIM_CAPTURE );
+			if ( false === $parts ) {
+				$out .= $line;
+				continue;
+			}
+			$kept = '';
+			for ( $j = 0, $n = count( $parts ); $j < $n; $j += 2 ) {
+				if ( false !== strpos( $parts[ $j ], '****' ) ) {
+					continue;
+				}
+				$kept .= $parts[ $j ] . ( isset( $parts[ $j + 1 ] ) ? $parts[ $j + 1 ] : '' );
+			}
+			// A list marker or heading prefix left alone carries nothing.
+			$out .= preg_match( '/^\s*(?:[-*+]|\d+\.|#{1,6})?\s*$/', $kept ) ? '' : rtrim( $kept );
+		}
+		// A heading whose only sentence went (the scaffold's closing
+		// "Contact" section) would stand over nothing: drop it too. Only when
+		// what follows is the end or a heading of the same or a higher level,
+		// so a heading directly followed by its own subsections stays.
+		$cleaned = preg_replace( '/^(#{1,6})[ \t][^\n]*\n(?:[ \t]*\n)*(?=\z|(?!\1#)#+[ \t])/m', '', $out );
+		return null === $cleaned ? $out : $cleaned;
 	}
 
 	/**

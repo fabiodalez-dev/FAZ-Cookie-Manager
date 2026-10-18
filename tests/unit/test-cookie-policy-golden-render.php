@@ -512,6 +512,22 @@ $fixtures = array(
 		'is_admin' => false,
 	),
 	array(
+		'name'     => 'ccpa-empty-visitor',
+		'why'      => 'CCPA scaffold with no controller saved: sentences naming an empty controller or contact are dropped, never printed as ****',
+		'option'   => array( 'jurisdiction' => 'ccpa-california', 'language' => 'en' ),
+		'atts'     => array(),
+		'rows'     => array(),
+		'is_admin' => false,
+	),
+	array(
+		'name'     => 'lgpd-empty-visitor',
+		'why'      => 'LGPD scaffold (pt-BR) with no controller saved: same rule in another language',
+		'option'   => array( 'jurisdiction' => 'lgpd-brazil', 'language' => 'pt-BR' ),
+		'atts'     => array(),
+		'rows'     => array(),
+		'is_admin' => false,
+	),
+	array(
 		'name'    => 'gdpr-full-en',
 		'why'     => 'the common case: full controller data, real inventory, services list',
 		'option'  => faz_fx_company() + array(
@@ -895,6 +911,18 @@ if ( ! $faz_update_mode ) {
 			&& false === strpos( $rendered_all['gdpr-empty-install-visitor'], 'faz-cookie-policy-empty' ),
 		'a live GDPR page on an upgraded install still renders for anonymous visitors, without the admin notice'
 	);
+	// An empty controller name or contact is never printed as an empty bold
+	// run: the sentence carrying it is dropped instead (GDPR, CCPA, LGPD).
+	foreach ( array( 'gdpr-empty-install-visitor', 'ccpa-empty-visitor', 'lgpd-empty-visitor' ) as $faz_empty ) {
+		assert_true(
+			isset( $rendered_all[ $faz_empty ] ) && false === strpos( $rendered_all[ $faz_empty ], '****' ) && false === strpos( $rendered_all[ $faz_empty ], '<strong></strong>' ),
+			$faz_empty . ': no **** where the controller name or contact would be'
+		);
+		assert_true(
+			isset( $rendered_all[ $faz_empty ] ) && false !== strpos( $rendered_all[ $faz_empty ], '<h2>' ),
+			$faz_empty . ': and the rest of the document is still there'
+		);
+	}
 
 	// The consent records the policy talks about are the plugin's own consent
 	// log, purged by Activator::run_retention_cleanup() on
