@@ -558,6 +558,9 @@ namespace {
 	// on the raw bytes saw none of these as the tracker.
 	$shapes = array(
 		'a character entity in the host' => 'https://cdn.tr&#97;cker.test/p.png',
+		// The tokenizer decodes a numeric reference without its semicolon.
+		'a decimal reference without ;'  => 'https:&#47&#47cdn.tracker.test/p.png',
+		'a hex reference without ;'      => 'https://cdn.tracke&#x72.test/p.png',
 		'a &Tab; in the host'            => 'https://cdn.tra&Tab;cker.test/p.png',
 		'a literal newline in the host'  => "https://cdn.tra\ncker.test/p.png",
 		'a percent-encoded dot in the host' => 'https://cdn.tracker%2Etest/p.png',

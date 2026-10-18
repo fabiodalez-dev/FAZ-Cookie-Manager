@@ -214,6 +214,12 @@ namespace {
 		'ur&#108;('  => 'background-image:ur&#108;(' . $poster . ')',
 		'&#x75;rl('  => 'background-image:&#x75;rl(' . $poster . ')',
 		'image&#45;set(' => 'background-image:image&#45;set(&quot;' . $poster . '&quot; 1x)',
+		// The HTML tokenizer also accepts a numeric reference without its
+		// semicolon, and a legacy named one (amp, lt, gt, quot) when no
+		// letter, digit or `=` follows. html_entity_decode() decodes neither.
+		'ur&#108( without ;' => 'background-image:ur&#108(' . $poster . ')',
+		'&#x75rl( without ;' => 'background-image:&#x75rl(' . $poster . ')',
+		'url(&quot  without ;' => 'background-image:url(&quot ' . $poster . '&quot )',
 	) as $faz_label => $faz_style ) {
 		$fe  = faz_ob_frontend( $providers, $blocked );
 		$out = faz_ob_run( $fe, '<html><body><div style="' . $faz_style . '"></div></body></html>' );

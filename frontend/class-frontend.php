@@ -5740,6 +5740,67 @@ class Frontend {
 		return $key;
 	}
 
+	/**
+	 * Decode character references the way the HTML tokenizer does in an
+	 * attribute value, for JUDGING only.
+	 *
+	 * html_entity_decode() needs the semicolon, the tokenizer does not: a
+	 * numeric reference without one (`ur&#108(`, `&#x75rl(`) is decoded, and so
+	 * is a legacy named one (`&amp`, `&lt`, `&gt`, `&quot`) unless a letter, a
+	 * digit or `=` follows it. Those four are the legacy names that change how
+	 * CSS or markup is tokenised; the others decode to symbols that cannot
+	 * form a function name or a URL delimiter. Numeric 0, surrogates and code
+	 * points past U+10FFFF become U+FFFD, as in the tokenizer. Whatever is
+	 * still encoded is then decoded by html_entity_decode().
+	 *
+	 * @param string $value Attribute value or markup.
+	 * @return string
+	 */
+	private static function decode_html_references( $value ) {
+		$value = (string) $value;
+		if ( false === strpos( $value, '&' ) ) {
+			return $value;
+		}
+		$numeric = preg_replace_callback(
+			'/&#(?:[xX]([0-9a-fA-F]+)|([0-9]+));?/',
+			function ( $m ) {
+				$digits = '' !== $m[1] ? ltrim( $m[1], '0' ) : ltrim( $m[2], '0' );
+				$cp     = 0;
+				if ( '' !== $digits && strlen( $digits ) <= 7 ) {
+					$cp = '' !== $m[1] ? hexdec( $digits ) : (int) $digits;
+				} elseif ( '' !== $digits ) {
+					$cp = 0x110000;
+				}
+				if ( 0 === $cp || $cp > 0x10FFFF || ( $cp >= 0xD800 && $cp <= 0xDFFF ) ) {
+					$cp = 0xFFFD;
+				}
+				if ( $cp < 0x80 ) {
+					return chr( $cp );
+				}
+				if ( $cp < 0x800 ) {
+					return chr( 0xC0 | ( $cp >> 6 ) ) . chr( 0x80 | ( $cp & 0x3F ) );
+				}
+				if ( $cp < 0x10000 ) {
+					return chr( 0xE0 | ( $cp >> 12 ) ) . chr( 0x80 | ( ( $cp >> 6 ) & 0x3F ) ) . chr( 0x80 | ( $cp & 0x3F ) );
+				}
+				return chr( 0xF0 | ( $cp >> 18 ) ) . chr( 0x80 | ( ( $cp >> 12 ) & 0x3F ) ) . chr( 0x80 | ( ( $cp >> 6 ) & 0x3F ) ) . chr( 0x80 | ( $cp & 0x3F ) );
+			},
+			$value
+		);
+		if ( null === $numeric ) {
+			return html_entity_decode( $value, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		}
+		$legacy = preg_replace_callback(
+			'/&(amp|lt|gt|quot|AMP|LT|GT|QUOT)(?![;A-Za-z0-9=])/',
+			function ( $m ) {
+				$map = array( 'amp' => '&', 'lt' => '<', 'gt' => '>', 'quot' => '"' );
+				return $map[ strtolower( $m[1] ) ];
+			},
+			$numeric
+		);
+		return html_entity_decode( null === $legacy ? $numeric : $legacy, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+	}
+
 	private function srcdoc_signature( $value, $category ) {
 		// Sign the DOM attribute value, independent of quoting/entity spelling.
 		$raw = ( strlen( $value ) >= 2 && ( '"' === $value[0] || "'" === $value[0] ) ) ? substr( $value, 1, -1 ) : $value;
@@ -5928,7 +5989,7 @@ class Frontend {
 		// What the engine parses is the DECODED attribute value, so the cheap
 		// pre-check reads that too: on the raw text `ur&#108;(`, `&#x75;rl(`
 		// and `image&#45;set(` named no function and left the pass untouched.
-		$css = false === strpos( $raw, '&' ) ? $raw : html_entity_decode( $raw, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$css = self::decode_html_references( $raw );
 		if ( ! preg_match( '/url|image-set|src\(|@import|\\\\/i', $css ) ) {
 			return $full;
 		}
@@ -6093,7 +6154,7 @@ class Frontend {
 			// URL pattern below.
 			$markup = $inner;
 			for ( $pass = 0; $pass < 3; $pass++ ) {
-				$decoded = html_entity_decode( $markup, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+				$decoded = self::decode_html_references( $markup );
 				if ( $decoded === $markup ) {
 					break;
 				}
@@ -6349,7 +6410,7 @@ class Frontend {
 			return '';
 		}
 		for ( $i = 0; $i < 3; $i++ ) {
-			$decoded = html_entity_decode( $value, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			$decoded = self::decode_html_references( $value );
 			if ( $decoded === $value ) {
 				break;
 			}
