@@ -9,7 +9,7 @@
  * they never run. An opt-IN (GDPR) banner, by contrast, blocks every
  * non-necessary category until explicit consent.
  *
- * Since 1.34.3 the CCPA first-visit HTML PARKS the sale-flagged scripts and
+ * Since 1.34.2 the CCPA first-visit HTML PARKS the sale-flagged scripts and
  * script.js releases them on boot. That HTML is the copy a page cache replays,
  * and the visitor it is replayed to may send Sec-GPC or carry the Do Not Sell
  * cookie, which the server never saw: shipped executable, the tracker ran from
@@ -115,6 +115,12 @@ test.describe('CCPA opt-out script blocking is law-aware (1.17.2)', () => {
     await ctx.route(/google-analytics\.com/, (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
     try {
       const page = await ctx.newPage();
+      // 'load', not 'domcontentloaded', on purpose. The assertion below is a
+      // negative one (still parked), so the wait must outlast every pass that
+      // could release the script, and the runtime's restore pass
+      // (_fazScheduleRestoreUnblock) has one bound to window load. Read before
+      // that event, a regression that released the tracker there would still
+      // look parked. The GA request is fulfilled locally, so load always fires.
       await page.goto(`${wpBaseURL}/?n=${Date.now()}`, { waitUntil: 'load' });
       await page.waitForFunction(() => document.documentElement.classList.contains('faz-ready'), undefined, { timeout: 10_000 });
       // The restore pass of a recorded state runs on timers up to 2 s.
