@@ -513,9 +513,11 @@ document.addEventListener("fazcookie_consent_update", function () {
         // If it DID restore a stored record and a live change has now left no
         // valid cookie behind (a withdrawal, or a record from another scope or
         // revision), the grants pushed above no longer apply: go back to the
-        // denied baseline on the same page view instead of leaving them
-        // standing. A record the runtime discards on load, without a change,
-        // is reconciled by the fazcookie_consent_ready listener above.
+        // region baseline (baselineConsentState(): a type stays granted only
+        // where every configured region grants it) on the same page view
+        // instead of leaving them standing. A record the runtime discards on
+        // load, without a change, is reconciled by the fazcookie_consent_ready
+        // listener above.
         if (!restoredFromCookie) return;
         restoreBaseline();
         return;
