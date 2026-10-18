@@ -414,6 +414,56 @@ await scenario(async () => {
   eq('and an attribute-shaped string outside a tag hides nothing', nativeGetAttribute.call(trick, 'srcdoc'), null);
 });
 
+console.log('\nf. a held call made THROUGH a holder lands where the holder landed');
+
+// Until the replay a held node's parentNode is its private holder, so a page
+// that reasons from it — `a.parentNode.insertBefore(b, a)`, `replaceChild`,
+// `a.before(b)`, `a.replaceWith(b)` — queues its call against the holder. The
+// holder is inserted (and emptied) by the earlier task; the later one used to
+// replay into that orphan fragment, so the new element never reached the page
+// and with replaceChild / replaceWith both nodes were gone.
+const IDIOMS = [
+  ['a.parentNode.insertBefore(b, a)', (a, b) => a.parentNode.insertBefore(b, a), ['b', 'a']],
+  ['a.parentNode.replaceChild(b, a)', (a, b) => a.parentNode.replaceChild(b, a), ['b']],
+  ['a.before(b)', (a, b) => a.before(b), ['b', 'a']],
+  ['a.after(b)', (a, b) => a.after(b), ['a', 'b']],
+  ['a.replaceWith(b)', (a, b) => a.replaceWith(b), ['b']],
+];
+for (const [label, act, expected] of IDIOMS) {
+  await scenario(async () => {
+    const { window, document } = boot();
+    const list = document.getElementById('list');
+    const a = document.createElement('img');
+    a.id = 'a';
+    a.src = 'https://third.example/a.png';
+    list.appendChild(a);
+    const b = document.createElement('iframe');
+    b.id = 'b';
+    b.src = 'https://third.example/b.html';
+    act(a, b);
+    handoff(window);
+    eq(label + ' through the holder: both calls land in the real parent, in order', JSON.stringify(ids(list)), JSON.stringify(expected));
+  });
+}
+await scenario(async () => {
+  // The order already handled by forward(): the call into the container
+  // comes first and a held fragment carrying it is inserted afterwards.
+  const { window, document } = boot();
+  const list = document.getElementById('list');
+  const frag = document.createDocumentFragment();
+  const a = document.createElement('img');
+  a.id = 'a';
+  a.src = 'https://third.example/a.png';
+  frag.appendChild(a);
+  list.appendChild(frag);
+  const b = document.createElement('img');
+  b.id = 'b';
+  b.src = 'https://third.example/b.png';
+  a.parentNode.insertBefore(b, a);
+  handoff(window);
+  eq('a fragment, then a call through the node it carried: both land in order', JSON.stringify(ids(list)), JSON.stringify(['b', 'a']));
+});
+
 console.log('\ne. a runtime that predates the handoff');
 
 // The contract, in the shape every runtime before 1.34.1 has: it creates its
@@ -474,6 +524,28 @@ await scenario(async () => {
   window._fazBootstrap.finish({ script() {}, node() {}, url() { return false; } });
   ok('stand-in: the bootstrap is fully handed over (a later finish is a repeat)', warnings.some((l) => l.indexOf('already drained') !== -1));
 });
+
+for (const [label, act, expected] of IDIOMS) {
+  await scenario(async () => {
+    // Section f's idioms when the runtime is one that never calls
+    // start()/finish(): the bootstrap hands over by itself.
+    const page = boot({ body: `<template id="fazBannerTemplate">${BANNER}</template><ul id="list"></ul>` });
+    const { window, document } = page;
+    const list = document.getElementById('list');
+    const a = document.createElement('img');
+    a.id = 'a';
+    a.src = 'https://third.example/a.png';
+    list.appendChild(a);
+    const b = document.createElement('iframe');
+    b.id = 'b';
+    b.src = 'https://third.example/b.html';
+    act(a, b);
+    page.setReady('interactive');
+    window.eval(STALE_STAND_IN);
+    for (let i = 0; i < 5; i += 1) await new Promise((r) => setTimeout(r, 0));
+    eq('stand-in runtime, ' + label + ' through the holder: both calls land in the real parent', JSON.stringify(ids(list)), JSON.stringify(expected));
+  });
+}
 
 await scenario(async () => {
   // A runtime with no configuration creates the object and stops; that is

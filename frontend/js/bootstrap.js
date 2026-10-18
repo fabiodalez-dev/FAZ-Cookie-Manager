@@ -1039,6 +1039,24 @@
         list.forEach(function (record) { record.target = holder; });
         into.set(holder, list);
     }
+    // A holder is about to be inserted into `target`. Until now its nodes'
+    // parentNode was the holder, so a page that reasoned from it — `a.parentNode
+    // .insertBefore(b, a)`, `replaceChild`, `a.before(b)`, `a.replaceWith(b)` —
+    // queued its own held call against the HOLDER. That call replays after this
+    // one, when the holder is already empty and out of the document: the new
+    // node landed in an orphan fragment and, for the replacing idioms, both
+    // nodes were gone. Every insertion still queued into the holder follows its
+    // nodes to the real destination instead, as forward() does for a fragment.
+    function land(holder, target) {
+        if (!holder || holder.nodeType !== 11 || !target) return;
+        var list = into.get(holder);
+        if (!list) return;
+        into.delete(holder);
+        waiting.delete(holder);
+        list.forEach(function (record) { record.target = target; });
+        var existing = into.get(target);
+        into.set(target, existing ? existing.concat(list) : list);
+    }
     function stash(node, record) {
         var holder = holderFor(node);
         records.set(holder, record);
@@ -1121,6 +1139,7 @@
                     var moved = mode !== 'appendChild' && anchor && anchor.parentNode !== target;
                     var insert = function () {
                         parkSheets(holder, policy);
+                        land(holder, target);
                         if (moved || mode === 'appendChild' || (mode === 'insertBefore' && !anchor)) return target.appendChild(holder);
                         if (mode === 'insertBefore') return target.insertBefore(holder, anchor);
                         target.replaceChild(holder, anchor);
@@ -1189,7 +1208,7 @@
                     enqueue(record, function (policy) {
                         var target = record.target;
                         var insert = function () {
-                            parts.forEach(function (n) { prepare(n, policy); parkSheets(n, policy); });
+                            parts.forEach(function (n) { prepare(n, policy); parkSheets(n, policy); land(n, target); });
                             if (gone) {
                                 if (anchor && anchor.parentNode === target) return anchor.before.apply(anchor, parts);
                                 return target.append.apply(target, parts);
