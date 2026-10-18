@@ -6588,11 +6588,19 @@ class Frontend {
 	 *   keeps it counting: more is judged, never less).
 	 * - A raw-text body ends at the first `</name` followed by whitespace,
 	 *   `/` or `>`, which is never later than where the parser ends it. A
-	 *   body with no end, or a <plaintext>, ends the walk: nothing after it
-	 *   is recorded.
-	 * - <iframe>, <noembed>, <noframes> and <noscript> bodies are raw text to
-	 *   the parser too and are walked past for that reason, but not recorded:
-	 *   the iframe and noscript passes read them.
+	 *   body with no end ends the walk: nothing after it is recorded.
+	 * - <iframe>, <noembed> and <noframes> bodies are raw text to the parser
+	 *   and are recorded like the others; only the BODY is, so the iframe
+	 *   pass still sees the opening tag it parks, and the body comes back
+	 *   inside its placeholder. Walked past without being recorded, a quoted
+	 *   value of a tag-shaped string in one of them (`<noembed><a title="`)
+	 *   ran past the end tag in the opening-tag walk of the media and
+	 *   style-attribute passes and swallowed the real <video> after it,
+	 *   which shipped live.
+	 * - <noscript> is walked past but not recorded: the noscript pass reads
+	 *   its body.
+	 * - Everything after <plaintext> is text to the end of the document, and
+	 *   is recorded as one span.
 	 *
 	 * @param string $html Document.
 	 * @return array<int,array{0:int,1:int}>|null Offset/length pairs in
@@ -6606,8 +6614,8 @@ class Frontend {
 		$foreign   = 0;
 		$dash_next = -1;
 		$bang_next = -1;
-		$recorded  = array( 'script', 'style', 'textarea', 'title', 'xmp' );
-		$walked    = array( 'iframe', 'noembed', 'noframes', 'noscript' );
+		$recorded  = array( 'script', 'style', 'textarea', 'title', 'xmp', 'iframe', 'noembed', 'noframes' );
+		$walked    = array( 'noscript' );
 		$tag_re    = '#\G<([a-zA-Z][^\s/>]*+)' . self::ATTR_WALK . '(/\s*+)?>#';
 		$end_re    = '#\G</[a-zA-Z][^\s/>]*+' . self::ATTR_WALK . '(?:/\s*+)?>#';
 		while ( $pos < $len ) {
@@ -6688,6 +6696,9 @@ class Frontend {
 				continue;
 			}
 			if ( 'plaintext' === $name ) {
+				if ( $after < $len ) {
+					$spans[] = array( $after, $len - $after );
+				}
 				break;
 			}
 			$is_recorded = in_array( $name, $recorded, true );
