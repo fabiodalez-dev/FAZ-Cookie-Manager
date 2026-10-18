@@ -474,7 +474,13 @@ namespace {
 		function wp_next_scheduled( $hook ) { return isset( $GLOBALS['faz_geo_cron'][ $hook ] ) ? $GLOBALS['faz_geo_cron'][ $hook ] : false; }
 	}
 	if ( ! function_exists( 'wp_schedule_single_event' ) ) {
-		function wp_schedule_single_event( $time, $hook ) { $GLOBALS['faz_geo_cron'][ $hook ] = $time; return true; }
+		function wp_schedule_single_event( $time, $hook ) {
+			// faz_geo_refuse_cron models a scheduling that does not land (a
+			// pre_schedule_event filter, a cron option write that fails).
+			if ( ! empty( $GLOBALS['faz_geo_refuse_cron'] ) ) { return false; }
+			$GLOBALS['faz_geo_cron'][ $hook ] = $time;
+			return true;
+		}
 	}
 	if ( ! function_exists( 'wp_clear_scheduled_hook' ) ) {
 		function wp_clear_scheduled_hook( $hook ) { unset( $GLOBALS['faz_geo_cron'][ $hook ] ); return 1; }
@@ -532,6 +538,47 @@ namespace {
 	geo_check(
 		1 === $GLOBALS['wpdb']->backfill_reads,
 		'and run no backfill batch of their own'
+	);
+
+	// --- ...but only once its continuation is actually scheduled --------------
+	//
+	// The marker is what stops the batch from re-entering this step, so it may
+	// be written only when the rest of the rows have somewhere to go. With the
+	// first continuation event refused, the old batch recorded the version
+	// anyway, and nothing ever called the backfill again: the remaining rows
+	// stayed without created_at_gmt until the next release bumped the version.
+	$GLOBALS['wpdb']                  = new Faz_Geo_Wpdb_Gmt_Pending();
+	$GLOBALS['faz_geo_options']       = array();
+	$GLOBALS['faz_geo_actions']       = array();
+	$GLOBALS['faz_geo_cron']          = array();
+	$GLOBALS['faz_geo_refuse_option'] = '';
+	$GLOBALS['faz_geo_refuse_cron']   = true;
+	$previous_level = error_reporting( E_ALL & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED );
+	Activator::run_pending_migrations();
+	geo_check(
+		1 === $GLOBALS['wpdb']->backfill_reads && empty( $GLOBALS['faz_geo_cron'][ Activator::GMT_BACKFILL_HOOK ] ),
+		'PRECONDITION: a batch of the backfill ran and its continuation event was refused'
+	);
+	geo_check(
+		Activator::MIGRATIONS_VERSION !== get_option( 'faz_migrations_version' ),
+		'with no continuation scheduled, faz_migrations_version is withheld'
+	);
+	$GLOBALS['faz_geo_refuse_cron'] = false;
+	Activator::run_pending_migrations();
+	geo_check(
+		2 === $GLOBALS['wpdb']->backfill_reads && ! empty( $GLOBALS['faz_geo_cron'][ Activator::GMT_BACKFILL_HOOK ] ),
+		'the next admin load runs the next batch and schedules the continuation'
+	);
+	geo_check(
+		Activator::MIGRATIONS_VERSION === get_option( 'faz_migrations_version' ),
+		'and only then records the version'
+	);
+	$GLOBALS['faz_geo_actions'] = array();
+	Activator::run_pending_migrations();
+	error_reporting( $previous_level );
+	geo_check(
+		! in_array( 'faz_clear_cache', $GLOBALS['faz_geo_actions'], true ) && 2 === $GLOBALS['wpdb']->backfill_reads,
+		'after which admin loads are back on the fast path'
 	);
 
 	echo "\n" . $run . ' checks, ' . $failed . " failed\n";

@@ -177,16 +177,19 @@ class Activator {
 			self::add_recaptcha_gstatic_pattern();
 			self::enable_gpc_on_ccpa_banners();
 			self::ensure_share_personal_data_column();
-			// Not folded into $all_complete: the step reports false until the
-			// LAST row is converted, 500 per call, and holding the version
-			// marker back on that re-ran this whole batch — and the
+			// Not held open by the backfill itself: the step reports false
+			// until the LAST row is converted, 500 per call, and holding the
+			// version marker back on that re-ran this whole batch — and the
 			// faz_clear_cache below, a site-wide page-cache purge through the
 			// cache adapters — on every admin_init, admin-ajax and its nopriv
 			// requests included, for as long as the backfill lasted. What the
-			// batch needs is the column, and a failed ALTER still throws; the
-			// rows continue on GMT_BACKFILL_HOOK, which this call schedules,
-			// and the readers fall back for the rows it has not reached.
-			self::ensure_consent_log_gmt_column();
+			// batch needs is the column (a failed ALTER still throws) and a
+			// place for the rest of the rows to go: the GMT_BACKFILL_HOOK
+			// event. The marker is withheld only while that event could not
+			// be scheduled, since once it is written nothing would call the
+			// backfill again; each such retry converts another batch, so the
+			// re-entry ends at the latest when the last row is reached.
+			$all_complete = self::consent_log_gmt_settled() && $all_complete;
 			self::clear_necessary_optout_flags();
 			self::normalize_legacy_functional_optout_flags();
 			self::move_sourcebuster_to_marketing();
@@ -2329,9 +2332,7 @@ class Activator {
 			update_option( 'faz_consent_log_gmt_column_added', 1, false );
 		}
 		if ( ! self::backfill_consent_log_gmt() ) {
-			if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( self::GMT_BACKFILL_HOOK ) ) {
-				wp_schedule_single_event( time() + 60, self::GMT_BACKFILL_HOOK );
-			}
+			self::schedule_consent_log_gmt_backfill( 60 );
 			return false;
 		}
 		update_option( 'faz_consent_log_gmt_done', 1, false );
@@ -2340,6 +2341,39 @@ class Activator {
 			wp_clear_scheduled_hook( self::GMT_BACKFILL_HOOK );
 		}
 		return true;
+	}
+
+	/**
+	 * Whether the migration batch may record its version for the GMT step:
+	 * the column exists, and the backfill is complete or its continuation
+	 * event is scheduled.
+	 *
+	 * @return bool
+	 */
+	private static function consent_log_gmt_settled() {
+		if ( self::ensure_consent_log_gmt_column() ) {
+			return true;
+		}
+		return function_exists( 'wp_next_scheduled' ) && false !== wp_next_scheduled( self::GMT_BACKFILL_HOOK );
+	}
+
+	/**
+	 * Schedule the backfill continuation unless one is already queued.
+	 *
+	 * Checked with wp_next_scheduled() afterwards rather than through the
+	 * return value, which WordPress before 5.1 does not report.
+	 *
+	 * @param int $delay Seconds from now.
+	 * @return bool Whether a continuation event is now scheduled.
+	 */
+	private static function schedule_consent_log_gmt_backfill( $delay ) {
+		if ( ! function_exists( 'wp_next_scheduled' ) || ! function_exists( 'wp_schedule_single_event' ) ) {
+			return false;
+		}
+		if ( ! wp_next_scheduled( self::GMT_BACKFILL_HOOK ) ) {
+			wp_schedule_single_event( time() + (int) $delay, self::GMT_BACKFILL_HOOK );
+		}
+		return false !== wp_next_scheduled( self::GMT_BACKFILL_HOOK );
 	}
 
 	/**
@@ -2387,8 +2421,14 @@ class Activator {
 				}
 			}
 		} catch ( \Throwable $e ) {
-			// Retried by the next admin load or the rescheduled event.
-			return;
+			// WordPress removes a single event before it runs the callback,
+			// and the migration batch no longer re-enters this step once its
+			// version is recorded: returning here without a new event ended
+			// the backfill on the first failed read, with the rows it had not
+			// reached left without created_at_gmt. Retried later, not at the
+			// usual minute, so a database that keeps failing is not hit by a
+			// read every minute.
+			self::schedule_consent_log_gmt_backfill( 15 * 60 );
 		}
 	}
 
