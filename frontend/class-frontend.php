@@ -5922,15 +5922,20 @@ class Frontend {
 			return $full;
 		}
 		$raw = $this->extract_tag_attr( $attrs, 'style' );
-		if ( '' === $raw || ! preg_match( '/url|image-set|src\(|@import|\\\\/i', $raw ) ) {
+		if ( '' === $raw ) {
+			return $full;
+		}
+		// What the engine parses is the DECODED attribute value, so the cheap
+		// pre-check reads that too: on the raw text `ur&#108;(`, `&#x75;rl(`
+		// and `image&#45;set(` named no function and left the pass untouched.
+		$css = false === strpos( $raw, '&' ) ? $raw : html_entity_decode( $raw, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		if ( ! preg_match( '/url|image-set|src\(|@import|\\\\/i', $css ) ) {
 			return $full;
 		}
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
 			return $full;
 		}
 
-		// What the engine parses is the DECODED attribute value.
-		$css        = html_entity_decode( $raw, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		$categories = array();
 		$rewritten  = $this->neutralize_blocked_css_urls( $css, $providers, $blocked_categories, $categories );
 		if ( empty( $categories ) || $rewritten === $css ) {

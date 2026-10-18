@@ -207,6 +207,19 @@ namespace {
 	$out = faz_ob_run( $fe, '<html><body><div style="background-image:image-set(&quot;' . $poster . '&quot; 1x)"></div></body></html>' );
 	assert_true( null !== faz_raw_attr( $out, 'data-faz-style' ) && false === strpos( faz_live_part( $out ), 'i.ytimg.com' ), 'a provider URL in an image-set() string is parked' );
 
+	// Character references in the attribute: the engine parses the DECODED
+	// value, and the cheap pre-check used to run on the raw one, so none of
+	// these reached the judgement at all.
+	foreach ( array(
+		'ur&#108;('  => 'background-image:ur&#108;(' . $poster . ')',
+		'&#x75;rl('  => 'background-image:&#x75;rl(' . $poster . ')',
+		'image&#45;set(' => 'background-image:image&#45;set(&quot;' . $poster . '&quot; 1x)',
+	) as $faz_label => $faz_style ) {
+		$fe  = faz_ob_frontend( $providers, $blocked );
+		$out = faz_ob_run( $fe, '<html><body><div style="' . $faz_style . '"></div></body></html>' );
+		assert_true( null !== faz_raw_attr( $out, 'data-faz-style' ) && false === strpos( faz_live_part( $out ), 'i.ytimg.com' ), 'a function name spelled with a character reference (' . $faz_label . ') is parked' );
+	}
+
 	echo "\n-- what is left alone --\n";
 
 	$fe   = faz_ob_frontend( $providers, $blocked );
