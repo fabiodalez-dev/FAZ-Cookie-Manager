@@ -24,6 +24,8 @@
  *   4. the_content: the tracker is parked, not shipped.
  *   5. `faz_output_buffer_fail_closed` false restores the old skip.
  *   6. The failure is logged once, not once per request.
+ *   7. The style-attribute fallback judges every tag name the regex pass
+ *      reads, a non-ASCII custom element included.
  *
  * Run: php tests/unit/test-output-buffer-pcre-fail-closed-php.php
  *  or: bash scripts/run-unit-tests.sh
@@ -289,6 +291,31 @@ namespace {
 	$lines = array_filter( explode( "\n", (string) file_get_contents( $faz_log ) ) );
 	assert_true( 1 === count( $lines ), 'two failing requests, one log line (got ' . count( $lines ) . ')' );
 	assert_true( 1 === count( $lines ) && false !== strpos( reset( $lines ), 'script (PCRE error 2)' ), 'the line names the pass and the PCRE error' );
+
+	echo "\n-- 7. the style-attribute pass reads every tag name the regex reads --\n";
+
+	// The regex pass ends a tag name at whitespace, `/` or `>`; the fallback
+	// accepted only names spelt in [A-Za-z0-9:_.-], so on a page where the
+	// pass failed a custom element such as <x-tipé> kept a live url(). A tag
+	// with 600 000 attributes walks ATTR_WALK past the match limit the
+	// output buffer raises to (1 000 000), so the pass fails there.
+	$names    = array( 'div', 'x-tipé', 'x@tip', 'my-élément', 'a' );
+	$attr_doc = '<html><body>';
+	foreach ( $names as $i => $name ) {
+		$attr_doc .= '<' . $name . ' class="c' . $i . '" style="background:url(https://fonts.googleapis.com/bg' . $i . '.png)">t</' . $name . '>';
+	}
+	$attr_tail = '<p ' . str_repeat( 'a ', 600000 ) . '>';
+	$normal    = faz_ob_run( $attr_doc );
+	$GLOBALS['faz_test_transients'] = array();
+	file_put_contents( $faz_log, '' );
+	$failed = faz_ob_run( $attr_doc . $attr_tail );
+	assert_true( false !== strpos( (string) file_get_contents( $faz_log ), 'style-attr (PCRE error 2)' ), 'sanity: the style-attribute pass fails on the long tag' );
+	$live = preg_replace( '/data-faz-style="[^"]*"/', '', $failed );
+	foreach ( $names as $i => $name ) {
+		assert_true( false !== strpos( $normal, 'data-faz-style="background:url(https://fonts.googleapis.com/bg' . $i . '.png)"' ), 'sanity: the working pass parks the style of <' . $name . '>' );
+		assert_true( false === strpos( $live, 'bg' . $i . '.png' ), 'pass failed: the style of <' . $name . '> is not served with a live url()' );
+	}
+	assert_true( substr( $failed, 0, strlen( $normal ) - strlen( '</body></html>' ) ) === substr( $normal, 0, -strlen( '</body></html>' ) ), 'pass failed: the fallback writes what the working pass writes' );
 	@unlink( $faz_log ); // phpcs:ignore
 
 	echo "\n--\n";

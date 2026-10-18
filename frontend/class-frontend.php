@@ -6872,8 +6872,9 @@ class Frontend {
 	 * - open3:   0 tag, 1 name, 2 attributes, 3 slash (svg, media, style attr).
 	 * - named:   0 tag, 1 name, 2 attributes (background).
 	 *
-	 * `*` stands for every element whose name the style-attribute pass
-	 * accepts.
+	 * `*` stands for every opening tag: the style-attribute pattern accepts
+	 * any name that starts with a letter and runs to whitespace, `/` or `>`,
+	 * which is how the walk reads a name.
 	 */
 	const LINEAR_PASS_KINDS = array(
 		'srcdoc'     => array( 'tags' => array( 'iframe' ), 'shape' => 'open2' ),
@@ -7081,7 +7082,11 @@ class Frontend {
 			$attrs_end = false === $slash ? $gt : $slash;
 			$end       = $gt + 1;
 			if ( '*' === $tags ) {
-				$is_target = $name_len === strspn( $name, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:_.-' );
+				// Every opening tag, its name read to whitespace, `/` or `>` as
+				// the pass's pattern reads it. A narrower class here left a
+				// custom element such as <x-tipé> unjudged on exactly the page
+				// where the regex had failed, with its url() live.
+				$is_target = true;
 			} else {
 				$is_target = in_array( $lower, $tags, true );
 			}
