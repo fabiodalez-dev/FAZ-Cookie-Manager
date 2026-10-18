@@ -274,6 +274,7 @@ if ( is_callable( $migrate ) ) {
 	);
 	$GLOBALS['wpdb']              = $db;
 	$GLOBALS['faz_test_options']  = array();
+	$GLOBALS['faz_test_cache_deletes'] = array();
 	Cookie_Controller::$busts     = 0;
 	Category_Controller::$busts   = 0;
 	$done_now = call_user_func( $migrate );
@@ -290,6 +291,11 @@ if ( is_callable( $migrate ) ) {
 	nd_eq( $db->tables['wp_faz_cookies'][11]['description'], 'Our own words about the consent cookie.', 'a plain-string custom consent-cookie description is left alone' );
 	nd_eq( get_option( 'faz_necessary_disclosure_text_done' ), 1, 'the once-per-site marker is written' );
 	nd_eq( Category_Controller::$busts > 0 && Cookie_Controller::$busts > 0, true, 'category and cookie caches are busted after the rewrite' );
+	// The bundled catalogues the preference centre merges sit in the object
+	// cache for twelve hours: without these deletes the old Necessary text
+	// stays on screen for that long.
+	nd_eq( in_array( 'faz_category_contents:faz_category_contents_v2_it', $GLOBALS['faz_test_cache_deletes'], true ), true, 'the merged bundled catalogue cache is busted per language' );
+	nd_eq( in_array( 'faz_category_contents:faz_category_contents_en', $GLOBALS['faz_test_cache_deletes'], true ), true, 'and the English bundled catalogue cache too' );
 
 	// Once per site: an administrator who later restores the old sentence keeps it.
 	$db->tables['wp_faz_cookie_categories'][1]['description'] = wp_json_encode( array( 'en' => $legacy_en ) );
