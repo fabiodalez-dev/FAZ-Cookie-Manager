@@ -327,7 +327,35 @@ assert_eq(
 	array( 'company.name', 'privacy_policy_url' ),
 	'POPIA validation rejects non-scalar option values without string coercion'
 );
-assert_eq( Generator::missing_required_settings( 'gdpr-strict', array() ), array(), 'POPIA-only requirements do not alter existing jurisdictions' );
+// Every jurisdiction's scaffold names a controller and tells the visitor whom
+// to contact (GDPR Art. 12(1)/13(1)(a)-(b), CCPA § 1798.130(a)(5), LGPD Art. 9
+// III/IV). With both fields empty the rendered page carried `how **** ("we",
+// "us", "our")` and `contact us at ****`, which the admin form already refused
+// client-side for every jurisdiction — only the server let it through outside
+// POPIA. The two-field floor is the form's contract, enforced where it reaches
+// the public page; POPIA keeps its longer section-18 list above.
+foreach ( array( 'gdpr-strict', 'ccpa-california', 'lgpd-brazil' ) as $faz_gated ) {
+	assert_eq(
+		Generator::missing_required_settings( $faz_gated, array() ),
+		array( 'company.name', 'company.email' ),
+		"{$faz_gated}: controller name and contact email are required server-side"
+	);
+	assert_eq(
+		Generator::missing_required_settings( $faz_gated, array( 'company' => array( 'name' => 'ACME', 'email' => 'privacy@acme.test' ) ) ),
+		array(),
+		"{$faz_gated}: name + valid email satisfy the gate (no POPIA-only fields demanded)"
+	);
+	assert_eq(
+		Generator::missing_required_settings( $faz_gated, array( 'company' => array( 'name' => 'ACME', 'email' => 'not-an-email' ) ) ),
+		array( 'company.email' ),
+		"{$faz_gated}: a malformed contact email is reported, not published"
+	);
+	assert_eq(
+		Generator::missing_required_settings( $faz_gated, array( 'company' => array( 'name' => '   ', 'email' => 'privacy@acme.test' ) ) ),
+		array( 'company.name' ),
+		"{$faz_gated}: a whitespace-only name counts as missing"
+	);
+}
 
 // ---------- Generator::policy_version_hash ----------
 
@@ -361,6 +389,7 @@ $rendered = Generator::substitute( $scaffold, array(
 	'THIRD_PARTY_SERVICES' => 'Google Analytics 4, Cloudflare',
 	'LAST_UPDATED_DATE'    => '2026-05-20',
 	'RETENTION_PERIOD'     => '12 months',
+	'CONSENT_RECORD_RETENTION' => '24 months',
 	'EDPB_CONTACT'         => 'edpb@edpb.europa.eu',
 	'OFFICIAL_RESOURCES_URL' => 'https://edpb.europa.eu/',
 	'COOKIE_POLICY_URL'    => 'https://acme.test/cookie-policy/',
@@ -368,6 +397,7 @@ $rendered = Generator::substitute( $scaffold, array(
 assert_contains( $rendered, 'ACME Srl', 'Real GDPR-EN template renders company name' );
 assert_contains( $rendered, 'privacy@acme.test', 'Real template renders contact email' );
 assert_contains( $rendered, '12 months', 'Real template renders retention' );
+assert_contains( $rendered, 'consent choices you make in our cookie banner are kept for 24 months', 'Real template states the consent-log period from its own placeholder' );
 assert_false( strpos( $rendered, '{{' ) !== false, 'Real template: no leftover {{...}} tokens' );
 
 // Same for CCPA
@@ -404,6 +434,7 @@ $rendered = Generator::substitute( $lgpd_scaffold, array(
 	'COOKIE_CATEGORIES' => '<dl></dl>',
 	'THIRD_PARTY_SERVICES' => 'GA4',
 	'RETENTION_PERIOD'  => '12 meses',
+	'CONSENT_RECORD_RETENTION' => '24 meses',
 	'OFFICIAL_RESOURCES_URL' => 'https://www.gov.br/anpd/pt-br',
 ) );
 assert_contains( $rendered, 'Encarregado', 'LGPD-pt-BR mentions Encarregado (Art. 41)' );

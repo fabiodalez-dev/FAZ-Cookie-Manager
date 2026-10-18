@@ -488,7 +488,7 @@ assert_eq( $GLOBALS['faz_test_slugs'][100], 'erasure-2026-06-16', 'post_name was
 // in the sweep: the eraser matches the ADDRESS, not one request, so an access
 // request still waiting for a reply is redacted along with the erasure.
 $joined = implode( ' ', $res['messages'] );
-assert_true( false !== strpos( $joined, 'consent logs use anonymized IP hashes' ), 'the consent-log message survives verbatim' );
+assert_true( false !== strpos( $joined, 'Consent history is located using consent IDs' ), 'the eraser explains the consent-ID lookup' );
 assert_true( false !== strpos( $joined, 'Erased the personal data in 20' ), 'the message names how many records were redacted' );
 assert_true( false !== strpos( $joined, '18 of those requests had not been answered yet' ), 'the message names how many were still unanswered' );
 assert_true( false !== strpos( $joined, 'Art. 5(2)' ), 'the message states WHY a record is kept' );
