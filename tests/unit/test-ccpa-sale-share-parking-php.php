@@ -229,6 +229,18 @@ namespace {
 	assert_true( array( 'marketing' ) === park_call( $fe, 'get_blocked_categories' ), 'the render blocks exactly the sale/share category' );
 	assert_true( array() === park_call( $fe, 'get_enforcement_blocked_categories' ), 'the visitor\'s own state blocks nothing: the cookie layers leave sale/share cookies alone' );
 
+	// The parking default must not stand in for an opt-out the server does see:
+	// with Sec-GPC or the Do-Not-Sell cookie on the request, the visitor's own
+	// state blocks the sale/share category too, not only the render.
+	echo "\n-- 2b. CCPA with an opt-out signal the server sees --\n";
+	$fe                      = park_frontend( 'ccpa' );
+	$_SERVER['HTTP_SEC_GPC'] = '1';
+	assert_true( array( 'marketing' ) === park_call( $fe, 'get_blocked_categories' ), 'Sec-GPC: the render blocks the sale/share category' );
+	assert_true( array( 'marketing' ) === park_call( $fe, 'get_enforcement_blocked_categories' ), 'Sec-GPC: and so does the visitor\'s own state' );
+	$fe                           = park_frontend( 'ccpa' );
+	$_COOKIE['fazcookie-dnsmpi'] = '1';
+	assert_true( array( 'marketing' ) === park_call( $fe, 'get_enforcement_blocked_categories' ), 'Do-Not-Sell cookie: the visitor\'s own state blocks it as well' );
+
 	echo "\n-- 3. faz_ccpa_park_sell_share_by_default = false --\n";
 	$GLOBALS['park_filters']['faz_ccpa_park_sell_share_by_default'] = false;
 	$out = park_render( park_frontend( 'ccpa' ) );
