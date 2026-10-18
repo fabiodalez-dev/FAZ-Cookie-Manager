@@ -70,9 +70,15 @@ class Geo_Detector {
 	 * @return array{country:string, region:string, vpn:bool|null, source:string}
 	 */
 	public function detect( $ip_override = null ) {
-		$ip = is_string( $ip_override ) && '' !== $ip_override
+		$request_ip = $this->resolve_client_ip();
+		$ip         = is_string( $ip_override ) && '' !== $ip_override
 			? $ip_override
-			: $this->resolve_client_ip();
+			: $request_ip;
+		// The edge's T1 verdict describes the connection being served. An
+		// explicit address that is not that connection's — a test or a cron
+		// asking about another visitor — is not the relay the edge saw, so the
+		// verdict is not applied to it.
+		$verdict_applies = $ip === $request_ip;
 
 		$ip_hash = $this->hash_ip( $ip );
 
@@ -106,7 +112,7 @@ class Geo_Detector {
 		// not sent to ipinfo to learn what the edge has already said. Read
 		// before the cache, like the override, because a header costs nothing
 		// and a header-derived verdict is never cached under the address.
-		if ( $this->cf_header_reports_anonymiser() ) {
+		if ( $verdict_applies && $this->cf_header_reports_anonymiser() ) {
 			return array( 'country' => 'XX', 'region' => '', 'vpn' => true, 'source' => 'cf_anonymiser' );
 		}
 

@@ -283,6 +283,24 @@ namespace {
 	faz_is( $spoofed['vpn'], null, 'T1 from a peer that is not Cloudflare carries no verdict: the client cannot force the fallback on itself and everybody behind its NAT' );
 	faz_is( $spoofed['country'], 'JP', 'and the address is resolved as before' );
 
+	// An explicit address is not the request's. The edge's T1 verdict
+	// describes the connection being served, so it says nothing about another
+	// address a caller (a test, a cron) asks about.
+	echo "\n\033[1mGeo_Detector — an explicit address is judged on its own\033[0m\n";
+	$resolve_ip = new ReflectionMethod( Geo_Detector::class, 'resolve_client_ip' );
+	$resolve_ip->setAccessible( true );
+
+	faz_request( 'T1' );
+	$ipinfo   = new Faz_Recording_Ipinfo();
+	$detector = new Geo_Detector( $ipinfo );
+	$other    = $detector->detect( '198.51.100.7' );
+	faz_is( $other['source'] !== 'cf_anonymiser' && true !== $other['vpn'], true, 'T1 on the request is not applied to an explicit, different address' );
+	faz_is( $ipinfo->calls, array( '198.51.100.7' ), 'that address is looked up on its own' );
+
+	faz_request( 'T1' );
+	$own = ( new Geo_Detector( new Faz_Recording_Ipinfo() ) )->detect( (string) $resolve_ip->invoke( new Geo_Detector( new Faz_Recording_Ipinfo() ) ) );
+	faz_is( $own['source'], 'cf_anonymiser', 'an explicit address that IS the request\'s keeps the edge\'s Tor verdict' );
+
 	@rmdir( rtrim( ABSPATH, '/' ) );
 
 	echo "\n--\n";
