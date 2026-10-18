@@ -1225,8 +1225,11 @@ class Renderer {
 	 *
 	 * A scaffold sentence such as `contact us at **{{COMPANY_EMAIL}}**.` reads
 	 * `contact us at ****.` when the field is empty. Only the sentence holding
-	 * the empty value goes; the rest of the paragraph stays byte for byte, and
-	 * a line that is nothing but a horizontal rule is left alone.
+	 * the empty value goes; the rest of the paragraph stays byte for byte. A
+	 * line that is nothing but the emptied value (`**{{COMPANY_EMAIL}}**`
+	 * alone under a contact heading) goes too: markdown_to_html() has no
+	 * horizontal-rule syntax, so such a line is never a rule, and keeping it
+	 * printed a literal `****` to visitors.
 	 *
 	 * @param string $markdown Substituted policy markdown.
 	 * @return string Cleaned markdown.
@@ -1242,25 +1245,45 @@ class Renderer {
 		$out = '';
 		foreach ( $lines as $i => $line ) {
 			// Even offsets are lines, odd ones the newline that followed them.
-			if ( 1 === $i % 2 || false === strpos( $line, '****' ) || preg_match( '/^\s*\*{3,}\s*$/', $line ) ) {
+			if ( 1 === $i % 2 || false === strpos( $line, '****' ) ) {
 				$out .= $line;
 				continue;
 			}
 			// Split after sentence-ending punctuation followed by a capital,
 			// keeping the whitespace so the surviving sentences are rejoined byte
-			// for byte. The capital is what keeps `Reg. 2016/679` and
-			// `Art. 12(3)` inside their sentence.
+			// for byte. The capital keeps `Art. 12(3)` inside its sentence.
 			$parts = preg_split( '/(?<=[.!?])(\s+)(?=\p{Lu})/u', $line, -1, PREG_SPLIT_DELIM_CAPTURE );
 			if ( false === $parts ) {
 				$out .= $line;
 				continue;
 			}
-			$kept = '';
+			// A capital after a dot is not enough: the legal citations carry
+			// abbreviations followed by one (`Cal. Civ. Code`, `Reg. UE
+			// 2016/679`). Split there, the sentence holding the empty value
+			// lost only its head and the policy opened on `Civ. Code §§ …)` or
+			// `UE 2016/679) …`. A part that ends in a short abbreviation — one
+			// letter, or a capital and up to two lower-case letters (`Cal.`,
+			// `Civ.`, `Reg.`, `Art.`, `Nr.`, `Inc.`, `z.`), or the French
+			// `Règl.` — is joined to the next. Joining two real sentences only
+			// removes more when one of them holds the empty value, which is the
+			// safe direction.
+			$sentences = array();
 			for ( $j = 0, $n = count( $parts ); $j < $n; $j += 2 ) {
-				if ( false !== strpos( $parts[ $j ], '****' ) ) {
+				$gap  = isset( $parts[ $j + 1 ] ) ? $parts[ $j + 1 ] : '';
+				$last = count( $sentences ) - 1;
+				if ( $last >= 0 && preg_match( '/(?:^|[^\p{L}])(?:\p{L}|\p{Lu}\p{Ll}{1,2}|Règl)\.$/u', $sentences[ $last ][0] ) ) {
+					$sentences[ $last ][0] .= $sentences[ $last ][1] . $parts[ $j ];
+					$sentences[ $last ][1]  = $gap;
 					continue;
 				}
-				$kept .= $parts[ $j ] . ( isset( $parts[ $j + 1 ] ) ? $parts[ $j + 1 ] : '' );
+				$sentences[] = array( $parts[ $j ], $gap );
+			}
+			$kept = '';
+			foreach ( $sentences as $sentence ) {
+				if ( false !== strpos( $sentence[0], '****' ) ) {
+					continue;
+				}
+				$kept .= $sentence[0] . $sentence[1];
 			}
 			// A list marker or heading prefix left alone carries nothing.
 			$out .= preg_match( '/^\s*(?:[-*+]|\d+\.|#{1,6})?\s*$/', $kept ) ? '' : rtrim( $kept );
