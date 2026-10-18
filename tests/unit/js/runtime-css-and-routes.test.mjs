@@ -298,6 +298,13 @@ console.log('\nroutes: a srcdoc URL spelled through entities or escaped slashes'
     ['&Tab; inside the slashes', '<img src="https:/&Tab;/tracker.test/p.png">'],
     ['&NewLine; inside the slashes', '<img src="https:/&NewLine;/tracker.test/p.png">'],
     ['&bsol;&bsol; after the scheme', '<img src=https:&bsol;&bsol;tracker.test/p.png>'],
+    // The compacted and the unescaped readings interact, so both orders run:
+    // `\/<TAB>host` is protocol-relative only while `\/` is kept, and
+    // `\<TAB>/` turns into the escape only once compacted.
+    ['an escaped protocol-relative slash pair then a tab', '<script>var u="\\/\ttracker.test/x.js"</script>'],
+    ['a tab between two escaped slashes', '<script>var u="\\/\t\\/tracker.test/x.js"</script>'],
+    ['a backslash, a tab, then a slash', '<script>var u="\\\t/\\\t/tracker.test/x.js"</script>'],
+    ['an own-site src and a tracker srcset split by a newline', '<img src=https://site.test/a.png\nsrcset=https://tracker.test/p.png>'],
   ]) {
     const f = w.document.createElement('iframe');
     f.srcdoc = markup;

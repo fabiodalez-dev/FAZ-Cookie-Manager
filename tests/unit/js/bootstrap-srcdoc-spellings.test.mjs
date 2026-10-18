@@ -126,6 +126,32 @@ for (const [label, markup] of NAMED) {
   eq('control: a srcdoc with references and only a relative URL is released', nativeGetAttribute.call(frame, 'srcdoc'), '<p>a &lt;/textarea&gt; &amp; <img src="/own.png"></p>');
 }
 
+// Tab, LF and CR were stripped from the WHOLE markup before it was read, so
+// two tokens the whitespace kept apart were read as one: an unquoted own-site
+// src followed by a newline and a tracker srcset became a single first-party
+// URL. The stripped copy is now one more reading, united with the others.
+console.log('\nsafety release: whitespace between two tokens');
+{
+  const markup = '<img src=http://site.test/a.png\nsrcset=https://tracker.test/px>';
+  const { window, document, nativeGetAttribute } = boot();
+  const frame = document.createElement('iframe');
+  frame.setAttribute('srcdoc', markup);
+  document.getElementById('w').appendChild(frame);
+  await release(window);
+  eq('an own-site src and a tracker srcset split by a newline: parked', nativeGetAttribute.call(frame, 'srcdoc'), null);
+}
+for (const [label, markup] of [
+  ['an escaped protocol-relative slash pair then a tab', '<script>var u="\\/\ttracker.test/x.js"</script>'],
+  ['a backslash, a tab, then a slash', '<script>var u="https:\\\t/\\\t/tracker.test/x.js"</script>'],
+]) {
+  const { window, document, nativeGetAttribute } = boot();
+  const frame = document.createElement('iframe');
+  frame.setAttribute('srcdoc', markup);
+  document.getElementById('w').appendChild(frame);
+  await release(window);
+  eq('srcdoc with ' + label + ' is parked on the safety release', nativeGetAttribute.call(frame, 'srcdoc'), null);
+}
+
 console.log('\nsafety release: what the site itself names is released');
 for (const [label, markup] of [
   ['a plain https URL (control)', '<img src="https://tracker.test/px">'],

@@ -333,8 +333,8 @@
         } catch (e) { /* the replacements below still run */ }
         return text;
     }
-    function decodeMarkup(value) {
-        return decodeReferences(String(value == null ? '' : value))
+    function decodeMarkup(value, keepWhitespace) {
+        var text = decodeReferences(String(value == null ? '' : value))
             .replace(/&#x([0-9a-f]+);?/gi, function (match, hex) {
                 try { return String.fromCodePoint(parseInt(hex, 16)); } catch (e) { return match; }
             })
@@ -342,8 +342,8 @@
                 try { return String.fromCodePoint(parseInt(dec, 10)); } catch (e) { return match; }
             })
             .replace(/&sol;/gi, '/')
-            .replace(/&colon;/gi, ':')
-            .replace(/[\t\n\r]/g, '');
+            .replace(/&colon;/gi, ':');
+        return keepWhitespace ? text : text.replace(/[\t\n\r]/g, '');
     }
     // Every spelling that names a host to the WHATWG parser, not just a
     // literal `//`: for a special scheme a backslash IS a slash, and any run
@@ -374,15 +374,24 @@
         return NAMESPACES.indexOf(String(url).replace(/\\\//g, '/')) !== -1;
     }
     function urlsIn(value) {
-        var text = decodeMarkup(value);
-        var found = text.match(MARKUP_URL) || [];
-        // The JSON escape `\/`, which a script embedding its markup as a
-        // string leaves behind. Collapsing it to `/` BEFORE the match would
-        // turn `\/host` — protocol-relative to the parser — into a first-party
-        // path and lose the host, so the escaped form is read as a second,
-        // separate pass, the same union _fazMarkupUrls makes.
-        var unescaped = text.replace(/\\\//g, '/');
-        if (unescaped !== text) found = found.concat(unescaped.match(MARKUP_URL) || []);
+        var found = [];
+        // Tab, LF and CR are stripped by the URL parser from inside a URL, so
+        // the text is read with them removed; but stripping them from the
+        // whole markup also JOINS tokens they kept apart, and
+        // `src=http://own/a.png<LF>srcset=https://tracker/p` read as one
+        // first-party URL. Both copies are read and the results united; every
+        // pass can only add a candidate.
+        [decodeMarkup(value), decodeMarkup(value, true)].forEach(function (text, i) {
+            if (i === 1 && !/[\t\n\r]/.test(text)) return;
+            found = found.concat(text.match(MARKUP_URL) || []);
+            // The JSON escape `\/`, which a script embedding its markup as a
+            // string leaves behind. Collapsing it to `/` BEFORE the match would
+            // turn `\/host` — protocol-relative to the parser — into a
+            // first-party path and lose the host, so the escaped form is read
+            // as a separate pass, the same union _fazMarkupUrls makes.
+            var unescaped = text.replace(/\\\//g, '/');
+            if (unescaped !== text) found = found.concat(unescaped.match(MARKUP_URL) || []);
+        });
         return found.filter(function (url) { return !namespaceName(url); });
     }
     // A list is same-origin only when EVERY candidate is: the browser picks one

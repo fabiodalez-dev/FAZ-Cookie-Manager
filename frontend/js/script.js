@@ -4608,11 +4608,21 @@ function _fazMarkupUrls(markup) {
     if (unescaped !== text) push(unescaped.match(MARKUP_URL) || []);
     // Tab, LF and CR are removed from anywhere in a URL by the URL parser
     // (`https:/<TAB>/tracker.test` is tracker.test), as the bootstrap and the
-    // server strip them. Another pass, not in place: removing them from the
-    // whole markup can join two neighbouring tokens, and the passes above
-    // still read those apart.
-    var compact = unescaped.replace(/[\t\n\r]/g, "");
-    if (compact !== unescaped) push(compact.match(MARKUP_URL) || []);
+    // server strip them. More passes, not an in-place strip: removing them
+    // from the whole markup can join two neighbouring tokens, and the passes
+    // above still read those apart. Both orders, because the two rewrites
+    // interact: `\/<TAB>tracker.test` is protocol-relative only while its
+    // `\/` is kept (compact the raw text), and `\<TAB>/` becomes the escape
+    // only once compacted (unescape the compacted text). Every pass can only
+    // add candidates.
+    var compactRaw = text.replace(/[\t\n\r]/g, "");
+    if (compactRaw !== text) {
+        push(compactRaw.match(MARKUP_URL) || []);
+        var compactUnescaped = compactRaw.replace(/\\\//g, "/");
+        if (compactUnescaped !== compactRaw) push(compactUnescaped.match(MARKUP_URL) || []);
+    }
+    var unescapedCompact = unescaped.replace(/[\t\n\r]/g, "");
+    if (unescapedCompact !== unescaped) push(unescapedCompact.match(MARKUP_URL) || []);
     return found;
 }
 function _fazMarkupBlockedCategory(el, markup) {
