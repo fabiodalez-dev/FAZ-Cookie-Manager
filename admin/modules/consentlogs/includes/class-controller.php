@@ -127,6 +127,10 @@ class Controller {
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
+		// dbDelta() creates the table with created_at_gmt, or adds the column
+		// when it is missing, so from here on inserts may write it (see
+		// Activator::ensure_consent_log_gmt_column() for the upgrade path).
+		update_option( 'faz_consent_log_gmt_column_added', 1, false );
 
 		// Migrate legacy plaintext user_agent values to hashed form.
 		$migration_ok = true;
