@@ -94,7 +94,9 @@ foreach ( array( true, false ) as $retain_request ) {
 }
 seed_privacy(); $GLOBALS['filters']['faz_consent_log_erasure_retain']=true;
 $result=faz_privacy_eraser('visitor@example.test');
-privacy_check(count($wpdb->rows)===3 && $result['items_retained'], 'optional retention filter reports retained history');
+// items_retained alone proves nothing here: redacting the DSAR record sets it
+// on every erasure. The retention policy has a message of its own.
+privacy_check(count($wpdb->rows)===3 && false!==strpos(implode(' ', $result['messages']), 'retained under the site retention policy'), 'optional retention filter reports retained history');
 privacy_check(!isset($GLOBALS['meta'][1]['_dsar_consent_id']), 'retention does not preserve the DSAR identifier');
 seed_privacy(); unset($GLOBALS['meta'][1]['_dsar_consent_id']);
 faz_privacy_eraser('visitor@example.test');
@@ -127,7 +129,10 @@ for($i=2;$i<=25;$i++) {
 }
 $wpdb->fail_delete=true;
 privacy_check(is_wp_error(faz_privacy_eraser('visitor@example.test')), 'a failed batch of more than twenty requests does not complete');
-privacy_check(count($GLOBALS['meta'])===25, 'failed batch retains all request links');
+// The records are redacted, never deleted, so counting them proves nothing:
+// each must still carry the verified link and the address a retry needs.
+$linked = array_filter( $GLOBALS['meta'], function ( $m ) { return 'visitor123' === ( isset( $m['_dsar_consent_id'] ) ? $m['_dsar_consent_id'] : '' ) && '' !== ( isset( $m['_dsar_consent_id_verified'] ) ? (string) $m['_dsar_consent_id_verified'] : '' ) && '' !== ( isset( $m['_dsar_email'] ) ? (string) $m['_dsar_email'] : '' ); } );
+privacy_check(count($linked)===25 && count($wpdb->rows)===3, 'failed batch retains all request links');
 $wpdb->fail_delete=false;
 $res=faz_privacy_eraser('visitor@example.test');
 privacy_check(!is_wp_error($res) && !$res['done'], 'retry drains first twenty and leaves the next batch pending');
