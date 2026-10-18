@@ -111,23 +111,25 @@ class Gvl {
 		), false );
 
 		// The selection must follow the list it was made against.
-		$this->prune_selected_vendors();
+		$selection_changed = $this->prune_selected_vendors();
 
 		// Also save raw JSON to file for frontend access.
 		if ( ! $this->save_to_file( 'vendor-list.json', $body ) ) {
 			return array(
-				'success'      => false,
-				'message'      => 'GVL saved to option but file write failed',
-				'version'      => $version,
-				'vendor_count' => $vendor_count,
+				'success'           => false,
+				'message'           => 'GVL saved to option but file write failed',
+				'version'           => $version,
+				'vendor_count'      => $vendor_count,
+				'selection_changed' => $selection_changed,
 			);
 		}
 
 		return array(
-			'success'      => true,
-			'message'      => sprintf( 'GVL v%d downloaded (%d vendors)', $version, $vendor_count ),
-			'version'      => $version,
-			'vendor_count' => $vendor_count,
+			'success'           => true,
+			'message'           => sprintf( 'GVL v%d downloaded (%d vendors)', $version, $vendor_count ),
+			'version'           => $version,
+			'vendor_count'      => $vendor_count,
+			'selection_changed' => $selection_changed,
 		);
 	}
 
@@ -294,20 +296,30 @@ class Gvl {
 	 * on every pageview. An install that never selected anything keeps its
 	 * "never selected" state so the first-download auto-select still runs.
 	 *
-	 * @return void
+	 * A changed selection also drops the stored banner template, as the
+	 * selection endpoint does. Purging the page caches is left to the caller,
+	 * which knows whether it purges anyway (download() reports the change as
+	 * `selection_changed`).
+	 *
+	 * @return bool Whether the stored selection changed.
 	 */
 	private function prune_selected_vendors() {
 		$selected = get_option( 'faz_gvl_selected_vendors', null );
 		if ( ! is_array( $selected ) ) {
-			return;
+			return false;
 		}
 		$live = array_map( 'absint', array_keys( $this->get_vendors( $selected ) ) );
 		sort( $live );
 		$current = array_map( 'absint', $selected );
 		sort( $current );
-		if ( $live !== $current ) {
-			update_option( 'faz_gvl_selected_vendors', $live, false );
+		if ( $live === $current ) {
+			return false;
 		}
+		update_option( 'faz_gvl_selected_vendors', $live, false );
+		if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+			faz_clear_banner_template_cache();
+		}
+		return true;
 	}
 
 	/**
@@ -687,8 +699,12 @@ class Gvl {
 		// fetched whether or not it is the one already stored, and the IAB does
 		// not publish a new list between every two weekly ticks. Purging on
 		// "non-zero" emptied every page cache on the site once a week for an
-		// identical list, so only a version change purges.
-		if ( ! empty( $result['version'] ) && absint( $result['version'] ) !== $stored_version ) {
+		// identical list, so only a version change purges — or a selection
+		// the refresh pruned: a vendor whose deletedDate has passed since the
+		// last tick leaves the selection on the SAME version, and the selected
+		// vendors are embedded in every page too.
+		$version_changed = ! empty( $result['version'] ) && absint( $result['version'] ) !== $stored_version;
+		if ( $version_changed || ! empty( $result['selection_changed'] ) ) {
 			do_action( 'faz_purge_page_cache' );
 		}
 	}
