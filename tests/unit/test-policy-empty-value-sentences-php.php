@@ -114,7 +114,7 @@ evs_check( false === strpos( $ccpa, 'Notice at Collection and Cookie Policy expl
 $es = $strip->invoke( null, evs_substituted( $root . '/admin/modules/cookie-policy-generator/templates/gdpr-strict/es.md' ) );
 evs_check( false === strpos( $es, 'UE 2016/679) y la Directiva ePrivacy' ), 'gdpr-strict/es: the opening sentence is dropped whole' );
 $de = $strip->invoke( null, evs_substituted( $root . '/admin/modules/cookie-policy-generator/templates/ccpa-california/de.md' ) );
-evs_check( false === strpos( $de, '****' ) && 1 !== preg_match( '/^##[^\n]*\n\s*\z/', $de ), 'ccpa-california/de: the lone emptied contact line goes, and the heading above it with it' );
+evs_check( false === strpos( $de, '****' ) && 1 !== preg_match( '/^##[^\n]*\n\s*\z/m', $de ), 'ccpa-california/de: the lone emptied contact line goes, and the heading above it with it' );
 
 // The neighbours of a dropped sentence stay as they were.
 $line = 'We keep logs (Art. 12(3) GDPR). Write to us at ****. See Cal. Civ. Code § 1798.100. The end.';
