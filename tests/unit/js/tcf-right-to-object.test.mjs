@@ -113,6 +113,20 @@ function run() {
     eq('Reject All (explicit objections): euconsent-v2 is not written on load', r.tcCookieWritten, false);
   }
 
+  // 0. Before any decision. The preference centre shows every legitimate-
+  //    interest switch OFF until the visitor has chosen
+  //    (_fazLIDefaultEstablished() in script.js); the API answered with every
+  //    LI bit ON, so a vendor reading getTCData saw an established legitimate
+  //    interest the visitor was being shown as not set. Both say "off" now.
+  for (const [label, consent] of [
+    ['no choice recorded yet', 'consentid:abc,necessary:yes'],
+    ['an undecided record (a privacy signal before any answer)', 'consentid:abc,action:yes,undecided:1,necessary:yes,functional:no,analytics:no,performance:no,marketing:no'],
+  ]) {
+    const r = boot({ consent });
+    eq('before a decision (' + label + '): no LI purpose is signalled', liOn(r.purposeLI), '');
+    eq('before a decision (' + label + '): no vendor LI is signalled', r.vendorLI['755'] === true, false);
+  }
+
   // 3. Accept All with no objection: LI stays established. Guards the other
   //    direction — a rule that always cleared LI would pass 1 and 2 alone.
   {

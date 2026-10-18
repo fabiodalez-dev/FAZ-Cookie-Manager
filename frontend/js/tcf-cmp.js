@@ -7,7 +7,8 @@
  *
  * When GVL data is provided via _fazTcfConfig, encodes real vendor consent
  * (from the visitor's explicit vendor record) and legitimate interest
- * bitfields (established by default, ended by the visitor's Right to Object).
+ * bitfields (off until the visitor has chosen, then established unless the
+ * visitor exercised the Right to Object).
  */
 (function () {
 	"use strict";
@@ -477,8 +478,13 @@
 	 *    purpose LI is established only if at least one vendor with LI still
 	 *    declares it. The two bitfields therefore agree.
 	 *
-	 * Before the visitor acts there is no record and nothing is objected, so
-	 * the TCF default (established) is what the UI shows and the string says.
+	 *  - Before the visitor has made a choice (no decided record, or an
+	 *    undecided one written by a privacy signal) nothing is signalled:
+	 *    every LI bit is off. That is what the preference centre shows —
+	 *    _fazLIDefaultEstablished() in script.js keeps every LI switch off
+	 *    until a choice — and the API must not answer a vendor with an
+	 *    established legitimate interest the visitor is being shown as unset.
+	 *    The string is not persisted before a choice either.
 	 */
 	function buildLegitimateInterest(categoryConsent) {
 		var record   = readLIObjections();
@@ -503,6 +509,10 @@
 		var purposeLI = {};
 		for (var p = 1; p <= 24; p++) purposeLI[String(p)] = false;
 		var vendorLI = {};
+		if (!acted) {
+			for (var k = 0; k < SELECTED_VENDORS.length; k++) vendorLI[SELECTED_VENDORS[k]] = false;
+			return { purposeLI: purposeLI, vendorLI: vendorLI };
+		}
 
 		for (var i = 0; i < SELECTED_VENDORS.length; i++) {
 			var vid = SELECTED_VENDORS[i];
