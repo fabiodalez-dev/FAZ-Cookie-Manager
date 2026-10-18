@@ -7304,7 +7304,7 @@ class Frontend {
 		$original = (string) $css;
 
 		$rewritten = preg_replace_callback(
-			'/url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)\s]+))\s*\)/i',
+			'/url\(\s*(?:"([^"]*+)"|\'([^\']*+)\'|([^)\s]++))\s*\)/i',
 			function ( $m ) use ( $block_url, $inert_url ) {
 				$url = isset( $m[1] ) && '' !== $m[1] ? $m[1] : ( isset( $m[2] ) && '' !== $m[2] ? $m[2] : ( isset( $m[3] ) ? $m[3] : '' ) );
 				if ( ! $block_url( $url ) ) {
@@ -7314,14 +7314,44 @@ class Frontend {
 			},
 			$original
 		);
-		// PCRE error (backtrack/recursion limit on crafted or very large CSS)
-		// returns null. Fail OPEN: reset categories and return the ORIGINAL CSS
-		// so process_style_tag leaves the <style> untouched, instead of emitting
-		// an empty <style> body that strips every rule. Also never pass a null
-		// subject into the next pass (deprecated / TypeError on PHP 8.1+).
+		// A PCRE error (backtrack or stack limit on crafted or very large CSS)
+		// returns null, and a null subject must never reach the next pass
+		// (deprecated / TypeError on PHP 8.1+). The patterns are possessive, so
+		// a long string or data URI is one step, not one stack frame per
+		// character; this is the last resort. It used to fail OPEN, returning
+		// the original text with no category, which threw away what the earlier
+		// passes had neutralised: a long image-set() string after a Google
+		// Fonts @import shipped the @import live. Now the text is judged as a
+		// whole: a pass that already met a blocked URL, or a blocked URL the
+		// residual reader finds in the original, parks the sheet whole (empty
+		// live text, the original restored on consent). Only text that names
+		// nothing blocked is left as it was.
+		// When the residual reader cannot read the text either (it runs the
+		// same engine under the same limits), a blocked provider named anywhere
+		// in it is enough: a plain substring test needs no regex, and a sheet
+		// parked here is restored on consent, while one left live fetches.
+		$fail_closed = function () use ( $original, $providers, $blocked_categories, &$categories ) {
+			$residual = $this->css_blocked_category( $original, $providers, $blocked_categories );
+			if ( false !== $residual ) {
+				$categories[] = $residual;
+			}
+			if ( empty( $categories ) ) {
+				$decoded = $this->css_decode_escapes( $original );
+				foreach ( $providers as $pattern => $category ) {
+					if ( '' === (string) $pattern || ! in_array( $category, (array) $blocked_categories, true ) ) {
+						continue;
+					}
+					if ( false !== stripos( $original, (string) $pattern ) || ( is_string( $decoded ) && false !== stripos( $decoded, (string) $pattern ) ) ) {
+						$categories[] = $category;
+						break;
+					}
+				}
+			}
+			$categories = array_values( array_unique( $categories ) );
+			return empty( $categories ) ? $original : '';
+		};
 		if ( null === $rewritten ) {
-			$categories = array();
-			return $original;
+			return $fail_closed();
 		}
 
 		// `\s*`, not `\s+`: the at-keyword may be followed directly by the
@@ -7330,7 +7360,7 @@ class Frontend {
 		// after the at-keyword: `@importurl(` would be a different, unknown
 		// at-rule, and `@import url("data:…")` is valid in its place.
 		$rewritten = preg_replace_callback(
-			'/(@import\s*)(["\'])([^"\']+)\2/i',
+			'/(@import\s*)(["\'])([^"\']++)\2/i',
 			function ( $m ) use ( $block_url, $inert_url ) {
 				if ( ! $block_url( $m[3] ) ) {
 					return $m[0];
@@ -7340,8 +7370,7 @@ class Frontend {
 			$rewritten
 		);
 		if ( null === $rewritten ) {
-			$categories = array();
-			return $original;
+			return $fail_closed();
 		}
 
 		// image-set() and src() name a file with a bare string and no url()
@@ -7349,10 +7378,10 @@ class Frontend {
 		// nested url() is reached; a first-party candidate next to the blocked
 		// one stays.
 		$rewritten = preg_replace_callback(
-			'/((?:-webkit-)?(?:image-set|src)\()((?:[^()]|\([^()]*\))*)(\))/i',
+			'/((?:-webkit-)?(?:image-set|src)\()((?:[^()]++|\([^()]*+\))*+)(\))/i',
 			function ( $m ) use ( $block_url, $inert_url ) {
 				$inner = preg_replace_callback(
-					'/"((?:[^"\\\\]|\\\\[\s\S])*)"|\'((?:[^\'\\\\]|\\\\[\s\S])*)\'/',
+					'/"((?:[^"\\\\]++|\\\\[\s\S])*+)"|\'((?:[^\'\\\\]++|\\\\[\s\S])*+)\'/',
 					function ( $s ) use ( $block_url, $inert_url ) {
 						$url = isset( $s[1] ) && '' !== $s[1] ? $s[1] : ( isset( $s[2] ) ? $s[2] : '' );
 						return $block_url( $url ) ? '"' . $inert_url . '"' : $s[0];
@@ -7364,8 +7393,7 @@ class Frontend {
 			$rewritten
 		);
 		if ( null === $rewritten ) {
-			$categories = array();
-			return $original;
+			return $fail_closed();
 		}
 
 		// The judgement: does the engine still fetch a blocked URL from what
@@ -7428,7 +7456,7 @@ class Frontend {
 		// can only ADD URLs: the stripper cannot tell where the tokenizer is,
 		// and `/*` inside an unquoted url(…) or an unterminated string is text
 		// the engine keeps, so the passes above still read the original.
-		$uncommented = preg_replace( '/("(?:[^"\\\\\n]|\\\\[\s\S])*"|\'(?:[^\'\\\\\n]|\\\\[\s\S])*\')|\/\*[\s\S]*?\*\//', '$1', $css );
+		$uncommented = preg_replace( '/("(?:[^"\\\\\n]++|\\\\[\s\S])*+"|\'(?:[^\'\\\\\n]++|\\\\[\s\S])*+\')|\/\*[^*]*+\*++(?:[^\/*][^*]*+\*++)*+\//', '$1', $css );
 		if ( null !== $uncommented ) {
 			$passes[] = $this->css_decode_escapes( $uncommented );
 		}
@@ -7464,21 +7492,25 @@ class Frontend {
 			return $urls;
 		}
 		$url_pattern = $decoded
-			? '/url\(\s*(?:"((?:[^"\\\\]|\\\\[\s\S])*)"|\'((?:[^\'\\\\]|\\\\[\s\S])*)\'|([^)]+?))\s*\)/i'
-			: '/url\(\s*(?:"((?:[^"\\\\]|\\\\[\s\S])*)"|\'((?:[^\'\\\\]|\\\\[\s\S])*)\'|([^)\s]+))\s*\)/i';
+			? '/url\(\s*(?:"((?:[^"\\\\]++|\\\\[\s\S])*+)"|\'((?:[^\'\\\\]++|\\\\[\s\S])*+)\'|([^)]++))\)/i'
+			: '/url\(\s*(?:"((?:[^"\\\\]++|\\\\[\s\S])*+)"|\'((?:[^\'\\\\]++|\\\\[\s\S])*+)\'|([^)\s]++))\s*\)/i';
 		if ( preg_match_all( $url_pattern, $css, $found, PREG_SET_ORDER ) ) {
 			foreach ( $found as $f ) {
-				$urls[] = isset( $f[1] ) && '' !== $f[1] ? $f[1] : ( isset( $f[2] ) && '' !== $f[2] ? $f[2] : ( isset( $f[3] ) ? $f[3] : '' ) );
+				// The decoded bare branch runs to the closing paren in one
+				// possessive step; the whitespace before the paren, which a
+				// lazy body used to leave out, is trimmed here instead.
+				$bare   = isset( $f[3] ) ? ( $decoded ? rtrim( $f[3], " \t\n\r\f" ) : $f[3] ) : '';
+				$urls[] = isset( $f[1] ) && '' !== $f[1] ? $f[1] : ( isset( $f[2] ) && '' !== $f[2] ? $f[2] : $bare );
 			}
 		}
-		if ( preg_match_all( '/@import\s*(["\'])((?:(?!\1)[^\\\\]|\\\\[\s\S])+)\1/i', $css, $found, PREG_SET_ORDER ) ) {
+		if ( preg_match_all( '/@import\s*(["\'])((?:(?:(?!\1)[^\\\\])++|\\\\[\s\S])++)\1/i', $css, $found, PREG_SET_ORDER ) ) {
 			foreach ( $found as $f ) {
 				$urls[] = $f[2];
 			}
 		}
-		if ( preg_match_all( '/(?:-webkit-)?(?:image-set|src)\(((?:[^()]|\([^()]*\))*)\)/i', $css, $found, PREG_SET_ORDER ) ) {
+		if ( preg_match_all( '/(?:-webkit-)?(?:image-set|src)\(((?:[^()]++|\([^()]*+\))*+)\)/i', $css, $found, PREG_SET_ORDER ) ) {
 			foreach ( $found as $f ) {
-				if ( preg_match_all( '/"((?:[^"\\\\]|\\\\[\s\S])*)"|\'((?:[^\'\\\\]|\\\\[\s\S])*)\'/', $f[1], $strings, PREG_SET_ORDER ) ) {
+				if ( preg_match_all( '/"((?:[^"\\\\]++|\\\\[\s\S])*+)"|\'((?:[^\'\\\\]++|\\\\[\s\S])*+)\'/', $f[1], $strings, PREG_SET_ORDER ) ) {
 					foreach ( $strings as $s ) {
 						$urls[] = isset( $s[1] ) && '' !== $s[1] ? $s[1] : ( isset( $s[2] ) ? $s[2] : '' );
 					}
@@ -7488,7 +7520,7 @@ class Frontend {
 		// A url( left OPEN: the tokenizer reads to the end of the text as the
 		// URL, and the engine fetches it. Anchored at the end, so only a
 		// genuinely unclosed token matches.
-		if ( preg_match( '/url\(\s*(?:"((?:[^"\\\\]|\\\\[\s\S])*)|\'((?:[^\'\\\\]|\\\\[\s\S])*)|([^)\s]*))\s*$/i', $css, $open ) ) {
+		if ( preg_match( '/url\(\s*(?:"((?:[^"\\\\]++|\\\\[\s\S])*+)|\'((?:[^\'\\\\]++|\\\\[\s\S])*+)|([^)\s]*+))\s*$/i', $css, $open ) ) {
 			$value = isset( $open[1] ) && '' !== $open[1] ? $open[1] : ( isset( $open[2] ) && '' !== $open[2] ? $open[2] : ( isset( $open[3] ) ? $open[3] : '' ) );
 			if ( '' !== $value ) {
 				$urls[] = $value;
