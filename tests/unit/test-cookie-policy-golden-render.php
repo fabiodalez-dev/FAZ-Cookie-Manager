@@ -932,12 +932,12 @@ if ( ! $faz_update_mode ) {
 	// scaffold (and the pt-BR LGPD one) still printed the fallback figure as
 	// the consent-record period, so moving the purge window left the published
 	// period wrong. Distinct values (37 vs 12) make the two sources visible.
-	$faz_retention_render = function ( $jurisdiction, $lang, $consent_months ) {
+	$faz_retention_render = function ( $jurisdiction, $lang, $consent_months, $declared_months = 12 ) {
 		$GLOBALS['faz_test_state']['options']       = array(
 			'faz_cookie_policy_data' => array_merge( faz_fx_company(), array(
 				'jurisdiction'     => $jurisdiction,
 				'language'         => $lang,
-				'retention_months' => 12,
+				'retention_months' => $declared_months,
 			) ),
 		);
 		if ( null !== $consent_months ) {
@@ -980,10 +980,12 @@ if ( ! $faz_update_mode ) {
 		false !== strpos( $faz_html, '12 months' ),
 		'gdpr-strict/en: the declared fallback period is still stated'
 	);
-	$faz_default = $faz_retention_render( 'gdpr-strict', 'en', null );
+	// A declared fallback other than 12, so the purge default (12) and the
+	// declared period cannot both produce the asserted text.
+	$faz_default = $faz_retention_render( 'gdpr-strict', 'en', null, 7 );
 	assert_true(
-		false !== strpos( $faz_default, 'kept for 12 months' ),
-		'gdpr-strict/en: with no saved settings the consent-record period is the purge default (12 months)'
+		false !== strpos( $faz_default, 'kept for 12 months' ) && false === strpos( $faz_default, 'kept for 7 months' ),
+		'gdpr-strict/en: with no saved settings the consent-record period is the purge default (12 months), not the declared fallback'
 	);
 	assert_true(
 		$hash_of( $faz_retention_render( 'gdpr-strict', 'en', 37 ) ) !== $hash_of( $faz_retention_render( 'gdpr-strict', 'en', 24 ) ),
