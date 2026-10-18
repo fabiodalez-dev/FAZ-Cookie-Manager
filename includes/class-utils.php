@@ -1504,9 +1504,18 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 			foreach ( $query->posts as $post_id ) {
 				$post_id = (int) $post_id;
 				$consent_id = faz_dsar_verified_consent_id( $post_id, $email );
+				// An ID whose ownership was never verified is a claim, not the
+				// requester's data: the history it points to may document
+				// another visitor's consent (Art. 7(1)), so it is not erased.
+				// Nor is the claim kept: the verification is bound to the
+				// address this erasure removes, so it could never be completed
+				// afterwards, and holding the requester's identifier past the
+				// request would outlast its purpose (Art. 5(1)(e)). The message
+				// says exactly that, so the administrator knows that history
+				// stays and how to erase it.
 				if ( '' === $consent_id && '' !== (string) get_post_meta( $post_id, '_dsar_consent_id', true ) ) {
 					$items_retained = true;
-					$messages[] = __( 'Consent history was not erased because ownership of the supplied consent ID has not been independently verified.', 'faz-cookie-manager' );
+					$messages[] = __( 'Consent history was not erased because ownership of the supplied consent ID had not been verified. The unverified ID has been removed with the request. To erase that history, the requester must submit the consent ID again and you must verify it before running the erasure.', 'faz-cookie-manager' );
 				}
 				if ( '' !== $consent_id ) {
 					if ( apply_filters( 'faz_consent_log_erasure_retain', false, $consent_id, $email ) ) {

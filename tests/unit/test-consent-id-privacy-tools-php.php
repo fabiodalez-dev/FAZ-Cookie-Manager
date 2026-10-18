@@ -110,8 +110,12 @@ privacy_check(!is_wp_error(faz_privacy_exporter('visitor@example.test')), 'a gen
 seed_privacy(); unset($GLOBALS['meta'][1]['_dsar_consent_id_verified']);
 $export=faz_privacy_exporter('visitor@example.test');
 privacy_check(count($export['data'])===1 && $export['data'][0]['group_id']==='faz_dsar_requests', 'a typed foreign ID never authorizes export');
-faz_privacy_eraser('visitor@example.test');
+$result=faz_privacy_eraser('visitor@example.test');
 privacy_check(count($wpdb->rows)===3, 'a typed foreign ID never authorizes erasure');
+privacy_check($result['items_retained'] && !isset($GLOBALS['meta'][1]['_dsar_consent_id']), 'the unverified ID is discarded with the request and the history is reported retained');
+$said=implode(' ', $result['messages']);
+privacy_check(false===strpos($said,'has not been independently verified') && false!==strpos($said,'The unverified ID has been removed with the request'), 'the administrator is told the ID is gone, not that it can still be verified');
+privacy_check(false!==strpos($said,'verify it before running the erasure'), 'and how the remaining history can still be erased');
 seed_privacy(); $GLOBALS['meta'][1]['_dsar_consent_id']='anotherVisitor';
 privacy_check(faz_dsar_verified_consent_id(1,'visitor@example.test')==='', 'changing an attested ID invalidates verification');
 seed_privacy(); $GLOBALS['meta'][1]['_dsar_email']='attacker@example.test';
