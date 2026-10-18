@@ -1243,14 +1243,19 @@
                         // judged against the sheet it now replays into.
                         var owner = styleOwner || (isStyle(target) ? target : null);
                         if (!owner) return insert();
-                        // before/after/replaceWith place the arguments against
-                        // `self`, a child of the owner; the other three address
-                        // the owner itself. When `self` has left the owner the
-                        // insert appends, and is judged as an append.
-                        var at = owner === self ? null : self;
-                        var how = name;
-                        if (at && at.parentNode !== owner) { at = null; how = 'append'; }
-                        else if (!at && owner !== self) how = 'append';
+                        // The sheet is judged with the parts exactly where
+                        // insert() will put them, branch for branch: a part
+                        // judged at the end of the sheet while the engine
+                        // receives it at the head can complete, or hide, a URL
+                        // across the junction with the existing text.
+                        var at = null, how = name;
+                        if (gone) {
+                            if (anchor && anchor.parentNode === target) { at = anchor; how = 'insertBefore'; }
+                            else how = 'append';
+                        } else if (sibling) {
+                            if (self.parentNode === target) at = self;
+                            else how = 'append';
+                        }
                         deliverCss(policy, owner, at, how, parts, insert);
                     });
                 };

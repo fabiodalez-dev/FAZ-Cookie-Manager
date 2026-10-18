@@ -483,6 +483,38 @@ await scenario(async () => {
   ok('and the refused text is parked where the runtime restores from', !!sheet.getAttribute('data-faz-css'));
 });
 
+// The same landed call is judged with its text where insert() really puts
+// it. Judged at the end of the sheet, a part the engine receives at the head
+// completes no URL across the junction with the existing text — here the
+// sheet ends `.test/a.png)}` and the part is `…url(https://tracker`, which the
+// engine reads as https://tracker.test/a.png.
+for (const [label, act] of [
+  ['prepend', (holder, img2, t) => holder.prepend(t)],
+  ['replaceChildren', (holder, img2, t) => holder.replaceChildren(t)],
+  ['replaceWith', (holder, img2, t) => img2.replaceWith(t)],
+  ['before', (holder, img2, t) => img2.before(t)],
+]) {
+  await scenario(async () => {
+    const { window, document } = boot({ head: '<style id="s">.test/a.png)}</style>' });
+    const sheet = document.getElementById('s');
+    const img = document.createElement('img');
+    img.src = 'https://third.example/x.png';
+    sheet.prepend(img); // held: its holder will land at the head of the sheet
+    const holder = img.parentNode;
+    const img2 = document.createElement('img');
+    img2.src = 'https://third.example/y.png';
+    holder.appendChild(img2);
+    act(holder, img2, document.createTextNode('.b{background:url(https://tracker'));
+    handoff(window, { url: (u) => String(u).indexOf('tracker.test') !== -1 });
+    // What the engine reads from the live sheet: every url( token, closed or
+    // left open at the end, resolved against the page.
+    const live = [];
+    sheet.textContent.replace(/url\(\s*["']?([^"')\s]*)/g, (m, u) => { live.push(u); return m; });
+    const hosts = live.map((u) => { try { return new window.URL(u, SITE).host; } catch (e) { return ''; } });
+    ok(label + ' landed into a <style>: judged where it lands, the live sheet names no tracker.test URL', hosts.indexOf('tracker.test') === -1);
+  });
+}
+
 console.log('\ne. a runtime that predates the handoff');
 
 // The contract, in the shape every runtime before 1.34.1 has: it creates its
