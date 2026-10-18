@@ -252,10 +252,11 @@ namespace {
 	faz_pa_ok( $wpo && $wpo->is_active(), '22 WP-Optimize is detected' );
 	if ( $wpo ) {
 		$wpo->clear_cache();
+		$wpo->clear_cache( false );
 	}
 	faz_pa_ok(
 		1 === faz_pa_calls( 'wpo_page_cache_purge' ) && 0 === faz_pa_calls( 'wpo_cache_flush' ),
-		'23 a save purges the WP-Optimize page cache without flushing the object cache'
+		'23 a save purges the WP-Optimize page cache once without flushing the object cache; clear_cache(false) does not'
 	);
 
 	// Super Page Cache.
