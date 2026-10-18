@@ -564,17 +564,22 @@ test.describe('Wizard policy pages and page-link search', () => {
     // which is right for a real site but means a page left behind by an earlier
     // run decides the outcome here. Hide those pages (private: not adopted,
     // not deleted) for the duration of the test and put them back afterwards.
+    // The ids are read first, without touching them, and the status change
+    // happens inside the try: a failure half-way through shelving still
+    // reaches the finally, which republishes every id read here.
     const shelved: number[] = JSON.parse(wpEval(`
-      global $wpdb;
-      $ids = array();
-      foreach ( get_posts( array( 'post_type' => 'page', 'post_status' => 'publish', 's' => '[faz_cookie_policy_complete lang="it" jurisdiction="gdpr-strict"]', 'posts_per_page' => -1, 'fields' => 'ids' ) ) as $pid ) {
-        $wpdb->update( $wpdb->posts, array( 'post_status' => 'private' ), array( 'ID' => (int) $pid ) );
-        clean_post_cache( (int) $pid );
-        $ids[] = (int) $pid;
-      }
-      echo wp_json_encode( $ids );
+      echo wp_json_encode( array_map( 'intval', get_posts( array( 'post_type' => 'page', 'post_status' => 'publish', 's' => '[faz_cookie_policy_complete lang="it" jurisdiction="gdpr-strict"]', 'posts_per_page' => -1, 'fields' => 'ids' ) ) ) );
     `).trim().split('\n').pop() || '[]');
     try {
+      if (shelved.length) {
+        wpEval(`
+          global $wpdb;
+          foreach ( array( ${shelved.join(', ')} ) as $pid ) {
+            $wpdb->update( $wpdb->posts, array( 'post_status' => 'private' ), array( 'ID' => (int) $pid ) );
+            clean_post_cache( (int) $pid );
+          }
+        `);
+      }
       forceIncomplete();
       await loginAsAdmin(page);
       await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
