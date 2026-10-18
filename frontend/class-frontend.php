@@ -7351,7 +7351,14 @@ class Frontend {
 	private function css_urls( $css ) {
 		$css  = (string) $css;
 		$urls = $this->css_urls_raw( $css, false );
-		$decoded = $this->css_decode_escapes( $css );
+		// Comments go before escapes are decoded, as the tokenizer does: to it
+		// `@import/*c*/"https://…"` is an @import of that string, which no
+		// pattern read while the comment sat between the two. A comment is a
+		// comment only outside a string, so whole strings are consumed first and
+		// given back untouched (twin of _fazCssStripComments() and of
+		// CSS_COMMENT in bootstrap.js).
+		$uncommented = preg_replace( '/("(?:[^"\\\\\n]|\\\\[\s\S])*"|\'(?:[^\'\\\\\n]|\\\\[\s\S])*\')|\/\*[\s\S]*?\*\//', '$1', $css );
+		$decoded = $this->css_decode_escapes( null === $uncommented ? $css : $uncommented );
 		if ( $decoded !== $css ) {
 			foreach ( $this->css_urls_raw( $decoded, true ) as $url ) {
 				if ( ! in_array( $url, $urls, true ) ) {

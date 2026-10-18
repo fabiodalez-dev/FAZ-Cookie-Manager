@@ -145,6 +145,7 @@ const CSS_SHAPES = [
   ['u\\72l( escape in the function name', '.p{background:u\\72l(https://tracker.test/c.png)}'],
   ['\\75 rl( escape in the function name', '.p{background:\\75 rl(https://tracker.test/c.png)}'],
   ['an escape inside the host', '.p{background:url(https://tracker\\.test/c.png)}'],
+  ['a comment between @import and its string', '@import/*c*/"https://tracker.test/c.css";body{color:red}'],
 ];
 for (const [label, css] of CSS_SHAPES) {
   const w = runtime();
@@ -163,6 +164,9 @@ for (const [label, css] of CSS_SHAPES) {
   s.textContent = '.p{background:url("/local.png")}@import"/local.css";';
   eq('control: a same-origin url() and @import are untouched', s.textContent, '.p{background:url("/local.png")}@import"/local.css";');
   eq('and not parked', s.getAttribute('data-faz-css'), null);
+  const quoted = w.document.createElement('style');
+  quoted.textContent = '.q:before{content:"/*"}.r:after{content:"*/ https://tracker.test/x"}';
+  eq('control: comment markers inside strings are content, not a comment', quoted.getAttribute('data-faz-css'), null);
 }
 
 console.log('\ncss: the other CSSOM entry points');

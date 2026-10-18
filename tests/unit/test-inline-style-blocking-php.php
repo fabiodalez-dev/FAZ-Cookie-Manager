@@ -132,6 +132,17 @@ namespace {
 	ok( false !== strpos( $out, '@import url("data:application/octet-stream,")' ), 'rewritten in place, with the rest of the sheet kept' );
 	eq( data_faz_css( $out ), $tight, 'the tight @import original is recoverable' );
 
+	// A comment between @import and its string is nothing to the tokenizer,
+	// so this imports Google Fonts; no pattern read it while the comment sat
+	// in the way.
+	$commented = '@import/*c*/"https://fonts.googleapis.com/css2?family=Inter";body{margin:0}';
+	$out       = process_style( $commented );
+	ok( false !== strpos( $out, 'data-faz-css=' ), 'an @import with a comment before its string is parked' );
+	ok( false === strpos( (string) $live_css( $out ), 'fonts.googleapis.com' ), 'and the provider URL is gone from the live text' );
+	eq( data_faz_css( $out ), $commented, 'and the original is recoverable' );
+	$quoted = '.q:before{content:"/*"}.r:after{content:"*/ https://fonts.googleapis.com/x"}';
+	ok( false === strpos( process_style( $quoted ), 'data-faz-css=' ), 'comment markers inside strings are content, not a comment' );
+
 	$escaped_fn = '@font-face{font-family:x;src:u\72l(https://fonts.gstatic.com/x.woff2)}';
 	$out        = process_style( $escaped_fn );
 	ok( false !== strpos( $out, 'data-faz-css=' ), 'a url() spelled through a CSS escape is parked' );

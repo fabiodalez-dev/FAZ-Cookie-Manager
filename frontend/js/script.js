@@ -5102,9 +5102,20 @@ function _fazCssUrlsRaw(css, decoded) {
     if (open && (open[1] || open[2] || open[3])) urls.push(open[1] || open[2] || open[3]);
     return urls;
 }
+// A comment is a comment only outside a string (`content:"/*"` is content),
+// so whole strings are consumed first and given back untouched. Twin of
+// CSS_COMMENT in bootstrap.js and of css_strip_comments() in PHP.
+var _FAZ_CSS_COMMENT = /("(?:[^"\\\n]|\\[\s\S])*"|'(?:[^'\\\n]|\\[\s\S])*')|\/\*[\s\S]*?\*\//g;
+function _fazCssStripComments(css) {
+    return String(css).replace(_FAZ_CSS_COMMENT, function (_m, str) { return str || ""; });
+}
 function _fazCssUrls(css) {
     var urls = _fazCssUrlsRaw(css);
-    var decoded = _fazCssDecodeEscapes(css);
+    // Comments go before escapes are decoded, as the tokenizer does: a comment
+    // between two tokens is nothing to it, so `@import/*c*/"https://…"` is an
+    // @import of that string, which no pattern read while the comment was in
+    // the way. An escaped `\2f\2a` is never a comment, hence the order.
+    var decoded = _fazCssDecodeEscapes(_fazCssStripComments(css));
     if (decoded !== css) {
         var more = _fazCssUrlsRaw(decoded, true);
         for (var i = 0; i < more.length; i++) {
