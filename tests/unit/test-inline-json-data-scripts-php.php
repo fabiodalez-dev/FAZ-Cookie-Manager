@@ -226,11 +226,25 @@ namespace {
 	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $wp ) );
 	assert_true( $is_live( $out, $wp ), 'the CDATA markers and the sourceURL line core adds do not hide the data shape' );
 
-	$str = '<script>var Notes = {"text":"}; fbq(\\"track\\"); var z = {\\"a\\":1"};</script>';
+	$crlf = "<script id=\"tool-js-after\">\r\nvar ToolData = {\"h\":\"google_gtagjs\"};\r\n//# sourceURL=tool-js-after\r\n</script>";
+	$out  = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $crlf ) );
+	assert_true( $is_live( $out, $crlf ), 'the same data with CRLF line endings stays untouched' );
+
+		$str = '<script>var Notes = {"text":"}; fbq(\\"track\\"); var z = {\\"a\\":1"};</script>';
 	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $str ) );
 	assert_true( $is_live( $out, $str ), 'code-looking text inside a JSON string is still just a string' );
 
 	echo "\n-- everything else is still judged --\n";
+
+	// A `//` comment ends at ANY JavaScript line terminator: LF, a lone CR,
+	// U+2028 or U+2029. The sourceURL line was stripped up to LF only, so code
+	// after a CR or a Unicode separator was swallowed with the "comment" and the
+	// tag was exempted as data, executable before consent.
+	foreach ( array( 'a lone CR' => "\r", 'U+2028' => "\xE2\x80\xA8", 'U+2029' => "\xE2\x80\xA9" ) as $faz_label => $faz_eol ) {
+		$hidden = "<script>var x = {\"a\":1};\n//# sourceURL=a" . $faz_eol . "fbq('init','1');</script>";
+		$out    = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $hidden ) );
+		assert_true( $is_parked( $out ), 'code after a sourceURL comment ended by ' . $faz_label . ' is judged and blocked' );
+	}
 
 	$load = '<script>(function(){var s=document.createElement("script");s.src="https://www.googletagmanager.com/gtag/js?id=G-TEST";document.head.appendChild(s);})();</script>';
 	$out  = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $load ) );

@@ -10682,7 +10682,12 @@ class Frontend {
 		if ( ! is_string( $content ) ) {
 			return false;
 		}
-		$body = preg_replace( '#^[ \t]*//\#[ \t]*source(?:Mapping)?URL=[^\n]*$#m', '', $content );
+		// A `//` comment ends at ANY JavaScript line terminator: LF, CR, U+2028
+		// and U+2029 (UTF-8 E2 80 A8 / E2 80 A9). Stripping the sourceURL line
+		// up to LF only swallowed `\rfbq('init')` with the "comment" and the
+		// tag was exempted as data while the browser ran the call. Matched
+		// byte-wise, without /u, so invalid UTF-8 cannot null the pattern.
+		$body = preg_replace( '#^[ \t]*//\#[ \t]*source(?:Mapping)?URL=(?:(?!\xE2\x80[\xA8\xA9])[^\r\n])*#m', '', $content );
 		if ( null === $body ) {
 			return false;
 		}
