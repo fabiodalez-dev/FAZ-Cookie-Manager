@@ -148,7 +148,19 @@ class Generator {
 	 * Return jurisdiction-specific settings that must be present before a
 	 * complete saved-configuration policy can be previewed, saved, or published.
 	 *
-	 * POPIA section 18 requires the responsible party's identity and address
+	 * Every scaffold names the controller and tells the visitor whom to write
+	 * to: `how **{{COMPANY_NAME}}** ("we", "us", "our") uses cookies` and
+	 * `contact us at **{{COMPANY_EMAIL}}**`. With those two fields empty the
+	 * public page read `how **** ("we", "us", "our")` and `contact us at ****`
+	 * — a document that asserts a controller and names none, and invites
+	 * rights requests to nobody (GDPR Art. 12(1) and 13(1)(a)-(b), CCPA
+	 * § 1798.130(a)(5), LGPD Art. 9 III/IV). The admin form has always
+	 * required both fields client-side for every jurisdiction; this is the
+	 * same contract, enforced in the one layer that reaches the public page,
+	 * so the setup wizard's page and a raw REST write can no longer publish
+	 * what the form refuses.
+	 *
+	 * POPIA section 18 additionally requires the responsible party's address
 	 * in the collection notice. The POPIA scaffold also publishes the
 	 * Information Officer and relies on the separate privacy notice
 	 * for recipient/safeguard detail, so those fields must not silently vanish
@@ -170,20 +182,23 @@ class Generator {
 		if ( null !== $doc && 'cookie-policy' !== $doc->slug() ) {
 			return array();
 		}
-		if ( 'popia-southafrica' !== $jurisdiction ) {
-			return array();
-		}
 
 		$company = is_array( $settings['company'] ?? null ) ? $settings['company'] : array();
 		$dpo     = is_array( $settings['dpo'] ?? null ) ? $settings['dpo'] : array();
 		$values  = array(
-			'company.name'       => $company['name'] ?? '',
-			'company.address'    => $company['address'] ?? '',
-			'company.email'      => $company['email'] ?? '',
-			'dpo.name'           => $dpo['name'] ?? '',
-			'dpo.email'          => $dpo['email'] ?? '',
-			'privacy_policy_url' => $settings['privacy_policy_url'] ?? '',
+			'company.name'  => $company['name'] ?? '',
+			'company.email' => $company['email'] ?? '',
 		);
+		if ( 'popia-southafrica' === $jurisdiction ) {
+			$values = array(
+				'company.name'       => $company['name'] ?? '',
+				'company.address'    => $company['address'] ?? '',
+				'company.email'      => $company['email'] ?? '',
+				'dpo.name'           => $dpo['name'] ?? '',
+				'dpo.email'          => $dpo['email'] ?? '',
+				'privacy_policy_url' => $settings['privacy_policy_url'] ?? '',
+			);
+		}
 
 		$missing = array();
 		foreach ( $values as $path => $value ) {

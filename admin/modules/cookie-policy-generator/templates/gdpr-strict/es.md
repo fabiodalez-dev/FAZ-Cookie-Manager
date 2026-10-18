@@ -42,7 +42,7 @@ Cada tercero es responsable autónomo del tratamiento de las cookies que coloca;
 
 ## Conservación
 
-Los registros de consentimiento y datos analíticos se conservan durante {{RETENTION_PERIOD}} desde la recogida. Las cookies estrictamente necesarias se conservan durante la sesión o el tiempo requerido para su función técnica. Consulte la tabla para la duración específica.
+Los registros de las decisiones de consentimiento que toma en nuestro banner de cookies se conservan durante {{CONSENT_RECORD_RETENTION}} desde la recogida, para poder demostrar el consentimiento en el que nos basamos. Los demás datos recogidos mediante cookies, incluidos los datos analíticos, se conservan solo durante el tiempo que exige su finalidad y, cuando no se muestre un periodo específico más breve, durante un plazo no superior al periodo residual declarado de {{RETENTION_PERIOD}}. Las cookies estrictamente necesarias se conservan durante la sesión o el tiempo requerido para su función técnica. Consulte la tabla para la duración específica.
 
 ## Sus derechos
 

@@ -93,25 +93,17 @@
     },
     "signals": {
       "type": "object",
-      "required": ["tcf_v22", "gpp", "gpc_honored", "gpc_required", "dnt_honored", "cmv2"],
+      "required": ["tcf_v22", "gpc_honored", "gpc_required", "dnt_honored", "cmv2"],
       "additionalProperties": false,
       "properties": {
         "tcf_v22": { "type": "boolean" },
-        "gpp": {
-          "type": "object",
-          "required": ["enabled"],
-          "additionalProperties": false,
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "section": {
-              "type": ["string", "null"],
-              "description": "IAB GPP section identifier (e.g. usca, usco, usnatv1) when enabled."
-            }
-          }
-        },
         "gpc_honored": { "type": "boolean" },
         "gpc_required": { "type": "boolean" },
         "dnt_honored": { "type": "boolean" },
+        "gpp": {
+          "deprecated": true,
+          "description": "Deprecated since 1.34.2 and ignored at runtime: FAZ Cookie Manager does not implement IAB GPP, so the shipped rule sets no longer declare it. Accepted in any shape so custom rule sets written for 1.34.1 and earlier keep validating."
+        },
         "cmv2": {
           "type": "object",
           "required": ["ad_storage", "analytics_storage", "ad_user_data", "ad_personalization", "personalization_storage", "functionality_storage", "security_storage"],

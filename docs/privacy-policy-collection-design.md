@@ -207,4 +207,4 @@ Reduced, but not zero:
   (`Content_Collector::collect`) and the snapshot option name
   (`faz_privacy_content_snapshot`). The renderer-facing accessor `effective_blocks()` already returns
   render-ready `id => [plugin_name, html]` pairs, so no migration is needed when that lands.
-- The refusal gating (`missing_required_settings()`, POPIA-only today) still applies and still matters.
+- The refusal gating (`missing_required_settings()`: controller name and contact email for every jurisdiction since 1.34.2, POPIA's longer list on top) still applies and still matters.

@@ -22,7 +22,7 @@ Privolu možete povući u svakom trenutku (čl. 8., § 5.) putem poveznice "Post
 
 ## Kategorije osobnih podataka koji se obrađuju (čl. 5., I)
 
-- **Mrežni identifikatori** — IP (heširan s mjesečnim saltom), identifikatori uređaja, identifikatori sesije
+- **Mrežni identifikatori** — IP (jednosmjerno heširan saltom specifičnim za web-stranicu), identifikatori uređaja, identifikatori sesije
 - **Podaci o pregledavanju** — posjećene stranice, trajanje zadržavanja, interakcije
 - **Približna lokacija** — država/regija na temelju IP adrese (ne precizni GPS)
 - **Postavke** — kategorije privole, jezik
@@ -41,7 +41,7 @@ Međunarodni prijenosi (čl. 33. – 36. LGPD-a) provode se u zemlje s odgovaraj
 
 ## Čuvanje podataka (čl. 15. – 16. LGPD-a)
 
-{{RETENTION_PERIOD}} od prikupljanja.
+Osobni podaci koje izravno prikupljamo putem kolačića čuvaju se samo onoliko dugo koliko je potrebno za navedenu svrhu i, ako nije naveden kraći rok specifičan za pojedini kolačić, ne dulje od objavljenog zamjenskog roka od {{RETENTION_PERIOD}}, osim ako je dulje razdoblje propisano zakonom ili dopušteno čl. 16. LGPD-a. Trajanje svakog kolačića navedeno je u tablici iznad.
 
 ## Prava ispitanika (čl. 18. LGPD-a)
 

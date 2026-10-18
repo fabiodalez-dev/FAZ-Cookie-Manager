@@ -26,7 +26,7 @@ Transferencias internacionales (Art. 33-36 LGPD): países con protección adecua
 
 ## Conservación
 
-{{RETENTION_PERIOD}} desde la recolección.
+Los datos personales que recogemos directamente mediante cookies se conservan solo durante el tiempo necesario para la finalidad indicada y, cuando no se muestre un periodo específico más breve, durante un plazo no superior al periodo residual declarado de {{RETENTION_PERIOD}}, salvo que la ley exija un plazo mayor o lo permita el art. 16 LGPD. Consulta la tabla anterior para la duración de cada cookie.
 
 ## Derechos (Art. 18 LGPD)
 

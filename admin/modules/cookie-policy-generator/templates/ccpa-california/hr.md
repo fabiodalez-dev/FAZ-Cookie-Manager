@@ -53,7 +53,7 @@ Ako se niste izuzeli, Personal Information dijelimo sa sljedećim pružateljima 
 
 ## Čuvanje podataka
 
-Personal Information čuva se {{RETENTION_PERIOD}} od prikupljanja, osim ako je dulje razdoblje propisano zakonom ili nužno za legitimne poslovne svrhe (CCPA § 1798.100(a)(3)).
+Personal Information koje izravno prikupljamo putem kolačića čuvaju se samo onoliko dugo koliko je potrebno za navedenu svrhu i, ako nije naveden kraći rok specifičan za pojedini kolačić, ne dulje od objavljenog zamjenskog roka od {{RETENTION_PERIOD}}, osim ako je dulje razdoblje propisano zakonom (CCPA § 1798.100(a)(3)). Trajanje svakog kolačića navedeno je u tablici iznad, a čuvanje pod kontrolom trećih strana u politici privatnosti.
 
 ## Vaša prava prema CCPA/CPRA
 

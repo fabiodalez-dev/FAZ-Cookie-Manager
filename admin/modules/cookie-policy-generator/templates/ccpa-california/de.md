@@ -30,7 +30,7 @@ Wir erheben **keine** Sensitive Personal Information ohne ausdrückliches Opt-in
 
 ## Aufbewahrung
 
-{{RETENTION_PERIOD}} ab Erhebung.
+Von uns unmittelbar über Cookies erhobene personenbezogene Informationen werden nur so lange aufbewahrt, wie es für den angegebenen Zweck erforderlich ist, und — sofern keine kürzere Cookie-spezifische Dauer angegeben ist — höchstens für den erklärten Auffangzeitraum von {{RETENTION_PERIOD}}, es sei denn, eine längere Dauer ist gesetzlich vorgeschrieben (CCPA § 1798.100(a)(3)). Die Lebensdauer jedes Cookies finden Sie in der obigen Tabelle; für von Dritten kontrollierte Fristen gilt die Datenschutzerklärung.
 
 ## CCPA/CPRA Rechte
 

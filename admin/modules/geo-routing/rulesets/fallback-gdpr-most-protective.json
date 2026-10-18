@@ -17,7 +17,6 @@
   ],
   "signals": {
     "tcf_v22": true,
-    "gpp": { "enabled": false, "section": null },
     "gpc_honored": true,
     "gpc_required": false,
     "dnt_honored": true,

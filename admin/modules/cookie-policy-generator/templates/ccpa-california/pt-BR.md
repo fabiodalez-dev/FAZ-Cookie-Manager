@@ -30,7 +30,7 @@ NÃO coletamos Informações Pessoais Sensíveis sem opt-in explícito, nem dado
 
 ## Retenção
 
-{{RETENTION_PERIOD}} a partir da coleta.
+As informações pessoais coletadas diretamente por nós por meio de cookies são conservadas somente pelo tempo necessário à finalidade informada e, quando não houver um prazo específico menor, por no máximo o período residual declarado de {{RETENTION_PERIOD}}, salvo se um prazo maior for exigido por lei (CCPA § 1798.100(a)(3)). Consulte a tabela acima para a duração de cada cookie e a Política de Privacidade para prazos controlados por terceiros.
 
 ## Direitos CCPA/CPRA
 

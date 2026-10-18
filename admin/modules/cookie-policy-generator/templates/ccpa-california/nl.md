@@ -53,7 +53,7 @@ Wij **verkopen of delen geen Personal Information** voor cross-context gedragsad
 
 ## Bewaartermijn
 
-Personal Information wordt {{RETENTION_PERIOD}} vanaf de verzameling bewaard, tenzij een langere termijn wettelijk vereist is of noodzakelijk is voor legitieme bedrijfsdoeleinden (CCPA § 1798.100(a)(3)).
+Personal Information die wij rechtstreeks via cookies verzamelen, wordt uitsluitend bewaard zolang dat voor het vermelde doel noodzakelijk is en, wanneer geen kortere cookiespecifieke termijn is vermeld, niet langer dan de opgegeven terugvaltermijn van {{RETENTION_PERIOD}}, tenzij een langere termijn wettelijk vereist is (CCPA § 1798.100(a)(3)). Zie de tabel hierboven voor de levensduur van elke cookie en de privacyverklaring voor bewaring die door derden wordt bepaald.
 
 ## Uw rechten onder CCPA/CPRA
 

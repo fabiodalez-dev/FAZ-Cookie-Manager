@@ -22,7 +22,7 @@ You may withdraw consent at any time (Art. 8, § 5) via the "Cookie settings" li
 
 ## Categories of personal data processed (Art. 5, I)
 
-- **Online identifiers** — IP (hashed with monthly salt), device IDs, session IDs
+- **Online identifiers** — IP (one-way hashed with a site-specific salt), device IDs, session IDs
 - **Browsing data** — pages visited, dwell time, interactions
 - **Approximate location** — country/region from IP (not precise GPS)
 - **Preferences** — consent categories, language
@@ -41,7 +41,7 @@ International transfers (Art. 33-36 LGPD) are subject to adequate-protection cou
 
 ## Retention (Art. 15-16 LGPD)
 
-{{RETENTION_PERIOD}} from collection.
+Personal data collected directly by us through cookies is retained only for as long as necessary for the stated purpose and, where no shorter cookie-specific period is shown, for no longer than the declared fallback period of {{RETENTION_PERIOD}}, unless a longer period is required by law or permitted under Art. 16 LGPD. See the table above for each cookie's lifetime.
 
 ## Data subject rights (Art. 18 LGPD)
 

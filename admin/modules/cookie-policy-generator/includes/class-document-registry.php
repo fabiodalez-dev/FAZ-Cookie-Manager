@@ -109,8 +109,9 @@ class Document_Registry {
 					'wrapper_class'   => 'faz-cookie-policy',
 					'data_builder'    => array( Renderer::class, 'build_data' ),
 					// Receives this config as its third argument, so Generator's
-					// per-document gate sees 'cookie-policy' and falls through to
-					// the existing POPIA-only rules verbatim. It reads the slug
+					// per-document gate sees 'cookie-policy' and applies the
+					// cookie-policy rules: controller name and contact email for
+					// every jurisdiction, POPIA's longer list on top. It reads the slug
 					// off the object it was handed — no recursion back here.
 					'required_fields' => array( Generator::class, 'missing_required_settings' ),
 				)

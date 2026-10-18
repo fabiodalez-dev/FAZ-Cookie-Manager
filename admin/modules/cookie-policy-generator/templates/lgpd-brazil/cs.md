@@ -18,13 +18,13 @@ Tyto Zásady používání cookies popisují, jak společnost **{{COMPANY_NAME}}
 
 Pro **nezbytně nutné** cookies: oprávněný zájem (čl. 7, IX) a smluvní nebo technická povinnost (čl. 7, V).
 
-Pro **všechny ostatní** kategorie: **výslovný souhlas** subjektu údajů (čl. 7, I), udělený prostřednictvím lišty souhlasu s cookies ještě před uložením jakéhokoli nepodstatného cookies.
+Pro **všechny ostatní** kategorie: **výslovný souhlas** subjektu údajů (čl. 7, I), udělený prostřednictvím lišty souhlasu s cookies ještě před uložením jakýchkoli nepovinných cookies.
 
 Souhlas lze kdykoli odvolat (čl. 8, § 5) prostřednictvím odkazu „Nastavení cookies".
 
 ## Kategorie zpracovávaných osobních údajů (čl. 5, I)
 
-- **Online identifikátory** — IP adresa (hashovaná s měsíčně obměňovaným klíčem), identifikátory zařízení, identifikátory relace
+- **Online identifikátory** — IP adresa (jednosměrně hashovaná s klíčem specifickým pro web), identifikátory zařízení, identifikátory relace
 - **Data o prohlížení** — navštívené stránky, čas strávený na stránce, interakce
 - **Přibližná poloha** — stát/region odvozený z IP adresy (nikoli přesná poloha GPS)
 - **Preference** — kategorie souhlasů, jazykové nastavení
@@ -43,7 +43,7 @@ Mezinárodní předávání osobních údajů (čl. 33–36 LGPD) probíhá výh
 
 ## Doba uchovávání (čl. 15–16 LGPD)
 
-{{RETENTION_PERIOD}} od shromáždění údajů.
+Osobní údaje, které shromažďujeme přímo prostřednictvím souborů cookie, uchováváme pouze po dobu nezbytnou pro uvedený účel a, není-li uvedena kratší konkrétní doba, nejdéle po deklarovanou náhradní dobu {{RETENTION_PERIOD}}, ledaže delší dobu vyžaduje zákon nebo ji umožňuje čl. 16 LGPD. Dobu platnosti jednotlivých souborů cookie najdete v tabulce výše.
 
 ## Práva subjektů údajů (čl. 18 LGPD)
 
