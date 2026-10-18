@@ -245,7 +245,9 @@ class Banner_Rest {
 		$orig_banner_lang = $banner->get_language();
 		$banner->set_language( $lang );
 
-		// Build the banner-scoped, language-specific template.
+		// Build the banner-scoped, language-specific template, with the
+		// transfer wording of the ruleset applied to this visitor.
+		Shortcodes::set_applied_ruleset( $runtime_ruleset );
 		$template = new Banner_Template( $banner, $lang );
 		$html     = $template->get_html();
 		$styles   = $template->get_styles();

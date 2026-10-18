@@ -446,6 +446,45 @@ assert_true( '' !== $ccpa_generic, 'render_transfer_disclosure(ccpa): no-country
 assert_not_contains( $ccpa_generic, 'EU adequacy', 'render_transfer_disclosure(ccpa): no EU adequacy wording for a non-GDPR banner' );
 $law_prop->setValue( $sc, 'popia' );
 assert_not_contains( $sc->render_transfer_disclosure( $generic_cookie ), 'EU adequacy', 'render_transfer_disclosure(popia): no EU adequacy wording for a non-GDPR banner' );
+// When a geo ruleset was applied, its family decides, not the banner label: a
+// match-all GDPR banner served under the LGPD ruleset must not speak of EU
+// adequacy, and a CCPA banner kept for an EEA visitor must.
+if ( method_exists( Shortcodes::class, 'set_applied_ruleset' ) ) {
+	$law_prop->setValue( $sc, 'gdpr' );
+	Shortcodes::set_applied_ruleset( array( 'id' => 'lgpd-brazil', 'model' => 'opt-in' ) );
+	assert_not_contains( $sc->render_transfer_disclosure( $generic_cookie ), 'EU adequacy', 'render_transfer_disclosure: GDPR banner under the LGPD ruleset uses the neutral line' );
+	Shortcodes::set_applied_ruleset( array( 'id' => 'uk-gdpr-pecr', 'model' => 'opt-in' ) );
+	assert_not_contains( $sc->render_transfer_disclosure( $generic_cookie ), 'EU adequacy', 'render_transfer_disclosure: UK ruleset (its own adequacy regime) uses the neutral line' );
+	$law_prop->setValue( $sc, 'ccpa' );
+	Shortcodes::set_applied_ruleset( array( 'id' => 'gdpr-italy', 'model' => 'opt-in' ) );
+	assert_contains( $sc->render_transfer_disclosure( $generic_cookie ), 'EU adequacy decision', 'render_transfer_disclosure: CCPA banner kept under an EU ruleset uses the EU wording' );
+	Shortcodes::set_applied_ruleset( null );
+	assert_not_contains( $sc->render_transfer_disclosure( $generic_cookie ), 'EU adequacy', 'render_transfer_disclosure: with no ruleset the banner law decides again' );
+	// The cached banner template must be scoped by that regime, or the first
+	// visitor's wording is served to everybody from faz_banner_template.
+	if ( ! class_exists( '\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Template' ) ) {
+		require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/class-template.php';
+	}
+	$tpl_ref = new ReflectionClass( '\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Template' );
+	$tpl     = $tpl_ref->newInstanceWithoutConstructor();
+	foreach ( array( 'banner' => false, 'language' => 'en' ) as $prop => $value ) {
+		$p = $tpl_ref->getProperty( $prop );
+		$p->setAccessible( true );
+		$p->setValue( $tpl, $value );
+	}
+	$slot = $tpl_ref->getMethod( 'get_storage_key' );
+	$slot->setAccessible( true );
+	$keys = array();
+	foreach ( array( null, array( 'id' => 'gdpr-italy' ), array( 'id' => 'lgpd-brazil' ) ) as $faz_rs ) {
+		Shortcodes::set_applied_ruleset( $faz_rs );
+		$keys[] = $slot->invoke( $tpl );
+	}
+	Shortcodes::set_applied_ruleset( null );
+	assert_eq( $keys[0], 'en', 'template cache slot: no ruleset keeps the historical key' );
+	assert_true( count( array_unique( $keys ) ) === 3, 'template cache slot: each transfer regime gets its own slot' );
+} else {
+	assert_true( false, 'render_transfer_disclosure: the applied geo ruleset decides the transfer regime' );
+}
 
 // =========================================================================
 // 6. Renderer international-transfers section + policy version fingerprint.

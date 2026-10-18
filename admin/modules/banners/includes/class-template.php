@@ -660,10 +660,18 @@ class Template {
 	 */
 	private function get_storage_key() {
 		$banner_id = ( $this->banner && is_callable( array( $this->banner, 'get_id' ) ) ) ? absint( $this->banner->get_id() ) : 0;
+		// The transfer wording in the preference centre follows the applied
+		// geo ruleset (Shortcodes::set_applied_ruleset()), so the regime is
+		// part of the slot: one regime's text is never served from the cache
+		// to another's visitors. No ruleset keeps the historical key.
+		$regime = class_exists( '\\FazCookie\\Frontend\\Modules\\Shortcodes\\Shortcodes' )
+			? \FazCookie\Frontend\Modules\Shortcodes\Shortcodes::transfer_regime()
+			: '';
+		$suffix = '' !== $regime ? ':' . $regime : '';
 		if ( $banner_id > 0 ) {
-			return 'banner_' . $banner_id . ':' . $this->language;
+			return 'banner_' . $banner_id . ':' . $this->language . $suffix;
 		}
-		return $this->language;
+		return $this->language . $suffix;
 	}
 
 	/**

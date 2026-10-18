@@ -82,6 +82,43 @@ class Shortcodes {
 	private $law = 'gdpr';
 
 	/**
+	 * Transfer regime of the geo ruleset applied to this request: 'eu' for the
+	 * GDPR family (the EU/EEA national rulesets and the most-protective
+	 * fallback), 'other' for any other ruleset, '' when none was applied (the
+	 * banner's own law decides). Set by the Frontend and the banner REST
+	 * endpoint before the template is built; part of the template cache slot
+	 * (Template::get_storage_key()), so one regime's wording is never cached
+	 * for another's visitors.
+	 *
+	 * @var string
+	 */
+	private static $transfer_regime = '';
+
+	/**
+	 * Record the ruleset applied to this request (null: none).
+	 *
+	 * @param array|null $ruleset Resolved Geo_Runtime ruleset.
+	 * @return void
+	 */
+	public static function set_applied_ruleset( $ruleset ) {
+		if ( ! is_array( $ruleset ) || empty( $ruleset['id'] ) ) {
+			self::$transfer_regime = '';
+			return;
+		}
+		$id = (string) $ruleset['id'];
+		self::$transfer_regime = ( 0 === strpos( $id, 'gdpr-' ) || 'fallback-gdpr-most-protective' === $id ) ? 'eu' : 'other';
+	}
+
+	/**
+	 * The regime recorded by set_applied_ruleset(), '' when none.
+	 *
+	 * @return string
+	 */
+	public static function transfer_regime() {
+		return self::$transfer_regime;
+	}
+
+	/**
 	 * Default constructor
 	 *
 	 * @param object  $banner Banner object.
@@ -1081,9 +1118,13 @@ class Shortcodes {
 			// adequacy decision" is GDPR's concept: it is kept for a GDPR banner
 			// and replaced by a regime-neutral line for every other law (CCPA,
 			// POPIA, the GDPR+CCPA mix), whose visitors it would describe in a
-			// framework that does not apply to them.
+			// framework that does not apply to them. When a geo ruleset was
+			// applied, ITS family decides, not the banner's label: a match-all
+			// GDPR banner served under the LGPD or UK ruleset must not speak of
+			// EU adequacy.
+			
 			$parts[] = '<span class="faz-audit-transfer-country">'
-				. ( 'gdpr' === $this->law
+				. ( ( '' === self::$transfer_regime ? 'gdpr' === $this->law : 'eu' === self::$transfer_regime )
 					? esc_html__( 'This cookie may transfer personal data to a country without an EU adequacy decision.', 'faz-cookie-manager' )
 					: esc_html__( 'This cookie may transfer personal data to another country.', 'faz-cookie-manager' ) )
 				. '</span>';

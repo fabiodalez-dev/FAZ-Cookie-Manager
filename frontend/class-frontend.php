@@ -1835,6 +1835,7 @@ class Frontend {
 			return;
 		}
 
+		\FazCookie\Frontend\Modules\Shortcodes\Shortcodes::set_applied_ruleset( $runtime_ruleset );
 		$this->template = $this->banner->get_template();
 	}
 
