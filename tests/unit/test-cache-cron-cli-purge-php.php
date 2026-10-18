@@ -245,6 +245,8 @@ namespace {
 		)
 	);
 	$GLOBALS['faz_options']['faz_gvl_data'] = json_decode( $gvl_body, true );
+	// cron_update() purges on a version change: start from a known one.
+	$GLOBALS['faz_options']['faz_gvl_meta'] = array( 'version' => 0 );
 
 	$request = new class() {
 		public function get_json_params() {
@@ -261,6 +263,7 @@ namespace {
 	$before                                 = \FlyingPress\Purge::$pages;
 	\FazCookie\Includes\Gvl::cron_update();
 	faz_cc_ok( $before + 1 === \FlyingPress\Purge::$pages, '09 the weekly GVL refresh purges the page cache once the list is replaced' );
+	faz_cc_ok( isset( $GLOBALS['faz_options']['faz_gvl_meta']['version'] ) && 150 === (int) $GLOBALS['faz_options']['faz_gvl_meta']['version'], '09 and the downloaded version is the one stored, which 09a compares against' );
 
 	// The IAB publishes a new list roughly weekly, but not always between two
 	// ticks; download() returns the version it fetched whether or not it is the
