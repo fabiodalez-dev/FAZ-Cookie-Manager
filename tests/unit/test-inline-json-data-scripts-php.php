@@ -1,0 +1,368 @@
+<?php
+/**
+ * Standalone unit tests — inline scripts that only assign JSON data are not
+ * tracker code (GitHub issue #322).
+ *
+ * Query Monitor prints `var QueryMonitorData = {…};` in an inline script with
+ * its own id. Version 4.x prints it with wp_print_inline_script_tag(), so the
+ * `wp_inline_script_attributes` filter judges it before the output buffer
+ * does; both layers are pinned below. The JSON lists every script and HTTP call of the page, so on a page
+ * that loads any tracker the provider matcher found the tracker's URL inside
+ * the data and re-typed the whole script to text/plain: QueryMonitorData was
+ * never defined, the admin-bar panels stopped working, and other developer and
+ * dashboard plugins that publish their state the same way broke alike.
+ *
+ * An inline script whose whole body is one or more `var|let|const|window.NAME
+ * = <JSON>;` assignments performs no request: it defines a value. The tracker
+ * that would read it is judged on its own tag. wp_localize_script() payloads
+ * were already exempt for exactly this reason (-js-extra); this extends the
+ * same reasoning to the same shape printed under any id, or none.
+ *
+ * Pinned here:
+ *   1. The Query Monitor payload stays executable although it names a tracker.
+ *   2. Several JSON assignments in one tag (Site Kit's data shape) stay too.
+ *   3. `window.NAME = …` and `let`/`const` count, with or without semicolons.
+ *   4. Controls: a script that LOADS the tracker is still blocked; data plus
+ *      any statement is still judged; a JS object literal that is not JSON
+ *      (a function inside) is still judged; Matomo's `_paq` queue is blocked.
+ *   5. An assignment to `location` (`var location = "https://…"`,
+ *      `window.location = …`) is judged as code in both layers: it navigates
+ *      the page, so it is an action, not a definition.
+ *
+ * Run: php tests/unit/test-inline-json-data-scripts-php.php
+ */
+
+
+namespace FazCookie\Includes {
+
+	class Known_Providers {
+		public static function get_all() {
+			return array();
+		}
+		public static function get_cookie_map() {
+			return array();
+		}
+		public static function get_pattern_map() {
+			return array();
+		}
+	}
+}
+
+namespace FazCookie\Frontend\Includes {
+
+	class Placeholder_Builder {
+		public static function detect_service_from_url( $url ) {
+			return 'default';
+		}
+		public static function get_service_name( $id ) {
+			return 'Embedded content';
+		}
+		public static function get_video_thumbnail( $url ) {
+			return '';
+		}
+		public static function build( $service_id, $service_name, $category, $blocked_html, $thumbnail_url = '' ) {
+			return $blocked_html;
+		}
+	}
+}
+
+namespace {
+
+	if ( ! defined( 'ABSPATH' ) ) {
+		define( 'ABSPATH', __DIR__ . '/' );
+	}
+	if ( ! defined( 'HOUR_IN_SECONDS' ) ) {
+		define( 'HOUR_IN_SECONDS', 3600 );
+	}
+	if ( ! function_exists( 'wp_strip_all_tags' ) ) {
+		function wp_strip_all_tags( $str ) {
+			return trim( preg_replace( '/<[^>]*>/', '', (string) $str ) );
+		}
+	}
+	if ( ! function_exists( 'sanitize_text_field' ) ) {
+		function sanitize_text_field( $str ) {
+			$str = (string) $str;
+			$str = preg_replace( '/[\r\n\t ]+/', ' ', $str );
+			return trim( wp_strip_all_tags( $str ) );
+		}
+	}
+	if ( ! function_exists( 'esc_attr' ) ) {
+		function esc_attr( $value ) {
+			return htmlspecialchars( (string) $value, ENT_QUOTES, 'UTF-8' );
+		}
+	}
+	if ( ! function_exists( 'apply_filters' ) ) {
+		function apply_filters( $tag, $value ) {
+			return $value;
+		}
+	}
+	if ( ! function_exists( 'wp_parse_url' ) ) {
+		function wp_parse_url( $url, $component = -1 ) {
+			return -1 === $component ? parse_url( (string) $url ) : parse_url( (string) $url, $component ); // phpcs:ignore
+		}
+	}
+	if ( ! function_exists( 'get_transient' ) ) {
+		function get_transient( $key ) {
+			return false;
+		}
+	}
+	if ( ! function_exists( 'set_transient' ) ) {
+		function set_transient( $key, $value, $ttl = 0 ) {
+			return true;
+		}
+	}
+
+	if ( ! function_exists( 'is_admin' ) ) {
+		function is_admin() {
+			return false;
+		}
+	}
+	if ( ! function_exists( 'faz_disable_banner' ) ) {
+		function faz_disable_banner() {
+			return false;
+		}
+	}
+
+	require_once dirname( __DIR__, 2 ) . '/frontend/includes/class-embed-inventory.php';
+	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
+
+	use FazCookie\Frontend\Frontend;
+
+	$tests_run    = 0;
+	$tests_passed = 0;
+	$tests_failed = 0;
+
+	function assert_true( $cond, $label ) {
+		global $tests_run, $tests_passed, $tests_failed;
+		$tests_run++;
+		if ( $cond ) {
+			$tests_passed++;
+			echo "  \033[32m✓\033[0m " . $label . "\n";
+		} else {
+			$tests_failed++;
+			echo "  \033[31m✗\033[0m " . $label . "\n";
+		}
+	}
+
+	function faz_ob_frontend( array $providers, array $blocked, array $whitelist = array() ) {
+		$rc = new ReflectionClass( Frontend::class );
+		$fe = $rc->newInstanceWithoutConstructor();
+		$preset = array(
+			'blocked_categories_cache'  => $blocked,
+			'provider_map_cache'        => $providers,
+			'service_consent_cache'     => array(),
+			'whitelist_cache'           => $whitelist,
+			'settings_option_cache'     => array(),
+			'pattern_service_cache'     => array(),
+			'provider_match_meta_cache' => null,
+			'service_match_meta_cache'  => null,
+		);
+		foreach ( $preset as $prop => $value ) {
+			$p = $rc->getProperty( $prop );
+			$p->setAccessible( true );
+			$p->setValue( $fe, $value );
+		}
+		return $fe;
+	}
+
+	function faz_ob_run( $fe, $html ) {
+		$m = new ReflectionMethod( Frontend::class, 'process_output_buffer' );
+		$m->setAccessible( true );
+		return $m->invoke( $fe, $html );
+	}
+
+	function faz_raw_attr( $html, $name ) {
+		if ( preg_match( '/(?<![\w:-])' . preg_quote( $name, '/' ) . '=("[^"]*"|\'[^\']*\'|[^\s>]+)/i', $html, $m ) ) {
+			return $m[1];
+		}
+		return null;
+	}
+
+	/** The markup with every data-faz-style value blanked: what the ENGINE reads as live. */
+	function faz_live_part( $html ) {
+		return preg_replace( '/data-faz-style=("[^"]*"|\'[^\']*\')/i', 'data-faz-style=""', $html );
+	}
+
+	// Inline bodies are matched against CODE SIGNATURES only (patterns with no
+	// '.' or '/'); URL fragments are applied to src attributes. That is what
+	// broke Query Monitor: its JSON names the page's handles and callbacks,
+	// and a handle like google_gtagjs carries the `gtag` signature.
+	$providers = array(
+		'gtag'  => 'analytics',
+		'fbq('  => 'marketing',
+		'_paq'  => 'analytics',
+	);
+	$blocked   = array( 'analytics', 'marketing' );
+	$wrap      = function ( $script ) {
+		return '<html><head></head><body><p>x</p>' . $script . '</body></html>';
+	};
+	$is_live   = function ( $out, $script ) {
+		return false !== strpos( $out, $script );
+	};
+	$is_parked = function ( $out ) {
+		return 1 === preg_match( '/<script[^>]*type="text\/plain"[^>]*data-faz-category=/i', $out )
+			|| 1 === preg_match( '/<script[^>]*data-faz-category=[^>]*type="text\/plain"/i', $out );
+	};
+
+	echo "\n-- JSON data assignments stay executable --\n";
+
+	$qm  = '<script id="query-monitor-inline-data">var QueryMonitorData = {"assets":{"scripts":[{"handle":"google_gtagjs","src":"https:\/\/www.googletagmanager.com\/gtag\/js?id=G-TEST"}]},"hooks":[{"callback":"fbq(init)"}]};</script>';
+	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $qm ) );
+	assert_true( $is_live( $out, $qm ), 'the Query Monitor payload is untouched although it names two trackers' );
+
+	$sk  = "<script id=\"googlesitekit-base-data-js-before\">var _googlesitekitBaseData = {\"homeURL\":\"https:\/\/site.test\",\"gtagHandle\":\"google_gtagjs\"};\nvar _googlesitekitUserData = {\"user\":{\"id\":1}};</script>";
+	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $sk ) );
+	assert_true( $is_live( $out, $sk ), 'several JSON assignments in one tag stay untouched' );
+
+	$win = '<script>window.ToolState = {"modules":["gtag","fbq(track)"]}</script>';
+	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $win ) );
+	assert_true( $is_live( $out, $win ), 'window.NAME = JSON without a semicolon stays untouched' );
+
+	$cst = '<script type="text/javascript">const A = ["fbq(", "gtag"];let B = null;</script>';
+	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $cst ) );
+	assert_true( $is_live( $out, $cst ), 'const/let JSON assignments stay untouched' );
+
+	$wp  = "<script id=\"tool-js-after\">\n/* <![CDATA[ */\nvar ToolData = {\"h\":\"google_gtagjs\"};\n/* ]]> */\n//# sourceURL=tool-js-after\n</script>";
+	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $wp ) );
+	assert_true( $is_live( $out, $wp ), 'the CDATA markers and the sourceURL line core adds do not hide the data shape' );
+
+	$crlf = "<script id=\"tool-js-after\">\r\nvar ToolData = {\"h\":\"google_gtagjs\"};\r\n//# sourceURL=tool-js-after\r\n</script>";
+	$out  = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $crlf ) );
+	assert_true( $is_live( $out, $crlf ), 'the same data with CRLF line endings stays untouched' );
+
+		$str = '<script>var Notes = {"text":"}; fbq(\\"track\\"); var z = {\\"a\\":1"};</script>';
+	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $str ) );
+	assert_true( $is_live( $out, $str ), 'code-looking text inside a JSON string is still just a string' );
+
+	echo "\n-- everything else is still judged --\n";
+
+	// A `//` comment ends at ANY JavaScript line terminator: LF, a lone CR,
+	// U+2028 or U+2029. The sourceURL line was stripped up to LF only, so code
+	// after a CR or a Unicode separator was swallowed with the "comment" and the
+	// tag was exempted as data, executable before consent.
+	foreach ( array( 'a lone CR' => "\r", 'U+2028' => "\xE2\x80\xA8", 'U+2029' => "\xE2\x80\xA9" ) as $faz_label => $faz_eol ) {
+		$hidden = "<script>var x = {\"a\":1};\n//# sourceURL=a" . $faz_eol . "fbq('init','1');</script>";
+		$out    = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $hidden ) );
+		assert_true( $is_parked( $out ), 'code after a sourceURL comment ended by ' . $faz_label . ' is judged and blocked' );
+	}
+
+	$load = '<script>(function(){var s=document.createElement("script");s.src="https://www.googletagmanager.com/gtag/js?id=G-TEST";document.head.appendChild(s);})();</script>';
+	$out  = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $load ) );
+	assert_true( $is_parked( $out ), 'a script that loads the tracker is still blocked' );
+
+	$mix = '<script>var cfg = {"id":"1"}; fbq("init", cfg.id);</script>';
+	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $mix ) );
+	assert_true( $is_parked( $out ), 'a JSON assignment followed by any statement is still judged' );
+
+	$fn  = '<script>var cfg = {"src":"x","onload":function(){ fbq("track","PageView"); }};</script>';
+	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $fn ) );
+	assert_true( $is_parked( $out ), 'an object literal that is not JSON is still judged' );
+
+	$paq = '<script>var _paq = window._paq = window._paq || []; _paq.push(["trackPageView"]); _paq.push(["setTrackerUrl", "https://matomo.example.test/matomo.php"]);</script>';
+	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $paq ) );
+	assert_true( $is_parked( $out ), 'the Matomo queue is still blocked' );
+
+	$chain = '<script>var a = {"u":"x"}, b = fbq("track","PageView");</script>';
+	$out   = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $chain ) );
+	assert_true( $is_parked( $out ), 'a declaration list that hides an expression is still judged' );
+
+	$nl  = "<script>var cfg = {\"id\":\"1\"}\nfbq(\"init\", cfg.id)</script>";
+	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $nl ) );
+	assert_true( $is_parked( $out ), 'a statement on the line after the data is still judged' );
+
+	$after = '<script>var cfg = {"id":"1"} fbq("init");</script>';
+	$out   = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $after ) );
+	assert_true( $is_parked( $out ), 'code right after the value on the same line is still judged' );
+
+	$src = '<script src="https://www.googletagmanager.com/gtag/js?id=G-TEST">var X = {"a":1};</script>';
+	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $src ) );
+	assert_true( $is_parked( $out ), 'an external script is judged by its src, whatever its body says' );
+
+	// Only the body stops being evidence; the tag's identity does not. A
+	// -js-before attached to a tracker handle follows the tracker even when
+	// all it holds is a data assignment.
+	$idd = '<script id="gtag-config-js-before">window.gtagConfig = {"anonymize_ip":true};</script>';
+	$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $idd ) );
+	assert_true( $is_parked( $out ), 'a data-only body is still blocked when the tag id names a tracker' );
+
+	// An assignment to `location` is not a definition: it navigates the page
+	// through the Location setter, whatever JSON value it is given. Exempted,
+	// the navigation ran before consent and skipped every rule that reads the
+	// body — here the code signature the URL carries.
+	foreach ( array(
+		'var location'    => '<script>var location = "https://site.test/out?fbq(1)";</script>',
+		'window.location' => '<script>window.location = "https://site.test/out?gtag=1"</script>',
+		'an object value' => '<script>window.location = {"href":"https://site.test/out?gtag=1"};</script>',
+		'after a data assignment' => "<script>var cfg = {\"a\":1};\nvar location = \"https://site.test/out?fbq(1)\";</script>",
+	) as $label => $nav ) {
+		$out = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $nav ) );
+		assert_true( $is_parked( $out ), 'an assignment to location is judged as code: ' . $label );
+	}
+	$near = '<script>var locationData = {"next":"fbq(1)"}; window.myLocation = {"u":"gtag"};</script>';
+	$out  = faz_ob_run( faz_ob_frontend( $providers, $blocked ), $wrap( $near ) );
+	assert_true( $is_live( $out, $near ), 'names that only contain "location" are still data' );
+
+	// ── Second layer: wp_inline_script_attributes ──────────────────────────
+	// Query Monitor 4.x prints its payload with wp_print_inline_script_tag(),
+	// so it never reaches the output-buffer pass above as an unjudged tag: the
+	// `wp_inline_script_attributes` filter retypes it first. Measured on
+	// faz-test with Query Monitor 4.0.7: the exemption above alone left
+	// QueryMonitorData undefined. Both layers must give the same verdict.
+	echo "\n-- the same verdict from the inline-attributes filter --\n";
+
+	$filter_fe = function () use ( $providers, $blocked ) {
+		$fe = new class() extends Frontend {
+			public function __construct() {}
+			protected function is_banner_disabled_by_settings() {
+				return false;
+			}
+			protected function is_blocking_disabled_for_page() {
+				return false;
+			}
+		};
+		$rc = new ReflectionClass( Frontend::class );
+		$preset = array(
+			'blocked_categories_cache'  => $blocked,
+			'provider_map_cache'        => $providers,
+			'service_consent_cache'     => array(),
+			'whitelist_cache'           => array(),
+			'settings_option_cache'     => array(),
+			'pattern_service_cache'     => array(),
+			'provider_match_meta_cache' => null,
+			'service_match_meta_cache'  => null,
+			'template'                  => array( 'html' => '<div></div>' ),
+		);
+		foreach ( $preset as $prop => $value ) {
+			$p = $rc->getProperty( $prop );
+			$p->setAccessible( true );
+			$p->setValue( $fe, $value );
+		}
+		return $fe;
+	};
+	$filtered = function ( $id, $body ) use ( $filter_fe ) {
+		return $filter_fe()->filter_inline_script_attributes( array( 'id' => $id ), $body );
+	};
+	$typed_plain = function ( $attrs ) {
+		return isset( $attrs['type'] ) && 'text/plain' === $attrs['type'] && ! empty( $attrs['data-faz-category'] );
+	};
+
+	$qm_body = 'var QueryMonitorData = {"assets":{"scripts":[{"handle":"google_gtagjs"}]},"hooks":[{"callback":"fbq(init)"}]};';
+	assert_true( ! $typed_plain( $filtered( 'query-monitor-inline-data', $qm_body ) ), 'filter: the Query Monitor payload keeps its type' );
+	assert_true( ! $typed_plain( $filtered( 'site-data', "var a = {\"gtag\":1};\nvar b = [\"_paq\"];" ) ), 'filter: several JSON assignments keep their type' );
+	assert_true( ! $typed_plain( $filtered( 'win-data', 'window.Payload = {"tracker":"gtag"}' ) ), 'filter: window.NAME = JSON keeps its type' );
+	assert_true( $typed_plain( $filtered( 'loader', "gtag('config','G-TEST');" ) ), 'filter: a tracker call is still retyped' );
+	assert_true( $typed_plain( $filtered( 'mixed', 'var cfg = {"id":"G-TEST"}; gtag("config", cfg.id);' ) ), 'filter: data followed by a call is still retyped' );
+	assert_true( $typed_plain( $filtered( 'paq', 'var _paq = window._paq = window._paq || []; _paq.push(["trackPageView"]);' ) ), 'filter: the Matomo queue is still retyped' );
+	assert_true( $typed_plain( $filtered( 'gtag-config-js-before', 'window.gtagConfig = {"anonymize_ip":true};' ) ), 'filter: a data-only body is still retyped when the id names a tracker' );
+	assert_true( $typed_plain( $filtered( 'nav', 'var location = "https://site.test/out?fbq(1)";' ) ), 'filter: var location = JSON is retyped like any code' );
+	assert_true( $typed_plain( $filtered( 'nav2', 'window.location = "https://site.test/out?gtag=1"' ) ), 'filter: window.location = JSON is retyped like any code' );
+	assert_true( ! $typed_plain( $filtered( 'near', 'var locationData = {"next":"fbq(1)"};' ) ), 'filter: a name that only contains "location" keeps its type' );
+
+	echo "\n";
+	if ( 0 === $tests_failed ) {
+		echo "ALL PASS ({$tests_passed})\n";
+		exit( 0 );
+	}
+	echo "FAILED: {$tests_failed}, passed: {$tests_passed}\n";
+	exit( 1 );
+}

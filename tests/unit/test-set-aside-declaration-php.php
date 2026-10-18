@@ -182,9 +182,14 @@ t( ! Frontend::is_declaration_suppressed( '_lscache_vary' ),
 	'and the display guard is lifted in the same operation — a row nobody can see is not a declaration' );
 
 foreach ( array( 'en', 'it' ) as $language ) {
-	foreach ( array( 'list', 'transfers' ) as $surface ) {
-		t( in_array( 'faz_cookie_policy:faz_cookie_policy_' . $surface . '_' . $language, $GLOBALS['cache_deleted'], true ),
-			'the declaration invalidates the ' . $language . ' policy ' . $surface );
+	t( in_array( 'faz_cookie_policy:faz_cookie_policy_transfers_' . $language, $GLOBALS['cache_deleted'], true ),
+		'the declaration invalidates the ' . $language . ' policy transfers' );
+	// The cookie-table entry is keyed by language AND jurisdiction; the bare
+	// `faz_cookie_policy_list_<lang>` key is one no render writes.
+	foreach ( \FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Generator::JURISDICTIONS as $jurisdiction ) {
+		$key = \FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Renderer::cookie_list_cache_key( $language, $jurisdiction );
+		t( in_array( 'faz_cookie_policy:' . $key, $GLOBALS['cache_deleted'], true ),
+			'the declaration invalidates the ' . $language . ' policy list for ' . $jurisdiction );
 	}
 }
 

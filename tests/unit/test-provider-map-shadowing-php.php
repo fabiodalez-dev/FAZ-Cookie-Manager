@@ -371,7 +371,13 @@ namespace {
 	eq( $fe->filter_inline_script_attributes( $attrs, 'tracker();' ), $attrs, 'E10 allowed inline category is unchanged' );
 	$fe = arrange( array( 'gtag(' => 'analytics' ), array( 'analytics' ) );
 	setp( $fe, 'gcm_settings', new class { public function is_advanced_mode() { return true; } } );
-	eq( $fe->filter_inline_script_attributes( $attrs, "gtag('config', 'G-TEST');" ), $attrs, 'E11 Advanced Consent Mode bootstrap remains allowed' );
+	// The exemption is conditioned on the synchronous denied `consent default`
+	// having been printed in this response (print_gcm_default_inline sets the
+	// flag); without it the gtag stack would run with no consent signal, so it
+	// stays hard-blocked. Both halves are pinned.
+	eq( $fe->filter_inline_script_attributes( $attrs, "gtag('config', 'G-TEST');" )['type'], 'text/plain', 'E11a Advanced Consent Mode does not exempt the gtag snippet when no default was emitted' );
+	setp( $fe, 'gcm_default_emitted', true );
+	eq( $fe->filter_inline_script_attributes( $attrs, "gtag('config', 'G-TEST');" ), $attrs, 'E11 Advanced Consent Mode bootstrap remains allowed once the default is emitted' );
 
 	echo "\n  ────────────────────────────────────────────────────\n";
 	echo "  Passed: {$passed}; Failed: {$failed}\n\n";

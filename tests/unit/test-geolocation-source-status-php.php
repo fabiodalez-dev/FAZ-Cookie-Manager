@@ -125,6 +125,10 @@ namespace {
 	// reale, altrimenti "il database non funziona" sarebbe un'affermazione del
 	// test e non della produzione.
 	require_once __DIR__ . '/../../includes/class-mmdb-reader.php';
+	// The helpers file for real: get_country() keys its transient with
+	// faz_ip_cache_key() since 1.34.2. Loaded AFTER the stubs above, whose
+	// function_exists() guards in the helpers file let the stubs win.
+	require_once __DIR__ . '/../../includes/class-utils.php';
 	require_once __DIR__ . '/../../includes/class-geolocation.php';
 
 	use FazCookie\Includes\Geolocation;
@@ -202,6 +206,21 @@ namespace {
 	$_SERVER['GEOIP_COUNTRY_CODE'] = 'IT';
 	faz_is( Geolocation::has_country_source(), false, 'il filtro di override vince anche quando una sorgente esiste' );
 	unset( $_SERVER['GEOIP_COUNTRY_CODE'] );
+
+	// Un callback su faz_visitor_country e' una sorgente: get_visitor_country()
+	// gli da' l'ultima parola e il runtime instrada su quel valore. source_status()
+	// lo contava gia' (country_filter) e diceva all'admin "routing attivo", ma
+	// has_country_source() — il predicato del veto sulla page cache — no: la
+	// pagina resa per il primo visitatore finiva in cache e veniva servita al
+	// successivo, di un'altra giurisdizione. I due predicati devono coincidere.
+	faz_reset();
+	@unlink( $db_path );
+	Geolocation::reset_runtime_cache();
+	faz_set_filter( 'faz_visitor_country', 'IT' );
+	faz_is( Geolocation::has_country_source(), true, 'un callback su faz_visitor_country e\' una sorgente: il veto sulla cache segue source_status()' );
+	faz_is( Geolocation::source_status()['working'], true, '...e i due predicati rispondono la stessa cosa' );
+	faz_set_filter( 'faz_has_country_signal_source', false );
+	faz_is( Geolocation::has_country_source(), false, 'faz_has_country_signal_source a false resta l\'override esplicito, anche sul callback' );
 
 	echo "\n\033[1mUn file che non è un MMDB non è una sorgente\033[0m\n";
 

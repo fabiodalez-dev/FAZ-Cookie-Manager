@@ -35,12 +35,22 @@ namespace {
 	function sanitize_key( $s ) { return strtolower( $s ); }
 	function sanitize_title( $s ) { return strtolower( $s ); }
 	function wp_strip_all_tags( $s ) { return strip_tags( $s ); }
-	function get_option( $key, $default = false ) { return $GLOBALS['options'][ $key ] ?? $default; }
+	// The Cookie Policy settings live in their own option and decide whether the
+	// wizard may publish: Generator::missing_required_settings() must pass. Kept
+	// apart from $GLOBALS['options'] so the many resets below do not silently
+	// turn every case into the "no controller named" one.
+	function get_option( $key, $default = false ) {
+		if ( 'faz_cookie_policy_data' === $key ) { return $GLOBALS['policy_data']; }
+		return $GLOBALS['options'][ $key ] ?? $default;
+	}
 	function add_option( $key, $value, ...$args ) { if ( isset( $GLOBALS['options'][ $key ] ) ) { return false; } $GLOBALS['options'][ $key ] = $value; return true; }
 	function update_option( $key, $value, ...$args ) { $GLOBALS['options'][ $key ] = $value; return true; }
 	function delete_option( $key ) { unset( $GLOBALS['options'][ $key ] ); }
 	function get_post( $id ) { return $GLOBALS['posts'][ $id ] ?? null; }
-	function get_posts( $args ) { return array_values( array_filter( $GLOBALS['posts'], function ( $p ) { return 'publish' === $p->post_status && '' === $p->post_password; } ) ); }
+	function get_posts( $args ) {
+		$statuses = (array) ( $args['post_status'] ?? 'publish' );
+		return array_values( array_filter( $GLOBALS['posts'], function ( $p ) use ( $statuses ) { return in_array( $p->post_status, $statuses, true ) && '' === $p->post_password; } ) );
+	}
 	function wp_insert_post( $data, $error = false ) {
 		if ( $GLOBALS['insert_error'] ) { return new WP_Error( 'insert_failed' ); }
 		// Monotonic, like a real AUTO_INCREMENT. Counting the surviving posts
@@ -70,6 +80,10 @@ namespace {
 	function get_post_meta( $id, $key, $single = false ) { return $GLOBALS['post_meta'][ $id ][ $key ] ?? ''; }
 	function faz_clear_banner_template_cache() { $GLOBALS['cache_cleared']++; }
 	$GLOBALS['banner_store'] = null;
+	// Complete by default: the earlier cases are about languages, locks and the
+	// banner link, and must keep publishing. The controller-identity cases at the
+	// end swap this out deliberately.
+	$GLOBALS['policy_data'] = array( 'company' => array( 'name' => 'Esempio S.r.l.', 'email' => 'privacy@example.test' ) );
 	$GLOBALS['post_meta'] = array();
 	$GLOBALS['next_post_id'] = 0;
 	$GLOBALS['banner_save_drops'] = false;
@@ -159,5 +173,51 @@ namespace {
 	// Item 5: template availability for the wizard checkbox.
 	check( Policy_Page::has_template( 'it', 'gdpr' ) && Policy_Page::has_template( 'en', 'ccpa' ), 'shipped templates are reported available' );
 	check( ! Policy_Page::has_template( 'cy', 'gdpr' ) && ! Policy_Page::has_template( 'it', 'invalid' ) && ! Policy_Page::has_template( array(), 'gdpr' ), 'missing template, bad law or bad language reported unavailable' );
+	// The wizard never collects the company details, so a page it publishes
+	// renders `how **** ("we", "us", "our")` and `contact us at ****` unless the
+	// Cookie Policy settings already name the controller. Same gate the renderer
+	// and the REST API apply (Generator::missing_required_settings): without it
+	// the page is parked as a draft, the public banner is not pointed at it, and
+	// the warning says what to fill in.
+	$GLOBALS['options'] = $GLOBALS['posts'] = $GLOBALS['post_meta'] = array();
+	$GLOBALS['policy_data'] = array();
+	$GLOBALS['banner_store'] = array( 'it' => array( 'notice' => array( 'elements' => array( 'privacyLink' => '' ) ) ) );
+	$GLOBALS['cache_cleared'] = 0;
+	$parked = Policy_Page::apply_to_setup( array( 'success' => true, 'warning' => '' ), 'it', 'gdpr' );
+	check( isset( $parked['cookie_page']['id'] ) && 'draft' === get_post( $parked['cookie_page']['id'] )->post_status, 'controller gate: without name + contact email the page is saved as a draft, not published' );
+	check( 'draft' === ( $parked['cookie_page']['status'] ?? '' ), 'controller gate: the result reports the draft status' );
+	check( '' === $banner_link() && 0 === $GLOBALS['cache_cleared'], 'controller gate: the public banner is never pointed at the draft' );
+	check( false !== stripos( (string) $parked['warning'], 'draft' ), 'controller gate: the warning names the draft and what to fill in' );
+	// Retrying while still incomplete returns the same parked draft: no duplicate,
+	// no publish, same warning — also after the tracking option is lost.
+	$count = count( $GLOBALS['posts'] );
+	$again = Policy_Page::apply_to_setup( array( 'success' => true, 'warning' => '' ), 'it', 'gdpr' );
+	check( count( $GLOBALS['posts'] ) === $count && ( $again['cookie_page']['id'] ?? 0 ) === $parked['cookie_page']['id'] && 'draft' === get_post( $parked['cookie_page']['id'] )->post_status && false !== stripos( (string) $again['warning'], 'draft' ), 'controller gate: retrying while incomplete neither duplicates nor publishes the parked draft' );
+	$GLOBALS['options'] = array();
+	$recovered = Policy_Page::ensure( 'it', 'gdpr' );
+	check( ! is_wp_error( $recovered ) && $recovered['id'] === $parked['cookie_page']['id'] && count( $GLOBALS['posts'] ) === $count, 'controller gate: a parked draft is recovered after option loss instead of duplicated' );
+	// An administrator's own draft (no wizard parking mark) is still never adopted or republished.
+	$GLOBALS['options'] = $GLOBALS['posts'] = $GLOBALS['post_meta'] = array();
+	$own = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'draft', 'post_title' => 'Cookie Policy', 'post_content' => '[faz_cookie_policy_complete lang="it" jurisdiction="gdpr-strict"]' ) );
+	$adopted = Policy_Page::ensure( 'it', 'gdpr' );
+	check( ! is_wp_error( $adopted ) && $adopted['id'] !== $own, 'controller gate: an administrator\'s own draft is not mistaken for a parked one' );
+	// Once the details are complete, a parked draft is left for the administrator
+	// to publish in Pages — the wizard does not republish drafts, parked or not.
+	$GLOBALS['options'] = $GLOBALS['posts'] = $GLOBALS['post_meta'] = array();
+	$GLOBALS['policy_data'] = array();
+	$fr = Policy_Page::ensure( 'fr', 'gdpr' );
+	$GLOBALS['policy_data'] = array( 'company' => array( 'name' => 'ACME', 'email' => 'privacy@acme.test' ) );
+	check( is_wp_error( Policy_Page::ensure( 'fr', 'gdpr' ) ) && 'draft' === get_post( $fr['id'] )->post_status, 'controller gate: a parked draft is not republished once the details are complete' );
+	// A name without a contact email is still incomplete; name + email publishes,
+	// for CCPA too — the floor is not GDPR-only.
+	$GLOBALS['options'] = $GLOBALS['posts'] = $GLOBALS['post_meta'] = array();
+	$GLOBALS['policy_data'] = array( 'company' => array( 'name' => 'ACME' ) );
+	$name_only = Policy_Page::ensure( 'en', 'ccpa' );
+	check( 'draft' === get_post( $name_only['id'] )->post_status, 'controller gate: a name without a contact email still parks a draft' );
+	$GLOBALS['options'] = $GLOBALS['posts'] = $GLOBALS['post_meta'] = array();
+	$GLOBALS['policy_data'] = array( 'company' => array( 'name' => 'ACME', 'email' => 'privacy@acme.test' ) );
+	$GLOBALS['banner_store'] = array( 'en' => array( 'notice' => array( 'elements' => array( 'privacyLink' => '' ) ) ) );
+	$complete = Policy_Page::apply_to_setup( array( 'success' => true, 'warning' => '' ), 'en', 'ccpa' );
+	check( 'publish' === get_post( $complete['cookie_page']['id'] )->post_status && 'publish' === $complete['cookie_page']['status'] && $banner_link( 'en' ) === $complete['cookie_page']['url'] && '' === $complete['warning'], 'controller gate: with name + email the page is published and linked, as before' );
 	echo "policy-page: $passed passed, 0 failed\n";
 }

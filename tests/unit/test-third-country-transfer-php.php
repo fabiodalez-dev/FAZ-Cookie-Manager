@@ -174,6 +174,11 @@ if ( ! function_exists( 'faz_default_language' ) ) {
 		return 'en';
 	}
 }
+if ( ! function_exists( 'faz_current_language' ) ) {
+	function faz_current_language( $reset_cache = false ) {
+		return 'en';
+	}
+}
 if ( ! function_exists( 'faz_selected_languages' ) ) {
 	function faz_selected_languages( $language = '' ) {
 		$langs = array( 'en' );
@@ -428,6 +433,59 @@ $generic = $sc->render_transfer_disclosure( $generic_cookie );
 assert_true( '' !== $generic, 'render_transfer_disclosure: enabled-but-empty still renders a neutral line' );
 assert_not_contains( $generic, 'Safeguard:', 'render_transfer_disclosure: no orphan "Safeguard:" fragment when empty' );
 
+// The no-country line follows the banner's law: "without an EU adequacy
+// decision" is GDPR's concept and must not describe a transfer to a CCPA,
+// POPIA or mixed-law audience.
+$law_prop = $ref_sc->getProperty( 'law' );
+$law_prop->setAccessible( true );
+$law_prop->setValue( $sc, 'gdpr' );
+assert_contains( $sc->render_transfer_disclosure( $generic_cookie ), 'EU adequacy decision', 'render_transfer_disclosure(gdpr): no-country line keeps the EU adequacy wording' );
+$law_prop->setValue( $sc, 'ccpa' );
+$ccpa_generic = $sc->render_transfer_disclosure( $generic_cookie );
+assert_true( '' !== $ccpa_generic, 'render_transfer_disclosure(ccpa): no-country line still discloses the transfer' );
+assert_not_contains( $ccpa_generic, 'EU adequacy', 'render_transfer_disclosure(ccpa): no EU adequacy wording for a non-GDPR banner' );
+$law_prop->setValue( $sc, 'popia' );
+assert_not_contains( $sc->render_transfer_disclosure( $generic_cookie ), 'EU adequacy', 'render_transfer_disclosure(popia): no EU adequacy wording for a non-GDPR banner' );
+// When a geo ruleset was applied, its family decides, not the banner label: a
+// match-all GDPR banner served under the LGPD ruleset must not speak of EU
+// adequacy, and a CCPA banner kept for an EEA visitor must.
+if ( method_exists( Shortcodes::class, 'set_applied_ruleset' ) ) {
+	$law_prop->setValue( $sc, 'gdpr' );
+	Shortcodes::set_applied_ruleset( array( 'id' => 'lgpd-brazil', 'model' => 'opt-in' ) );
+	assert_not_contains( $sc->render_transfer_disclosure( $generic_cookie ), 'EU adequacy', 'render_transfer_disclosure: GDPR banner under the LGPD ruleset uses the neutral line' );
+	Shortcodes::set_applied_ruleset( array( 'id' => 'uk-gdpr-pecr', 'model' => 'opt-in' ) );
+	assert_not_contains( $sc->render_transfer_disclosure( $generic_cookie ), 'EU adequacy', 'render_transfer_disclosure: UK ruleset (its own adequacy regime) uses the neutral line' );
+	$law_prop->setValue( $sc, 'ccpa' );
+	Shortcodes::set_applied_ruleset( array( 'id' => 'gdpr-italy', 'model' => 'opt-in' ) );
+	assert_contains( $sc->render_transfer_disclosure( $generic_cookie ), 'EU adequacy decision', 'render_transfer_disclosure: CCPA banner kept under an EU ruleset uses the EU wording' );
+	Shortcodes::set_applied_ruleset( null );
+	assert_not_contains( $sc->render_transfer_disclosure( $generic_cookie ), 'EU adequacy', 'render_transfer_disclosure: with no ruleset the banner law decides again' );
+	// The cached banner template must be scoped by that regime, or the first
+	// visitor's wording is served to everybody from faz_banner_template.
+	if ( ! class_exists( '\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Template' ) ) {
+		require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/class-template.php';
+	}
+	$tpl_ref = new ReflectionClass( '\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Template' );
+	$tpl     = $tpl_ref->newInstanceWithoutConstructor();
+	foreach ( array( 'banner' => false, 'language' => 'en' ) as $prop => $value ) {
+		$p = $tpl_ref->getProperty( $prop );
+		$p->setAccessible( true );
+		$p->setValue( $tpl, $value );
+	}
+	$slot = $tpl_ref->getMethod( 'get_storage_key' );
+	$slot->setAccessible( true );
+	$keys = array();
+	foreach ( array( null, array( 'id' => 'gdpr-italy' ), array( 'id' => 'lgpd-brazil' ) ) as $faz_rs ) {
+		Shortcodes::set_applied_ruleset( $faz_rs );
+		$keys[] = $slot->invoke( $tpl );
+	}
+	Shortcodes::set_applied_ruleset( null );
+	assert_eq( $keys[0], 'en', 'template cache slot: no ruleset keeps the historical key' );
+	assert_true( count( array_unique( $keys ) ) === 3, 'template cache slot: each transfer regime gets its own slot' );
+} else {
+	assert_true( false, 'render_transfer_disclosure: the applied geo ruleset decides the transfer regime' );
+}
+
 // =========================================================================
 // 6. Renderer international-transfers section + policy version fingerprint.
 // =========================================================================
@@ -500,6 +558,102 @@ assert_not_contains( $section_html, 'wp-settings-1', 'international_transfers_se
 // Must NOT assert the transfer is legally valid.
 assert_not_contains( $section_html, 'legally valid', 'international_transfers_section: makes NO legality claim' );
 assert_not_contains( $section_html, 'is compliant', 'international_transfers_section: makes NO compliance claim' );
+
+// 6b-bis. The section names the transfer regime of the DOCUMENT it is appended
+// to. Before 1.34.2 it was hard-wired to GDPR Art. 44-49 / EU adequacy for every
+// jurisdiction, so an LGPD policy (whose own scaffold cites Art. 33-36 LGPD) or
+// a POPIA policy (section 72) ended up citing two incompatible regimes, and a
+// CCPA policy gained foreign-law text with no bearing on its readers.
+$reset_renderer();
+$lgpd_section = $section->invoke( null, 'en', 'lgpd-brazil' );
+assert_contains( $lgpd_section, 'International data transfers', 'international_transfers_section(lgpd): still renders the section' );
+assert_contains( $lgpd_section, 'Articles 33 to 36 of the LGPD', 'international_transfers_section(lgpd): cites the LGPD transfer regime' );
+assert_not_contains( $lgpd_section, 'Articles 44 to 49', 'international_transfers_section(lgpd): does NOT cite GDPR Art. 44-49' );
+assert_not_contains( $lgpd_section, 'EU/EEA', 'international_transfers_section(lgpd): no EU/EEA framing in a Brazilian document' );
+assert_contains( $lgpd_section, 'United States', 'international_transfers_section(lgpd): recipient country still named' );
+
+$reset_renderer();
+$popia_section = $section->invoke( null, 'en', 'popia-southafrica' );
+assert_contains( $popia_section, 'section 72 of POPIA', 'international_transfers_section(popia): cites POPIA section 72' );
+assert_not_contains( $popia_section, 'Articles 44 to 49', 'international_transfers_section(popia): does NOT cite GDPR Art. 44-49' );
+assert_not_contains( $popia_section, 'adequacy decision', 'international_transfers_section(popia): no EU adequacy wording' );
+
+$reset_renderer();
+$ccpa_section = $section->invoke( null, 'en', 'ccpa-california' );
+assert_contains( $ccpa_section, 'International data transfers', 'international_transfers_section(ccpa): still renders the section' );
+assert_not_contains( $ccpa_section, 'GDPR', 'international_transfers_section(ccpa): names no foreign regime (GDPR)' );
+assert_not_contains( $ccpa_section, 'LGPD', 'international_transfers_section(ccpa): names no foreign regime (LGPD)' );
+assert_not_contains( $ccpa_section, 'POPIA', 'international_transfers_section(ccpa): names no foreign regime (POPIA)' );
+assert_contains( $ccpa_section, 'EU-US Data Privacy Framework', 'international_transfers_section(ccpa): the operator-described safeguard is still listed' );
+
+// The GDPR document keeps its framing byte-for-byte (golden gdpr-transfers.html).
+$reset_renderer();
+assert_eq( $section->invoke( null, 'en', 'gdpr-strict' ), $section->invoke( null, 'en' ), 'international_transfers_section: gdpr-strict is the default and renders as before' );
+
+// Row fallback when the operator names no country: the regime-neutral
+// "outside <territory>" line follows the document's jurisdiction too.
+$wpdb->cookies_rows = array(
+	array(
+		'cookie_name'   => '_x',
+		'cookie_meta'   => wp_json_encode( array( 'transfer' => array( 'enabled' => true, 'countries' => array(), 'safeguard' => array() ) ) ),
+		'category_slug' => 'analytics',
+	),
+);
+$reset_renderer();
+assert_contains( $section->invoke( null, 'en', 'gdpr-strict' ), 'outside the EU/EEA', 'section row fallback(gdpr): "outside the EU/EEA"' );
+$reset_renderer();
+assert_contains( $section->invoke( null, 'en', 'lgpd-brazil' ), 'outside Brazil', 'section row fallback(lgpd): "outside Brazil"' );
+$reset_renderer();
+$ccpa_row = $section->invoke( null, 'en', 'ccpa-california' );
+assert_not_contains( $ccpa_row, 'EU/EEA', 'section row fallback(ccpa): no EU/EEA wording' );
+assert_contains( $ccpa_row, 'another country', 'section row fallback(ccpa): neutral "another country"' );
+
+// Same fallback inside the cookie table — and the per-request/object cache key
+// must carry the jurisdiction, or the second document on a request would be
+// served the first document's labels. No reset between the two calls on purpose.
+$reset_renderer();
+$wpdb->cookies_rows[0]['category_name']        = 'Analytics';
+$wpdb->cookies_rows[0]['category_description'] = '';
+$wpdb->cookies_rows[0]['cookie_domain']        = 'example.com';
+$wpdb->cookies_rows[0]['cookie_duration']      = '1 year';
+$wpdb->cookies_rows[0]['cookie_description']   = 'Analytics cookie';
+assert_contains( $cookie_list->invoke( null, 'en', 'gdpr-strict' ), 'Transfers personal data outside the EU/EEA', 'table row fallback(gdpr): EU/EEA wording' );
+$lgpd_table = $cookie_list->invoke( null, 'en', 'lgpd-brazil' );
+assert_contains( $lgpd_table, 'Transfers personal data outside Brazil', 'table row fallback(lgpd): "outside Brazil", not served from the GDPR cache entry' );
+assert_not_contains( $lgpd_table, 'EU/EEA', 'table row fallback(lgpd): no EU/EEA wording' );
+
+// Invalidation must follow the key. Once the jurisdiction joined the cache key,
+// clearing only `faz_cookie_policy_list_<lang>` left every real entry in a
+// persistent object cache: an administrator hiding a cookie kept seeing it in
+// the published table for up to five minutes.
+$GLOBALS['_cache'] = array();
+$reset_renderer();
+foreach ( Generator::JURISDICTIONS as $faz_j ) {
+	$cookie_list->invoke( null, 'en', $faz_j );
+}
+$faz_list_keys = static function () {
+	return array_values( array_filter( array_keys( $GLOBALS['_cache'] ), static function ( $k ) {
+		return 0 === strpos( $k, 'faz_cookie_policy|faz_cookie_policy_list_' );
+	} ) );
+};
+assert_eq( count( $faz_list_keys() ), count( Generator::JURISDICTIONS ), 'cache: one cookie-table entry per jurisdiction was stored (premise)' );
+Renderer::clear_cookie_declaration_cache();
+assert_eq( $faz_list_keys(), array(), 'cache: clear_cookie_declaration_cache() removes the jurisdiction-keyed cookie-table entries' );
+
+// Restore the two-row inventory for the shared-query check below.
+$wpdb->cookies_rows = array(
+	array(
+		'cookie_name'   => '_ga',
+		'cookie_meta'   => wp_json_encode( array(
+			'transfer' => array(
+				'enabled'   => true,
+				'countries' => array( 'en' => 'United States' ),
+				'safeguard' => array( 'en' => 'EU-US Data Privacy Framework' ),
+			),
+		) ),
+		'category_slug' => 'analytics',
+	),
+);
 
 // The list and transfer surfaces share one request-local inventory query.
 $reset_renderer();
