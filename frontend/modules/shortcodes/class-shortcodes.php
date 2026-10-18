@@ -1122,7 +1122,7 @@ class Shortcodes {
 			// applied, ITS family decides, not the banner's label: a match-all
 			// GDPR banner served under the LGPD or UK ruleset must not speak of
 			// EU adequacy.
-			
+
 			$parts[] = '<span class="faz-audit-transfer-country">'
 				. ( ( '' === self::$transfer_regime ? 'gdpr' === $this->law : 'eu' === self::$transfer_regime )
 					? esc_html__( 'This cookie may transfer personal data to a country without an EU adequacy decision.', 'faz-cookie-manager' )
