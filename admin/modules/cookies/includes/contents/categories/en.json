@@ -1,7 +1,7 @@
 {
     "necessary": {
         "name": "Necessary",
-        "description": "<p>Necessary cookies are required to enable the basic features of this site, such as providing secure log-in or adjusting your consent preferences. These cookies do not store any personally identifiable data.</p>"
+        "description": "<p>Necessary cookies are required to enable the basic features of this site, such as providing secure log-in or adjusting your consent preferences. They are not used for advertising or to track you across other sites. The consent cookie stores a random identifier that lets us keep a record of the choice you made.</p>"
     },
     "functional": {
         "name": "Functional",

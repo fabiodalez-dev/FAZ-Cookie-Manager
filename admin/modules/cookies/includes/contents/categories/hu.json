@@ -1,7 +1,7 @@
 {
     "necessary": {
         "name": "Szükséges",
-        "description": "<p>A szükséges sütik döntő fontosságúak a weboldal alapvető funkciói szempontjából, és a weboldal ezek nélkül nem fog megfelelően működni. Ezek a sütik nem tárolnak személyazonosításra alkalmas adatokat.</p>"
+        "description": "<p>A szükséges sütik döntő fontosságúak a weboldal alapvető funkciói szempontjából, és a weboldal ezek nélkül nem fog megfelelően működni. Nem használjuk őket hirdetésre, sem arra, hogy más webhelyeken nyomon kövessük Önt. A hozzájárulási süti egy véletlenszerű azonosítót tárol, amellyel nyilvántartást vezetünk az Ön által hozott döntésről.</p>"
     },
     "functional": {
         "name": "Funkcionális",

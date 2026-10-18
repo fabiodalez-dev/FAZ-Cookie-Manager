@@ -1,7 +1,7 @@
 {
     "necessary": {
         "name": "Necessaria",
-        "description": "<p>I cookie necessari sono fondamentali per le funzioni di base del sito Web e il sito Web non funzionerà nel modo previsto senza di essi. Questi cookie non memorizzano dati identificativi personali.</p>"
+        "description": "<p>I cookie necessari sono fondamentali per le funzioni di base del sito Web e il sito Web non funzionerà nel modo previsto senza di essi. Non vengono usati per la pubblicità né per tracciarti su altri siti. Il cookie di consenso memorizza un identificativo casuale che ci permette di conservare una registrazione della scelta che hai fatto.</p>"
     },
     "functional": {
         "name": "Funzionale",
