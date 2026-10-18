@@ -42,6 +42,17 @@ foreach ( glob( $root . '/*/*.md' ) as $file ) {
 			++$failed;
 			echo "  FAIL {$juris}/{$lang}.md:" . ( $n + 1 ) . " presents the fallback figure as the retention period\n";
 		}
+		// LGPD: a period longer than the declared fallback is allowed only where
+		// the law requires it or Art. 16 permits it. pt-BR, the native version,
+		// said "ou para fins legítimos", a broader exception than any other
+		// language and than Art. 16 itself.
+		if ( 'lgpd-brazil' === $juris ) {
+			++$checks;
+			if ( 1 !== preg_match( '/\b16\.? (?:da )?LGPD/u', $line ) || false !== mb_strpos( $line, 'fins legítimos' ) ) {
+				++$failed;
+				echo "  FAIL {$juris}/{$lang}.md:" . ( $n + 1 ) . " allows a longer period on a ground other than the law or Art. 16 LGPD\n";
+			}
+		}
 	}
 }
 echo "policy-retention-fallback-wording: " . ( $checks - $failed ) . " passed, {$failed} failed\n";
