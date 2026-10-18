@@ -828,6 +828,25 @@ if ( ! $faz_update_mode ) {
 		}
 	}
 
+	// LGPD Art. 19 sets the deadline for confirmation and access only: a
+	// simplified answer at once, or a complete declaration within 15 days.
+	// The pt-BR scaffold promised a "prazo razoável" under Art. 19 instead,
+	// and the other rights follow the regulation (Art. 18, § 5º), not Art. 19.
+	foreach ( array( 'lgpd-brazil', 'lgpd-empty-visitor' ) as $faz_lgpd ) {
+		$faz_doc = isset( $rendered_all[ $faz_lgpd ] ) ? $rendered_all[ $faz_lgpd ] : '';
+		assert_true(
+			false === strpos( $faz_doc, 'prazo razoável' )
+				&& false !== strpos( $faz_doc, 'em formato simplificado' )
+				&& false !== strpos( $faz_doc, 'no prazo de até 15 dias' )
+				&& false !== strpos( $faz_doc, '(Art. 19 LGPD)' ),
+			"{$faz_lgpd}: confirmation and access follow Art. 19 (immediately, or a full declaration within 15 days)"
+		);
+		assert_true(
+			1 === preg_match( '/demais solicitações[^<]*Art\. 18, § 5º/u', $faz_doc ),
+			"{$faz_lgpd}: the other requests are tied to the regulation (Art. 18, § 5º), not to the 15 days"
+		);
+	}
+
 	// The wordpress-internal category must never surface publicly, in any
 	// fixture — the standing rule in CLAUDE.md.
 	foreach ( $rendered_all as $name => $html ) {
