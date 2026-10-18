@@ -153,7 +153,16 @@ namespace {
 		ok( false === strpos( (string) $live_css( $out ), 'fonts.g' ), $label . ': the provider URL is gone from the live text' );
 	}
 	$quoted = '.q:before{content:"/*"}.r:after{content:"*/ https://fonts.googleapis.com/x"}';
-	ok( false === strpos( process_style( $quoted ), 'data-faz-css=' ), 'comment markers inside strings are content, not a comment' );
+	ok( false === strpos( process_style( $quoted ), 'data-faz-css=' ), 'a provider URL written inside a string is content, not a fetch' );
+	// The markers themselves: between two strings holding `/*` and `*/` sits
+	// a URL only the comment-stripped pass can read (an @import with a comment
+	// before its string, still the first rule after @charset). A stripper
+	// that took the markers for a comment removed that URL along with them,
+	// and the sheet stayed live.
+	$quoted = '@charset "/*";@import/*c*/"https://fonts.googleapis.com/css2?family=Inter";.s:after{content:"*/"}';
+	$out    = process_style( $quoted );
+	ok( false !== strpos( $out, 'data-faz-css=' ), 'comment markers inside strings are content, not a comment: the URL between them is still judged' );
+	ok( false === strpos( (string) $live_css( $out ), 'fonts.g' ), 'and the provider URL is gone from the live text' );
 
 	$escaped_fn = '@font-face{font-family:x;src:u\72l(https://fonts.gstatic.com/x.woff2)}';
 	$out        = process_style( $escaped_fn );
