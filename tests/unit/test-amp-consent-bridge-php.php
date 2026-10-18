@@ -1386,6 +1386,24 @@ namespace {
 	amp_ok( $faz_blocking_started, 'an opt-in ruleset with no GDPR banner still starts the component blocking buffer' );
 	amp_ok( false !== strpos( $faz_ccpa_only_blocked, '<amp-analytics data-block-on-consent-purposes="analytics"' ), 'and amp-analytics leaves it gated on the analytics purpose' );
 	amp_ok( false !== strpos( $faz_ccpa_only_blocked, '<amp-pixel data-block-on-consent' ), 'and amp-pixel leaves it gated as well' );
+
+	// The Accept given through that opt-in prompt is an opt-in consent: its
+	// lifetime follows the GDPR-family cap, not the kept banner's CCPA floor.
+	$GLOBALS['faz_test_cookie'] = '';
+	$_COOKIE = array();
+	$_SERVER = array( 'HTTP_AMP_SAME_ORIGIN' => 'true' );
+	$faz_saved_expiry = $banner->expiry;
+	$banner->expiry   = 365;
+	$bridge->handle_update( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'accepted', 'purposeConsents' => array( 'analytics' => 1, 'marketing' => 1 ) ), '/faz/v1/amp-consent/update' ) );
+	$faz_optin_days = isset( $GLOBALS['faz_test_set_cookie']['expires'] ) ? (int) round( ( $GLOBALS['faz_test_set_cookie']['expires'] - time() ) / DAY_IN_SECONDS ) : -1;
+	amp_ok( $faz_optin_days > 0 && $faz_optin_days <= 182, 'an AMP Accept under an opt-in ruleset over the kept CCPA banner lives at most 182 days (got ' . $faz_optin_days . ')' );
+	amp_ok( false !== strpos( (string) $GLOBALS['faz_test_cookie'], '__scope.law:ccpa' ), 'and its scope still names the banner it was given on' );
+	// A record from before this fix: same scope, 365 days still to run.
+	$GLOBALS['faz_test_cookie'] = preg_replace( '/exp:\d+/', 'exp:' . ( time() + 300 * DAY_IN_SECONDS ), (string) $GLOBALS['faz_test_cookie'] );
+	$faz_long_check = $bridge->handle_check( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'accepted' ) ) );
+	amp_same( $faz_long_check->get_data()['consentStateValue'], 'unknown', 'a record with more lifetime left than the opt-in cap is not honoured by the check' );
+	$banner->expiry = $faz_saved_expiry;
+	$GLOBALS['faz_test_cookie'] = '';
 	$banner->law        = 'gdpr';
 	$banner->properties = null;
 

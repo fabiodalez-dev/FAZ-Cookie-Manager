@@ -765,6 +765,16 @@ class AMP_Consent_Rest {
 		// fold — a "gdpr_ccpa" banner is a GDPR-family banner for lifetime
 		// purposes and must not inherit the 365-day CCPA floor.
 		$expiry_law        = ( 'ccpa' === $law ) ? 'ccpa' : 'gdpr';
+		// A CCPA banner kept for a visitor whose resolved ruleset is opt-in (the
+		// "US only" install seen from the EEA, or any visitor the fallback
+		// ruleset covers) collects an opt-in consent through the AMP prompt, and
+		// an opt-in consent may not outlive the GDPR-family cap. Deciding the
+		// lifetime from the banner alone wrote a 365-day __scope.law:ccpa record
+		// for an EEA Accept. The scope keeps the banner's law (it names the
+		// banner); only the lifetime follows the regime actually applied.
+		if ( 'ccpa' === $expiry_law && self::resolved_ruleset_is_opt_in() ) {
+			$expiry_law = 'gdpr';
+		}
 		$settings          = $banner->get_settings();
 		// The fallback for a banner that never stored consentExpiry must be the
 		// SAME number Frontend::get_store_data() falls back to, or the classic page
@@ -790,6 +800,23 @@ class AMP_Consent_Rest {
 			'revision'          => max( 1, absint( $revision ) ),
 			'scope_fingerprint' => faz_scope_fingerprint( $slug, $law ),
 		);
+	}
+
+	/**
+	 * Whether the ruleset resolved for this visitor is opt-in (or hybrid).
+	 *
+	 * The same resolution get_purposes() uses for the per-purpose defaults, so
+	 * the lifetime and the defaults of one AMP context can never disagree.
+	 *
+	 * @return bool
+	 */
+	private static function resolved_ruleset_is_opt_in() {
+		if ( ! class_exists( Geo_Runtime::class ) ) {
+			return false;
+		}
+		$country = class_exists( Geolocation::class ) ? Geolocation::get_visitor_country() : '';
+		$ruleset = Geo_Runtime::resolve_for_country( $country );
+		return is_array( $ruleset ) && 'gdpr' === Geo_Runtime::model_to_law( $ruleset );
 	}
 
 	/**
@@ -1339,6 +1366,17 @@ class AMP_Consent_Rest {
 		$has_absolute_expiry = isset( $parsed['exp'] );
 		$expires            = $has_absolute_expiry ? absint( $parsed['exp'] ) : 0;
 		if ( $has_absolute_expiry && $expires <= time() ) {
+			return false;
+		}
+		// A record that still has more life left than the regime applied now
+		// allows was issued under a longer lifetime than this context permits
+		// (a 365-day record from the CCPA-shaped expiry, read by an opt-in
+		// visitor; or a lifetime the administrator has since shortened). It
+		// is not honoured: the visitor is asked again and the new record gets
+		// the permitted lifetime. One day of slack absorbs clock skew between
+		// the write and this read.
+		if ( $has_absolute_expiry && isset( $context['expiry_days'] )
+			&& $expires > time() + ( absint( $context['expiry_days'] ) + 1 ) * DAY_IN_SECONDS ) {
 			return false;
 		}
 
