@@ -129,7 +129,11 @@ namespace {
 		$wpdb2->rows[1] = array( 'created_at' => '2026-01-15 10:00:00', 'created_at_gmt' => '2026-01-15 09:30:00' );
 		$wpdb2->rows[2] = array( 'created_at' => '2026-01-15 10:00:00', 'created_at_gmt' => null );
 		$GLOBALS['wpdb'] = $wpdb2; $GLOBALS['opts'] = array();
-		while ( ! $A::ensure_consent_log_gmt_column() ) {}
+		// Bounded like the run above: a cursor that stopped advancing must fail
+		// the suite, not hang it until CI kills the job.
+		$rounds2 = 0;
+		do { $done2 = $A::ensure_consent_log_gmt_column(); $rounds2++; } while ( ! $done2 && $rounds2 < 20 );
+		gmt_check( $done2, 'the migration completes on a table that already has the column' );
 		gmt_check( 0 === count( $wpdb2->alters ), 'an install whose table already has the column gets no ALTER' );
 		gmt_check( '2026-01-15 09:30:00' === $wpdb2->rows[1]['created_at_gmt'] && '2026-01-15 09:00:00' === $wpdb2->rows[2]['created_at_gmt'], 'a recorded value is kept, a missing one is filled' );
 		gmt_check( ! empty( $GLOBALS['opts']['faz_consent_log_gmt_column_added'] ), 'and inserts are told the column exists' );
