@@ -53,6 +53,15 @@ EXCLUDES=(
 	'test-results'
 	'*.zip'
 	'.DS_Store'
+	# Private assistant context of the checkout. .claude/ also holds agent
+	# worktrees, i.e. whole copies of the repository: one deploy copied 206 MB
+	# of them into the test webroot.
+	'.claude'
+	'CLAUDE.md'
+	# Browser-tool scratch (snapshots, console dumps) written into the
+	# checkout during manual verification; never part of the plugin.
+	'.playwright-mcp'
+	'.playwright-cli'
 )
 
 if [ "${1:-}" = '--print-excludes' ]; then

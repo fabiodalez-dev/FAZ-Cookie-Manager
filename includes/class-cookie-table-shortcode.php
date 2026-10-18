@@ -196,6 +196,60 @@ class Cookie_Table_Shortcode {
 	}
 
 	/**
+	 * Third-country transfer disclosure for one table row.
+	 *
+	 * The banner preference centre (Shortcodes::render_transfer_disclosure) and
+	 * the generated policy (Renderer::build_cookie_list_html) both append the
+	 * operator-flagged recipient country and safeguard to a cookie's row. This
+	 * table — still embedded by [faz_cookie_policy] as its "Cookies We Use"
+	 * section and wrapped by the faz/cookie-table and faz/cookie-policy blocks —
+	 * never did, so the one document a visitor opens for GDPR Art. 13(1)(f)
+	 * information omitted the fact the operator entered while the banner showed
+	 * it. Same markup and classes as the banner (`.faz-audit-transfer*`, whose
+	 * rules have shipped in this shortcode's own stylesheet since the feature
+	 * landed); the country/safeguard maps resolve through localize(), the same
+	 * active → default → first-non-empty chain the rest of this table uses.
+	 *
+	 * Purely informational: states the fact and the operator's safeguard, never
+	 * asserts the transfer is lawful. Returns '' unless transfer.enabled is set,
+	 * so an unflagged inventory renders byte-identically to before. The table is
+	 * not bound to a banner law, so the no-country line names no regime.
+	 *
+	 * @param Cookie $cookie_obj Cookie model.
+	 * @param string $lang       Current language code.
+	 * @param string $default    Default plugin language.
+	 * @param string $wp_lang    WordPress locale prefix.
+	 * @return string Escaped HTML, or '' when the cookie is not flagged.
+	 */
+	private function render_transfer_disclosure( Cookie $cookie_obj, $lang, $default, $wp_lang = '' ) {
+		$transfer = $cookie_obj->get_transfer();
+		if ( empty( $transfer['enabled'] ) ) {
+			return '';
+		}
+		$country   = $this->localize( isset( $transfer['countries'] ) ? $transfer['countries'] : array(), $lang, $default, $wp_lang );
+		$safeguard = $this->localize( isset( $transfer['safeguard'] ) ? $transfer['safeguard'] : array(), $lang, $default, $wp_lang );
+		$country   = is_string( $country ) ? trim( $country ) : '';
+		$safeguard = is_string( $safeguard ) ? trim( $safeguard ) : '';
+
+		$parts = array();
+		if ( '' !== $country ) {
+			$parts[] = '<span class="faz-audit-transfer-country">'
+				. esc_html__( 'This cookie may transfer personal data to:', 'faz-cookie-manager' )
+				. ' <strong>' . esc_html( $country ) . '</strong></span>';
+		} else {
+			$parts[] = '<span class="faz-audit-transfer-country">'
+				. esc_html__( 'This cookie may transfer personal data to another country.', 'faz-cookie-manager' )
+				. '</span>';
+		}
+		if ( '' !== $safeguard ) {
+			$parts[] = '<span class="faz-audit-transfer-safeguard">'
+				. esc_html__( 'Safeguard:', 'faz-cookie-manager' ) . ' '
+				. wp_kses_post( $safeguard ) . '</span>';
+		}
+		return '<div class="faz-audit-transfer">' . implode( ' ', $parts ) . '</div>';
+	}
+
+	/**
 	 * Render the cookie table.
 	 *
 	 * @param array $atts Shortcode attributes.
@@ -371,7 +425,15 @@ class Cookie_Table_Shortcode {
 				</thead>
 				<tbody>
 					<?php foreach ( $cat_cookies as $cookie ) : ?>
-					<?php $cookie_obj = new Cookie( $cookie ); ?>
+					<?php
+					$cookie_obj = new Cookie( $cookie );
+					// Third-country transfer disclosure (see render_transfer_disclosure()).
+					// It belongs with the description; when the operator's column list
+					// leaves that column out it moves to the first column rather than
+					// vanishing with the cell it usually sits in.
+					$transfer_html = $this->render_transfer_disclosure( $cookie_obj, $lang, $default, $wp_lang );
+					$transfer_host = in_array( 'description', $columns, true ) ? 'description' : reset( $columns );
+					?>
 					<tr>
 						<?php foreach ( $columns as $col ) : ?>
 							<td data-label="<?php echo esc_attr( $allowed_columns[ $col ] ); ?>">
@@ -406,6 +468,9 @@ class Cookie_Table_Shortcode {
 								case 'category':
 									echo esc_html( isset( $cat_map[ $cookie->category ] ) ? $cat_map[ $cookie->category ] : '' );
 									break;
+							}
+							if ( '' !== $transfer_html && $col === $transfer_host ) {
+								echo $transfer_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- assembled from esc_html()/esc_html__()/wp_kses_post() parts in render_transfer_disclosure().
 							}
 							?>
 							</td>

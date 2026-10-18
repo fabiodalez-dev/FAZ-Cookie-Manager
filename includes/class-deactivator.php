@@ -58,10 +58,12 @@ class Deactivator {
 		wp_clear_scheduled_hook( 'faz_download_cookie_definitions' );
 		wp_clear_scheduled_hook( 'faz_daily_cleanup' );
 		wp_clear_scheduled_hook( 'faz_weekly_gvl_update' );
+		wp_clear_scheduled_hook( 'faz_gvl_bootstrap' );
 		wp_clear_scheduled_hook( 'faz_weekly_definitions_update' );
 		wp_clear_scheduled_hook( 'faz_async_cookie_scan' );
 		wp_clear_scheduled_hook( 'faz_async_httponly_cookie_check' );
 		wp_clear_scheduled_hook( 'faz_scheduled_scan' );
+		wp_clear_scheduled_hook( 'faz_consent_log_gmt_backfill' );
 	}
 
 }

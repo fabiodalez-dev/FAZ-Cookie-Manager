@@ -6,7 +6,9 @@
  * with core segment + mandatory DisclosedVendors segment (TCF v2.3).
  *
  * When GVL data is provided via _fazTcfConfig, encodes real vendor consent
- * and legitimate interest bitfields based on user category consent.
+ * (from the visitor's explicit vendor record) and legitimate interest
+ * bitfields (off until the visitor has chosen, then established unless the
+ * visitor exercised the Right to Object).
  */
 (function () {
 	"use strict";
@@ -29,6 +31,19 @@
 	/**
 	 * Push a value as `length` bits into the bits array (MSB first).
 	 */
+	function cookieName(name) {
+		return ((window._fazConfig || {})._cookieNames || {})[name] || name;
+	}
+	function readCookie(name) {
+		var prefix = cookieName(name) + '=';
+		var parts = document.cookie.split(';');
+		for (var i = 0; i < parts.length; i++) {
+			var part = parts[i].trim();
+			if (part.indexOf(prefix) === 0) return [part, part.substring(prefix.length)];
+		}
+		return null;
+	}
+
 	function pushBits(bits, value, length) {
 		if (length > 32) {
 			var highLen = length - 32;
@@ -103,8 +118,19 @@
 		return value;
 	}
 
+	var DECISECONDS_PER_DAY = 864000;
+
+	/**
+	 * The UTC midnight of the day containing `ms`, in deciseconds — the only
+	 * value the TC String format allows in Created and LastUpdated.
+	 */
+	function utcMidnightDeciseconds(ms) {
+		var d = new Date(ms);
+		return Math.round(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 100);
+	}
+
 	function readTcTimestamps() {
-		var match = document.cookie.match(/euconsent-v2=([^;]+)/);
+		var match = readCookie("euconsent-v2");
 		if (!match) return null;
 		var coreSegment = match[1].split(".")[0];
 		if (!coreSegment) return null;
@@ -118,7 +144,7 @@
 	}
 
 	function readConsentCookiePairs() {
-		var match = document.cookie.match(/fazcookie-consent=([^;]+)/);
+		var match = readCookie("fazcookie-consent");
 		if (!match) return null;
 		var value = match[1];
 		try {
@@ -142,12 +168,71 @@
 	function isConsentCookieStale(pairs) {
 		if (!pairs) return false;
 		var config = window._fazConfig || {};
+		// Defensive only. The server never activates the cached jurisdiction
+		// shell while IAB TCF is on (Frontend::get_geo_bootstrap_status() returns
+		// reason 'iab', pinned by test-geo-cache-bootstrap-php.php), and this
+		// file is enqueued only when TCF is on, so a page that loads the CMP has
+		// no pending geographic scope to wait for. The gate stays fail-closed for
+		// a `faz_store_data` filter that forces _geoBootstrap anyway; such a
+		// setup gets no re-announcement after resolution (no tcloaded, no
+		// euconsent-v2 rewrite) and is not supported.
+		if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
+		if (config._siteScopeBound && !isPmpNecessaryOnly(pairs) && isSiteBindingBroken(pairs, config)) return true;
 		// Coerce because wp_localize_script may stringify integers.
 		var serverRevisionRaw = config && config._consentRevision;
 		var serverRevision = parseInt(serverRevisionRaw, 10);
 		if (isNaN(serverRevision) || serverRevision < 1) serverRevision = 1;
 		var storedRevision = parseInt(pairs.rev, 10);
-		return serverRevision > 1 && (isNaN(storedRevision) || storedRevision < serverRevision);
+		return (serverRevision > 1 && (isNaN(storedRevision) || storedRevision < serverRevision)) || isConsentCookieOutOfScope(pairs, config);
+	}
+
+	// Share the banner/law decision with PHP, GCM and the main runtime.
+	function readScopedCookieValue(parsed, key, legacyKey, strict) {
+	    var primary = parsed[key] || "";
+	    if (primary || strict) return primary;
+	    var legacy = parsed[legacyKey] || "";
+	    if (!legacy || /^(yes|no)(:.*)?$/i.test(legacy)) return "";
+	    return legacy;
+	}
+
+	// Multisite site binding, twin of gcm.js and script.js: the fingerprint must
+	// be present and, when the record names the banner and law served here,
+	// equal the published one. Other records are verified by the server's HMAC.
+	function isSiteBindingBroken(parsed, config) {
+	    var storedFp = parsed["__scope.fp"] || "";
+	    if (!storedFp) return true;
+	    var sameScope = (parsed["__scope.banner"] || "") === (config._bannerSlug ? String(config._bannerSlug) : "") &&
+	        (parsed["__scope.law"] || "") === (config._activeLaw ? String(config._activeLaw) : "");
+	    return sameScope && storedFp !== (config._scopeFingerprint || "");
+	}
+
+	function isPmpNecessaryOnly(parsed) {
+	    return parsed.source === "pmp" && parsed.action === "auto" && parsed.consent === "no" && !Object.keys(parsed).some(function(key) { return key !== "necessary" && /^yes(?::|$)/.test(parsed[key]); });
+	}
+
+	function isConsentCookieOutOfScope(parsed, config) {
+	    if (!config) return false;
+	    if (isPmpNecessaryOnly(parsed)) return false;
+	    var strict = !!config._strictScopeFp;
+	    var currentSlug = config._bannerSlug ? String(config._bannerSlug) : "";
+	    var currentLaw = config._activeLaw ? String(config._activeLaw) : "";
+	    var currentFp = typeof config._scopeFingerprint === "string" ? config._scopeFingerprint : "";
+	    var storedFp = parsed["__scope.fp"] || "";
+	    var storedSlug = readScopedCookieValue(parsed, "__scope.banner", "banner", strict);
+	    var storedLaw = readScopedCookieValue(parsed, "__scope.law", "law", strict);
+	    if (strict && !storedFp) return true;
+	    // Pre-1.14 cookie, no scope recorded: the existing consent stands.
+	    if (!storedSlug && !storedLaw && !storedFp) return false;
+	    // Without geographic routing only a change of law re-asks: a new banner
+	    // slug or fingerprint (A/B test ended, salts rotated) does not.
+	    if (!(config._geoRouting || config._geoBootstrap)) {
+	        return !!(currentLaw && storedLaw && storedLaw !== currentLaw);
+	    }
+	    if (storedFp && currentFp && storedFp !== currentFp) return true;
+	    return !!(
+	        (currentSlug && storedSlug && storedSlug !== currentSlug) ||
+	        (currentLaw && storedLaw && storedLaw !== currentLaw)
+	    );
 	}
 
 	/**
@@ -176,23 +261,67 @@
 	}
 
 	/**
-	 * Read vendor-level consent from cookie (if present).
-	 * Format: fazVendorConsent=1:yes,2:no,5:yes
+	 * Decode a vendor bitfield written by script.js (_fazEncodeVendorBits):
+	 * bit (id - 1), most significant first, six bits per base64url character —
+	 * the TC string's own alphabet and order. null when the text is not one.
+	 */
+	function decodeVendorBits(text) {
+		if (typeof text !== "string") return null;
+		var ids = [];
+		for (var i = 0; i < text.length; i++) {
+			var value = BASE64URL.indexOf(text.charAt(i));
+			if (value === -1) return null;
+			for (var bit = 0; bit < 6; bit++) {
+				if (value & (32 >> bit)) ids.push(i * 6 + bit + 1);
+			}
+		}
+		return ids;
+	}
+
+	/**
+	 * Read vendor-level consent from cookie (if present): id → consented, for
+	 * every vendor the record names. Two formats (script.js
+	 * _fazParseVendorRecord is the twin):
+	 *   compact  fazVendorConsent=d:<bitfield>,c:<bitfield|*>
+	 *            d = vendors disclosed when the visitor chose, c = consented,
+	 *            "*" = every disclosed vendor (Accept All);
+	 *   legacy   fazVendorConsent=1:yes,2:no,5:yes (one pair per disclosed vendor).
+	 * The legacy record was not written at all past 3800 bytes, i.e. Accept All
+	 * with a few hundred selected vendors left none and every vendor read as
+	 * not consented. A damaged compact record reads as no record (fail closed).
 	 */
 	function readVendorConsent() {
 		var consentPairs = readConsentCookiePairs();
 		if (!consentPairs || isConsentCookieStale(consentPairs)) return {};
 
 		var vendorConsent = {};
-		var match = document.cookie.match(/fazVendorConsent=([^;]+)/);
+		var match = readCookie("fazVendorConsent");
 		if (!match) return vendorConsent;
 
+		var compactDisclosed = null;
+		var compactConsent = null;
+		var legacy = {};
 		var pairs = match[1].split(",");
 		for (var i = 0; i < pairs.length; i++) {
-			var kv = pairs[i].split(":");
-			if (kv.length === 2) {
-				vendorConsent[parseInt(kv[0], 10)] = kv[1].trim() === "yes";
-			}
+			var idx = pairs[i].indexOf(":");
+			if (idx === -1) continue;
+			var key = pairs[i].substring(0, idx).trim();
+			var value = pairs[i].substring(idx + 1).trim();
+			if (key === "d") { compactDisclosed = value; continue; }
+			if (key === "c") { compactConsent = value; continue; }
+			var id = parseInt(key, 10);
+			if (id > 0) legacy[id] = value === "yes";
+		}
+		if (compactDisclosed === null) return legacy;
+
+		var disclosedIds = decodeVendorBits(compactDisclosed);
+		if (!disclosedIds) return vendorConsent;
+		var all = compactConsent === "*";
+		var granted = {};
+		var consentIds = all ? [] : (decodeVendorBits(compactConsent || "") || []);
+		for (var c = 0; c < consentIds.length; c++) granted[consentIds[c]] = true;
+		for (var d = 0; d < disclosedIds.length; d++) {
+			vendorConsent[disclosedIds[d]] = all || granted[disclosedIds[d]] === true;
 		}
 		return vendorConsent;
 	}
@@ -250,77 +379,141 @@
 	}
 
 	/**
-	 * Build vendor consent map.
-	 * A vendor gets consent=true if:
-	 *  - Explicit vendor consent cookie exists → use it
-	 *  - Otherwise: user consented to ALL purposes that vendor declares under consent basis
+	 * Read the Right-to-Object record written by script.js when the visitor
+	 * saves the IAB section of the preference center.
+	 *
+	 * Format: fazVendorLI=p2:no,p7:yes,v:<bitfield>
+	 *   p<purposeId>  → purpose-level switch
+	 *   v             → bitfield of the vendors the visitor objected to (only
+	 *                   objected vendors are recorded, so an absent vendor
+	 *                   means "not objected")
+	 *   <vendorId>    → the same, one `<vendorId>:no` pair per objected vendor,
+	 *                   as records written before 1.34.2 carry it
+	 *   "no" = the visitor objected, "yes" = legitimate interest stays established.
+	 *
+	 * Returns null when there is no record at all — the visitor never saw the
+	 * LI controls, or the consent cookie is gone or stale — so callers can tell
+	 * "no record" from "nothing objected".
 	 */
-	function buildVendorConsent(purposeConsent) {
+	function readLIObjections() {
+		var consentPairs = readConsentCookiePairs();
+		if (!consentPairs || isConsentCookieStale(consentPairs)) return null;
+
+		var match = readCookie("fazVendorLI");
+		if (!match) return null;
+
+		var record = { purposes: {}, vendors: {} };
+		var pairs = match[1].split(",");
+		for (var i = 0; i < pairs.length; i++) {
+			var kv = pairs[i].split(":");
+			if (kv.length !== 2) continue;
+			var key = kv[0].trim();
+			var established = kv[1].trim() === "yes";
+			if (key === "v") {
+				var objected = decodeVendorBits(kv[1].trim()) || [];
+				for (var o = 0; o < objected.length; o++) record.vendors[objected[o]] = false;
+			} else if (key.charAt(0) === "p") {
+				var pid = parseInt(key.substring(1), 10);
+				if (!isNaN(pid)) record.purposes[pid] = established;
+			} else {
+				var vid = parseInt(key, 10);
+				if (!isNaN(vid)) record.vendors[vid] = established;
+			}
+		}
+		return record;
+	}
+
+	/**
+	 * Build vendor consent map.
+	 *
+	 * A vendor is consented only when the visitor's explicit record says so.
+	 * The record (fazVendorConsent) is written by script.js with one entry per
+	 * vendor that was DISCLOSED in the preference center at the moment of the
+	 * choice. A vendor absent from it was never shown to this visitor — the
+	 * operator added it later, the first GVL download auto-selected it, or TCF
+	 * was switched on after the visitor had already answered the banner — and
+	 * consent that is informed about recipients (GDPR Art. 4(11), EDPB 05/2020
+	 * §64) cannot be minted for it from an earlier category choice. This used
+	 * to derive "consented if every consent purpose is consented" for exactly
+	 * those vendors, and rewrite euconsent-v2 with the result on the next
+	 * pageview while the preference center showed the same vendor unticked.
+	 *
+	 * A vendor id the GVL in use does not carry is never consented, whatever an
+	 * older record says: a de-registered vendor has no Framework basis left.
+	 */
+	function buildVendorConsent() {
 		var vendorConsent = {};
 		var explicit = readVendorConsent();
 
 		for (var i = 0; i < SELECTED_VENDORS.length; i++) {
 			var vid = SELECTED_VENDORS[i];
-			var v = VENDORS[vid];
-
-			// Check explicit vendor-level consent first.
-			if (typeof explicit[vid] !== "undefined") {
-				vendorConsent[vid] = explicit[vid];
-				continue;
-			}
-
-			// Derive from purpose consent: vendor gets consent if ALL its
-			// consent-basis purposes are consented.
-			if (!v || !v.purposes || v.purposes.length === 0) {
+			if (!VENDORS[vid]) {
 				vendorConsent[vid] = false;
 				continue;
 			}
-			var allConsented = true;
-			for (var j = 0; j < v.purposes.length; j++) {
-				if (!purposeConsent[String(v.purposes[j])]) {
-					allConsented = false;
-					break;
-				}
-			}
-			vendorConsent[vid] = allConsented;
+			vendorConsent[vid] = explicit[vid] === true;
 		}
 		return vendorConsent;
 	}
 
 	/**
-	 * Build PurposesLegitimateInterest bitfield.
+	 * Build the PurposesLegitimateInterest and VendorLegitimateInterest maps.
 	 *
-	 * Per IAB TCF, legitimate interest is established BY DEFAULT and is
-	 * extinguished only when the user exercises the Right to Object (RTO) — a
-	 * separate signal from consent. Declining *consent* for a category is NOT an
-	 * RTO exercise, so it must not clear a vendor's LI bit. Until a dedicated RTO
-	 * toggle exists in the banner, set the LI bit for every purpose a selected
-	 * vendor declares under legitimate interest. (Over-reporting LI is the
-	 * less-harmful default under TCF; the previous code gated LI on
-	 * purposeConsent, which UNDER-reported LI — dropping valid LI signals
-	 * whenever the user merely declined consent — and mis-encoded the TC string.)
+	 * Per IAB TCF, legitimate interest is established BY DEFAULT and ends when
+	 * the visitor exercises the Right to Object (TCF Policies, Appendix B;
+	 * GDPR Art. 21) — a signal distinct from consent. The preference center
+	 * exposes that right per purpose and per vendor, and records it in the
+	 * fazVendorLI cookie (readLIObjections). The rules, in order:
+	 *
+	 *  - A purpose is objected when the record says so, or when the visitor
+	 *    pressed Reject All without an LI record (a choice recorded before the
+	 *    LI controls existed): Reject All is an objection to everything, which
+	 *    is the EDPB/CNIL reading and the only safe one for a legacy record.
+	 *  - A vendor keeps LI only when the visitor did not object to it, did not
+	 *    switch it off, and it was actually disclosed (present in the vendor
+	 *    record once the visitor acted). A vendor switched OFF loses LI as
+	 *    well — nobody who turned a vendor off meant "but keep processing my
+	 *    data under legitimate interest".
+	 *  - Vendor LI needs at least one of its LI purposes still established;
+	 *    purpose LI is established only if at least one vendor with LI still
+	 *    declares it. The two bitfields therefore agree.
+	 *
+	 *  - Before the visitor has made a choice (no decided record, or an
+	 *    undecided one written by a privacy signal) nothing is signalled:
+	 *    every LI bit is off. That is what the preference centre shows —
+	 *    _fazLIDefaultEstablished() in script.js keeps every LI switch off
+	 *    until a choice — and the API must not answer a vendor with an
+	 *    established legitimate interest the visitor is being shown as unset.
+	 *    The string is not persisted before a choice either.
 	 */
-	function buildPurposeLI() {
-		var li = {};
-		for (var p = 1; p <= 24; p++) li[String(p)] = false;
+	function buildLegitimateInterest(categoryConsent) {
+		var record   = readLIObjections();
+		var explicit = readVendorConsent();
+		var acted    = !!(categoryConsent && categoryConsent._acted);
 
-		for (var i = 0; i < SELECTED_VENDORS.length; i++) {
-			var v = VENDORS[SELECTED_VENDORS[i]];
-			if (!v || !v.legIntPurposes) continue;
-			for (var j = 0; j < v.legIntPurposes.length; j++) {
-				li[String(v.legIntPurposes[j])] = true;
+		var rejectedAll = false;
+		if (acted && !record) {
+			rejectedAll = true;
+			for (var cat in categoryConsent) {
+				if (!categoryConsent.hasOwnProperty(cat)) continue;
+				if (cat === "necessary" || cat === "_acted") continue;
+				if (categoryConsent[cat]) { rejectedAll = false; break; }
 			}
 		}
-		return li;
-	}
 
-	/**
-	 * Build vendor legitimate interest map.
-	 * Per IAB TCF spec: vendor LI = true only if at least one of the vendor's
-	 * LI purposes still has LI established (user did not object).
-	 */
-	function buildVendorLI(purposeLI) {
+		function purposeObjected(pid) {
+			if (rejectedAll) return true;
+			return !!(record && record.purposes[pid] === false);
+		}
+
+		var purposeLI = {};
+		for (var p = 1; p <= 24; p++) purposeLI[String(p)] = false;
 		var vendorLI = {};
+		if (!acted) {
+			for (var k = 0; k < SELECTED_VENDORS.length; k++) vendorLI[SELECTED_VENDORS[k]] = false;
+			return { purposeLI: purposeLI, vendorLI: vendorLI };
+		}
+
 		for (var i = 0; i < SELECTED_VENDORS.length; i++) {
 			var vid = SELECTED_VENDORS[i];
 			var v = VENDORS[vid];
@@ -328,30 +521,36 @@
 				vendorLI[vid] = false;
 				continue;
 			}
-			var hasAllowedLI = false;
-			for (var j = 0; j < v.legIntPurposes.length; j++) {
-				if (purposeLI[String(v.legIntPurposes[j])]) {
-					hasAllowedLI = true;
-					break;
+			var eligible = !rejectedAll;
+			if (record && record.vendors[vid] === false) eligible = false;
+			if (acted && explicit[vid] !== true) eligible = false;
+
+			var hasLI = false;
+			if (eligible) {
+				for (var j = 0; j < v.legIntPurposes.length; j++) {
+					var pid = v.legIntPurposes[j];
+					if (purposeObjected(pid)) continue;
+					hasLI = true;
+					purposeLI[String(pid)] = true;
 				}
 			}
-			vendorLI[vid] = hasAllowedLI;
+			vendorLI[vid] = hasLI;
 		}
-		return vendorLI;
+		return { purposeLI: purposeLI, vendorLI: vendorLI };
 	}
 
 	/**
 	 * Build all derived consent artifacts once so callers can reuse them.
+	 *
+	 * `categoryConsent` is the readConsent() map: LI needs to know whether the
+	 * visitor has acted (and what they granted) to read a legacy Reject All.
 	 */
-	function buildConsentArtifacts(purposeConsent) {
-		var vendorConsent = buildVendorConsent(purposeConsent);
-		// LI no longer depends on per-purpose consent (LI is established by
-		// default and only cleared by an explicit Right-to-Object signal).
-		var purposeLI     = buildPurposeLI();
+	function buildConsentArtifacts(purposeConsent, categoryConsent) {
+		var li = buildLegitimateInterest(categoryConsent || {});
 		return {
-			vendorConsent: vendorConsent,
-			purposeLI:     purposeLI,
-			vendorLI:      buildVendorLI(purposeLI)
+			vendorConsent: buildVendorConsent(),
+			purposeLI:     li.purposeLI,
+			vendorLI:      li.vendorLI
 		};
 	}
 
@@ -391,21 +590,35 @@
 	 */
 	function encodeTcString(purposeConsent, sfOptins, refreshLastUpdated, derived) {
 		var bits = [];
-		var artifacts      = derived || buildConsentArtifacts(purposeConsent);
+		var artifacts      = derived || buildConsentArtifacts(purposeConsent, readConsent());
 		var vendorConsent  = artifacts.vendorConsent;
 		var purposeLI      = artifacts.purposeLI;
 		var vendorLI       = artifacts.vendorLI;
 
-		// Deciseconds since Unix epoch (Jan 1, 1970) per IAB TCF spec.
-		var now = Math.round(Date.now() / 100);
+		// Created and LastUpdated: deciseconds since the Unix epoch, and per the
+		// IAB TC String format (Core String, "What happened to Created and
+		// LastUpdated?") the two fields hold the SAME value, the UTC midnight
+		// of the day the string was last updated. A sub-day timestamp is
+		// fingerprinting entropy and a consent record names a day, not an
+		// instant. An earlier version kept Created from the previous cookie
+		// and wrote both at decisecond precision; every string failed the
+		// precision rule and every re-consent failed the equality rule.
 		var existingTimestamps = readTcTimestamps();
-		var created = existingTimestamps && existingTimestamps.created ? existingTimestamps.created : now;
-		var lastUpdated = existingTimestamps && existingTimestamps.lastUpdated ? existingTimestamps.lastUpdated : created;
-		if (lastUpdated < created) {
-			lastUpdated = created;
-		}
-		if (refreshLastUpdated) {
-			lastUpdated = now < created ? created : now;
+		var created;
+		var lastUpdated;
+		if (refreshLastUpdated || !existingTimestamps) {
+			// A decision (or no prior string at all): this is the update.
+			created = lastUpdated = utcMidnightDeciseconds(Date.now());
+		} else {
+			// A re-read is not an update, so the day is kept. A string written
+			// by an earlier release with decisecond timestamps is brought to the
+			// midnight of the day it was last updated, without claiming a new one.
+			var kept = existingTimestamps.lastUpdated >= existingTimestamps.created
+				? existingTimestamps.lastUpdated
+				: existingTimestamps.created;
+			created = lastUpdated = kept > 0
+				? kept - (kept % DECISECONDS_PER_DAY)
+				: utcMidnightDeciseconds(Date.now());
 		}
 
 		pushBits(bits, TCF_VERSION, 6);
@@ -439,8 +652,9 @@
 		// PurposeOneTreatment
 		pushBits(bits, PURPOSE_ONE_TREATMENT ? 1 : 0, 1);
 
-		// PublisherCC
-		var publisherCC = cfg.publisherCC || "IT";
+		// PublisherCC — "AA" is the spec's value for an unknown publisher
+		// country; the server resolves the real one (resolve_tcf_publisher_cc).
+		var publisherCC = cfg.publisherCC || "AA";
 		pushBits(bits, charTo6(publisherCC.charAt(0)), 6);
 		pushBits(bits, charTo6(publisherCC.charAt(1)), 6);
 
@@ -496,12 +710,12 @@
 			domain = ";domain=" + window._fazConfig._rootDomain;
 		}
 		var secure = location.protocol === "https:" ? ";Secure" : "";
-		document.cookie = "euconsent-v2=" + tcString + ";expires=" + date.toUTCString() + ";path=/" + domain + ";SameSite=Lax" + secure;
+		document.cookie = cookieName("euconsent-v2") + "=" + tcString + ";expires=" + date.toUTCString() + ";path=/" + domain + ";SameSite=Lax" + secure;
 	}
 
 	function clearEuconsentCookie() {
 		var secure = location.protocol === "https:" ? ";Secure" : "";
-		var expired = "euconsent-v2=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+		var expired = cookieName("euconsent-v2") + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
 		document.cookie = expired + ";SameSite=Lax" + secure;
 		if (window._fazConfig && window._fazConfig._rootDomain) {
 			document.cookie = expired + ";domain=" + window._fazConfig._rootDomain + ";SameSite=Lax" + secure;
@@ -528,7 +742,7 @@
 	 * Build the TCData object returned by getTCData / addEventListener.
 	 */
 	function buildTCData(purposeConsent, sfOptins, tcString, listenerIdVal, derived) {
-		var artifacts     = derived || buildConsentArtifacts(purposeConsent);
+		var artifacts     = derived || buildConsentArtifacts(purposeConsent, readConsent());
 		var vendorConsent = artifacts.vendorConsent;
 		var purposeLI     = artifacts.purposeLI;
 		var vendorLI      = artifacts.vendorLI;
@@ -562,7 +776,7 @@
 			isServiceSpecific:   true,
 			useNonStandardTexts: false,
 			purposeOneTreatment: PURPOSE_ONE_TREATMENT,
-			publisherCC:         cfg.publisherCC || "IT",
+			publisherCC:         cfg.publisherCC || "AA",
 			outOfBand: {
 				allowedVendors:   {},
 				disclosedVendors: disclosedObj
@@ -593,7 +807,7 @@
 		var consent  = readConsent();
 		var purposes = buildPurposeConsent(consent);
 		var sf       = buildSpecialFeatureOptins(consent);
-		var derived  = buildConsentArtifacts(purposes);
+		var derived  = buildConsentArtifacts(purposes, consent);
 		var vendorConsent = derived.vendorConsent;
 		var purposeLI = derived.purposeLI;
 		var tcStr    = encodeTcString(purposes, sf, eventStatus === "useractioncomplete", derived);
@@ -644,7 +858,7 @@
 				consent  = readConsent();
 				purposes = buildPurposeConsent(consent);
 				var sfGet = buildSpecialFeatureOptins(consent);
-				var derivedGet = buildConsentArtifacts(purposes);
+				var derivedGet = buildConsentArtifacts(purposes, consent);
 				tcStr    = encodeTcString(purposes, sfGet, false, derivedGet);
 				data     = buildTCData(purposes, sfGet, tcStr, undefined, derivedGet);
 				data.eventStatus = "tcloaded";
@@ -658,7 +872,7 @@
 				consent  = readConsent();
 				purposes = buildPurposeConsent(consent);
 				var sfAdd = buildSpecialFeatureOptins(consent);
-				var derivedAdd = buildConsentArtifacts(purposes);
+				var derivedAdd = buildConsentArtifacts(purposes, consent);
 				tcStr    = encodeTcString(purposes, sfAdd, false, derivedAdd);
 				data     = buildTCData(purposes, sfAdd, tcStr, listenerId, derivedAdd);
 				// Registration reports `tcloaded`, not the current UI state.
@@ -716,11 +930,18 @@
 	cmpLoaded = true;
 	cmpStatus = "loaded";
 
-	// Process the command queue
+	// Process the command queue.
+	//
+	// The inline stub in class-frontend.php pushes its `arguments` object, as
+	// the IAB reference stub does. That is array-like but NOT an Array, so an
+	// Array.isArray() guard here dropped every command a vendor queued before
+	// the CMP loaded: the callback never ran, the listener was never stored,
+	// and the visitor's decision never reached that vendor. Accept any
+	// array-like entry and copy it into a real array for the call.
 	for (var q = 0; q < pendingQueue.length; q++) {
-		if (Array.isArray(pendingQueue[q])) {
-			tcfapi.apply(null, pendingQueue[q]);
-		}
+		var queued = pendingQueue[q];
+		if (!queued || typeof queued !== "object" || typeof queued.length !== "number") continue;
+		tcfapi.apply(null, Array.prototype.slice.call(queued));
 	}
 
 	// Create the __tcfapiLocator iframe (required by TCF spec)
@@ -814,7 +1035,7 @@
 		var existingConsent = readConsent();
 		var purposes = buildPurposeConsent(existingConsent);
 		var sfInit   = buildSpecialFeatureOptins(existingConsent);
-		var derivedInit = buildConsentArtifacts(purposes);
+		var derivedInit = buildConsentArtifacts(purposes, existingConsent);
 		var purposeLI = derivedInit.purposeLI;
 		var vendorConsent = derivedInit.vendorConsent;
 		if (shouldPersistTcCookie(purposes, vendorConsent, purposeLI, sfInit)) {

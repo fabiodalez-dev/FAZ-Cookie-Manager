@@ -110,6 +110,9 @@ class Gvl {
 			'timestamp'    => time(),
 		), false );
 
+		// The selection must follow the list it was made against.
+		$this->prune_selected_vendors();
+
 		// Also save raw JSON to file for frontend access.
 		if ( ! $this->save_to_file( 'vendor-list.json', $body ) ) {
 			return array(
@@ -201,41 +204,110 @@ class Gvl {
 	}
 
 	/**
+	 * Whether a GVL vendor entry is deleted.
+	 *
+	 * The IAB never removes a vendor from vendor-list.json; it marks it with
+	 * `deletedDate` ("If present, vendor is considered deleted after this
+	 * date/time and MUST NOT be established to users" — TC String and GVL
+	 * formats, v2). About one vendor in six in the live v3 list carries one.
+	 * Every accessor below drops such entries, so the admin picker, the
+	 * first-download auto-select, the preference center and the TC string all
+	 * see the same vendor set. A `deletedDate` that cannot be parsed counts as
+	 * deleted: the field only ever appears on a vendor the IAB has removed.
+	 *
+	 * @param array $vendor A vendor entry from the GVL.
+	 * @return bool
+	 */
+	public static function is_vendor_deleted( $vendor ) {
+		if ( ! is_array( $vendor ) || ! array_key_exists( 'deletedDate', $vendor ) ) {
+			return false;
+		}
+		// The GVL spec only writes the field for a deleted vendor; an explicit
+		// null or an empty string carries no date and is not a deletion. A
+		// present value that does not parse still fails closed below.
+		if ( null === $vendor['deletedDate'] || '' === $vendor['deletedDate'] ) {
+			return false;
+		}
+		$deleted_at = strtotime( (string) $vendor['deletedDate'] );
+		return false === $deleted_at || $deleted_at <= time();
+	}
+
+	/**
 	 * Get a single vendor by ID.
 	 *
 	 * @param int $id Vendor ID.
-	 * @return array|null
+	 * @return array|null Null when unknown or deleted from the GVL.
 	 */
 	public function get_vendor( $id ) {
 		$data = $this->get_data();
 		if ( ! $data || ! isset( $data['vendors'][ $id ] ) ) {
 			return null;
 		}
+		if ( self::is_vendor_deleted( $data['vendors'][ $id ] ) ) {
+			return null;
+		}
 		return $data['vendors'][ $id ];
 	}
 
 	/**
-	 * Get all vendors, or a subset by IDs.
+	 * Get all live vendors, or a subset by IDs.
+	 *
+	 * Vendors carrying a past `deletedDate` are excluded in both forms, so a
+	 * selected id that the IAB has since deleted silently disappears from the
+	 * result (see is_vendor_deleted()).
 	 *
 	 * @param array|null $ids Vendor IDs to filter, or null for all.
 	 * @return array
 	 */
 	public function get_vendors( $ids = null ) {
 		$data = $this->get_data();
-		if ( ! $data || ! isset( $data['vendors'] ) ) {
+		if ( ! $data || ! isset( $data['vendors'] ) || ! is_array( $data['vendors'] ) ) {
 			return array();
 		}
 		if ( null === $ids ) {
-			return $data['vendors'];
+			$all = array();
+			foreach ( $data['vendors'] as $id => $vendor ) {
+				if ( ! self::is_vendor_deleted( $vendor ) ) {
+					$all[ $id ] = $vendor;
+				}
+			}
+			return $all;
 		}
 		$result = array();
 		foreach ( $ids as $id ) {
 			$id = absint( $id );
-			if ( isset( $data['vendors'][ $id ] ) ) {
+			if ( isset( $data['vendors'][ $id ] ) && ! self::is_vendor_deleted( $data['vendors'][ $id ] ) ) {
 				$result[ $id ] = $data['vendors'][ $id ];
 			}
 		}
 		return $result;
+	}
+
+	/**
+	 * Drop vendors the refreshed GVL no longer carries, or marks deleted, from
+	 * the operator's selection.
+	 *
+	 * Runs after every download (manual button, bootstrap on enabling TCF,
+	 * weekly cron). Without it a vendor selected months ago and since deleted
+	 * by the IAB stays selected forever: listed in the preference center,
+	 * disclosed in the TC string and granted consent and legitimate interest
+	 * on every pageview. An install that never selected anything keeps its
+	 * "never selected" state so the first-download auto-select still runs.
+	 *
+	 * @return void
+	 */
+	private function prune_selected_vendors() {
+		$selected = get_option( 'faz_gvl_selected_vendors', null );
+		if ( ! is_array( $selected ) ) {
+			return;
+		}
+		$live = array_map( 'absint', array_keys( $this->get_vendors( $selected ) ) );
+		sort( $live );
+		$current = array_map( 'absint', $selected );
+		sort( $current );
+		if ( $live !== $current ) {
+			update_option( 'faz_gvl_selected_vendors', $live, false );
+		}
 	}
 
 	/**
@@ -416,9 +488,10 @@ class Gvl {
 		// Return an empty array rather than the unvalidated `$matched` set:
 		// the documented response shape (vendor_ids + gvl_available=false)
 		// must never carry stale/unvalidated IDs to its consumers.
-		$gvl_data = $this->get_data();
-		if ( $gvl_data && isset( $gvl_data['vendors'] ) && is_array( $gvl_data['vendors'] ) ) {
-			$live_ids = array_map( 'intval', array_keys( $gvl_data['vendors'] ) );
+		// get_vendors() is the filtered accessor: a vendor the IAB marked with
+		// `deletedDate` is still present in the raw JSON but is not live.
+		if ( $this->has_data() ) {
+			$live_ids = array_map( 'intval', array_keys( $this->get_vendors() ) );
 			$matched  = array_intersect_key( $matched, array_flip( $live_ids ) );
 		} else {
 			return array( 'vendor_ids' => array(), 'scan_available' => true );
@@ -590,7 +663,9 @@ class Gvl {
 		}
 
 		$gvl    = self::get_instance();
-		$result = $gvl->download();
+		// Read before the download overwrites it: see the purge below.
+		$stored_version = $gvl->get_version();
+		$result         = $gvl->download();
 		if ( ! $result['success'] ) {
 			error_log( 'FAZ GVL cron: download failed - ' . $result['message'] ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 		}
@@ -602,6 +677,19 @@ class Gvl {
 			if ( ! $purposes_result['success'] ) {
 				error_log( 'FAZ GVL cron: purposes download failed - ' . $purposes_result['message'] ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			}
+		}
+
+		// gvlVersion, purposes and vendor names are embedded in every page, so
+		// the refreshed list reaches visitors only once the page caches are
+		// purged (the cache module is loaded on cron for this). A non-zero
+		// version means the list was stored, even when the copy on disk could
+		// not be written afterwards — but download() returns the version it
+		// fetched whether or not it is the one already stored, and the IAB does
+		// not publish a new list between every two weekly ticks. Purging on
+		// "non-zero" emptied every page cache on the site once a week for an
+		// identical list, so only a version change purges.
+		if ( ! empty( $result['version'] ) && absint( $result['version'] ) !== $stored_version ) {
+			do_action( 'faz_purge_page_cache' );
 		}
 	}
 }

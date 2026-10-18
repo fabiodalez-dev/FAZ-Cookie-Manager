@@ -245,7 +245,9 @@ class Banner_Rest {
 		$orig_banner_lang = $banner->get_language();
 		$banner->set_language( $lang );
 
-		// Build the banner-scoped, language-specific template.
+		// Build the banner-scoped, language-specific template, with the
+		// transfer wording of the ruleset applied to this visitor.
+		Shortcodes::set_applied_ruleset( $runtime_ruleset );
 		$template = new Banner_Template( $banner, $lang );
 		$html     = $template->get_html();
 		$styles   = $template->get_styles();
@@ -295,9 +297,13 @@ class Banner_Rest {
 			'activeLaw'        => $active_law,
 			'bannerConfig'     => Frontend::prepare_banner_config( $banner ),
 			'tags'             => Frontend::prepare_banner_tags( $banner ),
-			'scopeFingerprint' => substr( wp_hash( $banner->get_slug() . '|' . $active_law, 'auth' ), 0, 32 ),
+			'siteScopeBound'   => faz_consent_site_bound(),
+			'scopeFingerprint' => faz_scope_fingerprint( $banner->get_slug(), $active_law ),
 			'consentExpiry'    => Frontend::normalize_consent_expiry( $active_law, $configured_expiry ),
 			'runtimeGeo'       => ( null !== $runtime_ruleset ),
+			// The WP Consent API regime for the banner actually returned; the
+			// client replaces the shell's `_wpConsentType` with it.
+			'wpConsentType'    => Frontend::resolve_wp_consent_type( $runtime_ruleset, $cache_compatibility, $active_law ),
 			'html'             => $html,
 			'styles'           => Frontend::prepare_banner_styles( $styles ),
 			'shortCodes'       => $short_codes,
@@ -310,11 +316,11 @@ class Banner_Rest {
 		// banner) by the visitor's jurisdiction, so it must never be cached
 		// across visitors — force no-store while the flag is on.
 		if ( $this->is_country_dependent_output( $controller ) ) {
-			$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
-			$response->header( 'Pragma', 'no-cache' );
-			$response->header( 'X-LiteSpeed-Cache-Control', 'no-cache' );
-			$response->header( 'CDN-Cache-Control', 'no-store' );
-			$response->header( 'Cloudflare-CDN-Cache-Control', 'no-store' );
+			// The shared veto set (private, no-store, the CDN-targeted and
+			// Surrogate-Control spellings) — see Cache_Compatibility.
+			foreach ( \FazCookie\Includes\Cache_Compatibility::NO_STORE_HEADERS as $name => $value ) {
+				$response->header( $name, $value );
+			}
 			$response->header( 'X-FAZ-Jurisdiction', 'live' );
 			if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
 				$response->header( 'Vary', 'CF-IPCountry' );
@@ -595,6 +601,7 @@ class Banner_Rest {
 		$age_min  = isset( $settings['age_gate']['min_age'] ) ? absint( $settings['age_gate']['min_age'] ) : 16;
 		return array(
 			'privacy_region_label'                => __( 'We value your privacy', 'faz-cookie-manager' ),
+			'consent_id'                          => __( 'Consent ID', 'faz-cookie-manager' ),
 			'consent_saved'                       => __( 'Your cookie preferences have been saved.', 'faz-cookie-manager' ),
 			'optout_preferences_label'            => __( 'Opt-out Preferences', 'faz-cookie-manager' ),
 			'customise_consent_preferences_label' => __( 'Customise Consent Preferences', 'faz-cookie-manager' ),
@@ -611,6 +618,15 @@ class Banner_Rest {
 			'age_confirm_error'                   => __( 'Please confirm you meet the minimum age to accept optional cookies.', 'faz-cookie-manager' ),
 			// translators: %d is a number of seconds.
 			'optout_autoclose_countdown'          => sprintf( __( 'Banner closes automatically in %d s...', 'faz-cookie-manager' ), 0 ),
+			// IAB TCF section of the preference centre, including the Right-to-Object
+			// controls: a legal notice to the visitor, so translated like the rest.
+			'iab_consent'                         => __( 'Consent', 'faz-cookie-manager' ),
+			'iab_cookie_retention'                => __( 'Cookie retention', 'faz-cookie-manager' ),
+			'iab_features'                        => __( 'Features', 'faz-cookie-manager' ),
+			'iab_legitimate_interest'             => __( 'Legitimate Interest', 'faz-cookie-manager' ),
+			'iab_legitimate_interest_note'        => __( 'Some vendors process your data on the basis of legitimate interest rather than consent. You have the right to object: switch a purpose off to object to that processing.', 'faz-cookie-manager' ),
+			'iab_vendor_consent'                  => __( 'IAB Vendor Consent', 'faz-cookie-manager' ),
+			'iab_vendor_legitimate_interest_label'=> __( 'Allow processing based on legitimate interest', 'faz-cookie-manager' ),
 		);
 	}
 

@@ -57,6 +57,14 @@ class Admin {
 	public static $existing_modules;
 
 	/**
+	 * Whether the cache module was already instantiated by the cron/WP-CLI
+	 * path, so load_modules() does not register its purge listeners twice.
+	 *
+	 * @var bool
+	 */
+	private static $cache_module_loaded = false;
+
+	/**
 	 * Submenu pages config.
 	 *
 	 * @var array
@@ -107,6 +115,7 @@ class Admin {
 		add_action( 'admin_notices', array( $this, 'scheduled_scan_notice' ) );
 		add_action( 'admin_notices', array( $this, 'smash_balloon_notice' ) );
 		add_action( 'admin_notices', array( $this, 'unmatched_vendors_notice' ) );
+		add_action( 'admin_notices', array( $this, 'tcf_gvl_missing_notice' ) );
 		add_action( 'admin_notices', array( $this, 'redundant_geo_routing_notice' ) );
 		add_action( 'admin_notices', array( $this, 'geo_enforcement_migration_notice' ) );
 		add_action( 'admin_notices', array( $this, 'functional_optout_migration_notice' ) );
@@ -161,6 +170,12 @@ class Admin {
 	 * @return void
 	 */
 	private function maybe_load_modules() {
+		// Proxy Cache Purge reads the actions that trigger a purge on `init`,
+		// before the cache module is loaded on REST requests, so the FAZ purge
+		// action is added to its lists here, on every request.
+		if ( class_exists( '\\FazCookie\\Admin\\Modules\\Cache\\Services\\Proxy_Cache_Purge' ) ) {
+			\FazCookie\Admin\Modules\Cache\Services\Proxy_Cache_Purge::register_purge_events();
+		}
 		// REST API requests need routes registered — always load.
 		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
 			$this->load_modules();
@@ -177,10 +192,41 @@ class Admin {
 			$this->load_modules();
 			return;
 		}
+		// WP-Cron and WP-CLI write the same data an admin save does — the
+		// scheduled scan creates cookies (faz_after_create_cookie, faz_clear_cache),
+		// the weekly GVL refresh replaces the vendor list the page embeds, and
+		// WP-CLI commands run the same controllers — but neither context loads
+		// the admin modules, so no cache adapter was listening and every page
+		// cache kept the old banner until it expired. Load the cache module
+		// alone there: it only registers purge listeners on faz_* hooks, no
+		// REST routes and no admin UI.
+		if ( wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			$this->load_cache_module();
+		}
 		// Deferred load: hook into rest_api_init so routes are still registered
 		// if WordPress processes a REST request that was not detected above
 		// (e.g. internal REST calls without REST_REQUEST defined).
 		add_action( 'rest_api_init', array( $this, 'load_modules' ), 1 );
+	}
+
+	/**
+	 * Instantiate only the cache module (purge listeners), exactly once.
+	 *
+	 * @return void
+	 */
+	public function load_cache_module() {
+		if ( self::$cache_module_loaded || ! in_array( 'cache', (array) self::$modules, true ) ) {
+			return;
+		}
+		self::$cache_module_loaded = true;
+		$class_name                = 'FazCookie\\Admin\\Modules\\Cache\\Cache';
+		if ( ! class_exists( $class_name ) ) {
+			return;
+		}
+		$module_obj = new $class_name( 'cache' );
+		if ( $module_obj->is_active() ) {
+			self::$active_modules['cache'] = true;
+		}
 	}
 
 	/**
@@ -197,6 +243,9 @@ class Admin {
 		$loaded = true;
 
 		foreach ( self::$modules as $module ) {
+			if ( 'cache' === $module && self::$cache_module_loaded ) {
+				continue; // Already loaded by the cron/WP-CLI path.
+			}
 			$parts      = explode( '_', $module );
 			$class      = implode( '_', $parts );
 			$class_name = 'FazCookie\\Admin\\Modules\\' . ucfirst( $module ) . '\\' . ucfirst( $class );
@@ -802,6 +851,17 @@ class Admin {
 						// Label for meta.signal_only: the record was created by a
 						// privacy signal and the visitor never answered the banner.
 						'metaSignalOnly'           => __( 'Privacy signal, banner unanswered', 'faz-cookie-manager' ),
+						// Tooltips (title) of the Context column pills: the
+						// Migration_V2 audit columns. The pill labels themselves
+						// are codes (ISO country/region, ruleset id, GPC, DNT,
+						// TCF, GPP) and are not translated.
+						'ctxRegionTitle'           => __( 'Region the consent was enforced under (ISO 3166-2).', 'faz-cookie-manager' ),
+						'ctxCountryTitle'          => __( 'Country the consent was enforced under (ISO 3166-1).', 'faz-cookie-manager' ),
+						'ctxRulesetTitle'          => __( 'Jurisdiction ruleset applied at consent time.', 'faz-cookie-manager' ),
+						'ctxGpcTitle'              => __( 'The request carried a Global Privacy Control signal (Sec-GPC: 1).', 'faz-cookie-manager' ),
+						'ctxDntTitle'              => __( 'The request carried a Do Not Track signal (DNT: 1).', 'faz-cookie-manager' ),
+						'ctxTcTitle'               => __( 'IAB TCF TC String recorded with this consent:', 'faz-cookie-manager' ),
+						'ctxGppTitle'              => __( 'IAB GPP string recorded with this consent:', 'faz-cookie-manager' ),
 						'loadFailed'            => __( 'Failed to load consent logs.', 'faz-cookie-manager' ),
 						'noLogs'                   => __( 'No consent logs found.', 'faz-cookie-manager' ),
 						'exportOk'                 => __( 'CSV exported successfully.', 'faz-cookie-manager' ),
@@ -2188,6 +2248,54 @@ class Admin {
 		);
 
 		delete_transient( 'faz_scan_new_cookies' );
+	}
+
+	/**
+	 * Say so when IAB TCF is switched on but cannot run for lack of a GVL.
+	 *
+	 * The frontend activates the CMP only with a stored Global Vendor List
+	 * (class-frontend.php gates both the enqueue and the store on
+	 * Gvl::has_data()). That gate is right — without a list there is nothing
+	 * to disclose and no valid TC string — but it was silent: the setting read
+	 * "enabled", no __tcfapi existed on the site, and nothing in the admin said
+	 * why. The list arrives through a scheduled download after TCF is enabled
+	 * (Settings::maybe_bootstrap_gvl), the weekly cron or the "Update GVL Now"
+	 * button (the download normally lands within seconds of the first request
+	 * after the save, so the button is a shortcut, not a requirement, unless
+	 * WP-Cron is disabled); until then this notice is shown on the plugin's
+	 * screens and on the WordPress dashboard. Not dismissible: it goes away by
+	 * itself once the list is stored, and hiding it would bring the silent
+	 * state back.
+	 *
+	 * @return void
+	 */
+	public function tcf_gvl_missing_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$screen       = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		$on_dashboard = $screen && isset( $screen->id ) && 'dashboard' === $screen->id;
+		if ( ! $on_dashboard && ! faz_is_admin_page() ) {
+			return;
+		}
+		$settings = get_option( 'faz_settings', array() );
+		if ( ! is_array( $settings ) || empty( $settings['iab']['enabled'] ) ) {
+			return;
+		}
+		if ( ! class_exists( '\\FazCookie\\Includes\\Gvl' ) || \FazCookie\Includes\Gvl::get_instance()->has_data() ) {
+			return;
+		}
+		// Worded with existing catalogue strings on purpose: a new msgid would
+		// ship untranslated until the next catalogue resync, and this notice
+		// matters most to exactly the sites that run TCF in other languages.
+		printf(
+			'<div class="notice notice-warning" id="faz-tcf-gvl-missing-notice"><p><strong>%s</strong> &mdash; %s</p><p>%s</p><p><a href="%s" class="button button-small">%s</a></p></div>',
+			esc_html__( 'IAB TCF', 'faz-cookie-manager' ),
+			esc_html__( 'GVL data not available. Please update GVL first.', 'faz-cookie-manager' ),
+			esc_html__( 'No GVL data downloaded yet. Click "Update GVL Now" to download.', 'faz-cookie-manager' ),
+			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-gvl' ) ),
+			esc_html__( 'Go to Vendor List', 'faz-cookie-manager' )
+		);
 	}
 
 	/**

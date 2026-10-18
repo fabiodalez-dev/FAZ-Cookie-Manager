@@ -279,7 +279,7 @@ class Categories_API extends API_Controller {
 					'context'     => array( 'view', 'edit' ),
 				),
 				'prior_consent'      => array(
-					'description' => __( 'Whether prior consent is required.', 'faz-cookie-manager' ),
+					'description' => __( 'Whether the category is granted before any consent action (an admin-declared consent-exempt category, e.g. first-party anonymised analytics). True pre-grants it client-side only; the server-side blocker keeps its scripts blocked under an opt-in law until the visitor acts.', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),

@@ -10,6 +10,7 @@ var regionSettings = Array.isArray(data.default_settings) ? data.default_setting
 var waitForTime = data.wait_for_update || 0;
 
 function getCookieValues(cookieName) {
+    cookieName = ((window._fazConfig || {})._cookieNames || {})[cookieName] || cookieName;
     var values = [];
     var name = cookieName + "=";
     var parts = document.cookie.split(';');
@@ -138,22 +139,8 @@ var initialCookieObj = parseConsentCookie();
     for (var index = 0; index < regionSettings.length; index++) {
         var regionSetting = regionSettings[index];
         if (!regionSetting || typeof regionSetting !== "object") continue;
-        // Read the category-mirror keys: these are the source of truth for the
-        // storage-type signals. The non-personalized-ads fallback deliberately
-        // keeps the `marketing` mirror and the canonical `ad_storage` OUT of sync
-        // (marketing drives ad serving here), so reading the mirrors is
-        // load-bearing — do NOT switch this to canonical-first. The runtime
-        // geo-routing override writes these same mirror keys (see
-        // Geo_Runtime::apply_cmv2_to_gcm) so its CMv2 signals reach gtag too.
-        var consentRegionData = {
-            ad_storage: regionSetting.marketing || regionSetting.advertisement || "denied",
-            analytics_storage: regionSetting.analytics,
-            functionality_storage: regionSetting.functional,
-            personalization_storage: regionSetting.functional,
-            security_storage: regionSetting.necessary,
-            ad_user_data: regionSetting.ad_user_data,
-            ad_personalization: regionSetting.ad_personalization
-        };
+        // Category-mirror keys, see regionConsentData().
+        var consentRegionData = regionConsentData(regionSetting);
         var regionsRaw = typeof regionSetting.regions === "string" ? regionSetting.regions : "";
         var regionsToSetFor = regionsRaw
             .split(",")
@@ -167,15 +154,7 @@ var initialCookieObj = parseConsentCookie();
     }
 
     if (setDefaultSetting) {
-        setConsentInitStates({
-          ad_storage: "denied",
-          analytics_storage: "denied",
-          functionality_storage: "denied",
-          personalization_storage: "denied",
-          security_storage: "granted",
-          ad_user_data: "denied",
-          ad_personalization: "denied"
-        });
+        setConsentInitStates(fallbackDefault());
         anyAdDenied = true;
     }
 
@@ -184,12 +163,89 @@ var initialCookieObj = parseConsentCookie();
     setNpaIfDenied(anyAdDenied ? "denied" : "granted");
 }
 
+// The consent signals one admin-configured region row stands for. Read the
+// category-mirror keys: these are the source of truth for the storage-type
+// signals. The non-personalized-ads fallback deliberately keeps the
+// `marketing` mirror and the canonical `ad_storage` OUT of sync (marketing
+// drives ad serving here), so reading the mirrors is load-bearing — do NOT
+// switch this to canonical-first. The runtime geo-routing override writes these
+// same mirror keys (see Geo_Runtime::apply_cmv2_to_gcm) so its CMv2 signals
+// reach gtag too.
+function regionConsentData(regionSetting) {
+    return {
+        ad_storage: regionSetting.marketing || regionSetting.advertisement || "denied",
+        analytics_storage: regionSetting.analytics,
+        functionality_storage: regionSetting.functional,
+        personalization_storage: regionSetting.functional,
+        security_storage: regionSetting.necessary,
+        ad_user_data: regionSetting.ad_user_data,
+        ad_personalization: regionSetting.ad_personalization
+    };
+}
+
+// The default applied everywhere no region row covers (no "all" row), and the
+// whole default in Advanced Consent Mode (print_gcm_default_inline emits the
+// same values).
+function fallbackDefault() {
+    return {
+        ad_storage: "denied",
+        analytics_storage: "denied",
+        functionality_storage: "denied",
+        personalization_storage: "denied",
+        security_storage: "granted",
+        ad_user_data: "denied",
+        ad_personalization: "denied"
+    };
+}
+
+// What to go back to when a restored record is invalidated on this page view.
+//
+// It used to be the hard-coded global denial above, whatever the admin had set
+// per region: an install whose defaults grant, say, analytics_storage
+// everywhere had it withdrawn from a visitor whose record merely went stale,
+// a state the visitor never had before the restore. The right target is the
+// region default the page started from — but `consent update` cannot be
+// region-scoped (`region` is a `consent default` parameter only) and this
+// script does not know the visitor's region; a second `consent default`
+// instead is what issue #149 removed. So each signal goes back to the value
+// every applicable default row agrees on, and to denied where they disagree:
+// exactly the region default whenever the visitor's own row could not have
+// said anything else, the most restrictive of the candidates otherwise.
+// Advanced Consent Mode has a single global denied default, so it is that.
+function baselineConsentState() {
+    var rows = [];
+    if (!data.advanced_mode) {
+        for (var i = 0; i < regionSettings.length; i++) {
+            if (regionSettings[i] && typeof regionSettings[i] === "object") {
+                rows.push(regionConsentData(regionSettings[i]));
+            }
+        }
+    }
+    if (data.advanced_mode || setDefaultSetting) rows.push(fallbackDefault());
+    var state = fallbackDefault();
+    for (var key in state) {
+        if (!state.hasOwnProperty(key)) continue;
+        var agreed = rows.length > 0;
+        for (var r = 0; r < rows.length; r++) {
+            if (rows[r][key] !== "granted") { agreed = false; break; }
+        }
+        state[key] = agreed ? "granted" : "denied";
+    }
+    return state;
+}
+
 // Returning visitor with saved consent: restore it via `consent update` (the
 // GCM-correct restoration signal), NOT a second `consent default`.
 // buildConsentState() also emits the non-personalized-ads npa signal (two-sided)
 // so it self-clears here when marketing was granted.
+// Whether a `consent update` carrying a stored record has been pushed. When
+// the runtime later invalidates that record (scope change, revision bump) the
+// cookie is gone by the time the listener below re-reads it, and "nothing to
+// push" would leave the restored grants standing for the whole page view.
+var restoredFromCookie = false;
 if (initialCookieObj) {
     updateConsentState(buildConsentState(initialCookieObj));
+    restoredFromCookie = true;
 }
 
 function parseConsentCookieParts() {
@@ -213,13 +269,89 @@ function parseConsentCookieParts() {
 function isConsentCookieStale(parsed) {
     if (!parsed) return false;
     var config = window._fazConfig || {};
+    // The shell's fingerprint is provisional on every topology. Restore
+    // nothing until the no-store payload has installed the visitor's scope.
+    if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
+    if (config._siteScopeBound && !isPmpNecessaryOnly(parsed) && isSiteBindingBroken(parsed, config)) return true;
     // wp_localize_script often stringifies numeric values ("1" instead of 1),
     // so we can't rely on typeof === "number". Coerce and fall back to 1.
     var serverRevisionRaw = config && config._consentRevision;
     var serverRevision = parseInt(serverRevisionRaw, 10);
     if (isNaN(serverRevision) || serverRevision < 1) serverRevision = 1;
     var storedRevision = parseInt(parsed.rev, 10);
-    return serverRevision > 1 && (isNaN(storedRevision) || storedRevision < serverRevision);
+    if (serverRevision > 1 && (isNaN(storedRevision) || storedRevision < serverRevision)) return true;
+    return isConsentCookieOutOfScope(parsed, config);
+}
+
+// Read a scope key, honouring the pre-1.14 unprefixed slot the way script.js
+// (_fazReadScopedCookieValue) does: a bare `banner` / `law` key can also be a
+// category slug, so a value shaped like a category decision is not a scope.
+function readScopedCookieValue(parsed, key, legacyKey, strict) {
+    var primary = parsed[key] || "";
+    if (primary || strict) return primary;
+    var legacy = parsed[legacyKey] || "";
+    if (!legacy || /^(yes|no)(:.*)?$/i.test(legacy)) return "";
+    return legacy;
+}
+
+// Twin of _fazConsentScopeChanged() in script.js and of
+// faz_consent_cookie_scope_changed() on the server. This bundle runs
+// synchronously in <head>, BEFORE the deferred runtime, so it is the first
+// layer to read a returning visitor's cookie: if it restored the grants of a
+// record acknowledged under another banner/law (a CCPA notice closed in the
+// US, the page now served under the GDPR banner), Google would be told
+// ad_storage/analytics_storage granted for a visitor the runtime is about to
+// classify as unconsented — and in Advanced Consent Mode nothing else gates
+// the Google tags for that page view. Same strict flag, legacy tolerance
+// and necessary-only PMP exception as the runtime, so both
+// layers reject the same cookie on the same page. The cached jurisdiction
+// shell advertises a placeholder scope until the live payload lands, so the
+// cookie is held at the baseline until that scope resolves. With geographic
+// routing (country-dependent output or the jurisdiction bootstrap) banner,
+// law and fingerprint must all match; without it only the law is compared.
+// Multisite: the record must carry the site-bound fingerprint, and where this
+// layer can recompute it — the record names the banner and law served here, so
+// the published _scopeFingerprint is the HMAC the server would check — it must
+// match. A record written under another banner slug cannot be verified here;
+// the server verifies its HMAC (faz_is_consent_cookie_stale), and the cookie
+// name already carries the network and blog ids. Twin of script.js.
+function isSiteBindingBroken(parsed, config) {
+    var storedFp = parsed["__scope.fp"] || "";
+    if (!storedFp) return true;
+    var sameScope = (parsed["__scope.banner"] || "") === (config._bannerSlug ? String(config._bannerSlug) : "") &&
+        (parsed["__scope.law"] || "") === (config._activeLaw ? String(config._activeLaw) : "");
+    return sameScope && storedFp !== (config._scopeFingerprint || "");
+}
+
+function isPmpNecessaryOnly(parsed) {
+    return parsed.source === "pmp" && parsed.action === "auto" && parsed.consent === "no" && !Object.keys(parsed).some(function(key) { return key !== "necessary" && /^yes(?::|$)/.test(parsed[key]); });
+}
+
+function isConsentCookieOutOfScope(parsed, config) {
+    if (!config) return false;
+    if (isPmpNecessaryOnly(parsed)) return false;
+    var strict = !!config._strictScopeFp;
+    var currentSlug = config._bannerSlug ? String(config._bannerSlug) : "";
+    var currentLaw = config._activeLaw ? String(config._activeLaw) : "";
+    var currentFp = typeof config._scopeFingerprint === "string" ? config._scopeFingerprint : "";
+    var storedFp = parsed["__scope.fp"] || "";
+    var storedSlug = readScopedCookieValue(parsed, "__scope.banner", "banner", strict);
+    var storedLaw = readScopedCookieValue(parsed, "__scope.law", "law", strict);
+    if (strict && !storedFp) return true;
+    // Pre-1.14 cookie, no scope recorded: the existing consent stands.
+    if (!storedSlug && !storedLaw && !storedFp) return false;
+    // Without geographic routing every visitor gets the same banner, so only
+    // a change of LAW makes the record answer a different question. A new
+    // banner slug (an A/B test ended, a banner re-created) or a new fingerprint
+    // (AUTH salts rotated) does not.
+    if (!(config._geoRouting || config._geoBootstrap)) {
+        return !!(currentLaw && storedLaw && storedLaw !== currentLaw);
+    }
+    if (storedFp && currentFp && storedFp !== currentFp) return true;
+    return !!(
+        (currentSlug && storedSlug && storedSlug !== currentSlug) ||
+        (currentLaw && storedLaw && storedLaw !== currentLaw)
+    );
 }
 
 function parseConsentCookie() {
@@ -314,18 +446,81 @@ function updateConsentState(consentState) {
 // emitted above, and a returning visitor's stored grants were restored via
 // `consent update`. We only need to handle live consent changes below.
 
+// Go back to the region defaults after the runtime discarded a record this
+// bundle had already restored (see the listeners below).
+function restoreBaseline() {
+    restoredFromCookie = false;
+    // The region defaults, not a global denial (see baselineConsentState).
+    var baseline = baselineConsentState();
+    setNpaIfDenied(baseline.ad_storage);
+    updateConsentState(baseline);
+    if (data.gacm_enabled && data.gacm_provider_ids) {
+        // No record: no additional-consent provider is consented.
+        setAdditionalConsent({ necessary: "granted" });
+    }
+}
+
+// Reconcile once with the state the runtime announces for this page load.
+//
+// A returning visitor's stored choice is announced with
+// fazcookie_consent_ready ('restore'), never with fazcookie_consent_update:
+// that event means "the consent just changed" and the runtime keeps it for
+// real changes. Two cases depend on this announcement:
+//
+//  - the cached jurisdiction shell (_geoBootstrap). isConsentCookieStale()
+//    holds every record while the live scope is pending, which is the only
+//    moment this bundle runs. When the runtime has installed the visitor's
+//    banner and law it fires `ready`; the cookie is read again here with the
+//    resolved scope and, when it is valid, its grants are pushed with ONE
+//    `consent update`. Without this a visitor who had accepted stayed denied
+//    in Google Consent Mode for the whole page view on every cached page;
+//  - a record this bundle restored in <head> that the runtime then discarded
+//    without a change event (scope, revision or TCF vendor list): the cookie is
+//    gone, so go back to the baseline instead of leaving the grants standing.
+//
+// `action: 'update'` is a live change and is handled by the listener below.
+var readyReconciled = false;
+document.addEventListener("fazcookie_consent_ready", function (event) {
+    var action = event && event.detail ? event.detail.action : "";
+    if (readyReconciled || action === "update") return;
+    readyReconciled = true;
+    var current = parseConsentCookie();
+    if (restoredFromCookie) {
+        if (!current) restoreBaseline();
+        return;
+    }
+    var config = window._fazConfig || {};
+    if (!current || !config._geoBootstrap) return;
+    updateConsentState(buildConsentState(current));
+    restoredFromCookie = true;
+    if (data.gacm_enabled && data.gacm_provider_ids) {
+        setAdditionalConsent(current);
+    }
+});
+
 // Re-apply on consent changes (banner interaction).
 document.addEventListener("fazcookie_consent_update", function () {
     var updated = parseConsentCookie();
     if (!updated) {
-        // parseConsentCookie() returns null when the cookie is stale (server
-        // bumped consent_revision since it was written) or malformed. In that
-        // window there is nothing actionable to push to gtag: leave the
-        // previous consent state untouched and skip GACM too, otherwise we
-        // would clobber the live provider list with "1~" (empty).
+        // parseConsentCookie() returns null when there is no cookie, or when it
+        // is stale (revision bump), out of scope or malformed.
+        //
+        // If this bundle never restored anything there is nothing actionable:
+        // the baseline `consent default` already stands, and pushing a denied
+        // update here would clobber the region defaults and the GACM provider
+        // list with "1~" (empty) on a first visit.
+        //
+        // If it DID restore a stored record, the runtime has since invalidated
+        // that record (_fazInvalidateStoredConsent deletes the cookie before
+        // dispatching this event): the grants pushed above belong to a scope
+        // or revision that no longer applies, so go back to the denied
+        // baseline on the same page view instead of leaving them standing.
+        if (!restoredFromCookie) return;
+        restoreBaseline();
         return;
     }
     updateConsentState(buildConsentState(updated));
+    restoredFromCookie = true;
     // Also update GACM additional consent string if enabled.
     if (data.gacm_enabled && data.gacm_provider_ids) {
         setAdditionalConsent(updated);

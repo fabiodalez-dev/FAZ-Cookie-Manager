@@ -33,6 +33,8 @@
 	var totalItems = 0;
 
 	FAZ.ready(function () {
+		var consentId = new URLSearchParams(window.location.search).get('consent_id');
+		if (consentId) document.getElementById('faz-log-search').value = consentId;
 		loadStats();
 		loadLogs();
 
@@ -100,7 +102,7 @@
 			tbody.textContent = '';
 			var tr = document.createElement('tr');
 			var td = document.createElement('td');
-			td.colSpan = 6;
+			td.colSpan = 7;
 			td.className = 'faz-text-center faz-text-muted';
 			td.style.padding = '40px';
 			td.textContent = fazI18n('consentLogs.loadFailed', 'Failed to load consent logs.');
@@ -116,7 +118,7 @@
 		if (!items || !items.length) {
 			var tr = document.createElement('tr');
 			var td = document.createElement('td');
-			td.colSpan = 6;
+			td.colSpan = 7;
 			td.className = 'faz-text-center faz-text-muted';
 			td.style.padding = '40px';
 			td.textContent = fazI18n('consentLogs.noLogs', 'No consent logs found.');
@@ -133,9 +135,17 @@
 			var tdDate = document.createElement('td');
 			tdDate.style.fontSize = '13px';
 			if (item.created_at) {
-				var d = new Date(item.created_at.replace(' ', 'T'));
+				// created_at is the site's wall clock with no offset; parsed bare,
+				// the browser reads it as ITS OWN local time, so an administrator
+				// in another timezone saw the right digits for the wrong instant.
+				// The API now sends created_at_gmt (RFC 3339, UTC) beside it:
+				// parse that when present so the cell shows the real instant in
+				// the viewer's zone, and keep the UTC value in the title.
+				var d = item.created_at_gmt ? new Date(item.created_at_gmt) : new Date(item.created_at.replace(' ', 'T'));
+				if (isNaN(d.getTime())) { d = new Date(item.created_at.replace(' ', 'T')); }
 				var logLocale = getLocale();
 				tdDate.textContent = d.toLocaleDateString(logLocale) + ' ' + d.toLocaleTimeString(logLocale, { hour: '2-digit', minute: '2-digit' });
+				if (item.created_at_gmt) { tdDate.title = item.created_at_gmt; }
 			} else {
 				tdDate.textContent = '--';
 			}
@@ -297,6 +307,58 @@
 			tdUrl.textContent = item.url || '--';
 			tdUrl.title = item.url || '';
 			tr.appendChild(tdUrl);
+
+			// Context: the Migration_V2 audit columns. The REST list returned
+			// them all along and the table showed none, so the TC string a TCF
+			// site has to evidence, or the "GPC header was present" bit a CPRA
+			// complaint turns on, were visible only in the raw JSON. One pill
+			// per datum; the long strings go in the title so they can be copied
+			// out whole. A row written before the migration has none and reads
+			// '--'. Labels are codes and acronyms (country, ruleset id, GPC, DNT,
+			// TCF, GPP), so there is nothing to translate but the tooltips.
+			var tdCtx = document.createElement('td');
+			tdCtx.style.fontSize = '12px';
+			var ctxPills = [];
+			function ctxPill(label, title) {
+				var p = document.createElement('span');
+				p.className = 'faz-cat-pill faz-cat-audit faz-ctx-pill';
+				p.textContent = label;
+				if (title) { p.title = title; }
+				ctxPills.push(p);
+			}
+			var region = typeof item.region_at_consent === 'string' ? item.region_at_consent : '';
+			var country = typeof item.country_at_consent === 'string' ? item.country_at_consent : '';
+			if (region) {
+				ctxPill(region, fazI18n('consentLogs.ctxRegionTitle', 'Region the consent was enforced under (ISO 3166-2).'));
+			} else if (country) {
+				ctxPill(country, fazI18n('consentLogs.ctxCountryTitle', 'Country the consent was enforced under (ISO 3166-1).'));
+			}
+			if (typeof item.ruleset_id_at_consent === 'string' && item.ruleset_id_at_consent) {
+				ctxPill(item.ruleset_id_at_consent, fazI18n('consentLogs.ctxRulesetTitle', 'Jurisdiction ruleset applied at consent time.'));
+			}
+			if (parseInt(item.signal_gpc_received, 10) === 1) {
+				ctxPill('GPC', fazI18n('consentLogs.ctxGpcTitle', 'The request carried a Global Privacy Control signal (Sec-GPC: 1).'));
+			}
+			if (parseInt(item.signal_dnt_received, 10) === 1) {
+				ctxPill('DNT', fazI18n('consentLogs.ctxDntTitle', 'The request carried a Do Not Track signal (DNT: 1).'));
+			}
+			if (typeof item.tc_string === 'string' && item.tc_string) {
+				ctxPill('TCF', fazI18n('consentLogs.ctxTcTitle', 'IAB TCF TC String recorded with this consent:') + ' ' + item.tc_string);
+			}
+			if (typeof item.gpp_string === 'string' && item.gpp_string) {
+				ctxPill('GPP', fazI18n('consentLogs.ctxGppTitle', 'IAB GPP string recorded with this consent:') + ' ' + item.gpp_string);
+			}
+			if (ctxPills.length) {
+				ctxPills.forEach(function (p, i) {
+					tdCtx.appendChild(p);
+					if (i < ctxPills.length - 1) {
+						tdCtx.appendChild(document.createTextNode(' '));
+					}
+				});
+			} else {
+				tdCtx.textContent = '--';
+			}
+			tr.appendChild(tdCtx);
 
 			tbody.appendChild(tr);
 		});

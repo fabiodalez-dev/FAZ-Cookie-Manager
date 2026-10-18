@@ -137,7 +137,7 @@ class Gpc_Exception_Audit {
 
 		// 2. A standing Do Not Sell request outranks a per-embed click, so an
 		//    exception cannot be served while one is in force.
-		if ( isset( $_COOKIE['fazcookie-dnsmpi'] ) && '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) ) ) {
+		if ( isset( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-dnsmpi' ) : 'fazcookie-dnsmpi' ] ) && '1' === sanitize_text_field( wp_unslash( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-dnsmpi' ) : 'fazcookie-dnsmpi' ] ) ) ) {
 			return false;
 		}
 

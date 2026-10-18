@@ -134,6 +134,10 @@ class DSAR_Admin {
 			__( 'Submitted', 'faz-cookie-manager' )    => esc_html( get_post_time( 'Y-m-d H:i', false, $post ) ),
 			__( 'Status', 'faz-cookie-manager' )       => esc_html( self::status_label( self::get_status( $post->ID ) ) ),
 		);
+		$consent_id = (string) get_post_meta( $post->ID, '_dsar_consent_id', true );
+		if ( '' !== $consent_id ) {
+			$rows[ __( 'Consent ID', 'faz-cookie-manager' ) ] = '<code>' . esc_html( $consent_id ) . '</code> <a href="' . esc_url( add_query_arg( array( 'page' => 'faz-cookie-manager-consent-logs', 'consent_id' => rawurlencode( $consent_id ) ), admin_url( 'admin.php' ) ) ) . '">' . esc_html__( 'View consent history', 'faz-cookie-manager' ) . '</a>';
+		}
 		?>
 		<table class="widefat striped" style="margin-bottom:12px;">
 			<tbody>
@@ -189,6 +193,19 @@ class DSAR_Admin {
 			}
 			echo '<p>' . esc_html__( 'This record has no valid email address, so it cannot be turned into a WordPress privacy request.', 'faz-cookie-manager' ) . '</p>';
 			return;
+		}
+
+		$consent_id = (string) get_post_meta( $post->ID, '_dsar_consent_id', true );
+		if ( '' !== $consent_id ) {
+			if ( '' !== faz_dsar_verified_consent_id( $post->ID, $email ) ) {
+				echo '<p>' . esc_html__( 'Ownership of this consent ID has been independently verified.', 'faz-cookie-manager' ) . '</p>';
+			} else {
+				echo self::consent_cookie_note( $post->ID ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- assembled from esc_html__() in consent_cookie_note().
+				echo '<p>' . esc_html__( 'Independently verify that this consent ID belongs to the requester before confirming it below. Email confirmation alone does not prove ownership. Consent history is excluded from automated exports and erasure until verified.', 'faz-cookie-manager' ) . '</p>';
+				if ( current_user_can( 'manage_privacy_options' ) ) {
+					self::action_link( $post->ID, 'verify_consent_id', __( 'Confirm independently verified consent ID', 'faz-cookie-manager' ) );
+				}
+			}
 		}
 
 		if ( $request_id && get_post( $request_id ) ) {
@@ -256,6 +273,17 @@ class DSAR_Admin {
 		}
 		if ( ! current_user_can( 'edit_post', $post_id ) ) {
 			wp_die( esc_html__( 'You are not allowed to handle data subject requests.', 'faz-cookie-manager' ), '', array( 'response' => 403 ) );
+		}
+
+		if ( 'verify_consent_id' === $action ) {
+			if ( ! current_user_can( 'manage_privacy_options' ) ) {
+				wp_die( esc_html__( 'You are not allowed to verify consent ownership.', 'faz-cookie-manager' ), '', array( 'response' => 403 ) );
+			}
+			$proof = faz_dsar_consent_verification_token( $post_id );
+			if ( '' !== $proof ) {
+				update_post_meta( $post_id, '_dsar_consent_id_verified', $proof );
+			}
+			$this->redirect_back( $post_id, '' !== $proof ? 'consent_verified' : 'error' );
 		}
 
 		if ( 'complete' === $action || 'reopen' === $action ) {
@@ -360,6 +388,7 @@ class DSAR_Admin {
 		$email   = $post_id ? (string) get_post_meta( $post_id, '_dsar_email', true ) : '';
 
 		$messages = array(
+			'consent_verified' => array( 'success', __( 'Consent ownership verification recorded.', 'faz-cookie-manager' ), '' ),
 			'created_erasure' => array(
 				'success',
 				__( 'Erasure request created. WordPress has emailed the requester a confirmation link; once they confirm, erase their data from Tools → Erase Personal Data.', 'faz-cookie-manager' ),
@@ -572,6 +601,31 @@ class DSAR_Admin {
 	}
 
 	/**
+	 * What the submission said about the declared consent ID, for the
+	 * administrator deciding whether to verify it.
+	 *
+	 * Recorded at submission by DSAR_Shortcode::consent_cookie_match(): whether
+	 * the ID equals the consent cookie of the browser that sent the request. A
+	 * match is not proof and a mismatch is not a refusal, so neither changes
+	 * what the verification button does; a mismatch is shown as a warning.
+	 * Records from before 1.34.2 carry no outcome and show nothing.
+	 *
+	 * @param int $post_id DSAR record ID.
+	 * @return string Escaped HTML, or '' when there is nothing to say.
+	 */
+	public static function consent_cookie_note( $post_id ) {
+		switch ( (string) get_post_meta( $post_id, '_dsar_consent_id_cookie', true ) ) {
+			case 'match':
+				return '<p>' . esc_html__( 'This consent ID matches the consent cookie of the browser that submitted the request. That supports, but does not prove, that it belongs to the requester.', 'faz-cookie-manager' ) . '</p>';
+			case 'mismatch':
+				return '<div class="notice notice-warning inline"><p><strong>' . esc_html__( 'Warning:', 'faz-cookie-manager' ) . '</strong> ' . esc_html__( 'This consent ID does not match the consent cookie of the browser that submitted the request. It may belong to someone else or be mistyped: verify ownership with particular care before confirming it.', 'faz-cookie-manager' ) . '</p></div>';
+			case 'no_cookie':
+				return '<p>' . esc_html__( 'The browser that submitted the request had no consent cookie, so the consent ID could not be compared with it.', 'faz-cookie-manager' ) . '</p>';
+		}
+		return '';
+	}
+
+	/**
 	 * Print one action as a nonce-protected link.
 	 *
 	 * A POST form would be the stricter choice, and it cannot be used here: a
@@ -643,6 +697,8 @@ class DSAR_Admin {
 			return false;
 		}
 		switch ( $code ) {
+			case 'consent_verified':
+				return '' !== faz_dsar_verified_consent_id( $post_id, (string) get_post_meta( $post_id, '_dsar_email', true ) );
 			case 'created_erasure':
 			case 'created_export':
 				$request_id = (int) get_post_meta( $post_id, '_dsar_core_request_id', true );

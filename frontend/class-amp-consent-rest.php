@@ -499,7 +499,10 @@ class AMP_Consent_Rest {
 		}
 
 		$incoming_state = self::sanitize_state( $request->get_param( 'consentStateValue' ) );
-		$cookie         = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie() : '';
+		// Scoped explicitly, with the same strict scope state_from_cookie()
+		// applies, so this read cannot be mistaken for the revision-only one
+		// the callers that run before banner selection use.
+		$cookie         = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie( '', self::cookie_scope( $context ) ) : '';
 		$server_state   = self::state_from_cookie( $cookie, $context );
 
 		// A signed state returned by checkConsentHref binds AMP's local cache to
@@ -720,8 +723,8 @@ class AMP_Consent_Rest {
 	 * @return bool
 	 */
 	private static function is_dnsmpi_active() {
-		return isset( $_COOKIE['fazcookie-dnsmpi'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+		return isset( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-dnsmpi' ) : 'fazcookie-dnsmpi' ] )
+			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-dnsmpi' ) : 'fazcookie-dnsmpi' ] ) );
 	}
 
 	/**
@@ -762,6 +765,16 @@ class AMP_Consent_Rest {
 		// fold — a "gdpr_ccpa" banner is a GDPR-family banner for lifetime
 		// purposes and must not inherit the 365-day CCPA floor.
 		$expiry_law        = ( 'ccpa' === $law ) ? 'ccpa' : 'gdpr';
+		// A CCPA banner kept for a visitor whose resolved ruleset is opt-in (the
+		// "US only" install seen from the EEA, or any visitor the fallback
+		// ruleset covers) collects an opt-in consent through the AMP prompt, and
+		// an opt-in consent may not outlive the GDPR-family cap. Deciding the
+		// lifetime from the banner alone wrote a 365-day __scope.law:ccpa record
+		// for an EEA Accept. The scope keeps the banner's law (it names the
+		// banner); only the lifetime follows the regime actually applied.
+		if ( 'ccpa' === $expiry_law && self::resolved_ruleset_is_opt_in() ) {
+			$expiry_law = 'gdpr';
+		}
 		$settings          = $banner->get_settings();
 		// The fallback for a banner that never stored consentExpiry must be the
 		// SAME number Frontend::get_store_data() falls back to, or the classic page
@@ -785,8 +798,25 @@ class AMP_Consent_Rest {
 			'purposes'          => self::get_purposes(),
 			'expiry_days'       => $expiry_days,
 			'revision'          => max( 1, absint( $revision ) ),
-			'scope_fingerprint' => substr( wp_hash( $slug . '|' . $law, 'auth' ), 0, 32 ),
+			'scope_fingerprint' => faz_scope_fingerprint( $slug, $law ),
 		);
+	}
+
+	/**
+	 * Whether the ruleset resolved for this visitor is opt-in (or hybrid).
+	 *
+	 * The same resolution get_purposes() uses for the per-purpose defaults, so
+	 * the lifetime and the defaults of one AMP context can never disagree.
+	 *
+	 * @return bool
+	 */
+	private static function resolved_ruleset_is_opt_in() {
+		if ( ! class_exists( Geo_Runtime::class ) ) {
+			return false;
+		}
+		$country = class_exists( Geolocation::class ) ? Geolocation::get_visitor_country() : '';
+		$ruleset = Geo_Runtime::resolve_for_country( $country );
+		return is_array( $ruleset ) && 'gdpr' === Geo_Runtime::model_to_law( $ruleset );
 	}
 
 	/**
@@ -1084,6 +1114,15 @@ class AMP_Consent_Rest {
 	 * produce, so the existing cookie is now read and its unowned keys carried
 	 * forward.
 	 *
+	 * No fazVendorConsent record is written: an AMP page never shows the IAB
+	 * vendor list, so no vendor consent exists. On a canonical page with TCF
+	 * active, script.js and faz_is_vendor_record_stale() therefore both treat
+	 * this cookie as a decision that still has to be asked, and the visitor
+	 * answers the full banner once there. Keeping the categories while asking
+	 * for the vendors alone would need a vendor-only prompt the banner does not
+	 * have; re-asking the whole choice is the conservative form of the same
+	 * IAB rule (vendor consent only through the CMP that disclosed them).
+	 *
 	 * @param string $state           accepted|rejected.
 	 * @param array  $purposes        Purpose slug => bool.
 	 * @param array  $context         Resolved banner context.
@@ -1095,8 +1134,8 @@ class AMP_Consent_Rest {
 	 */
 	public static function build_cookie_value( $state, $purposes, $context, $consent_id, $expires, $existing_cookie = null, $gpc_active = null ) {
 		if ( null === $existing_cookie ) {
-			$existing_cookie = isset( $_COOKIE['fazcookie-consent'] )
-				? sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-consent'] ) )
+			$existing_cookie = isset( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-consent' ) : 'fazcookie-consent' ] )
+				? sanitize_text_field( wp_unslash( $_COOKIE[ function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-consent' ) : 'fazcookie-consent' ] ) )
 				: '';
 		}
 		if ( null === $gpc_active ) {
@@ -1271,6 +1310,26 @@ class AMP_Consent_Rest {
 	}
 
 	/**
+	 * The consent-cookie scope of the AMP banner in a resolved context.
+	 *
+	 * AMP always knows its exact banner, so the check is strict: every scope key
+	 * present and matching. One definition, read by the update handler and by
+	 * state_from_cookie().
+	 *
+	 * @since 1.34.2
+	 * @param array $context Resolved AMP context (slug, law, scope_fingerprint).
+	 * @return array
+	 */
+	public static function cookie_scope( $context ) {
+		return array(
+			'slug'        => (string) $context['slug'],
+			'law'         => (string) $context['law'],
+			'fingerprint' => (string) $context['scope_fingerprint'],
+			'strict'      => true,
+		);
+	}
+
+	/**
 	 * Read a standard FAZ cookie only when scope, revision and TTL are current.
 	 *
 	 * @return array|false
@@ -1292,19 +1351,32 @@ class AMP_Consent_Rest {
 		if ( absint( isset( $parsed['rev'] ) ? $parsed['rev'] : 1 ) < absint( $context['revision'] ) ) {
 			return false;
 		}
-		$stored_banner = isset( $parsed['__scope.banner'] ) ? $parsed['__scope.banner'] : ( isset( $parsed['banner'] ) ? $parsed['banner'] : '' );
-		$stored_law    = isset( $parsed['__scope.law'] ) ? $parsed['__scope.law'] : ( isset( $parsed['law'] ) ? $parsed['law'] : '' );
-		$stored_fp     = isset( $parsed['__scope.fp'] ) ? $parsed['__scope.fp'] : '';
-		if (
-			! hash_equals( (string) $context['slug'], (string) $stored_banner )
-			|| ! hash_equals( (string) $context['law'], (string) $stored_law )
-			|| ! hash_equals( (string) $context['scope_fingerprint'], (string) $stored_fp )
-		) {
+		// One scope predicate for every server surface. The classic blocker and
+		// this bridge used to answer "is this cookie still valid" differently
+		// (revision-only versus slug|law|fp), so the same visitor was consented
+		// on one and not on the other. AMP always knows its exact banner, so it
+		// runs the shared check in strict mode: every scope key present and
+		// matching, no legacy slot, no pre-1.14 tolerance — what it did before.
+		if ( ! function_exists( 'faz_consent_cookie_scope_changed' ) ) {
+			return false;
+		}
+		if ( faz_consent_cookie_scope_changed( $parsed, self::cookie_scope( $context ) ) ) {
 			return false;
 		}
 		$has_absolute_expiry = isset( $parsed['exp'] );
 		$expires            = $has_absolute_expiry ? absint( $parsed['exp'] ) : 0;
 		if ( $has_absolute_expiry && $expires <= time() ) {
+			return false;
+		}
+		// A record that still has more life left than the regime applied now
+		// allows was issued under a longer lifetime than this context permits
+		// (a 365-day record from the CCPA-shaped expiry, read by an opt-in
+		// visitor; or a lifetime the administrator has since shortened). It
+		// is not honoured: the visitor is asked again and the new record gets
+		// the permitted lifetime. One day of slack absorbs clock skew between
+		// the write and this read.
+		if ( $has_absolute_expiry && isset( $context['expiry_days'] )
+			&& $expires > time() + ( absint( $context['expiry_days'] ) + 1 ) * DAY_IN_SECONDS ) {
 			return false;
 		}
 

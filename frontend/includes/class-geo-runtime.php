@@ -446,10 +446,12 @@ class Geo_Runtime {
 	 * analytics_storage, functional → functionality_storage AND
 	 * personalization_storage, necessary → security_storage) plus the canonical
 	 * ad_user_data / ad_personalization keys (which gcm.js reads directly). The
-	 * canonical equivalents are also written for row consistency. gcm.js
-	 * deliberately reads the mirrors (the non-personalized-ads fallback keeps
-	 * `marketing` and canonical `ad_storage` out of sync), so writing the
-	 * mirrors is what makes the ruleset CMv2 signals reach gtag.
+	 * canonical equivalents are also written for row consistency. gcm.js reads
+	 * the mirrors, not the canonical keys, for the storage-type signals — it
+	 * derives ad_storage from the `marketing` decision (the non-personalized-
+	 * ads fallback keeps ad_storage denied and only adds the `npa` signal, so
+	 * the two stay in sync) — so writing the mirrors is what makes the ruleset
+	 * CMv2 signals reach gtag.
 	 *
 	 * Limitation: gcm.js derives BOTH functionality_storage and
 	 * personalization_storage from the single `functional` mirror, so they

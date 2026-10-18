@@ -180,6 +180,9 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				'faz_migrated_advert_to_marketing',
 				'faz_ccpa_gpc_migrated',
 				'faz_share_personal_data_column_added',
+				'faz_consent_log_gmt_column_added',
+				'faz_consent_log_gmt_done',
+				'faz_consent_log_gmt_cursor',
 				'faz_reset_stale_per_cookie_consent_done',
 				'faz_normalize_legacy_functional_optout_done',
 				'faz_functional_optout_notice',
@@ -219,6 +222,12 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 			);
 			foreach ( $faz_options as $option_name ) {
 				delete_option( $option_name );
+			}
+			// The created_at_gmt backfill continuation (1.34.2). Deactivation
+			// clears it too; an uninstall that follows a failed deactivation
+			// must not leave the event behind.
+			if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+				wp_clear_scheduled_hook( 'faz_consent_log_gmt_backfill' );
 			}
 
 			// Clean up Do Not Sell / DSAR atomic lock options (created by add_option,
@@ -303,6 +312,47 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 		}
 	}
 
+	/**
+	 * Remove the plugin's user-meta rows for every user.
+	 *
+	 * wp_usermeta is not wp_options: the faz_% catch-all in
+	 * faz_cleanup_site_data() can never reach it, and nothing else in the
+	 * plugin deletes these keys, so without this sweep they survived every
+	 * opted-in uninstall. User meta is shared by the whole network on
+	 * multisite, so this runs ONCE per network (after the per-blog loop),
+	 * and only under the same gate as every other removal: a per-site
+	 * opt-in or FAZ_REMOVE_ALL_DATA.
+	 *
+	 * The explicit list is the audit trail, like the option list above.
+	 * Every key the plugin writes with add_user_meta()/update_user_meta()
+	 * belongs here.
+	 *
+	 * @since 1.34.2
+	 * @return void
+	 */
+	function faz_cleanup_user_meta() {
+		$faz_user_meta_keys = array(
+			// Browser-assisted scan observations (Scanner Controller::BROWSER_SCAN_META):
+			// one row per Set-Cookie seen while the administrator browsed the
+			// site. Finishing or discarding a scan deletes them, but a scan
+			// abandoned by closing the tab leaves its rows until that user
+			// starts another scan — which, by uninstall time, never comes.
+			'_faz_scan_cookie_observation',
+			// Per-user admin-notice dismissal flags (Admin::*_notice()).
+			'faz_wc_notice_dismissed',
+			'faz_smash_balloon_notice_dismissed',
+			'faz_payment_gateway_notice_dismissed',
+		);
+		foreach ( $faz_user_meta_keys as $faz_user_meta_key ) {
+			try {
+				// object_id 0 + delete_all: every user, every value.
+				delete_metadata( 'user', 0, $faz_user_meta_key, '', true );
+			} catch ( \Throwable $e ) {
+				error_log( 'FAZ uninstall: delete user meta ' . $faz_user_meta_key . ' failed — ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
+		}
+	}
+
 	if ( is_multisite() ) {
 		$faz_offset       = 0;
 		$faz_batch        = 100;
@@ -380,8 +430,12 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				}
 				delete_site_transient( $faz_network_transient );
 			}
+
+			// User meta is network-global: once, here, under the same gate.
+			faz_cleanup_user_meta();
 		}
 	} elseif ( faz_should_remove_on_uninstall() ) {
 		faz_cleanup_site_data();
+		faz_cleanup_user_meta();
 	}
 }

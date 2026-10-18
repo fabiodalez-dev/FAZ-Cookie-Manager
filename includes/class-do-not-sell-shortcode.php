@@ -9,6 +9,19 @@
  * Usage: [faz_do_not_sell]
  *        [faz_do_not_sell title="Opt Out" button="Submit Request"]
  *
+ * The render is visitor-invariant. Until 1.34.2 it read the opt-out cookie
+ * and emitted either the opt-out form or a "you have already opted out"
+ * notice with only a withdraw button; under a full-page cache the first
+ * logged-out visitor to warm the entry chose which of the two everybody else
+ * saw, and an entry primed by an opted-out visitor left every other visitor
+ * with no control to opt OUT with (Cal. Civ. Code 1798.135(a)) until it was
+ * purged. Now one document ships both states — the opt-out form live, the
+ * withdraw state inert in a <template> — and frontend/js/faz-dnsmpi.js picks
+ * from document.cookie, which is the visitor's own and never cached. The
+ * nonce the same cache freezes is recoverable the same way: a stale one is
+ * refused with a code the script recognises, and it fetches fresh nonces from
+ * the no-store `faz_dnsmpi_nonce` action and resends once.
+ *
  * @package FazCookie\Includes
  */
 
@@ -24,6 +37,12 @@ class Do_Not_Sell_Shortcode {
 
 	const AJAX_ACTION    = 'faz_dnsmpi_optout';
 	const RESCIND_ACTION = 'faz_dnsmpi_rescind';
+	/**
+	 * Read-only AJAX action that hands out fresh opt-out and rescind nonces.
+	 *
+	 * @since 1.34.2
+	 */
+	const NONCE_ACTION   = 'faz_dnsmpi_nonce';
 	const COOKIE_NAME    = 'fazcookie-dnsmpi';
 	const COOKIE_DAYS    = 365;
 	const STATUS_FIELD   = 'dnsmpi_optout';
@@ -35,6 +54,8 @@ class Do_Not_Sell_Shortcode {
 		add_action( 'wp_ajax_nopriv_' . self::AJAX_ACTION, array( $this, 'handle_optout' ) );
 		add_action( 'wp_ajax_' . self::RESCIND_ACTION, array( $this, 'handle_rescind' ) );
 		add_action( 'wp_ajax_nopriv_' . self::RESCIND_ACTION, array( $this, 'handle_rescind' ) );
+		add_action( 'wp_ajax_' . self::NONCE_ACTION, array( $this, 'handle_nonce_refresh' ) );
+		add_action( 'wp_ajax_nopriv_' . self::NONCE_ACTION, array( $this, 'handle_nonce_refresh' ) );
 		// render() enqueues the handler; this hook only covers forms a page
 		// builder injects client-side (see maybe_enqueue_assets()).
 		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue_assets' ) );
@@ -77,6 +98,11 @@ class Do_Not_Sell_Shortcode {
 				array(
 					'ajaxUrl'        => admin_url( 'admin-ajax.php' ),
 					'rescindAction'  => self::RESCIND_ACTION,
+					// Which cookie decides the visible state, and where a fresh
+					// nonce comes from when the one in the (possibly cached)
+					// markup has expired. See render().
+					'nonceAction'    => self::NONCE_ACTION,
+					'cookieName'     => function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME,
 					'successMsg'     => __( 'Your opt-out request has been received. We will not sell or share your personal information.', 'faz-cookie-manager' ),
 					'rescindSuccess' => __( 'Your opt-out has been withdrawn. You may submit a new request at any time.', 'faz-cookie-manager' ),
 					'errMsg'         => __( 'An error occurred. Please try again.', 'faz-cookie-manager' ),
@@ -89,6 +115,30 @@ class Do_Not_Sell_Shortcode {
 
 	/**
 	 * Render the opt-out form.
+	 *
+	 * Deliberately reads nothing about the visitor: not the opt-out cookie,
+	 * not the consent cookie, nothing. The page this lands on is cacheable —
+	 * the plugin's Cache Compatibility Mode promises exactly that — and a
+	 * cached render is replayed to visitors whose state the server never saw.
+	 * So both states are rendered for everyone, and which one the visitor
+	 * gets is decided in the browser from document.cookie by
+	 * frontend/js/faz-dnsmpi.js:
+	 *
+	 *   - the opt-out form is LIVE. It is the mechanism the law requires the
+	 *     page to offer, so it is what a visitor with no cookie — and a visitor
+	 *     with JavaScript off — must find without help;
+	 *   - the "already opted out / withdraw" state sits inert in a <template>.
+	 *     Template content is not rendered, not focusable, not matched by
+	 *     querySelector(), and the script swaps it in only for a visitor who
+	 *     carries the cookie. The DOM therefore holds exactly one state at a
+	 *     time, as it always did, only now the right one for THIS visitor.
+	 *
+	 * Both nonces are rendered, one per form. A cached copy older than the
+	 * nonce life (12 to 24 hours for an anonymous visitor) carries expired
+	 * ones; the handlers refuse those with the `stale_nonce` code and the
+	 * script fetches fresh ones from handle_nonce_refresh() and resends once,
+	 * so the visitor's click lands instead of being told to refresh a page the
+	 * cache will serve again unchanged.
 	 */
 	public function render( $atts = array() ) {
 		$atts = shortcode_atts(
@@ -99,8 +149,6 @@ class Do_Not_Sell_Shortcode {
 			$atts,
 			'faz_do_not_sell'
 		);
-
-		$already_opted_out = isset( $_COOKIE[ self::COOKIE_NAME ] ) && '1' === $_COOKIE[ self::COOKIE_NAME ];
 
 		wp_register_style( 'faz-dnsmpi', false, array(), FAZ_VERSION );
 		wp_enqueue_style( 'faz-dnsmpi' );
@@ -126,18 +174,7 @@ class Do_Not_Sell_Shortcode {
 		<div class="faz-dnsmpi-wrap">
 			<h3><?php echo esc_html( $atts['title'] ); ?></h3>
 
-			<?php if ( $already_opted_out ) : ?>
-				<div class="faz-dnsmpi-notice success">
-					<?php esc_html_e( 'You have already submitted an opt-out request. We will not sell or share your personal information.', 'faz-cookie-manager' ); ?>
-				</div>
-				<p><?php esc_html_e( 'Changed your mind? You can withdraw your opt-out at any time.', 'faz-cookie-manager' ); ?></p>
-				<form class="faz-dnsmpi-rescind-form">
-					<input type="hidden" name="action" value="<?php echo esc_attr( self::RESCIND_ACTION ); ?>">
-					<input type="hidden" name="nonce"  value="<?php echo esc_attr( $rescind_nonce ); ?>">
-					<button type="submit" class="faz-dnsmpi-btn faz-dnsmpi-rescind-btn"><?php esc_html_e( 'Withdraw opt-out / opt back in', 'faz-cookie-manager' ); ?></button>
-				</form>
-				<div class="faz-dnsmpi-notice" role="status" aria-live="polite" aria-atomic="true" style="display:none;"></div>
-			<?php else : ?>
+			<div class="faz-dnsmpi-state" data-faz-dnsmpi-state="optout">
 				<p><?php esc_html_e( 'As a US resident in a state with applicable privacy laws, you have the right to opt out of the sale of your personal information. Submit the form below to exercise this right.', 'faz-cookie-manager' ); ?></p>
 				<form class="faz-dnsmpi-form">
 					<input type="hidden" name="action" value="<?php echo esc_attr( self::AJAX_ACTION ); ?>">
@@ -145,7 +182,27 @@ class Do_Not_Sell_Shortcode {
 					<button type="submit" class="faz-dnsmpi-btn"><?php echo esc_html( $atts['button'] ); ?></button>
 				</form>
 				<div class="faz-dnsmpi-notice" role="status" aria-live="polite" aria-atomic="true" style="display:none;"></div>
-			<?php endif; ?>
+			</div>
+
+			<?php
+			// Inert until frontend/js/faz-dnsmpi.js finds the opt-out cookie
+			// in document.cookie and swaps it in for the state above. Rendered
+			// for every visitor so the page stays cacheable; see render().
+			?>
+			<template class="faz-dnsmpi-rescind-template">
+				<div class="faz-dnsmpi-state" data-faz-dnsmpi-state="rescind">
+					<div class="faz-dnsmpi-notice success">
+						<?php esc_html_e( 'You have already submitted an opt-out request. We will not sell or share your personal information.', 'faz-cookie-manager' ); ?>
+					</div>
+					<p><?php esc_html_e( 'Changed your mind? You can withdraw your opt-out at any time.', 'faz-cookie-manager' ); ?></p>
+					<form class="faz-dnsmpi-rescind-form">
+						<input type="hidden" name="action" value="<?php echo esc_attr( self::RESCIND_ACTION ); ?>">
+						<input type="hidden" name="nonce"  value="<?php echo esc_attr( $rescind_nonce ); ?>">
+						<button type="submit" class="faz-dnsmpi-btn faz-dnsmpi-rescind-btn"><?php esc_html_e( 'Withdraw opt-out / opt back in', 'faz-cookie-manager' ); ?></button>
+					</form>
+					<div class="faz-dnsmpi-notice" role="status" aria-live="polite" aria-atomic="true" style="display:none;"></div>
+				</div>
+			</template>
 		</div>
 		<?php
 		return ob_get_clean();
@@ -208,11 +265,64 @@ class Do_Not_Sell_Shortcode {
 	}
 
 	/**
+	 * Refuse a submission whose nonce no longer verifies.
+	 *
+	 * The payload carries `code: stale_nonce` beside the message. The nonce
+	 * is rendered into a cacheable page and an anonymous one lives 12 to 24
+	 * hours, so a visitor served a cached copy older than that fails here
+	 * through no fault of their own, and "refresh the page" would hand them
+	 * the same copy. The code lets frontend/js/faz-dnsmpi.js tell this apart
+	 * from every other refusal, fetch fresh nonces (handle_nonce_refresh())
+	 * and resend once; the message is what it shows if that fails too.
+	 *
+	 * @since 1.34.2
+	 * @return void
+	 */
+	private function refuse_stale_nonce() {
+		wp_send_json_error(
+			array(
+				'message' => __( 'Invalid security token. Please refresh the page and try again.', 'faz-cookie-manager' ),
+				'code'    => 'stale_nonce',
+			)
+		);
+	}
+
+	/**
+	 * AJAX handler that hands out fresh opt-out and rescind nonces.
+	 *
+	 * Read-only and unauthenticated on purpose. The anonymous nonces it mints
+	 * are the same ones render() prints into a public page, so nothing is
+	 * exposed that a GET of that page does not expose already; a cross-site
+	 * page cannot read the JSON (no CORS header is sent) and cannot execute
+	 * it (`nosniff` plus a non-script content type). The real CSRF control
+	 * on the two state-changing handlers remains is_same_origin_request(),
+	 * which a scraped or refreshed nonce does not bypass. No same-origin check
+	 * is applied HERE because a same-origin GET carries no Origin header and,
+	 * under `Referrer-Policy: no-referrer`, no Referer either: on a browser
+	 * without Fetch Metadata that check would refuse the one request whose
+	 * job is to let a visitor's click land.
+	 *
+	 * admin-ajax.php sends `nocache_headers()` itself and every page cache
+	 * excludes it, so these never come back from a cache.
+	 *
+	 * @since 1.34.2
+	 * @return void
+	 */
+	public function handle_nonce_refresh() {
+		wp_send_json_success(
+			array(
+				'optout'  => wp_create_nonce( self::AJAX_ACTION ),
+				'rescind' => wp_create_nonce( self::RESCIND_ACTION ),
+			)
+		);
+	}
+
+	/**
 	 * AJAX handler for the opt-out submission.
 	 */
 	public function handle_optout() {
 		if ( ! check_ajax_referer( self::AJAX_ACTION, 'nonce', false ) ) {
-			wp_send_json_error( __( 'Invalid security token. Please refresh the page and try again.', 'faz-cookie-manager' ) );
+			$this->refuse_stale_nonce();
 			return;
 		}
 
@@ -229,7 +339,7 @@ class Do_Not_Sell_Shortcode {
 
 		// Idempotency: if the browser already carries the opt-out cookie, skip
 		// creating a duplicate log entry and re-sending the admin notification.
-		if ( isset( $_COOKIE[ self::COOKIE_NAME ] ) && '1' === $_COOKIE[ self::COOKIE_NAME ] ) {
+		if ( isset( $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] ) && '1' === $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] ) {
 			wp_send_json_success(
 				array( 'message' => __( 'You have already opted out. We will not sell or share your personal information.', 'faz-cookie-manager' ) )
 			);
@@ -274,7 +384,7 @@ class Do_Not_Sell_Shortcode {
 	 */
 	public function handle_rescind() {
 		if ( ! check_ajax_referer( self::RESCIND_ACTION, 'nonce', false ) ) {
-			wp_send_json_error( __( 'Invalid security token. Please refresh the page and try again.', 'faz-cookie-manager' ) );
+			$this->refuse_stale_nonce();
 			return;
 		}
 
@@ -286,7 +396,7 @@ class Do_Not_Sell_Shortcode {
 		}
 
 		// Idempotency: if the opt-out cookie is already absent, nothing to do.
-		$has_optout_cookie = isset( $_COOKIE[ self::COOKIE_NAME ] ) && '1' === $_COOKIE[ self::COOKIE_NAME ];
+		$has_optout_cookie = isset( $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] ) && '1' === $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ];
 
 		// Rate limiting: atomic DB-backed lock plus 60-second transient window.
 		$rl_key   = 'faz_dnsmpi_rsc_rl_'   . substr( $this->hash_ip(), 0, 16 );
@@ -375,7 +485,7 @@ class Do_Not_Sell_Shortcode {
 		// could not see the opt-out, so _fazUnblockServerSide() restored the
 		// very scripts the server had blocked for it (the stored consent still
 		// said "yes"), undoing the opt-out one tick after page load.
-		setcookie( self::COOKIE_NAME, '1', array(
+		setcookie( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME, '1', array(
 			'expires'  => $expires,
 			'path'     => '/',
 			'domain'   => '',
@@ -393,7 +503,7 @@ class Do_Not_Sell_Shortcode {
 	 * subsequent calls within the same PHP process see the cleared state.
 	 */
 	private function clear_optout_cookie() {
-		setcookie( self::COOKIE_NAME, '', array(
+		setcookie( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME, '', array(
 			'expires'  => time() - 3600,
 			'path'     => '/',
 			'domain'   => '',
@@ -401,8 +511,8 @@ class Do_Not_Sell_Shortcode {
 			'httponly' => true,
 			'samesite' => 'Lax',
 		) );
-		if ( isset( $_COOKIE[ self::COOKIE_NAME ] ) ) {
-			unset( $_COOKIE[ self::COOKIE_NAME ] );
+		if ( isset( $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] ) ) {
+			unset( $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] );
 		}
 	}
 

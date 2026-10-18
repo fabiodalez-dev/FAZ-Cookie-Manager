@@ -147,10 +147,18 @@ class Api extends Rest_Controller {
 			)
 		);
 
-		// GET /consent_logs/(?P<consent_id>[a-zA-Z0-9=+/]+) - single consent proof (admin only).
+		// GET /consent_logs/(?P<consent_id>…) - single consent proof (admin only).
+		// The class must admit every id the plugin itself writes: the base64
+		// of generate_consent_id() (A-Za-z0-9+/=), the alphanumeric browser id
+		// from script.js, AND the Do-Not-Sell ids 'dnsmpi-<hex>' and
+		// 'dnsmpi-rsc-<hex>' from Do_Not_Sell_Shortcode::log_dnsmpi_event().
+		// The original class had no '-', so WordPress answered 404
+		// rest_no_route for every opt-out and rescission record although the
+		// row existed. The lookup itself binds the id with prepare(%s), so the
+		// class is a routing matter, not a sanitising one.
 		register_rest_route(
 			$this->namespace,
-			'/' . $this->rest_base . '/(?P<consent_id>[a-zA-Z0-9=+/]+)',
+			'/' . $this->rest_base . '/(?P<consent_id>[A-Za-z0-9=+\/_.-]+)',
 			array(
 				array(
 					'methods'             => WP_REST_Server::READABLE,
@@ -178,12 +186,30 @@ class Api extends Rest_Controller {
 		);
 
 		$result   = Controller::get_instance()->get_logs( $args );
-		$response = rest_ensure_response( $result['items'] );
+		$items    = is_array( $result['items'] ) ? array_map( array( $this, 'with_created_at_gmt' ), $result['items'] ) : $result['items'];
+		$response = rest_ensure_response( $items );
 
 		$response->header( 'X-WP-Total', $result['total'] );
 		$response->header( 'X-WP-TotalPages', $result['pages'] );
 
 		return $response;
+	}
+
+	/**
+	 * Add `created_at_gmt` — the stored site-time instant as RFC 3339 UTC — to
+	 * a row the API returns. The stored `created_at` stays as it is: the admin
+	 * table and existing integrations read it, and it is what the schema now
+	 * describes it to be. See Controller::created_at_gmt().
+	 *
+	 * @since 1.34.2
+	 * @param mixed $item One consent-log row.
+	 * @return mixed
+	 */
+	private function with_created_at_gmt( $item ) {
+		if ( is_array( $item ) && array_key_exists( 'created_at', $item ) ) {
+			$item['created_at_gmt'] = Controller::row_created_at_gmt( $item );
+		}
+		return $item;
 	}
 
 	/**
@@ -281,7 +307,7 @@ class Api extends Rest_Controller {
 			);
 		}
 
-		return rest_ensure_response( $item );
+		return rest_ensure_response( $this->with_created_at_gmt( $item ) );
 	}
 
 	/**
@@ -448,9 +474,65 @@ class Api extends Rest_Controller {
 					'context'     => array( 'view', 'edit' ),
 				),
 				'created_at' => array(
-					'description' => __( 'Date the consent was logged.', 'faz-cookie-manager' ),
+					// Not `format: date-time`: that promises RFC 3339 with an
+					// offset, and this value is the stored site-time wall clock,
+					// `Y-m-d H:i:s`, with none. created_at_gmt is the field that
+					// keeps that promise.
+					'description' => __( 'Date the consent was logged, in the site timezone (Y-m-d H:i:s, no offset).', 'faz-cookie-manager' ),
+					'type'        => 'string',
+					'context'     => array( 'view' ),
+					'readonly'    => true,
+				),
+				'created_at_gmt' => array(
+					'description' => __( 'The same instant in UTC, RFC 3339.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'format'      => 'date-time',
+					'context'     => array( 'view' ),
+					'readonly'    => true,
+				),
+				// The Migration_V2 audit columns: the jurisdiction the visitor was
+				// enforced under, the privacy signals the request carried, and
+				// the TC/GPP strings consented to. NULL on rows written before
+				// the migration.
+				'country_at_consent' => array(
+					'description' => __( 'ISO 3166-1 alpha-2 country the consent was enforced under; empty when unknown.', 'faz-cookie-manager' ),
+					'type'        => 'string',
+					'context'     => array( 'view' ),
+					'readonly'    => true,
+				),
+				'region_at_consent' => array(
+					'description' => __( 'ISO 3166-2 region the consent was enforced under; empty when unknown.', 'faz-cookie-manager' ),
+					'type'        => 'string',
+					'context'     => array( 'view' ),
+					'readonly'    => true,
+				),
+				'ruleset_id_at_consent' => array(
+					'description' => __( 'Identifier of the jurisdiction ruleset applied at consent time; empty when none was enforced.', 'faz-cookie-manager' ),
+					'type'        => 'string',
+					'context'     => array( 'view' ),
+					'readonly'    => true,
+				),
+				'signal_gpc_received' => array(
+					'description' => __( 'Whether the request carried a Global Privacy Control signal (1) or not (0).', 'faz-cookie-manager' ),
+					'type'        => 'integer',
+					'context'     => array( 'view' ),
+					'readonly'    => true,
+				),
+				'signal_dnt_received' => array(
+					'description' => __( 'Whether the request carried a Do Not Track signal (1) or not (0).', 'faz-cookie-manager' ),
+					'type'        => 'integer',
+					'context'     => array( 'view' ),
+					'readonly'    => true,
+				),
+				'tc_string' => array(
+					'description' => __( 'IAB TCF TC String recorded with the consent, when the TCF CMP is enabled.', 'faz-cookie-manager' ),
+					'type'        => 'string',
+					'context'     => array( 'view' ),
+					'readonly'    => true,
+				),
+				'gpp_string' => array(
+					'description' => __( 'IAB GPP string recorded with the consent, when a GPP API is present.', 'faz-cookie-manager' ),
+					'type'        => 'string',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),

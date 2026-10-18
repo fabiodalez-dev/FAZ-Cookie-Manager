@@ -75,7 +75,11 @@ class Policy_Page {
 			$warnings[] = sprintf( __( 'Setup is complete, but the cookie policy page was not created: %s', 'faz-cookie-manager' ), $page->get_error_message() );
 		} else {
 			$result['cookie_page'] = $page;
-			if ( ! self::link_banner( $language, $page['url'] ) ) {
+			if ( 'publish' !== $page['status'] ) {
+				// Parked: the renderer would publish nothing for a visitor anyway
+				// (same gate), so the public banner is not pointed at the draft.
+				$warnings[] = __( 'The cookie policy page was saved as a draft because the company name and privacy contact email are not set yet. Fill them in on the Cookie Policy page, then publish the page and link it from the Cookie Banner page.', 'faz-cookie-manager' );
+			} elseif ( ! self::link_banner( $language, $page['url'] ) ) {
 				$warnings[] = __( 'The cookie policy page was created, but the banner could not be linked to it. Set the privacy link on the Cookie Banner page.', 'faz-cookie-manager' );
 			}
 		}
@@ -119,13 +123,49 @@ class Policy_Page {
 		return true;
 	}
 
-	/** Create once per language and jurisdiction; never overwrite existing content. */
+	/**
+	 * Whether the saved Cookie Policy settings name the controller.
+	 *
+	 * The wizard never collects the company details, so a page it publishes
+	 * from an unconfigured install renders `how **** ("we", "us", "our")` and
+	 * `contact us at ****`. Generator::missing_required_settings() is the gate
+	 * the renderer and the REST API already apply; reading it here means the
+	 * wizard can only publish a page the renderer would actually render for a
+	 * visitor. The option name mirrors Renderer::SETTINGS_OPTION — spelled out
+	 * because this helper is loaded without the renderer in the wizard's tests.
+	 *
+	 * @param string $jurisdiction Generator jurisdiction id.
+	 * @return bool
+	 */
+	private static function controller_declared( $jurisdiction ) {
+		$settings = get_option( 'faz_cookie_policy_data', array() );
+		return array() === Generator::missing_required_settings( $jurisdiction, is_array( $settings ) ? $settings : array() );
+	}
+
+	/** Shape every success return the same way, status included. */
+	private static function page_result( $page, $language ) {
+		return array( 'id' => $page->ID, 'url' => get_permalink( $page ), 'language' => $language, 'status' => $page->post_status );
+	}
+
+	/**
+	 * Create once per language and jurisdiction; never overwrite existing content.
+	 *
+	 * Published only when the Cookie Policy settings already name the controller
+	 * (see controller_declared()). Otherwise the page is saved as a draft and
+	 * marked as parked by the wizard: a later run while the details are still
+	 * missing returns that same draft, and once the administrator has filled
+	 * them in the draft is theirs to publish in Pages — the wizard never
+	 * republishes a draft, so an administrator who unpublished the page on
+	 * purpose is left alone.
+	 */
 	public static function ensure( $language, $law ) {
 		$config = self::validate( $language, $law );
 		if ( is_wp_error( $config ) ) { return $config; }
 		$language = $config['language'];
 		$shortcode = '[faz_cookie_policy_complete lang="' . $language . '" jurisdiction="' . $config['jurisdiction'] . '"]';
 		$key = 'faz_setup_policy_page_' . sanitize_key( $language . '_' . $config['jurisdiction'] );
+		$publish = self::controller_declared( $config['jurisdiction'] );
+		$status  = $publish ? 'publish' : 'draft';
 		// An atomic option prevents concurrent wizard submissions creating duplicates.
 		// Expired leases are removed conditionally, so an interrupted PHP process
 		// cannot block future setup forever or delete another request's lock.
@@ -138,17 +178,30 @@ class Policy_Page {
 		}
 		try {
 			$page = get_post( (int) get_option( $key, 0 ) );
-			if ( $page && 'trash' !== $page->post_status && 'page' === $page->post_type && false !== strpos( $page->post_content, $shortcode ) && ( 'publish' !== $page->post_status || '' !== $page->post_password ) ) {
-				return self::not_public_error();
-			}
-			if ( ! $page || 'page' !== $page->post_type || 'publish' !== $page->post_status || '' !== $page->post_password || false === strpos( $page->post_content, $shortcode ) ) {
+			if ( ! $page || 'page' !== $page->post_type || 'trash' === $page->post_status || false === strpos( $page->post_content, $shortcode ) ) {
 				// Recover a page after an interrupted request, including when saving
 				// its option failed. Search the exact language-bearing shortcode.
-				$pages = get_posts( array( 'post_type' => 'page', 'post_status' => 'publish', 'has_password' => false, 's' => $shortcode, 'posts_per_page' => -1 ) );
+				// A draft is adopted only when it carries the wizard's own parking
+				// mark: an administrator who unpublished their page must not have
+				// it quietly taken over.
+				$pages = get_posts( array( 'post_type' => 'page', 'post_status' => array( 'publish', 'draft' ), 'has_password' => false, 's' => $shortcode, 'posts_per_page' => -1 ) );
 				$page = null;
 				foreach ( $pages as $candidate ) {
-					if ( false !== strpos( $candidate->post_content, $shortcode ) ) { $page = $candidate; break; }
+					if ( false === strpos( $candidate->post_content, $shortcode ) ) { continue; }
+					if ( 'draft' === $candidate->post_status && ! get_post_meta( $candidate->ID, '_faz_setup_policy_parked', true ) ) { continue; }
+					$page = $candidate;
+					break;
 				}
+			}
+			if ( $page && 'draft' === $page->post_status && '' === $page->post_password && ! $publish && get_post_meta( $page->ID, '_faz_setup_policy_parked', true ) ) {
+				// The draft this wizard parked earlier, and the controller is still
+				// not named: hand it back unchanged so the administrator gets the
+				// same instruction instead of a second draft.
+				update_option( $key, $page->ID, false );
+				return self::page_result( $page, $language );
+			}
+			if ( $page && ( 'publish' !== $page->post_status || '' !== $page->post_password ) ) {
+				return self::not_public_error();
 			}
 			if ( ! $page ) {
 				// The language is explicit: rendering never depends on the visitor's
@@ -157,20 +210,23 @@ class Policy_Page {
 				// Use the template's translated heading, never the admin's locale.
 				$template = (string) file_get_contents( $config['path'] );
 				$title = preg_match( '/^#\s+(.+)$/m', $template, $heading ) ? wp_strip_all_tags( $heading[1] ) : 'Cookie Policy';
-				$id = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => $title, 'post_name' => 'cookie-policy-' . sanitize_title( $language ), 'post_content' => $content ), true );
+				$id = wp_insert_post( array( 'post_type' => 'page', 'post_status' => $status, 'post_title' => $title, 'post_name' => 'cookie-policy-' . sanitize_title( $language ), 'post_content' => $content ), true );
 				if ( is_wp_error( $id ) ) { return $id; }
 				if ( ! $id ) { return new WP_Error( 'faz_policy_create_failed', __( 'The cookie policy page could not be created. Please try again.', 'faz-cookie-manager' ), array( 'status' => 500 ) ); }
 				$page = get_post( $id );
 				update_post_meta( $id, '_faz_setup_policy_language', $language );
+				if ( ! $publish ) {
+					update_post_meta( $id, '_faz_setup_policy_parked', '1' );
+				}
 				// Editorial plugins may force a draft even when publish was requested.
 				// Remember it for retries, but never point the public banner at a draft.
 				update_option( $key, $id, false );
-				if ( ! $page || 'publish' !== $page->post_status || '' !== $page->post_password ) {
+				if ( ! $page || $status !== $page->post_status || '' !== $page->post_password ) {
 					return self::not_public_error();
 				}
 			}
 			update_option( $key, $page->ID, false );
-			return array( 'id' => $page->ID, 'url' => get_permalink( $page ), 'language' => $language );
+			return self::page_result( $page, $language );
 		} finally {
 			self::release_lock( $lock, $token );
 		}

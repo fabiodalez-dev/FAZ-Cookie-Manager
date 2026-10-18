@@ -1089,8 +1089,13 @@ if ( ! function_exists( 'faz_throttle_request' ) ) {
 			return false;
 		}
 
-		$ip_hash = md5( $client_ip );
-		$key     = $prefix . '_' . $ip_hash;
+		// The same digest every other per-address key uses (faz_ip_cache_key()).
+		// Without a persistent object cache this key is a wp_options row, and a
+		// bare md5( ip ) there is reversed by enumerating IPv4 in seconds. The
+		// digest rotates monthly, so a window armed in the last seconds of a
+		// month closes early once: one extra request per address per month,
+		// against a window the E2E suites pin by prefix, not by suffix.
+		$key = $prefix . '_' . faz_ip_cache_key( $client_ip );
 
 		if ( wp_using_ext_object_cache() ) {
 			// Persistent object cache — atomic wp_cache_add().
@@ -1103,6 +1108,39 @@ if ( ! function_exists( 'faz_throttle_request' ) ) {
 		}
 		set_transient( $key, 1, $ttl );
 		return false;
+	}
+}
+
+if ( ! function_exists( 'faz_ip_cache_key' ) ) {
+	/**
+	 * The one way a visitor address becomes a cache key.
+	 *
+	 * An IP address is personal data, and a cache keyed on it is a record of
+	 * who visited. Without a persistent object cache a transient is a row in
+	 * wp_options, and that row outlives the request: in the live table, in
+	 * every backup, on every staging copy. A bare md5 does not change that,
+	 * because the IPv4 space is enumerated in seconds. The geolocation memos
+	 * were keyed that way while Geo_Detector and Ipinfo_Client keyed their
+	 * object-cache copies on a salted, month-rotated sha256, so one rule
+	 * (spec 001, Constitution VIII / NFR-03) was written two ways and only
+	 * one of them met it. Every per-address cache key goes through here now,
+	 * the rate-limit windows of faz_throttle_request() included (until 1.34.2
+	 * they were the one exception, keyed on a bare md5 of the address).
+	 *
+	 * The digest is bound to this site's nonce salt, so it cannot be computed
+	 * without the install's secrets, and to the current month, so an old row
+	 * stops matching anything and the cache's own turnover is a retention
+	 * limit. The formula is byte-for-byte what Geo_Detector used before, so
+	 * existing object-cache entries stay valid across the upgrade.
+	 *
+	 * @since 1.34.2
+	 * @param string $ip Cleartext address.
+	 * @return string 64-character hex digest.
+	 */
+	function faz_ip_cache_key( $ip ) {
+		$salt  = function_exists( 'wp_salt' ) ? (string) wp_salt( 'nonce' ) : 'faz-fallback';
+		$month = gmdate( 'Y-m' );
+		return hash( 'sha256', (string) $ip . '|' . $month . '|' . $salt );
 	}
 }
 
@@ -1175,7 +1213,12 @@ if ( ! function_exists( 'faz_is_bot' ) ) {
 		$bot_patterns = array(
 			'Googlebot', 'Bingbot', 'Slurp', 'DuckDuckBot', 'Baiduspider',
 			'YandexBot', 'facebot', 'ia_archiver', 'Twitterbot', 'LinkedInBot',
-			'Pinterest', 'WhatsApp', 'TelegramBot', 'Applebot', 'AdsBot-Google',
+			// Pinterest's crawlers only: `Pinterestbot/1.0` (desktop and
+			// mobile) and the rich-pin fetcher `Pinterest/0.2`. A bare
+			// 'Pinterest' also matched the in-app browser of the Pinterest
+			// app (`… [Pinterest/iOS]`, `… [Pinterest/Android]`), i.e. people,
+			// who were then served the banner-less crawler render.
+			'Pinterestbot', 'Pinterest/0.', 'WhatsApp', 'TelegramBot', 'Applebot', 'AdsBot-Google',
 			'Mediapartners-Google', 'Google-InspectionTool', 'Storebot-Google',
 			'SemrushBot', 'AhrefsBot', 'MJ12bot', 'DotBot', 'PetalBot',
 			'Bytespider', 'GPTBot', 'ChatGPT-User', 'ClaudeBot', 'PerplexityBot',
@@ -1223,6 +1266,25 @@ if ( ! function_exists( 'faz_verify_nonce' ) ) {
 	}
 }
 
+/** Bind an administrator's verification to the exact request, address and ID. */
+function faz_dsar_consent_verification_token( $post_id ) {
+	$id = (string) get_post_meta( $post_id, '_dsar_consent_id', true );
+	$email = (string) get_post_meta( $post_id, '_dsar_email', true );
+	return '' !== $id && is_email( $email ) ? wp_hash( $post_id . '|' . $email . '|' . $id, 'auth' ) : '';
+}
+
+/** Return an ID only after independent ownership verification by the controller. */
+function faz_dsar_verified_consent_id( $post_id, $email ) {
+	$record_email = (string) get_post_meta( $post_id, '_dsar_email', true );
+	if ( strtolower( $email ) !== strtolower( $record_email ) ) {
+		return '';
+	}
+	$proof = (string) get_post_meta( $post_id, '_dsar_consent_id_verified', true );
+	$expected = faz_dsar_consent_verification_token( $post_id );
+	return '' !== $proof && '' !== $expected && hash_equals( $expected, $proof )
+		? (string) get_post_meta( $post_id, '_dsar_consent_id', true ) : '';
+}
+
 if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 	/**
 	 * Export personal data (consent logs) for WordPress privacy tools.
@@ -1244,11 +1306,9 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 		$per_page     = 20;
 		$done         = true;
 
-		// Consent logs store only one-way hashed IPs (SHA-256 + salt) and cannot
-		// be linked back to an email address — nothing to export there. DSAR form
-		// submissions (post_type faz_dsar), however, store the requester's name,
-		// email, request type and message in the clear, keyed by _dsar_email, so
-		// they ARE exportable personal data.
+		// A submitted consent ID links the requester's email to their full
+		// pseudonymous consent history. Core confirms the email before export.
+		$seen_consent_ids = array();
 		if ( is_email( $email ) && post_type_exists( 'faz_dsar' ) ) {
 			$query = new WP_Query(
 				array(
@@ -1279,6 +1339,43 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 				if ( '' === $record_email ) {
 					continue;
 				}
+				$consent_id = faz_dsar_verified_consent_id( $post_id, $email );
+				if ( '' !== $consent_id && ! isset( $seen_consent_ids[ $consent_id ] ) ) {
+					$seen_consent_ids[ $consent_id ] = true;
+					$logs = \FazCookie\Admin\Modules\Consentlogs\Includes\Controller::get_instance()->get_logs_by_consent_id( $consent_id );
+					if ( is_wp_error( $logs ) ) {
+						return $logs;
+					}
+					$labels = array(
+						'consent_id' => __( 'Consent ID', 'faz-cookie-manager' ),
+						'status' => __( 'Status', 'faz-cookie-manager' ),
+						'categories' => __( 'Category and service decisions', 'faz-cookie-manager' ),
+						'url' => __( 'Page URL', 'faz-cookie-manager' ),
+						'banner_slug' => __( 'Banner', 'faz-cookie-manager' ),
+						'policy_revision' => __( 'Policy revision', 'faz-cookie-manager' ),
+						'created_at' => __( 'Date', 'faz-cookie-manager' ),
+						'created_at_gmt' => __( 'Date (UTC)', 'faz-cookie-manager' ),
+						'ip_hash' => __( 'Salted IP hash', 'faz-cookie-manager' ),
+						'user_agent' => __( 'Salted user-agent hash', 'faz-cookie-manager' ),
+						'tc_string' => __( 'TCF string', 'faz-cookie-manager' ),
+						'gpp_string' => __( 'GPP string from external CMP', 'faz-cookie-manager' ),
+						'country_at_consent' => __( 'Country at consent', 'faz-cookie-manager' ),
+						'region_at_consent' => __( 'Region at consent', 'faz-cookie-manager' ),
+						'ruleset_id_at_consent' => __( 'Ruleset at consent', 'faz-cookie-manager' ),
+						'signal_gpc_received' => __( 'GPC signal', 'faz-cookie-manager' ),
+						'signal_dnt_received' => __( 'Do Not Track signal', 'faz-cookie-manager' ),
+					);
+					foreach ( $logs as $log ) {
+						// The stored UTC instant, or the one computed for a row
+						// without it (see Controller::row_created_at_gmt()).
+						$log['created_at_gmt'] = \FazCookie\Admin\Modules\Consentlogs\Includes\Controller::row_created_at_gmt( $log );
+						$data = array();
+						foreach ( $labels as $field => $label ) {
+							$data[] = array( 'name' => $label, 'value' => isset( $log[ $field ] ) ? ( is_array( $log[ $field ] ) ? wp_json_encode( $log[ $field ] ) : (string) $log[ $field ] ) : '' );
+						}
+						$export_items[] = array( 'group_id' => 'faz_consent_logs', 'group_label' => __( 'Consent history (FAZ Cookie Manager)', 'faz-cookie-manager' ), 'item_id' => 'faz-consent-' . $log['log_id'], 'data' => $data );
+					}
+				}
 				$export_items[] = array(
 					'group_id'    => 'faz_dsar_requests',
 					'group_label' => __( 'Privacy requests (FAZ Cookie Manager)', 'faz-cookie-manager' ),
@@ -1292,6 +1389,7 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 							'name'  => __( 'Email', 'faz-cookie-manager' ),
 							'value' => $record_email,
 						),
+						array( 'name' => __( 'Consent ID', 'faz-cookie-manager' ), 'value' => (string) get_post_meta( $post_id, '_dsar_consent_id', true ) ),
 						array(
 							'name'  => __( 'Request type', 'faz-cookie-manager' ),
 							'value' => (string) get_post_meta( $post_id, '_dsar_type', true ),
@@ -1326,9 +1424,8 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 	 * Erase personal data (consent logs, stored DSAR requests) for WordPress
 	 * privacy tools.
 	 *
-	 * Consent logs use one-way IP hashing (SHA-256 + salt). We cannot
-	 * identify which records belong to a specific email address.
-	 * Records are auto-purged after the configured retention period.
+	 * Consent history can be resolved through the consent ID supplied in a
+	 * DSAR request. Core confirms the email before invoking this eraser.
 	 *
 	 * Stored DSAR requests (post_type faz_dsar) DO carry the requester's name,
 	 * address and free text, and are REDACTED here rather than deleted: the
@@ -1354,7 +1451,7 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 	 * @since 1.34.1 DSAR records are redacted in place instead of force-deleted.
 	 * @param string $email_address The user's email address.
 	 * @param int    $page          Page number for batched erasures.
-	 * @return array Erasure result conforming to the WP privacy eraser format.
+	 * @return array|WP_Error Erasure batch or an error that stops core until retry.
 	 */
 	function faz_privacy_eraser( $email_address, $page = 1 ) {
 		$email          = sanitize_email( (string) $email_address );
@@ -1365,11 +1462,7 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 		$messages       = array();
 		$done           = true;
 
-		// Consent logs use one-way IP hashing and cannot be linked to an email,
-		// so there is nothing to erase there (they auto-purge by retention). DSAR
-		// form submissions DO carry the requester's email and free text, so they
-		// are erasable on request.
-		$messages[] = __( 'FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses; they auto-purge after the configured retention period.', 'faz-cookie-manager' );
+		$messages[] = __( 'Consent history is located using consent IDs supplied with privacy requests. Other records expire under the configured retention policy. You can change or withdraw your cookie choices through the cookie preferences.', 'faz-cookie-manager' );
 
 		if ( is_email( $email ) && post_type_exists( 'faz_dsar' ) ) {
 			// IMPORTANT: always read the FIRST batch, never `paged => $page`.
@@ -1414,6 +1507,37 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 			$deleted    = 0;
 			foreach ( $query->posts as $post_id ) {
 				$post_id = (int) $post_id;
+				$consent_id = faz_dsar_verified_consent_id( $post_id, $email );
+				// An ID whose ownership was never verified is a claim, not the
+				// requester's data: the history it points to may document
+				// another visitor's consent (Art. 7(1)), so it is not erased.
+				// Nor is the claim kept: the verification is bound to the
+				// address this erasure removes, so it could never be completed
+				// afterwards, and holding the requester's identifier past the
+				// request would outlast its purpose (Art. 5(1)(e)). The message
+				// says exactly that, so the administrator knows that history
+				// stays and how to erase it.
+				if ( '' === $consent_id && '' !== (string) get_post_meta( $post_id, '_dsar_consent_id', true ) ) {
+					$items_retained = true;
+					$messages[] = __( 'Consent history was not erased because ownership of the supplied consent ID had not been verified. The unverified ID has been removed with the request. To erase that history, the requester must submit the consent ID again and you must verify it before running the erasure.', 'faz-cookie-manager' );
+				}
+				if ( '' !== $consent_id ) {
+					if ( apply_filters( 'faz_consent_log_erasure_retain', false, $consent_id, $email ) ) {
+						$items_retained = true;
+						$messages[] = __( 'Consent records were retained under the site retention policy.', 'faz-cookie-manager' );
+					} else {
+						$removed = \FazCookie\Admin\Modules\Consentlogs\Includes\Controller::get_instance()->delete_logs_by_consent_id( $consent_id );
+						if ( false === $removed ) {
+							// Core stops on WP_Error without marking the request complete;
+							// retry resumes the shrinking first-page batch after repair.
+							return new WP_Error( 'faz_consent_history_erasure', __( 'Consent history could not be erased. Please retry this request.', 'faz-cookie-manager' ) );
+						}
+						$items_removed += (int) $removed;
+					}
+				}
+				delete_post_meta( $post_id, '_dsar_consent_id' );
+				delete_post_meta( $post_id, '_dsar_consent_id_verified' );
+				delete_post_meta( $post_id, '_dsar_consent_id_cookie' );
 
 				/**
 				 * Whether to keep a dated, non-identifying record of an erased request.

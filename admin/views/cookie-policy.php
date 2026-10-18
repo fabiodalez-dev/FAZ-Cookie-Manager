@@ -286,7 +286,7 @@ $faz_cp_bundled_language_names = array(
 				<div class="faz-form-group">
 					<label for="cp-retention-months"><?php esc_html_e( 'Declared fallback retention period (months)', 'faz-cookie-manager' ); ?></label>
 					<input type="number" id="cp-retention-months" name="retention_months" class="faz-input" min="1" max="120" step="1" value="12" style="max-width:8em;">
-					<div class="faz-help"><?php esc_html_e( 'Used only as a policy declaration when no shorter cookie-specific period applies. It does not change consent-log or third-party analytics retention settings.', 'faz-cookie-manager' ); ?></div>
+					<div class="faz-help"><?php esc_html_e( 'Used only as a policy declaration when no shorter cookie-specific period applies. It does not change consent-log or third-party analytics retention settings.', 'faz-cookie-manager' ); ?> <?php esc_html_e( 'The period the policy states for consent records is the consent log retention set under Settings.', 'faz-cookie-manager' ); ?></div>
 				</div>
 				<div class="faz-form-group">
 					<label for="cp-privacy-policy-url"><?php esc_html_e( 'Separate Privacy Policy URL (required for POPIA)', 'faz-cookie-manager' ); ?></label>

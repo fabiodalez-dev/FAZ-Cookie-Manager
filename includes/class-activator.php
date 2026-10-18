@@ -103,9 +103,13 @@ class Activator {
 		// every install still using the floating widget.
 		add_action( 'faz_daily_cleanup', array( 'FazCookie\Includes\Withdrawal_Path', 'cron_verify' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
+		// One-off GVL download scheduled when TCF is enabled without a list
+		// (Settings::maybe_bootstrap_gvl) — kept out of the settings request.
+		add_action( 'faz_gvl_bootstrap', array( 'FazCookie\Admin\Modules\Settings\Includes\Settings', 'run_gvl_bootstrap' ) );
 		add_action( 'faz_weekly_definitions_update', array( 'FazCookie\Includes\Cookie_Definitions', 'cron_update' ) );
 		add_action( 'faz_after_update_settings', array( 'FazCookie\Includes\Cookie_Definitions', 'schedule_updates' ) );
 		add_action( 'faz_scheduled_scan', array( __CLASS__, 'run_scheduled_scan' ) );
+		add_action( self::GMT_BACKFILL_HOOK, array( __CLASS__, 'run_consent_log_gmt_backfill' ) );
 		add_action( 'faz_after_update_settings', array( __CLASS__, 'reschedule_auto_scan' ) );
 		// F009: keep the IAB unmatched-vendors transient fresh on every
 		// cookie write path (create / update / delete) — not just update.
@@ -129,7 +133,17 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.09.19.1';
+	const MIGRATIONS_VERSION = '2026.10.18.1';
+
+	/**
+	 * Continuation event of the created_at_gmt backfill on large tables.
+	 */
+	const GMT_BACKFILL_HOOK = 'faz_consent_log_gmt_backfill';
+
+	/**
+	 * Rows converted per backfill batch.
+	 */
+	const GMT_BACKFILL_BATCH = 500;
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -163,10 +177,12 @@ class Activator {
 			self::add_recaptcha_gstatic_pattern();
 			self::enable_gpc_on_ccpa_banners();
 			self::ensure_share_personal_data_column();
+			$all_complete = self::ensure_consent_log_gmt_column() && $all_complete;
 			self::clear_necessary_optout_flags();
 			self::normalize_legacy_functional_optout_flags();
 			self::move_sourcebuster_to_marketing();
 			self::reset_stale_per_cookie_consent();
+			$all_complete = self::refresh_necessary_disclosure_text() && $all_complete;
 			self::demote_bulky_autoloaded_options();
 			self::refresh_cookie_translation_caches();
 			self::remove_dead_site_settings();
@@ -276,8 +292,12 @@ class Activator {
 		if ( class_exists( $generator ) && method_exists( $generator, 'policy_languages' ) ) {
 			$languages = array_merge( $languages, (array) $generator::policy_languages() );
 		}
-		foreach ( array_unique( array_filter( $languages, 'is_string' ) ) as $language ) {
-			wp_cache_delete( 'faz_cookie_policy_list_' . $language, 'faz_cookie_policy' );
+		$languages = array_unique( array_filter( $languages, 'is_string' ) );
+		$renderer  = '\\FazCookie\\Admin\\Modules\\Cookie_Policy_Generator\\Includes\\Renderer';
+		if ( class_exists( $renderer ) && method_exists( $renderer, 'delete_cookie_list_cache' ) ) {
+			// The table cache is keyed by language AND jurisdiction; the renderer
+			// owns the key, so it also owns the deletion.
+			$renderer::delete_cookie_list_cache( $languages );
 		}
 		if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
 			faz_clear_banner_template_cache();
@@ -1419,6 +1439,9 @@ class Activator {
 				}
 			} ),
 			array( 'W3 Total Cache', function () {
+				// Every W3TC cache, not just pages: an upgrade ships new JS/CSS
+				// that its minify and CDN caches may hold. A save only needs the
+				// page cache (see the W3_Total_Cache adapter).
 				if ( function_exists( 'w3tc_flush_all' ) ) {
 					w3tc_flush_all();
 				}
@@ -1429,8 +1452,12 @@ class Activator {
 				}
 			} ),
 			array( 'Cache Enabler', function () {
+				// Same API as the Cache_Enabler adapter: the 1.6.0+ action, and
+				// the deprecated ce_clear_cache only for older builds.
 				if ( has_action( 'cache_enabler_clear_complete_cache' ) ) {
 					do_action( 'cache_enabler_clear_complete_cache' );
+				} elseif ( has_action( 'ce_clear_cache' ) ) {
+					do_action( 'ce_clear_cache' );
 				}
 			} ),
 			array( 'SG Optimizer', function () {
@@ -1456,6 +1483,31 @@ class Activator {
 			array( 'WP-Optimize', function () {
 				if ( class_exists( 'WP_Optimize' ) && function_exists( 'wpo_cache_flush' ) ) {
 					wpo_cache_flush();
+				}
+			} ),
+			array( 'Nginx Helper', function () {
+				if ( has_action( 'rt_nginx_helper_purge_all' ) ) {
+					do_action( 'rt_nginx_helper_purge_all' );
+				}
+			} ),
+			array( 'Proxy Cache Purge', function () {
+				// Not through the FAZ purge event the save adapter fires: this
+				// runs on init priority 5, before VarnishPurger::init()
+				// (priority 10) reads varnish_http_purge_events and hooks its
+				// listeners, so that event reached nothing here. The plugin's
+				// public execute_purge_no_id() needs neither: it queues the
+				// full-site `/?vhp-regex` URL on the instance, and the shutdown
+				// hook init() adds sends it — the same path as its own "Purge
+				// cache" button. Called after init (an activation), shutdown is
+				// already hooked and the result is the same.
+				$purger = isset( $GLOBALS['purger'] ) ? $GLOBALS['purger'] : null;
+				if ( $purger instanceof \VarnishPurger && is_callable( array( $purger, 'execute_purge_no_id' ) ) ) {
+					$purger->execute_purge_no_id( 0 );
+				}
+			} ),
+			array( 'Super Page Cache', function () {
+				if ( has_action( 'swcfpc_purge_cache' ) ) {
+					do_action( 'swcfpc_purge_cache' );
 				}
 			} ),
 			array( 'Comet Cache', function () {
@@ -2215,6 +2267,122 @@ class Activator {
 	}
 
 	/**
+	 * Add wp_faz_consent_logs.created_at_gmt and backfill it (1.34.2).
+	 *
+	 * created_at is the site's wall clock (current_time('mysql')): unambiguous
+	 * inside the site, ambiguous once a record leaves it, and off by an hour
+	 * around a DST change. The new column holds the same instant in UTC and is
+	 * written on every insert from now on (Controller::log_consent()).
+	 *
+	 * Upgrade path, idempotent and SQLite-friendly, in the shape of
+	 * ensure_share_personal_data_column(): SHOW COLUMNS decides, and the one
+	 * ALTER adds a NULL-able column and nothing else, so no existing column and
+	 * no existing value is touched. Fresh installs get the column from the
+	 * CREATE TABLE in Controller::maybe_create_table().
+	 *
+	 * Backfill: the existing rows are converted in PHP (get_gmt_from_date(), so
+	 * no database time-zone function is needed) in batches of
+	 * GMT_BACKFILL_BATCH by ascending log_id, from a stored cursor. Only rows
+	 * whose created_at_gmt is still NULL are read and written, and only that
+	 * column is written. The conversion uses the site's CURRENT time zone,
+	 * which is the only information an old row carries: a row written before
+	 * the time-zone setting was changed is converted with the new one. One
+	 * batch runs per admin load; larger tables continue through a single
+	 * self-rescheduling cron event, so no request does the whole table. Rows
+	 * with an unparseable created_at keep NULL, and the readers fall back to
+	 * the computed value for any row without one.
+	 *
+	 * @return bool True once the column exists and the backfill is complete.
+	 */
+	public static function ensure_consent_log_gmt_column() {
+		if ( get_option( 'faz_consent_log_gmt_done' ) ) {
+			return true;
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_consent_logs';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the upgrade path.
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+			// No table yet: Controller::maybe_create_table() creates it with the
+			// column. Not marked done, so the flag below is set once it exists.
+			return true;
+		}
+		if ( ! get_option( 'faz_consent_log_gmt_column_added' ) ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal; SHOW COLUMNS probe, no user input.
+			$has_column = $wpdb->get_var( 'SHOW COLUMNS FROM `' . esc_sql( $table ) . "` LIKE 'created_at_gmt'" );
+			if ( ! $has_column ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.SchemaChange -- $table is $wpdb->prefix + literal "faz_consent_logs"; the column definition is a fixed literal; one-shot DDL on the upgrade path.
+				$result = $wpdb->query( 'ALTER TABLE `' . esc_sql( $table ) . '` ADD COLUMN `created_at_gmt` datetime NULL DEFAULT NULL AFTER `created_at`' );
+				if ( false === $result ) {
+					throw new \RuntimeException( 'FAZ: failed to add the created_at_gmt column; migration will retry.' );
+				}
+			}
+			update_option( 'faz_consent_log_gmt_column_added', 1, false );
+		}
+		if ( ! self::backfill_consent_log_gmt() ) {
+			if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( self::GMT_BACKFILL_HOOK ) ) {
+				wp_schedule_single_event( time() + 60, self::GMT_BACKFILL_HOOK );
+			}
+			return false;
+		}
+		update_option( 'faz_consent_log_gmt_done', 1, false );
+		delete_option( 'faz_consent_log_gmt_cursor' );
+		if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+			wp_clear_scheduled_hook( self::GMT_BACKFILL_HOOK );
+		}
+		return true;
+	}
+
+	/**
+	 * Convert one batch of rows without created_at_gmt.
+	 *
+	 * @return bool True when no row is left to convert.
+	 */
+	private static function backfill_consent_log_gmt() {
+		global $wpdb;
+		$table  = $wpdb->prefix . 'faz_consent_logs';
+		$cursor = (int) get_option( 'faz_consent_log_gmt_cursor', 0 );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is $wpdb->prefix + literal; bounds bound via prepare(%d); one-shot upgrade backfill.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT log_id, created_at FROM {$table} WHERE log_id > %d AND created_at_gmt IS NULL ORDER BY log_id ASC LIMIT %d", $cursor, self::GMT_BACKFILL_BATCH ), ARRAY_A );
+		if ( ! is_array( $rows ) ) {
+			throw new \RuntimeException( 'FAZ: created_at_gmt backfill could not read the consent log; it will retry.' );
+		}
+		foreach ( $rows as $row ) {
+			$cursor     = max( $cursor, (int) $row['log_id'] );
+			$created_at = isset( $row['created_at'] ) ? trim( (string) $row['created_at'] ) : '';
+			if ( '' === $created_at || 0 === strpos( $created_at, '0000-00-00' ) || false === strtotime( $created_at ) ) {
+				continue;
+			}
+			$gmt = get_gmt_from_date( $created_at, 'Y-m-d H:i:s' );
+			if ( ! is_string( $gmt ) || '' === $gmt ) {
+				continue;
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot upgrade backfill of the plugin's own table.
+			$wpdb->update( $table, array( 'created_at_gmt' => $gmt ), array( 'log_id' => (int) $row['log_id'] ), array( '%s' ), array( '%d' ) );
+		}
+		update_option( 'faz_consent_log_gmt_cursor', $cursor, false );
+		return count( $rows ) < self::GMT_BACKFILL_BATCH;
+	}
+
+	/**
+	 * Cron continuation of the created_at_gmt backfill: a few batches per run,
+	 * rescheduled by ensure_consent_log_gmt_column() until complete.
+	 *
+	 * @return void
+	 */
+	public static function run_consent_log_gmt_backfill() {
+		try {
+			for ( $i = 0; $i < 10; $i++ ) {
+				if ( self::ensure_consent_log_gmt_column() ) {
+					return;
+				}
+			}
+		} catch ( \Throwable $e ) {
+			// Retried by the next admin load or the rescheduled event.
+			return;
+		}
+	}
+
+	/**
 	 * Clear the CCPA opt-out flags on the always-exempt `necessary` category.
 	 *
 	 * sell_personal_data / share_personal_data both default to 1 at the schema
@@ -2453,6 +2621,166 @@ class Activator {
 			);
 		}
 		update_option( 'faz_move_sourcebuster_marketing_done', 1, false );
+	}
+
+	/**
+	 * Replace the stock "Necessary" and consent-cookie wording that denied the
+	 * consent identifier.
+	 *
+	 * Until 1.34.2 the bundled Necessary category description ended with "These
+	 * cookies do not store any personally identifiable data" (and its
+	 * translations), and the fazcookie-consent description said only "Cookie
+	 * consent preferences set by the visitor." That cookie carries a random
+	 * consent identifier the consent log keys its record on, so both statements
+	 * were inaccurate. The bundled files now say so; this carries the change to
+	 * the rows an existing install already seeded, because the preference
+	 * centre, the generated policy and [faz_cookie_table] all print the stored
+	 * value.
+	 *
+	 * Only a language slot whose value is still a shipped wording (listed in
+	 * contents/legacy-stock-text.json; compared with tags stripped and
+	 * whitespace and case folded, so an editor round-trip still matches) is
+	 * replaced, with the current bundled text for that slot's language — English
+	 * when the language ships none. Anything else is an administrator's own
+	 * words and stays. Once per site (`faz_necessary_disclosure_text_done`), so
+	 * a later MIGRATIONS_VERSION bump cannot overrule someone who deliberately
+	 * restores the old sentence; withheld while the tables are missing; a failed
+	 * write throws so the batch withholds its version marker and retries.
+	 *
+	 * "Retried" has to be true, and until the return value it was not: a step
+	 * that declined (helpers not loaded, tables missing) returned quietly, the
+	 * batch wrote its version marker anyway, and the fast path in
+	 * run_pending_migrations() never called this again until a release bumped
+	 * MIGRATIONS_VERSION. It now reports the decline the way
+	 * seed_own_consent_cookie() does, and the batch withholds the marker.
+	 *
+	 * @return bool True when the step is done (now or on an earlier run); false
+	 *              when it declined and must be retried.
+	 * @throws \RuntimeException When a row cannot be written.
+	 */
+	public static function refresh_necessary_disclosure_text() {
+		if ( get_option( 'faz_necessary_disclosure_text_done' ) ) {
+			return true;
+		}
+		if ( ! function_exists( 'faz_read_json_file' ) ) {
+			return false; // Utilities not loaded in this context: retried later.
+		}
+		global $wpdb;
+		$cookies    = $wpdb->prefix . 'faz_cookies';
+		$categories = $wpdb->prefix . 'faz_cookie_categories';
+		foreach ( array( $cookies, $categories ) as $table ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the upgrade path.
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+				return false; // No table yet: retried on the next run, marker not set.
+			}
+		}
+
+		$contents = dirname( __DIR__ ) . '/admin/modules/cookies/includes/contents/';
+		$legacy   = faz_read_json_file( $contents . 'legacy-stock-text.json' );
+		$targets  = array(
+			array(
+				'table'   => $categories,
+				'id'      => 'category_id',
+				'column'  => 'slug',
+				'key'     => 'necessary',
+				'legacy'  => (array) ( $legacy['categories']['necessary']['description'] ?? array() ),
+				'catalog' => 'categories',
+			),
+			array(
+				'table'   => $cookies,
+				'id'      => 'cookie_id',
+				'column'  => 'name',
+				'key'     => 'fazcookie-consent',
+				'legacy'  => (array) ( $legacy['cookies']['fazcookie-consent']['description'] ?? array() ),
+				'catalog' => 'cookies',
+			),
+		);
+
+		$changed = array();
+		foreach ( $targets as $target ) {
+			$known = array_map( array( __CLASS__, 'fold_stock_text' ), $target['legacy'] );
+			if ( empty( $known ) ) {
+				continue;
+			}
+			$current = static function ( $lang ) use ( $contents, $target ) {
+				$lang       = strtolower( (string) $lang );
+				$candidates = array_unique( array( $lang, substr( $lang, 0, 2 ), 'en' ) );
+				foreach ( $candidates as $code ) {
+					if ( '' === $code || ! preg_match( '/^[a-z]{2}(-[a-z]{2})?$/', $code ) ) {
+						continue;
+					}
+					$data = faz_read_json_file( $contents . $target['catalog'] . '/' . $code . '.json' );
+					$text = $data[ $target['key'] ]['description'] ?? '';
+					if ( is_string( $text ) && '' !== $text ) {
+						return $text;
+					}
+				}
+				return '';
+			};
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table is $wpdb->prefix + literal (escaped via esc_sql); id/column names are literals from $targets above; value bound via %s; one-shot migration read.
+			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT `' . $target['id'] . '`, description FROM `' . esc_sql( $target['table'] ) . '` WHERE ' . $target['column'] . ' = %s', $target['key'] ), ARRAY_A );
+			foreach ( (array) $rows as $row ) {
+				$stored  = (string) ( $row['description'] ?? '' );
+				$decoded = ( '' !== $stored && '{' === $stored[0] ) ? json_decode( $stored, true ) : null;
+				$slots   = is_array( $decoded ) ? $decoded : array( '' => $stored );
+				$dirty   = false;
+				foreach ( $slots as $lang => $value ) {
+					if ( ! is_string( $value ) || ! in_array( self::fold_stock_text( $value ), $known, true ) ) {
+						continue;
+					}
+					$replacement = $current( '' === $lang ? ( function_exists( 'faz_default_language' ) ? faz_default_language() : 'en' ) : $lang );
+					if ( '' !== $replacement && $replacement !== $value ) {
+						$slots[ $lang ] = $replacement;
+						$dirty          = true;
+					}
+				}
+				if ( ! $dirty ) {
+					continue;
+				}
+				$new = is_array( $decoded ) ? wp_json_encode( $slots ) : $slots[''];
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration write to a plugin table; caches busted below.
+				$written = $wpdb->update(
+					$target['table'],
+					array( 'description' => $new ),
+					array( $target['id'] => (int) $row[ $target['id'] ] ),
+					array( '%s' ),
+					array( '%d' )
+				);
+				if ( false === $written ) {
+					throw new \RuntimeException( 'FAZ: failed to refresh the Necessary disclosure text; migration will retry.' );
+				}
+				$changed[ $target['catalog'] ] = true;
+			}
+		}
+
+		if ( ! empty( $changed['categories'] ) ) {
+			Category_Controller::get_instance()->delete_cache();
+		}
+		if ( ! empty( $changed['cookies'] ) ) {
+			Cookie_Controller::get_instance()->delete_cache();
+		}
+		// The merged bundled catalogues are object-cached for twelve hours, and
+		// the bundled Necessary text itself changed in this release.
+		foreach ( glob( $contents . 'categories/*.json' ) ?: array() as $file ) {
+			wp_cache_delete( 'faz_category_contents_v2_' . basename( $file, '.json' ), 'faz_category_contents' );
+		}
+		wp_cache_delete( 'faz_category_contents_en', 'faz_category_contents' );
+		update_option( 'faz_necessary_disclosure_text_done', 1, false );
+		return true;
+	}
+
+	/**
+	 * Fold a description for stock-text comparison: tags stripped, whitespace
+	 * collapsed, case folded.
+	 *
+	 * @param mixed $text Stored or bundled description.
+	 * @return string
+	 */
+	private static function fold_stock_text( $text ) {
+		$plain = wp_strip_all_tags( (string) $text );
+		return function_exists( 'mb_strtolower' )
+			? mb_strtolower( trim( (string) preg_replace( '/\s+/u', ' ', $plain ) ), 'UTF-8' )
+			: strtolower( trim( (string) preg_replace( '/\s+/u', ' ', $plain ) ) );
 	}
 
 	/**
@@ -2788,7 +3116,12 @@ class Activator {
 	 *
 	 * @param string $slug          Category slug.
 	 * @param array  $fallback_data Default name/description if not in Category_Controller defaults.
-	 * @param bool   $prior_consent Whether prior consent is required. Default false.
+	 * @param bool   $prior_consent Whether the category is ACTIVE BEFORE consent
+	 *                              (the stored `prior_consent` flag, which
+	 *                              Geo_Runtime::default_consent() reads as the
+	 *                              GDPR default), i.e. NOT whether consent is
+	 *                              required first. Default false: off until
+	 *                              the visitor consents.
 	 * @param bool   $visibility    Whether visible on frontend. Default true.
 	 */
 	private static function ensure_category_by_slug( $slug, $fallback_data, $prior_consent = false, $visibility = true ) {

@@ -423,7 +423,104 @@ class Settings extends Store {
 		$settings = self::sanitize( $data, $defaults );
 		update_option( 'faz_settings', $settings );
 		self::$cached_settings = null;
+		self::maybe_bootstrap_gvl( $settings );
 		do_action( 'faz_after_update_settings', $clear );
+	}
+
+	/**
+	 * WP-Cron hook that downloads the Global Vendor List after TCF is enabled.
+	 */
+	const GVL_BOOTSTRAP_HOOK = 'faz_gvl_bootstrap';
+
+	/**
+	 * Get the IAB Global Vendor List the moment TCF is switched on.
+	 *
+	 * This is the one write path every iab.enabled change goes through
+	 * (settings REST, onboarding wizard, import). Without it the only triggers
+	 * were the "Update GVL Now" button and the weekly cron, whose first tick
+	 * is up to seven days away, and the frontend does not activate the CMP
+	 * without a GVL: TCF stays off until then (Admin::tcf_gvl_missing_notice()
+	 * says so on the plugin's screens).
+	 *
+	 * The download is scheduled, not run here. It used to run synchronously
+	 * inside the settings save: the full GVL (well over a megabyte) with a
+	 * 60-second timeout, then the purpose translations with another 30, all
+	 * inside a REST request whose PHP limit is typically 30 seconds and whose
+	 * proxy commonly cuts at 60. A slow IAB endpoint turned "Save" into a hung
+	 * request or a timeout error for settings that had in fact been stored.
+	 * Lowering the timeout instead would only trade the hang for a download
+	 * that fails on exactly the slow hosts. A single cron event returns at
+	 * once; WP-Cron spawns it on the next request, typically within seconds,
+	 * and an install running without WP-Cron gets the notice and the button.
+	 *
+	 * Scheduled on any save while TCF is on and no list is stored, not only on
+	 * the off → on flip: it costs nothing now, and it is how a download that
+	 * failed is retried. At most one event is pending at a time.
+	 *
+	 * @param array $current The sanitised settings being stored.
+	 * @return void
+	 */
+	private static function maybe_bootstrap_gvl( array $current ) {
+		if ( empty( $current['iab']['enabled'] ) ) {
+			return;
+		}
+		if ( ! class_exists( '\\FazCookie\\Includes\\Gvl' ) ) {
+			return;
+		}
+		if ( \FazCookie\Includes\Gvl::get_instance()->has_data() ) {
+			return;
+		}
+		if ( ! function_exists( 'wp_schedule_single_event' ) || wp_next_scheduled( self::GVL_BOOTSTRAP_HOOK ) ) {
+			return;
+		}
+		wp_schedule_single_event( time(), self::GVL_BOOTSTRAP_HOOK );
+	}
+
+	/**
+	 * Cron callback for GVL_BOOTSTRAP_HOOK: download the GVL, and the purpose
+	 * translations for the site language, if TCF is still on and no list has
+	 * arrived in the meantime (the button or the weekly cron may have won).
+	 *
+	 * @return void
+	 */
+	public static function run_gvl_bootstrap() {
+		$settings = get_option( 'faz_settings', array() );
+		if ( ! is_array( $settings ) || empty( $settings['iab']['enabled'] ) ) {
+			return;
+		}
+		if ( ! class_exists( '\\FazCookie\\Includes\\Gvl' ) ) {
+			return;
+		}
+		$gvl = \FazCookie\Includes\Gvl::get_instance();
+		if ( $gvl->has_data() ) {
+			return;
+		}
+		$result = $gvl->download();
+		if ( empty( $result['success'] ) ) {
+			error_log( 'FAZ GVL bootstrap: download failed - ' . ( isset( $result['message'] ) ? $result['message'] : '' ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		}
+		// A zero version means nothing was stored. A non-zero one with success
+		// false means the list is in the option but the copy on disk failed:
+		// has_data() is true from now on and the CMP activates, so that case
+		// continues like a success.
+		if ( empty( $result['version'] ) ) {
+			return;
+		}
+		$lang = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
+		if ( 'en' !== $lang ) {
+			$gvl->download_purposes( $lang );
+		}
+		// Every page rendered since TCF was switched on was rendered without the
+		// CMP: the frontend gates tcf-cmp.js, the __tcfapi stub and the vendor
+		// data on has_data(). A page cache that stored one of those pages keeps
+		// serving it with no CMP until it is purged, which on a long TTL means
+		// TC strings never reach the ad stack. Drop the stored banner template
+		// too, as every other GVL write path does: download() prunes the vendor
+		// selection against the new list.
+		if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+			faz_clear_banner_template_cache();
+		}
+		do_action( 'faz_purge_page_cache' );
 	}
 
 	/**
