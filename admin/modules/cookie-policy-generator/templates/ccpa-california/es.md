@@ -45,7 +45,7 @@ Recopilamos las siguientes categorías de Información Personal según CCPA § 1
 
 ## Conservación
 
-{{RETENTION_PERIOD}} desde la recolección, salvo que la ley requiera mayor período (§ 1798.100(a)(3)).
+La información personal que recogemos directamente mediante cookies se conserva solo durante el tiempo necesario para la finalidad informada y, cuando no se muestre un periodo específico más breve, durante un plazo no superior al periodo residual declarado de {{RETENTION_PERIOD}}, salvo que la ley exija un plazo mayor (CCPA § 1798.100(a)(3)). Consulta la tabla anterior para la duración de cada cookie y la Política de privacidad para los plazos controlados por terceros.
 
 ## Sus derechos bajo CCPA/CPRA
 

@@ -43,7 +43,7 @@ Mezinárodní předávání osobních údajů (čl. 33–36 LGPD) probíhá výh
 
 ## Doba uchovávání (čl. 15–16 LGPD)
 
-{{RETENTION_PERIOD}} od shromáždění údajů.
+Osobní údaje, které shromažďujeme přímo prostřednictvím souborů cookie, uchováváme pouze po dobu nezbytnou pro uvedený účel a, není-li uvedena kratší konkrétní doba, nejdéle po deklarovanou náhradní dobu {{RETENTION_PERIOD}}, ledaže delší dobu vyžaduje zákon nebo ji umožňuje čl. 16 LGPD. Dobu platnosti jednotlivých souborů cookie najdete v tabulce výše.
 
 ## Práva subjektů údajů (čl. 18 LGPD)
 

@@ -26,7 +26,7 @@ Internationale Übermittlungen (Art. 33-36 LGPD): angemessenes Schutzniveau / St
 
 ## Aufbewahrung
 
-{{RETENTION_PERIOD}} ab Erhebung.
+Von uns unmittelbar über Cookies erhobene personenbezogene Daten werden nur so lange aufbewahrt, wie es für den angegebenen Zweck erforderlich ist, und — sofern keine kürzere Cookie-spezifische Dauer angegeben ist — höchstens für den erklärten Auffangzeitraum von {{RETENTION_PERIOD}}, es sei denn, eine längere Dauer ist gesetzlich vorgeschrieben oder nach Art. 16 LGPD zulässig. Die Lebensdauer jedes Cookies finden Sie in der obigen Tabelle.
 
 ## Rechte (Art. 18 LGPD)
 

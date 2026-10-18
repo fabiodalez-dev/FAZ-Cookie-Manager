@@ -30,7 +30,7 @@ Nous **ne** collectons **pas** les Sensitive PI sans opt-in explicite, ni les do
 
 ## Conservation
 
-{{RETENTION_PERIOD}} à compter de la collecte.
+Les informations personnelles que nous collectons directement au moyen de cookies ne sont conservées que pendant la durée nécessaire à la finalité indiquée et, lorsqu'aucune durée spécifique plus courte n'est affichée, pendant une durée n'excédant pas la période résiduelle déclarée de {{RETENTION_PERIOD}}, sauf si une durée plus longue est imposée par la loi (CCPA § 1798.100(a)(3)). Consultez le tableau ci-dessus pour la durée de chaque cookie et la Politique de confidentialité pour les durées contrôlées par des tiers.
 
 ## Droits CCPA/CPRA
 

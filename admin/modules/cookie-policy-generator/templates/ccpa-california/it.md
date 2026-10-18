@@ -30,7 +30,7 @@ NON raccogliamo Sensitive PI senza opt-in esplicito, né dati di minori di 16 an
 
 ## Conservazione
 
-{{RETENTION_PERIOD}} dalla raccolta.
+Le informazioni personali raccolte direttamente da noi tramite cookie sono conservate solo per il tempo necessario alla finalità dichiarata e, quando non è indicato un periodo specifico più breve, non oltre il periodo residuale dichiarato di {{RETENTION_PERIOD}}, salvo che un periodo più lungo sia imposto dalla legge (CCPA § 1798.100(a)(3)). Consulta la tabella sopra per la durata di ciascun cookie e la Privacy Policy per i periodi controllati da terze parti.
 
 ## Diritti CCPA/CPRA
 

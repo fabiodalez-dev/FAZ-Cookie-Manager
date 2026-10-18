@@ -41,7 +41,7 @@ Međunarodni prijenosi (čl. 33. – 36. LGPD-a) provode se u zemlje s odgovaraj
 
 ## Čuvanje podataka (čl. 15. – 16. LGPD-a)
 
-{{RETENTION_PERIOD}} od prikupljanja.
+Osobni podaci koje izravno prikupljamo putem kolačića čuvaju se samo onoliko dugo koliko je potrebno za navedenu svrhu i, ako nije naveden kraći rok specifičan za pojedini kolačić, ne dulje od objavljenog zamjenskog roka od {{RETENTION_PERIOD}}, osim ako je dulje razdoblje propisano zakonom ili dopušteno čl. 16. LGPD-a. Trajanje svakog kolačića navedeno je u tablici iznad.
 
 ## Prava ispitanika (čl. 18. LGPD-a)
 

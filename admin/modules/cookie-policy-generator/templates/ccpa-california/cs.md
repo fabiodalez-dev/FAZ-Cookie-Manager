@@ -56,7 +56,7 @@ Osobní údaje **neprodáváme ani nesdílíme** za účelem kontextové behavio
 
 ## Doba uchovávání
 
-Osobní údaje jsou uchovávány po dobu {{RETENTION_PERIOD}} od jejich shromáždění, pokud delší doba není vyžadována právními předpisy nebo oprávněnými obchodními účely (CCPA § 1798.100(a)(3)).
+Osobní údaje, které shromažďujeme přímo prostřednictvím souborů cookie, uchováváme pouze po dobu nezbytnou pro uvedený účel a, není-li uvedena kratší konkrétní doba, nejdéle po deklarovanou náhradní dobu {{RETENTION_PERIOD}}, ledaže delší dobu vyžaduje zákon (CCPA § 1798.100(a)(3)). Dobu platnosti jednotlivých souborů cookie najdete v tabulce výše a doby řízené třetími stranami v Zásadách ochrany osobních údajů.
 
 ## Vaše práva podle CCPA/CPRA
 

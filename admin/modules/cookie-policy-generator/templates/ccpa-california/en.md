@@ -53,7 +53,7 @@ We **do not sell or share Personal Information** for cross-context behavioral ad
 
 ## Retention
 
-Personal Information is retained for {{RETENTION_PERIOD}} from collection, unless a longer period is required by law or for legitimate business purposes (CCPA § 1798.100(a)(3)).
+Personal Information collected directly by us through cookies is retained only for as long as necessary for the disclosed purpose and, where no shorter cookie-specific period is shown, for no longer than the declared fallback period of {{RETENTION_PERIOD}}, unless a longer period is required by law (CCPA § 1798.100(a)(3)). See the table above for each cookie's lifetime and the Privacy Policy for retention controlled by third parties.
 
 ## Your CCPA/CPRA rights
 

@@ -191,7 +191,7 @@ We **do not sell or share Personal Information** for cross-context behavioral ad
 		_x(
 			'## Retention
 
-Personal Information is retained for {{RETENTION_PERIOD}} from collection, unless a longer period is required by law or for legitimate business purposes (CCPA § 1798.100(a)(3)).',
+Personal Information collected directly by us through cookies is retained only for as long as necessary for the disclosed purpose and, where no shorter cookie-specific period is shown, for no longer than the declared fallback period of {{RETENTION_PERIOD}}, unless a longer period is required by law (CCPA § 1798.100(a)(3)). See the table above for each cookie\'s lifetime and the Privacy Policy for retention controlled by third parties.',
 			'Cookie policy template: ccpa-california / section-7',
 			'faz-cookie-manager'
 		),
@@ -308,7 +308,7 @@ International transfers (Art. 33-36 LGPD) are subject to adequate-protection cou
 		_x(
 			'## Retention (Art. 15-16 LGPD)
 
-{{RETENTION_PERIOD}} from collection.',
+Personal data collected directly by us through cookies is retained only for as long as necessary for the stated purpose and, where no shorter cookie-specific period is shown, for no longer than the declared fallback period of {{RETENTION_PERIOD}}, unless a longer period is required by law or permitted under Art. 16 LGPD. See the table above for each cookie\'s lifetime.',
 			'Cookie policy template: lgpd-brazil / section-6',
 			'faz-cookie-manager'
 		),

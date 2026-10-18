@@ -41,7 +41,7 @@ Internationale doorgiften (art. 33-36 LGPD) vinden plaats naar landen met een pa
 
 ## Bewaartermijn (art. 15-16 LGPD)
 
-{{RETENTION_PERIOD}} vanaf de verzameling.
+Persoonsgegevens die wij rechtstreeks via cookies verzamelen, worden uitsluitend bewaard zolang dat voor het vermelde doel noodzakelijk is en, wanneer geen kortere cookiespecifieke termijn is vermeld, niet langer dan de opgegeven terugvaltermijn van {{RETENTION_PERIOD}}, tenzij een langere termijn wettelijk vereist is of op grond van art. 16 LGPD is toegestaan. Zie de tabel hierboven voor de levensduur van elke cookie.
 
 ## Rechten van de betrokkene (art. 18 LGPD)
 
