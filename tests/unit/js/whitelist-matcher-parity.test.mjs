@@ -133,7 +133,21 @@ cfg._userWhitelist = ['site.test'];
 const sb = (url) => w.eval('_fazImgShouldBlock')(null, url);
 eq('a Meta pixel whose query carries the whitelisted site is still blocked', sb('https://www.facebook.com/tr?id=1&dl=https%3A%2F%2Fsite.test%2F'), true);
 cfg._userWhitelist = ['googleapis.com/youtube/v3'];
-eq('a provider look-alike host is not exempted by the pattern', sb('https://evilgoogleapis.com/youtube/v3/t.js'), w.eval('_fazShouldBlockProvider')('evilgoogleapis.com/youtube/v3/t.js'));
+// Provider rules for both hosts, so the gate has something to block and only
+// the whitelist can tell the two apart. Without them neither URL is a
+// provider, the gate says false either way, and the check proves nothing.
+// Two rules, because the provider matcher is label-anchored: 'googleapis.com'
+// alone does not match evilgoogleapis.com.
+const lookAlikeRules = [
+  { re: 'evilgoogleapis.com', categories: ['marketing'], service: 'lookalike' },
+  { re: 'googleapis.com', categories: ['marketing'], service: 'gapi' },
+];
+cfg._providersToBlock.push(...lookAlikeRules);
+eq('premise: a provider rule blocks the look-alike host', w.eval('_fazShouldBlockProvider')('https://evilgoogleapis.com/youtube/v3/t.js'), true);
+eq('premise: and the legitimate host, before the whitelist is applied', w.eval('_fazShouldBlockProvider')('https://www.googleapis.com/youtube/v3/x.js'), true);
+eq('a provider look-alike host is not exempted by the pattern', sb('https://evilgoogleapis.com/youtube/v3/t.js'), true);
+eq('control: the whitelisted host itself is exempted at the gate', sb('https://www.googleapis.com/youtube/v3/x.js'), false);
+cfg._providersToBlock.splice(-lookAlikeRules.length, lookAlikeRules.length);
 cfg._userWhitelist = [];
 
 console.log(`\nwhitelist-matcher-parity: ${passed} passed, ${failed} failed`);
