@@ -422,6 +422,58 @@ function updateConsentState(consentState) {
 // emitted above, and a returning visitor's stored grants were restored via
 // `consent update`. We only need to handle live consent changes below.
 
+// Go back to the region defaults after the runtime discarded a record this
+// bundle had already restored (see the listeners below).
+function restoreBaseline() {
+    restoredFromCookie = false;
+    // The region defaults, not a global denial (see baselineConsentState).
+    var baseline = baselineConsentState();
+    setNpaIfDenied(baseline.ad_storage);
+    updateConsentState(baseline);
+    if (data.gacm_enabled && data.gacm_provider_ids) {
+        // No record: no additional-consent provider is consented.
+        setAdditionalConsent({ necessary: "granted" });
+    }
+}
+
+// Reconcile once with the state the runtime announces for this page load.
+//
+// A returning visitor's stored choice is announced with
+// fazcookie_consent_ready ('restore'), never with fazcookie_consent_update:
+// that event means "the consent just changed" and the runtime keeps it for
+// real changes. Two cases depend on this announcement:
+//
+//  - the cached jurisdiction shell (_geoBootstrap). isConsentCookieStale()
+//    holds every record while the live scope is pending, which is the only
+//    moment this bundle runs. When the runtime has installed the visitor's
+//    banner and law it fires `ready`; the cookie is read again here with the
+//    resolved scope and, when it is valid, its grants are pushed with ONE
+//    `consent update`. Without this a visitor who had accepted stayed denied
+//    in Google Consent Mode for the whole page view on every cached page;
+//  - a record this bundle restored in <head> that the runtime then discarded
+//    without a change event (scope, revision or TCF vendor list): the cookie is
+//    gone, so go back to the baseline instead of leaving the grants standing.
+//
+// `action: 'update'` is a live change and is handled by the listener below.
+var readyReconciled = false;
+document.addEventListener("fazcookie_consent_ready", function (event) {
+    var action = event && event.detail ? event.detail.action : "";
+    if (readyReconciled || action === "update") return;
+    readyReconciled = true;
+    var current = parseConsentCookie();
+    if (restoredFromCookie) {
+        if (!current) restoreBaseline();
+        return;
+    }
+    var config = window._fazConfig || {};
+    if (!current || !config._geoBootstrap) return;
+    updateConsentState(buildConsentState(current));
+    restoredFromCookie = true;
+    if (data.gacm_enabled && data.gacm_provider_ids) {
+        setAdditionalConsent(current);
+    }
+});
+
 // Re-apply on consent changes (banner interaction).
 document.addEventListener("fazcookie_consent_update", function () {
     var updated = parseConsentCookie();
@@ -440,15 +492,7 @@ document.addEventListener("fazcookie_consent_update", function () {
         // or revision that no longer applies, so go back to the denied
         // baseline on the same page view instead of leaving them standing.
         if (!restoredFromCookie) return;
-        restoredFromCookie = false;
-        // The region defaults, not a global denial (see baselineConsentState).
-        var baseline = baselineConsentState();
-        setNpaIfDenied(baseline.ad_storage);
-        updateConsentState(baseline);
-        if (data.gacm_enabled && data.gacm_provider_ids) {
-            // No record: no additional-consent provider is consented.
-            setAdditionalConsent({ necessary: "granted" });
-        }
+        restoreBaseline();
         return;
     }
     updateConsentState(buildConsentState(updated));

@@ -11,6 +11,12 @@
  * re-read a cookie that no longer existed and deliberately left the granted
  * state standing for the whole page view.
  *
+ * The runtime announces a returning visitor's choice with
+ * fazcookie_consent_ready ('restore'), never with fazcookie_consent_update, so
+ * every case below replays that real sequence. On the cached jurisdiction shell
+ * gcm.js must hold the record while the scope is pending and push it once the
+ * runtime announces the resolved state.
+ *
  * Run: node tests/unit/js/gcm-scope-invalidation.test.mjs
  */
 
@@ -39,7 +45,7 @@ function eq(label, actual, expected) {
 // booleans arrive as "1" / "" exactly as they do in production.
 const EU_FP = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const US_FP = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
-function euConfig(overrides = {}) {
+function euConfig(...overrides) {
   return Object.assign(
     {
       _consentRevision: '1',
@@ -50,7 +56,7 @@ function euConfig(overrides = {}) {
       _activeLaw: 'gdpr',
       _scopeFingerprint: EU_FP,
     },
-    overrides,
+    ...overrides,
   );
 }
 
@@ -60,10 +66,22 @@ const GDPR_EU = `${GRANTS},__scope.banner:eu-1,__scope.law:gdpr,__scope.fp:${EU_
 const PMP = 'action:auto,consent:no,necessary:yes,analytics:no,marketing:no,rev:1,source:pmp';
 
 /**
- * Run gcm.js with a cookie and a config; optionally change the cookie and fire
- * the runtime's event. Returns every `consent update` pushed to the data layer.
+ * Run gcm.js with a cookie and a config, then replay what the deferred runtime
+ * really does on that page load:
+ *
+ *  1. (jurisdiction shell only) the live payload resolves the scope;
+ *  2. a record the runtime discards is deleted — _fazInvalidateStoredConsent()
+ *     fires NO event;
+ *  3. _fazSetInitialState() announces the state with fazcookie_consent_ready
+ *     ('restore' for a stored choice, 'init' on a first visit).
+ *
+ * `change` simulates a later banner interaction on the same page: the cookie
+ * is rewritten and fazcookie_consent_update + fazcookie_consent_ready('update')
+ * are dispatched, in that order, as script.js does.
+ *
+ * Returns every `consent update` pushed to the data layer.
  */
-function run(cookie, config, { after = undefined, gacm = false, resolveGeo = false } = {}) {
+function run(cookie, config, { discard = false, ready = undefined, change = undefined, gacm = false, resolveGeo = false } = {}) {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
     runScripts: 'outside-only',
     url: 'http://localhost/',
@@ -86,15 +104,21 @@ function run(cookie, config, { after = undefined, gacm = false, resolveGeo = fal
 
   window.eval(readFileSync(GCM_PATH, 'utf8'));
 
+  const fire = (type, detail) => window.document.dispatchEvent(new window.CustomEvent(type, { detail }));
   if (resolveGeo) config._geoBootstrapResolved = 'live';
-  if (after !== undefined) {
-    if (after === null) {
-      // _fazInvalidateStoredConsent() deletes the cookie before the event.
+  if (discard) {
+    window.document.cookie = 'fazcookie-consent=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  }
+  if (ready === undefined) ready = cookie !== null && !discard ? 'restore' : 'init';
+  if (ready) fire('fazcookie_consent_ready', { action: ready, accepted: [], rejected: [] });
+  if (change !== undefined) {
+    if (change === null) {
       window.document.cookie = 'fazcookie-consent=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     } else {
-      window.document.cookie = `fazcookie-consent=${encodeURIComponent(after)}`;
+      window.document.cookie = `fazcookie-consent=${encodeURIComponent(change)}`;
     }
-    window.document.dispatchEvent(new window.CustomEvent('fazcookie_consent_update'));
+    fire('fazcookie_consent_update');
+    fire('fazcookie_consent_ready', { action: 'update', accepted: [], rejected: [] });
   }
 
   const calls = window.dataLayer.map((a) => Array.prototype.slice.call(a));
@@ -115,6 +139,7 @@ function main() {
 
   r = run(GDPR_EU, euConfig());
   eq('same scope: the stored grants are restored', last(r.updates) && last(r.updates).ad_storage, 'granted');
+  eq('... with exactly one update (the ready announcement does not repeat it)', r.updates.length, 1);
 
   r = run(CCPA_US, euConfig({ _bannerSlug: 'us-2', _activeLaw: 'ccpa', _scopeFingerprint: US_FP }));
   eq('back under the US banner the CCPA record is restored again', last(r.updates) && last(r.updates).ad_storage, 'granted');
@@ -122,16 +147,28 @@ function main() {
   r = run(CCPA_US, euConfig({ _geoRouting: '' }));
   eq('without a country source a foreign-law cookie is not restored', r.updates.length, 0);
 
-  r = run(CCPA_US, euConfig({ _geoBootstrap: '1' }));
+  // --- The cached jurisdiction shell: the real runtime sequence -------------
+  r = run(GDPR_EU, euConfig({ _geoBootstrap: '1' }), { ready: null });
   eq('cached jurisdiction shell cannot restore grants before its scope is resolved', r.updates.length, 0);
 
-  r = run(GDPR_EU, euConfig({ _geoBootstrap: '1' }), {after: GDPR_EU, resolveGeo: true});
-  eq('the matching cookie restores only after the live scope arrives', r.updates.length, 1);
-  eq('the resolved matching scope keeps its grants', last(r.updates) && last(r.updates).ad_storage, 'granted');
+  r = run(GDPR_EU, euConfig({ _geoBootstrap: '1' }), { resolveGeo: true });
+  eq('returning visitor on the shell: the grants are restored when the runtime announces "restore"', last(r.updates) && last(r.updates).ad_storage, 'granted');
+  eq('... with a single consent update', r.updates.length, 1);
 
-  r = run(CCPA_US, euConfig({ _geoBootstrap: '1' }), {after: CCPA_US, resolveGeo: true});
+  r = run(GDPR_EU, euConfig({ _geoBootstrap: '1' }), { resolveGeo: true, gacm: true });
+  const shellAc = r.sets.filter((c) => c[1] === 'addtl_consent').map((c) => c[2]);
+  eq('... and GACM gets the provider list, as on a normal restore', shellAc[shellAc.length - 1], '1~123.456');
+
+  r = run(CCPA_US, euConfig({ _geoBootstrap: '1' }), { resolveGeo: true, discard: true });
   eq('the resolved foreign scope never restores the old grants', r.updates.length, 0);
 
+  r = run(GDPR_EU, euConfig({ _geoBootstrap: '1' }), { resolveGeo: true, change: GDPR_EU });
+  eq('a choice made later on the shell page is not pushed twice', r.updates.length, 2);
+
+  r = run(null, euConfig({ _geoBootstrap: '1' }), { resolveGeo: true });
+  eq('first visit on the shell: nothing is pushed', r.updates.length, 0);
+
+  // --- Legacy and tamper cases ----------------------------------------------
   r = run(GRANTS, euConfig());
   eq('pre-1.14 cookie without scope keys is honoured (upgrade case)', last(r.updates) && last(r.updates).ad_storage, 'granted');
 
@@ -153,25 +190,31 @@ function main() {
   r = run(`${PMP.replace('marketing:no', 'marketing:yes')},__scope.law:ccpa`, euConfig());
   eq('a forged PMP marker with an optional grant cannot bypass the law scope', r.updates.length, 0);
 
-  // --- Invalidation after a restore must reach Google on the same page -----
-  r = run(GDPR_EU, euConfig({ _consentRevision: '1' }), { after: null });
-  eq('restore, then the runtime deletes the cookie: two updates were pushed', r.updates.length, 2);
+  // --- A record restored in <head>, then discarded by the runtime -----------
+  // _fazInvalidateStoredConsent() deletes the cookie and fires no change event:
+  // the only signal that reaches gcm.js is the page-load announcement.
+  r = run(GDPR_EU, euConfig({ _consentRevision: '1' }), { discard: true });
+  eq('restore, then the runtime discards the record: two updates were pushed', r.updates.length, 2);
   eq('... and the last one is the denied baseline (ad_storage)', last(r.updates) && last(r.updates).ad_storage, 'denied');
   eq('... (analytics_storage)', last(r.updates) && last(r.updates).analytics_storage, 'denied');
   eq('... (functionality_storage)', last(r.updates) && last(r.updates).functionality_storage, 'denied');
   eq('... while security_storage stays granted', last(r.updates) && last(r.updates).security_storage, 'granted');
 
-  r = run(GDPR_EU, euConfig(), { after: null, gacm: true });
+  r = run(GDPR_EU, euConfig(), { discard: true, gacm: true });
   const addtl = r.sets.filter((c) => c[1] === 'addtl_consent').map((c) => c[2]);
   eq('GACM: the provider list is emptied with the grants', addtl[addtl.length - 1], '1~');
   eq('GACM: it had been populated by the restore', addtl[0], '1~123.456');
 
-  r = run(null, euConfig(), { after: null });
+  r = run(null, euConfig(), { change: null });
   eq('first visit, event with no cookie: nothing restored, nothing pushed (baseline default stands)', r.updates.length, 0);
 
-  r = run(GDPR_EU, euConfig(), { after: `${GRANTS.replace('marketing:yes', 'marketing:no')},__scope.banner:eu-1,__scope.law:gdpr,__scope.fp:${EU_FP}` });
+  // --- Live changes still follow the cookie ---------------------------------
+  r = run(GDPR_EU, euConfig(), { change: `${GRANTS.replace('marketing:yes', 'marketing:no')},__scope.banner:eu-1,__scope.law:gdpr,__scope.fp:${EU_FP}` });
   eq('a live withdrawal still follows the new cookie', last(r.updates) && last(r.updates).ad_storage, 'denied');
   eq('... without touching what was granted', last(r.updates) && last(r.updates).analytics_storage, 'granted');
+
+  r = run(GDPR_EU, euConfig(), { change: null });
+  eq('a live change that removes the record returns to the baseline', last(r.updates) && last(r.updates).ad_storage, 'denied');
 
   console.log(`\n  gcm-scope-invalidation: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
