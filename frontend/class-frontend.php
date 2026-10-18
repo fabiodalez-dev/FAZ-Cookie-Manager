@@ -4812,10 +4812,14 @@ class Frontend {
 		// non_opening_token_skip() consumes end tags, `<?…>`, `<!x…>` and
 		// `</ …>` whole first, as the fallback does: a `<video` inside
 		// `</p title="…">` or a bogus comment is not an element either.
+		// The name runs to whitespace, `/` or `>`, as the tokenizer and
+		// tag_token_skip() read it: a narrower class stopped at `<x-tipé` and
+		// let the scan restart inside that tag's quoted value. The callback
+		// compares the lower-cased name with the media names.
 		if ( 0 !== preg_match( '/<(?:video|audio|source|embed|object|track|input)(?=[\s\/>])/i', $html ) ) {
 			$html = $this->run_markup_pass(
 				$html,
-				'#' . self::non_opening_token_skip() . '<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'#' . self::non_opening_token_skip() . '<([a-zA-Z][^\s/>]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				'media',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_media_resource_tag( $m, $providers, $blocked_categories );
@@ -4868,8 +4872,9 @@ class Frontend {
 		// reads a parser-built style attribute, so the server is the layer.
 		// Every opening tag is walked; process_style_attr_tag() returns at
 		// once for the great majority that carry no style, or no URL in it.
-		// End tags and bogus comments are consumed whole first, as in the
-		// media pass, so a `style=` quoted inside one is left alone.
+		// End tags and bogus comments are consumed whole first, and the tag
+		// name is read to whitespace, `/` or `>`, as in the media pass, so a
+		// `style=` quoted inside one is left alone.
 		// Runs after the src/href passes so a tag they already parked keeps
 		// its one category label.
 		//
@@ -4880,7 +4885,7 @@ class Frontend {
 		if ( 0 !== preg_match( '/\bstyle\s*=/i', $html ) ) {
 			$html = $this->run_markup_pass(
 				$html,
-				'#' . self::non_opening_token_skip() . '<([a-zA-Z][a-zA-Z0-9:_.-]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+				'#' . self::non_opening_token_skip() . '<([a-zA-Z][^\s/>]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
 				'style-attr',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_style_attr_tag( $m, $providers, $blocked_categories );

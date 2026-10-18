@@ -409,6 +409,25 @@ namespace {
 		assert_true( faz_ob_run( $fe, $html ) === $html, $what . ': byte-identical' );
 	}
 
+	// The tokenizer ends a tag name only at whitespace, `/` or `>`, and so do
+	// tag_token_skip() and the linear fallback. The two passes that walk every
+	// opening tag read the name as [a-zA-Z0-9:_.-] only: a name with any other
+	// character failed the lookahead after it, and the scan restarted inside
+	// that tag's quoted value.
+	$odd_names = array(
+		'video in the value of a tag whose name has a non-ASCII letter' => '<x-tipé data-tip=\'<video poster="https://i.ytimg.com/a.jpg">\'>h</x-tipé>',
+		'embed in the value of a tag whose name has an @'               => '<x@tip title="<embed src=\'https://www.youtube.com/embed/ID\'>">h</x@tip>',
+		'style attribute in the value of a tag whose name has an é'     => '<x-tipé title="<b style=\'background:url(https://i.ytimg.com/a.jpg)\'>">h</x-tipé>',
+	);
+	foreach ( $odd_names as $what => $snippet ) {
+		$fe   = faz_ob_frontend( $providers, $blocked );
+		$html = '<html><body>' . $snippet . '</body></html>';
+		assert_true( faz_ob_run( $fe, $html ) === $html, $what . ': byte-identical' );
+	}
+	$fe  = faz_ob_frontend( $providers, $blocked );
+	$out = faz_ob_run( $fe, '<html><body><x-tipé data-tip=\'<video poster="https://i.ytimg.com/a.jpg">\'>h</x-tipé><video poster="https://i.ytimg.com/vi/ID/hqdefault.jpg"></video></body></html>' );
+	assert_true( '"https://i.ytimg.com/vi/ID/hqdefault.jpg"' === faz_raw_attr( $out, 'data-faz-poster' ) && 1 === substr_count( $out, 'data-faz-poster=' ), 'the real <video> after a tag with such a name is still parked, and only that one' );
+
 	// The SVG href and `background` passes were anchored on their tag names
 	// with nothing consumed before them, the shape the img pass had: an
 	// `<image href>` or a `<td background>` inside another tag's value was
