@@ -118,6 +118,7 @@ namespace {
 			'service_consent_cache'     => array(),
 			'whitelist_cache'           => null,
 			'settings_option_cache'     => $settings,
+			'consentable_categories_cache' => array( 'functional', 'analytics', 'marketing' ),
 			'pattern_service_cache'     => array(),
 			'provider_match_meta_cache' => null,
 			'service_match_meta_cache'  => null,
@@ -186,7 +187,16 @@ namespace {
 	asc_check( 'necessary' === asc_call( asc_frontend( $on ), 'known_provider_category', array( 'necessary', 'google.com/recaptcha', $cats ) ), 'switched on: reCAPTCHA keeps the catalogue category' );
 	asc_check( 'necessary' === asc_call( asc_frontend( $off ), 'known_provider_category', array( 'necessary', 'wp-includes/js/jquery', $cats ) ), 'switched off: other necessary patterns are untouched' );
 	asc_check( 'marketing' === asc_call( asc_frontend( $off ), 'known_provider_category', array( 'marketing', 'connect.facebook.net', $cats ) ), 'switched off: non-necessary providers are untouched' );
-	asc_check( 'necessary' === asc_call( asc_frontend( $off ), 'known_provider_category', array( 'necessary', 'google.com/recaptcha', array( 'necessary', 'analytics' ) ) ), 'a site without a functional category keeps the catalogue answer' );
+	$asc_with = function ( $settings, array $consentable ) {
+		$fe = asc_frontend( $settings );
+		$p  = new ReflectionProperty( Frontend::class, 'consentable_categories_cache' );
+		$p->setAccessible( true );
+		$p->setValue( $fe, $consentable );
+		return $fe;
+	};
+	asc_check( 'uncategorized' === asc_call( $asc_with( $off, array( 'uncategorized', 'analytics' ) ), 'known_provider_category', array( 'necessary', 'google.com/recaptcha', array( 'necessary', 'uncategorized', 'analytics' ) ) ), 'a site that deleted functional holds CAPTCHAs under uncategorized' );
+	asc_check( 'analytics' === asc_call( $asc_with( $off, array( 'analytics' ) ), 'known_provider_category', array( 'necessary', 'google.com/recaptcha', array( 'necessary', 'functional', 'analytics' ) ) ), 'a hidden functional category is skipped: the visitor could never accept it' );
+	asc_check( 'necessary' === asc_call( $asc_with( $off, array() ), 'known_provider_category', array( 'necessary', 'google.com/recaptcha', array( 'necessary', 'functional' ) ) ), 'a banner that offers nothing but necessary keeps the catalogue answer' );
 	asc_check( 2 === substr_count( $fe_src, '$this->known_provider_category(' ), 'the server map and the client provider list both apply it' );
 
 	echo "\n-- output buffer: a custom rule now blocks reCAPTCHA --\n";

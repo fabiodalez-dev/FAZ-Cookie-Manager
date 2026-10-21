@@ -188,6 +188,13 @@ class Frontend {
 	private $blocked_categories_cache = null;
 	private $provider_map_cache       = null;
 	private $whitelist_cache          = null;
+
+	/**
+	 * Request cache for get_consentable_category_slugs().
+	 *
+	 * @var string[]|null
+	 */
+	private $consentable_categories_cache = null;
 	private $service_consent_cache    = null;
 	/**
 	 * The visitor's OWN blocked set and per-service map, kept apart from the
@@ -7999,7 +8006,12 @@ class Frontend {
 	 * would leave the switch doing nothing unless the owner also wrote a custom
 	 * rule, so those patterns are held under functional instead, the category
 	 * a CAPTCHA belongs to once it is not treated as strictly necessary (#343).
-	 * A site without a functional category keeps the catalogue's answer.
+	 * The category must be one the visitor can accept: a hidden category never
+	 * reaches the banner, so a CAPTCHA held under it would stay blocked for
+	 * good. Functional first, then uncategorized, then any other category the
+	 * banner shows. Falling back to necessary would let the CAPTCHA load
+	 * before consent with the switch off, so that happens only on a site
+	 * whose banner offers nothing but necessary, where nothing could hold it.
 	 *
 	 * @param string   $category         Category from the provider catalogue.
 	 * @param string   $pattern          The provider pattern.
@@ -8007,13 +8019,46 @@ class Frontend {
 	 * @return string
 	 */
 	private function known_provider_category( $category, $pattern, $valid_categories ) {
-		if ( 'necessary' !== $category || ! in_array( 'functional', $valid_categories, true ) ) {
+		if ( 'necessary' !== $category ) {
 			return $category;
 		}
 		if ( 1 !== preg_match( '/recaptcha|hcaptcha|turnstile/i', (string) $pattern ) ) {
 			return $category;
 		}
-		return $this->antispam_allowed_before_consent() ? $category : 'functional';
+		if ( $this->antispam_allowed_before_consent() ) {
+			return $category;
+		}
+		$consentable = array_values( array_intersect( $this->get_consentable_category_slugs(), $valid_categories ) );
+		foreach ( array( 'functional', 'uncategorized' ) as $preferred ) {
+			if ( in_array( $preferred, $consentable, true ) ) {
+				return $preferred;
+			}
+		}
+		return isset( $consentable[0] ) ? $consentable[0] : $category;
+	}
+
+	/**
+	 * Slugs of the categories a visitor can accept in the banner: visible,
+	 * not necessary, not wordpress-internal (the same filter as
+	 * get_cookie_groups()). Cached for the request.
+	 *
+	 * @return string[]
+	 */
+	private function get_consentable_category_slugs() {
+		if ( null !== $this->consentable_categories_cache ) {
+			return $this->consentable_categories_cache;
+		}
+		$slugs = array();
+		foreach ( \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items() as $cat_data ) {
+			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data );
+			$slug     = $category->get_slug();
+			if ( false === $category->get_visibility() || in_array( $slug, array( 'necessary', 'wordpress-internal' ), true ) ) {
+				continue;
+			}
+			$slugs[] = $slug;
+		}
+		$this->consentable_categories_cache = $slugs;
+		return $slugs;
 	}
 
 	/**
