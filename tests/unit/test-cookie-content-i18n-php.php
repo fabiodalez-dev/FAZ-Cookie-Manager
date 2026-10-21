@@ -360,6 +360,15 @@ cookie_i18n_eq( Cookie_Content_I18n::duration( '1.5 years', 'pl' ), '1.5 roku', 
 cookie_i18n_eq( Cookie_Content_I18n::duration( '5 years', 'pl' ), '5 lat', 'Polish 5 stays in the many class' );
 // …and the neighbours the two rules must not disturb.
 cookie_i18n_eq( Cookie_Content_I18n::duration( '2 years', 'cs' ), '2 roky', 'Czech few is untouched by the decimal rule' );
+// Slovak shares the Czech CLDR rule; before it had its own entry in
+// plural_form() every Slovak amount fell through to `other` ("2 dní", "1,5 rokov").
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1 day', 'sk' ), '1 deň', 'Slovak one' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '2 days', 'sk' ), '2 dni', 'Slovak 2-4 take few (dni), not other (dní)' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '4 years', 'sk' ), '4 roky', 'Slovak few for years' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '5 years', 'sk' ), '5 rokov', 'Slovak 5+ take other' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '22 months', 'sk' ), '22 mesiacov', 'Slovak 22 is other, not few' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1.5 years', 'sk' ), '1.5 roka', 'Slovak decimals take many (roka)' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( 'Session', 'sk' ), 'Relácia', 'Slovak session keeps the leading capital' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( '1.5 years', 'it' ), '1.5 anni', 'Italian decimals stay plural' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( '1.5 years', 'hr' ), '1.5 godina', 'Croatian decimals are left in other' );
 

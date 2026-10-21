@@ -92,7 +92,7 @@
                 "headers": {
                     "elements": {
                         "id": "Cookie",
-                        "duration": "Trvanlivosť",
+                        "duration": "Trvanie",
                         "description": "Popis"
                     }
                 },
@@ -101,7 +101,7 @@
         },
         "videoPlaceholder": {
             "elements": {
-                "title": "Pre zobrazenie tohto obsahu prijmite súbory cookie"
+                "title": "Ak chcete zobraziť tento obsah, prijmite súbory cookie"
             }
         }
     },
@@ -198,7 +198,7 @@
                 "headers": {
                     "elements": {
                         "id": "Cookie",
-                        "duration": "Trvanlivosť",
+                        "duration": "Trvanie",
                         "description": "Popis"
                     }
                 },
@@ -207,7 +207,7 @@
         },
         "videoPlaceholder": {
             "elements": {
-                "title": "Pre zobrazenie tohto obsahu prijmite súbory cookie"
+                "title": "Ak chcete zobraziť tento obsah, prijmite súbory cookie"
             }
         }
     }

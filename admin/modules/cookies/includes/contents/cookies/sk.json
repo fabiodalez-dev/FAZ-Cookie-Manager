@@ -102,7 +102,7 @@
         "description": "Používa ho služba Google reCAPTCHA na rozlíšenie ľudí od botov."
     },
     "fazcookie-consent": {
-        "description": "Predvoľby súhlasu so súbormi cookie nastavené návštevníkom."
+        "description": "Ukladá voľby návštevníka týkajúce sa súhlasu so súbormi cookie a náhodný identifikátor súhlasu, ktorý slúži na vedenie záznamu o tejto voľbe."
     },
     "_clck": {
         "description": "Súbor cookie služby Microsoft Clarity na analytiku."

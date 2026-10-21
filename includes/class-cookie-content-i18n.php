@@ -446,11 +446,14 @@ class Cookie_Content_I18n {
 			// the genitive singular): "1,5 roku", never "1,5 let". Elsewhere the
 			// fractional case falls through to `other`, which is also where CLDR
 			// puts Polish decimals — see the pl branch below, where `other` is
-			// therefore NOT the general integer plural.
-			return 'cs' === $lang ? 'many' : 'other';
+			// therefore NOT the general integer plural. Slovak follows the same
+			// CLDR rule as Czech: "1,5 roka", "1,5 dňa".
+			return in_array( $lang, array( 'cs', 'sk' ), true ) ? 'many' : 'other';
 		}
 		$integer = (int) $amount;
-		if ( 'cs' === $lang && $integer >= 2 && $integer <= 4 ) {
+		// Czech and Slovak: 2-4 take `few` ("2 roky", "3 dni"), and only 2-4 —
+		// 22 is `other` ("22 rokov"), unlike Polish and Croatian below.
+		if ( in_array( $lang, array( 'cs', 'sk' ), true ) && $integer >= 2 && $integer <= 4 ) {
 			return 'few';
 		}
 		// Polish and Croatian share the "few" rule — 2-4 in the last digit, minus

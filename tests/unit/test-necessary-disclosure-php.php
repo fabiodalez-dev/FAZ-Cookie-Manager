@@ -202,7 +202,7 @@ nd_eq( in_array( nd_fold( 'Cookie consent preferences set by the visitor.' ), $l
 $denials = array(
 	'personally identifiable', 'personenbezogenen Daten', 'dati identificativi personali',
 	'donnée personnellement identifiable', 'dato de identificación personal', 'persoonlijk identificeerbare',
-	'neukládají žádné osobní údaje', 'henkilökohtaisia tietoja', 'személyazonosításra alkalmas',
+	'neukládají žádné osobní údaje', 'neukladajú žiadne osobné údaje', 'henkilökohtaisia tietoja', 'személyazonosításra alkalmas',
 	'umożliwiających identyfikację', 'pessoalmente identificável', 'dado de identificação pessoal',
 	'не хранят персональные данные', 'не зберігають персональних даних',
 );
@@ -227,6 +227,18 @@ foreach ( glob( $contents . 'cookies/*.json' ) as $file ) {
 	$data = json_decode( (string) file_get_contents( $file ), true );
 	$text = (string) ( $data['fazcookie-consent']['description'] ?? '' );
 	nd_eq( '' !== $text && ! in_array( nd_fold( $text ), $legacy_ck, true ), true, 'cookies/' . basename( $file ) . ': consent-cookie text is the current wording' );
+}
+// A locale added after the fix can only carry the old wording translated
+// afresh, which the legacy list cannot know about: Slovak arrived with "Tieto
+// súbory cookie neukladajú žiadne osobné údaje" and a consent-cookie text that
+// left the identifier out. Each locale that names the identifier must keep
+// naming it; this pins the ones whose word for it is known.
+$identifier_words = array( 'cs' => 'identifikátor', 'sk' => 'identifikátor', 'de' => 'Kennung', 'it' => 'identificativo' );
+foreach ( $identifier_words as $loc => $word ) {
+	$cat = json_decode( (string) @file_get_contents( $contents . "categories/{$loc}.json" ), true );
+	$ck  = json_decode( (string) @file_get_contents( $contents . "cookies/{$loc}.json" ), true );
+	nd_eq( false !== mb_stripos( (string) ( $cat['necessary']['description'] ?? '' ), $word ), true, "categories/{$loc}.json: Necessary text names the consent identifier" );
+	nd_eq( false !== mb_stripos( (string) ( $ck['fazcookie-consent']['description'] ?? '' ), $word ), true, "cookies/{$loc}.json: consent-cookie text names the identifier" );
 }
 $en_ck = json_decode( (string) file_get_contents( $contents . 'cookies/en.json' ), true );
 nd_eq( false !== stripos( (string) $en_ck['fazcookie-consent']['description'], 'identifier' ), true, 'cookies/en.json: consent-cookie text names the identifier' );

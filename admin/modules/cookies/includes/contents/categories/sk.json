@@ -1,7 +1,7 @@
 {
     "necessary": {
         "name": "Nevyhnutné",
-        "description": "<p>Nevyhnutné súbory cookie sú potrebné na zabezpečenie základných funkcií tejto webovej stránky, ako je zabezpečené prihlásenie alebo úprava vašich predvolieb súhlasu. Tieto súbory cookie neukladajú žiadne osobné údaje.</p>"
+        "description": "<p>Nevyhnutné súbory cookie sú potrebné na zabezpečenie základných funkcií tejto webovej stránky, ako je zabezpečené prihlásenie alebo úprava vašich predvolieb súhlasu. Nepoužívajú sa na reklamu ani na sledovanie naprieč inými webovými stránkami. Súbor cookie súhlasu ukladá náhodný identifikátor, vďaka ktorému môžeme viesť záznam o vašej voľbe.</p>"
     },
     "functional": {
         "name": "Funkčné",
@@ -20,7 +20,7 @@
         "description": "<p>Súbory cookie, ktoré zatiaľ neboli zaradené do žiadnej kategórie.</p>"
     },
     "wordpress-internal": {
-        "name": "Interné súbory WordPressu",
+        "name": "Interné súbory cookie WordPressu",
         "description": "<p>Súbory cookie nastavované jadrom WordPressu pre prihlásených administrátorov. Návštevníkom webovej stránky sa nezobrazujú.</p>"
     },
     "marketing": {
