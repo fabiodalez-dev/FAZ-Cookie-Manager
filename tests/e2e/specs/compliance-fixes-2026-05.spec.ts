@@ -15,6 +15,7 @@
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/wp-fixture';
 import { resetDefaultBannerState } from '../utils/seed-defaults';
+import { stampedDsarFields } from '../utils/dsar-form';
 import { upsertPage, wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
@@ -465,29 +466,26 @@ test.describe('P3-B — DSAR per-email rate limit', () => {
     if (!dsarUrl) return test.skip();
 
     await page.context().clearCookies();
-    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
-
-    // The nonce hidden field has name="nonce" (no id attribute on the element).
-    const nonce = await page
-      .locator('.faz-dsar-form [name="nonce"]')
-      .getAttribute('value')
-      .catch(() => '');
-    expect(nonce).toBeTruthy();
+    // Every field of the rendered form, anti-bot stamp included: a hand-written
+    // body passes only during the stamp grace window, so the first submission
+    // was refused as an expired form on any site older than two days (#347).
+    // The stamp is not single-use, so both submissions may carry it.
+    const fields = await stampedDsarFields(page, dsarUrl);
+    expect(fields.nonce).toBeTruthy();
 
     const ajaxUrl = `${WP_BASE}/wp-admin/admin-ajax.php`;
     const uniqueEmail = `rl-${Date.now()}@compliance-test.example`;
 
     const submitDsar = async (): Promise<{ success: boolean }> =>
       page.evaluate(
-        async ({ url, em, nc }: { url: string; em: string; nc: string }) => {
+        async ({ url, em, form }: { url: string; em: string; form: Record<string, string> }) => {
           const body = new URLSearchParams({
+            ...form,
             action: 'faz_dsar_submit',
-            nonce: nc,
             dsar_name: 'Rate Limit User',
             dsar_email: em,
             dsar_type: 'access',
             dsar_message: 'Per-email rate limit test',
-            faz_hp_name: '',
           }).toString();
           const r = await fetch(url, {
             method: 'POST',
@@ -496,7 +494,7 @@ test.describe('P3-B — DSAR per-email rate limit', () => {
           });
           return r.json() as Promise<{ success: boolean }>;
         },
-        { url: ajaxUrl, em: uniqueEmail, nc: nonce! }
+        { url: ajaxUrl, em: uniqueEmail, form: fields }
       );
 
     const r1 = await submitDsar();

@@ -14,6 +14,7 @@
 
 import { expect, type Page, type Route } from '@playwright/test';
 import { test } from '../fixtures/wp-fixture';
+import { stampedDsarFields } from '../utils/dsar-form';
 import { seedConsentedCookie, upsertPage, wpEval } from '../utils/wp-env';
 
 /**
@@ -101,16 +102,18 @@ test.describe('F003 — per-email rate-limit error message says "1 hour"', () =>
   });
 
   test('blocked submission returns message containing "1 hour"', async ({ page, wpBaseURL }) => {
-    const nonce = wpEval(`echo wp_create_nonce( 'faz_dsar_submit' );`).trim();
+    // The rendered form, stamp included: a hand-written body is refused as an
+    // expired form once the stamp grace window has passed (#347), before the
+    // rate limit under test is ever reached.
+    const fields = await stampedDsarFields(page, dsarPageUrl);
 
     const resp = await page.request.post(`${wpBaseURL}/wp-admin/admin-ajax.php`, {
       form: {
+        ...fields,
         action: 'faz_dsar_submit',
-        nonce,
         dsar_name:  'Rate Limit User',
         dsar_email: RL_TEST_EMAIL,
         dsar_type:  'access',
-        faz_dsar_honeypot: '',
       },
     });
 
