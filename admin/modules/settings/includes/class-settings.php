@@ -242,6 +242,11 @@ class Settings extends Store {
 				// Compatibility-sensitive: filters Set-Cookie headers emitted by
 				// PHP plugins. Explicit opt-in until the owner tests critical flows.
 				'block_server_cookies'        => false,
+				// reCAPTCHA, hCaptcha and Cloudflare Turnstile load before
+				// consent, as strictly necessary anti-abuse protection of a form
+				// the visitor submits. On by default; the owner can switch it off
+				// where their legal advice treats them as needing consent (#343).
+				'allow_antispam_before_consent' => true,
 				// Default "never block before consent" list. Kept deliberately
 				// narrow: only anti-abuse / security challenge endpoints that
 				// are strictly necessary for a service the visitor actively
@@ -656,6 +661,7 @@ class Settings extends Store {
 			case 'cache_compatibility':
 			case 'aggressive_css_url_blocking':
 			case 'block_server_cookies':
+			case 'allow_antispam_before_consent':
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'per_cookie_consent':

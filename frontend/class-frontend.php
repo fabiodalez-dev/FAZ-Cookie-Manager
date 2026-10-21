@@ -3956,7 +3956,12 @@ class Frontend {
 		// own urls through get_whitelist(), not by dropping the rule, so the
 		// client needs the same tokens to resolve them the same way. Empty on
 		// every install without such a rule: the payload is unchanged there.
-		$store['_userWhitelist'] = array_values( array_unique( array_merge( $user_whitelist, $client_gateway_whitelist ) ) );
+		// The anti-spam endpoints the server exempts must be exempt on the client
+		// too, or a CAPTCHA a form loads after DOMContentLoaded is held by the
+		// runtime that the server just let through (#343). Off, they are judged
+		// on both sides like any other provider.
+		$client_antispam = $this->antispam_allowed_before_consent() ? self::ANTISPAM_CHALLENGE_PATTERNS : array();
+		$store['_userWhitelist'] = array_values( array_unique( array_merge( $user_whitelist, $client_gateway_whitelist, $client_antispam ) ) );
 		// Non-filterable commerce configuration invariant mirrored by the
 		// runtime MutationObserver/createElement interceptor. Keep it separate
 		// from the editable whitelist so an empty Settings field cannot remove
@@ -7955,6 +7960,39 @@ class Frontend {
 	}
 
 	/**
+	 * Anti-abuse challenge endpoints (CAPTCHA and bot challenges) that are
+	 * allowed before consent unless the owner switches that off (#343).
+	 * Substring patterns: 'hcaptcha.com' also covers js.hcaptcha.com, and
+	 * 'google.com/recaptcha' covers recaptcha/api.js.
+	 */
+	const ANTISPAM_CHALLENGE_PATTERNS = array(
+		'google.com/recaptcha',
+		// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
+		'gstatic.com/recaptcha',
+		'hcaptcha.com',
+		// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
+		'challenges.cloudflare.com/turnstile',
+	);
+
+	/**
+	 * Whether reCAPTCHA, hCaptcha and Turnstile load before consent.
+	 *
+	 * Settings → Script Blocking → "Allow anti-spam services before consent",
+	 * on by default. Anything but an explicit false keeps the default, so an
+	 * install that predates the setting behaves as before.
+	 *
+	 * @return bool
+	 */
+	private function antispam_allowed_before_consent() {
+		$settings = $this->get_faz_settings();
+		if ( ! isset( $settings['script_blocking'] ) || ! is_array( $settings['script_blocking'] )
+			|| ! array_key_exists( 'allow_antispam_before_consent', $settings['script_blocking'] ) ) {
+			return true;
+		}
+		return false !== $settings['script_blocking']['allow_antispam_before_consent'];
+	}
+
+	/**
 	 * Build and cache the whitelist array (once per request).
 	 *
 	 * @return string[]
@@ -8024,17 +8062,16 @@ class Frontend {
 		// global and 'akismet' (a server-side filter with no browser asset that
 		// needs unblocking) — both are generic handles the rule above rightly
 		// rejects.
-		$whitelist = array_merge(
-			$whitelist,
-			array(
-				'google.com/recaptcha',
-				// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
-				'gstatic.com/recaptcha',
-				'hcaptcha.com',
-				// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
-				'challenges.cloudflare.com/turnstile',
-			)
-		);
+		//
+		// Whether a CAPTCHA counts as strictly necessary is the site owner's
+		// call, not ours: some legal advisors (notably in Germany) want
+		// reCAPTCHA held until consent because it sends data to Google. The
+		// switch is on by default, so nothing changes for existing sites; off,
+		// these endpoints are judged like any other provider, and custom rules
+		// and the provider catalogue can block them (#343).
+		if ( $this->antispam_allowed_before_consent() ) {
+			$whitelist = array_merge( $whitelist, self::ANTISPAM_CHALLENGE_PATTERNS );
+		}
 
 		// ── WooCommerce core infrastructure ──
 		if ( class_exists( 'WooCommerce', false ) ) {
