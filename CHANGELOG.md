@@ -2,6 +2,15 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.34.3] - 2026-10-21
+
+### Added
+- A new switch under Settings → Script Blocking, "Allow anti-spam services before consent", decides whether Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent (#343). It is on by default, so nothing changes for existing sites. Switched off, those services are held under the Functional category until the visitor accepts it, with no custom rule needed, and the CAPTCHA entries the plugin adds to Script Blocking Exceptions by default are ignored; exceptions written by the administrator still apply. Forms protected by a CAPTCHA cannot be submitted before consent while it is off.
+- Slovak banner, preference centre, cookie category and cookie descriptions, contributed by Tomáš Jenej (#332). Cookie durations in Slovak now use the correct plural forms (2 dni, 5 rokov, 1,5 roka).
+
+### Fixed
+- The CAPTCHA endpoints were added to the script-blocking whitelist in code, ahead of every rule, so neither removing them from the exceptions nor a custom blocking rule could hold reCAPTCHA until consent (#343).
+
 ## [1.34.2] - 2026-10-18
 
 ### Added

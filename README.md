@@ -708,6 +708,12 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.34.3 — 2026-10-21
+
+- Added: A new switch under Settings → Script Blocking, "Allow anti-spam services before consent", decides whether Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent (#343). It is on by default, so nothing changes for existing sites. Switched off, those services are held under the Functional category until the visitor accepts it, with no custom rule needed, and the CAPTCHA entries the plugin adds to Script Blocking Exceptions by default are ignored; exceptions written by the administrator still apply. Forms protected by a CAPTCHA cannot be submitted before consent while it is off.
+- Added: Slovak banner, preference centre, cookie category and cookie descriptions, contributed by Tomáš Jenej (#332). Cookie durations in Slovak now use the correct plural forms (2 dni, 5 rokov, 1,5 roka).
+- Fixed: The CAPTCHA endpoints were added to the script-blocking whitelist in code, ahead of every rule, so neither removing them from the exceptions nor a custom blocking rule could hold reCAPTCHA until consent (#343).
+
 ### 1.34.2 — 2026-10-18
 
 - Added: Your consent ID is now shown in the cookie preferences, the data request form has an optional Consent ID field filled in automatically, and administrators can open the matching consent history from the request. The request also records whether the ID matches the consent cookie of the browser that sent it, and warns the administrator when it does not (#327). WordPress export and erasure tools include that history once the administrator confirms the ID belongs to the requester (filter: faz_consent_log_erasure_retain).

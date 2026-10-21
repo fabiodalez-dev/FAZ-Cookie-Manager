@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.34.2
+Stable tag: 1.34.3
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -434,6 +434,11 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
+= 1.34.3 =
+* Added: A new switch under Settings → Script Blocking, "Allow anti-spam services before consent", decides whether Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent (#343). It is on by default, so nothing changes for existing sites. Switched off, those services are held under the Functional category until the visitor accepts it, with no custom rule needed, and the CAPTCHA entries the plugin adds to Script Blocking Exceptions by default are ignored; exceptions written by the administrator still apply. Forms protected by a CAPTCHA cannot be submitted before consent while it is off.
+* Added: Slovak banner, preference centre, cookie category and cookie descriptions, contributed by Tomáš Jenej (#332). Cookie durations in Slovak now use the correct plural forms (2 dni, 5 rokov, 1,5 roka).
+* Fixed: The CAPTCHA endpoints were added to the script-blocking whitelist in code, ahead of every rule, so neither removing them from the exceptions nor a custom blocking rule could hold reCAPTCHA until consent (#343).
+
 = 1.34.2 =
 * Added: Your consent ID is now shown in the cookie preferences, the data request form has an optional Consent ID field filled in automatically, and administrators can open the matching consent history from the request. The request also records whether the ID matches the consent cookie of the browser that sent it, and warns the administrator when it does not (#327). WordPress export and erasure tools include that history once the administrator confirms the ID belongs to the requester (filter: faz_consent_log_erasure_retain).
 * Added: The suggested privacy policy text is now built from the features actually enabled on the site, including consent IDs, hashed IP and browser data, retention periods, geolocation, the optional ipinfo.io lookup and privacy requests.
@@ -499,14 +504,6 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Fixed: An embedded document written directly in a post could be damaged rather than delayed. The pass that protects scripts wrote its own attribute inside the embedded markup and cut the document short at the first quotation mark, so the embed was destroyed instead of being restored after consent. The embed is now set aside untouched and comes back exactly as it was written.
 * Fixed: With the new deferred loading, the IAB TCF framework could report its own interface as not displayed while the consent banner was on screen, so a vendor asking through the TCF API was told the notice had never been shown. The runtime already recorded that the banner had appeared; the framework now reads that record instead of relying only on an event it could arrive too late to hear.
 
-= 1.34.0 =
-* Fixed: The banner did not render at all with WPSpeed by JExtensions active, for two separate reasons. Its image optimiser rewrites the page through an HTML4 parser that truncates the banner template at the first closing tag, leaving a 0 px consent bar with no buttons; and because it combines and defers the scripts, initialisation ran before part of the file existed and died halfway. The template is now written so both parsers keep it intact, and initialisation runs in the same order whether the script is deferred, async, combined or delayed.
-* Fixed: A reopen link verified in the footer could leave a visitor with no way to withdraw consent. Verification was a text match, so a control inside a template, hidden, inert or hidden by an inline style counted as usable. The markup is now parsed, `disabled` is judged as the HTML specification defines it — never on a link, inherited only from a `<fieldset disabled>` — and the plugin's own widget reveals itself in the browser whenever no usable control is present, including when the theme hides the footer, a breakpoint drops it, or a stylesheet finishes loading after the page.
-* Fixed: Jurisdiction routing said it was active on sites where nothing can resolve a country. The switch governs two jobs — applying a jurisdiction's rules, which always works through the most protective fallback, and routing by country, which needs a geo source — and every screen described the second. The admin now reports four distinct states, and a saved MaxMind licence key no longer counts as proof that lookups work: that is checked with a real lookup.
-* Fixed: AMP pages keep their own native reopen control instead of relying on a footer link verified for the regular frontend. The two are different mechanisms, and a footer probe cannot prove an AMP tap action exists.
-* Added: A compact phone layout for the notice buttons, under Banner Control in Settings. Below 440px the shipped templates give each button a row of its own, which takes 44% of a typical phone screen; compact puts accept and reject on one row and brings that to 29%. The default is unchanged, so no existing site looks different after the update. Accept and reject stay exactly the same size in every language, every button keeps a 44px tap target, and long labels wrap instead of being cut off.
-* Changed: Lighter pages. The service catalogue — about 43 KB with per-service consent on — moved from the inline configuration into the cached, content-hashed configuration file, so it is downloaded once instead of with every page. The DSAR form script, the Do-Not-Sell form script and the 8 KB Cookie Policy stylesheet now load only where their shortcode renders. Provider matching is cached per URL: on a reported homepage it was costing about 200 ms of main-thread time, now 2 ms in the browser, with identical results.
-* Added: Filter `faz_load_shortcode_assets_everywhere` restores loading a shortcode's assets on every page, per asset, for page builders that inject the shortcode markup client-side.
 
 = Older versions =
 Older releases (1.33.0 and earlier) are listed in the full changelog on GitHub, linked at the top of this section.
