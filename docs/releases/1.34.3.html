@@ -1,0 +1,31 @@
+<p>FAZ Cookie Manager 1.34.3 è un rilascio piccolo, nato da due contributi arrivati dall'esterno: una segnalazione su GitHub che metteva il dito su una scelta che il plugin faceva al posto di chi lo usa, e una traduzione slovacca completa. Lavorandoci ho scoperto che in entrambi i casi la prima versione della soluzione sembrava funzionare, e non funzionava.</p>
+
+<h2>reCAPTCHA prima del consenso: una scelta che non era tua</h2>
+
+<p>Un utente che usa i moduli di Elementor Pro voleva che Google reCAPTCHA restasse bloccato finché il visitatore non dava il consenso. Aveva fatto tutto quello che il pannello suggerisce: aveva tolto reCAPTCHA dalle eccezioni del blocco script e aveva scritto una regola personalizzata per bloccarlo come «Funzionale». Lo script partiva lo stesso.</p>
+
+<p>Aveva anche trovato il perché, e aveva ragione. Gli indirizzi di reCAPTCHA, hCaptcha e Cloudflare Turnstile erano aggiunti all'elenco dei servizi sempre permessi direttamente nel codice, dopo la lettura delle impostazioni e prima di qualunque regola. Nessuna impostazione poteva toccarli. Il ragionamento dietro quella scelta è comprensibile, perché bloccare un CAPTCHA rompe i moduli che protegge. Ma se un CAPTCHA sia davvero «strettamente necessario» è una questione discussa, soprattutto in Germania, dove molti consulenti chiedono di caricare reCAPTCHA solo dopo il consenso perché manda dati a Google. Non è una decisione che un plugin per il consenso deve prendere in modo che non si possa cambiare.</p>
+
+<p>Ora in Impostazioni, sotto Script Blocking, c'è un interruttore: «Allow anti-spam services before consent». È acceso di default, quindi per chi aggiorna non cambia nulla.</p>
+
+<h2>La prima correzione non bastava</h2>
+
+<p>La prima versione toglieva semplicemente i CAPTCHA dall'elenco nel codice quando l'interruttore era spento. Il test end-to-end passava, e due revisori automatici l'hanno bocciata lo stesso. Avevano ragione loro.</p>
+
+<p>I problemi erano due, ed erano entrambi nascosti dal modo in cui avevo scritto il test. Il primo: una nuova installazione salva da sola quattro indirizzi CAPTCHA tra le eccezioni del blocco script, e un'eccezione vince sempre su qualunque regola. Il secondo: nel catalogo dei servizi noti reCAPTCHA, hCaptcha e Turnstile sono classificati come «necessari», e i servizi necessari non vengono mai bloccati. Il mio test funzionava perché, per preparare la pagina, toglieva quelle eccezioni e aggiungeva una regola personalizzata. Faceva cioè esattamente i due passi che l'interruttore doveva rendere inutili. Sul sito di prova, con l'interruttore spento e nient'altro, reCAPTCHA partiva ancora.</p>
+
+<p>Adesso, con l'interruttore spento, il plugin ignora le quattro eccezioni CAPTCHA che ha messo lui, e il catalogo tratta quei servizi come «Funzionali», sia sul server sia nel browser. Non serve scrivere regole. Le eccezioni che l'amministratore ha scritto a mano restano valide, e il testo d'aiuto lo dice. Il test ora fa il percorso della segnalazione, cioè spegne l'interruttore e basta, e fallisce sul codice precedente. Un test che passava solo perché aggiustava la pagina da sé non provava niente, ed è la lezione che mi porto via da questo rilascio.</p>
+
+<p>Chi spegne l'interruttore deve sapere una cosa: finché il visitatore non accetta la categoria Funzionale, un modulo protetto da CAPTCHA non riceve il suo token e non si può inviare.</p>
+
+<h2>Lo slovacco, e due frasi che non andavano</h2>
+
+<p>Tomáš Jenej ha tradotto in slovacco il banner, il centro preferenze, le categorie e le descrizioni dei 77 cookie inclusi nel plugin. È un lavoro lungo e ben fatto, e la struttura era perfetta: ogni chiave al suo posto, ogni segnaposto e ogni tag intatto.</p>
+
+<p>Rileggendo il testo ho trovato due cose che con la traduzione in sé non c'entravano. La prima era nel codice: la funzione che sceglie il plurale delle durate non conosceva lo slovacco, quindi ogni durata prendeva la forma generica e la tabella dei cookie avrebbe scritto «2 dní» e «1,5 rokov». Lo slovacco segue la stessa regola del ceco, e i plurali nella traduzione erano già scritti per quella regola: mancava solo chi li usasse.</p>
+
+<p>La seconda era più seria. La descrizione dei cookie necessari diceva che non conservano dati personali. È la frase che avevo tolto da tutte le altre lingue pochi giorni fa, perché il cookie del consenso contiene un identificativo casuale che il registro dei consensi conserva, e quindi è un dato personale. La traduzione partiva da un testo inglese precedente e l'aveva riportata. Ora dice ciò che dicono le altre lingue, e il test che controlla quella frase conosce anche la versione slovacca: prima non poteva accorgersene, perché cercava la frase solo nelle lingue che c'erano quando l'avevo scritto.</p>
+
+<h2>Cosa fare dopo l'aggiornamento</h2>
+
+<p>Niente, se reCAPTCHA prima del consenso ti va bene così. Se invece vuoi trattenerlo, basta spegnere l'interruttore. Se in passato avevi aggiunto a mano delle eccezioni per reCAPTCHA, toglile, perché quelle restano valide. I siti in slovacco vedono banner e descrizioni dei cookie nella loro lingua. La pagina della cookie policy generata per ora resta in un'altra lingua, perché il generatore non ha ancora i modelli slovacchi.</p>
