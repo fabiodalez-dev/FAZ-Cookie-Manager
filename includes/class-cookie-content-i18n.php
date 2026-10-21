@@ -386,7 +386,9 @@ class Cookie_Content_I18n {
 		}
 
 		$amount = str_replace( ',', '.', $matches[1] );
-		$form   = self::plural_form( (float) $amount, $lang );
+		// "1,0" and "2.0" show a fraction digit, which CLDR counts (operand v):
+		// Czech and Slovak put them in `many` ("1,0 roka"), English in `other`.
+		$form   = self::plural_form( (float) $amount, $lang, false !== strpbrk( $matches[1], '.,' ) );
 		$label  = isset( $units[ $lang ][ $unit ][ $form ] ) ? $units[ $lang ][ $unit ][ $form ] : '';
 		if ( '' === $label && isset( $units[ $lang ][ $unit ]['other'] ) ) {
 			$label = $units[ $lang ][ $unit ]['other'];
@@ -424,11 +426,12 @@ class Cookie_Content_I18n {
 	/**
 	 * Select the grammatical number used by the bundled unit catalogue.
 	 *
-	 * @param float  $amount Numeric duration amount.
-	 * @param string $lang   Normalized language code.
+	 * @param float  $amount       Numeric duration amount.
+	 * @param string $lang         Normalized language code.
+	 * @param bool   $has_fraction Whether the source wrote fraction digits ("1.0").
 	 * @return string one|few|many|other
 	 */
-	private static function plural_form( $amount, $lang ) {
+	private static function plural_form( $amount, $lang, $has_fraction = false ) {
 		// French and Portuguese are the odd ones out among the Romance locales:
 		// CLDR gives them `one` for an INTEGER PART of 0 or 1, not for the value
 		// 1 alone. So "0 jour" and "1,5 an" are singular where Italian, Spanish
@@ -438,10 +441,10 @@ class Cookie_Content_I18n {
 			$integer_part = (int) $amount;
 			return ( 0 === $integer_part || 1 === $integer_part ) ? 'one' : 'other';
 		}
-		if ( 1.0 === $amount ) {
+		if ( 1.0 === $amount && ! $has_fraction ) {
 			return 'one';
 		}
-		if ( floor( $amount ) !== $amount ) {
+		if ( $has_fraction || floor( $amount ) !== $amount ) {
 			// Czech puts every fractional amount in its own class (CLDR `many`,
 			// the genitive singular): "1,5 roku", never "1,5 let". Elsewhere the
 			// fractional case falls through to `other`, which is also where CLDR

@@ -369,6 +369,12 @@ cookie_i18n_eq( Cookie_Content_I18n::duration( '5 years', 'sk' ), '5 rokov', 'Sl
 cookie_i18n_eq( Cookie_Content_I18n::duration( '22 months', 'sk' ), '22 mesiacov', 'Slovak 22 is other, not few' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( '1.5 years', 'sk' ), '1.5 roka', 'Slovak decimals take many (roka)' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( 'Session', 'sk' ), 'Relácia', 'Slovak session keeps the leading capital' );
+// A written fraction digit counts even when it is zero (CLDR operand v):
+// "1,0 roka", not "1,0 rok"; "2.0 roka", not "2.0 roky"; English "1.0 years".
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1,0 years', 'sk' ), '1,0 roka', 'Slovak 1,0 takes many, not one' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '2.0 years', 'sk' ), '2.0 roka', 'Slovak 2.0 takes many, not few' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1.0 years', 'cs' ), '1.0 roku', 'Czech 1.0 takes many, not one' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1.0 days', 'it' ), '1.0 giorni', 'Italian 1.0 takes other, not one' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( '1.5 years', 'it' ), '1.5 anni', 'Italian decimals stay plural' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( '1.5 years', 'hr' ), '1.5 godina', 'Croatian decimals are left in other' );
 
