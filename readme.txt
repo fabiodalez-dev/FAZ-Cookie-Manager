@@ -506,4 +506,4 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
 
 = Older versions =
-Older releases (1.33.0 and earlier) are listed in the full changelog on GitHub, linked at the top of this section.
+Older releases (1.34.0 and earlier) are listed in the full changelog on GitHub, linked at the top of this section.

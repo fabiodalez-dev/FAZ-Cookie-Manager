@@ -68,8 +68,13 @@ older = re.search(r'\n= Older versions =', tail)
 body, footer = (tail[:older.start()], tail[older.start():]) if older else (tail, '')
 parts = re.split(r'(?m)^(?== \d+\.\d+\.\d+ =)', body)
 intro, entries = parts[0], parts[1:]
-if len(entries) > keep:
+dropped = entries[keep:]
+if dropped:
     entries = entries[:keep]
+    # The footer names the newest version that is no longer listed; trimming
+    # without rewriting it pointed readers past the version just dropped.
+    newest_dropped = re.match(r'= (\d+\.\d+\.\d+) =', dropped[0]).group(1)
+    footer = re.sub(r'\(\d+\.\d+\.\d+ and earlier\)', '(' + newest_dropped + ' and earlier)', footer)
 open(path, 'w', encoding='utf-8').write(head + sep + intro + ''.join(entries) + footer)
 PY
 fi
