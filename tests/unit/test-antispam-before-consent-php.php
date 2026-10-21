@@ -80,6 +80,8 @@ namespace {
 		}
 	}
 
+	require_once dirname( __DIR__, 2 ) . '/includes/class-store.php';
+	require_once dirname( __DIR__, 2 ) . '/admin/modules/settings/includes/class-settings.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/includes/class-embed-inventory.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 
@@ -148,6 +150,44 @@ namespace {
 	asc_check( in_array( 'faz-cookie-manager', $wl_off, true ) && in_array( 'wp-includes/', $wl_off, true ), 'switched off: the plugin and WordPress core stay protected' );
 	$wl_user = asc_call( asc_frontend( array( 'script_blocking' => array( 'allow_antispam_before_consent' => false, 'whitelist_patterns' => array( 'hcaptcha.com' ) ) ) ), 'get_whitelist' );
 	asc_check( in_array( 'hcaptcha.com', $wl_user, true ) && ! in_array( 'google.com/recaptcha', $wl_user, true ), 'switched off: an exception the owner keeps still applies, and only that one' );
+
+	echo "\n-- a default install: the shipped CAPTCHA exceptions follow the switch --\n";
+	// A fresh install stores these four in Script Blocking Exceptions, and every
+	// exception wins over every rule, so they alone would keep reCAPTCHA live.
+	$shipped     = \FazCookie\Admin\Modules\Settings\Includes\Settings::DEFAULT_ANTISPAM_EXCEPTIONS;
+	$recaptcha   = 'https://www.google.com/recaptcha/api.js?render=KEY';
+	$covers      = function ( array $whitelist, $url ) {
+		foreach ( $whitelist as $p ) {
+			if ( '' !== $p && false !== stripos( $url, $p ) ) {
+				return true;
+			}
+		}
+		return false;
+	};
+	$defaults_off = array( 'script_blocking' => array( 'allow_antispam_before_consent' => false, 'whitelist_patterns' => $shipped ) );
+	$defaults_on  = array( 'script_blocking' => array( 'allow_antispam_before_consent' => true, 'whitelist_patterns' => $shipped ) );
+	asc_check( ! $covers( asc_call( asc_frontend( $defaults_off ), 'get_whitelist' ), $recaptcha ), 'switched off on a default install: nothing in the whitelist covers reCAPTCHA' );
+	asc_check( $covers( asc_call( asc_frontend( $defaults_on ), 'get_whitelist' ), $recaptcha ), 'switched on on a default install: reCAPTCHA is covered, as before' );
+	$own = array( 'script_blocking' => array( 'allow_antispam_before_consent' => false, 'whitelist_patterns' => array_merge( $shipped, array( 'recaptcha', 'my-inline-script-id' ) ) ) );
+	$own_list = asc_call( asc_frontend( $own ), 'get_user_whitelist_patterns' );
+	asc_check( array( 'recaptcha', 'my-inline-script-id' ) === $own_list, 'switched off: only the shipped entries go, exceptions the owner wrote stay' );
+	asc_check( $shipped === asc_call( asc_frontend( $defaults_on ), 'get_user_whitelist_patterns' ), 'switched on: the stored exceptions are returned untouched' );
+	$out_defaults = asc_call( asc_frontend( $defaults_off, array( 'google.com/recaptcha' => 'functional' ), array( 'functional' ) ), 'process_output_buffer', array( '<html><head></head><body><script src="' . $recaptcha . '" id="r-js"></script></body></html>' ) );
+	asc_check( false !== strpos( $out_defaults, 'type="text/plain"' ), 'switched off on a default install: the rule parks reCAPTCHA in the HTML' );
+	$fe_src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' );
+	asc_check( 3 === substr_count( $fe_src, '$this->get_user_whitelist_patterns()' ), 'server whitelist, client whitelist and cookie exemptions all read the exceptions through the same filter' );
+	asc_check( false !== strpos( (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/settings/includes/class-settings.php' ), "'whitelist_patterns' => self::DEFAULT_ANTISPAM_EXCEPTIONS," ), 'the shipped exceptions are the list the filter recognises' );
+
+	echo "\n-- the catalogue holds CAPTCHAs under functional when the switch is off --\n";
+	$cats = array( 'necessary', 'functional', 'analytics', 'marketing' );
+	foreach ( array( 'google.com/recaptcha', 'recaptcha/api.js', 'js.hcaptcha.com', 'challenges.cloudflare.com/turnstile', 'wpforms-recaptcha', 'nf-google-recaptcha' ) as $pat ) {
+		asc_check( 'functional' === asc_call( asc_frontend( $off ), 'known_provider_category', array( 'necessary', $pat, $cats ) ), "switched off: {$pat} is held under functional" );
+	}
+	asc_check( 'necessary' === asc_call( asc_frontend( $on ), 'known_provider_category', array( 'necessary', 'google.com/recaptcha', $cats ) ), 'switched on: reCAPTCHA keeps the catalogue category' );
+	asc_check( 'necessary' === asc_call( asc_frontend( $off ), 'known_provider_category', array( 'necessary', 'wp-includes/js/jquery', $cats ) ), 'switched off: other necessary patterns are untouched' );
+	asc_check( 'marketing' === asc_call( asc_frontend( $off ), 'known_provider_category', array( 'marketing', 'connect.facebook.net', $cats ) ), 'switched off: non-necessary providers are untouched' );
+	asc_check( 'necessary' === asc_call( asc_frontend( $off ), 'known_provider_category', array( 'necessary', 'google.com/recaptcha', array( 'necessary', 'analytics' ) ) ), 'a site without a functional category keeps the catalogue answer' );
+	asc_check( 2 === substr_count( $fe_src, '$this->known_provider_category(' ), 'the server map and the client provider list both apply it' );
 
 	echo "\n-- output buffer: a custom rule now blocks reCAPTCHA --\n";
 	$providers = array( 'google.com/recaptcha' => 'functional' );

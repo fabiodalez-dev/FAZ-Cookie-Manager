@@ -47,6 +47,22 @@ class Settings extends Store {
 		return self::$instance;
 	}
 	/**
+	 * The CAPTCHA endpoints a fresh install stores in Script Blocking
+	 * Exceptions. Named so the frontend can tell these shipped entries apart:
+	 * with "Allow anti-spam services before consent" switched off they are
+	 * ignored, otherwise that switch would do nothing on a default install,
+	 * because every exception wins over every rule (#343).
+	 */
+	const DEFAULT_ANTISPAM_EXCEPTIONS = array(
+		'www.google.com/recaptcha/api',
+		// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
+		'www.gstatic.com/recaptcha/',
+		// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
+		'challenges.cloudflare.com/',
+		'hcaptcha.com/',
+	);
+
+	/**
 	 * Constructor
 	 */
 	public function __construct() {
@@ -272,14 +288,7 @@ class Settings extends Store {
 				// form the visitor is actively trying to submit is the textbook
 				// Art. 5(3) strictly-necessary case; the profiling resources above
 				// are not, and stay out.
-				'whitelist_patterns' => array(
-					'www.google.com/recaptcha/api',
-					// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
-					'www.gstatic.com/recaptcha/',
-					// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Matching a third-party challenge URL in the consent whitelist; this string does not load a plugin asset.
-					'challenges.cloudflare.com/',
-					'hcaptcha.com/',
-				),
+				'whitelist_patterns' => self::DEFAULT_ANTISPAM_EXCEPTIONS,
 				// Per-gateway payment-SDK opt-in. Each toggle, when the site owner
 				// enables it, allows that gateway's payment scripts (PayPal SDK,
 				// Stripe.js, …) to load BEFORE consent site-wide — for stores whose

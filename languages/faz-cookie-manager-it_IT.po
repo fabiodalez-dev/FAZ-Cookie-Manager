@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-21T05:45:35+00:00\n"
+"POT-Creation-Date: 2026-10-21T06:25:18+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -43,23 +43,29 @@ msgstr "https://fabiodalez.it/"
 msgid "Dashboard"
 msgstr "Pannello di controllo"
 
-#: admin/class-admin.php:277 admin/views/base.php:20 admin/views/dashboard.php:239
+#: admin/class-admin.php:277 admin/views/base.php:20
+#: admin/views/dashboard.php:239
 msgid "Cookie Banner"
 msgstr "Banner cookie"
 
-#: admin/class-admin.php:282 admin/views/base.php:21 frontend/class-frontend.php:3797 frontend/modules/banner-rest/class-banner-rest.php:609
+#: admin/class-admin.php:282 admin/views/base.php:21
+#: frontend/class-frontend.php:3797
+#: frontend/modules/banner-rest/class-banner-rest.php:609
 msgid "Cookies"
 msgstr "Cookie"
 
-#: admin/class-admin.php:287 admin/views/base.php:22 admin/views/dashboard.php:247 admin/views/settings.php:369
+#: admin/class-admin.php:287 admin/views/base.php:22
+#: admin/views/dashboard.php:247 admin/views/settings.php:369
 msgid "Consent Logs"
 msgstr "Registri di consenso"
 
-#: admin/class-admin.php:292 admin/views/base.php:23 admin/views/dashboard.php:243 admin/views/system-status.php:163
+#: admin/class-admin.php:292 admin/views/base.php:23
+#: admin/views/dashboard.php:243 admin/views/system-status.php:163
 msgid "Google Consent Mode"
 msgstr "Google Consent Mode"
 
-#: admin/class-admin.php:297 admin/views/base.php:24 admin/views/dashboard.php:251
+#: admin/class-admin.php:297 admin/views/base.php:24
+#: admin/views/dashboard.php:251
 msgid "Languages"
 msgstr "Lingue"
 
@@ -71,11 +77,14 @@ msgstr "Lista fornitori (IAB)"
 msgid "Geo-routing"
 msgstr "Geo-routing"
 
-#: admin/class-admin.php:312 admin/views/banner.php:426 admin/views/base.php:28 frontend/class-amp-consent.php:513 includes/blocks/class-blocks.php:67
+#: admin/class-admin.php:312 admin/views/banner.php:426 admin/views/base.php:28
+#: frontend/class-amp-consent.php:513 includes/blocks/class-blocks.php:67
 msgid "Cookie Policy"
 msgstr "Informativa cookie"
 
-#: admin/class-admin.php:317 admin/class-admin.php:2900 admin/views/base.php:25 admin/views/dashboard.php:255 includes/blocks/editor.js:27 includes/blocks/editor.js:60 includes/blocks/editor.js:93
+#: admin/class-admin.php:317 admin/class-admin.php:2900 admin/views/base.php:25
+#: admin/views/dashboard.php:255 includes/blocks/editor.js:27
+#: includes/blocks/editor.js:60 includes/blocks/editor.js:93
 msgid "Settings"
 msgstr "Impostazioni"
 
@@ -91,11 +100,13 @@ msgstr "Stato del sistema"
 msgid "Setup"
 msgstr "Configurazione"
 
-#: admin/class-admin.php:563 admin/class-admin.php:2873 admin/views/consent-logs.php:27 admin/views/consent-logs.php:52
+#: admin/class-admin.php:563 admin/class-admin.php:2873
+#: admin/views/consent-logs.php:27 admin/views/consent-logs.php:52
 msgid "Accepted"
 msgstr "Accettato"
 
-#: admin/class-admin.php:564 admin/class-admin.php:2877 admin/views/consent-logs.php:34 admin/views/consent-logs.php:53
+#: admin/class-admin.php:564 admin/class-admin.php:2877
+#: admin/views/consent-logs.php:34 admin/views/consent-logs.php:53
 msgid "Rejected"
 msgstr "Rifiutato"
 
@@ -127,11 +138,17 @@ msgstr "Eliminare questo elemento?"
 msgid "Cookie Name"
 msgstr "Nome cookie"
 
-#: admin/class-admin.php:586 admin/modules/cookie-policy-generator/includes/class-renderer.php:687 admin/views/cookies.php:176 includes/class-cookie-table-shortcode.php:280
+#: admin/class-admin.php:586
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:687
+#: admin/views/cookies.php:176 includes/class-cookie-table-shortcode.php:280
 msgid "Domain"
 msgstr "Dominio"
 
-#: admin/class-admin.php:587 admin/modules/cookie-policy-generator/includes/class-renderer.php:688 admin/views/cookies.php:177 frontend/modules/shortcodes/class-shortcodes.php:285 includes/class-cookie-table-shortcode.php:281
+#: admin/class-admin.php:587
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:688
+#: admin/views/cookies.php:177
+#: frontend/modules/shortcodes/class-shortcodes.php:285
+#: includes/class-cookie-table-shortcode.php:281
 msgid "Duration"
 msgstr "Durata"
 
@@ -139,7 +156,13 @@ msgstr "Durata"
 msgid "e.g. 1 year"
 msgstr "es. 1 anno"
 
-#: admin/class-admin.php:589 admin/modules/cookie-policy-generator/includes/class-renderer.php:689 admin/views/banner.php:830 admin/views/banner.php:878 admin/views/cookies.php:66 admin/views/cookies.php:178 admin/views/cookies.php:295 frontend/modules/shortcodes/class-shortcodes.php:287 includes/class-cookie-table-shortcode.php:282
+#: admin/class-admin.php:589
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:689
+#: admin/views/banner.php:830 admin/views/banner.php:878
+#: admin/views/cookies.php:66 admin/views/cookies.php:178
+#: admin/views/cookies.php:295
+#: frontend/modules/shortcodes/class-shortcodes.php:287
+#: includes/class-cookie-table-shortcode.php:282
 msgid "Description"
 msgstr "Descrizione"
 
@@ -159,7 +182,8 @@ msgstr "Categorie salvate."
 msgid "Delete all stale"
 msgstr "Elimina tutti gli obsoleti"
 
-#: admin/class-admin.php:594 admin/views/cookies.php:88 admin/views/cookies.php:95
+#: admin/class-admin.php:594 admin/views/cookies.php:88
+#: admin/views/cookies.php:95
 msgid "All Cookies"
 msgstr "Tutti i cookie"
 
@@ -215,7 +239,9 @@ msgstr "Elimina"
 msgid "Delete stale"
 msgstr "Elimina obsoleti"
 
-#: admin/class-admin.php:610 admin/views/cookies.php:260 admin/views/system-status.php:214 includes/class-cookie-table-shortcode.php:283
+#: admin/class-admin.php:610 admin/views/cookies.php:260
+#: admin/views/system-status.php:214
+#: includes/class-cookie-table-shortcode.php:283
 msgid "Category"
 msgstr "Categoria"
 
@@ -744,7 +770,8 @@ msgstr "Database GeoIP aggiornato con successo."
 msgid "Failed to update database."
 msgstr "Aggiornamento del database non riuscito."
 
-#: admin/class-admin.php:787 admin/class-admin.php:886 admin/class-admin.php:2295
+#: admin/class-admin.php:787 admin/class-admin.php:886
+#: admin/class-admin.php:2295
 msgid "No GVL data downloaded yet. Click \"Update GVL Now\" to download."
 msgstr "Nessun dato GVL scaricato. Fare clic su \"Aggiorna GVL ora\" per scaricarli."
 
@@ -1052,7 +1079,8 @@ msgstr "Salvataggio della selezione non riuscito."
 msgid "Scanning cookie inventory…"
 msgstr "Scansione inventario cookie in corso…"
 
-#: admin/class-admin.php:912 admin/views/cookie-policy.php:194 admin/views/gvl.php:52
+#: admin/class-admin.php:912 admin/views/cookie-policy.php:194
+#: admin/views/gvl.php:52
 msgid "Loading saved selection…"
 msgstr "Caricamento selezione salvata…"
 
@@ -1162,7 +1190,8 @@ msgid "Last 24 Hours"
 msgstr "Ultime 24 ore"
 
 #. translators: %s: date range label injected by JS
-#: admin/class-admin.php:948 admin/views/dashboard.php:89 admin/views/dashboard.php:124 admin/views/dashboard.php:216
+#: admin/class-admin.php:948 admin/views/dashboard.php:89
+#: admin/views/dashboard.php:124 admin/views/dashboard.php:216
 msgid "Last 7 Days"
 msgstr "Ultimi 7 giorni"
 
@@ -1240,7 +1269,9 @@ msgstr "Scansione completata. Non sono stati trovati nuovi cookie."
 msgid "Setup complete. Your cookie banner is ready."
 msgstr "Configurazione completata. Il banner cookie è pronto."
 
-#: admin/class-admin.php:974 admin/modules/settings/includes/class-onboarding.php:275 admin/modules/settings/includes/class-onboarding.php:444
+#: admin/class-admin.php:974
+#: admin/modules/settings/includes/class-onboarding.php:275
+#: admin/modules/settings/includes/class-onboarding.php:444
 msgid "Setup could not be saved. Please try again."
 msgstr "Impossibile salvare la configurazione. Riprova."
 
@@ -1458,7 +1489,10 @@ msgstr "A tutti i visitatori di ritorno verrà mostrato nuovamente il banner del
 msgid "Consents invalidated — returning visitors will be asked again."
 msgstr "Consensi invalidati — ai visitatori di ritorno verrà chiesto nuovamente il consenso."
 
-#: admin/class-admin.php:1052 admin/views/dashboard.php:222 admin/views/geo-routing.php:56 admin/views/geo-routing.php:67 admin/views/geo-routing.php:78 admin/views/geo-routing.php:123 admin/views/geo-routing.php:134
+#: admin/class-admin.php:1052 admin/views/dashboard.php:222
+#: admin/views/geo-routing.php:56 admin/views/geo-routing.php:67
+#: admin/views/geo-routing.php:78 admin/views/geo-routing.php:123
+#: admin/views/geo-routing.php:134
 msgid "Loading…"
 msgstr "Caricamento…"
 
@@ -1914,7 +1948,8 @@ msgstr "Pushwoosh"
 msgid "Firebase Cloud Messaging"
 msgstr "Firebase Cloud Messaging"
 
-#: admin/class-admin.php:1603 admin/class-admin.php:1604 admin/class-admin.php:1633 admin/class-admin.php:1634
+#: admin/class-admin.php:1603 admin/class-admin.php:1604
+#: admin/class-admin.php:1633 admin/class-admin.php:1634
 msgid "FAZ Cookie"
 msgstr "FAZ Cookie"
 
@@ -1946,7 +1981,8 @@ msgstr "Sito"
 msgid "Banner Status"
 msgstr "Stato banner"
 
-#: admin/class-admin.php:1667 admin/views/cookies.php:179 admin/views/cookies.php:261
+#: admin/class-admin.php:1667 admin/views/cookies.php:179
+#: admin/views/cookies.php:261
 msgid "Actions"
 msgstr "Azioni"
 
@@ -1978,7 +2014,9 @@ msgstr "e"
 msgid "filters."
 msgstr "filtri."
 
-#: admin/class-admin.php:1957 admin/class-admin.php:2109 admin/class-admin.php:2565 admin/class-admin.php:2605 admin/class-admin.php:2675
+#: admin/class-admin.php:1957 admin/class-admin.php:2109
+#: admin/class-admin.php:2565 admin/class-admin.php:2605
+#: admin/class-admin.php:2675
 msgid "Dismiss this notice"
 msgstr "Ignora questo avviso"
 
@@ -1990,11 +2028,13 @@ msgstr "Instagram Feed gestisce il consenso da sé"
 msgid "Its GDPR setting is set to Yes, so it serves local copies of images and never contacts Instagram. There is nothing left to block, so your cookie settings do not apply to that feed — and a visitor accepting will not restore the connection either, because Instagram Feed's restriction does not depend on consent."
 msgstr "La sua opzione GDPR è impostata su Sì, quindi serve copie locali delle immagini e non contatta mai Instagram. Non resta nulla da bloccare: le tue impostazioni sui cookie non si applicano più a quel feed, e nemmeno l'accettazione di un visitatore ripristina il collegamento, perché la limitazione di Instagram Feed non dipende dal consenso."
 
-#: admin/class-admin.php:2057 admin/modules/cookies/api/class-cookies-api.php:1157
+#: admin/class-admin.php:2057
+#: admin/modules/cookies/api/class-cookies-api.php:1157
 msgid "Open Instagram Feed settings"
 msgstr "Apri le impostazioni di Instagram Feed"
 
-#: admin/class-admin.php:2058 admin/class-admin.php:2339 admin/views/dashboard.php:32
+#: admin/class-admin.php:2058 admin/class-admin.php:2339
+#: admin/views/dashboard.php:32
 msgid "Dismiss"
 msgstr "Ignora"
 
@@ -2046,7 +2086,8 @@ msgstr "La scansione pianificata ha trovato %d nuovo/i cookie."
 msgid "Review now"
 msgstr "Rivedi ora"
 
-#: admin/class-admin.php:2293 admin/views/settings.php:508 admin/views/setup.php:201
+#: admin/class-admin.php:2293 admin/views/settings.php:508
+#: admin/views/setup.php:201
 msgid "IAB TCF"
 msgstr "IAB TCF"
 
@@ -2174,15 +2215,30 @@ msgstr "%d interazioni di consenso negli ultimi 30 giorni."
 msgid "View details"
 msgstr "Visualizza dettagli"
 
-#: admin/modules/banners/api/class-api.php:104 admin/modules/banners/api/class-api.php:801 admin/modules/cookies/api/class-categories-api.php:95 admin/modules/cookies/api/class-categories-api.php:244 admin/modules/cookies/api/class-cookies-api.php:219 admin/modules/cookies/api/class-cookies-api.php:515 admin/modules/scanner/api/class-api.php:240 admin/modules/scanner/api/class-api.php:1178 admin/modules/settings/api/class-api.php:665
+#: admin/modules/banners/api/class-api.php:104
+#: admin/modules/banners/api/class-api.php:801
+#: admin/modules/cookies/api/class-categories-api.php:95
+#: admin/modules/cookies/api/class-categories-api.php:244
+#: admin/modules/cookies/api/class-cookies-api.php:219
+#: admin/modules/cookies/api/class-cookies-api.php:515
+#: admin/modules/scanner/api/class-api.php:240
+#: admin/modules/scanner/api/class-api.php:1178
+#: admin/modules/settings/api/class-api.php:665
 msgid "Unique identifier for the resource."
 msgstr "Identificativo univoco della risorsa."
 
-#: admin/modules/banners/api/class-api.php:208 admin/modules/cookies/api/class-api-controller.php:113 admin/modules/cookies/api/class-api-controller.php:167 admin/modules/cookies/api/class-api-controller.php:172 admin/modules/cookies/api/class-api-controller.php:225 admin/modules/cookies/api/class-api-controller.php:232 admin/modules/scanner/api/class-api.php:441
+#: admin/modules/banners/api/class-api.php:208
+#: admin/modules/cookies/api/class-api-controller.php:113
+#: admin/modules/cookies/api/class-api-controller.php:167
+#: admin/modules/cookies/api/class-api-controller.php:172
+#: admin/modules/cookies/api/class-api-controller.php:225
+#: admin/modules/cookies/api/class-api-controller.php:232
+#: admin/modules/scanner/api/class-api.php:441
 msgid "Invalid ID."
 msgstr "ID non valido."
 
-#: admin/modules/banners/api/class-api.php:219 admin/modules/banners/api/class-api.php:341
+#: admin/modules/banners/api/class-api.php:219
+#: admin/modules/banners/api/class-api.php:341
 msgid "Banner not found."
 msgstr "Banner non trovato."
 
@@ -2194,7 +2250,8 @@ msgstr "Impossibile creare un banner già esistente."
 msgid "Failed to create banner."
 msgstr "Impossibile creare il banner."
 
-#: admin/modules/banners/api/class-api.php:286 admin/modules/banners/api/class-api.php:318
+#: admin/modules/banners/api/class-api.php:286
+#: admin/modules/banners/api/class-api.php:318
 msgid "Invalid banner id"
 msgstr "ID banner non valido"
 
@@ -2222,7 +2279,10 @@ msgstr "Impossibile salvare il banner durante l'aggiornamento collettivo."
 msgid "Too many requests. Please slow down."
 msgstr "Troppe richieste. Rallenta."
 
-#: admin/modules/banners/api/class-api.php:768 admin/modules/consentlogs/api/class-api.php:413 admin/modules/cookies/api/class-api-controller.php:291 admin/modules/settings/api/class-api.php:633
+#: admin/modules/banners/api/class-api.php:768
+#: admin/modules/consentlogs/api/class-api.php:413
+#: admin/modules/cookies/api/class-api-controller.php:291
+#: admin/modules/settings/api/class-api.php:633
 msgid "Limit results to those matching a string."
 msgstr "Limita i risultati a quelli corrispondenti a una stringa."
 
@@ -2270,7 +2330,8 @@ msgstr "Data di creazione del banner, in GMT."
 msgid "The date the banner was last modified, as GMT."
 msgstr "Data dell'ultima modifica del banner, in GMT."
 
-#: admin/modules/consentlogs/api/class-api.php:99 admin/modules/pageviews/api/class-api.php:412
+#: admin/modules/consentlogs/api/class-api.php:99
+#: admin/modules/pageviews/api/class-api.php:412
 msgid "Number of days to look back."
 msgstr "Numero di giorni da considerare."
 
@@ -2290,11 +2351,15 @@ msgstr "L'esportazione CSV non può iniziare perché un buffer di output è bloc
 msgid "INCOMPLETE EXPORT: a database error interrupted the download."
 msgstr "ESPORTAZIONE INCOMPLETA: un errore del database ha interrotto il download."
 
-#: admin/modules/consentlogs/api/class-api.php:396 admin/modules/cookies/api/class-api-controller.php:274 admin/modules/settings/api/class-api.php:616
+#: admin/modules/consentlogs/api/class-api.php:396
+#: admin/modules/cookies/api/class-api-controller.php:274
+#: admin/modules/settings/api/class-api.php:616
 msgid "Current page of the collection."
 msgstr "Pagina corrente della raccolta."
 
-#: admin/modules/consentlogs/api/class-api.php:404 admin/modules/cookies/api/class-api-controller.php:282 admin/modules/settings/api/class-api.php:624
+#: admin/modules/consentlogs/api/class-api.php:404
+#: admin/modules/cookies/api/class-api-controller.php:282
+#: admin/modules/settings/api/class-api.php:624
 msgid "Maximum number of items to be returned in result set."
 msgstr "Numero massimo di elementi da restituire nel set di risultati."
 
@@ -2382,7 +2447,10 @@ msgstr "Non esiste un modello di policy per quella giurisdizione e lingua."
 msgid "Complete all fields required for the selected jurisdiction before saving or previewing the Cookie Policy."
 msgstr "Compila tutti i campi richiesti dalla giurisdizione selezionata prima di salvare o di visualizzare l'anteprima della Cookie Policy."
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:686 admin/views/system-status.php:213 frontend/modules/shortcodes/class-shortcodes.php:283 includes/class-cookie-table-shortcode.php:279
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:686
+#: admin/views/system-status.php:213
+#: frontend/modules/shortcodes/class-shortcodes.php:283
+#: includes/class-cookie-table-shortcode.php:279
 msgid "Cookie"
 msgstr "Cookie"
 
@@ -2404,7 +2472,9 @@ msgstr "Trasferimenti internazionali di dati"
 msgid "Recipient country:"
 msgstr "Paese destinatario:"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1090 frontend/modules/shortcodes/class-shortcodes.php:1134 includes/class-cookie-table-shortcode.php:246
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1090
+#: frontend/modules/shortcodes/class-shortcodes.php:1134
+#: includes/class-cookie-table-shortcode.php:246
 msgid "Safeguard:"
 msgstr "Garanzia:"
 
@@ -3201,7 +3271,11 @@ msgstr ""
 "Per qualsiasi domanda su questa Cookie Policy, contattaci all’indirizzo **{{COMPANY_EMAIL}}**."
 
 #. translators: %s: Class method name.
-#: admin/modules/cookies/api/class-api-controller.php:44 admin/modules/cookies/api/class-api-controller.php:54 admin/modules/cookies/api/class-api-controller.php:71 includes/class-store.php:145 includes/class-store.php:156 includes/class-store.php:167 includes/class-store.php:178
+#: admin/modules/cookies/api/class-api-controller.php:44
+#: admin/modules/cookies/api/class-api-controller.php:54
+#: admin/modules/cookies/api/class-api-controller.php:71
+#: includes/class-store.php:145 includes/class-store.php:156
+#: includes/class-store.php:167 includes/class-store.php:178
 #, php-format
 msgid "Method '%s' not implemented. Must be overridden in subclass."
 msgstr "Il metodo '%s' non è implementato. Deve essere sovrascritto nella sottoclasse."
@@ -3234,7 +3308,8 @@ msgstr "Data di creazione della categoria, in GMT."
 msgid "The date the category was last modified, as GMT."
 msgstr "Data dell'ultima modifica della categoria, in GMT."
 
-#: admin/modules/cookies/api/class-categories-api.php:262 admin/modules/cookies/api/class-cookies-api.php:537
+#: admin/modules/cookies/api/class-categories-api.php:262
+#: admin/modules/cookies/api/class-cookies-api.php:537
 msgid "Cookie category name."
 msgstr "Nome della categoria cookie."
 
@@ -3466,7 +3541,8 @@ msgstr "Questo è un cookie di autenticazione di WordPress. Un visitatore non au
 msgid "That cookie is no longer waiting for a decision. Run a new scan if you need to review it again."
 msgstr "Quel cookie non è più in attesa di una decisione. Esegui una nuova scansione se devi riesaminarlo."
 
-#: admin/modules/scanner/api/class-api.php:371 admin/modules/scanner/includes/class-controller.php:638
+#: admin/modules/scanner/api/class-api.php:371
+#: admin/modules/scanner/includes/class-controller.php:638
 msgid "Invalid browser scan identifier."
 msgstr "Identificativo di scansione del browser non valido."
 
@@ -3532,11 +3608,13 @@ msgstr "Totale pagine scansionate."
 msgid "Maximum pages to scan."
 msgstr "Numero massimo di pagine da scansionare."
 
-#: admin/modules/scanner/includes/class-controller.php:649 admin/modules/scanner/includes/class-controller.php:668
+#: admin/modules/scanner/includes/class-controller.php:649
+#: admin/modules/scanner/includes/class-controller.php:668
 msgid "Another browser scan is already in progress for this administrator."
 msgstr "Un'altra scansione del browser è già in corso per questo amministratore."
 
-#: admin/modules/scanner/includes/class-controller.php:690 admin/modules/scanner/includes/class-controller.php:703
+#: admin/modules/scanner/includes/class-controller.php:690
+#: admin/modules/scanner/includes/class-controller.php:703
 msgid "The browser scan session has expired."
 msgstr "La sessione di scansione del browser è scaduta."
 
@@ -3548,7 +3626,9 @@ msgstr "L’ancoraggio a IP statico è limitato al nome host di questo sito."
 msgid "Static IP pinning requires the WordPress cURL HTTP transport."
 msgstr "L’ancoraggio a IP statico richiede il trasporto HTTP cURL di WordPress."
 
-#: admin/modules/settings/api/class-api.php:365 admin/modules/settings/includes/class-onboarding.php:160 admin/modules/settings/includes/class-onboarding.php:349
+#: admin/modules/settings/api/class-api.php:365
+#: admin/modules/settings/includes/class-onboarding.php:160
+#: admin/modules/settings/includes/class-onboarding.php:349
 msgid "Choose a valid privacy law before finishing setup."
 msgstr "Scegli una normativa sulla privacy valida prima di completare la configurazione."
 
@@ -3568,7 +3648,11 @@ msgstr "Forza il recupero dei dati"
 msgid "Notice dismissal duration in seconds; zero dismisses permanently."
 msgstr "Durata in secondi della chiusura dell’avviso; zero lo chiude in modo permanente."
 
-#: admin/modules/settings/api/class-api.php:671 admin/modules/settings/api/class-api.php:676 admin/modules/settings/api/class-api.php:681 admin/modules/settings/api/class-api.php:686 admin/modules/settings/api/class-api.php:691
+#: admin/modules/settings/api/class-api.php:671
+#: admin/modules/settings/api/class-api.php:676
+#: admin/modules/settings/api/class-api.php:681
+#: admin/modules/settings/api/class-api.php:686
+#: admin/modules/settings/api/class-api.php:691
 msgid "Language."
 msgstr "Lingua."
 
@@ -3738,7 +3822,8 @@ msgstr "Gateway di pagamento sconosciuto nell'elenco inviato."
 msgid "Unknown payment gateway key."
 msgstr "Chiave gateway di pagamento sconosciuta."
 
-#: admin/modules/settings/includes/class-onboarding.php:747 admin/modules/settings/includes/class-onboarding.php:758
+#: admin/modules/settings/includes/class-onboarding.php:747
+#: admin/modules/settings/includes/class-onboarding.php:758
 msgid "Payment gateway values must be true or false."
 msgstr "I valori dei gateway di pagamento devono essere true o false."
 
@@ -3808,7 +3893,8 @@ msgstr "Generale"
 msgid "Geo Targeting"
 msgstr "Geo Targeting"
 
-#: admin/views/banner.php:146 admin/views/banner.php:1129 admin/views/banner.php:1139
+#: admin/views/banner.php:146 admin/views/banner.php:1129
+#: admin/views/banner.php:1139
 msgid "Content"
 msgstr "Contenuto"
 
@@ -4054,7 +4140,8 @@ msgstr "Lingua:"
 msgid "Notice Title"
 msgstr "Titolo dell'avviso"
 
-#: admin/views/banner.php:383 frontend/class-frontend.php:3792 frontend/modules/banner-rest/class-banner-rest.php:603
+#: admin/views/banner.php:383 frontend/class-frontend.php:3792
+#: frontend/modules/banner-rest/class-banner-rest.php:603
 msgid "We value your privacy"
 msgstr "La tua privacy è importante"
 
@@ -4074,7 +4161,8 @@ msgstr "Etichette dei pulsanti"
 msgid "Accept Button"
 msgstr "Pulsante Accetta"
 
-#: admin/views/banner.php:414 admin/views/banner.php:852 frontend/class-amp-consent.php:511
+#: admin/views/banner.php:414 admin/views/banner.php:852
+#: frontend/class-amp-consent.php:511
 msgid "Accept All"
 msgstr "Accetta tutto"
 
@@ -4082,7 +4170,8 @@ msgstr "Accetta tutto"
 msgid "Reject Button"
 msgstr "Pulsante Rifiuta"
 
-#: admin/views/banner.php:418 admin/views/banner.php:860 frontend/class-amp-consent.php:512
+#: admin/views/banner.php:418 admin/views/banner.php:860
+#: frontend/class-amp-consent.php:512
 msgid "Reject All"
 msgstr "Rifiuta tutto"
 
@@ -4398,7 +4487,8 @@ msgstr "Testo opt-out (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Testo del modale «Preferenze di opt-out» che il visitatore vede dopo aver cliccato il link «Do Not Sell or Share My Personal Information». Mostrato solo sui banner CCPA / US State Laws (ed Entrambi). Segue la lingua selezionata qui sopra."
 
-#: admin/views/banner.php:875 frontend/class-frontend.php:3794 frontend/modules/banner-rest/class-banner-rest.php:606
+#: admin/views/banner.php:875 frontend/class-frontend.php:3794
+#: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "Opt-out Preferences"
 msgstr "Preferenze di opt-out"
 
@@ -4574,7 +4664,8 @@ msgstr "Canada (PIPEDA)"
 msgid "Brazil (LGPD)"
 msgstr "Brasile (LGPD)"
 
-#: admin/views/banner.php:1167 admin/views/settings.php:703 admin/views/setup.php:189
+#: admin/views/banner.php:1167 admin/views/settings.php:703
+#: admin/views/setup.php:189
 msgid "Australia"
 msgstr "Australia"
 
@@ -4754,15 +4845,21 @@ msgstr "\"Non verificata\" significa che il server non ha potuto riscontrarle; n
 msgid "\"Carried\" means it was already on record for this visitor and keeps the verdict of that earlier row."
 msgstr "\"Riportata\" significa che era già registrata per questo visitatore e mantiene l'esito di quella riga precedente."
 
-#: admin/views/consent-logs.php:86 includes/class-dsar-admin.php:448 includes/class-utils.php:1356
+#: admin/views/consent-logs.php:86 includes/class-dsar-admin.php:448
+#: includes/class-utils.php:1356
 msgid "Date"
 msgstr "Data"
 
-#: admin/views/consent-logs.php:87 frontend/class-frontend.php:3791 frontend/modules/banner-rest/class-banner-rest.php:604 includes/class-dsar-admin.php:139 includes/class-utils.php:1350 includes/class-utils.php:1392
+#: admin/views/consent-logs.php:87 frontend/class-frontend.php:3791
+#: frontend/modules/banner-rest/class-banner-rest.php:604
+#: includes/class-dsar-admin.php:139 includes/class-utils.php:1350
+#: includes/class-utils.php:1392
 msgid "Consent ID"
 msgstr "ID consenso"
 
-#: admin/views/consent-logs.php:88 includes/class-dsar-admin.php:135 includes/class-dsar-admin.php:453 includes/class-utils.php:1351 includes/class-utils.php:1402
+#: admin/views/consent-logs.php:88 includes/class-dsar-admin.php:135
+#: includes/class-dsar-admin.php:453 includes/class-utils.php:1351
+#: includes/class-utils.php:1402
 msgid "Status"
 msgstr "Stato"
 
@@ -4782,7 +4879,8 @@ msgstr "URL pagina"
 msgid "Context"
 msgstr "Contesto"
 
-#: admin/views/consent-logs.php:97 admin/views/cookies.php:71 admin/views/cookies.php:183 admin/views/dashboard.php:199
+#: admin/views/consent-logs.php:97 admin/views/cookies.php:71
+#: admin/views/cookies.php:183 admin/views/dashboard.php:199
 msgid "Loading..."
 msgstr "Caricamento..."
 
@@ -4900,7 +4998,8 @@ msgstr "CCPA / CPRA (California, USA)"
 msgid "LGPD (Brazil)"
 msgstr "LGPD (Brasile)"
 
-#: admin/views/cookie-policy.php:161 admin/views/cookie-policy.php:227 admin/views/setup.php:137
+#: admin/views/cookie-policy.php:161 admin/views/cookie-policy.php:227
+#: admin/views/setup.php:137
 msgid "POPIA (South Africa)"
 msgstr "POPIA (Sudafrica)"
 
@@ -4940,7 +5039,8 @@ msgstr "Testo della policy"
 msgid "<strong>You probably don't need this.</strong> The shipped sections are reviewed starting points. Fill a box only to replace that section with your own wording — placeholders such as <code>{{COMPANY_NAME}}</code> keep working inside it. Text you write here is <strong>your</strong> document, so review the disclaimer setting below accordingly. Leave a box empty to keep the shipped text."
 msgstr "<strong>Probabilmente non ti serve.</strong> Le sezioni incluse sono punti di partenza già rivisti. Compila una casella solo per sostituire quella sezione con parole tue — i segnaposto come <code>{{COMPANY_NAME}}</code> continuano a funzionare al suo interno. Il testo che scrivi qui è un documento <strong>tuo</strong>, quindi valuta di conseguenza l'impostazione del disclaimer qui sotto. Lascia una casella vuota per mantenere il testo incluso."
 
-#: admin/views/cookie-policy.php:231 admin/views/cookies.php:49 admin/views/setup.php:198
+#: admin/views/cookie-policy.php:231 admin/views/cookies.php:49
+#: admin/views/setup.php:198
 msgid "Language"
 msgstr "Lingua"
 
@@ -5202,7 +5302,8 @@ msgstr "Elimina selezionati"
 msgid "Select all cookies"
 msgstr "Seleziona tutti i cookie"
 
-#: admin/views/cookies.php:175 includes/class-dsar-admin.php:127 includes/class-dsar-shortcode.php:317 includes/class-utils.php:1385
+#: admin/views/cookies.php:175 includes/class-dsar-admin.php:127
+#: includes/class-dsar-shortcode.php:317 includes/class-utils.php:1385
 msgid "Name"
 msgstr "Nome"
 
@@ -5479,11 +5580,14 @@ msgstr "Predefinito (prima del consenso)"
 msgid "When Granted"
 msgstr "Quando concesso"
 
-#: admin/views/gcm.php:44 admin/views/gcm.php:49 admin/views/gcm.php:54 admin/views/gcm.php:59 admin/views/gcm.php:64 admin/views/gcm.php:69
+#: admin/views/gcm.php:44 admin/views/gcm.php:49 admin/views/gcm.php:54
+#: admin/views/gcm.php:59 admin/views/gcm.php:64 admin/views/gcm.php:69
 msgid "denied"
 msgstr "negato"
 
-#: admin/views/gcm.php:45 admin/views/gcm.php:50 admin/views/gcm.php:55 admin/views/gcm.php:60 admin/views/gcm.php:65 admin/views/gcm.php:70 admin/views/gcm.php:74 admin/views/gcm.php:75
+#: admin/views/gcm.php:45 admin/views/gcm.php:50 admin/views/gcm.php:55
+#: admin/views/gcm.php:60 admin/views/gcm.php:65 admin/views/gcm.php:70
+#: admin/views/gcm.php:74 admin/views/gcm.php:75
 msgid "granted"
 msgstr "concesso"
 
@@ -6071,8 +6175,8 @@ msgid "Allow anti-spam services before consent"
 msgstr "Consenti i servizi anti-spam prima del consenso"
 
 #: admin/views/settings.php:330
-msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are blocked like any other provider until the visitor accepts their category, so <strong>forms protected by them will not submit before consent</strong>. Also remove any CAPTCHA entries from Script Blocking Exceptions above, which always win."
-msgstr "Consente a Google reCAPTCHA, hCaptcha e Cloudflare Turnstile di caricarsi prima del consenso, come protezione dei moduli che il visitatore invia. Se questo conti come strettamente necessario dipende dalla tua consulenza legale: in alcuni paesi ci si aspetta che reCAPTCHA attenda il consenso perché invia dati a Google. Se lo disattivi, questi servizi vengono bloccati come qualsiasi altro fornitore finché il visitatore non accetta la loro categoria, quindi <strong>i moduli protetti da questi servizi non potranno essere inviati prima del consenso</strong>. Rimuovi anche le voci CAPTCHA dalle Eccezioni di blocco script qui sopra, che prevalgono sempre."
+msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it, so <strong>forms protected by them will not submit before consent</strong>. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
+msgstr "Consente a Google reCAPTCHA, hCaptcha e Cloudflare Turnstile di caricarsi prima del consenso, come protezione dei moduli che il visitatore invia. Se questo conti come strettamente necessario dipende dalla tua consulenza legale: in alcuni paesi ci si aspetta che reCAPTCHA attenda il consenso perché invia dati a Google. Se lo disattivi, questi servizi vengono trattenuti nella categoria Funzionale finché il visitatore non la accetta, quindi <strong>i moduli protetti da questi servizi non potranno essere inviati prima del consenso</strong>. Le voci CAPTCHA che il plugin aggiunge di default alle Eccezioni di blocco script vengono ignorate finché questa opzione è spenta; le eccezioni che hai scritto tu prevalgono sempre."
 
 #: admin/views/settings.php:336
 msgid "Advanced inline CSS URL blocking"
@@ -6570,7 +6674,8 @@ msgstr "Per i visitatori dell’Unione Europea, del SEE o del Regno Unito. I coo
 msgid "Opt-in model: no cookie is set before consent."
 msgstr "Modello opt-in: nessun cookie viene impostato prima del consenso."
 
-#: admin/views/setup.php:119 admin/views/setup.php:133 admin/views/setup.php:140
+#: admin/views/setup.php:119 admin/views/setup.php:133
+#: admin/views/setup.php:140
 msgid "Consent is remembered for up to 180 days."
 msgstr "Il consenso viene ricordato per un massimo di 180 giorni."
 
@@ -6734,7 +6839,8 @@ msgstr "Lingue aggiuntive, rilevamento automatico della lingua del visitatore e 
 msgid "Open the Languages page"
 msgstr "Apri la pagina Lingue"
 
-#: admin/views/setup.php:271 admin/views/setup.php:299 admin/views/setup.php:333 admin/views/setup.php:406
+#: admin/views/setup.php:271 admin/views/setup.php:299
+#: admin/views/setup.php:333 admin/views/setup.php:406
 msgid "(optional)"
 msgstr "(facoltativo)"
 
@@ -7238,7 +7344,8 @@ msgstr "Inserire un pattern nella lista consentiti in Impostazioni → Blocco de
 msgid "Active Plugins"
 msgstr "Plugin attivi"
 
-#: frontend/class-amp-consent-rest.php:498 frontend/class-amp-consent-rest.php:607
+#: frontend/class-amp-consent-rest.php:498
+#: frontend/class-amp-consent-rest.php:607
 msgid "Invalid AMP consent instance."
 msgstr "Istanza di consenso AMP non valida."
 
@@ -7310,81 +7417,99 @@ msgstr "{name} abilitato, disabilita {name}"
 msgid "{name} disabled, enable {name}"
 msgstr "{name} disabilitato, abilita {name}"
 
-#: frontend/class-frontend.php:3793 frontend/modules/banner-rest/class-banner-rest.php:605
+#: frontend/class-frontend.php:3793
+#: frontend/modules/banner-rest/class-banner-rest.php:605
 msgid "Your cookie preferences have been saved."
 msgstr "Le tue preferenze sui cookie sono state salvate."
 
-#: frontend/class-frontend.php:3795 frontend/modules/banner-rest/class-banner-rest.php:607
+#: frontend/class-frontend.php:3795
+#: frontend/modules/banner-rest/class-banner-rest.php:607
 msgid "Customise Consent Preferences"
 msgstr "Personalizza le preferenze di consenso"
 
-#: frontend/class-frontend.php:3796 frontend/modules/banner-rest/class-banner-rest.php:608
+#: frontend/class-frontend.php:3796
+#: frontend/modules/banner-rest/class-banner-rest.php:608
 msgid "Service consent"
 msgstr "Consenso al servizio"
 
-#: frontend/class-frontend.php:3798 frontend/modules/banner-rest/class-banner-rest.php:610
+#: frontend/class-frontend.php:3798
+#: frontend/modules/banner-rest/class-banner-rest.php:610
 msgid "Cookie consent"
 msgstr "Consenso ai cookie"
 
-#: frontend/class-frontend.php:3799 frontend/modules/banner-rest/class-banner-rest.php:611
+#: frontend/class-frontend.php:3799
+#: frontend/modules/banner-rest/class-banner-rest.php:611
 msgid "Vendor consent"
 msgstr "Consenso fornitore"
 
-#: frontend/class-frontend.php:3800 frontend/modules/banner-rest/class-banner-rest.php:612
+#: frontend/class-frontend.php:3800
+#: frontend/modules/banner-rest/class-banner-rest.php:612
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Questi cookie sono impostati dal servizio incorporato sul proprio dominio e si controllano consentendo o bloccando l'embed qui sopra — non possono essere rimossi singolarmente."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:3804 frontend/modules/banner-rest/class-banner-rest.php:617
+#: frontend/class-frontend.php:3804
+#: frontend/modules/banner-rest/class-banner-rest.php:617
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Confermo di avere almeno %d anni"
 
-#: frontend/class-frontend.php:3805 frontend/modules/banner-rest/class-banner-rest.php:618
+#: frontend/class-frontend.php:3805
+#: frontend/modules/banner-rest/class-banner-rest.php:618
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Conferma di avere l’età minima per accettare i cookie facoltativi."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:3812 frontend/modules/banner-rest/class-banner-rest.php:620
+#: frontend/class-frontend.php:3812
+#: frontend/modules/banner-rest/class-banner-rest.php:620
 #, php-format
 msgid "Banner closes automatically in %d s..."
 msgstr "Il banner si chiude automaticamente tra %d s..."
 
-#: frontend/class-frontend.php:3815 frontend/modules/banner-rest/class-banner-rest.php:623
+#: frontend/class-frontend.php:3815
+#: frontend/modules/banner-rest/class-banner-rest.php:623
 msgid "Consent"
 msgstr "Consenso"
 
-#: frontend/class-frontend.php:3816 frontend/modules/banner-rest/class-banner-rest.php:624
+#: frontend/class-frontend.php:3816
+#: frontend/modules/banner-rest/class-banner-rest.php:624
 msgid "Cookie retention"
 msgstr "Durata dei cookie"
 
-#: frontend/class-frontend.php:3817 frontend/modules/banner-rest/class-banner-rest.php:625
+#: frontend/class-frontend.php:3817
+#: frontend/modules/banner-rest/class-banner-rest.php:625
 msgid "Features"
 msgstr "Funzionalità"
 
-#: frontend/class-frontend.php:3818 frontend/modules/banner-rest/class-banner-rest.php:626
+#: frontend/class-frontend.php:3818
+#: frontend/modules/banner-rest/class-banner-rest.php:626
 msgid "Legitimate Interest"
 msgstr "Legittimo interesse"
 
-#: frontend/class-frontend.php:3819 frontend/modules/banner-rest/class-banner-rest.php:627
+#: frontend/class-frontend.php:3819
+#: frontend/modules/banner-rest/class-banner-rest.php:627
 msgid "Some vendors process your data on the basis of legitimate interest rather than consent. You have the right to object: switch a purpose off to object to that processing."
 msgstr "Alcuni fornitori trattano i tuoi dati sulla base del legittimo interesse anziché del consenso. Hai il diritto di opporti: disattiva una finalità per opporti a quel trattamento."
 
-#: frontend/class-frontend.php:3820 frontend/modules/banner-rest/class-banner-rest.php:628
+#: frontend/class-frontend.php:3820
+#: frontend/modules/banner-rest/class-banner-rest.php:628
 msgid "IAB Vendor Consent"
 msgstr "Consenso ai fornitori IAB"
 
-#: frontend/class-frontend.php:3821 frontend/modules/banner-rest/class-banner-rest.php:629
+#: frontend/class-frontend.php:3821
+#: frontend/modules/banner-rest/class-banner-rest.php:629
 msgid "Allow processing based on legitimate interest"
 msgstr "Consenti il trattamento basato sul legittimo interesse"
 
 #. translators: %s: service name (e.g., "YouTube", "Google Maps")
-#: frontend/includes/class-placeholder-builder.php:218 frontend/includes/class-placeholder-builder.php:300
+#: frontend/includes/class-placeholder-builder.php:218
+#: frontend/includes/class-placeholder-builder.php:300
 #, php-format
 msgid "This content is blocked because %s cookies have not been accepted."
 msgstr "Questo contenuto è bloccato perché i cookie di %s non sono stati accettati."
 
-#: frontend/includes/class-placeholder-builder.php:222 frontend/includes/class-placeholder-builder.php:304
+#: frontend/includes/class-placeholder-builder.php:222
+#: frontend/includes/class-placeholder-builder.php:304
 msgid "Accept cookies"
 msgstr "Accetta i cookie"
 
@@ -7408,7 +7533,9 @@ msgstr "Nessun banner disponibile per la giurisdizione risolta."
 msgid "No active banner found."
 msgstr "Nessun banner attivo trovato."
 
-#: frontend/modules/consent-logger/class-consent-logger.php:653 includes/class-do-not-sell-shortcode.php:336 includes/class-do-not-sell-shortcode.php:394
+#: frontend/modules/consent-logger/class-consent-logger.php:653
+#: includes/class-do-not-sell-shortcode.php:336
+#: includes/class-do-not-sell-shortcode.php:394
 msgid "This request must originate from this website."
 msgstr "Questa richiesta deve provenire da questo sito web."
 
@@ -7436,7 +7563,8 @@ msgstr "Mostra di meno"
 msgid "Data transfer"
 msgstr "Trasferimento dati"
 
-#: frontend/modules/shortcodes/class-shortcodes.php:1113 includes/class-cookie-table-shortcode.php:237
+#: frontend/modules/shortcodes/class-shortcodes.php:1113
+#: includes/class-cookie-table-shortcode.php:237
 msgid "This cookie may transfer personal data to:"
 msgstr "Questo cookie potrebbe trasferire dati personali verso:"
 
@@ -7444,7 +7572,8 @@ msgstr "Questo cookie potrebbe trasferire dati personali verso:"
 msgid "This cookie may transfer personal data to a country without an EU adequacy decision."
 msgstr "Questo cookie potrebbe trasferire dati personali verso un Paese privo di una decisione di adeguatezza dell’UE."
 
-#: frontend/modules/shortcodes/class-shortcodes.php:1129 includes/class-cookie-table-shortcode.php:241
+#: frontend/modules/shortcodes/class-shortcodes.php:1129
+#: includes/class-cookie-table-shortcode.php:241
 msgid "This cookie may transfer personal data to another country."
 msgstr "Questo cookie può trasferire dati personali in un altro Paese."
 
@@ -7476,7 +7605,8 @@ msgstr "Pulsante Gestisci cookie"
 msgid "A button that opens the cookie consent preferences."
 msgstr "Un pulsante che apre le preferenze di consenso ai cookie."
 
-#: includes/blocks/class-blocks.php:173 includes/class-cookie-policy-shortcode.php:95
+#: includes/blocks/class-blocks.php:173
+#: includes/class-cookie-policy-shortcode.php:95
 msgid "Manage Cookie Preferences"
 msgstr "Gestisci le preferenze sui cookie"
 
@@ -7632,15 +7762,18 @@ msgstr "Gestisci le preferenze di consenso"
 msgid "Other"
 msgstr "Altro"
 
-#: includes/class-do-not-sell-shortcode.php:106 includes/class-do-not-sell-shortcode.php:374
+#: includes/class-do-not-sell-shortcode.php:106
+#: includes/class-do-not-sell-shortcode.php:374
 msgid "Your opt-out request has been received. We will not sell or share your personal information."
 msgstr "La tua richiesta di opt-out è stata ricevuta. Non venderemo né condivideremo le tue informazioni personali."
 
-#: includes/class-do-not-sell-shortcode.php:107 includes/class-do-not-sell-shortcode.php:423
+#: includes/class-do-not-sell-shortcode.php:107
+#: includes/class-do-not-sell-shortcode.php:423
 msgid "Your opt-out has been withdrawn. You may submit a new request at any time."
 msgstr "Il tuo opt-out è stato ritirato. Puoi inviare una nuova richiesta in qualsiasi momento."
 
-#: includes/class-do-not-sell-shortcode.php:108 includes/class-dsar-shortcode.php:314
+#: includes/class-do-not-sell-shortcode.php:108
+#: includes/class-dsar-shortcode.php:314
 msgid "An error occurred. Please try again."
 msgstr "Si è verificato un errore. Riprova."
 
@@ -7676,7 +7809,9 @@ msgstr "Token di sicurezza non valido. Aggiorna la pagina e riprova."
 msgid "You have already opted out. We will not sell or share your personal information."
 msgstr "Hai già effettuato l’opt-out. Non venderemo né condivideremo le tue informazioni personali."
 
-#: includes/class-do-not-sell-shortcode.php:355 includes/class-do-not-sell-shortcode.php:406 includes/class-dsar-shortcode.php:666
+#: includes/class-do-not-sell-shortcode.php:355
+#: includes/class-do-not-sell-shortcode.php:406
+#: includes/class-dsar-shortcode.php:666
 msgid "Too many requests. Please wait 1 minute before submitting again."
 msgstr "Troppe richieste. Attendi 1 minuto prima di inviare di nuovo."
 
@@ -7720,11 +7855,13 @@ msgstr "Gestisci questa richiesta"
 msgid "(erased)"
 msgstr "(cancellati)"
 
-#: includes/class-dsar-admin.php:130 includes/class-dsar-shortcode.php:318 includes/class-utils.php:1389
+#: includes/class-dsar-admin.php:130 includes/class-dsar-shortcode.php:318
+#: includes/class-utils.php:1389
 msgid "Email"
 msgstr "E-mail"
 
-#: includes/class-dsar-admin.php:133 includes/class-dsar-shortcode.php:319 includes/class-utils.php:1394
+#: includes/class-dsar-admin.php:133 includes/class-dsar-shortcode.php:319
+#: includes/class-utils.php:1394
 msgid "Request type"
 msgstr "Tipo di richiesta"
 
@@ -8004,7 +8141,11 @@ msgstr "Non è stato possibile registrare la tua richiesta a causa di un errore 
 msgid "Your request has been received. We will respond within 30 days as required by law."
 msgstr "La tua richiesta è stata ricevuta. Risponderemo entro 30 giorni come richiesto dalla legge."
 
-#: includes/class-dsar-shortcode.php:888 includes/class-dsar-shortcode.php:1310 includes/class-dsar-shortcode.php:1338 includes/class-dsar-shortcode.php:1381 includes/class-dsar-shortcode.php:1431 includes/class-dsar-shortcode.php:1436
+#: includes/class-dsar-shortcode.php:888 includes/class-dsar-shortcode.php:1310
+#: includes/class-dsar-shortcode.php:1338
+#: includes/class-dsar-shortcode.php:1381
+#: includes/class-dsar-shortcode.php:1431
+#: includes/class-dsar-shortcode.php:1436
 msgid "Submission rejected."
 msgstr "Invio rifiutato."
 
@@ -8539,6 +8680,12 @@ msgstr "Pulsante"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Collegamento"
+
+#~ msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are blocked like any other provider until the visitor accepts their category, so <strong>forms protected by them will not submit before consent</strong>. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
+#~ msgstr "Consente a Google reCAPTCHA, hCaptcha e Cloudflare Turnstile di caricarsi prima del consenso, come protezione dei moduli che il visitatore invia. Se questo conti come strettamente necessario dipende dalla tua consulenza legale: in alcuni paesi ci si aspetta che reCAPTCHA attenda il consenso perché invia dati a Google. Se lo disattivi, questi servizi vengono bloccati come qualsiasi altro fornitore finché il visitatore non accetta la loro categoria, quindi <strong>i moduli protetti da questi servizi non potranno essere inviati prima del consenso</strong>. Le voci CAPTCHA che il plugin aggiunge di default alle Eccezioni di blocco script vengono ignorate finché questa opzione è spenta; le eccezioni che hai scritto tu prevalgono sempre."
+
+#~ msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are blocked like any other provider until the visitor accepts their category, so <strong>forms protected by them will not submit before consent</strong>. Also remove any CAPTCHA entries from Script Blocking Exceptions above, which always win."
+#~ msgstr "Consente a Google reCAPTCHA, hCaptcha e Cloudflare Turnstile di caricarsi prima del consenso, come protezione dei moduli che il visitatore invia. Se questo conti come strettamente necessario dipende dalla tua consulenza legale: in alcuni paesi ci si aspetta che reCAPTCHA attenda il consenso perché invia dati a Google. Se lo disattivi, questi servizi vengono bloccati come qualsiasi altro fornitore finché il visitatore non accetta la loro categoria, quindi <strong>i moduli protetti da questi servizi non potranno essere inviati prima del consenso</strong>. Rimuovi anche le voci CAPTCHA dalle Eccezioni di blocco script qui sopra, che prevalgono sempre."
 
 #~ msgid "The page is created from the standard template in the selected language. It is published immediately, visible to visitors, only when your company name and privacy contact email are already saved on the Cookie Policy page; otherwise it is saved as a draft for you to complete and publish. An existing generated page in that language is reused and custom banner links are kept."
 #~ msgstr "La pagina viene creata dal modello standard nella lingua selezionata. Viene pubblicata subito, visibile ai visitatori, solo se il nome dell'azienda e l'email di contatto per la privacy sono già salvati nella pagina Cookie Policy; altrimenti viene salvata come bozza da completare e pubblicare. Una pagina già generata in quella lingua viene riutilizzata e i link personalizzati del banner vengono mantenuti."

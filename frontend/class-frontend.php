@@ -3851,15 +3851,15 @@ class Frontend {
 		$known            = Known_Providers::get_all();
 		$provider_services = array(); // pattern => service id (per-service embed resolution).
 		foreach ( $known as $known_id => $service ) {
-			if ( 'necessary' === $service['category'] ) {
-				continue;
-			}
-			if ( ! in_array( $service['category'], $valid_categories, true ) ) {
-				continue;
-			}
 			foreach ( $service['patterns'] as $pattern ) {
+				// Per pattern, not per service, so the CAPTCHA reclassification
+				// below resolves exactly as it does in get_provider_category_map().
+				$category = $this->known_provider_category( $service['category'], $pattern, $valid_categories );
+				if ( 'necessary' === $category || ! in_array( $category, $valid_categories, true ) ) {
+					continue;
+				}
 				if ( ! isset( $this->providers[ $pattern ] ) ) {
-					$this->providers[ $pattern ] = array( $service['category'] );
+					$this->providers[ $pattern ] = array( $category );
 				}
 			}
 		}
@@ -3947,9 +3947,7 @@ class Frontend {
 		$store['_providersToBlock'] = $providers;
 
 		// User-defined whitelist patterns for client-side network interceptors.
-		$user_whitelist = isset( $settings['script_blocking']['whitelist_patterns'] )
-			? array_values( array_filter( array_map( 'sanitize_text_field', (array) $settings['script_blocking']['whitelist_patterns'] ) ) )
-			: array();
+		$user_whitelist = $this->get_user_whitelist_patterns();
 		// Plus the always-allowed gateway tokens whenever an explicit rule
 		// overlapped one and was therefore KEPT on the client list (see
 		// apply_client_provider_exemptions()). The server releases a gateway's
@@ -7993,6 +7991,63 @@ class Frontend {
 	}
 
 	/**
+	 * Category a built-in provider pattern is blocked under.
+	 *
+	 * The catalogue files reCAPTCHA, hCaptcha and Turnstile (and the WPForms /
+	 * Ninja Forms CAPTCHA handles) as necessary, and necessary patterns are
+	 * never blocked. With "Allow anti-spam services before consent" off that
+	 * would leave the switch doing nothing unless the owner also wrote a custom
+	 * rule, so those patterns are held under functional instead, the category
+	 * a CAPTCHA belongs to once it is not treated as strictly necessary (#343).
+	 * A site without a functional category keeps the catalogue's answer.
+	 *
+	 * @param string   $category         Category from the provider catalogue.
+	 * @param string   $pattern          The provider pattern.
+	 * @param string[] $valid_categories Category slugs that exist on this site.
+	 * @return string
+	 */
+	private function known_provider_category( $category, $pattern, $valid_categories ) {
+		if ( 'necessary' !== $category || ! in_array( 'functional', $valid_categories, true ) ) {
+			return $category;
+		}
+		if ( 1 !== preg_match( '/recaptcha|hcaptcha|turnstile/i', (string) $pattern ) ) {
+			return $category;
+		}
+		return $this->antispam_allowed_before_consent() ? $category : 'functional';
+	}
+
+	/**
+	 * Script Blocking Exceptions as the blocker should honour them.
+	 *
+	 * With "Allow anti-spam services before consent" off, the CAPTCHA entries a
+	 * fresh install stores there are dropped: they are the plugin's default,
+	 * not a choice the owner made, and since every exception wins over every
+	 * rule they would keep reCAPTCHA live and make the switch a no-op on a
+	 * default install (#343). Only exact copies of those shipped strings go;
+	 * any other entry, including a broader "recaptcha" the owner typed, stays.
+	 *
+	 * @return string[]
+	 */
+	private function get_user_whitelist_patterns() {
+		$settings = $this->get_faz_settings();
+		$patterns = isset( $settings['script_blocking']['whitelist_patterns'] )
+			? array_values( array_filter( array_map( 'sanitize_text_field', (array) $settings['script_blocking']['whitelist_patterns'] ) ) )
+			: array();
+		if ( $this->antispam_allowed_before_consent() ) {
+			return $patterns;
+		}
+		$shipped = array_map( 'strtolower', Settings::DEFAULT_ANTISPAM_EXCEPTIONS );
+		return array_values(
+			array_filter(
+				$patterns,
+				function ( $pattern ) use ( $shipped ) {
+					return ! in_array( strtolower( trim( $pattern ) ), $shipped, true );
+				}
+			)
+		);
+	}
+
+	/**
 	 * Build and cache the whitelist array (once per request).
 	 *
 	 * @return string[]
@@ -8067,8 +8122,9 @@ class Frontend {
 		// call, not ours: some legal advisors (notably in Germany) want
 		// reCAPTCHA held until consent because it sends data to Google. The
 		// switch is on by default, so nothing changes for existing sites; off,
-		// these endpoints are judged like any other provider, and custom rules
-		// and the provider catalogue can block them (#343).
+		// these endpoints leave the whitelist, the shipped CAPTCHA exceptions
+		// are ignored (get_user_whitelist_patterns()) and the catalogue holds
+		// them under functional (known_provider_category()) (#343).
 		if ( $this->antispam_allowed_before_consent() ) {
 			$whitelist = array_merge( $whitelist, self::ANTISPAM_CHALLENGE_PATTERNS );
 		}
@@ -8090,11 +8146,7 @@ class Frontend {
 		}
 
 		// Merge user-defined whitelist patterns from Settings → Script Blocking.
-		$faz_settings_wl = $this->get_faz_settings();
-		$user_patterns   = isset( $faz_settings_wl['script_blocking']['whitelist_patterns'] )
-			? array_filter( array_map( 'sanitize_text_field', (array) $faz_settings_wl['script_blocking']['whitelist_patterns'] ) )
-			: array();
-		$whitelist = array_merge( $whitelist, $user_patterns );
+		$whitelist = array_merge( $whitelist, $this->get_user_whitelist_patterns() );
 
 		// Sanitise: trim, deduplicate, remove empty strings (stripos('x','') === 0 always).
 		$this->whitelist_cache = array_values(
@@ -9333,6 +9385,7 @@ class Frontend {
 		// 2. Known providers database.
 		$known_map        = Known_Providers::get_pattern_map();
 		foreach ( $known_map as $pattern => $category ) {
+			$category = $this->known_provider_category( $category, $pattern, $valid_categories );
 			if ( 'necessary' === $category ) {
 				continue;
 			}
@@ -13096,9 +13149,7 @@ class Frontend {
 			return $this->whitelisted_cookie_patterns_cache;
 		}
 		$settings       = $this->get_faz_settings();
-		$user_whitelist = isset( $settings['script_blocking']['whitelist_patterns'] )
-			? array_values( array_filter( array_map( 'sanitize_text_field', (array) $settings['script_blocking']['whitelist_patterns'] ) ) )
-			: array();
+		$user_whitelist = $this->get_user_whitelist_patterns();
 		$this->whitelisted_cookie_patterns_cache = $this->compute_whitelisted_cookie_patterns( $user_whitelist, $this->get_valid_category_slugs() );
 		return $this->whitelisted_cookie_patterns_cache;
 	}

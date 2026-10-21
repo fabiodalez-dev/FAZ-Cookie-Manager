@@ -4,8 +4,9 @@
  * reCAPTCHA, hCaptcha and Turnstile used to be hard-coded into the server
  * whitelist ahead of every provider rule, so a site owner who wanted reCAPTCHA
  * held until consent could not get there from the settings. The switch is on by
- * default (nothing changes for existing sites); off, a custom rule blocks the
- * CAPTCHA like any other provider.
+ * default (nothing changes for existing sites); off, the shipped CAPTCHA
+ * exceptions are ignored and the catalogue holds reCAPTCHA under functional,
+ * with no custom rule needed.
  *
  * The page under test carries a real reCAPTCHA <script src> in its content; the
  * assertions read the HTML the server sends, so no request to Google is needed
@@ -19,7 +20,8 @@ import { wpEval } from '../utils/wp-env';
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const SLUG = 'faz-e2e-antispam-343';
 const RECAPTCHA_SRC = 'https://www.google.com/recaptcha/api.js?render=FAZE2EKEY';
-const RULE = { category: 'functional', pattern: 'google.com/recaptcha' };
+// Settings::DEFAULT_ANTISPAM_EXCEPTIONS — what a fresh install stores in Script Blocking Exceptions.
+const SHIPPED_EXCEPTIONS = ['www.google.com/recaptcha/api', 'www.gstatic.com/recaptcha/', 'challenges.cloudflare.com/', 'hcaptcha.com/'];
 
 type Settings = Record<string, any>;
 
@@ -91,19 +93,23 @@ test.describe('#343 — anti-spam services before consent', () => {
     await expect(toggle).toBeChecked();
   });
 
-  test('switched off, a custom rule blocks reCAPTCHA until its category is accepted', async ({ page, loginAsAdmin }) => {
+  test('switched off on a default install, reCAPTCHA is held under functional without any custom rule', async ({ page, loginAsAdmin }) => {
     await page.route(/(google\.com|gstatic\.com)\/recaptcha/, (route) => route.abort());
     nonce = await openSettingsPage(page, loginAsAdmin);
     const current = await getSettings(page, nonce);
     const rules = Array.isArray(current.script_blocking?.custom_rules) ? current.script_blocking.custom_rules : [];
-    const whitelist = (Array.isArray(current.script_blocking?.whitelist_patterns) ? current.script_blocking.whitelist_patterns : [])
-      .filter((p: string) => !/recaptcha|hcaptcha|turnstile/i.test(p));
+    // The four CAPTCHA exceptions a fresh install stores stay in place: the
+    // switch alone has to be enough, as it is on a default install.
+    const stored = Array.isArray(current.script_blocking?.whitelist_patterns) ? current.script_blocking.whitelist_patterns : [];
+    const whitelist = [...new Set([...stored.filter((p: string) => !/recaptcha|hcaptcha|turnstile|challenges\.cloudflare/i.test(p)), ...SHIPPED_EXCEPTIONS])];
     await postSettings(page, nonce, {
       ...current,
       script_blocking: {
         ...(current.script_blocking ?? {}),
         allow_antispam_before_consent: false,
-        custom_rules: [...rules.filter((r: any) => r?.pattern !== RULE.pattern), RULE],
+        // No custom rule: the switch alone has to hold the catalogue's CAPTCHA
+        // entries, which is the flow #343 asks for.
+        custom_rules: rules.filter((r: any) => !/recaptcha|hcaptcha|turnstile/i.test(r?.pattern ?? '')),
         whitelist_patterns: whitelist,
       },
     });
@@ -120,7 +126,7 @@ test.describe('#343 — anti-spam services before consent', () => {
     await expect(page.locator('input[type="checkbox"][data-path="script_blocking.allow_antispam_before_consent"]')).not.toBeChecked();
   });
 
-  test('switched back on, the same rule no longer touches reCAPTCHA', async ({ page, loginAsAdmin }) => {
+  test('switched back on, reCAPTCHA loads before consent again', async ({ page, loginAsAdmin }) => {
     nonce = await openSettingsPage(page, loginAsAdmin);
     const current = await getSettings(page, nonce);
     await postSettings(page, nonce, {

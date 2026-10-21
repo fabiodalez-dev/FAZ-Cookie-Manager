@@ -132,7 +132,9 @@ ret_eq(
 
 // And the shipped defaults themselves still exclude what that comment promises.
 $settings_src = (string) file_get_contents( $root . '/admin/modules/settings/includes/class-settings.php' );
-if ( preg_match( "#'whitelist_patterns'\s*=>\s*array\((.*?)\),#s", $settings_src, $m ) ) {
+// The list lives in Settings::DEFAULT_ANTISPAM_EXCEPTIONS (#343), which get_defaults() uses.
+if ( false !== strpos( $settings_src, "'whitelist_patterns' => self::DEFAULT_ANTISPAM_EXCEPTIONS," )
+	&& preg_match( "#const DEFAULT_ANTISPAM_EXCEPTIONS\s*=\s*array\((.*?)\);#s", $settings_src, $m ) ) {
 	ret_eq( false === strpos( $m[1], 'fonts.googleapis.com' ), true, 'the shipped default whitelist still excludes Google Fonts' );
 	ret_eq( false === strpos( $m[1], 'jsdelivr' ) && false === strpos( $m[1], 'unpkg' ), true, 'and still excludes the public CDNs' );
 } else {
