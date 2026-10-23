@@ -134,8 +134,13 @@ namespace {
 	cx_check( false === cx_call( $frontend, 'hummingbird_keep_own_resource', false, 'theme-app' ), 'a decision already false is passed through' );
 
 	echo "Jetpack Boost: render-blocking exclusion and concatenation\n";
-	$moved = cx_call( $frontend, 'jetpack_boost_keep_own_scripts', array( $theme_tag, $hinted_tag, $inline_boot, $vendor_tag, $inline_cfg ) );
-	cx_check( array( $theme_tag, $vendor_tag ) === $moved, 'FAZ tags (hinted, inline bootstrap, inline config) leave the move list; the rest keeps its order and is re-indexed' );
+	// Boost's real payload: preg_match_all( …, PREG_OFFSET_CAPTURE ) elements, `array( markup, offset )`.
+	$offset_list = array( array( $theme_tag, 10 ), array( $hinted_tag, 200 ), array( $inline_boot, 900 ), array( $vendor_tag, 1200 ), array( $inline_cfg, 1500 ) );
+	$moved       = cx_call( $frontend, 'jetpack_boost_keep_own_scripts', $offset_list );
+	cx_check( array( array( $theme_tag, 10 ), array( $vendor_tag, 1200 ) ) === $moved, 'PREG_OFFSET_CAPTURE shape: FAZ entries (hinted, inline bootstrap, inline config) leave the move list, offsets intact, list re-indexed' );
+	$moved_strings = cx_call( $frontend, 'jetpack_boost_keep_own_scripts', array( $theme_tag, $hinted_tag, $inline_boot, $vendor_tag, $inline_cfg ) );
+	cx_check( array( $theme_tag, $vendor_tag ) === $moved_strings, 'plain-string shape: same result' );
+	cx_check( array( array( 'x' => 1 ), 42 ) === cx_call( $frontend, 'jetpack_boost_keep_own_scripts', array( array( 'x' => 1 ), 42 ) ), 'an element of another shape is left to Boost' );
 	cx_check( 'x' === cx_call( $frontend, 'jetpack_boost_keep_own_scripts', 'x' ), 'a non-array list is passed through' );
 	cx_check( false === cx_call( $frontend, 'jetpack_boost_do_concat', true, 'faz-cookie-manager-a11y' ), 'js_do_concat refuses an own handle' );
 	cx_check( false === cx_call( $frontend, 'jetpack_boost_do_concat', true, 'faz-dsar' ), 'css_do_concat refuses the DSAR stylesheet' );

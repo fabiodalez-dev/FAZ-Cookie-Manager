@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2016,SC2329
+# shellcheck disable=SC2016,SC2317,SC2329
 # SC2016: the single-quoted strings are PHP handed to `wp eval`; their `$` must
-# NOT expand in the shell. SC2329: restore_site() is invoked through the EXIT trap.
+# NOT expand in the shell. SC2317/SC2329 (one check, renamed between ShellCheck
+# releases): restore_site() is invoked through the EXIT trap.
 #
 # cache-plugin-matrix.sh — run tests/e2e/specs/cache-plugin-matrix.spec.ts
 # against real cache / optimisation plugins, one at a time, on the local

@@ -11968,12 +11968,6 @@ class Frontend {
 	}
 
 	/**
-	 * Autoptimize exclude callback — accepts a comma-separated string.
-	 *
-	 * @param string $excludes Comma-joined exclusion list.
-	 * @return string
-	 */
-	/**
 	 * W3 Total Cache auto-minify: keep every FAZ tag out of its bundles.
 	 *
 	 * `$tag` is the full `<script …>` / `<link …>` markup and `$file` the URL
@@ -12097,6 +12091,12 @@ class Frontend {
 	 * they are. A moved tag would run after every third-party script that
 	 * was not moved, and the inline bootstrap would guard nothing.
 	 *
+	 * Boost builds the list with preg_match_all( …, PREG_OFFSET_CAPTURE ), so
+	 * each element is `array( markup, byte offset )`
+	 * (class-render-blocking-js.php, get_script_tags()); a plain string is
+	 * accepted as well in case that ever changes. An element of any other
+	 * shape is left to Boost.
+	 *
 	 * @param array $script_tags Script tags Boost is about to move to the end of the document.
 	 * @return array The same list without FAZ's own tags.
 	 */
@@ -12107,8 +12107,12 @@ class Frontend {
 		return array_values(
 			array_filter(
 				$script_tags,
-				function ( $tag ) {
-					if ( ! is_string( $tag ) ) {
+				function ( $entry ) {
+					$tag = $entry;
+					if ( is_array( $entry ) ) {
+						$tag = isset( $entry[0] ) ? $entry[0] : '';
+					}
+					if ( ! is_string( $tag ) || '' === $tag ) {
 						return true;
 					}
 					if ( false !== strpos( $tag, 'data-no-defer' ) ) {
@@ -12164,6 +12168,12 @@ class Frontend {
 		return $exclusions;
 	}
 
+	/**
+	 * Autoptimize exclude callback — accepts a comma-separated string.
+	 *
+	 * @param string $excludes Comma-joined exclusion list.
+	 * @return string
+	 */
 	public function autoptimize_exclude_own_scripts( $excludes ) {
 		$pattern = 'faz-cookie-manager';
 		$excludes = is_string( $excludes ) ? $excludes : '';
