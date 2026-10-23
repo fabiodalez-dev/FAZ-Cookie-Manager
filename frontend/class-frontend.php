@@ -498,6 +498,49 @@ class Frontend {
 			// Autoptimize exclude helper.
 			add_filter( 'autoptimize_filter_js_exclude', array( $this, 'autoptimize_exclude_own_scripts' ) );
 
+			// WP-Optimize "Minify" reads none of the data-* hints either: on 4.x it
+			// merged script.min.js, the config file, a11y AND the inline bootstrap
+			// into a deferred wpo-minify-header bundle, so the bootstrap ran after
+			// the parse it is meant to guard. Its exclusion list is filterable by
+			// URL substring (WP_Optimize_Minify_Functions::get_default_ignore()).
+			add_filter( 'wp-optimize-minify-default-exclusions', array( $this, 'wpo_exclude_own_scripts' ) );
+
+			// SiteGround Optimizer (Speed Optimizer). Its minify, async and
+			// combine passes exclude by script handle; "Remove Query Strings"
+			// by URL substring, and it stripped the `?ver=` from script.min.js on
+			// 7.x, which is the runtime-skew hazard the LiteSpeed `_litespeed_rm_qs`
+			// escape guards against.
+			add_filter( 'sgo_js_minify_exclude', array( $this, 'sgo_exclude_own_handles' ) );
+			add_filter( 'sgo_js_async_exclude', array( $this, 'sgo_exclude_own_handles' ) );
+			add_filter( 'sgo_javascript_combine_exclude_ids', array( $this, 'sgo_exclude_own_handles' ) );
+			add_filter( 'sgo_css_minify_exclude', array( $this, 'sgo_exclude_own_handles' ) );
+			add_filter( 'sgo_rqs_exclude', array( $this, 'sgo_exclude_own_urls' ) );
+			add_filter( 'sgo_javascript_combine_excluded_internal_paths', array( $this, 'sgo_exclude_own_urls' ) );
+			add_filter( 'sgo_javascript_combine_excluded_inline_content', array( $this, 'rocket_exclude_own_inline' ) );
+
+			// Hummingbird Asset Optimization asks per handle whether a resource
+			// may be minified or combined (core/modules/minify/class-minify-group.php).
+			add_filter( 'wphb_minify_resource', array( $this, 'hummingbird_keep_own_resource' ), 10, 2 );
+			add_filter( 'wphb_combine_resource', array( $this, 'hummingbird_keep_own_resource' ), 10, 2 );
+
+			// Jetpack Boost. "Defer non-essential JavaScript" moves every script
+			// tag to the end of the document unless it carries its ignore
+			// attribute; the filter receives the matched tags and returns the
+			// ones still to move. "Concatenate JS" asks `js_do_concat` per
+			// handle (and already skips deferred handles on its own).
+			add_filter( 'jetpack_boost_render_blocking_js_exclude_scripts', array( $this, 'jetpack_boost_keep_own_scripts' ) );
+			add_filter( 'js_do_concat', array( $this, 'jetpack_boost_do_concat' ), 10, 2 );
+			add_filter( 'css_do_concat', array( $this, 'jetpack_boost_do_concat' ), 10, 2 );
+
+			// W3 Total Cache "Minify (auto)" reads none of the data-* hints: on
+			// 2.8.x it folded script.min.js, the content-hashed config file and
+			// a11y into its own deferred bundle (wp-content/cache/minify/*.js).
+			// Its per-tag seam is this pair of filters (Minify_AutoJs.php /
+			// Minify_AutoCss.php, `$do_tag_minification`); returning false
+			// leaves the tag exactly as it was printed.
+			add_filter( 'w3tc_minify_js_do_tag_minification', array( $this, 'w3tc_keep_own_tag' ), 10, 3 );
+			add_filter( 'w3tc_minify_css_do_tag_minification', array( $this, 'w3tc_keep_own_tag' ), 10, 3 );
+
 			// Cross-version FlyingPress compatibility — DO NOT remove any of these
 			// as "dead code", each covers a different FlyingPress line (verified
 			// against FlyingPress 5.5.0 source):
@@ -563,6 +606,15 @@ class Frontend {
 		// part of the FlyingPress reports in issue #125. Registered
 		// unconditionally: with FlyingPress absent the filter never runs.
 		add_filter( 'flying_press_is_cacheable', array( $this, 'flying_press_is_cacheable' ) );
+
+		// Super Page Cache decides on its own bypass list and then REPLACES
+		// Cache-Control with its Cloudflare value (`s-maxage=31536000`): on
+		// 5.3.x the crawler-only render went out as cacheable for a year at
+		// the edge. Its `swcfpc_cache_bypass` filter is asked right before
+		// that, after every FAZ veto has defined DONOTCACHEPAGE. A page-cache
+		// veto, not an optimiser exclusion, so it is registered outside the
+		// `faz_auto_exclude_cache_plugins` block, like the FlyingPress one.
+		add_filter( 'swcfpc_cache_bypass', array( $this, 'super_page_cache_bypass' ) );
 
 		// Content-level blocking (defense-in-depth — runs before output buffer).
 		add_filter( 'the_content', array( $this, 'filter_content_blocking' ), 1000 );
@@ -3317,7 +3369,7 @@ class Frontend {
 		// denied `consent default` behind the gtag snippets it must precede,
 		// and Google treats a tag that fires without a default as granted.
 		$hints = apply_filters( 'faz_auto_exclude_cache_plugins', true )
-			? ' data-no-defer="1" data-no-optimize="1" data-no-minify="1" data-cfasync="false" data-ao-skip="1"'
+			? ' data-no-defer="1" data-no-optimize="1" data-no-minify="1" data-cfasync="false" data-ao-skip="1" data-noptimize="1"'
 			: '';
 
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; the id is a plugin constant passed through esc_attr, $hints is a literal, and every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
@@ -11198,6 +11250,10 @@ class Frontend {
 	 *
 	 * The attributes below are recognised by the major plugins:
 	 *   - `data-no-defer`        — LiteSpeed Cache, Hummingbird, SG Optimizer
+	 *   - `data-noptimize`       — Autoptimize: the tag is neither merged, moved
+	 *                              nor delayed. Breeze (its fork) only stops
+	 *                              moving it; its merge ignores every exclusion
+	 *                              (see readme.txt, Breeze)
 	 *   - `data-no-optimize`     — LiteSpeed Cache, WP Rocket, W3 Total Cache
 	 *   - `data-no-minify`       — WP Rocket
 	 *   - `data-cfasync="false"` — Autoptimize, Cloudflare Rocket Loader
@@ -11218,7 +11274,7 @@ class Frontend {
 		if ( ! $this->is_own_script_handle( $handle ) ) {
 			return $tag;
 		}
-		$hints = ' data-no-defer="1" data-no-optimize="1" data-no-minify="1" data-cfasync="false" data-ao-skip="1"';
+		$hints = ' data-no-defer="1" data-no-optimize="1" data-no-minify="1" data-cfasync="false" data-ao-skip="1" data-noptimize="1"';
 		// `script_loader_tag` receives the *composite* markup for this
 		// handle — the external `<script src>` PLUS any inline before/after
 		// snippets registered via `wp_add_inline_script()` concatenated in
@@ -11295,6 +11351,7 @@ class Frontend {
 			$attributes['data-no-minify']   = '1';
 			$attributes['data-cfasync']     = 'false';
 			$attributes['data-ao-skip']     = '1';
+			$attributes['data-noptimize']   = '1';
 		}
 		return $attributes;
 	}
@@ -11912,6 +11969,207 @@ class Frontend {
 			}
 		}
 		return $excluded;
+	}
+
+	/**
+	 * W3 Total Cache auto-minify: keep every FAZ tag out of its bundles.
+	 *
+	 * `$tag` is the full `<script …>` / `<link …>` markup and `$file` the URL
+	 * W3TC resolved for it. A FAZ tag is recognised by the hints every own
+	 * handle carries (tag_own_scripts_nooptimize(), filter_style_loader_tag())
+	 * or, for a tag printed by another path, by its own asset URL.
+	 *
+	 * @param bool   $do   Whether W3TC may minify/combine this tag.
+	 * @param string $tag  The tag markup.
+	 * @param string $file The resolved file URL.
+	 * @return bool
+	 */
+	public function w3tc_keep_own_tag( $do, $tag = '', $file = '' ) {
+		if ( ! $do ) {
+			return $do;
+		}
+		$tag = is_string( $tag ) ? $tag : '';
+		if ( false !== strpos( $tag, 'data-no-minify' ) || false !== strpos( $tag, 'data-no-optimize' ) ) {
+			return false;
+		}
+		foreach ( array( 'faz-cookie-manager', 'faz-fw', 'faz-dsar-form', 'faz-dnsmpi-form' ) as $keyword ) {
+			if ( false !== strpos( $tag, $keyword ) ) {
+				return false;
+			}
+		}
+		if ( is_string( $file ) && '' !== $file && $this->is_own_asset_url( $file ) ) {
+			return false;
+		}
+		return $do;
+	}
+
+	/**
+	 * SiteGround Optimizer: own handles for its minify / async / combine
+	 * exclusion lists (compared with in_array() against the handle).
+	 *
+	 * @param array $handles Handles SiteGround Optimizer already excludes.
+	 * @return array
+	 */
+	public function sgo_exclude_own_handles( $handles ) {
+		if ( ! is_array( $handles ) ) {
+			return $handles;
+		}
+		// Every handle enqueue_scripts() registers, under both base names
+		// (the default and the alternative-asset family), plus the shortcode
+		// handles. See is_own_script_handle() for the prefix contract.
+		$own = array( 'faz-dsar-form', 'faz-dnsmpi-form', 'faz-dsar' );
+		foreach ( array( (string) $this->plugin_name, 'faz-fw' ) as $base ) {
+			if ( '' === $base ) {
+				continue;
+			}
+			$own[] = $base;
+			foreach ( array( '-static-config', '-css', '-gcm', '-tcf-cmp', '-a11y', '-wca', '-microsoft-consent' ) as $suffix ) {
+				$own[] = $base . $suffix;
+			}
+		}
+		// The combinator compares the printed tag's id attribute, which carries
+		// WordPress's `-js` / `-css` suffix (and `-js-before` / `-js-extra` on
+		// the inline parts); the minify and async passes compare the handle.
+		foreach ( $own as $handle ) {
+			foreach ( array( '-js', '-js-before', '-js-after', '-js-extra', '-js-translations', '-css' ) as $suffix ) {
+				$own[] = $handle . $suffix;
+			}
+		}
+		foreach ( $own as $handle ) {
+			if ( ! in_array( $handle, $handles, true ) ) {
+				$handles[] = $handle;
+			}
+		}
+		return $handles;
+	}
+
+	/**
+	 * Super Page Cache: bypass its cache (and keep its Cloudflare Cache-Control
+	 * off the response) on every response FAZ vetoed.
+	 *
+	 * @param bool $bypass Whether Super Page Cache already bypasses this response.
+	 * @return bool
+	 */
+	public function super_page_cache_bypass( $bypass ) {
+		if ( $bypass ) {
+			return $bypass;
+		}
+		return defined( 'DONOTCACHEPAGE' ) && DONOTCACHEPAGE;
+	}
+
+	/**
+	 * SiteGround Optimizer "Remove Query Strings": keep `?ver=` on FAZ assets
+	 * (compared as URL substrings).
+	 *
+	 * @param array $urls URL fragments SiteGround Optimizer already excludes.
+	 * @return array
+	 */
+	public function sgo_exclude_own_urls( $urls ) {
+		if ( ! is_array( $urls ) ) {
+			return $urls;
+		}
+		foreach ( array( 'faz-cookie-manager', 'faz-fw' ) as $keyword ) {
+			if ( ! in_array( $keyword, $urls, true ) ) {
+				$urls[] = $keyword;
+			}
+		}
+		return $urls;
+	}
+
+	/**
+	 * Hummingbird Asset Optimization: never minify or combine an own handle.
+	 *
+	 * @param bool   $allowed Whether Hummingbird may process the resource.
+	 * @param string $handle  Script or style handle.
+	 * @return bool
+	 */
+	public function hummingbird_keep_own_resource( $allowed, $handle = '' ) {
+		if ( $allowed && ( 'faz-dsar' === $handle || $this->is_own_script_handle( $handle ) ) ) {
+			return false;
+		}
+		return $allowed;
+	}
+
+	/**
+	 * Jetpack Boost "Defer non-essential JavaScript": keep FAZ tags where
+	 * they are. A moved tag would run after every third-party script that
+	 * was not moved, and the inline bootstrap would guard nothing.
+	 *
+	 * Boost builds the list with preg_match_all( …, PREG_OFFSET_CAPTURE ), so
+	 * each element is `array( markup, byte offset )`
+	 * (class-render-blocking-js.php, get_script_tags()); a plain string is
+	 * accepted as well in case that ever changes. An element of any other
+	 * shape is left to Boost.
+	 *
+	 * @param array $script_tags Script tags Boost is about to move to the end of the document.
+	 * @return array The same list without FAZ's own tags.
+	 */
+	public function jetpack_boost_keep_own_scripts( $script_tags ) {
+		if ( ! is_array( $script_tags ) ) {
+			return $script_tags;
+		}
+		return array_values(
+			array_filter(
+				$script_tags,
+				function ( $entry ) {
+					$tag = $entry;
+					if ( is_array( $entry ) ) {
+						$tag = isset( $entry[0] ) ? $entry[0] : '';
+					}
+					if ( ! is_string( $tag ) || '' === $tag ) {
+						return true;
+					}
+					if ( false !== strpos( $tag, 'data-no-defer' ) ) {
+						return false;
+					}
+					foreach ( array( 'faz-cookie-manager', 'faz-fw', 'faz-dsar-form', 'faz-dnsmpi-form', '_fazBootstrap', '_fazConfig', '_fazCfg', '_fazGcm', '_fazTcfConfig', '_fazConsentLog' ) as $keyword ) {
+						if ( false !== strpos( $tag, $keyword ) ) {
+							return false;
+						}
+					}
+					return true;
+				}
+			)
+		);
+	}
+
+	/**
+	 * Jetpack Boost (and WordPress.com page-optimize) concatenation: never
+	 * fold an own handle into a combined file.
+	 *
+	 * @param bool   $do_concat Whether the handle may be concatenated.
+	 * @param string $handle    Script or style handle.
+	 * @return bool
+	 */
+	public function jetpack_boost_do_concat( $do_concat, $handle = '' ) {
+		// 'faz-dsar' is the data request form's stylesheet handle; the script
+		// handles all carry a prefix is_own_script_handle() knows.
+		if ( $do_concat && ( 'faz-dsar' === $handle || $this->is_own_script_handle( $handle ) ) ) {
+			return false;
+		}
+		return $do_concat;
+	}
+
+	/**
+	 * WP-Optimize minify: keep FAZ assets out of its merged bundles.
+	 *
+	 * The list is matched as URL substrings against every script and
+	 * stylesheet WP-Optimize considers; a match is printed untouched, with its
+	 * inline before/after data in place.
+	 *
+	 * @param array $exclusions WP-Optimize's default exclusion list.
+	 * @return array
+	 */
+	public function wpo_exclude_own_scripts( $exclusions ) {
+		if ( ! is_array( $exclusions ) ) {
+			return $exclusions;
+		}
+		foreach ( array( 'faz-cookie-manager', 'faz-fw' ) as $keyword ) {
+			if ( ! in_array( $keyword, $exclusions, true ) ) {
+				$exclusions[] = $keyword;
+			}
+		}
+		return $exclusions;
 	}
 
 	/**

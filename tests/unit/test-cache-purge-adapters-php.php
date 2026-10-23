@@ -13,7 +13,10 @@
  *     the current action is detected at all;
  *   - the adapters added for Nginx Helper, Proxy Cache Purge, WP-Optimize and
  *     Super Page Cache: registry, detection, the documented purge entry point,
- *     the `$clear === false` passthrough, and the upgrade purge.
+ *     the `$clear === false` passthrough, and the upgrade purge;
+ *   - Surge, Jetpack Boost and Cachify: registry, detection, Surge's flag
+ *     expiry plus its `surge_flush_actions` list, Boost's and Cachify's
+ *     documented actions, and the upgrade purge.
  *
  * The cache plugins are modelled by the public symbols they expose, with
  * counters.
@@ -26,6 +29,19 @@
 
 namespace FazCookie\Includes {
 	class Modules {}
+}
+
+// Surge's public functions (include/common.php): expire() queues a flag that
+// Surge writes on its own shutdown hook.
+namespace Surge {
+	function expire( $flag = null ) { // phpcs:ignore
+		static $expire = array();
+		if ( $flag ) {
+			$expire[] = $flag;
+			\faz_pa_count( 'surge_expire' );
+		}
+		return $expire;
+	}
 }
 
 namespace {
@@ -108,6 +124,7 @@ namespace {
 		faz_pa_count( 'wpo_cache_flush' );
 	}
 	define( 'SWCFPC_PLUGIN_PATH', __DIR__ . '/' );
+	define( 'JETPACK_BOOST_VERSION', '4.8.1' );
 
 	$faz_root = dirname( __DIR__, 2 );
 	require_once $faz_root . '/admin/modules/cache/services/class-services.php';
@@ -289,6 +306,65 @@ namespace {
 	faz_pa_ok(
 		1 === faz_pa_calls( 'vhp_execute_purge_no_id' ) && array( 'http://example.test/?vhp-regex' ) === $GLOBALS['purger']->purge_urls,
 		'27 an upgrade queues a full Proxy Cache Purge through its own API'
+	);
+
+	// --- Surge and Jetpack Boost -------------------------------------------
+	foreach ( array( 'surge' => 'Surge', 'jetpack_boost' => 'Jetpack_Boost' ) as $slug => $class ) {
+		$resolved = 'FazCookie\\Admin\\Modules\\Cache\\Services\\' . implode( '_', array_map( 'ucfirst', explode( '_', $slug ) ) );
+		faz_pa_ok(
+			in_array( $slug, $services, true ) && class_exists( $resolved ) && $resolved === 'FazCookie\\Admin\\Modules\\Cache\\Services\\' . $class,
+			"28 {$slug} is registered and resolves to Services\\{$class}"
+		);
+	}
+
+	// Surge: detected by its function, the FAZ action joins surge_flush_actions,
+	// and a save both queues the '/' flag and fires that action.
+	faz_pa_cache_enabler( array() );
+	$GLOBALS['faz_filters'] = array();
+	$surge = $adapter( 'Surge' );
+	faz_pa_ok( $surge && $surge->is_active(), '29 Surge is detected by Surge\\expire()' );
+	$flush = apply_filters( 'surge_flush_actions', array( 'switch_theme' ) );
+	faz_pa_ok(
+		array( 'switch_theme', 'faz_surge_flush_all' ) === $flush && 'x' === apply_filters( 'surge_flush_actions', 'x' ),
+		'30 the FAZ purge action is added to surge_flush_actions; a non-array list is passed through'
+	);
+	faz_pa_cache_enabler( array( 'faz_surge_flush_all' ) ); // What Surge reads on shutdown, modelled as a listener.
+	if ( $surge ) {
+		$surge->clear_cache();
+		$surge->clear_cache( false );
+	}
+	faz_pa_ok(
+		1 === faz_pa_calls( 'surge_expire' ) && 1 === faz_pa_calls( 'faz_surge_flush_all' ),
+		'31 a save expires the whole site once through Surge\\expire() and fires the flush action once; clear_cache(false) does neither'
+	);
+
+	// Jetpack Boost: detected by its version constant, purged through the
+	// public action its page-cache module documents.
+	faz_pa_cache_enabler( array( 'jetpack_boost_clear_page_cache_all' ) );
+	$boost = $adapter( 'Jetpack_Boost' );
+	faz_pa_ok( $boost && $boost->is_active(), '32 Jetpack Boost is detected by JETPACK_BOOST_VERSION' );
+	if ( $boost ) {
+		$boost->clear_cache();
+		$boost->clear_cache( false );
+	}
+	faz_pa_ok( 1 === faz_pa_calls( 'jetpack_boost_clear_page_cache_all' ), '33 a save fires jetpack_boost_clear_page_cache_all once; clear_cache(false) does not' );
+
+	// Cachify: detected by its flush action, purged through it.
+	faz_pa_cache_enabler( array( 'cachify_flush_cache' ) );
+	$cachify = $adapter( 'Cachify' );
+	faz_pa_ok( $cachify && $cachify->is_active() && in_array( 'cachify', $services, true ), '34 Cachify is registered and detected by cachify_flush_cache' );
+	if ( $cachify ) {
+		$cachify->clear_cache();
+		$cachify->clear_cache( false );
+	}
+	faz_pa_ok( 1 === faz_pa_calls( 'cachify_flush_cache' ), '35 a save fires cachify_flush_cache once; clear_cache(false) does not' );
+
+	// The upgrade purge reaches all three.
+	faz_pa_cache_enabler( array( 'jetpack_boost_clear_page_cache_all', 'cachify_flush_cache' ) );
+	Activator::purge_page_caches();
+	faz_pa_ok(
+		1 === faz_pa_calls( 'surge_expire' ) && 1 === faz_pa_calls( 'jetpack_boost_clear_page_cache_all' ) && 1 === faz_pa_calls( 'cachify_flush_cache' ),
+		'36 an upgrade expires Surge and purges Jetpack Boost and Cachify'
 	);
 
 	echo "\n" . ( 0 === $faz_fail ? "ALL PASS ({$faz_pass})\n" : "FAILED: {$faz_fail}, passed: {$faz_pass}\n" );

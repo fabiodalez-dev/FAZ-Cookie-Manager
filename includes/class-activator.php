@@ -1530,6 +1530,29 @@ class Activator {
 					}
 				}
 			} ),
+			array( 'Surge', function () {
+				// Surge collects the flags to expire in a static and writes them
+				// on its own shutdown hook; '/' is the whole site. common.php is
+				// loaded by its advanced-cache drop-in, so the function exists on
+				// every request Surge could have cached.
+				if ( function_exists( 'Surge\\expire' ) ) {
+					\Surge\expire( '/' );
+				}
+			} ),
+			array( 'Jetpack Boost', function () {
+				// The public action its page-cache module documents for
+				// third-party plugins (pre-wordpress/boost-cache-actions.php).
+				if ( has_action( 'jetpack_boost_clear_page_cache_all' ) ) {
+					do_action( 'jetpack_boost_clear_page_cache_all' );
+				}
+			} ),
+			array( 'Cachify', function () {
+				if ( has_action( 'cachify_flush_cache' ) ) {
+					do_action( 'cachify_flush_cache' );
+				} elseif ( is_callable( array( '\\Cachify', 'flush_total_cache' ) ) ) {
+					\Cachify::flush_total_cache( true );
+				}
+			} ),
 			array( 'WP Object Cache', function () {
 				// Generic WP object cache (Memcached, Redis via the drop-in).
 				if ( function_exists( 'wp_cache_flush' ) ) {
