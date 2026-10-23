@@ -20,8 +20,11 @@ namespace {
 	}
 
 	class Cachify {
-		/** @return void */
-		public static function flush_total_cache( $clear_all_sites = false ) {}
+		/**
+		 * @param bool $clear_all_methods Flush every caching method, not only the active one.
+		 * @return void
+		 */
+		public static function flush_total_cache( $clear_all_methods = false ) {}
 	}
 
 	/** @return void */
