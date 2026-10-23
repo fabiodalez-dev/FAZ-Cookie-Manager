@@ -295,13 +295,29 @@ cleanup_plugin() {
 
 snapshot_active=$(wpe 'echo base64_encode( serialize( get_option( "active_plugins", array() ) ) );')
 snapshot_settings=$(wpe 'echo base64_encode( serialize( get_option( "faz_settings", array() ) ) );')
+# The drop-ins and WP_CACHE the site started with: a site that already runs a
+# cache gets them back exactly, since switching active_plugins through
+# update_option() runs no activation hook that would regenerate them.
+snapshot_dir=$(mktemp -d)
+for dropin in advanced-cache.php object-cache.php; do
+  [ -f "$WPC/$dropin" ] && cp -p "$WPC/$dropin" "$snapshot_dir/$dropin"
+done
+snapshot_wp_cache=$(wpq config get WP_CACHE 2>/dev/null || echo "unset")
 
 restore_site() {
   echo "--- restoring site state"
-  rm -f "$WPC/advanced-cache.php"
-  set_wp_cache false
+  rm -f "$WPC/advanced-cache.php" "$WPC/object-cache.php"
+  for dropin in advanced-cache.php object-cache.php; do
+    [ -f "$snapshot_dir/$dropin" ] && cp -p "$snapshot_dir/$dropin" "$WPC/$dropin"
+  done
+  if [ "$snapshot_wp_cache" = "unset" ]; then
+    set_wp_cache false
+  else
+    wpq config set WP_CACHE "$snapshot_wp_cache" --raw --type=constant >/dev/null
+  fi
   wp --path="$WP_PATH" --skip-plugins --skip-themes eval "update_option( 'active_plugins', unserialize( base64_decode( '$snapshot_active' ) ) ); update_option( 'faz_settings', unserialize( base64_decode( '$snapshot_settings' ) ) ); delete_option( 'faz_banner_template' ); do_action( 'rest_api_init' ); do_action( 'faz_clear_cache' );" >/dev/null
   wpq cache flush >/dev/null 2>&1 || true
+  rm -rf "$snapshot_dir"
 }
 trap restore_site EXIT
 
@@ -322,6 +338,18 @@ wpe '
 ' >/dev/null
 rm -f "$WPC/advanced-cache.php"
 set_wp_cache false
+# The fixture page the spec judges; the spec upserts it by slug as well, this
+# only guarantees the baseline probe below does not read a 404 on a clean site.
+wpe '
+  if ( ! get_page_by_path( "faz-cache-matrix", OBJECT, "page" ) ) {
+    wp_insert_post( array( "post_type" => "page", "post_status" => "publish", "post_name" => "faz-cache-matrix", "post_title" => "FAZ Cache Matrix", "post_content" => "<p>FAZ cache matrix fixture.</p>" ) );
+  }
+' >/dev/null
+baseline_status=$(curl -s -o /dev/null -w "%{http_code}" -A "Mozilla/5.0 matrix" "$WP_BASE_URL/faz-cache-matrix/")
+if [ "$baseline_status" != "200" ]; then
+  echo "!! the fixture page answers HTTP $baseline_status with only FAZ active. Aborting." >&2
+  exit 3
+fi
 baseline_cc=$(curl -s -D - -o /dev/null -A "Mozilla/5.0 matrix" "$WP_BASE_URL/faz-cache-matrix/" | grep -i "^cache-control" || true)
 echo "baseline Cache-Control on the fixture page: ${baseline_cc:-(none — cacheable)}"
 if echo "$baseline_cc" | grep -qi "no-store"; then

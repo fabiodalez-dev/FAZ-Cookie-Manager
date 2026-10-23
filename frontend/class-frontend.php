@@ -518,13 +518,6 @@ class Frontend {
 			add_filter( 'sgo_javascript_combine_excluded_internal_paths', array( $this, 'sgo_exclude_own_urls' ) );
 			add_filter( 'sgo_javascript_combine_excluded_inline_content', array( $this, 'rocket_exclude_own_inline' ) );
 
-			// Super Page Cache decides on its own bypass list and then REPLACES
-			// Cache-Control with its Cloudflare value (`s-maxage=31536000`): on
-			// 5.3.x the crawler-only render went out as cacheable for a year at
-			// the edge. Its `swcfpc_cache_bypass` filter is asked right before
-			// that, after every FAZ veto has defined DONOTCACHEPAGE.
-			add_filter( 'swcfpc_cache_bypass', array( $this, 'super_page_cache_bypass' ) );
-
 			// Hummingbird Asset Optimization asks per handle whether a resource
 			// may be minified or combined (core/modules/minify/class-minify-group.php).
 			add_filter( 'wphb_minify_resource', array( $this, 'hummingbird_keep_own_resource' ), 10, 2 );
@@ -613,6 +606,15 @@ class Frontend {
 		// part of the FlyingPress reports in issue #125. Registered
 		// unconditionally: with FlyingPress absent the filter never runs.
 		add_filter( 'flying_press_is_cacheable', array( $this, 'flying_press_is_cacheable' ) );
+
+		// Super Page Cache decides on its own bypass list and then REPLACES
+		// Cache-Control with its Cloudflare value (`s-maxage=31536000`): on
+		// 5.3.x the crawler-only render went out as cacheable for a year at
+		// the edge. Its `swcfpc_cache_bypass` filter is asked right before
+		// that, after every FAZ veto has defined DONOTCACHEPAGE. A page-cache
+		// veto, not an optimiser exclusion, so it is registered outside the
+		// `faz_auto_exclude_cache_plugins` block, like the FlyingPress one.
+		add_filter( 'swcfpc_cache_bypass', array( $this, 'super_page_cache_bypass' ) );
 
 		// Content-level blocking (defense-in-depth — runs before output buffer).
 		add_filter( 'the_content', array( $this, 'filter_content_blocking' ), 1000 );
@@ -11248,8 +11250,10 @@ class Frontend {
 	 *
 	 * The attributes below are recognised by the major plugins:
 	 *   - `data-no-defer`        — LiteSpeed Cache, Hummingbird, SG Optimizer
-	 *   - `data-noptimize`       — Autoptimize and Breeze (its fork): the tag is
-	 *                              neither merged, moved nor delayed
+	 *   - `data-noptimize`       — Autoptimize: the tag is neither merged, moved
+	 *                              nor delayed. Breeze (its fork) only stops
+	 *                              moving it; its merge ignores every exclusion
+	 *                              (see readme.txt, Breeze)
 	 *   - `data-no-optimize`     — LiteSpeed Cache, WP Rocket, W3 Total Cache
 	 *   - `data-no-minify`       — WP Rocket
 	 *   - `data-cfasync="false"` — Autoptimize, Cloudflare Rocket Loader

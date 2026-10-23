@@ -92,7 +92,8 @@ namespace {
 
 	echo "W3 Total Cache: w3tc_minify_js_do_tag_minification / _css_\n";
 	cx_check( false === cx_call( $frontend, 'w3tc_keep_own_tag', true, $hinted_tag, FAZ_PLUGIN_URL . 'frontend/js/script.min.js' ), 'hinted FAZ tag is kept out of the bundle' );
-	cx_check( false === cx_call( $frontend, 'w3tc_keep_own_tag', true, $bare_own_tag, FAZ_PLUGIN_URL . 'frontend/js/a11y.min.js' ), 'an own asset URL is enough without hints' );
+	cx_check( false === cx_call( $frontend, 'w3tc_keep_own_tag', true, '<script id="renamed-js"></script>', FAZ_PLUGIN_URL . 'frontend/js/a11y.min.js' ), 'an own asset URL is enough without hints or keywords in the tag' );
+	cx_check( false === cx_call( $frontend, 'w3tc_keep_own_tag', true, $bare_own_tag, '' ), 'an own src in the tag is enough without a resolved file' );
 	cx_check( false === cx_call( $frontend, 'w3tc_keep_own_tag', true, '<link rel="stylesheet" id="faz-cookie-manager-css-css" href="https://example.test/wp-content/uploads/faz-cookie-manager/assets/banner.css">', 'https://example.test/wp-content/uploads/faz-cookie-manager/assets/banner.css' ), 'the banner stylesheet (uploads URL, keyword in the tag) is kept out' );
 	cx_check( true === cx_call( $frontend, 'w3tc_keep_own_tag', true, $theme_tag, 'https://example.test/wp-content/themes/x/app.js' ), 'a theme script is still minified' );
 	cx_check( false === cx_call( $frontend, 'w3tc_keep_own_tag', false, $theme_tag, 'https://example.test/wp-content/themes/x/app.js' ), 'a decision already false is passed through' );

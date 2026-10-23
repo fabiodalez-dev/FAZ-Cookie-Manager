@@ -404,8 +404,10 @@ test.describe(`Cache plugin matrix — ${SLUG || '(no plugin)'}`, () => {
     expect(before.html).toContain(originalTitle);
 
     const marker = `FAZ matrix ${SLUG} ${Date.now()}`;
-    await saveBannerTitle(marker);
+    // Set before the save: a PUT that fails after the server stored the
+    // banner must still be undone in afterAll.
     titleChanged = true;
+    await saveBannerTitle(marker);
 
     const after = await fetchAnon(fixtureUrl);
     expect(after.html, 'the very next anonymous response shows the new title (the save purged the cache)').toContain(marker);
