@@ -123,6 +123,9 @@ class Cache extends Modules {
 			'proxy_cache_purge',
 			'wp_optimize',
 			'super_page_cache',
+			'surge',
+			'jetpack_boost',
+			'cachify',
 		);
 	}
 }
