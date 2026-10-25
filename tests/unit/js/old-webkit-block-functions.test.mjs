@@ -155,6 +155,13 @@ test('the rule recognises the engine bug it guards against', () => {
     assert.deepEqual(findOldWebKitBlockFunctionReads('{ let a = 1; var g = function () { return a }; }'), []);
     assert.deepEqual(findOldWebKitBlockFunctionReads('(function () { { let a = 1; function f() { return a } } })()'), []);
     assert.deepEqual(findOldWebKitBlockFunctionReads('{ function f() { let a = 1; return a } }'), []);
+    // Every kind of block-scoped binding, and reads from nested closures.
+    const names = (src) => findOldWebKitBlockFunctionReads(src).map((r) => `${r.fn}:${r.name}`);
+    assert.deepEqual(names('{ class A {} function f() { return A } }'), ['f:A']);
+    assert.deepEqual(names('{ const { x, y: [z] } = o; function f() { return x + z } }'), ['f:x', 'f:z']);
+    assert.deepEqual(names('for (let i = 0; i < 1; i++) { function f() { return i } }'), ['f:i']);
+    assert.deepEqual(names('try {} catch (e) { function f() { return e } }'), ['f:e']);
+    assert.deepEqual(names('{ let a = 1; function f() { return () => a } }'), ['f:a']);
 });
 
 for (const file of files) {
