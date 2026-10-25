@@ -16,6 +16,7 @@
 
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/wp-fixture';
+import { stampedDsarFields } from '../utils/dsar-form';
 import { upsertPage, wpEval } from '../utils/wp-env';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -106,16 +107,18 @@ test.describe('DSAR form — security fixes', () => {
   test('DSAR-SEC-01: name with CRLF is sanitized and submission succeeds', async ({
     page, wpBaseURL,
   }) => {
-    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
-    const nonce = await page.locator('form.faz-dsar-form input[name="nonce"]').inputValue();
+    // The rendered form, stamp included: a hand-written body is refused as an
+    // expired form once the stamp grace window has passed (#347). This spec
+    // only passed when plugin-lifecycle had just reset the stamp epoch.
+    const fields = await stampedDsarFields(page, dsarUrl);
 
     // Attempt to inject a second SMTP header via name field.
     const injectedName = "Legit Name\r\nX-Injected-Header: malicious";
 
     const res = await page.request.post(`${wpBaseURL}${AJAX_URL_PATH}`, {
       form: {
+        ...fields,
         action:       'faz_dsar_submit',
-        nonce,
         dsar_name:    injectedName,
         dsar_email:   'test-sqf@example.com',
         dsar_type:    'access',
@@ -142,12 +145,13 @@ test.describe('DSAR form — security fixes', () => {
   test('DSAR-SEC-02: rate limit blocks second submission within 60 seconds', async ({
     page, wpBaseURL,
   }) => {
-    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
-    const nonce = await page.locator('form.faz-dsar-form input[name="nonce"]').inputValue();
+    // Stamped like a visitor's form (#347); the stamp is not single-use, so
+    // the second post reuses it and reaches the rate limiter.
+    const fields = await stampedDsarFields(page, dsarUrl);
 
     const formPayload = {
+      ...fields,
       action:       'faz_dsar_submit',
-      nonce,
       dsar_name:    'Rate Limit Test',
       dsar_email:   'ratelimit@example.com',
       dsar_type:    'erasure',
