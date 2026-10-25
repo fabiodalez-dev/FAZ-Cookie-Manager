@@ -58,6 +58,22 @@ use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Renderer;
 
 $checks = 0;
 $failed = 0;
+/**
+ * The first $chars characters of $text, for a failure message.
+ *
+ * mbstring is not guaranteed on the machines that run these standalone tests,
+ * and the old mb_substr() call was evaluated even when the check passed, so
+ * the whole file died with "Call to undefined function" (#342). /u keeps a
+ * multibyte character whole without it.
+ *
+ * @param string $text  Text to shorten.
+ * @param int    $chars Maximum characters.
+ * @return string
+ */
+function evs_excerpt( $text, $chars ) {
+	return 1 === preg_match( '/^.{0,' . (int) $chars . '}/us', (string) $text, $m ) ? $m[0] : (string) $text;
+}
+
 function evs_check( $ok, $label, $detail = '' ) {
 	global $checks, $failed;
 	++$checks;
@@ -125,7 +141,7 @@ foreach ( $templates as $file ) {
 		$after = $strip->invoke( null, $line );
 		$text  = preg_replace( '/^\s*(?:[-*+]|\d+\.|#{1,6}|>)?\s*/u', '', $after );
 		if ( '' !== $text && ( preg_match( '/^\p{Ll}/u', $text ) || preg_match( '/^(?:Civ\.|UE |[)\],;:])/u', $text ) ) ) {
-			$fragments[] = $name . ':' . ( $n + 1 ) . ' => ' . mb_substr( $text, 0, 60 );
+			$fragments[] = $name . ':' . ( $n + 1 ) . ' => ' . evs_excerpt( $text, 60 );
 		}
 	}
 }
@@ -178,7 +194,7 @@ foreach ( $templates as $file ) {
 	$ok       = false !== strpos( "\n" . $out . "\n", "\n" . $expected . "\n" )
 		&& false !== strpos( $expected, $evs_law[ $jur ] )
 		&& false === strpos( $expected, '****' );
-	evs_check( $ok, "{$name}: with no name saved the opening stays whole, names the controller neutrally and cites " . $evs_law[ $jur ], mb_substr( $expected, 0, 110 ) );
+	evs_check( $ok, "{$name}: with no name saved the opening stays whole, names the controller neutrally and cites " . $evs_law[ $jur ], $expected );
 	$openings += $ok ? 1 : 0;
 }
 evs_check( 40 === $openings, "all 40 openings survive an empty controller name ({$openings})" );
@@ -241,7 +257,7 @@ foreach ( $templates as $file ) {
 	}
 	$out = $strip->invoke( null, $labels->invoke( null, Generator::substitute( $scaffold, $data ) ) );
 	if ( preg_match( '/^(?![ \t]*(?:#|[-*+][ \t]))[^\n]*:[ \t]*\n(?:[ \t]*\n)*(?=#|\z)/mu', $out, $hit ) ) {
-		$orphans[] = $name . ' => ' . mb_substr( trim( $hit[0] ), 0, 50 );
+		$orphans[] = $name . ' => ' . evs_excerpt( trim( $hit[0] ), 50 );
 	}
 	// Control: with only the name saved the list keeps an item, and its
 	// introduction stays.

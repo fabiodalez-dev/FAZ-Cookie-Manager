@@ -306,6 +306,23 @@ use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Renderer;
 use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Section_Overrides;
 use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Template_Translations;
 
+/**
+ * At most $chars characters of $text, with an ellipsis when cut. mbstring is
+ * not guaranteed where these standalone tests run (#342); /u keeps a
+ * multibyte character whole.
+ *
+ * @param string $text  Text to shorten.
+ * @param int    $chars Maximum characters before the ellipsis.
+ * @return string
+ */
+function gr_excerpt( $text, $chars ) {
+	$text = (string) $text;
+	if ( 1 !== preg_match( '/^.{0,' . (int) $chars . '}/us', $text, $m ) || $m[0] === $text ) {
+		return $text;
+	}
+	return $m[0] . '…';
+}
+
 $golden_dir = __DIR__ . '/fixtures/cookie-policy-golden';
 
 // ---------------------------------------------------------------------------
@@ -353,8 +370,8 @@ function assert_golden( $actual, $path, $label ) {
 		$a = $act_lines[ $i ] ?? '(missing line)';
 		if ( $e !== $a ) {
 			echo "      line " . ( $i + 1 ) . ":\n";
-			echo "        golden:   " . mb_strimwidth( $e, 0, 160, '…' ) . "\n";
-			echo "        rendered: " . mb_strimwidth( $a, 0, 160, '…' ) . "\n";
+			echo "        golden:   " . gr_excerpt( $e, 160 ) . "\n";
+			echo "        rendered: " . gr_excerpt( $a, 160 ) . "\n";
 			$shown++;
 		}
 	}
