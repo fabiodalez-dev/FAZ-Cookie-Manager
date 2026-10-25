@@ -2993,8 +2993,13 @@ class Admin {
 			foreach ( $found as $shortcode ) {
 				$atts = shortcode_parse_atts( $shortcode[3] );
 				$atts = is_array( $atts ) ? $atts : array();
-				if ( ! empty( $atts['jurisdiction'] ) && in_array( $atts['jurisdiction'], $known, true ) ) {
-					$jurisdiction = (string) $atts['jurisdiction'];
+				// The same cleanup render_shortcode() applies: the editor curls
+				// attribute quotes (jurisdiction=”popia-southafrica”) and the
+				// parser keeps them in the value. Without it this lookup judged
+				// a different regime than the page renders.
+				$attr = isset( $atts['jurisdiction'] ) ? preg_replace( '/[^A-Za-z0-9_-]/', '', (string) $atts['jurisdiction'] ) : '';
+				if ( '' !== $attr && in_array( $attr, $known, true ) ) {
+					$jurisdiction = $attr;
 				} elseif ( ! empty( $settings['jurisdiction'] ) && in_array( $settings['jurisdiction'], $known, true ) ) {
 					$jurisdiction = (string) $settings['jurisdiction'];
 				} else {

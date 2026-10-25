@@ -47,7 +47,9 @@ test.describe('Published cookie policy without controller details is flagged in 
     created.push(wp(['post', 'create', '--post_type=page', '--post_status=publish', '--post_title=E2E 342 GDPR policy',
       '--post_content=[faz_cookie_policy_complete jurisdiction="gdpr-strict"]', '--porcelain']));
     created.push(wp(['post', 'create', '--post_type=page', '--post_status=publish', '--post_title=E2E 342 POPIA policy',
-      '--post_content=[faz_cookie_policy_complete jurisdiction="popia-southafrica"]', '--porcelain']));
+      // Curled quotes, as the editor writes them: the notice must read the
+      // regime the page renders, not fall back to the saved one.
+      '--post_content=[faz_cookie_policy_complete jurisdiction=”popia-southafrica”]', '--porcelain']));
   });
 
   test.afterAll(() => {
