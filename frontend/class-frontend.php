@@ -268,6 +268,8 @@ class Frontend {
 	private $definition_category_memo_dirty = false;
 	private $cookie_allowed_cache = array();
 	private $server_cookie_guard_started = false;
+	/** @var bool Whether this request printed the banner stylesheet as a non-blocking media="print" link. */
+	private $banner_css_non_blocking = false;
 	/**
 	 * Precomputed provider-pattern metadata (lowercased pattern, URL-vs-code
 	 * classification) for the output-buffer matching hot loop.
@@ -413,6 +415,7 @@ class Frontend {
 		// After every enqueue hook has run, before anything is printed.
 		add_action( 'wp_print_scripts', array( $this, 'warn_on_undeferred_handles' ), PHP_INT_MAX );
 		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
+		add_filter( 'style_loader_tag', array( $this, 'mark_banner_stylesheet' ), 15, 2 );
 
 		// Auto-exclusion from cache/optimization plugins' defer + delay +
 		// combine + minify features. Consent banners MUST run before
@@ -819,18 +822,20 @@ class Frontend {
 			// the container. The id selector outranks WP's zero-specificity
 			// :where(), and border-radius is unaffected.
 			$css .= '#faz-consent{border-style:none}';
-			$css .= '.faz-hidden{display:none!important;visibility:hidden!important}'
-				. '.faz-consent-bridge{width:0;height:0;border:0}'
-				// Inline age-confirmation row (GDPR Art. 8) injected by script.js
-				// above the accept surfaces. Inherits the banner's text direction
-				// (RTL support) from its container. The [hidden] attribute keeps
-				// the validation message out of the flow until an un-affirmed
-				// accept reveals it.
-				. '.faz-age-confirm{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;margin:0 0 12px;font-size:13px;line-height:1.4}'
+			// Inline age-confirmation row (GDPR Art. 8) injected by script.js
+			// above the accept surfaces. Inherits the banner's text direction
+			// (RTL support) from its container. The [hidden] attribute keeps
+			// the validation message out of the flow until an un-affirmed
+			// accept reveals it.
+			$css .= '.faz-age-confirm{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;margin:0 0 12px;font-size:13px;line-height:1.4}'
 				. '.faz-age-confirm-cb{margin:2px 0 0;flex:0 0 auto}'
 				. '.faz-age-confirm-label{cursor:pointer}'
-				. '.faz-age-confirm-error{flex-basis:100%;margin:2px 0 0;color:#b00020;font-size:12px}'
-				. '.video-placeholder-normal,.video-placeholder-youtube{min-height:200px;display:flex;align-items:center;justify-content:center;width:100%;max-width:100%;box-sizing:border-box}';
+				. '.faz-age-confirm-error{flex-basis:100%;margin:2px 0 0;color:#b00020;font-size:12px}';
+			// The rules that style PAGE content rather than the banner. Kept in
+			// the full stylesheet too, so every delivery path stays complete
+			// (the [faz_cookie_settings] button rules are already in it, via
+			// prepare_banner_styles()).
+			$css .= self::page_utility_css();
 			$css_handle = $this->plugin_name . '-css';
 			// Serve the compiled banner CSS (~30 KB) as a real, content-hashed
 			// stylesheet instead of inlining it into every page's <head> where
@@ -845,7 +850,33 @@ class Frontend {
 				$external_css_url = $this->get_static_asset_url( 'banner-' . md5( $css ) . '.css', $css );
 			}
 			if ( '' !== $external_css_url ) {
-				wp_enqueue_style( $css_handle, $external_css_url, array(), null );
+				/**
+				 * Whether the external banner stylesheet loads without blocking
+				 * the first paint.
+				 *
+				 * Nothing on the page needs it before script.js runs: the banner
+				 * is built from a <script type="text/template"> by script.js, and
+				 * the few rules that style server-rendered page content
+				 * (.faz-hidden on blocked embeds, the placeholder floor, the
+				 * [faz_cookie_settings] button) are printed inline below. So the
+				 * link is printed as media="print" — fetched at low priority,
+				 * never render-blocking — and script.js switches it to "all"
+				 * and holds the banner reveal until it has loaded. No inline
+				 * onload handler is used, so strict CSPs (script-src-attr) are
+				 * unaffected. Return false to restore a render-blocking link.
+				 *
+				 * @since 1.34.4
+				 * @param bool $non_blocking Default true.
+				 */
+				$this->banner_css_non_blocking = (bool) apply_filters( 'faz_banner_css_non_blocking', true );
+				wp_enqueue_style( $css_handle, $external_css_url, array(), null, $this->banner_css_non_blocking ? 'print' : 'all' );
+				if ( $this->banner_css_non_blocking ) {
+					$page_handle = $css_handle . '-page';
+					wp_register_style( $page_handle, false, array(), $this->version );
+					wp_enqueue_style( $page_handle );
+					// Same LiteSpeed exclusion marker as the inline fallback below.
+					wp_add_inline_style( $page_handle, '/* faz-cookie-manager/assets/ */' . self::page_content_css() );
+				}
 			} else {
 				wp_register_style( $css_handle, false, array(), $this->version );
 				wp_enqueue_style( $css_handle );
@@ -10487,6 +10518,83 @@ class Frontend {
 	}
 
 	/**
+	 * Rules for the [faz_cookie_settings] "manage consent preferences" button.
+	 *
+	 * Not the floating .faz-btn-revisit widget. Rendered inside page content
+	 * (outside #faz-consent), so it can't inherit the banner's scoped
+	 * rules — replicate the primary "accept" button here. The COLOUR
+	 * properties consume the same --faz-accept-button-* custom properties
+	 * the admin sets in Banner > Colours, which script.js exposes on :root;
+	 * the --faz-btn-* sizing properties (font/line-height/padding/radius)
+	 * are static design constants shared with the template's .faz-btn rule
+	 * (never JS-set), so the gdpr.json defaults below are the effective
+	 * values and the button still looks right before JS runs.
+	 *
+	 * @return string
+	 */
+	private static function settings_button_css() {
+		return '.faz-cookie-settings-btn{'
+			. 'display:inline-block;'
+			. 'font-family:inherit;'
+			. 'font-size:var(--faz-btn-font-size,14px);'
+			. 'line-height:var(--faz-btn-line-height,24px);'
+			. 'font-weight:500;'
+			. 'padding:var(--faz-btn-padding,8px 27px);'
+			. 'border-radius:var(--faz-btn-border-radius,2px);'
+			. 'border-width:var(--faz-accept-button-border-width,2px);'
+			. 'border-style:var(--faz-accept-button-border-style,solid);'
+			. 'border-color:var(--faz-accept-button-border-color,#1863dc);'
+			. 'background:var(--faz-accept-button-background-color,#1863dc);'
+			. 'color:var(--faz-accept-button-color,#ffffff);'
+			. 'white-space:nowrap;text-align:center;text-transform:none;'
+			. 'text-decoration:none;text-shadow:none;box-shadow:none;'
+			. 'cursor:pointer;min-height:0;-webkit-appearance:none;appearance:none;'
+			. 'transition:opacity .15s ease;'
+			. '}'
+			. '.faz-cookie-settings-btn:hover{opacity:.8;}'
+			. '.faz-cookie-settings-btn:focus-visible{'
+			. 'outline:2px solid var(--faz-accept-button-background-color,#1863dc);outline-offset:2px;'
+			. '}';
+	}
+
+	/**
+	 * Rules that style server-rendered PAGE content rather than the banner.
+	 *
+	 * They have to apply at first paint, before script.js runs, so when the
+	 * banner stylesheet is delivered as a non-blocking link they are also
+	 * printed inline:
+	 *
+	 * - `.faz-hidden` hides the original of a blocked social embed that
+	 *   process_social_embeds() marks server-side; a late rule would let the
+	 *   tracker-backed markup show for a moment.
+	 * - `.video-placeholder-*` is the size floor for the placeholders
+	 *   _fazAddPlaceholder inserts next to blocked iframes (outside
+	 *   #faz-consent, so the scoped template rules never reach them); without
+	 *   it lazy-loaded iframes (Bricks/Elementor/Divi Video) collapse to 0×0
+	 *   (issue #87).
+	 * - `.faz-consent-bridge` keeps the consent-forwarding iframe invisible.
+	 * - The [faz_cookie_settings] button sits in the page content.
+	 *
+	 * @return string
+	 */
+	private static function page_content_css() {
+		return self::page_utility_css() . self::settings_button_css();
+	}
+
+	/**
+	 * The utility half of page_content_css(): every rule except the
+	 * [faz_cookie_settings] button, which prepare_banner_styles() already
+	 * puts in the banner stylesheet.
+	 *
+	 * @return string
+	 */
+	private static function page_utility_css() {
+		return '.faz-hidden{display:none!important;visibility:hidden!important}'
+			. '.faz-consent-bridge{width:0;height:0;border:0}'
+			. '.video-placeholder-normal,.video-placeholder-youtube{min-height:200px;display:flex;align-items:center;justify-content:center;width:100%;max-width:100%;box-sizing:border-box}';
+	}
+
+	/**
 	 * Assemble the exact CSS shipped for a banner template.
 	 *
 	 * The live jurisdiction endpoint must return the same scoped/reset/utility
@@ -10554,39 +10662,7 @@ class Frontend {
 		$css_fixes .= '#faz-consent [data-faz-tag="detail-consent-id"],.faz-modal [data-faz-tag="detail-consent-id"]{display:block;margin:12px 24px;font-size:12px;color:var(--faz-detail-description-color,#212121);}'
 			. '#faz-consent [data-faz-tag="detail-consent-id"][hidden],.faz-modal [data-faz-tag="detail-consent-id"][hidden]{display:none;}'
 			. '#faz-consent [data-faz-tag="detail-consent-id"] input,.faz-modal [data-faz-tag="detail-consent-id"] input{display:block;width:100%;max-width:100%;margin-top:4px;padding:6px 8px;border:1px solid #c5c7cb;border-radius:4px;background:transparent;color:inherit;font-size:12px;}';
-		// [faz_cookie_settings] "manage consent preferences" button (not the
-		// floating .faz-btn-revisit widget). Rendered inside page content
-		// (outside #faz-consent), so it can't inherit the banner's scoped
-		// rules — replicate the primary "accept" button here. The COLOUR
-		// properties consume the same --faz-accept-button-* custom properties
-		// the admin sets in Banner > Colours, which script.js exposes on :root;
-		// the --faz-btn-* sizing properties (font/line-height/padding/radius)
-		// are static design constants shared with the template's .faz-btn rule
-		// (never JS-set), so the gdpr.json defaults below are the effective
-		// values and the button still looks right before JS runs.
-		$css_settings_btn = '.faz-cookie-settings-btn{'
-			. 'display:inline-block;'
-			. 'font-family:inherit;'
-			. 'font-size:var(--faz-btn-font-size,14px);'
-			. 'line-height:var(--faz-btn-line-height,24px);'
-			. 'font-weight:500;'
-			. 'padding:var(--faz-btn-padding,8px 27px);'
-			. 'border-radius:var(--faz-btn-border-radius,2px);'
-			. 'border-width:var(--faz-accept-button-border-width,2px);'
-			. 'border-style:var(--faz-accept-button-border-style,solid);'
-			. 'border-color:var(--faz-accept-button-border-color,#1863dc);'
-			. 'background:var(--faz-accept-button-background-color,#1863dc);'
-			. 'color:var(--faz-accept-button-color,#ffffff);'
-			. 'white-space:nowrap;text-align:center;text-transform:none;'
-			. 'text-decoration:none;text-shadow:none;box-shadow:none;'
-			. 'cursor:pointer;min-height:0;-webkit-appearance:none;appearance:none;'
-			. 'transition:opacity .15s ease;'
-			. '}'
-			. '.faz-cookie-settings-btn:hover{opacity:.8;}'
-			. '.faz-cookie-settings-btn:focus-visible{'
-			. 'outline:2px solid var(--faz-accept-button-background-color,#1863dc);outline-offset:2px;'
-			. '}';
-		$css = $css_reset . $css . $css_fixes . $css_settings_btn . self::compact_mobile_css( $layout );
+		$css = $css_reset . $css . $css_fixes . self::settings_button_css() . self::compact_mobile_css( $layout );
 
 		set_transient( $cache_key, $css, DAY_IN_SECONDS );
 		return $css;
@@ -11297,6 +11373,26 @@ class Frontend {
 			$attributes['data-ao-skip']     = '1';
 		}
 		return $attributes;
+	}
+
+	/**
+	 * Mark the non-blocking banner stylesheet so script.js can find it.
+	 *
+	 * script.js switches this link from media="print" to "all" and holds the
+	 * banner reveal until it has loaded (_fazWhenBannerCssReady). The marker
+	 * is an attribute rather than the generated id so it survives a renamed
+	 * plugin handle and CDN URL rewriting alike.
+	 *
+	 * @param string $tag    Rendered stylesheet link.
+	 * @param string $handle Registered WordPress style handle.
+	 * @return string
+	 */
+	public function mark_banner_stylesheet( $tag, $handle ) {
+		if ( ! $this->banner_css_non_blocking || $this->plugin_name . '-css' !== $handle || false !== strpos( $tag, 'data-faz-banner-css' ) ) {
+			return $tag;
+		}
+		$tagged = preg_replace( '/<link\b/i', '<link data-faz-banner-css="1"', $tag, 1 );
+		return is_string( $tagged ) ? $tagged : $tag;
 	}
 
 	/**
