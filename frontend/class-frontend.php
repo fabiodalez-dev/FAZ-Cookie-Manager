@@ -10593,14 +10593,17 @@ class Frontend {
 	 * load — a layout shift on exactly the slow visits the non-blocking
 	 * delivery is for. Scoped to `html:not(.faz-ready)`: script.js adds
 	 * faz-ready only once the sheet applies, so the banner's own positioning
-	 * takes over in the same frame. Printed only with the non-blocking link;
+	 * takes over in the same frame. pointer-events:none because the
+	 * container and modal boxes themselves carry no data-faz-tag, so they stay
+	 * hit-testable while transparent: fixed at the top of the viewport they
+	 * would swallow taps meant for the page. Printed only with the non-blocking link;
 	 * a render-blocking sheet is always in place before the banner exists.
 	 *
 	 * @return string
 	 */
 	private static function pending_banner_css() {
 		return 'html:not(.faz-ready) .faz-overlay,html:not(.faz-ready) .faz-btn-revisit-wrapper,'
-			. 'html:not(.faz-ready) .faz-consent-container,html:not(.faz-ready) .faz-modal{position:fixed!important}';
+			. 'html:not(.faz-ready) .faz-consent-container,html:not(.faz-ready) .faz-modal{position:fixed!important;pointer-events:none!important}';
 	}
 
 	/**

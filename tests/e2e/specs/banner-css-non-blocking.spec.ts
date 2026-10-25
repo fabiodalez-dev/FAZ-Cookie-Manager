@@ -83,6 +83,17 @@ test.describe('Banner stylesheet is not render-blocking', () => {
     expect(whileHeld.ready, 'banner stays hidden while its stylesheet is loading').toBe(false);
     const topWhileHeld = await contentTop();
     expect(topWhileHeld, 'found a page-content element to measure').not.toBeNull();
+    // The invisible banner boxes must not swallow taps meant for the page.
+    // Checked on the computed style rather than by hit-testing: whether they
+    // paint above the content depends on how the theme positions it (on the
+    // block theme here its positioned wrappers paint on top anyway).
+    const catchingClicks = await page.evaluate(() =>
+      ['.faz-overlay', '.faz-btn-revisit-wrapper', '.faz-consent-container', '.faz-modal']
+        .filter((sel) => {
+          const el = document.querySelector(sel);
+          return !!el && getComputedStyle(el).pointerEvents !== 'none';
+        }));
+    expect(catchingClicks, 'the hidden banner boxes do not intercept clicks on the page').toEqual([]);
 
     release();
     await page.waitForFunction(() => document.documentElement.classList.contains('faz-ready'), undefined, { timeout: 10000 });
