@@ -6742,15 +6742,21 @@ function _fazDrainScriptRestoreQueue() {
     if (_fazScriptRestoreBusy) return;
     while (_fazScriptRestoreQueue.length) {
         var script = _fazScriptRestoreQueue.shift();
+        var service = script.getAttribute('data-faz-service') || '';
+        // Resolve the category the way _fazShouldChangeType() parked it: with
+        // no category tag, the service's catalogue category. A script parked
+        // in place on its service alone (#349) otherwise reached the check
+        // with no category and was released while that category was denied.
         var category = script.getAttribute('data-faz-category')
             || (script.getAttribute('data-fazcookie') || '').replace('fazcookie-', '')
-            || script.getAttribute('data-faz-waitfor') || '';
+            || script.getAttribute('data-faz-waitfor')
+            || _fazKnownServiceCategory(service) || '';
         var src = script.getAttribute('src') || '';
         var waitFor = script.getAttribute('data-faz-waitfor');
         if (!script.isConnected || script.getAttribute('data-faz-executed') === '1'
             || (waitFor && _fazIsCategoryToBeBlocked(waitFor))
             || (!_fazIsUserWhitelisted(src, script) && !script.classList.contains('faz-skip')
-                && _fazShouldBlockResource(category, src || script.textContent || '', script.getAttribute('data-faz-service') || ''))) {
+                && _fazShouldBlockResource(category, src || script.textContent || '', service))) {
             _fazScriptRestorePending.delete(script);
             continue;
         }

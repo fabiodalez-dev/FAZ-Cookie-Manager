@@ -39,13 +39,20 @@ async function openOverrides(page: Page): Promise<unknown> {
   return (body as { overrides: unknown }).overrides;
 }
 
-async function addOverride(page: Page, cc: string): Promise<void> {
+/** The table rows, once the re-render after a save or delete is in the DOM. */
+async function waitForCountries(page: Page, expected: string[]): Promise<void> {
+  await expect
+    .poll(async () => (await listedCountries(page)).slice().sort(), { timeout: 10_000 })
+    .toEqual(expected.slice().sort());
+}
+
+async function addOverride(page: Page, cc: string, expectedAfter: string[]): Promise<void> {
   await page.fill('#ov-country', cc);
   const saved = page.waitForResponse((r) => r.request().method() === 'POST' && /\/faz\/v1\/geo\/overrides(?:[?]|$)/.test(r.url()));
-  const relisted = page.waitForResponse(isOverridesGet);
   await page.click('#faz-geo-add-override button[type="submit"]');
   expect((await saved).status()).toBe(200);
-  await relisted;
+  // The GET that follows only starts the re-render; wait for the rows.
+  await waitForCountries(page, expectedAfter);
 }
 
 async function listedCountries(page: Page): Promise<string[]> {
@@ -64,32 +71,47 @@ test.describe('Geo routing: per-country overrides persist from the first save (#
     expect(Array.isArray(empty), 'an empty override map is a JSON object, not []').toBe(false);
     expect(empty).toEqual({});
 
-    await addOverride(page, 'US');
-    expect(await listedCountries(page)).toEqual(['US']);
+    await addOverride(page, 'US', ['US']);
 
     // Survives a full reload of the settings page.
     await openOverrides(page);
-    expect(await listedCountries(page)).toEqual(['US']);
+    await waitForCountries(page, ['US']);
 
     // A second country keeps the first.
-    await addOverride(page, 'DE');
-    expect((await listedCountries(page)).sort()).toEqual(['DE', 'US']);
+    await addOverride(page, 'DE', ['DE', 'US']);
     expect(Object.keys(JSON.parse(wp(['option', 'get', 'faz_geo_admin_overrides', '--format=json']))).sort()).toEqual(['DE', 'US']);
+  });
+
+  test('a second submit while a save is in flight is ignored', async ({ page, loginAsAdmin }) => {
+    // Each save replaces the whole stored map, so two overlapping saves built
+    // from the same map would silently drop one country.
+    await loginAsAdmin(page);
+    await openOverrides(page);
+    let posts = 0;
+    page.on('request', (r) => {
+      if (r.method() === 'POST' && /\/faz\/v1\/geo\/overrides(?:[?]|$)/.test(r.url())) posts += 1;
+    });
+    await page.fill('#ov-country', 'US');
+    await page.evaluate(() => {
+      const form = document.getElementById('faz-geo-add-override') as HTMLFormElement;
+      form.requestSubmit();
+      form.requestSubmit();
+    });
+    await waitForCountries(page, ['US']);
+    expect(posts, 'only one save request is sent').toBe(1);
   });
 
   test('deleting the last override and adding a new first one works', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
     await openOverrides(page);
-    await addOverride(page, 'US');
+    await addOverride(page, 'US', ['US']);
 
     page.on('dialog', (d) => d.accept());
-    const relisted = page.waitForResponse(isOverridesGet);
     await page.click('#faz-geo-overrides-content button[data-country="US"]');
-    await relisted;
-    expect(await listedCountries(page)).toEqual([]);
+    await waitForCountries(page, []);
 
-    await addOverride(page, 'FR');
+    await addOverride(page, 'FR', ['FR']);
     await openOverrides(page);
-    expect(await listedCountries(page)).toEqual(['FR']);
+    await waitForCountries(page, ['FR']);
   });
 });

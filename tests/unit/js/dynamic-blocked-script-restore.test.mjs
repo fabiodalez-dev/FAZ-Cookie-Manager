@@ -34,10 +34,10 @@ function check(label, condition) {
 const GTM = 'https://www.googletagmanager.com/gtm.js?id=GTM-TEST';
 
 /** Load the real script.js with its DOMContentLoaded bootstrap neutralised. */
-function loadFrontend(analytics) {
+function loadFrontend(analytics, { services = [], runScripts = 'outside-only' } = {}) {
   const code = readFileSync(SCRIPT_PATH, 'utf8');
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-    runScripts: 'outside-only',
+    runScripts,
     url: 'http://localhost/',
   });
   const { window } = dom;
@@ -49,7 +49,7 @@ function loadFrontend(analytics) {
       { slug: 'analytics', isNecessary: false },
       { slug: 'marketing', isNecessary: false },
     ],
-    _services: [],
+    _services: services,
     _providersToBlock: [{ re: 'googletagmanager.com/gtm.js', categories: ['analytics'] }],
     _userWhitelist: [],
     _perServiceConsent: false,
@@ -147,6 +147,41 @@ function parked(w, id, attrs, text) {
   w._fazUnblockServerSide();
   check('data-fazcookie restoration still works', a().type === 'text/javascript');
   check('server-parked text/plain restoration still works', b().type === 'text/javascript');
+  w.close();
+}
+
+{
+  // Parked on its service alone: no category tag and a URL no provider
+  // pattern matches. The drain must resolve the service's catalogue category
+  // as the parker did, or it releases the script while that category is denied.
+  const w = loadFrontend('yes', { services: [{ id: 'hotjar', category: 'marketing' }] });
+  const get = parked(w, 'svc', {
+    type: 'javascript/blocked', 'data-faz-blocked-by-us': '1', 'data-faz-service': 'hotjar',
+    src: 'https://static.example.test/hj.js',
+  });
+  w._fazUnblockServerSide();
+  check('a service-only parked script stays blocked while its catalogue category is denied', get().type === 'javascript/blocked');
+  w.fazcookie._fazConsentStore.set('marketing', 'yes');
+  w._fazUnblockServerSide();
+  check('and is released once that category is granted', get().type === 'text/javascript');
+  w.close();
+}
+{
+  // Real execution, not only the type flip: an allowed inline script runs
+  // exactly once across repeated consent updates, and a denied one never runs.
+  const w = loadFrontend('no', { runScripts: 'dangerously' });
+  w.__runs = 0;
+  parked(w, 'counted', {
+    type: 'javascript/blocked', 'data-faz-blocked-by-us': '1', 'data-faz-category': 'analytics',
+  }, 'window.__runs = (window.__runs || 0) + 1;');
+  w._fazUnblockServerSide();
+  check('a denied parked inline script does not execute', w.__runs === 0);
+  w.fazcookie._fazConsentStore.set('analytics', 'yes');
+  w._fazUnblockServerSide();
+  check('once granted it executes', w.__runs === 1);
+  w._fazUnblockServerSide();
+  w._fazUnblockServerSide();
+  check('and repeated consent updates do not execute it again', w.__runs === 1);
   w.close();
 }
 
