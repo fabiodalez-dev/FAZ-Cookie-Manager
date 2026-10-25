@@ -120,6 +120,7 @@ class Admin {
 		add_action( 'admin_notices', array( $this, 'geo_enforcement_migration_notice' ) );
 		add_action( 'admin_notices', array( $this, 'functional_optout_migration_notice' ) );
 		add_action( 'admin_notices', array( $this, 'sourcebuster_marketing_notice' ) );
+		add_action( 'admin_notices', array( $this, 'incomplete_cookie_policy_notice' ) );
 		add_action( 'wp_ajax_faz_dismiss_unmatched', array( $this, 'ajax_dismiss_unmatched_vendors' ) );
 		add_action( 'wp_ajax_faz_disable_redundant_geo_routing', array( $this, 'ajax_disable_redundant_geo_routing' ) );
 		add_action( 'wp_ajax_faz_dismiss_redundant_geo_routing', array( $this, 'ajax_dismiss_redundant_geo_routing' ) );
@@ -2899,5 +2900,120 @@ class Admin {
 	public function plugin_action_links( $links ) {
 		$links[] = '<a href="' . esc_url( get_admin_url( null, 'admin.php?page=' . self::ADMIN_SLUG ) ) . '">' . esc_html__( 'Settings', 'faz-cookie-manager' ) . '</a>';
 		return array_reverse( $links );
+	}
+
+	/**
+	 * Published cookie policy pages that do not name the data controller.
+	 *
+	 * Since 1.34.2 a new policy page is published only once the controller's
+	 * name and contact email are set, but a page published before that keeps
+	 * rendering for visitors: hiding it would take away the cookie inventory
+	 * and the withdrawal instructions on an automatic update (#342). The
+	 * renderer only warns an administrator who opens that page, so this
+	 * notice is what tells them in wp-admin. Persistent, not dismissible: it
+	 * goes away when the details are filled in or the page is unpublished.
+	 *
+	 * Shown on the Dashboard, the page list and editor, and FAZ screens, so
+	 * the published-content lookup does not run on every admin page.
+	 *
+	 * @return void
+	 */
+	public function incomplete_cookie_policy_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		$id     = $screen ? (string) $screen->id : '';
+		if ( ! in_array( $id, array( 'dashboard', 'edit-page', 'page' ), true ) && false === strpos( $id, 'faz-cookie-manager' ) ) {
+			return;
+		}
+		$pages = self::incomplete_cookie_policy_pages();
+		if ( empty( $pages ) ) {
+			return;
+		}
+		$settings_url = admin_url( 'admin.php?page=' . self::ADMIN_SLUG . '-cookie-policy' );
+		echo '<div class="notice notice-warning faz-incomplete-policy-notice"><p><strong>'
+			. esc_html__( 'FAZ Cookie Policy: a published cookie policy does not name the data controller.', 'faz-cookie-manager' )
+			. '</strong> '
+			. esc_html__( 'Visitors are told who is responsible for their data only once the company name and a contact email are filled in.', 'faz-cookie-manager' )
+			. '</p><ul style="list-style:disc;margin-left:2em">';
+		foreach ( $pages as $page ) {
+			$title = '' !== $page['title'] ? $page['title'] : __( '(no title)', 'faz-cookie-manager' );
+			echo '<li><a href="' . esc_url( $page['url'] ) . '">' . esc_html( $title ) . '</a> — '
+				. ( $page['hidden']
+					? esc_html__( 'its jurisdiction requires these details, so visitors currently see no policy at all.', 'faz-cookie-manager' )
+					: esc_html__( 'visitors see the policy, with "the operator of this website" where the controller should be named.', 'faz-cookie-manager' ) )
+				. '</li>';
+		}
+		echo '</ul><p><a class="button" href="' . esc_url( $settings_url ) . '">'
+			. esc_html__( 'Fill in the controller details', 'faz-cookie-manager' )
+			. '</a></p></div>';
+	}
+
+	/**
+	 * Published pages whose generated cookie policy misses required settings.
+	 *
+	 * Each [faz_cookie_policy_complete] shortcode is judged for the
+	 * jurisdiction it renders (its own attribute, else the saved one, else the
+	 * first), by the same Generator::missing_required_settings() gate the
+	 * REST save, the wizard and the renderer use. Cached for the request.
+	 *
+	 * @return array<int,array{title:string,url:string,hidden:bool}>
+	 */
+	private static function incomplete_cookie_policy_pages() {
+		static $cache = null;
+		if ( null !== $cache ) {
+			return $cache;
+		}
+		$cache     = array();
+		$generator = '\\FazCookie\\Admin\\Modules\\Cookie_Policy_Generator\\Includes\\Generator';
+		if ( ! class_exists( $generator ) ) {
+			return $cache;
+		}
+		$settings = get_option( 'faz_cookie_policy_data', array() );
+		$settings = is_array( $settings ) ? $settings : array();
+		$known    = $generator::JURISDICTIONS;
+		$tag      = 'faz_cookie_policy_complete';
+		$posts    = get_posts(
+			array(
+				'post_type'        => array( 'page', 'post' ),
+				'post_status'      => 'publish',
+				's'                => '[' . $tag,
+				'posts_per_page'   => 20,
+				'no_found_rows'    => true,
+				'suppress_filters' => true,
+			)
+		);
+		foreach ( $posts as $post ) {
+			if ( ! preg_match_all( '/' . get_shortcode_regex( array( $tag ) ) . '/', (string) $post->post_content, $found, PREG_SET_ORDER ) ) {
+				continue;
+			}
+			$hidden     = false;
+			$incomplete = false;
+			foreach ( $found as $shortcode ) {
+				$atts = shortcode_parse_atts( $shortcode[3] );
+				$atts = is_array( $atts ) ? $atts : array();
+				if ( ! empty( $atts['jurisdiction'] ) && in_array( $atts['jurisdiction'], $known, true ) ) {
+					$jurisdiction = (string) $atts['jurisdiction'];
+				} elseif ( ! empty( $settings['jurisdiction'] ) && in_array( $settings['jurisdiction'], $known, true ) ) {
+					$jurisdiction = (string) $settings['jurisdiction'];
+				} else {
+					$jurisdiction = (string) $known[0];
+				}
+				if ( array() !== $generator::missing_required_settings( $jurisdiction, $settings ) ) {
+					$incomplete = true;
+					// The renderer refuses POPIA outright; every other regime renders.
+					$hidden = $hidden || 'popia-southafrica' === $jurisdiction;
+				}
+			}
+			if ( $incomplete ) {
+				$cache[] = array(
+					'title'  => get_the_title( $post ),
+					'url'    => (string) get_permalink( $post ),
+					'hidden' => $hidden,
+				);
+			}
+		}
+		return $cache;
 	}
 }
