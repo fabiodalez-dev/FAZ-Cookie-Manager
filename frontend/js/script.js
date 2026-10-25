@@ -6754,9 +6754,13 @@ function _fazDrainScriptRestoreQueue() {
             _fazScriptRestorePending.delete(script);
             continue;
         }
-        var clone = _fazBuildRestoredScript(script, ['data-fazcookie', 'data-faz-waitfor', 'data-faz-loaded', 'data-faz-restore']);
+        // data-faz-blocked-by-us is a parking marker: carried onto the
+        // restored script it would tell the type setters and the observer
+        // that a running script is still one of ours to hold.
+        var restoreSkip = ['data-fazcookie', 'data-faz-waitfor', 'data-faz-loaded', 'data-faz-restore', 'data-faz-blocked-by-us'];
+        var clone = _fazBuildRestoredScript(script, restoreSkip);
         if (!clone) {
-            _fazUnblockInPlace(script, ['data-fazcookie', 'data-faz-waitfor', 'data-faz-loaded', 'data-faz-restore']);
+            _fazUnblockInPlace(script, restoreSkip);
             _fazScriptRestorePending.delete(script);
             continue;
         }
@@ -6871,7 +6875,15 @@ function _fazUnblockServerSide() {
     // Materialize every eligible source before collecting scripts. querySelectorAll
     // cannot see inside template.content; draining earlier lets following inline
     // code overtake a library in a preceding placeholder.
-    document.querySelectorAll('script[type="text/plain"][data-faz-category], script[type="javascript/blocked"][data-fazcookie], script[data-faz-restore], script[data-faz-waitfor]:not([data-faz-loaded])')
+    //
+    // javascript/blocked + data-faz-blocked-by-us is a script THIS runtime (or
+    // the bootstrap handoff) parked in place, often with no category at all: a
+    // dynamically inserted GTM loader is the reported case (#349). Requiring
+    // data-fazcookie left it out, so it stayed dead after consent. The marker
+    // only queues it for re-evaluation; the drain still runs the permission
+    // check (the provider match when there is no category), and another tool's
+    // javascript/blocked, which lacks our marker, is never touched.
+    document.querySelectorAll('script[type="text/plain"][data-faz-category], script[type="javascript/blocked"][data-fazcookie], script[type="javascript/blocked"][data-faz-blocked-by-us], script[data-faz-restore], script[data-faz-waitfor]:not([data-faz-loaded])')
         .forEach(_fazQueueScriptRestore);
     _fazScriptRestoreQueue.sort(function (a, b) {
         var order = a.compareDocumentPosition(b);

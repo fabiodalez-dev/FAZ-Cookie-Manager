@@ -251,7 +251,13 @@
 		var container = document.getElementById('faz-geo-overrides-content');
 		return api('GET', 'overrides').then(function(data) {
 			clear(container);
-			var overrides = data.overrides || {};
+			// A country-keyed map. PHP encodes an EMPTY map as `[]`, and a
+			// string key added to an array is dropped by JSON.stringify, so the
+			// first override ever saved vanished (#349). Anything that is not a
+			// plain object is the empty map.
+			var overrides = (data.overrides && typeof data.overrides === 'object' && !Array.isArray(data.overrides))
+				? data.overrides
+				: {};
 			var keys = Object.keys(overrides);
 			var countTpl = keys.length === 1
 				? t('overridesConfiguredSingular', '%d override configured.')
@@ -315,7 +321,9 @@
 						try { delta = JSON.parse(deltaRaw); }
 						catch (err) { alert('Invalid delta JSON'); return; }
 					}
-					var current = overrides || {};
+					// A copy: a rejected save must not leave the entry in the map
+					// the table was drawn from.
+					var current = Object.assign({}, overrides);
 					current[cc] = { ruleset_id: rid || null, delta: delta };
 					api('POST', 'overrides', { overrides: current }).then(function() {
 						loaded.overrides = false;

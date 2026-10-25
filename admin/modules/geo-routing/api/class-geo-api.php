@@ -268,7 +268,23 @@ class Geo_Api {
 	 */
 	public function get_overrides() {
 		$overrides = (array) get_option( 'faz_geo_admin_overrides', array() );
-		return new WP_REST_Response( array( 'overrides' => $overrides ), 200 );
+		return new WP_REST_Response( array( 'overrides' => self::override_map_for_response( $overrides ) ), 200 );
+	}
+
+	/**
+	 * The override map as a JSON object, also when it is empty.
+	 *
+	 * The map is keyed by country code, but PHP encodes an empty array as
+	 * `[]`. A client that adds a country key to that array loses it at
+	 * JSON.stringify(), which is how the first override ever saved
+	 * disappeared (#349). Non-empty maps already encode as objects; the
+	 * cast only changes the empty case.
+	 *
+	 * @param array $overrides Country code => override.
+	 * @return object
+	 */
+	private static function override_map_for_response( array $overrides ) {
+		return (object) $overrides;
 	}
 
 	/**
@@ -289,7 +305,7 @@ class Geo_Api {
 		$overrides = isset( $body['overrides'] ) ? (array) $body['overrides'] : array();
 		$sanitized = $this->sanitize_overrides( $overrides );
 		update_option( 'faz_geo_admin_overrides', $sanitized, false );
-		return new WP_REST_Response( array( 'overrides' => $sanitized ), 200 );
+		return new WP_REST_Response( array( 'overrides' => self::override_map_for_response( $sanitized ) ), 200 );
 	}
 
 	/**
@@ -302,7 +318,7 @@ class Geo_Api {
 			unset( $overrides[ $country ] );
 			update_option( 'faz_geo_admin_overrides', $overrides, false );
 		}
-		return new WP_REST_Response( array( 'overrides' => $overrides ), 200 );
+		return new WP_REST_Response( array( 'overrides' => self::override_map_for_response( $overrides ) ), 200 );
 	}
 
 	/**
