@@ -59,15 +59,38 @@ test.describe('Banner stylesheet is not render-blocking', () => {
     // the anti-FOUC gate must stay closed.
     await page.waitForSelector('.faz-consent-container', { state: 'attached', timeout: 10000 });
     await page.waitForTimeout(800);
+    // Top of the first piece of page content: the first <body> child the
+    // banner runtime did not insert and that has a box (skip links and
+    // live regions are positioned off-screen), marked once so both reads
+    // measure the same element.
+    await page.evaluate(() => {
+      const first = Array.from(document.body.children).find((el) =>
+        !/\bfaz-/.test(String(el.className))
+        && !['SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT', 'LINK'].includes(el.tagName)
+        && !el.classList.contains('screen-reader-text')
+        && el.getBoundingClientRect().height > 0);
+      first?.setAttribute('data-e2e-content-probe', '1');
+    });
+    const contentTop = () => page.evaluate(() => {
+      const el = document.querySelector('[data-e2e-content-probe]');
+      return el ? Math.round(el.getBoundingClientRect().top + window.scrollY) : null;
+    });
     const whileHeld = await page.evaluate(() => ({
       ready: document.documentElement.classList.contains('faz-ready'),
       media: document.querySelector<HTMLLinkElement>('link[data-faz-banner-css]')?.media,
     }));
     expect(whileHeld.media, 'script.js applies the sheet without waiting for it').toBe('all');
     expect(whileHeld.ready, 'banner stays hidden while its stylesheet is loading').toBe(false);
+    const topWhileHeld = await contentTop();
+    expect(topWhileHeld, 'found a page-content element to measure').not.toBeNull();
 
     release();
     await page.waitForFunction(() => document.documentElement.classList.contains('faz-ready'), undefined, { timeout: 10000 });
+    // The hidden banner must not have pushed the page down while it waited:
+    // otherwise the content jumps back when the sheet lands (layout shift).
+    const topAfter = await contentTop();
+    expect(topAfter, 'the measured element is still in the page').not.toBeNull();
+    expect(topWhileHeld, 'page content did not move when the banner stylesheet arrived').toBe(topAfter);
     // Revealed WITH its styles: the template positions the container as fixed.
     const position = await page.evaluate(() => {
       const el = document.querySelector('.faz-consent-container');

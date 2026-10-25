@@ -875,7 +875,7 @@ class Frontend {
 					wp_register_style( $page_handle, false, array(), $this->version );
 					wp_enqueue_style( $page_handle );
 					// Same LiteSpeed exclusion marker as the inline fallback below.
-					wp_add_inline_style( $page_handle, '/* faz-cookie-manager/assets/ */' . self::page_content_css() );
+					wp_add_inline_style( $page_handle, '/* faz-cookie-manager/assets/ */' . self::page_content_css() . self::pending_banner_css() );
 				}
 			} else {
 				wp_register_style( $css_handle, false, array(), $this->version );
@@ -10579,6 +10579,28 @@ class Frontend {
 	 */
 	private static function page_content_css() {
 		return self::page_utility_css() . self::settings_button_css();
+	}
+
+	/**
+	 * Keep the rendered-but-unrevealed banner out of the page flow.
+	 *
+	 * script.js inserts the overlay, revisit widget, notice and preference
+	 * modal at the top of <body> before the non-blocking banner stylesheet
+	 * may have arrived. #faz-style-inline only hides them (visibility keeps
+	 * their space), and the rules that take them out of the flow live in
+	 * that stylesheet, so until it applies the invisible preference modal
+	 * pushed the page down by its full height and everything jumped back on
+	 * load — a layout shift on exactly the slow visits the non-blocking
+	 * delivery is for. Scoped to `html:not(.faz-ready)`: script.js adds
+	 * faz-ready only once the sheet applies, so the banner's own positioning
+	 * takes over in the same frame. Printed only with the non-blocking link;
+	 * a render-blocking sheet is always in place before the banner exists.
+	 *
+	 * @return string
+	 */
+	private static function pending_banner_css() {
+		return 'html:not(.faz-ready) .faz-overlay,html:not(.faz-ready) .faz-btn-revisit-wrapper,'
+			. 'html:not(.faz-ready) .faz-consent-container,html:not(.faz-ready) .faz-modal{position:fixed!important}';
 	}
 
 	/**

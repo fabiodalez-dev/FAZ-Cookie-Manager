@@ -287,6 +287,8 @@ type Baseline = {
   cssHref: string;
   /** FAZ printed the link as its own non-blocking media="print" delivery. */
   cssNonBlocking: boolean;
+  /** The link's media attribute as the server printed it (the raw HTML, not the DOM script.js later changes). */
+  cssMedia: string;
   verCount: number;
   /** Live sources to blocked embeds already present before any optimiser ran (the matrix's scan-only dormant tags). */
   liveParkedSources: string[];
@@ -396,6 +398,7 @@ function buildBaseline(html: string): Baseline {
     cssKind: link ? 'link' : style ? 'style' : 'none',
     cssHref: link?.attrs.href ?? '',
     cssNonBlocking: !!link && 'data-faz-banner-css' in link.attrs,
+    cssMedia: link?.attrs.media ?? '',
     verCount: (html.match(/\b(?:src|href)=["']?[^"'\s>]*[?&](?:amp;)?ver=/gi) ?? []).length,
     liveParkedSources: liveParkedSources(html),
     thumbnailCount: thumbnailCount(html),
@@ -540,6 +543,10 @@ function bannerAssetViolations(html: string, base: Baseline): string[] {
       // onload swap attached, it is an optimiser's async-CSS rewrite.
       const fazNonBlocking = 'data-faz-banner-css' in link.attrs;
       if (base.cssNonBlocking && !fazNonBlocking) problems.push('banner stylesheet lost data-faz-banner-css (script.js can no longer apply it)');
+      // The baseline is the server's raw HTML, so a non-blocking baseline must
+      // stay media="print": "all"/"screen" here means the delivery became
+      // render-blocking again, marker or not.
+      if (base.cssNonBlocking && (link.attrs.media ?? '') !== base.cssMedia) problems.push(`banner stylesheet media="${short(link.attrs.media ?? '', 40)}" instead of the baseline "${base.cssMedia}"`);
       if ('onload' in link.attrs) problems.push(`banner stylesheet carries onload="${short(link.attrs.onload, 40)}" (optimiser async-CSS swap)`);
       for (const attr of ['data-href', 'data-lazy-href', 'media']) {
         if (attr === 'media' && fazNonBlocking && /^print$/i.test(link.attrs.media ?? '')) continue;
