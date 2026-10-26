@@ -935,9 +935,49 @@ function _fazFireEvent(responseCategories) {
 }
 
 /**
+ * Apply the banner stylesheet and call back once it can style the banner.
+ *
+ * The server prints the compiled banner CSS as `<link media="print"
+ * data-faz-banner-css>` so it never blocks the page's first paint (PageSpeed
+ * "Render-blocking requests"): nothing that exists before this script runs
+ * needs it, and the rules that style server-rendered page content are printed
+ * inline. Switching media to "all" applies it. When the sheet has already
+ * arrived — the usual case, since the link sits in <head> and this script is
+ * deferred — the callback runs synchronously, exactly as before. Otherwise it
+ * waits for load or error, with a short fail-open timeout so a stalled CDN
+ * can never keep the consent prompt hidden.
+ *
+ * @param {Function} callback Runs once, when the sheet is usable.
+ */
+function _fazWhenBannerCssReady(callback) {
+    var link = null;
+    try { link = document.querySelector('link[data-faz-banner-css]'); } catch (e) { link = null; }
+    if (!link) { callback(); return; }
+    if (link.media !== 'all') link.media = 'all';
+    if (link.sheet) { callback(); return; }
+    var done = false;
+    var finish = function () {
+        if (done) return;
+        done = true;
+        link.removeEventListener('load', finish);
+        link.removeEventListener('error', finish);
+        callback();
+    };
+    link.addEventListener('load', finish);
+    link.addEventListener('error', finish);
+    window.setTimeout(finish, 2000);
+}
+
+/**
  * Remove styles by it's id.
  */
 function _fazRemoveStyles() {
+    // Reveal only once the banner stylesheet applies, or the first visible
+    // frame would be an unstyled banner.
+    _fazWhenBannerCssReady(_fazRevealBanner);
+}
+
+function _fazRevealBanner() {
     const item = document.getElementById('faz-style-inline');
     item && item.remove();
     // Belt-and-suspenders for CSS-optimizer plugins (LiteSpeed / WP Rocket /
@@ -1838,6 +1878,9 @@ async function _fazInit() {
         // missing consent prompt). Scheduling it up-front guarantees the
         // timer exists even for a partially-failed init. #134/#146.
         _fazScheduleBannerWatchdog();
+        // Start applying the non-blocking banner stylesheet now, so it is
+        // usually in place by the time the banner renders.
+        _fazWhenBannerCssReady(function () {});
         _fazRunDeadCookieCleanup();
         // A cacheable runtime page is a strict shell, not the visitor's final
         // banner. Resolve the live no-store payload BEFORE mounting UI or
