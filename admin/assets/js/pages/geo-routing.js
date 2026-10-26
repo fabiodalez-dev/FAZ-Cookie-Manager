@@ -251,7 +251,13 @@
 		var container = document.getElementById('faz-geo-overrides-content');
 		return api('GET', 'overrides').then(function(data) {
 			clear(container);
-			var overrides = data.overrides || {};
+			// A country-keyed map. PHP encodes an EMPTY map as `[]`, and a
+			// string key added to an array is dropped by JSON.stringify, so the
+			// first override ever saved vanished (#349). Anything that is not a
+			// plain object is the empty map.
+			var overrides = (data.overrides && typeof data.overrides === 'object' && !Array.isArray(data.overrides))
+				? data.overrides
+				: {};
 			var keys = Object.keys(overrides);
 			var countTpl = keys.length === 1
 				? t('overridesConfiguredSingular', '%d override configured.')
@@ -303,10 +309,15 @@
 			var ovDelta   = el('textarea', { id: 'ov-delta', placeholder: '{"signals.cmv2.functionality_storage":"denied"}' });
 			ovDelta.rows = 4; ovDelta.cols = 60;
 
+			// Each save sends the WHOLE map and the endpoint replaces the stored
+			// option with it, so a second submit before the first returns would
+			// be built from the same map and silently drop the first country.
+			var saving = false;
 			var form = el('form', {
 				id: 'faz-geo-add-override',
 				onsubmit: function(e) {
 					e.preventDefault();
+					if (saving) { return; }
 					var cc = ovCountry.value.trim().toUpperCase();
 					var rid = ovRid.value.trim();
 					var deltaRaw = ovDelta.value.trim();
@@ -315,12 +326,22 @@
 						try { delta = JSON.parse(deltaRaw); }
 						catch (err) { alert('Invalid delta JSON'); return; }
 					}
-					var current = overrides || {};
+					// A copy: a rejected save must not leave the entry in the map
+					// the table was drawn from.
+					var current = Object.assign({}, overrides);
 					current[cc] = { ruleset_id: rid || null, delta: delta };
+					var submit = form.querySelector('button[type="submit"]');
+					saving = true;
+					if (submit) { submit.disabled = true; }
 					api('POST', 'overrides', { overrides: current }).then(function() {
+						// loadOverrides() rebuilds the form, so the flag goes with it.
 						loaded.overrides = false;
 						loadOverrides();
-					}).catch(function(err) { alert(sprintf1(t('errorPrefix', 'Error: %s'), err.message)); });
+					}).catch(function(err) {
+						saving = false;
+						if (submit) { submit.disabled = false; }
+						alert(sprintf1(t('errorPrefix', 'Error: %s'), err.message));
+					});
 				}
 			}, [
 				el('p', null, el('label', null, [
