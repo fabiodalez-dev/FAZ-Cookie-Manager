@@ -56,6 +56,11 @@ test.describe('Published cookie policy without controller details is flagged in 
       '--post_content=[[faz_cookie_policy_complete jurisdiction="popia-southafrica"]]', '--porcelain']));
     created.push(wp(['post', 'create', '--post_type=page', '--post_status=publish', '--post_title=E2E 342 mixed policy and example',
       '--post_content=[[faz_cookie_policy_complete jurisdiction="popia-southafrica"]] [faz_cookie_policy_complete jurisdiction="gdpr-strict"]', '--porcelain']));
+    for (const regimes of [['popia-southafrica', 'gdpr-strict'], ['gdpr-strict', 'popia-southafrica']]) {
+      created.push(wp(['post', 'create', '--post_type=page', '--post_status=publish',
+        `--post_title=E2E 342 combined ${regimes[0]}`,
+        `--post_content=${regimes.map(regime => `[faz_cookie_policy_complete jurisdiction="${regime}"]`).join(' ')}`, '--porcelain']));
+    }
   });
 
   test.afterAll(() => {
@@ -87,6 +92,13 @@ test.describe('Published cookie policy without controller details is flagged in 
     const mixed = notice.locator('li', { hasText: 'E2E 342 mixed policy and example' });
     await expect(mixed).toContainText('Visitors still see this policy');
     await expect(mixed).not.toContainText('Information Officer');
+    // A refused POPIA shortcode never hides a second, visible policy,
+    // regardless of order or whether that second policy is complete.
+    for (const regime of ['popia-southafrica', 'gdpr-strict']) {
+      const combined = notice.locator('li', { hasText: `E2E 342 combined ${regime}` });
+      await expect(combined).toContainText('Visitors still see this policy');
+      await expect(combined).toContainText('Information Officer');
+    }
     await expect(notice.locator('a.button')).toHaveAttribute('href', /page=faz-cookie-manager-cookie-policy/);
 
     // Also on the page list, and not on an unrelated screen.
@@ -143,6 +155,11 @@ test.describe('Published cookie policy without controller details is flagged in 
     await expect(popia).toContainText('Postal address');
     await expect(popia).not.toContainText('Legal entity name');
     await expect(popia).not.toContainText('Privacy contact email');
+    for (const regime of ['popia-southafrica', 'gdpr-strict']) {
+      const combined = notice.locator('li', { hasText: `E2E 342 combined ${regime}` });
+      await expect(combined).toContainText('Visitors still see this policy');
+      await expect(combined).not.toContainText('Legal entity name');
+    }
   });
 
   test('complete settings skip the published-content search', () => {
