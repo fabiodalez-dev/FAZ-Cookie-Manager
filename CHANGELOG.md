@@ -18,6 +18,7 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 
 ### Developer
 - DSAR regression tests submit the rendered anti-bot fields, and policy tests run without mbstring. The cache matrix restores original options, drop-ins and configuration files, including W3 Total Cache, WP-Optimize and Breeze, on success or failure.
+- Published-policy lookups reuse matching page IDs between requests and invalidate them after content or policy-settings changes. Current shortcode content and missing fields are evaluated on every lookup.
 - The cache matrix runs all eight checks for its 12 page-cache plugins. LiteSpeed Cache, Autoptimize and SiteGround Optimizer run the REST and browser checks on this host; Comet Cache is available only as an explicitly selected optional run.
 
 ### Known limitations
