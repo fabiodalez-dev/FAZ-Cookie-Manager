@@ -308,6 +308,8 @@ state_paths=(
   "$WPC/wp-cache-config.php"
   "$WPC/wp-cache-config.php.bak"
   "$WPC/settings/cache-enabler"
+  "$WPC/wpo-cache/config"
+  "$WPC/breeze-config"
   "$WPC/wp-cloudflare-super-page-cache"
   "$WPC/boost-cache/config.php"
 )

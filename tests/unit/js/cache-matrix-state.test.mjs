@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 const root = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const driver = process.env.FAZ_MATRIX_DRIVER_PATH || join(root, 'scripts/cache-plugin-matrix.sh');
 
-function runMatrix(extraEnv = {}) {
+function runMatrix(extraEnv = {}, slug = 'autoptimize') {
     const dir = mkdtempSync(join(tmpdir(), 'faz matrix state '));
     const repo = join(dir, 'repo');
     const site = join(dir, 'site');
@@ -22,10 +22,15 @@ function runMatrix(extraEnv = {}) {
         'wp-config.php': '<?php /* original WP_CACHE config */',
         '.htaccess': '# original rewrite rules',
         'wp-content/w3tc-config/master.php': 'original non-default W3TC settings',
+        'wp-content/wpo-cache/config/test.php': 'original WP-Optimize settings',
+        'wp-content/breeze-config/breeze-config.php': 'original Breeze settings',
         'wp-content/wp-cache-config.php': '<?php /* original supercache config */',
         'wp-content/advanced-cache.php': '<?php /* original W3TC drop-in */',
     };
-    for (const [path, text] of Object.entries(originals)) writeFileSync(join(site, path), text);
+    for (const [path, text] of Object.entries(originals)) {
+        mkdirSync(resolve(join(site, path), '..'), { recursive: true });
+        writeFileSync(join(site, path), text);
+    }
     writeFileSync(join(dir, 'redis-dropin.php'), '<?php /* persistent cache */');
     symlinkSync(join(dir, 'redis-dropin.php'), join(content, 'object-cache.php'));
     const wp = `#!${process.execPath}
@@ -51,26 +56,31 @@ if (args[0] === 'plugin' && args[1] === 'activate') {
     mkdirSync(join(site, 'wp-content/boost-cache'), { recursive: true });
     writeFileSync(join(site, 'wp-content/boost-cache/config.php'), 'created by recipe');
 }
+if (args[0] === 'eval' && args[1].includes('Breeze_ConfigCache::factory()->write')) {
+    writeFileSync(join(site, 'wp-content/breeze-config/breeze-config.php'), 'temporary Breeze settings');
+}
 `;
     writeFileSync(join(bin, 'wp'), wp, { mode: 0o755 });
     writeFileSync(join(bin, 'package.json'), '{"type":"module"}');
     writeFileSync(join(bin, 'curl'), '#!/bin/sh\ncase " $* " in *" -w "*) printf "%s" "${MATRIX_HTTP_STATUS:-200}" ;; *) printf "Cache-Control: public\\r\\n" ;; esac\n', { mode: 0o755 });
     writeFileSync(join(bin, 'npx'), '#!/bin/sh\nif [ -n "${MATRIX_TEST_FAIL:-}" ]; then echo "1 failed"; exit 1; fi\necho "8 passed"\n', { mode: 0o755 });
     const calls = join(dir, 'calls');
-    const result = spawnSync('bash', [join(repo, 'scripts/cache-plugin-matrix.sh'), 'autoptimize'], {
+    const result = spawnSync('bash', [join(repo, 'scripts/cache-plugin-matrix.sh'), slug], {
         encoding: 'utf8', timeout: 30_000,
         env: { ...process.env, ...extraEnv, PATH: `${bin}:${process.env.PATH}`, WP_PATH: site, MATRIX_CALLS: calls },
     });
     return { dir, site, result, originals, calls: readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse) };
 }
 
-for (const [name, env, expectedStatus] of [
+for (const [name, env, expectedStatus, slug] of [
     ['successful run', {}, 0],
+    ['successful Breeze run', {}, 0, 'breeze'],
+    ['successful WP-Optimize run', {}, 0, 'wp-optimize'],
     ['failing tests', { MATRIX_TEST_FAIL: '1' }, 1],
     ['early baseline failure', { MATRIX_HTTP_STATUS: '503' }, 3],
 ]) {
     test(`matrix restores original configuration after ${name}`, () => {
-        const run = runMatrix(env);
+        const run = runMatrix(env, slug);
         try {
             assert.equal(run.result.status, expectedStatus, run.result.stdout + run.result.stderr);
             for (const [path, original] of Object.entries(run.originals)) {
