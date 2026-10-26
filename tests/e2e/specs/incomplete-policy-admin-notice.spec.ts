@@ -162,6 +162,40 @@ test.describe('Published cookie policy without controller details is flagged in 
     }
   });
 
+  test('repeated lookups reuse page IDs and content/settings changes invalidate them', () => {
+    setCompany('Cache E2E Controller Ltd', 'privacy@example.com');
+    // GDPR is complete, while unused POPIA fields stay empty: this is the
+    // common case that must not scan all published content on every request.
+    const lookup = () => JSON.parse(wp(['eval', `
+      $searches = 0;
+      add_filter( 'posts_pre_query', function ( $posts, $query ) use ( &$searches ) {
+        if ( '[faz_cookie_policy_complete' === $query->get( 's' ) ) { ++$searches; }
+        return $posts;
+      }, 10, 2 );
+      $method = new ReflectionMethod( 'FazCookie\\\\Admin\\\\Admin', 'incomplete_cookie_policy_pages' );
+      $method->setAccessible( true );
+      echo wp_json_encode( array( 'pages' => $method->invoke( null ), 'searches' => $searches ) );
+    `]));
+    expect(lookup().searches).toBe(1);
+    expect(lookup().searches).toBe(0);
+    const title = 'E2E 342 cached lookup';
+    const id = wp(['post', 'create', '--post_type=page', '--post_status=publish', `--post_title=${title}`,
+      '--post_content=[faz_cookie_policy_complete jurisdiction="popia-southafrica"]', '--porcelain']);
+    created.push(id);
+    const added = lookup();
+    expect(added.searches).toBe(1);
+    expect(added.pages.some((policy: { title: string }) => policy.title === title)).toBe(true);
+    wp(['post', 'update', id, '--post_content=[[faz_cookie_policy_complete jurisdiction="popia-southafrica"]]']);
+    const edited = lookup();
+    expect(edited.searches).toBe(1);
+    expect(edited.pages.some((policy: { title: string }) => policy.title === title)).toBe(false);
+    wp(['post', 'delete', id, '--force']);
+    expect(lookup().searches).toBe(1);
+    expect(lookup().searches).toBe(0);
+    setCompany('Updated E2E Controller Ltd', 'privacy@example.com');
+    expect(lookup().searches).toBe(1);
+  });
+
   test('complete settings skip the published-content search', () => {
     const result = wp(['eval', `
       $settings = get_option( '${OPTION}', array() );
