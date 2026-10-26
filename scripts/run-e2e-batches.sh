@@ -11,6 +11,7 @@ set -u
 # Resolve the repo from this script's own location so the runner is portable.
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WP="${WP_PATH:-/Users/fabio/Sites/faz-test}"
+BASE_URL="${WP_BASE_URL:-http://127.0.0.1:9998}"
 OUT="${E2E_BATCH_OUT:-/private/tmp/faz-e2e-batch}"
 BATCH_SIZE="${BATCH_SIZE:-1}"
 E2E_WORKERS="${E2E_WORKERS:-1}"
@@ -106,7 +107,7 @@ while [ "$i" -lt "$TOTAL" ]; do
   rm -f "$OUT/batch-$(printf '%02d' "$batch").json"
   reset_site || exit 2
   PLAYWRIGHT_JSON_OUTPUT_NAME="$OUT/batch-$(printf '%02d' "$batch").json" \
-  CI=1 WP_BASE_URL=http://127.0.0.1:9998 WP_ADMIN_USER=admin WP_ADMIN_PASS=admin \
+  CI=1 WP_BASE_URL="$BASE_URL" WP_ADMIN_USER="${WP_ADMIN_USER:-admin}" WP_ADMIN_PASS="${WP_ADMIN_PASS:-admin}" \
     WP_PATH="$WP" \
     FAZ_PLUGIN_DEPLOY_PATH="$WP/wp-content/plugins/faz-cookie-manager/" \
     npx playwright test -c tests/e2e/playwright.config.ts "${slice[@]}" \
