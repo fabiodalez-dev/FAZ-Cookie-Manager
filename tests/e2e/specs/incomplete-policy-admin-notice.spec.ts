@@ -50,6 +50,10 @@ test.describe('Published cookie policy without controller details is flagged in 
       // Curled quotes, as the editor writes them: the notice must read the
       // regime the page renders, not fall back to the saved one.
       '--post_content=[faz_cookie_policy_complete jurisdiction=”popia-southafrica”]', '--porcelain']));
+    created.push(wp(['post', 'create', '--post_type=page', '--post_status=publish', '--post_title=E2E 342 shortcode example',
+      '--post_content=[[faz_cookie_policy_complete jurisdiction="popia-southafrica"]]', '--porcelain']));
+    created.push(wp(['post', 'create', '--post_type=page', '--post_status=publish', '--post_title=E2E 342 mixed policy and example',
+      '--post_content=[[faz_cookie_policy_complete jurisdiction="popia-southafrica"]] [faz_cookie_policy_complete jurisdiction="gdpr-strict"]', '--porcelain']));
   });
 
   test.afterAll(() => {
@@ -76,6 +80,11 @@ test.describe('Published cookie policy without controller details is flagged in 
     await expect(popia).toContainText('Information Officer name');
     await expect(popia).toContainText('Separate Privacy Policy URL');
     await expect(popia).toContainText('Visitors see no policy until these are filled in.');
+    // Escaped shortcodes are text, including when followed by a real policy.
+    await expect(notice.locator('li', { hasText: 'E2E 342 shortcode example' })).toHaveCount(0);
+    const mixed = notice.locator('li', { hasText: 'E2E 342 mixed policy and example' });
+    await expect(mixed).toContainText('Visitors still see this policy');
+    await expect(mixed).not.toContainText('Information Officer');
     await expect(notice.locator('a.button')).toHaveAttribute('href', /page=faz-cookie-manager-cookie-policy/);
 
     // Also on the page list, and not on an unrelated screen.
@@ -103,6 +112,9 @@ test.describe('Published cookie policy without controller details is flagged in 
     await expect(anon.locator('.faz-cookie-policy-empty')).toHaveCount(0);
     await anon.goto(wp(['post', 'list', '--post_type=page', '--title=E2E 342 POPIA policy', '--field=url']), { waitUntil: 'domcontentloaded' });
     await expect(anon.locator('article.faz-cookie-policy')).toHaveCount(0);
+    await anon.goto(wp(['post', 'list', '--post_type=page', '--title=E2E 342 shortcode example', '--field=url']), { waitUntil: 'domcontentloaded' });
+    await expect(anon.locator('article.faz-cookie-policy')).toHaveCount(0);
+    await expect(anon.getByText('[faz_cookie_policy_complete jurisdiction="popia-southafrica"]', { exact: true })).toBeVisible();
     await visitor.close();
   });
 
@@ -122,6 +134,8 @@ test.describe('Published cookie policy without controller details is flagged in 
     // GDPR only needs name + email; POPIA also needs address, DPO and privacy
     // URL, and the notice now lists only those.
     await expect(notice.locator('li', { hasText: 'E2E 342 GDPR policy' })).toHaveCount(0);
+    await expect(notice.locator('li', { hasText: 'E2E 342 shortcode example' })).toHaveCount(0);
+    await expect(notice.locator('li', { hasText: 'E2E 342 mixed policy and example' })).toHaveCount(0);
     const popia = notice.locator('li', { hasText: 'E2E 342 POPIA policy' });
     await expect(popia).toHaveCount(1);
     await expect(popia).toContainText('Postal address');

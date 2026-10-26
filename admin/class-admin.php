@@ -3014,6 +3014,11 @@ class Admin {
 			$hidden  = false;
 			$missing = array();
 			foreach ( $found as $shortcode ) {
+				// WordPress prints [[tag]] as literal text; it never renders a
+				// policy. Match do_shortcode_tag()'s escape check before validation.
+				if ( '[' === $shortcode[1] && ']' === $shortcode[6] ) {
+					continue;
+				}
 				$atts = shortcode_parse_atts( $shortcode[3] );
 				$atts = is_array( $atts ) ? $atts : array();
 				// The same cleanup render_shortcode() applies: the editor curls
