@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: faz-cookie-manager\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-21T06:25:18+00:00\n"
+"POT-Creation-Date: 2026-10-26T06:33:46+00:00\n"
 "PO-Revision-Date: 2026-03-23\n"
 "Last-Translator: Pascal (contributed by user pascalminator)\n"
 "Language-Team: French\n"
@@ -49,7 +49,7 @@ msgid "Cookie Banner"
 msgstr "Bannière cookie"
 
 #: admin/class-admin.php:282 admin/views/base.php:21
-#: frontend/class-frontend.php:3797
+#: frontend/class-frontend.php:3804
 #: frontend/modules/banner-rest/class-banner-rest.php:609
 msgid "Cookies"
 msgstr "Cookies"
@@ -4140,7 +4140,7 @@ msgstr "Langue :"
 msgid "Notice Title"
 msgstr "Titre de l'avis"
 
-#: admin/views/banner.php:383 frontend/class-frontend.php:3792
+#: admin/views/banner.php:383 frontend/class-frontend.php:3799
 #: frontend/modules/banner-rest/class-banner-rest.php:603
 msgid "We value your privacy"
 msgstr "Nous respectons votre vie privée"
@@ -4487,7 +4487,7 @@ msgstr "Texte d'opt-out (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Texte de la fenêtre « Préférences de désinscription » qu'un visiteur voit après avoir cliqué sur le lien « Do Not Sell or Share My Personal Information ». Affiché uniquement sur les bannières CCPA / lois des États américains (et Les deux). Suit la langue sélectionnée ci-dessus."
 
-#: admin/views/banner.php:875 frontend/class-frontend.php:3794
+#: admin/views/banner.php:875 frontend/class-frontend.php:3801
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "Opt-out Preferences"
 msgstr "Préférences de désinscription"
@@ -4850,7 +4850,7 @@ msgstr ""
 msgid "Date"
 msgstr "Date"
 
-#: admin/views/consent-logs.php:87 frontend/class-frontend.php:3791
+#: admin/views/consent-logs.php:87 frontend/class-frontend.php:3798
 #: frontend/modules/banner-rest/class-banner-rest.php:604
 #: includes/class-dsar-admin.php:139 includes/class-utils.php:1350
 #: includes/class-utils.php:1392
@@ -6185,8 +6185,8 @@ msgid "Allow anti-spam services before consent"
 msgstr "Autoriser les services anti-spam avant le consentement"
 
 #: admin/views/settings.php:330
-msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it, so <strong>forms protected by them will not submit before consent</strong>. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
-msgstr "Permet à Google reCAPTCHA, hCaptcha et Cloudflare Turnstile de se charger avant le consentement, pour protéger les formulaires qu’un visiteur envoie. Que cela soit strictement nécessaire dépend de votre conseil juridique : dans certains pays, on attend de reCAPTCHA qu’il attende le consentement, car il envoie des données à Google. Si vous désactivez cette option, ces services sont retenus dans la catégorie Fonctionnelle jusqu’à ce que le visiteur l’accepte : <strong>les formulaires qu’ils protègent ne pourront pas être envoyés avant le consentement</strong>. Les entrées CAPTCHA que cette extension ajoute par défaut aux exceptions de blocage des scripts sont ignorées tant que cette option est désactivée ; toute exception que vous avez écrite vous-même prime toujours."
+msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it (under Uncategorized, or another category your banner shows, when Functional is deleted or hidden), so <strong>forms protected by them will not submit before consent</strong>, unless an exception you wrote yourself lets them load. If your banner offers only Necessary, there is no category to hold them under and they keep loading before consent. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
+msgstr "Permet à Google reCAPTCHA, hCaptcha et Cloudflare Turnstile de se charger avant le consentement, pour protéger les formulaires qu’un visiteur envoie. Que cela soit strictement nécessaire dépend de votre conseil juridique : dans certains pays, on attend de reCAPTCHA qu’il attende le consentement, car il envoie des données à Google. Si vous désactivez cette option, ces services sont retenus dans la catégorie Fonctionnelle jusqu’à ce que le visiteur l’accepte (ou dans Non catégorisé, ou une autre catégorie affichée par votre bannière, lorsque Fonctionnelle est supprimée ou masquée) : <strong>les formulaires qu’ils protègent ne pourront pas être envoyés avant le consentement</strong>, sauf si une exception que vous avez écrite vous-même les laisse se charger. Si votre bannière ne propose que la catégorie Nécessaire, aucune catégorie ne peut les retenir et ils continuent de se charger avant le consentement. Les entrées CAPTCHA que cette extension ajoute par défaut aux exceptions de blocage des scripts sont ignorées tant que cette option est désactivée ; toute exception que vous avez écrite vous-même prime toujours."
 
 #: admin/views/settings.php:336
 msgid "Advanced inline CSS URL blocking"
@@ -7418,95 +7418,95 @@ msgid "Manage cookie preferences"
 msgstr "Gérer les préférences de cookies"
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:1212
+#: frontend/class-frontend.php:1219
 msgid "{name} enabled, disable {name}"
 msgstr "{name} activé, désactiver {name}"
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:1214
+#: frontend/class-frontend.php:1221
 msgid "{name} disabled, enable {name}"
 msgstr "{name} désactivé, activer {name}"
 
-#: frontend/class-frontend.php:3793
+#: frontend/class-frontend.php:3800
 #: frontend/modules/banner-rest/class-banner-rest.php:605
 msgid "Your cookie preferences have been saved."
 msgstr "Vos préférences en matière de cookies ont été enregistrées."
 
-#: frontend/class-frontend.php:3795
+#: frontend/class-frontend.php:3802
 #: frontend/modules/banner-rest/class-banner-rest.php:607
 msgid "Customise Consent Preferences"
 msgstr "Personnaliser les préférences de consentement"
 
-#: frontend/class-frontend.php:3796
+#: frontend/class-frontend.php:3803
 #: frontend/modules/banner-rest/class-banner-rest.php:608
 msgid "Service consent"
 msgstr "Consentement au service"
 
-#: frontend/class-frontend.php:3798
+#: frontend/class-frontend.php:3805
 #: frontend/modules/banner-rest/class-banner-rest.php:610
 msgid "Cookie consent"
 msgstr "Consentement aux cookies"
 
-#: frontend/class-frontend.php:3799
+#: frontend/class-frontend.php:3806
 #: frontend/modules/banner-rest/class-banner-rest.php:611
 msgid "Vendor consent"
 msgstr "Consentement du fournisseur"
 
-#: frontend/class-frontend.php:3800
+#: frontend/class-frontend.php:3807
 #: frontend/modules/banner-rest/class-banner-rest.php:612
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Ces cookies sont déposés par le service intégré sur son propre domaine et se contrôlent en autorisant ou en bloquant l’intégration ci-dessus — ils ne peuvent pas être supprimés individuellement."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:3804
+#: frontend/class-frontend.php:3811
 #: frontend/modules/banner-rest/class-banner-rest.php:617
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Je confirme avoir au moins %d ans"
 
-#: frontend/class-frontend.php:3805
+#: frontend/class-frontend.php:3812
 #: frontend/modules/banner-rest/class-banner-rest.php:618
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Veuillez confirmer que vous avez l’âge minimum requis pour accepter les cookies facultatifs."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:3812
+#: frontend/class-frontend.php:3819
 #: frontend/modules/banner-rest/class-banner-rest.php:620
 #, php-format
 msgid "Banner closes automatically in %d s..."
 msgstr "La bannière se ferme automatiquement dans %d s..."
 
-#: frontend/class-frontend.php:3815
+#: frontend/class-frontend.php:3822
 #: frontend/modules/banner-rest/class-banner-rest.php:623
 msgid "Consent"
 msgstr "Consentement"
 
-#: frontend/class-frontend.php:3816
+#: frontend/class-frontend.php:3823
 #: frontend/modules/banner-rest/class-banner-rest.php:624
 msgid "Cookie retention"
 msgstr "Durée de conservation des cookies"
 
-#: frontend/class-frontend.php:3817
+#: frontend/class-frontend.php:3824
 #: frontend/modules/banner-rest/class-banner-rest.php:625
 msgid "Features"
 msgstr "Fonctionnalités"
 
-#: frontend/class-frontend.php:3818
+#: frontend/class-frontend.php:3825
 #: frontend/modules/banner-rest/class-banner-rest.php:626
 msgid "Legitimate Interest"
 msgstr "Intérêt légitime"
 
-#: frontend/class-frontend.php:3819
+#: frontend/class-frontend.php:3826
 #: frontend/modules/banner-rest/class-banner-rest.php:627
 msgid "Some vendors process your data on the basis of legitimate interest rather than consent. You have the right to object: switch a purpose off to object to that processing."
 msgstr "Certains fournisseurs traitent vos données sur la base de l’intérêt légitime plutôt que du consentement. Vous avez le droit de vous y opposer : désactivez une finalité pour vous opposer à ce traitement."
 
-#: frontend/class-frontend.php:3820
+#: frontend/class-frontend.php:3827
 #: frontend/modules/banner-rest/class-banner-rest.php:628
 msgid "IAB Vendor Consent"
 msgstr "Consentement aux fournisseurs IAB"
 
-#: frontend/class-frontend.php:3821
+#: frontend/class-frontend.php:3828
 #: frontend/modules/banner-rest/class-banner-rest.php:629
 msgid "Allow processing based on legitimate interest"
 msgstr "Autoriser le traitement fondé sur l’intérêt légitime"
