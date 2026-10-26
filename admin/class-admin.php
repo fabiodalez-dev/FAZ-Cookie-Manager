@@ -2991,6 +2991,18 @@ class Admin {
 		$settings = get_option( 'faz_cookie_policy_data', array() );
 		$settings = is_array( $settings ) ? $settings : array();
 		$known    = $generator::JURISDICTIONS;
+		$any_incomplete = false;
+		foreach ( $known as $candidate ) {
+			if ( array() !== $generator::missing_required_settings( $candidate, $settings ) ) {
+				$any_incomplete = true;
+				break;
+			}
+		}
+		// No shortcode can resolve to a regime outside $known. With every
+		// regime complete, avoid scanning published content on each admin load.
+		if ( ! $any_incomplete ) {
+			return $cache;
+		}
 		$tag      = 'faz_cookie_policy_complete';
 		$posts    = get_posts(
 			array(
