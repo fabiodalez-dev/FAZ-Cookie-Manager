@@ -3023,7 +3023,7 @@ class Admin {
 			if ( ! preg_match_all( '/' . get_shortcode_regex( array( $tag ) ) . '/', (string) $post->post_content, $found, PREG_SET_ORDER ) ) {
 				continue;
 			}
-			$hidden  = false;
+			$hidden  = true;
 			$missing = array();
 			foreach ( $found as $shortcode ) {
 				// WordPress prints [[tag]] as literal text; it never renders a
@@ -3048,9 +3048,10 @@ class Admin {
 				$gaps = $generator::missing_required_settings( $jurisdiction, $settings );
 				if ( array() !== $gaps ) {
 					$missing = array_merge( $missing, $gaps );
-					// The renderer refuses POPIA outright; every other regime renders.
-					$hidden = $hidden || 'popia-southafrica' === $jurisdiction;
 				}
+				// No policy is visible only if every real shortcode is an
+				// incomplete POPIA policy, which the renderer refuses outright.
+				$hidden = $hidden && array() !== $gaps && 'popia-southafrica' === $jurisdiction;
 			}
 			if ( array() !== $missing ) {
 				$cache[] = array(
