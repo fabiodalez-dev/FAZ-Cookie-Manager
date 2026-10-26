@@ -121,6 +121,9 @@ class Admin {
 		add_action( 'admin_notices', array( $this, 'functional_optout_migration_notice' ) );
 		add_action( 'admin_notices', array( $this, 'sourcebuster_marketing_notice' ) );
 		add_action( 'admin_notices', array( $this, 'incomplete_cookie_policy_notice' ) );
+		foreach ( array( 'save_post', 'deleted_post', 'add_option_faz_cookie_policy_data', 'update_option_faz_cookie_policy_data', 'delete_option_faz_cookie_policy_data' ) as $policy_cache_hook ) {
+			add_action( $policy_cache_hook, array( __CLASS__, 'invalidate_incomplete_policy_pages_cache' ), 10, 0 );
+		}
 		add_action( 'wp_ajax_faz_dismiss_unmatched', array( $this, 'ajax_dismiss_unmatched_vendors' ) );
 		add_action( 'wp_ajax_faz_disable_redundant_geo_routing', array( $this, 'ajax_disable_redundant_geo_routing' ) );
 		add_action( 'wp_ajax_faz_dismiss_redundant_geo_routing', array( $this, 'ajax_dismiss_redundant_geo_routing' ) );
@@ -2968,6 +2971,11 @@ class Admin {
 			. '</a></p></div>';
 	}
 
+	/** Clear the published-policy lookup after content or policy settings change. */
+	public static function invalidate_incomplete_policy_pages_cache() {
+		delete_transient( 'faz_incomplete_policy_page_ids' );
+	}
+
 	/**
 	 * Published pages whose generated cookie policy misses required settings.
 	 *
@@ -3004,22 +3012,33 @@ class Admin {
 			return $cache;
 		}
 		$tag      = 'faz_cookie_policy_complete';
-		$posts    = get_posts(
-			array(
-				'post_type'        => array( 'page', 'post' ),
-				'post_status'      => 'publish',
-				's'                => '[' . $tag,
-				// Every match: an incomplete policy must not hide behind newer
-				// complete ones. Pages carrying this shortcode are few, and the
-				// lookup only runs on the screens listed above.
-				'posts_per_page'         => -1,
-				'no_found_rows'          => true,
-				'update_post_meta_cache' => false,
-				'update_post_term_cache' => false,
-				'suppress_filters'       => true,
-			)
-		);
-		foreach ( $posts as $post ) {
+		$post_ids = get_transient( 'faz_incomplete_policy_page_ids' );
+		if ( ! is_array( $post_ids ) ) {
+			$post_ids = get_posts(
+				array(
+					'post_type'        => array( 'page', 'post' ),
+					'post_status'      => 'publish',
+					'fields'           => 'ids',
+					's'                => '[' . $tag,
+					// Every match: an incomplete policy must not hide behind newer
+					// complete ones. Pages carrying this shortcode are few, and the
+					// lookup only runs on the screens listed above.
+					'posts_per_page'         => -1,
+					'no_found_rows'          => true,
+					'update_post_meta_cache' => false,
+					'update_post_term_cache' => false,
+					'suppress_filters'       => true,
+				)
+			);
+			// Cache only IDs: evaluate current settings and content on every
+			// request, without repeating a full-content LIKE search.
+			set_transient( 'faz_incomplete_policy_page_ids', $post_ids, 15 * MINUTE_IN_SECONDS );
+		}
+		foreach ( $post_ids as $post_id ) {
+			$post = get_post( $post_id );
+			if ( ! $post || 'publish' !== $post->post_status ) {
+				continue;
+			}
 			if ( ! preg_match_all( '/' . get_shortcode_regex( array( $tag ) ) . '/', (string) $post->post_content, $found, PREG_SET_ORDER ) ) {
 				continue;
 			}
