@@ -1825,7 +1825,7 @@ class Renderer {
 		// A policy that still renders is already in front of visitors, so
 		// "before publishing" was wrong for it (#342): say what they see now.
 		$message = $rendered
-			? __( 'FAZ Cookie Policy: visitors see this policy, but it does not name the data controller yet ("the operator of this website" stands in for it). Fill in the company name and contact email in the Cookie Policy settings.', 'faz-cookie-manager' )
+			? __( 'FAZ Cookie Policy: visitors see this policy, but the company name or contact email it requires is missing. Fill them in in the Cookie Policy settings.', 'faz-cookie-manager' )
 			: __( 'FAZ Cookie Policy: complete the fields required for the selected jurisdiction before publishing this policy.', 'faz-cookie-manager' );
 		return '<div class="faz-cookie-policy-empty notice notice-warning"><p>' . esc_html( $message ) . '</p></div>';
 	}

@@ -2903,10 +2903,12 @@ class Admin {
 	}
 
 	/**
-	 * Published cookie policy pages that do not name the data controller.
+	 * Published cookie policy pages that miss details their jurisdiction requires.
 	 *
 	 * Since 1.34.2 a new policy page is published only once the controller's
-	 * name and contact email are set, but a page published before that keeps
+	 * details are set (name and contact email; POPIA also needs the address,
+	 * the Information Officer and a privacy policy URL), but a page published
+	 * before that keeps
 	 * rendering for visitors: hiding it would take away the cookie inventory
 	 * and the withdrawal instructions on an automatic update (#342). The
 	 * renderer only warns an administrator who opens that page, so this
@@ -2932,21 +2934,37 @@ class Admin {
 			return;
 		}
 		$settings_url = admin_url( 'admin.php?page=' . self::ADMIN_SLUG . '-cookie-policy' );
+		// Generator::missing_required_settings() paths, named with the labels of
+		// the Cookie Policy form fields the administrator has to fill in. POPIA
+		// needs more than the controller's name and email, so the notice says
+		// what is actually missing for each page instead of assuming those two.
+		$labels = array(
+			'company.name'       => __( 'Legal entity name', 'faz-cookie-manager' ),
+			'company.email'      => __( 'Privacy contact email', 'faz-cookie-manager' ),
+			'company.address'    => __( 'Postal address', 'faz-cookie-manager' ),
+			'dpo.name'           => __( 'DPO / Encarregado / Information Officer name', 'faz-cookie-manager' ),
+			'dpo.email'          => __( 'DPO / Encarregado / Information Officer email', 'faz-cookie-manager' ),
+			'privacy_policy_url' => __( 'Separate Privacy Policy URL (required for POPIA)', 'faz-cookie-manager' ),
+		);
 		echo '<div class="notice notice-warning faz-incomplete-policy-notice"><p><strong>'
-			. esc_html__( 'FAZ Cookie Policy: a published cookie policy does not name the data controller.', 'faz-cookie-manager' )
-			. '</strong> '
-			. esc_html__( 'Visitors are told who is responsible for their data only once the company name and a contact email are filled in.', 'faz-cookie-manager' )
-			. '</p><ul style="list-style:disc;margin-left:2em">';
+			. esc_html__( 'FAZ Cookie Policy: a published cookie policy is missing details its jurisdiction requires.', 'faz-cookie-manager' )
+			. '</strong></p><ul style="list-style:disc;margin-left:2em">';
 		foreach ( $pages as $page ) {
-			$title = '' !== $page['title'] ? $page['title'] : __( '(no title)', 'faz-cookie-manager' );
+			$title   = '' !== $page['title'] ? $page['title'] : __( '(no title)', 'faz-cookie-manager' );
+			$missing = array();
+			foreach ( $page['missing'] as $path ) {
+				$missing[] = isset( $labels[ $path ] ) ? $labels[ $path ] : $path;
+			}
 			echo '<li><a href="' . esc_url( $page['url'] ) . '">' . esc_html( $title ) . '</a> — '
+				/* translators: %s: comma-separated list of missing settings, e.g. "company name, contact email". */
+				. esc_html( sprintf( __( 'Missing: %s.', 'faz-cookie-manager' ), implode( '; ', $missing ) ) ) . ' '
 				. ( $page['hidden']
-					? esc_html__( 'its jurisdiction requires these details, so visitors currently see no policy at all.', 'faz-cookie-manager' )
-					: esc_html__( 'visitors see the policy, with "the operator of this website" where the controller should be named.', 'faz-cookie-manager' ) )
+					? esc_html__( 'Visitors see no policy until these are filled in.', 'faz-cookie-manager' )
+					: esc_html__( 'Visitors still see this policy, without these details.', 'faz-cookie-manager' ) )
 				. '</li>';
 		}
 		echo '</ul><p><a class="button" href="' . esc_url( $settings_url ) . '">'
-			. esc_html__( 'Fill in the controller details', 'faz-cookie-manager' )
+			. esc_html__( 'Fill in the missing details', 'faz-cookie-manager' )
 			. '</a></p></div>';
 	}
 
@@ -2958,7 +2976,7 @@ class Admin {
 	 * first), by the same Generator::missing_required_settings() gate the
 	 * REST save, the wizard and the renderer use. Cached for the request.
 	 *
-	 * @return array<int,array{title:string,url:string,hidden:bool}>
+	 * @return array<int,array{title:string,url:string,hidden:bool,missing:string[]}>
 	 */
 	private static function incomplete_cookie_policy_pages() {
 		static $cache = null;
@@ -2979,17 +2997,22 @@ class Admin {
 				'post_type'        => array( 'page', 'post' ),
 				'post_status'      => 'publish',
 				's'                => '[' . $tag,
-				'posts_per_page'   => 20,
-				'no_found_rows'    => true,
-				'suppress_filters' => true,
+				// Every match: an incomplete policy must not hide behind newer
+				// complete ones. Pages carrying this shortcode are few, and the
+				// lookup only runs on the screens listed above.
+				'posts_per_page'         => -1,
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+				'suppress_filters'       => true,
 			)
 		);
 		foreach ( $posts as $post ) {
 			if ( ! preg_match_all( '/' . get_shortcode_regex( array( $tag ) ) . '/', (string) $post->post_content, $found, PREG_SET_ORDER ) ) {
 				continue;
 			}
-			$hidden     = false;
-			$incomplete = false;
+			$hidden  = false;
+			$missing = array();
 			foreach ( $found as $shortcode ) {
 				$atts = shortcode_parse_atts( $shortcode[3] );
 				$atts = is_array( $atts ) ? $atts : array();
@@ -3005,17 +3028,19 @@ class Admin {
 				} else {
 					$jurisdiction = (string) $known[0];
 				}
-				if ( array() !== $generator::missing_required_settings( $jurisdiction, $settings ) ) {
-					$incomplete = true;
+				$gaps = $generator::missing_required_settings( $jurisdiction, $settings );
+				if ( array() !== $gaps ) {
+					$missing = array_merge( $missing, $gaps );
 					// The renderer refuses POPIA outright; every other regime renders.
 					$hidden = $hidden || 'popia-southafrica' === $jurisdiction;
 				}
 			}
-			if ( $incomplete ) {
+			if ( array() !== $missing ) {
 				$cache[] = array(
-					'title'  => get_the_title( $post ),
-					'url'    => (string) get_permalink( $post ),
-					'hidden' => $hidden,
+					'title'   => get_the_title( $post ),
+					'url'     => (string) get_permalink( $post ),
+					'hidden'  => $hidden,
+					'missing' => array_values( array_unique( $missing ) ),
 				);
 			}
 		}

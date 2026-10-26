@@ -70,8 +70,12 @@ test.describe('Published cookie policy without controller details is flagged in 
     await expect(notice).toBeVisible();
     const gdpr = notice.locator('li', { hasText: 'E2E 342 GDPR policy' });
     const popia = notice.locator('li', { hasText: 'E2E 342 POPIA policy' });
-    await expect(gdpr).toContainText('visitors see the policy');
-    await expect(popia).toContainText('visitors currently see no policy at all');
+    // Each page names what is missing for ITS regime and what visitors see.
+    await expect(gdpr).toContainText('Missing: Legal entity name; Privacy contact email.');
+    await expect(gdpr).toContainText('Visitors still see this policy');
+    await expect(popia).toContainText('Information Officer name');
+    await expect(popia).toContainText('Separate Privacy Policy URL');
+    await expect(popia).toContainText('Visitors see no policy until these are filled in.');
     await expect(notice.locator('a.button')).toHaveAttribute('href', /page=faz-cookie-manager-cookie-policy/);
 
     // Also on the page list, and not on an unrelated screen.
@@ -81,21 +85,47 @@ test.describe('Published cookie policy without controller details is flagged in 
     await expect(page.locator(NOTICE)).toHaveCount(0);
   });
 
-  test('the live page tells the administrator it is already visible', async ({ page, loginAsAdmin }) => {
+  test('the live page tells the administrator it is already visible, and visitors still get it', async ({ browser, page, loginAsAdmin }) => {
+    const gdprUrl = wp(['post', 'list', '--post_type=page', '--title=E2E 342 GDPR policy', '--field=url']);
     await loginAsAdmin(page);
-    await page.goto(wp(['post', 'list', '--post_type=page', '--title=E2E 342 GDPR policy', '--field=url']), { waitUntil: 'domcontentloaded' });
+    await page.goto(gdprUrl, { waitUntil: 'domcontentloaded' });
     const inline = page.locator('.faz-cookie-policy-empty');
     await expect(inline).toContainText('visitors see this policy');
     await expect(inline).not.toContainText('before publishing');
+
+    // What an anonymous visitor gets: the GDPR policy itself (no admin
+    // notice), and nothing for the POPIA page the renderer refuses.
+    const visitor = await browser.newContext();
+    await visitor.clearCookies();
+    const anon = await visitor.newPage();
+    await anon.goto(gdprUrl, { waitUntil: 'domcontentloaded' });
+    await expect(anon.locator('article.faz-cookie-policy')).toBeVisible();
+    await expect(anon.locator('.faz-cookie-policy-empty')).toHaveCount(0);
+    await anon.goto(wp(['post', 'list', '--post_type=page', '--title=E2E 342 POPIA policy', '--field=url']), { waitUntil: 'domcontentloaded' });
+    await expect(anon.locator('article.faz-cookie-policy')).toHaveCount(0);
+    await visitor.close();
   });
 
   test('the notice goes away once the controller details are filled in', async ({ page, loginAsAdmin }) => {
     setCompany('E2E Controller Ltd', 'privacy@example.com');
+    // Twenty newer, now-complete policy pages: the lookup must still reach
+    // the older incomplete POPIA page behind them (it used to stop at 20).
+    // (A future post_date would make them scheduled, not published, so the
+    // POPIA page is moved two days back instead.)
+    const popiaId = wp(['post', 'list', '--post_type=page', '--title=E2E 342 POPIA policy', '--field=ID']);
+    wp(['post', 'update', popiaId, `--post_date=${new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 19).replace('T', ' ')}`]);
+    const ids = wp(['eval', `$ids = array(); for ( $i = 0; $i < 20; $i++ ) { $ids[] = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'E2E 342 filler ' . $i, 'post_content' => '[faz_cookie_policy_complete jurisdiction="gdpr-strict"]' ) ); } echo implode( ' ', $ids );`]);
+    created.push(...ids.split(' ').filter(Boolean));
     await loginAsAdmin(page);
     await page.goto('/wp-admin/index.php', { waitUntil: 'domcontentloaded' });
     const notice = page.locator(NOTICE);
-    // GDPR only needs name + email; POPIA also needs address, DPO and privacy URL.
+    // GDPR only needs name + email; POPIA also needs address, DPO and privacy
+    // URL, and the notice now lists only those.
     await expect(notice.locator('li', { hasText: 'E2E 342 GDPR policy' })).toHaveCount(0);
-    await expect(notice.locator('li', { hasText: 'E2E 342 POPIA policy' })).toHaveCount(1);
+    const popia = notice.locator('li', { hasText: 'E2E 342 POPIA policy' });
+    await expect(popia).toHaveCount(1);
+    await expect(popia).toContainText('Postal address');
+    await expect(popia).not.toContainText('Legal entity name');
+    await expect(popia).not.toContainText('Privacy contact email');
   });
 });

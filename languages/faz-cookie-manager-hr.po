@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.12.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-25T20:03:34+00:00\n"
+"POT-Creation-Date: 2026-10-26T06:45:43+00:00\n"
 "PO-Revision-Date: 2026-04-20 00:00+0200\n"
 "Last-Translator: \n"
 "Language-Team: Croatian\n"
@@ -2218,29 +2218,55 @@ msgstr "%d interakcija s privolom u zadnjih 30 dana."
 msgid "View details"
 msgstr "Prikaži detalje"
 
-#: admin/class-admin.php:2936
-msgid "FAZ Cookie Policy: a published cookie policy does not name the data controller."
-msgstr "FAZ Cookie Policy: objavljena pravila o kolačićima ne navode voditelja obrade."
+#: admin/class-admin.php:2942 admin/views/cookie-policy.php:113
+msgid "Legal entity name"
+msgstr "Naziv pravnog subjekta"
 
-#: admin/class-admin.php:2938
-msgid "Visitors are told who is responsible for their data only once the company name and a contact email are filled in."
-msgstr "Posjetitelji će saznati tko je odgovoran za njihove podatke tek kada se ispune naziv tvrtke i kontaktna e-adresa."
+#: admin/class-admin.php:2943 admin/views/cookie-policy.php:121
+msgid "Privacy contact email"
+msgstr "E-mail za kontakt o privatnosti"
 
-#: admin/class-admin.php:2941
+#: admin/class-admin.php:2944 admin/views/cookie-policy.php:117
+msgid "Postal address"
+msgstr "Poštanska adresa"
+
+#: admin/class-admin.php:2945 admin/views/cookie-policy.php:138
+msgid "DPO / Encarregado / Information Officer name"
+msgstr "Ime DPO-a / Encarregado / Information Officera"
+
+#: admin/class-admin.php:2946 admin/views/cookie-policy.php:142
+msgid "DPO / Encarregado / Information Officer email"
+msgstr "E-pošta DPO-a / Encarregado / Information Officera"
+
+#: admin/class-admin.php:2947 admin/views/cookie-policy.php:292
+msgid "Separate Privacy Policy URL (required for POPIA)"
+msgstr "URL zasebnih Pravila o privatnosti (obavezno za POPIA)"
+
+#: admin/class-admin.php:2950
+msgid "FAZ Cookie Policy: a published cookie policy is missing details its jurisdiction requires."
+msgstr "FAZ Cookie Policy: objavljenim pravilima o kolačićima nedostaju podaci koje zahtijeva njihova jurisdikcija."
+
+#: admin/class-admin.php:2953
 msgid "(no title)"
 msgstr "(bez naslova)"
 
-#: admin/class-admin.php:2944
-msgid "its jurisdiction requires these details, so visitors currently see no policy at all."
-msgstr "njezina jurisdikcija zahtijeva ove podatke, pa posjetitelji trenutačno ne vide nikakva pravila."
+#. translators: %s: comma-separated list of missing settings, e.g. "company name, contact email".
+#: admin/class-admin.php:2960
+#, php-format
+msgid "Missing: %s."
+msgstr "Nedostaje: %s."
 
-#: admin/class-admin.php:2945
-msgid "visitors see the policy, with \"the operator of this website\" where the controller should be named."
-msgstr "posjetitelji vide pravila, ali umjesto voditelja obrade u njima stoji „voditelj ove web stranice“."
+#: admin/class-admin.php:2962
+msgid "Visitors see no policy until these are filled in."
+msgstr "Posjetitelji ne vide nikakva pravila dok se ovi podaci ne ispune."
 
-#: admin/class-admin.php:2949
-msgid "Fill in the controller details"
-msgstr "Ispunite podatke o voditelju obrade"
+#: admin/class-admin.php:2963
+msgid "Visitors still see this policy, without these details."
+msgstr "Posjetitelji i dalje vide ova pravila, ali bez ovih podataka."
+
+#: admin/class-admin.php:2967
+msgid "Fill in the missing details"
+msgstr "Ispunite podatke koji nedostaju"
 
 #: admin/modules/banners/api/class-api.php:104
 #: admin/modules/banners/api/class-api.php:801
@@ -2568,8 +2594,8 @@ msgid "FAZ Cookie Policy: no template scaffold found for jurisdiction \"%1$s\" a
 msgstr "FAZ Cookie Policy: nije pronađen predložak za jurisdikciju \"%1$s\" i jezik \"%2$s\". Konfigurirajte generator u FAZ Cookie Manager → Cookie Policy."
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1828
-msgid "FAZ Cookie Policy: visitors see this policy, but it does not name the data controller yet (\"the operator of this website\" stands in for it). Fill in the company name and contact email in the Cookie Policy settings."
-msgstr "FAZ Cookie Policy: posjetitelji vide ova pravila, ali ona još ne navode voditelja obrade (umjesto njega stoji „voditelj ove web stranice“). U postavkama pravila o kolačićima ispunite naziv tvrtke i kontaktnu e-adresu."
+msgid "FAZ Cookie Policy: visitors see this policy, but the company name or contact email it requires is missing. Fill them in in the Cookie Policy settings."
+msgstr "FAZ Cookie Policy: posjetitelji vide ova pravila, ali nedostaje obvezni naziv tvrtke ili kontaktna e-adresa. Ispunite ih u postavkama pravila o kolačićima."
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1829
 msgid "FAZ Cookie Policy: complete the fields required for the selected jurisdiction before publishing this policy."
@@ -4977,18 +5003,6 @@ msgstr "Odluči kasnije"
 msgid "Company details"
 msgstr "Podaci o tvrtki"
 
-#: admin/views/cookie-policy.php:113
-msgid "Legal entity name"
-msgstr "Naziv pravnog subjekta"
-
-#: admin/views/cookie-policy.php:117
-msgid "Postal address"
-msgstr "Poštanska adresa"
-
-#: admin/views/cookie-policy.php:121
-msgid "Privacy contact email"
-msgstr "E-mail za kontakt o privatnosti"
-
 #: admin/views/cookie-policy.php:125
 msgid "Registry / VAT / CNPJ (optional)"
 msgstr "Registar / PDV / CNPJ (neobavezno)"
@@ -4996,14 +5010,6 @@ msgstr "Registar / PDV / CNPJ (neobavezno)"
 #: admin/views/cookie-policy.php:134
 msgid "Privacy officer / DPO"
 msgstr "Službenik za zaštitu privatnosti / DPO"
-
-#: admin/views/cookie-policy.php:138
-msgid "DPO / Encarregado / Information Officer name"
-msgstr "Ime DPO-a / Encarregado / Information Officera"
-
-#: admin/views/cookie-policy.php:142
-msgid "DPO / Encarregado / Information Officer email"
-msgstr "E-pošta DPO-a / Encarregado / Information Officera"
 
 #: admin/views/cookie-policy.php:144
 msgid "Mandatory for LGPD (Art. 41). Under POPIA, the head of a public or private body is the Information Officer by default; name and contact email are required by this POPIA template. Recommended for GDPR where no DPO is legally required."
@@ -5116,10 +5122,6 @@ msgstr "Koristi se samo kao deklaracija u pravilima kada se ne primjenjuje krać
 #: admin/views/cookie-policy.php:289
 msgid "The period the policy states for consent records is the consent log retention set under Settings."
 msgstr "Razdoblje koje pravila navode za zapise o privolama jest razdoblje čuvanja zapisnika privola postavljeno u Postavkama."
-
-#: admin/views/cookie-policy.php:292
-msgid "Separate Privacy Policy URL (required for POPIA)"
-msgstr "URL zasebnih Pravila o privatnosti (obavezno za POPIA)"
 
 #: admin/views/cookie-policy.php:293
 msgid "https://example.com/privacy"

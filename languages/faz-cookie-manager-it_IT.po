@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-25T20:03:34+00:00\n"
+"POT-Creation-Date: 2026-10-26T06:45:43+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -2215,29 +2215,55 @@ msgstr "%d interazioni di consenso negli ultimi 30 giorni."
 msgid "View details"
 msgstr "Visualizza dettagli"
 
-#: admin/class-admin.php:2936
-msgid "FAZ Cookie Policy: a published cookie policy does not name the data controller."
-msgstr "FAZ Cookie Policy: una cookie policy pubblicata non indica il titolare del trattamento."
+#: admin/class-admin.php:2942 admin/views/cookie-policy.php:113
+msgid "Legal entity name"
+msgstr "Nome dell'entità legale"
 
-#: admin/class-admin.php:2938
-msgid "Visitors are told who is responsible for their data only once the company name and a contact email are filled in."
-msgstr "I visitatori sapranno chi è responsabile dei loro dati solo dopo che avrai compilato il nome dell'azienda e un'email di contatto."
+#: admin/class-admin.php:2943 admin/views/cookie-policy.php:121
+msgid "Privacy contact email"
+msgstr "Email contatto privacy"
 
-#: admin/class-admin.php:2941
+#: admin/class-admin.php:2944 admin/views/cookie-policy.php:117
+msgid "Postal address"
+msgstr "Indirizzo postale"
+
+#: admin/class-admin.php:2945 admin/views/cookie-policy.php:138
+msgid "DPO / Encarregado / Information Officer name"
+msgstr "DPO / Encarregado / nome dell'Information Officer"
+
+#: admin/class-admin.php:2946 admin/views/cookie-policy.php:142
+msgid "DPO / Encarregado / Information Officer email"
+msgstr "DPO / Encarregado / email dell'Information Officer"
+
+#: admin/class-admin.php:2947 admin/views/cookie-policy.php:292
+msgid "Separate Privacy Policy URL (required for POPIA)"
+msgstr "URL della Privacy Policy separata (obbligatorio per il POPIA)"
+
+#: admin/class-admin.php:2950
+msgid "FAZ Cookie Policy: a published cookie policy is missing details its jurisdiction requires."
+msgstr "FAZ Cookie Policy: a una cookie policy pubblicata mancano dati richiesti dalla sua giurisdizione."
+
+#: admin/class-admin.php:2953
 msgid "(no title)"
 msgstr "(senza titolo)"
 
-#: admin/class-admin.php:2944
-msgid "its jurisdiction requires these details, so visitors currently see no policy at all."
-msgstr "la sua giurisdizione richiede questi dati, quindi al momento i visitatori non vedono alcuna informativa."
+#. translators: %s: comma-separated list of missing settings, e.g. "company name, contact email".
+#: admin/class-admin.php:2960
+#, php-format
+msgid "Missing: %s."
+msgstr "Mancano: %s."
 
-#: admin/class-admin.php:2945
-msgid "visitors see the policy, with \"the operator of this website\" where the controller should be named."
-msgstr "i visitatori vedono l'informativa, con \"il titolare di questo sito\" al posto del nome del titolare del trattamento."
+#: admin/class-admin.php:2962
+msgid "Visitors see no policy until these are filled in."
+msgstr "I visitatori non vedono alcuna informativa finché non vengono compilati."
 
-#: admin/class-admin.php:2949
-msgid "Fill in the controller details"
-msgstr "Compila i dati del titolare"
+#: admin/class-admin.php:2963
+msgid "Visitors still see this policy, without these details."
+msgstr "I visitatori vedono comunque questa informativa, senza questi dati."
+
+#: admin/class-admin.php:2967
+msgid "Fill in the missing details"
+msgstr "Compila i dati mancanti"
 
 #: admin/modules/banners/api/class-api.php:104
 #: admin/modules/banners/api/class-api.php:801
@@ -2565,8 +2591,8 @@ msgid "FAZ Cookie Policy: no template scaffold found for jurisdiction \"%1$s\" a
 msgstr "FAZ Cookie Policy: nessun modello trovato per la giurisdizione \"%1$s\" e la lingua \"%2$s\". Configura il generatore in FAZ Cookie Manager → Cookie Policy."
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1828
-msgid "FAZ Cookie Policy: visitors see this policy, but it does not name the data controller yet (\"the operator of this website\" stands in for it). Fill in the company name and contact email in the Cookie Policy settings."
-msgstr "FAZ Cookie Policy: i visitatori vedono questa informativa, ma non indica ancora il titolare del trattamento (al suo posto compare \"il titolare di questo sito\"). Compila il nome dell'azienda e l'email di contatto nelle impostazioni dell'Informativa cookie."
+msgid "FAZ Cookie Policy: visitors see this policy, but the company name or contact email it requires is missing. Fill them in in the Cookie Policy settings."
+msgstr "FAZ Cookie Policy: i visitatori vedono questa informativa, ma manca il nome dell'azienda o l'email di contatto richiesti. Compilali nelle impostazioni dell'Informativa cookie."
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:1829
 msgid "FAZ Cookie Policy: complete the fields required for the selected jurisdiction before publishing this policy."
@@ -4974,18 +5000,6 @@ msgstr "Decidi più tardi"
 msgid "Company details"
 msgstr "Dettagli aziendali"
 
-#: admin/views/cookie-policy.php:113
-msgid "Legal entity name"
-msgstr "Nome dell'entità legale"
-
-#: admin/views/cookie-policy.php:117
-msgid "Postal address"
-msgstr "Indirizzo postale"
-
-#: admin/views/cookie-policy.php:121
-msgid "Privacy contact email"
-msgstr "Email contatto privacy"
-
 #: admin/views/cookie-policy.php:125
 msgid "Registry / VAT / CNPJ (optional)"
 msgstr "Registro / P.IVA / CNPJ (facoltativo)"
@@ -4993,14 +5007,6 @@ msgstr "Registro / P.IVA / CNPJ (facoltativo)"
 #: admin/views/cookie-policy.php:134
 msgid "Privacy officer / DPO"
 msgstr "Responsabile della privacy / DPO"
-
-#: admin/views/cookie-policy.php:138
-msgid "DPO / Encarregado / Information Officer name"
-msgstr "DPO / Encarregado / nome dell'Information Officer"
-
-#: admin/views/cookie-policy.php:142
-msgid "DPO / Encarregado / Information Officer email"
-msgstr "DPO / Encarregado / email dell'Information Officer"
 
 #: admin/views/cookie-policy.php:144
 msgid "Mandatory for LGPD (Art. 41). Under POPIA, the head of a public or private body is the Information Officer by default; name and contact email are required by this POPIA template. Recommended for GDPR where no DPO is legally required."
@@ -5113,10 +5119,6 @@ msgstr "Usato solo come dichiarazione nella policy quando non si applica un peri
 #: admin/views/cookie-policy.php:289
 msgid "The period the policy states for consent records is the consent log retention set under Settings."
 msgstr "Il periodo indicato dalla policy per i registri di consenso è la conservazione dei registri di consenso impostata in Impostazioni."
-
-#: admin/views/cookie-policy.php:292
-msgid "Separate Privacy Policy URL (required for POPIA)"
-msgstr "URL della Privacy Policy separata (obbligatorio per il POPIA)"
 
 #: admin/views/cookie-policy.php:293
 msgid "https://example.com/privacy"
