@@ -293,31 +293,86 @@ cleanup_plugin() {
   wpq cache flush >/dev/null 2>&1 || true
 }
 
-snapshot_active=$(wpe 'echo base64_encode( serialize( get_option( "active_plugins", array() ) ) );')
-snapshot_settings=$(wpe 'echo base64_encode( serialize( get_option( "faz_settings", array() ) ) );')
-# The drop-ins and WP_CACHE the site started with: a site that already runs a
-# cache gets them back exactly, since switching active_plugins through
-# update_option() runs no activation hook that would regenerate them.
-snapshot_dir=$(mktemp -d)
-for dropin in advanced-cache.php object-cache.php; do
-  [ -f "$WPC/$dropin" ] && cp -p "$WPC/$dropin" "$snapshot_dir/$dropin"
+# Keep configuration, not cached pages. Restoring only active_plugins and the
+# drop-ins lost W3TC's w3tc-config directory on EVERY cleanup, even on an
+# Autoptimize-only run, and left each recipe's option changes behind.
+options_helper="$PWD/scripts/cache-plugin-matrix-options.php"
+wp_config_path=$(wp --path="$WP_PATH" --skip-plugins --skip-themes config path) || exit 2
+snapshot_dir=$(mktemp -d) || exit 2
+state_paths=(
+  "$wp_config_path"
+  "$WP_PATH/.htaccess"
+  "$WPC/.htaccess"
+  "$WPC/cache/.htaccess"
+  "$WPC/w3tc-config"
+  "$WPC/wp-cache-config.php"
+  "$WPC/wp-cache-config.php.bak"
+  "$WPC/settings/cache-enabler"
+  "$WPC/wp-cloudflare-super-page-cache"
+  "$WPC/boost-cache/config.php"
+)
+for i in "${!state_paths[@]}"; do
+  path="${state_paths[$i]}"
+  if [ -e "$path" ] || [ -L "$path" ]; then
+    if ! cp -pPR "$path" "$snapshot_dir/state-$i"; then
+      rm -rf "$snapshot_dir"
+      exit 2
+    fi
+  fi
 done
-snapshot_wp_cache=$(wpq config get WP_CACHE 2>/dev/null || echo "unset")
+for dropin in advanced-cache.php object-cache.php; do
+  if [ -e "$WPC/$dropin" ] || [ -L "$WPC/$dropin" ]; then
+    if ! cp -pPR "$WPC/$dropin" "$snapshot_dir/$dropin"; then
+      rm -rf "$snapshot_dir"
+      exit 2
+    fi
+  fi
+done
+if ! wp --path="$WP_PATH" --skip-plugins --skip-themes eval-file "$options_helper" snapshot "$snapshot_dir/options"; then
+  rm -rf "$snapshot_dir"
+  exit 2
+fi
 
 restore_site() {
+  local run_status=$?
+  trap - EXIT
   echo "--- restoring site state"
+  # Do not bootstrap a cache drop-in against the matrix's temporary options.
   rm -f "$WPC/advanced-cache.php" "$WPC/object-cache.php"
-  for dropin in advanced-cache.php object-cache.php; do
-    [ -f "$snapshot_dir/$dropin" ] && cp -p "$snapshot_dir/$dropin" "$WPC/$dropin"
+  for i in "${!state_paths[@]}"; do
+    path="${state_paths[$i]}"
+    if ! rm -rf "$path"; then
+      echo "!! restore failed; snapshot retained at $snapshot_dir" >&2
+      exit 1
+    fi
+    if [ -e "$snapshot_dir/state-$i" ] || [ -L "$snapshot_dir/state-$i" ]; then
+      if ! mkdir -p "$(dirname "$path")" || ! cp -pPR "$snapshot_dir/state-$i" "$path"; then
+        echo "!! restore failed; snapshot retained at $snapshot_dir" >&2
+        exit 1
+      fi
+    fi
   done
-  if [ "$snapshot_wp_cache" = "unset" ]; then
-    set_wp_cache false
-  else
-    wpq config set WP_CACHE "$snapshot_wp_cache" --raw --type=constant >/dev/null
+  if ! wp --path="$WP_PATH" --skip-plugins --skip-themes eval-file "$options_helper" restore "$snapshot_dir/options"; then
+    echo "!! option restore failed; snapshot retained at $snapshot_dir" >&2
+    exit 1
   fi
-  wp --path="$WP_PATH" --skip-plugins --skip-themes eval "update_option( 'active_plugins', unserialize( base64_decode( '$snapshot_active' ) ) ); update_option( 'faz_settings', unserialize( base64_decode( '$snapshot_settings' ) ) ); delete_option( 'faz_banner_template' ); do_action( 'rest_api_init' ); do_action( 'faz_clear_cache' );" >/dev/null
-  wpq cache flush >/dev/null 2>&1 || true
+  wp --path="$WP_PATH" --skip-plugins --skip-themes option delete faz_banner_template >/dev/null 2>&1 || true
+  for dropin in advanced-cache.php object-cache.php; do
+    if [ -e "$snapshot_dir/$dropin" ] || [ -L "$snapshot_dir/$dropin" ]; then
+      if ! cp -pPR "$snapshot_dir/$dropin" "$WPC/$dropin"; then
+        echo "!! drop-in restore failed; snapshot retained at $snapshot_dir" >&2
+        exit 1
+      fi
+    fi
+  done
+  # The original object-cache drop-in may use Redis/Memcached. Flush through
+  # that backend too, after restoring it, so it cannot retain the test options.
+  if ! wp --path="$WP_PATH" --skip-plugins --skip-themes cache flush >/dev/null; then
+    echo "!! cache flush failed; snapshot retained at $snapshot_dir" >&2
+    exit 1
+  fi
   rm -rf "$snapshot_dir"
+  exit "$run_status"
 }
 trap restore_site EXIT
 
