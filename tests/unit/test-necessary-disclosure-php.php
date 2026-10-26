@@ -170,6 +170,20 @@ use FazCookie\Includes\Activator;
 
 $passed = 0;
 $failed = 0;
+/**
+ * Whether $haystack contains $needle, ignoring case in any script.
+ *
+ * mbstring is not guaranteed where these standalone tests run (#342).
+ * The /iu regex folds case on Unicode letters as mb_stripos() did.
+ *
+ * @param string $haystack Text to search.
+ * @param string $needle   Literal text to find.
+ * @return bool
+ */
+function nd_contains_ci( $haystack, $needle ) {
+	return 1 === preg_match( '/' . preg_quote( (string) $needle, '/' ) . '/iu', (string) $haystack );
+}
+
 function nd_eq( $actual, $expected, $label ) {
 	global $passed, $failed;
 	if ( $actual === $expected ) {
@@ -211,7 +225,7 @@ foreach ( glob( $contents . 'categories/*.json' ) as $file ) {
 	$text = (string) ( $data['necessary']['description'] ?? '' );
 	$hits = array();
 	foreach ( $denials as $needle ) {
-		if ( false !== mb_stripos( $text, $needle ) ) {
+		if ( nd_contains_ci( $text, $needle ) ) {
 			$hits[] = $needle;
 		}
 	}
@@ -237,8 +251,8 @@ $identifier_words = array( 'cs' => 'identifikátor', 'sk' => 'identifikátor', '
 foreach ( $identifier_words as $loc => $word ) {
 	$cat = json_decode( (string) @file_get_contents( $contents . "categories/{$loc}.json" ), true );
 	$ck  = json_decode( (string) @file_get_contents( $contents . "cookies/{$loc}.json" ), true );
-	nd_eq( false !== mb_stripos( (string) ( $cat['necessary']['description'] ?? '' ), $word ), true, "categories/{$loc}.json: Necessary text names the consent identifier" );
-	nd_eq( false !== mb_stripos( (string) ( $ck['fazcookie-consent']['description'] ?? '' ), $word ), true, "cookies/{$loc}.json: consent-cookie text names the identifier" );
+	nd_eq( nd_contains_ci( (string) ( $cat['necessary']['description'] ?? '' ), $word ), true, "categories/{$loc}.json: Necessary text names the consent identifier" );
+	nd_eq( nd_contains_ci( (string) ( $ck['fazcookie-consent']['description'] ?? '' ), $word ), true, "cookies/{$loc}.json: consent-cookie text names the identifier" );
 }
 $en_ck = json_decode( (string) file_get_contents( $contents . 'cookies/en.json' ), true );
 nd_eq( false !== stripos( (string) $en_ck['fazcookie-consent']['description'], 'identifier' ), true, 'cookies/en.json: consent-cookie text names the identifier' );

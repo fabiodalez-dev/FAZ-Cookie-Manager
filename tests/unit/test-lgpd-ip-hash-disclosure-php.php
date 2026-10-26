@@ -65,8 +65,10 @@ foreach ( glob( $dir . '/*.md' ) as $file ) {
 	lg_true( false === stripos( $text, 'monthly' ), "lgpd-brazil/$base does not say \"monthly\"" );
 	if ( isset( $monthly_markers[ $base ] ) ) {
 		$marker = $monthly_markers[ $base ];
-		$pos    = mb_stripos( $text, $marker );
-		lg_true( false === $pos, "lgpd-brazil/$base no longer claims a monthly salt (\"$marker\")", false === $pos ? '' : 'found: ' . trim( mb_substr( $text, max( 0, $pos - 40 ), 90 ) ) );
+		// Case-insensitive on Unicode, with up to 40 characters of context on
+		// each side for the failure message; no mbstring needed (#342).
+		$found  = 1 === preg_match( '/.{0,40}' . preg_quote( $marker, '/' ) . '.{0,50}/isu', $text, $context );
+		lg_true( ! $found, "lgpd-brazil/$base no longer claims a monthly salt (\"$marker\")", $found ? 'found: ' . trim( $context[0] ) : '' );
 	}
 }
 $en = (string) file_get_contents( $dir . '/en.md' );

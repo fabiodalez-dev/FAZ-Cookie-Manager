@@ -276,7 +276,7 @@ class Renderer {
 			if ( 'popia-southafrica' === $jurisdiction ) {
 				return self::incomplete_configuration_notice();
 			}
-			$admin_notice = self::incomplete_configuration_notice();
+			$admin_notice = self::incomplete_configuration_notice( true );
 		}
 
 		// FR-03 step 3: load scaffold.
@@ -1814,15 +1814,20 @@ class Renderer {
 	 * Admin-only notice used instead of publishing a policy whose mandatory
 	 * jurisdiction-specific identity/contact declarations are empty.
 	 *
+	 * @param bool $rendered True when the policy is rendered anyway (every
+	 *                       regime but POPIA), false when the notice replaces it.
 	 * @return string
 	 */
-	private static function incomplete_configuration_notice() {
-		if ( current_user_can( 'manage_options' ) ) {
-			return '<div class="faz-cookie-policy-empty notice notice-warning"><p>'
-				. esc_html__( 'FAZ Cookie Policy: complete the fields required for the selected jurisdiction before publishing this policy.', 'faz-cookie-manager' )
-				. '</p></div>';
+	private static function incomplete_configuration_notice( $rendered = false ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return '';
 		}
-		return '';
+		// A policy that still renders is already in front of visitors, so
+		// "before publishing" was wrong for it (#342): say what they see now.
+		$message = $rendered
+			? __( 'FAZ Cookie Policy: visitors see this policy, but the company name or contact email it requires is missing. Fill them in in the Cookie Policy settings.', 'faz-cookie-manager' )
+			: __( 'FAZ Cookie Policy: complete the fields required for the selected jurisdiction before publishing this policy.', 'faz-cookie-manager' );
+		return '<div class="faz-cookie-policy-empty notice notice-warning"><p>' . esc_html( $message ) . '</p></div>';
 	}
 
 	/**

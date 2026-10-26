@@ -45,7 +45,7 @@ foreach ( glob( $root . '/*/*.md' ) as $file ) {
 			continue;
 		}
 		++$checks;
-		if ( false === mb_strpos( $line, $markers[ $lang ] ) ) {
+		if ( false === strpos( $line, $markers[ $lang ] ) ) {
 			++$failed;
 			echo "  FAIL {$juris}/{$lang}.md:" . ( $n + 1 ) . " presents the fallback figure as the retention period\n";
 		}
@@ -55,7 +55,7 @@ foreach ( glob( $root . '/*/*.md' ) as $file ) {
 		// language and than Art. 16 itself.
 		if ( 'lgpd-brazil' === $juris ) {
 			++$checks;
-			if ( 1 !== preg_match( '/\b16\.? (?:da )?LGPD/u', $line ) || false !== mb_strpos( $line, 'fins legítimos' ) ) {
+			if ( 1 !== preg_match( '/\b16\.? (?:da )?LGPD/u', $line ) || false !== strpos( $line, 'fins legítimos' ) ) {
 				++$failed;
 				echo "  FAIL {$juris}/{$lang}.md:" . ( $n + 1 ) . " allows a longer period on a ground other than the law or Art. 16 LGPD\n";
 			}

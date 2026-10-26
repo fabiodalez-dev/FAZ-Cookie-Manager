@@ -120,6 +120,7 @@ class Admin {
 		add_action( 'admin_notices', array( $this, 'geo_enforcement_migration_notice' ) );
 		add_action( 'admin_notices', array( $this, 'functional_optout_migration_notice' ) );
 		add_action( 'admin_notices', array( $this, 'sourcebuster_marketing_notice' ) );
+		add_action( 'admin_notices', array( $this, 'incomplete_cookie_policy_notice' ) );
 		add_action( 'wp_ajax_faz_dismiss_unmatched', array( $this, 'ajax_dismiss_unmatched_vendors' ) );
 		add_action( 'wp_ajax_faz_disable_redundant_geo_routing', array( $this, 'ajax_disable_redundant_geo_routing' ) );
 		add_action( 'wp_ajax_faz_dismiss_redundant_geo_routing', array( $this, 'ajax_dismiss_redundant_geo_routing' ) );
@@ -2899,5 +2900,155 @@ class Admin {
 	public function plugin_action_links( $links ) {
 		$links[] = '<a href="' . esc_url( get_admin_url( null, 'admin.php?page=' . self::ADMIN_SLUG ) ) . '">' . esc_html__( 'Settings', 'faz-cookie-manager' ) . '</a>';
 		return array_reverse( $links );
+	}
+
+	/**
+	 * Published cookie policy pages that miss details their jurisdiction requires.
+	 *
+	 * Since 1.34.2 a new policy page is published only once the controller's
+	 * details are set (name and contact email; POPIA also needs the address,
+	 * the Information Officer and a privacy policy URL), but a page published
+	 * before that keeps
+	 * rendering for visitors: hiding it would take away the cookie inventory
+	 * and the withdrawal instructions on an automatic update (#342). The
+	 * renderer only warns an administrator who opens that page, so this
+	 * notice is what tells them in wp-admin. Persistent, not dismissible: it
+	 * goes away when the details are filled in or the page is unpublished.
+	 *
+	 * Shown on the Dashboard, the page list and editor, and FAZ screens, so
+	 * the published-content lookup does not run on every admin page.
+	 *
+	 * @return void
+	 */
+	public function incomplete_cookie_policy_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		$id     = $screen ? (string) $screen->id : '';
+		if ( ! in_array( $id, array( 'dashboard', 'edit-page', 'page' ), true ) && false === strpos( $id, 'faz-cookie-manager' ) ) {
+			return;
+		}
+		$pages = self::incomplete_cookie_policy_pages();
+		if ( empty( $pages ) ) {
+			return;
+		}
+		$settings_url = admin_url( 'admin.php?page=' . self::ADMIN_SLUG . '-cookie-policy' );
+		// Generator::missing_required_settings() paths, named with the labels of
+		// the Cookie Policy form fields the administrator has to fill in. POPIA
+		// needs more than the controller's name and email, so the notice says
+		// what is actually missing for each page instead of assuming those two.
+		$labels = array(
+			'company.name'       => __( 'Legal entity name', 'faz-cookie-manager' ),
+			'company.email'      => __( 'Privacy contact email', 'faz-cookie-manager' ),
+			'company.address'    => __( 'Postal address', 'faz-cookie-manager' ),
+			'dpo.name'           => __( 'DPO / Encarregado / Information Officer name', 'faz-cookie-manager' ),
+			'dpo.email'          => __( 'DPO / Encarregado / Information Officer email', 'faz-cookie-manager' ),
+			'privacy_policy_url' => __( 'Separate Privacy Policy URL (required for POPIA)', 'faz-cookie-manager' ),
+		);
+		echo '<div class="notice notice-warning faz-incomplete-policy-notice"><p><strong>'
+			. esc_html__( 'FAZ Cookie Policy: a published cookie policy is missing details its jurisdiction requires.', 'faz-cookie-manager' )
+			. '</strong></p><ul style="list-style:disc;margin-left:2em">';
+		foreach ( $pages as $page ) {
+			$title   = '' !== $page['title'] ? $page['title'] : __( '(no title)', 'faz-cookie-manager' );
+			$missing = array();
+			foreach ( $page['missing'] as $path ) {
+				$missing[] = isset( $labels[ $path ] ) ? $labels[ $path ] : $path;
+			}
+			echo '<li><a href="' . esc_url( $page['url'] ) . '">' . esc_html( $title ) . '</a> — '
+				/* translators: %s: comma-separated list of missing settings, e.g. "company name, contact email". */
+				. esc_html( sprintf( __( 'Missing: %s.', 'faz-cookie-manager' ), implode( '; ', $missing ) ) ) . ' '
+				. ( $page['hidden']
+					? esc_html__( 'Visitors see no policy until these are filled in.', 'faz-cookie-manager' )
+					: esc_html__( 'Visitors still see this policy, without these details.', 'faz-cookie-manager' ) )
+				. '</li>';
+		}
+		echo '</ul><p><a class="button" href="' . esc_url( $settings_url ) . '">'
+			. esc_html__( 'Fill in the missing details', 'faz-cookie-manager' )
+			. '</a></p></div>';
+	}
+
+	/**
+	 * Published pages whose generated cookie policy misses required settings.
+	 *
+	 * Each [faz_cookie_policy_complete] shortcode is judged for the
+	 * jurisdiction it renders (its own attribute, else the saved one, else the
+	 * first), by the same Generator::missing_required_settings() gate the
+	 * REST save, the wizard and the renderer use. Cached for the request.
+	 *
+	 * @return array<int,array{title:string,url:string,hidden:bool,missing:string[]}>
+	 */
+	private static function incomplete_cookie_policy_pages() {
+		static $cache = null;
+		if ( null !== $cache ) {
+			return $cache;
+		}
+		$cache     = array();
+		$generator = '\\FazCookie\\Admin\\Modules\\Cookie_Policy_Generator\\Includes\\Generator';
+		if ( ! class_exists( $generator ) ) {
+			return $cache;
+		}
+		$settings = get_option( 'faz_cookie_policy_data', array() );
+		$settings = is_array( $settings ) ? $settings : array();
+		$known    = $generator::JURISDICTIONS;
+		$tag      = 'faz_cookie_policy_complete';
+		$posts    = get_posts(
+			array(
+				'post_type'        => array( 'page', 'post' ),
+				'post_status'      => 'publish',
+				's'                => '[' . $tag,
+				// Every match: an incomplete policy must not hide behind newer
+				// complete ones. Pages carrying this shortcode are few, and the
+				// lookup only runs on the screens listed above.
+				'posts_per_page'         => -1,
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+				'suppress_filters'       => true,
+			)
+		);
+		foreach ( $posts as $post ) {
+			if ( ! preg_match_all( '/' . get_shortcode_regex( array( $tag ) ) . '/', (string) $post->post_content, $found, PREG_SET_ORDER ) ) {
+				continue;
+			}
+			$hidden  = false;
+			$missing = array();
+			foreach ( $found as $shortcode ) {
+				// WordPress prints [[tag]] as literal text; it never renders a
+				// policy. Match do_shortcode_tag()'s escape check before validation.
+				if ( '[' === $shortcode[1] && ']' === $shortcode[6] ) {
+					continue;
+				}
+				$atts = shortcode_parse_atts( $shortcode[3] );
+				$atts = is_array( $atts ) ? $atts : array();
+				// The same cleanup render_shortcode() applies: the editor curls
+				// attribute quotes (jurisdiction=”popia-southafrica”) and the
+				// parser keeps them in the value. Without it this lookup judged
+				// a different regime than the page renders.
+				$attr = isset( $atts['jurisdiction'] ) ? preg_replace( '/[^A-Za-z0-9_-]/', '', (string) $atts['jurisdiction'] ) : '';
+				if ( '' !== $attr && in_array( $attr, $known, true ) ) {
+					$jurisdiction = $attr;
+				} elseif ( ! empty( $settings['jurisdiction'] ) && in_array( $settings['jurisdiction'], $known, true ) ) {
+					$jurisdiction = (string) $settings['jurisdiction'];
+				} else {
+					$jurisdiction = (string) $known[0];
+				}
+				$gaps = $generator::missing_required_settings( $jurisdiction, $settings );
+				if ( array() !== $gaps ) {
+					$missing = array_merge( $missing, $gaps );
+					// The renderer refuses POPIA outright; every other regime renders.
+					$hidden = $hidden || 'popia-southafrica' === $jurisdiction;
+				}
+			}
+			if ( array() !== $missing ) {
+				$cache[] = array(
+					'title'   => get_the_title( $post ),
+					'url'     => (string) get_permalink( $post ),
+					'hidden'  => $hidden,
+					'missing' => array_values( array_unique( $missing ) ),
+				);
+			}
+		}
+		return $cache;
 	}
 }
