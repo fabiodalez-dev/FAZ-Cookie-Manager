@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
+    "acorn": "^8.19.0",
     "jsdom": "^29.1.1",
     "terser": "^5.46.0"
   }

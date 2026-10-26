@@ -22,7 +22,7 @@ const _fazStore = _fazStaticConfigMissing ? null : window._fazConfig;
 // Only a runtime that has its store claims it: without one the bootstrap is
 // still the only thing protecting the page.
 if (_fazStore) window._fazRuntimeStarted = true;
-// Must stay above `ref._fazConsentStore = new Map()`: the bootstrap reads a
+// Must stay above `_fazRef._fazConsentStore = new Map()`: the bootstrap reads a
 // consent store created before start() as a runtime that predates the handoff
 // and steps aside for it (adoptStale() in bootstrap.js).
 if (_fazStore && window._fazBootstrap) window._fazBootstrap.start();
@@ -32,6 +32,26 @@ if (_fazStore && window._fazBootstrap) window._fazBootstrap.start();
 // countdown instead of disappearing immediately.
 const _FAZ_OPTOUT_SUCCESS_SECONDS = 15;
 const _FAZ_OPTOUT_SUCCESS_DISMISS_MS = _FAZ_OPTOUT_SUCCESS_SECONDS * 1000;
+
+// Every binding that a function of the runtime reads is declared HERE, at the
+// top of the script, and never as a const/let of the `else` block below.
+// JavaScriptCore before September 2023 (WebKit 268553@main: iOS/Safari 16 and
+// early 17) did not implement Annex B block-level function hoisting for global
+// code: a function declared inside a top-level block was created in the global
+// scope, so it could not see that block's own let/const. Every read threw
+// "ReferenceError: Can't find variable: ref", _fazInit() swallowed it, and
+// the banner never appeared — the visitor could neither accept nor reject.
+// tests/unit/js/old-webkit-block-functions.test.mjs enforces the rule; the
+// values are still assigned where they always were, inside the block.
+// `_fazRef` is `window.fazcookie` (it was the block's `ref`): a global lexical
+// binding collides with any other script's top-level name, hence the prefix.
+let _fazRef, fazcookieConsentMap, _fazHasConsentCookie, _fazCreateElementBackup, _fazNodeListObserver;
+// Scope-tracking keys of the consent cookie; see _fazReadScopedCookieValue().
+const _FAZ_SCOPE_BANNER_KEY = "__scope.banner";
+const _FAZ_SCOPE_LAW_KEY = "__scope.law";
+const _FAZ_SCOPE_FP_KEY = "__scope.fp";
+// Focus-loop handlers per element; see _fazAttachFocusLoop().
+const _fazFocusLoopHandlers = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
 
 if ( ! _fazStore ) {
     // _fazConfig is injected by wp_localize_script. If it is missing (e.g. a
@@ -68,8 +88,8 @@ _fazStore._optoutSuccessAutoCloseTimer = null;
 _fazStore._optoutSuccessSubtextTemplate = "";
 
 window.fazcookie = window.fazcookie || {};
-const ref = window.fazcookie;
-ref._fazConsentStore = new Map();
+_fazRef = window.fazcookie;
+_fazRef._fazConsentStore = new Map();
 
 // Build marker — bump when shipping behavioural changes to this file. Lets
 // `fazcookie._diag().build` reveal at a glance whether a cache (CDN / optimizer)
@@ -84,11 +104,11 @@ ref._fazConsentStore = new Map();
 // exists so a support session can see at a glance which bundle a cache is
 // serving. A stale bundle is survivable: one that predates the bootstrap never
 // calls _fazBootstrap.start()/finish(), and the bootstrap recognises it by the
-// consent store it creates (`ref._fazConsentStore` below) and hands over to it
+// consent store it creates (`_fazRef._fazConsentStore` below) and hands over to it
 // before it installs its gates (adoptStale() in bootstrap.js). It used to be
 // survivable only on paper — that runtime's _fazRenderBanner() looped forever
 // on the bootstrap's held insertions, which never left their source.
-const _FAZ_BUILD = '1.34.2+bootstrap-held-insertions';
+const _FAZ_BUILD = '1.34.3+old-webkit-globals';
 
 /**
  * One-call frontend self-diagnosis for support: paste
@@ -98,7 +118,7 @@ const _FAZ_BUILD = '1.34.2+bootstrap-held-insertions';
  * build) and "why don't my service toggles appear?" (perServiceConsent /
  * services / catalogue counts). #auto-show-hardening
  */
-ref._diag = function () {
+_fazRef._diag = function () {
     var notice = null;
     try { notice = _fazGetBanner(); } catch (e) { /* not ready */ }
     var hasConsentCookie = false;
@@ -109,7 +129,7 @@ ref._diag = function () {
         ready: document.documentElement.classList.contains('faz-ready'),
         bannerFound: !!notice,
         bannerHidden: notice ? notice.classList.contains('faz-hide') : null,
-        action: ref._fazGetFromStore('action') || '',
+        action: _fazRef._fazGetFromStore('action') || '',
         hasConsentCookie: hasConsentCookie,
         swapResolved: !!store._swapResolved,
         geoBootstrap: !!store._geoBootstrap,
@@ -128,7 +148,7 @@ function _fazIsConsentCookieName(name) {
     return /^(?:fazcookie-consent|fazVendorConsent|fazVendorLI|euconsent-v2|fazcookie-dnsmpi|fazVendorSource)(?:-n[0-9]+-b[0-9]+)?$/.test(name);
 }
 
-ref._fazGetCookieMap = function () {
+_fazRef._fazGetCookieMap = function () {
     const cookieMap = {};
     try {
         document.cookie.split(";").forEach((cookie) => {
@@ -143,14 +163,14 @@ ref._fazGetCookieMap = function () {
     return cookieMap;
 };
 
-const currentCookieMap = ref._fazGetCookieMap();
-ref._fazGetFromStore = function (key) {
-    return ref._fazConsentStore.get(key) || "";
+const currentCookieMap = _fazRef._fazGetCookieMap();
+_fazRef._fazGetFromStore = function (key) {
+    return _fazRef._fazConsentStore.get(key) || "";
 };
 
-ref._fazSetInStore = function (key, value) {
-    ref._fazConsentStore.set(key, value);
-    ref._fazPersistConsentCookie();
+_fazRef._fazSetInStore = function (key, value) {
+    _fazRef._fazConsentStore.set(key, value);
+    _fazRef._fazPersistConsentCookie();
 };
 
 /**
@@ -164,7 +184,7 @@ ref._fazSetInStore = function (key, value) {
  *
  * @returns {void}
  */
-ref._fazPersistConsentCookie = function () {
+_fazRef._fazPersistConsentCookie = function () {
     _fazUpdateConsentId();
     // Build a service-id → category-slug map so we can skip redundant
     // `svc.<id>:<category-value>` entries below. On installs with many
@@ -186,12 +206,12 @@ ref._fazPersistConsentCookie = function () {
     }
 
     let cookieStringArray = [];
-    for (const [k, v] of ref._fazConsentStore) {
+    for (const [k, v] of _fazRef._fazConsentStore) {
         if (typeof k === 'string' && k.indexOf('svc.') === 0) {
             const svcId = k.substring(4);
             const cat = svcCatMap[svcId];
             if (cat) {
-                const catValue = ref._fazConsentStore.get(cat);
+                const catValue = _fazRef._fazConsentStore.get(cat);
                 // Category exists in store AND service value matches it —
                 // the entry is redundant, drop it. The frontend loader
                 // already falls back to the category when `svc.<id>` is
@@ -212,14 +232,14 @@ ref._fazPersistConsentCookie = function () {
             const ckFirstDot = ckRest.indexOf('.');
             if (ckFirstDot > 0) {
                 const ckSvcId = ckRest.substring(0, ckFirstDot);
-                const ckSvcVal = ref._fazConsentStore.get('svc.' + ckSvcId);
+                const ckSvcVal = _fazRef._fazConsentStore.get('svc.' + ckSvcId);
                 let ckSvcEff = '';
                 if (typeof ckSvcVal === 'string' && ckSvcVal) {
                     ckSvcEff = ckSvcVal;
                 } else {
                     const ckCat = svcCatMap[ckSvcId];
                     if (ckCat) {
-                        const ckCatVal = ref._fazConsentStore.get(ckCat);
+                        const ckCatVal = _fazRef._fazConsentStore.get(ckCat);
                         ckSvcEff = typeof ckCatVal === 'string' ? ckCatVal : '';
                     }
                 }
@@ -419,14 +439,14 @@ ref._fazPersistConsentCookie = function () {
         _fazStore && _fazStore._expiry
             ? _fazStore._expiry
             : 180;
-    ref._fazSetCookie(
+    _fazRef._fazSetCookie(
         "fazcookie-consent",
         cookieStringArray.join(","),
         scriptExpiry
     );
 };
 
-const fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
+fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
     .split(",")
     .reduce((prev, curr) => {
         if (!curr) return prev;
@@ -473,7 +493,7 @@ const _fazServerRevisionParsed = parseInt(_fazServerRevisionRaw, 10);
 const _fazServerRevision = isNaN(_fazServerRevisionParsed) || _fazServerRevisionParsed < 1
     ? 1
     : _fazServerRevisionParsed;
-const _fazHasConsentCookie = typeof currentCookieMap["fazcookie-consent"] === "string"
+_fazHasConsentCookie = typeof currentCookieMap["fazcookie-consent"] === "string"
     && currentCookieMap["fazcookie-consent"] !== "";
 function _fazCurrentBannerSlug() {
     return _fazStore && _fazStore._bannerSlug ? String(_fazStore._bannerSlug) : "";
@@ -498,8 +518,8 @@ function _fazGeoBootstrapPending() {
 // invalidation iterator below would also zero out the category's consent
 // value, and _fazConsentScopeChanged() would compare against the wrong
 // store entry.
-const _FAZ_SCOPE_BANNER_KEY = "__scope.banner";
-const _FAZ_SCOPE_LAW_KEY = "__scope.law";
+// _FAZ_SCOPE_BANNER_KEY and _FAZ_SCOPE_LAW_KEY are declared at the top of the
+// file (old Safari, see the note there).
 // __scope.fp carries an HMAC-style fingerprint of (banner|law) keyed by
 // wp_salt('auth'). Defends against a visitor hand-editing __scope.banner
 // / __scope.law to match the current scope to avoid the re-prompt — they
@@ -507,7 +527,7 @@ const _FAZ_SCOPE_LAW_KEY = "__scope.law";
 // triggers invalidation. Cosmetic defense-in-depth (the visitor harms
 // only themselves), but cheap to implement once and adds accountability
 // integrity for controllers running in scrutinised compliance contexts.
-const _FAZ_SCOPE_FP_KEY = "__scope.fp";
+// _FAZ_SCOPE_FP_KEY is declared at the top of the file.
 function _fazStrictScopeFp() {
     return !!(_fazStore && _fazStore._strictScopeFp);
 }
@@ -566,9 +586,9 @@ function _fazConsentScopeChanged() {
     const currentBannerSlug = _fazCurrentBannerSlug();
     const currentLaw = _fazCurrentLaw();
     // Read directly from fazcookieConsentMap — this function runs at module
-    // init, BEFORE the ref._fazConsentStore Map is populated from the
+    // init, BEFORE the _fazRef._fazConsentStore Map is populated from the
     // cookie (the populate loop is below this call site). The primary
-    // lookup via ref._fazGetFromStore() would always return "" at this
+    // lookup via _fazRef._fazGetFromStore() would always return "" at this
     // point, leaving only the fallback path.
     const storedBannerSlug = _fazReadScopedCookieValue(_FAZ_SCOPE_BANNER_KEY, "banner");
     const storedLaw = _fazReadScopedCookieValue(_FAZ_SCOPE_LAW_KEY, "law");
@@ -636,15 +656,15 @@ function _fazInvalidateStoredConsent() {
     // not a legal character in slug regex), so this list is collision-safe.
     ["consent", "action", _FAZ_SCOPE_BANNER_KEY, _FAZ_SCOPE_LAW_KEY, _FAZ_SCOPE_FP_KEY, "banner", "law"].forEach((k) => {
         fazcookieConsentMap[k] = "";
-        ref._fazConsentStore.set(k, "");
+        _fazRef._fazConsentStore.set(k, "");
     });
     _fazStore._categories.forEach(({ slug }) => {
         fazcookieConsentMap[slug] = "";
-        ref._fazConsentStore.set(slug, "");
+        _fazRef._fazConsentStore.set(slug, "");
     });
     _fazClearStoredServiceConsent();
     _fazClearGpcExceptions();
-    ref._fazConsentStore.delete("undecided");
+    _fazRef._fazConsentStore.delete("undecided");
 }
 const _fazStoredRevision = parseInt(fazcookieConsentMap.rev, 10);
 const _fazConsentRevisionInvalidated =
@@ -677,7 +697,7 @@ if (_fazConsentInvalidated) {
         let value = fazcookieConsentMap[item] || "";
         if (!value && item === _FAZ_SCOPE_BANNER_KEY) value = fazcookieConsentMap.banner || "";
         if (!value && item === _FAZ_SCOPE_LAW_KEY) value = fazcookieConsentMap.law || "";
-        ref._fazConsentStore.set(item, value);
+        _fazRef._fazConsentStore.set(item, value);
     });
 // Signal markers. The store is re-serialised into the cookie on every write,
 // and anything not loaded here is dropped by the next write — so `gpc` and
@@ -690,13 +710,13 @@ if (_fazConsentInvalidated) {
 // signal is still asserted, so a visitor who switches GPC off loses the marker
 // on the next write exactly as before (_fazUnblock reads it).
 if (!_fazConsentInvalidated) {
-    if (fazcookieConsentMap.gpc && _fazGpcActive()) ref._fazConsentStore.set("gpc", fazcookieConsentMap.gpc);
-    if (fazcookieConsentMap.dnsmpi && _fazDnsmpiCookieActive()) ref._fazConsentStore.set("dnsmpi", fazcookieConsentMap.dnsmpi);
-    if (fazcookieConsentMap.undecided === "1") ref._fazConsentStore.set("undecided", "1");
+    if (fazcookieConsentMap.gpc && _fazGpcActive()) _fazRef._fazConsentStore.set("gpc", fazcookieConsentMap.gpc);
+    if (fazcookieConsentMap.dnsmpi && _fazDnsmpiCookieActive()) _fazRef._fazConsentStore.set("dnsmpi", fazcookieConsentMap.dnsmpi);
+    if (fazcookieConsentMap.undecided === "1") _fazRef._fazConsentStore.set("undecided", "1");
 }
 // Always track the revision currently in effect so next _fazSetInStore()
 // persists it into the cookie.
-ref._fazConsentStore.set("rev", String(_fazServerRevision));
+_fazRef._fazConsentStore.set("rev", String(_fazServerRevision));
 // Remember discarded markers even when no consent UI is used on this visit.
 // Dropping them only from memory resurrected an exception on GPC off → on.
 const _fazDiscardedGpcMarkers = !_fazConsentInvalidated && !_fazGpcActive() &&
@@ -706,7 +726,7 @@ if (!_fazConsentInvalidated && _fazStore._perServiceConsent && _fazStore._servic
     _fazStore._services.forEach(function(svc) {
         const svcKey = "svc." + svc.id;
         if (fazcookieConsentMap[svcKey]) {
-            ref._fazConsentStore.set(svcKey, fazcookieConsentMap[svcKey]);
+            _fazRef._fazConsentStore.set(svcKey, fazcookieConsentMap[svcKey]);
         }
         // Restore per-cookie overrides (ck.<service-id>.<cookie-name>) — only
         // the entries that diverged from their service are persisted, so an
@@ -717,7 +737,7 @@ if (!_fazConsentInvalidated && _fazStore._perServiceConsent && _fazStore._servic
             svc.cookies.forEach(function(cookieName) {
                 const ckKey = _fazCkKey(svc.id, cookieName);
                 if (fazcookieConsentMap[ckKey]) {
-                    ref._fazConsentStore.set(ckKey, fazcookieConsentMap[ckKey]);
+                    _fazRef._fazConsentStore.set(ckKey, fazcookieConsentMap[ckKey]);
                 }
             });
         }
@@ -738,8 +758,8 @@ if (!_fazConsentInvalidated && _fazStore._perServiceConsent && _fazStore._servic
         // later, with no new act from the visitor. The bootstrap below persists
         // this omission even when the visitor does not save another choice.
         if (k.indexOf('gpcx.') === 0 && !_fazGpcActive()) return;
-        if ((k.indexOf('svc.') === 0 || k.indexOf('gpcx.') === 0) && !ref._fazConsentStore.has(k)) {
-            ref._fazConsentStore.set(k, fazcookieConsentMap[k]);
+        if ((k.indexOf('svc.') === 0 || k.indexOf('gpcx.') === 0) && !_fazRef._fazConsentStore.has(k)) {
+            _fazRef._fazConsentStore.set(k, fazcookieConsentMap[k]);
         }
     });
 }
@@ -751,7 +771,7 @@ if (!_fazConsentInvalidated && _fazStore._perServiceConsent && _fazStore._servic
  * @param {string} name Name of the cookie
  * @returns {string}
  */
-ref._fazGetCookie = function (name) {
+_fazRef._fazGetCookie = function (name) {
     const prefix = _fazCookieName(name) + '=';
     const cookies = document.cookie.split('; ');
     for (var i = 0; i < cookies.length; i++) {
@@ -771,7 +791,7 @@ ref._fazGetCookie = function (name) {
  * @param {*} days Expiry in days.
  * @param {*} domain Cookie domain.
  */
-ref._fazSetCookie = function (name, value, days = 0, domain = _fazStore._rootDomain) {
+_fazRef._fazSetCookie = function (name, value, days = 0, domain = _fazStore._rootDomain) {
     const date = new Date();
     if (!!domain) {
         domain = `domain=${domain}`;
@@ -802,15 +822,15 @@ ref._fazSetCookie = function (name, value, days = 0, domain = _fazStore._rootDom
 
 // _fazSetCookie is now installed and the store has been completely restored.
 // Do not create a consent record on a first visit or after invalidation.
-if (_fazDiscardedGpcMarkers && ref._fazGetFromStore("action")) {
-    ref._fazPersistConsentCookie();
+if (_fazDiscardedGpcMarkers && _fazRef._fazGetFromStore("action")) {
+    _fazRef._fazPersistConsentCookie();
 }
 
 function _fazSetConsentID() {
-    const fazcookieID = ref._fazGetFromStore("consentid");
+    const fazcookieID = _fazRef._fazGetFromStore("consentid");
     if (fazcookieID) return;
-    const consentID = ref._fazRandomString(32);
-    ref._fazSetInStore("consentid", consentID);
+    const consentID = _fazRef._fazRandomString(32);
+    _fazRef._fazSetInStore("consentid", consentID);
     _fazStore._resetConsentID = true;
 }
 
@@ -840,7 +860,7 @@ var _revisitFazConsent = function () {
     // banner geo-routing aware), so an EU visitor on a CCPA+GDPR
     // install still gets the GDPR banner on revisit.
     var activeLaw = (typeof _fazGetLaw === "function") ? _fazGetLaw() : "";
-    var actionRecorded = ref && ref._fazGetFromStore && ref._fazGetFromStore("action");
+    var actionRecorded = _fazRef && _fazRef._fazGetFromStore && _fazRef._fazGetFromStore("action");
     var hasOptoutPopup = !!document.querySelector('[data-faz-tag="optout-popup"]');
     if (activeLaw === "ccpa" && actionRecorded && hasOptoutPopup) {
         _fazSetPreferenceAction("donotsell-button");
@@ -997,7 +1017,7 @@ function _fazRevealBanner() {
  * @param {integer} length Length of the string to be generated.
  * @returns
  */
-ref._fazRandomString = function (length, allChars = true) {
+_fazRef._fazRandomString = function (length, allChars = true) {
     const chars = `${allChars ? `0123456789` : ""
         }ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz`;
     const response = [];
@@ -1050,10 +1070,10 @@ function _fazInitOperations() {
     // #faz-consent exists in the DOM when CSS custom properties are set.
     _fazAttachShortCodeStyles();
     _fazSetShowMoreLess();
-    var _fazStoredAction = ref._fazGetFromStore("action");
+    var _fazStoredAction = _fazRef._fazGetFromStore("action");
     if (_fazStoredAction && (
         _fazConsentScopeChanged() ||
-        _fazVendorRecordStale(_fazStoredAction, ref._fazGetFromStore("undecided"))
+        _fazVendorRecordStale(_fazStoredAction, _fazRef._fazGetFromStore("undecided"))
     )) {
         _fazInvalidateStoredConsent();
         _fazStoredAction = null;
@@ -1080,9 +1100,9 @@ function _fazInitOperations() {
     // page would be nagging someone who has already answered. GPC alone is
     // different: the browser sent it, the visitor answered nothing.
     var _fazUndecided = !!_fazStoredAction &&
-        ref._fazGetFromStore("undecided") === "1" &&
+        _fazRef._fazGetFromStore("undecided") === "1" &&
         _fazGetLaw() !== "ccpa" &&
-        ref._fazGetFromStore("dnsmpi") !== "1";
+        _fazRef._fazGetFromStore("dnsmpi") !== "1";
     // Honour a standing [faz_do_not_sell] opt-out before anything unblocks.
     // Runs regardless of a stored action — the form opt-out postdates the
     // stored consent — and no-ops once the store already reflects it.
@@ -1208,7 +1228,7 @@ function _fazFireConsentReadyEvent(action) {
     const detail = { accepted: [], rejected: [], action: action };
     const categories = (_fazStore && _fazStore._categories) || [];
     for (const category of categories) {
-        if (ref._fazGetFromStore(category.slug) === 'yes') {
+        if (_fazRef._fazGetFromStore(category.slug) === 'yes') {
             detail.accepted.push(category.slug);
         } else {
             detail.rejected.push(category.slug);
@@ -1288,13 +1308,13 @@ function _fazApplyDnsmpiOptOut() {
     var categories = _fazStore._categories || [];
     var responseCategories = { accepted: [], rejected: [], action: "custom", dnsmpi: true };
     var saleShareSlugs = [];
-    var changed = ref._fazGetFromStore("dnsmpi") !== "1";
+    var changed = _fazRef._fazGetFromStore("dnsmpi") !== "1";
     for (var i = 0; i < categories.length; i++) {
         var category = categories[i];
         var sellShare = !category.isNecessary && !!category.ccpaDoNotSell;
         if (sellShare) {
             saleShareSlugs.push(category.slug);
-            if (ref._fazGetFromStore(category.slug) !== "no") changed = true;
+            if (_fazRef._fazGetFromStore(category.slug) !== "no") changed = true;
         }
     }
     if (_fazClearStoredServiceConsent(saleShareSlugs)) changed = true;
@@ -1303,30 +1323,30 @@ function _fazApplyDnsmpiOptOut() {
     // A DNSMPI cookie can arrive without a consent record (for example after a
     // consent-cookie cleanup). Persist a real opt-out action and scope so the
     // category denies below survive reload and remain auditable.
-    if (!ref._fazGetFromStore("action")) {
+    if (!_fazRef._fazGetFromStore("action")) {
         _fazSetConsentID();
-        ref._fazSetInStore("action", "yes");
-        ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
-        ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
-        ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
-        ref._fazSetInStore("consent", "no");
+        _fazRef._fazSetInStore("action", "yes");
+        _fazRef._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
+        _fazRef._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
+        _fazRef._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
+        _fazRef._fazSetInStore("consent", "no");
         // The signal created this record, not the visitor: they have not
         // answered the banner yet. _fazInitOperations() keeps showing it
         // until they do; _fazAcceptCookies() clears the flag.
-        ref._fazSetInStore("undecided", "1");
+        _fazRef._fazSetInStore("undecided", "1");
     }
     // Audit marker, mirroring the gpc:1 marker: the recorded state says WHY it
     // changed without a banner interaction.
-    ref._fazSetInStore("dnsmpi", "1");
+    _fazRef._fazSetInStore("dnsmpi", "1");
     // Targeted overrides were cleared before this audit write so a stale
     // svc.<id>:yes cannot bypass the category opt-out.
     for (var r = 0; r < categories.length; r++) {
         if (saleShareSlugs.indexOf(categories[r].slug) === -1) continue;
-        ref._fazSetInStore(categories[r].slug, "no");
+        _fazRef._fazSetInStore(categories[r].slug, "no");
         _fazRemoveDeadCookies(categories[r]);
     }
     for (var j = 0; j < categories.length; j++) {
-        if (ref._fazGetFromStore(categories[j].slug) === "yes") {
+        if (_fazRef._fazGetFromStore(categories[j].slug) === "yes") {
             responseCategories.accepted.push(categories[j].slug);
         } else {
             responseCategories.rejected.push(categories[j].slug);
@@ -1352,13 +1372,13 @@ function _fazApplyGpcOptOut() {
     var responseCategories = { accepted: [], rejected: [], action: "custom", gpc: true };
     var categories = _fazStore._categories || [];
     var saleShareSlugs = [];
-    var changed = ref._fazGetFromStore("gpc") !== "1";
+    var changed = _fazRef._fazGetFromStore("gpc") !== "1";
 
     for (var i = 0; i < categories.length; i++) {
         var category = categories[i];
         if (!category.isNecessary && !!category.ccpaDoNotSell) {
             saleShareSlugs.push(category.slug);
-            if (ref._fazGetFromStore(category.slug) !== "no") changed = true;
+            if (_fazRef._fazGetFromStore(category.slug) !== "no") changed = true;
         }
     }
 
@@ -1384,28 +1404,28 @@ function _fazApplyGpcOptOut() {
     if (changed) {
         // First signal-driven action: create the strictly-necessary audit
         // record now, never before the signal is actually processed.
-        if (!ref._fazGetFromStore("action")) {
+        if (!_fazRef._fazGetFromStore("action")) {
             _fazSetConsentID();
-            ref._fazSetInStore("action", "yes");
-            ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
-            ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
-            ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
-            ref._fazSetInStore("consent", "no");
+            _fazRef._fazSetInStore("action", "yes");
+            _fazRef._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
+            _fazRef._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
+            _fazRef._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
+            _fazRef._fazSetInStore("consent", "no");
             // The signal created this record, not the visitor: they have not
             // answered the banner yet. _fazInitOperations() keeps showing it
             // until they do; _fazAcceptCookies() clears the flag.
-            ref._fazSetInStore("undecided", "1");
+            _fazRef._fazSetInStore("undecided", "1");
         }
-        ref._fazSetInStore("gpc", "1");
+        _fazRef._fazSetInStore("gpc", "1");
     }
 
     for (var j = 0; j < categories.length; j++) {
         var current = categories[j];
         if (saleShareSlugs.indexOf(current.slug) !== -1) {
-            if (changed) ref._fazSetInStore(current.slug, "no");
+            if (changed) _fazRef._fazSetInStore(current.slug, "no");
             _fazRemoveDeadCookies(current);
         }
-        if (ref._fazGetFromStore(current.slug) === "yes") responseCategories.accepted.push(current.slug);
+        if (_fazRef._fazGetFromStore(current.slug) === "yes") responseCategories.accepted.push(current.slug);
         else responseCategories.rejected.push(current.slug);
     }
 
@@ -1486,7 +1506,7 @@ function _fazSeedInitialState() {
     // action — a violation of ePrivacy Directive Art. 5(3). The cookie is
     // written for the first time only when the user clicks Accept / Reject
     // (inside _fazAcceptCookies via _fazSetInStore).
-    ref._fazConsentStore.set("consent", "no");
+    _fazRef._fazConsentStore.set("consent", "no");
     const ccpaCheckBoxValue = _fazFindCheckBoxValue();
     // When a runtime geo ruleset is active (_runtimeGeo), the per-category
     // defaultConsent values are jurisdiction-authoritative: derive the
@@ -1520,7 +1540,7 @@ function _fazSeedInitialState() {
         }
         if (valueToSet === "no") responseCategories.rejected.push(category.slug);
         else responseCategories.accepted.push(category.slug);
-        ref._fazConsentStore.set(category.slug, valueToSet);
+        _fazRef._fazConsentStore.set(category.slug, valueToSet);
     }
     return responseCategories;
 }
@@ -1923,7 +1943,7 @@ async function _fazInit() {
                 var _fazBannerNow = _fazGetBanner();
                 if (
                     _fazSwapped &&
-                    !ref._fazGetFromStore('action') &&
+                    !_fazRef._fazGetFromStore('action') &&
                     _fazBannerNow &&
                     !_fazBannerNow.classList.contains('faz-hide')
                 ) {
@@ -1983,7 +2003,7 @@ function _fazScheduleBannerWatchdog() {
                 document.documentElement.classList.add('faz-ready');
             }
             // No consent choice recorded → the first-visit banner must be visible.
-            if (!ref._fazGetFromStore('action')) {
+            if (!_fazRef._fazGetFromStore('action')) {
                 var notice = _fazGetBanner();
                 if (notice && notice.classList.contains('faz-hide')) {
                     _fazShowBanner();
@@ -2069,7 +2089,7 @@ function _fazAdblockResilienceCheck() {
     try {
         if (!_fazStore || !_fazStore._adblockResilience) return;
         // Respect an existing decision — never re-show a dismissed banner.
-        if (ref._fazGetFromStore('action')) return;
+        if (_fazRef._fazGetFromStore('action')) return;
         var notice = _fazGetBanner();
         if (!notice) return;
         // Never fight FAZ's own hidden state (returning visitor, geo no-banner,
@@ -2119,34 +2139,34 @@ function _fazClearAdblockReassert(container) {
 // Expose the anti-adblock internals so the jsdom unit test can call them
 // directly (the whole file runs inside the `else` block, so top-level function
 // declarations are not global). Not part of the public API.
-ref._fazAdblockResilienceCheck = _fazAdblockResilienceCheck;
-ref._fazClearAdblockReassert = _fazClearAdblockReassert;
+_fazRef._fazAdblockResilienceCheck = _fazAdblockResilienceCheck;
+_fazRef._fazClearAdblockReassert = _fazClearAdblockReassert;
 // The scheduler too, not just the check it defers. Asserting only the check
 // leaves WHEN it runs unguarded, which is the half that was actually wrong:
 // one timer at 1200ms never meets a filter list that lands later (#253).
-ref._fazScheduleAdblockGuard = _fazScheduleAdblockGuard;
+_fazRef._fazScheduleAdblockGuard = _fazScheduleAdblockGuard;
 // Exposed for the jsdom suite that pins the "asked-for panel is absent" case
 // (classic + CCPA has no optout-popup). That combination needs a banner type,
 // a law and a recorded consent to line up at once, which is hostile to E2E and
 // exact in jsdom. Not part of the public API.
-ref._fazShowPreferenceCenter = _fazShowPreferenceCenter;
+_fazRef._fazShowPreferenceCenter = _fazShowPreferenceCenter;
 // Exposed for the jsdom suite that pins description truncation. Its correctness
 // turns on a subtle invariant — reaching the last paragraph implies no show-more
 // button was appended — and a test that cannot invoke it directly ends up
 // asserting nothing. Not part of the public API.
-ref._fazSetShowMoreLess = _fazSetShowMoreLess;
+_fazRef._fazSetShowMoreLess = _fazSetShowMoreLess;
 // Exposed for the jsdom suite that pins the trigger→panel pairing. The shipped
 // default banner disables donotSell, so the Do-Not-Sell half of that pairing is
 // not in the DOM end-to-end and a regression there cannot fail an E2E assertion.
 // Not part of the public API.
-ref._fazLinkPreferenceTriggers = _fazLinkPreferenceTriggers;
+_fazRef._fazLinkPreferenceTriggers = _fazLinkPreferenceTriggers;
 
 // Exported for tests/unit/js/imagesrcset-candidate-list.test.mjs. The pair is
 // exported together on purpose: the test's point is that they answer
 // DIFFERENTLY on a candidate list, and that using the single-URL one there was
 // the bug.
-ref._fazSrcsetBlockedCategory = _fazSrcsetBlockedCategory;
-ref._fazImgShouldBlock = _fazImgShouldBlock;
+_fazRef._fazSrcsetBlockedCategory = _fazSrcsetBlockedCategory;
+_fazRef._fazImgShouldBlock = _fazImgShouldBlock;
 
 function _fazScheduleDeadCookieCleanup() {
     // Staggered passes catch cookies written after load. The 5000 ms tail picks
@@ -2607,7 +2627,7 @@ function _fazHidePreferenceCenter() {
 
     if (!isPushdown) {
         _fazHideOverLay();
-        if (!ref._fazGetFromStore("action")) _fazShowBanner();
+        if (!_fazRef._fazGetFromStore("action")) _fazShowBanner();
     } else {
         _fazToggleAriaExpandStatus("=settings-button", "false");
         // Symmetry with the open path (#253): if the container was un-hidden
@@ -2620,7 +2640,7 @@ function _fazHidePreferenceCenter() {
             _fazHideBanner();
         }
     }
-    if (ref._fazGetFromStore("action")) _fazShowRevisit();
+    if (_fazRef._fazGetFromStore("action")) _fazShowRevisit();
     const origin = _fazStore._preferenceOriginTag;
     origin && _fazSetFocus(origin)
     if (_fazStore._prefTriggerElement) {
@@ -2757,10 +2777,10 @@ function _fazTogglePreferenceCenter() {
             _fazHideBanner();
         } else {
             _fazHideOverLay();
-            if (!ref._fazGetFromStore("action")) _fazShowBanner();
+            if (!_fazRef._fazGetFromStore("action")) _fazShowBanner();
         }
     }
-    if (ref._fazGetFromStore("action")) _fazShowRevisit();
+    if (_fazRef._fazGetFromStore("action")) _fazShowRevisit();
     if (isOpen) {
         const origin = _fazStore._preferenceOriginTag;
         origin && _fazSetFocus(origin);
@@ -2920,8 +2940,8 @@ function _fazLoopFocus() {
 // registration order, so the most-recently registered (most "polluted")
 // handler wins on Tab, and its closed-over targetElement may point to a
 // stale DOM node — the visible symptom in the focus-trap test under full
-// suite load (issue #124).
-const _fazFocusLoopHandlers = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+// suite load (issue #124). _fazFocusLoopHandlers is declared at the top of
+// the file (old Safari, see the note there).
 function _fazAttachFocusLoop(element, targetElement, isReverse = false) {
     if (!element || !targetElement) return;
     const slot = isReverse ? '__faz_focus_loop_reverse' : '__faz_focus_loop_forward';
@@ -2978,7 +2998,7 @@ function _fazSetFooterShadow($doc) {
  */
 function _fazRemoveDeadCookies(category) {
     const cookies = category.cookies || [];
-    const currentCookieMap = ref._fazGetCookieMap();
+    const currentCookieMap = _fazRef._fazGetCookieMap();
     for (const { cookieID, domain, neverDelete } of cookies) {
         // Declaring an infrastructure cookie changes its visibility only.
         // This server-provided protection also outranks granular denials.
@@ -2999,13 +3019,13 @@ function _fazRemoveDeadCookies(category) {
         if (serviceDecision !== "no" && _fazIsCookieWhitelisted(cookieID)) continue;
         if (serviceDecision === "no" || currentCookieMap[cookieID])
             [domain, ""].forEach((cookieDomain) =>
-                ref._fazSetCookie(cookieID, "", 0, cookieDomain)
+                _fazRef._fazSetCookie(cookieID, "", 0, cookieDomain)
             );
     }
 }
 function _fazSetPreferenceCheckBoxStates(revisit = false) {
     for (const category of _fazStore._categories) {
-        const cookieValue = ref._fazGetFromStore(category.slug);
+        const cookieValue = _fazRef._fazGetFromStore(category.slug);
         const checked =
             cookieValue === "yes" ||
             (!cookieValue &&
@@ -3776,23 +3796,23 @@ function _fazAcceptCookies(choice = "all", ungated = false, source = "preference
     // on an earlier page stops being "undecided" here, and only here — every
     // visitor choice passes through this function. Deleted before the next
     // store write so the serialised cookie no longer carries it.
-    ref._fazConsentStore.delete("undecided");
-    ref._fazSetInStore("action", "yes");
+    _fazRef._fazConsentStore.delete("undecided");
+    _fazRef._fazSetInStore("action", "yes");
     // __scope.banner / __scope.law — see _fazConsentScopeChanged header.
     // Unprefixed "banner"/"law" keys would collide with admin-renameable
     // category slugs.
-    ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
-    ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
+    _fazRef._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
+    _fazRef._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
     // __scope.fp — server-side fingerprint of the current scope. See the
     // header comment near _FAZ_SCOPE_FP_KEY for the tamper-resistance
     // rationale. Empty when the server didn't publish a fingerprint
     // (older builds / non-geo-routing installs); the consent cookie
     // still works, just without the integrity check.
-    ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
+    _fazRef._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
     if (activeLaw === 'gdpr') {
-        ref._fazSetInStore("consent", choice === "reject" ? "no" : "yes");
+        _fazRef._fazSetInStore("consent", choice === "reject" ? "no" : "yes");
     } else {
-        ref._fazSetInStore("consent", ccpaCheckBoxValue ? "yes" : "no");
+        _fazRef._fazSetInStore("consent", ccpaCheckBoxValue ? "yes" : "no");
     }
     const responseCategories = { accepted: [], rejected: [], action: choice };
     const rejectedCategoryObjects = [];
@@ -3808,7 +3828,7 @@ function _fazAcceptCookies(choice = "all", ungated = false, source = "preference
             // Do Not Sell is a targeted withdrawal, not a new consent grant.
             // Keep unrelated choices; the binding opt-out below revokes sale/
             // share using its explicit marker, NOT the geo-overlaid default.
-            valueToSet = category.isNecessary || ref._fazGetFromStore(category.slug) === "yes" ? "yes" : "no";
+            valueToSet = category.isNecessary || _fazRef._fazGetFromStore(category.slug) === "yes" ? "yes" : "no";
         } else if (choice === 'all' || activeLaw === 'gdpr' ||
             (choice === "custom" && (embedGrant || _fazActivePreferenceTag() === 'detail' ||
                 (_fazStore._runtimeGeo && category.defaultFromRuleset)))) {
@@ -3831,7 +3851,7 @@ function _fazAcceptCookies(choice = "all", ungated = false, source = "preference
                 valueToSet = "no";
             }
         }
-        ref._fazSetInStore(`${category.slug}`, valueToSet);
+        _fazRef._fazSetInStore(`${category.slug}`, valueToSet);
         if (valueToSet === "no") {
             responseCategories.rejected.push(category.slug);
             rejectedCategoryObjects.push(category);
@@ -3839,11 +3859,11 @@ function _fazAcceptCookies(choice = "all", ungated = false, source = "preference
     }
     if (separateOptInWithheld || saleShareWithheld) responseCategories.action = "custom";
     if (gpcActive) {
-        ref._fazSetInStore("gpc", "1");
+        _fazRef._fazSetInStore("gpc", "1");
         responseCategories.gpc = true;
     }
     if (dnsmpiActive) {
-        ref._fazSetInStore("dnsmpi", "1");
+        _fazRef._fazSetInStore("dnsmpi", "1");
         responseCategories.dnsmpi = true;
     }
     // Handle per-service consent.
@@ -3861,15 +3881,15 @@ function _fazAcceptCookies(choice = "all", ungated = false, source = "preference
     // from re-granting sale/share — and only this service is granted, marked
     // so every later GPC pass can tell it from a bypass. See _fazIsGpcException.
     if (gpcEmbedException) {
-        ref._fazSetInStore("svc." + _fazEmbedGrantServiceId, "yes");
-        ref._fazSetInStore("gpcx." + _fazEmbedGrantServiceId, "1");
+        _fazRef._fazSetInStore("svc." + _fazEmbedGrantServiceId, "yes");
+        _fazRef._fazSetInStore("gpcx." + _fazEmbedGrantServiceId, "1");
     }
     // A broader consent on a later page (Accept All, a panel save) must not
     // silently revoke a map the visitor explicitly opened: re-assert standing
     // exceptions unless this action is a rejection or an explicit untick.
     if (choice !== "reject" && gpcOnlyBinding) {
         gpcExceptionIds.forEach(function (id) {
-            if (ref._fazGetFromStore("svc." + id) === "no") return;
+            if (_fazRef._fazGetFromStore("svc." + id) === "no") return;
             // An untick in the preference centre is a withdrawal, and it must
             // be as easy as the grant was. It cannot be read from the store:
             // GPC forces the category to "no", so an unticked toggle matches
@@ -3881,13 +3901,13 @@ function _fazAcceptCookies(choice = "all", ungated = false, source = "preference
                 '.faz-service-toggle[data-service="' + id + '"]'
             );
             if (toggle && !toggle.checked) {
-                ref._fazConsentStore.delete("gpcx." + id);
-                ref._fazConsentStore.delete("svc." + id);
-                ref._fazPersistConsentCookie();
+                _fazRef._fazConsentStore.delete("gpcx." + id);
+                _fazRef._fazConsentStore.delete("svc." + id);
+                _fazRef._fazPersistConsentCookie();
                 return;
             }
-            ref._fazSetInStore("svc." + id, "yes");
-            ref._fazSetInStore("gpcx." + id, "1");
+            _fazRef._fazSetInStore("svc." + id, "yes");
+            _fazRef._fazSetInStore("gpcx." + id, "1");
         });
     }
     // Granular Save/Accept handlers run after the category loop and could have
@@ -3965,10 +3985,10 @@ function _fazAcceptCookies(choice = "all", ungated = false, source = "preference
  * @return {number} Number of removed overrides.
  */
 function _fazClearStoredServiceConsent(categorySlugs, honourGpcExceptions) {
-    if (!ref._fazConsentStore || typeof ref._fazConsentStore.forEach !== 'function') return 0;
+    if (!_fazRef._fazConsentStore || typeof _fazRef._fazConsentStore.forEach !== 'function') return 0;
     var targeted = Array.isArray(categorySlugs);
     var keys = [];
-    ref._fazConsentStore.forEach(function(value, key) {
+    _fazRef._fazConsentStore.forEach(function(value, key) {
         if (typeof key !== 'string' || (key.indexOf('svc.') !== 0 && key.indexOf('ck.') !== 0)) return;
         if (!targeted) {
             keys.push(key);
@@ -3985,7 +4005,7 @@ function _fazClearStoredServiceConsent(categorySlugs, honourGpcExceptions) {
         if (!category || categorySlugs.indexOf(category) !== -1) keys.push(key);
     });
     keys.forEach(function(key) {
-        ref._fazConsentStore.delete(key);
+        _fazRef._fazConsentStore.delete(key);
     });
     return keys.length;
 }
@@ -4023,15 +4043,15 @@ function _fazIsGpcException(serviceId) {
     if (typeof _fazIsRecognizedService === "function" && !_fazIsRecognizedService(serviceId)) {
         return false;
     }
-    return ref._fazGetFromStore("gpcx." + serviceId) === "1" &&
-        ref._fazGetFromStore("svc." + serviceId) === "yes";
+    return _fazRef._fazGetFromStore("gpcx." + serviceId) === "1" &&
+        _fazRef._fazGetFromStore("svc." + serviceId) === "yes";
 }
 
 /** Service ids currently holding a GPC exception. */
 function _fazGpcExceptionIds() {
     var ids = [];
-    if (!ref._fazConsentStore || typeof ref._fazConsentStore.forEach !== 'function') return ids;
-    ref._fazConsentStore.forEach(function(value, key) {
+    if (!_fazRef._fazConsentStore || typeof _fazRef._fazConsentStore.forEach !== 'function') return ids;
+    _fazRef._fazConsentStore.forEach(function(value, key) {
         if (typeof key === 'string' && key.indexOf('gpcx.') === 0 && value === "1") {
             var id = key.substring(5);
             if (_fazIsGpcException(id)) ids.push(id);
@@ -4051,18 +4071,18 @@ function _fazGpcExceptionIds() {
  * @returns {number} Markers removed.
  */
 function _fazPruneGpcExceptions(gpcActive) {
-    if (!ref._fazConsentStore || typeof ref._fazConsentStore.forEach !== 'function') return 0;
+    if (!_fazRef._fazConsentStore || typeof _fazRef._fazConsentStore.forEach !== 'function') return 0;
     var stale = [];
-    ref._fazConsentStore.forEach(function(value, key) {
+    _fazRef._fazConsentStore.forEach(function(value, key) {
         if (typeof key !== 'string' || key.indexOf('gpcx.') !== 0) return;
-        if (!gpcActive || ref._fazGetFromStore("svc." + key.substring(5)) !== "yes") stale.push(key);
+        if (!gpcActive || _fazRef._fazGetFromStore("svc." + key.substring(5)) !== "yes") stale.push(key);
     });
-    stale.forEach(function(key) { ref._fazConsentStore.delete(key); });
+    stale.forEach(function(key) { _fazRef._fazConsentStore.delete(key); });
     // Persist the removal. Deleting from the store alone left the marker in
     // the cookie whenever no later write rebuilt it, and the next load read it
     // back. Only once a decision exists: writing the cookie earlier would
     // create a consent record before the visitor has acted.
-    if (stale.length && ref._fazGetFromStore("action")) ref._fazPersistConsentCookie();
+    if (stale.length && _fazRef._fazGetFromStore("action")) _fazRef._fazPersistConsentCookie();
     return stale.length;
 }
 
@@ -4115,7 +4135,7 @@ function _fazStoreCustomServiceConsent(choice) {
         togglesByCategory[category].push(toggle);
     });
     Object.keys(togglesByCategory).forEach(function(category) {
-        var catConsent = ref._fazGetFromStore(category) || "no";
+        var catConsent = _fazRef._fazGetFromStore(category) || "no";
         var toggles = togglesByCategory[category];
         var hasOverride = toggles.some(function(toggle) {
             return (toggle.checked ? "yes" : "no") !== catConsent;
@@ -4124,7 +4144,7 @@ function _fazStoreCustomServiceConsent(choice) {
         toggles.forEach(function(toggle) {
             var serviceId = toggle.getAttribute('data-service');
             if (!serviceId) return;
-            ref._fazSetInStore("svc." + serviceId, toggle.checked ? "yes" : "no");
+            _fazRef._fazSetInStore("svc." + serviceId, toggle.checked ? "yes" : "no");
         });
     });
     if (_fazServicesBeforeConsent && Array.isArray(_fazStore._services)) {
@@ -4132,9 +4152,9 @@ function _fazStoreCustomServiceConsent(choice) {
             if (!service || !service.id || !service.category || seenServiceIds[service.id]) return;
             var prior = _fazServicesBeforeConsent[service.id];
             if (prior !== "yes" && prior !== "no") return;
-            var catConsent = ref._fazGetFromStore(service.category) || "no";
+            var catConsent = _fazRef._fazGetFromStore(service.category) || "no";
             if (prior !== catConsent) {
-                ref._fazSetInStore("svc." + service.id, prior);
+                _fazRef._fazSetInStore("svc." + service.id, prior);
             }
         });
     }
@@ -4149,9 +4169,9 @@ function _fazStoreCustomServiceConsent(choice) {
  * @return {string} "yes" or "no".
  */
 function _fazServiceEffectiveConsent(serviceId, category) {
-    var svcConsent = ref._fazGetFromStore("svc." + serviceId);
+    var svcConsent = _fazRef._fazGetFromStore("svc." + serviceId);
     if (svcConsent) return svcConsent === "yes" ? "yes" : "no";
-    return ref._fazGetFromStore(category) === "yes" ? "yes" : "no";
+    return _fazRef._fazGetFromStore(category) === "yes" ? "yes" : "no";
 }
 
 function _fazKnownServiceCategory(serviceId) {
@@ -4221,7 +4241,7 @@ function _fazGetServiceConsentSnapshot() {
     // same-session accept-then-reject of such a provider is invisible to the
     // revocation check, so no reload fires and its already-running embed keeps
     // executing (faz-skip is never removed). #134/#146.
-    ref._fazConsentStore.forEach(function (val, key) {
+    _fazRef._fazConsentStore.forEach(function (val, key) {
         if (typeof key === 'string' && key.indexOf('svc.') === 0) {
             var sid = key.slice(4);
             if (sid && !(sid in snapshot)) {
@@ -4243,7 +4263,7 @@ function _fazGetServiceConsentSnapshot() {
  * @return {string} "yes" or "no".
  */
 function _fazCookieEffectiveConsent(serviceId, category, cookieName) {
-    var ck = ref._fazGetFromStore(_fazCkKey(serviceId, cookieName));
+    var ck = _fazRef._fazGetFromStore(_fazCkKey(serviceId, cookieName));
     if (ck) return ck === "yes" ? "yes" : "no";
     return _fazServiceEffectiveConsent(serviceId, category);
 }
@@ -4267,9 +4287,9 @@ function _fazGetServiceCookieDecision(cookieName) {
         for (var ci = 0; ci < service.cookies.length; ci++) {
             var pattern = service.cookies[ci];
             if (!pattern || !_fazCookieNameMatches(cookieName, pattern)) continue;
-            var decision = ref._fazGetFromStore("svc." + service.id);
+            var decision = _fazRef._fazGetFromStore("svc." + service.id);
             if (_fazStore._perCookieConsent) {
-                var cookieDecision = ref._fazGetFromStore(_fazCkKey(service.id, pattern));
+                var cookieDecision = _fazRef._fazGetFromStore(_fazCkKey(service.id, pattern));
                 if (cookieDecision === "yes" || cookieDecision === "no") {
                     decision = cookieDecision;
                 }
@@ -4297,7 +4317,7 @@ function _fazStoreCustomCookieConsent(choice) {
         var serviceId = toggle.getAttribute('data-service');
         var cookieName = toggle.getAttribute('data-cookie-name');
         if (!serviceId || !cookieName) return;
-        ref._fazSetInStore(_fazCkKey(serviceId, cookieName), toggle.checked ? "yes" : "no");
+        _fazRef._fazSetInStore(_fazCkKey(serviceId, cookieName), toggle.checked ? "yes" : "no");
     });
 }
 function _fazSetShowMoreLess() {
@@ -6098,7 +6118,7 @@ function _fazRestoreConstructableSheets() {
     _fazTrackedSheets = remaining;
 }
 
-const _fazCreateElementBackup = document.createElement;
+_fazCreateElementBackup = document.createElement;
 document.createElement = (...args) => {
     return _fazGuardScriptElement(_fazCreateElementBackup.call(document, ...args));
 };
@@ -6405,7 +6425,7 @@ function _fazMutationObserver(mutations) {
                     node.classList.remove("faz-hidden");
                     continue;
                 }
-                const uniqueID = ref._fazRandomString(8, false);
+                const uniqueID = _fazRef._fazRandomString(8, false);
                 if (node.nodeName.toLowerCase() === "iframe")
                     _fazAddPlaceholder(node, uniqueID);
                 else {
@@ -6453,15 +6473,15 @@ function _fazMutationObserver(mutations) {
  * @returns {void}
  */
 function _fazUnblock() {
-    const fazconsent = ref._fazGetFromStore("consent");
+    const fazconsent = _fazRef._fazGetFromStore("consent");
     // GPC and DNSMPI are targeted sale/share opt-outs, not blanket GDPR
     // rejections. Once every category has its explicit value, permit the normal
     // category-aware restore pass so an unrelated existing grant (for example
     // functional:yes on a "Both" banner) is not suppressed. Sell/share remains
     // blocked by its forced category:no value.
     const targetedSaleShareOptOut =
-        ref._fazGetFromStore("gpc") === "1" ||
-        ref._fazGetFromStore("dnsmpi") === "1";
+        _fazRef._fazGetFromStore("gpc") === "1" ||
+        _fazRef._fazGetFromStore("dnsmpi") === "1";
     if (
         _fazGetLaw() === "gdpr" &&
         (!fazconsent || fazconsent !== "yes") &&
@@ -7276,8 +7296,8 @@ try {
     if (window.console && console.warn) console.warn('[FAZ Cookie Manager] Startup resource sweep failed', _sweepError);
 }
 
-const _nodeListObserver = new MutationObserver(_fazMutationObserver);
-_nodeListObserver.observe(document.documentElement, {
+_fazNodeListObserver = new MutationObserver(_fazMutationObserver);
+_fazNodeListObserver.observe(document.documentElement, {
     childList: true,
     subtree: true,
     // Watch type-attribute flips too: a caching layer (LiteSpeed / WP Rocket
@@ -7399,7 +7419,7 @@ function _fazIsCategoryToBeBlocked(category) {
         // window; the only category that may pass is explicitly necessary.
         return !pendingCategory || !pendingCategory.isNecessary;
     }
-    const cookieValue = ref._fazGetFromStore(category);
+    const cookieValue = _fazRef._fazGetFromStore(category);
     return (
         cookieValue === "no" ||
         (cookieValue !== "yes" &&
@@ -7509,7 +7529,7 @@ function _fazGetServiceConsentForTarget(formattedRE) {
         // Fall back to the scanner-detected pattern map otherwise. #134/#146.
         var serviceIds = providers[pi].service ? [providers[pi].service] : (psMap[providers[pi].re] || []);
         for (var si = 0; si < serviceIds.length; si++) {
-            var svcConsent = ref._fazGetFromStore("svc." + serviceIds[si]);
+            var svcConsent = _fazRef._fazGetFromStore("svc." + serviceIds[si]);
             if (svcConsent === "no") return "no";
             if (svcConsent === "yes") hasExplicitYes = true;
         }
@@ -7531,7 +7551,7 @@ function _fazShouldBlockResource(category, target, serviceId) {
             // provider's cookie was never observed. Gated on _fazIsRecognizedService
             // so a forged/unknown svc.<id> cannot override a denied category.
             // Mirrors the server-side get_enforceable_services() resolution. #134/#146.
-            var explicit = ref._fazGetFromStore("svc." + serviceId);
+            var explicit = _fazRef._fazGetFromStore("svc." + serviceId);
             if (explicit === "no") return true;
             if (explicit === "yes") return false;
         }
@@ -7869,7 +7889,7 @@ function _fazShouldChangeType(element, src, typeOverride) {
     // data-faz-service id is still rejected by the allowlist. serviceCategory is
     // only consulted by the category fallback return below.
     if (_fazStore._perServiceConsent && serviceId && _fazIsRecognizedService(serviceId)) {
-        var explicit = ref._fazGetFromStore("svc." + serviceId);
+        var explicit = _fazRef._fazGetFromStore("svc." + serviceId);
         if (explicit === "no") return true;
         if (explicit === "yes") return false;
     }
@@ -8227,7 +8247,7 @@ function _fazAfterConsent() {
         var consentData = { event: 'faz_consent_update' };
         var cats = _fazStore._categories || [];
         for (var i = 0; i < cats.length; i++) {
-            consentData['faz_' + cats[i].slug] = ref._fazGetFromStore(cats[i].slug) === 'yes' ? 'granted' : 'denied';
+            consentData['faz_' + cats[i].slug] = _fazRef._fazGetFromStore(cats[i].slug) === 'yes' ? 'granted' : 'denied';
         }
         window.dataLayer.push(consentData);
     }
@@ -8270,7 +8290,7 @@ function _fazAfterConsent() {
                 var _undetCat = _fazUndetectedProviderCategory(_sid);
                 _nowEffective = _undetCat
                     ? _fazServiceEffectiveConsent(_sid, _undetCat)
-                    : (ref._fazGetFromStore("svc." + _sid) || "no");
+                    : (_fazRef._fazGetFromStore("svc." + _sid) || "no");
             }
             if (_nowEffective === "no") {
                 serviceRevoked = true;
@@ -8367,14 +8387,14 @@ function _fazAfterConsent() {
         function (cat) { return !cat.isNecessary && _fazIsCategoryToBeBlocked(cat.slug); }
     );
     if (!anyBlocked) {
-        _nodeListObserver.disconnect();
+        _fazNodeListObserver.disconnect();
         document.createElement = _fazCreateElementBackup;
     }
 
     // Cross-domain consent forwarding: send consent to configured target domains.
     if (_fazStore._consentForwarding && _fazStore._consentForwarding.enabled) {
         var targets = _fazStore._consentForwarding.targets || [];
-        var consentValue = ref._fazGetCookie('fazcookie-consent');
+        var consentValue = _fazRef._fazGetCookie('fazcookie-consent');
         if (consentValue && targets.length > 0) {
             targets.forEach(function(targetUrl) {
                 if (!_fazIsAllowedScheme(targetUrl)) return;
@@ -8547,7 +8567,7 @@ function _fazExecuteConsentScripts(prevAccepted) {
         var entry = scripts[slug];
         if (!entry) continue;
         var wasAccepted = Array.isArray(prevAccepted) && prevAccepted.indexOf(slug) !== -1;
-        var isAccepted  = ref._fazGetFromStore(slug) === 'yes';
+        var isAccepted  = _fazRef._fazGetFromStore(slug) === 'yes';
         var toRun = null;
         if (!wasAccepted && isAccepted  && entry.opt_in  && entry.opt_in.length)  toRun = entry.opt_in;
         // Run opt_out on any rejection — including first-visit Reject All where
@@ -8656,9 +8676,9 @@ function _fazFindCheckBoxValue(id = "") {
     //     visitor has consented to sale of personal data, which is what the
     //     CCPA opt-out checkbox represents when present.
     if (id) {
-        return ref._fazGetFromStore && ref._fazGetFromStore(id) === "yes";
+        return _fazRef._fazGetFromStore && _fazRef._fazGetFromStore(id) === "yes";
     }
-    return !!(ref._fazGetFromStore && ref._fazGetFromStore("consent") === "yes");
+    return !!(_fazRef._fazGetFromStore && _fazRef._fazGetFromStore("consent") === "yes");
 }
 
 function _fazAddPlaceholder(htmlElm, uniqueID) {
@@ -8802,7 +8822,7 @@ function _fazSetPlaceHolder(container) {
     Array.from(placeHolders).forEach((placeHolder) => {
         placeHolder.classList.remove('faz-hidden');
         placeHolder.addEventListener("click", () => {
-            if (ref._fazGetFromStore("action")) _revisitFazConsent();
+            if (_fazRef._fazGetFromStore("action")) _revisitFazConsent();
         });
         for (const style in styles) {
             if (!styles[style]) continue;
@@ -8846,7 +8866,7 @@ function _fazUpdateConsentId() {
         else parent.insertBefore(line, anchor);
     }
     if (!line) return;
-    var id = ref._fazGetFromStore('consentid');
+    var id = _fazRef._fazGetFromStore('consentid');
     line.hidden = !id;
     var field = line.querySelector('input');
     if (field) field.value = id;
@@ -8918,7 +8938,7 @@ function _fazRemoveAllDeadCookies() {
     // svc.<id>:no / ck.<svc>.<cookie>:no inside it gets shredded. #135 / #134/#146.
     var _fazGranularConsent = _fazStore._perCookieConsent || _fazStore._perServiceConsent;
     for (const category of _fazStore._categories) {
-        if (_fazGranularConsent || ref._fazGetFromStore(category.slug) !== "yes")
+        if (_fazGranularConsent || _fazRef._fazGetFromStore(category.slug) !== "yes")
             _fazRemoveDeadCookies(category);
     }
 }
@@ -9125,7 +9145,7 @@ function _fazHandleOptoutConfirm() {
  */
 function _fazHandleOptoutPopupClose() {
     if ( _fazIsOptoutSuccessVisible() ) {
-        ref._fazSetInStore( "action", "yes" );
+        _fazRef._fazSetInStore( "action", "yes" );
         _fazDismissOptoutSuccessCountdown();
         return;
     }
@@ -9148,7 +9168,7 @@ function _fazSetCCPAOptions() {
         `[faz_optout_option_title]`,
         optOutTitle.content
     );
-    const checked = ref._fazGetFromStore("consent") === "yes";
+    const checked = _fazRef._fazGetFromStore("consent") === "yes";
     _fazSetCheckBoxInfo(
         document.getElementById(`fazCCPAOptOut`),
         formattedLabel,
@@ -9311,8 +9331,8 @@ function _fazBuildServiceRow(service, serviceList) {
     checkbox.setAttribute('aria-label', _fazTranslate('service_consent_label', 'Service consent') + ': ' + service.label);
 
     // Determine checked state: explicit service consent > category consent.
-    var svcConsent = ref._fazGetFromStore('svc.' + service.id);
-    var catConsent = ref._fazGetFromStore(service.category);
+    var svcConsent = _fazRef._fazGetFromStore('svc.' + service.id);
+    var catConsent = _fazRef._fazGetFromStore(service.category);
     checkbox.checked = svcConsent ? svcConsent === 'yes' : catConsent === 'yes';
 
     checkbox.addEventListener('change', function() {
@@ -9575,8 +9595,8 @@ function _fazUpdateServiceToggleStates() {
     document.querySelectorAll('.faz-service-toggle').forEach(function(toggle) {
         var serviceId = toggle.getAttribute('data-service');
         var category = toggle.getAttribute('data-category');
-        var svcConsent = ref._fazGetFromStore('svc.' + serviceId);
-        var catConsent = ref._fazGetFromStore(category);
+        var svcConsent = _fazRef._fazGetFromStore('svc.' + serviceId);
+        var catConsent = _fazRef._fazGetFromStore(category);
         var isChecked = svcConsent ? svcConsent === 'yes' : catConsent === 'yes';
         toggle.checked = isChecked;
     });
@@ -10007,7 +10027,7 @@ function _fazParseVendorRecord(raw) {
  * @return {{disclosed: Object<number, boolean>, consent: Object<number, boolean>}|null}
  */
 function _fazReadVendorRecord() {
-    return _fazParseVendorRecord((ref._fazGetCookieMap()[_fazCookieName("fazVendorConsent")] || ""));
+    return _fazParseVendorRecord((_fazRef._fazGetCookieMap()[_fazCookieName("fazVendorConsent")] || ""));
 }
 
 /**
@@ -10076,7 +10096,7 @@ function _fazVendorRecordStale(action, undecided) {
  * @return {{purposes: Object<number, boolean>, vendors: Object<number, boolean>}|null}
  */
 function _fazReadVendorLI() {
-    const value = (ref._fazGetCookieMap()[_fazCookieName("fazVendorLI")] || "");
+    const value = (_fazRef._fazGetCookieMap()[_fazCookieName("fazVendorLI")] || "");
     if (!value) return null;
     const result = { purposes: {}, vendors: {} };
     value.split(',').forEach(function(pair) {
@@ -10120,12 +10140,12 @@ function _fazReadVendorLI() {
  * @return {boolean} true = established (switch on).
  */
 function _fazLIDefaultEstablished() {
-    if (ref._fazGetFromStore('action') !== 'yes' || ref._fazGetFromStore('undecided') === '1') return false;
+    if (_fazRef._fazGetFromStore('action') !== 'yes' || _fazRef._fazGetFromStore('undecided') === '1') return false;
     const categories = _fazStore._categories || [];
     for (let i = 0; i < categories.length; i++) {
         const category = categories[i];
         if (!category || category.isNecessary || category.slug === 'necessary') continue;
-        if (ref._fazGetFromStore(category.slug) === 'yes') return true;
+        if (_fazRef._fazGetFromStore(category.slug) === 'yes') return true;
     }
     return false;
 }
@@ -10408,8 +10428,8 @@ window._fazAcceptCategory = function (categorySlug) {
         if (cat.slug === categorySlug && !cat.isNecessary) {
             matched = true;
             categorySlugToRollback = cat.slug;
-            previousCategoryValue = ref._fazGetFromStore(cat.slug);
-            ref._fazConsentStore.set(cat.slug, "yes");
+            previousCategoryValue = _fazRef._fazGetFromStore(cat.slug);
+            _fazRef._fazConsentStore.set(cat.slug, "yes");
             // Sync checkbox so _fazAcceptCookies("custom") reads the correct state.
             var cb = document.getElementById("fazSwitch" + cat.slug);
             if (cb) cb.checked = true;
@@ -10429,7 +10449,7 @@ window._fazAcceptCategory = function (categorySlug) {
     if (_fazAcceptCookies("custom", false, "embed") === false) {
         // Age gate blocked the accept — rollback store and UI to original state.
         if (categorySlugToRollback) {
-            ref._fazConsentStore.set(categorySlugToRollback, previousCategoryValue);
+            _fazRef._fazConsentStore.set(categorySlugToRollback, previousCategoryValue);
             var cbR = document.getElementById("fazSwitch" + categorySlugToRollback);
             if (cbR) cbR.checked = previousCategoryValue === "yes";
             var cbDirectR = document.getElementById("fazCategoryDirect" + categorySlugToRollback);
@@ -10472,11 +10492,11 @@ window.getFazConsent = function () {
         cookieConsent.activeLaw = _fazGetLaw();
 
         _fazStore._categories.forEach(category => {
-            cookieConsent.categories[category.slug] = ref._fazGetFromStore(category.slug) === "yes";
+            cookieConsent.categories[category.slug] = _fazRef._fazGetFromStore(category.slug) === "yes";
         });
 
-        cookieConsent.isUserActionCompleted = ref._fazGetFromStore("action") === "yes";
-        cookieConsent.consentID = ref._fazGetFromStore("consentid") || "";
+        cookieConsent.isUserActionCompleted = _fazRef._fazGetFromStore("action") === "yes";
+        cookieConsent.consentID = _fazRef._fazGetFromStore("consentid") || "";
         cookieConsent.languageCode = _fazStore._language || "";
         cookieConsent.services = _fazPublicServiceConsentMap();
     } catch (_unused) { /* consent data unavailable */ }
@@ -10557,7 +10577,7 @@ window.getFazCookieConsent = function (cookieName) {
                 if (!pattern || !_fazCookieNameMatches(cookieName, pattern)) continue;
                 var decision = "";
                 if (_fazStore._perCookieConsent) {
-                    decision = ref._fazGetFromStore(_fazCkKey(service.id, pattern));
+                    decision = _fazRef._fazGetFromStore(_fazCkKey(service.id, pattern));
                 }
                 if (decision !== "yes" && decision !== "no") {
                     decision = _fazServiceEffectiveConsent(service.id, service.category || "");
@@ -10617,7 +10637,7 @@ window.addEventListener('message', function(event) {
         // Do not override an explicit local user action: if this page already has
         // action:yes the visitor has already chosen; forwarding must not upgrade
         // their choice (e.g. reject → accept) without their knowledge.
-        if (ref._fazGetFromStore("action") === "yes") return;
+        if (_fazRef._fazGetFromStore("action") === "yes") return;
 
         // Idempotency / anti-reload-loop guard: if the forwarded consent is
         // byte-for-byte identical to the cookie already stored on this domain,
@@ -10625,7 +10645,7 @@ window.addEventListener('message', function(event) {
         // forward to the other could trigger an endless reload ping-pong, and
         // a single allowed origin re-posting the same message would needlessly
         // reload the page on every event.
-        if (ref._fazGetCookie('fazcookie-consent') === consent) return;
+        if (_fazRef._fazGetCookie('fazcookie-consent') === consent) return;
 
         // Clear any vendor/TCF cookies the recipient domain may have from
         // a previous (possibly more permissive) choice. Without this, a
@@ -10636,7 +10656,7 @@ window.addEventListener('message', function(event) {
         // but TCF vendors are still flagged as consented.
         ["fazVendorConsent", "fazVendorLI", "euconsent-v2"].forEach(_fazDeleteCookie);
         // Apply forwarded consent cookie.
-        ref._fazSetCookie('fazcookie-consent', consent, _fazStore._expiry || 180);
+        _fazRef._fazSetCookie('fazcookie-consent', consent, _fazStore._expiry || 180);
         // Reload to apply the forwarded consent state.
         window.location.reload();
     }
