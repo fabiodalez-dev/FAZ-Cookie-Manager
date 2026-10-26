@@ -238,7 +238,10 @@ function faz_rm_php_sources( $root ) {
 		if ( 'php' !== strtolower( $file->getExtension() ) ) {
 			continue;
 		}
-		if ( preg_match( '#/(tests|node_modules|vendor|\.git|\.claude|\.codex|build|dist)/#', $path ) ) {
+		// Exclude directories inside the checkout, not its parent path: a
+		// managed worktree can itself live beneath ~/.codex/worktrees.
+		$relative_path = substr( $path, strlen( $root ) + 1 );
+		if ( preg_match( '#(^|/)(tests|node_modules|vendor|\.git|\.claude|\.codex|build|dist)/#', $relative_path ) ) {
 			continue;
 		}
 		$files[] = $path;
