@@ -108,7 +108,7 @@ _fazRef._fazConsentStore = new Map();
 // before it installs its gates (adoptStale() in bootstrap.js). It used to be
 // survivable only on paper — that runtime's _fazRenderBanner() looped forever
 // on the bootstrap's held insertions, which never left their source.
-const _FAZ_BUILD = '1.34.3+old-webkit-globals';
+const _FAZ_BUILD = '1.34.4+css-ready-and-script-restore';
 
 /**
  * One-call frontend self-diagnosis for support: paste

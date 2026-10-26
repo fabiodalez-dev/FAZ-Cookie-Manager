@@ -708,6 +708,15 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.34.4 — 2026-10-27
+
+- On Safari and iOS 16, a JavaScript scope incompatibility could leave the consent banner invisible. Runtime bindings are now accessible to the affected engine.
+- The banner stylesheet loads without blocking the first paint. Page-content utilities remain inline, and the banner waits for its stylesheet before appearing, with a bounded fallback if the download fails.
+- The first country override now persists when no overrides have been saved yet. The form also prevents overlapping submissions from silently replacing one another. Dynamically inserted scripts parked in place are reconsidered after consent. Restoration retains their original type, checks their service category and executes eligible scripts only once.
+- WP Fastest Cache and Super Page Cache now honour every FAZ page-cache veto, preventing crawler or visitor-specific output from becoming the shared page. Surge, Jetpack Boost and Cachify page caches are purged after relevant changes and plugin updates. W3 Total Cache, WP-Optimize, SiteGround Optimizer, Hummingbird and Jetpack Boost receive their supported optimisation exclusions; own tags also carry the Autoptimize exclusion marker.
+- Published cookie policies with incomplete required details are listed in wp-admin, with the missing fields and the visitor-visible outcome for each jurisdiction. The check includes older pages and ignores escaped shortcode examples.
+- The anti-spam setting help now explains the category fallback, custom exceptions and the Necessary-only banner case.
+
 ### 1.34.3 — 2026-10-21
 
 - Added: A new switch under Settings → Script Blocking, "Allow anti-spam services before consent", decides whether Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent (#343). It is on by default, so nothing changes for existing sites. Switched off, those services are held under the Functional category until the visitor accepts it, with no custom rule needed, and the CAPTCHA entries the plugin adds to Script Blocking Exceptions by default are ignored; exceptions written by the administrator still apply. Forms protected by a CAPTCHA cannot be submitted before consent while it is off.

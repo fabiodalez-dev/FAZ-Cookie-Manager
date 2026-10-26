@@ -2,17 +2,26 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
-## [1.34.4] - unreleased
+## [1.34.4] - 2026-10-27
 
 ### Fixed
-- With WP Fastest Cache, the first search-engine crawler to visit a page left a copy with no consent banner that was then served to every visitor, with tracking scripts unblocked. WP Fastest Cache reads the `DONOTCACHEPAGE` constant only on a 403, a Wordfence 503 and under the Divi theme, and never reads `Cache-Control`, so every page the plugin kept out of other caches (a crawler render, a consenting visitor's render, the data request form, country-dependent output) was still stored by it. The plugin now also calls WP Fastest Cache's own per-page exclusion, and the matrix below measures that a crawler visit no longer hides the banner.
-- A banner, cookie, category or settings save did not purge the page cache of Surge, Jetpack Boost or Cachify, so each kept serving the previous banner until its own expiry. All three are now purged on save and on a plugin update, through the mechanisms each documents (Surge's `surge_flush_actions` list and flag expiry, Boost's `jetpack_boost_clear_page_cache_all` action, Cachify's `cachify_flush_cache` action).
-- With Super Page Cache, the crawler-only render, a consenting visitor's render and the data request form page were sent to the browser and to Cloudflare as cacheable for a year: the plugin replaces the `Cache-Control` of every page it does not bypass with its own `s-maxage` value and reads neither `DONOTCACHEPAGE` nor the header it overwrote. Every FAZ page veto now also answers its `swcfpc_cache_bypass` filter, so those responses stay `no-store` everywhere.
-- W3 Total Cache "Minify (auto)", WP-Optimize "Minify" and Jetpack Boost "Defer non-essential JavaScript" rewrote the consent runtime: W3TC and WP-Optimize folded script.min.js, the configuration file and a11y into their own deferred bundles, WP-Optimize merged the inline bootstrap into that bundle too, so the protection the bootstrap gives while the runtime downloads ran after the parse it is meant to guard. Each optimiser now receives the exclusion its own API provides (`w3tc_minify_js_do_tag_minification`, `wp-optimize-minify-default-exclusions`, `jetpack_boost_render_blocking_js_exclude_scripts` and `js_do_concat`), as do Hummingbird's asset optimisation (`wphb_minify_resource`, `wphb_combine_resource`), Autoptimize (the `data-noptimize` attribute on every own tag) and SiteGround Optimizer's minify, async, combine and "Remove Query Strings" passes, the last of which had dropped the version from script.min.js so an update could keep serving the previous runtime.
-- Breeze is the one optimiser this release does not fix: with "Group JS", "Include inline JS" or "Delay all JavaScript" on it merges every script, the consent runtime included, into one bundle run at DOMContentLoaded, and its merge honours no exclusion, not `data-noptimize` and not its own "Exclude JavaScript" list. The banner still appears without interaction and the server-side blocking holds; only the early inline guard runs later than designed. The readme's Breeze entry documents the configuration that restores it.
+- On Safari and iOS 16, a JavaScript scope incompatibility could leave the consent banner invisible. Runtime bindings are now accessible to the affected engine.
+- The banner stylesheet loads without blocking the first paint. Page-content utilities remain inline, and the banner waits for its stylesheet before appearing, with a bounded fallback if the download fails.
+- The first country override now persists when no overrides have been saved yet. The form also prevents overlapping submissions from silently replacing one another.
+- Dynamically inserted scripts parked in place are reconsidered after consent. Restoration retains their original type, checks their service category and executes eligible scripts only once.
+- WP Fastest Cache and Super Page Cache now honour every FAZ page-cache veto, preventing crawler or visitor-specific output from becoming the shared page.
+- Surge, Jetpack Boost and Cachify page caches are purged after relevant changes and plugin updates. W3 Total Cache, WP-Optimize, SiteGround Optimizer, Hummingbird and Jetpack Boost receive their supported optimisation exclusions; own tags also carry the Autoptimize exclusion marker.
+- Published cookie policies with incomplete required details are listed in wp-admin, with the missing fields and the visitor-visible outcome for each jurisdiction. The check includes older pages and ignores escaped shortcode examples.
 
-### Added
-- `scripts/cache-plugin-matrix.sh` and `tests/e2e/specs/cache-plugin-matrix.spec.ts`: the default run checks WP Super Cache, W3 Total Cache, WP Fastest Cache, Cache Enabler, Hummingbird, Breeze, WP-Optimize, Surge, Jetpack Boost, Super Page Cache, FlyingPress and Cachify against all eight page-cache, REST and browser checks. LiteSpeed Cache, Autoptimize and SiteGround Optimizer run the REST and browser checks only on this host, where they provide no page cache. Comet Cache is supported as an explicitly selected optional run and is not in the default list.
+### Changed
+- The anti-spam setting help now explains the category fallback, custom exceptions and the Necessary-only banner case.
+
+### Developer
+- DSAR regression tests submit the rendered anti-bot fields, and policy tests run without mbstring. The cache matrix restores original options, drop-ins and configuration files, including W3 Total Cache, WP-Optimize and Breeze, on success or failure.
+- The cache matrix runs all eight checks for its 12 page-cache plugins. LiteSpeed Cache, Autoptimize and SiteGround Optimizer run the REST and browser checks on this host; Comet Cache is available only as an explicitly selected optional run.
+
+### Known limitations
+- Breeze script aggregation still requires the manual configuration documented in readme.txt to preserve the early inline guard; its merge does not honour script exclusions.
 
 ## [1.34.3] - 2026-10-21
 

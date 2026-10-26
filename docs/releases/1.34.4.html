@@ -1,0 +1,33 @@
+<p>FAZ Cookie Manager 1.34.4 raccoglie correzioni al caricamento del banner, al rapporto con i plugin di cache e al ripristino degli script dopo il consenso. Le segnalazioni avevano un punto comune: una pagina poteva sembrare corretta sul sito di prova, ma comportarsi diversamente con un browser meno recente, una cache attiva o impostazioni salvate tempo prima.</p>
+
+<h2>Il banner che Safari non mostrava</h2>
+
+<p>Su Safari e iOS 16 il banner poteva restare invisibile per un problema di ambito delle variabili JavaScript. Le funzioni dichiarate nel blocco principale non trovavano alcune variabili che gli altri motori rendevano accessibili. L'inizializzazione intercettava l'errore, ma il visitatore rimaneva senza pulsanti per scegliere.</p>
+
+<p>Le variabili condivise dal runtime sono ora dichiarate fuori da quel blocco. Un controllo statico cerca questa combinazione nei file sorgenti e nelle versioni compresse: i browser aggiornati usati dai test non riproducono più il difetto del vecchio motore, quindi verificare soltanto il loro risultato non sarebbe bastato.</p>
+
+<h2>Il foglio di stile e il primo disegno della pagina</h2>
+
+<p>Il CSS del banner viene scaricato senza bloccare il primo disegno della pagina. Le poche regole che servono subito al contenuto, come quelle dei segnaposto e del pulsante per riaprire le preferenze, restano disponibili nella pagina. Il banner aspetta che il proprio foglio di stile sia pronto prima di mostrarsi, con un'attesa limitata se il download non termina.</p>
+
+<p>Durante quell'attesa, le finestre ancora invisibili devono anche restare fuori dal flusso della pagina e non intercettare i clic. Il test rallenta apposta il CSS e controlla sia la posizione del contenuto sia l'interazione: il solo fatto che il banner compaia alla fine non dimostrerebbe che il caricamento è corretto.</p>
+
+<h2>La cache deve sapere quando non salvare</h2>
+
+<p>Non tutti i plugin di cache interpretano gli stessi segnali. WP Fastest Cache e Super Page Cache richiedono un'integrazione specifica per evitare di conservare una risposta destinata a un crawler o dipendente dalle scelte di un singolo visitatore. Questa versione aggiunge quei controlli e completa lo svuotamento delle cache di Surge, Jetpack Boost e Cachify quando cambiano i dati che influenzano il banner.</p>
+
+<p>Sono state aggiunte anche le esclusioni previste dai diversi ottimizzatori per mantenere intatti gli script del consenso. Breeze conserva una limitazione: il suo raggruppamento JavaScript non rispetta le esclusioni necessarie alla protezione inline iniziale. Il readme distingue questo caso e indica la configurazione manuale da usare.</p>
+
+<p>La verifica ha riguardato anche lo strumento con cui proviamo queste integrazioni. Una prima correzione ripristinava i file di W3 Total Cache, ma lasciava fuori la configurazione di WP-Optimize e quella di Breeze. La matrice ora conserva anche queste cartelle, insieme alle opzioni e ai drop-in originali. I test controllano il ripristino dopo un risultato positivo, un fallimento e un'uscita anticipata.</p>
+
+<h2>Override geografici e script rimasti fermi</h2>
+
+<p>Il primo override di un paese poteva sparire al salvataggio perché una mappa vuota veniva rappresentata come un array. La risposta dell'API conserva ora la forma di un oggetto, e il modulo impedisce invii sovrapposti che potrebbero sostituirsi a vicenda.</p>
+
+<p>Gli script dinamici parcheggiati direttamente nella pagina vengono inoltre rivalutati dopo il consenso. Il ripristino controlla la categoria del servizio e conserva il tipo originale dello script. I test verificano l'esecuzione, non soltanto il cambio di un attributo: uno script autorizzato deve partire una sola volta, mentre quello ancora negato deve restare fermo.</p>
+
+<h2>Le policy incomplete sono visibili anche all'amministratore</h2>
+
+<p>Una cookie policy già pubblicata può precedere i controlli sui dati obbligatori introdotti nelle versioni recenti. Il nuovo avviso in wp-admin elenca i campi mancanti per ciascuna pagina e distingue le policy ancora mostrate da quelle POPIA che il renderer non può produrre. La ricerca raggiunge anche le pagine più vecchie e non scambia uno shortcode scritto come esempio per una policy reale.</p>
+
+<p>Il testo dell'impostazione anti-spam chiarisce infine le categorie alternative e il ruolo delle eccezioni personalizzate. Non cambia la scelta salvata sul sito: rende esplicite le condizioni in cui il CAPTCHA può caricarsi.</p>
