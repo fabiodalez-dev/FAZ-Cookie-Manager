@@ -18,10 +18,12 @@ const WP_PATH = process.env.WP_PATH || '';
 const OPTION = 'faz_cookie_policy_data';
 const NOTICE = '.faz-incomplete-policy-notice';
 
+/** Run a WP-CLI command against the configured test installation. */
 function wp(args: string[]): string {
   return execFileSync('wp', [`--path=${WP_PATH}`, ...args], { encoding: 'utf8' }).trim();
 }
 
+/** Change controller fields while retaining the rest of the saved policy data. */
 function setCompany(name: string, email: string): void {
   const php = `$s = get_option( '${OPTION}', array() ); $s = is_array( $s ) ? $s : array();`
     + ` $s['company'] = array_merge( (array) ( $s['company'] ?? array() ), array( 'name' => ${JSON.stringify(name)}, 'email' => ${JSON.stringify(email)} ) );`
@@ -141,5 +143,25 @@ test.describe('Published cookie policy without controller details is flagged in 
     await expect(popia).toContainText('Postal address');
     await expect(popia).not.toContainText('Legal entity name');
     await expect(popia).not.toContainText('Privacy contact email');
+  });
+
+  test('complete settings skip the published-content search', () => {
+    const result = wp(['eval', `
+      $settings = get_option( '${OPTION}', array() );
+      $settings['company'] = array( 'name' => 'Complete Controller', 'email' => 'privacy@example.com', 'address' => '1 Test Street' );
+      $settings['dpo'] = array( 'name' => 'Information Officer', 'email' => 'officer@example.com' );
+      $settings['privacy_policy_url'] = 'https://example.com/privacy/';
+      update_option( '${OPTION}', $settings );
+      $searches = 0;
+      add_filter( 'posts_pre_query', function ( $posts, $query ) use ( &$searches ) {
+        if ( '[faz_cookie_policy_complete' === $query->get( 's' ) ) { ++$searches; }
+        return $posts;
+      }, 10, 2 );
+      $method = new ReflectionMethod( 'FazCookie\\\\Admin\\\\Admin', 'incomplete_cookie_policy_pages' );
+      $method->setAccessible( true );
+      $pages = $method->invoke( null );
+      echo wp_json_encode( array( 'pages' => $pages, 'searches' => $searches ) );
+    `]);
+    expect(JSON.parse(result)).toEqual({ pages: [], searches: 0 });
   });
 });
