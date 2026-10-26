@@ -141,7 +141,7 @@ test.describe('Cache-plugin auto-exclude (#83 + 1.13.2 post-review)', () => {
     }
   });
 
-  test('frontend <script> tags for own handles carry all 5 opt-out attributes', async ({ page }) => {
+  test('frontend <script> tags for own handles carry all 6 opt-out attributes', async ({ page }) => {
     // Hit any public URL that enqueues the FAZ frontend scripts; we
     // don't need a specific page — the root homepage enqueues them by
     // default when the banner template is loaded.
@@ -169,6 +169,9 @@ test.describe('Cache-plugin auto-exclude (#83 + 1.13.2 post-review)', () => {
       expect(tag, `missing data-no-minify on: ${tag.slice(0, 120)}`).toContain('data-no-minify="1"');
       expect(tag, `missing data-cfasync on: ${tag.slice(0, 120)}`).toContain('data-cfasync="false"');
       expect(tag, `missing data-ao-skip on: ${tag.slice(0, 120)}`).toContain('data-ao-skip="1"');
+      // Autoptimize and Breeze read this one (their `dontmove` list); without
+      // it Breeze merged the inline bootstrap into its deferred bundle.
+      expect(tag, `missing data-noptimize on: ${tag.slice(0, 120)}`).toContain('data-noptimize="1"');
     }
   });
 

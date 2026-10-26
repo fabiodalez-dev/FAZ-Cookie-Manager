@@ -19,6 +19,17 @@ namespace {
 		public function execute_purge_no_id( $post_id = 0 ) {}
 	}
 
+	class Cachify {
+		/**
+		 * @param bool $clear_all_methods Flush every caching method, not only the active one.
+		 * @return void
+		 */
+		public static function flush_total_cache( $clear_all_methods = false ) {}
+	}
+
+	/** @return void */
+	function wpfc_exclude_current_page() {}
+
 	/** @return mixed */
 	function rocket_clean_domain() {}
 
@@ -46,6 +57,11 @@ namespace FlyingPress {
 		/** @return mixed */
 		public static function purge_everything() {}
 	}
+}
+
+namespace Surge {
+	/** @return array<int, string> */
+	function expire( $flag = null ) {}
 }
 
 namespace LiteSpeed {

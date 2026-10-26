@@ -126,9 +126,12 @@ class Cache_Compatibility {
 	 * Define the page-cache bypass constants the WordPress caches read.
 	 *
 	 * DONOTCACHEPAGE (WP Rocket, W3TC, WP Super Cache, Cache Enabler, SG
-	 * Optimizer, Breeze …) and LSCACHE_NO_CACHE, which LiteSpeed Cache checks
-	 * on its own besides the `litespeed_control_set_nocache` action. Constants
-	 * cannot be undefined, so a value someone else already set is left as it is.
+	 * Optimizer, Breeze, Surge, Jetpack Boost, Comet Cache, Cachify, WP-Optimize
+	 * …) and LSCACHE_NO_CACHE, which LiteSpeed Cache checks on its own besides
+	 * the `litespeed_control_set_nocache` action. WP Fastest Cache honours
+	 * neither in general, so its own per-request opt-out is called as well.
+	 * Constants cannot be undefined, so a value someone else already set is
+	 * left as it is.
 	 *
 	 * Every caller is a PAGE veto: the response varies by visitor (consent
 	 * state, country, crawler) and must not be stored as a page. W3 Total
@@ -151,6 +154,17 @@ class Cache_Compatibility {
 			if ( ! defined( $constant ) ) {
 				define( $constant, true );
 			}
+		}
+		// WP Fastest Cache reads DONOTCACHEPAGE only on a Wordfence 503, a 403
+		// and under the Divi theme (inc/cache.php, callback()), and it never
+		// reads Cache-Control. Measured on 1.3.x: with the constant defined and
+		// the no-store set sent, the crawler-only render was still stored and
+		// served to the next human. Its own opt-out is this function, which
+		// fires the `wpfc_exclude_current_page` action its buffer callback
+		// honours; it locates the caller by name in a backtrace, so it must be
+		// called, not re-fired as an action.
+		if ( function_exists( 'wpfc_exclude_current_page' ) ) {
+			\wpfc_exclude_current_page();
 		}
 	}
 
