@@ -64,6 +64,7 @@ if (args[0] === 'eval' && args[1].includes('Breeze_ConfigCache::factory()->write
     writeFileSync(join(bin, 'package.json'), '{"type":"module"}');
     writeFileSync(join(bin, 'curl'), '#!/bin/sh\ncase " $* " in *" -w "*) printf "%s" "${MATRIX_HTTP_STATUS:-200}" ;; *) printf "Cache-Control: public\\r\\n" ;; esac\n', { mode: 0o755 });
     writeFileSync(join(bin, 'npx'), '#!/bin/sh\nif [ -n "${MATRIX_TEST_FAIL:-}" ]; then echo "1 failed"; exit 1; fi\necho "8 passed"\n', { mode: 0o755 });
+    writeFileSync(join(bin, 'cp'), '#!/bin/sh\nfor arg do last="$arg"; done\nif [ -n "${MATRIX_STATE_RESTORE_FAIL:-}" ] && [ "$last" = "$WP_PATH/wp-content/w3tc-config" ]; then exit 1; fi\nexec /bin/cp "$@"\n', { mode: 0o755 });
     const calls = join(dir, 'calls');
     const result = spawnSync('bash', [join(repo, 'scripts/cache-plugin-matrix.sh'), slug], {
         encoding: 'utf8', timeout: 30_000,
@@ -108,6 +109,32 @@ test('matrix retains its snapshot and fails when restore fails', () => {
         assert.ok(snapshot, 'recovery path is reported');
         assert.equal(readFileSync(join(snapshot, 'options'), 'utf8'), 'original option snapshot');
         assert.equal(readFileSync(join(run.site, 'wp-content/w3tc-config/master.php'), 'utf8'), run.originals['wp-content/w3tc-config/master.php']);
+        assert.equal(existsSync(join(run.site, 'wp-content/advanced-cache.php')), false, 'cache drop-in stays off with unrestored options');
+        assert.equal(existsSync(join(run.site, 'wp-content/object-cache.php')), false, 'persistent backend stays off with unrestored options');
+        const restore = run.calls.findIndex(args => args[0] === 'eval-file' && args[2] === 'restore');
+        assert.equal(run.calls.slice(restore + 1).some(args => args[0] === 'cache' && args[1] === 'flush'), false);
+    } finally {
+        if (snapshot) rmSync(snapshot, { recursive: true, force: true });
+        rmSync(run.dir, { recursive: true, force: true });
+    }
+});
+
+test('a failed state-file restore does not prevent independent recovery', () => {
+    const run = runMatrix({ MATRIX_STATE_RESTORE_FAIL: '1' });
+    let snapshot;
+    try {
+        assert.equal(run.result.status, 1, run.result.stdout + run.result.stderr);
+        snapshot = run.result.stderr.match(/snapshot retained at (.+)/)?.[1];
+        assert.ok(snapshot, 'backup retained after partial restore');
+        for (const [path, original] of Object.entries(run.originals)) {
+            if (path.startsWith('wp-content/w3tc-config/')) continue;
+            assert.equal(readFileSync(join(run.site, path), 'utf8'), original, path);
+        }
+        assert.equal(readlinkSync(join(run.site, 'wp-content/object-cache.php')), join(run.dir, 'redis-dropin.php'));
+        assert.equal(readFileSync(join(snapshot, 'state-4/master.php'), 'utf8'), run.originals['wp-content/w3tc-config/master.php']);
+        const restore = run.calls.findIndex(args => args[0] === 'eval-file' && args[2] === 'restore');
+        assert.ok(restore >= 0, 'options restored despite a file failure');
+        assert.ok(run.calls.slice(restore + 1).some(args => args[0] === 'cache' && args[1] === 'flush'), 'restored backend flushed');
     } finally {
         if (snapshot) rmSync(snapshot, { recursive: true, force: true });
         rmSync(run.dir, { recursive: true, force: true });

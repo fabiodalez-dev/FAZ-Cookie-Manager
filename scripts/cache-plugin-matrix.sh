@@ -337,6 +337,8 @@ fi
 
 restore_site() {
   local run_status=$?
+  local restore_failed=0
+  local options_restored=0
   trap - EXIT
   echo "--- restoring site state"
   # Do not bootstrap a cache drop-in against the matrix's temporary options.
@@ -344,33 +346,43 @@ restore_site() {
   for i in "${!state_paths[@]}"; do
     path="${state_paths[$i]}"
     if ! rm -rf "$path"; then
-      echo "!! restore failed; snapshot retained at $snapshot_dir" >&2
-      exit 1
+      echo "!! could not remove $path" >&2
+      restore_failed=1
+      continue
     fi
     if [ -e "$snapshot_dir/state-$i" ] || [ -L "$snapshot_dir/state-$i" ]; then
       if ! mkdir -p "$(dirname "$path")" || ! cp -pPR "$snapshot_dir/state-$i" "$path"; then
-        echo "!! restore failed; snapshot retained at $snapshot_dir" >&2
-        exit 1
+        echo "!! could not restore $path" >&2
+        restore_failed=1
       fi
     fi
   done
   if ! wp --path="$WP_PATH" --skip-plugins --skip-themes eval-file "$options_helper" restore "$snapshot_dir/options"; then
-    echo "!! option restore failed; snapshot retained at $snapshot_dir" >&2
-    exit 1
+    echo "!! option restore failed" >&2
+    restore_failed=1
+  else
+    options_restored=1
   fi
-  wp --path="$WP_PATH" --skip-plugins --skip-themes option delete faz_banner_template >/dev/null 2>&1 || true
-  for dropin in advanced-cache.php object-cache.php; do
-    if [ -e "$snapshot_dir/$dropin" ] || [ -L "$snapshot_dir/$dropin" ]; then
-      if ! cp -pPR "$snapshot_dir/$dropin" "$WPC/$dropin"; then
-        echo "!! drop-in restore failed; snapshot retained at $snapshot_dir" >&2
-        exit 1
+  if [ "$options_restored" -eq 1 ]; then
+    wp --path="$WP_PATH" --skip-plugins --skip-themes option delete faz_banner_template >/dev/null 2>&1 || true
+    for dropin in advanced-cache.php object-cache.php; do
+      if [ -e "$snapshot_dir/$dropin" ] || [ -L "$snapshot_dir/$dropin" ]; then
+        if ! cp -pPR "$snapshot_dir/$dropin" "$WPC/$dropin"; then
+          echo "!! drop-in restore failed: $dropin" >&2
+          restore_failed=1
+        fi
       fi
+    done
+    # Flush through the original persistent backend after restoring it.
+    if ! wp --path="$WP_PATH" --skip-plugins --skip-themes cache flush >/dev/null; then
+      echo "!! cache flush failed" >&2
+      restore_failed=1
     fi
-  done
-  # The original object-cache drop-in may use Redis/Memcached. Flush through
-  # that backend too, after restoring it, so it cannot retain the test options.
-  if ! wp --path="$WP_PATH" --skip-plugins --skip-themes cache flush >/dev/null; then
-    echo "!! cache flush failed; snapshot retained at $snapshot_dir" >&2
+  else
+    echo "!! drop-in restore skipped because option restore failed" >&2
+  fi
+  if [ "$restore_failed" -ne 0 ]; then
+    echo "!! restore incomplete; snapshot retained at $snapshot_dir" >&2
     exit 1
   fi
   rm -rf "$snapshot_dir"
