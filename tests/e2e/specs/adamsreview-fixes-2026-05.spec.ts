@@ -51,7 +51,7 @@ function blockFazDsarSubmit(page: Page): { wasCalled: () => boolean; restore: ()
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const DSAR_SLUG = 'faz-e2ear-fixes-dsar';
+const DSAR_SLUG = 'faz-e2e-ar-fixes-dsar';
 
 // ── Suite setup ───────────────────────────────────────────────────────────────
 
