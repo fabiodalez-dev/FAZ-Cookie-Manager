@@ -33,6 +33,7 @@ function runMatrix(extraEnv = {}, slug = 'autoptimize') {
     }
     writeFileSync(join(dir, 'redis-dropin.php'), '<?php /* persistent cache */');
     symlinkSync(join(dir, 'redis-dropin.php'), join(content, 'object-cache.php'));
+    if (extraEnv.MATRIX_EXISTING_FIXTURE) writeFileSync(join(site, 'fixture-page'), 'original fixture content');
     const wp = `#!${process.execPath}
 import { writeFileSync, appendFileSync, readFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
@@ -49,6 +50,17 @@ if (args[0] === 'plugin' && args[1] === 'list') {
 if (args[0] === 'plugin' && args[1] === 'deactivate') {
     if (process.env.MATRIX_DEACTIVATE_FAIL || (process.env.MATRIX_PRIMARY_DEACTIVATE_FAIL && !rawArgs.includes('--skip-plugins'))) process.exit(1);
     if (!process.env.MATRIX_STUCK_PLUGIN && existsSync(activeFile)) unlinkSync(activeFile);
+}
+if (args[0] === 'eval' && args[1].includes('wp_insert_post')) {
+    if (process.env.MATRIX_CREATE_FIXTURE_FAIL) process.exit(1);
+    if (!existsSync(join(site, 'fixture-page'))) {
+        writeFileSync(join(site, 'fixture-page'), 'created by matrix');
+        console.log('123');
+    }
+}
+if (args[0] === 'post' && args[1] === 'delete') {
+    if (args[2] !== '123' || process.env.MATRIX_DELETE_FIXTURE_FAIL) process.exit(1);
+    unlinkSync(join(site, 'fixture-page'));
 }
 if (args[0] === 'config' && args[1] === 'path') console.log(join(site, 'wp-config.php'));
 if (args[0] === 'config' && args[1] === 'get') console.log('true');
@@ -115,6 +127,7 @@ for (const [name, env, expectedStatus, slug] of [
             assert.equal(readlinkSync(join(run.site, 'wp-content/object-cache.php')), join(run.dir, 'redis-dropin.php'));
             assert.equal(existsSync(join(run.site, 'wp-content/wp-cache-config.php.bak')), false);
             assert.equal(existsSync(join(run.site, 'wp-content/boost-cache/config.php')), false);
+            assert.equal(existsSync(join(run.site, 'fixture-page')), false, 'owned fixture removed even after an early failure');
             const restore = run.calls.findIndex(args => args[0] === 'eval-file' && args[2] === 'restore');
             const flush = run.calls.findLastIndex(args => args[0] === 'cache' && args[1] === 'flush');
             assert.ok(restore >= 0, 'original options restored');
@@ -194,6 +207,49 @@ test('the output preview drains long reporter output through completion', () => 
         assert.equal(run.result.status, 0, run.result.stdout + run.result.stderr);
         assert.equal(readFileSync(join(run.dir, 'npx-completed'), 'utf8'), 'done');
         assert.match(run.result.stdout, /ok 8 passed/);
+    } finally {
+        rmSync(run.dir, { recursive: true, force: true });
+    }
+});
+
+
+test('matrix preserves a fixture page that existed before the run', () => {
+    const run = runMatrix({ MATRIX_EXISTING_FIXTURE: '1' });
+    try {
+        assert.equal(run.result.status, 0, run.result.stdout + run.result.stderr);
+        assert.equal(readFileSync(join(run.site, 'fixture-page'), 'utf8'), 'original fixture content');
+        assert.equal(run.calls.some(args => args[0] === 'post' && args[1] === 'delete'), false);
+    } finally {
+        rmSync(run.dir, { recursive: true, force: true });
+    }
+});
+
+test('failed fixture deletion fails the run but still restores the configuration', () => {
+    const run = runMatrix({ MATRIX_DELETE_FIXTURE_FAIL: '1' });
+    let snapshot;
+    try {
+        assert.equal(run.result.status, 1, run.result.stdout + run.result.stderr);
+        assert.match(run.result.stderr, /fixture page deletion failed: 123/);
+        assert.equal(existsSync(join(run.site, 'fixture-page')), true);
+        for (const [path, original] of Object.entries(run.originals)) {
+            assert.equal(readFileSync(join(run.site, path), 'utf8'), original, path);
+        }
+        assert.equal(readlinkSync(join(run.site, 'wp-content/object-cache.php')), join(run.dir, 'redis-dropin.php'));
+        snapshot = run.result.stderr.match(/snapshot retained at (.+)/)?.[1];
+        assert.ok(snapshot);
+    } finally {
+        if (snapshot) rmSync(snapshot, { recursive: true, force: true });
+        rmSync(run.dir, { recursive: true, force: true });
+    }
+});
+
+test('failed fixture creation stops before activating a cache plugin', () => {
+    const run = runMatrix({ MATRIX_CREATE_FIXTURE_FAIL: '1' });
+    try {
+        assert.equal(run.result.status, 3, run.result.stdout + run.result.stderr);
+        assert.equal(existsSync(join(run.site, 'fixture-page')), false);
+        assert.equal(run.calls.some(args => args[0] === 'plugin' && args[1] === 'activate'), false);
+        assert.ok(run.calls.some(args => args[0] === 'eval-file' && args[2] === 'restore'));
     } finally {
         rmSync(run.dir, { recursive: true, force: true });
     }
