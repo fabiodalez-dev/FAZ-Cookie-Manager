@@ -1,10 +1,15 @@
 import { request } from '@playwright/test';
+import type { FullConfig } from '@playwright/test';
 import { assertPrerequisites } from './utils/preflight';
 import { getWpLoginPath } from './utils/wp-auth';
 import { wpEval } from './utils/wp-env';
 import { resetBaseline } from './utils/seed-defaults';
 
-async function globalSetup(): Promise<void> {
+async function globalSetup(config: FullConfig): Promise<void> {
+  // Reject CLI overrides before login, preflight repair or any fixture mutation.
+  if (config.workers !== 1) {
+    throw new Error('Single-site E2E projects share a WordPress database. Run with --workers=1; parallel projects need separate WordPress installations.');
+  }
   const baseURL = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
   const adminUser = process.env.WP_ADMIN_USER ?? 'admin';
   const adminPass = process.env.WP_ADMIN_PASS ?? 'admin';
