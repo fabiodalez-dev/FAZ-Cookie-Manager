@@ -128,6 +128,10 @@ pbc_check( false === strpos( $css, 'background:var(--faz-svc-color,#ff0000)' ), 
 // and drops a borderline colour (Twitch, 4.64:1) under 4.5:1 on hover; the
 // hover darkens the background only.
 pbc_check( false === strpos( $css, 'filter:brightness' ), 'the hover does not dim the button text with a filter' );
+// Non-video placeholders keep a neutral blue on purpose (the brand colour is
+// a video-placeholder accent), but with the same margin over 4.5:1.
+$generic = preg_match( '/\.faz-placeholder \.faz-placeholder-btn\{background:(#[0-9a-f]{6})/i', $css, $m ) ? $m[1] : '';
+pbc_check( '' !== $generic && pbc_white_contrast( $generic ) >= 4.6, sprintf( 'the generic button background (%s) clears 4.6:1 with white text', $generic ) );
 pbc_check( false !== strpos( $css, '.faz-placeholder--video .faz-placeholder-btn:hover{background:var(--faz-svc-btn,' ), 'the hover keeps the AA background underneath' );
 
 echo "\nTests run: {$run}\n";
