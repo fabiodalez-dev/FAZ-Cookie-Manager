@@ -436,13 +436,15 @@ rm -f "$WPC/advanced-cache.php"
 set_wp_cache false
 # The fixture page the spec judges; the spec upserts it by slug as well, this
 # only guarantees the baseline probe below does not read a 404 on a clean site.
-fixture_page_id=$(wpe '
+fixture_output=$(wp --path="$WP_PATH" --skip-plugins --skip-themes eval '
   if ( ! get_page_by_path( "faz-cache-matrix", OBJECT, "page" ) ) {
     $id = wp_insert_post( array( "post_type" => "page", "post_status" => "publish", "post_name" => "faz-cache-matrix", "post_title" => "FAZ Cache Matrix", "post_content" => "<p>FAZ cache matrix fixture.</p>" ), true );
     if ( is_wp_error( $id ) || ! $id ) { fwrite( STDERR, "Fixture page creation failed\n" ); exit(1); }
-    echo (int) $id;
+    echo "\nFAZ_FIXTURE_ID=" . (int) $id . "\n";
   }
 ') || exit 3
+# Ignore PHP/MU-plugin diagnostics around our explicit ownership record.
+fixture_page_id=$(printf '%s\n' "$fixture_output" | sed -n 's/^FAZ_FIXTURE_ID=//p' | tail -n 1)
 if [ -n "$fixture_page_id" ] && ! [[ "$fixture_page_id" =~ ^[1-9][0-9]*$ ]]; then
   echo "!! invalid fixture page ID" >&2
   fixture_page_id=''

@@ -52,11 +52,15 @@ if (args[0] === 'plugin' && args[1] === 'deactivate') {
     if (!process.env.MATRIX_STUCK_PLUGIN && existsSync(activeFile)) unlinkSync(activeFile);
 }
 if (args[0] === 'eval' && args[1].includes('wp_insert_post')) {
+    if (!rawArgs.includes('--skip-plugins')) process.exit(9);
     if (process.env.MATRIX_CREATE_FIXTURE_FAIL) process.exit(1);
+    if (process.env.MATRIX_FIXTURE_NOISE) console.log('Deprecated: simulated PHP notice on line 42');
     if (!existsSync(join(site, 'fixture-page'))) {
         writeFileSync(join(site, 'fixture-page'), 'created by matrix');
-        console.log('123');
+        console.log('');
+        console.log('FAZ_FIXTURE_ID=123');
     }
+    if (process.env.MATRIX_FIXTURE_NOISE) console.log('Notice: unrelated output 987');
 }
 if (args[0] === 'post' && args[1] === 'get') console.log(process.env.MATRIX_FIXTURE_SLUG_MISMATCH ? 'some-other-page' : 'faz-cache-matrix');
 if (args[0] === 'post' && args[1] === 'delete') {
@@ -111,6 +115,7 @@ printf done > "$MATRIX_NPX_DONE"
 
 for (const [name, env, expectedStatus, slug] of [
     ['successful run', {}, 0],
+    ['noisy fixture creation output', { MATRIX_FIXTURE_NOISE: '1' }, 0],
     ['successful Breeze run', {}, 0, 'breeze'],
     ['successful WP-Optimize run', {}, 0, 'wp-optimize'],
     ['fallback deactivation before the next plugin', { MATRIX_PRIMARY_DEACTIVATE_FAIL: '1' }, 0, ['autoptimize', 'breeze']],
@@ -215,7 +220,7 @@ test('the output preview drains long reporter output through completion', () => 
 
 
 test('matrix preserves a fixture page that existed before the run', () => {
-    const run = runMatrix({ MATRIX_EXISTING_FIXTURE: '1' });
+    const run = runMatrix({ MATRIX_EXISTING_FIXTURE: '1', MATRIX_FIXTURE_NOISE: '1' });
     try {
         assert.equal(run.result.status, 0, run.result.stdout + run.result.stderr);
         assert.equal(readFileSync(join(run.site, 'fixture-page'), 'utf8'), 'original fixture content');
