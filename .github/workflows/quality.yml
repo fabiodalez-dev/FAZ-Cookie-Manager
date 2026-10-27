@@ -14,7 +14,8 @@ concurrency:
 jobs:
   quality:
     name: Quality
-    runs-on: ubuntu-latest
+    # Playwright 1.58.2 supports Ubuntu 24.04; 26.04 rejects browser setup.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read
@@ -71,7 +72,8 @@ jobs:
 
   consent-browser:
     name: Consent intent (${{ matrix.browser }})
-    runs-on: ubuntu-latest
+    # Playwright 1.58.2 supports Ubuntu 24.04; 26.04 rejects browser setup.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
