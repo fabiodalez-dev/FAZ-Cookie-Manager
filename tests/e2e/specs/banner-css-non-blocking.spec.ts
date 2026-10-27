@@ -125,6 +125,11 @@ test.describe('Banner stylesheet is not render-blocking', () => {
       return !!el && !el.classList.contains('faz-hide');
     });
     expect(shown).toBe(true);
+    // State classes must keep working even when the external CSS never loads.
+    // Native DOM click avoids depending on RAF while WebKit has pending CSS.
+    await page.locator('.faz-btn-accept').evaluate((button) => (button as HTMLButtonElement).click());
+    await page.waitForFunction(() => document.querySelector('.faz-consent-container')?.classList.contains('faz-hide'), undefined, { polling: 50 });
+    expect(await page.locator('.faz-consent-container').evaluate((el) => getComputedStyle(el).display)).toBe('none');
     await ctx.close();
   });
 
