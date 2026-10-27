@@ -371,6 +371,7 @@ test.describe(`Cache plugin matrix — ${SLUG || '(no plugin)'}`, () => {
       await expect.poll(() => visitor.providerRequests(), { timeout: 10_000 }).toBeGreaterThan(0);
       // Load the page again as the consenting visitor: this is the render a
       // cache keyed only on the URL would store.
+      purgeAll();
       await visitor.page.reload({ waitUntil: 'domcontentloaded' });
       await visitor.page.waitForTimeout(1_000);
     } finally {
@@ -431,6 +432,11 @@ test.describe(`Cache plugin matrix — ${SLUG || '(no plugin)'}`, () => {
     for (const got of [first, second]) {
       expect(got.status).toBe(200);
       expect(got.headers['content-type'] ?? '', 'JSON content type').toMatch(/application\/json/);
+      if (got.headers['x-faz-jurisdiction'] === 'live') {
+        expect(got.headers['cache-control'] ?? '', 'country-dependent REST response is private').toMatch(/\bprivate\b/i);
+        expect(got.headers['cache-control'] ?? '', 'country-dependent REST response is no-store').toMatch(/\bno-store\b/i);
+        expect(got.headerHit, 'country-dependent REST response is not served from the page cache').toBe(false);
+      }
       expect(got.stamp, 'no page-cache stamp injected into the JSON response').toBe('');
       expect(() => JSON.parse(got.html), 'REST body is valid JSON (no minifier or footer comment appended)').not.toThrow();
     }

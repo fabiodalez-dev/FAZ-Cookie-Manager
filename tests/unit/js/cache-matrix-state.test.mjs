@@ -34,11 +34,22 @@ function runMatrix(extraEnv = {}, slug = 'autoptimize') {
     writeFileSync(join(dir, 'redis-dropin.php'), '<?php /* persistent cache */');
     symlinkSync(join(dir, 'redis-dropin.php'), join(content, 'object-cache.php'));
     const wp = `#!${process.execPath}
-import { writeFileSync, appendFileSync, readFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, appendFileSync, readFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 const site = process.env.WP_PATH;
-const args = process.argv.slice(2).filter(a => !a.startsWith('--'));
+const rawArgs = process.argv.slice(2);
+const args = rawArgs.filter(a => !a.startsWith('--'));
+const activeFile = join(site, 'active-plugin');
 appendFileSync(process.env.MATRIX_CALLS, JSON.stringify(args) + '\\n');
+if (args[0] === 'plugin' && args[1] === 'list') {
+    if (process.env.MATRIX_STATE_CHECK_FAIL) process.exit(1);
+    console.log('name,status');
+    if (existsSync(activeFile)) console.log(readFileSync(activeFile, 'utf8') + ',' + (process.env.MATRIX_NETWORK_ACTIVE ? 'active-network' : 'active'));
+}
+if (args[0] === 'plugin' && args[1] === 'deactivate') {
+    if (process.env.MATRIX_DEACTIVATE_FAIL || (process.env.MATRIX_PRIMARY_DEACTIVATE_FAIL && !rawArgs.includes('--skip-plugins'))) process.exit(1);
+    if (!process.env.MATRIX_STUCK_PLUGIN && existsSync(activeFile)) unlinkSync(activeFile);
+}
 if (args[0] === 'config' && args[1] === 'path') console.log(join(site, 'wp-config.php'));
 if (args[0] === 'config' && args[1] === 'get') console.log('true');
 if (args[0] === 'eval-file') {
@@ -48,8 +59,8 @@ if (args[0] === 'eval-file') {
         if (readFileSync(args[3], 'utf8') !== 'original option snapshot') process.exit(1);
     }
 }
-if (args[0] === 'plugin' && args[1] === 'is-active') process.exit(process.env.MATRIX_STUCK_PLUGIN ? 0 : 1);
 if (args[0] === 'plugin' && args[1] === 'activate') {
+    writeFileSync(activeFile, args[2]);
     writeFileSync(join(site, 'wp-config.php'), '<?php /* temporary config */');
     writeFileSync(join(site, '.htaccess'), '# temporary rules');
     writeFileSync(join(site, 'wp-content/wp-cache-config.php'), 'temporary supercache config');
@@ -78,7 +89,7 @@ printf done > "$MATRIX_NPX_DONE"
 `, { mode: 0o755 });
     writeFileSync(join(bin, 'cp'), '#!/bin/sh\nfor arg do last="$arg"; done\nif [ -n "${MATRIX_STATE_RESTORE_FAIL:-}" ] && [ "$last" = "$WP_PATH/wp-content/w3tc-config" ]; then exit 1; fi\nexec /bin/cp "$@"\n', { mode: 0o755 });
     const calls = join(dir, 'calls');
-    const result = spawnSync('bash', [join(repo, 'scripts/cache-plugin-matrix.sh'), slug], {
+    const result = spawnSync('bash', [join(repo, 'scripts/cache-plugin-matrix.sh'), ...[slug].flat()], {
         encoding: 'utf8', timeout: 30_000,
         env: { ...process.env, ...extraEnv, PATH: `${bin}:${process.env.PATH}`, WP_PATH: site, MATRIX_CALLS: calls, MATRIX_NPX_DONE: join(dir, 'npx-completed') },
     });
@@ -89,6 +100,7 @@ for (const [name, env, expectedStatus, slug] of [
     ['successful run', {}, 0],
     ['successful Breeze run', {}, 0, 'breeze'],
     ['successful WP-Optimize run', {}, 0, 'wp-optimize'],
+    ['fallback deactivation before the next plugin', { MATRIX_PRIMARY_DEACTIVATE_FAIL: '1' }, 0, ['autoptimize', 'breeze']],
     ['failing tests', { MATRIX_TEST_FAIL: '1' }, 1],
     ['plugin still active after cleanup', { MATRIX_STUCK_PLUGIN: '1' }, 1],
     ['early baseline failure', { MATRIX_HTTP_STATUS: '503' }, 3],
@@ -107,6 +119,28 @@ for (const [name, env, expectedStatus, slug] of [
             const flush = run.calls.findLastIndex(args => args[0] === 'cache' && args[1] === 'flush');
             assert.ok(restore >= 0, 'original options restored');
             assert.ok(flush > restore, 'persistent object cache flushed after restoring options');
+        } finally {
+            rmSync(run.dir, { recursive: true, force: true });
+        }
+    });
+}
+
+for (const [name, env, message] of [
+    ['both deactivation attempts fail', { MATRIX_DEACTIVATE_FAIL: '1' }, /autoptimize is still active after cleanup/],
+    ['the plugin remains network-active', { MATRIX_DEACTIVATE_FAIL: '1', MATRIX_NETWORK_ACTIVE: '1' }, /autoptimize is still active after cleanup/],
+    ['the inactive-state query fails', { MATRIX_STATE_CHECK_FAIL: '1' }, /could not verify deactivation of autoptimize/],
+]) {
+    test(`matrix stops and restores the site when ${name}`, () => {
+        const run = runMatrix(env, ['autoptimize', 'breeze']);
+        try {
+            assert.equal(run.result.status, 1, run.result.stdout + run.result.stderr);
+            assert.match(run.result.stderr, message);
+            assert.equal(run.calls.some(args => args[0] === 'plugin' && args[1] === 'activate' && args[2] === 'breeze'), false, 'next plugin never activated');
+            assert.ok(run.calls.some(args => args[0] === 'eval-file' && args[2] === 'restore'), 'EXIT trap still restores options');
+            for (const [path, original] of Object.entries(run.originals)) {
+                assert.equal(readFileSync(join(run.site, path), 'utf8'), original, path);
+            }
+            assert.equal(readlinkSync(join(run.site, 'wp-content/object-cache.php')), join(run.dir, 'redis-dropin.php'));
         } finally {
             rmSync(run.dir, { recursive: true, force: true });
         }

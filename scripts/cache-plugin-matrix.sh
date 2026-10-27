@@ -280,14 +280,21 @@ configure_plugin() {
 }
 
 cleanup_plugin() {
+  local active_plugins active_slug active_status
   wpq plugin deactivate "$1" >/dev/null 2>&1 || wp --path="$WP_PATH" --skip-plugins --skip-themes plugin deactivate "$1" >/dev/null 2>&1 || true
-  # A plugin that survived both attempts would keep its hooks on the next
-  # plugin's run and alter that verdict silently. Stop here: the EXIT trap
-  # puts the original plugin list back.
-  if wp --path="$WP_PATH" --skip-plugins --skip-themes plugin is-active "$1" >/dev/null 2>&1; then
-    echo "!! $1 is still active after cleanup — stopping the matrix" >&2
-    exit 1
+  # Do not load a possibly broken plugin just to confirm its removal. A failed
+  # status query is not proof of inactivity, so stop before deleting its files
+  # or activating another cache plugin. The EXIT trap still restores the site.
+  if ! active_plugins=$(wp --path="$WP_PATH" --skip-plugins --skip-themes plugin list --fields=name,status --format=csv); then
+    echo "!! could not verify deactivation of $1 — stopping the matrix" >&2
+    return 1
   fi
+  while IFS=, read -r active_slug active_status; do
+    if [ "$active_slug" = "$1" ] && { [ "$active_status" = 'active' ] || [ "$active_status" = 'active-network' ]; }; then
+      echo "!! $1 is still active after cleanup — stopping the matrix" >&2
+      return 1
+    fi
+  done <<< "$active_plugins"
   rm -f "$WPC/advanced-cache.php" "$WPC/object-cache.php"
   rm -rf "$WPC/cache/surge" "$WPC/cache/cache-enabler" "$WPC/cache/wp-fastest-cache" "$WPC/cache/all" "$WPC/cache/wpfc-mobile-cache" \
     "$WPC/cache/breeze"* "$WPC/cache/page_enhanced" "$WPC/cache/minify" "$WPC/cache/supercache" "$WPC/cache/blogs" \
@@ -446,7 +453,7 @@ for slug in "${PLUGINS[@]}"; do
   if ! wpq plugin activate "$slug" >/dev/null 2>&1; then
     echo "activation failed"
     summary+=("$slug: ACTIVATION FAILED")
-    cleanup_plugin "$slug"
+    cleanup_plugin "$slug" || exit 1
     continue
   fi
   configure_plugin "$slug"
@@ -456,7 +463,7 @@ for slug in "${PLUGINS[@]}"; do
     echo "!! site answers $health with $slug configured — not running the spec"
     summary+=("$slug: ERROR — site answers HTTP $health after configuration")
     rc=1
-    cleanup_plugin "$slug"
+    cleanup_plugin "$slug" || exit 1
     continue
   fi
   echo "WP_CACHE=$(wpq config get WP_CACHE 2>/dev/null || echo unset) advanced-cache.php=$([ -f "$WPC/advanced-cache.php" ] && echo present || echo absent)"
@@ -479,7 +486,7 @@ for slug in "${PLUGINS[@]}"; do
   if [ "$slug" = "jetpack-boost" ] && ls "$WPC"/boost-cache/logs/*.log >/dev/null 2>&1; then
     echo "  boost log:"; tail -12 "$WPC"/boost-cache/logs/*.log | cut -c1-200 | sed 's/^/    /'
   fi
-  cleanup_plugin "$slug"
+  cleanup_plugin "$slug" || exit 1
 done
 
 echo
