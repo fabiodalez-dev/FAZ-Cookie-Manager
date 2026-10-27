@@ -1538,6 +1538,17 @@ class Frontend {
 		if ( ! apply_filters( 'faz_runtime_fetchpriority', true ) ) {
 			return $tag;
 		}
+		// A priority registered for the handle through WordPress (6.9+:
+		// wp_script_add_data( $handle, 'fetchpriority', … ) or the
+		// 'fetchpriority' script arg) is a deliberate choice. 'auto' prints no
+		// attribute and 'low' can be lifted to 'auto' by a dependent, so the
+		// markup alone cannot show it: read the registration and keep it.
+		if ( function_exists( 'wp_scripts' ) ) {
+			$registered = wp_scripts()->get_data( $handle, 'fetchpriority' );
+			if ( is_string( $registered ) && '' !== $registered ) {
+				return $tag;
+			}
+		}
 		$id      = preg_quote( $handle . '-js', '#' );
 		$new_tag = preg_replace_callback( '#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#i', function ( $match ) use ( $id ) {
 			$attributes = $match[1];

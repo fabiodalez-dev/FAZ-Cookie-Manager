@@ -12,6 +12,20 @@ function is_admin() { return ! empty( $GLOBALS['rfp_admin'] ); }
 function apply_filters( $tag, $value ) {
 	return 'faz_runtime_fetchpriority' === $tag && isset( $GLOBALS['rfp_filter'] ) ? $GLOBALS['rfp_filter'] : $value;
 }
+/** Minimal WP_Scripts double: only the registered 'fetchpriority' data is read. */
+class RFP_Scripts {
+	public $data = array();
+	public function get_data( $handle, $key ) {
+		return isset( $this->data[ $handle ][ $key ] ) ? $this->data[ $handle ][ $key ] : false;
+	}
+}
+function wp_scripts() {
+	static $s = null;
+	if ( null === $s ) {
+		$s = new RFP_Scripts();
+	}
+	return $s;
+}
 require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 
 $frontend = ( new ReflectionClass( \FazCookie\Frontend\Frontend::class ) )->newInstanceWithoutConstructor();
@@ -54,6 +68,16 @@ rfp_check( $own === $frontend->prioritize_runtime_script_tag( $own, 'faz-cookie-
 
 $inline = "<script id=\"faz-cookie-manager-js\">/* alternative-asset inline bundle */</script>\n";
 rfp_check( $inline === $frontend->prioritize_runtime_script_tag( $inline, 'faz-cookie-manager' ), 'the inline alternative-asset bundle is untouched' );
+
+// WordPress 6.9+ lets a site register the priority. 'auto' prints no
+// attribute, and 'low' can be lifted to 'auto' by a dependent, so the tag
+// alone does not show it; the registration must still win.
+foreach ( array( 'auto', 'low' ) as $registered ) {
+	wp_scripts()->data['faz-cookie-manager']['fetchpriority'] = $registered;
+	rfp_check( $composite === $frontend->prioritize_runtime_script_tag( $composite, 'faz-cookie-manager' ), "a priority registered through WordPress ('{$registered}') is kept" );
+}
+unset( wp_scripts()->data['faz-cookie-manager'] );
+rfp_check( false !== strpos( $frontend->prioritize_runtime_script_tag( $composite, 'faz-cookie-manager' ), 'fetchpriority="high"' ), 'with nothing registered, high is added again' );
 
 $GLOBALS['rfp_filter'] = false;
 rfp_check( $composite === $frontend->prioritize_runtime_script_tag( $composite, 'faz-cookie-manager' ), 'faz_runtime_fetchpriority false turns it off' );
