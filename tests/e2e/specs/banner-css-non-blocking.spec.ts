@@ -125,6 +125,7 @@ test.describe('Banner stylesheet is not render-blocking', () => {
       return !!el && !el.classList.contains('faz-hide');
     });
     expect(shown).toBe(true);
+    await expect(page.locator('.faz-consent-container')).toBeVisible();
     // State classes must keep working even when the external CSS never loads.
     // Native DOM click avoids depending on RAF while WebKit has pending CSS.
     await page.locator('[data-faz-tag="accept-button"]').evaluate((button) => (button as HTMLButtonElement).click());
