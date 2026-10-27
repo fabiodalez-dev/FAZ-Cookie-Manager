@@ -311,7 +311,7 @@ test.describe('WooCommerce block checkout strictly-necessary configuration', () 
     // cache and cannot by itself rule out a production LiteSpeed/Cloudflare race.
     const fixture = JSON.parse(wpEval(`
       $snapshot = array();
-      foreach ( array( 'woocommerce_cart_page_id', 'woocommerce_enable_ajax_add_to_cart', 'woocommerce_coming_soon' ) as $name ) {
+      foreach ( array( 'woocommerce_cart_page_id', 'woocommerce_enable_ajax_add_to_cart', 'woocommerce_cart_redirect_after_add', 'woocommerce_coming_soon' ) as $name ) {
         $snapshot[ $name ] = get_option( $name, null );
       }
       $product = new WC_Product_Simple();
@@ -337,6 +337,7 @@ test.describe('WooCommerce block checkout strictly-necessary configuration', () 
       }
       update_option( 'woocommerce_cart_page_id', $cart_id );
       update_option( 'woocommerce_enable_ajax_add_to_cart', 'yes' );
+      update_option( 'woocommerce_cart_redirect_after_add', 'no' );
       // A newly assigned real cart page otherwise inherits Woo's store-only
       // "coming soon" screen from the baseline instead of rendering a cart.
       update_option( 'woocommerce_coming_soon', 'no' );

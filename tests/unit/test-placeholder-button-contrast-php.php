@@ -123,7 +123,7 @@ $social = Placeholder_Builder::build_social( 'instagram', 'Instagram', 'marketin
 pbc_check( false !== strpos( $social, '--faz-svc-btn:' . Placeholder_Builder::button_background( '#e4405f' ) ), 'the social placeholder sets --faz-svc-btn too' );
 $css = Placeholder_Builder::get_css();
 pbc_check( false !== strpos( $css, 'background:var(--faz-svc-btn,' ), 'the video button reads --faz-svc-btn first' );
-pbc_check( false === strpos( $css, 'background:var(--faz-svc-color,#ff0000)' ), 'no button background falls back to #ff0000 behind the white text' );
+pbc_check( 2 === substr_count( $css, 'background:var(--faz-svc-btn,var(--faz-svc-color,#e50000))' ), 'both video button states carry the complete nested AA fallback' );
 // A filter on the button darkens the white text along with the background
 // and drops a borderline colour (Twitch, 4.64:1) under 4.5:1 on hover; the
 // hover darkens the background only.
