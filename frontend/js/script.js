@@ -949,6 +949,8 @@ function _fazFireEvent(responseCategories) {
  *
  * @param {Function} callback Runs once, when the sheet is usable.
  */
+var _fazBannerCssWaitMs = 2000;
+
 function _fazWhenBannerCssReady(callback) {
     var link = null;
     try { link = document.querySelector('link[data-faz-banner-css]'); } catch (e) { link = null; }
@@ -965,7 +967,7 @@ function _fazWhenBannerCssReady(callback) {
     };
     link.addEventListener('load', finish);
     link.addEventListener('error', finish);
-    window.setTimeout(finish, 2000);
+    window.setTimeout(finish, _fazBannerCssWaitMs);
 }
 
 /**
@@ -1974,7 +1976,8 @@ function _fazScheduleBannerWatchdog() {
         // two never disagree about how long the await can actually run.
         var _fazBootstrapBudget = parseInt(_fazStore._geoBootstrapTimeout, 10);
         if (isNaN(_fazBootstrapBudget) || _fazBootstrapBudget < 250) _fazBootstrapBudget = 1500;
-        _fazWatchdogDelay = Math.max(2500, _fazBootstrapBudget + 1000);
+        // Rendering starts after the bootstrap, and can then wait for CSS.
+        _fazWatchdogDelay = Math.max(2500, _fazBootstrapBudget + _fazBannerCssWaitMs + 1000);
     }
     window.setTimeout(function () {
         try {
