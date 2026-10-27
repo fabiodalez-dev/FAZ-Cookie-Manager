@@ -15,8 +15,8 @@ import { execFileSync } from 'node:child_process';
 const WP_PATH = process.env.WP_PATH || '';
 const ADMIN_PAGE = '/wp-admin/admin.php?page=faz-cookie-manager-geo-routing';
 
-function wp(args: string[]): string {
-  return execFileSync('wp', [`--path=${WP_PATH}`, ...args], { encoding: 'utf8' }).trim();
+function wp(args: string[], input?: string): string {
+  return execFileSync('wp', [`--path=${WP_PATH}`, ...args], { encoding: 'utf8', input }).trim();
 }
 
 function clearOverrides(): void {
@@ -75,14 +75,15 @@ test.describe('Geo routing: per-country overrides persist from the first save (#
   test.beforeEach(clearOverrides);
   test.afterAll(() => {
     if (overridesSnapshot === null) return;
-    wp(['eval', `
+    // STDIN avoids putting a potentially large saved map into one CLI argument.
+    wp(['eval-file', '-'], `<?php
       $snapshot = unserialize( base64_decode( '${overridesSnapshot}', true ) );
       if ( $snapshot['exists'] ) {
         update_option( 'faz_geo_admin_overrides', $snapshot['value'] );
       } else {
         delete_option( 'faz_geo_admin_overrides' );
       }
-    `]);
+    `);
   });
 
   test('the first override survives a reload, and later edits keep the others', async ({ page, loginAsAdmin }) => {
