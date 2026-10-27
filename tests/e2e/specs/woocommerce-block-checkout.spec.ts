@@ -304,14 +304,14 @@ test.describe('WooCommerce block checkout strictly-necessary configuration', () 
     }
   });
 
-  test('fresh mobile guests retain the first AJAX addition after rejecting cookies', async ({ browser, browserName }) => {
+  test('fresh mobile guests retain the first AJAX addition after rejecting cookies', async ({ browser, browserName }, testInfo) => {
     // Exercise the classic catalogue -> immediate View cart flow as well as the
     // Store API coverage above. Every iteration owns a new cookie jar: reusing
     // a guest session would miss first-add failures. This fixture has no edge
     // cache and cannot by itself rule out a production LiteSpeed/Cloudflare race.
     const fixture = JSON.parse(wpEval(`
       $snapshot = array();
-      foreach ( array( 'woocommerce_cart_page_id', 'woocommerce_enable_ajax_add_to_cart' ) as $name ) {
+      foreach ( array( 'woocommerce_cart_page_id', 'woocommerce_enable_ajax_add_to_cart', 'woocommerce_coming_soon' ) as $name ) {
         $snapshot[ $name ] = get_option( $name, null );
       }
       $product = new WC_Product_Simple();
@@ -337,6 +337,9 @@ test.describe('WooCommerce block checkout strictly-necessary configuration', () 
       }
       update_option( 'woocommerce_cart_page_id', $cart_id );
       update_option( 'woocommerce_enable_ajax_add_to_cart', 'yes' );
+      // A newly assigned real cart page otherwise inherits Woo's store-only
+      // "coming soon" screen from the baseline instead of rendering a cart.
+      update_option( 'woocommerce_coming_soon', 'no' );
       wp_cache_flush();
       echo wp_json_encode( array(
         'snapshot' => $snapshot, 'productId' => $product_id,
@@ -352,8 +355,8 @@ test.describe('WooCommerce block checkout strictly-necessary configuration', () 
           isMobile: browserName !== 'firefox',
           hasTouch: true,
         });
+        const page = await context.newPage();
         try {
-          const page = await context.newPage();
           await page.goto(fixture.catalogueUrl, { waitUntil: 'domcontentloaded' });
           await page.locator('[data-faz-tag="reject-button"]').click();
           const consent = (await context.cookies()).find((cookie) => cookie.name === 'fazcookie-consent');
@@ -371,6 +374,11 @@ test.describe('WooCommerce block checkout strictly-necessary configuration', () 
           const session = (await context.cookies()).find((cookie) => cookie.name.startsWith('wp_woocommerce_session_'));
           expect(session, 'the first guest cart must have a session cookie').toBeDefined();
           expect(session!.httpOnly).toBe(true);
+        } catch (error) {
+          await testInfo.attach(`classic-cart-attempt-${attempt + 1}`, {
+            body: await page.screenshot(), contentType: 'image/png',
+          });
+          throw error;
         } finally {
           await context.close();
         }
