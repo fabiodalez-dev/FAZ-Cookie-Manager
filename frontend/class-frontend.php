@@ -12024,7 +12024,7 @@ class Frontend {
 				continue;
 			}
 			$own[] = $base;
-			foreach ( array( '-static-config', '-css', '-css-page', '-gcm', '-tcf-cmp', '-a11y', '-wca', '-microsoft-consent' ) as $suffix ) {
+			foreach ( array( '-static-config', '-css', '-gcm', '-tcf-cmp', '-a11y', '-wca', '-microsoft-consent' ) as $suffix ) {
 				$own[] = $base . $suffix;
 			}
 		}
