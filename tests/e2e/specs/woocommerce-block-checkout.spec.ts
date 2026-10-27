@@ -303,4 +303,91 @@ test.describe('WooCommerce block checkout strictly-necessary configuration', () 
       await context.close();
     }
   });
+
+  test('fresh mobile guests retain the first AJAX addition after rejecting cookies', async ({ browser, browserName }) => {
+    // Exercise the classic catalogue -> immediate View cart flow as well as the
+    // Store API coverage above. Every iteration owns a new cookie jar: reusing
+    // a guest session would miss first-add failures. This fixture has no edge
+    // cache and cannot by itself rule out a production LiteSpeed/Cloudflare race.
+    const fixture = JSON.parse(wpEval(`
+      $snapshot = array();
+      foreach ( array( 'woocommerce_cart_page_id', 'woocommerce_enable_ajax_add_to_cart' ) as $name ) {
+        $snapshot[ $name ] = get_option( $name, null );
+      }
+      $product = new WC_Product_Simple();
+      $product->set_name( 'FAZ first mobile cart addition' );
+      $product->set_status( 'publish' );
+      $product->set_regular_price( '9.99' );
+      $product->set_virtual( true );
+      $product_id = $product->save();
+      $catalogue_id = wp_insert_post( array(
+        'post_type' => 'page', 'post_status' => 'publish',
+        'post_title' => 'FAZ first mobile cart catalogue',
+        'post_content' => '[products ids="' . $product_id . '"]',
+      ), true );
+      $cart_id = wp_insert_post( array(
+        'post_type' => 'page', 'post_status' => 'publish',
+        'post_title' => 'FAZ first mobile cart', 'post_content' => '[woocommerce_cart]',
+      ), true );
+      if ( ! $product_id || is_wp_error( $catalogue_id ) || is_wp_error( $cart_id ) ) {
+        if ( $product_id ) { wp_delete_post( $product_id, true ); }
+        if ( is_int( $catalogue_id ) ) { wp_delete_post( $catalogue_id, true ); }
+        if ( is_int( $cart_id ) ) { wp_delete_post( $cart_id, true ); }
+        throw new RuntimeException( 'Could not create the classic cart fixture.' );
+      }
+      update_option( 'woocommerce_cart_page_id', $cart_id );
+      update_option( 'woocommerce_enable_ajax_add_to_cart', 'yes' );
+      wp_cache_flush();
+      echo wp_json_encode( array(
+        'snapshot' => $snapshot, 'productId' => $product_id,
+        'catalogueId' => $catalogue_id, 'cartId' => $cart_id,
+        'catalogueUrl' => get_permalink( $catalogue_id ), 'cartUrl' => get_permalink( $cart_id ),
+      ) );
+    `)) as { snapshot: Record<string, unknown>; productId: number; catalogueId: number; cartId: number; catalogueUrl: string; cartUrl: string };
+
+    try {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const context = await browser.newContext({
+          viewport: { width: 393, height: 852 },
+          isMobile: browserName !== 'firefox',
+          hasTouch: true,
+        });
+        try {
+          const page = await context.newPage();
+          await page.goto(fixture.catalogueUrl, { waitUntil: 'domcontentloaded' });
+          await page.locator('[data-faz-tag="reject-button"]').click();
+          const consent = (await context.cookies()).find((cookie) => cookie.name === 'fazcookie-consent');
+          expect(consent, 'Reject All must persist before adding the product').toBeDefined();
+          expect(decodeURIComponent(consent!.value)).toContain('analytics:no');
+          expect(decodeURIComponent(consent!.value)).toContain('marketing:no');
+
+          await page.locator(`.add_to_cart_button[data-product_id="${fixture.productId}"]`).click();
+          // No delay or polling the Store API before navigation: follow the
+          // real Woo link as soon as its AJAX success handler inserts it.
+          await page.locator('a.added_to_cart.wc-forward').click();
+          expect(new URL(page.url()).pathname).toBe(new URL(fixture.cartUrl).pathname);
+          await expect(page.locator('.woocommerce-cart-form .cart_item')).toHaveCount(1);
+          await expect(page.locator('.woocommerce-cart-form .cart_item')).toContainText('FAZ first mobile cart addition');
+          const session = (await context.cookies()).find((cookie) => cookie.name.startsWith('wp_woocommerce_session_'));
+          expect(session, 'the first guest cart must have a session cookie').toBeDefined();
+          expect(session!.httpOnly).toBe(true);
+        } finally {
+          await context.close();
+        }
+      }
+    } finally {
+      const encoded = Buffer.from(JSON.stringify(fixture), 'utf8').toString('base64');
+      wpEval(`
+        $fixture = json_decode( base64_decode( '${encoded}' ), true );
+        foreach ( $fixture['snapshot'] as $name => $value ) {
+          if ( null === $value ) { delete_option( $name ); }
+          else { update_option( $name, $value ); }
+        }
+        foreach ( array( 'productId', 'catalogueId', 'cartId' ) as $key ) {
+          wp_delete_post( (int) $fixture[ $key ], true );
+        }
+        wp_cache_flush();
+      `);
+    }
+  });
 });

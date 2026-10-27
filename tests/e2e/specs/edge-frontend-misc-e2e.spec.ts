@@ -272,8 +272,8 @@ test.describe('A. Blocked-embed placeholder keeps branded styling after the JS r
       // 16/9 aspect ratio on a ~560px card → ~315px, well above the
       // unstyled content height (~160px).
       expect(probe.height).toBeGreaterThan(250);
-      // YouTube brand accent on the CTA + the service name label.
-      expect(probe.btnBg).toBe('rgb(255, 0, 0)');
+      // YouTube red darkened for AA contrast with the white CTA text.
+      expect(probe.btnBg).toBe('rgb(229, 0, 0)');
       expect(probe.svcname).toBe('YouTube');
     } finally {
       await ctx.close();
