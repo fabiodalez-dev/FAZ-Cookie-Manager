@@ -114,11 +114,12 @@ test.describe('Banner stylesheet is not render-blocking', () => {
   test('a banner stylesheet that never arrives cannot keep the consent prompt hidden', async ({ browser }) => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-    // Never answered: neither load nor error ever fires. Default RAF polling
-    // also verifies that pending CSS does not suspend WebKit screen painting.
+    // Never answered: neither load nor error ever fires. Poll the timer-driven
+    // fallback independently of rendering frames, which WebKit can defer while
+    // the document still has a pending stylesheet.
     await page.route(BANNER_CSS, () => new Promise(() => {}));
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => document.documentElement.classList.contains('faz-ready'), undefined, { timeout: 8000 });
+    await page.waitForFunction(() => document.documentElement.classList.contains('faz-ready'), undefined, { timeout: 8000, polling: 50 });
     const shown = await page.evaluate(() => {
       const el = document.querySelector('.faz-consent-container');
       return !!el && !el.classList.contains('faz-hide');
@@ -135,7 +136,7 @@ test.describe('Banner stylesheet is not render-blocking', () => {
     await page.route(BANNER_CSS, async (route) => { await held; await route.continue(); });
     try {
       await page.goto('/', { waitUntil: 'domcontentloaded' });
-      await page.waitForFunction(() => document.documentElement.classList.contains('faz-ready'), undefined, { timeout: 8000 });
+      await page.waitForFunction(() => document.documentElement.classList.contains('faz-ready'), undefined, { timeout: 8000, polling: 50 });
       expect(await page.evaluate(() => document.querySelector<HTMLLinkElement>('link[data-faz-banner-css]')?.media)).toBe('print');
       release();
       await page.waitForFunction(() => document.querySelector<HTMLLinkElement>('link[data-faz-banner-css]')?.media === 'all');
