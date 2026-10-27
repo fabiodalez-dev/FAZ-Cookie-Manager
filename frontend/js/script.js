@@ -954,6 +954,8 @@ function _fazFireEvent(responseCategories) {
     document.dispatchEvent(consentUpdate);
 }
 
+var _fazBannerCssWaitMs = 2000;
+
 /**
  * Apply the banner stylesheet and call back once it can style the banner.
  *
@@ -985,7 +987,7 @@ function _fazWhenBannerCssReady(callback) {
     };
     link.addEventListener('load', finish);
     link.addEventListener('error', finish);
-    window.setTimeout(finish, 2000);
+    window.setTimeout(finish, _fazBannerCssWaitMs);
 }
 
 /**
@@ -1994,7 +1996,8 @@ function _fazScheduleBannerWatchdog() {
         // two never disagree about how long the await can actually run.
         var _fazBootstrapBudget = parseInt(_fazStore._geoBootstrapTimeout, 10);
         if (isNaN(_fazBootstrapBudget) || _fazBootstrapBudget < 250) _fazBootstrapBudget = 1500;
-        _fazWatchdogDelay = Math.max(2500, _fazBootstrapBudget + 1000);
+        // Rendering starts after the bootstrap, and can then wait for CSS.
+        _fazWatchdogDelay = Math.max(2500, _fazBootstrapBudget + _fazBannerCssWaitMs + 1000);
     }
     window.setTimeout(function () {
         try {

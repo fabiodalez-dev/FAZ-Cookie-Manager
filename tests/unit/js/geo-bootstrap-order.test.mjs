@@ -22,6 +22,7 @@ window.__fazTestShouldBlockResource = _fazShouldBlockResource;
 // Captured BEFORE __fazTestIsolateInit() swaps the binding for a no-op, so the
 // watchdog-delay checks can exercise the real scheduler.
 window.__fazTestRealWatchdog = _fazScheduleBannerWatchdog;
+window.__fazTestRemoveStyles = _fazRemoveStyles;
 window.__fazTestIsolateInit = function () {
   _fazScheduleBannerWatchdog = function () {};
   _fazRunDeadCookieCleanup = function () {};
@@ -312,24 +313,58 @@ console.log('cache-safe jurisdiction bootstrap ordering (jsdom)');
   window._fazConfig._geoBootstrap = true;
   window._fazConfig._geoBootstrapTimeout = 5000;
   window.__fazTestRealWatchdog();
-  check('a 5000ms bootstrap budget pushes the watchdog past it', delays[0] === 6000);
+  check('a 5000ms bootstrap budget pushes the watchdog past it', delays[0] === 8000);
 
   window._fazConfig._geoBootstrapTimeout = 3000;
   window.__fazTestRealWatchdog();
-  check('the watchdog tracks an intermediate raised budget', delays[1] === 4000);
+  check('the watchdog tracks an intermediate raised budget', delays[1] === 6000);
 
   window._fazConfig._geoBootstrapTimeout = 500;
   window.__fazTestRealWatchdog();
-  check('a short budget never shortens the watchdog below its 2500ms floor', delays[2] === 2500);
+  check('a short bootstrap still leaves time for the CSS wait', delays[2] === 3500);
 
   window._fazConfig._geoBootstrapTimeout = 'not-a-number';
   window.__fazTestRealWatchdog();
-  check('an unparseable budget falls back to the same 1500ms default the bootstrap uses', delays[3] === 2500);
+  check('an unparseable budget falls back to the same 1500ms default the bootstrap uses', delays[3] === 4500);
 
   window._fazConfig._geoBootstrap = false;
   window._fazConfig._geoBootstrapTimeout = 5000;
   window.__fazTestRealWatchdog();
   check('non-bootstrap pages keep the original 2500ms delay exactly', delays[4] === 2500);
+}
+
+
+// A bootstrap that finishes late must still get the full post-render CSS
+// wait. The old watchdog revealed at 2500ms, before a sheet loading at 3000ms.
+{
+  const window = loadFrontend(async () => ({ ok: true, json: async () => liveCcpaPayload() }));
+  window.document.documentElement.classList.remove('faz-ready');
+  const link = window.document.createElement('link');
+  link.setAttribute('data-faz-banner-css', '1');
+  link.media = 'print';
+  window.document.head.appendChild(link);
+  let now = 0;
+  const timers = [];
+  window.setTimeout = (fn, ms) => { timers.push({ fn, at: now + ms }); return timers.length; };
+  const advance = (until) => {
+    for (;;) {
+      timers.sort((a, b) => a.at - b.at);
+      if (!timers.length || timers[0].at > until) break;
+      const timer = timers.shift();
+      now = timer.at;
+      timer.fn();
+    }
+    now = until;
+  };
+  window._fazConfig._geoBootstrapTimeout = 1500;
+  window.__fazTestRealWatchdog();
+  advance(1400);
+  window.__fazTestRemoveStyles();
+  advance(2500);
+  check('a late bootstrap keeps the banner hidden beyond the old watchdog deadline', !window.document.documentElement.classList.contains('faz-ready'));
+  advance(3000);
+  link.dispatchEvent(new window.Event('load'));
+  check('the delayed sheet reveals the banner when it becomes usable', window.document.documentElement.classList.contains('faz-ready'));
 }
 
 console.log(`\n  geo-bootstrap-order: ${passed} passed, ${failed} failed`);
