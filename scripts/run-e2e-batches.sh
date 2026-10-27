@@ -14,6 +14,10 @@ WP="${WP_PATH:-/Users/fabio/Sites/faz-test}"
 OUT="${E2E_BATCH_OUT:-/private/tmp/faz-e2e-batch}"
 BATCH_SIZE="${BATCH_SIZE:-1}"
 E2E_WORKERS="${E2E_WORKERS:-1}"
+if [ "$E2E_WORKERS" != "1" ]; then
+  echo 'Single-site E2E batches share a WordPress database; E2E_WORKERS must be 1.' >&2
+  exit 2
+fi
 mkdir -p "$OUT"
 # A resumed run must not combine green batches from different candidates.
 COMMIT="$(git -C "$REPO" rev-parse HEAD)"

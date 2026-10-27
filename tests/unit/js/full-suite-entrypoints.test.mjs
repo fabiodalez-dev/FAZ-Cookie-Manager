@@ -85,6 +85,7 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
   run('npm', ['test'], 'wordpress', ['unit', 'browser', 'wordpress']);
   run('bash', ['scripts/run-e2e-batches.sh'], 'unit', ['unit']);
   run('bash', ['scripts/run-e2e-batches.sh'], 'browser', ['unit', 'browser']);
+  run('bash', ['scripts/run-e2e-batches.sh'], 'parallel-workers', [], { E2E_WORKERS: '2' });
   mkdirSync(join(packageFixture, 'faz-cookie-manager'));
   writeFileSync(join(packageFixture, 'faz-cookie-manager/faz-cookie-manager.php'), '<?php // release-only');
   // In package mode the runner now refuses to start unless the site under test

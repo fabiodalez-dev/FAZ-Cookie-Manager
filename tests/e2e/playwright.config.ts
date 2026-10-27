@@ -44,7 +44,8 @@ export default defineConfig({
   // while a local run retried once, which is why the same green-in-CI spec
   // could show red locally. Matching the two keeps local == CI reliability.
   retries: 2,
-  workers: isCI ? 2 : 1,
+  // All browser projects share one WordPress database and mutate its options.
+  workers: 1,
   outputDir: './reports/artifacts',
   globalSetup: './global-setup.ts',
   reporter: [
