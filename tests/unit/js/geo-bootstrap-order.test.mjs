@@ -335,8 +335,8 @@ console.log('cache-safe jurisdiction bootstrap ordering (jsdom)');
 
 
 // A bootstrap that finishes late must still get the full post-render CSS
-// wait. The old watchdog revealed at 2500ms, before a sheet loading at 3000ms.
-{
+// wait. Exercise a sheet arriving before and after the 3400ms CSS deadline.
+for (const cssLoadAt of [3000, 3500]) {
   const window = loadFrontend(async () => ({ ok: true, json: async () => liveCcpaPayload() }));
   window.document.documentElement.classList.remove('faz-ready');
   const link = window.document.createElement('link');
@@ -363,7 +363,11 @@ console.log('cache-safe jurisdiction bootstrap ordering (jsdom)');
   advance(2500);
   check('pending banner CSS stays non-blocking for screen rendering', link.media === 'print');
   check('a late bootstrap keeps the banner hidden beyond the old watchdog deadline', !window.document.documentElement.classList.contains('faz-ready'));
-  advance(3000);
+  advance(cssLoadAt);
+  if (cssLoadAt > 3400) {
+    check('CSS timeout reveals the banner before a late load', window.document.documentElement.classList.contains('faz-ready'));
+    check('CSS stays non-blocking after the fallback', link.media === 'print');
+  }
   link.dispatchEvent(new window.Event('load'));
   check('the loaded banner CSS applies to the screen', link.media === 'all');
   check('the delayed sheet reveals the banner when it becomes usable', window.document.documentElement.classList.contains('faz-ready'));
