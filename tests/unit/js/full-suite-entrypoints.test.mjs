@@ -38,7 +38,7 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
 `, { mode: 0o755 });
   // The fixture's own site copy is not part of the candidate: the runner reads
   // the tree with --untracked-files=all and would refuse to start.
-  writeFileSync(join(fixture, '.gitignore'), 'calls.log\nbatch-output/\nabsent-wordpress/\n');
+  writeFileSync(join(fixture, '.gitignore'), 'calls.log\nbatch-output/\nabsent-wordpress/\nwp-stub/\n');
   writeFileSync(join(fixture, 'scripts/check-package-deploy.py'), readFileSync(join(root, 'scripts/check-package-deploy.py')));
   writeFileSync(join(fixture, 'faz-cookie-manager.php'), '<?php // release-only');
   writeFileSync(join(fixture, 'scripts/build-release.sh'), "#!/bin/sh\npython3 - \"$@\" <<'PYBUILD'\nimport subprocess,sys,zipfile\nfrom pathlib import Path\noutput=next(a.split('=',1)[1] for a in sys.argv[1:] if a.startswith('--output-dir='))\nwith zipfile.ZipFile(Path(output)/'release.zip','w') as archive:\n    archive.writestr('faz-cookie-manager/faz-cookie-manager.php',subprocess.check_output(['git','show','HEAD:faz-cookie-manager.php']))\nPYBUILD\n");
@@ -50,6 +50,7 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
     const log = join(fixture, 'calls.log');
     rmSync(log, { force: true });
     let code = 0;
+    let stderr = "";
     try {
       execFileSync(command, args, {
         cwd: fixture, timeout: 30_000, stdio: 'pipe',
@@ -62,11 +63,12 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
           START_BATCH: '', BATCH_SIZE: '', E2E_WORKERS: '',
           E2E_BATCH_OUT: join(fixture, 'batch-output'), WP_PATH: join(fixture, 'absent-wordpress'), ...extraEnv },
       });
-    } catch (error) { code = error.status ?? -1; }
+    } catch (error) { code = error.status ?? -1; stderr = String(error.stderr ?? ""); }
     assert.equal(code === 0, !fail, `${command} ${args.join(' ')}: failure must propagate`);
     const calls = existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : [];
     assert.deepEqual(calls, expected, `${command} ${args.join(' ')}: stage order / fail-fast`);
     passed++;
+    return { code, stderr };
   }
   // Run everything below inside the environment a resumed release run leaves
   // behind. These must not reach the fixture: without the pinning in run(),
@@ -85,7 +87,18 @@ process.exit(process.env.FAZ_GATE_FAIL === stage ? 9 : 0);
   run('npm', ['test'], 'wordpress', ['unit', 'browser', 'wordpress']);
   run('bash', ['scripts/run-e2e-batches.sh'], 'unit', ['unit']);
   run('bash', ['scripts/run-e2e-batches.sh'], 'browser', ['unit', 'browser']);
-  run('bash', ['scripts/run-e2e-batches.sh'], 'parallel-workers', [], { E2E_WORKERS: '2' });
+  const wpStub = join(fixture, 'wp-stub');
+  const wpGuardLog = join(wpStub, 'calls.log');
+  mkdirSync(wpStub);
+  mkdirSync(join(fixture, 'absent-wordpress'), { recursive: true });
+  writeFileSync(join(fixture, 'absent-wordpress/wp-config.php'), '<?php // valid fixture path');
+  writeFileSync(join(wpStub, 'wp'), '#!/bin/sh\nprintf "called\\n" >> "$FAZ_WP_GUARD_LOG"\nexit 0\n', { mode: 0o755 });
+  const rejected = run('bash', ['scripts/run-e2e-batches.sh'], 'parallel-workers', [], {
+    E2E_WORKERS: '2', PATH: wpStub + ':' + process.env.PATH, FAZ_WP_GUARD_LOG: wpGuardLog,
+  });
+  assert.equal(rejected.code, 2, 'parallel workers have the documented configuration-error status');
+  assert.equal(rejected.stderr.trim(), 'Single-site E2E batches share a WordPress database; E2E_WORKERS must be 1.');
+  assert.equal(existsSync(wpGuardLog), false, 'wp is never called before rejecting parallel workers');
   mkdirSync(join(packageFixture, 'faz-cookie-manager'));
   writeFileSync(join(packageFixture, 'faz-cookie-manager/faz-cookie-manager.php'), '<?php // release-only');
   // In package mode the runner now refuses to start unless the site under test
