@@ -410,6 +410,7 @@ class Frontend {
 		add_filter( 'wp_redirect', array( $this, 'filter_server_cookies_before_redirect' ), PHP_INT_MAX, 2 );
 		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
 		add_filter( 'script_loader_tag', array( $this, 'defer_runtime_script_tag' ), 25, 2 );
+		add_filter( 'script_loader_tag', array( $this, 'prioritize_runtime_script_tag' ), 26, 2 );
 		// After every enqueue hook has run, before anything is printed.
 		add_action( 'wp_print_scripts', array( $this, 'warn_on_undeferred_handles' ), PHP_INT_MAX );
 		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
@@ -1418,6 +1419,53 @@ class Frontend {
 		// inline bootstrap plus the runtime's <script src>. Returning null from
 		// a tag filter drops all of it from the page — the consent banner with
 		// it. Same guard tag_own_scripts_nooptimize() already uses.
+		return is_string( $new_tag ) ? $new_tag : $tag;
+	}
+
+	/**
+	 * Fetch the consent runtime at high priority.
+	 *
+	 * Chrome downloads deferred scripts at low priority, behind the page's
+	 * images, and the banner cannot paint until the runtime has run. On a shop
+	 * home page (wp.org topic render-blocking-requests-2) script.min.js
+	 * finished downloading at 2.8 s on a throttled mobile load, and the banner
+	 * text — the largest text block, so PageSpeed's LCP element — painted
+	 * after it. With fetchpriority="high" on the runtime alone, the same page
+	 * measured LCP 3.31 s → 3.02 s (median of 8 interleaved runs each), for a
+	 * 0.16 s later first paint. The config file and the banner stylesheet keep
+	 * their priority, and nothing else changes in when the runtime executes:
+	 * defer still holds the config → runtime order. Only the external runtime
+	 * tag is touched, so the alternative-asset (inline) mode is unaffected.
+	 *
+	 * @param string $tag    Rendered script markup for the handle.
+	 * @param string $handle Script handle.
+	 * @return string
+	 */
+	public function prioritize_runtime_script_tag( $tag, $handle ) {
+		if ( is_admin() || $this->plugin_name !== $handle ) {
+			return $tag;
+		}
+		/**
+		 * Whether the consent runtime is fetched with fetchpriority="high".
+		 *
+		 * @since 1.34.4
+		 * @param bool $high Default true.
+		 */
+		if ( ! apply_filters( 'faz_runtime_fetchpriority', true ) ) {
+			return $tag;
+		}
+		$id      = preg_quote( $handle . '-js', '#' );
+		$new_tag = preg_replace_callback( '#<script(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#i', function ( $match ) use ( $id ) {
+			$attributes = $match[1];
+			if ( ! preg_match( '/(?:^|\s)src\s*=/i', $attributes )
+				|| ! preg_match( '#(?:^|\s)id\s*=\s*([\'"])' . $id . '\1#i', $attributes )
+				|| preg_match( '/(?:^|\s)fetchpriority\s*=/i', $attributes ) ) {
+				return $match[0];
+			}
+			return '<script fetchpriority="high"' . $attributes . '>';
+		}, $tag );
+		// Same guard as defer_runtime_script_tag(): a PCRE failure must not
+		// drop the bootstrap and the runtime from the page.
 		return is_string( $new_tag ) ? $new_tag : $tag;
 	}
 

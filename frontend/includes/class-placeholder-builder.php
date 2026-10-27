@@ -221,7 +221,7 @@ class Placeholder_Builder {
 
 		$button_text = esc_html__( 'Accept cookies', 'faz-cookie-manager' );
 
-		$html  = '<div class="' . esc_attr( $class ) . '" data-faz-category="' . esc_attr( $category ) . '" data-faz-service="' . esc_attr( $service_id ) . '" style="--faz-svc-color:' . esc_attr( $brand ) . '">';
+		$html  = '<div class="' . esc_attr( $class ) . '" data-faz-category="' . esc_attr( $category ) . '" data-faz-service="' . esc_attr( $service_id ) . '" style="--faz-svc-color:' . esc_attr( $brand ) . ';--faz-svc-btn:' . esc_attr( self::button_background( $brand ) ) . '">';
 
 		if ( $has_thumb ) {
 			$html .= '<img class="faz-placeholder-thumb" src="' . esc_url( $thumbnail_url ) . '" alt="" loading="lazy"/>';
@@ -313,7 +313,7 @@ class Placeholder_Builder {
 			. ( $is_video_service ? ' faz-placeholder--video' : ' faz-placeholder--social' );
 		$brand = isset( self::$service_colors[ $service_id ] ) ? self::$service_colors[ $service_id ] : self::$service_colors['default'];
 
-		$html  = '<div class="' . esc_attr( $class ) . '" data-faz-category="' . esc_attr( $category ) . '" data-faz-service="' . esc_attr( $service_id ) . '" style="--faz-svc-color:' . esc_attr( $brand ) . '">';
+		$html  = '<div class="' . esc_attr( $class ) . '" data-faz-category="' . esc_attr( $category ) . '" data-faz-service="' . esc_attr( $service_id ) . '" style="--faz-svc-color:' . esc_attr( $brand ) . ';--faz-svc-btn:' . esc_attr( self::button_background( $brand ) ) . '">';
 		$html .= '<div class="faz-placeholder-overlay">';
 		$html .= '<svg class="faz-placeholder-icon" viewBox="0 0 24 24" width="32" height="32" xmlns="http://www.w3.org/2000/svg">' . $icon_svg . '</svg>';
 		if ( $is_video_service ) {
@@ -325,6 +325,53 @@ class Placeholder_Builder {
 		$html .= '</div>';
 
 		return $html;
+	}
+
+	/**
+	 * The service colour, darkened until white button text on it meets WCAG AA.
+	 *
+	 * Brand colours are chosen for logos, not for text: white on YouTube red is
+	 * 4.0:1, on Spotify green or Vimeo blue about 2.3–2.6:1, and the "Accept
+	 * cookies" button uses 14px text, which needs 4.5:1 (PageSpeed flagged the
+	 * YouTube one). Each channel is scaled down in 5% steps until white reaches
+	 * 4.6:1 (a small margin over 4.5), which keeps the hue recognisable:
+	 * #ff0000 becomes #e50000, #1db954 becomes #12853b. Colours that already
+	 * pass are returned unchanged.
+	 *
+	 * @param string $hex Colour as #rrggbb.
+	 * @return string #rrggbb
+	 */
+	public static function button_background( $hex ) {
+		if ( 1 !== preg_match( '/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i', (string) $hex, $m ) ) {
+			return (string) $hex;
+		}
+		$rgb = array( hexdec( $m[1] ), hexdec( $m[2] ), hexdec( $m[3] ) );
+		for ( $i = 0; $i < 40 && self::white_contrast( $rgb ) < 4.6; $i++ ) {
+			$rgb = array_map(
+				function ( $c ) {
+					return (int) floor( $c * 0.95 );
+				},
+				$rgb
+			);
+		}
+		return sprintf( '#%02x%02x%02x', $rgb[0], $rgb[1], $rgb[2] );
+	}
+
+	/**
+	 * WCAG 2 contrast ratio of white against an sRGB colour.
+	 *
+	 * @param int[] $rgb Three 0–255 channels.
+	 * @return float
+	 */
+	private static function white_contrast( array $rgb ) {
+		$weights   = array( 0.2126, 0.7152, 0.0722 );
+		$luminance = 0.0;
+		foreach ( $rgb as $i => $channel ) {
+			$c          = $channel / 255;
+			$c          = $c <= 0.03928 ? $c / 12.92 : pow( ( $c + 0.055 ) / 1.055, 2.4 );
+			$luminance += $weights[ $i ] * $c;
+		}
+		return 1.05 / ( $luminance + 0.05 );
 	}
 
 	/**
@@ -449,8 +496,8 @@ class Placeholder_Builder {
 			. '.faz-placeholder .faz-placeholder-btn{background:#0d6efd;color:#fff;border:none;padding:11px 28px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:background .2s,transform .1s,box-shadow .2s;letter-spacing:.3px;line-height:normal;display:inline-block;text-decoration:none}'
 			. '.faz-placeholder .faz-placeholder-btn:hover{background:#0b5ed7;transform:translateY(-1px)}'
 			/* On the dark poster a solid white pill reads as the clear CTA. */
-			. '.faz-placeholder--video .faz-placeholder-btn{background:var(--faz-svc-color,#ff0000);color:#fff;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.18)}'
-			. '.faz-placeholder--video .faz-placeholder-btn:hover{background:var(--faz-svc-color,#ff0000);filter:brightness(.92);transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.25)}'
+			. '.faz-placeholder--video .faz-placeholder-btn{background:var(--faz-svc-btn,var(--faz-svc-color,#e50000));color:#fff;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.18)}'
+			. '.faz-placeholder--video .faz-placeholder-btn:hover{background:var(--faz-svc-btn,var(--faz-svc-color,#e50000));filter:brightness(.92);transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.25)}'
 			. '.faz-placeholder .faz-placeholder-btn:active{transform:translateY(0)}'
 			. '.faz-placeholder .faz-placeholder-btn:focus-visible{outline:2px solid #0b5ed7;outline-offset:2px}'
 			. '.faz-placeholder--video .faz-placeholder-btn:focus-visible{outline-color:var(--faz-svc-color,#ff0000)}'
