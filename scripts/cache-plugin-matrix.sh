@@ -359,7 +359,13 @@ restore_site() {
   # Do not bootstrap a cache drop-in against the matrix's temporary options.
   rm -f "$WPC/advanced-cache.php" "$WPC/object-cache.php"
   if [ -n "$fixture_page_id" ]; then
-    if ! wp --path="$WP_PATH" --skip-plugins --skip-themes post delete "$fixture_page_id" --force >/dev/null; then
+    # The id was printed by the eval that created the page and validated as a
+    # bare integer; the slug is still re-read before the delete, so nothing
+    # but the matrix's own page can ever be removed.
+    if [ "$(wp --path="$WP_PATH" --skip-plugins --skip-themes post get "$fixture_page_id" --field=post_name 2>/dev/null)" != "faz-cache-matrix" ]; then
+      echo "!! post $fixture_page_id is not the matrix fixture page; left in place" >&2
+      restore_failed=1
+    elif ! wp --path="$WP_PATH" --skip-plugins --skip-themes post delete "$fixture_page_id" --force >/dev/null; then
       echo "!! fixture page deletion failed: $fixture_page_id" >&2
       restore_failed=1
     fi

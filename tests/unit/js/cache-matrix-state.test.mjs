@@ -58,6 +58,7 @@ if (args[0] === 'eval' && args[1].includes('wp_insert_post')) {
         console.log('123');
     }
 }
+if (args[0] === 'post' && args[1] === 'get') console.log(process.env.MATRIX_FIXTURE_SLUG_MISMATCH ? 'some-other-page' : 'faz-cache-matrix');
 if (args[0] === 'post' && args[1] === 'delete') {
     if (args[2] !== '123' || process.env.MATRIX_DELETE_FIXTURE_FAIL) process.exit(1);
     unlinkSync(join(site, 'fixture-page'));
@@ -219,6 +220,18 @@ test('matrix preserves a fixture page that existed before the run', () => {
         assert.equal(run.result.status, 0, run.result.stdout + run.result.stderr);
         assert.equal(readFileSync(join(run.site, 'fixture-page'), 'utf8'), 'original fixture content');
         assert.equal(run.calls.some(args => args[0] === 'post' && args[1] === 'delete'), false);
+    } finally {
+        rmSync(run.dir, { recursive: true, force: true });
+    }
+});
+
+test('a fixture id that is not the matrix page is never deleted', () => {
+    const run = runMatrix({ MATRIX_FIXTURE_SLUG_MISMATCH: '1' });
+    try {
+        assert.equal(run.result.status, 1, run.result.stdout + run.result.stderr);
+        assert.match(run.result.stderr, /is not the matrix fixture page; left in place/);
+        assert.equal(run.calls.some(args => args[0] === 'post' && args[1] === 'delete'), false, 'no delete issued');
+        assert.ok(run.calls.some(args => args[0] === 'eval-file' && args[2] === 'restore'), 'configuration still restored');
     } finally {
         rmSync(run.dir, { recursive: true, force: true });
     }
