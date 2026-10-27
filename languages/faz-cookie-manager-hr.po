@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.12.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-26T06:33:46+00:00\n"
+"POT-Creation-Date: 2026-10-27T00:50:57+00:00\n"
 "PO-Revision-Date: 2026-04-20 00:00+0200\n"
 "Last-Translator: \n"
 "Language-Team: Croatian\n"
@@ -84,8 +84,7 @@ msgid "Cookie Policy"
 msgstr "Pravila o kolačićima"
 
 #: admin/class-admin.php:317 admin/class-admin.php:2900 admin/views/base.php:25
-#: admin/views/dashboard.php:255 includes/blocks/editor.js:27
-#: includes/blocks/editor.js:60 includes/blocks/editor.js:93
+#: admin/views/dashboard.php:255
 msgid "Settings"
 msgstr "Postavke"
 
@@ -6189,8 +6188,8 @@ msgid "Allow anti-spam services before consent"
 msgstr "Dopusti antispam usluge prije privole"
 
 #: admin/views/settings.php:330
-msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it (under Uncategorized, or another category your banner shows, when Functional is deleted or hidden), so <strong>forms protected by them will not submit before consent</strong>, unless an exception you wrote yourself lets them load. If your banner offers only Necessary, there is no category to hold them under and they keep loading before consent. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
-msgstr "Dopušta da se Google reCAPTCHA, hCaptcha i Cloudflare Turnstile učitaju prije privole, kao zaštita obrazaca koje posjetitelj šalje. Smatra li se to nužno potrebnim ovisi o vašem pravnom savjetu: u nekim se zemljama očekuje da reCAPTCHA čeka privolu jer šalje podatke Googleu. Ako ovo isključite, te se usluge zadržavaju u kategoriji Funkcionalni dok je posjetitelj ne prihvati (ili u kategoriji Nekategorizirani ili drugoj kategoriji koju vaš banner prikazuje, kada je Funkcionalni izbrisana ili skrivena), pa <strong>obrasci koje štite neće se moći poslati prije privole</strong>, osim ako ih iznimka koju ste sami upisali ne pusti da se učitaju. Ako vaš banner nudi samo kategoriju Nužni, ne postoji kategorija u kojoj bi se zadržale pa se i dalje učitavaju prije privole. CAPTCHA unosi koje ovaj dodatak prema zadanim postavkama dodaje u iznimke blokiranja skripti zanemaruju se dok je ovo isključeno; svaka iznimka koju ste sami upisali i dalje ima prednost."
+msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it (under Uncategorized, or another category your banner shows, when Functional is deleted or hidden), so <strong>forms protected by them will not submit before consent</strong>, unless a custom exception pattern that differs from the defaults lets them load. If your banner offers only Necessary, there is no category to hold them under and they keep loading before consent. While this is off, exceptions matching a default CAPTCHA pattern are ignored, even if you added them yourself; other custom exception patterns still apply."
+msgstr "Dopušta da se Google reCAPTCHA, hCaptcha i Cloudflare Turnstile učitaju prije privole, kao zaštita obrazaca koje posjetitelj šalje. Smatra li se to nužno potrebnim ovisi o vašem pravnom savjetu: u nekim se zemljama očekuje da reCAPTCHA čeka privolu jer šalje podatke Googleu. Ako ovo isključite, te se usluge zadržavaju u kategoriji Funkcionalni dok je posjetitelj ne prihvati (ili u kategoriji Nekategorizirani ili drugoj kategoriji koju vaš banner prikazuje, kada je Funkcionalni izbrisana ili skrivena), pa <strong>obrasci koje štite neće se moći poslati prije privole</strong>, osim ako ih prilagođena iznimka koja se razlikuje od zadanih obrazaca ne pusti da se učitaju. Ako vaš banner nudi samo kategoriju Nužni, ne postoji kategorija u kojoj bi se zadržale pa se i dalje učitavaju prije privole. CAPTCHA unosi koje ovaj dodatak prema zadanim postavkama dodaje u iznimke blokiranja skripti zanemaruju se dok je ovo isključeno; svaka prilagođena iznimka koja se razlikuje od zadanih obrazaca i dalje ima prednost."
 
 #: admin/views/settings.php:336
 msgid "Advanced inline CSS URL blocking"
@@ -8614,65 +8613,50 @@ msgstr[0] "Meta-polja skripte (opt_in_script/opt_out_script) uklonjena su iz %d 
 msgstr[1] "Meta-polja skripte (opt_in_script/opt_out_script) uklonjena su iz %d uvezena unosa jer trenutni korisnik nema mogućnost unfiltered_html. Ponovno pokrenite kao super-administrator da biste sačuvali polja skripte."
 msgstr[2] "Meta-polja skripte (opt_in_script/opt_out_script) uklonjena su iz %d uvezenih unosa jer trenutni korisnik nema mogućnost unfiltered_html. Ponovno pokrenite kao super-administrator da biste sačuvali polja skripte."
 
-#: includes/blocks/editor.js:29
-msgid "Columns"
-msgstr "Stupci"
+#~ msgid "Columns"
+#~ msgstr "Stupci"
 
-#: includes/blocks/editor.js:30
-msgid "Comma-separated: name, domain, duration, description, category"
-msgstr "Odvojeno zarezima: name, domain, duration, description, category"
+#~ msgid "Comma-separated: name, domain, duration, description, category"
+#~ msgstr "Odvojeno zarezima: name, domain, duration, description, category"
 
-#: includes/blocks/editor.js:35
-msgid "Category filter"
-msgstr "Filter kategorije"
+#~ msgid "Category filter"
+#~ msgstr "Filter kategorije"
 
-#: includes/blocks/editor.js:36
-msgid "Filter by category slug (e.g. analytics)"
-msgstr "Filtriraj prema slugu kategorije (npr. analytics)"
+#~ msgid "Filter by category slug (e.g. analytics)"
+#~ msgstr "Filtriraj prema slugu kategorije (npr. analytics)"
 
-#: includes/blocks/editor.js:41
-msgid "Heading"
-msgstr "Naslov"
+#~ msgid "Heading"
+#~ msgstr "Naslov"
 
-#: includes/blocks/editor.js:62
-msgid "Show cookie table"
-msgstr "Prikaži tablicu kolačića"
+#~ msgid "Show cookie table"
+#~ msgstr "Prikaži tablicu kolačića"
 
-#: includes/blocks/editor.js:67
-msgid "Site name"
-msgstr "Naziv stranice"
+#~ msgid "Site name"
+#~ msgstr "Naziv stranice"
 
-#: includes/blocks/editor.js:68
-msgid "Leave empty to use the site title"
-msgstr "Ostavite prazno za korištenje naslova stranice"
+#~ msgid "Leave empty to use the site title"
+#~ msgstr "Ostavite prazno za korištenje naslova stranice"
 
-#: includes/blocks/editor.js:73
-msgid "Contact email"
-msgstr "Kontakt e-mail"
+#~ msgid "Contact email"
+#~ msgstr "Kontakt e-mail"
 
-#: includes/blocks/editor.js:74
-msgid "Leave empty to use the admin email"
-msgstr "Ostavite prazno za korištenje administratorske e-mail adrese"
+#~ msgid "Leave empty to use the admin email"
+#~ msgstr "Ostavite prazno za korištenje administratorske e-mail adrese"
 
-#: includes/blocks/editor.js:95
-msgid "Button label"
-msgstr "Oznaka gumba"
+#~ msgid "Button label"
+#~ msgstr "Oznaka gumba"
 
-#: includes/blocks/editor.js:96
-msgid "Leave empty for default: \"Manage Cookie Preferences\""
-msgstr "Ostavite prazno za zadano: \"Upravljanje postavkama kolačića\""
+#~ msgid "Leave empty for default: \"Manage Cookie Preferences\""
+#~ msgstr "Ostavite prazno za zadano: \"Upravljanje postavkama kolačića\""
 
-#: includes/blocks/editor.js:101
-msgid "Style"
-msgstr "Stil"
+#~ msgid "Style"
+#~ msgstr "Stil"
 
-#: includes/blocks/editor.js:104
-msgid "Button"
-msgstr "Gumb"
+#~ msgid "Button"
+#~ msgstr "Gumb"
 
-#: includes/blocks/editor.js:105
-msgid "Link"
-msgstr "Poveznica"
+#~ msgid "Link"
+#~ msgstr "Poveznica"
 
 #~ msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are blocked like any other provider until the visitor accepts their category, so <strong>forms protected by them will not submit before consent</strong>. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
 #~ msgstr "Dopušta da se Google reCAPTCHA, hCaptcha i Cloudflare Turnstile učitaju prije privole, kao zaštita obrazaca koje posjetitelj šalje. Smatra li se to nužno potrebnim ovisi o vašem pravnom savjetu: u nekim se zemljama očekuje da reCAPTCHA čeka privolu jer šalje podatke Googleu. Ako ovo isključite, te se usluge blokiraju kao i svaki drugi pružatelj dok posjetitelj ne prihvati njihovu kategoriju, pa <strong>obrasci koje štite neće se moći poslati prije privole</strong>. CAPTCHA unosi koje ovaj dodatak prema zadanim postavkama dodaje u iznimke blokiranja skripti zanemaruju se dok je ovo isključeno; svaka iznimka koju ste sami upisali i dalje ima prednost."

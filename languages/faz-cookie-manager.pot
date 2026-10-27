@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-26T06:33:46+00:00\n"
+"POT-Creation-Date: 2026-10-27T00:50:57+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
@@ -99,9 +99,6 @@ msgstr ""
 #: admin/class-admin.php:2900
 #: admin/views/base.php:25
 #: admin/views/dashboard.php:255
-#: includes/blocks/editor.js:27
-#: includes/blocks/editor.js:60
-#: includes/blocks/editor.js:93
 msgid "Settings"
 msgstr ""
 
@@ -6054,7 +6051,7 @@ msgid "Allow anti-spam services before consent"
 msgstr ""
 
 #: admin/views/settings.php:330
-msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it (under Uncategorized, or another category your banner shows, when Functional is deleted or hidden), so <strong>forms protected by them will not submit before consent</strong>, unless an exception you wrote yourself lets them load. If your banner offers only Necessary, there is no category to hold them under and they keep loading before consent. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
+msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it (under Uncategorized, or another category your banner shows, when Functional is deleted or hidden), so <strong>forms protected by them will not submit before consent</strong>, unless a custom exception pattern that differs from the defaults lets them load. If your banner offers only Necessary, there is no category to hold them under and they keep loading before consent. While this is off, exceptions matching a default CAPTCHA pattern are ignored, even if you added them yourself; other custom exception patterns still apply."
 msgstr ""
 
 #: admin/views/settings.php:336
@@ -8474,63 +8471,3 @@ msgid "Script meta field(s) (opt_in_script/opt_out_script) were stripped from %d
 msgid_plural "Script meta field(s) (opt_in_script/opt_out_script) were stripped from %d imported entries because the current user lacks the unfiltered_html capability. Re-run as a super-admin to preserve script fields."
 msgstr[0] ""
 msgstr[1] ""
-
-#: includes/blocks/editor.js:29
-msgid "Columns"
-msgstr ""
-
-#: includes/blocks/editor.js:30
-msgid "Comma-separated: name, domain, duration, description, category"
-msgstr ""
-
-#: includes/blocks/editor.js:35
-msgid "Category filter"
-msgstr ""
-
-#: includes/blocks/editor.js:36
-msgid "Filter by category slug (e.g. analytics)"
-msgstr ""
-
-#: includes/blocks/editor.js:41
-msgid "Heading"
-msgstr ""
-
-#: includes/blocks/editor.js:62
-msgid "Show cookie table"
-msgstr ""
-
-#: includes/blocks/editor.js:67
-msgid "Site name"
-msgstr ""
-
-#: includes/blocks/editor.js:68
-msgid "Leave empty to use the site title"
-msgstr ""
-
-#: includes/blocks/editor.js:73
-msgid "Contact email"
-msgstr ""
-
-#: includes/blocks/editor.js:74
-msgid "Leave empty to use the admin email"
-msgstr ""
-
-#: includes/blocks/editor.js:95
-msgid "Button label"
-msgstr ""
-
-#: includes/blocks/editor.js:96
-msgid "Leave empty for default: \"Manage Cookie Preferences\""
-msgstr ""
-
-#: includes/blocks/editor.js:101
-msgid "Style"
-msgstr ""
-
-#: includes/blocks/editor.js:104
-msgid "Button"
-msgstr ""
-
-#: includes/blocks/editor.js:105
-msgid "Link"
-msgstr ""

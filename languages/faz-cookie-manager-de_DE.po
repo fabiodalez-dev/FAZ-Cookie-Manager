@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.9.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-26T06:33:46+00:00\n"
+"POT-Creation-Date: 2026-10-27T00:50:57+00:00\n"
 "PO-Revision-Date: 2026-04-10\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: German\n"
@@ -83,8 +83,7 @@ msgid "Cookie Policy"
 msgstr "Cookie-Richtlinie"
 
 #: admin/class-admin.php:317 admin/class-admin.php:2900 admin/views/base.php:25
-#: admin/views/dashboard.php:255 includes/blocks/editor.js:27
-#: includes/blocks/editor.js:60 includes/blocks/editor.js:93
+#: admin/views/dashboard.php:255
 msgid "Settings"
 msgstr "Einstellungen"
 
@@ -6185,8 +6184,8 @@ msgid "Allow anti-spam services before consent"
 msgstr "Anti-Spam-Dienste vor der Einwilligung zulassen"
 
 #: admin/views/settings.php:330
-msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it (under Uncategorized, or another category your banner shows, when Functional is deleted or hidden), so <strong>forms protected by them will not submit before consent</strong>, unless an exception you wrote yourself lets them load. If your banner offers only Necessary, there is no category to hold them under and they keep loading before consent. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
-msgstr "Erlaubt Google reCAPTCHA, hCaptcha und Cloudflare Turnstile, vor der Einwilligung zu laden, als Schutz der Formulare, die ein Besucher absendet. Ob das als unbedingt erforderlich gilt, hängt von Ihrer Rechtsberatung ab: In manchen Ländern wird erwartet, dass reCAPTCHA auf die Einwilligung wartet, weil es Daten an Google sendet. Wenn Sie dies ausschalten, werden diese Dienste in der Kategorie Funktionale zurückgehalten, bis der Besucher sie akzeptiert (in Nicht kategorisiert oder einer anderen Kategorie, die Ihr Banner anzeigt, wenn Funktionale gelöscht oder ausgeblendet ist), daher <strong>lassen sich damit geschützte Formulare vor der Einwilligung nicht absenden</strong>, es sei denn, eine selbst eingetragene Ausnahme lässt sie laden. Bietet Ihr Banner nur Notwendige an, gibt es keine Kategorie, in der sie zurückgehalten werden können, und sie laden weiterhin vor der Einwilligung. Die CAPTCHA-Einträge, die dieses Plugin standardmäßig zu den Skript-Blockierungsausnahmen hinzufügt, werden ignoriert, solange dies ausgeschaltet ist; jede Ausnahme, die Sie selbst eingetragen haben, hat weiterhin Vorrang."
+msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it (under Uncategorized, or another category your banner shows, when Functional is deleted or hidden), so <strong>forms protected by them will not submit before consent</strong>, unless a custom exception pattern that differs from the defaults lets them load. If your banner offers only Necessary, there is no category to hold them under and they keep loading before consent. While this is off, exceptions matching a default CAPTCHA pattern are ignored, even if you added them yourself; other custom exception patterns still apply."
+msgstr "Erlaubt Google reCAPTCHA, hCaptcha und Cloudflare Turnstile, vor der Einwilligung zu laden, als Schutz der Formulare, die ein Besucher absendet. Ob das als unbedingt erforderlich gilt, hängt von Ihrer Rechtsberatung ab: In manchen Ländern wird erwartet, dass reCAPTCHA auf die Einwilligung wartet, weil es Daten an Google sendet. Wenn Sie dies ausschalten, werden diese Dienste in der Kategorie Funktionale zurückgehalten, bis der Besucher sie akzeptiert (in Nicht kategorisiert oder einer anderen Kategorie, die Ihr Banner anzeigt, wenn Funktionale gelöscht oder ausgeblendet ist), daher <strong>lassen sich damit geschützte Formulare vor der Einwilligung nicht absenden</strong>, es sei denn, ein eigenes Ausnahmemuster, das von den Standardmustern abweicht, lässt sie laden. Bietet Ihr Banner nur Notwendige an, gibt es keine Kategorie, in der sie zurückgehalten werden können, und sie laden weiterhin vor der Einwilligung. Solange dies ausgeschaltet ist, werden Ausnahmen ignoriert, die einem Standard-CAPTCHA-Muster entsprechen, auch wenn Sie sie selbst hinzugefügt haben; andere eigene Ausnahmemuster gelten weiterhin."
 
 #: admin/views/settings.php:336
 msgid "Advanced inline CSS URL blocking"
@@ -8605,65 +8604,50 @@ msgid_plural "Script meta field(s) (opt_in_script/opt_out_script) were stripped 
 msgstr[0] "Die Skript-Meta-Felder (opt_in_script/opt_out_script) wurden aus %d importierten Eintrag entfernt, weil dem aktuellen Benutzer die Berechtigung unfiltered_html fehlt. Führen Sie den Vorgang als Super-Admin erneut aus, um die Skriptfelder zu erhalten."
 msgstr[1] "Die Skript-Meta-Felder (opt_in_script/opt_out_script) wurden aus %d importierten Einträgen entfernt, weil dem aktuellen Benutzer die Berechtigung unfiltered_html fehlt. Führen Sie den Vorgang als Super-Admin erneut aus, um die Skriptfelder zu erhalten."
 
-#: includes/blocks/editor.js:29
-msgid "Columns"
-msgstr "Spalten"
+#~ msgid "Columns"
+#~ msgstr "Spalten"
 
-#: includes/blocks/editor.js:30
-msgid "Comma-separated: name, domain, duration, description, category"
-msgstr "Kommagetrennt: name, domain, duration, description, category"
+#~ msgid "Comma-separated: name, domain, duration, description, category"
+#~ msgstr "Kommagetrennt: name, domain, duration, description, category"
 
-#: includes/blocks/editor.js:35
-msgid "Category filter"
-msgstr "Kategoriefilter"
+#~ msgid "Category filter"
+#~ msgstr "Kategoriefilter"
 
-#: includes/blocks/editor.js:36
-msgid "Filter by category slug (e.g. analytics)"
-msgstr "Nach Kategorie-Slug filtern (z.B. analytics)"
+#~ msgid "Filter by category slug (e.g. analytics)"
+#~ msgstr "Nach Kategorie-Slug filtern (z.B. analytics)"
 
-#: includes/blocks/editor.js:41
-msgid "Heading"
-msgstr "Überschrift"
+#~ msgid "Heading"
+#~ msgstr "Überschrift"
 
-#: includes/blocks/editor.js:62
-msgid "Show cookie table"
-msgstr "Cookie-Tabelle anzeigen"
+#~ msgid "Show cookie table"
+#~ msgstr "Cookie-Tabelle anzeigen"
 
-#: includes/blocks/editor.js:67
-msgid "Site name"
-msgstr "Websitename"
+#~ msgid "Site name"
+#~ msgstr "Websitename"
 
-#: includes/blocks/editor.js:68
-msgid "Leave empty to use the site title"
-msgstr "Leer lassen, um den Seitentitel zu verwenden"
+#~ msgid "Leave empty to use the site title"
+#~ msgstr "Leer lassen, um den Seitentitel zu verwenden"
 
-#: includes/blocks/editor.js:73
-msgid "Contact email"
-msgstr "Kontakt-E-Mail"
+#~ msgid "Contact email"
+#~ msgstr "Kontakt-E-Mail"
 
-#: includes/blocks/editor.js:74
-msgid "Leave empty to use the admin email"
-msgstr "Leer lassen, um die Admin-E-Mail zu verwenden"
+#~ msgid "Leave empty to use the admin email"
+#~ msgstr "Leer lassen, um die Admin-E-Mail zu verwenden"
 
-#: includes/blocks/editor.js:95
-msgid "Button label"
-msgstr "Schaltflächenbeschriftung"
+#~ msgid "Button label"
+#~ msgstr "Schaltflächenbeschriftung"
 
-#: includes/blocks/editor.js:96
-msgid "Leave empty for default: \"Manage Cookie Preferences\""
-msgstr "Leer lassen für Standard: \"Manage Cookie Preferences\""
+#~ msgid "Leave empty for default: \"Manage Cookie Preferences\""
+#~ msgstr "Leer lassen für Standard: \"Manage Cookie Preferences\""
 
-#: includes/blocks/editor.js:101
-msgid "Style"
-msgstr "Stil"
+#~ msgid "Style"
+#~ msgstr "Stil"
 
-#: includes/blocks/editor.js:104
-msgid "Button"
-msgstr "Schaltfläche"
+#~ msgid "Button"
+#~ msgstr "Schaltfläche"
 
-#: includes/blocks/editor.js:105
-msgid "Link"
-msgstr "Link"
+#~ msgid "Link"
+#~ msgstr "Link"
 
 #~ msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are blocked like any other provider until the visitor accepts their category, so <strong>forms protected by them will not submit before consent</strong>. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
 #~ msgstr "Erlaubt Google reCAPTCHA, hCaptcha und Cloudflare Turnstile, vor der Einwilligung zu laden, als Schutz der Formulare, die ein Besucher absendet. Ob das als unbedingt erforderlich gilt, hängt von Ihrer Rechtsberatung ab: In manchen Ländern wird erwartet, dass reCAPTCHA auf die Einwilligung wartet, weil es Daten an Google sendet. Wenn Sie dies ausschalten, werden diese Dienste wie jeder andere Anbieter blockiert, bis der Besucher ihre Kategorie akzeptiert, daher <strong>lassen sich damit geschützte Formulare vor der Einwilligung nicht absenden</strong>. Die CAPTCHA-Einträge, die dieses Plugin standardmäßig zu den Skript-Blockierungsausnahmen hinzufügt, werden ignoriert, solange dies ausgeschaltet ist; jede Ausnahme, die Sie selbst eingetragen haben, hat weiterhin Vorrang."

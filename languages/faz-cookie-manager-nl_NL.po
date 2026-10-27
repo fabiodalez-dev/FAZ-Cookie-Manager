@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-26T06:33:46+00:00\n"
+"POT-Creation-Date: 2026-10-27T00:50:57+00:00\n"
 "PO-Revision-Date: 2026-04-02 13:06+0200\n"
 "Last-Translator: Yannic van Veen (Yard Digital Agency)\n"
 "Language-Team: Dutch\n"
@@ -84,8 +84,7 @@ msgid "Cookie Policy"
 msgstr "Cookiebeleid"
 
 #: admin/class-admin.php:317 admin/class-admin.php:2900 admin/views/base.php:25
-#: admin/views/dashboard.php:255 includes/blocks/editor.js:27
-#: includes/blocks/editor.js:60 includes/blocks/editor.js:93
+#: admin/views/dashboard.php:255
 msgid "Settings"
 msgstr "Instellingen"
 
@@ -6186,8 +6185,8 @@ msgid "Allow anti-spam services before consent"
 msgstr "Antispamdiensten vóór toestemming toestaan"
 
 #: admin/views/settings.php:330
-msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it (under Uncategorized, or another category your banner shows, when Functional is deleted or hidden), so <strong>forms protected by them will not submit before consent</strong>, unless an exception you wrote yourself lets them load. If your banner offers only Necessary, there is no category to hold them under and they keep loading before consent. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
-msgstr "Laat Google reCAPTCHA, hCaptcha en Cloudflare Turnstile vóór toestemming laden, als bescherming van de formulieren die een bezoeker verstuurt. Of dat strikt noodzakelijk is, hangt af van uw juridisch advies: in sommige landen wordt verwacht dat reCAPTCHA op toestemming wacht, omdat het gegevens naar Google stuurt. Als u dit uitschakelt, worden deze diensten tegengehouden in de categorie Functioneel totdat de bezoeker die accepteert (of in Ongecategoriseerd, of een andere categorie die uw banner toont, als Functioneel is verwijderd of verborgen), dus <strong>formulieren die ze beschermen kunnen vóór toestemming niet worden verzonden</strong>, tenzij een uitzondering die u zelf hebt geschreven ze laat laden. Als uw banner alleen Noodzakelijk aanbiedt, is er geen categorie om ze in tegen te houden en blijven ze vóór toestemming laden. De CAPTCHA-items die deze plugin standaard aan de uitzonderingen voor scriptblokkering toevoegt, worden genegeerd zolang dit uit staat; elke uitzondering die u zelf hebt geschreven, heeft nog steeds voorrang."
+msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it (under Uncategorized, or another category your banner shows, when Functional is deleted or hidden), so <strong>forms protected by them will not submit before consent</strong>, unless a custom exception pattern that differs from the defaults lets them load. If your banner offers only Necessary, there is no category to hold them under and they keep loading before consent. While this is off, exceptions matching a default CAPTCHA pattern are ignored, even if you added them yourself; other custom exception patterns still apply."
+msgstr "Laat Google reCAPTCHA, hCaptcha en Cloudflare Turnstile vóór toestemming laden, als bescherming van de formulieren die een bezoeker verstuurt. Of dat strikt noodzakelijk is, hangt af van uw juridisch advies: in sommige landen wordt verwacht dat reCAPTCHA op toestemming wacht, omdat het gegevens naar Google stuurt. Als u dit uitschakelt, worden deze diensten tegengehouden in de categorie Functioneel totdat de bezoeker die accepteert (of in Ongecategoriseerd, of een andere categorie die uw banner toont, als Functioneel is verwijderd of verborgen), dus <strong>formulieren die ze beschermen kunnen vóór toestemming niet worden verzonden</strong>, tenzij een aangepast uitzonderingspatroon dat afwijkt van de standaardpatronen ze laat laden. Als uw banner alleen Noodzakelijk aanbiedt, is er geen categorie om ze in tegen te houden en blijven ze vóór toestemming laden. Zolang dit uit staat, worden uitzonderingen die overeenkomen met een standaard CAPTCHA-patroon genegeerd, ook als u ze zelf hebt toegevoegd; andere aangepaste uitzonderingspatronen blijven gelden."
 
 #: admin/views/settings.php:336
 msgid "Advanced inline CSS URL blocking"
@@ -8606,65 +8605,50 @@ msgid_plural "Script meta field(s) (opt_in_script/opt_out_script) were stripped 
 msgstr[0] "Script-metavelden (opt_in_script/opt_out_script) zijn verwijderd uit %d geïmporteerd item omdat de huidige gebruiker niet over de unfiltered_html-rechten beschikt. Voer opnieuw uit als superbeheerder om de scriptvelden te behouden."
 msgstr[1] "Script-metavelden (opt_in_script/opt_out_script) zijn verwijderd uit %d geïmporteerde items omdat de huidige gebruiker niet over de unfiltered_html-rechten beschikt. Voer opnieuw uit als superbeheerder om de scriptvelden te behouden."
 
-#: includes/blocks/editor.js:29
-msgid "Columns"
-msgstr "Kolommen"
+#~ msgid "Columns"
+#~ msgstr "Kolommen"
 
-#: includes/blocks/editor.js:30
-msgid "Comma-separated: name, domain, duration, description, category"
-msgstr "Kommagescheiden: naam, domein, duur, beschrijving, categorie"
+#~ msgid "Comma-separated: name, domain, duration, description, category"
+#~ msgstr "Kommagescheiden: naam, domein, duur, beschrijving, categorie"
 
-#: includes/blocks/editor.js:35
-msgid "Category filter"
-msgstr "Categorie filter"
+#~ msgid "Category filter"
+#~ msgstr "Categorie filter"
 
-#: includes/blocks/editor.js:36
-msgid "Filter by category slug (e.g. analytics)"
-msgstr "Filter op categorie slug (bijv. analytics)"
+#~ msgid "Filter by category slug (e.g. analytics)"
+#~ msgstr "Filter op categorie slug (bijv. analytics)"
 
-#: includes/blocks/editor.js:41
-msgid "Heading"
-msgstr "Kop"
+#~ msgid "Heading"
+#~ msgstr "Kop"
 
-#: includes/blocks/editor.js:62
-msgid "Show cookie table"
-msgstr "Toon cookie tabel"
+#~ msgid "Show cookie table"
+#~ msgstr "Toon cookie tabel"
 
-#: includes/blocks/editor.js:67
-msgid "Site name"
-msgstr "Sitenaam"
+#~ msgid "Site name"
+#~ msgstr "Sitenaam"
 
-#: includes/blocks/editor.js:68
-msgid "Leave empty to use the site title"
-msgstr "Leeg laten om de sitetitel te gebruiken"
+#~ msgid "Leave empty to use the site title"
+#~ msgstr "Leeg laten om de sitetitel te gebruiken"
 
-#: includes/blocks/editor.js:73
-msgid "Contact email"
-msgstr "Contact e-mail"
+#~ msgid "Contact email"
+#~ msgstr "Contact e-mail"
 
-#: includes/blocks/editor.js:74
-msgid "Leave empty to use the admin email"
-msgstr "Leeg laten om de beheerderse-mail te gebruiken"
+#~ msgid "Leave empty to use the admin email"
+#~ msgstr "Leeg laten om de beheerderse-mail te gebruiken"
 
-#: includes/blocks/editor.js:95
-msgid "Button label"
-msgstr "Knoplabel"
+#~ msgid "Button label"
+#~ msgstr "Knoplabel"
 
-#: includes/blocks/editor.js:96
-msgid "Leave empty for default: \"Manage Cookie Preferences\""
-msgstr "Laat leeg voor standaard: \"Cookievoorkeuren beheren\""
+#~ msgid "Leave empty for default: \"Manage Cookie Preferences\""
+#~ msgstr "Laat leeg voor standaard: \"Cookievoorkeuren beheren\""
 
-#: includes/blocks/editor.js:101
-msgid "Style"
-msgstr "Stijl"
+#~ msgid "Style"
+#~ msgstr "Stijl"
 
-#: includes/blocks/editor.js:104
-msgid "Button"
-msgstr "Knop"
+#~ msgid "Button"
+#~ msgstr "Knop"
 
-#: includes/blocks/editor.js:105
-msgid "Link"
-msgstr "Link"
+#~ msgid "Link"
+#~ msgstr "Link"
 
 #~ msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are blocked like any other provider until the visitor accepts their category, so <strong>forms protected by them will not submit before consent</strong>. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
 #~ msgstr "Laat Google reCAPTCHA, hCaptcha en Cloudflare Turnstile vóór toestemming laden, als bescherming van de formulieren die een bezoeker verstuurt. Of dat strikt noodzakelijk is, hangt af van uw juridisch advies: in sommige landen wordt verwacht dat reCAPTCHA op toestemming wacht, omdat het gegevens naar Google stuurt. Als u dit uitschakelt, worden deze diensten geblokkeerd zoals elke andere aanbieder totdat de bezoeker hun categorie accepteert, dus <strong>formulieren die ze beschermen kunnen vóór toestemming niet worden verzonden</strong>. De CAPTCHA-items die deze plugin standaard aan de uitzonderingen voor scriptblokkering toevoegt, worden genegeerd zolang dit uit staat; elke uitzondering die u zelf hebt geschreven, heeft nog steeds voorrang."
