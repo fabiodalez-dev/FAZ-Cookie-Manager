@@ -61,8 +61,29 @@ async function listedCountries(page: Page): Promise<string[]> {
 
 test.describe('Geo routing: per-country overrides persist from the first save (#349)', () => {
   test.skip(!WP_PATH, 'requires WP_PATH to reset the override option via wp-cli');
+  let overridesSnapshot: string | null = null;
+  test.beforeAll(() => {
+    // Serialize the WordPress value to retain its type as well as absence.
+    const snapshot = wp(['eval', `
+      $sentinel = new stdClass();
+      $value = get_option( 'faz_geo_admin_overrides', $sentinel );
+      echo base64_encode( serialize( array( 'exists' => $value !== $sentinel, 'value' => $value === $sentinel ? null : $value ) ) );
+    `]);
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(snapshot)) throw new Error('Could not snapshot the original geographic overrides');
+    overridesSnapshot = snapshot;
+  });
   test.beforeEach(clearOverrides);
-  test.afterAll(clearOverrides);
+  test.afterAll(() => {
+    if (overridesSnapshot === null) return;
+    wp(['eval', `
+      $snapshot = unserialize( base64_decode( '${overridesSnapshot}', true ) );
+      if ( $snapshot['exists'] ) {
+        update_option( 'faz_geo_admin_overrides', $snapshot['value'] );
+      } else {
+        delete_option( 'faz_geo_admin_overrides' );
+      }
+    `]);
+  });
 
   test('the first override survives a reload, and later edits keep the others', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
