@@ -14,7 +14,9 @@ concurrency:
 jobs:
   quality:
     name: Quality
-    # Playwright 1.58.2 supports Ubuntu 24.04; 26.04 rejects browser setup.
+    # Pinned: ubuntu-latest now resolves to 26.04, which Playwright 1.58 does
+    # not support (browser installs fail) and whose libxml changes HTML
+    # parsing. Move this forward together with a Playwright upgrade.
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -72,7 +74,9 @@ jobs:
 
   consent-browser:
     name: Consent intent (${{ matrix.browser }})
-    # Playwright 1.58.2 supports Ubuntu 24.04; 26.04 rejects browser setup.
+    # Pinned: ubuntu-latest now resolves to 26.04, which Playwright 1.58 does
+    # not support (browser installs fail) and whose libxml changes HTML
+    # parsing. Move this forward together with a Playwright upgrade.
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:

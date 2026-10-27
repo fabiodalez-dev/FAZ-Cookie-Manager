@@ -12,8 +12,10 @@
  * Pinned here:
  *   1. The escaped template keeps every closing tag through a DOMDocument
  *      round trip.
- *   2. The unescaped one does not (the reason the escape exists — if libxml
- *      ever stops doing this, this check tells us the escape is optional).
+ *   2. The unescaped one does not, on libxml < 2.14 — the parser most hosts
+ *      run and the reason the escape exists. libxml 2.14 replaced its HTML
+ *      parser and keeps the tags, so there this control is reported, not
+ *      asserted (see observe_unescaped()).
  *   3. Undoing the escape the way script.js does gives back the original.
  *   4. No other character is touched.
  *   5. 1-3 also hold for the real box, banner and classic templates shipped
@@ -65,6 +67,32 @@ namespace {
 		}
 	}
 
+	$observed = 0;
+	/**
+	 * The control: does THIS libxml drop the unescaped closing tags?
+	 *
+	 * libxml up to 2.13 (what most hosts run: Ubuntu 24.04 ships 2.9.14) ends
+	 * a script at any `</` + letter and drops the stray end tags, which is why
+	 * the escape exists. libxml 2.14 replaced its HTML parser with an
+	 * HTML5-style tokenizer that keeps them (Ubuntu 26.04 CI runners). That is
+	 * a fact about the machine running the test, not about the plugin: the
+	 * escape is still needed wherever the old parser runs, and the escaped
+	 * round trips below are asserted either way. So a libxml that keeps the
+	 * tags is reported, not failed.
+	 *
+	 * @param bool   $dropped Whether the unescaped round trip lost closing tags.
+	 * @param string $label   What was round-tripped.
+	 */
+	function observe_unescaped( $dropped, $label ) {
+		global $observed;
+		if ( $dropped ) {
+			check( true, $label );
+			return;
+		}
+		++$observed;
+		echo "  \033[33m~\033[0m {$label} — not on libxml " . LIBXML_DOTTED_VERSION . " (keeps them); the escape still matters on libxml < 2.14\n";
+	}
+
 	/**
 	 * Round-trip a page through libxml's HTML parser, as the optimisers do.
 	 *
@@ -107,7 +135,7 @@ namespace {
 	check( js_unescape( $after ) === $template, 'escaped: unescaping in the browser gives back the original markup' );
 
 	$raw_after = html4_round_trip( $template );
-	check( substr_count( $raw_after, '</' ) < $closing, 'unescaped: libxml drops closing tags (why the escape exists)' );
+	observe_unescaped( substr_count( $raw_after, '</' ) < $closing, 'unescaped: libxml drops closing tags (why the escape exists)' );
 
 	echo "\nReal templates (templates/6.2.0/template.json)\n";
 	$json_path = dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/templates/6.2.0/template.json';
@@ -143,7 +171,7 @@ namespace {
 					check( html_entity_decode( js_unescape( $real_after ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ) === html_entity_decode( $markup, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), "{$label}: unescaping reproduces the input once entities are decoded" );
 				}
 			}
-			check( substr_count( html4_round_trip( $markup, true ), '</' ) < $real_closing, "{$type} ({$variant}): unescaped, libxml drops closing tags" );
+			observe_unescaped( substr_count( html4_round_trip( $markup, true ), '</' ) < $real_closing, "{$type} ({$variant}): unescaped, libxml drops closing tags" );
 		}
 	}
 
@@ -155,7 +183,7 @@ namespace {
 
 	echo "\n";
 	if ( 0 === $failed ) {
-		echo "ALL PASS ({$passed})\n";
+		echo "ALL PASS ({$passed})" . ( $observed ? ", {$observed} libxml control(s) not applicable on " . LIBXML_DOTTED_VERSION : '' ) . "\n";
 		exit( 0 );
 	}
 	echo "FAILED: {$failed}, passed: {$passed}\n";
