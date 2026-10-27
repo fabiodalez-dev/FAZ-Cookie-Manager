@@ -111,7 +111,7 @@ test.describe('Banner stylesheet is not render-blocking', () => {
     await ctx.close();
   });
 
-  test('a banner stylesheet that never arrives cannot keep the consent prompt hidden', async ({ browser }) => {
+  test('a banner stylesheet that never arrives cannot keep the consent prompt hidden', async ({ browser, browserName }) => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     // Never answered: neither load nor error ever fires. Poll the timer-driven
@@ -127,8 +127,20 @@ test.describe('Banner stylesheet is not render-blocking', () => {
     expect(shown).toBe(true);
     await expect(page.locator('.faz-consent-container')).toBeVisible();
     // State classes must keep working even when the external CSS never loads.
-    // Native DOM click avoids depending on RAF while WebKit has pending CSS.
-    await page.locator('[data-faz-tag="accept-button"]').evaluate((button) => (button as HTMLButtonElement).click());
+    const acceptButton = page.locator('[data-faz-tag="accept-button"]');
+    await expect(acceptButton).toBeVisible();
+    if (browserName === 'webkit') {
+      // WebKit defers RAF while this request is pending, so click() cannot
+      // finish its stability check. Verify hit testing and send real pointer
+      // input without depending on frames; never invoke the DOM listener.
+      const box = await acceptButton.boundingBox();
+      expect(box).not.toBeNull();
+      const point = { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 };
+      expect(await acceptButton.evaluate((el, p) => el.contains(document.elementFromPoint(p.x, p.y)), point)).toBe(true);
+      await page.mouse.click(point.x, point.y);
+    } else {
+      await acceptButton.click();
+    }
     await page.waitForFunction(() => document.querySelector('.faz-consent-container')?.classList.contains('faz-hide'), undefined, { polling: 50 });
     expect(await page.locator('.faz-consent-container').evaluate((el) => getComputedStyle(el).display)).toBe('none');
     await ctx.close();

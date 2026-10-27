@@ -367,6 +367,8 @@ for (const cssLoadAt of [3000, 3500]) {
   if (cssLoadAt > 3400) {
     check('CSS timeout reveals the banner before a late load', window.document.documentElement.classList.contains('faz-ready'));
     check('CSS stays non-blocking after the fallback', link.media === 'print');
+  } else {
+    check('the banner stays hidden until the stylesheet load event', !window.document.documentElement.classList.contains('faz-ready'));
   }
   link.dispatchEvent(new window.Event('load'));
   check('the loaded banner CSS applies to the screen', link.media === 'all');
