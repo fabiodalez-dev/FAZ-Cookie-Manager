@@ -9,7 +9,7 @@ import { test, expect } from '../fixtures/wp-fixture';
  *  - The link is printed as media="print" with the data-faz-banner-css marker;
  *    the rules that style server-rendered page content (.faz-hidden, the
  *    placeholder floor, the [faz_cookie_settings] button) are printed inline.
- *  - script.js switches the link to media="all" and holds the .faz-ready
+ *  - script.js switches loaded CSS to media="all" and holds the .faz-ready
  *    reveal until the sheet has loaded, so a slow stylesheet delays the banner
  *    instead of flashing it unstyled.
  *  - A stylesheet that never arrives cannot keep the consent prompt hidden.
@@ -79,7 +79,7 @@ test.describe('Banner stylesheet is not render-blocking', () => {
       ready: document.documentElement.classList.contains('faz-ready'),
       media: document.querySelector<HTMLLinkElement>('link[data-faz-banner-css]')?.media,
     }));
-    expect(whileHeld.media, 'script.js applies the sheet without waiting for it').toBe('all');
+    expect(whileHeld.media, 'pending CSS stays non-blocking until it loads').toBe('print');
     expect(whileHeld.ready, 'banner stays hidden while its stylesheet is loading').toBe(false);
     const topWhileHeld = await contentTop();
     expect(topWhileHeld, 'found a page-content element to measure').not.toBeNull();
@@ -114,7 +114,8 @@ test.describe('Banner stylesheet is not render-blocking', () => {
   test('a banner stylesheet that never arrives cannot keep the consent prompt hidden', async ({ browser }) => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-    // Never answered: neither load nor error ever fires.
+    // Never answered: neither load nor error ever fires. Default RAF polling
+    // also verifies that pending CSS does not suspend WebKit screen painting.
     await page.route(BANNER_CSS, () => new Promise(() => {}));
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.documentElement.classList.contains('faz-ready'), undefined, { timeout: 8000 });
@@ -125,4 +126,24 @@ test.describe('Banner stylesheet is not render-blocking', () => {
     expect(shown).toBe(true);
     await ctx.close();
   });
+
+  test('a stylesheet arriving after the fallback still applies its styles', async ({ browser }) => {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route(BANNER_CSS, async (route) => { await held; await route.continue(); });
+    try {
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => document.documentElement.classList.contains('faz-ready'), undefined, { timeout: 8000 });
+      expect(await page.evaluate(() => document.querySelector<HTMLLinkElement>('link[data-faz-banner-css]')?.media)).toBe('print');
+      release();
+      await page.waitForFunction(() => document.querySelector<HTMLLinkElement>('link[data-faz-banner-css]')?.media === 'all');
+      expect(await page.locator('.faz-consent-container').evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
+    } finally {
+      release();
+      await ctx.close();
+    }
+  });
+
 });

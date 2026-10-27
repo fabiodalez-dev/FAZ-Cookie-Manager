@@ -361,9 +361,11 @@ console.log('cache-safe jurisdiction bootstrap ordering (jsdom)');
   advance(1400);
   window.__fazTestRemoveStyles();
   advance(2500);
+  check('pending banner CSS stays non-blocking for screen rendering', link.media === 'print');
   check('a late bootstrap keeps the banner hidden beyond the old watchdog deadline', !window.document.documentElement.classList.contains('faz-ready'));
   advance(3000);
   link.dispatchEvent(new window.Event('load'));
+  check('the loaded banner CSS applies to the screen', link.media === 'all');
   check('the delayed sheet reveals the banner when it becomes usable', window.document.documentElement.classList.contains('faz-ready'));
 }
 
