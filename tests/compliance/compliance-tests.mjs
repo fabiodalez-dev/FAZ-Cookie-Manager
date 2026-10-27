@@ -161,8 +161,10 @@ async function loginAdmin(page) {
 	await page.goto(SITE + '/wp-login.php', { waitUntil: 'domcontentloaded' });
 	await page.fill('#user_login', ADMIN_USER);
 	await page.fill('#user_pass', ADMIN_PASS);
-	await page.click('#wp-submit');
-	await page.waitForLoadState('domcontentloaded');
+	await Promise.all([
+		page.waitForURL(`${SITE}/wp-admin/**`, { waitUntil: 'domcontentloaded' }),
+		page.click('#wp-submit'),
+	]);
 }
 
 /**

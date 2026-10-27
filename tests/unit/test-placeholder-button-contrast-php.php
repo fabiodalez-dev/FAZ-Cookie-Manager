@@ -117,9 +117,16 @@ pbc_check( 'not-a-colour' === Placeholder_Builder::button_background( 'not-a-col
 echo "\n-- the markup carries the safe colour the CSS reads --\n";
 $html = Placeholder_Builder::build( 'youtube', 'YouTube', 'marketing', '<iframe src="https://www.youtube.com/embed/x"></iframe>' );
 pbc_check( false !== strpos( $html, '--faz-svc-btn:#e50000' ), 'the YouTube placeholder sets --faz-svc-btn' );
+$social = Placeholder_Builder::build_social( 'instagram', 'Instagram', 'marketing' );
+pbc_check( false !== strpos( $social, '--faz-svc-btn:' . Placeholder_Builder::button_background( '#e4405f' ) ), 'the social placeholder sets --faz-svc-btn too' );
 $css = Placeholder_Builder::get_css();
 pbc_check( false !== strpos( $css, 'background:var(--faz-svc-btn,' ), 'the video button reads --faz-svc-btn first' );
 pbc_check( false === strpos( $css, 'background:var(--faz-svc-color,#ff0000)' ), 'no button background falls back to #ff0000 behind the white text' );
+// A filter on the button darkens the white text along with the background
+// and drops a borderline colour (Twitch, 4.64:1) under 4.5:1 on hover; the
+// hover darkens the background only.
+pbc_check( false === strpos( $css, 'filter:brightness' ), 'the hover does not dim the button text with a filter' );
+pbc_check( false !== strpos( $css, '.faz-placeholder--video .faz-placeholder-btn:hover{background:var(--faz-svc-btn,' ), 'the hover keeps the AA background underneath' );
 
 echo "\nTests run: {$run}\n";
 if ( $fail > 0 ) {

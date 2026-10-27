@@ -37,8 +37,10 @@ const page = await ctx.newPage();
 await page.goto(`${SITE}/wp-login.php`);
 await page.fill('#user_login', 'admin');
 await page.fill('#user_pass', 'admin');
-await page.click('#wp-submit');
-await page.waitForLoadState('domcontentloaded');
+await Promise.all([
+  page.waitForURL(`${SITE}/wp-admin/**`, { waitUntil: 'domcontentloaded' }),
+  page.click('#wp-submit'),
+]);
 
 // V01 - Dashboard loads
 await page.goto(`${SITE}/wp-admin/admin.php?page=faz-cookie-manager`, { waitUntil: 'domcontentloaded' });

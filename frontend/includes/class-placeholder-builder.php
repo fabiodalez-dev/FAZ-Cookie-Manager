@@ -497,7 +497,7 @@ class Placeholder_Builder {
 			. '.faz-placeholder .faz-placeholder-btn:hover{background:#0b5ed7;transform:translateY(-1px)}'
 			/* On the dark poster a solid white pill reads as the clear CTA. */
 			. '.faz-placeholder--video .faz-placeholder-btn{background:var(--faz-svc-btn,var(--faz-svc-color,#e50000));color:#fff;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.18)}'
-			. '.faz-placeholder--video .faz-placeholder-btn:hover{background:var(--faz-svc-btn,var(--faz-svc-color,#e50000));filter:brightness(.92);transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.25)}'
+			. '.faz-placeholder--video .faz-placeholder-btn:hover{background:var(--faz-svc-btn,var(--faz-svc-color,#e50000));background-image:linear-gradient(rgba(0,0,0,.08),rgba(0,0,0,.08));transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.25)}'
 			. '.faz-placeholder .faz-placeholder-btn:active{transform:translateY(0)}'
 			. '.faz-placeholder .faz-placeholder-btn:focus-visible{outline:2px solid #0b5ed7;outline-offset:2px}'
 			. '.faz-placeholder--video .faz-placeholder-btn:focus-visible{outline-color:var(--faz-svc-color,#ff0000)}'
