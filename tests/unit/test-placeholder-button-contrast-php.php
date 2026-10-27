@@ -100,7 +100,9 @@ function pbc_white_contrast( $hex ) {
 	return 1.05 / ( $l + 0.05 );
 }
 
-$colors = ( new ReflectionClass( Placeholder_Builder::class ) )->getStaticPropertyValue( 'service_colors' );
+// getStaticProperties() rather than getStaticPropertyValue(): the latter
+// honours visibility on PHP 7.4.0–7.4.8 and throws on a private property.
+$colors = ( new ReflectionClass( Placeholder_Builder::class ) )->getStaticProperties()['service_colors'];
 
 echo "\n-- every service colour gives an AA button --\n";
 foreach ( $colors as $service => $brand ) {
