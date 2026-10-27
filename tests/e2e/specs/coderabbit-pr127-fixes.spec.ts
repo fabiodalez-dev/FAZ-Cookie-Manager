@@ -166,7 +166,7 @@ test.describe('CodeRabbit PR #127 fixes', () => {
 
   test('8. Frontend: the reject/close path announces the saved outcome', async ({ page, context }) => {
     await context.clearCookies();
-    await page.goto('http://127.0.0.1:9998/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => typeof (window as any)._fazConfig !== 'undefined', null, { timeout: 10_000 });
     const fired = await page.evaluate(() => {
       if (typeof (window as any)._fazAcceptCookies !== 'function') return 'no-fn';
@@ -179,7 +179,7 @@ test.describe('CodeRabbit PR #127 fixes', () => {
 
   test('9. Frontend: accept also announces via the centralized path', async ({ page, context }) => {
     await context.clearCookies();
-    await page.goto('http://127.0.0.1:9998/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => typeof (window as any)._fazConfig !== 'undefined', null, { timeout: 10_000 });
     const fired = await page.evaluate(() => {
       if (typeof (window as any)._fazAcceptCookies !== 'function') return 'no-fn';
@@ -194,7 +194,7 @@ test.describe('CodeRabbit PR #127 fixes', () => {
 
   test('10. Frontend: a protocol-relative forwarding target is accepted (origin resolved against the page)', async ({ page, context }) => {
     await context.clearCookies();
-    await page.goto('http://127.0.0.1:9998/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => typeof (window as any)._fazConfig !== 'undefined', null, { timeout: 10_000 });
     // `_fazStore` is a const alias of `window._fazConfig` captured at load, so
     // mutating `window._fazConfig._consentForwarding` is visible to the message

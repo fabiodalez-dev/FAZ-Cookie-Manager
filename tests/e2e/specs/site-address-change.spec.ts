@@ -37,6 +37,7 @@ test.describe.serial('Site address change (#195)', () => {
   });
 
   test('changing siteurl drops the cached banner template', async ({ page }) => {
+    const originalSiteUrl = wpEval(`echo get_option('siteurl');`).trim();
     primeTemplateCache();
     await page.goto(`${WP_BASE}/?_cb=${Date.now()}`, { waitUntil: 'domcontentloaded' });
 
@@ -53,7 +54,7 @@ test.describe.serial('Site address change (#195)', () => {
     expect(afterChange, 'the address change invalidates the cache').toBe('cleared');
 
     const restored = wpEval(`echo get_option('siteurl');`).trim();
-    expect(restored, 'the probe restored the real siteurl').toContain('9998');
+    expect(restored, 'the probe restored the real siteurl').toBe(originalSiteUrl);
   });
 
   test('a template cached under a previous address is repaired at render time', async ({ page }) => {
