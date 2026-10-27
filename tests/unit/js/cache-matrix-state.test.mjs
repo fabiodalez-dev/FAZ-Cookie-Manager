@@ -63,12 +63,23 @@ if (args[0] === 'eval' && args[1].includes('Breeze_ConfigCache::factory()->write
     writeFileSync(join(bin, 'wp'), wp, { mode: 0o755 });
     writeFileSync(join(bin, 'package.json'), '{"type":"module"}');
     writeFileSync(join(bin, 'curl'), '#!/bin/sh\ncase " $* " in *" -w "*) printf "%s" "${MATRIX_HTTP_STATUS:-200}" ;; *) printf "Cache-Control: public\\r\\n" ;; esac\n', { mode: 0o755 });
-    writeFileSync(join(bin, 'npx'), '#!/bin/sh\nif [ -n "${MATRIX_TEST_FAIL:-}" ]; then echo "1 failed"; exit 1; fi\necho "8 passed"\n', { mode: 0o755 });
+    writeFileSync(join(bin, 'npx'), `#!/bin/sh
+if [ -n "$MATRIX_LONG_OUTPUT" ]; then
+    i=0
+    while [ "$i" -lt 4000 ]; do
+        printf '  - diagnostic %s: output must be consumed until the reporter and teardown finish\\n' "$i"
+        i=$((i + 1))
+    done
+fi
+if [ -n "$MATRIX_TEST_FAIL" ]; then echo "1 failed"; exit 1; fi
+echo "8 passed"
+printf done > "$MATRIX_NPX_DONE"
+`, { mode: 0o755 });
     writeFileSync(join(bin, 'cp'), '#!/bin/sh\nfor arg do last="$arg"; done\nif [ -n "${MATRIX_STATE_RESTORE_FAIL:-}" ] && [ "$last" = "$WP_PATH/wp-content/w3tc-config" ]; then exit 1; fi\nexec /bin/cp "$@"\n', { mode: 0o755 });
     const calls = join(dir, 'calls');
     const result = spawnSync('bash', [join(repo, 'scripts/cache-plugin-matrix.sh'), slug], {
         encoding: 'utf8', timeout: 30_000,
-        env: { ...process.env, ...extraEnv, PATH: `${bin}:${process.env.PATH}`, WP_PATH: site, MATRIX_CALLS: calls },
+        env: { ...process.env, ...extraEnv, PATH: `${bin}:${process.env.PATH}`, WP_PATH: site, MATRIX_CALLS: calls, MATRIX_NPX_DONE: join(dir, 'npx-completed') },
     });
     return { dir, site, result, originals, calls: readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse) };
 }
@@ -137,6 +148,17 @@ test('a failed state-file restore does not prevent independent recovery', () => 
         assert.ok(run.calls.slice(restore + 1).some(args => args[0] === 'cache' && args[1] === 'flush'), 'restored backend flushed');
     } finally {
         if (snapshot) rmSync(snapshot, { recursive: true, force: true });
+        rmSync(run.dir, { recursive: true, force: true });
+    }
+});
+
+test('the output preview drains long reporter output through completion', () => {
+    const run = runMatrix({ MATRIX_LONG_OUTPUT: '1' });
+    try {
+        assert.equal(run.result.status, 0, run.result.stdout + run.result.stderr);
+        assert.equal(readFileSync(join(run.dir, 'npx-completed'), 'utf8'), 'done');
+        assert.match(run.result.stdout, /ok 8 passed/);
+    } finally {
         rmSync(run.dir, { recursive: true, force: true });
     }
 });
