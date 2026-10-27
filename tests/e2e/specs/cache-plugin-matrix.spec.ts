@@ -288,11 +288,22 @@ test.describe(`Cache plugin matrix — ${SLUG || '(no plugin)'}`, () => {
   test.skip(!SLUG, 'FAZ_CACHE_PLUGIN is not set — run through scripts/cache-plugin-matrix.sh');
 
   let fixtureUrl = '';
+  let fixtureId = 0;
+  let fixtureBefore: { id: number; title: string; content: string } | null = null;
   let originalTitle = '';
   let titleChanged = false;
 
   test.beforeAll(() => {
+    // A page that already exists (the driver creates one before its baseline
+    // probe) gets its title and content back in afterAll; one this file
+    // creates is deleted there.
+    const existing = wpEval(`
+      $p = get_page_by_path( '${FIXTURE_SLUG}', OBJECT, 'page' );
+      echo $p ? wp_json_encode( array( 'id' => (int) $p->ID, 'title' => $p->post_title, 'content' => $p->post_content ) ) : '';
+    `).trim();
+    fixtureBefore = existing ? (JSON.parse(existing) as { id: number; title: string; content: string }) : null;
     const id = upsertPage(FIXTURE_SLUG, 'FAZ Cache Matrix', FIXTURE_HTML);
+    fixtureId = id;
     fixtureUrl = wpEval(`echo get_permalink( ${id} );`).trim();
     originalTitle = readActiveTitle();
     expect(originalTitle.length, 'active banner must have a notice title').toBeGreaterThan(0);
@@ -302,6 +313,15 @@ test.describe(`Cache plugin matrix — ${SLUG || '(no plugin)'}`, () => {
   test.afterAll(async () => {
     if (titleChanged) {
       await saveBannerTitle(originalTitle);
+    }
+    if (fixtureBefore) {
+      const encoded = Buffer.from(JSON.stringify(fixtureBefore), 'utf8').toString('base64');
+      wpEval(`
+        $p = json_decode( base64_decode( '${encoded}' ), true );
+        wp_update_post( array( 'ID' => (int) $p['id'], 'post_title' => $p['title'], 'post_content' => $p['content'] ) );
+      `);
+    } else if (fixtureId > 0) {
+      wp(['post', 'delete', String(fixtureId), '--force'], { allowRetry: false });
     }
     purgeAll();
   });

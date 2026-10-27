@@ -68,6 +68,7 @@ if (args[0] === 'plugin' && args[1] === 'activate') {
     mkdirSync(join(site, 'wp-content/boost-cache'), { recursive: true });
     writeFileSync(join(site, 'wp-content/boost-cache/config.php'), 'created by recipe');
 }
+if (args[0] === 'eval' && args[1].includes('wp_insert_post')) console.log('4242');
 if (args[0] === 'eval' && args[1].includes('Breeze_ConfigCache::factory()->write')) {
     writeFileSync(join(site, 'wp-content/breeze-config/breeze-config.php'), 'temporary Breeze settings');
 }
@@ -115,6 +116,8 @@ for (const [name, env, expectedStatus, slug] of [
             assert.equal(readlinkSync(join(run.site, 'wp-content/object-cache.php')), join(run.dir, 'redis-dropin.php'));
             assert.equal(existsSync(join(run.site, 'wp-content/wp-cache-config.php.bak')), false);
             assert.equal(existsSync(join(run.site, 'wp-content/boost-cache/config.php')), false);
+            // The fixture page this run created (the fake wp answers the insert with id 4242) is deleted again.
+            assert.ok(run.calls.some(args => args[0] === 'eval' && args[1].includes('wp_delete_post( 4242, true )')), 'fixture page created by the driver is deleted on exit');
             const restore = run.calls.findIndex(args => args[0] === 'eval-file' && args[2] === 'restore');
             const flush = run.calls.findLastIndex(args => args[0] === 'cache' && args[1] === 'flush');
             assert.ok(restore >= 0, 'original options restored');

@@ -349,12 +349,20 @@ if ! wp --path="$WP_PATH" --skip-plugins --skip-themes eval-file "$options_helpe
   exit 2
 fi
 
+fixture_page_id=''
 restore_site() {
   local run_status=$?
   local restore_failed=0
   local options_restored=0
   trap - EXIT
   echo "--- restoring site state"
+  # Only the fixture page this run created; a pre-existing one is left alone.
+  if [ -n "$fixture_page_id" ]; then
+    if ! wp --path="$WP_PATH" --skip-plugins --skip-themes eval "if ( ! wp_delete_post( ${fixture_page_id}, true ) ) { exit( 1 ); }" >/dev/null 2>&1; then
+      echo "!! fixture page ${fixture_page_id} could not be deleted" >&2
+      restore_failed=1
+    fi
+  fi
   # Do not bootstrap a cache drop-in against the matrix's temporary options.
   rm -f "$WPC/advanced-cache.php" "$WPC/object-cache.php"
   for i in "${!state_paths[@]}"; do
@@ -423,11 +431,12 @@ rm -f "$WPC/advanced-cache.php"
 set_wp_cache false
 # The fixture page the spec judges; the spec upserts it by slug as well, this
 # only guarantees the baseline probe below does not read a 404 on a clean site.
-wpe '
+fixture_page_id=$(wpe '
   if ( ! get_page_by_path( "faz-cache-matrix", OBJECT, "page" ) ) {
-    wp_insert_post( array( "post_type" => "page", "post_status" => "publish", "post_name" => "faz-cache-matrix", "post_title" => "FAZ Cache Matrix", "post_content" => "<p>FAZ cache matrix fixture.</p>" ) );
+    $id = wp_insert_post( array( "post_type" => "page", "post_status" => "publish", "post_name" => "faz-cache-matrix", "post_title" => "FAZ Cache Matrix", "post_content" => "<p>FAZ cache matrix fixture.</p>" ) );
+    if ( ! is_wp_error( $id ) && $id > 0 ) { echo (int) $id; }
   }
-' >/dev/null
+' | tr -cd '0-9')
 baseline_status=$(curl -s -o /dev/null -w "%{http_code}" -A "Mozilla/5.0 matrix" "$WP_BASE_URL/faz-cache-matrix/")
 if [ "$baseline_status" != "200" ]; then
   echo "!! the fixture page answers HTTP $baseline_status with only FAZ active. Aborting." >&2
