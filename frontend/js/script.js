@@ -934,6 +934,8 @@ function _fazFireEvent(responseCategories) {
     document.dispatchEvent(consentUpdate);
 }
 
+var _fazBannerCssWaitMs = 2000;
+
 /**
  * Apply the banner stylesheet and call back once it can style the banner.
  *
@@ -941,7 +943,8 @@ function _fazFireEvent(responseCategories) {
  * data-faz-banner-css>` so it never blocks the page's first paint (PageSpeed
  * "Render-blocking requests"): nothing that exists before this script runs
  * needs it, and the rules that style server-rendered page content are printed
- * inline. Switching media to "all" applies it. When the sheet has already
+ * inline. Loaded sheets switch to "all"; pending ones remain non-blocking so
+ * WebKit can still paint if the timeout reveals the prompt. When the sheet has already
  * arrived — the usual case, since the link sits in <head> and this script is
  * deferred — the callback runs synchronously, exactly as before. Otherwise it
  * waits for load or error, with a short fail-open timeout so a stalled CDN
@@ -949,14 +952,23 @@ function _fazFireEvent(responseCategories) {
  *
  * @param {Function} callback Runs once, when the sheet is usable.
  */
-var _fazBannerCssWaitMs = 2000;
-
 function _fazWhenBannerCssReady(callback) {
     var link = null;
     try { link = document.querySelector('link[data-faz-banner-css]'); } catch (e) { link = null; }
     if (!link) { callback(); return; }
-    if (link.media !== 'all') link.media = 'all';
-    if (link.sheet) { callback(); return; }
+    if (link.sheet) { link.media = 'all'; callback(); return; }
+    // A pending screen stylesheet suspends animation frames in WebKit. Keep it
+    // non-blocking until load, including after the bounded fail-open callback.
+    link.media = 'print';
+    if (!link._fazApplyLoadedCss) {
+        var applyLoadedCss = function () {
+            link.media = 'all';
+            link.removeEventListener('load', applyLoadedCss);
+            link._fazApplyLoadedCss = null;
+        };
+        link._fazApplyLoadedCss = applyLoadedCss;
+        link.addEventListener('load', applyLoadedCss);
+    }
     var done = false;
     var finish = function () {
         if (done) return;
