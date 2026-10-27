@@ -12,8 +12,10 @@
  * Pinned here:
  *   1. The escaped template keeps every closing tag through a DOMDocument
  *      round trip.
- *   2. The unescaped one does not (the reason the escape exists — if libxml
- *      ever stops doing this, this check tells us the escape is optional).
+ *   2. The unescaped one does not, on libxml < 2.14 — the parser most hosts
+ *      run and the reason the escape exists. libxml 2.14 replaced its HTML
+ *      parser and keeps the tags, so there this control is reported, not
+ *      asserted (see observe_unescaped()).
  *   3. Undoing the escape the way script.js does gives back the original.
  *   4. No other character is touched.
  *   5. 1-3 also hold for the real box, banner and classic templates shipped

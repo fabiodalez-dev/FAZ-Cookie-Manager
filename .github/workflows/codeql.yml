@@ -15,9 +15,8 @@ concurrency:
 jobs:
   analyze:
     name: Analyze
-    # Pinned: ubuntu-latest now resolves to 26.04, which Playwright 1.58 does
-    # not support (browser installs fail) and whose libxml changes HTML
-    # parsing. Move this forward together with a Playwright upgrade.
+    # Pinned with quality.yml so every gate runs on the same image; move it
+    # forward together with the Quality and Consent intent jobs there.
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
