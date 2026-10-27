@@ -48,6 +48,7 @@ if (args[0] === 'eval-file') {
         if (readFileSync(args[3], 'utf8') !== 'original option snapshot') process.exit(1);
     }
 }
+if (args[0] === 'plugin' && args[1] === 'is-active') process.exit(process.env.MATRIX_STUCK_PLUGIN ? 0 : 1);
 if (args[0] === 'plugin' && args[1] === 'activate') {
     writeFileSync(join(site, 'wp-config.php'), '<?php /* temporary config */');
     writeFileSync(join(site, '.htaccess'), '# temporary rules');
@@ -89,6 +90,7 @@ for (const [name, env, expectedStatus, slug] of [
     ['successful Breeze run', {}, 0, 'breeze'],
     ['successful WP-Optimize run', {}, 0, 'wp-optimize'],
     ['failing tests', { MATRIX_TEST_FAIL: '1' }, 1],
+    ['plugin still active after cleanup', { MATRIX_STUCK_PLUGIN: '1' }, 1],
     ['early baseline failure', { MATRIX_HTTP_STATUS: '503' }, 3],
 ]) {
     test(`matrix restores original configuration after ${name}`, () => {

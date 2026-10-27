@@ -281,6 +281,13 @@ configure_plugin() {
 
 cleanup_plugin() {
   wpq plugin deactivate "$1" >/dev/null 2>&1 || wp --path="$WP_PATH" --skip-plugins --skip-themes plugin deactivate "$1" >/dev/null 2>&1 || true
+  # A plugin that survived both attempts would keep its hooks on the next
+  # plugin's run and alter that verdict silently. Stop here: the EXIT trap
+  # puts the original plugin list back.
+  if wp --path="$WP_PATH" --skip-plugins --skip-themes plugin is-active "$1" >/dev/null 2>&1; then
+    echo "!! $1 is still active after cleanup — stopping the matrix" >&2
+    exit 1
+  fi
   rm -f "$WPC/advanced-cache.php" "$WPC/object-cache.php"
   rm -rf "$WPC/cache/surge" "$WPC/cache/cache-enabler" "$WPC/cache/wp-fastest-cache" "$WPC/cache/all" "$WPC/cache/wpfc-mobile-cache" \
     "$WPC/cache/breeze"* "$WPC/cache/page_enhanced" "$WPC/cache/minify" "$WPC/cache/supercache" "$WPC/cache/blogs" \
