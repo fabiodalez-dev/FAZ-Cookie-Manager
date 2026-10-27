@@ -35,7 +35,7 @@ test.beforeEach(async ({ page, wpBaseURL }) => {
   const domain = new URL(wpBaseURL).hostname;
   await page.context().addCookies([{
     name:     'fazcookie-consent',
-    value:    `consentid%3Ae2e-val%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
+    value:    `consentid%3Ae2eval%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
     domain,
     path:     '/',
     sameSite: 'Lax',
