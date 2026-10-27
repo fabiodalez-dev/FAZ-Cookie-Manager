@@ -957,8 +957,8 @@ function _fazWhenBannerCssReady(callback) {
     try { link = document.querySelector('link[data-faz-banner-css]'); } catch (e) { link = null; }
     if (!link) { callback(); return; }
     if (link.sheet) { link.media = 'all'; callback(); return; }
-    // A pending screen stylesheet suspends animation frames in WebKit. Keep it
-    // non-blocking until load, including after the bounded fail-open callback.
+    // Keep the pending sheet non-blocking until load, including after the
+    // bounded fail-open callback. A late load must still apply the styles.
     link.media = 'print';
     if (!link._fazApplyLoadedCss) {
         var applyLoadedCss = function () {
