@@ -14,6 +14,8 @@ class Matrix_Test_DB {
 	public $last_error = '';
 	public $rows = array();
 	public $fail_insert = false;
+	public $fail_on_insert = 0;
+	public $insert_calls = 0;
 	private $pattern;
 	private $transaction;
 	public function prepare( $sql, $active, $faz, $pattern ) {
@@ -36,6 +38,8 @@ class Matrix_Test_DB {
 		return 1;
 	}
 	public function insert( $table, $row ) {
+		$this->insert_calls++;
+		if ( $this->fail_on_insert === $this->insert_calls ) { return false; }
 		if ( $this->fail_insert ) { return false; }
 		$this->rows[] = $row;
 		return 1;
@@ -96,6 +100,18 @@ try {
 	matrix_check( $wpdb->rows === $expected, 'failed restore rolls back the option deletion' );
 	matrix_check( is_file( $file ), 'backup retained on restore failure' );
 	$wpdb->fail_insert = false;
+
+	$wpdb->insert_calls = 0;
+	$wpdb->fail_on_insert = 2;
+	try {
+		matrix_run( 'restore', $file );
+		matrix_check( false, 'second insert failure must surface' );
+	} catch ( RuntimeException $error ) {
+		matrix_check( false !== strpos( $error->getMessage(), 'Could not restore' ), 'partial restore failures are reported' );
+	}
+	matrix_check( 2 === $wpdb->insert_calls, 'one option was reinserted before the next insertion failed' );
+	matrix_check( $wpdb->rows === $expected, 'partial restore rolls back every inserted option' );
+	$wpdb->fail_on_insert = 0;
 
 	file_put_contents( $file, serialize( array( array( 'option_name' => 'incomplete row' ) ) ) );
 	try {

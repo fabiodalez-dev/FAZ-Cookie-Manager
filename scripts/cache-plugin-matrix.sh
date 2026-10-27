@@ -458,7 +458,7 @@ for slug in "${PLUGINS[@]}"; do
   FAZ_E2E_SKIP_PREFLIGHT=1 FAZ_CACHE_PLUGIN="$slug" FAZ_CACHE_PAGECACHE="$PAGECACHE" FAZ_CACHE_NATIVE_PURGE_PHP="$NATIVE_PURGE" \
     PLAYWRIGHT_JSON_OUTPUT_NAME="$PWD/$REPORT_DIR/$slug.json" \
     npx playwright test -c tests/e2e/playwright.config.ts tests/e2e/specs/cache-plugin-matrix.spec.ts --workers=1 --retries=0 \
-      --reporter=list,json 2>&1 | tee "$REPORT_DIR/$slug.log" | grep -E "^\s+(✓|✘|-|×)|passed|failed|skipped|Error:" | head -40
+      --reporter=list,json 2>&1 | tee "$REPORT_DIR/$slug.log" | grep -E "^\s+(✓|✘|-|×)|passed|failed|skipped|Error:" | awk 'NR <= 40'
   if grep -qE "[0-9]+ failed" "$REPORT_DIR/$slug.log"; then
     verdict="FAIL $(grep -oE '[0-9]+ failed' "$REPORT_DIR/$slug.log" | head -1), $(grep -oE '[0-9]+ passed' "$REPORT_DIR/$slug.log" | head -1)"
     rc=1

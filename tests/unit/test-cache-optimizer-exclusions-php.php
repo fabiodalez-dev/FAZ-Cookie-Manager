@@ -107,7 +107,7 @@ namespace {
 	echo "SiteGround Optimizer: handle lists, ids and Remove Query Strings\n";
 	$sgo = cx_call( $frontend, 'sgo_exclude_own_handles', array( 'jquery-core' ) );
 	$sgo = is_array( $sgo ) ? $sgo : array();
-	foreach ( array( 'faz-cookie-manager', 'faz-cookie-manager-static-config', 'faz-cookie-manager-a11y', 'faz-cookie-manager-css', 'faz-cookie-manager-tcf-cmp', 'faz-fw', 'faz-fw-a11y', 'faz-dsar-form', 'faz-dnsmpi-form', 'faz-dsar' ) as $h ) {
+	foreach ( array( 'faz-cookie-manager', 'faz-cookie-manager-static-config', 'faz-cookie-manager-a11y', 'faz-cookie-manager-css', 'faz-cookie-manager-css-page', 'faz-fw-css', 'faz-fw-css-page', 'faz-cookie-manager-tcf-cmp', 'faz-fw', 'faz-fw-a11y', 'faz-dsar-form', 'faz-dnsmpi-form', 'faz-dsar' ) as $h ) {
 		cx_check( in_array( $h, $sgo, true ), "minify/async exclude carries the handle {$h}" );
 	}
 	foreach ( array( 'faz-cookie-manager-js', 'faz-cookie-manager-js-before', 'faz-cookie-manager-js-extra', 'faz-cookie-manager-static-config-js', 'faz-fw-static-config-js', 'faz-cookie-manager-css-css' ) as $id ) {
