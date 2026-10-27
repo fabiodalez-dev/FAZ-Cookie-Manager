@@ -2,9 +2,9 @@ import { test, expect } from '../fixtures/wp-fixture';
 import type { APIRequestContext, APIResponse, Browser, Page } from '@playwright/test';
 import { request as playwrightRequest } from '@playwright/test';
 import { getWpLoginPath } from '../utils/wp-auth';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { upsertPage, wp, wpEval } from '../utils/wp-env';
+import { upsertPage, wp, wpEval, WP_PATH } from '../utils/wp-env';
 
 /**
  * Cache plugin matrix — one real cache / optimisation plugin at a time.
@@ -288,42 +288,45 @@ test.describe(`Cache plugin matrix — ${SLUG || '(no plugin)'}`, () => {
   test.skip(!SLUG, 'FAZ_CACHE_PLUGIN is not set — run through scripts/cache-plugin-matrix.sh');
 
   let fixtureUrl = '';
-  let fixtureId = 0;
-  let fixtureBefore: { id: number; title: string; content: string } | null = null;
   let originalTitle = '';
   let titleChanged = false;
+  let fixturePageId = 0;
+  let fixturePageSnapshot = '';
 
   test.beforeAll(() => {
-    // A page that already exists (the driver creates one before its baseline
-    // probe) gets its title and content back in afterAll; one this file
-    // creates is deleted there.
-    const existing = wpEval(`
+    fixturePageSnapshot = wpEval(`
       $p = get_page_by_path( '${FIXTURE_SLUG}', OBJECT, 'page' );
-      echo $p ? wp_json_encode( array( 'id' => (int) $p->ID, 'title' => $p->post_title, 'content' => $p->post_content ) ) : '';
+      echo base64_encode( serialize( $p ? array( 'ID' => $p->ID, 'post_title' => $p->post_title, 'post_content' => $p->post_content ) : null ) );
     `).trim();
-    fixtureBefore = existing ? (JSON.parse(existing) as { id: number; title: string; content: string }) : null;
-    const id = upsertPage(FIXTURE_SLUG, 'FAZ Cache Matrix', FIXTURE_HTML);
-    fixtureId = id;
-    fixtureUrl = wpEval(`echo get_permalink( ${id} );`).trim();
+    // Record an existing ID before the update, so a failed setup is recoverable.
+    fixturePageId = Number(wpEval(`$p = unserialize( base64_decode( '${fixturePageSnapshot}' ) ); echo $p ? $p['ID'] : 0;`).trim());
+    fixturePageId = upsertPage(FIXTURE_SLUG, 'FAZ Cache Matrix', FIXTURE_HTML);
+    fixtureUrl = wpEval(`echo get_permalink( ${fixturePageId} );`).trim();
     originalTitle = readActiveTitle();
     expect(originalTitle.length, 'active banner must have a notice title').toBeGreaterThan(0);
     purgeAll();
   });
 
   test.afterAll(async () => {
-    if (titleChanged) {
-      await saveBannerTitle(originalTitle);
+    try {
+      if (titleChanged) await saveBannerTitle(originalTitle);
+    } finally {
+      try {
+        if (fixturePageId) {
+          wpEval(`
+            $p = unserialize( base64_decode( '${fixturePageSnapshot}' ) );
+            if ( $p ) {
+              $result = wp_update_post( wp_slash( $p ), true );
+              if ( is_wp_error( $result ) || ! $result ) { throw new RuntimeException( 'Fixture page restore failed' ); }
+            } elseif ( ! wp_delete_post( ${fixturePageId}, true ) ) {
+              throw new RuntimeException( 'Fixture page deletion failed' );
+            }
+          `);
+        }
+      } finally {
+        purgeAll();
+      }
     }
-    if (fixtureBefore) {
-      const encoded = Buffer.from(JSON.stringify(fixtureBefore), 'utf8').toString('base64');
-      wpEval(`
-        $p = json_decode( base64_decode( '${encoded}' ), true );
-        wp_update_post( array( 'ID' => (int) $p['id'], 'post_title' => $p['title'], 'post_content' => $p['content'] ) );
-      `);
-    } else if (fixtureId > 0) {
-      wp(['post', 'delete', String(fixtureId), '--force'], { allowRetry: false });
-    }
-    purgeAll();
   });
 
   test('01 the plugin serves the fixture page from its page cache', async () => {
@@ -452,13 +455,66 @@ test.describe(`Cache plugin matrix — ${SLUG || '(no plugin)'}`, () => {
     for (const got of [first, second]) {
       expect(got.status).toBe(200);
       expect(got.headers['content-type'] ?? '', 'JSON content type').toMatch(/application\/json/);
-      if (got.headers['x-faz-jurisdiction'] === 'live') {
+      expect(got.stamp, 'no page-cache stamp injected into the JSON response').toBe('');
+      expect(() => JSON.parse(got.html), 'REST body is valid JSON (no minifier or footer comment appended)').not.toThrow();
+    }
+
+    // Exercise actual geo routing with a deterministic country source. The MU
+    // callback only supplies a country; production code decides the live marker
+    // and cache headers. Neither the verdict nor the headers are stubbed.
+    const snapshot = wpEval(`
+      global $wpdb;
+      echo base64_encode( serialize( $wpdb->get_row( $wpdb->prepare(
+        "SELECT option_value, autoload FROM {$wpdb->options} WHERE option_name = %s", 'faz_settings'
+      ), ARRAY_A ) ) );
+    `).trim();
+    const muFile = join(WP_PATH, 'wp-content', 'mu-plugins', `faz-e2e-matrix-geo-${process.pid}.php`);
+    let ownsMuFile = false;
+    try {
+      mkdirSync(join(WP_PATH, 'wp-content', 'mu-plugins'), { recursive: true });
+      writeFileSync(muFile, `<?php
+if ( isset( $_COOKIE['faz_e2e_matrix_geo'] ) && '1' === $_COOKIE['faz_e2e_matrix_geo'] ) {
+  add_filter( 'faz_visitor_country', function () { return 'DE'; } );
+}
+`, { flag: 'wx' });
+      ownsMuFile = true;
+      wpEval(`
+        $s = get_option( 'faz_settings', array() );
+        if ( ! is_array( $s ) ) { $s = array(); }
+        $s['geolocation']['geo_targeting'] = true;
+        $s['banner_control']['cache_compatibility'] = false;
+        update_option( 'faz_settings', $s );
+      `);
+      purgeAll();
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const got = await fetchAnon(url, HUMAN_UA, ['faz_e2e_matrix_geo=1']);
+        expect(got.status).toBe(200);
+        expect(got.headers['x-faz-jurisdiction'], 'geo routing produces a live REST response').toBe('live');
         expect(got.headers['cache-control'] ?? '', 'country-dependent REST response is private').toMatch(/\bprivate\b/i);
         expect(got.headers['cache-control'] ?? '', 'country-dependent REST response is no-store').toMatch(/\bno-store\b/i);
         expect(got.headerHit, 'country-dependent REST response is not served from the page cache').toBe(false);
+        expect(got.headers['content-type'] ?? '').toMatch(/application\/json/);
+        expect(got.stamp).toBe('');
+        expect(() => JSON.parse(got.html)).not.toThrow();
       }
-      expect(got.stamp, 'no page-cache stamp injected into the JSON response').toBe('');
-      expect(() => JSON.parse(got.html), 'REST body is valid JSON (no minifier or footer comment appended)').not.toThrow();
+    } finally {
+      try {
+        wpEval(`
+          global $wpdb;
+          $row = unserialize( base64_decode( '${snapshot}' ) );
+          if ( null === $row ) {
+            delete_option( 'faz_settings' );
+          } else {
+            if ( false === $wpdb->update( $wpdb->options, $row, array( 'option_name' => 'faz_settings' ) ) ) {
+              throw new RuntimeException( 'Matrix settings restore failed' );
+            }
+            foreach ( array( 'faz_settings', 'alloptions', 'notoptions' ) as $key ) { wp_cache_delete( $key, 'options' ); }
+          }
+        `);
+      } finally {
+        if (ownsMuFile) rmSync(muFile);
+        purgeAll();
+      }
     }
   });
 

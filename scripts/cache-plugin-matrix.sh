@@ -356,15 +356,14 @@ restore_site() {
   local options_restored=0
   trap - EXIT
   echo "--- restoring site state"
-  # Only the fixture page this run created; a pre-existing one is left alone.
+  # Do not bootstrap a cache drop-in against the matrix's temporary options.
+  rm -f "$WPC/advanced-cache.php" "$WPC/object-cache.php"
   if [ -n "$fixture_page_id" ]; then
-    if ! wp --path="$WP_PATH" --skip-plugins --skip-themes eval "if ( ! wp_delete_post( ${fixture_page_id}, true ) ) { exit( 1 ); }" >/dev/null 2>&1; then
-      echo "!! fixture page ${fixture_page_id} could not be deleted" >&2
+    if ! wp --path="$WP_PATH" --skip-plugins --skip-themes post delete "$fixture_page_id" --force >/dev/null; then
+      echo "!! fixture page deletion failed: $fixture_page_id" >&2
       restore_failed=1
     fi
   fi
-  # Do not bootstrap a cache drop-in against the matrix's temporary options.
-  rm -f "$WPC/advanced-cache.php" "$WPC/object-cache.php"
   for i in "${!state_paths[@]}"; do
     path="${state_paths[$i]}"
     if ! rm -rf "$path"; then
@@ -433,10 +432,16 @@ set_wp_cache false
 # only guarantees the baseline probe below does not read a 404 on a clean site.
 fixture_page_id=$(wpe '
   if ( ! get_page_by_path( "faz-cache-matrix", OBJECT, "page" ) ) {
-    $id = wp_insert_post( array( "post_type" => "page", "post_status" => "publish", "post_name" => "faz-cache-matrix", "post_title" => "FAZ Cache Matrix", "post_content" => "<p>FAZ cache matrix fixture.</p>" ) );
-    if ( ! is_wp_error( $id ) && $id > 0 ) { echo (int) $id; }
+    $id = wp_insert_post( array( "post_type" => "page", "post_status" => "publish", "post_name" => "faz-cache-matrix", "post_title" => "FAZ Cache Matrix", "post_content" => "<p>FAZ cache matrix fixture.</p>" ), true );
+    if ( is_wp_error( $id ) || ! $id ) { fwrite( STDERR, "Fixture page creation failed\n" ); exit(1); }
+    echo (int) $id;
   }
-' | tr -cd '0-9')
+') || exit 3
+if [ -n "$fixture_page_id" ] && ! [[ "$fixture_page_id" =~ ^[1-9][0-9]*$ ]]; then
+  echo "!! invalid fixture page ID" >&2
+  fixture_page_id=''
+  exit 3
+fi
 baseline_status=$(curl -s -o /dev/null -w "%{http_code}" -A "Mozilla/5.0 matrix" "$WP_BASE_URL/faz-cache-matrix/")
 if [ "$baseline_status" != "200" ]; then
   echo "!! the fixture page answers HTTP $baseline_status with only FAZ active. Aborting." >&2
