@@ -444,6 +444,8 @@ and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
 = 1.34.4 =
+* Fixed: Video-placeholder buttons use service colours darkened enough for readable white text at WCAG AA contrast.
+* Changed: The external consent runtime is fetched at high priority without changing execution order. The effect depends on the page; faz_runtime_fetchpriority can disable the hint when it competes with the main image on returning visits.
 * Fixed: On Safari and iOS 16, a JavaScript scope incompatibility could leave the consent banner invisible. Runtime bindings are now accessible to the affected engine.
 * Fixed: The banner stylesheet loads without blocking the first paint. Page-content utilities remain inline, and the banner waits for its stylesheet before appearing, with a bounded fallback if the download fails.
 * Fixed: The first country override now persists when no overrides have been saved yet. The form also prevents overlapping submissions from silently replacing one another. Dynamically inserted scripts parked in place are reconsidered after consent. Restoration retains their original type, checks their service category and executes eligible scripts only once.

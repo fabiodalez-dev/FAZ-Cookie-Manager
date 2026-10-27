@@ -75,7 +75,9 @@ test.describe('Blocked-video placeholder stays styled after the JS runs', () => 
     // far above the unstyled content height of ~160px).
     expect(info!.height).toBeGreaterThan(250);
     // Brand accent applied: YouTube renders the red CTA + the service label.
-    expect(info!.btnBg).toBe('rgb(255, 0, 0)');
+    // The CTA uses the brand red darkened until white 14px text meets WCAG AA
+    // (#e50000, 4.85:1); pure #ff0000 is 4.0:1 and PageSpeed flags it.
+    expect(info!.btnBg).toBe('rgb(229, 0, 0)');
     expect(info!.svcname).toBe('YouTube');
 
     await ctx.close();

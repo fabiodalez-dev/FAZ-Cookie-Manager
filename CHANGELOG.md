@@ -5,6 +5,7 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 ## [1.34.4] - 2026-10-27
 
 ### Fixed
+- Video-placeholder buttons use service colours darkened enough for readable white text at WCAG AA contrast.
 - On Safari and iOS 16, a JavaScript scope incompatibility could leave the consent banner invisible. Runtime bindings are now accessible to the affected engine.
 - The banner stylesheet loads without blocking the first paint. Page-content utilities remain inline, and the banner waits for its stylesheet before appearing, with a bounded fallback if the download fails.
 - The first country override now persists when no overrides have been saved yet. The form also prevents overlapping submissions from silently replacing one another.
@@ -14,9 +15,11 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 - Published cookie policies with incomplete required details are listed in wp-admin, with the missing fields and the visitor-visible outcome for each jurisdiction. The check includes older pages and ignores escaped shortcode examples.
 
 ### Changed
+- The external consent runtime is fetched at high priority so it can become available earlier on a first visit; its execution order remains unchanged.
 - The anti-spam setting help now explains the category fallback, custom exceptions and the Necessary-only banner case.
 
 ### Developer
+- The `faz_runtime_fetchpriority` filter can disable the priority hint. On returning visits without a banner, the runtime can compete with the page's main image, so measure the effect on the site's own layout.
 - DSAR regression tests submit the rendered anti-bot fields, and policy tests run without mbstring. The cache matrix restores original options, drop-ins and configuration files, including W3 Total Cache, WP-Optimize and Breeze, on success or failure.
 - Published-policy lookups reuse matching page IDs between requests and invalidate them after content or policy-settings changes. Current shortcode content and missing fields are evaluated on every lookup.
 - The cache matrix runs all eight checks for its 12 page-cache plugins. LiteSpeed Cache, Autoptimize and SiteGround Optimizer run the REST and browser checks on this host; Comet Cache is available only as an explicitly selected optional run.

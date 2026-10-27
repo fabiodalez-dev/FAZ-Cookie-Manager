@@ -12,6 +12,12 @@
 
 <p>Durante quell'attesa, le finestre ancora invisibili devono anche restare fuori dal flusso della pagina e non intercettare i clic. Il test rallenta apposta il CSS e controlla sia la posizione del contenuto sia l'interazione: il solo fatto che il banner compaia alla fine non dimostrerebbe che il caricamento è corretto.</p>
 
+<p>Il runtime del consenso viene inoltre richiesto con priorità alta, mantenendo l'ordine di esecuzione esistente. Può quindi arrivare prima quando il banner deve comparire al primo accesso. Il risultato dipende dalla pagina: per chi ha già scelto, il download può competere con l'immagine principale. Il filtro <code>faz_runtime_fetchpriority</code> permette di disattivare l'indicazione dopo una misura sul proprio sito.</p>
+
+<h2>Pulsanti leggibili nei video bloccati</h2>
+
+<p>I colori dei servizi non sono sempre adatti come sfondo di un pulsante con testo bianco. Nei segnaposto video, il rosso di YouTube e altre tinte chiare vengono ora scuriti quanto basta per raggiungere il contrasto WCAG AA. Il colore resta riconoscibile e il visitatore può leggere meglio il pulsante che autorizza il contenuto.</p>
+
 <h2>La cache deve sapere quando non salvare</h2>
 
 <p>Non tutti i plugin di cache interpretano gli stessi segnali. WP Fastest Cache e Super Page Cache richiedono un'integrazione specifica per evitare di conservare una risposta destinata a un crawler o dipendente dalle scelte di un singolo visitatore. Questa versione aggiunge quei controlli e completa lo svuotamento delle cache di Surge, Jetpack Boost e Cachify quando cambiano i dati che influenzano il banner.</p>
