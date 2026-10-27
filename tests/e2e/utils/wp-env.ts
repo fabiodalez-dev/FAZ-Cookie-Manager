@@ -652,7 +652,7 @@ export function clearAllFazCookieCaches(): void {
 export async function seedConsentedCookie(
   page: import('@playwright/test').Page,
   baseURL: string,
-  consentId = 'e2e-seed',
+  consentId = 'e2eseed',
 ): Promise<void> {
   const rev = parseInt(wpEval('echo faz_get_consent_revision();').trim(), 10) || 1;
   const domain = new URL(baseURL).hostname;

@@ -139,7 +139,7 @@ test.describe('[faz_do_not_sell] CCPA opt-out form', () => {
     const domain = new URL(wpBaseURL).hostname;
     await page.context().addCookies([{
       name:     'fazcookie-consent',
-      value:    `consentid%3Ae2e-ccpa-test%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
+      value:    `consentid%3Ae2eccpatest%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
       domain,
       path:     '/',
       sameSite: 'Lax',
@@ -282,7 +282,7 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
     const domain = new URL(wpBaseURL).hostname;
     await page.context().addCookies([{
       name:     'fazcookie-consent',
-      value:    `consentid%3Ae2e-dsar-test%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
+      value:    `consentid%3Ae2edsartest%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
       domain,
       path:     '/',
       sameSite: 'Lax',

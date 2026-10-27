@@ -279,7 +279,7 @@ test.describe('DSAR-SPAM-01 — faz_dsar_pre_submit can refuse a submission', ()
     const domain = new URL(wpBaseURL).hostname;
     await page.context().addCookies([{
       name:     'fazcookie-consent',
-      value:    `consentid%3Ae2e-gate%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
+      value:    `consentid%3Ae2egate%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
       domain,
       path:     '/',
       sameSite: 'Lax',

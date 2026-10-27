@@ -74,7 +74,9 @@ test.beforeAll(() => {
 // invalidate the cookie we inject.
 test.beforeEach(async ({ page, wpBaseURL }) => {
   await page.context().clearCookies();
-  await seedConsentedCookie(page, wpBaseURL, 'e2e-ar');
+  // The form copies this ID from the cookie; use the generated IDs' base64
+  // alphabet so consent-ID validation does not mask the rate-limit check.
+  await seedConsentedCookie(page, wpBaseURL, 'e2ear');
 });
 
 // ── F003 — Rate-limit message says "1 hour" ───────────────────────────────────

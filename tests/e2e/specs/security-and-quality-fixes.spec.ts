@@ -86,7 +86,7 @@ test.beforeEach(async ({ page, wpBaseURL }) => {
   const domain = new URL(wpBaseURL).hostname;
   await page.context().addCookies([{
     name:     'fazcookie-consent',
-    value:    `consentid%3Ae2e-sqf%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
+    value:    `consentid%3Ae2esqf%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
     domain,
     path:     '/',
     sameSite: 'Lax',
@@ -210,7 +210,7 @@ test.describe('CCPA opt-out form — security fixes', () => {
     const domain = new URL(wpBaseURL).hostname;
     await page.context().addCookies([{
       name:     'fazcookie-consent',
-      value:    `consentid%3Ae2e-sqf%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Crev%3A${rev}`,
+      value:    `consentid%3Ae2esqf%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Crev%3A${rev}`,
       domain,
       path:     '/',
       sameSite: 'Lax',
