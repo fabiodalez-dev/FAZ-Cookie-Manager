@@ -148,6 +148,86 @@ test('a canonical link changed into a stylesheet needs a new verdict', async ({ 
   }
 });
 
+for (const route of ['DOMParser', 'createHTMLDocument']) {
+  test(`a parser image adopted by ${route} needs the insertion document base`, async ({ page }) => {
+    const requests: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    await page.route('https://defer.example.test/**', async response => {
+      const path = new URL(response.request().url()).pathname;
+      if (path === '/pending.js') {
+        await gate;
+        return response.fulfill({ contentType: 'text/javascript', body: '' });
+      }
+      if (path.endsWith('/p.jpg')) return response.fulfill({ contentType: 'image/gif', body: '' });
+      return response.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head>
+        <script>window._fazConfig={_block:true};</script><script>${bootstrap}</script>
+        <script defer src="/pending.js"></script></head><body><main id="host"><img id="probe" src="p.jpg"></main>
+        <script>(async function () {
+          var image = document.getElementById('probe');
+          var sourceBase = document.baseURI;
+          var foreign = ${route === 'DOMParser'
+            ? "new DOMParser().parseFromString('', 'text/html')"
+            : "document.implementation.createHTMLDocument('')"};
+          var foreignBase = foreign.createElement('base');
+          foreignBase.href = sourceBase;
+          foreign.head.appendChild(foreignBase);
+          foreign.adoptNode(image);
+          await new Promise(function (resolve) { setTimeout(resolve, 0); });
+          var base = document.createElement('base');
+          base.href = 'https://tracker.example.test/';
+          document.head.appendChild(base);
+          document.getElementById('host').appendChild(image);
+          window.adoptionProbe = image.isConnected;
+        })();</script></body></html>` });
+    });
+    await page.route('https://tracker.example.test/**', response => {
+      requests.push(response.request().url());
+      return response.fulfill({ contentType: 'image/gif', body: '' });
+    });
+    try {
+      await page.goto('https://defer.example.test/allowed/', { waitUntil: 'commit' });
+      await expect.poll(async () => ({
+        inserted: await page.evaluate(() => (window as any).adoptionProbe), requests: requests.slice(),
+      })).toEqual({ inserted: false, requests: [] });
+      release();
+      await page.waitForLoadState('domcontentloaded');
+      expect(requests).toEqual([]);
+    } finally {
+      release();
+    }
+  });
+}
+
+test('local SVG fragments still move after query stripping', async ({ page }) => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('https://defer.example.test/**', async route => {
+    if (new URL(route.request().url()).pathname === '/pending.js') {
+      await gate;
+      return route.fulfill({ contentType: 'text/javascript', body: '' });
+    }
+    return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head>
+      <script>window._fazConfig={_block:true};</script><script>${bootstrap}</script>
+      <script defer src="/pending.js"></script></head><body>
+      <svg id="sprite" xmlns="http://www.w3.org/2000/svg"><defs><rect id="icon" width="10" height="10"/></defs><use id="glyph" href="#icon"/></svg>
+      <script>
+        history.replaceState(null, '', '/');
+        var svg = document.getElementById('sprite');
+        var destination = document.createElement('div');
+        document.body.appendChild(destination);
+        destination.appendChild(svg);
+        window.fragmentProbe = { inserted: destination.contains(svg), width: document.getElementById('glyph').getBBox().width };
+      </script></body></html>` });
+  });
+  try {
+    await page.goto('https://defer.example.test/?utm_source=ad', { waitUntil: 'commit' });
+    await expect.poll(() => page.evaluate(() => (window as any).fragmentProbe)).toEqual({ inserted: true, width: 10 });
+  } finally {
+    release();
+  }
+});
+
 for (const consent of ['no', 'yes', 'missing']) {
   test(`deferred runtime protects early resources: analytics=${consent}`, async ({ page, context }) => {
     const requests: string[] = [], errors: string[] = [], cdn: string[] = [];

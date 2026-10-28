@@ -247,6 +247,41 @@ console.log('e. a server iframe whose src was rewritten while detached is still 
   eq('a query-relative src is held when the base filename changes', frame.isConnected, false);
 }
 
+for (const name of ['use', 'image', 'feImage']) {
+  const { window, document, parse } = boot();
+  window.history.replaceState(null, '', '/?utm_source=x');
+  const svg = parse(`<svg><${name} href="#icon"></${name}></svg>`);
+  await checkpoint();
+  window.history.replaceState(null, '', '/');
+  const dest = document.createElement('div');
+  document.getElementById('main').appendChild(dest);
+  dest.appendChild(svg);
+  eq(`${name}: a local SVG fragment still moves after query stripping`, dest.contains(svg), true);
+}
+
+{
+  const { document, parse } = boot();
+  const svg = parse('<svg><use href="#icon"></use></svg>');
+  await checkpoint();
+  const base = document.createElement('base');
+  base.href = 'https://tracker.example/';
+  document.head.appendChild(base);
+  const dest = document.createElement('div');
+  document.getElementById('main').appendChild(dest);
+  dest.appendChild(svg);
+  eq('an SVG fragment redirected to another document is still held', dest.contains(svg), false);
+}
+{
+  const { window, document, parse } = boot();
+  window.history.replaceState(null, '', '/?utm_source=x');
+  const frame = parse('<iframe src="#section"></iframe>');
+  await checkpoint();
+  frame.remove();
+  window.history.replaceState(null, '', '/');
+  document.getElementById('main').appendChild(frame);
+  eq('an iframe fragment still compares its complete destination', frame.isConnected, false);
+}
+
 console.log('f. the other insertion paths: server image moves, script image held');
 {
   const paths = {

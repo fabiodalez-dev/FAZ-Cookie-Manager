@@ -545,7 +545,18 @@
         var names = heldAttrs(el).map(function (p) { return p.slice(p.indexOf(':') + 1).toLowerCase(); });
         var list = el.attributes || [], out = [], base = d.baseURI;
         function resolve(value) {
-            try { return new URL(value, base).href; }
+            try {
+                var target = new URL(value, base);
+                // A local SVG href points into this document, even after
+                // history strips its query. Keep that identity stable without
+                // exempting iframe #fragments or SVG links to another base.
+                if (el.namespaceURI === 'http://www.w3.org/2000/svg' && local === 'href' && /^\s*#/.test(value)) {
+                    var page = new URL(d.URL), resource = new URL(target.href);
+                    page.hash = ''; resource.hash = '';
+                    if (resource.href === page.href) return ['local-fragment', target.hash];
+                }
+                return target.href;
+            }
             catch (e) { return [base, value]; } // stricter if the URL cannot be resolved
         }
         for (var i = 0; i < list.length; i++) {
