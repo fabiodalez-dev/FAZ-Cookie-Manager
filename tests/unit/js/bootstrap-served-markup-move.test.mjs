@@ -305,5 +305,29 @@ for (const insert of ['appendChild', 'append', 'insertAdjacentElement', 'Range.i
   eq(`${insert}: a colliding signature cannot exempt the new src`, frame.isConnected, false);
 }
 
+console.log('h. a changed fetching mode requires a new verdict');
+for (const sample of [
+  { html: '<link rel="canonical" href="https://tracker.example/style.css">', key: 'rel', value: 'stylesheet' },
+  { html: '<input type="text" background="/unused" src="https://tracker.example/pixel">', key: 'type', value: 'image' },
+]) {
+  const { document, parse } = boot();
+  const node = parse(sample.html);
+  await checkpoint();
+  node.remove();
+  await checkpoint();
+  node.setAttribute(sample.key, sample.value);
+  document.getElementById('main').appendChild(node);
+  eq(`${node.tagName}: changing ${sample.key} invalidates the parser verdict`, node.isConnected, false);
+}
+{
+  const { document, parse } = boot();
+  const link = parse('<link rel="stylesheet" href="/theme.css">');
+  await checkpoint();
+  const dest = document.createElement('div');
+  document.getElementById('main').appendChild(dest);
+  dest.appendChild(link);
+  eq('an unchanged parser stylesheet still moves immediately', dest.contains(link), true);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -538,7 +538,7 @@
     // URL. A later runtime can judge the document it would actually create.
     function urls(el) {
         var names = heldAttrs(el).map(function (p) { return p.slice(p.indexOf(':') + 1).toLowerCase(); });
-        var list = el.attributes || [], out = [], base = d.baseURI;
+        var list = el.attributes || [], out = [], base = el.baseURI || d.baseURI;
         function resolve(value) {
             try { return new URL(value, base).href; }
             catch (e) { return [base, value]; } // stricter if the URL cannot be resolved
@@ -550,6 +550,12 @@
                 : (isList(local) ? candidates(a.value) : [a.value]).map(resolve);
             out.push([a.namespaceURI || '', a.name, a.value, targets]);
         }
+        // These attributes can turn non-fetching parser markup into a
+        // fetching resource without changing its URL. The server leaves a
+        // canonical link alone; changing its rel to stylesheet while detached
+        // must therefore require a new verdict before it can be reinserted.
+        var mode = tagKey(el) === 'LINK' ? 'rel' : tagKey(el) === 'INPUT' ? 'type' : '';
+        if (mode) out.push(['mode', mode, attr(el, mode)]);
         // Attribute values can contain newlines. Joining with that delimiter
         // made one background="/empty\nsrc=https://tracker/..." compare equal
         // to background="/empty" plus a new src attribute. A detached parser

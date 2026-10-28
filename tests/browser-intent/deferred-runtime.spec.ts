@@ -109,6 +109,45 @@ for (const scenario of [
   });
 }
 
+test('a canonical link changed into a stylesheet needs a new verdict', async ({ page }) => {
+  const requests: string[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('https://defer.example.test/**', async route => {
+    if (new URL(route.request().url()).pathname === '/pending.js') {
+      await gate;
+      return route.fulfill({ contentType: 'text/javascript', body: '' });
+    }
+    return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head>
+      <script>window._fazConfig={_block:true};</script><script>${bootstrap}</script>
+      <link id="probe" rel="canonical" href="https://tracker.example.test/mode.css">
+      <script defer src="/pending.js"></script></head><body>
+      <script>(async function () {
+        var link = document.getElementById('probe');
+        link.remove();
+        await new Promise(function (resolve) { setTimeout(resolve, 0); });
+        link.rel = 'stylesheet';
+        document.head.appendChild(link);
+        window.modeProbe = link.isConnected;
+      })();</script></body></html>` });
+  });
+  await page.route('https://tracker.example.test/**', route => {
+    requests.push(route.request().url());
+    return route.fulfill({ contentType: 'text/css', body: '' });
+  });
+  try {
+    await page.goto('https://defer.example.test/', { waitUntil: 'commit' });
+    await expect.poll(async () => ({
+      inserted: await page.evaluate(() => (window as any).modeProbe), requests: requests.slice(),
+    })).toEqual({ inserted: false, requests: [] });
+    release();
+    await page.waitForLoadState('domcontentloaded');
+    expect(requests, 'the safety release keeps the new stylesheet parked').toEqual([]);
+  } finally {
+    release();
+  }
+});
+
 for (const consent of ['no', 'yes', 'missing']) {
   test(`deferred runtime protects early resources: analytics=${consent}`, async ({ page, context }) => {
     const requests: string[] = [], errors: string[] = [], cdn: string[] = [];
