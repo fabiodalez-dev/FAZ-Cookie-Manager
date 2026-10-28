@@ -24,7 +24,8 @@
  *   e. a server <iframe> detached, its src rewritten through the Attr node
  *      (a route the setters and setAttribute do not see) and inserted back
  *      is still held: the exemption is for the URL the server judged, not
- *      for the element;
+ *      for the element — and the same holds for a relative src whose
+ *      document base a script rewrote;
  *   f. the other insertion paths the exemption reaches — Range.insertNode(),
  *      insertAdjacentElement() and the ParentNode methods (append, prepend,
  *      before, after, replaceWith, replaceChildren) — move a server image on
@@ -186,6 +187,18 @@ console.log('e. a server iframe whose src was rewritten while detached is still 
   document.getElementById('main').appendChild(dest);
   dest.appendChild(same);
   eq('an unchanged server iframe still moves on the same turn', dest.contains(same), true);
+}
+{
+  const { document, parse } = boot();
+  const box = parse('<div id="box"><iframe src="widget.html"></iframe></div>');
+  await checkpoint();
+  const frame = box.querySelector('iframe');
+  const base = document.createElement('base');
+  base.setAttribute('href', 'https://tracker.example/');
+  document.head.appendChild(base);
+  box.removeChild(frame);
+  box.appendChild(frame);
+  eq('a relative src re-resolved against a rewritten <base> is held', box.contains(frame), false);
 }
 
 console.log('f. the other insertion paths: server image moves, script image held');

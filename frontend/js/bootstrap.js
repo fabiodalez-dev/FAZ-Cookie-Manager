@@ -528,7 +528,10 @@
     // value, setAttributeNode, a namespace prefix nobody wrapped. Detach a
     // parser <iframe>, rewrite its src through one of those and insert it
     // back: the iframe loads the new URL on insertion, and without this check
-    // it would have loaded with no verdict.
+    // it would have loaded with no verdict. The document base is part of the
+    // record too: a relative src re-resolves when the element is inserted
+    // again, so a script that adds or rewrites <base href> sends the same
+    // attribute somewhere the server never judged.
     function urls(el) {
         var names = heldAttrs(el).map(function (p) { return p.slice(p.indexOf(':') + 1).toLowerCase(); });
         var list = el.attributes || [], out = [];
@@ -536,7 +539,7 @@
             var a = list[i], local = String(a.localName || a.name).toLowerCase();
             if (names.indexOf(local) !== -1) out.push(a.name + '=' + a.value);
         }
-        return out.sort().join('\n');
+        return d.baseURI + '\n' + out.sort().join('\n');
     }
     function unjudged(node) {
         var found = resources(node);
