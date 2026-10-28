@@ -25,8 +25,10 @@
  *      (a route the setters and setAttribute do not see) and inserted back
  *      is still held: the exemption is for the URL the server judged, not
  *      for the element — and the same holds for a relative src whose
- *      document base a script rewrote, while a history.replaceState() that
- *      only rewrites the query (utm_* stripping) leaves the exemption alone;
+ *      document base a script rewrote (a <base> to another host, or a
+ *      pushState() under a relative <base>), while a history.replaceState()
+ *      that only rewrites the query (utm_* stripping) leaves the exemption
+ *      alone;
  *   f. the other insertion paths the exemption reaches — Range.insertNode(),
  *      insertAdjacentElement() and the ParentNode methods (append, prepend,
  *      before, after, replaceWith, replaceChildren) — move a server image on
@@ -205,12 +207,25 @@ console.log('e. a server iframe whose src was rewritten while detached is still 
   const { window, document, parse } = boot();
   const box = parse('<div id="box"><img src="/wp-content/uploads/p.jpg"></div>');
   await checkpoint();
-  window.history.replaceState(null, '', '/product/?utm_source=x');
+  window.history.replaceState(null, '', '/?utm_source=x');
   const img = box.querySelector('img');
   const dest = document.createElement('div');
   document.getElementById('main').appendChild(dest);
   dest.appendChild(img);
   eq('a same-origin history.replaceState() does not hold a server image', dest.contains(img), true);
+}
+{
+  const { window, document, parse } = boot();
+  const base = document.createElement('base');
+  base.setAttribute('href', 'assets/');
+  window.Node.prototype.appendChild.call(document.head, base);
+  const box = parse('<div id="box"><iframe src="widget.html"></iframe></div>');
+  await checkpoint();
+  window.history.pushState(null, '', '/other/');
+  const frame = box.querySelector('iframe');
+  box.removeChild(frame);
+  box.appendChild(frame);
+  eq('a pushState() under a relative <base> holds a relative server iframe', box.contains(frame), false);
 }
 
 console.log('f. the other insertion paths: server image moves, script image held');

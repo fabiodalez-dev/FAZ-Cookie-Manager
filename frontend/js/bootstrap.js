@@ -531,12 +531,14 @@
     // it would have loaded with no verdict. The document base is part of the
     // record too: a relative src re-resolves when the element is inserted
     // again, so a script that adds or rewrites <base href> sends the same
-    // attribute somewhere the server never judged. Only the base's ORIGIN is
-    // recorded: history.pushState/replaceState rewrite the document URL — a
-    // script stripping utm_* or fbclid does it before the footer scripts run —
-    // but cannot leave the origin, and recording the whole URL held the Divi
-    // gallery again on every such page. Only a <base> can move a relative URL
-    // to another host, and that changes the origin.
+    // attribute somewhere the server never judged. What is recorded is the
+    // base's DIRECTORY — origin and path up to the last slash — which is all a
+    // relative URL resolves against: a <base> pointing at another host changes
+    // it, and so does a pushState() to another path under a relative
+    // <base href="assets/">. Its query and fragment are left out on purpose: a
+    // script stripping utm_* or fbclid with replaceState() runs before the
+    // footer scripts, and recording the whole URL held the Divi gallery again
+    // on every such page.
     function urls(el) {
         var names = heldAttrs(el).map(function (p) { return p.slice(p.indexOf(':') + 1).toLowerCase(); });
         var list = el.attributes || [], out = [];
@@ -545,7 +547,7 @@
             if (names.indexOf(local) !== -1) out.push(a.name + '=' + a.value);
         }
         var base = d.baseURI;
-        try { base = new URL(base).origin; } catch (e) { /* keep the full base: stricter, never looser */ }
+        try { base = new URL('.', base).href; } catch (e) { /* keep the full base: stricter, never looser */ }
         // Attribute values can contain newlines. Joining with that delimiter
         // made one background="/empty\nsrc=https://tracker/..." compare equal
         // to background="/empty" plus a new src attribute. A detached parser
