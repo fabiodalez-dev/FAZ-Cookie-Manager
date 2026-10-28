@@ -536,11 +536,27 @@
     // the document URL: that image's destination did not change. A srcdoc is
     // markup, so retain its full inherited base rather than treating it as a
     // URL. A later runtime can judge the document it would actually create.
+    // The base is THIS document's, never el.baseURI: the element resolves
+    // against the document it is inserted into, and a script can adoptNode()
+    // a parser <img> into a DOMParser document, point this page's <base> at
+    // another host and append it back — el.baseURI would still answer the old
+    // base and the record would match.
     function urls(el) {
         var names = heldAttrs(el).map(function (p) { return p.slice(p.indexOf(':') + 1).toLowerCase(); });
-        var list = el.attributes || [], out = [], base = el.baseURI || d.baseURI;
+        var list = el.attributes || [], out = [], base = d.baseURI;
         function resolve(value) {
-            try { return new URL(value, base).href; }
+            try {
+                var target = new URL(value, base);
+                // A local SVG href points into this document, even after
+                // history strips its query. Keep that identity stable without
+                // exempting iframe #fragments or SVG links to another base.
+                if (el.namespaceURI === 'http://www.w3.org/2000/svg' && local === 'href' && /^\s*#/.test(value)) {
+                    var page = new URL(d.URL), resource = new URL(target.href);
+                    page.hash = ''; resource.hash = '';
+                    if (resource.href === page.href) return ['local-fragment', target.hash];
+                }
+                return target.href;
+            }
             catch (e) { return [base, value]; } // stricter if the URL cannot be resolved
         }
         for (var i = 0; i < list.length; i++) {

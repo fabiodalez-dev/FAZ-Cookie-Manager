@@ -32,7 +32,12 @@
  *   f. the other insertion paths the exemption reaches — Range.insertNode(),
  *      insertAdjacentElement() and the ParentNode methods (append, prepend,
  *      before, after, replaceWith, replaceChildren) — move a server image on
- *      the same turn and still hold one a script built.
+ *      the same turn and still hold one a script built;
+ *   g. attribute signatures cannot collide across embedded newlines;
+ *   h. a changed fetching mode (link rel, input type) requires a new verdict;
+ *   i. a parser image adopted into another document, re-inserted after this
+ *      page's <base> moved to another host, is held: the record resolves
+ *      against the page it is inserted into, not the adopting document.
  *
  * The "parser" is the native appendChild captured before the bootstrap runs:
  * no wrapper sees the call and no sink tags the node, which is exactly how a
@@ -242,6 +247,41 @@ console.log('e. a server iframe whose src was rewritten while detached is still 
   eq('a query-relative src is held when the base filename changes', frame.isConnected, false);
 }
 
+for (const name of ['use', 'image', 'feImage']) {
+  const { window, document, parse } = boot();
+  window.history.replaceState(null, '', '/?utm_source=x');
+  const svg = parse(`<svg><${name} href="#icon"></${name}></svg>`);
+  await checkpoint();
+  window.history.replaceState(null, '', '/');
+  const dest = document.createElement('div');
+  document.getElementById('main').appendChild(dest);
+  dest.appendChild(svg);
+  eq(`${name}: a local SVG fragment still moves after query stripping`, dest.contains(svg), true);
+}
+
+{
+  const { document, parse } = boot();
+  const svg = parse('<svg><use href="#icon"></use></svg>');
+  await checkpoint();
+  const base = document.createElement('base');
+  base.href = 'https://tracker.example/';
+  document.head.appendChild(base);
+  const dest = document.createElement('div');
+  document.getElementById('main').appendChild(dest);
+  dest.appendChild(svg);
+  eq('an SVG fragment redirected to another document is still held', dest.contains(svg), false);
+}
+{
+  const { window, document, parse } = boot();
+  window.history.replaceState(null, '', '/?utm_source=x');
+  const frame = parse('<iframe src="#section"></iframe>');
+  await checkpoint();
+  frame.remove();
+  window.history.replaceState(null, '', '/');
+  document.getElementById('main').appendChild(frame);
+  eq('an iframe fragment still compares its complete destination', frame.isConnected, false);
+}
+
 console.log('f. the other insertion paths: server image moves, script image held');
 {
   const paths = {
@@ -327,6 +367,23 @@ for (const sample of [
   document.getElementById('main').appendChild(dest);
   dest.appendChild(link);
   eq('an unchanged parser stylesheet still moves immediately', dest.contains(link), true);
+}
+
+console.log('i. an adopted parser image re-inserted after a <base> change is held');
+for (const route of ['DOMParser', 'createHTMLDocument']) {
+  const { window, document, parse } = boot();
+  const box = parse('<div><img src="p.jpg"></div>');
+  await checkpoint();
+  const img = box.querySelector('img');
+  const other = route === 'DOMParser'
+    ? new window.DOMParser().parseFromString('<!DOCTYPE html><html><body></body></html>', 'text/html')
+    : document.implementation.createHTMLDocument('');
+  other.adoptNode(img);
+  const base = document.createElement('base');
+  base.setAttribute('href', 'https://tracker.example/');
+  document.head.appendChild(base);
+  box.appendChild(img);
+  eq(`${route}: not in the document until the runtime answers`, box.contains(img), false);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
