@@ -531,7 +531,12 @@
     // it would have loaded with no verdict. The document base is part of the
     // record too: a relative src re-resolves when the element is inserted
     // again, so a script that adds or rewrites <base href> sends the same
-    // attribute somewhere the server never judged.
+    // attribute somewhere the server never judged. Only the base's ORIGIN is
+    // recorded: history.pushState/replaceState rewrite the document URL — a
+    // script stripping utm_* or fbclid does it before the footer scripts run —
+    // but cannot leave the origin, and recording the whole URL held the Divi
+    // gallery again on every such page. Only a <base> can move a relative URL
+    // to another host, and that changes the origin.
     function urls(el) {
         var names = heldAttrs(el).map(function (p) { return p.slice(p.indexOf(':') + 1).toLowerCase(); });
         var list = el.attributes || [], out = [];
@@ -539,7 +544,9 @@
             var a = list[i], local = String(a.localName || a.name).toLowerCase();
             if (names.indexOf(local) !== -1) out.push(a.name + '=' + a.value);
         }
-        return d.baseURI + '\n' + out.sort().join('\n');
+        var base = d.baseURI;
+        try { base = new URL(base).origin; } catch (e) { /* keep the full base: stricter, never looser */ }
+        return base + '\n' + out.sort().join('\n');
     }
     function unjudged(node) {
         var found = resources(node);

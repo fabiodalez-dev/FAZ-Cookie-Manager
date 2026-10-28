@@ -25,7 +25,8 @@
  *      (a route the setters and setAttribute do not see) and inserted back
  *      is still held: the exemption is for the URL the server judged, not
  *      for the element — and the same holds for a relative src whose
- *      document base a script rewrote;
+ *      document base a script rewrote, while a history.replaceState() that
+ *      only rewrites the query (utm_* stripping) leaves the exemption alone;
  *   f. the other insertion paths the exemption reaches — Range.insertNode(),
  *      insertAdjacentElement() and the ParentNode methods (append, prepend,
  *      before, after, replaceWith, replaceChildren) — move a server image on
@@ -199,6 +200,17 @@ console.log('e. a server iframe whose src was rewritten while detached is still 
   box.removeChild(frame);
   box.appendChild(frame);
   eq('a relative src re-resolved against a rewritten <base> is held', box.contains(frame), false);
+}
+{
+  const { window, document, parse } = boot();
+  const box = parse('<div id="box"><img src="/wp-content/uploads/p.jpg"></div>');
+  await checkpoint();
+  window.history.replaceState(null, '', '/product/?utm_source=x');
+  const img = box.querySelector('img');
+  const dest = document.createElement('div');
+  document.getElementById('main').appendChild(dest);
+  dest.appendChild(img);
+  eq('a same-origin history.replaceState() does not hold a server image', dest.contains(img), true);
 }
 
 console.log('f. the other insertion paths: server image moves, script image held');
