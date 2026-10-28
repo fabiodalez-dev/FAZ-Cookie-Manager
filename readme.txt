@@ -444,6 +444,7 @@ and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
 = 1.34.4 =
+* Fixed: WooCommerce product galleries remain visible when Divi regroups server-rendered images. Moving unchanged resources preserves the gallery; changed URL attributes still require a consent verdict.
 * Fixed: Video-placeholder buttons use service colours darkened enough for readable white text at WCAG AA contrast.
 * Changed: The external consent runtime is fetched at high priority without changing execution order. The effect depends on the page; faz_runtime_fetchpriority can disable the hint when it competes with the main image on returning visits.
 * Fixed: On Safari and iOS 16, a JavaScript scope incompatibility could leave the consent banner invisible. Runtime bindings are now accessible to the affected engine.

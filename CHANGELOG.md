@@ -2,9 +2,10 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
-## [1.34.4] - 2026-10-27
+## [1.34.4] - 2026-10-28
 
 ### Fixed
+- WooCommerce product galleries remain visible when Divi regroups server-rendered images. Moving unchanged resources preserves the gallery; changed URL attributes still require a consent verdict.
 - Video-placeholder buttons use service colours darkened enough for readable white text at WCAG AA contrast.
 - On Safari and iOS 16, a JavaScript scope incompatibility could leave the consent banner invisible. Runtime bindings are now accessible to the affected engine.
 - The banner stylesheet loads without blocking the first paint. Page-content utilities remain inline, and the banner waits for its stylesheet before appearing, with a bounded fallback if the download fails.

@@ -1,5 +1,9 @@
 <p>FAZ Cookie Manager 1.34.4 raccoglie correzioni al caricamento del banner, al rapporto con i plugin di cache e al ripristino degli script dopo il consenso. Le segnalazioni avevano un punto comune: una pagina poteva sembrare corretta sul sito di prova, ma comportarsi diversamente con un browser meno recente, una cache attiva o impostazioni salvate tempo prima.</p>
 
+<h2>Le immagini prodotto tornano visibili con Divi</h2>
+
+<p>Divi riorganizza le immagini della galleria WooCommerce mentre carica la pagina. Il blocco preventivo poteva ritardare quello spostamento e lasciare la galleria vuota. Le risorse già verificate dal server ora si spostano subito quando i loro indirizzi restano invariati; un indirizzo modificato continua a richiedere la verifica del consenso.</p>
+
 <h2>Il banner che Safari non mostrava</h2>
 
 <p>Su Safari e iOS 16 il banner poteva restare invisibile per un problema di ambito delle variabili JavaScript. Le funzioni dichiarate nel blocco principale non trovavano alcune variabili che gli altri motori rendevano accessibili. L'inizializzazione intercettava l'errore, ma il visitatore rimaneva senza pulsanti per scegliere.</p>

@@ -708,8 +708,9 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
-### 1.34.4 — 2026-10-27
+### 1.34.4 — 2026-10-28
 
+- WooCommerce product galleries remain visible when Divi regroups server-rendered images. Moving unchanged resources preserves the gallery; changed URL attributes still require a consent verdict.
 - Video-placeholder buttons use service colours darkened enough for readable white text at WCAG AA contrast.
 - The external consent runtime is fetched at high priority without changing execution order. The effect depends on the page; `faz_runtime_fetchpriority` can disable the hint when it competes with the main image on returning visits.
 - On Safari and iOS 16, a JavaScript scope incompatibility could leave the consent banner invisible. Runtime bindings are now accessible to the affected engine.
