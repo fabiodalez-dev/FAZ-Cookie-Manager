@@ -15,7 +15,9 @@ concurrency:
 jobs:
   analyze:
     name: Analyze
-    runs-on: ubuntu-latest
+    # Pinned with quality.yml so every gate runs on the same image; move it
+    # forward together with the Quality and Consent intent jobs there.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read
