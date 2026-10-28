@@ -5,6 +5,50 @@ const bootstrap = readFileSync(new URL('../../frontend/js/bootstrap.min.js', imp
 const gcm = readFileSync(new URL('../../frontend/js/gcm.min.js', import.meta.url), 'utf8');
 const runtime = readFileSync(new URL('../../frontend/js/script.min.js', import.meta.url), 'utf8');
 
+test('a parser attribute containing a newline cannot exempt a new iframe URL', async ({ page }) => {
+  const requests: string[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('https://defer.example.test/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/pending.js') {
+      await gate;
+      return route.fulfill({ contentType: 'text/javascript', body: '' });
+    }
+    return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head>
+      <script>window._fazConfig={_block:true};</script>
+      <script>${bootstrap}</script><script defer src="/pending.js"></script>
+      </head><body><main id="host"><iframe id="probe"
+        background="/empty&#10;src=https://tracker.example.test/collision"></iframe></main>
+      <script>(async function () {
+        var frame = document.getElementById('probe');
+        frame.remove();
+        // Drain the removal: the observer no longer sees detached edits.
+        await new Promise(function (resolve) { setTimeout(resolve, 0); });
+        frame.getAttributeNode('background').value = '/empty';
+        var src = document.createAttribute('src');
+        src.value = 'https://tracker.example.test/collision';
+        frame.setAttributeNode(src);
+        document.getElementById('host').appendChild(frame);
+        window.collisionProbe = { inserted: frame.isConnected };
+      })();</script></body></html>` });
+  });
+  await page.route('https://tracker.example.test/**', route => {
+    requests.push(route.request().url());
+    return route.fulfill({ contentType: 'text/html', body: '' });
+  });
+  try {
+    await page.goto('https://defer.example.test/', { waitUntil: 'commit' });
+    await expect.poll(() => page.evaluate(() => (window as any).collisionProbe)).toEqual({ inserted: false });
+    expect(requests, 'no external request before the deferred runtime answers').toEqual([]);
+    release();
+    await page.waitForLoadState('domcontentloaded');
+    expect(requests, 'the safety release also keeps the external iframe parked').toEqual([]);
+  } finally {
+    release();
+  }
+});
+
 for (const consent of ['no', 'yes', 'missing']) {
   test(`deferred runtime protects early resources: analytics=${consent}`, async ({ page, context }) => {
     const requests: string[] = [], errors: string[] = [], cdn: string[] = [];

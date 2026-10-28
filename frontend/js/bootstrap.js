@@ -505,6 +505,58 @@
     function prepare(node, policy) {
         resources(node).forEach(function (el) { policy.node(el); });
     }
+    // The resource elements in `node` that an insertion still has to answer
+    // for: every one except those the PARSER put in the document. The server-
+    // side blocker already judged that markup, and moving it fetches nothing
+    // new — the request left when the parser built it, and a URL changed since
+    // went through the attribute gates. Holding such a move bought nothing and
+    // broke the page: a layout script that regroups the server's own markup
+    // (Divi's Salvattore pulls a product gallery out with
+    // Range.extractContents() and appends it back in columns) found the
+    // gallery empty on its very next line, serialized it through outerHTML,
+    // and the held images replayed into the detached copy. WooCommerce product
+    // images vanished on every Divi product page. `served` is filled by the
+    // DOM backstop, which sees each parser insertion before the next parser-
+    // run script, so the record is in place before any script can move it.
+    // Scripts are never recorded — see observed().
+    //
+    // The exemption is for the URL the server judged, not for the element:
+    // the record keeps the element's URL attributes as the parser left them,
+    // and an element whose URLs differ now is judged like any other. The
+    // setters and setAttribute stage a write without touching the attribute,
+    // so this matters for the routes they do not cover — an Attr node's
+    // value, setAttributeNode, a namespace prefix nobody wrapped. Detach a
+    // parser <iframe>, rewrite its src through one of those and insert it
+    // back: the iframe loads the new URL on insertion, and without this check
+    // it would have loaded with no verdict. The document base is part of the
+    // record too: a relative src re-resolves when the element is inserted
+    // again, so a script that adds or rewrites <base href> sends the same
+    // attribute somewhere the server never judged. Only the base's ORIGIN is
+    // recorded: history.pushState/replaceState rewrite the document URL — a
+    // script stripping utm_* or fbclid does it before the footer scripts run —
+    // but cannot leave the origin, and recording the whole URL held the Divi
+    // gallery again on every such page. Only a <base> can move a relative URL
+    // to another host, and that changes the origin.
+    function urls(el) {
+        var names = heldAttrs(el).map(function (p) { return p.slice(p.indexOf(':') + 1).toLowerCase(); });
+        var list = el.attributes || [], out = [];
+        for (var i = 0; i < list.length; i++) {
+            var a = list[i], local = String(a.localName || a.name).toLowerCase();
+            if (names.indexOf(local) !== -1) out.push(a.name + '=' + a.value);
+        }
+        var base = d.baseURI;
+        try { base = new URL(base).origin; } catch (e) { /* keep the full base: stricter, never looser */ }
+        // Attribute values can contain newlines. Joining with that delimiter
+        // made one background="/empty\nsrc=https://tracker/..." compare equal
+        // to background="/empty" plus a new src attribute. A detached parser
+        // element could then fetch the new URL without an insertion verdict.
+        return JSON.stringify([base, out.sort()]);
+    }
+    function unjudged(node) {
+        var found = resources(node);
+        if (!served) return found;
+        return found.filter(function (el) { return !served.has(el) || served.get(el) !== urls(el); });
+    }
     // Every <style> in a subtree, the node itself included, in any namespace —
     // querySelectorAll('style') matches both, since a CSS type selector with no
     // namespace does.
@@ -621,6 +673,9 @@
     // document.write, handled below by withdrawing the exemption rather than
     // by trusting it.
     var sunk = typeof w.WeakSet === 'function' ? new w.WeakSet() : null;
+    // Resource elements the parser inserted, each with its URLs as inserted —
+    // see unjudged().
+    var served = sunk && typeof w.WeakMap === 'function' ? new w.WeakMap() : null;
     // Sheets a wrapper has already delivered, judged, on the safety release.
     // The backstop stays armed on that path and must not judge them again —
     // which is only sound because the delivery question (judgeCss) reads the
@@ -1106,7 +1161,7 @@
                 // stops counting — the same bookkeeping replaceWith needs.
                 var dropped = name === 'replaceChild' ? ref : null;
                 var pendingRef = !!ref && pendingChild(self, ref);
-                var carries = resources(node).length
+                var carries = unjudged(node).length
                     || styleRisk(node)
                     || waitingFragment(node)
                     || pendingRef
@@ -1192,7 +1247,7 @@
                     // One joined string, in call order, judged against the text
                     // the owner will actually hold. Per-argument tests missed a
                     // URL split across two arguments of one call.
-                    var carries = args.some(function (n) { return resources(n).length || styleRisk(n) || waitingFragment(n); })
+                    var carries = args.some(function (n) { return unjudged(n).length || styleRisk(n) || waitingFragment(n); })
                         || !!(styleOwner && cssRisk(containerText(styleOwner, self, name), args));
                     // Queued behind an earlier held insertion into the same
                     // container, as appendChild always was: otherwise a plain
@@ -1429,7 +1484,7 @@
                     // queued INTO it, as in the Node and ParentNode wrappers.
                     // Inserted natively it lands empty, and the held child
                     // later replays into the orphaned fragment and is lost.
-                    var carries = resources(node).length
+                    var carries = unjudged(node).length
                         || styleRisk(node)
                         || waitingFragment(node)
                         || cssURL(surrounded())
@@ -1523,7 +1578,7 @@
             var el = this, where = String(position).toLowerCase();
             var outside = where === 'beforebegin' || where === 'afterend';
             var container = outside ? el.parentNode : el;
-            if (!resources(node).length && !styleRisk(node) && !(container && waiting.has(container))) return original.call(el, position, node);
+            if (!unjudged(node).length && !styleRisk(node) && !(container && waiting.has(container))) return original.call(el, position, node);
             // An unknown position, a non-element, a parentless element asked
             // for a sibling, an element placed inside itself: the engine
             // throws or does nothing, and so does this.
@@ -2936,7 +2991,15 @@
                     if (!node || node.nodeType !== 1) continue;
                     // Server-rendered markup is the server-side blocker's to
                     // judge, and it already did. See fromScript() above.
-                    if (!fromScript(node)) continue;
+                    if (!fromScript(node)) {
+                        // Never a <script>: a parked one (type text/plain) is
+                        // not "already started", so a page that flips its type
+                        // back and moves it would run it with no verdict. A
+                        // moved image, frame or media element fetches nothing
+                        // its current attributes did not already fetch.
+                        if (served) resources(node).forEach(function (el) { if (tagKey(el) !== 'SCRIPT' && !served.has(el)) served.set(el, urls(el)); });
+                        continue;
+                    }
                     resources(node).forEach(guard);
                     // Tagged means a script sink built it; untagged here means
                     // the parser did (or a wrapper above already judged it).
