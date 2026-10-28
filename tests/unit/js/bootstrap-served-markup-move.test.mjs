@@ -249,5 +249,32 @@ console.log('f. the other insertion paths: server image moves, script image held
   }
 }
 
+console.log('g. attribute signatures cannot collide across embedded newlines');
+for (const insert of ['appendChild', 'append', 'insertAdjacentElement', 'Range.insertNode']) {
+  const { document, parse } = boot();
+  // One parser attribute must never compare equal to two different attributes.
+  const frame = parse('<iframe background="/empty\nsrc=https://tracker.example/frame"></iframe>');
+  await checkpoint();
+  frame.remove();
+  // Once the removal record has drained, edits of the detached node produce
+  // no document observer records. Reinsertion must judge the changed URLs.
+  await checkpoint();
+  frame.getAttributeNode('background').value = '/empty';
+  const src = document.createAttribute('src');
+  src.value = 'https://tracker.example/frame';
+  frame.setAttributeNode(src);
+  const dest = document.getElementById('main');
+  if (insert === 'Range.insertNode') {
+    const range = document.createRange();
+    range.selectNodeContents(dest);
+    range.insertNode(frame);
+  } else if (insert === 'insertAdjacentElement') {
+    dest.insertAdjacentElement('beforeend', frame);
+  } else {
+    dest[insert](frame);
+  }
+  eq(`${insert}: a colliding signature cannot exempt the new src`, frame.isConnected, false);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

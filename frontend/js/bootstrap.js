@@ -546,7 +546,11 @@
         }
         var base = d.baseURI;
         try { base = new URL(base).origin; } catch (e) { /* keep the full base: stricter, never looser */ }
-        return base + '\n' + out.sort().join('\n');
+        // Attribute values can contain newlines. Joining with that delimiter
+        // made one background="/empty\nsrc=https://tracker/..." compare equal
+        // to background="/empty" plus a new src attribute. A detached parser
+        // element could then fetch the new URL without an insertion verdict.
+        return JSON.stringify([base, out.sort()]);
     }
     function unjudged(node) {
         var found = resources(node);
