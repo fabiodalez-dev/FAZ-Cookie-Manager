@@ -528,29 +528,33 @@
     // value, setAttributeNode, a namespace prefix nobody wrapped. Detach a
     // parser <iframe>, rewrite its src through one of those and insert it
     // back: the iframe loads the new URL on insertion, and without this check
-    // it would have loaded with no verdict. The document base is part of the
-    // record too: a relative src re-resolves when the element is inserted
-    // again, so a script that adds or rewrites <base href> sends the same
-    // attribute somewhere the server never judged. Only the base's ORIGIN is
-    // recorded: history.pushState/replaceState rewrite the document URL — a
-    // script stripping utm_* or fbclid does it before the footer scripts run —
-    // but cannot leave the origin, and recording the whole URL held the Divi
-    // gallery again on every such page. Only a <base> can move a relative URL
-    // to another host, and that changes the origin.
+    // it would have loaded with no verdict. Record the RESOLVED destinations
+    // too: a changed <base> can redirect an unchanged attribute. Its directory
+    // alone is insufficient for a query-relative src like "?pixel", which
+    // inherits the base's filename. Resolving each candidate also avoids
+    // holding an image at p.jpg just because replaceState stripped utm_* from
+    // the document URL: that image's destination did not change. A srcdoc is
+    // markup, so retain its full inherited base rather than treating it as a
+    // URL. A later runtime can judge the document it would actually create.
     function urls(el) {
         var names = heldAttrs(el).map(function (p) { return p.slice(p.indexOf(':') + 1).toLowerCase(); });
-        var list = el.attributes || [], out = [];
+        var list = el.attributes || [], out = [], base = d.baseURI;
+        function resolve(value) {
+            try { return new URL(value, base).href; }
+            catch (e) { return [base, value]; } // stricter if the URL cannot be resolved
+        }
         for (var i = 0; i < list.length; i++) {
             var a = list[i], local = String(a.localName || a.name).toLowerCase();
-            if (names.indexOf(local) !== -1) out.push(a.name + '=' + a.value);
+            if (names.indexOf(local) === -1) continue;
+            var targets = local === 'srcdoc' ? [base]
+                : (isList(local) ? candidates(a.value) : [a.value]).map(resolve);
+            out.push([a.namespaceURI || '', a.name, a.value, targets]);
         }
-        var base = d.baseURI;
-        try { base = new URL(base).origin; } catch (e) { /* keep the full base: stricter, never looser */ }
         // Attribute values can contain newlines. Joining with that delimiter
         // made one background="/empty\nsrc=https://tracker/..." compare equal
         // to background="/empty" plus a new src attribute. A detached parser
         // element could then fetch the new URL without an insertion verdict.
-        return JSON.stringify([base, out.sort()]);
+        return JSON.stringify(out.sort());
     }
     function unjudged(node) {
         var found = resources(node);
