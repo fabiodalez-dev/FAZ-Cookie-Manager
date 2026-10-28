@@ -18,7 +18,7 @@ test('a parser attribute containing a newline cannot exempt a new iframe URL', a
     return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head>
       <script>window._fazConfig={_block:true};</script>
       <script>${bootstrap}</script><script defer src="/pending.js"></script>
-      </head><body><main id="host"><iframe id="probe"
+      </head><body><main id="host"><img id="kept-image" src="/unchanged.jpg"><iframe id="probe"
         background="/empty&#10;src=https://tracker.example.test/collision"></iframe></main>
       <script>(async function () {
         var frame = document.getElementById('probe');
@@ -30,7 +30,11 @@ test('a parser attribute containing a newline cannot exempt a new iframe URL', a
         src.value = 'https://tracker.example.test/collision';
         frame.setAttributeNode(src);
         document.getElementById('host').appendChild(frame);
-        window.collisionProbe = { inserted: frame.isConnected };
+        var destination = document.createElement('div');
+        document.body.appendChild(destination);
+        var image = document.getElementById('kept-image');
+        destination.appendChild(image);
+        window.collisionProbe = { inserted: frame.isConnected, imageMoved: destination.contains(image) };
       })();</script></body></html>` });
   });
   await page.route('https://tracker.example.test/**', route => {
@@ -39,7 +43,7 @@ test('a parser attribute containing a newline cannot exempt a new iframe URL', a
   });
   try {
     await page.goto('https://defer.example.test/', { waitUntil: 'commit' });
-    await expect.poll(() => page.evaluate(() => (window as any).collisionProbe)).toEqual({ inserted: false });
+    await expect.poll(() => page.evaluate(() => (window as any).collisionProbe)).toEqual({ inserted: false, imageMoved: true });
     expect(requests, 'no external request before the deferred runtime answers').toEqual([]);
     release();
     await page.waitForLoadState('domcontentloaded');
@@ -48,6 +52,62 @@ test('a parser attribute containing a newline cannot exempt a new iframe URL', a
     release();
   }
 });
+
+for (const scenario of [
+  {
+    name: 'a relative base reinserted after navigation',
+    base: 'assets/', src: 'widget.html', finalBase: 'https://defer.example.test/denied/assets/',
+    change: "history.pushState(null, '', '/denied/'); base.remove(); document.head.appendChild(base);",
+  },
+  {
+    name: 'a query-relative src after a base filename change',
+    base: '/allowed.html', src: '?pixel', finalBase: 'https://defer.example.test/denied.html',
+    change: "base.setAttribute('href', '/denied.html');",
+  },
+]) {
+  test(`${scenario.name} requires a new iframe verdict`, async ({ page }) => {
+    const requests: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    await page.route('https://defer.example.test/**', async route => {
+      const url = new URL(route.request().url());
+      if (url.pathname === '/pending.js') {
+        await gate;
+        return route.fulfill({ contentType: 'text/javascript', body: '' });
+      }
+      if (url.pathname.endsWith('/widget.html') || url.searchParams.has('pixel')) {
+        requests.push(url.pathname);
+        return route.fulfill({ contentType: 'text/html', body: '' });
+      }
+      return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head>
+        <base href="${scenario.base}"><script>window._fazConfig={_block:true};</script>
+        <script>${bootstrap}</script><script defer src="/pending.js"></script>
+        </head><body><main id="host"><img id="kept-image" src="/unchanged.jpg"><iframe id="probe" src="${scenario.src}"></iframe></main>
+        <script>(async function () {
+          var frame = document.getElementById('probe');
+          frame.remove();
+          await new Promise(function (resolve) { setTimeout(resolve, 0); });
+          var base = document.querySelector('base');
+          ${scenario.change}
+          document.getElementById('host').appendChild(frame);
+          var destination = document.createElement('div');
+          document.body.appendChild(destination);
+          var image = document.getElementById('kept-image');
+          destination.appendChild(image);
+          window.baseProbe = { inserted: frame.isConnected, base: document.baseURI, imageMoved: destination.contains(image) };
+        })();</script></body></html>` });
+    });
+    try {
+      await page.goto('https://defer.example.test/allowed/', { waitUntil: 'commit' });
+      await expect.poll(() => page.evaluate(() => (window as any).baseProbe)).toEqual({
+        inserted: false, base: scenario.finalBase, imageMoved: true,
+      });
+      expect(requests.filter(path => path.startsWith('/denied')), 'no request to the changed destination before a verdict').toEqual([]);
+    } finally {
+      release();
+    }
+  });
+}
 
 for (const consent of ['no', 'yes', 'missing']) {
   test(`deferred runtime protects early resources: analytics=${consent}`, async ({ page, context }) => {

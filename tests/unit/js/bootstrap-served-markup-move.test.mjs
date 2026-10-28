@@ -205,7 +205,7 @@ console.log('e. a server iframe whose src was rewritten while detached is still 
 }
 {
   const { window, document, parse } = boot();
-  const box = parse('<div id="box"><img src="/wp-content/uploads/p.jpg"></div>');
+  const box = parse('<div id="box"><img src="p.jpg"></div>');
   await checkpoint();
   window.history.replaceState(null, '', '/?utm_source=x');
   const img = box.querySelector('img');
@@ -226,6 +226,20 @@ console.log('e. a server iframe whose src was rewritten while detached is still 
   box.removeChild(frame);
   box.appendChild(frame);
   eq('a pushState() under a relative <base> holds a relative server iframe', box.contains(frame), false);
+}
+
+{
+  const { document, parse } = boot();
+  const base = document.createElement('base');
+  base.setAttribute('href', '/allowed.html');
+  document.head.appendChild(base);
+  const frame = parse('<iframe src="?pixel"></iframe>');
+  await checkpoint();
+  frame.remove();
+  await checkpoint();
+  base.setAttribute('href', '/denied.html');
+  document.getElementById('main').appendChild(frame);
+  eq('a query-relative src is held when the base filename changes', frame.isConnected, false);
 }
 
 console.log('f. the other insertion paths: server image moves, script image held');
