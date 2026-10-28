@@ -24,7 +24,11 @@
  *   e. a server <iframe> detached, its src rewritten through the Attr node
  *      (a route the setters and setAttribute do not see) and inserted back
  *      is still held: the exemption is for the URL the server judged, not
- *      for the element.
+ *      for the element;
+ *   f. the other insertion paths the exemption reaches — Range.insertNode(),
+ *      insertAdjacentElement() and the ParentNode methods (append, prepend,
+ *      before, after, replaceWith, replaceChildren) — move a server image on
+ *      the same turn and still hold one a script built.
  *
  * The "parser" is the native appendChild captured before the bootstrap runs:
  * no wrapper sees the call and no sink tags the node, which is exactly how a
@@ -182,6 +186,42 @@ console.log('e. a server iframe whose src was rewritten while detached is still 
   document.getElementById('main').appendChild(dest);
   dest.appendChild(same);
   eq('an unchanged server iframe still moves on the same turn', dest.contains(same), true);
+}
+
+console.log('f. the other insertion paths: server image moves, script image held');
+{
+  const paths = {
+    'Range.insertNode': (document, dest, img) => {
+      const range = document.createRange();
+      range.selectNodeContents(dest);
+      range.insertNode(img);
+    },
+    'insertAdjacentElement': (document, dest, img) => dest.insertAdjacentElement('beforeend', img),
+    'append': (document, dest, img) => dest.append(img),
+    'prepend': (document, dest, img) => dest.prepend(img),
+    'before': (document, dest, img) => dest.firstChild.before(img),
+    'after': (document, dest, img) => dest.firstChild.after(img),
+    'replaceWith': (document, dest, img) => dest.firstChild.replaceWith(img),
+    'replaceChildren': (document, dest, img) => dest.replaceChildren(img),
+  };
+  for (const [name, insert] of Object.entries(paths)) {
+    const { document, parse } = boot();
+    const box = parse('<div><img src="/wp-content/uploads/p.jpg"></div>');
+    await checkpoint();
+    const served = box.querySelector('img');
+    const dest = document.createElement('div');
+    dest.appendChild(document.createElement('span'));
+    document.getElementById('main').appendChild(dest);
+    insert(document, dest, served);
+    eq(`${name}: the server image is moved on the same turn`, dest.contains(served), true);
+    const built = document.createElement('img');
+    built.setAttribute('src', 'https://tracker.example/p.gif');
+    const other = document.createElement('div');
+    other.appendChild(document.createElement('span'));
+    document.getElementById('main').appendChild(other);
+    insert(document, other, built);
+    eq(`${name}: a script-built image is held`, other.contains(built), false);
+  }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
