@@ -20,7 +20,11 @@
  *   c. an image from a DOMParser document is still held;
  *   d. a script the server parked, turned executable and moved by a page
  *      script, is still held: a parked script is not "already started", so
- *      exempting the move would run it with no verdict.
+ *      exempting the move would run it with no verdict;
+ *   e. a server <iframe> detached, its src rewritten through the Attr node
+ *      (a route the setters and setAttribute do not see) and inserted back
+ *      is still held: the exemption is for the URL the server judged, not
+ *      for the element.
  *
  * The "parser" is the native appendChild captured before the bootstrap runs:
  * no wrapper sees the call and no sink tags the node, which is exactly how a
@@ -159,6 +163,25 @@ console.log('d. a server-parked script flipped back and moved is still held');
   document.getElementById('main').appendChild(dest);
   dest.appendChild(script);
   eq('not in the document until the runtime answers', dest.contains(script), false);
+}
+
+console.log('e. a server iframe whose src was rewritten while detached is still held');
+{
+  const { document, parse } = boot();
+  const box = parse('<div id="box"><iframe src="https://video.example/embed/1"></iframe></div>');
+  await checkpoint();
+  const frame = box.querySelector('iframe');
+  box.removeChild(frame);
+  frame.getAttributeNode('src').value = 'https://tracker.example/frame';
+  box.appendChild(frame);
+  eq('not in the document until the runtime answers', box.contains(frame), false);
+  const kept = parse('<div id="kept"><iframe src="https://video.example/embed/2"></iframe></div>');
+  await checkpoint();
+  const same = kept.querySelector('iframe');
+  const dest = document.createElement('div');
+  document.getElementById('main').appendChild(dest);
+  dest.appendChild(same);
+  eq('an unchanged server iframe still moves on the same turn', dest.contains(same), true);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

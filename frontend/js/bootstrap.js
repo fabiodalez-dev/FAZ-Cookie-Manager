@@ -519,10 +519,29 @@
     // DOM backstop, which sees each parser insertion before the next parser-
     // run script, so the record is in place before any script can move it.
     // Scripts are never recorded — see observed().
+    //
+    // The exemption is for the URL the server judged, not for the element:
+    // the record keeps the element's URL attributes as the parser left them,
+    // and an element whose URLs differ now is judged like any other. The
+    // setters and setAttribute stage a write without touching the attribute,
+    // so this matters for the routes they do not cover — an Attr node's
+    // value, setAttributeNode, a namespace prefix nobody wrapped. Detach a
+    // parser <iframe>, rewrite its src through one of those and insert it
+    // back: the iframe loads the new URL on insertion, and without this check
+    // it would have loaded with no verdict.
+    function urls(el) {
+        var names = heldAttrs(el).map(function (p) { return p.slice(p.indexOf(':') + 1).toLowerCase(); });
+        var list = el.attributes || [], out = [];
+        for (var i = 0; i < list.length; i++) {
+            var a = list[i], local = String(a.localName || a.name).toLowerCase();
+            if (names.indexOf(local) !== -1) out.push(a.name + '=' + a.value);
+        }
+        return out.sort().join('\n');
+    }
     function unjudged(node) {
         var found = resources(node);
         if (!served) return found;
-        return found.filter(function (el) { return !served.has(el); });
+        return found.filter(function (el) { return !served.has(el) || served.get(el) !== urls(el); });
     }
     // Every <style> in a subtree, the node itself included, in any namespace —
     // querySelectorAll('style') matches both, since a CSS type selector with no
@@ -640,8 +659,9 @@
     // document.write, handled below by withdrawing the exemption rather than
     // by trusting it.
     var sunk = typeof w.WeakSet === 'function' ? new w.WeakSet() : null;
-    // Resource elements the parser inserted — see unjudged().
-    var served = sunk ? new w.WeakSet() : null;
+    // Resource elements the parser inserted, each with its URLs as inserted —
+    // see unjudged().
+    var served = sunk && typeof w.WeakMap === 'function' ? new w.WeakMap() : null;
     // Sheets a wrapper has already delivered, judged, on the safety release.
     // The backstop stays armed on that path and must not judge them again —
     // which is only sound because the delivery question (judgeCss) reads the
@@ -2963,7 +2983,7 @@
                         // back and moves it would run it with no verdict. A
                         // moved image, frame or media element fetches nothing
                         // its current attributes did not already fetch.
-                        if (served) resources(node).forEach(function (el) { if (tagKey(el) !== 'SCRIPT') served.add(el); });
+                        if (served) resources(node).forEach(function (el) { if (tagKey(el) !== 'SCRIPT' && !served.has(el)) served.set(el, urls(el)); });
                         continue;
                     }
                     resources(node).forEach(guard);
