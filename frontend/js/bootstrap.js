@@ -536,9 +536,14 @@
     // the document URL: that image's destination did not change. A srcdoc is
     // markup, so retain its full inherited base rather than treating it as a
     // URL. A later runtime can judge the document it would actually create.
+    // The base is THIS document's, never el.baseURI: the element resolves
+    // against the document it is inserted into, and a script can adoptNode()
+    // a parser <img> into a DOMParser document, point this page's <base> at
+    // another host and append it back — el.baseURI would still answer the old
+    // base and the record would match.
     function urls(el) {
         var names = heldAttrs(el).map(function (p) { return p.slice(p.indexOf(':') + 1).toLowerCase(); });
-        var list = el.attributes || [], out = [], base = el.baseURI || d.baseURI;
+        var list = el.attributes || [], out = [], base = d.baseURI;
         function resolve(value) {
             try { return new URL(value, base).href; }
             catch (e) { return [base, value]; } // stricter if the URL cannot be resolved
