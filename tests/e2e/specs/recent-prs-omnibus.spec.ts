@@ -463,6 +463,19 @@ test.describe.serial('Recent PR omnibus regressions', () => {
 		setLabToken(token);
 		enableWooLabScenario();
 		touchPosts('page', ['faz-lab-js-basic']);
+		// Discovery adds the newest published product (get_posts orders by
+		// post_date). Other specs leave their own products behind, so the lab
+		// product is only the one picked if it is also the newest.
+		wpEval(`
+			$product = get_page_by_path( 'faz-lab-woo-product', OBJECT, 'product' );
+			if ( $product ) {
+				wp_update_post( array(
+					'ID'            => $product->ID,
+					'post_date'     => current_time( 'mysql' ),
+					'post_date_gmt' => current_time( 'mysql', 1 ),
+				) );
+			}
+		`);
 
 		try {
 			// scan_id is a required, validated route arg (32 lowercase hex).
