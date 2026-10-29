@@ -499,6 +499,20 @@ class Frontend {
 			// in #95.
 			add_filter( 'rocket_defer_inline_exclusions', array( $this, 'rocket_exclude_own_inline' ) );
 
+			// Perfmatters "Delay JavaScript" (with "Delay All" it rewrites every
+			// tag it does not exclude to type="pmdelayedscript" and runs it on the
+			// first interaction), "Defer JavaScript" and "Minify JavaScript". None
+			// of them reads the data-* opt-out hints; each takes an array of
+			// substrings matched against the tag (delay/defer) or its URL (minify),
+			// filterable as documented at perfmatters.io/docs/filters. Delayed,
+			// the content-hashed config file from uploads runs after script.min.js,
+			// which then finds no _fazStaticConfig and stands down: on a
+			// WooCommerce checkout that parks the PayPal / Google Pay iframes for
+			// the page view.
+			add_filter( 'perfmatters_delay_js_exclusions', array( $this, 'perfmatters_exclude_own_scripts' ) );
+			add_filter( 'perfmatters_defer_js_exclusions', array( $this, 'perfmatters_exclude_own_scripts' ) );
+			add_filter( 'perfmatters_minify_js_exclusions', array( $this, 'perfmatters_exclude_own_scripts' ) );
+
 			// Autoptimize exclude helper.
 			add_filter( 'autoptimize_filter_js_exclude', array( $this, 'autoptimize_exclude_own_scripts' ) );
 
@@ -794,6 +808,12 @@ class Frontend {
 						$static_deps[] = $static_handle;
 						$store_data    = $split['inline'];
 						$store_data['_staticConfigRequired'] = true;
+						// Inline, per page view, never in the static file itself:
+						// it is what script.js re-fetches when the file did not
+						// apply (an empty cached copy, a refused MIME type, an
+						// optimiser that delayed or removed the tag), and it
+						// survives an optimiser that rewrote the tag's src.
+						$store_data['_staticConfigUrl'] = $static_url;
 					}
 				}
 			}
@@ -1629,7 +1649,19 @@ class Frontend {
 		}
 
 		$path = $dir_info['path'] . $filename;
-		if ( file_exists( $path ) ) {
+		// A file whose size is not the size of its contents is a missing file.
+		// The name is a content hash, so a copy that was cut once — a staging
+		// clone or backup restore that created the files without their bytes, a
+		// full disk, an interrupted sync — was otherwise served forever: browsers
+		// cache it as immutable, script.js finds no _fazStaticConfig and the
+		// runtime stands down on every page view (the zero-byte config-*.js
+		// behind "the static configuration file failed to load"). The contents
+		// are in hand, so the comparison costs one filesize(), served from the
+		// stat cache file_exists() just filled; an unreadable size counts as a
+		// mismatch. The staged write below renames over the bad copy, which is
+		// atomic for the same name, and if that fails the caller falls back to
+		// inlining — never to the broken file.
+		if ( file_exists( $path ) && self::static_asset_is_complete( $path, $contents ) ) {
 			// Keep mtime meaning "last used" for the reaper, without paying a
 			// write on every request. filemtime() here hits PHP's per-request
 			// stat cache populated by the file_exists() above.
@@ -1667,14 +1699,32 @@ class Frontend {
 		if ( ! @rename( $staged, $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.rename_rename -- intentional atomic same-dir swap; WP_Filesystem has no atomic move.
 			wp_delete_file( $staged );
 			// A parallel request may have landed the same file first. The name
-			// is a content hash, so that copy is byte-identical — use it.
-			if ( ! file_exists( $path ) ) {
+			// is a content hash, so that copy is byte-identical — use it. A
+			// short copy that could not be replaced is not that copy.
+			clearstatcache( true, $path );
+			if ( ! file_exists( $path ) || ! self::static_asset_is_complete( $path, $contents ) ) {
 				$write_failed = true;
 				return '';
 			}
 		}
 
 		return $dir_info['url'] . $filename;
+	}
+
+	/**
+	 * Whether a generated asset on disk holds all of its contents.
+	 *
+	 * Size only, not bytes: the name already is the hash of the contents, so a
+	 * file of the right length under it is the file; what goes wrong in the
+	 * field is a copy that is empty or cut short.
+	 *
+	 * @param string $path     Absolute file path.
+	 * @param string $contents The contents the file must hold.
+	 * @return bool False for an empty or short file and for a size that cannot be read.
+	 */
+	private static function static_asset_is_complete( $path, $contents ) {
+		$size = @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failed stat is handled as incomplete and regenerated.
+		return false !== $size && strlen( (string) $contents ) === (int) $size;
 	}
 
 	/**
@@ -12151,6 +12201,34 @@ class Frontend {
 			}
 		}
 		return $excluded;
+	}
+
+	/**
+	 * Perfmatters Delay / Defer / Minify JavaScript exclusions.
+	 *
+	 * Each list is a set of plain substrings Perfmatters looks for in the
+	 * script tag (delay, defer) or in its URL (minify). The keywords cover
+	 * every own external tag — the plugin directory, the alternative-asset
+	 * family and the generated assets under uploads, whose URL carries the
+	 * plugin slug — and the inline markers cover the localized payloads and
+	 * the bootstrap, as rocket_exclude_own_inline() does for WP Rocket.
+	 *
+	 * @param mixed $exclusions Exclusions Perfmatters already applies.
+	 * @return mixed The list with FAZ's own entries, or a non-array unchanged.
+	 */
+	public function perfmatters_exclude_own_scripts( $exclusions ) {
+		if ( null === $exclusions || '' === $exclusions ) {
+			$exclusions = array();
+		}
+		if ( ! is_array( $exclusions ) ) {
+			return $exclusions;
+		}
+		foreach ( array( 'faz-cookie-manager', 'faz-fw', 'faz-cookie-manager/assets' ) as $keyword ) {
+			if ( ! in_array( $keyword, $exclusions, true ) ) {
+				$exclusions[] = $keyword;
+			}
+		}
+		return $this->rocket_exclude_own_inline( $exclusions );
 	}
 
 	/**

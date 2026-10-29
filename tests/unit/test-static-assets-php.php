@@ -13,7 +13,8 @@
  *   1. First call writes the file and returns its URL; the write goes through
  *      a staging file + rename (atomicity), leaving no .tmp residue — a
  *      partially written, immutably named asset would stay corrupt forever.
- *   2. A subsequent call for the same hash re-uses the file without rewriting.
+ *   2. A subsequent call for the same hash re-uses the file without rewriting;
+ *      an empty or truncated copy under that name is rewritten instead.
  *   3. mtime tracks last use (refreshed at most once a day), which is what the
  *      reaper keys off.
  *   4. cleanup_static_assets() deletes only stale generated assets (and orphan
@@ -215,6 +216,39 @@ namespace {
 	assert_true( file_exists( faz_assets_dir() . $name_b ), 'new hash writes a new file' );
 	assert_true( file_exists( faz_assets_dir() . $name ), 'previous hash still present (stale caches keep resolving)' );
 
+	// ---------- 2b. an empty or short copy is regenerated ----------
+
+	echo "\n-- empty / truncated copy on disk --\n";
+
+	// A staging clone or an interrupted sync that leaves the content-hashed
+	// file with no bytes used to be served forever (file_exists() only): the
+	// browser cached the empty script as immutable and the runtime stood
+	// down on every page view ("the static configuration file failed to load").
+	file_put_contents( faz_assets_dir() . $name, '' ); // phpcs:ignore
+	clearstatcache();
+	$writes_before = FazTestFilesystem::$writes;
+	$url3          = faz_write_asset( $name, $payload );
+	clearstatcache();
+	assert_true( $url3 === $url, 'an empty copy still yields the same URL' );
+	assert_true( $payload === file_get_contents( faz_assets_dir() . $name ), 'a zero-byte config-<hash>.js is rewritten with its contents' );
+	assert_true( FazTestFilesystem::$writes === $writes_before + 1, 'exactly one staged write repaired it' );
+	assert_true( array() === faz_tmp_files(), 'the repair leaves no staging residue' );
+
+	file_put_contents( faz_assets_dir() . $name, substr( $payload, 0, 20 ) ); // phpcs:ignore
+	clearstatcache();
+	faz_write_asset( $name, $payload );
+	clearstatcache();
+	assert_true( $payload === file_get_contents( faz_assets_dir() . $name ), 'a truncated copy is rewritten as well' );
+
+	$writes_before = FazTestFilesystem::$writes;
+	faz_write_asset( $name, $payload );
+	assert_true( FazTestFilesystem::$writes === $writes_before, 'a complete copy is not rewritten after the repair' );
+
+	// The URL the runtime re-fetches when the file did not apply is per page
+	// view and must stay inline: it can never be part of the shared file.
+	assert_true( ! in_array( '_staticConfigUrl', Frontend::STATIC_CONFIG_KEYS, true ), '_staticConfigUrl is not a STATIC_CONFIG_KEYS member' );
+	assert_true( ! in_array( '_staticConfigRequired', Frontend::STATIC_CONFIG_KEYS, true ), '_staticConfigRequired is not a STATIC_CONFIG_KEYS member' );
+
 	// ---------- 3. mtime tracks last use ----------
 
 	echo "\n-- mtime as last-used marker --\n";
@@ -372,6 +406,8 @@ namespace {
 	$inline_swap    = strpos( $enqueue_body, "\$store_data    = \$split['inline'];" );
 	assert_true( false !== $split_call, 'enqueue_scripts() splits the store with split_static_config()' );
 	assert_true( false !== $url_guard && false !== $inline_swap && $inline_swap > $url_guard, 'the inline remainder replaces the store only after the static file URL is confirmed' );
+	$url_key = strpos( $enqueue_body, "\$store_data['_staticConfigUrl'] = \$static_url;" );
+	assert_true( false !== $url_key && $url_key > $inline_swap, 'the inline store carries _staticConfigUrl next to _staticConfigRequired (the runtime\'s recovery URL)' );
 
 	// ---------- cleanup + result ----------
 

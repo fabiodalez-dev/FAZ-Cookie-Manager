@@ -23,6 +23,9 @@
  *   - Jetpack Boost: jetpack_boost_keep_own_scripts() removes FAZ tags
  *     (hinted, keyworded, inline bootstrap/config) from the move list and
  *     re-indexes it; jetpack_boost_do_concat() refuses own handles;
+ *   - Perfmatters: perfmatters_exclude_own_scripts() feeds the Delay, Defer
+ *     and Minify JavaScript exclusion filters substrings that match every FAZ
+ *     tag (the uploads config file included) and no theme or vendor tag;
  *   - the `data-noptimize` hint (Autoptimize / Breeze) is on every own
  *     external AND inline tag;
  *   - WP Fastest Cache: Cache_Compatibility::define_no_cache_constants()
@@ -155,6 +158,41 @@ namespace {
 	cx_check( is_array( $attrs ) && isset( $attrs['data-noptimize'] ) && '1' === $attrs['data-noptimize'], 'inline tag (wp_inline_script_attributes): data-noptimize set' );
 	$theme_attrs = cx_call( $frontend, 'tag_own_inline_attributes_nooptimize', array( 'id' => 'theme-app-js-before' ), 'x' );
 	cx_check( is_array( $theme_attrs ) && ! isset( $theme_attrs['data-noptimize'] ), 'a theme inline tag is not touched' );
+
+	echo "Perfmatters: Delay / Defer / Minify JavaScript exclusions\n";
+	// Perfmatters skips a tag when any exclusion is a substring of it
+	// (delay, defer) or of its URL (minify). Delayed, the uploads config file
+	// ran after script.min.js and the runtime stood down — the WooCommerce
+	// Express Checkout buttons never appeared (wp.org support thread).
+	$pm          = cx_call( $frontend, 'perfmatters_exclude_own_scripts', array( 'jquery.min.js' ) );
+	$pm          = is_array( $pm ) ? $pm : array();
+	$pm_excludes = function ( $markup ) use ( $pm ) {
+		foreach ( $pm as $needle ) {
+			if ( '' !== $needle && false !== strpos( $markup, $needle ) ) {
+				return true;
+			}
+		}
+		return false;
+	};
+	$config_tag  = '<script defer id="faz-cookie-manager-static-config-js" src="https://example.test/wp-content/uploads/faz-cookie-manager/assets/config-' . md5( 'x' ) . '.js"></script>';
+	$alt_cfg_tag = '<script id="faz-fw-js-extra">var _fazCfg = {"a":1};</script>';
+	cx_check( in_array( 'jquery.min.js', $pm, true ), 'the site\'s own exclusions are kept' );
+	foreach ( array( 'faz-cookie-manager', 'faz-fw', 'faz-cookie-manager/assets', '_fazConfig', '_fazCfg', '_fazStaticConfig', '_fazConsentLog', '_fazGcm', '_fazTcfConfig' ) as $needle ) {
+		cx_check( in_array( $needle, $pm, true ), "the list carries {$needle}" );
+	}
+	cx_check( $pm_excludes( $config_tag ), 'the content-hashed config file under uploads is excluded' );
+	cx_check( $pm_excludes( $hinted_tag ) && $pm_excludes( $bare_own_tag ), 'the runtime and an unhinted own script are excluded' );
+	cx_check( $pm_excludes( $inline_boot ) && $pm_excludes( $inline_cfg ) && $pm_excludes( $alt_cfg_tag ), 'the inline bootstrap and both localized payloads are excluded' );
+	cx_check( $pm_excludes( 'https://example.test/wp-content/uploads/faz-cookie-manager/assets/config-' . md5( 'x' ) . '.js' ), 'minify: the config URL alone matches' );
+	cx_check( ! $pm_excludes( $theme_tag ) && ! $pm_excludes( $vendor_tag ), 'a theme script and a vendor tag are still delayed' );
+	cx_check( count( $pm ) === count( array_unique( $pm ) ) && $pm === cx_call( $frontend, 'perfmatters_exclude_own_scripts', $pm ), 'no duplicates, and applying it twice adds nothing' );
+	$pm_empty = cx_call( $frontend, 'perfmatters_exclude_own_scripts', null );
+	cx_check( is_array( $pm_empty ) && in_array( 'faz-cookie-manager', $pm_empty, true ), 'an unset list becomes the FAZ list' );
+	cx_check( 'x' === cx_call( $frontend, 'perfmatters_exclude_own_scripts', 'x' ), 'a non-array list is passed through' );
+	$pm_source = (string) file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' ); // phpcs:ignore
+	foreach ( array( 'perfmatters_delay_js_exclusions', 'perfmatters_defer_js_exclusions', 'perfmatters_minify_js_exclusions' ) as $pm_hook ) {
+		cx_check( false !== strpos( $pm_source, "add_filter( '{$pm_hook}', array( \$this, 'perfmatters_exclude_own_scripts' ) );" ), "{$pm_hook} is registered" );
+	}
 
 	echo "WP Fastest Cache: the per-page exclusion is called by the shared veto\n";
 	$GLOBALS['wpfc_calls'] = 0;
