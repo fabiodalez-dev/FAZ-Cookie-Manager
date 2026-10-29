@@ -170,13 +170,15 @@ const _fazStaticConfigRecovery = (function () {
         }
         // The inline URL is the server's own word and survives an optimiser
         // that rewrote or removed the tag; the tag is the fallback for a page
-        // cached before the inline key existed, and the better source when a
-        // proxy rewrote it to this host. Either must name a content-hashed
+        // cached before the inline key existed, and the one used when a proxy
+        // rewrote it to this host while the inline URL stayed cross-origin
+        // (the scan matches any config-<hash>.js, so it never outranks a
+        // same-origin inline URL). Either must name a content-hashed
         // config file: this path fetches nothing else, and only from this
         // page's origin (_fazStaticConfigRecoveryUrl).
         var chosen = _fazStaticConfigRecoveryUrl([
-            found ? { url: found.url, source: 'tag' } : null,
-            typeof cfg._staticConfigUrl === 'string' ? { url: cfg._staticConfigUrl, source: 'inline' } : null
+            typeof cfg._staticConfigUrl === 'string' ? { url: cfg._staticConfigUrl, source: 'inline' } : null,
+            found ? { url: found.url, source: 'tag' } : null
         ]);
         if (!chosen || typeof window.XMLHttpRequest !== 'function') return report;
         var url = chosen.url;

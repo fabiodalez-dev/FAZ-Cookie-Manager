@@ -131,6 +131,14 @@ console.log('\nrecovery on a proxy, mirror or CDN host: only this page\'s origin
   ok('the runtime starts', w._fazRuntimeStarted === true);
 }
 {
+  // Both on this origin: the server's inline URL wins over whatever the DOM
+  // scan found (it matches any config-<hash>.js, another plugin's included).
+  const OTHER = `https://shop.test/wp-content/uploads/other-plugin/config-${'f'.repeat(32)}.js`;
+  const { w, log } = page({ tag: 'src', tagUrl: OTHER, response: { status: 200, body: GOOD_BODY } });
+  run(w);
+  ok('with both URLs same-origin, the inline URL is requested, not the tag', log.requests.length === 1 && log.requests[0].url.indexOf(CONFIG_URL + '?faz-recover=') === 0);
+}
+{
   // Neither URL rewritten: the content-hashed path is requested from this host.
   const { w, log } = page({ pageUrl: 'https://shop-it.test/checkout/', response: { status: 200, body: GOOD_BODY } });
   run(w);
