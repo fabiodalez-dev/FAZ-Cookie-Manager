@@ -115,7 +115,7 @@ namespace {
 	tro_same( tro_sorted( Gtranslate::translated_hosts( $custom, 'www.dilnastore.cz' ) ), array( 'dilnastore.com', 'dilnastore.de', 'dilnastore.pl' ), 'custom domains: every mapped domain is trusted, lowercased' );
 	$custom_array = $custom;
 	$custom_array['custom_domains_data'] = array( 'en' => 'dilnastore.com' );
-	tro_same( Gtranslate::translated_hosts( $custom_array, 'dilnastore.cz' ), array( 'dilnastore.com' ), 'custom domains already decoded to an array are read too' );
+	tro_same( tro_sorted( Gtranslate::translated_hosts( $custom_array, 'www.dilnastore.cz' ) ), array( 'de.dilnastore.cz', 'dilnastore.com', 'pl.dilnastore.cz' ), 'partial custom map: unmapped languages keep their sub-domain hosts, mapped languages use only their custom host' );
 
 	$sub = array(
 		'enterprise_version' => '1',
@@ -127,8 +127,8 @@ namespace {
 	);
 	tro_same(
 		tro_sorted( Gtranslate::translated_hosts( $sub, 'www.dilnastore.cz' ) ),
-		tro_sorted( array( 'en.www.dilnastore.cz', 'en.dilnastore.cz', 'de.www.dilnastore.cz', 'de.dilnastore.cz', 'zh-cn.www.dilnastore.cz', 'zh-cn.dilnastore.cz' ) ),
-		'sub_domain structure: <lang>.<host> for every language but the source one, www stripped too, junk codes skipped'
+		tro_sorted( array( 'en.dilnastore.cz', 'de.dilnastore.cz', 'zh-cn.dilnastore.cz' ) ),
+		'sub_domain structure: www is stripped, source language and junk codes skipped, no additional www hosts trusted'
 	);
 	tro_same( tro_sorted( Gtranslate::translated_hosts( $sub, 'dilnastore.cz' ) ), array( 'de.dilnastore.cz', 'en.dilnastore.cz', 'zh-cn.dilnastore.cz' ), 'sub_domain structure on an apex WordPress Address' );
 	$sub_unsynced = $custom;
@@ -162,6 +162,7 @@ namespace {
 	$core = array( 'http://www.dilnastore.cz', 'https://www.dilnastore.cz' );
 	$GLOBALS['faz_test_options']['faz_settings'] = array( 'trusted_origins' => array( 'alternate_domains' => array( 'https://cdn.example.net:8443' ) ) );
 	$GLOBALS['faz_test_options']['GTranslate']   = $custom_array; // dilnastore.com only.
+	$GLOBALS['faz_test_options']['GTranslate']['fincl_langs'] = array( 'cs', 'en' );
 	// home_url() is https, so a bare host contributes its https origin only:
 	// an http page on that host could be rewritten on the network path.
 	$widened = array( 'http://www.dilnastore.cz', 'https://www.dilnastore.cz', 'https://cdn.example.net:8443', 'https://dilnastore.com' );
@@ -205,6 +206,17 @@ namespace {
 	// admin's responses. Only the nopriv actions are widened.
 	$_REQUEST['action'] = 'faz_dismiss_unmatched';
 	tro_same( faz_allowed_http_origins( $core ), $core, 'admin-ajax action=faz_dismiss_unmatched (administrators only): untouched despite the prefix' );
+	$_GET['rest_route'] = '/faz/v1/consent';
+	tro_same( faz_allowed_http_origins( $core ), $core, 'a forged REST query cannot widen CORS for a privileged AJAX action' );
+	unset( $_GET['rest_route'] );
+	$_SERVER['REQUEST_URI'] = '/wp-admin/admin-ajax.php/wp-json/faz/v1/consent';
+	tro_same( faz_allowed_http_origins( $core ), $core, 'REST-looking PATH_INFO cannot widen CORS for a privileged AJAX action' );
+	unset( $_SERVER['REQUEST_URI'] );
+	$GLOBALS['wp'] = (object) array( 'query_vars' => array( 'rest_route' => '/faz/v1/consent' ) );
+	tro_same( faz_allowed_http_origins( $core ), $core, 'AJAX dispatch also takes precedence over a parsed REST route' );
+	unset( $GLOBALS['wp'] );
+	$_REQUEST['action'] = 'FAZ_dnsmpi_optout';
+	tro_same( faz_allowed_http_origins( $core ), $core, 'CORS action matching is exact, like the admin-ajax dispatcher' );
 	$_REQUEST['action'] = 'faz_dsar_refresh';
 	tro_same( faz_allowed_http_origins( $core ), $widened, 'admin-ajax action=faz_dsar_refresh (nopriv): widened' );
 	$GLOBALS['faz_test_filters']['faz_public_ajax_actions'] = function ( $actions ) { $actions[] = 'faz_custom_public'; return $actions; };

@@ -165,6 +165,31 @@ console.log('\nfailure: the runtime stands down and says why');
   run(w);
   ok('a non-object payload is refused', w._fazRuntimeStarted !== true && staticWarning(log) !== '');
 }
+for (const payload of [
+  {},
+  { _providersToBlock: [] },
+  { _providersToBlock: 'invalid', _cookieCategoryMap: {} },
+  { _providersToBlock: [{ re: 'tracker.test', categories: null }], _cookieCategoryMap: {} },
+  { _providersToBlock: [], _cookieCategoryMap: null },
+  { _providersToBlock: [], _cookieCategoryMap: {}, _block: false },
+  JSON.parse('{"_providersToBlock":[],"_cookieCategoryMap":{},"__proto__":{"_block":false}}'),
+]) {
+  const { w, log } = page({ response: { status: 200, body: `window._fazStaticConfig=${JSON.stringify(payload)};` } });
+  run(w);
+  ok(`incomplete or unexpected configuration stays blocked: ${JSON.stringify(payload)}`, w._fazRuntimeStarted !== true && staticWarning(log).includes('expected configuration'));
+}
+{
+  const { w, log } = page({ response: { status: 200, body: GOOD_BODY } });
+  w._fazConfig._perServiceConsent = true;
+  run(w);
+  ok('per-service consent requires its offloaded catalogue too', w._fazRuntimeStarted !== true && staticWarning(log) !== '');
+}
+{
+  const { w } = page({ response: { status: 200, body: 'window._fazStaticConfig={"_providersToBlock":[],"_cookieCategoryMap":[],"_serviceCatalogue":[]};' } });
+  w._fazConfig._perServiceConsent = true;
+  run(w);
+  ok('empty PHP arrays for maps and catalogue are valid', w._fazRuntimeStarted === true);
+}
 
 console.log('\nno URL, or not a config URL: no request');
 {
@@ -178,6 +203,15 @@ console.log('\nno URL, or not a config URL: no request');
   const { w, log } = page({ inlineUrl: 'https://tracker.test/collect.js', tag: '', response: { status: 200, body: GOOD_BODY } });
   run(w);
   ok('an inline URL that does not name a config file is never fetched', log.requests.length === 0 && w._fazRuntimeStarted !== true);
+}
+for (const inlineUrl of [
+  `https://tracker.test/collect?file=config-${HASH}.js`,
+  `https://tracker.test/not-config-${HASH}.js`,
+  `data:text/plain,/config-${HASH}.js`,
+]) {
+  const { w, log } = page({ inlineUrl, tag: '', response: { status: 200, body: GOOD_BODY } });
+  run(w);
+  ok(`only an HTTP(S) config pathname can be fetched: ${inlineUrl}`, log.requests.length === 0 && w._fazRuntimeStarted !== true);
 }
 {
   const { w, log } = page({ response: { status: 200, body: GOOD_BODY } });

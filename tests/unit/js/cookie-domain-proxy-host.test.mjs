@@ -25,6 +25,7 @@ import { dirname, resolve } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CODE = readFileSync(resolve(HERE, '../../../frontend/js/script.js'), 'utf8');
+const TCF = readFileSync(resolve(HERE, '../../../frontend/js/tcf-cmp.js'), 'utf8');
 
 let passed = 0;
 let failed = 0;
@@ -139,6 +140,26 @@ console.log('\n== _fazCookieDomainForHost() boundaries ==');
   ok('another registrable domain does not match', fn('.example.cz', 'example.com') === '');
   ok('a sub-scope does not cover its parent', fn('.shop.example.com', 'example.com') === '');
   ok('an empty scope is host-only', fn('', 'example.com') === '' && fn('.', 'example.com') === '');
+}
+
+for (const url of ['https://dilnastore.com/', 'https://shop.dilnastore.cz/']) {
+  const { dom, window } = boot(url, '.dilnastore.cz');
+  const vendor = { id: 755, name: 'Test vendor', purposes: [1, 3, 4], legIntPurposes: [2, 7], features: [] };
+  Object.assign(window._fazConfig, { _iabEnabled: true, _iabVendors: [vendor] });
+  ['consent', 'action', 'necessary', 'functional', 'analytics', 'marketing'].forEach((key) => window.fazcookie._fazSetInStore(key, 'yes'));
+  window._fazSaveVendorConsent('all');
+  window._fazTcfConfig = { cmpId: 400, gvlVersion: 100, selectedVendors: [755], vendors: { 755: vendor } };
+  window.eval(TCF);
+  const hostOnly = url.includes('dilnastore.com');
+  for (const key of ['fazVendorConsent', 'fazVendorLI', 'euconsent-v2']) {
+    const cookie = dom.cookieJar.getCookiesSync(url).find((item) => item.key === key);
+    ok(`${key} persists with the correct scope on ${url}`, !!cookie && cookie.hostOnly === hostOnly, cookie && { domain: cookie.domain, hostOnly: cookie.hostOnly });
+  }
+  window._fazSaveVendorConsent('reject');
+  ['functional', 'analytics', 'marketing'].forEach((key) => window.fazcookie._fazSetInStore(key, 'no'));
+  window.document.dispatchEvent(new window.CustomEvent('fazcookie_consent_update', { detail: { action: 'reject' } }));
+  ok(`TC cookie is removed on withdrawal on ${url}`, !dom.cookieJar.getCookiesSync(url).some((item) => item.key === 'euconsent-v2'));
+  window.close();
 }
 
 console.log(`\n  cookie-domain-proxy-host: ${passed} passed, ${failed} failed`);

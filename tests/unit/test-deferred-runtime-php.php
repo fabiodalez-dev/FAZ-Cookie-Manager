@@ -60,6 +60,23 @@ $GLOBALS['faz_defer_admin'] = false;
 $GLOBALS['wp_version'] = '6.3';
 check_defer( $foreign === $frontend->defer_runtime_script_tag( $foreign, 'faz-cookie-manager' ), 'respect native dependency fallback on modern WP' );
 
+// The PageSpeed report also named banner-*.css. Preserve the non-matching
+// media and CSP nonce while marking the link for the runtime's load handler.
+$css_flag = new ReflectionProperty( $frontend, 'banner_css_non_blocking' );
+$css_flag->setAccessible( true );
+$css_flag->setValue( $frontend, true );
+$plugin_name = new ReflectionProperty( $frontend, 'plugin_name' );
+$plugin_name->setAccessible( true );
+$plugin_name->setValue( $frontend, 'faz-cookie-manager' );
+$css_link = '<link rel="stylesheet" id="faz-cookie-manager-css-css" href="/banner.css" media="print" nonce="csp" />';
+$marked = $frontend->mark_banner_stylesheet( $css_link, 'faz-cookie-manager-css' );
+check_defer( false !== strpos( $marked, 'data-faz-banner-css="1"' ), 'non-blocking banner stylesheet is discoverable by the runtime' );
+check_defer( false !== strpos( $marked, 'media="print"' ) && false !== strpos( $marked, 'nonce="csp"' ), 'stylesheet marking preserves non-blocking media and CSP nonce' );
+check_defer( $marked === $frontend->mark_banner_stylesheet( $marked, 'faz-cookie-manager-css' ), 'stylesheet marking is idempotent' );
+check_defer( $css_link === $frontend->mark_banner_stylesheet( $css_link, 'theme-css' ), 'foreign stylesheet markup is unchanged' );
+$css_flag->setValue( $frontend, false );
+check_defer( $css_link === $frontend->mark_banner_stylesheet( $css_link, 'faz-cookie-manager-css' ), 'explicit blocking-style opt-out remains supported' );
+
 // Without a readable bootstrap, deferring would leave the runtime arriving
 // after the page's own scripts with nothing holding dynamic resources in
 // between. file_get_contents() returns false there and

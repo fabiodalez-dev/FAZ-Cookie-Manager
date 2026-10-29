@@ -1467,6 +1467,13 @@ if ( ! function_exists( 'faz_request_targets_plugin_surface' ) ) {
 	 */
 	function faz_request_targets_plugin_surface() {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- routing inspection only; nothing is read as data.
+		// admin-ajax dispatches by action, even if a caller supplies a fake
+		// rest_route or a REST-looking PATH_INFO. Never let those parameters
+		// widen credentialed CORS for an unrelated or privileged AJAX action.
+		if ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() ) {
+			return isset( $_REQUEST['action'] ) && is_string( $_REQUEST['action'] )
+				&& in_array( wp_unslash( $_REQUEST['action'] ), faz_public_ajax_actions(), true );
+		}
 		$route = '';
 		if ( isset( $GLOBALS['wp'] ) && is_object( $GLOBALS['wp'] ) && ! empty( $GLOBALS['wp']->query_vars['rest_route'] ) ) {
 			$route = (string) $GLOBALS['wp']->query_vars['rest_route'];
@@ -1485,10 +1492,6 @@ if ( ! function_exists( 'faz_request_targets_plugin_surface' ) ) {
 			return 0 === strpos( '/' . ltrim( $route, '/' ), '/faz/v1/' );
 		}
 
-		$doing_ajax = function_exists( 'wp_doing_ajax' ) && wp_doing_ajax();
-		if ( $doing_ajax && isset( $_REQUEST['action'] ) && is_string( $_REQUEST['action'] ) ) {
-			return in_array( sanitize_key( wp_unslash( $_REQUEST['action'] ) ), faz_public_ajax_actions(), true );
-		}
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		return false;
 	}

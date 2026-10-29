@@ -84,7 +84,8 @@ class Gtranslate {
 			return array();
 		}
 
-		$hosts = array();
+		$hosts            = array();
+		$custom_languages = array();
 
 		// Custom domains: one registrable domain per language, synchronised
 		// from the GTranslate dashboard into a slashed JSON string.
@@ -94,18 +95,15 @@ class Gtranslate {
 				$map = json_decode( stripslashes( $map ), true );
 			}
 			if ( is_array( $map ) ) {
-				foreach ( $map as $domain ) {
-					if ( is_string( $domain ) ) {
+				foreach ( $map as $lang => $domain ) {
+					if ( is_string( $domain ) && self::clean( array( $domain ) ) ) {
 						$hosts[] = $domain;
+						$custom_languages[] = strtolower( (string) $lang );
 					}
 				}
 			}
-			if ( $hosts ) {
-				return self::clean( $hosts );
-			}
-			// An unsynchronised or empty map describes no domain at all; the
-			// sub-domain structure below is then the only one the option
-			// still implies, and those hosts are this site's own anyway.
+			// GTranslate falls back to <lang>.<host> for each language absent
+			// from the map, even when other languages have custom domains.
 		}
 
 		if ( null === $home_host ) {
@@ -115,14 +113,13 @@ class Gtranslate {
 		}
 		$home_host = strtolower( trim( (string) $home_host ) );
 		if ( '' === $home_host || filter_var( $home_host, FILTER_VALIDATE_IP ) ) {
-			return array();
+			return self::clean( $hosts );
 		}
 		// GTranslate's sub-domains hang off the bare domain: www.example.com
-		// is translated on de.example.com. Both spellings are this site's own
-		// sub-domains, so trusting the second one as well costs nothing.
-		$bases = array( $home_host );
+		// is translated on de.example.com. Do not also trust de.www.example.com:
+		// it is not a proxy host described by these settings.
 		if ( 0 === strpos( $home_host, 'www.' ) ) {
-			$bases[] = substr( $home_host, 4 );
+			$home_host = substr( $home_host, 4 );
 		}
 
 		$languages = array();
@@ -136,12 +133,10 @@ class Gtranslate {
 			$lang = strtolower( trim( (string) $lang ) );
 			// Language codes are `de`, `zh-CN`, `haw`: letters and one hyphen.
 			// The source language is served on the origin itself.
-			if ( '' === $lang || $lang === $default || ! preg_match( '/^[a-z]{2,3}(?:-[a-z]{2,4})?$/', $lang ) ) {
+			if ( '' === $lang || $lang === $default || in_array( $lang, $custom_languages, true ) || ! preg_match( '/^[a-z]{2,3}(?:-[a-z]{2,4})?$/', $lang ) ) {
 				continue;
 			}
-			foreach ( $bases as $base ) {
-				$hosts[] = $lang . '.' . $base;
-			}
+			$hosts[] = $lang . '.' . $home_host;
 		}
 
 		return self::clean( $hosts );

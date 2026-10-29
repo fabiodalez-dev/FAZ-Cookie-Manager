@@ -63,7 +63,33 @@ const _FAZ_BUILD = '1.34.4+static-config-recovery-and-proxy-hosts';
 // `!_fazStore` branch below reads this report).
 const _FAZ_STATIC_CONFIG_PREFIX = 'window._fazStaticConfig=';
 const _FAZ_STATIC_CONFIG_FILE_RE = /\/faz-cookie-manager\/assets\/config-[0-9a-f]{32}\.js(?:[?#]|$)/;
-const _FAZ_STATIC_CONFIG_NAME_RE = /config-[0-9a-f]{32}\.js(?:[?#]|$)/;
+const _FAZ_STATIC_CONFIG_NAME_RE = /\/config-[0-9a-f]{32}\.js$/;
+function _fazIsStaticConfigUrl(value) {
+    try {
+        var parsed = new URL(value, document.baseURI);
+        return /^(?:http:|https:)$/.test(parsed.protocol) && _FAZ_STATIC_CONFIG_NAME_RE.test(parsed.pathname);
+    } catch (e) { return false; }
+}
+// JSON syntax alone is not enough: an empty object (or a different cached
+// payload) would start the runtime without its blocking rules. Only the three
+// keys offloaded by PHP belong here; the remaining settings must stay inline.
+function _fazIsRecoveredStaticConfig(value, cfg) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    if (Object.keys(value).some(function (key) {
+        return ['_providersToBlock', '_cookieCategoryMap', '_serviceCatalogue'].indexOf(key) === -1;
+    })) return false;
+    if (!Array.isArray(value._providersToBlock) || value._providersToBlock.some(function (provider) {
+        return !provider || typeof provider.re !== 'string' || !Array.isArray(provider.categories)
+            || provider.categories.some(function (category) { return typeof category !== 'string'; });
+    })) return false;
+    var map = value._cookieCategoryMap;
+    if (!map || typeof map !== 'object' || (Array.isArray(map) && map.length !== 0)
+        || Object.keys(map).some(function (key) { return typeof map[key] !== 'string'; })) return false;
+    var catalogue = value._serviceCatalogue;
+    if ((cfg._perServiceConsent || catalogue !== undefined)
+        && (!catalogue || typeof catalogue !== 'object' || (Array.isArray(catalogue) && catalogue.length !== 0))) return false;
+    return true;
+}
 // Where an optimiser parks a delayed script's URL instead of `src`
 // (Perfmatters, WP Rocket, LiteSpeed, generic lazy loaders).
 const _FAZ_STATIC_CONFIG_SRC_ATTRS = ['src', 'data-src', 'data-pmdelayedscript', 'data-rocket-src', 'data-litespeed-src', 'data-lazy-src'];
@@ -104,9 +130,9 @@ const _fazStaticConfigRecovery = (function () {
         // that rewrote or removed the tag; the tag is the fallback for a page
         // cached before the inline key existed. Either must name a
         // content-hashed config file: this path fetches nothing else.
-        var url = (typeof cfg._staticConfigUrl === 'string' && _FAZ_STATIC_CONFIG_NAME_RE.test(cfg._staticConfigUrl))
+        var url = (typeof cfg._staticConfigUrl === 'string' && _fazIsStaticConfigUrl(cfg._staticConfigUrl))
             ? cfg._staticConfigUrl
-            : (found && _FAZ_STATIC_CONFIG_NAME_RE.test(found.url) ? found.url : '');
+            : (found && _fazIsStaticConfigUrl(found.url) ? found.url : '');
         if (!url || typeof window.XMLHttpRequest !== 'function') return report;
         report.attempted = true;
         report.url = url;
@@ -135,7 +161,7 @@ const _fazStaticConfigRecovery = (function () {
         if (text.indexOf(_FAZ_STATIC_CONFIG_PREFIX) !== 0) { report.verdict = 'malformed'; return report; }
         var parsed;
         try { parsed = JSON.parse(text.slice(_FAZ_STATIC_CONFIG_PREFIX.length).replace(/;\s*$/, '')); } catch (e) { report.verdict = 'malformed'; return report; }
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { report.verdict = 'malformed'; return report; }
+        if (!_fazIsRecoveredStaticConfig(parsed, cfg)) { report.verdict = 'malformed'; return report; }
         window._fazStaticConfig = parsed;
         report.ok = true;
         // A fresh copy that is valid narrows the cause down: its own response

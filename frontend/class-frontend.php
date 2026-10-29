@@ -1692,7 +1692,11 @@ class Frontend {
 		// A same-directory rename() is atomic on POSIX and NTFS. Mirrors the
 		// staging pattern in Geolocation::extract_mmdb().
 		$staged = $dir_info['path'] . '.' . $filename . '.' . wp_generate_uuid4() . '.tmp';
-		if ( ! $fs->put_contents( $staged, $contents ) ) {
+		if ( ! $fs->put_contents( $staged, $contents ) || ! self::static_asset_is_complete( $staged, $contents ) ) {
+			// Some filesystem transports report success after a partial write
+			// (for example when storage fills up). Do not publish that copy or
+			// leave its temporary file behind; keep the full payload inline.
+			wp_delete_file( $staged );
 			$write_failed = true;
 			return '';
 		}

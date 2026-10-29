@@ -51,6 +51,7 @@ namespace FazCookie\Includes {
 	class Filesystem {
 		public static $writes         = 0;
 		public static $can_access     = true;
+		public static $short_write    = false;
 		private static $instance      = null;
 
 		public static function get_instance() {
@@ -73,6 +74,10 @@ namespace FazCookie\Includes {
 
 		public function put_contents( $file_path, $data ) {
 			self::$writes++;
+			if ( self::$short_write && '.tmp' === substr( $file_path, -4 ) ) {
+				file_put_contents( $file_path, substr( $data, 0, 10 ) );
+				return true;
+			}
 			return false !== file_put_contents( $file_path, $data ); // phpcs:ignore
 		}
 	}
@@ -408,6 +413,17 @@ namespace {
 	assert_true( false !== $url_guard && false !== $inline_swap && $inline_swap > $url_guard, 'the inline remainder replaces the store only after the static file URL is confirmed' );
 	$url_key = strpos( $enqueue_body, "\$store_data['_staticConfigUrl'] = \$static_url;" );
 	assert_true( false !== $url_key && $url_key > $inline_swap, 'the inline store carries _staticConfigUrl next to _staticConfigRequired (the runtime\'s recovery URL)' );
+
+	// A transport can return true after a short write. This must run last:
+	// the production guard deliberately disables further writes for the request.
+	FazTestFilesystem::$short_write = true;
+	$tmp_before = faz_tmp_files();
+	$short_name = 'config-' . md5( 'transport-short-write' ) . '.js';
+	assert_true( '' === faz_write_asset( $short_name, $payload ), 'a successful transport with a short file falls back to the inline payload' );
+	assert_true( ! file_exists( faz_assets_dir() . $short_name ), 'a short staged file is never published under the immutable name' );
+	assert_true( $tmp_before === faz_tmp_files(), 'a failed short write leaves no additional temporary file behind' );
+	FazTestFilesystem::$short_write = false;
+	assert_true( '' === faz_write_asset( 'banner-' . md5( 'after-short-write' ) . '.css', 'body{}' ), 'the request stops further writes after a transport failure' );
 
 	// ---------- cleanup + result ----------
 
