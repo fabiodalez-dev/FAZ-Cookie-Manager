@@ -27,9 +27,11 @@ const _FAZ_BUILD = '1.34.4+static-config-recovery-and-proxy-hosts';
         var bundleVersion = String(_FAZ_BUILD).split('+')[0];
         if (typeof serverVersion === 'string' && serverVersion !== '' && serverVersion !== bundleVersion) {
             window.console.warn('[FAZ Cookie Manager] The runtime bundle is ' + bundleVersion + ' but the PHP side reports '
-                + serverVersion + ': the plugin directory mixes files from two versions (an interrupted update, a partial '
-                + 'deployment or staging sync, or a second copy of the plugin). Reinstall the plugin from Plugins -> Add New -> '
-                + 'Upload Plugin or through the wp-admin updater, and check wp-content/plugins for duplicate FAZ Cookie Manager folders.');
+                + serverVersion + ': either a page, CDN or optimiser cache is still serving the previous script.min.js (purge '
+                + 'those caches first), or the plugin directory mixes files from two versions (an interrupted update, a partial '
+                + 'deployment or staging sync, or a second copy of the plugin). If purging does not clear this, reinstall the plugin '
+                + 'from Plugins -> Add New -> Upload Plugin or through the wp-admin updater, and check wp-content/plugins for '
+                + 'duplicate FAZ Cookie Manager folders. System Status -> Runtime Bundle reads the file on disk and tells the two apart.');
         }
     } catch (e) { /* diagnostic only */ }
 })();
