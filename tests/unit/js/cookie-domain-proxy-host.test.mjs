@@ -150,7 +150,11 @@ for (const url of ['https://dilnastore.com/', 'https://shop.dilnastore.cz/']) {
   window._fazSaveVendorConsent('all');
   window._fazTcfConfig = { cmpId: 400, gvlVersion: 100, selectedVendors: [755], vendors: { 755: vendor } };
   window.eval(TCF);
-  const hostOnly = url.includes('dilnastore.com');
+  // The translated domain lies outside the configured `.dilnastore.cz` scope,
+  // so its cookies must be host-only; the shop sub-domain keeps the scope.
+  // Decided on the parsed hostname, not a substring of the URL (CodeQL
+  // js/incomplete-url-substring-sanitization).
+  const hostOnly = new URL(url).hostname === 'dilnastore.com';
   for (const key of ['fazVendorConsent', 'fazVendorLI', 'euconsent-v2']) {
     const cookie = dom.cookieJar.getCookiesSync(url).find((item) => item.key === key);
     ok(`${key} persists with the correct scope on ${url}`, !!cookie && cookie.hostOnly === hostOnly, cookie && { domain: cookie.domain, hostOnly: cookie.hostOnly });
