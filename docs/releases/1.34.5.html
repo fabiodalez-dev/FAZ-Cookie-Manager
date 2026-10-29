@@ -1,0 +1,33 @@
+<p>FAZ Cookie Manager 1.34.5 nasce da due segnalazioni arrivate sul forum di wordpress.org nello stesso giorno, apparentemente lontanissime fra loro: un negozio tradotto con GTranslate su cui il banner non ricordava la scelta del visitatore, e un checkout WooCommerce su cui i pulsanti di pagamento rapido non comparivano più. In entrambi i casi il plugin funzionava bene sul dominio per cui era stato configurato, ma non su un dominio diverso o con un file diverso da quello atteso. Questa versione affronta proprio quella differenza.</p>
+
+<h2>Il sito tradotto che dimenticava il consenso</h2>
+
+<p>GTranslate, nella versione Enterprise, serve lo stesso sito WordPress su altri domini: il negozio ceco su dilnastore.cz diventa dilnastore.com in inglese, dilnastore.pl in polacco, oppure sottodomini come de.example.com. Il proxy riscrive gli indirizzi nella pagina, ma lascia intatta la configurazione del banner, che continuava a dichiarare il dominio originale. Il cookie del consenso veniva quindi scritto per .dilnastore.cz mentre il visitatore si trovava su dilnastore.com: il browser lo rifiutava senza dire nulla, e a ogni pagina il banner ricompariva come se nessuno avesse mai scelto.</p>
+
+<p>Ora il banner confronta il dominio configurato con quello su cui si trova davvero. Quando non coincidono, il cookie viene salvato solo per il dominio corrente. Il visitatore sceglie una volta per ogni dominio, perché un browser non può condividere un cookie fra domini registrati diversi, ma la scelta resta. Lo stesso vale ora anche per il cookie scritto dal server, nel percorso AMP e nell'integrazione con Paid Memberships Pro: l'ho aggiunto durante la revisione, perché la prima versione della correzione copriva solo il JavaScript.</p>
+
+<h2>Le richieste rifiutate come "cross-origin"</h2>
+
+<p>Il secondo sintomo dello stesso sito era nei log: i registri del consenso e le richieste Do Not Sell venivano scartati come cross_origin. Il proxy inoltra la richiesta del browser con il dominio tradotto come Origin, e il plugin, giustamente prudente, non lo riconosceva come proprio. Ho riunito i controlli di provenienza in un'unica funzione condivisa e le ho insegnato quali altri domini appartengono davvero al sito: quelli che GTranslate descrive nelle proprie impostazioni vengono riconosciuti automaticamente, e per tutti gli altri c'è la nuova sezione Impostazioni → Domini alternativi attendibili, oltre al filtro faz_trusted_origins per chi preferisce il codice.</p>
+
+<p>Allargare la fiducia è proprio il tipo di modifica che va riletta con sospetto, e la revisione ha trovato un punto debole reale. Per permettere a un mirror di leggere le risposte del plugin, i domini attendibili ricevono gli header CORS sulle sole rotte del plugin. Il controllo che decideva se una richiesta fosse "del plugin", però, si fidava anche di un parametro rest_route scritto a mano nell'indirizzo. WordPress consulta lo stesso elenco di origini consentite anche su admin-post.php, che non è un endpoint del plugin: con l'indirizzo giusto, una pagina su un dominio attendibile poteva ottenere CORS con credenziali su un gestore amministrativo. L'ho riprodotto sul sito di prova prima di correggerlo. Ora una rotta REST conta solo dopo che WordPress l'ha interpretata davvero, e su admin-post.php gli header non compaiono più.</p>
+
+<p>Anche l'interfaccia ha avuto la sua correzione: una riga non valida nel campo dei domini, per esempio un carattere jolly, spariva al salvataggio sotto un messaggio di successo. Adesso il salvataggio elenca le righe scartate e il campo mostra quello che è stato salvato davvero.</p>
+
+<h2>I pulsanti di pagamento che non comparivano</h2>
+
+<p>La seconda segnalazione veniva da un sito di staging. La console diceva che il file di configurazione generato non era stato caricato, mentre la scheda di rete mostrava una risposta 200 dalla cache del disco. Il plugin scrive le regole di blocco in un file config-*.js con un nome che dipende dal contenuto, e quindi memorizzabile per sempre. Se quella copia arriva vuota, troncata, con il Content-Type sbagliato o dopo il runtime per colpa di un ottimizzatore, il runtime non ha le regole che gli servono. Per sicurezza resta fermo, e con lui restano bloccati anche PayPal e Google Pay.</p>
+
+<p>Ora il runtime, in quel caso e solo in quello, richiede di nuovo il file una volta sola, lo legge come JSON e mai come codice, ne verifica la forma e riparte normalmente. Quando non ci riesce, il messaggio nella console non è più generico: riporta lo stato HTTP, il tipo e la dimensione della risposta, e indica la causa con il rimedio. Sul server, un file vuoto o troncato viene rigenerato invece di essere servito per sempre, e Perfmatters riceve automaticamente le esclusioni del plugin.</p>
+
+<p>Anche qui la revisione ha trovato un punto debole. La prima versione richiedeva il file all'indirizzo assoluto del sito principale, e su un dominio tradotto o su una CDN quella richiesta diventava cross-origin, quindi non poteva funzionare proprio sui siti per cui questa release esiste. Ora la richiesta va sempre all'host della pagina, e un indirizzo che punta a un dominio di terzi non viene mai contattato.</p>
+
+<h2>Due versioni del plugin nella stessa cartella</h2>
+
+<p>Nello stesso sito di staging lo script veniva caricato con ?ver=1.28.1 mentre stampava messaggi della 1.34: due release mescolate nella stessa cartella. È un problema che si manifesta in mille modi, tranne che come problema di versione. System Status mostra ora la versione del runtime accanto a quella del plugin, segnala le copie doppie e controlla come viene servito il file di configurazione. Nella console compare un avviso, che adesso distingue i due casi: una pagina più vecchia del runtime indica una cache HTML da svuotare, non un plugin da reinstallare.</p>
+
+<h2>Come ho verificato</h2>
+
+<p>Ogni test nuovo l'ho eseguito anche sul codice precedente alla correzione, per vedere che lì fallisse: un test che passa anche senza la correzione non dimostra niente. Prima della pubblicazione sono passati la suite completa dei test unitari, quella del consenso nei tre browser, la suite end-to-end sul commit definitivo, i test di conformità, l'installazione da zero, l'aggiornamento dalla 1.34.4 e Plugin Check.</p>
+
+<p>Chi usa GTranslate o un mirror non deve fare nulla: i domini descritti da GTranslate sono riconosciuti da soli. Chi serve il sito su altri domini con altri strumenti può aggiungerli nelle impostazioni. E se dietro il proxy tutti i visitatori arrivano dallo stesso indirizzo IP, la FAQ spiega come dichiararlo, così i limiti di frequenza non li trattano come un unico visitatore.</p>

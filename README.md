@@ -710,6 +710,14 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.34.5 — 2026-10-30
+
+- On a site translated through a proxy (GTranslate custom domains or language sub-domains, Weglot sub-domains) or served on a mirror domain, the visitor's choice was not saved, and consent records and Do Not Sell requests were refused as cross-origin. The consent cookie is now stored for the domain the visitor is on, and the domains GTranslate's own settings describe are trusted automatically.
+- Settings → Trusted Alternate Domains for any other domain this same site is served on, and the faz_trusted_origins filter. Saving names the lines that are not a valid domain or URL. Credentialed CORS for these domains is limited to the plugin's own public endpoints.
+- When the generated configuration file had not applied (an empty cached copy, a wrong Content-Type, a staging login page, a Delay/Defer optimiser), the banner was disabled for the page view and services such as WooCommerce express checkout buttons stayed blocked. The runtime now fetches the file again from the page's own host and starts normally, and the console names the cause when it cannot.
+- Empty or truncated generated files on disk are regenerated instead of being served forever. Perfmatters Delay, Defer and Minify JavaScript receive the plugin's exclusions automatically.
+- System Status shows the runtime bundle version, warns when the plugin directory mixes two versions or holds two copies of the plugin, and checks how the generated configuration file is served.
+
 ### 1.34.4 — 2026-10-28
 
 - WooCommerce product galleries remain visible when Divi regroups server-rendered images. Moving unchanged resources preserves the gallery; changed URL attributes still require a consent verdict.

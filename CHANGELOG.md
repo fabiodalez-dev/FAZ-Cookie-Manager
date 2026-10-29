@@ -2,7 +2,7 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
-## [Unreleased]
+## [1.34.5] - 2026-10-30
 
 ### Fixed
 - Trusted-origin CORS now dispatches admin-ajax by its exact public action before considering any REST route, so a forged `rest_route` or REST-looking path cannot enable credentialed CORS on another AJAX action. A REST route now counts only once WordPress has parsed it, so the same hints cannot enable it on `admin-post.php` or in the Customizer preview either, where core also consults `allowed_http_origins`.

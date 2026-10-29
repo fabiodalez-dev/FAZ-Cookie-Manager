@@ -10,7 +10,7 @@ if ( typeof window._fazConfig === 'undefined' && typeof window._fazCfg !== 'unde
 // Declared up here, ahead of everything that can stand the runtime down,
 // because the version-skew check below must run on exactly the page views
 // where the runtime never starts. See the longer note above `_fazRef._diag`.
-const _FAZ_BUILD = '1.34.4+static-config-recovery-and-proxy-hosts';
+const _FAZ_BUILD = '1.34.5+static-config-recovery-and-proxy-hosts';
 // Version skew between this bundle and the PHP side that printed _fazConfig.
 // `_version` is FAZ_VERSION from the main plugin file (it is also the `?ver=`
 // of this script's own URL), and the numeric prefix of _FAZ_BUILD is the
