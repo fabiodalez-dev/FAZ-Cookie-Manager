@@ -50,7 +50,7 @@ const CONFIG_URL = `https://shop.test/wp-content/uploads/faz-cookie-manager/asse
 const GOOD_BODY = 'window._fazStaticConfig={"_providersToBlock":[{"re":"connect.facebook.net","categories":["marketing"]}],"_cookieCategoryMap":{"_fbp":"marketing"}};';
 
 // `response` is { status, body, type, nosniff } or { throws: true }.
-function page({ inlineUrl = CONFIG_URL, tag = 'src', tagUrl = CONFIG_URL, response = null, version = VERSION } = {}) {
+function page({ inlineUrl = CONFIG_URL, tag = 'src', tagUrl = CONFIG_URL, pageUrl = 'https://shop.test/checkout/', response = null, version = VERSION } = {}) {
   const tagMarkup = tag === 'src'
     ? `<script defer id="faz-cookie-manager-static-config-js" src="${tagUrl}"></script>`
     : tag === 'delayed'
@@ -58,7 +58,7 @@ function page({ inlineUrl = CONFIG_URL, tag = 'src', tagUrl = CONFIG_URL, respon
       : tag === 'anonymous'
         ? `<script src="${tagUrl}?_litespeed_rm_qs=0"></script>`
         : '';
-  const dom = new JSDOM(`<!DOCTYPE html><html><head>${tagMarkup}</head><body></body></html>`, { runScripts: 'outside-only', url: 'https://shop.test/checkout/', virtualConsole: new VirtualConsole() });
+  const dom = new JSDOM(`<!DOCTYPE html><html><head>${tagMarkup}</head><body></body></html>`, { runScripts: 'outside-only', url: pageUrl, virtualConsole: new VirtualConsole() });
   const w = dom.window;
   const log = { warn: [], info: [], requests: [] };
   w.console.warn = function () { log.warn.push(Array.prototype.join.call(arguments, ' ')); };
@@ -118,6 +118,41 @@ console.log('\nrecovery: a valid file that had not applied');
   run(w);
   ok('a valid body served as text/plain still recovers', w._fazRuntimeStarted === true);
   ok('and the info names the Content-Type and nosniff', log.info.some((l) => l.indexOf('"text/plain"') !== -1 && l.indexOf('nosniff') !== -1));
+}
+
+console.log('\nrecovery on a proxy, mirror or CDN host: only this page\'s origin is requested');
+{
+  // GTranslate proxy: the proxy rewrote the tag to its own host, the inline
+  // JSON copy still names the origin site.
+  const PROXIED = CONFIG_URL.replace('https://shop.test/', 'https://shop-it.test/');
+  const { w, log } = page({ pageUrl: 'https://shop-it.test/checkout/', tagUrl: PROXIED, response: { status: 200, body: GOOD_BODY } });
+  run(w);
+  ok('the same-origin tag URL is preferred over the cross-origin inline one', log.requests.length === 1 && log.requests[0].url.indexOf(PROXIED + '?faz-recover=') === 0);
+  ok('the runtime starts', w._fazRuntimeStarted === true);
+}
+{
+  // Neither URL rewritten: the content-hashed path is requested from this host.
+  const { w, log } = page({ pageUrl: 'https://shop-it.test/checkout/', response: { status: 200, body: GOOD_BODY } });
+  run(w);
+  ok('with both URLs on another host, the path is requested from this page\'s origin', log.requests.length === 1
+    && log.requests[0].url.indexOf(`https://shop-it.test/wp-content/uploads/faz-cookie-manager/assets/config-${HASH}.js?faz-recover=`) === 0);
+  ok('the origin host is never contacted', !log.requests.some((r) => r.url.indexOf('https://shop.test/') === 0));
+  ok('the runtime starts', w._fazRuntimeStarted === true);
+}
+{
+  const { w, log } = page({ inlineUrl: `https://tracker.test/x/config-${HASH}.js`, tag: '', response: { status: 200, body: GOOD_BODY } });
+  run(w);
+  ok('a config-named URL on a third-party host is never requested there', log.requests.length === 1
+    && log.requests[0].url.indexOf(`https://shop.test/x/config-${HASH}.js?faz-recover=`) === 0);
+}
+{
+  // Uploads offloaded to a CDN path: the tag is still found by its file name.
+  const CDN = `https://cdn.shop.test/media/assets/config-${HASH}.js`;
+  const { w, log } = page({ inlineUrl: '', tag: 'anonymous-cdn', tagUrl: CDN, response: { status: 200, body: GOOD_BODY } });
+  w.document.head.insertAdjacentHTML('beforeend', `<script src="${CDN}"></script>`);
+  run(w);
+  ok('a tag whose uploads directory was rewritten is still found by its file name', log.requests.length === 1
+    && log.requests[0].url.indexOf(`https://shop.test/media/assets/config-${HASH}.js?faz-recover=`) === 0);
 }
 
 console.log('\nfailure: the runtime stands down and says why');
@@ -205,16 +240,18 @@ console.log('\nno URL, or not a config URL: no request');
   ok('an inline URL that does not name a config file is never fetched', log.requests.length === 0 && w._fazRuntimeStarted !== true);
 }
 // The tag's URL comes from the DOM: injected markup could name a foreign host
-// whose "config" carries no blocking rule, so without the server's inline URL
-// only a same-origin tag is followed. The inline URL itself may name a CDN.
+// whose "config" carries no blocking rule. Only this page's origin is ever
+// contacted; the file path is what is taken from either source.
 {
   const FOREIGN = `https://cdn.evil.test/wp-content/uploads/faz-cookie-manager/assets/config-${HASH}.js`;
   const { w, log } = page({ inlineUrl: '', tag: 'src', tagUrl: FOREIGN, response: { status: 200, body: GOOD_BODY, type: 'application/javascript' } });
   run(w);
-  ok('a tag-derived URL on another origin is never fetched', log.requests.length === 0 && w._fazRuntimeStarted !== true);
+  ok('a tag-derived URL on another origin is never fetched there', log.requests.every((r) => r.url.indexOf('https://shop.test/') === 0));
   const cdn = page({ inlineUrl: FOREIGN.replace('evil', 'assets'), tag: '', response: { status: 200, body: GOOD_BODY, type: 'application/javascript' } });
   run(cdn.w);
-  ok('while the server\'s inline URL may name a CDN host', cdn.log.requests.length === 1 && cdn.w._fazRuntimeStarted === true);
+  ok('an inline URL on a CDN host is requested from this page\'s origin', cdn.log.requests.length === 1
+    && cdn.log.requests[0].url.indexOf(`https://shop.test/wp-content/uploads/faz-cookie-manager/assets/config-${HASH}.js?faz-recover=`) === 0
+    && cdn.w._fazRuntimeStarted === true);
 }
 for (const inlineUrl of [
   `https://tracker.test/collect?file=config-${HASH}.js`,
@@ -246,6 +283,21 @@ console.log('\nversion skew between the bundle and the PHP side');
   run(w);
   ok('a different PHP version is reported once', log.warn.filter((l) => l.indexOf(`runtime bundle is ${VERSION} but the PHP side reports 1.28.1`) !== -1).length === 1);
   ok('it is diagnostic only: the runtime still starts', w._fazRuntimeStarted === true);
+}
+{
+  const { w, log } = page({ version: '1.28.1', response: { status: 200, body: GOOD_BODY } });
+  w._fazStaticConfig = {};
+  run(w);
+  const line = log.warn.find((l) => l.indexOf('runtime bundle is') !== -1) || '';
+  ok('an OLDER page than the bundle points at the cached page HTML', line.indexOf('HTML was generated before the update') !== -1);
+  ok('and does not tell the admin to reinstall the plugin', line.indexOf('reinstall the plugin') === -1);
+}
+{
+  const { w, log } = page({ version: '99.0.0', response: { status: 200, body: GOOD_BODY } });
+  w._fazStaticConfig = {};
+  run(w);
+  const line = log.warn.find((l) => l.indexOf(`runtime bundle is ${VERSION} but the PHP side reports 99.0.0`) !== -1) || '';
+  ok('a NEWER page than the bundle keeps the stale-script / mixed-directory guidance', line.indexOf('previous script.min.js') !== -1 && line.indexOf('reinstall') !== -1);
 }
 {
   const { w, log } = page({ response: { status: 200, body: GOOD_BODY } });

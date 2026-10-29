@@ -1219,8 +1219,13 @@ if ( ! function_exists( 'faz_normalize_trusted_origin' ) ) {
 		// A bare host. A path pasted after it is dropped; a port is not
 		// guessed at (it would only ever match one of the two schemes).
 		$host = rtrim( (string) preg_replace( '#[/?\#].*$#', '', $entry ), '.' );
-		if ( false !== strpos( $host, ':' ) && ! filter_var( trim( $host, '[]' ), FILTER_VALIDATE_IP ) ) {
-			return '';
+		if ( false !== strpos( $host, ':' ) ) {
+			// Only an IPv6 literal may contain a colon here. It is stored in
+			// brackets, the form wp_parse_url() returns for an Origin and the
+			// one an origin string needs: `::1` alone could never match, and
+			// would have produced the invalid origin `https://::1`.
+			$ip = trim( $host, '[]' );
+			return filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 ) ? '[' . $ip . ']' : '';
 		}
 		return $host_ok( $host ) ? $host : '';
 	}
@@ -1385,6 +1390,34 @@ if ( ! function_exists( 'faz_origin_is_trusted' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_cookie_domain_for_host' ) ) {
+	/**
+	 * The Domain attribute a cookie may carry on this host.
+	 *
+	 * Server-side twin of `_fazCookieDomainForHost()` in script.js. A cookie
+	 * whose Domain does not cover the request host is rejected by the browser,
+	 * so on a mirror or a translation-proxy domain outside the configured
+	 * scope the consent cookie is stored host-only instead of not at all.
+	 *
+	 * @since 1.34.5
+	 * @param string $domain Configured Domain (e.g. `.example.com`), or ''.
+	 * @param string $host   Request host.
+	 * @return string The domain, or '' (host-only).
+	 */
+	function faz_cookie_domain_for_host( $domain, $host ) {
+		$bare = ltrim( rtrim( strtolower( trim( (string) $domain ) ), '.' ), '.' );
+		$host = rtrim( strtolower( trim( (string) $host ) ), '.' );
+		$host = (string) preg_replace( '/:[0-9]+$/', '', $host );
+		if ( '' === $bare || '' === $host ) {
+			return '' === $bare ? '' : (string) $domain;
+		}
+		if ( $host === $bare || substr( $host, -( strlen( $bare ) + 1 ) ) === '.' . $bare ) {
+			return (string) $domain;
+		}
+		return '';
+	}
+}
+
 if ( ! function_exists( 'faz_is_same_origin_request' ) ) {
 	/**
 	 * Accept only a browser request initiated by this site's own pages.
@@ -1474,21 +1507,15 @@ if ( ! function_exists( 'faz_request_targets_plugin_surface' ) ) {
 			return isset( $_REQUEST['action'] ) && is_string( $_REQUEST['action'] )
 				&& in_array( wp_unslash( $_REQUEST['action'] ), faz_public_ajax_actions(), true );
 		}
-		$route = '';
+		// A REST route counts only once WordPress has parsed it: the value in
+		// $wp->query_vars is the one rest_api_loaded() dispatches, so it cannot
+		// name a route other than the one being served. A raw ?rest_route= or a
+		// REST-looking path is NOT read: core consults allowed_http_origins on
+		// admin-post.php and in the Customizer preview before (or without)
+		// parse_request, and either could be dressed up as /faz/v1/ to obtain
+		// credentialed CORS for a privileged handler in the visitor's session.
 		if ( isset( $GLOBALS['wp'] ) && is_object( $GLOBALS['wp'] ) && ! empty( $GLOBALS['wp']->query_vars['rest_route'] ) ) {
 			$route = (string) $GLOBALS['wp']->query_vars['rest_route'];
-		} elseif ( isset( $_GET['rest_route'] ) && is_string( $_GET['rest_route'] ) ) {
-			$route = sanitize_text_field( wp_unslash( $_GET['rest_route'] ) );
-		} elseif ( ! empty( $_SERVER['REQUEST_URI'] ) && is_string( $_SERVER['REQUEST_URI'] ) ) {
-			// Before parse_request has run: read the pretty-permalink path.
-			$prefix = '/' . trim( function_exists( 'rest_get_url_prefix' ) ? (string) rest_get_url_prefix() : 'wp-json', '/' ) . '/';
-			$path   = (string) wp_parse_url( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH );
-			$at     = strpos( $path, $prefix );
-			if ( false !== $at ) {
-				$route = '/' . substr( $path, $at + strlen( $prefix ) );
-			}
-		}
-		if ( '' !== $route ) {
 			return 0 === strpos( '/' . ltrim( $route, '/' ), '/faz/v1/' );
 		}
 

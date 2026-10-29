@@ -131,8 +131,10 @@ class Consent_Logger {
 	 * renders, so it exposes nothing a GET of any page does not. The token was
 	 * never the control against a forged record — is_same_origin_request() and
 	 * the per-IP and per-consent_id throttles are, and a fresh token bypasses
-	 * none of them. A cross-site page cannot read the JSON (no CORS header) and
-	 * cannot execute it.
+	 * none of them. A cross-site page cannot read the JSON and cannot execute
+	 * it: the only origins answered with CORS headers are the site's own
+	 * alternate hosts (faz_trusted_origins(), via faz_allowed_http_origins()),
+	 * whose pages already carry the same tokens.
 	 *
 	 * Why admin-ajax and not a REST route. Several page caches cache GET REST
 	 * responses by default (LiteSpeed's "Cache REST API" among them) and some

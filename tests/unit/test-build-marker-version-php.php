@@ -34,13 +34,14 @@ function marker_check( $cond, $label ) {
 }
 
 $main = (string) file_get_contents( $root . '/faz-cookie-manager.php' );
-preg_match( "/define\\( 'FAZ_VERSION', '([0-9]+\\.[0-9]+\\.[0-9]+)' \\);/", $main, $m );
+// The grammar build-release.sh accepts: X.Y.Z, or a pre-release X.Y.Z-rcN.
+preg_match( "/define\\( 'FAZ_VERSION', '([0-9]+\\.[0-9]+\\.[0-9]+(?:-(?:rc|beta|alpha)\\.?[0-9]+)?)' \\);/", $main, $m );
 $version = isset( $m[1] ) ? $m[1] : '';
 marker_check( '' !== $version, "FAZ_VERSION is declared in faz-cookie-manager.php ({$version})" );
 
 foreach ( array( 'frontend/js/script.js', 'frontend/js/script.min.js' ) as $file ) {
 	$source = (string) file_get_contents( $root . '/' . $file );
-	$found  = preg_match( '/_FAZ_BUILD\s*=\s*["\']([0-9]+\.[0-9]+\.[0-9]+)\+([A-Za-z0-9._+-]+)["\']/', $source, $b );
+	$found  = preg_match( '/_FAZ_BUILD\s*=\s*["\']([0-9]+\.[0-9]+\.[0-9]+(?:-(?:rc|beta|alpha)\.?[0-9]+)?)\+([A-Za-z0-9._+-]+)["\']/', $source, $b );
 	marker_check( 1 === $found, "{$file} declares _FAZ_BUILD as <version>+<suffix>" );
 	marker_check( $found && $b[1] === $version, "{$file}: _FAZ_BUILD prefix {$b[1]} equals FAZ_VERSION {$version} (bump it with scripts/bump-version.sh, then npm run build:min)" );
 }

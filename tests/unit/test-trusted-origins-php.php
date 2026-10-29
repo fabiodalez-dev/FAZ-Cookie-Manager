@@ -84,6 +84,13 @@ namespace {
 		return $list;
 	}
 
+	echo "== faz_cookie_domain_for_host(): the server-side cookie scope ==\n";
+	tro_same( faz_cookie_domain_for_host( '.dilnastore.cz', 'www.dilnastore.cz' ), '.dilnastore.cz', 'a host inside the configured domain keeps it' );
+	tro_same( faz_cookie_domain_for_host( '.dilnastore.cz', 'dilnastore.cz:443' ), '.dilnastore.cz', 'the bare domain (port ignored) keeps it' );
+	tro_same( faz_cookie_domain_for_host( '.dilnastore.cz', 'dilnastore.com' ), '', 'a proxy domain outside it gets a host-only cookie' );
+	tro_same( faz_cookie_domain_for_host( '.dilnastore.cz', 'evildilnastore.cz' ), '', 'a suffix that is not a label boundary is outside' );
+	tro_same( faz_cookie_domain_for_host( '', 'dilnastore.com' ), '', 'no configured domain stays host-only' );
+
 	echo "== faz_normalize_trusted_origin() ==\n";
 	tro_same( faz_normalize_trusted_origin( ' Dilnastore.COM ' ), 'dilnastore.com', 'a bare host is lowercased and trimmed' );
 	tro_same( faz_normalize_trusted_origin( 'dilnastore.de/' ), 'dilnastore.de', 'a pasted trailing path is dropped from a bare host' );
@@ -100,6 +107,9 @@ namespace {
 	tro_same( faz_normalize_trusted_origin( 'exa mple.de' ), '', 'whitespace inside a host is refused' );
 	tro_same( faz_normalize_trusted_origin( array( 'example.de' ) ), '', 'a non-string is refused' );
 	tro_same( faz_normalize_trusted_origin( '203.0.113.7' ), '203.0.113.7', 'an IPv4 host is accepted' );
+	tro_same( faz_normalize_trusted_origin( '2001:db8::1' ), '[2001:db8::1]', 'a bare IPv6 host is stored in brackets, the form an Origin carries' );
+	tro_same( faz_normalize_trusted_origin( '[2001:DB8::1]' ), '[2001:db8::1]', 'a bracketed IPv6 host is kept' );
+	tro_same( faz_normalize_trusted_origin( '2001:db8::zz' ), '', 'a colon in anything but an IPv6 literal is refused' );
 
 	echo "\n== Gtranslate::translated_hosts() from the GTranslate option ==\n";
 	$custom = array(
@@ -182,12 +192,27 @@ namespace {
 	$GLOBALS['wp'] = (object) array( 'query_vars' => array( 'rest_route' => '/faz/v10/x' ) );
 	tro_same( faz_allowed_http_origins( $core ), $core, 'a lookalike namespace (/faz/v10/) is not the plugin\'s' );
 
+	// Plain permalinks: core parses ?rest_route= into the same query var.
 	$reset();
-	$_GET['rest_route'] = '/faz/v1/pageview';
-	tro_same( faz_allowed_http_origins( $core ), $widened, '?rest_route=/faz/v1/pageview (plain permalinks): widened' );
+	$GLOBALS['wp'] = (object) array( 'query_vars' => array( 'rest_route' => '/faz/v1/pageview' ) );
+	tro_same( faz_allowed_http_origins( $core ), $widened, '?rest_route=/faz/v1/pageview once parsed (plain permalinks): widened' );
+	// Unparsed routing hints are not trusted. Core also consults
+	// allowed_http_origins on admin-post.php (no parse_request at all) and in
+	// the Customizer preview (before parse_request): a forged hint there would
+	// grant credentialed CORS to a privileged handler.
+	$reset();
+	$_GET['rest_route'] = '/faz/v1/consent';
+	$_REQUEST['action'] = 'export_everything';
+	tro_same( faz_allowed_http_origins( $core ), $core, 'admin-post.php?action=…&rest_route=/faz/v1/…: untouched' );
+	$reset();
+	$_SERVER['REQUEST_URI'] = '/wp-admin/admin-post.php/wp-json/faz/v1/consent';
+	tro_same( faz_allowed_http_origins( $core ), $core, 'admin-post.php with a REST-looking PATH_INFO: untouched' );
+	$reset();
+	$_SERVER['REQUEST_URI'] = '/some-page/wp-json/faz/v1/?customize_changeset_uuid=x';
+	tro_same( faz_allowed_http_origins( $core ), $core, 'a /wp-json/faz/v1/ segment in the middle of a front-end path: untouched' );
 	$reset();
 	$_SERVER['REQUEST_URI'] = '/wp-json/faz/v1/consent?x=1';
-	tro_same( faz_allowed_http_origins( $core ), $widened, '/wp-json/faz/v1/consent before parse_request: widened' );
+	tro_same( faz_allowed_http_origins( $core ), $core, '/wp-json/faz/v1/consent before parse_request: not yet a REST dispatch, untouched' );
 	$reset();
 	$_SERVER['REQUEST_URI'] = '/wp-json/wp/v2/posts';
 	tro_same( faz_allowed_http_origins( $core ), $core, '/wp-json/wp/v2/posts: untouched' );

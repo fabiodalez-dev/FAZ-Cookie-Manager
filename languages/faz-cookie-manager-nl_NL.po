@@ -8648,7 +8648,7 @@ msgid "One per line: example.de or https://shop.example.de:8443"
 msgstr ""
 
 #: admin/views/settings.php:242
-msgid "Domains on which this same WordPress site is served by something in front of it: a translation proxy such as GTranslate, Weglot sub-domains, a mirror or a CDN host. Consent records and Do-Not-Sell submissions arriving from these domains are accepted instead of being refused as cross-origin. Enter a bare domain to trust it over https (both schemes on a plain-http site), or a full URL when the scheme or a non-default port matters. Only list domains whose pages are this site's own. Developers can also use the faz_trusted_origins filter."
+msgid "Domains on which this same WordPress site is served by something in front of it: a translation proxy such as GTranslate, Weglot sub-domains, a mirror or a CDN host. Consent records and Do-Not-Sell submissions arriving from these domains are accepted instead of being refused as cross-origin. Enter a bare domain to trust it over https (both schemes on a plain-http site), or a full URL when the scheme or a non-default port matters. Only list domains whose pages are this site's own. Lines that are neither a domain nor an http(s) URL (wildcards, single-label names) are not saved. Developers can also use the faz_trusted_origins filter."
 msgstr ""
 
 #: admin/views/settings.php:245

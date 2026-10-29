@@ -517,8 +517,22 @@
 			// Warn the admin instead of letting the generic success toast imply
 			// the A/B test is actually running.
 			var saveWarnings = collectSaveWarnings(current);
+			var submittedDomains = (current.trusted_origins && Array.isArray(current.trusted_origins.alternate_domains))
+				? current.trusted_origins.alternate_domains
+				: null;
 
-			return FAZ.post('settings', current).then(function () {
+			return FAZ.post('settings', current).then(function (saved) {
+				// The server keeps only what faz_normalize_trusted_origin()
+				// accepts, normalised (lowercase, origin only) and de-duplicated;
+				// collectSaveWarnings() has already named the lines it refuses.
+				// Show what was actually stored rather than the raw input.
+				var kept = saved && saved.trusted_origins && Array.isArray(saved.trusted_origins.alternate_domains)
+					? saved.trusted_origins.alternate_domains
+					: null;
+				if (submittedDomains && kept) {
+					var field = document.getElementById('faz-trusted-alternate-domains');
+					if (field) field.value = kept.join('\n');
+				}
 				return saveWarnings;
 			});
 		}).then(function (saveWarnings) {

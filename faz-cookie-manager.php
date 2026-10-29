@@ -738,7 +738,16 @@ function faz_is_auto_granted_consent_cookie( $cookie = '' ) {
  */
 function faz_set_browser_cookie( $name, $value, $expires, $domain = null, $same_site = 'Lax', $force_secure = null ) {
 	$name = faz_consent_cookie_name( $name );
-	$domain = null === $domain ? faz_get_cookie_domain() : (string) $domain;
+	if ( null === $domain ) {
+		$domain = faz_get_cookie_domain();
+		// On a host outside that scope (a mirror, a translation proxy that
+		// forwards its own Host) the browser would reject the cookie outright.
+		if ( '' !== $domain && ! empty( $_SERVER['HTTP_HOST'] ) && function_exists( 'faz_cookie_domain_for_host' ) ) {
+			$domain = faz_cookie_domain_for_host( $domain, sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) ) );
+		}
+	} else {
+		$domain = (string) $domain;
+	}
 	$same_site = in_array( $same_site, array( 'Lax', 'Strict', 'None' ), true ) ? $same_site : 'Lax';
 	$secure    = null === $force_secure ? is_ssl() : (bool) $force_secure;
 	// Browsers reject SameSite=None without Secure. Fold an invalid caller

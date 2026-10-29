@@ -74,8 +74,8 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 				if ( is_readable( $faz_bundle_file ) ) {
 					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local plugin file, read-only diagnostic.
 					$faz_bundle_source = (string) file_get_contents( $faz_bundle_file );
-					if ( preg_match( '/_FAZ_BUILD\s*=\s*["\']([0-9]+(?:\.[0-9]+)+)\+/', $faz_bundle_source, $faz_bundle_match )
-						|| preg_match( '/["\']([0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?)\+[A-Za-z0-9._-]+["\']/', $faz_bundle_source, $faz_bundle_match ) ) {
+					if ( preg_match( '/_FAZ_BUILD\s*=\s*["\']([0-9]+(?:\.[0-9]+)+(?:-(?:rc|beta|alpha)\.?[0-9]+)?)\+/', $faz_bundle_source, $faz_bundle_match )
+						|| preg_match( '/["\']([0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-(?:rc|beta|alpha)\.?[0-9]+)?)\+[A-Za-z0-9._-]+["\']/', $faz_bundle_source, $faz_bundle_match ) ) {
 						$faz_bundle_version = $faz_bundle_match[1];
 					}
 					unset( $faz_bundle_source );

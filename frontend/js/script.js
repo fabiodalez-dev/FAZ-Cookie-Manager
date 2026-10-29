@@ -14,24 +14,41 @@ const _FAZ_BUILD = '1.34.4+static-config-recovery-and-proxy-hosts';
 // Version skew between this bundle and the PHP side that printed _fazConfig.
 // `_version` is FAZ_VERSION from the main plugin file (it is also the `?ver=`
 // of this script's own URL), and the numeric prefix of _FAZ_BUILD is the
-// release this file shipped with. They differ only when the plugin directory
-// mixes two releases: an update interrupted half-way, a deployment or staging
-// sync that copied part of the tree, or a second, older copy of the plugin
-// whose main file defines FAZ_VERSION first. A 1.34 runtime under a 1.28
-// header reads configuration keys that PHP never prints, and the resulting
-// breakage looks like anything but a version problem — so say it, once, and
-// change nothing else: this is diagnostic only.
+// release this file shipped with. They differ in two situations, and the
+// direction tells them apart:
+//   - the bundle is NEWER than the page: the HTML was generated before an
+//     update and is still served by a page, CDN or host cache that was not
+//     purged, while the script URL already returns the new file;
+//   - the bundle is OLDER: a cached previous script.min.js, or a plugin
+//     directory that mixes two releases (an update interrupted half-way, a
+//     partial deployment or staging sync, a second copy of the plugin whose
+//     main file defines FAZ_VERSION first). A 1.34 runtime under a 1.28
+//     header reads configuration keys that PHP never prints, and the
+//     breakage looks like anything but a version problem.
+// So say it, once, and change nothing else: this is diagnostic only.
+function _fazCompareVersions(a, b) {
+    var pa = String(a).split(/[.-]/), pb = String(b).split(/[.-]/);
+    for (var i = 0; i < 3; i++) {
+        var d = (parseInt(pa[i], 10) || 0) - (parseInt(pb[i], 10) || 0);
+        if (d) return d > 0 ? 1 : -1;
+    }
+    return 0;
+}
 (function () {
     try {
         var serverVersion = window._fazConfig && window._fazConfig._version;
         var bundleVersion = String(_FAZ_BUILD).split('+')[0];
         if (typeof serverVersion === 'string' && serverVersion !== '' && serverVersion !== bundleVersion) {
-            window.console.warn('[FAZ Cookie Manager] The runtime bundle is ' + bundleVersion + ' but the PHP side reports '
-                + serverVersion + ': either a page, CDN or optimiser cache is still serving the previous script.min.js (purge '
-                + 'those caches first), or the plugin directory mixes files from two versions (an interrupted update, a partial '
-                + 'deployment or staging sync, or a second copy of the plugin). If purging does not clear this, reinstall the plugin '
-                + 'from Plugins -> Add New -> Upload Plugin or through the wp-admin updater, and check wp-content/plugins for '
-                + 'duplicate FAZ Cookie Manager folders. System Status -> Runtime Bundle reads the file on disk and tells the two apart.');
+            var head = '[FAZ Cookie Manager] The runtime bundle is ' + bundleVersion + ' but the PHP side reports ' + serverVersion + ': ';
+            window.console.warn(_fazCompareVersions(bundleVersion, serverVersion) > 0
+                ? head + 'this page\'s HTML was generated before the update and is still being served by a page, CDN or host cache '
+                    + 'that was not purged. Purge those caches; nothing needs reinstalling if this disappears afterwards. '
+                    + 'System Status -> Runtime Bundle reads the file on disk: if it matches the plugin version there, the cache is the cause.'
+                : head + 'either a page, CDN or optimiser cache is still serving the previous script.min.js (purge '
+                    + 'those caches first), or the plugin directory mixes files from two versions (an interrupted update, a partial '
+                    + 'deployment or staging sync, or a second copy of the plugin). If purging does not clear this, reinstall the plugin '
+                    + 'from Plugins -> Add New -> Upload Plugin or through the wp-admin updater, and check wp-content/plugins for '
+                    + 'duplicate FAZ Cookie Manager folders. System Status -> Runtime Bundle reads the file on disk and tells the two apart.');
         }
     } catch (e) { /* diagnostic only */ }
 })();
@@ -62,7 +79,9 @@ const _FAZ_BUILD = '1.34.4+static-config-recovery-and-proxy-hosts';
 // runtime stands down exactly as it did before, with a precise reason (the
 // `!_fazStore` branch below reads this report).
 const _FAZ_STATIC_CONFIG_PREFIX = 'window._fazStaticConfig=';
-const _FAZ_STATIC_CONFIG_FILE_RE = /\/faz-cookie-manager\/assets\/config-[0-9a-f]{32}\.js(?:[?#]|$)/;
+// Matched on the file name only: an uploads offload or CDN rewrite may move
+// the directory, and the recovery below validates whatever it fetches.
+const _FAZ_STATIC_CONFIG_FILE_RE = /\/config-[0-9a-f]{32}\.js(?:[?#]|$)/;
 const _FAZ_STATIC_CONFIG_NAME_RE = /\/config-[0-9a-f]{32}\.js$/;
 function _fazIsStaticConfigUrl(value) {
     try {
@@ -70,8 +89,28 @@ function _fazIsStaticConfigUrl(value) {
         return /^(?:http:|https:)$/.test(parsed.protocol) && _FAZ_STATIC_CONFIG_NAME_RE.test(parsed.pathname);
     } catch (e) { return false; }
 }
-function _fazIsSameOriginUrl(value) {
-    try { return new URL(value, document.baseURI).origin === window.location.origin; } catch (e) { return false; }
+// The recovery request is always made to this page's own origin. The inline
+// URL is absolute on the uploads host, which on a translation proxy, a mirror
+// or a CDN-rewritten page is another origin: a synchronous cross-origin GET is
+// refused by the bootstrap before consent, and uploads send no CORS headers
+// anyway, so it could only ever fail. The page's own tag is preferred when it
+// is already same-origin (a proxy rewrote it); otherwise the content-hashed
+// path is requested from this origin, which a proxy forwards to the site and
+// a CDN-rewritten page still serves. Never a third-party host.
+function _fazStaticConfigRecoveryUrl(candidates) {
+    var origin = window.location && window.location.origin;
+    var valid = [];
+    for (var i = 0; i < candidates.length; i++) {
+        if (!candidates[i] || !_fazIsStaticConfigUrl(candidates[i].url)) continue;
+        var parsed = new URL(candidates[i].url, document.baseURI);
+        if (origin && parsed.origin === origin) return { url: parsed.href, source: candidates[i].source };
+        valid.push({ parsed: parsed, source: candidates[i].source });
+    }
+    if (!valid.length || !origin || 'null' === origin) return null;
+    // Rebase the server's own URL first: its path is the real uploads path,
+    // while a tag rewritten to a CDN may carry the CDN's layout.
+    valid.sort(function (a, b) { return ('inline' === b.source) - ('inline' === a.source); });
+    return { url: origin + valid[0].parsed.pathname + valid[0].parsed.search, source: 'rebased' };
 }
 // JSON syntax alone is not enough: an empty object (or a different cached
 // payload) would start the runtime without its blocking rules. Only the three
@@ -97,7 +136,7 @@ function _fazIsRecoveredStaticConfig(value, cfg) {
 // (Perfmatters, WP Rocket, LiteSpeed, generic lazy loaders).
 const _FAZ_STATIC_CONFIG_SRC_ATTRS = ['src', 'data-src', 'data-pmdelayedscript', 'data-rocket-src', 'data-litespeed-src', 'data-lazy-src'];
 const _fazStaticConfigRecovery = (function () {
-    var report = { attempted: false, ok: false, url: '', status: 0, contentType: '', nosniff: false, bytes: 0, verdict: '', tag: '' };
+    var report = { attempted: false, ok: false, url: '', source: '', status: 0, contentType: '', nosniff: false, bytes: 0, verdict: '', tag: '' };
     try {
         var cfg = window._fazConfig;
         if (!cfg || !cfg._staticConfigRequired) return report;
@@ -131,16 +170,17 @@ const _fazStaticConfigRecovery = (function () {
         }
         // The inline URL is the server's own word and survives an optimiser
         // that rewrote or removed the tag; the tag is the fallback for a page
-        // cached before the inline key existed. Either must name a
-        // content-hashed config file: this path fetches nothing else. The
-        // tag's URL is read off the DOM, which markup injected into the page
-        // could point at a foreign host serving a "configuration" with no
-        // blocking rule in it, so that fallback is taken from the page's own
-        // origin only (the server's inline URL may name a CDN host).
-        var url = (typeof cfg._staticConfigUrl === 'string' && _fazIsStaticConfigUrl(cfg._staticConfigUrl))
-            ? cfg._staticConfigUrl
-            : (found && _fazIsStaticConfigUrl(found.url) && _fazIsSameOriginUrl(found.url) ? found.url : '');
-        if (!url || typeof window.XMLHttpRequest !== 'function') return report;
+        // cached before the inline key existed, and the better source when a
+        // proxy rewrote it to this host. Either must name a content-hashed
+        // config file: this path fetches nothing else, and only from this
+        // page's origin (_fazStaticConfigRecoveryUrl).
+        var chosen = _fazStaticConfigRecoveryUrl([
+            found ? { url: found.url, source: 'tag' } : null,
+            typeof cfg._staticConfigUrl === 'string' ? { url: cfg._staticConfigUrl, source: 'inline' } : null
+        ]);
+        if (!chosen || typeof window.XMLHttpRequest !== 'function') return report;
+        var url = chosen.url;
+        report.source = chosen.source;
         report.attempted = true;
         report.url = url;
         // A fresh query string bypasses a poisoned (empty, truncated) entry
@@ -297,7 +337,7 @@ if ( ! _fazStore ) {
             'malformed': 'the file does not hold the expected configuration (truncated, or rewritten by a minifier or proxy): delete wp-content/uploads/faz-cookie-manager/assets/ and reload, and exclude faz-cookie-manager from JavaScript minify/combine',
             'not-found': 'the file does not exist (404): a full-page cache is serving HTML older than the generated assets, or the uploads directory was not copied; purge the page cache',
             'http': 'the server refused the file: check the web server, CDN or security rules for wp-content/uploads',
-            'network': 'the request did not complete (a network error, an ad-blocker rule, or a CDN host that does not allow it)',
+            'network': 'the request did not complete (a network error, an ad-blocker rule, or a proxy or CDN that does not serve wp-content/uploads/faz-cookie-manager/ on this host)',
             'error': 'the recovery could not run in this browser'
         };
         _fazStaticVerdict = ' A fresh request for ' + _fazR.url + ' returned HTTP ' + _fazR.status
