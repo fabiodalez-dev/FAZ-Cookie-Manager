@@ -128,7 +128,7 @@ while [ "$i" -lt "$TOTAL" ]; do
 try: s=json.load(open(sys.argv[1])).get("stats",{})
 except Exception: s={}
 print(sum(s.get(k,0) for k in ("expected","unexpected","flaky","skipped")))' "$json")
-    [ "$ran" = "0" ] && [ "$attempt" -eq 1 ] || break
+    if [ "$ran" != "0" ] || [ "$attempt" -ne 1 ]; then break; fi
     mv "$log" "${log%.log}.setup-failed.log"
     echo "batch $(printf '%02d' "$batch"): setup failed before any test ran; one more attempt (first log: ${log%.log}.setup-failed.log)"
   done
