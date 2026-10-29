@@ -53,6 +53,43 @@ const _FAZ_SCOPE_FP_KEY = "__scope.fp";
 // Focus-loop handlers per element; see _fazAttachFocusLoop().
 const _fazFocusLoopHandlers = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
 
+/**
+ * The Domain attribute a consent cookie may carry on `hostname`.
+ *
+ * `_rootDomain` is computed by PHP from the WordPress Address
+ * (faz_get_cookie_domain(), `.example.com` when subdomain sharing is on), and
+ * the page is not always served on that host. A translation proxy such as
+ * GTranslate's paid tier serves machine-translated copies of the same pages on
+ * OTHER registrable domains (example.de, example.pl): it rewrites every full
+ * URL in the HTML to the translated domain, but `_rootDomain` is a bare domain,
+ * not a URL, and arrives untouched. `document.cookie = "…; domain=.example.com"`
+ * on example.de is then silently rejected by the browser (RFC 6265 §5.3 step
+ * 6), so the consent was never stored there: the banner came back on every
+ * page, server-side blocking never saw a consent cookie and nothing was ever
+ * released. The same holds for a mirror, a CDN host or a staging copy that
+ * kept the production settings.
+ *
+ * Returns `rootDomain` unchanged when `hostname` is that domain or one of its
+ * subdomains (label boundary, so `badexample.com` does not match
+ * `.example.com`), and '' otherwise — a host-only cookie, which is what a page
+ * outside the configured scope can actually store. The choice is then made per
+ * domain, which is all a browser lets a site do across registrable domains.
+ * Declared here, at the top of the script and outside the runtime's block,
+ * for the old-WebKit rule described above; it reads nothing but its arguments.
+ *
+ * @param {string} rootDomain Configured cookie domain (`_rootDomain`), may be ''.
+ * @param {string} hostname   Host the page is served on (location.hostname).
+ * @returns {string}
+ */
+function _fazCookieDomainForHost(rootDomain, hostname) {
+    var root = String(rootDomain || '').trim().toLowerCase().replace(/\.$/, '');
+    var host = String(hostname || '').trim().toLowerCase().replace(/\.$/, '');
+    var bare = root.charAt(0) === '.' ? root.slice(1) : root;
+    if (!bare || !host) return '';
+    if (host === bare || host.slice(-(bare.length + 1)) === '.' + bare) return String(rootDomain).trim();
+    return '';
+}
+
 if ( ! _fazStore ) {
     // _fazConfig is injected by wp_localize_script. If it is missing (e.g. a
     // JS-defer plugin scoped the localize block inside a DOMContentLoaded
@@ -137,7 +174,12 @@ _fazRef._diag = function () {
         perServiceConsent: !!store._perServiceConsent,
         perCookieConsent: !!store._perCookieConsent,
         services: Array.isArray(store._services) ? store._services.map(function (s) { return s && s.id; }) : null,
-        catalogueCount: (store._serviceCatalogue && typeof store._serviceCatalogue === 'object') ? Object.keys(store._serviceCatalogue).length : 0
+        catalogueCount: (store._serviceCatalogue && typeof store._serviceCatalogue === 'object') ? Object.keys(store._serviceCatalogue).length : 0,
+        // The configured scope and the one this host actually writes: they
+        // differ on a translation-proxy / mirror domain, where '' (host-only)
+        // is correct and a non-empty value would be rejected by the browser.
+        rootDomain: store._rootDomain || '',
+        cookieDomain: _fazCookieDomainForHost(store._rootDomain, location.hostname)
     };
 };
 
@@ -789,10 +831,30 @@ _fazRef._fazGetCookie = function (name) {
  * @param {*} name Name of the cookie.
  * @param {*} value Value to be set.
  * @param {*} days Expiry in days.
- * @param {*} domain Cookie domain.
+ * @param {*} domain Cookie domain. Omitted, it is the configured consent scope
+ *                   (`_rootDomain`) as far as THIS host can store it — see
+ *                   _fazCookieDomainForHost(). An explicit value is used as
+ *                   given (the dead-cookie sweep passes each declared domain).
  */
-_fazRef._fazSetCookie = function (name, value, days = 0, domain = _fazStore._rootDomain) {
+_fazRef._fazSetCookie = function (name, value, days = 0, domain) {
     const date = new Date();
+    if (domain === undefined) {
+        domain = _fazCookieDomainForHost(_fazStore._rootDomain, location.hostname);
+        // Say once per page view why the cookie is host-only here: a support
+        // session otherwise sees `domain=.example.com` in the configuration
+        // and a cookie without it in the jar, and has to work out the proxy.
+        if (!domain && _fazStore._rootDomain && !_fazRef._fazCookieScopeNoted) {
+            _fazRef._fazCookieScopeNoted = true;
+            if (typeof console !== "undefined" && console.info) {
+                console.info(
+                    "[FAZ Cookie Manager] This page is served on " + location.hostname +
+                    ", outside the configured cookie domain " + _fazStore._rootDomain +
+                    " (a translation proxy such as GTranslate, a mirror or a CDN host). " +
+                    "Consent cookies are stored for this host only, so the choice made here applies to this domain."
+                );
+            }
+        }
+    }
     if (!!domain) {
         domain = `domain=${domain}`;
     }
@@ -10307,9 +10369,12 @@ function _fazSaveVendorConsent(choice) {
     const expiry = _fazStore._expiry || 180;
     const date = new Date();
     date.setTime(date.getTime() + (expiry * 24 * 60 * 60 * 1000));
+    // Same scope as the consent cookie: the configured domain only where this
+    // host can store it (_fazCookieDomainForHost()), host-only elsewhere.
     let domain = '';
-    if (_fazStore._rootDomain) {
-        domain = ';domain=' + _fazStore._rootDomain;
+    const scopedDomain = _fazCookieDomainForHost(_fazStore._rootDomain, location.hostname);
+    if (scopedDomain) {
+        domain = ';domain=' + scopedDomain;
     }
     const secure = location.protocol === 'https:' ? ';Secure' : '';
     const budget = _fazVendorRecordBudget();

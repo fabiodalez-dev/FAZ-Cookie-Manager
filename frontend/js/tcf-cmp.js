@@ -696,6 +696,25 @@
 	}
 
 	/**
+	 * The Domain attribute the TC cookie may carry on this host.
+	 *
+	 * Mirrors _fazCookieDomainForHost() in script.js (kept local: this file is
+	 * an IIFE that must not depend on the runtime's load order). The configured
+	 * `_rootDomain` comes from the WordPress Address; on a domain served
+	 * through a translation proxy (GTranslate) or a mirror it does not cover
+	 * the current host and the browser would silently reject the cookie, so
+	 * the record is written host-only there instead.
+	 */
+	function cookieDomain() {
+		var configured = (window._fazConfig && window._fazConfig._rootDomain) ? String(window._fazConfig._rootDomain).trim() : "";
+		var root = configured.toLowerCase().replace(/\.$/, "");
+		var host = String(location.hostname || "").toLowerCase().replace(/\.$/, "");
+		var bare = root.charAt(0) === "." ? root.slice(1) : root;
+		if (!bare || !host) return "";
+		return (host === bare || host.slice(-(bare.length + 1)) === "." + bare) ? configured : "";
+	}
+
+	/**
 	 * Write the euconsent-v2 cookie (standard TCF cookie name).
 	 */
 	function setEuconsentCookie(tcString) {
@@ -706,8 +725,9 @@
 		var date = new Date();
 		date.setTime(date.getTime() + (expiry * 24 * 60 * 60 * 1000));
 		var domain = "";
-		if (window._fazConfig && window._fazConfig._rootDomain) {
-			domain = ";domain=" + window._fazConfig._rootDomain;
+		var scoped = cookieDomain();
+		if (scoped) {
+			domain = ";domain=" + scoped;
 		}
 		var secure = location.protocol === "https:" ? ";Secure" : "";
 		document.cookie = cookieName("euconsent-v2") + "=" + tcString + ";expires=" + date.toUTCString() + ";path=/" + domain + ";SameSite=Lax" + secure;
@@ -717,6 +737,9 @@
 		var secure = location.protocol === "https:" ? ";Secure" : "";
 		var expired = cookieName("euconsent-v2") + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
 		document.cookie = expired + ";SameSite=Lax" + secure;
+		// Deletion still tries the configured scope unconditionally: on a host
+		// inside it that is where the record lives, and on one outside it the
+		// browser simply ignores an expiry for a domain it cannot set.
 		if (window._fazConfig && window._fazConfig._rootDomain) {
 			document.cookie = expired + ";domain=" + window._fazConfig._rootDomain + ";SameSite=Lax" + secure;
 		}
