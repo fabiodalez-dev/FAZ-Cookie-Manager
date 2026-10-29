@@ -366,8 +366,30 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 								esc_html( number_format_i18n( $faz_token_days ) )
 							);
 							echo ' ';
-							esc_html_e( 'A request with no same-origin signal, or no token at all, is normally automated traffic — but if that figure tracks your visitor numbers, your pages are being served on a host, scheme or port that differs from your WordPress Address: check that www and apex, http and https, and any non-default port all redirect to the canonical one. A database write failure is always a real visitor whose consent was lost.', 'faz-cookie-manager' );
+							esc_html_e( 'A request with no same-origin signal, or no token at all, is normally automated traffic — but if that figure tracks your visitor numbers, your pages are being served on a host, scheme or port that differs from your WordPress Address: check that www and apex, http and https, and any non-default port all redirect to the canonical one. If the site is served on another domain through a translation proxy (GTranslate, Weglot) or a mirror, add that domain under Settings → Trusted Alternate Domains (or the faz_trusted_origins filter). A database write failure is always a real visitor whose consent was lost.', 'faz-cookie-manager' );
 							echo ' ';
+							// Rate-limited records behind a translation proxy: every
+							// visitor of the translated domains reaches this origin from
+							// the proxy's few addresses, so the 10-second per-address
+							// window collides between unrelated people. Only said where
+							// that topology is known to exist, because on any other site
+							// the generic sentence below is the right one and naming a
+							// vendor's header would only confuse.
+							$faz_proxy_known = ! empty( \FazCookie\Includes\Integrations\Gtranslate::translated_hosts() )
+								|| ( function_exists( 'faz_trusted_origins' ) && ! empty( faz_trusted_origins() ) );
+							if ( $faz_proxy_known && ! empty( $faz_tally['causes']['throttled'] ) ) {
+								echo wp_kses(
+									sprintf(
+										/* translators: 1: the faz_trusted_proxy_cidrs filter name. 2: the faz_proxy_forwarded_header filter name. 3: the HTTP_X_GT_VIEWER_IP $_SERVER key. */
+										esc_html__( 'Rate-limited records on a site served through a translation proxy usually mean that every visitor of the translated domains reaches WordPress from the proxy\'s few addresses and shares one rate-limit window. Ask the proxy provider (GTranslate support) for its server address ranges, declare them with the %1$s filter, and read the visitor\'s own address from the header the proxy forwards (X-GT-Viewer-IP) with the %2$s filter returning %3$s. Forwarded headers are never believed from an undeclared address, because anyone can send them.', 'faz-cookie-manager' ),
+										'<code>faz_trusted_proxy_cidrs</code>',
+										'<code>faz_proxy_forwarded_header</code>',
+										'<code>HTTP_X_GT_VIEWER_IP</code>'
+									),
+									array( 'code' => array() )
+								);
+								echo ' ';
+							}
 							printf(
 								/* translators: %s: length of the reporting window, in days. */
 								esc_html__( 'This tally covers %s days whatever the token window is set to, and counts at most one refusal per visitor per cause every ten seconds, so it is a floor rather than an exact total.', 'faz-cookie-manager' ),
@@ -400,6 +422,44 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 				<tr><td><?php esc_html_e( 'GTM Data Layer', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['banner_control']['gtm_datalayer'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
 				<tr><td><?php esc_html_e( 'Age Gate', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['age_gate']['enabled'] ) ? faz_status_flag( true ) . ' ' . sprintf( /* translators: %d: minimum age in years. */ esc_html__( '(min age %d)', 'faz-cookie-manager' ), absint( $settings['age_gate']['min_age'] ?? 16 ) ) : faz_status_flag( false ) ); ?></td></tr>
 				<tr><td><?php esc_html_e( 'Cross-Domain Consent', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['consent_forwarding']['enabled'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
+				<?php
+				// The effective list the same-origin gates read, with where each
+				// entry came from: a refusal tally that keeps counting
+				// `cross_origin` on a proxied site is answered by this row, and
+				// an entry that arrived through the filter is otherwise invisible.
+				$faz_trusted_effective = function_exists( 'faz_trusted_origins' ) ? faz_trusted_origins() : array();
+				$faz_trusted_detected  = \FazCookie\Includes\Integrations\Gtranslate::translated_hosts();
+				$faz_trusted_setting   = array();
+				if ( isset( $settings['trusted_origins']['alternate_domains'] ) && is_array( $settings['trusted_origins']['alternate_domains'] ) && function_exists( 'faz_normalize_trusted_origin' ) ) {
+					$faz_trusted_setting = array_filter( array_map( 'faz_normalize_trusted_origin', $settings['trusted_origins']['alternate_domains'] ) );
+				}
+				?>
+				<tr>
+					<td><?php esc_html_e( 'Trusted Alternate Domains', 'faz-cookie-manager' ); ?></td>
+					<td>
+						<?php if ( empty( $faz_trusted_effective ) ) : ?>
+							<?php esc_html_e( 'None — consent records and Do-Not-Sell submissions are accepted from the WordPress Address only.', 'faz-cookie-manager' ); ?>
+						<?php else : ?>
+							<?php
+							$faz_trusted_lines = array();
+							foreach ( $faz_trusted_effective as $faz_trusted_entry ) {
+								if ( in_array( $faz_trusted_entry, $faz_trusted_detected, true ) ) {
+									$faz_trusted_source = __( 'GTranslate, auto-detected', 'faz-cookie-manager' );
+								} elseif ( in_array( $faz_trusted_entry, $faz_trusted_setting, true ) ) {
+									$faz_trusted_source = __( 'Settings', 'faz-cookie-manager' );
+								} else {
+									$faz_trusted_source = __( 'faz_trusted_origins filter', 'faz-cookie-manager' );
+								}
+								$faz_trusted_lines[] = '<code>' . esc_html( $faz_trusted_entry ) . '</code> (' . esc_html( $faz_trusted_source ) . ')';
+							}
+							echo wp_kses_post( implode( ', ', $faz_trusted_lines ) );
+							?>
+						<?php endif; ?>
+						<?php if ( \FazCookie\Includes\Integrations\Gtranslate::is_active() && empty( $faz_trusted_detected ) ) : ?>
+							<div class="faz-help"><?php esc_html_e( 'GTranslate is active but its settings describe no translated domain of their own (the free widget and the sub-directory plan stay on this host), so nothing was auto-detected.', 'faz-cookie-manager' ); ?></div>
+						<?php endif; ?>
+					</td>
+				</tr>
 				<tr><td><?php esc_html_e( 'Ad-Blocker Compat', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['banner_control']['alternative_asset_path'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
 				<tr><td><?php esc_html_e( 'Microsoft UET', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['microsoft']['uet_consent_mode'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>
 				<tr><td><?php esc_html_e( 'Microsoft Clarity', 'faz-cookie-manager' ); ?></td><td><?php echo wp_kses_post( ! empty( $settings['microsoft']['clarity_consent'] ) ? faz_status_flag( true ) : faz_status_flag( false ) ); ?></td></tr>

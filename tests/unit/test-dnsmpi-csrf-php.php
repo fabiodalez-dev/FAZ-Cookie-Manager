@@ -50,7 +50,26 @@ namespace {
 			return $url;
 		}
 	}
+	$GLOBALS['faz_test_filters'] = array();
+	if ( ! function_exists( 'sanitize_text_field' ) ) {
+		function sanitize_text_field( $value ) {
+			return trim( (string) $value );
+		}
+	}
+	if ( ! function_exists( 'get_option' ) ) {
+		function get_option( $name, $default = false ) {
+			return $default;
+		}
+	}
+	if ( ! function_exists( 'apply_filters' ) ) {
+		function apply_filters( $hook, $value, ...$args ) {
+			return isset( $GLOBALS['faz_test_filters'][ $hook ] ) ? call_user_func( $GLOBALS['faz_test_filters'][ $hook ], $value, ...$args ) : $value;
+		}
+	}
 
+	// The gate itself is faz_is_same_origin_request(), shared with the
+	// consent log since the trusted-alternate-domains change.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-utils.php';
 	require_once dirname( __DIR__, 2 ) . '/includes/class-ip-hasher.php';
 	require_once dirname( __DIR__, 2 ) . '/includes/class-do-not-sell-shortcode.php';
 
@@ -112,6 +131,28 @@ namespace {
 		false === $same_origin( array( 'HTTP_SEC_FETCH_SITE' => 'cross-site', 'HTTP_REFERER' => 'https://example.test/' ) ),
 		'11 cross-site Fetch-Site is honoured even with a site-looking Referer'
 	);
+
+	// --- Trusted alternate domains: the opt-out form on a translated domain ---
+	// GTranslate's proxy serves the shortcode page on example.de and forwards
+	// the visitor's same-origin admin-ajax POST without Sec-Fetch-* and with
+	// Origin: https://example.de. Refusing it left the translated site's
+	// visitors with an opt-out form that never worked.
+	check( false === $same_origin( array( 'HTTP_ORIGIN' => 'https://example.de' ) ), '12 premise: an untrusted translated domain is REJECTED' );
+	$GLOBALS['faz_test_filters']['faz_trusted_origins'] = function ( $list ) {
+		$list[] = 'example.de';
+		$list[] = 'https://mirror.example.pl:8443';
+		return $list;
+	};
+	check( true === $same_origin( array( 'HTTP_ORIGIN' => 'https://example.de' ) ), '13 trusted host (filter) on Origin, no Sec-Fetch-Site -> allowed' );
+	check( true === $same_origin( array( 'HTTP_REFERER' => 'https://example.de/ochrana-udaju/' ) ), '14 trusted host on the Referer fallback -> allowed' );
+	check( true === $same_origin( array( 'HTTP_SEC_FETCH_SITE' => 'cross-site', 'HTTP_ORIGIN' => 'https://example.de' ) ), '15 Sec-Fetch-Site cross-site + trusted Origin -> allowed' );
+	check( false === $same_origin( array( 'HTTP_SEC_FETCH_SITE' => 'cross-site', 'HTTP_ORIGIN' => 'https://evil.example.com' ) ), '16 Sec-Fetch-Site cross-site + untrusted Origin -> REJECTED' );
+	check( false === $same_origin( array( 'HTTP_ORIGIN' => 'https://evil.example.com' ) ), '17 untrusted Origin still REJECTED with trusted domains configured' );
+	check( false === $same_origin( array( 'HTTP_SEC_FETCH_SITE' => 'none', 'HTTP_ORIGIN' => 'https://example.de' ) ), '18 Sec-Fetch-Site none -> REJECTED even with a trusted Origin' );
+	check( true === $same_origin( array( 'HTTP_ORIGIN' => 'https://mirror.example.pl:8443' ) ), '19 full-origin entry, exact match -> allowed' );
+	check( false === $same_origin( array( 'HTTP_ORIGIN' => 'http://mirror.example.pl:8443' ) ), '20 full-origin entry, scheme mismatch -> REJECTED' );
+	check( false === $same_origin( array() ), '21 no provenance header -> still REJECTED' );
+	unset( $GLOBALS['faz_test_filters']['faz_trusted_origins'] );
 
 	echo "\nPassed: $passed\nFailed: $failed\n";
 	if ( $failed > 0 ) {

@@ -217,51 +217,38 @@ class Do_Not_Sell_Shortcode {
 	 * cannot suppress its own Origin on a cross-origin POST, so this cannot be
 	 * spoofed away by the attacker's page.
 	 *
-	 * Prefers the Fetch Metadata signal (`Sec-Fetch-Site`): only `same-origin`
-	 * is accepted. `same-site` would admit sibling subdomains (a compromised
+	 * Prefers the Fetch Metadata signal (`Sec-Fetch-Site`): `same-origin` is
+	 * accepted. `same-site` alone would admit sibling subdomains (a compromised
 	 * subdomain could scrape the public nonce and replay the mutation), and a
 	 * POST can never legitimately report `none` (that value is reserved for
-	 * user-initiated navigations). When the header is absent (older clients),
-	 * falls back to requiring the `Origin` (or `Referer`) scheme, host, AND
-	 * port to match home_url() — host alone would again let a sibling
-	 * subdomain or a different-scheme/port origin through.
+	 * user-initiated navigations). When the header is absent (older clients,
+	 * or a proxy that does not forward it), falls back to requiring the
+	 * `Origin` (or `Referer`) scheme, host, AND port to match home_url() —
+	 * host alone would again let a sibling subdomain or a different-scheme/port
+	 * origin through.
+	 *
+	 * The one widening is an origin the site declared as its own: the hosts a
+	 * translation proxy (GTranslate), a mirror or a CDN serves this same site
+	 * on — Settings → Trusted Alternate Domains, the auto-detected GTranslate
+	 * domains and the `faz_trusted_origins` filter. The opt-out form rendered
+	 * there posts with that host in Origin, and refusing it left a visitor of
+	 * the translated site unable to opt out at all. Shared with the consent
+	 * log through faz_is_same_origin_request(); see it for the exact rules.
+	 *
+	 * No usable origin signal at all is still a refusal, because nothing
+	 * proves the request came from this site. Browsers attach `Origin` to
+	 * every non-GET fetch/XHR — including same-origin ones — so the normal
+	 * submission carries it even under `Referrer-Policy: no-referrer`. The
+	 * residual gap is a client old enough to send neither `Sec-Fetch-Site`
+	 * (Chrome 76+, Firefox 90+, Safari 16.4+) nor `Origin` on a same-origin
+	 * POST, on a site that also suppresses the Referer: there the opt-out is
+	 * refused rather than silently accepted, which is the safe direction for
+	 * a state change.
 	 *
 	 * @return bool True when the request is same-origin.
 	 */
 	private function is_same_origin_request() {
-		if ( ! empty( $_SERVER['HTTP_SEC_FETCH_SITE'] ) ) {
-			$fetch_site = sanitize_key( wp_unslash( $_SERVER['HTTP_SEC_FETCH_SITE'] ) );
-			return 'same-origin' === $fetch_site;
-		}
-
-		$site    = wp_parse_url( home_url( '/' ) );
-		$request = array();
-		if ( ! empty( $_SERVER['HTTP_ORIGIN'] ) ) {
-			$request = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) );
-		} elseif ( ! empty( $_SERVER['HTTP_REFERER'] ) ) {
-			$request = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) );
-		}
-		if ( ! is_array( $site ) || ! is_array( $request ) ) {
-			return false;
-		}
-
-		// No usable origin signal at all: reject, because nothing proves the
-		// request came from this site. Browsers attach `Origin` to every
-		// non-GET fetch/XHR — including same-origin ones — so the normal
-		// submission carries it even under `Referrer-Policy: no-referrer`.
-		// The residual gap is a client old enough to send neither
-		// `Sec-Fetch-Site` (Chrome 76+, Firefox 90+, Safari 16.4+) nor
-		// `Origin` on a same-origin POST, on a site that also suppresses the
-		// Referer: there the opt-out is refused rather than silently
-		// accepted, which is the safe direction for a state change.
-		// Ports default per scheme so an explicit ":443" and an implicit
-		// https origin still match.
-		return ! empty( $site['scheme'] ) && ! empty( $site['host'] )
-			&& ! empty( $request['scheme'] ) && ! empty( $request['host'] )
-			&& strtolower( $request['scheme'] ) === strtolower( $site['scheme'] )
-			&& strtolower( $request['host'] ) === strtolower( $site['host'] )
-			&& (int) ( isset( $request['port'] ) ? $request['port'] : ( 'https' === strtolower( $request['scheme'] ) ? 443 : 80 ) )
-				=== (int) ( isset( $site['port'] ) ? $site['port'] : ( 'https' === strtolower( $site['scheme'] ) ? 443 : 80 ) );
+		return faz_is_same_origin_request();
 	}
 
 	/**

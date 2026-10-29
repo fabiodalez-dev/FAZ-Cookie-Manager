@@ -607,13 +607,13 @@ class Consent_Logger {
 
 		switch ( $cause ) {
 			case self::CAUSE_CROSS_ORIGIN:
-				$why = 'the request carried no same-origin signal. That is usually automated traffic, but if this figure tracks your visitor numbers your pages are being served on a host, scheme or port that differs from your WordPress Address (Settings -> General): check that www/apex, http/https and any non-default port all redirect to the canonical one.';
+				$why = 'the request carried no same-origin signal. That is usually automated traffic, but if this figure tracks your visitor numbers your pages are being served on a host, scheme or port that differs from your WordPress Address (Settings -> General): check that www/apex, http/https and any non-default port all redirect to the canonical one. If the site is served on another domain through a translation proxy (GTranslate, Weglot) or a mirror, add that domain under Settings -> Trusted Alternate Domains (filter faz_trusted_origins).';
 				break;
 			case self::CAUSE_MISSING_TOKEN:
 				$why = 'the request carried no origin token at all, which the plugin\'s own frontend never does. Automated traffic is the usual source.';
 				break;
 			case self::CAUSE_THROTTLED:
-				$why = 'the request was rate-limited. Visitors sharing one outbound address can collide here.';
+				$why = 'the request was rate-limited. Visitors sharing one outbound address can collide here. Behind a translation proxy such as GTranslate every visitor of the translated domains arrives from the proxy\'s few addresses: declare its ranges with the faz_trusted_proxy_cidrs filter and read the visitor address it forwards in X-GT-Viewer-IP with faz_proxy_forwarded_header returning HTTP_X_GT_VIEWER_IP.';
 				break;
 			case self::CAUSE_WRITE_FAILED:
 				$why = 'the record could not be written to the database. This one is always a real visitor\'s real consent — check the wp_faz_consent_logs table and the database error log.';
@@ -1056,7 +1056,7 @@ class Consent_Logger {
 	}
 
 	/**
-	 * Accept only a browser POST initiated by this exact origin.
+	 * Accept only a browser POST initiated by this site's own pages.
 	 *
 	 * Consent logging is an anonymous endpoint. A public, cache-compatible
 	 * token is useful as a request-origin marker but cannot distinguish the
@@ -1064,35 +1064,17 @@ class Consent_Logger {
 	 * when unavailable, match scheme, host and effective port of Origin (or
 	 * Referer) against home_url(). Reject when no trustworthy signal exists.
 	 *
+	 * Delegates to faz_is_same_origin_request(), shared with the Do-Not-Sell
+	 * form, which also accepts the origins of faz_trusted_origins(): the hosts
+	 * a translation proxy (GTranslate), a mirror or a CDN serves this same site
+	 * on. Without that every consent given on such a host was refused as
+	 * `cross_origin` — the proxy forwards the browser's same-origin POST
+	 * without Sec-Fetch-Site and with its own host in Origin. Kept as a private
+	 * method so the gate stays one call at the top of handle_rest_consent().
+	 *
 	 * @return bool
 	 */
 	private function is_same_origin_request() {
-		if ( ! empty( $_SERVER['HTTP_SEC_FETCH_SITE'] ) ) {
-			$fetch_site = sanitize_key( wp_unslash( $_SERVER['HTTP_SEC_FETCH_SITE'] ) );
-			return 'same-origin' === $fetch_site;
-		}
-
-		$site    = wp_parse_url( home_url( '/' ) );
-		$request = array();
-		if ( ! empty( $_SERVER['HTTP_ORIGIN'] ) ) {
-			$request = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) );
-		} elseif ( ! empty( $_SERVER['HTTP_REFERER'] ) ) {
-			$request = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) );
-		}
-		if ( ! is_array( $site ) || ! is_array( $request ) ) {
-			return false;
-		}
-
-		$site_scheme    = isset( $site['scheme'] ) ? strtolower( $site['scheme'] ) : '';
-		$request_scheme = isset( $request['scheme'] ) ? strtolower( $request['scheme'] ) : '';
-		$site_host      = isset( $site['host'] ) ? strtolower( $site['host'] ) : '';
-		$request_host   = isset( $request['host'] ) ? strtolower( $request['host'] ) : '';
-		$site_port      = isset( $site['port'] ) ? (int) $site['port'] : ( 'https' === $site_scheme ? 443 : 80 );
-		$request_port   = isset( $request['port'] ) ? (int) $request['port'] : ( 'https' === $request_scheme ? 443 : 80 );
-
-		return '' !== $site_scheme && '' !== $site_host
-			&& $site_scheme === $request_scheme
-			&& $site_host === $request_host
-			&& $site_port === $request_port;
+		return faz_is_same_origin_request();
 	}
 }

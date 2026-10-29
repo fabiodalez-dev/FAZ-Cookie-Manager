@@ -153,6 +153,10 @@ namespace {
 		public function get_param( $key ) { return array_key_exists( $key, $this->params ) ? $this->params[ $key ] : null; }
 	}
 
+	// The same-origin gate lives in includes/class-utils.php
+	// (faz_is_same_origin_request()); the doubles above win over its
+	// function_exists()-guarded copies.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-utils.php';
 	require_once dirname( __DIR__, 2 ) . '/frontend/modules/consent-logger/class-consent-logger.php';
 
 	use FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger;

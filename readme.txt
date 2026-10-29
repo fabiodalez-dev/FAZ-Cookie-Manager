@@ -269,6 +269,20 @@ Yes. Every consent action (accept, reject, customize) is recorded in a local dat
 
 Yes. The Languages page lets you select from 180+ available languages. Each banner you create carries its own translations for every language you enable — the banner text (title, description, button labels) is stored per-language inside the banner row, and the language displayed to the visitor is resolved client-side from `navigator.languages`. WPML / Polylang URL-based language switching is auto-detected and always cache-safe.
 
+= Does it work with GTranslate or another translation proxy that serves my site on other domains? =
+
+Yes. GTranslate's paid plans (and similar proxies, mirrors or CDN hosts) serve translated copies of your pages on other hosts — `example.de`, `de.example.com` — and forward every request made there, including the consent log and the Do-Not-Sell form, back to your WordPress site. Three things follow, and the plugin handles each one:
+
+* **The consent cookie on a translated domain.** A browser cannot share a cookie between different registrable domains, so on `example.de` the consent is stored for that domain only, even when "Share consent across subdomains" is on for `example.com`. The visitor makes their choice once per domain. (Earlier versions wrote the cookie for the configured domain, which the browser rejects on another domain, so the banner came back on every page.) A cookie the server itself sets, such as the Do-Not-Sell confirmation, is host-only too.
+* **Consent records and Do-Not-Sell submissions from those domains.** They arrive with the translated domain as their origin and used to be refused as "cross-origin". The domains GTranslate's own settings describe (Enterprise plan: custom domains or language sub-domains) are now trusted automatically while GTranslate is active. Any other domain is added under **Settings → Trusted Alternate Domains** (one per line: a bare domain, or a full URL when the scheme or port matters), or with the `faz_trusted_origins` filter. **System Status** lists the effective domains and where each came from.
+* **"Rate-limited" consent records.** Every visitor of the translated domains reaches your server from the proxy's few addresses, so they share one rate-limit window. The plugin never believes a forwarded address from an unknown sender, because anyone can send one. Ask GTranslate support for the proxy's address ranges, then declare them and name the header the proxy forwards the visitor's address in:
+
+`add_filter( 'faz_trusted_proxy_cidrs', function ( $cidrs ) { return array_merge( $cidrs, array( '203.0.113.0/24' ) ); } );`
+
+`add_filter( 'faz_proxy_forwarded_header', function () { return 'HTTP_X_GT_VIEWER_IP'; } );`
+
+Replace `203.0.113.0/24` with the ranges you were given. See "My site is behind Cloudflare or a reverse proxy" below for how these two filters work.
+
 = Does multi-banner mean one banner per language? =
 
 No — multi-banner routing is per visitor **country** (e.g. GDPR vs CCPA, EU vs US), not per language. Each banner row carries its OWN multilingual content: title, description and button labels translated for every language you support. The visitor's country selects the banner; the visitor's browser language then selects which translated strings to render inside that banner. So an install with one EU-targeted GDPR banner (carrying English + Italian + German + French translations) and one US-targeted CCPA banner (carrying English + Spanish translations) needs only TWO banner rows, not eight. See the "Multi-banner geo-routing vs multilingual content" section in the Description for the full architecture.

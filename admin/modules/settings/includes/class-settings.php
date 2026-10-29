@@ -307,6 +307,15 @@ class Settings extends Store {
 				'enabled'        => false,
 				'target_domains' => array(),
 			),
+			// Other hosts on which THIS site is served (translation proxy such
+			// as GTranslate, mirror, CDN host). Read by faz_trusted_origins():
+			// the consent log and the Do-Not-Sell form accept requests from
+			// them. Bare hosts or full http(s) origins, see
+			// faz_normalize_trusted_origin(). Leaf deliberately not a generic
+			// 'hosts' — sanitize_option() matches leaves by bare name.
+			'trusted_origins'   => array(
+				'alternate_domains' => array(),
+			),
 			'age_gate'          => array(
 				'enabled' => false,
 				'min_age' => 16,
@@ -391,6 +400,9 @@ class Settings extends Store {
 			'custom_rules',
 			'target_regions',
 			'target_domains',
+			// trusted_origins.alternate_domains: a list of strings whose default
+			// is an empty array — recursing would wipe every entry.
+			'alternate_domains',
 			'whitelist_patterns',
 			'exempt_levels',
 			'payment_gateways',
@@ -805,6 +817,33 @@ class Settings extends Store {
 				}, $value ), function ( $item ) {
 					return '' !== $item;
 				} ) );
+				break;
+			case 'alternate_domains':
+				// Trusted alternate domains: a bare host (`example.de`) or an
+				// http(s) URL (`https://example.de:8443`), one per entry; the
+				// admin textarea is split into lines by settings.js, a string
+				// from a REST/import payload is split here the same way.
+				// Stored canonical (lowercase host, or scheme://host[:port]) so
+				// System Status shows exactly what is matched; anything else —
+				// `javascript:`, wildcards, paths only, single-label names — is
+				// dropped by faz_normalize_trusted_origin().
+				if ( is_string( $value ) ) {
+					$value = preg_split( '/[\r\n,]+/', $value );
+				}
+				if ( ! is_array( $value ) ) {
+					$value = array();
+					break;
+				}
+				$clean = array();
+				foreach ( $value as $item ) {
+					$item = function_exists( 'faz_normalize_trusted_origin' )
+						? faz_normalize_trusted_origin( is_string( $item ) ? sanitize_text_field( $item ) : '' )
+						: '';
+					if ( '' !== $item ) {
+						$clean[ $item ] = true;
+					}
+				}
+				$value = array_keys( $clean );
 				break;
 			case 'excluded_pages':
 			case 'sites':
