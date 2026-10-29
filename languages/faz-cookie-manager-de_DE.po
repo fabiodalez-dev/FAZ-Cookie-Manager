@@ -8634,6 +8634,132 @@ msgid_plural "Script meta field(s) (opt_in_script/opt_out_script) were stripped 
 msgstr[0] "Die Skript-Meta-Felder (opt_in_script/opt_out_script) wurden aus %d importierten Eintrag entfernt, weil dem aktuellen Benutzer die Berechtigung unfiltered_html fehlt. Führen Sie den Vorgang als Super-Admin erneut aus, um die Skriptfelder zu erhalten."
 msgstr[1] "Die Skript-Meta-Felder (opt_in_script/opt_out_script) wurden aus %d importierten Einträgen entfernt, weil dem aktuellen Benutzer die Berechtigung unfiltered_html fehlt. Führen Sie den Vorgang als Super-Admin erneut aus, um die Skriptfelder zu erhalten."
 
+#: admin/views/settings.php:236 admin/views/system-status.php:438
+msgid "Trusted Alternate Domains"
+msgstr ""
+
+#: admin/views/settings.php:240
+msgid "Domains this site is also served on"
+msgstr ""
+
+#: admin/views/settings.php:241
+msgid "One per line: example.de or https://shop.example.de:8443"
+msgstr ""
+
+#: admin/views/settings.php:242
+msgid "Domains on which this same WordPress site is served by something in front of it: a translation proxy such as GTranslate, Weglot sub-domains, a mirror or a CDN host. Consent records and Do-Not-Sell submissions arriving from these domains are accepted instead of being refused as cross-origin. Enter a bare domain to trust it over http and https, or a full URL when the scheme or a non-default port matters. Only list domains whose pages are this site's own. Developers can also use the faz_trusted_origins filter."
+msgstr ""
+
+#: admin/views/settings.php:245
+msgid "Detected automatically from your GTranslate settings and already trusted (no need to add them here):"
+msgstr ""
+
+#: admin/views/settings.php:249
+msgid "On these domains the consent cookie is stored for that domain only, because a browser cannot share a cookie between different registrable domains: a visitor chooses once per domain."
+msgstr ""
+
+#: admin/views/system-status.php:98
+msgid "Runtime Bundle"
+msgstr ""
+
+#: admin/views/system-status.php:100
+msgid "unknown"
+msgstr ""
+
+#. translators: 1: version of the frontend runtime bundle, 2: plugin version from the main plugin file.
+#: admin/views/system-status.php:107
+#, php-format
+msgid "The frontend runtime is %1$s but the plugin reports %2$s: the plugin directory mixes files from two versions (an interrupted update, a partial deployment or staging sync, or a second copy of the plugin). Reinstall the plugin through Plugins → Add New → Upload Plugin or the updater, then purge every page, CDN and optimiser cache."
+msgstr ""
+
+#. translators: 1: number of installed copies of the plugin, 2: comma-separated list of plugin folders with their versions.
+#: admin/views/system-status.php:126
+#, php-format
+msgid "%1$s copies of FAZ Cookie Manager are installed: %2$s. Keep one: delete the others from Plugins (or wp-content/plugins) so only one main file can load."
+msgstr ""
+
+#. translators: %s: HTTP status code.
+#: admin/views/system-status.php:216
+#, php-format
+msgid "The configuration file is not served (HTTP %s): check the web server, security or staging-protection rules for wp-content/uploads."
+msgstr ""
+
+#: admin/views/system-status.php:220
+msgid "An HTML page answered instead of the script: a login, maintenance or staging-protection layer intercepts static files under wp-content/uploads. Exempt that folder."
+msgstr ""
+
+#. translators: 1: bytes served, 2: bytes on disk.
+#: admin/views/system-status.php:224
+#, php-format
+msgid "The served copy is empty, truncated or rewritten (%1$s of %2$s bytes): purge the server and CDN cache for wp-content/uploads/faz-cookie-manager/assets/, and exclude that folder from minification."
+msgstr ""
+
+#. translators: %s: the Content-Type header the file is served with.
+#: admin/views/system-status.php:232
+#, php-format
+msgid "The file is served as \"%s\", not as JavaScript; with X-Content-Type-Options: nosniff a browser refuses to run it. Map .js to application/javascript for wp-content/uploads in the web server or CDN."
+msgstr ""
+
+#: admin/views/system-status.php:239
+msgid "Generated Assets"
+msgstr ""
+
+#: admin/views/system-status.php:241
+msgid "unavailable"
+msgstr ""
+
+#. translators: 1: number of config-*.js files, 2: number of banner-*.css files.
+#: admin/views/system-status.php:246
+#, php-format
+msgid "%1$s configuration files (config-*.js), %2$s banner stylesheets (banner-*.css)."
+msgstr ""
+
+#. translators: 1: file name, 2: error message.
+#: admin/views/system-status.php:255
+#, php-format
+msgid "Could not request %1$s from the server itself (%2$s). This check needs loopback requests; open the file in a browser and look at its status, Content-Type and size instead."
+msgstr ""
+
+#. translators: 1: file name, 2: HTTP status code, 3: Content-Type header, 4: number of bytes served.
+#: admin/views/system-status.php:263
+#, php-format
+msgid "Most recently used: %1$s — HTTP %2$s, Content-Type \"%3$s\", %4$s bytes."
+msgstr ""
+
+#: admin/views/system-status.php:369
+msgid "A request with no same-origin signal, or no token at all, is normally automated traffic — but if that figure tracks your visitor numbers, your pages are being served on a host, scheme or port that differs from your WordPress Address: check that www and apex, http and https, and any non-default port all redirect to the canonical one. If the site is served on another domain through a translation proxy (GTranslate, Weglot) or a mirror, add that domain under Settings → Trusted Alternate Domains (or the faz_trusted_origins filter). A database write failure is always a real visitor whose consent was lost."
+msgstr ""
+
+#. translators: 1: the faz_trusted_proxy_cidrs filter name. 2: the faz_proxy_forwarded_header filter name. 3: the HTTP_X_GT_VIEWER_IP $_SERVER key.
+#: admin/views/system-status.php:384
+#, php-format
+msgid "Rate-limited records on a site served through a translation proxy usually mean that every visitor of the translated domains reaches WordPress from the proxy's few addresses and shares one rate-limit window. Ask the proxy provider (GTranslate support) for its server address ranges, declare them with the %1$s filter, and read the visitor's own address from the header the proxy forwards (X-GT-Viewer-IP) with the %2$s filter returning %3$s. Forwarded headers are never believed from an undeclared address, because anyone can send them."
+msgstr ""
+
+#: admin/views/system-status.php:441
+msgid "None — consent records and Do-Not-Sell submissions are accepted from the WordPress Address only."
+msgstr ""
+
+#: admin/views/system-status.php:447
+msgid "GTranslate, auto-detected"
+msgstr ""
+
+#: admin/views/system-status.php:451
+msgid "faz_trusted_origins filter"
+msgstr ""
+
+#: admin/views/system-status.php:459
+msgid "GTranslate is active but its settings describe no translated domain of their own (the free widget and the sub-directory plan stay on this host), so nothing was auto-detected."
+msgstr ""
+
+#. translators: %s: number of generated asset files that are empty on disk.
+#: admin/views/system-status.php:208
+#, php-format
+msgid "%s generated file is empty on disk; the next page view rewrites it, then purge any CDN or server cache of wp-content/uploads/faz-cookie-manager/assets/."
+msgid_plural "%s generated files are empty on disk; the next page views rewrite them, then purge any CDN or server cache of wp-content/uploads/faz-cookie-manager/assets/."
+msgstr[0] ""
+msgstr[1] ""
+
 #~ msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it, so <strong>forms protected by them will not submit before consent</strong>. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
 #~ msgstr "Erlaubt Google reCAPTCHA, hCaptcha und Cloudflare Turnstile, vor der Einwilligung zu laden, als Schutz der Formulare, die ein Besucher absendet. Ob das als unbedingt erforderlich gilt, hängt von Ihrer Rechtsberatung ab: In manchen Ländern wird erwartet, dass reCAPTCHA auf die Einwilligung wartet, weil es Daten an Google sendet. Wenn Sie dies ausschalten, werden diese Dienste in der Kategorie Funktionale zurückgehalten, bis der Besucher sie akzeptiert, daher <strong>lassen sich damit geschützte Formulare vor der Einwilligung nicht absenden</strong>. Die CAPTCHA-Einträge, die dieses Plugin standardmäßig zu den Skript-Blockierungsausnahmen hinzufügt, werden ignoriert, solange dies ausgeschaltet ist; jede Ausnahme, die Sie selbst eingetragen haben, hat weiterhin Vorrang."
 
