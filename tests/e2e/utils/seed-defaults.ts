@@ -91,6 +91,15 @@ export function resetBaseline(): void {
 
     update_option( 'faz_settings', $faz_settings );
 
+    // WooCommerce "coming soon" mode replaces every front-end page with a
+    // placeholder for logged-out visitors, so the DSAR form page renders no
+    // form and six DSAR assertions fail as if the shortcode were broken. A
+    // store that is still in coming-soon mode on a fresh install arrives here
+    // with 'yes'; no spec wants it.
+    if ( false !== get_option( 'woocommerce_coming_soon', false ) ) {
+      update_option( 'woocommerce_coming_soon', 'no' );
+    }
+
     delete_option( 'faz_banner_template' );
     if ( function_exists( 'faz_clear_banner_template_cache' ) ) { faz_clear_banner_template_cache(); }
 

@@ -108,15 +108,30 @@ while [ "$i" -lt "$TOTAL" ]; do
   slice=("${SPECS[@]:$i:$BATCH_SIZE}")
   log="$OUT/batch-$(printf '%02d' $batch).log"
 
-  rm -f "$OUT/batch-$(printf '%02d' "$batch").json"
-  reset_site || exit 2
-  PLAYWRIGHT_JSON_OUTPUT_NAME="$OUT/batch-$(printf '%02d' "$batch").json" \
-  CI=1 WP_BASE_URL="$BASE_URL" WP_ADMIN_USER="${WP_ADMIN_USER:-admin}" WP_ADMIN_PASS="${WP_ADMIN_PASS:-admin}" \
-    WP_PATH="$WP" \
-    FAZ_PLUGIN_DEPLOY_PATH="$WP/wp-content/plugins/faz-cookie-manager/" \
-    npx playwright test -c tests/e2e/playwright.config.ts "${slice[@]}" \
-    --workers="$E2E_WORKERS" --retries=0 --reporter=line,json > "$log" 2>&1
-  rc=$?
+  json="$OUT/batch-$(printf '%02d' "$batch").json"
+  # A batch whose global setup dies (a WP-CLI call timing out while the
+  # machine is loaded) has run no test at all: there is no result to keep or
+  # to hide, so it gets exactly one more attempt. A batch that ran even one
+  # test is never repeated — --retries=0 still holds for every assertion.
+  for attempt in 1 2; do
+    rm -f "$json"
+    reset_site || exit 2
+    PLAYWRIGHT_JSON_OUTPUT_NAME="$json" \
+    CI=1 WP_BASE_URL="$BASE_URL" WP_ADMIN_USER="${WP_ADMIN_USER:-admin}" WP_ADMIN_PASS="${WP_ADMIN_PASS:-admin}" \
+      WP_PATH="$WP" \
+      FAZ_PLUGIN_DEPLOY_PATH="$WP/wp-content/plugins/faz-cookie-manager/" \
+      npx playwright test -c tests/e2e/playwright.config.ts "${slice[@]}" \
+      --workers="$E2E_WORKERS" --retries=0 --reporter=line,json > "$log" 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] && break
+    ran=$(python3 -c 'import json,sys
+try: s=json.load(open(sys.argv[1])).get("stats",{})
+except Exception: s={}
+print(sum(s.get(k,0) for k in ("expected","unexpected","flaky","skipped")))' "$json")
+    [ "$ran" = "0" ] && [ "$attempt" -eq 1 ] || break
+    mv "$log" "${log%.log}.setup-failed.log"
+    echo "batch $(printf '%02d' "$batch"): setup failed before any test ran; one more attempt (first log: ${log%.log}.setup-failed.log)"
+  done
 	[ "$rc" -eq 0 ] || overall_rc=1
 
   # The line reporter's tail carries the counts. Removing ESC alone leaves CSI

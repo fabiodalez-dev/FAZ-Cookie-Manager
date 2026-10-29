@@ -98,6 +98,22 @@ test.beforeAll(async ({}, testInfo) => {
     $t['add-subdirectory-to-default-language'] = 'no';
     update_option( 'trp_settings', $t );
 
+    // Saving trp_settings directly skips the TranslatePress settings screen,
+    // which is what creates the per-language tables. Without
+    // wp_trp_gettext_it_it every /it/ request retries ~9,000 failing string
+    // INSERTs (WooCommerce states and cities) and takes 18s — the probe then
+    // times out at 15s with FAZ deactivated just the same.
+    if ( class_exists( 'TRP_Translate_Press' ) ) {
+      $q = TRP_Translate_Press::get_trp_instance()->get_component( 'query' );
+      if ( $q && method_exists( $q, 'check_table' ) ) {
+        $q->check_table( 'en_US', 'it_IT' );
+      }
+      $g = ( $q && method_exists( $q, 'get_query_component' ) ) ? $q->get_query_component( 'gettext_table_creation' ) : null;
+      if ( $g && method_exists( $g, 'check_gettext_table' ) ) {
+        $g->check_gettext_table( 'it_IT' );
+      }
+    }
+
     $s = get_option( 'faz_settings', array() );
     if ( ! is_array( $s ) ) { $s = array(); }
     $s['languages'] = array( 'default' => 'en', 'selected' => array( 'en', 'it' ) );
