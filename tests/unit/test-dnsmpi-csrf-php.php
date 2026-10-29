@@ -145,6 +145,7 @@ namespace {
 	};
 	check( true === $same_origin( array( 'HTTP_ORIGIN' => 'https://example.de' ) ), '13 trusted host (filter) on Origin, no Sec-Fetch-Site -> allowed' );
 	check( true === $same_origin( array( 'HTTP_REFERER' => 'https://example.de/ochrana-udaju/' ) ), '14 trusted host on the Referer fallback -> allowed' );
+	check( false === $same_origin( array( 'HTTP_ORIGIN' => 'http://example.de' ) ), '14b bare-host entry over http on an https site -> REJECTED' );
 	check( true === $same_origin( array( 'HTTP_SEC_FETCH_SITE' => 'cross-site', 'HTTP_ORIGIN' => 'https://example.de' ) ), '15 Sec-Fetch-Site cross-site + trusted Origin -> allowed' );
 	check( false === $same_origin( array( 'HTTP_SEC_FETCH_SITE' => 'cross-site', 'HTTP_ORIGIN' => 'https://evil.example.com' ) ), '16 Sec-Fetch-Site cross-site + untrusted Origin -> REJECTED' );
 	check( false === $same_origin( array( 'HTTP_ORIGIN' => 'https://evil.example.com' ) ), '17 untrusted Origin still REJECTED with trusted domains configured' );

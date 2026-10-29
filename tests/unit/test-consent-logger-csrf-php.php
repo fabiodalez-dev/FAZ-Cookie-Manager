@@ -98,7 +98,7 @@ namespace {
 		return $list;
 	};
 	consent_logger_check( $check( array( 'HTTP_ORIGIN' => 'https://example.de' ) ), 'a trusted host from the filter is accepted on Origin (proxy stripped Sec-Fetch-*)' );
-	consent_logger_check( $check( array( 'HTTP_ORIGIN' => 'http://example.de' ) ), 'a bare-host entry is trusted over http as well' );
+	consent_logger_check( ! $check( array( 'HTTP_ORIGIN' => 'http://example.de' ) ), 'a bare-host entry is https-only on an https site (an http page there can be rewritten on the network path)' );
 	consent_logger_check( $check( array( 'HTTP_REFERER' => 'https://example.de/kosik/' ) ), 'a trusted host is accepted on the Referer fallback' );
 	consent_logger_check( $check( array( 'HTTP_SEC_FETCH_SITE' => 'cross-site', 'HTTP_ORIGIN' => 'https://example.de' ) ), 'Sec-Fetch-Site cross-site with a trusted Origin is accepted (non-rewriting mirror)' );
 	consent_logger_check( $check( array( 'HTTP_SEC_FETCH_SITE' => 'same-site', 'HTTP_ORIGIN' => 'https://example.de' ) ), 'Sec-Fetch-Site same-site with a trusted Origin is accepted' );

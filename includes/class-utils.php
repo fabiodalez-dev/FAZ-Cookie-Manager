@@ -1177,8 +1177,9 @@ if ( ! function_exists( 'faz_normalize_trusted_origin' ) ) {
 	 * One trusted-origin entry in its canonical form, or '' for junk.
 	 *
 	 * Two shapes are accepted, and they mean different things:
-	 *   - a bare host (`example.de`) — that host on http or https, on the
-	 *     scheme's default port. What a translation proxy or a mirror is in
+	 *   - a bare host (`example.de`) — that host on the scheme's default port,
+	 *     over https when the WordPress Address is https (both schemes only on
+	 *     a plain-http site). What a translation proxy or a mirror is in
 	 *     practice, and what an administrator types;
 	 *   - a full http(s) URL (`https://shop.example.de:8443/anything`) — that
 	 *     exact origin and nothing else, normalised to `scheme://host[:port]`
@@ -1273,7 +1274,8 @@ if ( ! function_exists( 'faz_trusted_origins' ) ) {
 		 * Requests from these origins pass the same-origin check of the consent
 		 * log and of the Do-Not-Sell form, and admin-ajax/REST calls into this
 		 * plugin's own endpoints get CORS headers for them. Return bare hosts
-		 * (`example.de`: that host over http or https, default ports) or full
+		 * (`example.de`: that host on the default port, https-only on an https
+		 * site) or full
 		 * origins (`https://example.de:8443`: exactly that).
 		 *
 		 * @since 1.34.5
@@ -1293,12 +1295,67 @@ if ( ! function_exists( 'faz_trusted_origins' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_site_is_https' ) ) {
+	/**
+	 * Whether the WordPress Address is served over https.
+	 *
+	 * The line the bare-host entries of faz_trusted_origins() are drawn on:
+	 * on an https site only an https origin is this site's own.
+	 *
+	 * @since 1.34.5
+	 * @return bool
+	 */
+	function faz_site_is_https() {
+		$site = faz_parse_origin( home_url( '/' ) );
+		return null !== $site && 'https' === $site['scheme'];
+	}
+}
+
+if ( ! function_exists( 'faz_public_ajax_actions' ) ) {
+	/**
+	 * The admin-ajax actions this plugin serves to anonymous visitors.
+	 *
+	 * Exactly the `wp_ajax_nopriv_*` registrations: the origin-token refresh
+	 * of the consent log and pageview beacons, the Do-Not-Sell opt-out,
+	 * rescind and nonce refresh, and the data request form's submit and
+	 * refresh. These are the only admin-ajax actions a page on a trusted
+	 * alternate domain may call with CORS; an action the plugin registers for
+	 * logged-in users only never joins the list through a prefix.
+	 *
+	 * @since 1.34.5
+	 * @return string[]
+	 */
+	function faz_public_ajax_actions() {
+		$actions = array(
+			'faz_origin_tokens',
+			'faz_dnsmpi_optout',
+			'faz_dnsmpi_rescind',
+			'faz_dnsmpi_nonce',
+			'faz_dsar_submit',
+			'faz_dsar_refresh',
+		);
+		/**
+		 * Filters the public admin-ajax actions trusted alternate domains may call.
+		 *
+		 * @since 1.34.5
+		 * @param string[] $actions Action names, as registered with wp_ajax_nopriv_*.
+		 */
+		$actions = apply_filters( 'faz_public_ajax_actions', $actions );
+		return array_values( array_filter( array_map( 'strval', (array) $actions ) ) );
+	}
+}
+
 if ( ! function_exists( 'faz_origin_is_trusted' ) ) {
 	/**
 	 * Whether a URL's origin is one of faz_trusted_origins().
 	 *
 	 * A full-origin entry needs scheme, host AND port to match; a bare-host
-	 * entry matches that host on http or https at the scheme's default port.
+	 * entry matches that host at the scheme's default port — over https only
+	 * when the WordPress Address is https: a plain-http `http://example.de`
+	 * page can be rewritten by anyone on the network path, and from it a
+	 * forged consent record or opt-out could be posted, so an http origin on
+	 * an https site is trusted only when spelled out in full. Both schemes
+	 * match on a plain-http site, which has no such guarantee to lose.
 	 * Exact host only: trusting `example.de` does not trust `x.example.de`.
 	 *
 	 * @since 1.34.5
@@ -1310,6 +1367,7 @@ if ( ! function_exists( 'faz_origin_is_trusted' ) ) {
 		if ( null === $request ) {
 			return false;
 		}
+		$https_only = faz_site_is_https();
 		foreach ( faz_trusted_origins() as $entry ) {
 			if ( false !== strpos( $entry, '://' ) ) {
 				$trusted = faz_parse_origin( $entry );
@@ -1319,7 +1377,7 @@ if ( ! function_exists( 'faz_origin_is_trusted' ) ) {
 				continue;
 			}
 			$default = 'https' === $request['scheme'] ? 443 : 80;
-			if ( $entry === $request['host'] && $default === $request['port'] ) {
+			if ( $entry === $request['host'] && $default === $request['port'] && ( ! $https_only || 'https' === $request['scheme'] ) ) {
 				return true;
 			}
 		}
@@ -1396,9 +1454,13 @@ if ( ! function_exists( 'faz_request_targets_plugin_surface' ) ) {
 	/**
 	 * Whether this request is for one of the plugin's own endpoints.
 	 *
-	 * A REST route under `/faz/v1/`, or admin-ajax.php with an action that
-	 * starts with `faz_`. The scope of the CORS widening below: nothing else
-	 * on the site may answer a trusted origin with credentialed CORS.
+	 * A REST route under `/faz/v1/`, or admin-ajax.php with one of the
+	 * plugin's PUBLIC (nopriv) actions, faz_public_ajax_actions(). The scope
+	 * of the CORS widening below: nothing else on the site may answer a
+	 * trusted origin with credentialed CORS. The prefix alone was too wide:
+	 * `faz_` also names administrator-only actions, and on a translated
+	 * sub-domain (same-site, so the browser sends the login cookies) a proxied
+	 * page could have read their responses in the administrator's session.
 	 *
 	 * @since 1.34.5
 	 * @return bool
@@ -1425,7 +1487,7 @@ if ( ! function_exists( 'faz_request_targets_plugin_surface' ) ) {
 
 		$doing_ajax = function_exists( 'wp_doing_ajax' ) && wp_doing_ajax();
 		if ( $doing_ajax && isset( $_REQUEST['action'] ) && is_string( $_REQUEST['action'] ) ) {
-			return 0 === strpos( sanitize_key( wp_unslash( $_REQUEST['action'] ) ), 'faz_' );
+			return in_array( sanitize_key( wp_unslash( $_REQUEST['action'] ) ), faz_public_ajax_actions(), true );
 		}
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		return false;
@@ -1445,7 +1507,8 @@ if ( ! function_exists( 'faz_allowed_http_origins' ) ) {
 	 * the list is widened only while faz_request_targets_plugin_surface() holds
 	 * and is left exactly as core built it for every other request.
 	 *
-	 * A bare-host entry contributes both its http and https origins.
+	 * A bare-host entry contributes its https origin, and its http origin
+	 * only on a plain-http site (faz_origin_is_trusted() draws the same line).
 	 *
 	 * @since 1.34.5
 	 * @param string[] $origins Origins core allows.
@@ -1455,8 +1518,15 @@ if ( ! function_exists( 'faz_allowed_http_origins' ) ) {
 		if ( ! is_array( $origins ) || ! faz_request_targets_plugin_surface() ) {
 			return $origins;
 		}
+		$https_only = faz_site_is_https();
 		foreach ( faz_trusted_origins() as $entry ) {
-			$add = false !== strpos( $entry, '://' ) ? array( $entry ) : array( 'http://' . $entry, 'https://' . $entry );
+			if ( false !== strpos( $entry, '://' ) ) {
+				$add = array( $entry );
+			} elseif ( $https_only ) {
+				$add = array( 'https://' . $entry );
+			} else {
+				$add = array( 'http://' . $entry, 'https://' . $entry );
+			}
 			foreach ( $add as $origin ) {
 				if ( ! in_array( $origin, $origins, true ) ) {
 					$origins[] = $origin;

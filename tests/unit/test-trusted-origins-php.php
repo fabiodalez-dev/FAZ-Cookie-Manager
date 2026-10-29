@@ -46,7 +46,7 @@ namespace {
 	function sanitize_text_field( $value ) { return trim( preg_replace( '/[\x00-\x1F\x7F]/', '', strip_tags( (string) $value ) ) ); }
 	function absint( $value ) { return abs( (int) $value ); }
 	function wp_unslash( $value ) { return is_string( $value ) ? stripslashes( $value ) : $value; }
-	function home_url( $path = '' ) { return 'https://www.dilnastore.cz' . $path; }
+	function home_url( $path = '' ) { return ( isset( $GLOBALS['faz_test_home_url'] ) ? $GLOBALS['faz_test_home_url'] : 'https://www.dilnastore.cz' ) . $path; }
 	function wp_parse_url( $url, $component = -1 ) { return parse_url( (string) $url, $component ); }
 	function esc_url_raw( $url ) { return (string) $url; }
 	function wp_doing_ajax() { return (bool) $GLOBALS['faz_test_ajax']; }
@@ -161,7 +161,9 @@ namespace {
 	$core = array( 'http://www.dilnastore.cz', 'https://www.dilnastore.cz' );
 	$GLOBALS['faz_test_options']['faz_settings'] = array( 'trusted_origins' => array( 'alternate_domains' => array( 'https://cdn.example.net:8443' ) ) );
 	$GLOBALS['faz_test_options']['GTranslate']   = $custom_array; // dilnastore.com only.
-	$widened = array( 'http://www.dilnastore.cz', 'https://www.dilnastore.cz', 'https://cdn.example.net:8443', 'http://dilnastore.com', 'https://dilnastore.com' );
+	// home_url() is https, so a bare host contributes its https origin only:
+	// an http page on that host could be rewritten on the network path.
+	$widened = array( 'http://www.dilnastore.cz', 'https://www.dilnastore.cz', 'https://cdn.example.net:8443', 'https://dilnastore.com' );
 	$reset   = function () {
 		unset( $GLOBALS['wp'] );
 		$_GET    = array();
@@ -172,7 +174,7 @@ namespace {
 
 	$reset();
 	$GLOBALS['wp'] = (object) array( 'query_vars' => array( 'rest_route' => '/faz/v1/consent' ) );
-	tro_same( faz_allowed_http_origins( $core ), $widened, 'REST /faz/v1/consent (parsed route): trusted origins added, bare hosts on both schemes' );
+	tro_same( faz_allowed_http_origins( $core ), $widened, 'REST /faz/v1/consent (parsed route): trusted origins added, bare hosts as https only on an https site' );
 	$GLOBALS['wp'] = (object) array( 'query_vars' => array( 'rest_route' => '/wp/v2/users/me' ) );
 	tro_same( faz_allowed_http_origins( $core ), $core, 'REST /wp/v2/users/me: core list untouched' );
 	$GLOBALS['wp'] = (object) array( 'query_vars' => array( 'rest_route' => '/faz/v10/x' ) );
@@ -196,6 +198,19 @@ namespace {
 	tro_same( faz_allowed_http_origins( $core ), $widened, 'admin-ajax action=faz_origin_tokens: widened' );
 	$_REQUEST['action'] = 'heartbeat';
 	tro_same( faz_allowed_http_origins( $core ), $core, 'admin-ajax action=heartbeat: untouched' );
+	// Administrator-only actions share the prefix; on a translated sub-domain
+	// the browser sends the login cookies (same-site), and core answers with
+	// Access-Control-Allow-Credentials, so a proxied page could have read the
+	// admin's responses. Only the nopriv actions are widened.
+	$_REQUEST['action'] = 'faz_dismiss_unmatched';
+	tro_same( faz_allowed_http_origins( $core ), $core, 'admin-ajax action=faz_dismiss_unmatched (administrators only): untouched despite the prefix' );
+	$_REQUEST['action'] = 'faz_dsar_refresh';
+	tro_same( faz_allowed_http_origins( $core ), $widened, 'admin-ajax action=faz_dsar_refresh (nopriv): widened' );
+	$GLOBALS['faz_test_filters']['faz_public_ajax_actions'] = function ( $actions ) { $actions[] = 'faz_custom_public'; return $actions; };
+	$_REQUEST['action'] = 'faz_custom_public';
+	tro_same( faz_allowed_http_origins( $core ), $widened, 'an action added through faz_public_ajax_actions is widened' );
+	unset( $GLOBALS['faz_test_filters']['faz_public_ajax_actions'] );
+	tro_same( faz_allowed_http_origins( $core ), $core, 'and is not without the filter' );
 	$_REQUEST['action'] = 'woocommerce_faz_lookalike';
 	tro_same( faz_allowed_http_origins( $core ), $core, 'an action that merely contains faz_ is not the plugin\'s' );
 	$GLOBALS['faz_test_ajax'] = false;
@@ -207,7 +222,13 @@ namespace {
 	$GLOBALS['faz_test_filters']['faz_trusted_origins'] = function () { return array(); };
 	tro_same( faz_allowed_http_origins( $core ), $core, 'nothing trusted: nothing added even on the plugin\'s routes' );
 	unset( $GLOBALS['faz_test_filters']['faz_trusted_origins'] );
-	tro_same( faz_allowed_http_origins( array_merge( $core, array( 'https://dilnastore.com' ) ) ), array( 'http://www.dilnastore.cz', 'https://www.dilnastore.cz', 'https://dilnastore.com', 'https://cdn.example.net:8443', 'http://dilnastore.com' ), 'an origin already allowed is not duplicated' );
+	tro_same( faz_allowed_http_origins( array_merge( $core, array( 'https://dilnastore.com' ) ) ), array( 'http://www.dilnastore.cz', 'https://www.dilnastore.cz', 'https://dilnastore.com', 'https://cdn.example.net:8443' ), 'an origin already allowed is not duplicated' );
+	$GLOBALS['faz_test_home_url'] = 'http://www.dilnastore.cz';
+	tro_same( faz_allowed_http_origins( $core ), array( 'http://www.dilnastore.cz', 'https://www.dilnastore.cz', 'https://cdn.example.net:8443', 'http://dilnastore.com', 'https://dilnastore.com' ), 'on a plain-http site a bare host contributes both schemes' );
+	tro_same( faz_origin_is_trusted( 'http://dilnastore.com' ), true, 'and matches an http origin there' );
+	unset( $GLOBALS['faz_test_home_url'] );
+	tro_same( faz_origin_is_trusted( 'http://dilnastore.com' ), false, 'on the https site the same http origin is refused' );
+	tro_same( faz_origin_is_trusted( 'https://dilnastore.com' ), true, 'while its https origin is trusted' );
 	$reset();
 
 	echo "\n== Settings sanitiser: trusted_origins.alternate_domains ==\n";
@@ -236,10 +257,10 @@ namespace {
 	$declare_ranges = function ( $cidrs ) { return array_merge( (array) $cidrs, array( '85.10.20.0/24' ) ); };
 	$name_header    = function () { return 'HTTP_X_GT_VIEWER_IP'; };
 
-	$_SERVER = array( 'REMOTE_ADDR' => $gt_peer, 'HTTP_X_GT_VIEWER_IP' => $visitor );
-	tro_same( faz_resolve_client_ip(), $gt_peer, 'nothing declared: the proxy address stands (a forwarded header is not believed)' );
+	$_SERVER = array( 'REMOTE_ADDR' => $gt_peer, 'HTTP_X_GT_VIEWER_IP' => $visitor, 'HTTP_X_FORWARDED_FOR' => '9.9.9.9' );
+	tro_same( faz_resolve_client_ip(), $gt_peer, 'nothing declared: the proxy address stands (neither forwarded header is believed)' );
 	$GLOBALS['faz_test_filters']['faz_trusted_proxy_cidrs'] = $declare_ranges;
-	tro_same( faz_resolve_client_ip(), $gt_peer, 'ranges declared, header not named: X-Forwarded-For is read, X-GT-Viewer-IP is not' );
+	tro_same( faz_resolve_client_ip(), '9.9.9.9', 'ranges declared, header not named: X-Forwarded-For is read, X-GT-Viewer-IP is not' );
 	$GLOBALS['faz_test_filters']['faz_proxy_forwarded_header'] = $name_header;
 	tro_same( faz_resolve_client_ip(), $visitor, 'ranges + faz_proxy_forwarded_header=HTTP_X_GT_VIEWER_IP: the visitor\'s own address' );
 	tro_same( faz_client_ip_identifies_visitor(), true, 'and that address identifies one visitor, so each gets their own throttle window' );
@@ -247,8 +268,8 @@ namespace {
 	tro_same( faz_resolve_client_ip(), $visitor, 'a single-address header with padding is read' );
 	$_SERVER = array( 'REMOTE_ADDR' => $gt_peer, 'HTTP_X_GT_VIEWER_IP' => '10.0.0.5' );
 	tro_same( faz_resolve_client_ip(), $gt_peer, 'a private address in the header is not a visitor: the peer stands' );
-	$_SERVER = array( 'REMOTE_ADDR' => $gt_peer );
-	tro_same( faz_resolve_client_ip(), $gt_peer, 'a declared peer that sent no header: the peer stands, no fallback to another header' );
+	$_SERVER = array( 'REMOTE_ADDR' => $gt_peer, 'HTTP_X_FORWARDED_FOR' => '9.9.9.9' );
+	tro_same( faz_resolve_client_ip(), $gt_peer, 'a declared peer that sent no X-GT-Viewer-IP: the peer stands, no fallback to X-Forwarded-For' );
 	$_SERVER = array( 'REMOTE_ADDR' => '9.9.9.9', 'HTTP_X_GT_VIEWER_IP' => '1.2.3.4' );
 	tro_same( faz_resolve_client_ip(), '9.9.9.9', 'an undeclared peer forging X-GT-Viewer-IP gets nothing' );
 	unset( $GLOBALS['faz_test_filters']['faz_trusted_proxy_cidrs'], $GLOBALS['faz_test_filters']['faz_proxy_forwarded_header'] );
