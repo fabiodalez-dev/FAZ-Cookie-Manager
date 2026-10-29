@@ -1144,6 +1144,329 @@ if ( ! function_exists( 'faz_ip_cache_key' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_parse_origin' ) ) {
+	/**
+	 * Scheme, host and effective port of an http(s) URL, or null.
+	 *
+	 * The one parser the same-origin gates compare with, so an explicit
+	 * ":443" and an implicit https origin are the same origin everywhere.
+	 *
+	 * @since 1.34.5
+	 * @param string $url Origin, Referer or configured URL.
+	 * @return array{scheme:string,host:string,port:int}|null
+	 */
+	function faz_parse_origin( $url ) {
+		$parts = wp_parse_url( (string) $url );
+		if ( ! is_array( $parts ) || empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+			return null;
+		}
+		$scheme = strtolower( (string) $parts['scheme'] );
+		if ( 'http' !== $scheme && 'https' !== $scheme ) {
+			return null;
+		}
+		return array(
+			'scheme' => $scheme,
+			'host'   => rtrim( strtolower( (string) $parts['host'] ), '.' ),
+			'port'   => isset( $parts['port'] ) ? (int) $parts['port'] : ( 'https' === $scheme ? 443 : 80 ),
+		);
+	}
+}
+
+if ( ! function_exists( 'faz_normalize_trusted_origin' ) ) {
+	/**
+	 * One trusted-origin entry in its canonical form, or '' for junk.
+	 *
+	 * Two shapes are accepted, and they mean different things:
+	 *   - a bare host (`example.de`) — that host on http or https, on the
+	 *     scheme's default port. What a translation proxy or a mirror is in
+	 *     practice, and what an administrator types;
+	 *   - a full http(s) URL (`https://shop.example.de:8443/anything`) — that
+	 *     exact origin and nothing else, normalised to `scheme://host[:port]`
+	 *     with a default port dropped, which is the spelling a browser sends in
+	 *     `Origin` and the one core's allowed_http_origins list compares with.
+	 * Lowercased, trailing dot dropped. No wildcards, no paths, no bare
+	 * `host:port` (write the URL when the port matters), no single-label names.
+	 *
+	 * @since 1.34.5
+	 * @param mixed $entry Raw entry.
+	 * @return string
+	 */
+	function faz_normalize_trusted_origin( $entry ) {
+		if ( ! is_string( $entry ) ) {
+			return '';
+		}
+		$entry = strtolower( trim( $entry ) );
+		if ( '' === $entry ) {
+			return '';
+		}
+		$host_ok = function ( $host ) {
+			if ( filter_var( trim( $host, '[]' ), FILTER_VALIDATE_IP ) ) {
+				return true;
+			}
+			return (bool) preg_match( '/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/', $host );
+		};
+
+		if ( false !== strpos( $entry, '://' ) ) {
+			$origin = faz_parse_origin( $entry );
+			if ( null === $origin || ! $host_ok( $origin['host'] ) || $origin['port'] < 1 || $origin['port'] > 65535 ) {
+				return '';
+			}
+			$default = 'https' === $origin['scheme'] ? 443 : 80;
+			return $origin['scheme'] . '://' . $origin['host'] . ( $default === $origin['port'] ? '' : ':' . $origin['port'] );
+		}
+
+		// A bare host. A path pasted after it is dropped; a port is not
+		// guessed at (it would only ever match one of the two schemes).
+		$host = rtrim( (string) preg_replace( '#[/?\#].*$#', '', $entry ), '.' );
+		if ( false !== strpos( $host, ':' ) && ! filter_var( trim( $host, '[]' ), FILTER_VALIDATE_IP ) ) {
+			return '';
+		}
+		return $host_ok( $host ) ? $host : '';
+	}
+}
+
+if ( ! function_exists( 'faz_trusted_origins' ) ) {
+	/**
+	 * Other origins on which THIS WordPress site is served.
+	 *
+	 * The same-origin gates of the anonymous consent log and of the Do-Not-Sell
+	 * form compare the request's Origin with home_url(). That is right until
+	 * the site's own pages are served on another host by something in front
+	 * of WordPress: a translation proxy (GTranslate's paid tiers serve
+	 * example.de / de.example.com and forward every request — /wp-json,
+	 * admin-ajax.php — to this origin, without the Fetch Metadata headers), a
+	 * mirror, a CDN host, Weglot sub-domains. Every genuine consent record then
+	 * arrived with a foreign Origin and was refused as `cross_origin`.
+	 *
+	 * Three sources, merged in this order:
+	 *   1. Settings → Trusted Alternate Domains
+	 *      (`trusted_origins.alternate_domains`);
+	 *   2. the domains GTranslate's own settings say its proxy serves the site
+	 *      on, while GTranslate is active (Integrations\Gtranslate) — zero
+	 *      configuration for the case that prompted this;
+	 *   3. the `faz_trusted_origins` filter, which sees 1 and 2 and may add to
+	 *      or remove from them.
+	 * Each entry is a bare host or a full origin; see
+	 * faz_normalize_trusted_origin() for what each one matches.
+	 *
+	 * Trusting an origin here is a statement that pages on it are this site's
+	 * own: a page there can then record consent and submit the opt-out form.
+	 * Never derive it from a request header — the proxy's `X-GT-*` headers are
+	 * forgeable by anyone who can reach the origin.
+	 *
+	 * @since 1.34.5
+	 * @return string[] Canonical entries, unique, in source order.
+	 */
+	function faz_trusted_origins() {
+		$list     = array();
+		$settings = function_exists( 'get_option' ) ? get_option( 'faz_settings', array() ) : array();
+		if ( is_array( $settings ) && isset( $settings['trusted_origins']['alternate_domains'] ) && is_array( $settings['trusted_origins']['alternate_domains'] ) ) {
+			$list = array_values( $settings['trusted_origins']['alternate_domains'] );
+		}
+		if ( class_exists( '\FazCookie\Includes\Integrations\Gtranslate' ) ) {
+			$list = array_merge( $list, \FazCookie\Includes\Integrations\Gtranslate::translated_hosts() );
+		}
+
+		/**
+		 * Origins on which this site's own pages are served.
+		 *
+		 * Requests from these origins pass the same-origin check of the consent
+		 * log and of the Do-Not-Sell form, and admin-ajax/REST calls into this
+		 * plugin's own endpoints get CORS headers for them. Return bare hosts
+		 * (`example.de`: that host over http or https, default ports) or full
+		 * origins (`https://example.de:8443`: exactly that).
+		 *
+		 * @since 1.34.5
+		 * @param string[] $list Entries from the setting plus the auto-detected
+		 *                       GTranslate domains.
+		 */
+		$list = apply_filters( 'faz_trusted_origins', $list );
+
+		$out = array();
+		foreach ( (array) $list as $entry ) {
+			$entry = faz_normalize_trusted_origin( $entry );
+			if ( '' !== $entry ) {
+				$out[ $entry ] = true;
+			}
+		}
+		return array_keys( $out );
+	}
+}
+
+if ( ! function_exists( 'faz_origin_is_trusted' ) ) {
+	/**
+	 * Whether a URL's origin is one of faz_trusted_origins().
+	 *
+	 * A full-origin entry needs scheme, host AND port to match; a bare-host
+	 * entry matches that host on http or https at the scheme's default port.
+	 * Exact host only: trusting `example.de` does not trust `x.example.de`.
+	 *
+	 * @since 1.34.5
+	 * @param string $url Origin or Referer.
+	 * @return bool
+	 */
+	function faz_origin_is_trusted( $url ) {
+		$request = faz_parse_origin( $url );
+		if ( null === $request ) {
+			return false;
+		}
+		foreach ( faz_trusted_origins() as $entry ) {
+			if ( false !== strpos( $entry, '://' ) ) {
+				$trusted = faz_parse_origin( $entry );
+				if ( null !== $trusted && $trusted === $request ) {
+					return true;
+				}
+				continue;
+			}
+			$default = 'https' === $request['scheme'] ? 443 : 80;
+			if ( $entry === $request['host'] && $default === $request['port'] ) {
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
+if ( ! function_exists( 'faz_is_same_origin_request' ) ) {
+	/**
+	 * Accept only a browser request initiated by this site's own pages.
+	 *
+	 * The CSRF control of the anonymous consent-log endpoint and of the
+	 * Do-Not-Sell opt-out/rescind handlers, whose public tokens and nonces are
+	 * rendered into cacheable pages and so cannot tell this site's page from a
+	 * third-party one replaying them. A page cannot suppress or forge the
+	 * Origin, Referer or Sec-Fetch-Site headers of its own requests.
+	 *
+	 * Accepted when, in this order:
+	 *   1. `Sec-Fetch-Site: same-origin`;
+	 *   2. `Sec-Fetch-Site` is `same-site` or `cross-site` and `Origin` is a
+	 *      trusted origin (faz_trusted_origins()) — a browser on a mirror or a
+	 *      translated sub-domain that left the endpoint URLs on this host posts
+	 *      here directly, cross-origin. Origin only: a browser always sends it
+	 *      on such a request. `none` (a user navigation) is never a POST;
+	 *   3. no Fetch Metadata at all, and `Origin` (else `Referer`) matches
+	 *      home_url() in scheme, host and effective port — host alone would let
+	 *      a sibling sub-domain or another scheme/port through — or is a trusted
+	 *      origin. A proxy that serves the site on another host forwards the
+	 *      browser's same-origin request without the Sec-Fetch-* headers and
+	 *      with `Origin: https://<that host>`, which is how this branch is
+	 *      reached on a GTranslate domain.
+	 * Refused when no provenance header is present at all: nothing then proves
+	 * the request came from this site, and refusing a state change is the safe
+	 * direction.
+	 *
+	 * @since 1.34.5 (shared; the two private copies predate it)
+	 * @return bool
+	 */
+	function faz_is_same_origin_request() {
+		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- each value is sanitised (sanitize_key / esc_url_raw) on read.
+		$fetch_site = ! empty( $_SERVER['HTTP_SEC_FETCH_SITE'] ) ? sanitize_key( wp_unslash( $_SERVER['HTTP_SEC_FETCH_SITE'] ) ) : '';
+		if ( 'same-origin' === $fetch_site ) {
+			return true;
+		}
+		$origin = ! empty( $_SERVER['HTTP_ORIGIN'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
+
+		if ( '' !== $fetch_site ) {
+			if ( 'none' === $fetch_site || '' === $origin ) {
+				return false;
+			}
+			return faz_origin_is_trusted( $origin );
+		}
+
+		$source = '' !== $origin
+			? $origin
+			: ( ! empty( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : '' );
+		// phpcs:enable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		if ( '' === $source ) {
+			return false;
+		}
+		$request = faz_parse_origin( $source );
+		$site    = faz_parse_origin( home_url( '/' ) );
+		if ( null === $request ) {
+			return false;
+		}
+		if ( null !== $site && $site === $request ) {
+			return true;
+		}
+		return faz_origin_is_trusted( $source );
+	}
+}
+
+if ( ! function_exists( 'faz_request_targets_plugin_surface' ) ) {
+	/**
+	 * Whether this request is for one of the plugin's own endpoints.
+	 *
+	 * A REST route under `/faz/v1/`, or admin-ajax.php with an action that
+	 * starts with `faz_`. The scope of the CORS widening below: nothing else
+	 * on the site may answer a trusted origin with credentialed CORS.
+	 *
+	 * @since 1.34.5
+	 * @return bool
+	 */
+	function faz_request_targets_plugin_surface() {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- routing inspection only; nothing is read as data.
+		$route = '';
+		if ( isset( $GLOBALS['wp'] ) && is_object( $GLOBALS['wp'] ) && ! empty( $GLOBALS['wp']->query_vars['rest_route'] ) ) {
+			$route = (string) $GLOBALS['wp']->query_vars['rest_route'];
+		} elseif ( isset( $_GET['rest_route'] ) && is_string( $_GET['rest_route'] ) ) {
+			$route = sanitize_text_field( wp_unslash( $_GET['rest_route'] ) );
+		} elseif ( ! empty( $_SERVER['REQUEST_URI'] ) && is_string( $_SERVER['REQUEST_URI'] ) ) {
+			// Before parse_request has run: read the pretty-permalink path.
+			$prefix = '/' . trim( function_exists( 'rest_get_url_prefix' ) ? (string) rest_get_url_prefix() : 'wp-json', '/' ) . '/';
+			$path   = (string) wp_parse_url( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH );
+			$at     = strpos( $path, $prefix );
+			if ( false !== $at ) {
+				$route = '/' . substr( $path, $at + strlen( $prefix ) );
+			}
+		}
+		if ( '' !== $route ) {
+			return 0 === strpos( '/' . ltrim( $route, '/' ), '/faz/v1/' );
+		}
+
+		$doing_ajax = function_exists( 'wp_doing_ajax' ) ? wp_doing_ajax() : ( defined( 'DOING_AJAX' ) && DOING_AJAX );
+		if ( $doing_ajax && isset( $_REQUEST['action'] ) && is_string( $_REQUEST['action'] ) ) {
+			return 0 === strpos( sanitize_key( wp_unslash( $_REQUEST['action'] ) ), 'faz_' );
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		return false;
+	}
+}
+
+if ( ! function_exists( 'faz_allowed_http_origins' ) ) {
+	/**
+	 * `allowed_http_origins` callback: add the trusted origins, on our endpoints only.
+	 *
+	 * For the mirror that does NOT rewrite the endpoint URLs: its pages call
+	 * this origin's /wp-json/faz/v1/… and admin-ajax.php?action=faz_… directly,
+	 * cross-origin, and need CORS headers to read the response. Core consults
+	 * this list in is_allowed_http_origin(), which admin-ajax.php's
+	 * send_origin_headers() uses (core's REST server already reflects any
+	 * Origin). Core sends `Access-Control-Allow-Credentials: true` with it, so
+	 * the list is widened only while faz_request_targets_plugin_surface() holds
+	 * and is left exactly as core built it for every other request.
+	 *
+	 * A bare-host entry contributes both its http and https origins.
+	 *
+	 * @since 1.34.5
+	 * @param string[] $origins Origins core allows.
+	 * @return string[]
+	 */
+	function faz_allowed_http_origins( $origins ) {
+		if ( ! is_array( $origins ) || ! faz_request_targets_plugin_surface() ) {
+			return $origins;
+		}
+		foreach ( faz_trusted_origins() as $entry ) {
+			$add = false !== strpos( $entry, '://' ) ? array( $entry ) : array( 'http://' . $entry, 'https://' . $entry );
+			foreach ( $add as $origin ) {
+				if ( ! in_array( $origin, $origins, true ) ) {
+					$origins[] = $origin;
+				}
+			}
+		}
+		return $origins;
+	}
+}
+
 if ( ! function_exists( 'faz_path_matches_pattern' ) ) {
 	/**
 	 * Match a URL path against a glob-like pattern with case-folding and

@@ -170,6 +170,10 @@
 			if (data.consent_forwarding && Array.isArray(data.consent_forwarding.target_domains)) {
 				data.consent_forwarding.target_domains = data.consent_forwarding.target_domains.join('\n');
 			}
+			// Trusted alternate domains: same array <-> one-per-line textarea.
+			if (data.trusted_origins && Array.isArray(data.trusted_origins.alternate_domains)) {
+				data.trusted_origins.alternate_domains = data.trusted_origins.alternate_domains.join('\n');
+			}
 			// PMP exempt levels: array of IDs -> comma-separated string for the input field.
 			if (data.integrations && data.integrations.paid_memberships_pro
 				&& Array.isArray(data.integrations.paid_memberships_pro.exempt_levels)) {
@@ -439,6 +443,12 @@
 			// Convert target domains back to array
 			if (formData.consent_forwarding && typeof formData.consent_forwarding.target_domains === 'string') {
 				formData.consent_forwarding.target_domains = formData.consent_forwarding.target_domains
+					.split('\n')
+					.map(function (s) { return s.trim(); })
+					.filter(Boolean);
+			}
+			if (formData.trusted_origins && typeof formData.trusted_origins.alternate_domains === 'string') {
+				formData.trusted_origins.alternate_domains = formData.trusted_origins.alternate_domains
 					.split('\n')
 					.map(function (s) { return s.trim(); })
 					.filter(Boolean);

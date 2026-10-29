@@ -948,6 +948,12 @@ $faz_loader->run();
 // its own "is banner disabled" checks.
 \FazCookie\Includes\Integrations\Paid_Memberships_Pro::get_instance()->register_hooks();
 
+// CORS for the origins this site is also served on (Settings → Trusted
+// Alternate Domains, auto-detected GTranslate domains, `faz_trusted_origins`),
+// for the plugin's own /faz/v1/ routes and faz_* admin-ajax actions only —
+// faz_allowed_http_origins() returns core's list untouched for anything else.
+add_filter( 'allowed_http_origins', 'faz_allowed_http_origins' );
+
 // Cookie Policy Generator (Spec 002) — registers the [faz_cookie_policy]
 // shortcode and the faz/v1/cookie-policy/* REST API. Always loads (no
 // module toggle); the admin tab is wired in admin/class-admin.php

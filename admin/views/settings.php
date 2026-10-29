@@ -224,6 +224,33 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 	</div>
 
+	<?php
+	// The domains GTranslate's own settings say its proxy serves this site on,
+	// trusted without being typed here (faz_trusted_origins()). Listed so the
+	// administrator can see what is already covered and does not add a second
+	// copy that keeps being trusted after GTranslate is switched off.
+	$faz_gt_hosts = \FazCookie\Includes\Integrations\Gtranslate::translated_hosts();
+	?>
+	<div class="faz-card">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Trusted Alternate Domains', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-form-group">
+				<label for="faz-trusted-alternate-domains"><?php esc_html_e( 'Domains this site is also served on', 'faz-cookie-manager' ); ?></label>
+				<textarea class="faz-textarea" id="faz-trusted-alternate-domains" data-path="trusted_origins.alternate_domains" rows="3" placeholder="<?php esc_attr_e( 'One per line: example.de or https://shop.example.de:8443', 'faz-cookie-manager' ); ?>"></textarea>
+				<div class="faz-help"><?php esc_html_e( 'Domains on which this same WordPress site is served by something in front of it: a translation proxy such as GTranslate, Weglot sub-domains, a mirror or a CDN host. Consent records and Do-Not-Sell submissions arriving from these domains are accepted instead of being refused as cross-origin. Enter a bare domain to trust it over http and https, or a full URL when the scheme or a non-default port matters. Only list domains whose pages are this site\'s own. Developers can also use the faz_trusted_origins filter.', 'faz-cookie-manager' ); ?></div>
+				<?php if ( ! empty( $faz_gt_hosts ) ) : ?>
+					<div class="faz-help">
+						<?php esc_html_e( 'Detected automatically from your GTranslate settings and already trusted (no need to add them here):', 'faz-cookie-manager' ); ?>
+						<code><?php echo esc_html( implode( ', ', $faz_gt_hosts ) ); ?></code>
+					</div>
+				<?php endif; ?>
+				<div class="faz-help"><?php esc_html_e( 'On these domains the consent cookie is stored for that domain only, because a browser cannot share a cookie between different registrable domains: a visitor chooses once per domain.', 'faz-cookie-manager' ); ?></div>
+			</div>
+		</div>
+	</div>
+
 	<div class="faz-card">
 		<div class="faz-card-header">
 			<h3><?php esc_html_e( 'Pageview Tracking', 'faz-cookie-manager' ); ?></h3>
