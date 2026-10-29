@@ -62,6 +62,15 @@ if [[ "${CHECK_ONLY}" == "false" ]]; then
     # correct install of a PHP-only release would be told to reinstall. The
     # suffix after `+` stays whatever the last runtime change named it.
     sed -i '' -E "s/^(const _FAZ_BUILD = ')[0-9]+\.[0-9]+\.[0-9]+(\+)/\1${VERSION}\2/" "${RUNTIME_JS}"
+    # The marker just changed in the source, so the minified bundle sites run
+    # is stale until rebuilt; rebuild it here rather than fail the verify
+    # below on every ordinary bump. Needs the dev dependencies (npm ci).
+    if command -v npm >/dev/null 2>&1 && [[ -d "${PLUGIN_SRC}/node_modules" ]]; then
+        cyan "Rebuilding the minified bundles (npm run build:min)"
+        ( cd "${PLUGIN_SRC}" && npm run --silent build:min ) || { red "  ✗ npm run build:min failed"; exit 1; }
+    else
+        red "  ! npm or node_modules missing: run 'npm ci && npm run build:min' before releasing"
+    fi
 
     # Trim the changelog to the newest KEEP_ENTRIES versions, preserving the
     # "= Older versions =" pointer that sends readers to the full history.

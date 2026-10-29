@@ -1499,7 +1499,7 @@ if ( ! function_exists( 'faz_allowed_http_origins' ) ) {
 	 * `allowed_http_origins` callback: add the trusted origins, on our endpoints only.
 	 *
 	 * For the mirror that does NOT rewrite the endpoint URLs: its pages call
-	 * this origin's /wp-json/faz/v1/… and admin-ajax.php?action=faz_… directly,
+	 * this origin's /wp-json/faz/v1/… and the public admin-ajax actions directly,
 	 * cross-origin, and need CORS headers to read the response. Core consults
 	 * this list in is_allowed_http_origin(), which admin-ajax.php's
 	 * send_origin_headers() uses (core's REST server already reflects any

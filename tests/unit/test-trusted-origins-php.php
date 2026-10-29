@@ -14,7 +14,8 @@
  *   2. entries are normalised the one way the gates compare them, through the
  *      settings sanitiser as well (faz_normalize_trusted_origin());
  *   3. core's allowed_http_origins list is widened for this plugin's own
- *      /faz/v1/ REST routes and faz_* admin-ajax actions ONLY — core sends
+ *      /faz/v1/ REST routes and its public (nopriv) admin-ajax actions ONLY,
+ *      faz_public_ajax_actions(), never the whole faz_ prefix — core sends
  *      `Access-Control-Allow-Credentials: true` with it;
  *   4. the `throttled` refusals: every proxied visitor reaches the origin from
  *      the proxy's addresses. No trust shortcut was added — the existing

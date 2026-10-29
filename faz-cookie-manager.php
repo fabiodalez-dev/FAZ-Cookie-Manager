@@ -950,7 +950,8 @@ $faz_loader->run();
 
 // CORS for the origins this site is also served on (Settings → Trusted
 // Alternate Domains, auto-detected GTranslate domains, `faz_trusted_origins`),
-// for the plugin's own /faz/v1/ routes and faz_* admin-ajax actions only —
+// for the plugin's own /faz/v1/ routes and its public (nopriv) admin-ajax
+// actions only, faz_public_ajax_actions() —
 // faz_allowed_http_origins() returns core's list untouched for anything else.
 add_filter( 'allowed_http_origins', 'faz_allowed_http_origins' );
 
