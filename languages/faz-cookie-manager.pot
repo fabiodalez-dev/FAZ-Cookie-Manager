@@ -8634,3 +8634,20 @@ msgid "%s generated file is empty on disk; the next page view rewrites it, then 
 msgid_plural "%s generated files are empty on disk; the next page views rewrite them, then purge any CDN or server cache of wp-content/uploads/faz-cookie-manager/assets/."
 msgstr[0] ""
 msgstr[1] ""
+
+#: admin/class-admin.php:807
+#, php-format
+msgid "These Trusted Alternate Domains entries are neither a domain nor an http(s) URL and will not be saved: %s"
+msgstr ""
+
+#: admin/views/system-status.php:102
+msgid "differs from the plugin version"
+msgstr ""
+
+#: admin/views/system-status.php:114
+msgid "matches the plugin version"
+msgstr ""
+
+#: admin/views/system-status.php:118
+msgid "More than one copy of the plugin is installed."
+msgstr ""

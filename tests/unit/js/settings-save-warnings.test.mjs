@@ -27,6 +27,7 @@ const sandbox = {
           cacheCompatWarnGeo: 'LOCALIZED_CACHE_GEO',
           cacheCompatWarnIab: 'LOCALIZED_CACHE_IAB',
           withdrawalUnverified: 'LOCALIZED_WITHDRAWAL_UNVERIFIED',
+          trustedOriginsDropped: 'LOCALIZED_TRUSTED_DROPPED %s',
         },
       },
     },
@@ -60,6 +61,23 @@ const settings = (overrides = {}) => ({
 });
 
 assert.deepEqual(Array.from(collect(settings())), [], 'ordinary settings produce no warning');
+// Trusted Alternate Domains: the server drops what is neither a host nor an
+// http(s) URL (faz_normalize_trusted_origin()); the save must say which.
+assert.deepEqual(
+  Array.from(collect({ ...settings(), trusted_origins: { alternate_domains: ['dilnastore.com', 'https://shop.example.pl:8443/kosik', '203.0.113.7', ' '] } })),
+  [],
+  'valid hosts, full URLs and IPs raise no warning',
+);
+assert.deepEqual(
+  Array.from(collect({ ...settings(), trusted_origins: { alternate_domains: ['dilnastore.com', '*.evil.test', 'localhost', 'javascript:alert(1)', 'example.de:8443'] } })),
+  ['LOCALIZED_TRUSTED_DROPPED *.evil.test, localhost, javascript:alert(1), example.de:8443'],
+  'entries the server would drop are named in one warning',
+);
+assert.deepEqual(
+  Array.from(collect({ ...settings(), trusted_origins: { alternate_domains: 'dilnastore.com\n*.evil.test' } })),
+  ['LOCALIZED_TRUSTED_DROPPED *.evil.test'],
+  'the textarea form (newline-separated string) is checked the same way',
+);
 assert.deepEqual(
   Array.from(collect(settings({ banner_control: { cache_compatibility: true }, geolocation: { geo_targeting: true } }))),
   ['LOCALIZED_CACHE_GEO'],

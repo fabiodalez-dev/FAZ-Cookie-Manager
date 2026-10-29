@@ -8770,6 +8770,23 @@ msgstr[0] ""
 msgstr[1] ""
 msgstr[2] ""
 
+#: admin/class-admin.php:807
+#, php-format
+msgid "These Trusted Alternate Domains entries are neither a domain nor an http(s) URL and will not be saved: %s"
+msgstr ""
+
+#: admin/views/system-status.php:102
+msgid "differs from the plugin version"
+msgstr ""
+
+#: admin/views/system-status.php:114
+msgid "matches the plugin version"
+msgstr ""
+
+#: admin/views/system-status.php:118
+msgid "More than one copy of the plugin is installed."
+msgstr ""
+
 #~ msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it, so <strong>forms protected by them will not submit before consent</strong>. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
 #~ msgstr "Dopušta da se Google reCAPTCHA, hCaptcha i Cloudflare Turnstile učitaju prije privole, kao zaštita obrazaca koje posjetitelj šalje. Smatra li se to nužno potrebnim ovisi o vašem pravnom savjetu: u nekim se zemljama očekuje da reCAPTCHA čeka privolu jer šalje podatke Googleu. Ako ovo isključite, te se usluge zadržavaju u kategoriji Funkcionalni dok je posjetitelj ne prihvati, pa <strong>obrasci koje štite neće se moći poslati prije privole</strong>. CAPTCHA unosi koje ovaj dodatak prema zadanim postavkama dodaje u iznimke blokiranja skripti zanemaruju se dok je ovo isključeno; svaka iznimka koju ste sami upisali i dalje ima prednost."
 

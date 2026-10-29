@@ -629,6 +629,44 @@
 
 		abTestWarnings.forEach(function (w) { saveWarnings.push(w); });
 
+		// Trusted Alternate Domains: the server keeps a bare host or an http(s)
+		// URL and drops anything else (faz_normalize_trusted_origin()), so a
+		// wildcard, a typo or a single-label name vanished under a success
+		// toast. Name the dropped entries here. Mirrors the server's host rule:
+		// labels of letters, digits and hyphens, at least two of them, or an IP.
+		if (current.trusted_origins && current.trusted_origins.alternate_domains) {
+			var entries = current.trusted_origins.alternate_domains;
+			if (typeof entries === 'string') {
+				entries = entries.split(/[\r\n,]+/);
+			}
+			var hostRe = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
+			var ipRe = /^(?:\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f:]+)$/i;
+			var dropped = (Array.isArray(entries) ? entries : []).filter(function (entry) {
+				var raw = String(entry || '').trim();
+				if (!raw) return false;
+				var host = raw;
+				var urlMatch = /^https?:\/\/([^/?#]+)/i.exec(raw);
+				if (urlMatch) {
+					// Authority without user info or port: what the server parses.
+					host = urlMatch[1].replace(/^[^@]*@/, '').replace(/:\d+$/, '');
+				} else if (raw.indexOf('://') !== -1) {
+					return true;
+				} else {
+					host = raw.replace(/[/?#].*$/, '').replace(/\.$/, '');
+				}
+				host = host.replace(/^\[|\]$/g, '');
+				if (ipRe.test(host) && (host.indexOf(':') !== -1 || /^\d/.test(host))) return false;
+				if (host.indexOf(':') !== -1) return true;
+				return !hostRe.test(host);
+			});
+			if (dropped.length) {
+				saveWarnings.push(fazI18n(
+					'settings.trustedOriginsDropped',
+					'These Trusted Alternate Domains entries are neither a domain nor an http(s) URL and will not be saved: %s'
+				).replace('%s', dropped.join(', ')));
+			}
+		}
+
 		// Choosing the footer link without a passing check saves fine — the
 		// server simply keeps forcing the revisit widget on, which is the
 		// fail-closed direction. Silently, though, it looks like the setting did

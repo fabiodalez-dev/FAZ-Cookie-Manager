@@ -99,7 +99,7 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 					<td>
 						<code><?php echo esc_html( '' !== $faz_bundle_version ? $faz_bundle_version : __( 'unknown', 'faz-cookie-manager' ) ); ?></code>
 						<?php if ( $faz_bundle_skew ) : ?>
-							&#10060;
+							&#10060; <?php esc_html_e( 'differs from the plugin version', 'faz-cookie-manager' ); ?>
 							<div class="faz-help">
 								<?php
 								printf(
@@ -111,11 +111,11 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 								?>
 							</div>
 						<?php elseif ( '' !== $faz_bundle_version ) : ?>
-							&#9989;
+							&#9989; <?php esc_html_e( 'matches the plugin version', 'faz-cookie-manager' ); ?>
 						<?php endif; ?>
 						<?php if ( count( $faz_copies ) > 1 ) : ?>
 							<div class="faz-status-detail">
-								&#10060;
+								&#10060; <?php esc_html_e( 'More than one copy of the plugin is installed.', 'faz-cookie-manager' ); ?>
 								<?php
 								$faz_copy_lines = array();
 								foreach ( $faz_copies as $faz_plugin_file => $faz_plugin_version ) {
@@ -175,7 +175,12 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 							array(
 								'timeout'     => 5,
 								'redirection' => 2,
-								'sslverify'   => apply_filters( 'https_local_ssl_verify', false ),
+								// The relaxed local-request verification only for the
+								// site's own host: an uploads URL offloaded to a CDN is a
+								// remote host and keeps WordPress's default verification.
+								'sslverify'   => ( wp_parse_url( $faz_probe_url, PHP_URL_HOST ) === wp_parse_url( home_url( '/' ), PHP_URL_HOST ) )
+									? apply_filters( 'https_local_ssl_verify', false )
+									: apply_filters( 'https_ssl_verify', true ),
 							)
 						);
 						if ( is_wp_error( $faz_response ) ) {

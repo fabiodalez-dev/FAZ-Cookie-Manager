@@ -70,6 +70,9 @@ function _fazIsStaticConfigUrl(value) {
         return /^(?:http:|https:)$/.test(parsed.protocol) && _FAZ_STATIC_CONFIG_NAME_RE.test(parsed.pathname);
     } catch (e) { return false; }
 }
+function _fazIsSameOriginUrl(value) {
+    try { return new URL(value, document.baseURI).origin === window.location.origin; } catch (e) { return false; }
+}
 // JSON syntax alone is not enough: an empty object (or a different cached
 // payload) would start the runtime without its blocking rules. Only the three
 // keys offloaded by PHP belong here; the remaining settings must stay inline.
@@ -129,10 +132,14 @@ const _fazStaticConfigRecovery = (function () {
         // The inline URL is the server's own word and survives an optimiser
         // that rewrote or removed the tag; the tag is the fallback for a page
         // cached before the inline key existed. Either must name a
-        // content-hashed config file: this path fetches nothing else.
+        // content-hashed config file: this path fetches nothing else. The
+        // tag's URL is read off the DOM, which markup injected into the page
+        // could point at a foreign host serving a "configuration" with no
+        // blocking rule in it, so that fallback is taken from the page's own
+        // origin only (the server's inline URL may name a CDN host).
         var url = (typeof cfg._staticConfigUrl === 'string' && _fazIsStaticConfigUrl(cfg._staticConfigUrl))
             ? cfg._staticConfigUrl
-            : (found && _fazIsStaticConfigUrl(found.url) ? found.url : '');
+            : (found && _fazIsStaticConfigUrl(found.url) && _fazIsSameOriginUrl(found.url) ? found.url : '');
         if (!url || typeof window.XMLHttpRequest !== 'function') return report;
         report.attempted = true;
         report.url = url;

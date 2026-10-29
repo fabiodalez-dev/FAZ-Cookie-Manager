@@ -50,13 +50,13 @@ const CONFIG_URL = `https://shop.test/wp-content/uploads/faz-cookie-manager/asse
 const GOOD_BODY = 'window._fazStaticConfig={"_providersToBlock":[{"re":"connect.facebook.net","categories":["marketing"]}],"_cookieCategoryMap":{"_fbp":"marketing"}};';
 
 // `response` is { status, body, type, nosniff } or { throws: true }.
-function page({ inlineUrl = CONFIG_URL, tag = 'src', response = null, version = VERSION } = {}) {
+function page({ inlineUrl = CONFIG_URL, tag = 'src', tagUrl = CONFIG_URL, response = null, version = VERSION } = {}) {
   const tagMarkup = tag === 'src'
-    ? `<script defer id="faz-cookie-manager-static-config-js" src="${CONFIG_URL}"></script>`
+    ? `<script defer id="faz-cookie-manager-static-config-js" src="${tagUrl}"></script>`
     : tag === 'delayed'
-      ? `<script type="pmdelayedscript" id="faz-cookie-manager-static-config-js" data-pmdelayedscript="${CONFIG_URL}"></script>`
+      ? `<script type="pmdelayedscript" id="faz-cookie-manager-static-config-js" data-pmdelayedscript="${tagUrl}"></script>`
       : tag === 'anonymous'
-        ? `<script src="${CONFIG_URL}?_litespeed_rm_qs=0"></script>`
+        ? `<script src="${tagUrl}?_litespeed_rm_qs=0"></script>`
         : '';
   const dom = new JSDOM(`<!DOCTYPE html><html><head>${tagMarkup}</head><body></body></html>`, { runScripts: 'outside-only', url: 'https://shop.test/checkout/', virtualConsole: new VirtualConsole() });
   const w = dom.window;
@@ -203,6 +203,18 @@ console.log('\nno URL, or not a config URL: no request');
   const { w, log } = page({ inlineUrl: 'https://tracker.test/collect.js', tag: '', response: { status: 200, body: GOOD_BODY } });
   run(w);
   ok('an inline URL that does not name a config file is never fetched', log.requests.length === 0 && w._fazRuntimeStarted !== true);
+}
+// The tag's URL comes from the DOM: injected markup could name a foreign host
+// whose "config" carries no blocking rule, so without the server's inline URL
+// only a same-origin tag is followed. The inline URL itself may name a CDN.
+{
+  const FOREIGN = `https://cdn.evil.test/wp-content/uploads/faz-cookie-manager/assets/config-${HASH}.js`;
+  const { w, log } = page({ inlineUrl: '', tag: 'src', tagUrl: FOREIGN, response: { status: 200, body: GOOD_BODY, type: 'application/javascript' } });
+  run(w);
+  ok('a tag-derived URL on another origin is never fetched', log.requests.length === 0 && w._fazRuntimeStarted !== true);
+  const cdn = page({ inlineUrl: FOREIGN.replace('evil', 'assets'), tag: '', response: { status: 200, body: GOOD_BODY, type: 'application/javascript' } });
+  run(cdn.w);
+  ok('while the server\'s inline URL may name a CDN host', cdn.log.requests.length === 1 && cdn.w._fazRuntimeStarted === true);
 }
 for (const inlineUrl of [
   `https://tracker.test/collect?file=config-${HASH}.js`,

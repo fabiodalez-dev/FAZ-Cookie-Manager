@@ -8760,6 +8760,23 @@ msgid_plural "%s generated files are empty on disk; the next page views rewrite 
 msgstr[0] ""
 msgstr[1] ""
 
+#: admin/class-admin.php:807
+#, php-format
+msgid "These Trusted Alternate Domains entries are neither a domain nor an http(s) URL and will not be saved: %s"
+msgstr ""
+
+#: admin/views/system-status.php:102
+msgid "differs from the plugin version"
+msgstr ""
+
+#: admin/views/system-status.php:114
+msgid "matches the plugin version"
+msgstr ""
+
+#: admin/views/system-status.php:118
+msgid "More than one copy of the plugin is installed."
+msgstr ""
+
 #~ msgid "Lets Google reCAPTCHA, hCaptcha and Cloudflare Turnstile load before consent, as protection of the forms a visitor submits. Whether that counts as strictly necessary depends on your legal advice: in some countries reCAPTCHA is expected to wait for consent because it sends data to Google. If you switch this off, these services are held under the Functional category until the visitor accepts it, so <strong>forms protected by them will not submit before consent</strong>. The CAPTCHA entries this plugin adds to Script Blocking Exceptions by default are ignored while this is off; any exception you wrote yourself still wins."
 #~ msgstr "Permet à Google reCAPTCHA, hCaptcha et Cloudflare Turnstile de se charger avant le consentement, pour protéger les formulaires qu’un visiteur envoie. Que cela soit strictement nécessaire dépend de votre conseil juridique : dans certains pays, on attend de reCAPTCHA qu’il attende le consentement, car il envoie des données à Google. Si vous désactivez cette option, ces services sont retenus dans la catégorie Fonctionnelle jusqu’à ce que le visiteur l’accepte : <strong>les formulaires qu’ils protègent ne pourront pas être envoyés avant le consentement</strong>. Les entrées CAPTCHA que cette extension ajoute par défaut aux exceptions de blocage des scripts sont ignorées tant que cette option est désactivée ; toute exception que vous avez écrite vous-même prime toujours."
 
