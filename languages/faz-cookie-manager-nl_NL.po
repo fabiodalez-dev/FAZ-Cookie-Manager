@@ -8761,7 +8761,8 @@ msgid_plural "%s generated files are empty on disk; the next page views rewrite 
 msgstr[0] ""
 msgstr[1] ""
 
-#: admin/class-admin.php:807
+#. translators: %s: comma-separated list of the entries that will not be saved.
+#: admin/class-admin.php:808
 #, php-format
 msgid "These Trusted Alternate Domains entries are neither a domain nor an http(s) URL and will not be saved: %s"
 msgstr ""

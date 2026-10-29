@@ -8776,7 +8776,8 @@ msgid_plural "%s generated files are empty on disk; the next page views rewrite 
 msgstr[0] "%s file generato è vuoto su disco; la prossima visualizzazione di pagina lo riscrive, poi svuota qualsiasi cache CDN o del server di wp-content/uploads/faz-cookie-manager/assets/."
 msgstr[1] "%s file generati sono vuoti su disco; le prossime visualizzazioni di pagina li riscrivono, poi svuota qualsiasi cache CDN o del server di wp-content/uploads/faz-cookie-manager/assets/."
 
-#: admin/class-admin.php:807
+#. translators: %s: comma-separated list of the entries that will not be saved.
+#: admin/class-admin.php:808
 #, php-format
 msgid "These Trusted Alternate Domains entries are neither a domain nor an http(s) URL and will not be saved: %s"
 msgstr "Queste voci dei Domini alternativi attendibili non sono né un dominio né un URL http(s) e non verranno salvate: %s"

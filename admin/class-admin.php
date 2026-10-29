@@ -804,6 +804,7 @@ class Admin {
 						'withdrawalChecking'       => __( 'Loading your pages and looking for the link…', 'faz-cookie-manager' ),
 						'withdrawalCheckFailed'    => __( 'The check could not be run.', 'faz-cookie-manager' ),
 						'withdrawalUnverified'     => __( 'The footer link has not been verified, so the revisit widget stays forced on. Use "Check my site for a withdrawal link" to confirm the link is there.', 'faz-cookie-manager' ),
+						/* translators: %s: comma-separated list of the entries that will not be saved. */
 						'trustedOriginsDropped'    => __( 'These Trusted Alternate Domains entries are neither a domain nor an http(s) URL and will not be saved: %s', 'faz-cookie-manager' ),
 						'bootstrapSaveToCheck'     => __( 'Save settings to check whether the bootstrap can activate.', 'faz-cookie-manager' ),
 						'bootstrapStatusFailed'    => __( 'Bootstrap readiness could not be determined. Pages keep the safe no-cache fallback.', 'faz-cookie-manager' ),
