@@ -343,13 +343,16 @@ if ( ! _fazStore ) {
         _fazStaticVerdict = ' A fresh request for ' + _fazR.url + ' returned HTTP ' + _fazR.status
             + ', Content-Type "' + ( _fazR.contentType || 'none' ) + '"' + ( _fazR.nosniff ? ' (nosniff)' : '' )
             + ', ' + _fazR.bytes + ' bytes: ' + ( _fazCauses[ _fazR.verdict ] || _fazCauses.error ) + '.';
-        if ( 'empty' !== _fazR.verdict && 'html' !== _fazR.verdict && _fazR.contentType && ! /javascript|ecmascript/i.test( _fazR.contentType ) ) {
+        // Only when the server actually returned the file: a 404 or 403 page
+        // is usually text/html, and a MIME remedy there would mislead.
+        if ( 'malformed' === _fazR.verdict && _fazR.status >= 200 && _fazR.status < 300
+            && _fazR.contentType && ! /javascript|ecmascript/i.test( _fazR.contentType ) ) {
             _fazStaticVerdict += ' The Content-Type is not JavaScript either: map .js to application/javascript for wp-content/uploads, or a browser will refuse to execute the file.';
         }
     }
     console.warn( _fazStaticConfigMissing
         ? '[FAZ Cookie Manager] The static configuration file failed to load, so the provider rules this runtime needs are missing and the consent banner is disabled for this page view. Third-party resources stay parked and same-origin requests are released; reload to retry.'
-            + ( _fazStaticVerdict || ' Check the Network tab for frontend/js/config-*.js under wp-content/uploads.' )
+            + ( _fazStaticVerdict || ' Check the Network tab for wp-content/uploads/faz-cookie-manager/assets/config-*.js.' )
         : '[FAZ Cookie Manager] _fazConfig is not defined — banner disabled. If you use a JS optimisation plugin (WP Rocket, LiteSpeed, etc.), exclude _fazConfig from deferral.' );
     // Expose a no-op stub so any external callers (GTM, etc.) do not crash.
     window.fazcookie = window.fazcookie || {};

@@ -124,10 +124,19 @@ while [ "$i" -lt "$TOTAL" ]; do
       --workers="$E2E_WORKERS" --retries=0 --reporter=line,json > "$log" 2>&1
     rc=$?
     [ "$rc" -eq 0 ] && break
+    # Only a valid report that counts zero tests proves the batch never ran.
+    # A missing or unreadable report (the process died before the reporter's
+    # onEnd) is unknown, and an unknown batch is never repeated.
     ran=$(python3 -c 'import json,sys
-try: s=json.load(open(sys.argv[1])).get("stats",{})
-except Exception: s={}
-print(sum(s.get(k,0) for k in ("expected","unexpected","flaky","skipped")))' "$json")
+try:
+    with open(sys.argv[1]) as f:
+        s=json.load(f)["stats"]
+    counts=[s[k] for k in ("expected","unexpected","flaky","skipped")]
+    if not all(type(n) is int and n >= 0 for n in counts):
+        raise ValueError()
+    print(sum(counts))
+except (OSError,ValueError,KeyError,TypeError):
+    print("unknown")' "$json")
     if [ "$ran" != "0" ] || [ "$attempt" -ne 1 ]; then break; fi
     mv "$log" "${log%.log}.setup-failed.log"
     echo "batch $(printf '%02d' "$batch"): setup failed before any test ran; one more attempt (first log: ${log%.log}.setup-failed.log)"

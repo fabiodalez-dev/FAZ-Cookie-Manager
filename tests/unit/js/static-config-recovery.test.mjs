@@ -81,7 +81,7 @@ function page({ inlineUrl = CONFIG_URL, tag = 'src', tagUrl = CONFIG_URL, pageUr
   return { w, log };
 }
 function run(w) {
-  try { w.eval(runtime); } catch (e) { /* no banner DOM in this fixture */ }
+  w.eval(runtime);
 }
 const staticWarning = (log) => log.warn.find((l) => l.indexOf('static configuration file failed to load') !== -1) || '';
 
@@ -246,7 +246,10 @@ console.log('\nno URL, or not a config URL: no request');
   const FOREIGN = `https://cdn.evil.test/wp-content/uploads/faz-cookie-manager/assets/config-${HASH}.js`;
   const { w, log } = page({ inlineUrl: '', tag: 'src', tagUrl: FOREIGN, response: { status: 200, body: GOOD_BODY, type: 'application/javascript' } });
   run(w);
-  ok('a tag-derived URL on another origin is never fetched there', log.requests.every((r) => r.url.indexOf('https://shop.test/') === 0));
+  ok('a tag-derived URL on another origin is never fetched there', log.requests.length === 1 && log.requests.every((r) => r.url.indexOf('https://shop.test/') === 0));
+  ok('the recovery fetches the file path from this page\'s origin and starts', log.requests.length === 1
+    && log.requests[0].url.indexOf(`https://shop.test/wp-content/uploads/faz-cookie-manager/assets/config-${HASH}.js?faz-recover=`) === 0
+    && w._fazRuntimeStarted === true);
   const cdn = page({ inlineUrl: FOREIGN.replace('evil', 'assets'), tag: '', response: { status: 200, body: GOOD_BODY, type: 'application/javascript' } });
   run(cdn.w);
   ok('an inline URL on a CDN host is requested from this page\'s origin', cdn.log.requests.length === 1
