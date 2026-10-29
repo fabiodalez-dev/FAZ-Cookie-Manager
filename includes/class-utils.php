@@ -1423,7 +1423,7 @@ if ( ! function_exists( 'faz_request_targets_plugin_surface' ) ) {
 			return 0 === strpos( '/' . ltrim( $route, '/' ), '/faz/v1/' );
 		}
 
-		$doing_ajax = function_exists( 'wp_doing_ajax' ) ? wp_doing_ajax() : ( defined( 'DOING_AJAX' ) && DOING_AJAX );
+		$doing_ajax = function_exists( 'wp_doing_ajax' ) && wp_doing_ajax();
 		if ( $doing_ajax && isset( $_REQUEST['action'] ) && is_string( $_REQUEST['action'] ) ) {
 			return 0 === strpos( sanitize_key( wp_unslash( $_REQUEST['action'] ) ), 'faz_' );
 		}
