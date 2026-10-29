@@ -2,6 +2,19 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- On a domain served through a translation proxy (GTranslate Enterprise custom domains or language sub-domains, Weglot sub-domains, a mirror), the consent cookie was written with the Domain attribute of the WordPress Address and silently rejected by the browser, so the banner returned on every page and nothing was ever unblocked. Consent, TCF and vendor cookies are now stored for the current host when it lies outside the configured scope; the dead-cookie sweep and `fazcookie._diag()` report the effective scope.
+- Consent records and Do-Not-Sell submissions arriving from such a domain were refused as `cross_origin`: the proxy forwards the browser's same-origin request with the translated domain as `Origin` and without the Fetch Metadata headers. The domains GTranslate's own settings describe are trusted automatically while GTranslate is active; any other domain goes under Settings → Trusted Alternate Domains or the new `faz_trusted_origins` filter. The same-origin gate is shared by the consent log and the Do-Not-Sell form, the trusted origins also receive CORS headers on the plugin's own REST and admin-ajax endpoints only, and System Status lists the effective domains with their source. The `cross_origin` and `throttled` error-log lines and the System Status hint now name the setting, the filter and, for a proxy that shares one outbound address, `faz_trusted_proxy_cidrs` with `faz_proxy_forwarded_header` (`X-GT-Viewer-IP` for GTranslate).
+- When the content-hashed `config-*.js` file was served but had not defined `window._fazStaticConfig` by the time the runtime ran (an empty or truncated copy cached as immutable, a non-JavaScript Content-Type under `nosniff`, a login or staging-protection page, a Delay/Defer JavaScript optimiser running it late), the runtime stood down for the page view and every third-party resource stayed parked — on a WooCommerce checkout, the PayPal and Google Pay express buttons and the payment options. The runtime now re-fetches the file once, synchronously and with a cache-busting query, parses it as JSON (never evaluated as code) and starts normally; when that also fails, the console warning carries the HTTP status, Content-Type, size and a verdict with the remedy. The inline configuration carries the file's URL so the recovery survives a rewritten tag, and the bootstrap no longer reports a runtime that loaded but stood down as "did not load".
+- A zero-byte or truncated `config-*.js` / `banner-*.css` on disk (a staging clone, a full disk, an interrupted sync) was served forever because only its existence was checked; a file whose size does not match its contents is now regenerated through the same atomic staged write.
+- Perfmatters "Delay JavaScript" (including "Delay All"), "Defer JavaScript" and "Minify JavaScript" now receive the plugin's exclusions automatically: the runtime, the generated configuration file under uploads, the inline bootstrap and the localized configuration.
+
+### Added
+- Settings → Trusted Alternate Domains, with the auto-detected GTranslate domains listed read-only; the `faz_trusted_origins` filter; a readme FAQ on translation proxies and one on the two console messages about the static configuration file.
+- System Status shows the runtime bundle version next to the plugin version and warns when they differ or when more than one copy of the plugin is installed (a `?ver=1.28.1` runtime printing 1.34 messages is a plugin directory mixing two releases), and a Generated Assets row that probes the current configuration file (HTTP status, Content-Type, size, empty files on disk) with a remedy for each problem. The runtime prints the same version-skew warning once in the console.
+
 ## [1.34.4] - 2026-10-28
 
 ### Fixed
