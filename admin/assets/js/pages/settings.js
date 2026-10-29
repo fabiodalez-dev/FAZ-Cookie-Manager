@@ -448,8 +448,11 @@
 					.filter(Boolean);
 			}
 			if (formData.trusted_origins && typeof formData.trusted_origins.alternate_domains === 'string') {
+				// Lines or commas, the same rule the server applies to a REST
+				// payload (sanitize_option()): `example.de, example.pl` on one
+				// line is two entries, not one that gets dropped.
 				formData.trusted_origins.alternate_domains = formData.trusted_origins.alternate_domains
-					.split('\n')
+					.split(/[\r\n,]+/)
 					.map(function (s) { return s.trim(); })
 					.filter(Boolean);
 			}
