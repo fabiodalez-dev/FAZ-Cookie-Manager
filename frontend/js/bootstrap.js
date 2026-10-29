@@ -3081,15 +3081,27 @@
     }
     // `reason` is 'overflow' when the fuse in defer() tripped; anything else —
     // the DOMContentLoaded event itself, or nothing — is the runtime being
-    // missing, which is what the second message says.
+    // missing, which is what the last message says. "Missing" is not always
+    // true: a runtime that executed but stood down — its static configuration
+    // file never applied, or _fazConfig absent — leaves the stub `fazcookie`
+    // object without the consent store a started runtime creates, and it has
+    // already printed the reason. Telling that visitor's support session to
+    // look for a failed script.min.js request sent it after the one file that
+    // did load.
     function releaseSafely(reason) {
         if (!pending || immediate) return;
+        var stoodDown = false;
+        try { stoodDown = !!w.fazcookie && typeof w.fazcookie === 'object' && !w.fazcookie._fazConsentStore; } catch (e) { /* treat as missing */ }
         w.console.warn(reason === 'overflow'
             ? '[FAZ Cookie Manager] More than ' + LIMIT + ' operations were held while waiting for the consent '
                 + 'runtime, so the bootstrap stopped queuing them and applied its safety policy instead of '
                 + 'letting the queue grow without bound: third-party scripts, iframes, images and embeds stay '
                 + "blocked and same-origin requests are released. The consent runtime still takes over if it "
                 + 'loads. A script on this page is inserting or requesting at a rate no consent window should see.'
+            : stoodDown
+            ? '[FAZ Cookie Manager] The consent runtime loaded but could not start (see the FAZ Cookie Manager warning above), '
+                + 'so the consent banner will not appear on this page view. Third-party scripts, iframes, images '
+                + "and embeds stay blocked; same-origin requests are released so the site's own JavaScript keeps working."
             : '[FAZ Cookie Manager] The consent runtime did not load before DOMContentLoaded, '
                 + 'so the consent banner will not appear on this page view. Third-party scripts, '
                 + 'iframes, images and embeds stay blocked; same-origin requests are released so the '
