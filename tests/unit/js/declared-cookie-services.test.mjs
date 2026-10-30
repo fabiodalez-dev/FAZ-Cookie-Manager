@@ -199,6 +199,23 @@ console.log('declared cookies as services + persistent opt-in scripts (#360, jsd
 }
 
 // ---------------------------------------------------------------------------
+// Per-service consent OFF with a stale svc.<id>:no token left over from when it
+// was on: the category decides, like the server, so the script replays, the
+// accept transition runs it, and the public map reports the category consent.
+// ---------------------------------------------------------------------------
+{
+  const w = page({ perService: false, cookies: [record('consentid:abc,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,marketing:yes,svc.bk_session:no')] });
+  // The token is also forced into the in-memory store: whichever way a stale
+  // svc.* value reaches the runtime, the gate must not read it while the
+  // option is off.
+  w.eval('fazcookie._fazSetInStore("svc.bk_session", "no"); _fazInitOperations()');
+  check('per-service off, stale svc:no: the flagged script still replays (category granted)', w.__bk === 1);
+  check('per-service off, stale svc:no: getFazConsent().services follows the category, not the token', w.getFazConsent().services.bk_session === true);
+  w.eval('_fazExecuteConsentScripts([])');
+  check('per-service off, stale svc:no: the accept transition runs it too', w.__bk === 2);
+}
+
+// ---------------------------------------------------------------------------
 // Replay on the other bootstrap branches: never in preview, yes under GPC for
 // a category GPC leaves granted.
 // ---------------------------------------------------------------------------

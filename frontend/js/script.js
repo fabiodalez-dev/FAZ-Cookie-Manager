@@ -9019,6 +9019,11 @@ function _fazConsentScriptCode(item) {
  */
 function _fazConsentScriptAllowed(item, slug) {
     if (!item || typeof item === 'string' || !item.service) return true;
+    // Per-service consent off: the category alone decides, like the server
+    // (get_service_consent() returns nothing when the option is off). A
+    // svc.<id>:no token left in the cookie from when the option WAS on must
+    // not keep denying a script the category now grants.
+    if (!_fazStore._perServiceConsent) return true;
     return _fazServiceEffectiveConsent(item.service, slug) === 'yes';
 }
 
@@ -10962,9 +10967,15 @@ window.getFazConsent = function () {
  */
 function _fazPublicServiceConsentMap() {
     var out = {};
+    // With per-service consent off only declared cookies are listed, and a
+    // stale svc.<id> token (from when the option was on) must not speak for
+    // them: the category decides, as it does server-side.
+    var perService = !!_fazStore._perServiceConsent;
     _fazEachDeclaredService(function (service) {
         if (!service || !service.id || Object.prototype.hasOwnProperty.call(out, service.id)) return;
-        out[service.id] = _fazServiceEffectiveConsent(service.id, service.category || "") === "yes";
+        out[service.id] = perService
+            ? _fazServiceEffectiveConsent(service.id, service.category || "") === "yes"
+            : _fazRef._fazGetFromStore(service.category || "") === "yes";
     });
     return out;
 }
