@@ -654,6 +654,48 @@ $found = new Cookie( declared_row( 302, '_hjSession_1', 3, true ) );
 $found->save();
 assert_false( isset( json_decode( $wpdb->last_update[1]['meta'], true )['service_id'] ), 'save(): a scanner-discovered row gets no service id' );
 
+// A frozen id is re-checked on every save, because a save can move the row to
+// another category (#365 review): two Functional rows folded under
+// booking-widget, one moved to Marketing → the MOVED row takes a new key and
+// the untouched sibling keeps booking-widget and stays exposed.
+reset_inventory( $wpdb, array(
+	declared_row( 400, 'Booking Widget', 4, false, array( 'service_id' => 'booking-widget' ) ),
+	declared_row( 401, 'booking-widget', 4, false, array( 'service_id' => 'booking-widget' ) ),
+) );
+$wpdb->update_queue = array( 1 );
+$moved = new Cookie( declared_row( 401, 'booking-widget', 5, false, array( 'service_id' => 'booking-widget' ) ) );
+$moved->save();
+assert_eq( json_decode( $wpdb->last_update[1]['meta'], true )['service_id'] ?? null, 'booking-widget-2', 'save(): a row moved to a category where its frozen key would clash takes a new key' );
+reset_inventory( $wpdb, array(
+	declared_row( 400, 'Booking Widget', 4, false, array( 'service_id' => 'booking-widget' ) ),
+	declared_row( 401, 'booking-widget', 5, false, array( 'service_id' => 'booking-widget-2' ) ),
+) );
+$after = $ctrl->get_declared_service_map();
+assert_eq( $after['by_cookie'], array( 400 => 'booking-widget', 401 => 'booking-widget-2' ), 'save(): after the move both rows are exposed — the untouched one under its original key' );
+// A save that does not create a clash keeps the frozen key (the same-category
+// sibling still holds it, so it is not "only another category").
+reset_inventory( $wpdb, array(
+	declared_row( 400, 'Booking Widget', 4, false, array( 'service_id' => 'booking-widget' ) ),
+	declared_row( 401, 'booking-widget', 4, false, array( 'service_id' => 'booking-widget' ) ),
+) );
+$wpdb->update_queue = array( 1 );
+$stay = new Cookie( declared_row( 401, 'Booking Widget (edited)', 4, false, array( 'service_id' => 'booking-widget' ) ) );
+$stay->save();
+assert_eq( json_decode( $wpdb->last_update[1]['meta'], true )['service_id'] ?? null, 'booking-widget', 'save(): an edit within the same category keeps the frozen key' );
+
+// Recycle-bin restore / settings import replay the snapshot's key.
+reset_inventory( $wpdb, array() );
+$wpdb->update_queue = array( 1 );
+$restored = new Cookie();
+$restored->set_name( 'Renamed Since' );
+$restored->set_category( 3 );
+$restored->set_service_id( 'Original-Key' );
+assert_eq( $restored->get_service_id(), 'original-key', 'set_service_id(): the snapshot key is kept (sanitize_key\'d), not re-derived from the current name' );
+$noop = new Cookie();
+$noop->set_name( 'Fresh Name' );
+$noop->set_service_id( '' );
+assert_eq( $noop->get_service_id(), 'fresh-name', 'set_service_id(\'\'): a snapshot without a key leaves the derivation to save()' );
+
 // ---------------------------------------------------------------------------
 echo "\n--\n";
 echo "Tests:  $tests_run\n";

@@ -278,6 +278,23 @@ console.log('declared cookies as services + persistent opt-in scripts (#360, jsd
 }
 
 // ---------------------------------------------------------------------------
+// #365 review: "__proto__" is a legal declared id (sanitize_key keeps
+// underscores). It must become an own key reporting the consent, not replace
+// the map's prototype, and the map must keep hasOwnProperty for integrators.
+// ---------------------------------------------------------------------------
+{
+  const w = page({ cookies: [record('consentid:abc,consent:no,action:yes,necessary:yes,functional:no,analytics:no,marketing:no')] });
+  w._fazConfig._declaredServices.push({ id: '__proto__', label: '__proto__', category: 'functional', patterns: [], cookies: ['__proto__'], third_party: false, declared: true });
+  w.eval('_fazInitOperations()');
+  const ok = w.eval(`(function () {
+    var s = getFazConsent().services;
+    var d = Object.getOwnPropertyDescriptor(s, '__proto__');
+    return !!d && d.value === false && Object.getPrototypeOf(s) === Object.prototype && typeof s.hasOwnProperty === 'function';
+  })()`);
+  check('a declared "__proto__" id is an own key reporting false, and the map keeps its prototype', ok === true);
+}
+
+// ---------------------------------------------------------------------------
 // No declared cookies and per-service off: the map is empty, as documented.
 // ---------------------------------------------------------------------------
 {

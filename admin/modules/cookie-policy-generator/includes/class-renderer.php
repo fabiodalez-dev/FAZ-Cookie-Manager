@@ -986,7 +986,14 @@ class Renderer {
 		}
 		// The one URL contract every surface shares (#365 review): a looser
 		// regex here rendered links the banner and the REST API treat as empty.
-		return \FazCookie\Admin\Modules\Cookies\Includes\Cookie::sanitize_policy_url_value( $meta['policy_url'] );
+		// class_exists() lets the autoloader resolve it under WordPress; a
+		// harness that loads this file alone, without the cookie model, gets
+		// the model's own first-stage check rather than a fatal.
+		if ( class_exists( '\\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Cookie' ) ) {
+			return \FazCookie\Admin\Modules\Cookies\Includes\Cookie::sanitize_policy_url_value( $meta['policy_url'] );
+		}
+		$url = trim( $meta['policy_url'] );
+		return ( strlen( $url ) <= 2048 && preg_match( '#^https?://[^\x00-\x20\x7f]+$#i', $url ) ) ? $url : '';
 	}
 
 	/**

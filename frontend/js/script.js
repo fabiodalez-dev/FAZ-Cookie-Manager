@@ -10996,9 +10996,18 @@ function _fazPublicServiceConsentMap() {
     var perService = !!_fazStore._perServiceConsent;
     _fazEachDeclaredService(function (service) {
         if (!service || !service.id || Object.prototype.hasOwnProperty.call(out, service.id)) return;
-        out[service.id] = perService
-            ? _fazServiceEffectiveConsent(service.id, service.category || "") === "yes"
-            : _fazRef._fazGetFromStore(service.category || "") === "yes";
+        // defineProperty, not out[id] = …: a declared id may legally be
+        // "__proto__" (sanitize_key keeps underscores), and a plain assignment
+        // would set the prototype instead of a key, so services.__proto__ read
+        // back Object.prototype rather than false (#365 review). The map keeps
+        // its ordinary prototype, so integrators' services.hasOwnProperty()
+        // calls go on working.
+        Object.defineProperty(out, service.id, {
+            value: perService
+                ? _fazServiceEffectiveConsent(service.id, service.category || "") === "yes"
+                : _fazRef._fazGetFromStore(service.category || "") === "yes",
+            enumerable: true, writable: true, configurable: true,
+        });
     });
     return out;
 }

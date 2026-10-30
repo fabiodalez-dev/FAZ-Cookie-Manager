@@ -181,10 +181,12 @@ class Cookie_Controller extends Base_Controller {
 			$clean_name = sanitize_text_field( $name );
 			if ( isset( $services[ $service_id ] ) ) {
 				if ( $services[ $service_id ]['category'] !== $cat_slug ) {
-					// Only rows saved before ids were frozen can still clash: a save
-					// picks a key no other category holds (unique_declared_service_id).
+					// A clash survives only on rows that have not been saved since it
+					// arose (an id frozen before this check existed, a category moved
+					// by direct SQL): every save re-resolves the key against other
+					// categories (Cookie::save()), so saving this row gives it its own.
 					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- operator-actionable, once per rebuild, not user-facing.
-					error_log( sprintf( '[faz-cookie-manager] declared cookie "%s" (category %s) shares service id "%s" with a cookie in category %s and was not exposed as a service; save it again to give it its own id.', $clean_name, $cat_slug, $service_id, $services[ $service_id ]['category'] ) );
+					error_log( sprintf( '[faz-cookie-manager] declared cookie "%s" (category %s) shares service id "%s" with a cookie in category %s and was not exposed as a service; open it under Cookies and save it to give it its own id.', $clean_name, $cat_slug, $service_id, $services[ $service_id ]['category'] ) );
 					continue;
 				}
 				if ( ! in_array( $clean_name, $services[ $service_id ]['cookies'], true ) ) {

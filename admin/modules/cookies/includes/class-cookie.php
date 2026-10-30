@@ -455,6 +455,32 @@ class Cookie extends Store {
 	}
 
 	/**
+	 * Carry a frozen service id into this row — the recycle-bin restore and a
+	 * settings import replay it from the snapshot, so a cookie that was renamed
+	 * after its first save, or got a -2 suffix, comes back under the key
+	 * integrators and returning visitors' svc.<id> tokens already use (#365
+	 * review). An empty value is a no-op: save() then freezes a fresh id, and
+	 * a restored key now held by another category is re-resolved there.
+	 *
+	 * Not a REST field: the schema marks service_id readonly, so neither the
+	 * single-item nor the bulk endpoint dispatches to this setter.
+	 *
+	 * @param string $service_id Key from a snapshot.
+	 * @return void
+	 */
+	public function set_service_id( $service_id ) {
+		$service_id = is_string( $service_id ) ? sanitize_key( $service_id ) : '';
+		if ( '' === $service_id ) {
+			return;
+		}
+		$meta               = $this->get_meta();
+		$meta['service_id'] = $service_id;
+		// set_object_data(), not set_meta(), for the reason documented on save().
+		$this->set_object_data( 'meta', $meta );
+		$this->decoded_meta = null;
+	}
+
+	/**
 	 * The service id of a raw row: the one frozen in its meta when it was saved,
 	 * else the derivation from slug or name.
 	 *
@@ -493,6 +519,13 @@ class Cookie extends Store {
 	 * instead. A same-category match keeps the shared key on purpose — two rows
 	 * whose names collapse to one key are one declared thing to the visitor.
 	 *
+	 * The check runs on every save, not only the first (#365 review): moving a
+	 * row whose key it shares with a sibling into another category would
+	 * otherwise leave one key in two categories, and the runtime would drop
+	 * whichever row came second — possibly the sibling nobody touched. The row
+	 * being saved is the one that moves; an id nothing contests is never
+	 * rewritten.
+	 *
 	 * Written through set_object_data(), not set_meta(): the latter strips the
 	 * script keys for a user without unfiltered_html, and assigning an id must
 	 * never cost a row the scripts an administrator gave it.
@@ -501,17 +534,14 @@ class Cookie extends Store {
 	 */
 	public function save() {
 		if ( ! $this->is_discovered() ) {
-			$meta = $this->get_meta();
-			if ( empty( $meta['service_id'] ) ) {
-				$service_id = self::derive_service_id( $this->get_slug(), $this->get_name() );
-				if ( '' !== $service_id && class_exists( __NAMESPACE__ . '\\Cookie_Controller' ) ) {
-					$service_id = Cookie_Controller::get_instance()->unique_declared_service_id( $service_id, (int) $this->get_category(), (int) $this->get_id() );
-				}
-				if ( '' !== $service_id ) {
-					$meta['service_id'] = $service_id;
-					$this->set_object_data( 'meta', $meta );
-					$this->decoded_meta = null;
-				}
+			$meta       = $this->get_meta();
+			$stored     = isset( $meta['service_id'] ) ? (string) $meta['service_id'] : '';
+			$service_id = '' !== $stored ? $stored : self::derive_service_id( $this->get_slug(), $this->get_name() );
+			if ( '' !== $service_id && class_exists( __NAMESPACE__ . '\\Cookie_Controller' ) ) {
+				$service_id = Cookie_Controller::get_instance()->unique_declared_service_id( $service_id, (int) $this->get_category(), (int) $this->get_id() );
+			}
+			if ( '' !== $service_id && $service_id !== $stored ) {
+				$this->write_service_id( $service_id );
 			}
 		}
 		$saved = parent::save();
@@ -522,6 +552,19 @@ class Cookie extends Store {
 			Cookie_Controller::get_instance()->forget_declared_service_map();
 		}
 		return $saved;
+	}
+
+	/**
+	 * Write meta.service_id without set_meta()'s script stripping.
+	 *
+	 * @param string $service_id Sanitised id.
+	 * @return void
+	 */
+	private function write_service_id( $service_id ) {
+		$meta               = $this->get_meta();
+		$meta['service_id'] = $service_id;
+		$this->set_object_data( 'meta', $meta );
+		$this->decoded_meta = null;
 	}
 
 	/**

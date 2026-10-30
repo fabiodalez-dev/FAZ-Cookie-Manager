@@ -1035,6 +1035,7 @@ class Cookies_API extends API_Controller {
 			'transfer',
 			'policy_url',
 			'opt_in_run_each_load',
+			'service_id',
 			'opt_in_script',
 			'opt_out_script',
 		);
