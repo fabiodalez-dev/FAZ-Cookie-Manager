@@ -11063,12 +11063,32 @@ class Frontend {
 			. '#faz-consent.faz-classic-top .faz-notice-btn-wrapper .faz-btn,'
 			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn{width:100%;margin-right:0;margin-left:0;}'
 			. '}'
-			// Box and banner gave Accept a 16px top margin as the first button
-			// under the description; it now belongs to whichever button is first.
+			// Box and popup (at 440px) and banner (at 425px) gave Accept a 16px
+			// top margin as the first button under the description; it now
+			// belongs to whichever button is first, at the same widths. Classic
+			// never had it and keeps its 10px.
 			. '@media (max-width:440px){'
 			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-accept{margin-top:10px;}'
-			. '#faz-consent .faz-notice-btn-wrapper .faz-btn:first-child{margin-top:16px;}'
+			. self::first_notice_button_selector( array( 'box-bottom-left', 'box-bottom-right', 'box-top-left', 'box-top-right', 'popup-center' ) ) . '{margin-top:16px;}'
+			. '}'
+			. '@media (max-width:425px){'
+			. self::first_notice_button_selector( array( 'banner-top', 'banner-bottom' ) ) . '{margin-top:16px;}'
 			. '}';
+	}
+
+	/**
+	 * Selector list for the first notice button under the given container
+	 * position classes (without the `faz-` prefix).
+	 *
+	 * @param string[] $positions Position class suffixes.
+	 * @return string
+	 */
+	private static function first_notice_button_selector( array $positions ) {
+		$selectors = array();
+		foreach ( $positions as $position ) {
+			$selectors[] = '#faz-consent.faz-' . $position . ' .faz-notice-btn-wrapper .faz-btn:first-child';
+		}
+		return implode( ',', $selectors );
 	}
 
 	/**
@@ -11192,10 +11212,10 @@ class Frontend {
 			. 'flex:1 1 100%;width:100%;display:block;white-space:normal;'
 			. '}'
 			// markup_order_mobile_css() gives the first stacked button a 16px top
-			// margin and the classic buttons a full row each, with selectors one
-			// class heavier than the reset above. Side by side neither applies,
-			// so the compact values are restored at the same weight.
-			. '#faz-consent .faz-notice-btn-wrapper .faz-btn:first-child,'
+			// margin and the classic buttons a full row each, with selectors
+			// heavier than the reset above. Side by side neither applies, so the
+			// compact values are restored with the same selectors, later.
+			. self::first_notice_button_selector( array( 'box-bottom-left', 'box-bottom-right', 'box-top-left', 'box-top-right', 'popup-center', 'banner-top', 'banner-bottom' ) ) . ','
 			. '#faz-consent.faz-classic-top .faz-notice-btn-wrapper .faz-btn,'
 			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn{width:auto;margin:0;}'
 			. '}'

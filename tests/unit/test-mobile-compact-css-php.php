@@ -204,6 +204,16 @@ namespace {
 		faz_mcss_assert( false !== $generic_at && false !== $dns_at && $dns_at > $generic_at, "{$type}: the Do-Not-Sell rule comes after the generic button rule it overrides" );
 	}
 
+	// #368: the phone order reset ships in both layouts, and the 16px that the
+	// box/popup (440px) and banner (425px) templates gave Accept as the first
+	// button goes to the first button at the same widths only — classic never
+	// had it. The compact block restores its own margin with the same selectors.
+	list( $comfortable_box, ) = faz_mcss_build( 'comfortable', $by_type['box'] );
+	faz_mcss_assert( 1 === preg_match( '/@media \(max-width:576px\)\{#faz-consent \.faz-notice-btn-wrapper \.faz-btn,[^}]*\{order:0;\}/', $comfortable_box ), '#368: comfortable resets the notice button order on phones' );
+	faz_mcss_assert( false !== strpos( $comfortable_box, '#faz-consent.faz-box-bottom-left .faz-notice-btn-wrapper .faz-btn:first-child' ), '#368: box keeps its 16px first-button margin' );
+	faz_mcss_assert( 1 === preg_match( '/@media \(max-width:425px\)\{#faz-consent\.faz-banner-top [^{]*:first-child,#faz-consent\.faz-banner-bottom [^{]*:first-child\{margin-top:16px;\}\}/', $comfortable_box ), '#368: banner gets the 16px at 425px, not 440px' );
+	faz_mcss_assert( false === strpos( $comfortable_box, 'faz-classic-top .faz-notice-btn-wrapper .faz-btn:first-child{margin-top:16px' ) && 0 === preg_match( '/faz-classic-[a-z]+ \.faz-notice-btn-wrapper \.faz-btn:first-child/', $comfortable_box ), '#368: classic keeps its 10px' );
+
 	// The template does draw that chevron with an absolute ::after anchored to
 	// the end padding - the reason the classic rule above exists. If the
 	// template ever stops doing that, the rule is dead weight and should go.
