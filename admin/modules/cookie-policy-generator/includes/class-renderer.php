@@ -984,8 +984,9 @@ class Renderer {
 		if ( ! is_array( $meta ) || empty( $meta['policy_url'] ) || ! is_string( $meta['policy_url'] ) ) {
 			return '';
 		}
-		$url = trim( $meta['policy_url'] );
-		return preg_match( '#^https?://[^\s]+$#i', $url ) ? $url : '';
+		// The one URL contract every surface shares (#365 review): a looser
+		// regex here rendered links the banner and the REST API treat as empty.
+		return \FazCookie\Admin\Modules\Cookies\Includes\Cookie::sanitize_policy_url_value( $meta['policy_url'] );
 	}
 
 	/**

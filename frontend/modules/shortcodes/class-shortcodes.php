@@ -1175,8 +1175,9 @@ class Shortcodes {
 	 * @return string HTML anchor, or '' when no URL is set.
 	 */
 	public function render_policy_link( $cookie ) {
-		$url = isset( $cookie['policy_url'] ) && is_string( $cookie['policy_url'] ) ? $cookie['policy_url'] : '';
-		if ( '' === $url || ! preg_match( '#^https?://#i', $url ) ) {
+		// Same contract as the generated policy and the cookie table (#365 review).
+		$url = isset( $cookie['policy_url'] ) ? \FazCookie\Admin\Modules\Cookies\Includes\Cookie::sanitize_policy_url_value( $cookie['policy_url'] ) : '';
+		if ( '' === $url ) {
 			return '';
 		}
 		$switched = $this->switch_to_banner_locale();

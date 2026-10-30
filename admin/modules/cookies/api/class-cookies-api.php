@@ -603,11 +603,18 @@ class Cookies_API extends API_Controller {
 				'policy_url'     => array(
 					'description'       => __( 'Link to the provider\'s own privacy policy, shown under the cookie in the banner and the cookie policy.', 'faz-cookie-manager' ),
 					'type'              => 'string',
-					'format'            => 'uri',
 					'context'           => array( 'view', 'edit' ),
 					// Not a script field: no unfiltered_html gate. The sanitiser keeps
 					// absolute http(s) URLs only, so a javascript: value never persists.
-					'sanitize_callback' => array( __CLASS__, 'sanitize_policy_url_field' ),
+					// Under arg_options, the only place rest_get_endpoint_args_for_schema()
+					// copies a callback from (#365 review): a property-level
+					// sanitize_callback is ignored, and with 'format' => 'uri' the
+					// default rest_sanitize_request_arg() ran sanitize_url() first —
+					// turning "provider.example/privacy" into an http:// URL the
+					// contract says to refuse. No 'format' for the same reason.
+					'arg_options'       => array(
+						'sanitize_callback' => array( __CLASS__, 'sanitize_policy_url_field' ),
+					),
 				),
 				'opt_in_run_each_load' => array(
 					'description' => __( 'Also run the opt-in script on every page load while the category stays accepted, not only when consent is given.', 'faz-cookie-manager' ),

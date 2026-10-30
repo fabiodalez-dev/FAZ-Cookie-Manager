@@ -260,8 +260,10 @@ class Cookie_Table_Shortcode {
 	 * @return string Escaped HTML, or '' when no URL is set.
 	 */
 	private function render_policy_link( Cookie $cookie_obj ) {
+		// get_policy_url() already reads through Cookie::sanitize_policy_url_value()
+		// (get_meta()), the contract the banner and the generated policy share.
 		$url = $cookie_obj->get_policy_url();
-		if ( '' === $url || ! preg_match( '#^https?://#i', $url ) ) {
+		if ( '' === $url ) {
 			return '';
 		}
 		return '<div class="faz-audit-policy"><a class="faz-audit-policy-link" href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer">'
