@@ -26,6 +26,24 @@ defined( 'ABSPATH' ) || exit;
 
 	<div class="faz-card">
 		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Google Tag', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-form-group">
+				<label for="faz-gcm-google-tag-ids"><?php esc_html_e( 'Google tag IDs', 'faz-cookie-manager' ); ?></label>
+				<input type="text" class="faz-input" id="faz-gcm-google-tag-ids" data-path="google_tag_ids" autocomplete="off" spellcheck="false" placeholder="G-XXXXXXXXXX, GTM-XXXXXXX" aria-describedby="faz-gcm-google-tag-help" style="max-width:420px;">
+				<div class="faz-help" id="faz-gcm-google-tag-help">
+					<p><?php esc_html_e( 'Let the plugin load Google Analytics 4 or a Google tag (G-, GT-), Google Ads or Floodlight (AW-, DC-) and Google Tag Manager containers (GTM-), separated by commas, up to five. Leave it empty if the tag is already installed by your theme or another plugin.', 'faz-cookie-manager' ); ?></p>
+					<p><?php esc_html_e( 'Each tag waits for the same consent a copy pasted into the theme would: Google Analytics for Analytics, Google Ads and Floodlight for Marketing, the Tag Manager container for its catalogue category. With Advanced Consent Mode on, Google Analytics and Google Ads load before consent in cookieless mode; a Tag Manager container always waits for consent, because it can run tags that ignore Consent Mode.', 'faz-cookie-manager' ); ?></p>
+					<p><?php esc_html_e( 'This works whether or not Google Consent Mode is enabled. Nothing is loaded on pages where the consent banner is turned off, since visitors there have no way to consent.', 'faz-cookie-manager' ); ?></p>
+				</div>
+				<div class="faz-help" id="faz-gcm-google-tag-notice" role="status" hidden style="margin-top:.5rem;border-left:3px solid #f59e0b;padding:.5rem .75rem;background:#fffbeb;color:#78350f;"></div>
+			</div>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header">
 			<h3><?php esc_html_e( 'Consent Signal Defaults', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">

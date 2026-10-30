@@ -537,6 +537,9 @@ class Admin {
 				),
 				'site'           => array(
 					'url'        => get_site_url(),
+					// The front page the visitor sees, for same-origin checks on it
+					// (GCM page: is a Google tag already loaded elsewhere, #366).
+					'home'       => set_url_scheme( home_url( '/' ) ),
 					'name'       => esc_attr( get_option( 'blogname' ) ),
 					'previewUrl' => add_query_arg(
 						array(
@@ -822,6 +825,10 @@ class Admin {
 						'loadFailed'               => __( 'Failed to load GCM settings.', 'faz-cookie-manager' ),
 						'saved'                    => __( 'GCM settings saved successfully.', 'faz-cookie-manager' ),
 						'saveFailed'               => __( 'Failed to save GCM settings.', 'faz-cookie-manager' ),
+						/* translators: %s: list of Google tag IDs. */
+						'tagDropped'               => __( 'Not saved, because they are not valid Google tag IDs: %s', 'faz-cookie-manager' ),
+						/* translators: %s: list of Google tag IDs. */
+						'tagDuplicate'             => __( 'Your home page already loads %s outside this plugin. Remove the other copy, or the tag will be loaded twice.', 'faz-cookie-manager' ),
 					),
 					// Consent logs page.
 					'consentLogs'              => array(

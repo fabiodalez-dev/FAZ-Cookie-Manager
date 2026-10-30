@@ -68,6 +68,11 @@ class Gcm_Settings extends Store {
 			// admin/views/gcm.php the help text.)
 			// See https://support.google.com/adsense/answer/13554116
 			'non_personalized_ads_fallback' => false,
+			// Built-in Google tag (#366): comma-separated G- / GT- / AW- / DC- /
+			// GTM- IDs the plugin loads itself, behind the same consent gate a
+			// pasted copy would get. Empty = the plugin loads nothing. See
+			// includes/class-google-tag.php.
+			'google_tag_ids' => '',
 		);
 	}
 
@@ -265,6 +270,9 @@ class Gcm_Settings extends Store {
 			case 'wait_for_update':
 				$value = absint( $value );
 				break;
+			case 'google_tag_ids':
+				$value = \FazCookie\Includes\Google_Tag::sanitize_ids( $value );
+				break;
 			default:
 				$value = faz_sanitize_text( $value );
 				break;
@@ -279,6 +287,15 @@ class Gcm_Settings extends Store {
 	 */
 	public function is_gcm_enabled() {
 		return $this->get( 'status' );
+	}
+
+	/**
+	 * The built-in Google tag IDs (#366), validated.
+	 *
+	 * @return string[]
+	 */
+	public function get_google_tag_ids() {
+		return \FazCookie\Includes\Google_Tag::parse_ids( $this->get( 'google_tag_ids' ) );
 	}
 
 	/**

@@ -390,6 +390,9 @@ class Frontend {
 		// top of <head>, ahead of theme/plugin gtag snippets. No-op unless
 		// Advanced mode is on.
 		add_action( 'wp_head', array( $this, 'print_gcm_default_inline' ), 0 );
+		// Built-in Google tag (#366): right after the Advanced-mode default, so
+		// the tag never runs ahead of the consent default it depends on.
+		add_action( 'wp_head', array( $this, 'print_google_tag' ), 1 );
 		add_action( 'template_redirect', array( $this, 'render_banner_preview_frame' ), 0 );
 		// Cookie shredding needs the resolved main query so WooCommerce checkout /
 		// cart conditionals and page exclusions are reliable. template_redirect is
@@ -3410,6 +3413,10 @@ class Frontend {
 		}
 		$gcm          = $this->gcm_settings;
 		$gcm_settings = $gcm->get();
+		// The built-in Google tag IDs (#366) are printed server-side by
+		// print_google_tag(); gcm.js has no use for them, and repeating them in
+		// an inline script makes the page look like it loads the tag twice.
+		unset( $gcm_settings['google_tag_ids'] );
 
 		// When the runtime geo-routing flag is on, override the Google Consent
 		// Mode default signals from the resolved ruleset's CMv2 block so the
@@ -3511,6 +3518,48 @@ class Frontend {
 
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; the id is a plugin constant passed through esc_attr, $hints is a literal, and every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
 		echo '<script id="' . esc_attr( $this->gcm_default_script_id() ) . '"' . $hints . '>' . $js . "</script>\n";
+	}
+
+	/**
+	 * Print the built-in Google tag (#366) configured on the Consent Mode page.
+	 *
+	 * Printed only where the consent banner runs, so the visitor can always
+	 * release it: with the banner off there is no way to consent and nothing
+	 * is loaded. The gtag.js groups go out live only while the Advanced-mode
+	 * gtag exemption is active (the denied default is already in front of
+	 * them in this response), and then still pass through the output buffer
+	 * like any pasted tag, so an explicit per-service rejection keeps them
+	 * blocked. In every other case they, and the Tag Manager container always,
+	 * are printed already parked (see Google_Tag::render()).
+	 *
+	 * @return void
+	 */
+	public function print_google_tag() {
+		if ( apply_filters( 'faz_is_amp_request', false ) || faz_is_machine_readable_request() ) {
+			return;
+		}
+		if ( ! $this->gcm_settings || ! $this->template ) {
+			return;
+		}
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() ) {
+			return;
+		}
+		$ids = $this->gcm_settings->get_google_tag_ids();
+		if ( empty( $ids ) ) {
+			return;
+		}
+		$hints = apply_filters( 'faz_auto_exclude_cache_plugins', true )
+			? ' data-no-defer="1" data-no-optimize="1" data-no-minify="1" data-cfasync="false" data-ao-skip="1" data-noptimize="1"'
+			: '';
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Google_Tag::render() builds the markup from IDs validated against fixed patterns, escapes every attribute and encodes every JS value with wp_json_encode; $hints is a literal.
+		echo \FazCookie\Includes\Google_Tag::render(
+			$ids,
+			array(
+				'gtag_unblocked' => $this->gcm_advanced_exemption_active(),
+				'data_layer'     => $this->gcm_datalayer_name(),
+				'hints'          => $hints,
+			)
+		);
 	}
 
 	/**

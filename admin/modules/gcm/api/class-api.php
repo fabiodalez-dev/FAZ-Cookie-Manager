@@ -179,6 +179,11 @@ class Api extends Rest_Controller {
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
+				'google_tag_ids' => array(
+					'description' => __( 'Google tag IDs the plugin loads itself (G-, GT-, AW-, DC-, GTM-), comma-separated.', 'faz-cookie-manager' ),
+					'type'        => 'string',
+					'context'     => array( 'view', 'edit' ),
+				),
 			),
 		);
 

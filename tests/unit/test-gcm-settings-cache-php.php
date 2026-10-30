@@ -42,6 +42,9 @@ namespace {
 	}
 	function faz_sanitize_text( $value ) { return is_scalar( $value ) ? trim( (string) $value ) : ''; }
 
+	// sanitize_option() validates google_tag_ids through Google_Tag (#366).
+	require_once dirname( __DIR__, 2 ) . '/includes/class-known-providers.php';
+	require_once dirname( __DIR__, 2 ) . '/includes/class-google-tag.php';
 	require_once dirname( __DIR__, 2 ) . '/admin/modules/gcm/includes/class-gcm-settings.php';
 
 	use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;

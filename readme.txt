@@ -191,11 +191,27 @@ Documentation / Privacy:
 * https://amp.dev/documentation/components/amp-consent
 * https://policies.google.com/privacy
 
+= Google tag (Google Analytics, Google Ads, Google Tag Manager) =
+
+Used only when you enter one or more Google tag IDs under Google Consent Mode → Google Tag, to load Google's tag in the visitor's browser on your behalf. The plugin loads nothing from Google while that field is empty.
+
+Triggered when: a visitor accepts the consent category the tag belongs to (Analytics for G-/GT- IDs, Marketing for AW-/DC- IDs, the catalogue category of Google Tag Manager for GTM- IDs). With Advanced Consent Mode enabled, the gtag.js tags for G-/GT-/AW-/DC- IDs load on page view before consent in Google's cookieless mode; Tag Manager containers always wait for consent. Nothing is loaded on pages where the consent banner is turned off.
+
+Data sent: by the visitor's browser, directly to Google: the visitor IP address, standard browser request data, the configured tag IDs, and whatever the tag itself collects under the consent state the plugin signals. Your server sends nothing to Google.
+
+Service URLs:
+* https://www.googletagmanager.com/gtag/js
+* https://www.googletagmanager.com/gtm.js
+
+Terms of Service / Privacy Policy:
+* https://marketingplatform.google.com/about/analytics/terms/us/
+* https://policies.google.com/privacy
+
 = Note on third-party domain strings inside the plugin codebase =
 
 The source contains third-party domain names (`js.stripe.com`, `connect.facebook.net`, `googletagmanager.com` and others) purely as **string patterns**, for two purposes:
 
-1. **Blocking detection** -- to recognise analytics, advertising and tracking scripts injected by the site's *other* plugins, so they can be held until consent. This plugin loads none of them itself.
+1. **Blocking detection** -- to recognise analytics, advertising and tracking scripts injected by the site's *other* plugins, so they can be held until consent. This plugin loads none of them itself, with one opt-in exception: the Google tag you configure under Google Consent Mode → Google Tag (see its entry above).
 2. **Explicit exceptions** -- no whole third-party plugin is whitelisted and no profiling resource is: Google Fonts, Google Maps, OAuth endpoints and generic CDNs stay blocked until consent. The only defaults are four anti-abuse challenge endpoints (reCAPTCHA, its gstatic assets, Cloudflare Turnstile, hCaptcha), which gate a form the visitor is actively submitting and load before consent by default. Whether they count as strictly necessary is the site owner's call: Settings → Script Blocking → "Allow anti-spam services before consent" holds them until consent instead. An administrator can also add a narrow audited exception in Settings.
 
 Every outbound request documented above happens only when its feature is used. `/faz/v1/banner` is hosted by this plugin on the same site: no third-party call leaves the visitor's browser.
