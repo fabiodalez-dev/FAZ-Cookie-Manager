@@ -161,6 +161,7 @@ console.log('declared cookies as services + persistent opt-in scripts (#360, jsd
   check('per-service on, service denied: the flagged script is NOT replayed although its category is granted', w.__bk === undefined);
   check('per-service on, service denied: an owner-less flagged script in a granted category still replays', w.__ads === 1);
   check('per-service on, service denied: getFazConsent().services reports the declared cookie as false', w.getFazConsent().services.bk_session === false);
+  check('per-service on, service denied: getFazCookieConsent() reports it false too', w.getFazCookieConsent('bk_session') === false);
   // The accept transition (category went from not-accepted to accepted) must
   // honour the same denial.
   w.eval('_fazExecuteConsentScripts([])');
@@ -211,6 +212,7 @@ console.log('declared cookies as services + persistent opt-in scripts (#360, jsd
   w.eval('fazcookie._fazSetInStore("svc.bk_session", "no"); _fazInitOperations()');
   check('per-service off, stale svc:no: the flagged script still replays (category granted)', w.__bk === 1);
   check('per-service off, stale svc:no: getFazConsent().services follows the category, not the token', w.getFazConsent().services.bk_session === true);
+  check('per-service off, stale svc:no: getFazCookieConsent() agrees with getFazConsent().services', w.getFazCookieConsent('bk_session') === true);
   w.eval('_fazExecuteConsentScripts([])');
   check('per-service off, stale svc:no: the accept transition runs it too', w.__bk === 2);
 }

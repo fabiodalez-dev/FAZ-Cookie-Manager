@@ -11041,7 +11041,13 @@ window.getFazCookieConsent = function (cookieName) {
                     decision = _fazRef._fazGetFromStore(_fazCkKey(service.id, pattern));
                 }
                 if (decision !== "yes" && decision !== "no") {
-                    decision = _fazServiceEffectiveConsent(service.id, service.category || "");
+                    // Per-service consent off: the category decides, as in
+                    // getFazConsent().services, the script gate and the server.
+                    // A svc.<id> token left from when the option was on must
+                    // not make this API disagree with them (#365 review).
+                    decision = _fazStore._perServiceConsent
+                        ? _fazServiceEffectiveConsent(service.id, service.category || "")
+                        : (_fazRef._fazGetFromStore(service.category || "") === "yes" ? "yes" : "no");
                 }
                 if (decision === "no") { decided = false; return; }
                 if (decision === "yes" && decided === null) decided = true;
