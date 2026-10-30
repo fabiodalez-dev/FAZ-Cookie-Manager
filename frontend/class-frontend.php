@@ -4503,7 +4503,10 @@ class Frontend {
 	 * Result is cached by the caller in a 12h transient and invalidated
 	 * on cookie saves / category renames (see Cookies module hooks).
 	 *
-	 * @return array<string, array{opt_in: string[], opt_out: string[], opt_in_persistent: string[]}>
+	 * Every list entry is {code: string, service: string} — the service is the
+	 * owning declared cookie's service id, or '' for a scanner-discovered row.
+	 *
+	 * @return array<string, array{opt_in: array, opt_out: array, opt_in_persistent: array}>
 	 */
 	private function build_cookie_scripts_map() {
 		global $wpdb;
@@ -4526,7 +4529,7 @@ class Frontend {
 		do {
 			$rows = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT c.cookie_id, c.meta, cat.slug AS category_slug
+					"SELECT c.cookie_id, c.name, c.slug, c.discovered, c.meta, cat.slug AS category_slug
 					 FROM {$wpdb->prefix}faz_cookies c
 					 INNER JOIN {$wpdb->prefix}faz_cookie_categories cat ON c.category = cat.category_id
 					 WHERE c.cookie_id > %d
@@ -4556,18 +4559,31 @@ class Frontend {
 				if ( ! isset( $cookie_scripts[ $cat_slug ] ) ) {
 					$cookie_scripts[ $cat_slug ] = array( 'opt_in' => array(), 'opt_out' => array(), 'opt_in_persistent' => array() );
 				}
+				// Each script is shipped WITH its owner (#360 review): a hand-declared
+				// cookie is also a per-service toggle, so with per-service consent on
+				// a visitor can grant the category and still deny that one service.
+				// The runtime gates the entry on _fazServiceEffectiveConsent(service,
+				// category), which falls back to the category when no svc.* token
+				// exists — so with per-service off nothing changes. A scanner-
+				// discovered row has no toggle of its own (its provider does), so it
+				// carries '' and stays category-gated; a map cached before this shape
+				// existed holds bare strings, which the runtime reads the same way.
+				$owner = empty( $row->discovered )
+					? \FazCookie\Admin\Modules\Cookies\Includes\Cookie::derive_service_id( isset( $row->slug ) ? $row->slug : '', isset( $row->name ) ? $row->name : '' )
+					: '';
 				if ( ! empty( $meta['opt_in_script'] ) ) {
-					$cookie_scripts[ $cat_slug ]['opt_in'][] = (string) $meta['opt_in_script'];
+					$entry = array( 'code' => (string) $meta['opt_in_script'], 'service' => $owner );
+					$cookie_scripts[ $cat_slug ]['opt_in'][] = $entry;
 					// #360: flagged scripts ALSO go to the persistent list, which the
-					// runtime replays on every later page load while the category is
+					// runtime replays on every later page load while the owner is
 					// accepted. The accept-click transition still runs `opt_in`, so a
 					// script never fires twice on the page where consent is given.
 					if ( ! empty( $meta['opt_in_run_each_load'] ) && true === $meta['opt_in_run_each_load'] ) {
-						$cookie_scripts[ $cat_slug ]['opt_in_persistent'][] = (string) $meta['opt_in_script'];
+						$cookie_scripts[ $cat_slug ]['opt_in_persistent'][] = $entry;
 					}
 				}
 				if ( ! empty( $meta['opt_out_script'] ) ) {
-					$cookie_scripts[ $cat_slug ]['opt_out'][] = (string) $meta['opt_out_script'];
+					$cookie_scripts[ $cat_slug ]['opt_out'][] = array( 'code' => (string) $meta['opt_out_script'], 'service' => $owner );
 				}
 
 				if ( $scanned >= $max_rows ) {

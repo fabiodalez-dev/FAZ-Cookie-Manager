@@ -54,7 +54,7 @@ const record = (pairs) => `fazcookie-consent=${encodeURIComponent(pairs)}; path=
  * script is flagged persistent, one unflagged opt-in script in `analytics`,
  * and a persistent script in `marketing` (so a rejected category can be checked).
  */
-function page({ cookies = [], declared = true } = {}) {
+function page({ cookies = [], declared = true, perService = false } = {}) {
   const dom = new JSDOM(PAGE, { runScripts: 'dangerously', url: 'https://shop.example.test/' });
   const { window: w } = dom;
   for (const c of cookies) w.document.cookie = c;
@@ -65,11 +65,13 @@ function page({ cookies = [], declared = true } = {}) {
       { slug: 'analytics', isNecessary: false, defaultConsent: { gdpr: false, ccpa: true } },
       { slug: 'marketing', isNecessary: false, defaultConsent: { gdpr: false, ccpa: true } },
     ],
+    // Entries carry their owning declared service ({code, service}); the
+    // analytics one is a bare string, the shape of a map cached before #360.
     _cookieScripts: {
       functional: {
-        opt_in: ['window.__bk = (window.__bk || 0) + 1;'],
+        opt_in: [{ code: 'window.__bk = (window.__bk || 0) + 1;', service: 'bk_session' }],
         opt_out: [],
-        opt_in_persistent: ['window.__bk = (window.__bk || 0) + 1;'],
+        opt_in_persistent: [{ code: 'window.__bk = (window.__bk || 0) + 1;', service: 'bk_session' }],
       },
       analytics: {
         opt_in: ['window.__ga = (window.__ga || 0) + 1;'],
@@ -77,20 +79,21 @@ function page({ cookies = [], declared = true } = {}) {
         opt_in_persistent: [],
       },
       marketing: {
-        opt_in: ['window.__ads = (window.__ads || 0) + 1;'],
+        opt_in: [{ code: 'window.__ads = (window.__ads || 0) + 1;', service: '' }],
         opt_out: [],
-        opt_in_persistent: ['window.__ads = (window.__ads || 0) + 1;'],
+        opt_in_persistent: [{ code: 'window.__ads = (window.__ads || 0) + 1;', service: '' }],
       },
     },
     _services: [], _providersToBlock: [], _cookieCategoryMap: {}, _whitelistedCookiePatterns: [], _userWhitelist: [],
-    _perServiceConsent: false, _perCookieConsent: false, _rootDomain: '', _activeLaw: 'gdpr', _bannerSlug: 'gdpr', _expiry: 180,
+    _perServiceConsent: perService, _perCookieConsent: false, _rootDomain: '', _activeLaw: 'gdpr', _bannerSlug: 'gdpr', _expiry: 180,
     _bannerConfig: { settings: { applicableLaw: 'gdpr' }, behaviours: { respectGPC: false }, config: { revisitConsent: { status: false } } },
     _shortCodes: [], i18n: {}, _i18n: {},
   };
   if (declared) {
-    w._fazConfig._declaredServices = [
-      { id: 'bk_session', label: 'bk_session', category: 'functional', patterns: [], cookies: ['bk_session'], third_party: false, declared: true },
-    ];
+    const svc = { id: 'bk_session', label: 'bk_session', category: 'functional', patterns: [], cookies: ['bk_session'], third_party: false, declared: true };
+    w._fazConfig._declaredServices = [svc];
+    // With per-service consent on the server also lists it as a visible toggle.
+    if (perService) w._fazConfig._services = [svc];
   }
   const realAdd = w.document.addEventListener.bind(w.document);
   w.document.addEventListener = (type, ...rest) => (type === 'DOMContentLoaded' ? undefined : realAdd(type, ...rest));
@@ -144,6 +147,30 @@ console.log('declared cookies as services + persistent opt-in scripts (#360, jsd
   check('accept click: the flagged script runs exactly once (transition path only, no double fire)', w.__bk === 1);
   check('accept click: the unflagged script runs once too', w.__ga === 1);
   check('accept click: the public map now reports the declared cookie as accepted', w.getFazConsent().services.bk_session === true);
+}
+
+// ---------------------------------------------------------------------------
+// Per-service consent ON: the category is granted but the declared service is
+// denied (svc.bk_session:no). Neither the replay nor the accept transition may
+// run its script; an entry with no owner (scanner row) stays category-gated.
+// ---------------------------------------------------------------------------
+{
+  const w = page({ perService: true, cookies: [record('consentid:abc,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,marketing:yes,svc.bk_session:no')] });
+  w.eval('_fazInitOperations()');
+  check('per-service on, service denied: the flagged script is NOT replayed although its category is granted', w.__bk === undefined);
+  check('per-service on, service denied: an owner-less flagged script in a granted category still replays', w.__ads === 1);
+  check('per-service on, service denied: getFazConsent().services reports the declared cookie as false', w.getFazConsent().services.bk_session === false);
+  // The accept transition (category went from not-accepted to accepted) must
+  // honour the same denial.
+  w.eval('_fazExecuteConsentScripts([])');
+  check('per-service on, service denied: the accept transition skips the denied owner', w.__bk === undefined);
+  check('per-service on, service denied: …but runs the owner-less and the legacy bare-string entries', w.__ads === 2 && w.__ga === 1);
+}
+{
+  const w = page({ perService: true, cookies: [record('consentid:abc,consent:yes,action:yes,necessary:yes,functional:yes,analytics:no,marketing:no,svc.bk_session:yes')] });
+  w.eval('_fazInitOperations()');
+  check('per-service on, service granted: the flagged script replays once', w.__bk === 1);
+  check('per-service on, service granted: the public map reports it true', w.getFazConsent().services.bk_session === true);
 }
 
 // ---------------------------------------------------------------------------

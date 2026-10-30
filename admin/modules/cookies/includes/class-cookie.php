@@ -425,9 +425,23 @@ class Cookie extends Store {
 	 * @return string '' when neither slug nor name yields a usable key.
 	 */
 	public function get_service_id() {
-		$base = $this->get_slug();
+		return self::derive_service_id( $this->get_slug(), $this->get_name() );
+	}
+
+	/**
+	 * The service-id derivation behind get_service_id(), callable on raw row
+	 * values so the frontend scripts map (which reads wp_faz_cookies directly,
+	 * without building a Cookie per row) tags each script with the same key the
+	 * per-service toggle and getFazConsent().services use.
+	 *
+	 * @param string $slug Row slug (may be '').
+	 * @param string $name Row name.
+	 * @return string '' when neither yields a usable key.
+	 */
+	public static function derive_service_id( $slug, $name ) {
+		$base = is_string( $slug ) ? trim( $slug ) : '';
 		if ( '' === $base ) {
-			$base = $this->get_name();
+			$base = is_string( $name ) ? sanitize_text_field( $name ) : '';
 		}
 		if ( '' === $base ) {
 			return '';

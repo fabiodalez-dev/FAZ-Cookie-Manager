@@ -506,14 +506,17 @@ test.describe('Per-cookie opt-in/out consent scripts', () => {
   }) => {
     await setConsentCookie(page, wpBaseURL);
     await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
-    type Scripts = { opt_in: string[]; opt_out: string[] };
+    // Entries are {code, service} since #360 (the owning declared service rides
+    // with the script); a bare string is a map cached before that shape.
+    type ScriptEntry = string | { code: string; service: string };
+    type Scripts = { opt_in: ScriptEntry[]; opt_out: ScriptEntry[] };
     const optInScripts = await page.evaluate(() => {
       const s = (window as Record<string, unknown> & { _fazConfig?: { _cookieScripts?: Record<string, Scripts> } })
         ._fazConfig?._cookieScripts?.['analytics']?.opt_in ?? [];
       return s;
     });
     expect(Array.isArray(optInScripts)).toBeTruthy();
-    const hasExpected = optInScripts.some((s: string) => s.includes('_fazE2EOptIn'));
+    const hasExpected = optInScripts.some((s: ScriptEntry) => (typeof s === 'string' ? s : s.code).includes('_fazE2EOptIn'));
     expect(hasExpected, 'opt_in array contains test script').toBeTruthy();
   });
 

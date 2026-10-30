@@ -76,6 +76,22 @@ test.describe('Declared cookies as consent services (#360)', () => {
     expect(res.status(), `deleteCookie(${id}): unexpected status`).toBe(200);
   }
 
+  type SettingsTree = Record<string, unknown>;
+  async function getSettings(): Promise<SettingsTree> {
+    const res = await adminPage.request.get(`${baseURL}/?rest_route=/faz/v1/settings/`, { headers: { 'X-WP-Nonce': nonce } });
+    expect(res.status()).toBe(200);
+    return (await res.json()) as SettingsTree;
+  }
+  async function setPerServiceConsent(on: boolean): Promise<void> {
+    const current = await getSettings();
+    const bannerControl = { ...((current.banner_control as SettingsTree) ?? {}), per_service_consent: on };
+    const res = await adminPage.request.post(`${baseURL}/?rest_route=/faz/v1/settings/`, {
+      headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+      data: { ...current, banner_control: bannerControl },
+    });
+    expect(res.status(), 'settings save').toBe(200);
+  }
+
   /** Remove rows a crashed earlier run may have left, so counts start from zero. */
   function purgeLeftovers(): void {
     wpEval(`
@@ -201,6 +217,37 @@ test.describe('Declared cookies as consent services (#360)', () => {
       expect(await readCounter(page), 'without the flag the script does not run on page load').toBeUndefined();
     } finally {
       await updateCookie({ opt_in_run_each_load: true });
+    }
+  });
+
+  test('with per-service consent on, a denied declared service is not replayed although its category is granted', async ({ page, wpBaseURL }) => {
+    const before = await getSettings();
+    const wasOn = !!((before.banner_control as Record<string, unknown> | undefined)?.per_service_consent);
+    await setPerServiceConsent(true);
+    try {
+      const rev = parseInt(wpEval('echo faz_get_consent_revision();').trim(), 10) || 1;
+      const domain = new URL(wpBaseURL).hostname;
+      const pairs = (svc: 'yes' | 'no') =>
+        `consentid:e2e-360,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,performance:yes,uncategorized:yes,marketing:yes,svc.${COOKIE_NAME}:${svc},rev:${rev}`;
+
+      // Functional granted, the booking service denied.
+      await page.context().clearCookies();
+      await page.context().addCookies([{ name: 'fazcookie-consent', value: encodeURIComponent(pairs('no')), domain, path: '/', sameSite: 'Lax' }]);
+      await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => !!(window as Record<string, unknown> & { fazcookie?: { _fazInitDone?: boolean } }).fazcookie?._fazInitDone, { timeout: 10_000 });
+      await page.waitForTimeout(500);
+      expect(await readCounter(page), 'denied service: no replay').toBeUndefined();
+      expect(await readServices(page), 'denied service: reported false').toHaveProperty(COOKIE_NAME, false);
+
+      // Same category state, the service granted: it replays.
+      await page.context().clearCookies();
+      await page.context().addCookies([{ name: 'fazcookie-consent', value: encodeURIComponent(pairs('yes')), domain, path: '/', sameSite: 'Lax' }]);
+      await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => typeof (window as Record<string, unknown>)._fazE2E360 === 'number', { timeout: 5_000 });
+      expect(await readCounter(page), 'granted service: replayed once').toBe(1);
+      expect(await readServices(page), 'granted service: reported true').toHaveProperty(COOKIE_NAME, true);
+    } finally {
+      await setPerServiceConsent(wasOn);
     }
   });
 

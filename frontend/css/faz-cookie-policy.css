@@ -255,3 +255,11 @@ details.faz-cookie-policy-details > summary.faz-cookie-policy-summary > .faz-coo
 	font-size: 0.82em;
 	color: var(--faz-transfer-fg, #475569);
 }
+
+/* Provider privacy-policy link under a cookie row (#360). Block like the
+   transfer indicator above it, so it never runs on from the description. */
+.faz-cookie-policy-link-wrap {
+	display: block;
+	margin-top: 0.35em;
+	font-size: 0.82em;
+}

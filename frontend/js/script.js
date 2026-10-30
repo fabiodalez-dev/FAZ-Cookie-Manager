@@ -1515,8 +1515,10 @@ function _fazInitOperations() {
  * operators had to keep a second copy of the snippet behind a getFazConsent()
  * check. The admin flag puts the same script in `opt_in_persistent`; this runs
  * that list on the stored-consent bootstrap paths only (never on a first visit,
- * never in preview), once per page load. The accept-click page is covered by
- * the transition path, so the script never fires twice there.
+ * never in preview), once per page load, for the categories accepted AND — with
+ * per-service consent on — only when the owning declared service is not denied.
+ * The accept-click page is covered by the transition path, so the script never
+ * fires twice there.
  */
 var _fazPersistentOptInRan = false;
 function _fazRunPersistentOptInScripts() {
@@ -1532,7 +1534,12 @@ function _fazRunPersistentOptInScripts() {
         // it as empty rather than throw.
         if (!entry || !Array.isArray(entry.opt_in_persistent) || !entry.opt_in_persistent.length) continue;
         if (_fazRef._fazGetFromStore(slug) !== 'yes') continue;
-        entry.opt_in_persistent.forEach(function (code) { _fazRunScript(code); });
+        // Then the owner: a declared service the visitor turned off (svc.<id>:no)
+        // must not get its widget back on every page just because the category
+        // stayed granted (#360 review).
+        entry.opt_in_persistent.forEach(function (item) {
+            if (_fazConsentScriptAllowed(item, slug)) _fazRunScript(_fazConsentScriptCode(item));
+        });
     }
 }
 
@@ -8950,15 +8957,53 @@ function _fazExecuteConsentScripts(prevAccepted) {
         if (!entry) continue;
         var wasAccepted = Array.isArray(prevAccepted) && prevAccepted.indexOf(slug) !== -1;
         var isAccepted  = _fazRef._fazGetFromStore(slug) === 'yes';
-        var toRun = null;
-        if (!wasAccepted && isAccepted  && entry.opt_in  && entry.opt_in.length)  toRun = entry.opt_in;
+        if (!wasAccepted && isAccepted && entry.opt_in && entry.opt_in.length) {
+            // The category just went yes — but with per-service consent on the
+            // visitor may have denied the one declared service that owns a
+            // script (#360). Gate each entry on its owner, not the category.
+            entry.opt_in.forEach(function (item) {
+                if (_fazConsentScriptAllowed(item, slug)) _fazRunScript(_fazConsentScriptCode(item));
+            });
+        }
         // Run opt_out on any rejection — including first-visit Reject All where
         // wasAccepted is false. Opt-out scripts are cleanup routines (idempotent).
-        if (!isAccepted && entry.opt_out && entry.opt_out.length) toRun = entry.opt_out;
-        if (toRun) {
-            toRun.forEach(function (code) { _fazRunScript(code); });
+        if (!isAccepted && entry.opt_out && entry.opt_out.length) {
+            entry.opt_out.forEach(function (item) { _fazRunScript(_fazConsentScriptCode(item)); });
         }
     }
+}
+
+/**
+ * The JavaScript source of a _cookieScripts entry.
+ *
+ * Entries are {code, service} objects; a bare string is a map the 12-hour
+ * transient cached before the owner was shipped, and is read the same way.
+ *
+ * @param {Object|string} item List entry.
+ * @return {string}
+ */
+function _fazConsentScriptCode(item) {
+    if (typeof item === 'string') return item;
+    return (item && typeof item.code === 'string') ? item.code : '';
+}
+
+/**
+ * Whether a _cookieScripts entry may run now that its category is accepted.
+ *
+ * An entry that names its owning declared service is allowed only when that
+ * service's effective consent is yes: an explicit svc.<id>:no wins over the
+ * granted category (per-service consent on), and with no token the answer is
+ * the category's — so with per-service consent off nothing changes. A bare
+ * string or an empty owner (scanner-discovered row) stays category-gated,
+ * which the caller has already established.
+ *
+ * @param {Object|string} item List entry.
+ * @param {string}        slug Category slug the entry is filed under.
+ * @return {boolean}
+ */
+function _fazConsentScriptAllowed(item, slug) {
+    if (!item || typeof item === 'string' || !item.service) return true;
+    return _fazServiceEffectiveConsent(item.service, slug) === 'yes';
 }
 
 /**
