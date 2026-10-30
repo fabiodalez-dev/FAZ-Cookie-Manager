@@ -138,14 +138,18 @@ class Google_Tag {
 	 *     @type bool   $gtag_unblocked Print the gtag.js groups as live scripts
 	 *                                  (Advanced Consent Mode, default already
 	 *                                  emitted in front of them).
-	 *     @type string $data_layer     dataLayer array name, JS-identifier safe.
+	 *     @type string $data_layer     dataLayer array name, same charset as
+	 *                                  Frontend::gcm_datalayer_name() (it is
+	 *                                  only used as a window[] key and a URL
+	 *                                  parameter), so the Consent Mode default
+	 *                                  and the tags share one array.
 	 *     @type string $hints          Extra attribute string for optimiser opt-outs.
 	 * }
 	 * @return string
 	 */
 	public static function render( array $ids, array $args = array() ) {
 		$unblocked  = ! empty( $args['gtag_unblocked'] );
-		$data_layer = isset( $args['data_layer'] ) && is_string( $args['data_layer'] ) && preg_match( '/^[A-Za-z_$][A-Za-z0-9_$]*$/', $args['data_layer'] )
+		$data_layer = isset( $args['data_layer'] ) && is_string( $args['data_layer'] ) && preg_match( '/^[A-Za-z0-9_$]+$/', $args['data_layer'] )
 			? $args['data_layer']
 			: 'dataLayer';
 		$hints      = isset( $args['hints'] ) && is_string( $args['hints'] ) ? $args['hints'] : '';

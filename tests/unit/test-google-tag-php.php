@@ -86,6 +86,10 @@ $dl = Google_Tag::render( $ids, array( 'data_layer' => 'myLayer' ) );
 t( false !== strpos( $dl, 'window["myLayer"]' ) && false !== strpos( $dl, '&amp;l=myLayer' ) && false !== strpos( $dl, '"script","myLayer","GTM-ABC123"' ), 'custom dataLayer reaches gtag and the container' );
 $bad = Google_Tag::render( $ids, array( 'data_layer' => 'x"];alert(1);//' ) );
 t( false === strpos( $bad, 'alert' ) && false !== strpos( $bad, 'window["dataLayer"]' ), 'an unsafe dataLayer name falls back' );
+// Every name Frontend::gcm_datalayer_name() can return must survive, or the
+// Advanced-mode default and the tags push to different arrays.
+$digit = Google_Tag::render( $ids, array( 'data_layer' => '1abc' ) );
+t( false !== strpos( $digit, 'window["1abc"]' ) && false !== strpos( $digit, '"script","1abc","GTM-ABC123"' ), 'a name the GCM default accepts is kept' );
 
 // Invalid IDs passed straight to render() are still dropped.
 t( '' === Google_Tag::render( array( 'G-ABCD1234"><img>' ) ), 'render() re-validates its input' );
