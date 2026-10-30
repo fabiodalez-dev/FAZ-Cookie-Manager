@@ -328,10 +328,13 @@ test.describe('1.17.2 — [faz_cookie_settings] revisit shortcode', () => {
     // from the HTML before the page scripts run, so _fazRenderBanner() early-returns.
     await page.route(`**/${PAGES.settings.slug}/**`, async (route) => {
       const resp = await route.fetch();
-      const stripped = (await resp.text()).replace(
-        /<(template|script) id="fazBannerTemplate"[^>]*>[\s\S]*?<\/\1>/,
-        '',
-      );
+      // Cut the element out by index: from its opening tag to the end of the
+      // matching closing tag.
+      const html = await resp.text();
+      const start = html.search(/<(?:template|script) id="fazBannerTemplate"/);
+      const closer = html.startsWith('<template', start) ? '</template>' : '</script>';
+      const end = start < 0 ? -1 : html.indexOf(closer, start);
+      const stripped = start < 0 || end < 0 ? html : html.slice(0, start) + html.slice(end + closer.length);
       await route.fulfill({ response: resp, body: stripped });
     });
 
