@@ -3551,8 +3551,7 @@ class Frontend {
 		$hints = apply_filters( 'faz_auto_exclude_cache_plugins', true )
 			? ' data-no-defer="1" data-no-optimize="1" data-no-minify="1" data-cfasync="false" data-ao-skip="1" data-noptimize="1"'
 			: '';
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Google_Tag::render() builds the markup from IDs validated against fixed patterns, escapes every attribute and encodes every JS value with wp_json_encode; $hints is a literal.
-		echo \FazCookie\Includes\Google_Tag::render(
+		$markup = \FazCookie\Includes\Google_Tag::render(
 			$ids,
 			array(
 				'gtag_unblocked' => $this->gcm_advanced_exemption_active(),
@@ -3560,6 +3559,7 @@ class Frontend {
 				'hints'          => $hints,
 			)
 		);
+		echo $markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Google_Tag::render() builds the markup from IDs validated against fixed patterns, escapes every attribute and encodes every JS value with wp_json_encode; $hints is a literal.
 	}
 
 	/**
