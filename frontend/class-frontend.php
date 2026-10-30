@@ -3834,10 +3834,12 @@ class Frontend {
 	 * name for the shredder and NO URL patterns, so the output buffer keeps
 	 * judging scripts by category exactly as before.
 	 *
-	 * Pure function of the cookie inventory and the category slugs — never of
-	 * the visitor — so it is invariant across consent states and safe under
-	 * Cache Compatibility Mode. Cached in a transient that
-	 * Cookie_Controller::delete_cache() drops on every cookie or category write.
+	 * Which rows qualify, and under which key, is decided once in
+	 * Cookie_Controller::get_declared_service_map() — pure function of the
+	 * cookie inventory and the category slugs, never of the visitor, so it is
+	 * invariant across consent states and safe under Cache Compatibility Mode,
+	 * and cached in a transient Cookie_Controller::delete_cache() drops on every
+	 * cookie or category write.
 	 *
 	 * @param string[]|null $valid_categories Active non-necessary category slugs.
 	 * @return array<int,array<string,mixed>> Each: {id,label,category,patterns,cookies,third_party,declared}.
@@ -3855,7 +3857,6 @@ class Frontend {
 		// is_third_party_service(); under the plugin autoloader both resolve.
 		if (
 			! class_exists( '\\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Cookie_Controller' )
-			|| ! class_exists( '\\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Category_Controller' )
 			|| ! class_exists( '\\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Cookie' )
 			|| ! function_exists( 'get_transient' )
 		) {
@@ -3863,63 +3864,20 @@ class Frontend {
 			return $this->declared_services_cache;
 		}
 
-		$cached = get_transient( 'faz_declared_services_v1' );
-		if ( ! is_array( $cached ) ) {
-			$cached         = array();
-			$category_slugs = array();
-			foreach ( \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items() as $category_row ) {
-				$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $category_row );
-				$category_slugs[ (int) $category->get_id() ] = sanitize_key( $category->get_slug() );
-			}
-			foreach ( \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::get_instance()->get_items() as $cookie_row ) {
-				$cookie = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie( $cookie_row );
-				if ( $cookie->is_discovered() ) {
-					continue;
-				}
-				$name = $cookie->get_name();
-				if ( '' === $name || self::is_declaration_suppressed( $name ) ) {
-					continue;
-				}
-				$cat_slug = isset( $category_slugs[ (int) $cookie->get_category() ] ) ? $category_slugs[ (int) $cookie->get_category() ] : '';
-				if ( '' === $cat_slug || 'necessary' === $cat_slug || 'wordpress-internal' === $cat_slug ) {
-					continue;
-				}
-				$service_id = $cookie->get_service_id();
-				if ( '' === $service_id ) {
-					continue;
-				}
-				// Two rows whose names collapse to the same key ("Booking Widget" and
-				// "booking-widget", "_GA" and "_ga") are one declared thing to the
-				// visitor: they share the toggle and the public-API key — which is
-				// also what Cookie::get_service_id() tells the REST client and the
-				// admin dialog for BOTH rows, so minting a per-row suffix here would
-				// make the runtime disagree with them. The second row's name is
-				// folded into the service's cookie list, so the shredder still
-				// honours a denial for it. Same-category only: a clash across
-				// categories keeps the first row's and drops the other, logged below.
-				if ( isset( $cached[ $service_id ] ) ) {
-					$clean_name = sanitize_text_field( $name );
-					if ( $cached[ $service_id ]['category'] === $cat_slug ) {
-						if ( ! in_array( $clean_name, $cached[ $service_id ]['cookies'], true ) ) {
-							$cached[ $service_id ]['cookies'][] = $clean_name;
-						}
-					} else {
-						// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- operator-actionable, once per rebuild, not user-facing.
-						error_log( sprintf( '[faz-cookie-manager] declared cookie "%s" (category %s) shares service id "%s" with a cookie in category %s and was not exposed as a service; rename one of them.', $clean_name, $cat_slug, $service_id, $cached[ $service_id ]['category'] ) );
-					}
-					continue;
-				}
-				$cached[ $service_id ] = array(
-					'id'          => $service_id,
-					'label'       => sanitize_text_field( $name ),
-					'category'    => $cat_slug,
-					'patterns'    => array(),
-					'cookies'     => array( sanitize_text_field( $name ) ),
-					'third_party' => false,
-					'declared'    => true,
-				);
-			}
-			set_transient( 'faz_declared_services_v1', $cached, HOUR_IN_SECONDS );
+		// One map for every surface (#365 review): REST, admin dialog and the
+		// scripts map read the same answer, built and cached in one place.
+		$map    = \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::get_instance()->get_declared_service_map();
+		$cached = array();
+		foreach ( $map['services'] as $service_id => $service ) {
+			$cached[ $service_id ] = array(
+				'id'          => $service['id'],
+				'label'       => $service['label'],
+				'category'    => $service['category'],
+				'patterns'    => array(),
+				'cookies'     => $service['cookies'],
+				'third_party' => false,
+				'declared'    => true,
+			);
 		}
 
 		// Re-check the category against the live active set on every read: the
@@ -4525,7 +4483,8 @@ class Frontend {
 	 * on cookie saves / category renames (see Cookies module hooks).
 	 *
 	 * Every list entry is {code: string, service: string} — the service is the
-	 * owning declared cookie's service id, or '' for a scanner-discovered row.
+	 * owning declared service id (Cookie_Controller::get_declared_service_map()),
+	 * or '' for a row the runtime does not expose as a service.
 	 *
 	 * @return array<string, array{opt_in: array, opt_out: array, opt_in_persistent: array}>
 	 */
@@ -4543,6 +4502,12 @@ class Frontend {
 		// so a description containing the literal text "opt_in_script" cannot
 		// false-positive into the result set. json_decode() below remains the
 		// authoritative parser; LIKE only narrows the rows we have to decode.
+		$declared_owners = array();
+		if ( class_exists( '\\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Cookie_Controller' ) ) {
+			$declared_map    = \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::get_instance()->get_declared_service_map();
+			$declared_owners = $declared_map['by_cookie'];
+		}
+
 		$like_opt_in  = '%"opt_in_script":"%';
 		$like_opt_out = '%"opt_out_script":"%';
 
@@ -4589,9 +4554,12 @@ class Frontend {
 				// discovered row has no toggle of its own (its provider does), so it
 				// carries '' and stays category-gated; a map cached before this shape
 				// existed holds bare strings, which the runtime reads the same way.
-				$owner = empty( $row->discovered )
-					? \FazCookie\Admin\Modules\Cookies\Includes\Cookie::derive_service_id( isset( $row->slug ) ? $row->slug : '', isset( $row->name ) ? $row->name : '' )
-					: '';
+				// The owner comes from the declared-services map, not a fresh
+				// derivation: a row the runtime does not expose (a provider's own
+				// cookie, a key another category holds) has no toggle, and gating
+				// its script on one would let a toggle the row does not own block
+				// it (#365 review).
+				$owner = isset( $declared_owners[ (int) $row->cookie_id ] ) ? $declared_owners[ (int) $row->cookie_id ] : '';
 				if ( ! empty( $meta['opt_in_script'] ) ) {
 					$entry = array( 'code' => (string) $meta['opt_in_script'], 'service' => $owner );
 					$cookie_scripts[ $cat_slug ]['opt_in'][] = $entry;

@@ -91,7 +91,160 @@ class Cookie_Controller extends Base_Controller {
 		// Admin-declared cookies surfaced as consent services (#360): the list is
 		// a pure function of this table plus the category slugs, and this method
 		// runs on every cookie AND category write (hooked on both actions).
+		$this->forget_declared_service_map();
+	}
+
+	/**
+	 * Request memo of get_declared_service_map().
+	 *
+	 * @var array|null
+	 */
+	private $declared_service_map = null;
+
+	/**
+	 * Drop the declared-services map, persistent and in-request.
+	 *
+	 * @return void
+	 */
+	public function forget_declared_service_map() {
+		$this->declared_service_map = null;
+		delete_transient( 'faz_declared_services_v2' );
+		// The pre-review shape; a leftover would only expire, never be read.
 		delete_transient( 'faz_declared_services_v1' );
+	}
+
+	/**
+	 * Hand-declared cookies the runtime exposes as consent services (#360).
+	 *
+	 * The single answer to "which declared row is which service": the frontend
+	 * builds window.getFazConsent().services and the per-service toggles from
+	 * `services`, the scripts map tags each script with its owner from
+	 * `by_cookie`, and the REST response shows the admin the same key. Each of
+	 * them used to re-derive it on its own, and they drifted — the dialog showed
+	 * a key for rows the runtime never exposed, and a script was gated on a
+	 * service its row did not own (#365 review).
+	 *
+	 * A row is exposed when it is not scanner-discovered, has a name the banner
+	 * may declare, sits in a category other than necessary/wordpress-internal,
+	 * is not a Known_Providers cookie (that one already has its provider's
+	 * toggle), and its key is not taken by a row in another category. Rows
+	 * sharing a key in the same category fold into one service.
+	 *
+	 * Pure function of the inventory and the category slugs, never of the
+	 * visitor, so it is safe under Cache Compatibility Mode. One pass over the
+	 * cookies and a plain id→slug query for the categories: no Category_Controller
+	 * hydration, which builds every category's cookie list just to read a slug.
+	 *
+	 * @return array{services: array<string,array>, by_cookie: array<int,string>}
+	 */
+	public function get_declared_service_map() {
+		if ( null !== $this->declared_service_map ) {
+			return $this->declared_service_map;
+		}
+		$cached = get_transient( 'faz_declared_services_v2' );
+		if ( is_array( $cached ) && isset( $cached['services'], $cached['by_cookie'] ) ) {
+			$this->declared_service_map = $cached;
+			return $cached;
+		}
+
+		global $wpdb;
+		$category_slugs = array();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom table, table-prefix interpolation only, no user input; the result is cached in the transient above.
+		$rows = $wpdb->get_results( "SELECT category_id, slug FROM {$wpdb->prefix}faz_cookie_categories" );
+		foreach ( (array) $rows as $row ) {
+			$category_slugs[ (int) $row->category_id ] = sanitize_key( $row->slug );
+		}
+
+		$suppressed = is_callable( array( '\\FazCookie\\Frontend\\Frontend', 'is_declaration_suppressed' ) );
+		$services   = array();
+		$by_cookie  = array();
+		foreach ( $this->get_items() as $cookie_row ) {
+			$cookie = new Cookie( $cookie_row );
+			if ( $cookie->is_discovered() ) {
+				continue;
+			}
+			$name = $cookie->get_name();
+			if ( '' === $name || ( $suppressed && \FazCookie\Frontend\Frontend::is_declaration_suppressed( $name ) ) ) {
+				continue;
+			}
+			$cat_slug = isset( $category_slugs[ (int) $cookie->get_category() ] ) ? $category_slugs[ (int) $cookie->get_category() ] : '';
+			if ( '' === $cat_slug || 'necessary' === $cat_slug || 'wordpress-internal' === $cat_slug ) {
+				continue;
+			}
+			if ( Cookie::is_provider_cookie_name( $name ) ) {
+				continue;
+			}
+			$service_id = $cookie->get_service_id();
+			if ( '' === $service_id ) {
+				continue;
+			}
+			$clean_name = sanitize_text_field( $name );
+			if ( isset( $services[ $service_id ] ) ) {
+				if ( $services[ $service_id ]['category'] !== $cat_slug ) {
+					// Only rows saved before ids were frozen can still clash: a save
+					// picks a key no other category holds (unique_declared_service_id).
+					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- operator-actionable, once per rebuild, not user-facing.
+					error_log( sprintf( '[faz-cookie-manager] declared cookie "%s" (category %s) shares service id "%s" with a cookie in category %s and was not exposed as a service; save it again to give it its own id.', $clean_name, $cat_slug, $service_id, $services[ $service_id ]['category'] ) );
+					continue;
+				}
+				if ( ! in_array( $clean_name, $services[ $service_id ]['cookies'], true ) ) {
+					$services[ $service_id ]['cookies'][] = $clean_name;
+				}
+			} else {
+				$services[ $service_id ] = array(
+					'id'       => $service_id,
+					'label'    => $clean_name,
+					'category' => $cat_slug,
+					'cookies'  => array( $clean_name ),
+				);
+			}
+			$by_cookie[ (int) $cookie->get_id() ] = $service_id;
+		}
+
+		$this->declared_service_map = array(
+			'services'  => $services,
+			'by_cookie' => $by_cookie,
+		);
+		set_transient( 'faz_declared_services_v2', $this->declared_service_map, HOUR_IN_SECONDS );
+		return $this->declared_service_map;
+	}
+
+	/**
+	 * A service id no declared cookie in another category already holds.
+	 *
+	 * Called once, when a declared row is first saved and its id frozen. A key
+	 * already used in the SAME category is returned unchanged (the rows fold
+	 * into one service); one used only elsewhere gets the first free -2, -3…
+	 * suffix.
+	 *
+	 * @param string $service_id  Derived id.
+	 * @param int    $category_id Category of the row being saved.
+	 * @param int    $cookie_id   Id of the row being saved (0 when new).
+	 * @return string
+	 */
+	public function unique_declared_service_id( $service_id, $category_id, $cookie_id ) {
+		$taken = array();
+		foreach ( $this->get_items() as $cookie_row ) {
+			$other = new Cookie( $cookie_row );
+			if ( $other->is_discovered() || (int) $other->get_id() === (int) $cookie_id ) {
+				continue;
+			}
+			$other_id = $other->get_service_id();
+			if ( '' === $other_id ) {
+				continue;
+			}
+			if ( ! isset( $taken[ $other_id ] ) ) {
+				$taken[ $other_id ] = array();
+			}
+			$taken[ $other_id ][ (int) $other->get_category() ] = true;
+		}
+		$candidate = $service_id;
+		$suffix    = 2;
+		while ( isset( $taken[ $candidate ] ) && ! isset( $taken[ $candidate ][ (int) $category_id ] ) ) {
+			$candidate = $service_id . '-' . $suffix;
+			++$suffix;
+		}
+		return $candidate;
 	}
 
 	/**

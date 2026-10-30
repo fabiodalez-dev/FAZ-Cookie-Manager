@@ -21,6 +21,10 @@ import { wpEval } from '../utils/wp-env';
  */
 
 const COOKIE_NAME = '_faz_e2e_360_bk';
+const RENAMED_NAME = '_faz_e2e_360_bk_renamed';
+// Matches Google Analytics' `_ga_*` pattern, so it is a provider's cookie; a
+// unique suffix lets the purge below remove it without touching a real `_ga`.
+const PROVIDER_COOKIE_NAME = '_ga_FAZE2E365';
 const POLICY_URL = 'https://provider.example/privacy-360';
 const OPT_IN = "window._fazE2E360 = (window._fazE2E360 || 0) + 1;";
 
@@ -96,7 +100,7 @@ test.describe('Declared cookies as consent services (#360)', () => {
   function purgeLeftovers(): void {
     wpEval(`
       global $wpdb;
-      $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}faz_cookies WHERE name = %s", '${COOKIE_NAME}' ) );
+      $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}faz_cookies WHERE name IN ( %s, %s, %s )", '${COOKIE_NAME}', '${RENAMED_NAME}', '${PROVIDER_COOKIE_NAME}' ) );
       do_action( 'faz_after_delete_cookie' );
       do_action( 'faz_after_update_cookie' );
       echo 'ok';
@@ -172,6 +176,70 @@ test.describe('Declared cookies as consent services (#360)', () => {
       expect(body.policy_url).toBe('');
     } finally {
       await updateCookie({ policy_url: POLICY_URL });
+    }
+  });
+
+  // #365 review: WordPress's default arg sanitiser (format: uri → sanitize_url)
+  // used to run before the model and turn this into "http://provider.example/…",
+  // which the contract says to refuse. Only provable through the live REST stack.
+  test('a scheme-less policy URL is refused, not completed to http://', async () => {
+    await updateCookie({ policy_url: 'provider.example/privacy' });
+    try {
+      const res = await adminPage.request.get(`${baseURL}/?rest_route=/faz/v1/cookies/${cookieId}&context=edit`, {
+        headers: { 'X-WP-Nonce': nonce },
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(body.policy_url).toBe('');
+    } finally {
+      await updateCookie({ policy_url: POLICY_URL });
+    }
+  });
+
+  // #365 review: the id is the public key integrators gate on and returning
+  // visitors' svc.<id> tokens are stored under. It used to be re-derived from
+  // the slug on every read, so an edited slug (an import, a REST client) moved
+  // it; it is now frozen in the row's meta at the first save.
+  test('the service id is frozen at the first save: a later slug change does not move it', async () => {
+    await updateCookie({ slug: RENAMED_NAME });
+    try {
+      const res = await adminPage.request.get(`${baseURL}/?rest_route=/faz/v1/cookies/${cookieId}&context=edit`, {
+        headers: { 'X-WP-Nonce': nonce },
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(body.slug).toBe(RENAMED_NAME);
+      expect(body.service_id, 'service id survives the slug change').toBe(COOKIE_NAME);
+    } finally {
+      await updateCookie({ slug: COOKIE_NAME });
+    }
+  });
+
+  // #365 review: a hand-declared cookie a provider already owns (here GA's
+  // `_ga_*`) must not become a second service next to the provider's own.
+  test('a hand-declared provider cookie is not exposed as a second service', async ({ page, wpBaseURL }) => {
+    const analyticsId = parseInt(wpEval(`
+      global $wpdb;
+      echo (int) $wpdb->get_var( $wpdb->prepare( "SELECT category_id FROM {$wpdb->prefix}faz_cookie_categories WHERE slug = %s", 'analytics' ) );
+    `).trim(), 10);
+    expect(analyticsId, 'analytics category must exist in DB').toBeGreaterThan(0);
+    const res = await adminPage.request.post(`${baseURL}/?rest_route=/faz/v1/cookies`, {
+      headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+      data: { name: PROVIDER_COOKIE_NAME, domain: '127.0.0.1', category: analyticsId, duration: { en: '2 years' }, description: { en: 'E2E #365 provider cookie' } },
+    });
+    const body = await res.json() as Record<string, unknown>;
+    const providerCookieId = typeof body.id === 'number' ? body.id : 0;
+    expect(providerCookieId, `create: got no id — ${JSON.stringify(body)}`).toBeGreaterThan(0);
+    try {
+      expect(body.service_id, 'the REST response shows no key the runtime does not expose').toBe('');
+      await page.context().clearCookies();
+      await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
+      const declared = await page.evaluate(() => {
+        const cfg = (window as Record<string, unknown> & { _fazConfig?: { _declaredServices?: Array<{ id: string; cookies: string[] }> } })._fazConfig;
+        return cfg?._declaredServices ?? [];
+      });
+      expect(declared.some((s) => (s.cookies || []).includes('_ga_FAZE2E365')), 'no declared service for the provider cookie').toBe(false);
+      expect(declared.some((s) => s.id === COOKIE_NAME), 'the ordinary declared cookie is still a service').toBe(true);
+    } finally {
+      await deleteCookieById(providerCookieId);
     }
   });
 

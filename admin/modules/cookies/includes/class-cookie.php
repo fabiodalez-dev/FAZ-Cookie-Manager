@@ -170,8 +170,12 @@ class Cookie extends Store {
 			// under which window.getFazConsent().services reports this cookie; the
 			// policy URL is shown under the cookie row in every declaration surface;
 			// the flag only decides WHEN the opt-in script runs, never what it is,
-			// so none of the three needs the unfiltered_html gate.
-			'service_id'    => $this->get_service_id(),
+			// so none of the three needs the unfiltered_html gate. The service id is
+			// the one the runtime actually exposes, '' for a row it does not
+			// (scanner-discovered, necessary, a provider's own cookie, a cross-
+			// category clash): showing a key that getFazConsent().services never
+			// answers would send an integrator to gate on undefined.
+			'service_id'    => $this->get_exposed_service_id(),
 			'policy_url'    => $this->get_policy_url(),
 			'opt_in_run_each_load' => $this->get_opt_in_run_each_load(),
 			'date_created'  => $this->get_date_created(),
@@ -344,6 +348,10 @@ class Cookie extends Store {
 				// javascript: scheme and mangle nothing useful. The dedicated
 				// sanitiser keeps http(s) only.
 				$meta[ $key ] = self::sanitize_policy_url_value( $item );
+			} elseif ( 'service_id' === $key ) {
+				// The frozen public key: the same alphabet derive_service_id()
+				// produces, so a hand-edited value cannot smuggle anything else in.
+				$meta[ $key ] = is_string( $item ) ? sanitize_key( $item ) : '';
 			} elseif ( 'opt_in_run_each_load' === $key ) {
 				// Strict bool: sanitize_textarea_field() would turn `true` into
 				// the string "1" and `false` into "", and a later `! empty()`
@@ -425,7 +433,131 @@ class Cookie extends Store {
 	 * @return string '' when neither slug nor name yields a usable key.
 	 */
 	public function get_service_id() {
-		return self::derive_service_id( $this->get_slug(), $this->get_name() );
+		return self::service_id_for_row( $this->get_slug(), $this->get_name(), $this->get_meta() );
+	}
+
+	/**
+	 * The key window.getFazConsent().services reports this cookie under, or ''
+	 * when the runtime does not expose it as a declared service.
+	 *
+	 * Read from the same inventory map the frontend builds the services from,
+	 * so the REST client and the admin dialog can never disagree with it.
+	 *
+	 * @return string
+	 */
+	public function get_exposed_service_id() {
+		$id = (int) $this->get_id();
+		if ( $id < 1 || $this->is_discovered() || ! class_exists( __NAMESPACE__ . '\\Cookie_Controller' ) ) {
+			return '';
+		}
+		$map = Cookie_Controller::get_instance()->get_declared_service_map();
+		return isset( $map['by_cookie'][ $id ] ) ? (string) $map['by_cookie'][ $id ] : '';
+	}
+
+	/**
+	 * The service id of a raw row: the one frozen in its meta when it was saved,
+	 * else the derivation from slug or name.
+	 *
+	 * The frozen copy is what makes the id stable (#365 review). Derived on every
+	 * read, it changed when the operator fixed a typo in the cookie name, or when
+	 * a later release added a Known_Providers entry with the same key — and the
+	 * integrator's getFazConsent().services[id] check, plus every returning
+	 * visitor's svc.<id> token, silently stopped matching. Rows saved before the
+	 * id was frozen still derive, exactly as before.
+	 *
+	 * @param string       $slug Row slug (may be '').
+	 * @param string       $name Row name.
+	 * @param array|string $meta Decoded meta array, or the raw JSON column.
+	 * @return string
+	 */
+	public static function service_id_for_row( $slug, $name, $meta ) {
+		if ( is_string( $meta ) && '' !== $meta ) {
+			$meta = json_decode( $meta, true );
+		}
+		if ( is_array( $meta ) && isset( $meta['service_id'] ) && is_string( $meta['service_id'] ) ) {
+			$stored = sanitize_key( $meta['service_id'] );
+			if ( '' !== $stored ) {
+				return $stored;
+			}
+		}
+		return self::derive_service_id( $slug, $name );
+	}
+
+	/**
+	 * Save the cookie, freezing its service id on the first save of a declared row.
+	 *
+	 * Only hand-declared rows get one: a scanner-discovered row is never a
+	 * service of its own (its provider is). The id must not collide with a
+	 * declared cookie in ANOTHER category, which the runtime could not expose
+	 * (one key cannot answer for two categories): it gets a -2, -3… suffix
+	 * instead. A same-category match keeps the shared key on purpose — two rows
+	 * whose names collapse to one key are one declared thing to the visitor.
+	 *
+	 * Written through set_object_data(), not set_meta(): the latter strips the
+	 * script keys for a user without unfiltered_html, and assigning an id must
+	 * never cost a row the scripts an administrator gave it.
+	 *
+	 * @return int
+	 */
+	public function save() {
+		if ( ! $this->is_discovered() ) {
+			$meta = $this->get_meta();
+			if ( empty( $meta['service_id'] ) ) {
+				$service_id = self::derive_service_id( $this->get_slug(), $this->get_name() );
+				if ( '' !== $service_id && class_exists( __NAMESPACE__ . '\\Cookie_Controller' ) ) {
+					$service_id = Cookie_Controller::get_instance()->unique_declared_service_id( $service_id, (int) $this->get_category(), (int) $this->get_id() );
+				}
+				if ( '' !== $service_id ) {
+					$meta['service_id'] = $service_id;
+					$this->set_object_data( 'meta', $meta );
+					$this->decoded_meta = null;
+				}
+			}
+		}
+		$saved = parent::save();
+		// The REST handlers build their response before the faz_after_update_cookie
+		// action busts the caches, so drop the map here: the response must already
+		// carry the key this save just exposed.
+		if ( ! $this->is_discovered() && class_exists( __NAMESPACE__ . '\\Cookie_Controller' ) ) {
+			Cookie_Controller::get_instance()->forget_declared_service_map();
+		}
+		return $saved;
+	}
+
+	/**
+	 * Whether a cookie name belongs to a Known_Providers service.
+	 *
+	 * Such a cookie already has an owner — the provider's toggle and key — so a
+	 * hand-declared row for it (an operator adding `_ga` because the scanner
+	 * missed it) must not become a second service for the same cookie: the
+	 * preference centre would show two toggles, and the most-restrictive
+	 * shredder rule would delete `_ga` for a visitor who granted Google
+	 * Analytics but left the duplicate off (#365 review). Exact names and
+	 * trailing-wildcard patterns (`_ga_*`), the same matching the shredder uses.
+	 *
+	 * @param string $name Cookie name.
+	 * @return bool
+	 */
+	public static function is_provider_cookie_name( $name ) {
+		$name = (string) $name;
+		if ( '' === $name || ! class_exists( '\\FazCookie\\Includes\\Known_Providers' ) ) {
+			return false;
+		}
+		foreach ( \FazCookie\Includes\Known_Providers::get_all() as $provider ) {
+			if ( empty( $provider['cookies'] ) || ! is_array( $provider['cookies'] ) ) {
+				continue;
+			}
+			foreach ( $provider['cookies'] as $pattern ) {
+				$pattern = (string) $pattern;
+				if ( $pattern === $name ) {
+					return true;
+				}
+				if ( false !== strpos( $pattern, '*' ) && preg_match( '/^' . str_replace( '\\*', '.*', preg_quote( $pattern, '/' ) ) . '$/', $name ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**

@@ -38,6 +38,29 @@ namespace FazCookie\Frontend {
 	}
 }
 
+namespace FazCookie\Admin\Modules\Cookies\Includes {
+	// Stand-in for the inventory map (#365 review): get_prepared_data() reports
+	// the id the RUNTIME exposes, read from Cookie_Controller. The real map is
+	// exercised in test-cookie-controller-edge-php.php against a mock $wpdb.
+	class Cookie_Controller {
+		public static $map = array( 'services' => array(), 'by_cookie' => array() );
+		private static $instance;
+		public static function get_instance() {
+			if ( null === self::$instance ) {
+				self::$instance = new self();
+			}
+			return self::$instance;
+		}
+		public function get_declared_service_map() {
+			return self::$map;
+		}
+		public function forget_declared_service_map() {}
+		public function unique_declared_service_id( $id, $category_id, $cookie_id ) {
+			return $id;
+		}
+	}
+}
+
 namespace {
 
 error_reporting( E_ALL & ~E_DEPRECATED );
@@ -250,7 +273,14 @@ $p = make_cookie( 'bk_session', '', array(
 	'policy_url'           => 'https://booking.example/privacy',
 	'opt_in_run_each_load' => true,
 ) )->get_prepared_data();
-assert_eq( $p['service_id'] ?? null, 'bk_session', 'prepared: service_id present' );
+assert_eq( $p['service_id'] ?? null, '', 'prepared: a row the runtime does not expose reports no service id (#365 review)' );
+\FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::$map = array( 'services' => array(), 'by_cookie' => array( 42 => 'bk_session' ) );
+$p = make_cookie( 'bk_session', 'bk_session', array(
+	'policy_url'           => 'https://booking.example/privacy',
+	'opt_in_run_each_load' => true,
+) )->get_prepared_data();
+assert_eq( $p['service_id'] ?? null, 'bk_session', 'prepared: service_id is the key the runtime map exposes' );
+\FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::$map = array( 'services' => array(), 'by_cookie' => array() );
 assert_eq( $p['policy_url'] ?? null, 'https://booking.example/privacy', 'prepared: policy_url present' );
 assert_true( true === ( $p['opt_in_run_each_load'] ?? null ), 'prepared: opt_in_run_each_load present as bool' );
 assert_false( array_key_exists( 'opt_in_script', $p ), 'prepared: scripts still excluded (admin-only)' );
@@ -258,7 +288,19 @@ assert_false( array_key_exists( 'opt_in_script', $p ), 'prepared: scripts still 
 $legacy = make_cookie( '_gid', '_gid', array( 'opt_in_script' => 'x=1' ) )->get_prepared_data();
 assert_eq( $legacy['policy_url'], '', 'prepared (legacy row): policy_url defaults to empty' );
 assert_true( false === $legacy['opt_in_run_each_load'], 'prepared (legacy row): flag defaults to false' );
-assert_eq( $legacy['service_id'], '_gid', 'prepared (legacy row): service_id derived anyway' );
+assert_eq( $legacy['service_id'], '', 'prepared (legacy row): not in the runtime map → no service id shown' );
+\FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::$map = array( 'services' => array(), 'by_cookie' => array() );
+
+// 4b. #365 review: the frozen id, the provider-cookie test, meta sanitising.
+assert_eq( make_cookie( 'Booking Widget v2', '', array( 'service_id' => 'booking-widget' ) )->get_service_id(), 'booking-widget', 'service_id: the id frozen at save survives a rename of the cookie' );
+assert_eq( make_cookie( 'google-analytics', '', array( 'service_id' => 'google-analytics-cookie' ) )->get_service_id(), 'google-analytics-cookie', 'service_id: a frozen id is read back as stored' );
+assert_eq( make_cookie( 'x', '', array( 'service_id' => 'Bad Key!<b>' ) )->get_meta()['service_id'], 'badkeyb', 'get_meta: a hand-edited service_id is reduced to the key alphabet' );
+assert_eq( make_cookie( 'Booking Widget', '', array( 'service_id' => '' ) )->get_service_id(), 'booking-widget', 'service_id: an empty frozen value falls back to the derivation' );
+assert_eq( Cookie::service_id_for_row( '', 'Booking Widget', wp_json_encode( array( 'service_id' => 'booking-widget' ) ) ), 'booking-widget', 'service_id_for_row: reads the frozen id from the raw JSON column' );
+assert_true( Cookie::is_provider_cookie_name( '_ga' ), 'provider cookie: _ga belongs to Google Analytics' );
+assert_true( Cookie::is_provider_cookie_name( '_ga_ABC123' ), 'provider cookie: _ga_ABC123 matches the _ga_* wildcard' );
+assert_false( Cookie::is_provider_cookie_name( 'bk_session' ), 'provider cookie: a booking widget cookie has no provider' );
+assert_false( Cookie::is_provider_cookie_name( '' ), 'provider cookie: an empty name is never a provider cookie' );
 
 // =========================================================================
 // 5. Shortcodes: link rendered only when set, new tab, no opener/referrer.

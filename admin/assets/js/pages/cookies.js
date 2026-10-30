@@ -1210,6 +1210,13 @@
 			{ label: fazI18n('cookies.descriptionLabel', 'Description'), path: 'description', type: 'textarea' },
 			{ label: fazI18n('cookies.policyUrlLabel', 'Provider privacy policy URL'), path: 'policy_url', type: 'url', placeholder: fazI18n('cookies.policyUrlPlaceholder', 'https://provider.example/privacy'), help: fazI18n('cookies.policyUrlHelp', 'Shown as a link under the cookie in the banner and in the cookie policy, so visitors can read the provider\'s policy before deciding.') },
 		];
+		// A saved row the runtime does not expose as a service (scanner-discovered,
+		// necessary, a provider's own cookie) comes back with an empty id: showing
+		// the field with "assigned when you save" would promise a key that
+		// getFazConsent().services never answers (#365 review).
+		if (isEdit && !cookie.service_id) {
+			fields = fields.filter(function (f) { return f.path !== 'service_id'; });
+		}
 
 		// Only expose opt-in/opt-out script fields to users with the
 		// `unfiltered_html` capability. Without this guard the admin UI would

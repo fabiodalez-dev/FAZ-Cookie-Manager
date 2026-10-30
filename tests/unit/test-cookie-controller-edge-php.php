@@ -568,6 +568,92 @@ $wpdb->detected_col = null;
 $malformed          = $method->invoke( $instance );
 assert_eq( $malformed, array(), 'get_detected_cookie_names: non-array get_col result → empty list (defensive cast)' );
 
+// =========================================================================
+// 10. #365 review: get_declared_service_map() — the ONE answer to "which
+//     declared row is which service", read by the frontend, the scripts map
+//     and the REST response. Real controller, mock $wpdb.
+// =========================================================================
+function declared_row( $id, $name, $category, $discovered = false, $meta = array() ) {
+	$row                = new stdClass();
+	$row->cookie_id     = $id;
+	$row->name          = $name;
+	$row->slug          = '';
+	$row->description   = wp_json_encode( array( 'en' => '' ) );
+	$row->duration      = wp_json_encode( array( 'en' => 'session' ) );
+	$row->domain        = 'example.com';
+	$row->category      = $category;
+	$row->type          = 0;
+	$row->discovered    = $discovered ? 1 : 0;
+	$row->url_pattern   = '';
+	$row->meta          = wp_json_encode( $meta );
+	$row->date_created  = '2026-01-01 00:00:00';
+	$row->date_modified = '2026-01-01 00:00:00';
+	return $row;
+}
+function category_row( $id, $slug ) {
+	$c              = new stdClass();
+	$c->category_id = $id;
+	$c->slug        = $slug;
+	return $c;
+}
+function reset_inventory( $wpdb, $cookies ) {
+	$GLOBALS['_cache']      = array();
+	$GLOBALS['_transients'] = array();
+	Cache::reset_prefix_cache();
+	$wpdb->category_rows = array( category_row( 1, 'necessary' ), category_row( 3, 'analytics' ), category_row( 4, 'functional' ), category_row( 5, 'marketing' ) );
+	$wpdb->cookies_rows  = $cookies;
+	Cookie_Controller::get_instance()->forget_declared_service_map();
+	reset_side_effects();
+}
+require_once $root . '/includes/class-known-providers.php';
+
+reset_inventory( $wpdb, array(
+	declared_row( 200, 'Booking Widget', 4 ),
+	declared_row( 201, 'booking-widget', 4 ),
+	declared_row( 202, 'booking widget', 5 ),                       // cross-category clash (legacy, unsaved)
+	declared_row( 203, '_ga', 3 ),                                  // a Known_Providers cookie
+	declared_row( 204, 'nec_cookie', 1 ),                           // necessary
+	declared_row( 205, '_hjSession_1', 3, true ),                   // scanner-discovered
+	declared_row( 206, 'Chat Loader', 5, false, array( 'service_id' => 'chat-v1' ) ), // frozen id
+) );
+$map = $ctrl->get_declared_service_map();
+assert_eq( array_keys( $map['services'] ), array( 'booking-widget', 'chat-v1' ), 'declared map: only rows the runtime may expose become services' );
+assert_eq( $map['services']['booking-widget']['cookies'], array( 'Booking Widget', 'booking-widget' ), 'declared map: same-category rows sharing a key fold into one service' );
+assert_eq( $map['services']['booking-widget']['category'], 'functional', 'declared map: the service keeps the first row\'s category' );
+assert_eq( $map['by_cookie'], array( 200 => 'booking-widget', 201 => 'booking-widget', 206 => 'chat-v1' ), 'declared map: by_cookie names the owner of every exposed row, and of no other' );
+assert_false( isset( $map['by_cookie'][203] ), 'declared map: a hand-declared _ga is NOT a second service next to Google Analytics' );
+assert_false( isset( $map['by_cookie'][202] ), 'declared map: the cross-category clash is not exposed (no script gated on a toggle it does not own)' );
+assert_eq( $map['services']['chat-v1']['label'], 'Chat Loader', 'declared map: a frozen id keys the service, the name stays its label' );
+assert_true( isset( $GLOBALS['_transient_sets']['faz_declared_services_v2'] ), 'declared map: cached in the v2 transient' );
+assert_eq( $ctrl->unique_declared_service_id( 'booking-widget', 4, 0 ), 'booking-widget', 'unique id: a key held in the SAME category is kept (the rows fold)' );
+assert_eq( $ctrl->unique_declared_service_id( 'chat-v1', 3, 0 ), 'chat-v1-2', 'unique id: a key held only by another category gets the first free suffix' );
+assert_eq( $ctrl->unique_declared_service_id( 'brand-new', 3, 0 ), 'brand-new', 'unique id: a free key is returned unchanged' );
+assert_eq( $ctrl->unique_declared_service_id( 'chat-v1', 3, 206 ), 'chat-v1', 'unique id: the row being saved does not collide with itself' );
+
+// The REST/admin view reads the same map.
+$exposed = new Cookie( declared_row( 200, 'Booking Widget', 4 ) );
+assert_eq( $exposed->get_prepared_data()['service_id'], 'booking-widget', 'prepared data: an exposed row reports its runtime key' );
+$hidden = new Cookie( declared_row( 203, '_ga', 3 ) );
+assert_eq( $hidden->get_prepared_data()['service_id'], '', 'prepared data: a row the runtime does not expose reports no key' );
+
+// save() freezes the id once, through the same uniqueness rule, and drops the map.
+reset_inventory( $wpdb, array( declared_row( 206, 'Chat Loader', 5, false, array( 'service_id' => 'chat-v1' ) ) ) );
+$wpdb->update_queue = array( 1 );
+$fresh = new Cookie( declared_row( 300, 'Chat V1', 3, false, array( 'opt_in_script' => 'window.x=1' ) ) );
+$fresh->save();
+$saved_meta = json_decode( $wpdb->last_update[1]['meta'], true );
+assert_eq( $saved_meta['service_id'] ?? null, 'chat-v1-2', 'save(): a declared row gets its id frozen, made unique across categories' );
+assert_eq( $saved_meta['opt_in_script'] ?? null, 'window.x=1', 'save(): freezing the id never drops the row\'s scripts' );
+assert_true( transient_purged( 'faz_declared_services_v2' ), 'save(): the map is dropped so the REST response carries the new key' );
+$wpdb->update_queue = array( 1 );
+$frozen = new Cookie( declared_row( 301, 'Renamed Widget', 3, false, array( 'service_id' => 'old-widget' ) ) );
+$frozen->save();
+assert_eq( json_decode( $wpdb->last_update[1]['meta'], true )['service_id'] ?? null, 'old-widget', 'save(): an already frozen id is never re-derived from a new name' );
+$wpdb->update_queue = array( 1 );
+$found = new Cookie( declared_row( 302, '_hjSession_1', 3, true ) );
+$found->save();
+assert_false( isset( json_decode( $wpdb->last_update[1]['meta'], true )['service_id'] ), 'save(): a scanner-discovered row gets no service id' );
+
 // ---------------------------------------------------------------------------
 echo "\n--\n";
 echo "Tests:  $tests_run\n";

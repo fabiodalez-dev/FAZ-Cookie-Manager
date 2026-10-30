@@ -191,7 +191,15 @@ class CLI {
 		$faz_bust_frontend_caches = static function () {
 			\delete_transient( 'faz_cookie_scripts_map' );
 			\delete_transient( 'faz_detected_cookie_names' );
-			\delete_transient( 'faz_declared_services_v1' );
+			// Through the controller, so its in-request memo goes with the
+			// transient: a REST write that reads the map back in the same
+			// request must not see the pre-write answer.
+			if ( \class_exists( '\\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Cookie_Controller' ) ) {
+				\FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::get_instance()->forget_declared_service_map();
+			} else {
+				\delete_transient( 'faz_declared_services_v2' );
+				\delete_transient( 'faz_declared_services_v1' );
+			}
 			\delete_transient( 'faz_server_cookie_category_map' );
 			// Versioned sibling: the map gained a wordpress-internal filter, so
 			// the key was bumped to stop a stale unfiltered map from answering
