@@ -4599,7 +4599,10 @@ class Frontend {
 					// runtime replays on every later page load while the owner is
 					// accepted. The accept-click transition still runs `opt_in`, so a
 					// script never fires twice on the page where consent is given.
-					if ( ! empty( $meta['opt_in_run_each_load'] ) && true === $meta['opt_in_run_each_load'] ) {
+					// Same strict allowlist Cookie::get_meta() applies: this method reads
+					// the raw column, so an import that stored "yes"/"1"/"on" must not
+					// show the replay as on in the admin and skip it at runtime.
+					if ( isset( $meta['opt_in_run_each_load'] ) && \FazCookie\Admin\Modules\Cookies\Includes\Cookie::sanitize_bool_value( $meta['opt_in_run_each_load'] ) ) {
 						$cookie_scripts[ $cat_slug ]['opt_in_persistent'][] = $entry;
 					}
 				}

@@ -220,6 +220,32 @@ test.describe('Declared cookies as consent services (#360)', () => {
     }
   });
 
+  test('a run-each-load flag stored as the string "yes" (settings import) still puts the script in the persistent list', async ({ page, wpBaseURL }) => {
+    // Write the raw meta column the way an import can leave it, bypassing the
+    // REST sanitiser, then bust the scripts-map transient.
+    wpEval(`
+      global $wpdb;
+      $t    = $wpdb->prefix . 'faz_cookies';
+      $meta = json_decode( (string) $wpdb->get_var( $wpdb->prepare( "SELECT meta FROM {$t} WHERE cookie_id = %d", ${cookieId} ) ), true );
+      $meta['opt_in_run_each_load'] = 'yes';
+      $wpdb->update( $t, array( 'meta' => wp_json_encode( $meta ) ), array( 'cookie_id' => ${cookieId} ) );
+      do_action( 'faz_after_update_cookie' );
+      echo 'ok';
+    `);
+    try {
+      await page.context().clearCookies();
+      await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
+      const persistent = await page.evaluate(() => {
+        type Entry = string | { code: string; service: string };
+        const cfg = (window as Record<string, unknown> & { _fazConfig?: { _cookieScripts?: Record<string, { opt_in_persistent?: Entry[] }> } })._fazConfig;
+        return (cfg?._cookieScripts?.functional?.opt_in_persistent ?? []).map((e) => (typeof e === 'string' ? e : e.code));
+      });
+      expect(persistent, '"yes" is read as on, like Cookie::get_meta() reads it').toContain(OPT_IN);
+    } finally {
+      await updateCookie({ opt_in_run_each_load: true });
+    }
+  });
+
   test('with per-service consent on, a denied declared service is not replayed although its category is granted', async ({ page, wpBaseURL }) => {
     const before = await getSettings();
     const wasOn = !!((before.banner_control as Record<string, unknown> | undefined)?.per_service_consent);
