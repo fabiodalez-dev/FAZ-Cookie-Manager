@@ -9,11 +9,14 @@
  * initialization"). It now defers to a microtask in that case, and still
  * waits for DOMContentLoaded while the document is loading.
  *
- * `_fazReadBannerTemplate()` undoes the server-side `</` → `<\/` escape of the
- * banner template (Frontend::escape_template_end_tags()), which keeps an HTML4
- * page rewrite (DOMDocument::loadHTML) from cutting the template at its first
- * closing tag. Unescaped content — what the geo bootstrap writes client-side —
- * must come back unchanged.
+ * The banner template is now a <template id="fazBannerTemplate"> (it was a
+ * <script type="text/template"> with every `</` written as `<\/`, which a
+ * translation proxy mangled). `_fazReadBannerTemplate()` reads either form —
+ * the script form still arrives from pages cached before the update — and
+ * `_fazWriteBannerTemplate()` stores the geo bootstrap's markup in the form
+ * the element needs. The <template> must survive an HTML4 page rewrite
+ * (DOMDocument::loadHTML, run here through the real php binary) as the same
+ * DOM a browser builds from the original.
  *
  * Both are the real functions in frontend/js/script.js, loaded in jsdom with
  * the DOMContentLoaded bootstrap neutralised, as url-host-matching.test.mjs
@@ -24,6 +27,7 @@
 
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -148,6 +152,74 @@ const plain = '<div class="faz-consent-bar"><p>Cookies</p><a href="https://examp
 eq('unescaped content (geo bootstrap) is unchanged', readTemplate(plain), plain);
 eq('a backslash-slash that does not follow `<` is left alone', readTemplate('<p>path a\\/b<\\/p>'), '<p>path a\\/b</p>');
 eq('an empty template reads as an empty string', readTemplate(''), '');
+
+console.log('\n#fazBannerTemplate as a <template> element\n');
+
+const markup = '<div class="faz-consent-bar" id="faz-consent"><p class="faz-title">Cookies</p>'
+  + '<button class="faz-btn faz-btn-accept">Accept</button><img src="https://example.test/i.svg" alt=""></div>';
+
+function templateWith(html) {
+  const tpl = win.document.createElement('template');
+  tpl.id = 'fazBannerTemplate';
+  tpl.innerHTML = html;
+  win.document.body.appendChild(tpl);
+  return tpl;
+}
+
+{
+  const tpl = templateWith(markup);
+  eq('reads back the markup it holds', win.eval('_fazReadBannerTemplate')(tpl), markup);
+  eq('its content is not in the document (no duplicate #faz-consent)', win.document.getElementById('faz-consent'), null);
+  tpl.remove();
+}
+{
+  const tpl = templateWith('<p>a <code>&lt;\\/p&gt;</code></p>');
+  eq('a literal `<\\/` in a <template> is not rewritten', win.eval('_fazReadBannerTemplate')(tpl), '<p>a <code>&lt;\\/p&gt;</code></p>');
+  tpl.remove();
+}
+{
+  const tpl = templateWith('<div>old</div>');
+  win.eval('_fazWriteBannerTemplate')(tpl, markup);
+  eq('the geo payload writer stores parsed markup, read back unchanged', win.eval('_fazReadBannerTemplate')(tpl), markup);
+  eq('the writer leaves no text node in the template content', [...tpl.content.childNodes].some((n) => n.nodeType === 3), false);
+  eq('the written content is still not in the document', win.document.getElementById('faz-consent'), null);
+  tpl.remove();
+}
+{
+  const legacy = win.document.createElement('script');
+  legacy.type = 'text/template';
+  win.eval('_fazWriteBannerTemplate')(legacy, markup);
+  eq('the legacy script form keeps textContent', legacy.textContent, markup);
+}
+
+console.log('\nThe real templates after an HTML4 (libxml) page rewrite build the same DOM\n');
+
+const shipped = JSON.parse(readFileSync(resolve(HERE, '../../../admin/modules/banners/includes/templates/6.2.0/template.json'), 'utf8'));
+const PHP_ROUND_TRIP = `
+$in = stream_get_contents( STDIN );
+$page = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><template id="fazBannerTemplate">' . $in . '</template><p id="after">x</p></body></html>';
+$d = new DOMDocument(); libxml_use_internal_errors( true );
+$d->loadHTML( $page );
+$out = $d->saveHTML( $d->documentElement );
+echo preg_match( '#<template id="fazBannerTemplate">(.*)</template>#s', $out, $m ) ? $m[1] : '';
+`;
+function domOf(html) {
+  const tpl = win.document.createElement('template');
+  tpl.innerHTML = html;
+  return tpl.innerHTML.replace(/\s+/g, ' ');
+}
+let php = true;
+try { execFileSync('php', ['-v'], { stdio: 'ignore' }); } catch { php = false; }
+if (!php) {
+  console.log('  (php not available — DOMDocument round trip skipped)');
+} else {
+  for (const entry of shipped) {
+    if (!entry || !entry.html) continue;
+    const text = entry.html.replace(/\[faz_[a-z_]+\]/g, 'Příliš žluťoučký kůň «Café»');
+    const after = execFileSync('php', ['-r', PHP_ROUND_TRIP], { input: text }).toString('utf8');
+    eq(`${entry.type}: same DOM before and after the DOMDocument rewrite`, domOf(after) === domOf(text), true);
+  }
+}
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

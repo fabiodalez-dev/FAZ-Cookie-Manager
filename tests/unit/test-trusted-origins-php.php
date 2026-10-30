@@ -19,7 +19,7 @@
  *      `Access-Control-Allow-Credentials: true` with it;
  *   4. the `throttled` refusals: every proxied visitor reaches the origin from
  *      the proxy's addresses. No trust shortcut was added — the existing
- *      declared-proxy path must read GTranslate's `X-GT-Viewer-IP` once the
+ *      declared-proxy path must read GTranslate's `X-GT-ClientIP` once the
  *      ranges and the header are declared, and must keep ignoring it from an
  *      undeclared peer.
  *
@@ -288,28 +288,28 @@ namespace {
 	tro_same( $saved['trusted_origins']['alternate_domains'], array(), 'a scalar that is not a string is dropped' );
 	tro_same( in_array( 'alternate_domains', Settings::get_excludes(), true ), true, 'the leaf is handed whole to sanitize_option() instead of recursed into' );
 
-	echo "\n== Throttled refusals: GTranslate's X-GT-Viewer-IP through the declared-proxy path ==\n";
+	echo "\n== Throttled refusals: GTranslate's X-GT-ClientIP through the declared-proxy path ==\n";
 	$GLOBALS['faz_test_options'] = array();
 	$gt_peer   = '85.10.20.30';   // A proxy address GTranslate support gave the site.
 	$visitor   = '8.8.8.8';
 	$declare_ranges = function ( $cidrs ) { return array_merge( (array) $cidrs, array( '85.10.20.0/24' ) ); };
-	$name_header    = function () { return 'HTTP_X_GT_VIEWER_IP'; };
+	$name_header    = function () { return 'HTTP_X_GT_CLIENTIP'; };
 
-	$_SERVER = array( 'REMOTE_ADDR' => $gt_peer, 'HTTP_X_GT_VIEWER_IP' => $visitor, 'HTTP_X_FORWARDED_FOR' => '9.9.9.9' );
+	$_SERVER = array( 'REMOTE_ADDR' => $gt_peer, 'HTTP_X_GT_CLIENTIP' => $visitor, 'HTTP_X_FORWARDED_FOR' => '9.9.9.9' );
 	tro_same( faz_resolve_client_ip(), $gt_peer, 'nothing declared: the proxy address stands (neither forwarded header is believed)' );
 	$GLOBALS['faz_test_filters']['faz_trusted_proxy_cidrs'] = $declare_ranges;
-	tro_same( faz_resolve_client_ip(), '9.9.9.9', 'ranges declared, header not named: X-Forwarded-For is read, X-GT-Viewer-IP is not' );
+	tro_same( faz_resolve_client_ip(), '9.9.9.9', 'ranges declared, header not named: X-Forwarded-For is read, X-GT-ClientIP is not' );
 	$GLOBALS['faz_test_filters']['faz_proxy_forwarded_header'] = $name_header;
-	tro_same( faz_resolve_client_ip(), $visitor, 'ranges + faz_proxy_forwarded_header=HTTP_X_GT_VIEWER_IP: the visitor\'s own address' );
+	tro_same( faz_resolve_client_ip(), $visitor, 'ranges + faz_proxy_forwarded_header=HTTP_X_GT_CLIENTIP: the visitor\'s own address' );
 	tro_same( faz_client_ip_identifies_visitor(), true, 'and that address identifies one visitor, so each gets their own throttle window' );
-	$_SERVER = array( 'REMOTE_ADDR' => $gt_peer, 'HTTP_X_GT_VIEWER_IP' => ' ' . $visitor . ' ' );
+	$_SERVER = array( 'REMOTE_ADDR' => $gt_peer, 'HTTP_X_GT_CLIENTIP' => ' ' . $visitor . ' ' );
 	tro_same( faz_resolve_client_ip(), $visitor, 'a single-address header with padding is read' );
-	$_SERVER = array( 'REMOTE_ADDR' => $gt_peer, 'HTTP_X_GT_VIEWER_IP' => '10.0.0.5' );
+	$_SERVER = array( 'REMOTE_ADDR' => $gt_peer, 'HTTP_X_GT_CLIENTIP' => '10.0.0.5' );
 	tro_same( faz_resolve_client_ip(), $gt_peer, 'a private address in the header is not a visitor: the peer stands' );
 	$_SERVER = array( 'REMOTE_ADDR' => $gt_peer, 'HTTP_X_FORWARDED_FOR' => '9.9.9.9' );
-	tro_same( faz_resolve_client_ip(), $gt_peer, 'a declared peer that sent no X-GT-Viewer-IP: the peer stands, no fallback to X-Forwarded-For' );
-	$_SERVER = array( 'REMOTE_ADDR' => '9.9.9.9', 'HTTP_X_GT_VIEWER_IP' => '1.2.3.4' );
-	tro_same( faz_resolve_client_ip(), '9.9.9.9', 'an undeclared peer forging X-GT-Viewer-IP gets nothing' );
+	tro_same( faz_resolve_client_ip(), $gt_peer, 'a declared peer that sent no X-GT-ClientIP: the peer stands, no fallback to X-Forwarded-For' );
+	$_SERVER = array( 'REMOTE_ADDR' => '9.9.9.9', 'HTTP_X_GT_CLIENTIP' => '1.2.3.4' );
+	tro_same( faz_resolve_client_ip(), '9.9.9.9', 'an undeclared peer forging X-GT-ClientIP gets nothing' );
 	unset( $GLOBALS['faz_test_filters']['faz_trusted_proxy_cidrs'], $GLOBALS['faz_test_filters']['faz_proxy_forwarded_header'] );
 	$_SERVER = array();
 

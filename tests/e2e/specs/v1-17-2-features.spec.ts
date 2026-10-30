@@ -323,12 +323,13 @@ test.describe('1.17.2 — [faz_cookie_settings] revisit shortcode', () => {
     // _fazInitOperations()) and log the diagnostic warning. This differs from
     // test 12, which removes the DOM AFTER listeners are already registered.
     await context.clearCookies();
-    // Strip the banner template (a <script id="fazBannerTemplate" type="text/template">)
+    // Strip the banner template (<template id="fazBannerTemplate">, or the
+    // <script type="text/template"> earlier releases printed)
     // from the HTML before the page scripts run, so _fazRenderBanner() early-returns.
     await page.route(`**/${PAGES.settings.slug}/**`, async (route) => {
       const resp = await route.fetch();
       const stripped = (await resp.text()).replace(
-        /<script id="fazBannerTemplate"[^>]*>[\s\S]*?<\/script>/,
+        /<(template|script) id="fazBannerTemplate"[^>]*>[\s\S]*?<\/\1>/,
         '',
       );
       await route.fulfill({ response: resp, body: stripped });

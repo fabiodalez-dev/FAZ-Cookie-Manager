@@ -305,6 +305,12 @@ function parseAttrs(source: string): Attrs {
   return attrs;
 }
 
+/** The banner template, in the <template> form the server prints. */
+function bannerTemplate(html: string): ScriptTag | undefined {
+  const match = /<template\b([^>]*\bid=["']?fazBannerTemplate["']?[^>]*)>([\s\S]*?)<\/template\s*>/i.exec(html);
+  return match ? { index: match.index, attrs: parseAttrs(match[1]), content: match[2] } : undefined;
+}
+
 function scriptTags(html: string): ScriptTag[] {
   const tags: ScriptTag[] = [];
   const re = /<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi;
@@ -476,12 +482,18 @@ function bootstrapOrderViolations(html: string): string[] {
 /** (c) banner template and stylesheet. */
 function bannerAssetViolations(html: string, base: Baseline): string[] {
   const problems: string[] = [];
-  const template = scriptTags(html).find((tag) => tag.attrs.id === 'fazBannerTemplate');
+  const template = bannerTemplate(html);
   if (!template) {
-    problems.push('script#fazBannerTemplate is missing');
+    problems.push('template#fazBannerTemplate is missing');
   } else {
-    if ((template.attrs.type ?? '').toLowerCase() !== 'text/template') problems.push(`fazBannerTemplate type is "${template.attrs.type ?? ''}"`);
     if (!template.content.includes('data-faz-tag')) problems.push('fazBannerTemplate lost its data-faz-tag markup');
+    // The template is real markup now, so an optimiser can reach it. An image
+    // whose src was moved to a lazy-load attribute would mount without it.
+    for (const img of template.content.match(/<img\b[^>]*>/gi) ?? []) {
+      const attrs = parseAttrs(img.slice(4, -1));
+      const src = attrs.src ?? '';
+      if (!src || src.startsWith('data:')) problems.push(`an image in the banner template lost its src: ${short(img)}`);
+    }
   }
   if (base.cssKind === 'link') {
     const link = voidTags(html, 'link').find((tag) => tag.attrs.id === 'faz-cookie-manager-css-css');

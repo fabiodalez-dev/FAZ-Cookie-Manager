@@ -2,6 +2,11 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- On a domain served through a translation proxy (GTranslate Translation Proxy, reported on a store with .com/.pl/.de translations) the banner broke: the consent bar ended up inside the revisit button, without its buttons, and stray closing tags showed in the text. The banner markup travelled in a `<script type="text/template">` with every `</` written as `<\/` (so that a page optimiser rewriting the HTML through DOMDocument could not cut it), and the proxy read that script as HTML, translated the escaped closing tags as text and closed the elements where it chose. The markup now travels in a `<template>` element with real closing tags: the proxy translates it with the rest of the page and keeps its structure, so the banner also appears in the translated language, and an HTML4 rewriter keeps it intact without any escape. Pages cached before the update keep working. Because page optimisers can now see the banner markup, every banner image carries the usual lazy-load opt-outs (`data-no-lazy`, `data-skip-lazy`, `skip-lazy`), and the containment FlyingPress "Lazy render" adds is taken off again inside the banner. The readme's translation-proxy FAQ names GTranslate's `X-GT-ClientIP` header (`HTTP_X_GT_CLIENTIP`) and its published address list.
+
 ## [1.35.0] - 2026-10-30
 
 ### Added

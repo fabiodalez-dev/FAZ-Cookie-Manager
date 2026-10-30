@@ -475,6 +475,25 @@ class Template {
 				}
 			}
 
+			// The template is printed as a <template> element, so a page
+			// optimiser now sees its images. A lazy-loader that swaps `src` for
+			// a placeholder (LiteSpeed's, WP Rocket's, Jetpack's…) leaves the
+			// mounted banner without its icons: the content of a <template> is
+			// never in view, and the loader's script does not watch it. Every
+			// image carries the opt-outs those loaders honour.
+			foreach ( $finder->query( '//img' ) as $img ) {
+				if ( ! $img instanceof \DOMElement ) {
+					continue;
+				}
+				$img->setAttribute( 'data-no-lazy', '1' );
+				$img->setAttribute( 'data-skip-lazy', '1' );
+				$classes = preg_split( '/\s+/', trim( $img->getAttribute( 'class' ) ), -1, PREG_SPLIT_NO_EMPTY );
+				if ( ! in_array( 'skip-lazy', $classes, true ) ) {
+					$classes[] = 'skip-lazy';
+				}
+				$img->setAttribute( 'class', implode( ' ', $classes ) );
+			}
+
 			$elements   = $finder->query( '//*[@data-faz-tag]' );
 			$properties = $this->properties;
 			$configs    = isset( $properties['config'] ) ? $properties['config'] : array();

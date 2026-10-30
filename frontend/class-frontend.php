@@ -936,7 +936,7 @@ class Frontend {
 				 * the first paint.
 				 *
 				 * Nothing on the page needs it before script.js runs: the banner
-				 * is built from a <script type="text/template"> by script.js, and
+				 * is built from a <template> by script.js, and
 				 * the few rules that style server-rendered page content
 				 * (.faz-hidden on blocked embeds, the placeholder floor, the
 				 * [faz_cookie_settings] button) are printed inline below. So the
@@ -1602,11 +1602,11 @@ class Frontend {
 	 * the document as HTML4 (DOMDocument::loadHTML(), e.g. WPSpeed's image
 	 * optimiser). libxml ends a <script> at the first `</` followed by a
 	 * letter, so a `</` inside the bundle's string literals truncates the
-	 * script. The banner template escapes `</` as `<\/` for this reason
-	 * (escape_template_end_tags()), but that is not done here on purpose:
-	 * rewriting `</` in JavaScript source would corrupt regex literals and
-	 * other code where `<\/` is not equivalent. A site that combines this
-	 * option with such a rewriter should leave this option off.
+	 * script. The banner template avoids this by being a <template> rather
+	 * than a script; a bundle cannot, and rewriting `</` in JavaScript source
+	 * would corrupt regex literals and other code where `<\/` is not
+	 * equivalent. A site that combines this option with such a rewriter
+	 * should leave this option off.
 	 *
 	 * @param string $handle        Script handle.
 	 * @param string $relative_path Path relative to frontend/.
@@ -3170,8 +3170,7 @@ class Frontend {
 	}
 
 	/**
-	 * Print banner HTML as script template using
-	 * type="text/template" attribute
+	 * Print the banner HTML as an inert <template> for script.js to mount.
 	 *
 	 * @return void
 	 */
@@ -3251,37 +3250,23 @@ class Frontend {
 		// icon, which browsers surface as a local-network access prompt.
 		$html = $this->repair_stale_asset_origin( $html );
 
-		// `<script type="text/template">` is the W3C-recommended way to
-		// embed inert HTML templates in the page (browsers do NOT execute
-		// it — `type` is not `text/javascript` or `module`). The banner
-		// frontend mounts this template into the DOM at runtime via
-		// `_fazInjectBannerHtml()` in script.js. wp_enqueue_script()
-		// cannot model this: there is no JS to load, only an HTML payload
-		// that must appear inline so the renderer finds it synchronously.
-		// phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- inert HTML template (type=text/template is non-executable); see comment above.
-		echo '<script id="fazBannerTemplate" type="text/template">';
-		echo self::escape_template_end_tags( wp_kses( $html, faz_allowed_html() ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already through wp_kses(); only `</` is rewritten.
-		echo '</script>';
-	}
-
-	/**
-	 * Write every `</` in the banner template as `<\/`.
-	 *
-	 * The template travels inside a <script type="text/template">. HTML5 ends
-	 * that element only at `</script`, but an HTML4 parser — libxml, i.e. PHP's
-	 * DOMDocument::loadHTML() — ends a script at any `</` followed by a letter
-	 * and then throws the stray end tags away. Optimisation plugins that
-	 * rewrite the whole page through DOMDocument (WPSpeed's image optimiser,
-	 * on by default) therefore delivered the template with every closing tag
-	 * removed: the browser nested the whole banner inside the title and the
-	 * consent bar rendered 0 px tall, with no buttons. `<\/` is plain text to
-	 * both parsers; _fazReadBannerTemplate() in script.js turns it back.
-	 *
-	 * @param string $html Sanitised template markup.
-	 * @return string
-	 */
-	public static function escape_template_end_tags( $html ) {
-		return str_replace( '</', '<\/', (string) $html );
+		// The banner markup travels in a <template> element: inert (nothing in
+		// it renders, runs or loads) and read by script.js, which mounts it
+		// into the page. It used to be a <script type="text/template"> with
+		// every `</` written as `<\/`, so that an HTML4 rewriter (libxml,
+		// DOMDocument::loadHTML() — WPSpeed's image optimiser) would not end
+		// the script at the first closing tag. A translation proxy (GTranslate
+		// Translation Proxy) parses that script body as HTML: it saw the
+		// opening tags, read every `<\/div>` as text, escaped it, translated
+		// it ("\ / Div", "przycisk") and closed the elements where it chose,
+		// so on the translated domains the consent bar ended up inside the
+		// revisit button with no buttons. In a <template> the closing tags are
+		// real: the proxy translates the text and keeps the structure, and
+		// libxml's HTML4 parser keeps an unknown element's children, so the
+		// DOMDocument round trip gives back the same DOM without any escape.
+		echo '<template id="fazBannerTemplate">';
+		echo wp_kses( $html, faz_allowed_html() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_kses() is the escape.
+		echo '</template>';
 	}
 
 	/**
@@ -12019,6 +12004,14 @@ class Frontend {
 	 *     on such a tag is dropped, which means text/javascript;
 	 *   - `<link data-href=…>` without `href` → `href` restored.
 	 *
+	 * And inside the banner <template>, the inline style "Lazy render" adds
+	 * (`content-visibility: auto;contain-intrinsic-size: auto Npx;`) is taken
+	 * off again. The template is real markup, so the Cloud Optimizer counts its
+	 * elements as page content below the fold; once mounted they are the fixed
+	 * consent bar and preference centre, where that containment would clip and
+	 * re-anchor them. Its exclusion list matches each element's own tag, which
+	 * the banner's unclassed inner elements would not match.
+	 *
 	 * @param mixed $html Optimised page HTML.
 	 * @return mixed
 	 */
@@ -12056,6 +12049,27 @@ class Frontend {
 		);
 		if ( is_string( $links ) ) {
 			$html = $links;
+		}
+
+		$template = preg_replace_callback(
+			'#(<template\b[^>]*\bid=(["\']?)fazBannerTemplate\2[^>]*>)(.*?)(</template>)#is',
+			static function ( $match ) {
+				// Not counted in $restored: with Lazy render on this happens on
+				// every optimised page by design, and is not a FAZ asset the
+				// exclusions failed to protect.
+				$body = preg_replace_callback(
+					'#\sstyle=(["\'])content-visibility:\s*auto;\s*contain-intrinsic-size:\s*auto\s+[0-9.]+px;\s*(.*?)\1#is',
+					static function ( $style ) {
+						return '' === trim( $style[2] ) ? '' : ' style=' . $style[1] . $style[2] . $style[1];
+					},
+					$match[3]
+				);
+				return $match[1] . ( is_string( $body ) ? $body : $match[3] ) . $match[4];
+			},
+			$html
+		);
+		if ( is_string( $template ) ) {
+			$html = $template;
 		}
 
 		if ( $restored > 0 ) {

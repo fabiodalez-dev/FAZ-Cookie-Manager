@@ -8,7 +8,9 @@
  *     PHP's DOMDocument::loadHTML(). Its HTML4 parser ends a <script> at any
  *     `</` + letter and drops the stray end tags, so the banner template inside
  *     <script type="text/template"> lost every closing tag and rendered 0 px tall.
- *     The server now writes `</` as `<\/` inside the template.
+ *     The template is now a <template> element, whose children libxml keeps.
+ *     (1.34.0 to 1.35.0 wrote `</` as `<\/` inside the script instead; that
+ *     escape is what a translation proxy mangled — see the third test.)
  *
  *  2. WPSpeed combines and defers the scripts. script.js then runs after the
  *     document is parsed, _fazDomReady() called the init synchronously in the
@@ -18,6 +20,12 @@
  *
  * Neither needs WPSpeed to reproduce: the fixture plugin performs the same
  * DOMDocument round trip, and a route adds `defer` to script.js.
+ *
+ * The third test is the GTranslate Translation Proxy report (dilnastore.com):
+ * the proxy translates every text node, and it read the body of the old
+ * <script type="text/template"> as HTML, so each escaped `<\/div>` became
+ * translated text and the consent bar ended up inside the revisit button with
+ * no buttons. The fixture's `translate` mode does the same to the page.
  */
 import { expect, test, type Page } from '../fixtures/wp-fixture';
 import { ensureFixturePlugin, listActivePluginFiles, restoreActivePluginFiles } from '../utils/wp-env';
@@ -52,7 +60,16 @@ async function expectWorkingBanner(page: Page, errors: string[]): Promise<void> 
   expect(errors.join('\n')).not.toMatch(/banner render step failed/);
 }
 
-// Not serial: the two tests are independent (the rewriter fixture only acts on
+/** expectWorkingBanner(), plus: the proxy's translation reached the banner. */
+async function expectWorkingBannerTranslated(page: Page, errors: string[]): Promise<void> {
+  const accept = page.locator('#faz-consent [data-faz-tag="accept-button"]');
+  await expect(accept).toBeVisible({ timeout: 10_000 });
+  await expect(accept, 'the banner text went through the proxy translation').toContainText('[t]');
+  expect(await page.locator('.faz-btn-revisit #faz-consent, .faz-overlay #faz-consent').count(), 'the consent bar is not nested inside the revisit button or the overlay').toBe(0);
+  await expectWorkingBanner(page, errors);
+}
+
+// Not serial: the tests are independent (the rewriter fixture only acts on
 // requests carrying ?faz_html4_rewrite=1, and the first test restores the
 // active plugin list in `finally`), so a failure in one must not skip the other.
 test.describe('Banner under page optimisers (WPSpeed report)', () => {
@@ -65,10 +82,24 @@ test.describe('Banner under page optimisers (WPSpeed report)', () => {
       const errors = captureRuntimeErrors(page);
       const response = await page.goto(`${WP_BASE}/?faz_html4_rewrite=1&t=${Date.now()}`, { waitUntil: 'load' });
       const html = (await response?.text()) ?? '';
-      const template = /<script[^>]*id="?fazBannerTemplate"?[^>]*>([\s\S]*?)<\/script>/i.exec(html)?.[1] ?? '';
+      const template = /<template[^>]*id="?fazBannerTemplate"?[^>]*>([\s\S]*?)<\/template>/i.exec(html)?.[1] ?? '';
       expect(template.length, 'template present after the rewrite').toBeGreaterThan(1000);
-      expect(template, 'closing tags survive, escaped').toContain('<\\/div>');
+      expect((template.match(/<\/div>/g) ?? []).length, 'closing tags survive as real tags').toBeGreaterThan(20);
       await expectWorkingBanner(page, errors);
+    } finally {
+      restoreActivePluginFiles(originalActive);
+    }
+  });
+
+  test('a translation proxy that translates the page keeps the banner working, translated', async ({ page }) => {
+    test.setTimeout(90_000);
+    const originalActive = listActivePluginFiles();
+    ensureFixturePlugin('faz-e2e-html4-rewriter');
+    try {
+      await page.context().clearCookies();
+      const errors = captureRuntimeErrors(page);
+      await page.goto(`${WP_BASE}/?faz_html4_rewrite=translate&t=${Date.now()}`, { waitUntil: 'load' });
+      await expectWorkingBannerTranslated(page, errors);
     } finally {
       restoreActivePluginFiles(originalActive);
     }

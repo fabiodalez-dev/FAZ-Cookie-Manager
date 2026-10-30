@@ -28,7 +28,7 @@
  *     shows depends on its look; both are hosts the proxy answers on).
  * `pro_version` wins over `enterprise_version` exactly as it does there.
  *
- * Deliberately NOT read: the `X-GT-Lang` / `X-GT-Viewer-IP` request headers the
+ * Deliberately NOT read: the `X-GT-Lang` / `X-GT-ClientIP` request headers the
  * proxy adds. Anyone who can reach the origin can send them, so they prove
  * nothing about where a request came from; trust is derived from the site's
  * own settings only.

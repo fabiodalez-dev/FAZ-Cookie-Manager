@@ -271,7 +271,9 @@ Yes. The Languages page lets you select from 180+ available languages. Each bann
 
 = Does it work with GTranslate or another translation proxy that serves my site on other domains? =
 
-Yes. GTranslate's paid plans (and similar proxies, mirrors or CDN hosts) serve translated copies of your pages on other hosts — `example.de`, `de.example.com` — and forward every request made there, including the consent log and the Do-Not-Sell form, back to your WordPress site. Three things follow, and the plugin handles each one:
+Yes. GTranslate's paid plans (and similar proxies, mirrors or CDN hosts) serve translated copies of your pages on other hosts — `example.de`, `de.example.com` — and forward every request made there, including the consent log and the Do-Not-Sell form, back to your WordPress site. Four things follow, and the plugin handles each one:
+
+* **The banner itself.** The proxy translates the page, banner included, so on a translated domain the banner shows in that language. The banner markup travels in a `<template>` element the proxy can translate without breaking its structure. (Up to 1.35.0 it travelled in a script element the proxy also read as HTML, which on the translated domains left the consent bar nested inside the revisit button with no buttons.)
 
 * **The consent cookie on a translated domain.** A browser cannot share a cookie between different registrable domains, so on `example.de` the consent is stored for that domain only, even when "Share consent across subdomains" is on for `example.com`. The visitor makes their choice once per domain. (Earlier versions wrote the cookie for the configured domain, which the browser rejects on another domain, so the banner came back on every page.) A cookie the server itself sets, such as the Do-Not-Sell confirmation, is host-only too.
 * **Consent records and Do-Not-Sell submissions from those domains.** They arrive with the translated domain as their origin and used to be refused as "cross-origin". The domains GTranslate's own settings describe (Enterprise plan: custom domains or language sub-domains) are now trusted automatically while GTranslate is active. Any other domain is added under **Settings → Trusted Alternate Domains** (one per line: a bare domain, or a full URL when the scheme or port matters), or with the `faz_trusted_origins` filter. **System Status** lists the effective domains and where each came from.
@@ -279,9 +281,9 @@ Yes. GTranslate's paid plans (and similar proxies, mirrors or CDN hosts) serve t
 
 `add_filter( 'faz_trusted_proxy_cidrs', function ( $cidrs ) { return array_merge( $cidrs, array( '203.0.113.0/24' ) ); } );`
 
-`add_filter( 'faz_proxy_forwarded_header', function () { return 'HTTP_X_GT_VIEWER_IP'; } );`
+`add_filter( 'faz_proxy_forwarded_header', function () { return 'HTTP_X_GT_CLIENTIP'; } );`
 
-Replace `203.0.113.0/24` with the ranges you were given. See "My site is behind Cloudflare or a reverse proxy" below for how these two filters work.
+Replace `203.0.113.0/24` with the ranges you were given; GTranslate publishes its current list at https://gtranslate.net/ips.txt. The filter takes the server variable name of the header: GTranslate forwards the visitor's address in `X-GT-ClientIP`, which PHP exposes as `HTTP_X_GT_CLIENTIP`. See "My site is behind Cloudflare or a reverse proxy" below for how these two filters work.
 
 = Does multi-banner mean one banner per language? =
 

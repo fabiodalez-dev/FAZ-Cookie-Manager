@@ -273,8 +273,8 @@ test.describe('a page rendered by this build never freezes while the consent run
     const runtime = scriptTagById(html, 'faz-cookie-manager-js');
     expect(runtime, 'faz-cookie-manager-js (script.min.js) must be on the page').not.toBeNull();
     expect(/\sdefer(?:[\s=>]|$)/i.test(` ${runtime?.attrs ?? ''} `), 'script.min.js must be deferred (the waiting window exists only then)').toBe(true);
-    const template = scriptTagById(html, 'fazBannerTemplate');
-    expect(template?.body ?? '', 'the banner template must contain an <img> (the old runtime moves it with while(firstChild))').toMatch(/<img\b/i);
+    const template = /<template\b[^>]*\bid=["']fazBannerTemplate["'][^>]*>([\s\S]*?)<\/template>/i.exec(html)?.[1] ?? '';
+    expect(template, 'the banner template must contain an <img> (the old runtime moves it with while(firstChild))').toMatch(/<img\b/i);
     const runtimeSrc = attrValue(runtime?.attrs ?? '', 'src') ?? '';
     const deployed = await fetchText(new URL(runtimeSrc.replace(/&amp;/g, '&'), pageUrl).toString());
     expect(deployed, 'the deployed runtime must be the handoff-aware one (calls _fazBootstrap.start)').toContain('_fazBootstrap.start');

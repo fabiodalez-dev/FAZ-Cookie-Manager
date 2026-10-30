@@ -615,7 +615,7 @@ class Consent_Logger {
 				$why = 'the request carried no origin token at all, which the plugin\'s own frontend never does. Automated traffic is the usual source.';
 				break;
 			case self::CAUSE_THROTTLED:
-				$why = 'the request was rate-limited. Visitors sharing one outbound address can collide here. Behind a translation proxy such as GTranslate every visitor of the translated domains arrives from the proxy\'s few addresses: declare its ranges with the faz_trusted_proxy_cidrs filter and read the visitor address it forwards in X-GT-Viewer-IP with faz_proxy_forwarded_header returning HTTP_X_GT_VIEWER_IP.';
+				$why = 'the request was rate-limited. Visitors sharing one outbound address can collide here. Behind a translation proxy such as GTranslate every visitor of the translated domains arrives from the proxy\'s few addresses: declare its ranges with the faz_trusted_proxy_cidrs filter and read the visitor address it forwards in X-GT-ClientIP with faz_proxy_forwarded_header returning HTTP_X_GT_CLIENTIP.';
 				break;
 			case self::CAUSE_WRITE_FAILED:
 				$why = 'the record could not be written to the database. This one is always a real visitor\'s real consent — check the wp_faz_consent_logs table and the database error log.';

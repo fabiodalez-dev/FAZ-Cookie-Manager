@@ -68,9 +68,11 @@ test.describe('Banner i18n — non-English locale renders translated copy', () =
     // no page cache masks the freshly-regenerated template.
     const res = await request.get(`/?faz_i18n_e2e=${Date.now()}`);
     expect(res.ok()).toBeTruthy();
-    // Undo the banner template's end-tag escaping before scanning, exactly as
-    // _fazReadBannerTemplate() does in the browser. Since 1.34.0 the server
-    // writes `</` as `<\/` inside #fazBannerTemplate so that an HTML4 page
+    // Undo the banner template's end-tag escaping before scanning, as
+    // _fazReadBannerTemplate() does in the browser for the legacy script form.
+    // The template is a <template> element now and carries real end tags, so
+    // this is a no-op on a current page. From 1.34.0 to 1.35.0 the server
+    // wrote `</` as `<\/` inside #fazBannerTemplate so that an HTML4 page
     // rewriter (WPSpeed's image optimiser parses through DOMDocument, and
     // libxml ends a <script> at any `</` + letter) cannot truncate it. Scanning
     // the raw body for `</` therefore walks straight past the whole template:

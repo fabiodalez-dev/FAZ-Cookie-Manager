@@ -2078,10 +2078,10 @@ function _fazFetchBannerForLanguage(endpoint, lang, timeoutMs) {
  * with the payload returned by the REST endpoint. Must run before
  * _fazRenderBanner() parses the template.
  *
- * The banner HTML is stored inside a `<script type="text/template">`
- * element and originates from a wp_kses-sanitised PHP render; writing it
- * via textContent preserves the exact same content contract as the
- * server-initial render (which uses echo wp_kses inside the same tag).
+ * The banner HTML is stored in the `<template id="fazBannerTemplate">`
+ * element and originates from a wp_kses-sanitised PHP render, the same
+ * contract as the server-initial render; _fazWriteBannerTemplate() writes it
+ * in the form that element needs.
  *
  * @param {Object} payload Response body from /faz/v1/banner/{lang}.
  */
@@ -2135,7 +2135,7 @@ function _fazApplyBannerPayload(payload) {
     }
     if (typeof payload.html === 'string' && payload.html !== '') {
         var tpl = document.getElementById('fazBannerTemplate');
-        if (tpl) tpl.textContent = payload.html;
+        if (tpl) _fazWriteBannerTemplate(tpl, payload.html);
     }
     if (typeof payload.styles === 'string' && payload.styles !== '') {
         var style = document.getElementById('faz-jurisdiction-bootstrap-styles');
@@ -2584,21 +2584,57 @@ function _fazDomReady(callback) {
 }
 
 /**
+ * Whether #fazBannerTemplate is a <template> element (the current markup)
+ * rather than the <script type="text/template"> earlier releases printed.
+ *
+ * @param {Element} template #fazBannerTemplate.
+ * @returns {boolean}
+ */
+function _fazIsTemplateElement(template) {
+    return !!template && String(template.nodeName).toLowerCase() === 'template' && !!template.content;
+}
+
+/**
  * Read the banner template markup.
  *
- * The server escapes every `</` in the template as `<\/` (see
- * Frontend::banner_html()), so that an HTML4 parser that rewrites the page —
- * PHP's DOMDocument::loadHTML(), used by image optimisers such as WPSpeed's —
- * cannot read the closing tags as the end of the <script> element and drop
- * them. Browsers keep `<\/` as literal text inside a script, so it is undone
- * here. Content written client-side (the geo bootstrap) is not escaped, which
- * the replacement leaves untouched.
+ * The server prints a <template> (see Frontend::banner_html()), whose
+ * innerHTML serialises its inert content. A page cached before the update
+ * still carries the old <script type="text/template">, in which the server
+ * wrote every `</` as `<\/` for HTML4 page rewriters; that escape is undone
+ * for the script form only.
  *
  * @param {Element} template #fazBannerTemplate.
  * @returns {string}
  */
 function _fazReadBannerTemplate(template) {
-    return String(template.innerHTML || '').replace(/<\\\//g, '</');
+    var html = String(template.innerHTML || '');
+    return _fazIsTemplateElement(template) ? html : html.replace(/<\\\//g, '</');
+}
+
+/**
+ * Replace the banner template markup (the geo bootstrap's live payload).
+ *
+ * A <template> takes the markup as parsed nodes in its inert content:
+ * textContent would store it as a text node that innerHTML then serialises
+ * escaped. The nodes come from a DOMParser document, so nothing in them runs
+ * or loads while they are moved. The legacy script form keeps textContent.
+ *
+ * @param {Element} template #fazBannerTemplate.
+ * @param {string} html Banner markup (wp_kses-sanitised on the server).
+ */
+function _fazWriteBannerTemplate(template, html) {
+    if (!_fazIsTemplateElement(template)) {
+        template.textContent = html;
+        return;
+    }
+    var doc = new DOMParser().parseFromString(html, 'text/html');
+    var content = template.content;
+    while (content.firstChild) content.removeChild(content.firstChild);
+    var node;
+    while ((node = doc.body.firstChild)) {
+        doc.body.removeChild(node);
+        content.appendChild(content.ownerDocument.importNode(node, true));
+    }
 }
 
 /**

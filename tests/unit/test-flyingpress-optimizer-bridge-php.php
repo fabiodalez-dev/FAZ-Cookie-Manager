@@ -326,7 +326,8 @@ namespace {
 	$untouched = array(
 		'a delayed third-party script'              => '<script id="google-gtag-js" data-loading-method="user-interaction" data-src="https://www.googletagmanager.com/gtag/js"></script>',
 		'a FAZ script FlyingPress did not rewrite'  => '<script id="faz-cookie-manager-js" src="/wp-content/plugins/faz-cookie-manager/frontend/js/script.min.js" defer></script>',
-		'the banner template'                       => '<script id="fazBannerTemplate" type="text/template"><div class="faz-consent-container"></div></script>',
+		'the banner template'                       => '<template id="fazBannerTemplate"><div class="faz-consent-container"></div></template>',
+		'the banner template a cached page still has' => '<script id="fazBannerTemplate" type="text/template"><div class="faz-consent-container"><\\/div></script>',
 		'a FAZ stylesheet that still has its href'  => "<link rel='stylesheet' id='faz-cookie-manager-css' href='/banner.css' data-href='/old.css' />",
 		'another plugin stylesheet held back'       => "<link rel='stylesheet' id='theme-css' data-href='/theme.css' />",
 		'a look-alike id that is not a FAZ handle'  => '<script id="faz-cookie-manager" data-loading-method="user-interaction" data-src="/x.js"></script>',
@@ -335,6 +336,13 @@ namespace {
 		$page = '<html><head>' . $tag . '<link rel="stylesheet" id="faz-cookie-manager-css" href="/b.css"></head></html>';
 		faz_ob_ok( $page === $restore( $page ), '19 left alone: ' . $label );
 	}
+
+	// Lazy render inside the banner template is undone, and only there.
+	$cv   = 'content-visibility: auto;contain-intrinsic-size: auto 300px;';
+	$tpl  = '<template id="fazBannerTemplate"><div class="faz-overlay" style="' . $cv . '"></div><p style="' . $cv . 'color:red">x</p></template>';
+	$out  = $restore( '<html><body><div class="page" style="' . $cv . '">y</div>' . $tpl . '</body></html>' );
+	faz_ob_ok( false !== strpos( $out, '<template id="fazBannerTemplate"><div class="faz-overlay"></div><p style="color:red">x</p></template>' ), '19b lazy_render style removed inside the banner template, the element\'s own style kept' );
+	faz_ob_ok( false !== strpos( $out, '<div class="page" style="' . $cv . '">y</div>' ), '19c lazy_render style outside the template is left to FlyingPress' );
 
 	$restored_once = $restore( '<head>' . $cases['delayed inline config (third-party pass)'][0] . '</head>' );
 	faz_ob_ok( $restored_once === $restore( $restored_once ), '20 the safety net is idempotent' );

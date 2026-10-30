@@ -385,11 +385,11 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 							if ( $faz_proxy_known && ! empty( $faz_tally['causes']['throttled'] ) ) {
 								echo wp_kses(
 									sprintf(
-										/* translators: 1: the faz_trusted_proxy_cidrs filter name. 2: the faz_proxy_forwarded_header filter name. 3: the HTTP_X_GT_VIEWER_IP $_SERVER key. */
-										esc_html__( 'Rate-limited records on a site served through a translation proxy usually mean that every visitor of the translated domains reaches WordPress from the proxy\'s few addresses and shares one rate-limit window. Ask the proxy provider (GTranslate support) for its server address ranges, declare them with the %1$s filter, and read the visitor\'s own address from the header the proxy forwards (X-GT-Viewer-IP) with the %2$s filter returning %3$s. Forwarded headers are never believed from an undeclared address, because anyone can send them.', 'faz-cookie-manager' ),
+										/* translators: 1: the faz_trusted_proxy_cidrs filter name. 2: the faz_proxy_forwarded_header filter name. 3: the HTTP_X_GT_CLIENTIP $_SERVER key. */
+										esc_html__( 'Rate-limited records on a site served through a translation proxy usually mean that every visitor of the translated domains reaches WordPress from the proxy\'s few addresses and shares one rate-limit window. Ask the proxy provider (GTranslate support) for its server address ranges, declare them with the %1$s filter, and read the visitor\'s own address from the header the proxy forwards (X-GT-ClientIP) with the %2$s filter returning %3$s. Forwarded headers are never believed from an undeclared address, because anyone can send them.', 'faz-cookie-manager' ),
 										'<code>faz_trusted_proxy_cidrs</code>',
 										'<code>faz_proxy_forwarded_header</code>',
-										'<code>HTTP_X_GT_VIEWER_IP</code>'
+										'<code>HTTP_X_GT_CLIENTIP</code>'
 									),
 									array( 'code' => array() )
 								);

@@ -318,6 +318,12 @@ function parseAttrs(source: string): Attrs {
   return attrs;
 }
 
+/** The banner template, in the <template> form the server prints. */
+function bannerTemplate(html: string): ScriptTag | undefined {
+  const match = /<template\b([^>]*\bid=["']?fazBannerTemplate["']?[^>]*)>([\s\S]*?)<\/template\s*>/i.exec(html);
+  return match ? { index: match.index, attrs: parseAttrs(match[1]), content: match[2] } : undefined;
+}
+
 function scriptTags(html: string): ScriptTag[] {
   const tags: ScriptTag[] = [];
   const re = /<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi;
@@ -517,12 +523,18 @@ function bootstrapOrderViolations(html: string): string[] {
 /** (c) banner template and stylesheet. */
 function bannerAssetViolations(html: string, base: Baseline): string[] {
   const problems: string[] = [];
-  const template = scriptTags(html).find((tag) => tag.attrs.id === 'fazBannerTemplate');
+  const template = bannerTemplate(html);
   if (!template) {
-    problems.push('script#fazBannerTemplate is missing');
+    problems.push('template#fazBannerTemplate is missing');
   } else {
-    if ((template.attrs.type ?? '').toLowerCase() !== 'text/template') problems.push(`fazBannerTemplate type is "${template.attrs.type ?? ''}"`);
     if (!template.content.includes('data-faz-tag')) problems.push('fazBannerTemplate lost its data-faz-tag markup');
+    // The template is real markup now, so an optimiser can reach it. An image
+    // whose src was moved to a lazy-load attribute would mount without it.
+    for (const img of template.content.match(/<img\b[^>]*>/gi) ?? []) {
+      const attrs = parseAttrs(img.slice(4, -1));
+      const src = attrs.src ?? '';
+      if (!src || src.startsWith('data:')) problems.push(`an image in the banner template lost its src: ${short(img)}`);
+    }
   }
   if (base.cssKind === 'link') {
     const link = voidTags(html, 'link').find((tag) => tag.attrs.id === 'faz-cookie-manager-css-css');
@@ -1473,7 +1485,7 @@ test.describe('FlyingPress page optimisation leaves FAZ intact', () => {
     const deferredOthers = voidTags(hit.html, 'link').filter((tag) => 'data-href' in tag.attrs && !isFazId(tag.attrs.id));
     expect(deferredOthers.length, 'positive control: RUCSS must defer at least one non-FAZ stylesheet to data-href').toBeGreaterThan(0);
     expect(fazHandleViolations(hit.html, base)).toEqual([]);
-    const template = scriptTags(hit.html).find((tag) => tag.attrs.id === 'fazBannerTemplate');
+    const template = bannerTemplate(hit.html);
     expect(template?.content ?? '', 'the banner template must survive').toContain('data-faz-tag');
     if (base.cssKind === 'link') {
       const fazLink = voidTags(hit.html, 'link').find((tag) => tag.attrs.id === 'faz-cookie-manager-css-css');
@@ -1522,8 +1534,8 @@ test.describe('FlyingPress page optimisation leaves FAZ intact', () => {
     applyFp({ lazy_render: true });
     const { hit } = await fpCopies(matrixUrl);
     expect(hit.html, 'positive control: lazy_render must apply content-visibility to at least one element').toMatch(/content-visibility:\s*auto/);
-    const templateNow = scriptTags(hit.html).find((tag) => tag.attrs.id === 'fazBannerTemplate')?.content;
-    const templateBase = scriptTags(baselineHtml).find((tag) => tag.attrs.id === 'fazBannerTemplate')?.content;
+    const templateNow = bannerTemplate(hit.html)?.content;
+    const templateBase = bannerTemplate(baselineHtml)?.content;
     expect(templateNow, 'the banner template must come out of lazy_render byte-identical').toBe(templateBase);
     expect(bannerAssetViolations(hit.html, base)).toEqual([]);
     expect(fazHandleViolations(hit.html, base)).toEqual([]);

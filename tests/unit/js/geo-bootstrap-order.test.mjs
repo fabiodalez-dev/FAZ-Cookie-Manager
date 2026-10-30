@@ -131,9 +131,14 @@ function liveCcpaPayload() {
   };
 }
 
-function loadFrontend(fetchImpl, consentCookie = '') {
+// The server prints a <template>; a page cached before that change still has
+// the <script type="text/template"> form, so both are exercised.
+const TEMPLATE_ELEMENT = '<template id="fazBannerTemplate">Strict GDPR</template>';
+const TEMPLATE_SCRIPT = '<script id="fazBannerTemplate" type="text/template">Strict GDPR</script>';
+
+function loadFrontend(fetchImpl, consentCookie = '', templateMarkup = TEMPLATE_ELEMENT) {
   const dom = new JSDOM(
-    '<!doctype html><html><head></head><body><script id="fazBannerTemplate" type="text/template">Strict GDPR</script></body></html>',
+    `<!doctype html><html><head></head><body>${templateMarkup}</body></html>`,
     { runScripts: 'outside-only', url: 'https://example.test/' },
   );
   const { window } = dom;
@@ -211,9 +216,23 @@ console.log('cache-safe jurisdiction bootstrap ordering (jsdom)');
   check('operations observe the live CCPA law/banner, never the strict placeholder', applied.law === 'ccpa' && applied.slug === 'live-ccpa');
   check('live jurisdiction category defaults are installed before operations', applied.marketingDefault === true);
   check('the live scope fingerprint and expiry replace the shell values', window._fazConfig._scopeFingerprint === 'live-fingerprint' && window._fazConfig._expiry === 365);
-  check('the banner template is atomically replaced before render', window.document.getElementById('fazBannerTemplate').textContent.includes('Live CCPA'));
+  check('the banner template is atomically replaced before render', window.eval('_fazReadBannerTemplate')(window.document.getElementById('fazBannerTemplate')).includes('Live CCPA'));
   check('the endpoint stylesheet is installed as a non-optimizable override', window.document.getElementById('faz-jurisdiction-bootstrap-styles')?.textContent.includes('rgb(1,2,3)'));
   check('diagnostics report a successful live bootstrap', window.fazcookie._diag().geoBootstrapResolved === 'live');
+}
+
+// The same replacement on a page cached with the legacy script template.
+{
+  let release;
+  const window = loadFrontend(() => new Promise((resolveResponse) => {
+    release = () => resolveResponse({ ok: true, json: async () => liveCcpaPayload() });
+  }), '', TEMPLATE_SCRIPT);
+  const init = window.__fazTestInit();
+  await Promise.resolve();
+  release();
+  await init;
+  const tpl = window.document.getElementById('fazBannerTemplate');
+  check('legacy script template: replaced before render too', tpl.textContent.includes('Live CCPA') && window.eval('_fazReadBannerTemplate')(tpl).includes('Live CCPA'));
 }
 
 // A returning CCPA visitor's stored consent belongs to the live payload, not
