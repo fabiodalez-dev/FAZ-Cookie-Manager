@@ -1515,7 +1515,8 @@ function _fazInitOperations() {
  * operators had to keep a second copy of the snippet behind a getFazConsent()
  * check. The admin flag puts the same script in `opt_in_persistent`; this runs
  * that list on the stored-consent bootstrap paths only (never on a first visit,
- * never in preview), once per page load, for the categories accepted AND — with
+ * never in preview, never on a record a signal wrote that the visitor has not
+ * answered), once per page load, for the categories accepted AND — with
  * per-service consent on — only when the owning declared service is not denied.
  * The accept-click page is covered by the transition path, so the script never
  * fires twice there.
@@ -1524,6 +1525,13 @@ var _fazPersistentOptInRan = false;
 function _fazRunPersistentOptInScripts() {
     if (_fazPersistentOptInRan) return;
     _fazPersistentOptInRan = true;
+    // A record nobody answered is not a consent to replay (#365 review): GPC or
+    // a Do Not Sell form writes one with the jurisdiction defaults — analytics
+    // still "yes" on a CCPA site — and those pages never ran an opt-in script,
+    // so replaying here would make the opt-out signal start tracking from page
+    // two. Raw marker, not _fazUndecided: that one is about re-offering the
+    // banner and is false under CCPA, the very case this guards.
+    if (_fazRef._fazGetFromStore('undecided') === '1') return;
     var scripts = _fazStore._cookieScripts;
     if (!scripts || typeof scripts !== 'object') return;
     var cats = _fazStore._categories || [];
@@ -8985,6 +8993,20 @@ function _fazExecuteConsentScripts(prevAccepted) {
         // wasAccepted is false. Opt-out scripts are cleanup routines (idempotent).
         if (!isAccepted && entry.opt_out && entry.opt_out.length) {
             entry.opt_out.forEach(function (item) { _fazRunScript(_fazConsentScriptCode(item)); });
+        } else if (isAccepted && entry.opt_out && entry.opt_out.length) {
+            // The mirror of the opt-in owner rule (#365 review): with the
+            // category still granted, revoking only the owning declared service
+            // is a rejection for that script — its widget's own cleanup must
+            // run, or it is lost to the reload _fazAfterConsent() does on a
+            // service revoke. Judged on the same pre-consent snapshot, which is
+            // empty with per-service off, so a category-only site is unchanged.
+            entry.opt_out.forEach(function (item) {
+                if (!item || typeof item !== 'object' || !item.service) return;
+                if (!_fazServicesBeforeConsent || !Object.prototype.hasOwnProperty.call(_fazServicesBeforeConsent, item.service)) return;
+                if (_fazServicesBeforeConsent[item.service] === 'yes' && !_fazConsentScriptAllowed(item, slug)) {
+                    _fazRunScript(_fazConsentScriptCode(item));
+                }
+            });
         }
     }
 }
@@ -10959,9 +10981,10 @@ window.getFazConsent = function () {
  * Every service the visitor can be asked about on THIS site, with its effective
  * consent resolved.
  *
- * Empty when per-service consent is off: the server ships no service list in
- * that mode, so there is nothing finer than the category to report, and an empty
- * map says exactly that instead of inventing entries.
+ * With per-service consent off the server ships no provider list, so only the
+ * administrator's hand-declared cookies (#360) are listed, each answered with
+ * its category's consent; on a site that declares none the map is empty, which
+ * says there is nothing finer than the category to report.
  *
  * @return {Object} serviceId → true|false.
  */
@@ -11023,8 +11046,9 @@ function _fazEachDeclaredService(fn) {
  * @param {string} cookieName Exact cookie name (patterns are matched for you).
  * @return {boolean|null} true = allowed, false = denied, null = this site
  *         declares no service for that cookie, so ask about the category
- *         instead. null is the answer on every site with per-service consent
- *         off, since the server ships no service list in that mode.
+ *         instead. With per-service consent off only hand-declared cookies
+ *         (#360) get an answer — their category's consent — and every other
+ *         name is null.
  */
 window.getFazCookieConsent = function (cookieName) {
     if (!cookieName || typeof cookieName !== "string") return null;

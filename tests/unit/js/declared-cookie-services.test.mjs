@@ -71,7 +71,7 @@ function page({ cookies = [], declared = true, perService = false, preview = fal
     _cookieScripts: {
       functional: {
         opt_in: [{ code: 'window.__bk = (window.__bk || 0) + 1;', service: 'bk_session' }],
-        opt_out: [],
+        opt_out: [{ code: 'window.__bkOut = (window.__bkOut || 0) + 1;', service: 'bk_session' }],
         opt_in_persistent: [{ code: 'window.__bk = (window.__bk || 0) + 1;', service: 'bk_session' }],
       },
       analytics: {
@@ -230,6 +230,51 @@ console.log('declared cookies as services + persistent opt-in scripts (#360, jsd
   const w = page({ gpc: true, cookies: [record('consentid:abc,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,marketing:yes')] });
   w.eval('_fazInitOperations()');
   check('GPC with a stored action: the flagged script replays for a category GPC leaves granted', w.__bk === 1);
+}
+
+// ---------------------------------------------------------------------------
+// #365 review: a record a signal wrote (GPC, Do Not Sell) that the visitor never
+// answered carries `undecided:1`. It holds jurisdiction defaults, not a choice,
+// so nothing replays — with the signal still on, or gone.
+// ---------------------------------------------------------------------------
+{
+  const w = page({ gpc: true, cookies: [record('consentid:abc,consent:yes,action:yes,undecided:1,necessary:yes,functional:yes,analytics:yes,marketing:no')] });
+  w.eval('_fazInitOperations()');
+  check('undecided record, GPC on: the flagged script is NOT replayed (no one answered)', w.__bk === undefined && w.__ads === undefined);
+}
+{
+  const w = page({ cookies: [record('consentid:abc,consent:yes,action:yes,undecided:1,necessary:yes,functional:yes,analytics:yes,marketing:yes')] });
+  w.eval('_fazInitOperations()');
+  check('undecided record, signal gone: the flagged script is NOT replayed either', w.__bk === undefined && w.__ads === undefined);
+}
+
+// ---------------------------------------------------------------------------
+// #365 review: revoking only the owning service, with its category still
+// granted, is a rejection for that script — its opt-out cleanup runs once.
+// ---------------------------------------------------------------------------
+{
+  const w = page({ perService: true, cookies: [record('consentid:abc,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,marketing:yes,svc.bk_session:yes')] });
+  w.eval('_fazInitOperations()');
+  w.eval('_fazServicesBeforeConsent = _fazGetServiceConsentSnapshot(); fazcookie._fazSetInStore("svc.bk_session", "no");');
+  w.eval('_fazExecuteConsentScripts(["functional", "analytics", "marketing"])');
+  check('service revoked under a granted category: the owner\'s opt-out script runs once', w.__bkOut === 1);
+  w.eval('_fazServicesBeforeConsent = _fazGetServiceConsentSnapshot();');
+  w.eval('_fazExecuteConsentScripts(["functional", "analytics", "marketing"])');
+  check('service already denied before the action: the opt-out does not run again', w.__bkOut === 1);
+}
+{
+  const w = page({ perService: true, cookies: [record('consentid:abc,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,marketing:yes,svc.bk_session:yes')] });
+  w.eval('_fazInitOperations()');
+  w.eval('_fazServicesBeforeConsent = _fazGetServiceConsentSnapshot();');
+  w.eval('_fazExecuteConsentScripts(["functional", "analytics", "marketing"])');
+  check('service still granted: no opt-out runs', w.__bkOut === undefined);
+}
+{
+  const w = page({ perService: false, cookies: [record('consentid:abc,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,marketing:yes')] });
+  w.eval('_fazInitOperations()');
+  w.eval('_fazServicesBeforeConsent = _fazGetServiceConsentSnapshot(); fazcookie._fazSetInStore("svc.bk_session", "no");');
+  w.eval('_fazExecuteConsentScripts(["functional", "analytics", "marketing"])');
+  check('per-service off: a svc token never triggers an opt-out (the category decides)', w.__bkOut === undefined);
 }
 
 // ---------------------------------------------------------------------------

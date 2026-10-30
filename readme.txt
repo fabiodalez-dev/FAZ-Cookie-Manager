@@ -367,7 +367,7 @@ Use `fazcookie_consent_update` instead when you want to react to a **change**: i
 
 Categories are the right granularity on most sites, and while **Per-service consent** is off (the default) a granted category does mean every service in it is allowed. Once you enable it, a visitor can grant Functional and still deny one embed inside it, and a check on the category alone would run a script the visitor declined.
 
-`window.getFazCookieConsent('cookie_name')` answers for a single declared cookie. It returns `true` when allowed, `false` when denied, and `null` when this site declares no service for that cookie -- which is the answer on every site with per-service consent off. Treat `null` as "ask about the category instead":
+`window.getFazCookieConsent('cookie_name')` answers for a single declared cookie. It returns `true` when allowed, `false` when denied, and `null` when this site declares no service for that cookie. With per-service consent off, only cookies you added by hand under Cookies get an answer (their category's consent); every other name returns `null`. Treat `null` as "ask about the category instead":
 
 `document.addEventListener('fazcookie_consent_ready', function (e) {
     var osm = getFazCookieConsent('_osm_session');
