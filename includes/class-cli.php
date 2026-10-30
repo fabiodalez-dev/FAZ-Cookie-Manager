@@ -191,6 +191,7 @@ class CLI {
 		$faz_bust_frontend_caches = static function () {
 			\delete_transient( 'faz_cookie_scripts_map' );
 			\delete_transient( 'faz_detected_cookie_names' );
+			\delete_transient( 'faz_declared_services_v1' );
 			\delete_transient( 'faz_server_cookie_category_map' );
 			// Versioned sibling: the map gained a wordpress-internal filter, so
 			// the key was bumped to stop a stale unfiltered map from answering

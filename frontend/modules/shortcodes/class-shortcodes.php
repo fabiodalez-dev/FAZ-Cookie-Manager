@@ -689,6 +689,19 @@ class Shortcodes {
 				$table_body .= '</li>';
 			}
 
+			// Provider privacy-policy link (#360) — same default-OFF contract as
+			// the transfer row: renders only when the operator entered a URL.
+			$policy_link = $this->render_policy_link( $cookie );
+			if ( '' !== $policy_link ) {
+				$switched     = $this->switch_to_banner_locale();
+				$policy_label = esc_html__( 'Privacy policy', 'faz-cookie-manager' );
+				$this->restore_banner_locale( $switched );
+				$table_body .= '<li class="faz-audit-policy">';
+				$table_body .= '<div>' . $policy_label . '</div>';
+				$table_body .= '<div>' . $policy_link . '</div>';
+				$table_body .= '</li>';
+			}
+
 			$html .= str_replace(
 				array(
 					'[CONTENT]',
@@ -1000,6 +1013,10 @@ class Shortcodes {
 			if ( '' !== $transfer_disclosure ) {
 				$desc_cell .= '<div class="faz-audit-transfer">' . $transfer_disclosure . '</div>';
 			}
+			$policy_link = $this->render_policy_link( $cookie );
+			if ( '' !== $policy_link ) {
+				$desc_cell .= '<div class="faz-audit-policy">' . $policy_link . '</div>';
+			}
 
 			$table_body .= '<tr>';
 			$table_body .= '<td>' . esc_html( $cookie['name'] ) . '</td>';
@@ -1137,6 +1154,35 @@ class Shortcodes {
 
 		$this->restore_banner_locale( $switched );
 		return implode( ' ', $parts );
+	}
+
+	/**
+	 * Link to the provider's own privacy policy for one cookie row (#360).
+	 *
+	 * Lets the visitor read the third party's policy before deciding — the
+	 * disclosure GDPR Art. 13(1)(e) asks for when a recipient is named. Pure
+	 * function of the cookie inventory (not of the visitor), so it is invariant
+	 * across consent states and Cache-Compatibility-Mode safe. Returns '' unless
+	 * the operator entered a URL that survived Cookie::sanitize_policy_url_value()
+	 * (absolute http(s) only), so a legacy row renders byte-identically.
+	 *
+	 * The anchor opens in a new tab with rel="noopener noreferrer": the target
+	 * is a third-party site and the banner must not hand it a window reference
+	 * or the visitor's referrer. The visible text is the fixed label in the
+	 * banner language, not the URL, which may be long and is already in href.
+	 *
+	 * @param array $cookie Prepared cookie data (Cookie::get_prepared_data()).
+	 * @return string HTML anchor, or '' when no URL is set.
+	 */
+	public function render_policy_link( $cookie ) {
+		$url = isset( $cookie['policy_url'] ) && is_string( $cookie['policy_url'] ) ? $cookie['policy_url'] : '';
+		if ( '' === $url || ! preg_match( '#^https?://#i', $url ) ) {
+			return '';
+		}
+		$switched = $this->switch_to_banner_locale();
+		$label    = esc_html__( 'Read the provider\'s privacy policy', 'faz-cookie-manager' );
+		$this->restore_banner_locale( $switched );
+		return '<a class="faz-audit-policy-link" href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer">' . $label . '</a>';
 	}
 
 	/**

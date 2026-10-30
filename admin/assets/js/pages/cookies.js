@@ -1197,12 +1197,18 @@
 		var form = document.createElement('div');
 
 		var canEditScripts = !!(window.fazConfig && window.fazConfig.canEditScripts);
+		var eachLoadCheckbox = null;
 
 		var fields = [
 			{ label: fazI18n('cookies.nameLabel', 'Cookie Name'), path: 'name', type: 'text' },
+			// Read-only: derived server-side from slug/name (Cookie::get_service_id).
+			// It is the key window.getFazConsent().services reports this cookie
+			// under, so the admin can see it without guessing (#360). Not posted.
+			{ label: fazI18n('cookies.serviceIdLabel', 'Service ID (read-only)'), path: 'service_id', type: 'text', readonly: true, placeholder: fazI18n('cookies.serviceIdPending', 'Assigned from the cookie name when you save'), help: fazI18n('cookies.serviceIdHelp', 'Query this key in window.getFazConsent().services to learn whether the visitor has accepted this cookie.') },
 			{ label: fazI18n('cookies.domainLabel', 'Domain'), path: 'domain', type: 'text' },
 			{ label: fazI18n('cookies.durationLabel', 'Duration'), path: 'duration', type: 'text', placeholder: fazI18n('cookies.durationPlaceholder', 'e.g. 1 year') },
 			{ label: fazI18n('cookies.descriptionLabel', 'Description'), path: 'description', type: 'textarea' },
+			{ label: fazI18n('cookies.policyUrlLabel', 'Provider privacy policy URL'), path: 'policy_url', type: 'url', placeholder: fazI18n('cookies.policyUrlPlaceholder', 'https://provider.example/privacy'), help: fazI18n('cookies.policyUrlHelp', 'Shown as a link under the cookie in the banner and in the cookie policy, so visitors can read the provider\'s policy before deciding.') },
 		];
 
 		// Only expose opt-in/opt-out script fields to users with the
@@ -1234,10 +1240,23 @@
 				input.type = f.type;
 				input.className = 'faz-input';
 			}
-			input.dataset.field = f.path;
+			if (f.readonly) {
+				// Display only: no data-field, so the save handler never posts it
+				// (the REST schema marks it readonly anyway).
+				input.readOnly = true;
+				input.setAttribute('aria-readonly', 'true');
+			} else {
+				input.dataset.field = f.path;
+			}
 			if (f.placeholder) input.placeholder = f.placeholder;
 			if (isEdit && cookie[f.path]) input.value = textVal(cookie[f.path]);
 			group.appendChild(input);
+			if (f.help) {
+				var fieldHelp = document.createElement('p');
+				fieldHelp.style.cssText = 'font-size:12px;color:#767676;margin:4px 0 0;';
+				fieldHelp.textContent = f.help;
+				group.appendChild(fieldHelp);
+			}
 			if (f.path === 'opt_in_script' || f.path === 'opt_out_script') {
 				var scriptNotice = document.createElement('p');
 				// #767676 is the minimum WCAG-AA-passing gray on white (4.5:1
@@ -1248,6 +1267,22 @@
 				scriptNotice.style.cssText = 'font-size:12px;color:#767676;margin:4px 0 0;';
 				scriptNotice.textContent = fazI18n('cookies.scriptNotice', 'Note: code entered here is included in the page source and visible to all visitors.');
 				group.appendChild(scriptNotice);
+			}
+			if (f.path === 'opt_in_script') {
+				// #360: by default the opt-in script runs once, at the accept click.
+				// A booking widget or chat loader has to run on EVERY page the
+				// visitor opens afterwards; this flag asks the runtime to replay the
+				// same script on each page load while the category stays accepted,
+				// so the admin keeps one snippet in one place.
+				var eachLoadLabel = document.createElement('label');
+				eachLoadLabel.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-weight:400;margin-top:8px;';
+				eachLoadCheckbox = document.createElement('input');
+				eachLoadCheckbox.type = 'checkbox';
+				eachLoadCheckbox.className = 'faz-optin-each-load';
+				eachLoadCheckbox.checked = !!(isEdit && cookie && cookie.opt_in_run_each_load === true);
+				eachLoadLabel.appendChild(eachLoadCheckbox);
+				eachLoadLabel.appendChild(document.createTextNode(fazI18n('cookies.optInEachLoadLabel', 'Also run the opt-in script on every page load while the category stays accepted')));
+				group.appendChild(eachLoadLabel);
 			}
 			form.appendChild(group);
 		});
@@ -1410,6 +1445,11 @@
 				countries: countriesObj,
 				safeguard: safeguardObj
 			};
+			// Only users who can see the script fields can change when they run;
+			// for everyone else the flag is left untouched (partial-update REST).
+			if (eachLoadCheckbox) {
+				data.opt_in_run_each_load = !!eachLoadCheckbox.checked;
+			}
 
 			FAZ.btnLoading(saveBtn, true);
 			var promise = isEdit

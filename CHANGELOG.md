@@ -2,6 +2,13 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Added
+- A cookie declared by hand under Cookies → <category> is now a consent service of its own (#360). The REST API exposes its read-only `service_id` (derived from the slug, or the name when the admin form set none) and the Service ID is shown in the cookie dialog; `window.getFazConsent().services` reports the cookie under that key with its category's consent, whether or not per-service consent is enabled, and with per-service consent on it also gets its own toggle in the preference centre and is honoured by the cookie shredder. Hand-declared cookies never add URL patterns, so script blocking is unchanged.
+- The cookie dialog gained "Also run the opt-in script on every page load while the category stays accepted". Until now a per-cookie opt-in script ran once, at the accept click, so a booking widget or chat loader declared that way worked on the page where the visitor accepted and was dead on every page after it, unless the operator kept a second copy of the snippet behind a `getFazConsent()` check. With the flag the runtime replays the same script on each later page load for a returning visitor whose category is accepted — never on a first visit, never for a rejected category, and never twice on the page where consent is given.
+- A "Provider privacy policy URL" per cookie, rendered as a "Read the provider's privacy policy" link (new tab, `rel="noopener noreferrer"`) under the cookie row in the banner preference centre, the generated cookie policy and the `[faz_cookie_table]` shortcode, so the visitor can read the third party's own policy before deciding. Absolute http(s) URLs only; anything else is stored as empty.
+
 ## [1.34.5] - 2026-10-30
 
 ### Fixed

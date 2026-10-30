@@ -201,7 +201,7 @@ ds_ok( ds_contains( $cookie_api, 'array_slice( $bin, 0, self::RECYCLE_BIN_BATCHE
 // identity 'id', so the very first key it would reach is the one that turns
 // every INSERT into an UPDATE of a row that no longer exists.
 ds_ok(
-	ds_contains( $cookie_api, "\$restorable = array( 'name', 'slug', 'description', 'duration', 'type', 'domain', 'discovered', 'url_pattern', 'category', 'transfer', 'opt_in_script', 'opt_out_script', );" )
+	ds_contains( $cookie_api, "\$restorable = array( 'name', 'slug', 'description', 'duration', 'type', 'domain', 'discovered', 'url_pattern', 'category', 'transfer', 'policy_url', 'opt_in_run_each_load', 'opt_in_script', 'opt_out_script', );" )
 		&& ds_contains( $cookie_api, "\$setter = 'set_' . \$field; if ( method_exists( \$cookie, \$setter ) ) {" )
 		&& ! ds_contains( $cookie_api, 'foreach ( $data as $field => $value )' ),
 	'a snapshot value can never choose which public setter it calls'

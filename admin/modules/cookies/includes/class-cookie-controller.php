@@ -88,6 +88,10 @@ class Cookie_Controller extends Base_Controller {
 		}
 		parent::delete_cache();
 		delete_transient( 'faz_detected_cookie_names' );
+		// Admin-declared cookies surfaced as consent services (#360): the list is
+		// a pure function of this table plus the category slugs, and this method
+		// runs on every cookie AND category write (hooked on both actions).
+		delete_transient( 'faz_declared_services_v1' );
 	}
 
 	/**

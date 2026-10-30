@@ -107,3 +107,12 @@
 .faz-audit-transfer-safeguard {
 	display: block;
 }
+
+/* Provider privacy-policy link under a cookie row (#360). Inherits the link
+   colour of its surface; only spacing and size are set here. */
+.faz-audit-policy {
+	display: block;
+	margin-top: 0.35em;
+	font-size: 0.85em;
+	line-height: 1.45;
+}

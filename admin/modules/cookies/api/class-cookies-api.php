@@ -594,6 +594,26 @@ class Cookies_API extends API_Controller {
 						'safeguard' => array( 'type' => 'object' ),
 					),
 				),
+				'service_id'     => array(
+					'description' => __( 'Stable key under which the public consent API (window.getFazConsent().services) reports this cookie. Derived from the slug, or the name when no slug is set.', 'faz-cookie-manager' ),
+					'type'        => 'string',
+					'context'     => array( 'view', 'edit' ),
+					'readonly'    => true,
+				),
+				'policy_url'     => array(
+					'description'       => __( 'Link to the provider\'s own privacy policy, shown under the cookie in the banner and the cookie policy.', 'faz-cookie-manager' ),
+					'type'              => 'string',
+					'format'            => 'uri',
+					'context'           => array( 'view', 'edit' ),
+					// Not a script field: no unfiltered_html gate. The sanitiser keeps
+					// absolute http(s) URLs only, so a javascript: value never persists.
+					'sanitize_callback' => array( __CLASS__, 'sanitize_policy_url_field' ),
+				),
+				'opt_in_run_each_load' => array(
+					'description' => __( 'Also run the opt-in script on every page load while the category stays accepted, not only when consent is given.', 'faz-cookie-manager' ),
+					'type'        => 'boolean',
+					'context'     => array( 'view', 'edit' ),
+				),
 				'opt_in_script'  => array(
 					'description'       => __( 'JavaScript executed when this cookie\'s category is accepted.', 'faz-cookie-manager' ),
 					'type'              => 'string',
@@ -1006,6 +1026,8 @@ class Cookies_API extends API_Controller {
 			'url_pattern',
 			'category',
 			'transfer',
+			'policy_url',
+			'opt_in_run_each_load',
 			'opt_in_script',
 			'opt_out_script',
 		);
@@ -1221,6 +1243,23 @@ class Cookies_API extends API_Controller {
 	 */
 	public static function sanitize_transfer_field( $value, $request = null, $param = '' ) {
 		return Cookie::sanitize_transfer_value( $value );
+	}
+
+	/**
+	 * Sanitise the provider privacy-policy URL schema property (#360).
+	 *
+	 * Same shape as sanitize_transfer_field: never a WP_Error, both the REST
+	 * boundary and Cookie::set_policy_url() call the one shared normaliser, so
+	 * a rejected value (relative path, javascript: scheme, non-string) saves as
+	 * '' rather than failing the whole cookie save.
+	 *
+	 * @param mixed            $value   Raw value.
+	 * @param \WP_REST_Request $request Unused.
+	 * @param string           $param   Unused.
+	 * @return string
+	 */
+	public static function sanitize_policy_url_field( $value, $request = null, $param = '' ) {
+		return Cookie::sanitize_policy_url_value( $value );
 	}
 
 	/**

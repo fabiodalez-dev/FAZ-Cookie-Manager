@@ -1476,6 +1476,9 @@ function _fazInitOperations() {
             _fazShowBanner();
         }
         _fazFireConsentReadyEvent(_fazGpcChanged ? 'gpc' : (_fazStoredAction ? 'restore' : 'init'));
+        // The GPC opt-out above has already denied the sale/share categories in
+        // the store, so only the categories still accepted replay (#360).
+        if (_fazStoredAction) _fazRunPersistentOptInScripts();
         return;
     }
     if (!_fazStoredAction || _fazPreviewEnabled()) {
@@ -1498,6 +1501,38 @@ function _fazInitOperations() {
         else _fazRemoveBanner();
         _fazFireConsentReadyEvent('restore');
         _fazScheduleRestoreUnblock();
+        _fazRunPersistentOptInScripts();
+    }
+}
+
+/**
+ * Replay the opt-in scripts flagged "run on every page load" (#360) for the
+ * categories the returning visitor has accepted.
+ *
+ * _fazExecuteConsentScripts() fires an opt-in script once, on the accept
+ * transition. A booking widget or chat loader declared that way worked on the
+ * page where the visitor clicked Accept and was dead on every page after it, so
+ * operators had to keep a second copy of the snippet behind a getFazConsent()
+ * check. The admin flag puts the same script in `opt_in_persistent`; this runs
+ * that list on the stored-consent bootstrap paths only (never on a first visit,
+ * never in preview), once per page load. The accept-click page is covered by
+ * the transition path, so the script never fires twice there.
+ */
+var _fazPersistentOptInRan = false;
+function _fazRunPersistentOptInScripts() {
+    if (_fazPersistentOptInRan) return;
+    _fazPersistentOptInRan = true;
+    var scripts = _fazStore._cookieScripts;
+    if (!scripts || typeof scripts !== 'object') return;
+    var cats = _fazStore._categories || [];
+    for (var i = 0; i < cats.length; i++) {
+        var slug  = cats[i].slug;
+        var entry = scripts[slug];
+        // A map cached before this key existed has no opt_in_persistent: treat
+        // it as empty rather than throw.
+        if (!entry || !Array.isArray(entry.opt_in_persistent) || !entry.opt_in_persistent.length) continue;
+        if (_fazRef._fazGetFromStore(slug) !== 'yes') continue;
+        entry.opt_in_persistent.forEach(function (code) { _fazRunScript(code); });
     }
 }
 
@@ -10885,7 +10920,11 @@ function _fazPublicServiceConsentMap() {
  * @param {Function} fn Receives each service object.
  */
 function _fazEachDeclaredService(fn) {
-    var lists = [_fazStore._services, _fazStore._serviceCatalogue];
+    // _declaredServices (#360) is the administrator's own cookie declarations
+    // surfaced as services. It is shipped even when per-service consent is off
+    // — the first two lists are empty then — so getFazConsent().services can
+    // still answer for a hand-declared cookie with its category's consent.
+    var lists = [_fazStore._services, _fazStore._serviceCatalogue, _fazStore._declaredServices];
     for (var li = 0; li < lists.length; li++) {
         var list = lists[li];
         if (!list) continue;

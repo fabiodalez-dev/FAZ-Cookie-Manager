@@ -691,6 +691,7 @@ class Renderer {
 			/* translators: %s: recipient country name. */
 			$transfer_to_fmt  = esc_html__( 'Transfers personal data to: %s', 'faz-cookie-manager' );
 			$transfer_outside = self::transfer_outside_label( $jurisdiction, true );
+			$policy_link_lbl  = esc_html__( 'Read the provider\'s privacy policy', 'faz-cookie-manager' );
 			self::restore_policy_locale( $switched );
 
 			$parts = array();
@@ -763,6 +764,13 @@ class Renderer {
 							? sprintf( $transfer_to_fmt, esc_html( $t_country ) )
 							: $transfer_outside;
 						$desc_cell .= '<small class="faz-cookie-policy-transfer">' . $indicator . '</small>';
+					}
+					// Provider privacy-policy link (#360): same per-row contract as
+					// the banner and the legacy table — only when the operator set
+					// an absolute http(s) URL; new tab, no opener, no referrer.
+					$policy_url = self::decode_policy_url_meta( $row['cookie_meta'] ?? '' );
+					if ( '' !== $policy_url ) {
+						$desc_cell .= '<small class="faz-cookie-policy-link-wrap"><a class="faz-audit-policy-link" href="' . esc_url( $policy_url ) . '" target="_blank" rel="noopener noreferrer">' . $policy_link_lbl . '</a></small>';
 					}
 					$parts[]  = '<td data-label="' . $col_desc . '">' . $desc_cell . '</td>';
 					$parts[]  = '</tr>';
@@ -943,6 +951,34 @@ class Renderer {
 			'countries' => ( isset( $transfer['countries'] ) && is_array( $transfer['countries'] ) ) ? $transfer['countries'] : array(),
 			'safeguard' => ( isset( $transfer['safeguard'] ) && is_array( $transfer['safeguard'] ) ) ? $transfer['safeguard'] : array(),
 		);
+	}
+
+	/**
+	 * Decode a cookie's `meta` value and return its provider privacy-policy URL
+	 * (#360), or '' when absent, malformed or not an absolute http(s) URL.
+	 *
+	 * Reads the raw column like decode_transfer_meta() because this renderer
+	 * works on the shared inventory rows, not on Cookie objects; the scheme
+	 * check mirrors Cookie::sanitize_policy_url_value() so a value written by
+	 * an older sanitiser or a direct DB edit still cannot print a javascript:
+	 * href.
+	 *
+	 * @param mixed $raw_meta The cookie's raw `meta` column (JSON string / array).
+	 * @return string
+	 */
+	private static function decode_policy_url_meta( $raw_meta ) {
+		if ( is_array( $raw_meta ) ) {
+			$meta = $raw_meta;
+		} elseif ( is_string( $raw_meta ) && '' !== $raw_meta ) {
+			$meta = json_decode( $raw_meta, true );
+		} else {
+			$meta = null;
+		}
+		if ( ! is_array( $meta ) || empty( $meta['policy_url'] ) || ! is_string( $meta['policy_url'] ) ) {
+			return '';
+		}
+		$url = trim( $meta['policy_url'] );
+		return preg_match( '#^https?://[^\s]+$#i', $url ) ? $url : '';
 	}
 
 	/**

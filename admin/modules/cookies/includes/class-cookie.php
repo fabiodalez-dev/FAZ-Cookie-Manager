@@ -166,6 +166,14 @@ class Cookie extends Store {
 			'url_pattern'   => $this->get_url_pattern(),
 			'category'      => $this->get_category(),
 			'transfer'      => $this->get_transfer(),
+			// Public, non-script metadata (#360). The service id is the stable key
+			// under which window.getFazConsent().services reports this cookie; the
+			// policy URL is shown under the cookie row in every declaration surface;
+			// the flag only decides WHEN the opt-in script runs, never what it is,
+			// so none of the three needs the unfiltered_html gate.
+			'service_id'    => $this->get_service_id(),
+			'policy_url'    => $this->get_policy_url(),
+			'opt_in_run_each_load' => $this->get_opt_in_run_each_load(),
 			'date_created'  => $this->get_date_created(),
 			'date_modified' => $this->get_date_modified(),
 		);
@@ -331,6 +339,16 @@ class Cookie extends Store {
 				$meta[ $key ] = (string) $item;
 			} elseif ( in_array( $key, $structured_keys, true ) ) {
 				$meta[ $key ] = $this->sanitize_transfer_meta( $item );
+			} elseif ( 'policy_url' === $key ) {
+				// A URL, not free text: sanitize_textarea_field() would keep a
+				// javascript: scheme and mangle nothing useful. The dedicated
+				// sanitiser keeps http(s) only.
+				$meta[ $key ] = self::sanitize_policy_url_value( $item );
+			} elseif ( 'opt_in_run_each_load' === $key ) {
+				// Strict bool: sanitize_textarea_field() would turn `true` into
+				// the string "1" and `false` into "", and a later `! empty()`
+				// read would then treat the string "false" as on.
+				$meta[ $key ] = self::sanitize_bool_value( $item );
 			} else {
 				$meta[ $key ] = sanitize_textarea_field( $item );
 			}
@@ -391,6 +409,130 @@ class Cookie extends Store {
 		$meta                    = $this->get_meta();
 		$meta['opt_out_script']  = (string) $script;
 		$this->set_meta( $meta );
+	}
+
+	/**
+	 * Stable public identifier of this cookie as a consent "service".
+	 *
+	 * This is the key under which window.getFazConsent().services reports the
+	 * cookie's effective consent, and the id of its per-service toggle when
+	 * per-service consent is on (#360). It derives from the slug, falling back
+	 * to the cookie name — the admin "Add cookie" form never sets a slug, so
+	 * most hand-declared rows only have a name. sanitize_title() turns
+	 * "Booking Widget" into "booking-widget" before sanitize_key() enforces the
+	 * same [a-z0-9_-] alphabet every Known_Providers id already lives in.
+	 *
+	 * @return string '' when neither slug nor name yields a usable key.
+	 */
+	public function get_service_id() {
+		$base = $this->get_slug();
+		if ( '' === $base ) {
+			$base = $this->get_name();
+		}
+		if ( '' === $base ) {
+			return '';
+		}
+		$title = function_exists( 'sanitize_title' ) ? sanitize_title( $base ) : strtolower( preg_replace( '/\s+/', '-', $base ) );
+		return sanitize_key( $title );
+	}
+
+	/**
+	 * Return the provider's privacy-policy URL for this cookie ('' when unset).
+	 *
+	 * Shown under the cookie row in the banner preference centre, the generated
+	 * policy and the [faz_cookie_table] shortcode so the visitor can read the
+	 * third party's own policy before deciding (#360).
+	 *
+	 * @return string
+	 */
+	public function get_policy_url() {
+		$meta = $this->get_meta();
+		return isset( $meta['policy_url'] ) ? (string) $meta['policy_url'] : '';
+	}
+
+	/**
+	 * Set the provider's privacy-policy URL, merging into the existing meta.
+	 *
+	 * Routes through set_meta() like every other meta write. Reachable from the
+	 * REST single-item update, the bulk endpoint and settings import via the
+	 * generic set_{key}() dispatch, because `policy_url` is a schema property.
+	 *
+	 * @param string $url Raw URL.
+	 * @return void
+	 */
+	public function set_policy_url( $url ) {
+		$meta               = $this->get_meta();
+		$meta['policy_url'] = self::sanitize_policy_url_value( $url );
+		$this->set_meta( $meta );
+	}
+
+	/**
+	 * Whether the opt-in script must ALSO run on every later page load while
+	 * the cookie's category stays accepted — not only at the moment of the
+	 * accept click (#360).
+	 *
+	 * @return bool
+	 */
+	public function get_opt_in_run_each_load() {
+		$meta = $this->get_meta();
+		return isset( $meta['opt_in_run_each_load'] ) && true === $meta['opt_in_run_each_load'];
+	}
+
+	/**
+	 * Set the "run the opt-in script on every page load" flag.
+	 *
+	 * @param mixed $flag Anything the strict bool allowlist recognises.
+	 * @return void
+	 */
+	public function set_opt_in_run_each_load( $flag ) {
+		$meta                         = $this->get_meta();
+		$meta['opt_in_run_each_load'] = self::sanitize_bool_value( $flag );
+		$this->set_meta( $meta );
+	}
+
+	/**
+	 * Keep only an absolute http(s) URL; anything else becomes ''.
+	 *
+	 * Public so the REST schema boundary (Cookies_API::sanitize_policy_url_field)
+	 * and the model setter normalise identically. esc_url_raw() is used when WP
+	 * is loaded (it also strips a stray javascript: scheme); the standalone
+	 * fallback keeps the same contract for CLI/unit contexts.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return string
+	 */
+	public static function sanitize_policy_url_value( $value ) {
+		if ( ! is_scalar( $value ) ) {
+			return '';
+		}
+		$url = trim( (string) $value );
+		if ( '' === $url || strlen( $url ) > 2048 ) {
+			return '';
+		}
+		if ( function_exists( 'esc_url_raw' ) ) {
+			$url = esc_url_raw( $url, array( 'http', 'https' ) );
+		}
+		if ( ! preg_match( '#^https?://[^\s/$.?\#][^\s]*$#i', $url ) ) {
+			return '';
+		}
+		return $url;
+	}
+
+	/**
+	 * Strict bool allowlist shared by the flag setter and get_meta().
+	 *
+	 * Only an explicit truthy token turns the flag on — the same rule
+	 * sanitize_transfer_value() applies to `enabled`, so an unrecognised value
+	 * (including the string "false" a form may post) resolves to off.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return bool
+	 */
+	public static function sanitize_bool_value( $value ) {
+		if ( is_string( $value ) ) {
+			$value = strtolower( trim( $value ) );
+		}
+		return in_array( $value, array( true, 1, '1', 'true', 'yes', 'on' ), true );
 	}
 
 	/**

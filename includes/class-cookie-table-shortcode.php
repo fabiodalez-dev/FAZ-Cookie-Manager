@@ -250,6 +250,26 @@ class Cookie_Table_Shortcode {
 	}
 
 	/**
+	 * Provider privacy-policy link for one table row (#360).
+	 *
+	 * Same contract and classes as Shortcodes::render_policy_link() in the
+	 * banner: '' unless the operator entered an absolute http(s) URL (the model
+	 * sanitiser already enforces that), new tab, no opener, no referrer.
+	 *
+	 * @param Cookie $cookie_obj Cookie model.
+	 * @return string Escaped HTML, or '' when no URL is set.
+	 */
+	private function render_policy_link( Cookie $cookie_obj ) {
+		$url = $cookie_obj->get_policy_url();
+		if ( '' === $url || ! preg_match( '#^https?://#i', $url ) ) {
+			return '';
+		}
+		return '<div class="faz-audit-policy"><a class="faz-audit-policy-link" href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer">'
+			. esc_html__( 'Read the provider\'s privacy policy', 'faz-cookie-manager' )
+			. '</a></div>';
+	}
+
+	/**
 	 * Render the cookie table.
 	 *
 	 * @param array $atts Shortcode attributes.
@@ -432,6 +452,8 @@ class Cookie_Table_Shortcode {
 					// leaves that column out it moves to the first column rather than
 					// vanishing with the cell it usually sits in.
 					$transfer_html = $this->render_transfer_disclosure( $cookie_obj, $lang, $default, $wp_lang );
+					// The policy link (#360) sits in the same host cell, after the disclosure.
+					$transfer_html .= $this->render_policy_link( $cookie_obj );
 					$transfer_host = in_array( 'description', $columns, true ) ? 'description' : reset( $columns );
 					?>
 					<tr>
