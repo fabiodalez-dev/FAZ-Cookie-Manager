@@ -8957,12 +8957,28 @@ function _fazExecuteConsentScripts(prevAccepted) {
         if (!entry) continue;
         var wasAccepted = Array.isArray(prevAccepted) && prevAccepted.indexOf(slug) !== -1;
         var isAccepted  = _fazRef._fazGetFromStore(slug) === 'yes';
-        if (!wasAccepted && isAccepted && entry.opt_in && entry.opt_in.length) {
-            // The category just went yes — but with per-service consent on the
-            // visitor may have denied the one declared service that owns a
-            // script (#360). Gate each entry on its owner, not the category.
+        if (isAccepted && entry.opt_in && entry.opt_in.length) {
             entry.opt_in.forEach(function (item) {
-                if (_fazConsentScriptAllowed(item, slug)) _fazRunScript(_fazConsentScriptCode(item));
+                // Two ways an entry's consent goes no → yes in this action (#360):
+                //  - its category was just accepted, and (per-service consent on)
+                //    the owning declared service is not denied — the owner gate,
+                //    not the category alone, decides;
+                //  - its category was already accepted and only the owning
+                //    service flipped from not-yes to yes in the preference
+                //    centre. Read from the pre-consent snapshot, which holds the
+                //    effective consent of every visible service (declared
+                //    cookies included) and is empty with per-service off — so
+                //    bare-string and owner-less entries, and every entry on a
+                //    category-only site, keep the category transition alone.
+                // The two are exclusive on wasAccepted, so an entry runs at most
+                // once per action and never twice on the accept page.
+                if (!_fazConsentScriptAllowed(item, slug)) return;
+                var run = !wasAccepted;
+                if (!run && item && typeof item === 'object' && item.service
+                    && _fazServicesBeforeConsent && Object.prototype.hasOwnProperty.call(_fazServicesBeforeConsent, item.service)) {
+                    run = _fazServicesBeforeConsent[item.service] !== 'yes';
+                }
+                if (run) _fazRunScript(_fazConsentScriptCode(item));
             });
         }
         // Run opt_out on any rejection — including first-visit Reject All where

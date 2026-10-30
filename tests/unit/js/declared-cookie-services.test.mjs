@@ -54,9 +54,10 @@ const record = (pairs) => `fazcookie-consent=${encodeURIComponent(pairs)}; path=
  * script is flagged persistent, one unflagged opt-in script in `analytics`,
  * and a persistent script in `marketing` (so a rejected category can be checked).
  */
-function page({ cookies = [], declared = true, perService = false } = {}) {
-  const dom = new JSDOM(PAGE, { runScripts: 'dangerously', url: 'https://shop.example.test/' });
+function page({ cookies = [], declared = true, perService = false, preview = false, gpc = false } = {}) {
+  const dom = new JSDOM(PAGE, { runScripts: 'dangerously', url: 'https://shop.example.test/' + (preview ? '?faz_preview=true' : '') });
   const { window: w } = dom;
+  Object.defineProperty(w.navigator, 'globalPrivacyControl', { configurable: true, value: gpc });
   for (const c of cookies) w.document.cookie = c;
   w._fazConfig = {
     _categories: [
@@ -171,6 +172,45 @@ console.log('declared cookies as services + persistent opt-in scripts (#360, jsd
   w.eval('_fazInitOperations()');
   check('per-service on, service granted: the flagged script replays once', w.__bk === 1);
   check('per-service on, service granted: the public map reports it true', w.getFazConsent().services.bk_session === true);
+}
+
+// ---------------------------------------------------------------------------
+// Per-service consent ON: the category was already accepted and only the owning
+// service flips no → yes in the preference centre. The accept transition alone
+// (category-based) would never run the script; the service flip must.
+// ---------------------------------------------------------------------------
+{
+  const w = page({ perService: true, cookies: [record('consentid:abc,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,marketing:yes,svc.bk_session:no')] });
+  w.eval('_fazInitOperations()');
+  check('service flip: nothing replays while the service is denied', w.__bk === undefined);
+  // The bootstrap replayed the owner-less flagged marketing script once; the
+  // analytics bare string is unflagged and did not run.
+  const adsAfterBoot = w.__ads;
+  // What _fazAcceptCookies() does before mutating the store: snapshot the
+  // effective per-service consent, then the visitor's new choice lands.
+  w.eval('_fazServicesBeforeConsent = _fazGetServiceConsentSnapshot(); fazcookie._fazSetInStore("svc.bk_session", "yes");');
+  w.eval('_fazExecuteConsentScripts(["functional", "analytics", "marketing"])');
+  check('service flip no → yes under an already-accepted category runs the owner\'s opt-in script once', w.__bk === 1);
+  check('service flip: owner-less and bare-string entries in already-accepted categories do NOT run (no category transition)', w.__ads === adsAfterBoot && w.__ga === undefined);
+  // The same action again with the service already yes before: no re-run.
+  w.eval('_fazServicesBeforeConsent = _fazGetServiceConsentSnapshot();');
+  w.eval('_fazExecuteConsentScripts(["functional", "analytics", "marketing"])');
+  check('service already yes before the action: the script does not run again', w.__bk === 1);
+}
+
+// ---------------------------------------------------------------------------
+// Replay on the other bootstrap branches: never in preview, yes under GPC for
+// a category GPC leaves granted.
+// ---------------------------------------------------------------------------
+{
+  const w = page({ preview: true, cookies: [record('consentid:abc,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,marketing:yes')] });
+  w.eval('_fazInitOperations()');
+  check('preview (?faz_preview=true): the flagged script is not replayed', w.__bk === undefined && w.__ads === undefined);
+}
+{
+  const w = page({ gpc: true, cookies: [record('consentid:abc,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,marketing:yes')] });
+  w.eval('_fazInitOperations()');
+  check('GPC with a stored action: the flagged script replays for a category GPC leaves granted', w.__bk === 1);
 }
 
 // ---------------------------------------------------------------------------

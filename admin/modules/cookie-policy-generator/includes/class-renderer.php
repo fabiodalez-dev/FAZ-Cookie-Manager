@@ -384,9 +384,16 @@ class Renderer {
 			$sentinel = Generator::html_token_sentinel( $token_name );
 			// Standalone-line case: markdown wrapped the sentinel in `<p>…</p>`.
 			// Strip the wrapper so the block-level HTML isn't nested inside <p>.
-			$html = (string) preg_replace(
+			// preg_replace_callback, not preg_replace: the replacement is HTML an
+			// operator's URL can end up in (a policy link such as
+			// `…/privacy?ref=$1`), and preg_replace() would read `$1` as a
+			// back-reference and drop it. The callback inserts it literally.
+			$literal = (string) $html_value;
+			$html    = (string) preg_replace_callback(
 				'/<p>\s*' . preg_quote( $sentinel, '/' ) . '\s*<\/p>/',
-				(string) $html_value,
+				static function () use ( $literal ) {
+					return $literal;
+				},
 				$html
 			);
 			// Inline-case fallback: sentinel sat mid-paragraph. Replace in place;
