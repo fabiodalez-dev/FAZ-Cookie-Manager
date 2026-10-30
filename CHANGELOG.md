@@ -2,7 +2,7 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
-## [Unreleased]
+## [1.35.0] - 2026-10-30
 
 ### Added
 - A cookie declared by hand under Cookies → <category> is now a consent service of its own (#360). The REST API exposes its read-only `service_id` and the Service ID is shown in the cookie dialog. The id is derived from the slug, or the name, at the first save and then kept in the cookie's data (and through a recycle-bin restore), so a later rename, slug edit or plugin update never moves the key an integration or a returning visitor's choice is stored under. Cookies in the same category whose names reduce to the same key share one service; a save that would leave a key held in two categories gives the cookie being saved a `-2` suffix instead, and the untouched one keeps its key. A cookie that already belongs to a known provider (a `_ga` added by hand) stays under that provider's toggle instead of becoming a second one, and a cookie the runtime does not expose (scanner-discovered, Necessary) shows no Service ID; `window.getFazConsent().services` reports the cookie under that key with its category's consent, whether or not per-service consent is enabled, and with per-service consent on it also gets its own toggle in the preference centre and is honoured by the cookie shredder. Hand-declared cookies never add URL patterns, so script blocking is unchanged.

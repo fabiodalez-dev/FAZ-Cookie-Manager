@@ -710,6 +710,12 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.35.0 — 2026-10-30
+
+- A cookie declared by hand under Cookies is now a consent service of its own (#360). It appears in window.getFazConsent().services under a stable Service ID shown in the cookie dialog and exposed read-only by the REST API; with per-service consent on it also gets its own toggle in the preference centre and is honoured by the cookie shredder. The id is fixed at the first save, so a later rename or slug edit never moves the key a returning visitor's choice is stored under. Cookies that belong to a known provider, scanner-discovered cookies and Necessary cookies are not exposed as separate services, and script blocking is unchanged.
+- "Also run the opt-in script on every page load while the category stays accepted" in the cookie dialog. A booking widget or chat loader declared as a per-cookie opt-in script now runs on every later page for a returning visitor who accepted, not only on the page where they clicked accept. It never runs on a first visit, on a record written by Global Privacy Control or Do Not Sell that the visitor has not answered, or for a rejected category.
+- A provider privacy policy URL per cookie, shown as a "Read the provider's privacy policy" link under the cookie in the preference centre, the generated cookie policy and the [faz_cookie_table] shortcode. Only absolute http(s) addresses are accepted.
+
 ### 1.34.5 — 2026-10-30
 
 - On a site translated through a proxy (GTranslate custom domains or language sub-domains, Weglot sub-domains) or served on a mirror domain, the visitor's choice was not saved, and consent records and Do Not Sell requests were refused as cross-origin. The consent cookie is now stored for the domain the visitor is on, and the domains GTranslate's own settings describe are trusted automatically.

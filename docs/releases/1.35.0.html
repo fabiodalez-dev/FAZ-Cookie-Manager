@@ -1,0 +1,31 @@
+<p>FAZ Cookie Manager 1.35.0 nasce da una richiesta arrivata su GitHub (issue #360) che descrive bene un caso molto comune: un sito con un widget di prenotazione esterno, uno script che carica una pagina di terzi e che deve partire solo dopo il consenso. Il plugin permetteva già di dichiarare quel cookie a mano, sotto Cookie → Funzionali, con il suo script di opt-in. Mancavano però tre cose, e senza di esse il flusso funzionava solo a metà. Questa versione le aggiunge tutte e tre.</p>
+
+<h2>Un cookie dichiarato a mano diventa un servizio</h2>
+
+<p>Chi integra uno script esterno vuole poter chiedere al banner una cosa semplice: questo servizio ha il consenso? La risposta sta in window.getFazConsent().services, che però elencava solo i servizi riconosciuti dal catalogo dei provider. Un cookie aggiunto a mano non compariva, e l'unica strada era controllare l'intera categoria.</p>
+
+<p>Ora ogni cookie dichiarato a mano ha un proprio Service ID, visibile nella finestra del cookie e restituito in sola lettura dall'API REST, e compare fra i servizi con il consenso della sua categoria. Se il consenso per singolo servizio è attivo, ottiene anche un interruttore proprio nel centro preferenze, e il cookie shredder lo rispetta.</p>
+
+<p>La parte delicata non è stata aggiungere il campo, ma decidere quando l'identificativo può cambiare. La prima versione lo calcolava dal nome del cookie a ogni caricamento: bastava correggere un refuso nel nome perché la chiave sotto cui il visitatore aveva dato il consenso cambiasse, e la sua scelta finisse attribuita a un servizio che non esisteva più. Ora l'identificativo viene fissato al primo salvataggio e conservato nei dati del cookie, anche quando il cookie passa dal cestino e viene ripristinato. Rinominarlo o cambiarne lo slug non lo sposta più.</p>
+
+<p>La revisione ha trovato altri tre casi limite. Due cookie in categorie diverse potevano ridursi alla stessa chiave: ora il cookie che si sta salvando riceve un suffisso -2 e l'altro conserva la propria. Un _ga dichiarato a mano creava un secondo interruttore accanto a quello di Google Analytics: ora resta sotto il provider a cui appartiene. Un identificativo chiamato __proto__, infine, poteva finire nel prototipo dell'oggetto invece che fra i servizi: è un caso improbabile, ma il costo della correzione era una riga.</p>
+
+<h2>Lo script che girava una volta sola</h2>
+
+<p>Il secondo problema era più visibile. Lo script di opt-in di un cookie veniva eseguito al clic su "Accetta", e mai più. Il widget di prenotazione funzionava quindi sulla pagina in cui il visitatore aveva accettato e spariva su tutte le successive, a meno di tenerne una seconda copia protetta da un controllo su getFazConsent(), cioè lo stesso snippet in due posti diversi.</p>
+
+<p>Nella finestra del cookie c'è ora un'opzione per eseguire lo script di opt-in a ogni caricamento di pagina finché la categoria resta accettata. Lo script viene rieseguito solo per un visitatore che torna e ha già accettato: mai alla prima visita, mai per una categoria rifiutata, e mai due volte sulla pagina in cui il consenso viene dato.</p>
+
+<p>Qui la revisione ha trovato il difetto più serio della release. Quando un segnale Global Privacy Control o Do Not Sell arriva prima che il visitatore abbia risposto al banner, il plugin scrive un record di consenso per conto suo. In quel record le categorie non toccate dal segnale risultano accettate, ma il visitatore non ha mai deciso nulla. La prima versione della ripetizione lo leggeva come un consenso vero ed eseguiva lo script. Adesso un record che il visitatore non ha ancora confermato non attiva mai la ripetizione. Con il consenso per singolo servizio, lo script segue il proprio interruttore: spegnerlo esegue lo script di opt-out anche se la categoria resta accettata.</p>
+
+<h2>Il link all'informativa del fornitore</h2>
+
+<p>La terza richiesta era la più semplice da descrivere: un campo per l'indirizzo dell'informativa privacy del fornitore, mostrato sotto il cookie, così il visitatore può leggerla prima di decidere. Il link compare nel centro preferenze del banner, nella cookie policy generata e nello shortcode [faz_cookie_table], e si apre in una nuova scheda.</p>
+
+<p>Anche questo campo nascondeva un tranello. Un indirizzo scritto senza https://, come booking.example/privacy, non arrivava mai al controllo del plugin: WordPress lo completava prima con un http:// davanti e lo salvava come valido. Inoltre la cookie policy e i due shortcode avevano ciascuno la propria regola, più permissiva, quindi un valore che il banner considerava vuoto poteva comunque diventare un link altrove. Ora l'API e tutte le superfici usano la stessa regola, che giudica il valore così come è stato scritto, accetta solo indirizzi http o https assoluti e salva vuoto tutto il resto.</p>
+
+<h2>Come ho verificato</h2>
+
+<p>Ogni test nuovo l'ho eseguito anche sul codice precedente alla correzione, per vedere che lì fallisse. Uno non falliva: il test end-to-end sulla rinomina passava anche senza la correzione, perché creare un cookie via API salva uno slug uguale al nome e la rinomina non toccava mai il caso difettoso. L'ho riscritto perché modificasse lo slug, ed è lì che il difetto compariva davvero. Prima della pubblicazione sono passati la suite dei test unitari, quella del consenso nei tre browser, la suite end-to-end completa sul commit definitivo, i test di conformità con TCF e Consent Mode attivi, l'installazione da zero, l'aggiornamento dalla 1.34.5 e Plugin Check.</p>
+
+<p>Chi non usa cookie dichiarati a mano non vede nessuna differenza: il blocco degli script e i servizi riconosciuti dal catalogo funzionano come prima. Chi li usa trova il Service ID nella finestra del cookie e può controllarlo con getFazConsent().services al posto della categoria intera.</p>

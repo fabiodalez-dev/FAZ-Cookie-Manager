@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.34.5
+Stable tag: 1.35.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -469,6 +469,11 @@ The full changelog (every release back to 1.0.0) lives at:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
+
+= 1.35.0 =
+* Added: A cookie declared by hand under Cookies is now a consent service of its own (#360). It appears in window.getFazConsent().services under a stable Service ID shown in the cookie dialog and exposed read-only by the REST API; with per-service consent on it also gets its own toggle in the preference centre and is honoured by the cookie shredder. The id is fixed at the first save, so a later rename or slug edit never moves the key a returning visitor's choice is stored under. Cookies that belong to a known provider, scanner-discovered cookies and Necessary cookies are not exposed as separate services, and script blocking is unchanged.
+* Added: "Also run the opt-in script on every page load while the category stays accepted" in the cookie dialog. A booking widget or chat loader declared as a per-cookie opt-in script now runs on every later page for a returning visitor who accepted, not only on the page where they clicked accept. It never runs on a first visit, on a record written by Global Privacy Control or Do Not Sell that the visitor has not answered, or for a rejected category.
+* Added: A provider privacy policy URL per cookie, shown as a "Read the provider's privacy policy" link under the cookie in the preference centre, the generated cookie policy and the [faz_cookie_table] shortcode. Only absolute http(s) addresses are accepted.
 
 = 1.34.5 =
 * Fixed: On a site translated through a proxy (GTranslate custom domains or language sub-domains, Weglot sub-domains) or served on a mirror domain, the visitor's choice was not saved, and consent records and Do Not Sell requests were refused as cross-origin. The consent cookie is now stored for the domain the visitor is on, and the domains GTranslate's own settings describe are trusted automatically.
