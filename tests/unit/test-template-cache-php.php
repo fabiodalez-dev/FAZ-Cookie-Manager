@@ -104,6 +104,9 @@ if ( ! function_exists( 'wp_json_encode' ) ) {
 	}
 }
 
+// The layout signature resolves the button order through Banner (#367).
+require_once dirname( __DIR__, 2 ) . '/includes/class-store.php';
+require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/class-banner.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/class-template.php';
 
 use FazCookie\Admin\Modules\Banners\Includes\Template;
@@ -199,7 +202,7 @@ $base_settings = array(
 	'applicableLaw'        => 'gdpr',
 );
 
-echo "Template cache: get_layout_signature() / load() / update()  (15 assertions)\n";
+echo "Template cache: get_layout_signature() / load() / update()  (17 assertions)\n";
 
 // 1: identical inputs -> identical signature (deterministic md5).
 $a = faz_make_template( $base_settings );
@@ -265,6 +268,7 @@ function faz_sig_for_version( $version, $base_settings, $desc_md5, $build_locale
 				'ptype'          => $base_settings['preferenceCenterType'],
 				'theme'          => $base_settings['theme'],
 				'law'            => $base_settings['applicableLaw'],
+				'button_order'   => 'settings-reject-accept',
 				'do_not_sell'    => false,
 				'optout_popup'   => false,
 				'revisit_status' => true,
@@ -282,6 +286,13 @@ $sig_v1 = faz_sig_for_version( FAZ_VERSION, $base_settings, $desc_md5, $base_bui
 $sig_v2 = faz_sig_for_version( '0.0.1-other', $base_settings, $desc_md5, $base_build_locale );
 faz_ok( $sig_v1 === $sig_base, '10a recomputed builder matches real signature (version field present)' );
 faz_ok( $sig_v1 !== $sig_v2, '10b changing plugin_version changes the signature' );
+
+// 10c: the notice button order rewrites the markup (#367), so it must flip the
+// signature; an order outside the whitelist renders as the default and must not.
+$ord = faz_make_template( array_merge( $base_settings, array( 'buttonOrder' => 'accept-reject-settings' ) ) );
+faz_ok( $sig_base !== $ord->faz_signature(), '10c a chosen button order flips the signature' );
+$bad = faz_make_template( array_merge( $base_settings, array( 'buttonOrder' => 'accept-settings-reject' ) ) );
+faz_ok( $sig_base === $bad->faz_signature(), '10d a disallowed order signs as the default it renders as' );
 
 // 11: load() with an empty cache -> generate() runs (no stored template).
 $GLOBALS['faz_test_options']['faz_banner_template'] = array();

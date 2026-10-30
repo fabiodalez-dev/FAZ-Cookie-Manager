@@ -26,6 +26,26 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Banner extends Store {
 
 	/**
+	 * The notice button orders an admin may choose (#367).
+	 *
+	 * Only the orders that keep Accept All and Reject All next to each other:
+	 * EDPB Guidelines 03/2022 and the Garante ask accepting and refusing to
+	 * carry the same weight, and position is part of that weight. An order
+	 * such as Accept → Customise → Reject would let a banner put Accept first
+	 * and push Reject to the end, so it is not offered. Customise is not one
+	 * of the compared options and may sit on either side of the pair. The
+	 * first entry is the default and the order every template ships with.
+	 *
+	 * @var string[]
+	 */
+	const BUTTON_ORDERS = array(
+		'settings-reject-accept',
+		'settings-accept-reject',
+		'reject-accept-settings',
+		'accept-reject-settings',
+	);
+
+	/**
 	 * Banner controller class.
 	 *
 	 * @var object
@@ -793,11 +813,71 @@ class Banner extends Store {
 				// render path).
 				$value = is_scalar( $value ) ? wp_strip_all_tags( (string) $value ) : '';
 				break;
+			case 'buttonOrder':
+				$value = self::sanitize_button_order( $value );
+				break;
 			default:
 				$value = faz_sanitize_text( $value );
 				break;
 		}
 		return $value;
+	}
+
+	/**
+	 * Resolve a stored notice button order to one of BUTTON_ORDERS.
+	 *
+	 * A whitelist, not a text filter: the value decides the markup order of
+	 * the consent choices, so anything that is not one of the allowed orders
+	 * (a REST write, an import, an order that separates Accept from Reject)
+	 * falls back to the default instead of being passed through.
+	 *
+	 * @param mixed $value Stored or submitted value.
+	 * @return string One of BUTTON_ORDERS.
+	 */
+	public static function sanitize_button_order( $value ) {
+		$value = is_string( $value ) ? strtolower( trim( $value ) ) : '';
+		return in_array( $value, self::BUTTON_ORDERS, true ) ? $value : self::BUTTON_ORDERS[0];
+	}
+
+	/**
+	 * Rewrite the notice button shortcodes of a template into the given order.
+	 *
+	 * Every shipped template writes the three choices as one run of shortcodes
+	 * inside the notice-buttons wrapper, `[faz_settings] [faz_reject]
+	 * [faz_accept]`, followed by `[faz_donot_sell]` where the law needs it.
+	 * Reordering the shortcodes before they render puts the buttons in the
+	 * chosen order in the markup itself, so focus order and visual order stay
+	 * the same (WCAG 2.4.3) — CSS `order` would only move what is seen. Do Not
+	 * Sell is not touched and stays last. A template without that exact run
+	 * (a custom one) is returned unchanged.
+	 *
+	 * @param string $html  Template HTML with shortcodes.
+	 * @param string $order One of BUTTON_ORDERS.
+	 * @return string
+	 */
+	public static function apply_button_order( $html, $order ) {
+		$html  = is_string( $html ) ? $html : '';
+		$order = self::sanitize_button_order( $order );
+		if ( self::BUTTON_ORDERS[0] === $order ) {
+			return $html;
+		}
+		$shortcodes = array(
+			'settings' => '[faz_settings]',
+			'reject'   => '[faz_reject]',
+			'accept'   => '[faz_accept]',
+		);
+		$ordered = array();
+		foreach ( explode( '-', $order ) as $button ) {
+			$ordered[] = $shortcodes[ $button ];
+		}
+		$pattern = '/\[faz_settings\](\s*)\[faz_reject\](\s*)\[faz_accept\]/';
+		return (string) preg_replace_callback(
+			$pattern,
+			static function ( $m ) use ( $ordered ) {
+				return $ordered[0] . $m[1] . $ordered[1] . $m[2] . $ordered[2];
+			},
+			$html
+		);
 	}
 
 	/**

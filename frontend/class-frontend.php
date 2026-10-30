@@ -10950,7 +10950,8 @@ class Frontend {
 		// v5: the compact labels wrap instead of clipping, the buttons follow
 		// DOM order and the classic chevron keeps its padding. Same reason.
 		// v7: style the consent identifier in both inline and detached modals.
-		$cache_key = 'faz_boosted_css_v7_' . FAZ_VERSION . '_' . $layout . '_' . md5( $raw_css );
+		// v8: the comfortable phone layout follows the markup order (#368).
+		$cache_key = 'faz_boosted_css_v8_' . FAZ_VERSION . '_' . $layout . '_' . md5( $raw_css );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
 			return $cached;
@@ -10985,7 +10986,7 @@ class Frontend {
 		$css_fixes .= '#faz-consent [data-faz-tag="detail-consent-id"],.faz-modal [data-faz-tag="detail-consent-id"]{display:block;margin:12px 24px;font-size:12px;color:var(--faz-detail-description-color,#212121);}'
 			. '#faz-consent [data-faz-tag="detail-consent-id"][hidden],.faz-modal [data-faz-tag="detail-consent-id"][hidden]{display:none;}'
 			. '#faz-consent [data-faz-tag="detail-consent-id"] input,.faz-modal [data-faz-tag="detail-consent-id"] input{display:block;width:100%;max-width:100%;margin-top:4px;padding:6px 8px;border:1px solid #c5c7cb;border-radius:4px;background:transparent;color:inherit;font-size:12px;}';
-		$css = $css_reset . $css . $css_fixes . self::settings_button_css() . self::compact_mobile_css( $layout );
+		$css = $css_reset . $css . $css_fixes . self::settings_button_css() . self::markup_order_mobile_css() . self::compact_mobile_css( $layout );
 
 		set_transient( $cache_key, $css, DAY_IN_SECONDS );
 		return $css;
@@ -11014,6 +11015,60 @@ class Frontend {
 		// emitted, and a row written before the sanitiser existed - or by hand -
 		// must not reach the stylesheet.
 		return 'compact' === $value ? 'compact' : 'comfortable';
+	}
+
+	/**
+	 * Phone rules shared by both layouts: the markup decides the order of the
+	 * buttons (#368).
+	 *
+	 * The compact layout below resets `order` on the notice buttons for its own
+	 * reasons (point 4); this does the same for the stacked comfortable layout,
+	 * where the template phone rules put Accept first and Reject last behind
+	 * Customise while focus still ran in markup order, and for the
+	 * preference-centre buttons in both layouts. The order of the markup itself
+	 * is the one chosen in Banner → Buttons (#367).
+	 *
+	 * Emitted for both layouts so the compact stylesheet stays the comfortable
+	 * one plus an appended block; where these rules out-rank a compact rule on
+	 * specificity, compact_mobile_css() restores its own value.
+	 *
+	 * @since 1.36.0
+	 * @return string CSS.
+	 */
+	private static function markup_order_mobile_css() {
+		// Every shipped template sorts the buttons on phones with CSS `order`:
+		// Accept 1, Customise / Save 2, Reject 3, against a markup order of
+		// Customise → Reject → Accept. Keyboard and screen-reader users then
+		// meet the buttons in a different order from the one on screen (WCAG
+		// 2.4.3, 1.3.2), and Reject ends up last, behind Customise, on phones
+		// only. `order:0` makes the phone layout follow the markup, whose order
+		// is the one chosen in Banner → Buttons (#367), so desktop and phone
+		// agree (#368). The rules carry the `#faz-consent` / `.faz-modal`
+		// prefixes boost_css_specificity() gives the template rules, so they
+		// win on document order at equal specificity.
+		return '@media (max-width:576px){'
+			. '#faz-consent .faz-notice-btn-wrapper .faz-btn,'
+			. '#faz-consent .faz-prefrence-btn-wrapper .faz-btn,'
+			. '.faz-modal .faz-prefrence-btn-wrapper .faz-btn{order:0;}'
+			// The preference-centre templates gave Accept `margin-top:0` as the
+			// button they sorted first; the first button in the markup takes it.
+			. '#faz-consent .faz-prefrence-btn-wrapper .faz-btn-accept,'
+			. '.faz-modal .faz-prefrence-btn-wrapper .faz-btn-accept{margin-top:10px;}'
+			. '#faz-consent .faz-prefrence-btn-wrapper .faz-btn:first-child,'
+			. '.faz-modal .faz-prefrence-btn-wrapper .faz-btn:first-child{margin-top:0;}'
+			// The classic template stretched only Accept to the full width and
+			// left Customise and Reject to share the row after it, so Accept was
+			// both first and wider than Reject. Every button takes its own full
+			// row, as in the other templates.
+			. '#faz-consent.faz-classic-top .faz-notice-btn-wrapper .faz-btn,'
+			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn{width:100%;margin-right:0;margin-left:0;}'
+			. '}'
+			// Box and banner gave Accept a 16px top margin as the first button
+			// under the description; it now belongs to whichever button is first.
+			. '@media (max-width:440px){'
+			. '#faz-consent .faz-notice-btn-wrapper .faz-btn-accept{margin-top:10px;}'
+			. '#faz-consent .faz-notice-btn-wrapper .faz-btn:first-child{margin-top:16px;}'
+			. '}';
 	}
 
 	/**
@@ -11053,7 +11108,8 @@ class Frontend {
 	 * 5. Under 360px three buttons no longer fit side by side. Accept and reject
 	 *    stay paired on their own row and "customise" - the one control that
 	 *    takes no part in the equal-prominence comparison - takes a row of its
-	 *    own. Since it comes first in the markup, that row sits above the pair.
+	 *    own, above the pair or below it as the chosen button order (#367)
+	 *    places it in the markup.
 	 *
 	 * Emitted AFTER boost_css_specificity(), so the selectors are written with
 	 * their `#faz-consent` prefix already in place and need no `!important`:
@@ -11135,6 +11191,13 @@ class Frontend {
 			. '#faz-consent .faz-notice-btn-wrapper [data-faz-tag="donotsell-button"]{'
 			. 'flex:1 1 100%;width:100%;display:block;white-space:normal;'
 			. '}'
+			// markup_order_mobile_css() gives the first stacked button a 16px top
+			// margin and the classic buttons a full row each, with selectors one
+			// class heavier than the reset above. Side by side neither applies,
+			// so the compact values are restored at the same weight.
+			. '#faz-consent .faz-notice-btn-wrapper .faz-btn:first-child,'
+			. '#faz-consent.faz-classic-top .faz-notice-btn-wrapper .faz-btn,'
+			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn{width:auto;margin:0;}'
 			. '}'
 			. '@media (max-width:360px){'
 			// 40% rather than calc(50% - 4px): the exact value lands on the

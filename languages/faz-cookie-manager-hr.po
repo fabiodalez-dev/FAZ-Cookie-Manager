@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.12.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-10-30T19:40:12+00:00\n"
+"POT-Creation-Date: 2026-10-31T08:49:41+00:00\n"
 "PO-Revision-Date: 2026-04-20 00:00+0200\n"
 "Last-Translator: \n"
 "Language-Team: Croatian\n"
@@ -160,7 +160,7 @@ msgstr "npr. 1 godina"
 
 #: admin/class-admin.php:593
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:696
-#: admin/views/banner.php:830 admin/views/banner.php:878
+#: admin/views/banner.php:845 admin/views/banner.php:893
 #: admin/views/cookies.php:66 admin/views/cookies.php:178
 #: admin/views/cookies.php:295
 #: frontend/modules/shortcodes/class-shortcodes.php:287
@@ -3999,12 +3999,12 @@ msgstr "Izbriši ovaj banner"
 msgid "General"
 msgstr "Općenito"
 
-#: admin/views/banner.php:145 admin/views/banner.php:1128
+#: admin/views/banner.php:145 admin/views/banner.php:1143
 msgid "Geo Targeting"
 msgstr "Geo ciljanje"
 
-#: admin/views/banner.php:146 admin/views/banner.php:1129
-#: admin/views/banner.php:1139
+#: admin/views/banner.php:146 admin/views/banner.php:1144
+#: admin/views/banner.php:1154
 msgid "Content"
 msgstr "Sadržaj"
 
@@ -4112,11 +4112,11 @@ msgstr "Klasični i Puna širina s centrom postavki tipa Pushdown nemaju skočni
 msgid "Position"
 msgstr "Pozicija"
 
-#: admin/views/banner.php:270 admin/views/banner.php:941
+#: admin/views/banner.php:270 admin/views/banner.php:956
 msgid "Bottom Left"
 msgstr "Dolje lijevo"
 
-#: admin/views/banner.php:271 admin/views/banner.php:942
+#: admin/views/banner.php:271 admin/views/banner.php:957
 msgid "Bottom Right"
 msgstr "Dolje desno"
 
@@ -4242,7 +4242,7 @@ msgstr "Odaberite ili prenesite logotip. Koristi medijsku biblioteku u WordPress
 msgid "Banner Text"
 msgstr "Tekst bannera"
 
-#: admin/views/banner.php:375 admin/views/banner.php:819
+#: admin/views/banner.php:375 admin/views/banner.php:834
 msgid "Language:"
 msgstr "Jezik:"
 
@@ -4271,7 +4271,7 @@ msgstr "Oznake gumba"
 msgid "Accept Button"
 msgstr "Gumb za prihvaćanje"
 
-#: admin/views/banner.php:414 admin/views/banner.php:852
+#: admin/views/banner.php:414 admin/views/banner.php:867
 #: frontend/class-amp-consent.php:511
 msgid "Accept All"
 msgstr "Prihvati sve"
@@ -4280,7 +4280,7 @@ msgstr "Prihvati sve"
 msgid "Reject Button"
 msgstr "Gumb za odbijanje"
 
-#: admin/views/banner.php:418 admin/views/banner.php:860
+#: admin/views/banner.php:418 admin/views/banner.php:875
 #: frontend/class-amp-consent.php:512
 msgid "Reject All"
 msgstr "Odbij sve"
@@ -4553,293 +4553,321 @@ msgstr "Samo izvan EU-a"
 msgid "<strong>Off by default — keep OFF for EU/EEA/UK visitors.</strong> The %1$s and the %2$s identify \"X close + labelled Reject on the same banner\" as a recognised dark pattern (unequal-weight dismissal paths). Safe to enable on banners targeted at US, Brazil, Canada or Australian traffic where this rule does not apply — typically used together with multi-banner geo-routing (Geo Targeting tab) to keep the X on a CCPA-style banner."
 msgstr "<strong>Isključeno prema zadanim postavkama — zadržite ISKLJUČENO za posjetitelje EU/EGP/UK.</strong> %1$s i %2$s identificiraju \"zatvaranje X + označeni Odbij na istom banneru\" kao prepoznati tamni obrazac (putovi zatvaranja nejednake težine). Sigurno je omogućiti na bannerima usmjerenima na promet iz SAD-a, Brazila, Kanade ili Australije gdje se ovo pravilo ne primjenjuje — obično se koristi zajedno s geo-usmjeravanjem više bannera (kartica Geo Targeting) kako bi se X zadržao na banneru u stilu CCPA."
 
+#: admin/views/banner.php:811
+msgid "Button Order"
+msgstr ""
+
 #: admin/views/banner.php:814
+msgid "Order of the banner buttons"
+msgstr ""
+
+#: admin/views/banner.php:816
+msgid "Customise → Reject All → Accept All (default)"
+msgstr ""
+
+#: admin/views/banner.php:817
+msgid "Customise → Accept All → Reject All"
+msgstr ""
+
+#: admin/views/banner.php:818
+msgid "Reject All → Accept All → Customise"
+msgstr ""
+
+#: admin/views/banner.php:819
+msgid "Accept All → Reject All → Customise"
+msgstr ""
+
+#: admin/views/banner.php:821
+msgid "The same order is used on desktop and on phones, and keyboard users reach the buttons in this order. Accept All and Reject All always stay next to each other: accepting and refusing must carry the same weight, and an order that put one of them first and the other last behind Customise would not."
+msgstr ""
+
+#: admin/views/banner.php:829
 msgid "Looking for the preference center <strong>colours</strong> (the &quot;Show more/less&quot; and Cookie Policy link)? They live under <strong>Colours → Preference Center Colours</strong>, grouped with every other colour setting."
 msgstr "Tražite <strong>boje</strong> centra za preferencije (veza &quot;Prikaži više/manje&quot; i Pravila o kolačićima)? Nalaze se pod <strong>Boje → Boje centra za preferencije</strong>, grupirane sa svim ostalim postavkama boja."
 
-#: admin/views/banner.php:817
+#: admin/views/banner.php:832
 msgid "Preference Center Text"
 msgstr "Tekst centra postavki"
 
-#: admin/views/banner.php:826 admin/views/banner.php:874
+#: admin/views/banner.php:841 admin/views/banner.php:889
 msgid "Title"
 msgstr "Naslov"
 
-#: admin/views/banner.php:827
+#: admin/views/banner.php:842
 msgid "Customize consent preferences"
 msgstr "Prilagodite postavke privole"
 
-#: admin/views/banner.php:847 admin/views/banner.php:895
+#: admin/views/banner.php:862 admin/views/banner.php:910
 msgid "Supports plain text or HTML. Keep it short enough to stay readable on mobile."
 msgstr "Podržava obični tekst ili HTML. Neka bude dovoljno kratko da ostane čitljivo na mobilnim uređajima."
 
-#: admin/views/banner.php:851
+#: admin/views/banner.php:866
 msgid "Accept All Button"
 msgstr "Gumb „Prihvati sve”"
 
-#: admin/views/banner.php:855
+#: admin/views/banner.php:870
 msgid "Save Preferences Button"
 msgstr "Gumb „Spremi postavke”"
 
-#: admin/views/banner.php:856
+#: admin/views/banner.php:871
 msgid "Save My Preferences"
 msgstr "Spremi moje postavke"
 
-#: admin/views/banner.php:859
+#: admin/views/banner.php:874
 msgid "Reject All Button"
 msgstr "Gumb „Odbij sve”"
 
-#: admin/views/banner.php:869
+#: admin/views/banner.php:884
 msgid "Opt-out (Do Not Sell) Text"
 msgstr "Tekst za opt-out (Do Not Sell)"
 
-#: admin/views/banner.php:872
+#: admin/views/banner.php:887
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Tekst modalnog prozora «Postavke odjave» koji posjetitelj vidi nakon klika na poveznicu «Do Not Sell or Share My Personal Information». Prikazuje se samo na CCPA / američkim državnim zakonima (i Oboje) bannerima. Slijedi jezik odabran gore."
 
-#: admin/views/banner.php:875 frontend/class-frontend.php:4084
+#: admin/views/banner.php:890 frontend/class-frontend.php:4084
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "Opt-out Preferences"
 msgstr "Postavke odjave"
 
-#: admin/views/banner.php:898
+#: admin/views/banner.php:913
 msgid "Opt-out Toggle Label"
 msgstr "Oznaka prekidača za opt-out"
 
-#: admin/views/banner.php:899 includes/class-do-not-sell-shortcode.php:146
+#: admin/views/banner.php:914 includes/class-do-not-sell-shortcode.php:146
 msgid "Do Not Sell or Share My Personal Information"
 msgstr "Ne prodavaj niti dijeli moje osobne podatke"
 
-#: admin/views/banner.php:905
+#: admin/views/banner.php:920
 msgid "Audit Table"
 msgstr "Tablica pregleda"
 
-#: admin/views/banner.php:911
+#: admin/views/banner.php:926
 msgid "Show cookie audit table in preference center"
 msgstr "Prikaži tablicu pregleda kolačića u centru postavki"
 
-#: admin/views/banner.php:921
+#: admin/views/banner.php:936
 msgid "Revisit Consent"
 msgstr "Ponovni pristup privoli"
 
-#: admin/views/banner.php:927
+#: admin/views/banner.php:942
 msgid "Show revisit consent widget"
 msgstr "Prikaži widget za ponovni pristup privoli"
 
-#: admin/views/banner.php:931
+#: admin/views/banner.php:946
 msgid "Rule sets that can reach your visitors require a standing way to reopen and withdraw consent, and this switch would normally be locked on for that reason. It is unlocked because your site was checked and a persistent consent-preferences link was found on every page, which satisfies the same requirement. Turn the widget off here if you prefer to rely on that link alone. If the link is ever removed, the requirement is no longer met and this switch locks again."
 msgstr "Skupovi pravila koji se mogu primijeniti na vaše posjetitelje zahtijevaju stalno dostupan način ponovnog otvaranja i povlačenja privole, i zato bi ovaj prekidač inače bio zaključan kao uključen. Otključan je jer je vaša stranica provjerena i na svakoj je stranici pronađena trajna poveznica na postavke privole, koja ispunjava isti zahtjev. Ovdje isključite widget ako se radije oslanjate samo na tu poveznicu. Ako poveznica ikada bude uklonjena, zahtjev više nije ispunjen i ovaj se prekidač ponovno zaključava."
 
-#: admin/views/banner.php:935
+#: admin/views/banner.php:950
 msgid "Locked on. Every visitor is served the most-protective fallback rule set, because nothing on this site can resolve their country, and it requires a standing way to reopen and withdraw consent — withdrawing has to stay as easy as giving. The runtime keeps this widget visible whatever this switch says. Its position, colours and icon below remain yours to change. To use a footer link instead, add one and have it verified under Settings » Banner Control » How visitors withdraw consent — once it checks out, this switch unlocks."
 msgstr "Zaključano kao uključeno. Svaki posjetitelj dobiva najzaštitniji zamjenski skup pravila jer ništa na ovoj stranici ne može utvrditi njegovu zemlju, a taj skup zahtijeva stalno dostupan način ponovnog otvaranja i povlačenja privole — povlačenje mora ostati jednako jednostavno kao davanje. Sustav drži ovaj widget vidljivim bez obzira na to što pokazuje ovaj prekidač. Njegov položaj, boje i ikonu u nastavku i dalje možete mijenjati. Želite li umjesto toga koristiti poveznicu u podnožju, dodajte je i dajte je provjeriti u Postavke » Kontrola bannera » Kako posjetitelji povlače privolu — čim provjera uspije, ovaj se prekidač otključava."
 
-#: admin/views/banner.php:935
+#: admin/views/banner.php:950
 msgid "Locked on while jurisdiction routing is active. Every rule set that can reach a visitor here requires a standing way to reopen and withdraw consent, so the runtime keeps this widget visible whatever this switch says — withdrawing has to stay as easy as giving. Its position, colours and icon below remain yours to change. To use a footer link instead, add one and have it verified under Settings » Banner Control » How visitors withdraw consent — once it checks out, this switch unlocks."
 msgstr "Zaključano kao uključeno dok je usmjeravanje nadležnosti aktivno. Svaki skup pravila koji se ovdje može primijeniti na posjetitelja zahtijeva stalno dostupan način ponovnog otvaranja i povlačenja privole, pa sustav drži ovaj widget vidljivim bez obzira na to što pokazuje ovaj prekidač — povlačenje mora ostati jednako jednostavno kao davanje. Njegov položaj, boje i ikonu u nastavku i dalje možete mijenjati. Želite li umjesto toga koristiti poveznicu u podnožju, dodajte je i dajte je provjeriti u Postavke » Kontrola bannera » Kako posjetitelji povlače privolu — čim provjera uspije, ovaj se prekidač otključava."
 
-#: admin/views/banner.php:939
+#: admin/views/banner.php:954
 msgid "Widget Position"
 msgstr "Pozicija widgeta"
 
-#: admin/views/banner.php:946
+#: admin/views/banner.php:961
 msgid "Widget Label"
 msgstr "Oznaka widgeta"
 
-#: admin/views/banner.php:947
+#: admin/views/banner.php:962
 msgid "Consent Preferences"
 msgstr "Postavke privole"
 
-#: admin/views/banner.php:948
+#: admin/views/banner.php:963
 msgid "Used as tooltip and screen reader label (aria-label)."
 msgstr "Koristi se kao tooltip i oznaka za čitače zaslona (aria-label)."
 
-#: admin/views/banner.php:951
+#: admin/views/banner.php:966
 msgid "Inline consent button or footer link"
 msgstr "Ugrađeni gumb privole ili poveznica u podnožju"
 
-#: admin/views/banner.php:952
+#: admin/views/banner.php:967
 msgid "Place this shortcode in a Shortcode block in your footer, page or post to reopen consent preferences:"
 msgstr "Postavite ovaj shortcode u blok Shortcode u podnožju, na stranici ili u objavi kako biste ponovno otvorili postavke privole:"
 
-#: admin/views/banner.php:955
+#: admin/views/banner.php:970
 msgid "The link uses your theme’s link styling. To use it instead of the floating widget, add it to a persistent footer on every page and turn off “Show revisit consent widget” above. When jurisdiction routing locks that switch on, go to Settings » Banner Control » How visitors withdraw consent and run the check: the plugin loads your own pages, and once it finds the link on every one of them the switch unlocks and the widget stops being forced on."
 msgstr "Poveznica preuzima stil poveznica vaše teme. Želite li je koristiti umjesto plutajućeg widgeta, dodajte je u podnožje prisutno na svakoj stranici i iznad isključite „Prikaži widget za ponovni pristup privoli“. Kada usmjeravanje nadležnosti zaključa taj prekidač kao uključen, idite na Postavke » Kontrola bannera » Kako posjetitelji povlače privolu i pokrenite provjeru: dodatak učitava vaše vlastite stranice i, čim pronađe poveznicu na svakoj od njih, prekidač se otključava i widget više nije prisilno uključen."
 
-#: admin/views/banner.php:956
+#: admin/views/banner.php:971
 msgid "For a custom HTML link, use the data-faz-open-preferences attribute. Standard navigation menu labels do not process shortcodes."
 msgstr "Za prilagođenu HTML poveznicu upotrijebite atribut data-faz-open-preferences. Standardne oznake navigacijskih izbornika ne obrađuju kratke kodove."
 
-#: admin/views/banner.php:958
+#: admin/views/banner.php:973
 msgid "Optional attributes: <code>text=&quot;Manage cookies&quot;</code> (custom label) and <code>class=&quot;my-button&quot;</code> (extra CSS classes). The button automatically inherits your banner&#39;s primary button colours. <strong>It needs the banner runtime to work, so place it on a page where the banner is active</strong> — pages added to the banner exclusion list don't load the consent runtime, so the button won't open the preferences there."
 msgstr "Opcionalni atributi: <code>text=&quot;Upravljaj kolačićima&quot;</code> (prilagođena oznaka) i <code>class=&quot;my-button&quot;</code> (dodatne CSS klase). Gumb automatski nasljeđuje boje primarnog gumba vašeg banera. <strong>Za rad zahtijeva pokretačko okruženje banera, stoga ga postavite na stranicu gdje je baner aktivan</strong> — stranice na popisu isključenja banera ne učitavaju pokretačko okruženje pristanka, pa gumb tamo neće otvoriti postavke."
 
-#: admin/views/banner.php:964
+#: admin/views/banner.php:979
 msgid "Behaviours"
 msgstr "Ponašanje"
 
-#: admin/views/banner.php:970
+#: admin/views/banner.php:985
 msgid "Reload page after accepting consent"
 msgstr "Ponovno učitaj stranicu nakon prihvaćanja privole"
 
-#: admin/views/banner.php:977
+#: admin/views/banner.php:992
 msgid "Respect Global Privacy Control (GPC)"
 msgstr "Poštuj Global Privacy Control (GPC)"
 
-#: admin/views/banner.php:988
+#: admin/views/banner.php:1003
 msgid "A Global Privacy Control signal is always honoured, whether this switch is on or off. GPC is a binding opt-out of the sale and sharing of personal data in several US states, and a browser does not say which law applies to its visitor, so the plugin treats it the same everywhere."
 msgstr "Signal Global Privacy Control uvijek se poštuje, bez obzira na to je li ovaj prekidač uključen ili isključen. U nekoliko američkih saveznih država GPC je obvezujuća odjava (opt-out) od prodaje i dijeljenja osobnih podataka, a preglednik ne govori koji se zakon primjenjuje na njegova korisnika, pa ga dodatak svugdje tretira jednako."
 
-#: admin/views/banner.php:989
+#: admin/views/banner.php:1004
 msgid "What it blocks is decided on the Cookies page: a visitor sending GPC (Brave, DuckDuckGo, Firefox with the setting on) is opted out of every category flagged Sale or Sharing, and no other category is touched. On a site running IAB TCF, their vendor consents are withdrawn as well. If those visitors report that maps or videos never load, check that Functional is not flagged there."
 msgstr "Što blokira, određuje se na stranici Kolačići: posjetitelju koji šalje GPC (Brave, DuckDuckGo, Firefox s uključenom postavkom) odbijaju se sve kategorije označene kao Prodaja ili Dijeljenje, a nijedna druga kategorija nije dirnuta. Na web-stranici s IAB TCF-om povlače mu se i privole dodijeljene dobavljačima. Ako ti posjetitelji javljaju da se karte ili videozapisi nikad ne učitavaju, provjerite da kategorija „Functional” (funkcionalni kolačići) ondje nije označena."
 
-#: admin/views/banner.php:990
+#: admin/views/banner.php:1005
 msgid "One exception: with per-service consent on, a visitor who clicks Accept on a blocked embed (a map, a video) gets that one service, even under GPC. The category stays denied, every other service stays blocked, and a Do Not Sell request still wins over the click. The consent log records it as a GPC exception."
 msgstr "Jedna iznimka: uz uključenu privolu po usluzi, posjetitelj koji klikne Prihvati na blokiranom ugrađenom sadržaju (karti, videozapisu) dobiva samo tu jednu uslugu, čak i uz GPC. Kategorija ostaje odbijena, sve ostale usluge ostaju blokirane, a zahtjev „Ne prodaj niti dijeli“ i dalje ima prednost pred klikom. Zapisi privola bilježe to kao GPC iznimku."
 
-#: admin/views/banner.php:1062
+#: admin/views/banner.php:1077
 msgid "Geo source configured but not working"
 msgstr "Geo izvor je konfiguriran, ali ne radi"
 
-#: admin/views/banner.php:1063
+#: admin/views/banner.php:1078
 msgid "Geo source not configured"
 msgstr "Geo izvor nije konfiguriran"
 
 #. translators: %1$s: Settings -> Geolocation link, %2$s: the faz_trust_cf_ipcountry_header filter name, %3$s: the add_filter() code snippet, %4$s: nginx real_ip_header directive name, %5$s: Apache mod_remoteip module name, %6$s: the second add_filter() code snippet.
-#: admin/views/banner.php:1071
+#: admin/views/banner.php:1086
 #, fuzzy, php-format
 msgid "No country signal is available on this install. Multi-banner geo-routing will resolve every visitor to \"unknown\" and fall back to your match-all / default banner. The usual fix is to configure %1$s with a free MaxMind GeoLite2 license key. If your site sits behind Cloudflare instead, the %2$s filter is available — note this is a developer code filter, NOT a setting in this screen: a developer adds %3$s in your theme or a code-snippets plugin. That filter says the header may be read; it does not say the request came from Cloudflare, and the country is only taken from a request that did. Where your server or host restores the visitor&#8217;s own address at the origin — nginx %4$s, Apache %5$s, and most managed hosts — add %6$s as well, which asserts that the rewrite happens only for Cloudflare&#8217;s ranges and that the origin cannot be reached any other way. Until one of these works, the region presets and custom country list below are switched off rather than merely ineffective — anything already saved there is kept untouched and becomes editable again the moment a country can be resolved. Priority and &#8220;default fallback&#8221; stay editable: they decide between your match-all banners and do not need a country."
 msgstr "Na ovoj instalaciji nije dostupan nikakav signal zemlje. Geo-usmjeravanje s više bannera svakog će posjetitelja odrediti kao „nepoznatog“ i vratiti se na vaš univerzalni / zadani banner. Uobičajeno rješenje je konfigurirati %1$s s besplatnim licencnim ključem MaxMind GeoLite2. Ako je vaša stranica umjesto toga iza Cloudflarea, dostupan je filtar %2$s — napominjemo da je to filtar u kodu za programere, a NE postavka na ovom zaslonu: programer dodaje %3$s u vašu temu ili u dodatak za isječke koda. Dok jedno od toga ne proradi, predodređene postavke regije i prilagođeni popis zemalja u nastavku isključeni su, a ne samo bez učinka — ono što je već spremljeno ostaje netaknuto i ponovno postaje uredivo čim se zemlja može utvrditi. Prioritet i &#8220;zadana zamjena&#8221; ostaju uredivi: oni odlučuju između vaših univerzalnih bannera i ne trebaju zemlju."
 
-#: admin/views/banner.php:1072
+#: admin/views/banner.php:1087
 msgid "Settings &raquo; Geolocation"
 msgstr "Postavke &raquo; Geolokacija"
 
 #. translators: %s: the add_filter() code snippet for faz_trust_geoip_country_code.
-#: admin/views/banner.php:1091
+#: admin/views/banner.php:1106
 #, php-format
 msgid "Apache mod_geoip is present on this server, but its value is not used until a developer adds %s — it is off by default because, on a misconfigured server, a request header can fill the same variable."
 msgstr "Apache mod_geoip prisutan je na ovom poslužitelju, ali njegova se vrijednost ne koristi dok programer ne doda %s — to je prema zadanim postavkama isključeno jer na pogrešno konfiguriranom poslužitelju zaglavlje zahtjeva može popuniti istu varijablu."
 
-#: admin/views/banner.php:1102 admin/views/settings.php:640
+#: admin/views/banner.php:1117 admin/views/settings.php:640
 msgid "The Cloudflare CF-IPCountry opt-in (faz_trust_cf_ipcountry_header) is active, but this request did not arrive from a Cloudflare address, so visitor countries will not resolve and every visitor is served the fallback rule set. If your server or host restores the visitor's own address at the origin (nginx real_ip_header, Apache mod_remoteip, most managed hosts), a developer must also add the faz_remote_addr_rewritten_by_cloudflare filter, which asserts that the rewrite happens only for Cloudflare's ranges and that the origin cannot be reached any other way."
 msgstr ""
 
-#: admin/views/banner.php:1120
+#: admin/views/banner.php:1135
 msgid "How multi-banner works — quick guide"
 msgstr "Kako funkcionira više bannera — kratki vodič"
 
 #. translators: %1$s: Geo Targeting (tab name), %2$s: Content (tab name).
-#: admin/views/banner.php:1127
+#: admin/views/banner.php:1142
 #, php-format
 msgid "%1$s (this tab) = <em>WHICH visitors</em> see this banner. Pick countries / regions; the multi-banner picker matches against the visitor's detected country. Leave empty to make this banner the universal fallback."
 msgstr "%1$s (ova kartica) = <em>KOJI posjetitelji</em> vide ovaj banner. Odaberite zemlje/regije; birač više bannera uspoređuje otkrivenu zemlju posjetitelja. Ostavite prazno da ovaj banner bude univerzalni rezervni."
 
 #. translators: %1$s: Content (tab name).
-#: admin/views/banner.php:1138
+#: admin/views/banner.php:1153
 #, php-format
 msgid "%1$s = <em>WHAT the banner says</em> — title, description, button labels, per-language translations. This is where you put law-specific copy: \"Não vender minhas informações pessoais\" for LGPD (Brazil), \"Do not sell or share my personal information\" for CCPA/CPRA (California 2024+), German consent text for GDPR-DE, and so on. Same banner row, multiple languages."
 msgstr "%1$s = <em>ŠTO BANNER GOVORI</em> — naslov, opis, oznake gumba, prijevodi po jeziku. Ovdje unosite tekst specifičan za zakon: \"Não vender minhas informações pessoais\" za LGPD (Brazil), \"Do not sell or share my personal information\" za CCPA/CPRA (Kalifornija 2024+), njemački tekst suglasnosti za GDPR-DE i tako dalje. Isti redak bannera, više jezika."
 
-#: admin/views/banner.php:1146
+#: admin/views/banner.php:1161
 msgid "<strong>EU</strong> preset = 27 EU + 3 EEA (Iceland, Liechtenstein, Norway). It does <em>not</em> include the UK — pick the <strong>United Kingdom</strong> preset separately when you want a UK-GDPR variant with different copy. To cover EU+UK with one banner, tick both presets."
 msgstr "<strong>EU unaprijed postavljeno</strong> = 27 EU + 3 EGP (Island, Lihtenštajn, Norveška). <em>Ne</em> uključuje Ujedinjenu Kraljevinu — odaberite zasebno unaprijed postavljeno <strong>United Kingdom</strong> ako želite varijantu UK-GDPR s drugačijim tekstom. Za pokrivenost EU+UK jednim bannerom, označite oba unaprijed postavljena."
 
-#: admin/views/banner.php:1155
+#: admin/views/banner.php:1170
 msgid "Region presets"
 msgstr "Predodređene postavke regije"
 
-#: admin/views/banner.php:1159
+#: admin/views/banner.php:1174
 msgid "Tick the regions where this banner should be shown. A visitor from any country in the selected regions sees this banner. Leave all unchecked to make this banner match every visitor (fallback / single-banner installs)."
 msgstr "Označite regije u kojima se ovaj banner treba prikazivati. Posjetitelj iz bilo koje zemlje u odabranim regijama vidjet će ovaj banner. Ostavite sve neoznačeno kako bi se ovaj banner prikazivao svim posjetiteljima (fallback / instalacije s jednim bannerom)."
 
-#: admin/views/banner.php:1162
+#: admin/views/banner.php:1177
 msgid "EU / EEA (27 + IS, LI, NO)"
 msgstr "EU / EGP (27 + IS, LI, NO)"
 
-#: admin/views/banner.php:1163
+#: admin/views/banner.php:1178
 msgid "United Kingdom (UK-GDPR)"
 msgstr "Ujedinjeno Kraljevstvo (UK-GDPR)"
 
-#: admin/views/banner.php:1164
+#: admin/views/banner.php:1179
 msgid "United States (CCPA / state laws)"
 msgstr "Sjedinjene Američke Države (CCPA / državni zakoni)"
 
-#: admin/views/banner.php:1165
+#: admin/views/banner.php:1180
 msgid "Canada (PIPEDA)"
 msgstr "Kanada (PIPEDA)"
 
-#: admin/views/banner.php:1166
+#: admin/views/banner.php:1181
 msgid "Brazil (LGPD)"
 msgstr "Brazil (LGPD)"
 
-#: admin/views/banner.php:1167 admin/views/settings.php:730
+#: admin/views/banner.php:1182 admin/views/settings.php:730
 #: admin/views/setup.php:189
 msgid "Australia"
 msgstr "Australija"
 
-#: admin/views/banner.php:1168
+#: admin/views/banner.php:1183
 msgid "Japan (APPI)"
 msgstr "Japan (APPI)"
 
-#: admin/views/banner.php:1169
+#: admin/views/banner.php:1184
 msgid "Switzerland (nFADP)"
 msgstr "Švicarska (nFADP)"
 
-#: admin/views/banner.php:1176
+#: admin/views/banner.php:1191
 msgid "Custom country list"
 msgstr "Prilagođeni popis zemalja"
 
-#: admin/views/banner.php:1179
+#: admin/views/banner.php:1194
 msgid "Additional ISO-3166 alpha-2 country codes"
 msgstr "Dodatni ISO-3166 alpha-2 kodovi zemalja"
 
-#: admin/views/banner.php:1180
+#: admin/views/banner.php:1195
 msgid "e.g. NZ, SG, KR"
 msgstr "npr. NZ, SG, KR"
 
-#: admin/views/banner.php:1181
+#: admin/views/banner.php:1196
 msgid "Comma-separated, two letters per code. Use this for countries not covered by the region presets above. Codes are normalised to upper-case and deduplicated automatically."
 msgstr "Odvojeni zarezima, dva slova po kodu. Koristite za zemlje koje nisu obuhvaćene regionalnim predefiniranim postavkama iznad. Kodovi se automatski normaliziraju u velika slova i deduplificiraju."
 
-#: admin/views/banner.php:1187
+#: admin/views/banner.php:1202
 msgid "Priority & fallback"
 msgstr "Prioritet i zamjena"
 
-#: admin/views/banner.php:1190
+#: admin/views/banner.php:1205
 msgid "Priority"
 msgstr "Prioritet"
 
-#: admin/views/banner.php:1192
+#: admin/views/banner.php:1207
 msgid "Tie-breaker when several banners are candidates for the same visitor. Higher wins. Default 0. This applies to banners targeting the same country AND to banners with no targeting at all, so it still decides between your match-all banners on a site that cannot resolve a country."
 msgstr "Odlučuje kada je više bannera kandidat za istog posjetitelja. Pobjeđuje viša vrijednost. Zadano 0. Vrijedi za bannere koji ciljaju istu zemlju I za bannere bez ikakvog ciljanja, pa i dalje odlučuje između vaših univerzalnih bannera na stranici koja ne može utvrditi zemlju."
 
-#: admin/views/banner.php:1198
+#: admin/views/banner.php:1213
 msgid "Use this banner as the default fallback"
 msgstr "Upotrijebi ovaj banner kao zadani zamjenski"
 
-#: admin/views/banner.php:1200
+#: admin/views/banner.php:1215
 msgid "Shown to visitors from countries no banner targets explicitly. Exactly one banner should be marked as default. Saving this option will clear the flag on every other banner."
 msgstr "Prikazuje se posjetiteljima iz zemalja koje nijedan natpis izričito ne cilja. Točno jedan natpis treba biti označen kao zadani. Spremanjem ove opcije uklonit će se zastavica s svih ostalih natpisa."
 
-#: admin/views/banner.php:1216
+#: admin/views/banner.php:1231
 msgid "Frontend banner preview"
 msgstr "Pregled bannera na sučelju"
 
-#: admin/views/banner.php:1224
+#: admin/views/banner.php:1239
 msgid "Loading real site preview..."
 msgstr "Učitavanje prikaza stvarne stranice..."
 
-#: admin/views/banner.php:1229
+#: admin/views/banner.php:1244
 msgid "Save Banner Settings"
 msgstr "Spremi postavke bannera"
 
-#: admin/views/banner.php:1230
+#: admin/views/banner.php:1245
 msgid "Hide Preview"
 msgstr "Sakrij pregled"
 
-#: admin/views/banner.php:1231
+#: admin/views/banner.php:1246
 msgid "Refresh Preview"
 msgstr "Osvježi pregled"
 

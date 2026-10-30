@@ -446,7 +446,13 @@ class Template {
 		if ( '' === $template ) {
 			return $html;
 		}
-		$html = do_shortcode( $template );
+		// The chosen notice button order (#367) is applied to the shortcodes,
+		// so the buttons are rendered in that order rather than moved by CSS.
+		$settings = isset( $this->properties['settings'] ) && is_array( $this->properties['settings'] )
+			? $this->properties['settings']
+			: array();
+		$template = Banner::apply_button_order( $template, isset( $settings['buttonOrder'] ) ? $settings['buttonOrder'] : '' );
+		$html     = do_shortcode( $template );
 		if ( ! class_exists( 'DOMDocument' ) || ! class_exists( 'DOMXPath' ) ) {
 			return $html;
 		}
@@ -736,6 +742,8 @@ class Template {
 					'ptype'          => isset( $settings['preferenceCenterType'] ) ? $settings['preferenceCenterType'] : 'popup',
 					'theme'          => isset( $settings['theme'] ) ? $settings['theme'] : 'light',
 					'law'            => isset( $settings['applicableLaw'] ) ? $settings['applicableLaw'] : 'gdpr',
+					// The notice button order rewrites the markup (#367).
+					'button_order'   => Banner::sanitize_button_order( isset( $settings['buttonOrder'] ) ? $settings['buttonOrder'] : '' ),
 					'do_not_sell'    => $do_not_sell,
 					'optout_popup'   => ! empty( $config['optoutPopup']['status'] ),
 					'revisit_status' => isset( $config['revisitConsent']['status'] ) ? (bool) $config['revisitConsent']['status'] : true,

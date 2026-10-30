@@ -77,6 +77,9 @@ namespace {
 		}
 	}
 
+	// The layout signature resolves the button order through Banner (#367).
+	require_once dirname( __DIR__, 2 ) . '/includes/class-store.php';
+	require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/class-banner.php';
 	require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/class-template.php';
 
 	use FazCookie\Admin\Modules\Banners\Includes\Template;

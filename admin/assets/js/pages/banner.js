@@ -1563,6 +1563,15 @@
 		var bannerSettings = (bannerData.properties && bannerData.properties.settings) || {};
 		setChecked('faz-b-close-with-reject-toggle', !!bannerSettings.allowCloseButtonWithReject);
 
+		// Notice button order (#367). An unknown stored value shows the default,
+		// which is also what the server renders for it (sanitize_button_order).
+		var orderEl = document.getElementById('faz-b-button-order');
+		if (orderEl) {
+			var storedOrder = typeof bannerSettings.buttonOrder === 'string' ? bannerSettings.buttonOrder : '';
+			var knownOrder = Array.prototype.some.call(orderEl.options, function (opt) { return opt.value === storedOrder; });
+			orderEl.value = knownOrder ? storedOrder : 'settings-reject-accept';
+		}
+
 		// The sub-toggle is only meaningful when the parent "Show Close Button"
 		// is on — a ticked override on an OFF parent is a no-op that
 		// misleadingly suggests something is active. Bind disabled state to
@@ -2238,6 +2247,7 @@
 		// Lives under properties.settings so it travels with the banner row.
 		if (!props.settings || typeof props.settings !== 'object') props.settings = {};
 		props.settings.allowCloseButtonWithReject = isChecked('faz-b-close-with-reject-toggle');
+		props.settings.buttonOrder = getVal('faz-b-button-order') || 'settings-reject-accept';
 
 		// Brand logo
 		ensureObj(props, 'config.notice.elements.brandLogo');

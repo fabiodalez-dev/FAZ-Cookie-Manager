@@ -27,6 +27,7 @@
       }
     ],
     "allowCloseButtonWithReject": false,
+    "buttonOrder": "settings-reject-accept",
     "softCookieWall": false
   },
   "behaviours": {

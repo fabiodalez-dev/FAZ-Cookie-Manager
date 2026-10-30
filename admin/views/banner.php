@@ -807,6 +807,21 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 				</div>
 			</div>
 		</div>
+		<div class="faz-card">
+			<div class="faz-card-header"><h3><?php esc_html_e( 'Button Order', 'faz-cookie-manager' ); ?></h3></div>
+			<div class="faz-card-body">
+				<div class="faz-form-group">
+					<label for="faz-b-button-order"><?php esc_html_e( 'Order of the banner buttons', 'faz-cookie-manager' ); ?></label>
+					<select class="faz-select" id="faz-b-button-order" style="width:auto;max-width:360px;" aria-describedby="faz-b-button-order-help">
+						<option value="settings-reject-accept"><?php esc_html_e( 'Customise → Reject All → Accept All (default)', 'faz-cookie-manager' ); ?></option>
+						<option value="settings-accept-reject"><?php esc_html_e( 'Customise → Accept All → Reject All', 'faz-cookie-manager' ); ?></option>
+						<option value="reject-accept-settings"><?php esc_html_e( 'Reject All → Accept All → Customise', 'faz-cookie-manager' ); ?></option>
+						<option value="accept-reject-settings"><?php esc_html_e( 'Accept All → Reject All → Customise', 'faz-cookie-manager' ); ?></option>
+					</select>
+					<p class="faz-help" id="faz-b-button-order-help"><?php esc_html_e( 'The same order is used on desktop and on phones, and keyboard users reach the buttons in this order. Accept All and Reject All always stay next to each other: accepting and refusing must carry the same weight, and an order that put one of them first and the other last behind Customise would not.', 'faz-cookie-manager' ); ?></p>
+				</div>
+			</div>
+		</div>
 	</div>
 
 	<!-- ─── Preference Center ──────────────────────────── -->
