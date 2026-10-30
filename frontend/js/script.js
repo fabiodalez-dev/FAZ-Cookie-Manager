@@ -2616,24 +2616,17 @@ function _fazReadBannerTemplate(template) {
  *
  * A <template> takes the markup as parsed nodes in its inert content:
  * textContent would store it as a text node that innerHTML then serialises
- * escaped. The nodes come from a DOMParser document, so nothing in them runs
- * or loads while they are moved. The legacy script form keeps textContent.
+ * escaped. innerHTML on a <template> parses into that inert content, so
+ * nothing in it runs or loads. The legacy script form keeps textContent.
  *
  * @param {Element} template #fazBannerTemplate.
  * @param {string} html Banner markup (wp_kses-sanitised on the server).
  */
 function _fazWriteBannerTemplate(template, html) {
-    if (!_fazIsTemplateElement(template)) {
+    if (_fazIsTemplateElement(template)) {
+        template.innerHTML = html;
+    } else {
         template.textContent = html;
-        return;
-    }
-    var doc = new DOMParser().parseFromString(html, 'text/html');
-    var content = template.content;
-    while (content.firstChild) content.removeChild(content.firstChild);
-    var node;
-    while ((node = doc.body.firstChild)) {
-        doc.body.removeChild(node);
-        content.appendChild(content.ownerDocument.importNode(node, true));
     }
 }
 

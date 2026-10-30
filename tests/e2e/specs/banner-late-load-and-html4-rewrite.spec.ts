@@ -98,7 +98,7 @@ test.describe('Banner under page optimisers (WPSpeed report)', () => {
     try {
       await page.context().clearCookies();
       const errors = captureRuntimeErrors(page);
-      await page.goto(`${WP_BASE}/?faz_html4_rewrite=translate&t=${Date.now()}`, { waitUntil: 'load' });
+      await page.goto(`${WP_BASE}/?faz_html4_rewrite=translate&t=${Date.now()}`, { waitUntil: 'domcontentloaded' });
       await expectWorkingBannerTranslated(page, errors);
     } finally {
       restoreActivePluginFiles(originalActive);
