@@ -3885,7 +3885,28 @@ class Frontend {
 					continue;
 				}
 				$service_id = $cookie->get_service_id();
-				if ( '' === $service_id || isset( $cached[ $service_id ] ) ) {
+				if ( '' === $service_id ) {
+					continue;
+				}
+				// Two rows whose names collapse to the same key ("Booking Widget" and
+				// "booking-widget", "_GA" and "_ga") are one declared thing to the
+				// visitor: they share the toggle and the public-API key — which is
+				// also what Cookie::get_service_id() tells the REST client and the
+				// admin dialog for BOTH rows, so minting a per-row suffix here would
+				// make the runtime disagree with them. The second row's name is
+				// folded into the service's cookie list, so the shredder still
+				// honours a denial for it. Same-category only: a clash across
+				// categories keeps the first row's and drops the other, logged below.
+				if ( isset( $cached[ $service_id ] ) ) {
+					$clean_name = sanitize_text_field( $name );
+					if ( $cached[ $service_id ]['category'] === $cat_slug ) {
+						if ( ! in_array( $clean_name, $cached[ $service_id ]['cookies'], true ) ) {
+							$cached[ $service_id ]['cookies'][] = $clean_name;
+						}
+					} else {
+						// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- operator-actionable, once per rebuild, not user-facing.
+						error_log( sprintf( '[faz-cookie-manager] declared cookie "%s" (category %s) shares service id "%s" with a cookie in category %s and was not exposed as a service; rename one of them.', $clean_name, $cat_slug, $service_id, $cached[ $service_id ]['category'] ) );
+					}
 					continue;
 				}
 				$cached[ $service_id ] = array(

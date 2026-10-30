@@ -75,11 +75,17 @@ function sanitize_title( $v ) {
 	return trim( preg_replace( '/[\s\-]+/', '-', $v ), '-' );
 }
 function sanitize_key( $v ) { return preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $v ) ); }
-// Faithful to the one property under test: a disallowed scheme yields ''.
+// Mirrors the three core behaviours that matter here: a scheme-less value
+// gets "http://" prepended, a space becomes %20, a disallowed scheme yields ''.
+// The first two are exactly why sanitize_policy_url_value() must judge the raw
+// input BEFORE calling this.
 function esc_url_raw( $url, $protocols = null ) {
-	$url = trim( (string) $url );
+	$url = str_replace( ' ', '%20', ltrim( (string) $url ) );
 	if ( '' === $url ) {
 		return '';
+	}
+	if ( false === strpos( $url, ':' ) && ! in_array( $url[0], array( '/', '#', '?' ), true ) ) {
+		$url = 'http://' . $url;
 	}
 	if ( preg_match( '#^([a-z][a-z0-9+.\-]*):#i', $url, $m ) ) {
 		$allowed = is_array( $protocols ) ? $protocols : array( 'http', 'https', 'ftp', 'mailto', 'tel' );
@@ -123,6 +129,9 @@ $root = dirname( __DIR__, 2 );
 require_once $root . '/includes/class-store.php';
 require_once $root . '/admin/modules/cookies/includes/class-cookie.php';
 require_once $root . '/frontend/modules/shortcodes/class-shortcodes.php';
+// Loaded so the reserved-id rule in Cookie::derive_service_id() is exercised
+// against the real provider catalogue, not a stub.
+require_once $root . '/includes/class-known-providers.php';
 
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie;
 use FazCookie\Frontend\Modules\Shortcodes\Shortcodes;
@@ -176,6 +185,9 @@ assert_eq( make_cookie( 'Booking Widget', '', array() )->get_service_id(), 'book
 assert_eq( make_cookie( '_ga', '', array() )->get_service_id(), '_ga', 'service_id: a leading underscore survives (matches the cookie name the visitor sees)' );
 assert_eq( make_cookie( 'Weird <b>Name</b>!', '', array() )->get_service_id(), 'weird-name', 'service_id: markup and punctuation never reach the key' );
 assert_eq( make_cookie( '', '', array() )->get_service_id(), '', 'service_id: no slug and no name → empty (caller skips the row)' );
+assert_eq( make_cookie( 'google-analytics', '', array() )->get_service_id(), 'google-analytics-cookie', 'service_id: a Known_Providers id is reserved — the declared cookie gets a deterministic suffix' );
+assert_eq( make_cookie( 'Google Analytics', 'google-analytics', array() )->get_service_id(), 'google-analytics-cookie', 'service_id: the reservation applies to the slug path too' );
+assert_eq( \FazCookie\Admin\Modules\Cookies\Includes\Cookie::derive_service_id( '', 'bk_session' ), 'bk_session', 'derive_service_id: the raw-row helper matches get_service_id()' );
 
 // =========================================================================
 // 2. policy_url: absolute http(s) only.
@@ -195,7 +207,9 @@ $c->set_policy_url( array( 'https://x.example' ) );
 assert_eq( $c->get_policy_url(), '', 'policy_url: a non-scalar collapses to empty' );
 $c->set_policy_url( '' );
 assert_eq( $c->get_policy_url(), '', 'policy_url: empty clears the value' );
-assert_eq( Cookie::sanitize_policy_url_value( 'https://a.example/b c' ), '', 'sanitize_policy_url_value: whitespace inside the URL is refused' );
+assert_eq( Cookie::sanitize_policy_url_value( 'https://a.example/b c' ), '', 'sanitize_policy_url_value: whitespace inside the URL is refused (core would have encoded it as %20)' );
+assert_eq( Cookie::sanitize_policy_url_value( 'https://a.example/path?x=1#frag' ), 'https://a.example/path?x=1#frag', 'sanitize_policy_url_value: query and fragment survive' );
+assert_eq( Cookie::sanitize_policy_url_value( "https://a.example/\tpath" ), '', 'sanitize_policy_url_value: a control character is refused' );
 
 // Persist round-trip: the sanitised URL survives get_meta() re-decoding.
 $c->set_policy_url( 'https://booking.example/privacy' );

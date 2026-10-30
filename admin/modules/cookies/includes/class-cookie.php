@@ -447,7 +447,24 @@ class Cookie extends Store {
 			return '';
 		}
 		$title = function_exists( 'sanitize_title' ) ? sanitize_title( $base ) : strtolower( preg_replace( '/\s+/', '-', $base ) );
-		return sanitize_key( $title );
+		$id    = sanitize_key( $title );
+		if ( '' === $id ) {
+			return '';
+		}
+		// The Known_Providers ids are reserved: a cookie an operator happened to
+		// name "google-analytics" must not share a key with the provider
+		// toggle, or getFazConsent().services[id] would answer with the
+		// provider's consent and the declared cookie would vanish from the per-
+		// service lists (first id wins there). The suffix is deterministic and
+		// applied here, at the one derivation every surface (REST, admin dialog,
+		// store, scripts map) goes through, so they keep agreeing.
+		if ( class_exists( '\\FazCookie\\Includes\\Known_Providers' ) ) {
+			$providers = \FazCookie\Includes\Known_Providers::get_all();
+			if ( is_array( $providers ) && isset( $providers[ $id ] ) ) {
+				$id .= '-cookie';
+			}
+		}
+		return $id;
 	}
 
 	/**
@@ -521,6 +538,13 @@ class Cookie extends Store {
 		}
 		$url = trim( (string) $value );
 		if ( '' === $url || strlen( $url ) > 2048 ) {
+			return '';
+		}
+		// Judge the operator's OWN input first: esc_url_raw() would prepend
+		// "http://" to a scheme-less host and encode a space as %20, turning a
+		// value this contract says to refuse into one that passes the check
+		// below. Absolute http(s), no whitespace or control characters.
+		if ( ! preg_match( '#^https?://[^\x00-\x20\x7f]+$#i', $url ) ) {
 			return '';
 		}
 		if ( function_exists( 'esc_url_raw' ) ) {
