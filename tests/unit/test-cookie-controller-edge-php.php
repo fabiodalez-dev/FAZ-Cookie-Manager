@@ -683,6 +683,28 @@ $stay = new Cookie( declared_row( 401, 'Booking Widget (edited)', 4, false, arra
 $stay->save();
 assert_eq( json_decode( $wpdb->last_update[1]['meta'], true )['service_id'] ?? null, 'booking-widget', 'save(): an edit within the same category keeps the frozen key' );
 
+// An existing cross-category clash (two "Chat" rows from before ids were
+// frozen, no stored key): the runtime exposes the Functional one. Editing that
+// winner in place must NOT hand `chat` to the Marketing row; saving the loser
+// is what moves (#365 review).
+reset_inventory( $wpdb, array(
+	declared_row( 500, 'Chat', 4 ),
+	declared_row( 501, 'Chat', 5 ),
+) );
+assert_eq( $ctrl->get_declared_service_map()['by_cookie'], array( 500 => 'chat' ), 'clash: the first row is the exposed one' );
+$wpdb->update_queue = array( 1 );
+$winner = new Cookie( declared_row( 500, 'Chat', 4 ) );
+$winner->save();
+assert_eq( json_decode( $wpdb->last_update[1]['meta'], true )['service_id'] ?? null, 'chat', 'clash: saving the exposed winner in place keeps its key' );
+reset_inventory( $wpdb, array(
+	declared_row( 500, 'Chat', 4, false, array( 'service_id' => 'chat' ) ),
+	declared_row( 501, 'Chat', 5 ),
+) );
+$wpdb->update_queue = array( 1 );
+$loser = new Cookie( declared_row( 501, 'Chat', 5 ) );
+$loser->save();
+assert_eq( json_decode( $wpdb->last_update[1]['meta'], true )['service_id'] ?? null, 'chat-2', 'clash: saving the losing row gives it its own key' );
+
 // Recycle-bin restore / settings import replay the snapshot's key.
 reset_inventory( $wpdb, array() );
 $wpdb->update_queue = array( 1 );

@@ -147,13 +147,7 @@ class Cookie_Controller extends Base_Controller {
 			return $cached;
 		}
 
-		global $wpdb;
-		$category_slugs = array();
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom table, table-prefix interpolation only, no user input; the result is cached in the transient above.
-		$rows = $wpdb->get_results( "SELECT category_id, slug FROM {$wpdb->prefix}faz_cookie_categories" );
-		foreach ( (array) $rows as $row ) {
-			$category_slugs[ (int) $row->category_id ] = sanitize_key( $row->slug );
-		}
+		$category_slugs = $this->category_slugs_by_id();
 
 		$suppressed = is_callable( array( '\\FazCookie\\Frontend\\Frontend', 'is_declaration_suppressed' ) );
 		$services   = array();
@@ -212,12 +206,35 @@ class Cookie_Controller extends Base_Controller {
 	}
 
 	/**
+	 * Category id → slug, read with one plain query (no Category_Controller
+	 * hydration, which builds every category's cookie list just to read a slug).
+	 *
+	 * @return array<int,string>
+	 */
+	private function category_slugs_by_id() {
+		global $wpdb;
+		$category_slugs = array();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom table, table-prefix interpolation only, no user input; callers cache what they build from it.
+		$rows = $wpdb->get_results( "SELECT category_id, slug FROM {$wpdb->prefix}faz_cookie_categories" );
+		foreach ( (array) $rows as $row ) {
+			$category_slugs[ (int) $row->category_id ] = sanitize_key( $row->slug );
+		}
+		return $category_slugs;
+	}
+
+	/**
 	 * A service id no declared cookie in another category already holds.
 	 *
-	 * Called once, when a declared row is first saved and its id frozen. A key
-	 * already used in the SAME category is returned unchanged (the rows fold
-	 * into one service); one used only elsewhere gets the first free -2, -3…
-	 * suffix.
+	 * Called on every save of a declared row. A key already used in the SAME
+	 * category is returned unchanged (the rows fold into one service); one used
+	 * only elsewhere gets the first free -2, -3… suffix.
+	 *
+	 * The row the runtime currently exposes under the key, saved without leaving
+	 * its category, always keeps it (#365 review). On a clash an older version
+	 * left behind (two "Chat" rows in two categories), editing the winner — even
+	 * just its description — would otherwise hand `chat`, and every visitor's
+	 * svc.chat choice, to the cookie in the other category. The losing row is
+	 * the one that moves, when it is saved.
 	 *
 	 * @param string $service_id  Derived id.
 	 * @param int    $category_id Category of the row being saved.
@@ -225,6 +242,18 @@ class Cookie_Controller extends Base_Controller {
 	 * @return string
 	 */
 	public function unique_declared_service_id( $service_id, $category_id, $cookie_id ) {
+		if ( (int) $cookie_id > 0 ) {
+			// Read before this save lands, so it says who is exposed NOW.
+			$map   = $this->get_declared_service_map();
+			$slugs = $this->category_slugs_by_id();
+			if (
+				isset( $map['by_cookie'][ (int) $cookie_id ], $map['services'][ $service_id ], $slugs[ (int) $category_id ] )
+				&& $map['by_cookie'][ (int) $cookie_id ] === $service_id
+				&& $map['services'][ $service_id ]['category'] === $slugs[ (int) $category_id ]
+			) {
+				return $service_id;
+			}
+		}
 		$taken = array();
 		foreach ( $this->get_items() as $cookie_row ) {
 			$other = new Cookie( $cookie_row );
