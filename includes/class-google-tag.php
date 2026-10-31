@@ -193,6 +193,61 @@ class Google_Tag {
 	}
 
 	/**
+	 * The provider of a gtag.js script this class printed, or '' (#371 review).
+	 *
+	 * The Ads/Floodlight loader is `googletagmanager.com/gtag/js?id=AW-…`, the
+	 * same URL shape as the GA4 loader, so the catalogue's google-analytics
+	 * pattern matches it too. Judged by that URL, a visitor who accepted
+	 * Marketing and rejected Analytics (or denied the google-analytics service)
+	 * never got the Ads loader, only its inline `config` call into a dataLayer
+	 * nothing reads. The server already knows which provider each of its own
+	 * scripts belongs to and prints it in data-faz-google-tag; this tells the
+	 * blocking paths when that marker can be trusted over the URL match.
+	 *
+	 * Trusted only when the marker, the URL and every ID agree with what
+	 * render() produces: a gtag.js loader whose `id` maps to the marker's
+	 * provider, optionally with the `l` dataLayer parameter, or an inline body
+	 * of exactly the generated bootstrap whose `config` IDs all map to it.
+	 * Anything else — a theme script borrowing the attribute, another URL, an
+	 * edited body — returns '' and keeps the URL matching it always had. The
+	 * Tag Manager container is never trusted this way: it can host tags that
+	 * do not read Consent Mode. Mirrored by _fazOwnGoogleTagProvider() in
+	 * frontend/js/script.js.
+	 *
+	 * @param string $marker The data-faz-google-tag value.
+	 * @param string $src    The src attribute, entity-decoded ('' for inline).
+	 * @param string $body   The inline body ('' for a loader).
+	 * @return string 'google-analytics', 'google-ads' or ''.
+	 */
+	public static function own_tag_provider( $marker, $src, $body ) {
+		$marker = is_string( $marker ) ? $marker : '';
+		if ( 'google-analytics' !== $marker && 'google-ads' !== $marker ) {
+			return '';
+		}
+		$src = is_string( $src ) ? trim( $src ) : '';
+		$ids = array();
+		if ( '' !== $src ) {
+			if ( ! preg_match( '#^https://www\.googletagmanager\.com/gtag/js\?id=([A-Z0-9-]+)(?:&l=[A-Za-z0-9_%]+)?$#', $src, $m ) ) {
+				return '';
+			}
+			$ids[] = $m[1];
+		} else {
+			$body = is_string( $body ) ? trim( $body ) : '';
+			if ( ! preg_match( '#^window\[("[A-Za-z0-9_$]+")\]=window\[\1\]\|\|\[\];function gtag\(\)\{window\[\1\]\.push\(arguments\);\}gtag\("js",new Date\(\)\);((?:gtag\("config","[A-Z0-9-]+"\);)+)$#', $body, $m ) ) {
+				return '';
+			}
+			preg_match_all( '#gtag\("config","([A-Z0-9-]+)"\);#', $m[2], $all );
+			$ids = $all[1];
+		}
+		foreach ( $ids as $id ) {
+			if ( self::provider_for( $id ) !== $marker ) {
+				return '';
+			}
+		}
+		return $ids ? $marker : '';
+	}
+
+	/**
 	 * The attributes that park a script until its category is accepted.
 	 *
 	 * @param string $provider Provider id, also the per-service consent key.

@@ -6809,7 +6809,7 @@ function _fazMutationObserver(mutations) {
                     : "";
                 var nodeCategory = rawCategory.replace("fazcookie-", "");
                 var nodeService = node.getAttribute ? (node.getAttribute("data-faz-service") || "") : "";
-                if (!_fazShouldBlockResource(nodeCategory, blockingTarget, nodeService)) continue;
+                if (!_fazShouldBlockScriptNode(node, nodeCategory, blockingTarget, nodeService)) continue;
                 // Reveal a per-service toggle for the provider we just blocked.
                 // This is the only place a JS-injected embed (e.g. a YouTube
                 // iframe_api player) — invisible to the server-side scanner — is
@@ -6911,7 +6911,7 @@ function _fazUnblock() {
                 var nodeService = node && typeof node.getAttribute === "function"
                     ? (node.getAttribute("data-faz-service") || "")
                     : "";
-                if (_fazShouldBlockResource(nodeCategory, nodeTarget, nodeService)) return true;
+                if (_fazShouldBlockScriptNode(node, nodeCategory, nodeTarget, nodeService)) return true;
                 if (node.nodeName.toLowerCase() === "script") {
                     if (anchor && !anchor.isConnected) return false;
                     // Connect the original inert node first. The common restore
@@ -7227,7 +7227,7 @@ function _fazDrainScriptRestoreQueue() {
         if (!script.isConnected || script.getAttribute('data-faz-executed') === '1'
             || (waitFor && _fazIsCategoryToBeBlocked(waitFor))
             || (!_fazIsUserWhitelisted(src, script) && !script.classList.contains('faz-skip')
-                && _fazShouldBlockResource(category, src || script.textContent || '', service))) {
+                && _fazShouldBlockScriptNode(script, category, src || script.textContent || '', service))) {
             _fazScriptRestorePending.delete(script);
             continue;
         }
@@ -7961,6 +7961,81 @@ function _fazGetServiceConsentForTarget(formattedRE) {
         }
     }
     return hasExplicitYes ? "yes" : "";
+}
+
+/**
+ * The provider of a gtag.js script the plugin itself printed, or "" (#371 review).
+ *
+ * Mirror of Google_Tag::own_tag_provider(). The Ads/Floodlight loader
+ * (gtag/js?id=AW-…) also matches the google-analytics catalogue pattern, so
+ * _fazShouldBlockResource() — which ORs in a provider match on the URL — kept
+ * it parked for a visitor who accepted Marketing and rejected Analytics. The
+ * server prints the real provider in data-faz-google-tag; it is trusted only
+ * when the marker, the URL and every ID agree with the generated markup, and
+ * for a parked copy only when data-faz-service names the same provider. Any
+ * other script borrowing the attribute keeps the URL matching it always had.
+ * The Tag Manager container is never trusted this way.
+ *
+ * @param {Element} script
+ * @return {string} "google-analytics", "google-ads" or "".
+ */
+function _fazOwnGoogleTagProvider(script) {
+    if (!script || typeof script.getAttribute !== "function") return "";
+    var marker = script.getAttribute("data-faz-google-tag") || "";
+    if (marker !== "google-analytics" && marker !== "google-ads") return "";
+    var service = script.getAttribute("data-faz-service");
+    if (service !== null && service !== marker) return "";
+    var ids = [];
+    var src = (script.getAttribute("src") || "").trim();
+    if (src) {
+        var loader = /^https:\/\/www\.googletagmanager\.com\/gtag\/js\?id=([A-Z0-9-]+)(?:&l=[A-Za-z0-9_%]+)?$/.exec(src);
+        if (!loader) return "";
+        ids.push(loader[1]);
+    } else {
+        var body = (script.textContent || "").trim();
+        var boot = /^window\[("[A-Za-z0-9_$]+")\]=window\[\1\]\|\|\[\];function gtag\(\)\{window\[\1\]\.push\(arguments\);\}gtag\("js",new Date\(\)\);((?:gtag\("config","[A-Z0-9-]+"\);)+)$/.exec(body);
+        if (!boot) return "";
+        var re = /gtag\("config","([A-Z0-9-]+)"\);/g, m;
+        while ((m = re.exec(boot[2]))) ids.push(m[1]);
+    }
+    if (!ids.length) return "";
+    for (var i = 0; i < ids.length; i++) {
+        var provider = /^(G|GT)-[A-Z0-9]{4,20}$/.test(ids[i]) ? "google-analytics"
+            : (/^(AW|DC)-[A-Z0-9]{4,20}$/.test(ids[i]) ? "google-ads" : "");
+        if (provider !== marker) return "";
+    }
+    return marker;
+}
+
+/**
+ * Block decision for one of the plugin's own gtag.js scripts: its own service's
+ * explicit choice, then its own category — never another provider's URL match.
+ *
+ * @param {string} category Category the script is parked under.
+ * @param {string} provider _fazOwnGoogleTagProvider() result.
+ * @return {boolean}
+ */
+function _fazShouldBlockOwnGoogleTag(category, provider) {
+    if (!_fazGeoBootstrapPending() && _fazStore._perServiceConsent && _fazIsRecognizedService(provider)) {
+        var explicit = _fazRef._fazGetFromStore("svc." + provider);
+        if (explicit === "no") return true;
+        if (explicit === "yes") return false;
+    }
+    // No category means nothing tells us it may run: stay parked.
+    return !category || _fazIsCategoryToBeBlocked(category);
+}
+
+/**
+ * Block decision for a script element: the plugin's own Google tag by its own
+ * service and category, every other node by _fazShouldBlockResource(). Used by
+ * every path that judges a script ELEMENT — the restore queue, the mutation
+ * observer (which also sees the restored clone, still carrying its gtag.js
+ * URL) and the backup-node pass — so one of them cannot re-park what another
+ * released.
+ */
+function _fazShouldBlockScriptNode(node, category, target, serviceId) {
+    var own = _fazOwnGoogleTagProvider(node);
+    return own ? _fazShouldBlockOwnGoogleTag(category, own) : _fazShouldBlockResource(category, target, serviceId);
 }
 
 function _fazShouldBlockResource(category, target, serviceId) {

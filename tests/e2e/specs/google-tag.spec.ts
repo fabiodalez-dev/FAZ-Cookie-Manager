@@ -197,6 +197,56 @@ test.describe.serial('Built-in Google tag (#366)', () => {
     }
   });
 
+  test('Basic mode: Marketing alone releases Google Ads, not GA4 or the container (#371 review)', async ({ browser }) => {
+    // The Ads loader is gtag/js?id=AW-…, the same URL shape the google-analytics
+    // catalogue pattern matches: judged by URL it stayed parked for this visitor.
+    const { context, page, requests } = await visitor(browser);
+    try {
+      await openHome(page);
+      await clickFirstVisible(page, ['[data-faz-tag="settings-button"]', '.faz-btn-customize']);
+      await page.waitForTimeout(400);
+      await setCategoryToggle(page, 'analytics', false);
+      await setCategoryToggle(page, 'marketing', true);
+      await setCategoryToggle(page, 'functional', false);
+      await setCategoryToggle(page, 'performance', false);
+      await clickFirstVisible(page, ['[data-faz-tag="detail-save-button"]', '.faz-btn-preferences']);
+      await expect.poll(() => loaded(requests).ads, { timeout: 10_000 }).toBe(true);
+      await page.waitForTimeout(500);
+      expect(loaded(requests)).toEqual({ ga4: false, ads: true, gtm: false });
+      // And on the next page, from the stored choice.
+      requests.length = 0;
+      await openHome(page);
+      await expect.poll(() => loaded(requests).ads, { timeout: 10_000 }).toBe(true);
+      expect(loaded(requests).ga4).toBe(false);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('Advanced mode + per-service: a google-analytics denial does not hold the Ads loader (#371 review)', async ({ browser }) => {
+    setGcm({ status: true, advanced_mode: true, google_tag_ids: IDS_SAVED });
+    const prevSettings = wpEval(`echo "\\n".base64_encode(maybe_serialize(get_option('faz_settings')));`).trim().split('\n').pop() as string;
+    wpEval(`$s=get_option('faz_settings');if(!is_array($s)){$s=array();}$s['banner_control']=isset($s['banner_control'])&&is_array($s['banner_control'])?$s['banner_control']:array();$s['banner_control']['per_service_consent']=true;update_option('faz_settings',$s);delete_option('faz_banner_template');`);
+    const { context, page, requests } = await visitor(browser);
+    try {
+      const rev = parseInt(wpEval('echo faz_get_consent_revision();').trim(), 10) || 1;
+      const host = new URL(process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998').hostname;
+      await context.addCookies([{
+        name: 'fazcookie-consent',
+        value: encodeURIComponent(`consentid:e2e-371,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,performance:yes,uncategorized:yes,marketing:yes,svc.google-analytics:no,rev:${rev}`),
+        domain: host, path: '/', sameSite: 'Lax',
+      }]);
+      await openHome(page);
+      await expect.poll(() => loaded(requests).ads, { timeout: 10_000 }).toBe(true);
+      await page.waitForTimeout(500);
+      expect(loaded(requests).ga4, 'the denied google-analytics service stays blocked').toBe(false);
+    } finally {
+      await context.close();
+      setGcm({ advanced_mode: false });
+      wpEval(`$v=maybe_unserialize(base64_decode('${prevSettings}'));if(false===$v||''===$v){delete_option('faz_settings');}else{update_option('faz_settings',$v);}delete_option('faz_banner_template');`);
+    }
+  });
+
   test('Basic mode: Accept All releases every tag, and a returning visitor gets them again', async ({ browser }) => {
     const { context, page, requests } = await visitor(browser);
     try {

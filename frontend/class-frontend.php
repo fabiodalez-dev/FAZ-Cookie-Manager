@@ -5430,6 +5430,35 @@ class Frontend {
 			return $full;
 		}
 
+		// The plugin's own Google tag (#371 review). print_google_tag() prints it
+		// live only under the Advanced Consent Mode exemption; parked copies are
+		// text/plain and never reach this point. Its gtag.js URL also matches the
+		// google-analytics catalogue pattern, so judged by URL the Ads/Floodlight
+		// loader was hard-blocked by a google-analytics denial it has nothing to
+		// do with. Judge it by the provider the server printed instead — trusted
+		// only for markup that is exactly Google_Tag::render()'s — so only an
+		// explicit denial of THAT service blocks it, as for any other Google tag
+		// under the exemption.
+		// Only a script carrying the marker pays for this, and a process that
+		// booted Frontend without the class (CLI, standalone harnesses) keeps
+		// the URL path instead of fataling.
+		$own_marker = (string) $this->extract_tag_attr( $attrs, 'data-faz-google-tag' );
+		$own_google = ( '' !== $own_marker && class_exists( '\\FazCookie\\Includes\\Google_Tag' ) )
+			? \FazCookie\Includes\Google_Tag::own_tag_provider(
+				$own_marker,
+				html_entity_decode( (string) $this->extract_tag_attr( $attrs, 'src' ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
+				$content
+			)
+			: '';
+		if ( '' !== $own_google && $this->gcm_advanced_exemption_active() ) {
+			$own_consent = $this->get_service_consent();
+			if ( ! isset( $own_consent[ $own_google ] ) || 'no' !== $own_consent[ $own_google ] ) {
+				return $full;
+			}
+			$own_category = \FazCookie\Includes\Google_Tag::category_for( $own_google, 'google-ads' === $own_google ? 'marketing' : 'analytics' );
+			return '<script' . $this->label_category_first( $this->set_script_type_plain( $attrs ), $own_category ) . '>' . $content . '</script>';
+		}
+
 		$matched_category = $this->match_script_to_provider( $attrs, $match_body, $providers, $blocked_categories );
 		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
 			// Category is allowed — but per-service consent might still block it.

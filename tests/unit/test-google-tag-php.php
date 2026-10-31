@@ -99,4 +99,29 @@ t( '' === Google_Tag::render( array() ), 'nothing to render' );
 $h = Google_Tag::render( $ids, array( 'hints' => ' data-no-optimize="1"' ) );
 t( 5 === substr_count( $h, 'data-no-optimize="1"' ), 'optimiser hints on every tag' );
 
+// own_tag_provider() (#371 review): every script render() prints is recognised
+// with its own provider, and nothing else is. Read back through the DOM the way
+// the output buffer and the browser see it (entities decoded).
+$faz_own = function ( $markup ) {
+	$out = array();
+	$doc = new DOMDocument();
+	@$doc->loadHTML( '<html><head>' . $markup . '</head></html>' );
+	foreach ( $doc->getElementsByTagName( 'script' ) as $el ) {
+		$out[] = Google_Tag::own_tag_provider( $el->getAttribute( 'data-faz-google-tag' ), $el->getAttribute( 'src' ), $el->textContent );
+	}
+	return $out;
+};
+$mixed = array( 'G-ABCD1234', 'AW-123456789', 'DC-12345678', 'GTM-ABC123' );
+t( array( 'google-analytics', 'google-analytics', 'google-ads', 'google-ads', '' ) === $faz_own( Google_Tag::render( $mixed ) ), 'own tag: GA4 and Ads loader + bootstrap recognised by provider; the GTM container never' );
+t( array( 'google-analytics', 'google-analytics', 'google-ads', 'google-ads', '' ) === $faz_own( Google_Tag::render( $mixed, array( 'data_layer' => 'my$dl' ) ) ), 'own tag: recognised with a custom dataLayer (l= parameter, $ in the name)' );
+t( array( 'google-analytics', 'google-analytics', 'google-ads', 'google-ads', '' ) === $faz_own( Google_Tag::render( $mixed, array( 'gtag_unblocked' => true ) ) ), 'own tag: recognised in the live Advanced-mode markup' );
+// Forged or edited markup keeps the URL matching.
+t( '' === Google_Tag::own_tag_provider( 'google-ads', 'https://www.googletagmanager.com/gtag/js?id=G-ABCD1234', '' ), 'own tag: marker contradicting the ID is refused (an Ads label on the GA4 loader)' );
+t( '' === Google_Tag::own_tag_provider( 'google-ads', 'https://evil.example/gtag/js?id=AW-123456789', '' ), 'own tag: another host is refused' );
+t( '' === Google_Tag::own_tag_provider( 'google-ads', 'https://www.googletagmanager.com/gtag/js?id=AW-123456789&next=x', '' ), 'own tag: an extra parameter is refused' );
+t( '' === Google_Tag::own_tag_provider( 'google-tag-manager', 'https://www.googletagmanager.com/gtm.js?id=GTM-ABC123', '' ), 'own tag: the Tag Manager marker is never trusted' );
+t( '' === Google_Tag::own_tag_provider( '', 'https://www.googletagmanager.com/gtag/js?id=AW-123456789', '' ), 'own tag: no marker, no trust' );
+t( '' === Google_Tag::own_tag_provider( 'google-ads', '', 'window["dataLayer"]=window["dataLayer"]||[];function gtag(){window["dataLayer"].push(arguments);}gtag("js",new Date());gtag("config","AW-123456789");fetch("//evil.example");' ), 'own tag: an edited inline body is refused' );
+t( '' === Google_Tag::own_tag_provider( 'google-ads', '', 'window["dataLayer"]=window["dataLayer"]||[];function gtag(){window["dataLayer"].push(arguments);}gtag("js",new Date());gtag("config","AW-123456789");gtag("config","G-ABCD1234");' ), 'own tag: an inline body mixing providers is refused' );
+
 echo "$passed passed: Google tag ID whitelist, catalogue categories, parked/live markup and dataLayer handling\n";
