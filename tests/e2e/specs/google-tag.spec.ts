@@ -224,6 +224,10 @@ test.describe.serial('Built-in Google tag (#366)', () => {
   });
 
   test('Advanced mode + per-service: a google-analytics denial does not hold the Ads loader (#371 review)', async ({ browser }) => {
+    // Analytics denied as a category too: the buffer used to re-type the live
+    // Ads loader as analytics/text/plain (its URL matched google-analytics), and
+    // with Analytics granted the client happened to release it again, hiding
+    // the server defect. With Analytics denied nothing rescued it.
     setGcm({ status: true, advanced_mode: true, google_tag_ids: IDS_SAVED });
     const prevSettings = wpEval(`echo "\\n".base64_encode(maybe_serialize(get_option('faz_settings')));`).trim().split('\n').pop() as string;
     wpEval(`$s=get_option('faz_settings');if(!is_array($s)){$s=array();}$s['banner_control']=isset($s['banner_control'])&&is_array($s['banner_control'])?$s['banner_control']:array();$s['banner_control']['per_service_consent']=true;update_option('faz_settings',$s);delete_option('faz_banner_template');`);
@@ -233,7 +237,7 @@ test.describe.serial('Built-in Google tag (#366)', () => {
       const host = new URL(process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998').hostname;
       await context.addCookies([{
         name: 'fazcookie-consent',
-        value: encodeURIComponent(`consentid:e2e-371,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,performance:yes,uncategorized:yes,marketing:yes,svc.google-analytics:no,rev:${rev}`),
+        value: encodeURIComponent(`consentid:e2e-371,consent:yes,action:yes,necessary:yes,functional:yes,analytics:no,performance:yes,uncategorized:yes,marketing:yes,svc.google-analytics:no,rev:${rev}`),
         domain: host, path: '/', sameSite: 'Lax',
       }]);
       await openHome(page);
