@@ -32,7 +32,7 @@ const RENDERED = ''
   + '<script id="ads-loader" type="text/plain" data-faz-category="marketing" data-faz-service="google-ads" async src="https://www.googletagmanager.com/gtag/js?id=AW-123456789" data-faz-google-tag="google-ads"></script>'
   + `<script id="ads-boot" type="text/plain" data-faz-category="marketing" data-faz-service="google-ads" data-faz-google-tag="google-ads">${BOOT('AW-123456789')}</script>`;
 
-function page(consent, { perService = false, markup = RENDERED } = {}) {
+function page(consent, { perService = false, markup = RENDERED, advanced = false, unblock = true } = {}) {
   const code = readFileSync(SCRIPT_PATH, 'utf8');
   const dom = new JSDOM(`<!DOCTYPE html><html><head>${markup}</head><body></body></html>`, {
     runScripts: 'outside-only', url: 'http://localhost/',
@@ -54,6 +54,7 @@ function page(consent, { perService = false, markup = RENDERED } = {}) {
       { re: 'googleadservices.com/pagead', categories: ['marketing'], service: 'google-ads' },
     ],
     _userWhitelist: [], _perServiceConsent: perService, _perCookieConsent: false, i18n: {},
+    _gcmAdvanced: advanced,
   };
   w.fazcookie = {};
   const realAdd = w.document.addEventListener.bind(w.document);
@@ -61,9 +62,13 @@ function page(consent, { perService = false, markup = RENDERED } = {}) {
   w.eval(code);
   w.document.addEventListener = realAdd;
   for (const [k, v] of Object.entries(consent)) w.fazcookie._fazConsentStore.set(k, v);
-  w._fazUnblockServerSide();
+  if (unblock) w._fazUnblockServerSide();
   return w;
 }
+/** Let the MutationObserver see what the last pass inserted. */
+const tick = () => new Promise((r) => setTimeout(r, 0));
+/** The live markup render() prints under the Advanced exemption: no category, no service. */
+const LIVE_ADS = '<script id="live-ads" async src="https://www.googletagmanager.com/gtag/js?id=AW-123456789" data-faz-google-tag="google-ads"></script>';
 const live = (w, id) => {
   const el = w.document.getElementById(id);
   return !!el && el.type !== 'text/plain' && el.type !== 'javascript/blocked';
@@ -99,6 +104,43 @@ console.log('own Google tag judged by its own provider (#371 review, jsdom)');
   const forged = '<script id="forged" type="text/plain" data-faz-category="marketing" data-faz-service="google-ads" async src="https://www.googletagmanager.com/gtag/js?id=G-ABCD1234" data-faz-google-tag="google-ads"></script>';
   const w = page({ consent: 'yes', marketing: 'yes', analytics: 'no' }, { markup: forged });
   check('a GA4 loader labelled as Ads is still held by the google-analytics match', !live(w, 'forged'));
+  w.close();
+}
+
+// The restored clone drops data-faz-category; the observer then sees an own
+// tag with no category and must not park it again (#371 review).
+{
+  const w = page({ consent: 'yes', marketing: 'yes', analytics: 'no' });
+  await tick(); await tick();
+  check('after the observer tick the released Ads loader is still live', live(w, 'ads-loader'));
+  check('…and its bootstrap too', live(w, 'ads-boot'));
+  check('…and nothing was re-parked into the backup list', !(w._fazConfig._backupNodes || []).some((b) => b.node && /AW-123456789/.test(b.node.getAttribute && (b.node.getAttribute('src') || b.node.textContent) || '')));
+  w.close();
+}
+// Advanced Consent Mode: the live tag has no category and runs behind the
+// denied default, as _fazShouldBlockResource() lets a gtag.js URL run.
+{
+  const w = page({ consent: 'yes', marketing: 'yes', analytics: 'yes' }, { markup: '', advanced: true });
+  w.document.head.insertAdjacentHTML('beforeend', LIVE_ADS);
+  await tick(); await tick();
+  check('Advanced: a live own loader inserted after start is not parked', live(w, 'live-ads'));
+  w.close();
+}
+{
+  const w = page({ consent: 'yes', marketing: 'yes', analytics: 'yes', 'svc.google-ads': 'no' }, { markup: '', advanced: true, perService: true });
+  w.document.head.insertAdjacentHTML('beforeend', LIVE_ADS);
+  await tick(); await tick();
+  const el = w.document.getElementById('live-ads');
+  check('Advanced + per-service: an explicit google-ads denial still parks the live loader', !el || !live(w, 'live-ads'));
+  w.close();
+}
+{
+  // Outside Advanced mode a category-less own tag has no consent to lean on.
+  const w = page({ consent: 'yes', marketing: 'no', analytics: 'no' }, { markup: '' });
+  w.document.head.insertAdjacentHTML('beforeend', LIVE_ADS);
+  await tick(); await tick();
+  const el = w.document.getElementById('live-ads');
+  check('Basic: a category-less own Ads loader with Marketing denied is held', !el || !live(w, 'live-ads'));
   w.close();
 }
 

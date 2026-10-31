@@ -8016,13 +8016,29 @@ function _fazOwnGoogleTagProvider(script) {
  * @return {boolean}
  */
 function _fazShouldBlockOwnGoogleTag(category, provider) {
-    if (!_fazGeoBootstrapPending() && _fazStore._perServiceConsent && _fazIsRecognizedService(provider)) {
+    var geoPending = _fazGeoBootstrapPending();
+    if (!geoPending && _fazStore._perServiceConsent && _fazIsRecognizedService(provider)) {
         var explicit = _fazRef._fazGetFromStore("svc." + provider);
         if (explicit === "no") return true;
         if (explicit === "yes") return false;
     }
-    // No category means nothing tells us it may run: stay parked.
-    return !category || _fazIsCategoryToBeBlocked(category);
+    if (!category) {
+        // Two own tags carry no category (#371 review): the live markup
+        // render() prints under the Advanced exemption, and the clone the
+        // restore queue inserts (_fazBuildRestoredScript() drops the parking
+        // attributes). Both reach the mutation observer, and treating "no
+        // category" as "blocked" re-parked them for good.
+        // Advanced: the live tag runs behind the denied consent default, as
+        // _fazShouldBlockResource() lets any gtag.js URL — only the explicit
+        // denial above holds it.
+        if (!geoPending && _fazStore._gcmAdvanced) return false;
+        // Otherwise judge it by its own provider's category: Ads/Floodlight
+        // under Marketing, GA4 under Analytics, the catalogue entry when the
+        // store carries one.
+        category = _fazUndetectedProviderCategory(provider)
+            || (provider === "google-ads" ? "marketing" : "analytics");
+    }
+    return _fazIsCategoryToBeBlocked(category);
 }
 
 /**
