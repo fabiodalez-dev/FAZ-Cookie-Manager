@@ -95,7 +95,10 @@ const STAMPS: RegExp[] = [
   /Cache served by breeze CACHE[^>]*/,
   /Cached by WP-Optimize[^>]*/,
   /Comet Cache file (?:path|built)[^>]*/,
-  /Cachify \|[^>]*/,
+  // Cachify's signature ends with this request's "With Cachify: N DB queries,
+  // T seconds" line, which differs on every cached response; only the line
+  // carrying the generation time ("DB Cache @ …") identifies the stored copy.
+  /Cachify \|[^\n]*\n[^\n@]*@[^\n]*/,
   /Cached by FlyingPress[^>]*/i,
   /Cached by Jetpack Boost[^>]*/i,
 ];
