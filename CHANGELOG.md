@@ -2,7 +2,7 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
-## [Unreleased]
+## [1.36.0] - 2026-10-31
 
 ### Added
 - Banner → Buttons → Button Order chooses the order of the notice buttons (#367). Four orders are offered, the ones that keep Accept All and Reject All next to each other: Customise → Reject All → Accept All (the default and the order every template already used), Customise → Accept All → Reject All, Reject All → Accept All → Customise and Accept All → Reject All → Customise. Position is part of the equal weight EDPB Guidelines 03/2022 and the Garante ask between accepting and refusing, so an order that would put Accept first and Reject last behind Customise is not offered, and a stored or submitted value outside the four is saved as the default. The order is applied to the markup, not with CSS `order`, so keyboard focus meets the buttons in the order they are seen; Do Not Sell stays last.

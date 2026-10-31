@@ -710,6 +710,13 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.36.0 — 2026-10-31
+
+- Banner → Buttons → Button Order chooses the order of the notice buttons (#367). The four orders offered all keep Accept All and Reject All next to each other, because position is part of the equal weight the EDPB and the Garante ask for between accepting and refusing. The order is written into the markup, so keyboard focus follows what is on screen.
+- Google Consent Mode → Google Tag: enter up to five Google tag IDs (G-, GT-, AW-, DC-, GTM-) and the plugin loads them itself (#366). Each tag waits for the consent a pasted copy would get: Google Analytics for Analytics, Google Ads and Floodlight for Marketing, each with its own loader, and the Tag Manager container for its category. The tags are printed already blocked, so they also stay held on a page excluded from script blocking. With Advanced Consent Mode on, gtag.js loads before consent behind the denied default and the container still waits. The settings page warns when the home page already loads one of the IDs from elsewhere.
+- On a domain served through a translation proxy such as the GTranslate Translation Proxy the banner broke: the consent bar ended up inside the revisit button, without its buttons. The banner markup now travels in a template element the proxy translates without breaking it, so the banner also shows in the translated language. The FAQ names GTranslate's X-GT-ClientIP header (HTTP_X_GT_CLIENTIP).
+- On phones the templates reordered the notice buttons with CSS, putting Reject last and away from Accept, while keyboard focus followed a different order (#368). Phones now show the buttons in the same order as desktop, the one chosen under Button Order.
+
 ### 1.35.0 — 2026-10-30
 
 - A cookie declared by hand under Cookies is now a consent service of its own (#360). It appears in window.getFazConsent().services under a stable Service ID shown in the cookie dialog and exposed read-only by the REST API; with per-service consent on it also gets its own toggle in the preference centre and is honoured by the cookie shredder. The id is fixed at the first save, so a later rename or slug edit never moves the key a returning visitor's choice is stored under. Cookies that belong to a known provider, scanner-discovered cookies and Necessary cookies are not exposed as separate services, and script blocking is unchanged.
