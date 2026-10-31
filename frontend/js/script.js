@@ -8032,13 +8032,25 @@ function _fazShouldBlockOwnGoogleTag(category, provider) {
         // _fazShouldBlockResource() lets any gtag.js URL — only the explicit
         // denial above holds it.
         if (!geoPending && _fazStore._gcmAdvanced) return false;
-        // Otherwise judge it by its own provider's category: Ads/Floodlight
-        // under Marketing, GA4 under Analytics, the catalogue entry when the
-        // store carries one.
-        category = _fazUndetectedProviderCategory(provider)
-            || (provider === "google-ads" ? "marketing" : "analytics");
+        // Otherwise judge it by its own provider's category, resolved from the
+        // store only — category slugs are dynamic, so a literal "marketing"
+        // could name a category this site does not have, which
+        // _fazIsCategoryToBeBlocked() would read as "not blocked" (#371 review).
+        // A provider whose category cannot be resolved to a configured one
+        // stays parked.
+        category = _fazUndetectedProviderCategory(provider) || _fazKnownServiceCategory(provider);
+        if (!category || !_fazCategoryIsConfigured(category)) return true;
     }
     return _fazIsCategoryToBeBlocked(category);
+}
+
+/** Whether a category slug is one of this site's configured categories. */
+function _fazCategoryIsConfigured(slug) {
+    var cats = _fazStore._categories || [];
+    for (var i = 0; i < cats.length; i++) {
+        if (cats[i] && cats[i].slug === slug) return true;
+    }
+    return false;
 }
 
 /**
@@ -8051,7 +8063,19 @@ function _fazShouldBlockOwnGoogleTag(category, provider) {
  */
 function _fazShouldBlockScriptNode(node, category, target, serviceId) {
     var own = _fazOwnGoogleTagProvider(node);
-    return own ? _fazShouldBlockOwnGoogleTag(category, own) : _fazShouldBlockResource(category, target, serviceId);
+    if (!own) return _fazShouldBlockResource(category, target, serviceId);
+    // The clone the restore queue just released (data-faz-executed): it was
+    // judged with its full category before release, and
+    // _fazBuildRestoredScript() then dropped data-faz-category. Re-deciding it
+    // from scratch is what re-parked it. Only what can change after release
+    // still holds it: an explicit denial of its own service, or the geo
+    // bootstrap not having resolved yet (#371 review).
+    if (!category && node.getAttribute && node.getAttribute("data-faz-executed") === "1") {
+        if (_fazGeoBootstrapPending()) return true;
+        return !!(_fazStore._perServiceConsent && _fazIsRecognizedService(own)
+            && _fazRef._fazGetFromStore("svc." + own) === "no");
+    }
+    return _fazShouldBlockOwnGoogleTag(category, own);
 }
 
 function _fazShouldBlockResource(category, target, serviceId) {

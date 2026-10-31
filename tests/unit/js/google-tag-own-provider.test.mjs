@@ -32,7 +32,7 @@ const RENDERED = ''
   + '<script id="ads-loader" type="text/plain" data-faz-category="marketing" data-faz-service="google-ads" async src="https://www.googletagmanager.com/gtag/js?id=AW-123456789" data-faz-google-tag="google-ads"></script>'
   + `<script id="ads-boot" type="text/plain" data-faz-category="marketing" data-faz-service="google-ads" data-faz-google-tag="google-ads">${BOOT('AW-123456789')}</script>`;
 
-function page(consent, { perService = false, markup = RENDERED, advanced = false, unblock = true } = {}) {
+function page(consent, { perService = false, markup = RENDERED, advanced = false, unblock = true, categories = null, providers = null } = {}) {
   const code = readFileSync(SCRIPT_PATH, 'utf8');
   const dom = new JSDOM(`<!DOCTYPE html><html><head>${markup}</head><body></body></html>`, {
     runScripts: 'outside-only', url: 'http://localhost/',
@@ -40,7 +40,7 @@ function page(consent, { perService = false, markup = RENDERED, advanced = false
   const { window: w } = dom;
   w._fazConfig = {
     _block: '1', _activeLaw: 'gdpr',
-    _categories: [
+    _categories: categories || [
       { slug: 'necessary', isNecessary: true },
       { slug: 'analytics', isNecessary: false },
       { slug: 'marketing', isNecessary: false },
@@ -49,7 +49,7 @@ function page(consent, { perService = false, markup = RENDERED, advanced = false
       { id: 'google-analytics', category: 'analytics', cookies: [] },
       { id: 'google-ads', category: 'marketing', cookies: [] },
     ] : [],
-    _providersToBlock: [
+    _providersToBlock: providers || [
       { re: 'googletagmanager.com/gtag/js', categories: ['analytics'], service: 'google-analytics' },
       { re: 'googleadservices.com/pagead', categories: ['marketing'], service: 'google-ads' },
     ],
@@ -141,6 +141,33 @@ console.log('own Google tag judged by its own provider (#371 review, jsdom)');
   await tick(); await tick();
   const el = w.document.getElementById('live-ads');
   check('Basic: a category-less own Ads loader with Marketing denied is held', !el || !live(w, 'live-ads'));
+  w.close();
+}
+
+// Category slugs are dynamic: on a site whose categories are not literally
+// "marketing"/"analytics", and whose store has no catalogue entry for the
+// service, a category-less own tag must stay parked instead of falling into a
+// category that does not exist — which would read as "not blocked".
+{
+  const w = page({ consent: 'yes', ads: 'no', stats: 'no' }, {
+    markup: '',
+    categories: [{ slug: 'necessary', isNecessary: true }, { slug: 'stats', isNecessary: false }, { slug: 'ads', isNecessary: false }],
+    providers: [],
+  });
+  w.document.head.insertAdjacentHTML('beforeend', LIVE_ADS);
+  await tick(); await tick();
+  const el = w.document.getElementById('live-ads');
+  check('custom slugs, no catalogue entry: a category-less own loader stays parked', !el || !live(w, 'live-ads'));
+  w.close();
+}
+// A released clone stays released, but a later explicit denial of its own
+// service still holds it.
+{
+  const w = page({ consent: 'yes', marketing: 'yes', analytics: 'no' }, { perService: true });
+  await tick(); await tick();
+  check('per-service: the released Ads loader is still live after the observer tick', live(w, 'ads-loader'));
+  w.fazcookie._fazConsentStore.set('svc.google-ads', 'no');
+  check('per-service: a later svc.google-ads:no makes the released clone blockable', w.eval('_fazShouldBlockScriptNode(document.getElementById("ads-loader"), "", document.getElementById("ads-loader").getAttribute("src"), "")') === true);
   w.close();
 }
 
