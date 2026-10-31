@@ -213,6 +213,11 @@ namespace {
 	faz_mcss_assert( false !== strpos( $comfortable_box, '#faz-consent.faz-box-bottom-left .faz-notice-btn-wrapper .faz-btn:first-child' ), '#368: box keeps its 16px first-button margin' );
 	faz_mcss_assert( 1 === preg_match( '/@media \(max-width:425px\)\{#faz-consent\.faz-banner-top [^{]*:first-child,#faz-consent\.faz-banner-bottom [^{]*:first-child\{margin-top:16px;\}\}/', $comfortable_box ), '#368: banner gets the 16px at 425px, not 440px' );
 	faz_mcss_assert( false === strpos( $comfortable_box, 'faz-classic-top .faz-notice-btn-wrapper .faz-btn:first-child{margin-top:16px' ) && 0 === preg_match( '/faz-classic-[a-z]+ \.faz-notice-btn-wrapper \.faz-btn:first-child/', $comfortable_box ), '#368: classic keeps its 10px' );
+	// The scoped selectors above can coexist with a generic rule and every check
+	// would still pass: a bare `#faz-consent .faz-notice-btn-wrapper
+	// .faz-btn:first-child{margin-top:16px}` out-specifies Accept's 10px and
+	// would hand 16px to classic, and to the banner between 426px and 440px.
+	faz_mcss_assert( 0 === preg_match( '/#faz-consent \.faz-notice-btn-wrapper \.faz-btn:first-child\{margin-top:16px;?\}/', $comfortable_box ), '#368: no generic 16px first-button margin at any width' );
 
 	// The template does draw that chevron with an absolute ::after anchored to
 	// the end padding - the reason the classic rule above exists. If the
