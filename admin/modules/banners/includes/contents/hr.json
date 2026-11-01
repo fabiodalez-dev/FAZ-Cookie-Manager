@@ -1,0 +1,214 @@
+{
+    "gdpr": {
+        "notice": {
+            "elements": {
+                "title": "Cijenimo vašu privatnost",
+                "description": "<p>Koristimo kolačiće kako bismo poboljšali vaše iskustvo pregledavanja, prikazivali personalizirane oglase ili sadržaj te analizirali promet na stranici. Klikom na \"Prihvati sve\" pristajete na našu upotrebu kolačića. Svoju privolu možete u svakom trenutku promijeniti ili povući klikom na ikonu postavki privole.</p>",
+                "privacyLink": "",
+                "buttons": {
+                    "elements": {
+                        "accept": "Prihvati sve",
+                        "reject": "Odbij sve",
+                        "settings": "Prilagodi",
+                        "readMore": "Pravila o kolačićima",
+                        "donotSell": "Ne prodavaj niti dijeli moje osobne podatke"
+                    }
+                },
+                "closeButton": "Zatvori"
+            }
+        },
+        "categoryPreview": {
+            "elements": {
+                "buttons": {
+                    "elements": {
+                        "save": "Spremi moje postavke"
+                    }
+                }
+            }
+        },
+        "preferenceCenter": {
+            "elements": {
+                "title": "Prilagodite postavke privole",
+                "description": "<p>Kolačiće koristimo kako bismo vam pomogli da se učinkovito krećete stranicom i kako bi određene funkcije radile. Detaljne informacije o svim kolačićima pronaći ćete ispod svake kategorije privole.</p><p>Kolačići razvrstani kao \"Nužni\" pohranjuju se u vašem pregledniku jer su neophodni za osnovne funkcije stranice. </p><p>Koristimo i kolačiće trećih strana koji nam pomažu analizirati kako upotrebljavate ovu web stranicu, pohraniti vaše postavke te vam pružiti sadržaj i marketinške materijale koji su za vas relevantni. Ti će se kolačići pohraniti u vašem pregledniku samo uz vašu prethodnu privolu.</p><p>Možete omogućiti ili onemogućiti neke ili sve te kolačiće, no onemogućavanje nekih od njih može utjecati na vaše iskustvo pregledavanja.</p>",
+                "showMore": "Prikaži više",
+                "showLess": "Prikaži manje",
+                "category": {
+                    "elements": {
+                        "alwaysEnabled": "Uvijek aktivno",
+                        "enable": "Omogući",
+                        "disable": "Onemogući"
+                    }
+                },
+                "buttons": {
+                    "elements": {
+                        "accept": "Prihvati sve",
+                        "save": "Spremi moje postavke",
+                        "reject": "Odbij sve"
+                    }
+                },
+                "closeButton": "Zatvori"
+            }
+        },
+        "optoutPopup": {
+            "elements": {
+                "title": "Postavke odjave",
+                "description": "<p>Koristimo kolačiće trećih strana koji nam pomažu analizirati kako upotrebljavate ovu web stranicu, pohraniti vaše postavke te vam pružiti sadržaj i marketinške materijale koji su za vas relevantni. Ipak, od tih se kolačića možete odjaviti tako da označite \"Ne prodavaj niti dijeli moje osobne podatke\" i kliknete gumb \"Spremi moje postavke\". Nakon odjave u svakom se trenutku možete ponovno prijaviti tako da poništite oznaku \"Ne prodavaj niti dijeli moje osobne podatke\" i kliknete gumb \"Spremi moje postavke\".</p>",
+                "optOption": {
+                    "elements": {
+                        "title": "Ne prodavaj niti dijeli moje osobne podatke",
+                        "enable": "Omogući",
+                        "disable": "Onemogući"
+                    }
+                },
+                "gpcOption": {
+                    "elements": {
+                        "description": "<p>Vaše postavke odjave za ovu web stranicu poštuju se jer smo iz vašeg preglednika primili signal <b>Global Privacy Control</b>, pa tu postavku ne možete promijeniti.</p>"
+                    }
+                },
+                "showLess": "Prikaži manje",
+                "showMore": "Prikaži više",
+                "buttons": {
+                    "elements": {
+                        "cancel": "Odustani",
+                        "confirm": "Spremi moje postavke"
+                    }
+                },
+                "closeButton": "Zatvori",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "Vaša je odluka o odjavi poštovana.",
+                        "subtext": "Banner se automatski zatvara za <span id=\"fazCountdownTimer\"></span> s..."
+                    }
+                }
+            }
+        },
+        "revisitConsent": {
+            "elements": {
+                "title": "Postavke privole"
+            }
+        },
+        "auditTable": {
+            "elements": {
+                "headers": {
+                    "elements": {
+                        "id": "Kolačić",
+                        "duration": "Trajanje",
+                        "description": "Opis"
+                    }
+                },
+                "message": "Nema kolačića za prikaz."
+            }
+        },
+        "videoPlaceholder": {
+            "elements": {
+                "title": "Prihvatite kolačiće kako biste pristupili ovom sadržaju"
+            }
+        }
+    },
+    "ccpa": {
+        "notice": {
+            "elements": {
+                "title": "Cijenimo vašu privatnost",
+                "description": "<p>Ova web stranica ili njezini alati trećih strana obrađuju osobne podatke. Od prodaje svojih osobnih podataka možete se odjaviti klikom na poveznicu \"Ne prodavaj niti dijeli moje osobne podatke\". Svoju privolu možete u svakom trenutku promijeniti ili povući klikom na ikonu postavki privole.</p>",
+                "privacyLink": "",
+                "buttons": {
+                    "elements": {
+                        "accept": "Prihvati sve",
+                        "reject": "Odbij sve",
+                        "settings": "Prilagodi",
+                        "readMore": "Pravila o kolačićima",
+                        "donotSell": "Ne prodavaj niti dijeli moje osobne podatke"
+                    }
+                },
+                "closeButton": "Zatvori"
+            }
+        },
+        "categoryPreview": {
+            "elements": {
+                "buttons": {
+                    "elements": {
+                        "save": "Spremi moje postavke"
+                    }
+                }
+            }
+        },
+        "preferenceCenter": {
+            "elements": {
+                "title": "Prilagodite postavke privole",
+                "description": "<p>Kolačiće koristimo kako bismo vam pomogli da se učinkovito krećete stranicom i kako bi određene funkcije radile. Detaljne informacije o svim kolačićima pronaći ćete ispod svake kategorije privole.</p><p>Kolačići razvrstani kao \"Nužni\" pohranjuju se u vašem pregledniku jer su neophodni za osnovne funkcije stranice. </p><p>Koristimo i kolačiće trećih strana koji nam pomažu analizirati kako upotrebljavate ovu web stranicu, pohraniti vaše postavke te vam pružiti sadržaj i marketinške materijale koji su za vas relevantni. Ti će se kolačići pohraniti u vašem pregledniku samo uz vašu prethodnu privolu.</p><p>Možete omogućiti ili onemogućiti neke ili sve te kolačiće, no onemogućavanje nekih od njih može utjecati na vaše iskustvo pregledavanja.</p>",
+                "showMore": "Prikaži više",
+                "showLess": "Prikaži manje",
+                "category": {
+                    "elements": {
+                        "alwaysEnabled": "Uvijek aktivno",
+                        "enable": "Omogući",
+                        "disable": "Onemogući"
+                    }
+                },
+                "buttons": {
+                    "elements": {
+                        "accept": "Prihvati sve",
+                        "save": "Spremi moje postavke",
+                        "reject": "Odbij sve"
+                    }
+                },
+                "closeButton": "Zatvori"
+            }
+        },
+        "optoutPopup": {
+            "elements": {
+                "title": "Postavke odjave",
+                "description": "<p>Koristimo kolačiće trećih strana koji nam pomažu analizirati kako upotrebljavate ovu web stranicu, pohraniti vaše postavke te vam pružiti sadržaj i marketinške materijale koji su za vas relevantni. Ipak, od tih se kolačića možete odjaviti tako da označite \"Ne prodavaj niti dijeli moje osobne podatke\" i kliknete gumb \"Spremi moje postavke\". Nakon odjave u svakom se trenutku možete ponovno prijaviti tako da poništite oznaku \"Ne prodavaj niti dijeli moje osobne podatke\" i kliknete gumb \"Spremi moje postavke\".</p>",
+                "optOption": {
+                    "elements": {
+                        "title": "Ne prodavaj niti dijeli moje osobne podatke",
+                        "enable": "Omogući",
+                        "disable": "Onemogući"
+                    }
+                },
+                "gpcOption": {
+                    "elements": {
+                        "description": "<p>Vaše postavke odjave za ovu web stranicu poštuju se jer smo iz vašeg preglednika primili signal <b>Global Privacy Control</b>, pa tu postavku ne možete promijeniti.</p>"
+                    }
+                },
+                "showLess": "Prikaži manje",
+                "showMore": "Prikaži više",
+                "buttons": {
+                    "elements": {
+                        "cancel": "Odustani",
+                        "confirm": "Spremi moje postavke"
+                    }
+                },
+                "closeButton": "Zatvori",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "Vaša je odluka o odjavi poštovana.",
+                        "subtext": "Banner se automatski zatvara za <span id=\"fazCountdownTimer\"></span> s..."
+                    }
+                }
+            }
+        },
+        "revisitConsent": {
+            "elements": {
+                "title": "Postavke privole"
+            }
+        },
+        "auditTable": {
+            "elements": {
+                "headers": {
+                    "elements": {
+                        "id": "Kolačić",
+                        "duration": "Trajanje",
+                        "description": "Opis"
+                    }
+                },
+                "message": "Nema kolačića za prikaz."
+            }
+        },
+        "videoPlaceholder": {
+            "elements": {
+                "title": "Prihvatite kolačiće kako biste pristupili ovom sadržaju"
+            }
+        }
+    }
+}

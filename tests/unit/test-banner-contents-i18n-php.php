@@ -31,6 +31,7 @@ function esc_html__( $v, ...$u ) { return $v; }
 function esc_attr( $v ) { return $v; }
 function esc_url( $v ) { return $v; }
 function wp_kses_post( $v ) { return $v; }
+function wp_strip_all_tags( $v ) { return trim( strip_tags( (string) $v ) ); }
 function wp_json_encode( $v ) { return json_encode( $v ); }
 function apply_filters( $t, $v ) { return $v; }
 function get_option( $n, $d = false ) { return $d; }
@@ -60,7 +61,7 @@ $dir = dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/contents/';
 $en  = json_decode( file_get_contents( $dir . 'en.json' ), true );
 
 // 1. The gap the report was about: a shipped catalogue for these languages.
-foreach ( array( 'ru', 'uk' ) as $lang ) {
+foreach ( array( 'ru', 'uk', 'hr' ) as $lang ) {
 	reset_cache();
 	$c = Banner::resolve_bundled_contents( $lang );
 	t( isset( $c['gdpr'], $c['ccpa'] ), "$lang: both laws resolve" );
@@ -187,6 +188,36 @@ t( 'Новое описание' === $d['gdpr'], 'and the baseline too, not just
 $GLOBALS['cache']['faz_banner_contents/faz_contents_v2_uk'] = array( 'sentinel' => true );
 Banner::flush_translation_cache( 'ru' );
 t( isset( $GLOBALS['cache']['faz_banner_contents/faz_contents_v2_uk'] ), 'and leaves other languages cached' );
+
+// 8. Saving the banner stores every selected language's copy, and for a
+//    language with no catalogue that copy is the English fallback. Shipping the
+//    catalogue later must still reach that slot (Croatian, wordpress.org report),
+//    without touching the wording an administrator changed.
+reset_cache();
+$hr     = json_decode( file_get_contents( $dir . 'hr.json' ), true );
+$stored = $en['gdpr'];
+$stored['notice']['elements']['title'] = 'Naš vlastiti naslov';
+// An editor round-trip may reflow whitespace and drop the paragraph tags.
+$stored['preferenceCenter']['elements']['description'] = '  ' . strip_tags( $en['gdpr']['preferenceCenter']['elements']['description'] ) . "\n";
+$out = Banner::translate_stored_defaults( $stored, 'hr', 'gdpr' );
+t( $hr['gdpr']['notice']['elements']['buttons']['elements']['accept'] === ( $out['notice']['elements']['buttons']['elements']['accept'] ?? '' ),
+	'hr: a stored English default button label is translated' );
+t( $hr['gdpr']['notice']['elements']['description'] === ( $out['notice']['elements']['description'] ?? '' ),
+	'hr: a stored English default description is translated' );
+t( $hr['gdpr']['preferenceCenter']['elements']['description'] === ( $out['preferenceCenter']['elements']['description'] ?? '' ),
+	'hr: and so is one an editor round-trip reflowed' );
+t( 'Naš vlastiti naslov' === ( $out['notice']['elements']['title'] ?? '' ),
+	'hr: the administrator\'s own title is kept' );
+
+$ccpa = Banner::translate_stored_defaults( $en['ccpa'], 'hr', 'ccpa' );
+t( $hr['ccpa']['notice']['elements']['description'] === ( $ccpa['notice']['elements']['description'] ?? '' ),
+	'hr: the CCPA banner is translated from the CCPA catalogue' );
+
+t( $en['gdpr'] === Banner::translate_stored_defaults( $en['gdpr'], 'en', 'gdpr' ),
+	'en: the English slot is never rewritten' );
+reset_cache();
+t( $en['gdpr'] === Banner::translate_stored_defaults( $en['gdpr'], 'sw', 'gdpr' ),
+	'a language with no catalogue keeps its English copy' );
 
 echo "\nbanner contents i18n: $ok passed, $ko failed\n";
 exit( $ko > 0 ? 1 : 0 );

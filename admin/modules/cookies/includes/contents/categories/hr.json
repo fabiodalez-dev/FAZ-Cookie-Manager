@@ -1,0 +1,30 @@
+{
+    "necessary": {
+        "name": "Nužni",
+        "description": "<p>Nužni kolačići potrebni su za osnovne funkcije ove stranice, kao što su sigurna prijava ili prilagodba vaših postavki privole. Ne koriste se za oglašavanje niti za praćenje na drugim stranicama. Kolačić privole pohranjuje nasumični identifikator koji nam omogućuje da vodimo evidenciju o izboru koji ste napravili.</p>"
+    },
+    "functional": {
+        "name": "Funkcionalni",
+        "description": "<p>Funkcionalni kolačići pomažu u izvođenju određenih funkcija, poput dijeljenja sadržaja web stranice na društvenim mrežama, prikupljanja povratnih informacija i drugih značajki trećih strana.</p>"
+    },
+    "analytics": {
+        "name": "Analitički",
+        "description": "<p>Analitički kolačići koriste se kako bismo razumjeli kako posjetitelji upotrebljavaju web stranicu. Ti kolačići pružaju informacije o pokazateljima kao što su broj posjetitelja, stopa napuštanja, izvor prometa i slično.</p>"
+    },
+    "performance": {
+        "name": "Izvedbeni",
+        "description": "<p>Izvedbeni kolačići koriste se za razumijevanje i analizu ključnih pokazatelja izvedbe web stranice, što pomaže u pružanju boljeg korisničkog iskustva posjetiteljima.</p>"
+    },
+    "uncategorized": {
+        "name": "Nekategorizirani",
+        "description": "<p>Kolačići koji još nisu razvrstani u kategoriju.</p>"
+    },
+    "wordpress-internal": {
+        "name": "Interni kolačići WordPressa",
+        "description": "<p>Kolačiće postavlja jezgra WordPressa za prijavljene administratore. Ne prikazuju se posjetiteljima stranice.</p>"
+    },
+    "marketing": {
+        "name": "Marketinški",
+        "description": "<p>Marketinški kolačići koriste se za prikazivanje oglasa prilagođenih stranicama koje ste prethodno posjetili i za analizu učinkovitosti oglasnih kampanja.</p>"
+    }
+}

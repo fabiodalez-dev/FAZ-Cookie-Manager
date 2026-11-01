@@ -68,7 +68,7 @@ namespace {
 		eq( $model->get_description()['de'], $descs['de'], 'deselected description preserved' );
 	}
 	$english = faz_read_json_file( $root . '/admin/modules/cookies/includes/contents/categories/en.json' );
-	foreach ( array( 'ru', 'uk' ) as $lang ) {
+	foreach ( array( 'ru', 'uk', 'hr' ) as $lang ) {
 		$bundled = faz_read_json_file( $root . "/admin/modules/cookies/includes/contents/categories/$lang.json" );
 		eq( array_keys( $bundled ), array_keys( $english ), "$lang catalogue complete" );
 		foreach ( $english as $slug => $fields ) {
