@@ -710,6 +710,10 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.36.1 — 2026-11-01
+
+- On a site set to Croatian the banner was shown in English, because the banner and category texts come from bundled catalogues and Croatian had none. Both are now included. Banner texts that a site had already saved while they were still the English defaults are shown in the language of the banner; any text you changed stays as you wrote it.
+
 ### 1.36.0 — 2026-10-31
 
 - Banner → Buttons → Button Order chooses the order of the notice buttons (#367). The four orders offered all keep Accept All and Reject All next to each other, because position is part of the equal weight the EDPB and the Garante ask for between accepting and refusing. The order is written into the markup, so keyboard focus follows what is on screen.

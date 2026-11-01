@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.36.0
+Stable tag: 1.36.1
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -487,6 +487,9 @@ The full changelog (every release back to 1.0.0) lives at:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
+
+= 1.36.1 =
+* Fixed: On a site set to Croatian the banner was shown in English, because the banner and category texts come from bundled catalogues and Croatian had none. Both are now included. Banner texts that a site had already saved while they were still the English defaults are shown in the language of the banner; any text you changed stays as you wrote it.
 
 = 1.36.0 =
 * Added: Banner → Buttons → Button Order chooses the order of the notice buttons (#367). The four orders offered all keep Accept All and Reject All next to each other, because position is part of the equal weight the EDPB and the Garante ask for between accepting and refusing. The order is written into the markup, so keyboard focus follows what is on screen.

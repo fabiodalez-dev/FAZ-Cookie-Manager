@@ -2,6 +2,12 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.36.1] - 2026-11-01
+
+### Fixed
+- On a site set to Croatian the banner was shown in English, although the Croatian translation of the plugin translates "Accept All", "Reject All" and "Customize" (reported on wordpress.org). The visible banner and category texts do not come from the gettext catalogue but from the bundled banner catalogues, and Croatian had none, while every other locale with a complete admin translation (Czech, German, French, Italian, Dutch) had both. The Croatian banner (GDPR and CCPA) and category catalogues are now included; strings the gettext catalogue already translates are reused, so the banner and the admin use the same words.
+- A catalogue added after a site had saved its banner never reached that site. Saving the banner stores the copy of every selected language, and for a language without a catalogue that copy is the English fallback, which then stays because the catalogue is only consulted for an empty slot. Banner texts that are still the shipped English defaults are now shown in the language of their slot when a catalogue exists for it; any text the administrator changed is kept. Category names and descriptions already had the same repair. The check that re-syncs the notice description when a banner's law changes also recognises the English default in such a slot, so a Croatian CCPA banner saved with the English GDPR text gets the Croatian CCPA notice.
+
 ## [1.36.0] - 2026-10-31
 
 ### Added
