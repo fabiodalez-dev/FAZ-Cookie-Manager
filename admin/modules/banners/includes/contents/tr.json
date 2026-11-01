@@ -1,0 +1,214 @@
+{
+    "gdpr": {
+        "notice": {
+            "elements": {
+                "title": "Gizliliğinize değer veriyoruz",
+                "description": "<p>Tarama deneyiminizi geliştirmek, kişiselleştirilmiş reklamlar veya içerik sunmak ve trafiğimizi analiz etmek için çerez kullanıyoruz. \"Tümünü Kabul Et\" seçeneğine tıklayarak, çerez kullanımımız için onay vermiş olursunuz.</p>",
+                "privacyLink": "",
+                "buttons": {
+                    "elements": {
+                        "accept": "Tümünü Kabul Et",
+                        "reject": "Tümünü Reddet",
+                        "settings": "Özelleştir",
+                        "readMore": "Çerez Politikası",
+                        "donotSell": "Kişisel Verilerimi Satmayın veya Paylaşmayın"
+                    }
+                },
+                "closeButton": "Kapat"
+            }
+        },
+        "categoryPreview": {
+            "elements": {
+                "buttons": {
+                    "elements": {
+                        "save": "Tercihlerimi Kaydet"
+                    }
+                }
+            }
+        },
+        "preferenceCenter": {
+            "elements": {
+                "title": "Onay Tercihlerinizi Özelleştirin",
+                "description": "<p>Web sitemizde verimli şekilde gezinmenize ve belirli işlevlerin çalışmasına yardımcı olmak için çerez kullanıyoruz. Tüm çerezler hakkında detaylı bilgiyi her bir onay kategorisinin altında bulabilirsiniz.</p>",
+                "showMore": "Daha fazla göster",
+                "showLess": "Daha az göster",
+                "category": {
+                    "elements": {
+                        "alwaysEnabled": "Her Zaman Etkin",
+                        "enable": "Etkinleştir",
+                        "disable": "Devre Dışı Bırak"
+                    }
+                },
+                "buttons": {
+                    "elements": {
+                        "accept": "Tümünü Kabul Et",
+                        "save": "Tercihlerimi Kaydet",
+                        "reject": "Tümünü Reddet"
+                    }
+                },
+                "closeButton": "Kapat"
+            }
+        },
+        "optoutPopup": {
+            "elements": {
+                "title": "İptal Tercihleri",
+                "description": "<p>Bu web sitesini nasıl kullandığınızı analiz etmemize, tercihlerinizi kaydetmemize ve ilgili içerik ile pazarlama materyallerini sunmamıza yardımcı olması için üçüncü taraf çerezleri kullanıyoruz.</p>",
+                "optOption": {
+                    "elements": {
+                        "title": "Kişisel Verilerimi Satmayın veya Paylaşmayın",
+                        "enable": "Etkinleştir",
+                        "disable": "Devre Dışı Bırak"
+                    }
+                },
+                "gpcOption": {
+                    "elements": {
+                        "description": "<p>Bu web sitesi için iptal tercihlerinize saygı gösteriyoruz; tarayıcınızdan algıladığımız <b>Global Privacy Control</b> sinyali nedeniyle bu ayarların dikkate alındığını belirtiyoruz.</p>"
+                    }
+                },
+                "showLess": "Daha az göster",
+                "showMore": "Daha fazla göster",
+                "buttons": {
+                    "elements": {
+                        "cancel": "İptal",
+                        "confirm": "Tercihlerimi Kaydet"
+                    }
+                },
+                "closeButton": "Kapat",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "İptal tercihiniz dikkate alındı.",
+                        "subtext": "Banner otomatik olarak kapanıyor <span id=\"fazCountdownTimer\"></span> sn..."
+                    }
+                }
+            }
+        },
+        "revisitConsent": {
+            "elements": {
+                "title": "Onay Tercihleri"
+            }
+        },
+        "auditTable": {
+            "elements": {
+                "headers": {
+                    "elements": {
+                        "id": "Çerez",
+                        "duration": "Süre",
+                        "description": "Açıklama"
+                    }
+                },
+                "message": "Gösterilecek çerez yok."
+            }
+        },
+        "videoPlaceholder": {
+            "elements": {
+                "title": "İçeriğe erişmek için çerezleri kabul etmelisiniz"
+            }
+        }
+    },
+    "ccpa": {
+        "notice": {
+            "elements": {
+                "title": "Gizliliğinize değer veriyoruz",
+                "description": "<p>Bu web sitesi veya üçüncü taraf araçları kişisel verileri işliyor. Kişisel verilerinizin satılmasını reddetmek için \"Kişisel Verilerimi Satmayın veya Paylaşmayın\" bağlantısına tıklayabilirsiniz.</p>",
+                "privacyLink": "",
+                "buttons": {
+                    "elements": {
+                        "accept": "Tümünü Kabul Et",
+                        "reject": "Tümünü Reddet",
+                        "settings": "Özelleştir",
+                        "readMore": "Çerez Politikası",
+                        "donotSell": "Kişisel Verilerimi Satmayın veya Paylaşmayın"
+                    }
+                },
+                "closeButton": "Kapat"
+            }
+        },
+        "categoryPreview": {
+            "elements": {
+                "buttons": {
+                    "elements": {
+                        "save": "Tercihlerimi Kaydet"
+                    }
+                }
+            }
+        },
+        "preferenceCenter": {
+            "elements": {
+                "title": "Onay Tercihlerinizi Özelleştirin",
+                "description": "<p>Web sitemizde verimli şekilde gezinmenize ve belirli işlevlerin çalışmasına yardımcı olmak için çerez kullanıyoruz. Tüm çerezler hakkında detaylı bilgiyi her bir onay kategorisinin altında bulabilirsiniz.</p>",
+                "showMore": "Daha fazla göster",
+                "showLess": "Daha az göster",
+                "category": {
+                    "elements": {
+                        "alwaysEnabled": "Her Zaman Etkin",
+                        "enable": "Etkinleştir",
+                        "disable": "Devre Dışı Bırak"
+                    }
+                },
+                "buttons": {
+                    "elements": {
+                        "accept": "Tümünü Kabul Et",
+                        "save": "Tercihlerimi Kaydet",
+                        "reject": "Tümünü Reddet"
+                    }
+                },
+                "closeButton": "Kapat"
+            }
+        },
+        "optoutPopup": {
+            "elements": {
+                "title": "İptal Tercihleri",
+                "description": "<p>Bu web sitesini nasıl kullandığınızı analiz etmemize, tercihlerinizi kaydetmemize ve ilgili içerik ile pazarlama materyallerini sunmamıza yardımcı olması için üçüncü taraf çerezleri kullanıyoruz.</p>",
+                "optOption": {
+                    "elements": {
+                        "title": "Kişisel Verilerimi Satmayın veya Paylaşmayın",
+                        "enable": "Etkinleştir",
+                        "disable": "Devre Dışı Bırak"
+                    }
+                },
+                "gpcOption": {
+                    "elements": {
+                        "description": "<p>Bu web sitesi için iptal tercihlerinize saygı gösteriyoruz; tarayıcınızdan algıladığımız <b>Global Privacy Control</b> sinyali nedeniyle bu ayarların dikkate alındığını belirtiyoruz.</p>"
+                    }
+                },
+                "showLess": "Daha az göster",
+                "showMore": "Daha fazla göster",
+                "buttons": {
+                    "elements": {
+                        "cancel": "İptal",
+                        "confirm": "Tercihlerimi Kaydet"
+                    }
+                },
+                "closeButton": "Kapat",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "İptal tercihiniz dikkate alındı.",
+                        "subtext": "Banner otomatik olarak kapanıyor <span id=\"fazCountdownTimer\"></span> sn..."
+                    }
+                }
+            }
+        },
+        "revisitConsent": {
+            "elements": {
+                "title": "Onay Tercihleri"
+            }
+        },
+        "auditTable": {
+            "elements": {
+                "headers": {
+                    "elements": {
+                        "id": "Çerez",
+                        "duration": "Süre",
+                        "description": "Açıklama"
+                    }
+                },
+                "message": "Gösterilecek çerez yok."
+            }
+        },
+        "videoPlaceholder": {
+            "elements": {
+                "title": "İçeriğe erişmek için çerezleri kabul etmelisiniz"
+            }
+        }
+    }
+}
