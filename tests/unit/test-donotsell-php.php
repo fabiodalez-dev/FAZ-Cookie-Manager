@@ -671,6 +671,29 @@ namespace {
 		'the shipped English GDPR copy is recognised when a download rewords it'
 	);
 
+	// 20. The non-English branch must not reach the administrator's own words:
+	//     an hr slot whose description is an edited English sentence, on a CCPA
+	//     banner, is left exactly as stored.
+	$custom = '<p>We use cookies on this shop. Read our own notice before choosing.</p>';
+	$b      = new Test_Banner();
+	$b->set_injected_settings( faz_make_settings( 'ccpa', 'box', 'popup', false ) );
+	$b->set_injected_contents(
+		array(
+			'hr' => array(
+				'notice' => array(
+					'elements' => array(
+						'title'       => 'Cijenimo vašu privatnost',
+						'description' => $custom,
+					),
+				),
+			),
+		)
+	);
+	$changed = $b->apply_runtime_law_content_compatibility();
+	$stored  = $b->peek( 'contents' );
+	assert_eq( $changed, false, 'hr slot with an edited English description → not re-synced' );
+	assert_eq( $stored['hr']['notice']['elements']['description'] ?? '', $custom, 'and the edited text is kept as stored' );
+
 	// ---------- Summary ----------
 
 	echo "\n";
