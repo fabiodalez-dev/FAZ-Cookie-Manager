@@ -608,6 +608,30 @@ namespace {
 		'and it gets the Croatian CCPA description, not the English one'
 	);
 
+	// 18. The same stored copy after an editor reflowed it (whitespace between
+	//     paragraphs) is still the untouched GDPR default.
+	$b = new Test_Banner();
+	$b->set_injected_settings( faz_make_settings( 'ccpa', 'box', 'popup', false ) );
+	$b->set_injected_contents(
+		array(
+			'hr' => array(
+				'notice' => array(
+					'elements' => array(
+						'title'       => 'Cijenimo vašu privatnost',
+						'description' => "\n\t" . str_replace( '<p>', "<p>\n  ", $law_desc['gdpr'] ) . "\n",
+					),
+				),
+			),
+		)
+	);
+	$b->apply_runtime_law_content_compatibility();
+	$stored = $b->peek( 'contents' );
+	assert_eq(
+		$stored['hr']['notice']['elements']['description'] ?? '',
+		$hr_desc['ccpa'],
+		'a reflowed English GDPR copy is recognised too'
+	);
+
 	// ---------- Summary ----------
 
 	echo "\n";

@@ -470,9 +470,15 @@ class Banner extends Store {
 			// A slot saved while its language had no catalogue holds the English
 			// copy, so the previous law's default is the English one there; the
 			// localised default alone no longer matches it once a catalogue ships.
+			// Both the resolved English copy (a downloaded en catalogue may reword
+			// it) and the shipped one, which is what such a slot was filled from.
 			if ( 'en' !== $lang ) {
 				$english       = self::get_law_notice_descriptions( 'en' );
+				$shipped       = self::shipped_english_contents();
 				$old_default[] = self::normalize_notice_description( $english[ $old_key ] );
+				if ( isset( $shipped[ $old_key ]['notice']['elements']['description'] ) ) {
+					$old_default[] = self::normalize_notice_description( $shipped[ $old_key ]['notice']['elements']['description'] );
+				}
 			}
 			$new_default = isset( $defaults[ $new_key ] ) ? $defaults[ $new_key ] : '';
 
@@ -505,7 +511,9 @@ class Banner extends Store {
 	 * @return string
 	 */
 	private static function normalize_notice_description( $value ) {
-		return trim( preg_replace( '/\s+/', ' ', (string) $value ) );
+		// The same folding the stored-copy repair uses, so both recognise the
+		// whitespace an editor adds between paragraphs and neither ignores markup.
+		return self::fold_text( $value );
 	}
 
 	/**
@@ -1069,16 +1077,27 @@ class Banner extends Store {
 		if ( 'en' === $lang || ! is_array( $content ) ) {
 			return $content;
 		}
+		$english = self::shipped_english_contents();
+		$local   = self::resolve_bundled_contents( $lang );
+		if ( ! isset( $english[ $law ], $local[ $law ] ) || ! is_array( $english[ $law ] ) || ! is_array( $local[ $law ] ) ) {
+			return $content;
+		}
+		return self::replace_english_leaves( $content, $english[ $law ], $local[ $law ] );
+	}
+
+	/**
+	 * The English copy as shipped in contents/en.json, without any downloaded
+	 * catalogue laid over it: the copy a slot without a catalogue was saved from.
+	 *
+	 * @return array
+	 */
+	private static function shipped_english_contents() {
 		static $english = null;
 		if ( null === $english ) {
 			$english = faz_read_json_file( __DIR__ . '/contents/en.json' );
 			$english = is_array( $english ) ? $english : array();
 		}
-		$local = self::resolve_bundled_contents( $lang );
-		if ( ! isset( $english[ $law ], $local[ $law ] ) || ! is_array( $english[ $law ] ) || ! is_array( $local[ $law ] ) ) {
-			return $content;
-		}
-		return self::replace_english_leaves( $content, $english[ $law ], $local[ $law ] );
+		return $english;
 	}
 
 	/**
@@ -1117,7 +1136,9 @@ class Banner extends Store {
 	 * @return string
 	 */
 	private static function fold_text( $text ) {
-		$plain = trim( (string) preg_replace( array( '/\s+/u', '/>\s+</u', '/\s+(<\/?p\b)/u' ), array( ' ', '><', '$1' ), (string) $text ) );
+		// Whitespace around a paragraph tag is layout an editor adds; anywhere
+		// else a space between two inline elements is part of the text.
+		$plain = trim( (string) preg_replace( array( '/\s+/u', '/\s*(<\/?p\b[^>]*>)\s*/u' ), array( ' ', '$1' ), (string) $text ) );
 		return function_exists( 'mb_strtolower' ) ? mb_strtolower( $plain, 'UTF-8' ) : strtolower( $plain );
 	}
 
