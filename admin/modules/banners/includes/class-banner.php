@@ -466,10 +466,17 @@ class Banner extends Store {
 				? $content['notice']['elements']['description']
 				: '';
 			$current     = self::normalize_notice_description( $current );
-			$old_default = self::normalize_notice_description( $defaults[ $old_key ] );
+			$old_default = array( self::normalize_notice_description( $defaults[ $old_key ] ) );
+			// A slot saved while its language had no catalogue holds the English
+			// copy, so the previous law's default is the English one there; the
+			// localised default alone no longer matches it once a catalogue ships.
+			if ( 'en' !== $lang ) {
+				$english       = self::get_law_notice_descriptions( 'en' );
+				$old_default[] = self::normalize_notice_description( $english[ $old_key ] );
+			}
 			$new_default = isset( $defaults[ $new_key ] ) ? $defaults[ $new_key ] : '';
 
-			if ( ( '' === $current || $current === $old_default )
+			if ( ( '' === $current || in_array( $current, $old_default, true ) )
 				&& '' !== $new_default
 				&& self::normalize_notice_description( $new_default ) !== $current ) {
 				if ( ! isset( $content['notice'] ) || ! is_array( $content['notice'] ) ) {
@@ -1046,9 +1053,10 @@ class Banner extends Store {
 	 * for category names in Cookie_Categories::translate_stored_value().
 	 *
 	 * A leaf is replaced only while it still equals the shipped English default
-	 * at the same path, compared with tags stripped and whitespace and case
-	 * folded so an editor round-trip still matches. Anything else is the
-	 * administrator's wording and stays. The cost is the case the categories
+	 * at the same path, with whitespace and case folded so an editor reflow
+	 * still matches. Markup is compared as it is: a link or emphasis the
+	 * administrator added to the default sentence makes it their wording, and
+	 * it stays. The cost is the case the categories
 	 * accept too: English chosen on purpose in a non-English slot cannot be told
 	 * apart from English inherited, and is translated.
 	 *
@@ -1103,13 +1111,13 @@ class Banner extends Store {
 	}
 
 	/**
-	 * Comparable form of a copy string: tags stripped, whitespace and case folded.
+	 * Comparable form of a copy string: whitespace and case folded, markup kept.
 	 *
 	 * @param string $text Text to fold.
 	 * @return string
 	 */
 	private static function fold_text( $text ) {
-		$plain = trim( (string) preg_replace( '/\s+/u', ' ', wp_strip_all_tags( (string) $text ) ) );
+		$plain = trim( (string) preg_replace( array( '/\s+/u', '/>\s+</u', '/\s+(<\/?p\b)/u' ), array( ' ', '><', '$1' ), (string) $text ) );
 		return function_exists( 'mb_strtolower' ) ? mb_strtolower( $plain, 'UTF-8' ) : strtolower( $plain );
 	}
 

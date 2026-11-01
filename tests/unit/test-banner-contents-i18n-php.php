@@ -197,8 +197,12 @@ reset_cache();
 $hr     = json_decode( file_get_contents( $dir . 'hr.json' ), true );
 $stored = $en['gdpr'];
 $stored['notice']['elements']['title'] = 'Naš vlastiti naslov';
-// An editor round-trip may reflow whitespace and drop the paragraph tags.
-$stored['preferenceCenter']['elements']['description'] = '  ' . strip_tags( $en['gdpr']['preferenceCenter']['elements']['description'] ) . "\n";
+// An editor round-trip may reflow the whitespace.
+$stored['preferenceCenter']['elements']['description'] = '  ' . str_replace( '</p><p>', "</p>\n\t<p>", $en['gdpr']['preferenceCenter']['elements']['description'] ) . "\n";
+// A link added to the default sentence is the administrator's markup.
+$linked = str_replace( 'analyse our traffic', '<a href="https://example.test/">analyse our traffic</a>', $en['gdpr']['notice']['elements']['description'] );
+$stored_linked = $en['gdpr'];
+$stored_linked['notice']['elements']['description'] = $linked;
 $out = Banner::translate_stored_defaults( $stored, 'hr', 'gdpr' );
 t( $hr['gdpr']['notice']['elements']['buttons']['elements']['accept'] === ( $out['notice']['elements']['buttons']['elements']['accept'] ?? '' ),
 	'hr: a stored English default button label is translated' );
@@ -208,6 +212,9 @@ t( $hr['gdpr']['preferenceCenter']['elements']['description'] === ( $out['prefer
 	'hr: and so is one an editor round-trip reflowed' );
 t( 'Naš vlastiti naslov' === ( $out['notice']['elements']['title'] ?? '' ),
 	'hr: the administrator\'s own title is kept' );
+$out_linked = Banner::translate_stored_defaults( $stored_linked, 'hr', 'gdpr' );
+t( $linked === ( $out_linked['notice']['elements']['description'] ?? '' ),
+	'hr: a default sentence the administrator added a link to is kept' );
 
 $ccpa = Banner::translate_stored_defaults( $en['ccpa'], 'hr', 'ccpa' );
 t( $hr['ccpa']['notice']['elements']['description'] === ( $ccpa['notice']['elements']['description'] ?? '' ),
