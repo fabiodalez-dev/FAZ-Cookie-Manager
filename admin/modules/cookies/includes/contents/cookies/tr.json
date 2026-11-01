@@ -1,42 +1,42 @@
 {
     "wpemojisettingssupports": {
-        "description": "WordPress, kullanıcı bir WordPress sitesinde emojilerle etkileşime girdiğinde bu çerezi ayarlar."
+        "description": "Kullanıcı bir WordPress sitesinde emojilerle etkileşimde bulunduğunda, WordPress bu çerezi oluşturur."
     },
     "wordpress_test_cookie": {
         "description": "Çerezlerin etkin olup olmadığını kontrol etmek için kullanılan WordPress test çerezi."
     },
     "wordpress_logged_in_": {
-        "description": "Giriş durumunu ve kullanıcı kimliğini belirtir."
+        "description": "Kullanıcının giriş durumunu ve kimliğini belirten çerezi."
     },
     "wp-settings-": {
-        "description": "Yönetim arayüzünü her kullanıcı için özelleştirir."
+        "description": "Yönetim arayüzünü her kullanıcı için kişiselleştiren çerezi."
     },
     "wordpress_": {
-        "description": "Yönetim alanı için WordPress kimlik doğrulama çerezi."
+        "description": "Yönetim alanı için kullanılan WordPress kimlik doğrulama çerezi."
     },
     "wp_lang": {
-        "description": "Giriş sırasında seçilen dili kaydeder."
+        "description": "Giriş sırasında seçilen dili kaydeden çerezi."
     },
     "comment_author_email_": {
-        "description": "Yorum yazan kişinin e-posta adresini kolay erişim için kaydeder."
+        "description": "Yorum yapan kişinin e-posta adresini kaydederek kullanım kolaylığı sağlar."
     },
     "comment_author_url_": {
-        "description": "Yorum yazan kişinin web sitesi adresini kolay erişim için kaydeder."
+        "description": "Yorum yapan kişinin web sitesi adresini kaydederek kullanım kolaylığı sağlar."
     },
     "comment_author_": {
-        "description": "Yorum yazan kişinin adını kolay erişim için kaydeder."
+        "description": "Yorum yapan kişinin adını kaydederek kullanım kolaylığı sağlar."
     },
     "_ga": {
-        "description": "Kullanıcıları ayırt etmek için kullanılan Google Analytics çerezi."
+        "description": "Kullanıcıları ayırt etmek ve web sitesi trafiğini analiz etmek için kullanılan Google Analytics çerezi."
     },
     "_ga_": {
-        "description": "Oturum durumunu korumak için kullanılan Google Analytics 4 çerezi."
+        "description": "Oturum durumunu korumak ve web sitesi kullanımını analiz etmek için kullanılan Google Analytics 4 çerezi."
     },
     "_gid": {
-        "description": "Kullanıcıları ayırt etmek için kullanılan Google Analytics çerezi."
+        "description": "Kullanıcıları ayırt etmek ve ziyaretçi trafiğini analiz etmek için kullanılan Google Analytics çerezi."
     },
     "_gat": {
-        "description": "İstek oranını sınırlamak için kullanılan Google Analytics çerezi."
+        "description": "İstek oranını sınırlamak amacıyla kullanılan Google Analytics çerezi."
     },
     "wp_statistics_": {
         "description": "Ziyaretçi oturumlarını ve sayfa görüntülemelerini izlemek için kullanılan WP Statistics çerezi."
@@ -45,7 +45,7 @@
         "description": "Benzersiz ziyaretçileri tanımlamak için kullanılan Burst Statistics çerezi."
     },
     "_koko_analytics_pages_viewed": {
-        "description": "Benzersiz ziyaretçileri tespit etmek ve oturum başına görüntülenen sayfaları saymak için kullanılan Koko Analytics çerezi."
+        "description": "Benzersiz ziyaretçileri belirlemek ve oturum başına görüntülenen sayfaları saymak için kullanılan Koko Analytics çerezi."
     },
     "_gac_": {
         "description": "Kampanya bilgilerini içeren Google Analytics çerezi."
@@ -60,16 +60,16 @@
         "description": "__utmb ile birlikte yeni oturumları belirlemek için kullanılan Google Analytics (Classic) çerezi."
     },
     "__utmz": {
-        "description": "Trafik kaynağını veya kampanyayı saklayan Google Analytics (Classic) çerezi."
+        "description": "Trafik kaynağını veya kampanyayı kaydeden Google Analytics (Classic) çerezi."
     },
     "__utmt": {
         "description": "İstek oranını sınırlamak için kullanılan Google Analytics (Classic) çerezi."
     },
     "_gcl_au": {
-        "description": "Google Ads dönüşüm bağlayıcı çerezi."
+        "description": "Google Ads dönüşüm bağlama işlevi için kullanılan çerezi."
     },
     "ide": {
-        "description": "Hedefleme reklamcılığı için kullanılan DoubleClick/Google çerezi.",
+        "description": "Hedeflenen reklamcılık için kullanılan DoubleClick/Google çerezi.",
         "domains": [
             "doubleclick.net"
         ]
@@ -84,7 +84,7 @@
         "description": "Reklam ve analiz için kullanılan Facebook Pixel çerezi."
     },
     "_fbc": {
-        "description": "Facebook tıklama tanımlayıcı çerezi."
+        "description": "Facebook tıklama kimliği çerezi."
     },
     "fr": {
         "description": "Facebook reklam çerezi.",
@@ -93,19 +93,19 @@
         ]
     },
     "__cf_bm": {
-        "description": "Cloudflare bot yönetimi çerezi."
+        "description": "Cloudflare tarafından bot yönetimi amacıyla kullanılan çerezi."
     },
     "__cfduid": {
         "description": "Güvenilir web trafiğini tanımlamak için kullanılan Cloudflare çerezi."
     },
     "_grecaptcha": {
-        "description": "Google reCAPTCHA tarafından insanlarla botları ayırtmak için kullanılır."
+        "description": "Google reCAPTCHA tarafından insanlarla botları ayırtmak için kullanılan çerezi."
     },
     "fazcookie-consent": {
-        "description": "Ziyaretçinin çerez onayı tercihlerini ve bu tercihin kaydedilmesi için rastgele bir onay kimliği saklar."
+        "description": "Ziyaretçinin çerez tercihlerini ve bu tercihin kaydedilmesi için kullanılan rastgele bir onay kimliğini saklayan çerezi."
     },
     "_clck": {
-        "description": "Analitik için kullanılan Microsoft Clarity çerezi."
+        "description": "Analitik amaçlarla kullanılan Microsoft Clarity çerezi."
     },
     "_clsk": {
         "description": "Microsoft Clarity oturum çerezi."
@@ -131,7 +131,7 @@
         "description": "LinkedIn Insight Tag çerezi."
     },
     "lidc": {
-        "description": "Veri merkezi yönlendirme optimizasyonu için LinkedIn çerezi.",
+        "description": "Veri merkezi yönlendirme optimizasyonu için kullanılan LinkedIn çerezi.",
         "domains": [
             "linkedin.com"
         ]
@@ -146,10 +146,10 @@
         "description": "HubSpot ana analitik çerezi."
     },
     "hubspotutk": {
-        "description": "HubSpot ziyaretçi takip çerezi."
+        "description": "HubSpot ziyaretçi takibi için kullanılan çerezi."
     },
     "__hs_opt_out": {
-        "description": "HubSpot reddetme tercihini hatırlayan çerez."
+        "description": "HubSpot tarafından reddetme tercihinin hatırlanması için kullanılan çerezi."
     },
     "ysc": {
         "description": "Gömülü videoların izlenmesini takip eden YouTube çerezi.",
@@ -159,7 +159,7 @@
         ]
     },
     "visitor_info1_live": {
-        "description": "YouTube, bant genişliği ve görüntü ayarlarını tahmin etmek için kullandığı çerezi."
+        "description": "YouTube tarafından bant genişliği ve görüntü ayarlarını tahmin etmek için kullanılan çerezi."
     },
     "vuid": {
         "description": "Video izlemelerini takip eden Vimeo analitik çerezi.",
@@ -198,7 +198,7 @@
         "description": "Web siteleri arasında ziyaretçileri izlemek için kullanılan TikTok Pixel çerezi."
     },
     "tt_webid": {
-        "description": "Reklam amaçlı kullanıcıları tanımlamak ve izlemek için kullanılan TikTok çerezi."
+        "description": "Reklam amacıyla kullanıcıları tanımlamak ve izlemek için kullanılan TikTok çerezi."
     },
     "guest_id": {
         "description": "Oturum açmamış kullanıcıları tanımlamak için kullanılan Twitter çerezi."
