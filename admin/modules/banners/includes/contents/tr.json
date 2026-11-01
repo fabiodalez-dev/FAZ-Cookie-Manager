@@ -2,15 +2,15 @@
     "gdpr": {
         "notice": {
             "elements": {
-                "title": "Gizliliğinize değer veriyoruz",
-                "description": "<p>Tarama deneyiminizi geliştirmek, kişiselleştirilmiş reklamlar veya içerik sunmak ve trafiğimizi analiz etmek için çerez kullanıyoruz. \"Tümünü Kabul Et\" seçeneğine tıklayarak, çerez kullanımımız için onay vermiş olursunuz.</p>",
+                "title": "Çerezler ve Kişisel Verilerin Korunması",
+                "description": "<p>Web sitemiz, güvenli kullanım, kullanıcı deneyimini iyileştirme, performans ölçümü ve analiz faaliyetleri için çerezler kullanır. Kişisel verileriniz, yalnızca belirtilen amaçlarla ve mevzuata uygun şekilde işlenir. Gerekli çerezler site güvenliği ve temel işlevler için zorunludur; analitik, performans ve pazarlama amaçlı çerezler için tercihlerinizi ayrı şekilde yönetebilirsiniz. Aydınlatma metnimizi okuyabilir ve verdiğiniz rızayı istediğiniz zaman geri çekebilirsiniz.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {
                         "accept": "Tümünü Kabul Et",
                         "reject": "Tümünü Reddet",
                         "settings": "Özelleştir",
-                        "readMore": "Çerez Politikası",
+                        "readMore": "Aydınlatma Metni",
                         "donotSell": "Kişisel Verilerimi Satmayın veya Paylaşmayın"
                     }
                 },
@@ -28,15 +28,15 @@
         },
         "preferenceCenter": {
             "elements": {
-                "title": "Onay Tercihlerinizi Özelleştirin",
-                "description": "<p>Web sitemizde verimli şekilde gezinmenize ve belirli işlevlerin çalışmasına yardımcı olmak için çerez kullanıyoruz. Tüm çerezler hakkında detaylı bilgiyi her bir onay kategorisinin altında bulabilirsiniz.</p>",
+                "title": "Çerez Tercihlerinizi Yönetin",
+                "description": "<p>Web sitemizin güvenli şekilde çalışması, performansının izlenmesi, kullanıcı deneyiminin iyileştirilmesi ve gerektiğinde reklam/analitik hizmetlerinin sunulması amacıyla çerezler kullanılmaktadır. Gerekli çerezler zorunlu olup otomatik olarak çalışır; diğer çerez türleri için tercihlerinizi ayrı ayrı belirleyebilirsiniz. Verdiğiniz rızayı dilediğiniz zaman geri çekebilirsiniz.</p>",
                 "showMore": "Daha fazla göster",
                 "showLess": "Daha az göster",
                 "category": {
                     "elements": {
                         "alwaysEnabled": "Her Zaman Etkin",
-                        "enable": "Etkinleştir",
-                        "disable": "Devre Dışı Bırak"
+                        "enable": "İzin Ver",
+                        "disable": "İzin Verme"
                     }
                 },
                 "buttons": {
@@ -51,18 +51,18 @@
         },
         "optoutPopup": {
             "elements": {
-                "title": "İptal Tercihleri",
-                "description": "<p>Bu web sitesini nasıl kullandığınızı analiz etmemize, tercihlerinizi kaydetmemize ve ilgili içerik ile pazarlama materyallerini sunmamıza yardımcı olması için üçüncü taraf çerezleri kullanıyoruz.</p>",
+                "title": "İptal ve Rıza Tercihleri",
+                "description": "<p>İşleyiş, güvenlik, performans ve analiz amaçları için kullanılan çerezlerin ve benzeri teknolojilerin kullanımıyla ilgili tercihlerinizi yönetebilirsiniz. Gerekli çerezler dışındaki çerezlerin kullanımı için açık rıza alınır. Verdiğiniz rızayı dilediğiniz zaman geri çekebilirsiniz.</p>",
                 "optOption": {
                     "elements": {
                         "title": "Kişisel Verilerimi Satmayın veya Paylaşmayın",
-                        "enable": "Etkinleştir",
-                        "disable": "Devre Dışı Bırak"
+                        "enable": "İzin Ver",
+                        "disable": "İzin Verme"
                     }
                 },
                 "gpcOption": {
                     "elements": {
-                        "description": "<p>Bu web sitesi için iptal tercihlerinize saygı gösteriyoruz; tarayıcınızdan algıladığımız <b>Global Privacy Control</b> sinyali nedeniyle bu ayarların dikkate alındığını belirtiyoruz.</p>"
+                        "description": "<p>Tarayıcınızdan gelen <b>Global Privacy Control</b> sinyali doğrultusunda, bu web sitesinde kayıt ve izleme amaçlı tercihlerinizin dikkate alınması için uygun düzenlemeler uygulanmaktadır.</p>"
                     }
                 },
                 "showLess": "Daha az göster",
@@ -76,7 +76,7 @@
                 "closeButton": "Kapat",
                 "optoutSuccess": {
                     "elements": {
-                        "text": "İptal tercihiniz dikkate alındı.",
+                        "text": "Tercihiniz kaydedildi.",
                         "subtext": "Banner otomatik olarak kapanıyor <span id=\"fazCountdownTimer\"></span> sn..."
                     }
                 }
@@ -84,7 +84,7 @@
         },
         "revisitConsent": {
             "elements": {
-                "title": "Onay Tercihleri"
+                "title": "Çerez Tercihleri"
             }
         },
         "auditTable": {
@@ -108,15 +108,15 @@
     "ccpa": {
         "notice": {
             "elements": {
-                "title": "Gizliliğinize değer veriyoruz",
-                "description": "<p>Bu web sitesi veya üçüncü taraf araçları kişisel verileri işliyor. Kişisel verilerinizin satılmasını reddetmek için \"Kişisel Verilerimi Satmayın veya Paylaşmayın\" bağlantısına tıklayabilirsiniz.</p>",
+                "title": "Çerezler ve Kişisel Verilerin Korunması",
+                "description": "<p>Web sitemiz veya üçüncü taraf araçlar, güvenli çalışma, kullanıcı deneyimi, performans ölçümü ve reklam/analitik hizmetleri için kişisel verileri işleyebilir. Kişisel verilerinizin işlenmesine ilişkin detayları aydınlatma metnimizde bulabilirsiniz. Gerekli çerezler zorunlu olup otomatik olarak çalışır; diğer çerez türleri için açık rıza tercihlerinizi ayrı şekilde yönetebilirsiniz.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {
                         "accept": "Tümünü Kabul Et",
                         "reject": "Tümünü Reddet",
                         "settings": "Özelleştir",
-                        "readMore": "Çerez Politikası",
+                        "readMore": "Aydınlatma Metni",
                         "donotSell": "Kişisel Verilerimi Satmayın veya Paylaşmayın"
                     }
                 },
@@ -134,15 +134,15 @@
         },
         "preferenceCenter": {
             "elements": {
-                "title": "Onay Tercihlerinizi Özelleştirin",
-                "description": "<p>Web sitemizde verimli şekilde gezinmenize ve belirli işlevlerin çalışmasına yardımcı olmak için çerez kullanıyoruz. Tüm çerezler hakkında detaylı bilgiyi her bir onay kategorisinin altında bulabilirsiniz.</p>",
+                "title": "Çerez Tercihlerinizi Yönetin",
+                "description": "<p>Gerekli çerezler site güvenliği ve temel işlevler için zorunludur. Analitik, performans ve pazarlama amaçlı çerezler için açık rıza tercihinizi ayrı ayrı belirleyebilirsiniz. Verdiğiniz rızayı dilediğiniz zaman geri çekebilirsiniz.</p>",
                 "showMore": "Daha fazla göster",
                 "showLess": "Daha az göster",
                 "category": {
                     "elements": {
                         "alwaysEnabled": "Her Zaman Etkin",
-                        "enable": "Etkinleştir",
-                        "disable": "Devre Dışı Bırak"
+                        "enable": "İzin Ver",
+                        "disable": "İzin Verme"
                     }
                 },
                 "buttons": {
@@ -157,18 +157,18 @@
         },
         "optoutPopup": {
             "elements": {
-                "title": "İptal Tercihleri",
-                "description": "<p>Bu web sitesini nasıl kullandığınızı analiz etmemize, tercihlerinizi kaydetmemize ve ilgili içerik ile pazarlama materyallerini sunmamıza yardımcı olması için üçüncü taraf çerezleri kullanıyoruz.</p>",
+                "title": "İptal ve Rıza Tercihleri",
+                "description": "<p>İşleyiş, güvenlik, performans ve analiz amaçları için kullanılan çerezlerin ve benzeri teknolojilerin kullanımıyla ilgili tercihlerinizi yönetebilirsiniz. Gerekli çerezler dışındaki çerezlerin kullanımı için açık rıza alınır. Verdiğiniz rızayı dilediğiniz zaman geri çekebilirsiniz.</p>",
                 "optOption": {
                     "elements": {
                         "title": "Kişisel Verilerimi Satmayın veya Paylaşmayın",
-                        "enable": "Etkinleştir",
-                        "disable": "Devre Dışı Bırak"
+                        "enable": "İzin Ver",
+                        "disable": "İzin Verme"
                     }
                 },
                 "gpcOption": {
                     "elements": {
-                        "description": "<p>Bu web sitesi için iptal tercihlerinize saygı gösteriyoruz; tarayıcınızdan algıladığımız <b>Global Privacy Control</b> sinyali nedeniyle bu ayarların dikkate alındığını belirtiyoruz.</p>"
+                        "description": "<p>Tarayıcınızdan gelen <b>Global Privacy Control</b> sinyali doğrultusunda, bu web sitesinde kayıt ve izleme amaçlı tercihlerinizin dikkate alınması için uygun düzenlemeler uygulanmaktadır.</p>"
                     }
                 },
                 "showLess": "Daha az göster",
@@ -182,7 +182,7 @@
                 "closeButton": "Kapat",
                 "optoutSuccess": {
                     "elements": {
-                        "text": "İptal tercihiniz dikkate alındı.",
+                        "text": "Tercihiniz kaydedildi.",
                         "subtext": "Banner otomatik olarak kapanıyor <span id=\"fazCountdownTimer\"></span> sn..."
                     }
                 }
@@ -190,7 +190,7 @@
         },
         "revisitConsent": {
             "elements": {
-                "title": "Onay Tercihleri"
+                "title": "Çerez Tercihleri"
             }
         },
         "auditTable": {

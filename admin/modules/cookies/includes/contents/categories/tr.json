@@ -1,30 +1,30 @@
 {
     "necessary": {
         "name": "Gerekli",
-        "description": "<p>Gerekli çerezler, bu web sitesinin temel işlevlerinin çalışması için gereklidir; güvenli giriş veya onay tercihlerinizi ayarlama gibi işlemler için kullanılır. Bunlar reklam veya analitik amaçlarla kullanılmaz.</p>"
+        "description": "<p>Web sitesinin güvenli ve düzgün şekilde çalışması için zorunlu olan çerezlerdir. Bu çerezler, oturum yönetimi, güvenlik ve temel işlevlerin sağlanması amacıyla kullanılır. Bu çerezlerin işlevleri olmadan site düzgün çalışmayabilir.</p>"
     },
     "functional": {
         "name": "İşlevsel",
-        "description": "<p>İşlevsel çerezler, web sitesinin içeriğini sosyal medya platformlarında paylaşma, geri bildirim toplama ve diğer üçüncü taraf özelliklerinin çalışması gibi belirli işlevlerin gerçekleştirilmesine yardımcı olur.</p>"
+        "description": "<p>İşlevsel çerezler, sosyal medya paylaşımı, tercihlerin hatırlanması ve kullanıcı deneyimini iyileştirme gibi fonksiyonların çalışması için kullanılır. Bu çerezler sayesinde site tercihleriniz ve kullanım deneyiminiz kişiselleştirilebilir.</p>"
     },
     "analytics": {
         "name": "Analitik",
-        "description": "<p>Analitik çerezler, ziyaretçilerin web sitesiyle nasıl etkileşim kurduğunu anlamak için kullanılır. Bu çerezler, ziyaretçi sayısı, hemen çıkma oranı ve diğer ölçümler gibi metrikler hakkında bilgi sağlar.</p>"
+        "description": "<p>Analitik çerezler, ziyaretçi davranışlarını analiz etmek, site kullanımını ölçmek ve hizmet kalitesini geliştirmek için kullanılır. Bu çerezler, ziyaretçi sayısı, sayfa görüntüleme, sayfa etkileşimleri ve benzeri verileri toplayabilir.</p>"
     },
     "performance": {
         "name": "Performans",
-        "description": "<p>Performans çerezleri, web sitesinin temel performans göstergelerini anlamak ve analiz etmek için kullanılır; bu da ziyaretçiler için daha iyi bir kullanıcı deneyimi sağlar.</p>"
+        "description": "<p>Performans çerezleri, web sitesinin yükleme hızını, kullanılabilirliğini ve genel performansını izlemek amacıyla kullanılır. Bu veriler, kullanıcı deneyimini iyileştirmek için değerlendirilir.</p>"
     },
     "uncategorized": {
         "name": "Kategorize Edilmemiş",
-        "description": "<p>Henüz kategorize edilmemiş çerezler.</p>"
+        "description": "<p>Henüz sınıflandırılmamış çerezlerdir.</p>"
     },
     "wordpress-internal": {
         "name": "WordPress Dahili",
-        "description": "<p>WordPress çekirdeği tarafından giriş yapmış yöneticiler için ayarlanan çerezler. Site ziyaretçilerine gösterilmez.</p>"
+        "description": "<p>WordPress çekirdeği tarafından, giriş yapmış yöneticilerin güvenli ve doğru şekilde yönetimi için kullanılan dahili çerezlerdir. Site ziyaretçilerine gösterilmez.</p>"
     },
     "marketing": {
         "name": "Pazarlama",
-        "description": "<p>Pazarlama çerezleri, ziyaretçilere daha önce ziyaret ettikleri sayfalara göre kişiselleştirilmiş reklamlar sunmak ve reklam kampanyalarının etkinliğini analiz etmek için kullanılır.</p>"
+        "description": "<p>Pazarlama çerezleri, kullanıcı davranışlarına göre reklam ve kampanya içeriğini kişiselleştirmek, reklam etkinliğini ölçmek ve daha uygun içerik sunmak amacıyla kullanılır.</p>"
     }
 }
