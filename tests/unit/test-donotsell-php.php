@@ -108,6 +108,9 @@ if ( ! function_exists( 'wp_upload_dir' ) ) {
 	function wp_upload_dir() {
 		// A non-existent basedir guarantees the translated-file branch is never
 		// taken, so get_law_notice_descriptions() reads the bundled en.json.
+		if ( isset( $GLOBALS['faz_test_upload_dir'] ) ) {
+			return array( 'basedir' => $GLOBALS['faz_test_upload_dir'] );
+		}
 		return array( 'basedir' => sys_get_temp_dir() . '/faz-nonexistent-uploads-' . wp_rand() );
 	}
 }
@@ -630,6 +633,42 @@ namespace {
 		$stored['hr']['notice']['elements']['description'] ?? '',
 		$hr_desc['ccpa'],
 		'a reflowed English GDPR copy is recognised too'
+	);
+
+	// 19. A downloaded en catalogue may reword the GDPR description. The hr slot
+	//     was still saved from contents/en.json as shipped, and must be
+	//     recognised against that copy, not only the resolved one.
+	$upload = sys_get_temp_dir() . '/faz-upload-' . wp_rand();
+	mkdir( $upload . '/fazcookie/languages/banners', 0777, true );
+	file_put_contents(
+		$upload . '/fazcookie/languages/banners/en.json',
+		json_encode( array( 'banner_data' => array( 'gdpr' => array( 'notice' => array( 'elements' => array( 'description' => '<p>A reworded English GDPR notice.</p>' ) ) ) ) ) )
+	);
+	$GLOBALS['faz_test_upload_dir'] = $upload;
+	$resolved_en = Banner::get_law_notice_descriptions( 'en' );
+	assert_eq( $resolved_en['gdpr'], '<p>A reworded English GDPR notice.</p>', 'the downloaded en catalogue rewords the resolved default' );
+	$b = new Test_Banner();
+	$b->set_injected_settings( faz_make_settings( 'ccpa', 'box', 'popup', false ) );
+	$b->set_injected_contents(
+		array(
+			'hr' => array(
+				'notice' => array(
+					'elements' => array(
+						'title'       => 'Cijenimo vašu privatnost',
+						'description' => $law_desc['gdpr'],
+					),
+				),
+			),
+		)
+	);
+	$b->apply_runtime_law_content_compatibility();
+	$stored = $b->peek( 'contents' );
+	unset( $GLOBALS['faz_test_upload_dir'] );
+	unlink( $upload . '/fazcookie/languages/banners/en.json' );
+	assert_eq(
+		$stored['hr']['notice']['elements']['description'] ?? '',
+		$hr_desc['ccpa'],
+		'the shipped English GDPR copy is recognised when a download rewords it'
 	);
 
 	// ---------- Summary ----------
