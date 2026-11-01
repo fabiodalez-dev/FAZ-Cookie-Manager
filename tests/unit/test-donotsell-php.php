@@ -579,6 +579,35 @@ namespace {
 	$changed = $b->apply_runtime_law_content_compatibility();
 	assert_eq( $changed, true, 'JSON-string language with stale GDPR copy → decoded + re-synced' );
 
+	// 17. A slot saved before its language had a catalogue holds the English
+	//     copy. Once hr.json ships, the localised GDPR default no longer matches
+	//     the stored English GDPR description, and a CCPA banner must still be
+	//     re-synced to the Croatian CCPA copy instead of keeping GDPR text that
+	//     never mentions the opt-out.
+	$hr_desc = Banner::get_law_notice_descriptions( 'hr' );
+	$b       = new Test_Banner();
+	$b->set_injected_settings( faz_make_settings( 'ccpa', 'box', 'popup', false ) );
+	$b->set_injected_contents(
+		array(
+			'hr' => array(
+				'notice' => array(
+					'elements' => array(
+						'title'       => 'Cijenimo vašu privatnost',
+						'description' => $law_desc['gdpr'],
+					),
+				),
+			),
+		)
+	);
+	$changed = $b->apply_runtime_law_content_compatibility();
+	$stored  = $b->peek( 'contents' );
+	assert_eq( $changed, true, 'hr slot holding the English GDPR copy on a CCPA banner → re-synced' );
+	assert_eq(
+		$stored['hr']['notice']['elements']['description'] ?? '',
+		$hr_desc['ccpa'],
+		'and it gets the Croatian CCPA description, not the English one'
+	);
+
 	// ---------- Summary ----------
 
 	echo "\n";
