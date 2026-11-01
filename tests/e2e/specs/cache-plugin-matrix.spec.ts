@@ -146,7 +146,10 @@ async function warmUntilHit(url: string, tries = 20): Promise<Fetched> {
     if (got.headerHit) return got;
     if (got.stamp && previous && got.stamp === previous) return got;
     previous = got.stamp;
-    await new Promise((r) => setTimeout(r, 400));
+    // Most stamps, Cachify's "DB Cache @" among them, carry the time to the
+    // second: two pages generated within the same second would match without
+    // either being a cached copy, so the next request lands in a later second.
+    await new Promise((r) => setTimeout(r, 1_100));
   }
   const seenHeaders = HIT_HEADERS.map((h) => `${h.name}=${last?.headers[h.name] ?? '-'}`).join(' ');
   throw new Error(
