@@ -1,0 +1,231 @@
+{
+    "wpemojisettingssupports": {
+        "description": "WordPress, kullanıcı bir WordPress sitesinde emojilerle etkileşime girdiğinde bu çerezi ayarlar."
+    },
+    "wordpress_test_cookie": {
+        "description": "Çerezlerin etkin olup olmadığını kontrol etmek için kullanılan WordPress test çerezi."
+    },
+    "wordpress_logged_in_": {
+        "description": "Giriş durumunu ve kullanıcı kimliğini belirtir."
+    },
+    "wp-settings-": {
+        "description": "Yönetim arayüzünü her kullanıcı için özelleştirir."
+    },
+    "wordpress_": {
+        "description": "Yönetim alanı için WordPress kimlik doğrulama çerezi."
+    },
+    "wp_lang": {
+        "description": "Giriş sırasında seçilen dili kaydeder."
+    },
+    "comment_author_email_": {
+        "description": "Yorum yazan kişinin e-posta adresini kolay erişim için kaydeder."
+    },
+    "comment_author_url_": {
+        "description": "Yorum yazan kişinin web sitesi adresini kolay erişim için kaydeder."
+    },
+    "comment_author_": {
+        "description": "Yorum yazan kişinin adını kolay erişim için kaydeder."
+    },
+    "_ga": {
+        "description": "Kullanıcıları ayırt etmek için kullanılan Google Analytics çerezi."
+    },
+    "_ga_": {
+        "description": "Oturum durumunu korumak için kullanılan Google Analytics 4 çerezi."
+    },
+    "_gid": {
+        "description": "Kullanıcıları ayırt etmek için kullanılan Google Analytics çerezi."
+    },
+    "_gat": {
+        "description": "İstek oranını sınırlamak için kullanılan Google Analytics çerezi."
+    },
+    "wp_statistics_": {
+        "description": "Ziyaretçi oturumlarını ve sayfa görüntülemelerini izlemek için kullanılan WP Statistics çerezi."
+    },
+    "burst_uid": {
+        "description": "Benzersiz ziyaretçileri tanımlamak için kullanılan Burst Statistics çerezi."
+    },
+    "_koko_analytics_pages_viewed": {
+        "description": "Benzersiz ziyaretçileri tespit etmek ve oturum başına görüntülenen sayfaları saymak için kullanılan Koko Analytics çerezi."
+    },
+    "_gac_": {
+        "description": "Kampanya bilgilerini içeren Google Analytics çerezi."
+    },
+    "__utma": {
+        "description": "Kullanıcıları ve oturumları ayırt etmek için kullanılan Google Analytics (Classic) çerezi."
+    },
+    "__utmb": {
+        "description": "Yeni oturumları belirlemek için kullanılan Google Analytics (Classic) çerezi."
+    },
+    "__utmc": {
+        "description": "__utmb ile birlikte yeni oturumları belirlemek için kullanılan Google Analytics (Classic) çerezi."
+    },
+    "__utmz": {
+        "description": "Trafik kaynağını veya kampanyayı saklayan Google Analytics (Classic) çerezi."
+    },
+    "__utmt": {
+        "description": "İstek oranını sınırlamak için kullanılan Google Analytics (Classic) çerezi."
+    },
+    "_gcl_au": {
+        "description": "Google Ads dönüşüm bağlayıcı çerezi."
+    },
+    "ide": {
+        "description": "Hedefleme reklamcılığı için kullanılan DoubleClick/Google çerezi.",
+        "domains": [
+            "doubleclick.net"
+        ]
+    },
+    "dsid": {
+        "description": "Reklam kişiselleştirmesi için kullanılan Google reklam çerezi.",
+        "domains": [
+            "doubleclick.net"
+        ]
+    },
+    "_fbp": {
+        "description": "Reklam ve analiz için kullanılan Facebook Pixel çerezi."
+    },
+    "_fbc": {
+        "description": "Facebook tıklama tanımlayıcı çerezi."
+    },
+    "fr": {
+        "description": "Facebook reklam çerezi.",
+        "domains": [
+            "facebook.com"
+        ]
+    },
+    "__cf_bm": {
+        "description": "Cloudflare bot yönetimi çerezi."
+    },
+    "__cfduid": {
+        "description": "Güvenilir web trafiğini tanımlamak için kullanılan Cloudflare çerezi."
+    },
+    "_grecaptcha": {
+        "description": "Google reCAPTCHA tarafından insanlarla botları ayırtmak için kullanılır."
+    },
+    "fazcookie-consent": {
+        "description": "Ziyaretçinin çerez onayı tercihlerini ve bu tercihin kaydedilmesi için rastgele bir onay kimliği saklar."
+    },
+    "_clck": {
+        "description": "Analitik için kullanılan Microsoft Clarity çerezi."
+    },
+    "_clsk": {
+        "description": "Microsoft Clarity oturum çerezi."
+    },
+    "muid": {
+        "description": "Microsoft Bing Ads Evrensel Olay İzleme çerezi.",
+        "domains": [
+            "bing.com",
+            "microsoft.com",
+            "clarity.ms"
+        ]
+    },
+    "_uetsid": {
+        "description": "Microsoft Bing Ads UET oturum izleme çerezi."
+    },
+    "_uetvid": {
+        "description": "Microsoft Bing Ads UET oturumlar arası izleme çerezi."
+    },
+    "bcookie": {
+        "description": "LinkedIn tarayıcı kimlik çerezi."
+    },
+    "li_sugr": {
+        "description": "LinkedIn Insight Tag çerezi."
+    },
+    "lidc": {
+        "description": "Veri merkezi yönlendirme optimizasyonu için LinkedIn çerezi.",
+        "domains": [
+            "linkedin.com"
+        ]
+    },
+    "__hssc": {
+        "description": "HubSpot oturum izleme çerezi."
+    },
+    "__hssrc": {
+        "description": "HubSpot oturum sıfırlama tespit çerezi."
+    },
+    "__hstc": {
+        "description": "HubSpot ana analitik çerezi."
+    },
+    "hubspotutk": {
+        "description": "HubSpot ziyaretçi takip çerezi."
+    },
+    "__hs_opt_out": {
+        "description": "HubSpot reddetme tercihini hatırlayan çerez."
+    },
+    "ysc": {
+        "description": "Gömülü videoların izlenmesini takip eden YouTube çerezi.",
+        "domains": [
+            "youtube.com",
+            "youtube-nocookie.com"
+        ]
+    },
+    "visitor_info1_live": {
+        "description": "YouTube, bant genişliği ve görüntü ayarlarını tahmin etmek için kullandığı çerezi."
+    },
+    "vuid": {
+        "description": "Video izlemelerini takip eden Vimeo analitik çerezi.",
+        "domains": [
+            "vimeo.com"
+        ]
+    },
+    "__stripe_mid": {
+        "description": "Ödeme işlemleri için kullanılan Stripe sahtecilik önleme çerezi."
+    },
+    "__stripe_sid": {
+        "description": "Ödeme işlemleri için kullanılan Stripe oturum sahtecilik önleme çerezi."
+    },
+    "mp_": {
+        "description": "Kullanıcı etkileşimlerini izlemek için kullanılan Mixpanel analitik çerezi."
+    },
+    "distinct_id": {
+        "description": "Benzersiz kullanıcıları tanımlamak için kullanılan Mixpanel çerezi."
+    },
+    "_hj*": {
+        "description": "Hotjar analitik çerezi."
+    },
+    "woocommerce_cart_hash": {
+        "description": "Sepet içeriği değişikliklerini belirlemek için kullanılan WooCommerce çerezi."
+    },
+    "woocommerce_items_in_cart": {
+        "description": "Sepetteki ürünleri takip etmek için kullanılan WooCommerce çerezi."
+    },
+    "wp_woocommerce_session_": {
+        "description": "WooCommerce oturum çerezi."
+    },
+    "__tea_cache_tokens_": {
+        "description": "Analitik SDK tarafından kullanılan TikTok önbellek belirteci."
+    },
+    "_ttp": {
+        "description": "Web siteleri arasında ziyaretçileri izlemek için kullanılan TikTok Pixel çerezi."
+    },
+    "tt_webid": {
+        "description": "Reklam amaçlı kullanıcıları tanımlamak ve izlemek için kullanılan TikTok çerezi."
+    },
+    "guest_id": {
+        "description": "Oturum açmamış kullanıcıları tanımlamak için kullanılan Twitter çerezi."
+    },
+    "personalization_id": {
+        "description": "Kişiselleştirme ve reklam için kullanılan Twitter çerezi."
+    },
+    "ct0": {
+        "description": "Gömülü içeriklerde güvenlik ve spam koruması için kullanılan Twitter çerezi.",
+        "domains": [
+            "twitter.com",
+            "x.com"
+        ]
+    },
+    "_scid": {
+        "description": "Siteler arası ziyaretçi tanımlama için kullanılan Snapchat Pixel çerezi."
+    },
+    "sc_at": {
+        "description": "Reklam ataması için kullanılan Snapchat Pixel çerezi."
+    },
+    "_pin_unauth": {
+        "description": "Oturum açmamış kullanıcıları izlemek için kullanılan Pinterest çerezi."
+    },
+    "_pinterest_sess": {
+        "description": "Reklam ve izleme için kullanılan Pinterest oturum çerezi."
+    },
+    "phpsessid": {
+        "description": "Kullanıcı oturumlarını yönetmek için kullanılan PHP oturum çerezi."
+    }
+}

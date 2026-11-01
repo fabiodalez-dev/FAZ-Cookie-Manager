@@ -1,0 +1,30 @@
+{
+    "necessary": {
+        "name": "Gerekli",
+        "description": "<p>Gerekli çerezler, bu web sitesinin temel işlevlerinin çalışması için gereklidir; güvenli giriş veya onay tercihlerinizi ayarlama gibi işlemler için kullanılır. Bunlar reklam veya analitik amaçlarla kullanılmaz.</p>"
+    },
+    "functional": {
+        "name": "İşlevsel",
+        "description": "<p>İşlevsel çerezler, web sitesinin içeriğini sosyal medya platformlarında paylaşma, geri bildirim toplama ve diğer üçüncü taraf özelliklerinin çalışması gibi belirli işlevlerin gerçekleştirilmesine yardımcı olur.</p>"
+    },
+    "analytics": {
+        "name": "Analitik",
+        "description": "<p>Analitik çerezler, ziyaretçilerin web sitesiyle nasıl etkileşim kurduğunu anlamak için kullanılır. Bu çerezler, ziyaretçi sayısı, hemen çıkma oranı ve diğer ölçümler gibi metrikler hakkında bilgi sağlar.</p>"
+    },
+    "performance": {
+        "name": "Performans",
+        "description": "<p>Performans çerezleri, web sitesinin temel performans göstergelerini anlamak ve analiz etmek için kullanılır; bu da ziyaretçiler için daha iyi bir kullanıcı deneyimi sağlar.</p>"
+    },
+    "uncategorized": {
+        "name": "Kategorize Edilmemiş",
+        "description": "<p>Henüz kategorize edilmemiş çerezler.</p>"
+    },
+    "wordpress-internal": {
+        "name": "WordPress Dahili",
+        "description": "<p>WordPress çekirdeği tarafından giriş yapmış yöneticiler için ayarlanan çerezler. Site ziyaretçilerine gösterilmez.</p>"
+    },
+    "marketing": {
+        "name": "Pazarlama",
+        "description": "<p>Pazarlama çerezleri, ziyaretçilere daha önce ziyaret ettikleri sayfalara göre kişiselleştirilmiş reklamlar sunmak ve reklam kampanyalarının etkinliğini analiz etmek için kullanılır.</p>"
+    }
+}
