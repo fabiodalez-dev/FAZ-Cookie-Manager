@@ -2,15 +2,15 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
-## [Unreleased]
-
-### Added
-- The WordPress Dashboard and FAZ screens explain when an automatic opt-in rendition is needed, including sites with country-restricted GDPR banners. The notice explicitly says when a missing country source affects every visitor. Its administrator-only on-site check reopens the real banner without resetting consent, ignoring privacy signals, or recording test interactions in visitor metrics or consent logs. The check is nonce-bound and is never shared through the page cache.
+## [1.37.0] - 2026-11-02
 
 ### Fixed
-- When only opt-out banners exist, visitors whose jurisdiction requires opt-in consent receive a GDPR rendition that keeps each language's configured cookie-policy URL and translated controls. A stored `main_banner` fallback no longer waives the jurisdiction rules, and Settings explains the automatic rendition instead of offering that waiver. Malformed fallback values are normalized through the recursive settings sanitizer.
-- Language swaps preserve the selected CCPA A/B variant before converting it to the visitor's opt-in rendition.
-- AMP renders and records the same effective GDPR banner/law scope as the classic page on CCPA-only sites, so moving between those pages preserves an existing decision. Its consent lifetime follows the same rendition as well.
+- With Geo-Targeting on (the default) and only opt-out (CCPA) banners active, visitors whose jurisdiction requires opt-in consent saw no banner at all (#377, reported on wordpress.org as "3 pageviews but 0 banner views"). The plugin kept the CCPA banner for blocking and hid it, because an opt-out notice over opt-in blocking would misstate the visitor's rules. That covers visitors from the EU, the UK, Brazil and the other opt-in jurisdictions, a US visitor whose state cannot be resolved, and, on a site with no country source (no trusted Cloudflare header, GeoLite2 database or server GeoIP module), every visitor. These visitors now see the same banner rendered as an opt-in banner: its type, position, theme, colours and each language's cookie-policy URL are kept; the text and buttons are the default GDPR ones (Accept, Reject, preferences, no Do Not Sell); the consent lifetime is capped at the GDPR default; and optional cookies stay blocked until they choose. Nothing is saved. The first build of this fix offered a setting to show the CCPA banner as it is instead; it is retired, because an opt-out banner cannot meet the prior-consent rule for a visitor in the EU (ePrivacy Directive, Art. 5(3)), and a saved `main_banner` value is normalised and never waives a visitor's rules.
+- The banner REST route (language swap and live jurisdiction) and AMP use the same rendition as the page, so a decision made on one is recognised on the others, and the AMP consent lifetime follows it too. A language swap matches the requested CCPA A/B variant by its stored law before converting it.
+- The cache-safe jurisdiction bootstrap required an active global GDPR banner to build its strict shell, so a CCPA-only site with a country source bypassed the page cache on every request. A global CCPA banner now builds the shell through the opt-in rendition, and each visitor still gets their own banner from the live endpoint. With no global banner at all the gate still fails closed, and the status text says what is missing.
+
+### Added
+- The notice that explains the opt-in rendition now also appears on the WordPress Dashboard, covers sites whose GDPR banner is restricted to some countries, and says when a missing country source affects every visitor. It offers **Check the banner on your site**: an administrator-only, nonce-bound link that reopens the real banner even after a saved choice, without clearing consent, ignoring privacy signals, or recording the check in visitor metrics or consent logs. The checked page is never stored in a page cache.
 
 ## [1.36.1] - 2026-11-01
 
