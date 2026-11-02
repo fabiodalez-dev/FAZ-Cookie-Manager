@@ -817,7 +817,7 @@ class Api extends Rest_Controller {
 			'no_banner'              => __( 'Safe fallback: hiding the banner outside target regions changes server output, so these pages bypass the full-page cache.', 'faz-cookie-manager' ),
 			'country_banners'        => __( 'Safe fallback: one or more banners target specific countries, so these pages bypass the full-page cache.', 'faz-cookie-manager' ),
 			'custom_output'          => __( 'Safe fallback: a custom integration declared country-dependent output, so these pages bypass the full-page cache.', 'faz-cookie-manager' ),
-			'missing_gdpr_banner'    => __( 'Safe fallback: no active global GDPR banner is available for the strict shell, so these pages bypass the full-page cache.', 'faz-cookie-manager' ),
+			'missing_gdpr_banner'    => __( 'Safe fallback: no active banner applies to every visitor, so there is nothing to build the strict shell from and these pages bypass the full-page cache.', 'faz-cookie-manager' ),
 			'missing_strict_ruleset' => __( 'Safe fallback: the strict GDPR ruleset could not be loaded, so these pages bypass the full-page cache.', 'faz-cookie-manager' ),
 		);
 		$reason            = isset( $status['reason'] ) ? (string) $status['reason'] : 'missing_strict_ruleset';

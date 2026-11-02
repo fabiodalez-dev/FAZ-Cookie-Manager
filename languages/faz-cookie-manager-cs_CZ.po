@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-11-02T14:47:09+00:00\n"
+"POT-Creation-Date: 2026-11-02T15:22:46+00:00\n"
 "PO-Revision-Date: 2026-08-01 13:45+0200\n"
 "Last-Translator: \n"
 "Language-Team: Czech\n"
@@ -50,7 +50,7 @@ msgid "Cookie Banner"
 msgstr "Cookie Banner"
 
 #: admin/class-admin.php:286 admin/views/base.php:21
-#: frontend/class-frontend.php:4138
+#: frontend/class-frontend.php:4146
 #: frontend/modules/banner-rest/class-banner-rest.php:607
 msgid "Cookies"
 msgstr "Cookies"
@@ -3858,8 +3858,8 @@ msgid "Safe fallback: a custom integration declared country-dependent output, so
 msgstr "Bezpečný záložní režim: vlastní integrace deklarovala výstup závislý na zemi, proto tyto stránky obcházejí celostránkovou mezipaměť."
 
 #: admin/modules/settings/api/class-api.php:820
-msgid "Safe fallback: no active global GDPR banner is available for the strict shell, so these pages bypass the full-page cache."
-msgstr "Bezpečný záložní režim: pro přísný shell není k dispozici žádný aktivní globální banner GDPR, proto tyto stránky obcházejí celostránkovou mezipaměť."
+msgid "Safe fallback: no active banner applies to every visitor, so there is nothing to build the strict shell from and these pages bypass the full-page cache."
+msgstr ""
 
 #: admin/modules/settings/api/class-api.php:821
 msgid "Safe fallback: the strict GDPR ruleset could not be loaded, so these pages bypass the full-page cache."
@@ -4285,7 +4285,7 @@ msgstr "Jazyk:"
 msgid "Notice Title"
 msgstr "Nadpis banneru"
 
-#: admin/views/banner.php:383 frontend/class-frontend.php:4133
+#: admin/views/banner.php:383 frontend/class-frontend.php:4141
 #: frontend/modules/banner-rest/class-banner-rest.php:601
 msgid "We value your privacy"
 msgstr "Vážíme si vašeho soukromí"
@@ -4660,7 +4660,7 @@ msgstr "Text pro opt-out (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Text modálního okna «Předvolby odhlášení», které návštěvník uvidí po kliknutí na odkaz «Do Not Sell or Share My Personal Information». Zobrazuje se pouze u bannerů CCPA / zákonů států USA (a Obojí). Řídí se jazykem vybraným výše."
 
-#: admin/views/banner.php:890 frontend/class-frontend.php:4135
+#: admin/views/banner.php:890 frontend/class-frontend.php:4143
 #: frontend/modules/banner-rest/class-banner-rest.php:604
 msgid "Opt-out Preferences"
 msgstr "Předvolby odhlášení"
@@ -5023,7 +5023,7 @@ msgstr ""
 msgid "Date"
 msgstr "Datum"
 
-#: admin/views/consent-logs.php:87 frontend/class-frontend.php:4132
+#: admin/views/consent-logs.php:87 frontend/class-frontend.php:4140
 #: frontend/modules/banner-rest/class-banner-rest.php:602
 #: includes/class-dsar-admin.php:139 includes/class-utils.php:1773
 #: includes/class-utils.php:1815
@@ -7749,86 +7749,86 @@ msgstr "{name} povoleno, zakázat {name}"
 msgid "{name} disabled, enable {name}"
 msgstr "{name} zakázáno, povolit {name}"
 
-#: frontend/class-frontend.php:4134
+#: frontend/class-frontend.php:4142
 #: frontend/modules/banner-rest/class-banner-rest.php:603
 msgid "Your cookie preferences have been saved."
 msgstr "Vaše předvolby cookies byly uloženy."
 
-#: frontend/class-frontend.php:4136
+#: frontend/class-frontend.php:4144
 #: frontend/modules/banner-rest/class-banner-rest.php:605
 msgid "Customise Consent Preferences"
 msgstr "Přizpůsobit předvolby souhlasu"
 
-#: frontend/class-frontend.php:4137
+#: frontend/class-frontend.php:4145
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "Service consent"
 msgstr "Souhlas se službou"
 
-#: frontend/class-frontend.php:4139
+#: frontend/class-frontend.php:4147
 #: frontend/modules/banner-rest/class-banner-rest.php:608
 msgid "Cookie consent"
 msgstr "Souhlas s cookies"
 
-#: frontend/class-frontend.php:4140
+#: frontend/class-frontend.php:4148
 #: frontend/modules/banner-rest/class-banner-rest.php:609
 msgid "Vendor consent"
 msgstr "Souhlas dodavatele"
 
-#: frontend/class-frontend.php:4141
+#: frontend/class-frontend.php:4149
 #: frontend/modules/banner-rest/class-banner-rest.php:610
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Tyto soubory cookie nastavuje vložená služba na své vlastní doméně a jejich chování lze řídit povolením nebo zablokováním výše uvedené vložené služby – nelze je odstranit jednotlivě."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:4145
+#: frontend/class-frontend.php:4153
 #: frontend/modules/banner-rest/class-banner-rest.php:615
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Potvrzuji, že mi je alespoň %d let"
 
-#: frontend/class-frontend.php:4146
+#: frontend/class-frontend.php:4154
 #: frontend/modules/banner-rest/class-banner-rest.php:616
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Potvrďte prosím, že splňujete minimální věk pro přijetí volitelných cookies."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:4153
+#: frontend/class-frontend.php:4161
 #: frontend/modules/banner-rest/class-banner-rest.php:618
 #, php-format
 msgid "Banner closes automatically in %d s..."
 msgstr "Banner se automaticky zavře za %d s..."
 
-#: frontend/class-frontend.php:4156
+#: frontend/class-frontend.php:4164
 #: frontend/modules/banner-rest/class-banner-rest.php:621
 msgid "Consent"
 msgstr "Souhlas"
 
-#: frontend/class-frontend.php:4157
+#: frontend/class-frontend.php:4165
 #: frontend/modules/banner-rest/class-banner-rest.php:622
 msgid "Cookie retention"
 msgstr "Doba uchování cookies"
 
-#: frontend/class-frontend.php:4158
+#: frontend/class-frontend.php:4166
 #: frontend/modules/banner-rest/class-banner-rest.php:623
 msgid "Features"
 msgstr "Funkce"
 
-#: frontend/class-frontend.php:4159
+#: frontend/class-frontend.php:4167
 #: frontend/modules/banner-rest/class-banner-rest.php:624
 msgid "Legitimate Interest"
 msgstr "Oprávněný zájem"
 
-#: frontend/class-frontend.php:4160
+#: frontend/class-frontend.php:4168
 #: frontend/modules/banner-rest/class-banner-rest.php:625
 msgid "Some vendors process your data on the basis of legitimate interest rather than consent. You have the right to object: switch a purpose off to object to that processing."
 msgstr "Někteří dodavatelé zpracovávají vaše údaje na základě oprávněného zájmu namísto souhlasu. Máte právo vznést námitku: vypnutím účelu vznesete námitku proti tomuto zpracování."
 
-#: frontend/class-frontend.php:4161
+#: frontend/class-frontend.php:4169
 #: frontend/modules/banner-rest/class-banner-rest.php:626
 msgid "IAB Vendor Consent"
 msgstr "Souhlas pro dodavatele IAB"
 
-#: frontend/class-frontend.php:4162
+#: frontend/class-frontend.php:4170
 #: frontend/modules/banner-rest/class-banner-rest.php:627
 msgid "Allow processing based on legitimate interest"
 msgstr "Povolit zpracování na základě oprávněného zájmu"
@@ -8994,6 +8994,9 @@ msgstr "Tlačítko"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Odkaz"
+
+#~ msgid "Safe fallback: no active global GDPR banner is available for the strict shell, so these pages bypass the full-page cache."
+#~ msgstr "Bezpečný záložní režim: pro přísný shell není k dispozici žádný aktivní globální banner GDPR, proto tyto stránky obcházejí celostránkovou mezipaměť."
 
 #~ msgid "Visitors under an opt-in privacy law are seeing no banner."
 #~ msgstr "Návštěvníkům podléhajícím zákonu o ochraně soukromí typu opt-in se banner nezobrazuje."

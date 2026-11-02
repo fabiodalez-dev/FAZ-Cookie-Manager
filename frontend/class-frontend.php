@@ -2960,7 +2960,15 @@ class Frontend {
 			if ( $controller->has_country_dependent_banners() ) {
 				return array( 'requested' => true, 'active' => false, 'reason' => 'country_banners' );
 			}
-			$has_strict_banner = $controller->has_active_banner_for_law( 'gdpr', '' );
+			// The strict shell needs a banner that applies to every visitor
+			// and can be rendered opt-in. A global GDPR banner is one; so is a
+			// global CCPA banner, which load_banner() renders as its opt-in
+			// version under the strict ruleset (Banner::
+			// apply_runtime_law_rendition()). Requiring a GDPR row kept every
+			// CCPA-only site out of the page cache for no reason: the live
+			// payload replaces the shell for each visitor either way.
+			$has_strict_banner = $controller->has_active_banner_for_law( 'gdpr', '' )
+				|| $controller->has_active_banner_for_law( 'ccpa', '' );
 		} catch ( \Throwable $e ) {
 			return array( 'requested' => true, 'active' => false, 'reason' => 'missing_gdpr_banner' );
 		}

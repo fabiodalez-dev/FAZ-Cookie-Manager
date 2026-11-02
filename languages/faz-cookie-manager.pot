@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-02T14:47:09+00:00\n"
+"POT-Creation-Date: 2026-11-02T15:22:46+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
@@ -53,7 +53,7 @@ msgstr ""
 
 #: admin/class-admin.php:286
 #: admin/views/base.php:21
-#: frontend/class-frontend.php:4138
+#: frontend/class-frontend.php:4146
 #: frontend/modules/banner-rest/class-banner-rest.php:607
 msgid "Cookies"
 msgstr ""
@@ -3672,7 +3672,7 @@ msgid "Safe fallback: a custom integration declared country-dependent output, so
 msgstr ""
 
 #: admin/modules/settings/api/class-api.php:820
-msgid "Safe fallback: no active global GDPR banner is available for the strict shell, so these pages bypass the full-page cache."
+msgid "Safe fallback: no active banner applies to every visitor, so there is nothing to build the strict shell from and these pages bypass the full-page cache."
 msgstr ""
 
 #: admin/modules/settings/api/class-api.php:821
@@ -4106,7 +4106,7 @@ msgid "Notice Title"
 msgstr ""
 
 #: admin/views/banner.php:383
-#: frontend/class-frontend.php:4133
+#: frontend/class-frontend.php:4141
 #: frontend/modules/banner-rest/class-banner-rest.php:601
 msgid "We value your privacy"
 msgstr ""
@@ -4488,7 +4488,7 @@ msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking 
 msgstr ""
 
 #: admin/views/banner.php:890
-#: frontend/class-frontend.php:4135
+#: frontend/class-frontend.php:4143
 #: frontend/modules/banner-rest/class-banner-rest.php:604
 msgid "Opt-out Preferences"
 msgstr ""
@@ -4857,7 +4857,7 @@ msgid "Date"
 msgstr ""
 
 #: admin/views/consent-logs.php:87
-#: frontend/class-frontend.php:4132
+#: frontend/class-frontend.php:4140
 #: frontend/modules/banner-rest/class-banner-rest.php:602
 #: includes/class-dsar-admin.php:139
 #: includes/class-utils.php:1773
@@ -7631,86 +7631,86 @@ msgstr ""
 msgid "{name} disabled, enable {name}"
 msgstr ""
 
-#: frontend/class-frontend.php:4134
+#: frontend/class-frontend.php:4142
 #: frontend/modules/banner-rest/class-banner-rest.php:603
 msgid "Your cookie preferences have been saved."
 msgstr ""
 
-#: frontend/class-frontend.php:4136
+#: frontend/class-frontend.php:4144
 #: frontend/modules/banner-rest/class-banner-rest.php:605
 msgid "Customise Consent Preferences"
 msgstr ""
 
-#: frontend/class-frontend.php:4137
+#: frontend/class-frontend.php:4145
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "Service consent"
 msgstr ""
 
-#: frontend/class-frontend.php:4139
+#: frontend/class-frontend.php:4147
 #: frontend/modules/banner-rest/class-banner-rest.php:608
 msgid "Cookie consent"
 msgstr ""
 
-#: frontend/class-frontend.php:4140
+#: frontend/class-frontend.php:4148
 #: frontend/modules/banner-rest/class-banner-rest.php:609
 msgid "Vendor consent"
 msgstr ""
 
-#: frontend/class-frontend.php:4141
+#: frontend/class-frontend.php:4149
 #: frontend/modules/banner-rest/class-banner-rest.php:610
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr ""
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:4145
+#: frontend/class-frontend.php:4153
 #: frontend/modules/banner-rest/class-banner-rest.php:615
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr ""
 
-#: frontend/class-frontend.php:4146
+#: frontend/class-frontend.php:4154
 #: frontend/modules/banner-rest/class-banner-rest.php:616
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr ""
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:4153
+#: frontend/class-frontend.php:4161
 #: frontend/modules/banner-rest/class-banner-rest.php:618
 #, php-format
 msgid "Banner closes automatically in %d s..."
 msgstr ""
 
-#: frontend/class-frontend.php:4156
+#: frontend/class-frontend.php:4164
 #: frontend/modules/banner-rest/class-banner-rest.php:621
 msgid "Consent"
 msgstr ""
 
-#: frontend/class-frontend.php:4157
+#: frontend/class-frontend.php:4165
 #: frontend/modules/banner-rest/class-banner-rest.php:622
 msgid "Cookie retention"
 msgstr ""
 
-#: frontend/class-frontend.php:4158
+#: frontend/class-frontend.php:4166
 #: frontend/modules/banner-rest/class-banner-rest.php:623
 msgid "Features"
 msgstr ""
 
-#: frontend/class-frontend.php:4159
+#: frontend/class-frontend.php:4167
 #: frontend/modules/banner-rest/class-banner-rest.php:624
 msgid "Legitimate Interest"
 msgstr ""
 
-#: frontend/class-frontend.php:4160
+#: frontend/class-frontend.php:4168
 #: frontend/modules/banner-rest/class-banner-rest.php:625
 msgid "Some vendors process your data on the basis of legitimate interest rather than consent. You have the right to object: switch a purpose off to object to that processing."
 msgstr ""
 
-#: frontend/class-frontend.php:4161
+#: frontend/class-frontend.php:4169
 #: frontend/modules/banner-rest/class-banner-rest.php:626
 msgid "IAB Vendor Consent"
 msgstr ""
 
-#: frontend/class-frontend.php:4162
+#: frontend/class-frontend.php:4170
 #: frontend/modules/banner-rest/class-banner-rest.php:627
 msgid "Allow processing based on legitimate interest"
 msgstr ""
