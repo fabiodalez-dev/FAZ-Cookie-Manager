@@ -569,6 +569,11 @@ test('a CCPA-only site still gets the cacheable strict shell, built from its ban
   clearCaches();
   try {
     expect(privateCall('is_geo_bootstrap_cache_active'), 'the readiness gate accepts a global CCPA banner').toBe('true');
+    // FlyingPress may need several requests before it stores the page (the
+    // first render after a purge is sent no-store), so wait for the
+    // Californian copy to be cached. Before #377 every request bypassed the
+    // cache and this never turned into a HIT.
+    if (flyingPressAvailable) await primeCache(request);
 
     const californiaShell = await request.get(pageUrl, { headers: requestHeaders('US', 'CA') });
     const italyShell = await request.get(pageUrl, { headers: requestHeaders('IT') });
