@@ -167,6 +167,7 @@ class Banner_Rest {
 		// when the resolved ruleset's model maps to a different law than the
 		// country-selected banner, prefer the active banner carrying that law so
 		// the language-swapped banner enforces the same model as the first paint.
+		$needs_gdpr_rendition = false;
 		$runtime_ruleset = $cache_compatibility ? null : Geo_Runtime::resolve_for_country( $country );
 		if ( null !== $runtime_ruleset ) {
 			$wanted_law  = Geo_Runtime::model_to_law( $runtime_ruleset );
@@ -175,18 +176,8 @@ class Banner_Rest {
 				$law_banner = $controller->get_active_banner_for_law( $wanted_law, $country );
 				if ( $law_banner ) {
 					$banner = $law_banner;
-				} elseif ( 'gdpr' === $wanted_law && $banner && ! $banner->apply_runtime_law_rendition( 'gdpr' ) ) {
-					// Parity with load_banner(): the first paint rendered the
-					// opt-out banner as an opt-in one, so the language swap
-					// does too. Should that fail, the first paint showed no
-					// banner (faz_law_fallback_suppress), and a 404 keeps it
-					// that way instead of swapping in an opt-out UI that
-					// would contradict the opt-in blocking.
-					return new WP_Error(
-						'faz_no_law_banner',
-						__( 'No banner available for the resolved jurisdiction.', 'faz-cookie-manager' ),
-						array( 'status' => 404 )
-					);
+				} elseif ( 'gdpr' === $wanted_law && $banner ) {
+					$needs_gdpr_rendition = true;
 				}
 			}
 		}
@@ -210,6 +201,17 @@ class Banner_Rest {
 			if ( $requested_variant ) {
 				$banner = $requested_variant;
 			}
+		}
+
+		// Match A/B peers by their stored law first, just as load_banner()
+		// selects a variant before applying jurisdiction requirements. Comparing
+		// a converted GDPR banner with stored CCPA peers would reject them all.
+		if ( $needs_gdpr_rendition && ! $banner->apply_runtime_law_rendition( 'gdpr' ) ) {
+			return new WP_Error(
+				'faz_no_law_banner',
+				__( 'No banner available for the resolved jurisdiction.', 'faz-cookie-manager' ),
+				array( 'status' => 404 )
+			);
 		}
 
 		if ( null !== $runtime_ruleset ) {

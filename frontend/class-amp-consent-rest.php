@@ -745,6 +745,20 @@ class AMP_Consent_Rest {
 			return new \WP_Error( 'faz_amp_inactive_banner', __( 'The AMP consent banner is no longer active.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
 		}
 
+		// A cached AMP document pins the banner slug, but its effective law
+		// must follow the same jurisdiction rendition as the classic page.
+		// Keep an explicitly different law-matching banner as a separate scope;
+		// only a CCPA-only fallback is converted in place.
+		if ( 'ccpa' === $banner->get_law() && self::resolved_ruleset_is_opt_in() ) {
+			$country = class_exists( Geolocation::class ) ? Geolocation::get_visitor_country() : '';
+			if ( ! Banner_Controller::get_instance()->get_active_banner_for_law( 'gdpr', $country ) ) {
+				$banner = clone $banner;
+				if ( ! $banner->apply_runtime_law_rendition( 'gdpr' ) ) {
+					return new \WP_Error( 'faz_no_law_banner', __( 'No banner available for the resolved jurisdiction.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+				}
+			}
+		}
+
 		// The RAW law, not a gdpr/ccpa fold. class-frontend.php hashes
 		// $banner->get_law() verbatim into _scopeFingerprint, and the banner UI
 		// offers a third value ("gdpr_ccpa"), with the setup wizard writing
@@ -765,13 +779,8 @@ class AMP_Consent_Rest {
 		// fold — a "gdpr_ccpa" banner is a GDPR-family banner for lifetime
 		// purposes and must not inherit the 365-day CCPA floor.
 		$expiry_law        = ( 'ccpa' === $law ) ? 'ccpa' : 'gdpr';
-		// A CCPA banner kept for a visitor whose resolved ruleset is opt-in (the
-		// "US only" install seen from the EEA, or any visitor the fallback
-		// ruleset covers) collects an opt-in consent through the AMP prompt, and
-		// an opt-in consent may not outlive the GDPR-family cap. Deciding the
-		// lifetime from the banner alone wrote a 365-day __scope.law:ccpa record
-		// for an EEA Accept. The scope keeps the banner's law (it names the
-		// banner); only the lifetime follows the regime actually applied.
+		// A cached older AMP document can still name a CCPA scope while a
+		// separate GDPR banner now exists. Keep its opt-in lifetime cap too.
 		if ( 'ccpa' === $expiry_law && self::resolved_ruleset_is_opt_in() ) {
 			$expiry_law = 'gdpr';
 		}
@@ -811,7 +820,7 @@ class AMP_Consent_Rest {
 	 * @return bool
 	 */
 	private static function resolved_ruleset_is_opt_in() {
-		if ( ! class_exists( Geo_Runtime::class ) ) {
+		if ( ! class_exists( Geo_Runtime::class ) || \FazCookie\Includes\Cache_Compatibility::is_active() ) {
 			return false;
 		}
 		$country = class_exists( Geolocation::class ) ? Geolocation::get_visitor_country() : '';

@@ -57,7 +57,11 @@ EXCLUDES=(
 	# worktrees, i.e. whole copies of the repository: one deploy copied 206 MB
 	# of them into the test webroot.
 	'.claude'
+	'.impeccable'
+	'impeccable'
 	'CLAUDE.md'
+	'PRODUCT.md'
+	'DESIGN.md'
 	# Browser-tool scratch (snapshots, console dumps) written into the
 	# checkout during manual verification; never part of the plugin.
 	'.playwright-mcp'

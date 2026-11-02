@@ -10,10 +10,8 @@
  *   - Banner::apply_runtime_law_rendition() rebuilds the CCPA banner as an
  *     opt-in one for the request: the law's switches from gdpr.json, the
  *     banner's own look, the GDPR consent lifetime cap, the GDPR text.
- *   - Geo_Runtime waives the opt-in ruleset when the administrator chose to
- *     show the main banner as it is (missing_law_banner = main_banner), so
- *     page, blocking and log all follow the banner shown.
- *   - The settings sanitiser accepts only the two modes.
+	 *   - Legacy fallback preferences never waive an opt-in jurisdiction.
+	 *   - The recursive settings sanitiser normalizes malformed/retired modes.
  *
  * Run: php tests/unit/test-missing-law-banner-php.php
  *
@@ -45,6 +43,10 @@ namespace {
 	function sanitize_text_field( $str ) {
 		return trim( (string) $str );
 	}
+	function faz_default_language() { return 'en'; }
+	function faz_selected_languages( $language = '' ) { return array( 'en', 'it', 'fr' ); }
+	function faz_sanitize_content( $value ) { return is_scalar( $value ) ? (string) $value : ''; }
+	function faz_sanitize_text( $value ) { return is_scalar( $value ) ? (string) $value : ''; }
 	function wp_cache_get( $key, $group = '' ) {
 		return false;
 	}
@@ -110,6 +112,7 @@ namespace {
 	require_once $root . '/includes/class-store.php';
 	require_once $root . '/admin/modules/banners/includes/class-banner.php';
 	require_once $root . '/frontend/includes/class-geo-runtime.php';
+	require_once $root . '/admin/modules/settings/includes/class-settings.php';
 
 	use FazCookie\Admin\Modules\Banners\Includes\Banner;
 	use FazCookie\Admin\Modules\Banners\Includes\Controller;
@@ -198,6 +201,26 @@ namespace {
 	mlb_assert( isset( $catalogue['notice']['elements']['buttons']['elements']['accept'] ) && '' !== (string) $catalogue['notice']['elements']['buttons']['elements']['accept'], 'that catalogue is the GDPR one, with an Accept label' );
 	mlb_assert( false === $banner->apply_runtime_law_rendition( 'gdpr' ), 'a second call changes nothing' );
 
+	// A policy URL belongs to the site, even when the notice copy changes law.
+	// Exercise get_contents(), not just the raw array: a link-only slot would
+	// suppress its whole-language fallback and render blank text/buttons.
+	$linked = new Missing_Law_Test_Banner( mlb_ccpa_banner()->get_settings(), array(
+		'en' => array( 'notice' => array( 'elements' => array( 'privacyLink' => 'https://legal.example/policy', 'title' => 'Old opt-out title' ) ) ),
+		'it' => json_encode( array( 'notice' => array( 'elements' => array( 'privacyLink' => '/informativa-cookie/' ) ) ) ),
+		'fr' => array( 'notice' => array( 'elements' => array( 'privacyLink' => array( 'invalid' ) ) ) ),
+	) );
+	$linked->apply_runtime_law_rendition( 'gdpr' );
+	foreach ( array( 'en' => 'https://legal.example/policy', 'it' => '/informativa-cookie/', 'fr' => '' ) as $lang => $url ) {
+		$content = $linked->get_contents( $lang );
+		$default = $linked->get_translations( $lang );
+		mlb_assert( $url === $content['notice']['elements']['privacyLink'], "$lang: its policy URL survives, malformed links use the default" );
+		mlb_assert( $default['notice']['elements']['description'] === $content['notice']['elements']['description'], "$lang: the description is the full GDPR catalogue text" );
+		mlb_assert( $default['notice']['elements']['buttons']['elements']['reject'] === $content['notice']['elements']['buttons']['elements']['reject'], "$lang: Reject keeps its translated label" );
+	}
+	$contents = $linked->stored( 'contents' );
+	$linked->apply_runtime_law_rendition( 'gdpr' );
+	mlb_assert( $contents === $linked->stored( 'contents' ), 'repeated conversion keeps the restored policy links' );
+
 	$own = mlb_ccpa_banner();
 	$short                                        = $own->get_settings();
 	$short['settings']['consentExpiry']['value']  = 30;
@@ -220,9 +243,10 @@ namespace {
 
 	$GLOBALS['faz_test_options']['faz_settings']['geolocation']['missing_law_banner'] = 'main_banner';
 	mlb_reset_runtime();
-	mlb_assert( null === Geo_Runtime::resolve_for_country( 'DE' ), 'main_banner without a GDPR banner waives the opt-in ruleset' );
-	mlb_assert( array( array( 'gdpr', 'DE' ) ) === Controller::$asked, 'it asked for a GDPR banner for that visitor\'s country' );
-	mlb_assert( null === Geo_Runtime::resolve_for_country( 'DE' ), 'the waiver is memoised for the request' );
+	mlb_assert( null !== Geo_Runtime::resolve_for_country( 'DE' ), 'a legacy main_banner preference cannot waive the opt-in ruleset' );
+	mlb_assert( 'gdpr_version' === Geo_Runtime::missing_law_banner_mode(), 'the retired mode reads as the opt-in rendition' );
+	mlb_assert( null !== Geo_Runtime::resolve_for_country( 'DE' ), 'the protective ruleset is memoised for the request' );
+	mlb_assert( null !== Geo_Runtime::resolve_for_country( '' ), 'an unknown country keeps opt-in protection too' );
 
 	mlb_reset_runtime();
 	Controller::$has_gdpr = true;
@@ -239,9 +263,13 @@ namespace {
 
 	echo "\n-- Settings sanitiser --\n";
 
-	$settings_src = file_get_contents( $root . '/admin/modules/settings/includes/class-settings.php' );
-	mlb_assert( false !== strpos( $settings_src, "'missing_law_banner'  => 'gdpr_version'" ), 'the default is the opt-in version' );
-	mlb_assert( 1 === preg_match( "/case 'missing_law_banner':\\s*\\\$value = in_array\\( \\\$value, array\\( 'gdpr_version', 'main_banner' \\), true \\) \\? \\\$value : 'gdpr_version';/", $settings_src ), 'only the two modes are stored, anything else becomes the opt-in version' );
+	foreach ( array( 'main_banner', array( 'main_banner' ), array(), 'anything-else' ) as $value ) {
+		$clean = \FazCookie\Admin\Modules\Settings\Includes\Settings::sanitize(
+			array( 'geolocation' => array( 'missing_law_banner' => $value ) ),
+			array( 'geolocation' => array( 'missing_law_banner' => 'gdpr_version' ) )
+		);
+		mlb_assert( 'gdpr_version' === $clean['geolocation']['missing_law_banner'], 'recursive sanitisation restores the protective scalar for ' . json_encode( $value ) );
+	}
 
 	echo "\n--\nChecks: {$run}\nFailed: {$failed}\n\n";
 	if ( $failed > 0 ) {

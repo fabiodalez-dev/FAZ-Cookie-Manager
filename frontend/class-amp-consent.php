@@ -932,31 +932,16 @@ class AMP_Consent {
 				$law_banner = Controller::get_instance()->get_active_banner_for_law( $wanted_law, $country );
 				if ( $law_banner ) {
 					$banner = $law_banner;
+				} elseif ( 'gdpr' === $wanted_law && 'ccpa' === $banner->get_law() ) {
+					// Match the classic page's effective law, text and expiry.
+					// Otherwise AMP would write a ccpa-scoped cookie which the
+					// same visitor's GDPR rendition immediately rejects.
+					$banner = clone $banner;
+					$banner->apply_runtime_law_rendition( 'gdpr' );
 				}
-				// No banner for the wanted law: keep the country-selected one.
-				//
-				// This used to return false when the wanted law was 'gdpr', to
-				// avoid showing an opt-out notice in an opt-in jurisdiction. On
-				// AMP, false does not mean "no UI": both callers read it as
-				// "nothing to do", so output_amp_consent() rendered no
-				// <amp-consent> and start_component_blocking_buffer() never
-				// started its buffer. With no instance and no blocking
-				// attributes the AMP runtime gates nothing, and every
-				// amp-analytics, amp-ad and amp-pixel ran on an opt-in visitor
-				// with no consent and no log row. The AMP caches then served
-				// that document to every later reader of the URL. A wizard
-				// "US only" install reaches this with a single CCPA banner,
-				// and so does any install without a country source, because
-				// the unresolved-country fallback ruleset is opt-in.
-				//
-				// Frontend::load_banner() handles the same mismatch by keeping
-				// the banner so server-side blocking still runs and hiding
-				// only its UI. Here nothing needs hiding: the AMP prompt is
-				// already opt-in shaped (Accept, Reject, Save with every
-				// purpose unticked) and the check endpoint answers
-				// consentRequired:true, so rendering it over the CCPA
-				// banner's scope misrepresents nothing. Scripts stay blocked
-				// and the visitor can still consent or opt out.
+				// Never return false for a missing law-specific banner: that
+				// would remove both <amp-consent> and component blocking. The
+				// gated opt-in prompt remains even if a rendition cannot build.
 			}
 			// Normal-page footer probes only prove a script.js trigger, not
 			// an AMP tap action. Keep the native post-consent control.

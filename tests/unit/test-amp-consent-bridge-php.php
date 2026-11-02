@@ -89,6 +89,17 @@ namespace {
 			);
 		}
 		public function set_settings( $settings ) { $this->properties = $settings; }
+		// Banner's full conversion is exercised in test-missing-law-banner-php;
+		// this bridge fixture supplies its observable law and lifetime changes.
+		public function apply_runtime_law_rendition( $law ) {
+			if ( 'gdpr' !== $law || 'ccpa' !== $this->law ) { return false; }
+			$settings = $this->get_settings();
+			$this->law = 'gdpr';
+			$settings['settings']['applicableLaw'] = 'gdpr';
+			$settings['settings']['consentExpiry']['value'] = min( 180, max( 1, $this->expiry ) );
+			$this->set_settings( $settings );
+			return true;
+		}
 		public function get_contents() {
 			return array(
 				'en' => array(
@@ -1387,7 +1398,15 @@ namespace {
 	$bridge->handle_update( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'accepted', 'purposeConsents' => array( 'analytics' => 1, 'marketing' => 1 ) ), '/faz/v1/amp-consent/update' ) );
 	$faz_optin_days = isset( $GLOBALS['faz_test_set_cookie']['expires'] ) ? (int) round( ( $GLOBALS['faz_test_set_cookie']['expires'] - time() ) / DAY_IN_SECONDS ) : -1;
 	amp_ok( $faz_optin_days > 0 && $faz_optin_days <= 182, 'an AMP Accept under an opt-in ruleset over the kept CCPA banner lives at most 182 days (got ' . $faz_optin_days . ')' );
-	amp_ok( false !== strpos( (string) $GLOBALS['faz_test_cookie'], '__scope.law:ccpa' ), 'and its scope still names the banner it was given on' );
+	amp_ok( false !== strpos( (string) $GLOBALS['faz_test_cookie'], '__scope.law:gdpr' ), 'AMP uses the same effective GDPR law as the classic rendition' );
+	$faz_classic_scope = array( 'slug' => $banner->get_slug(), 'law' => 'gdpr', 'fingerprint' => faz_scope_fingerprint( $banner->get_slug(), 'gdpr' ), 'routed' => true );
+	amp_ok( ! faz_consent_cookie_scope_changed( faz_parse_consent_cookie( $GLOBALS['faz_test_cookie'] ), $faz_classic_scope ), 'a classic GDPR rendition recognizes the AMP-written cookie' );
+	$faz_amp_context_method = new ReflectionMethod( AMP_Consent_Rest::class, 'resolve_context' );
+	$faz_amp_context_method->setAccessible( true );
+	$faz_amp_context = $faz_amp_context_method->invoke( $bridge, new Faz_AMP_Test_Request( $base ) );
+	amp_same( $faz_amp_context['scope_fingerprint'], $faz_classic_scope['fingerprint'], 'AMP and classic hash the same effective banner/law scope' );
+	$faz_classic_cookie = 'action:yes,consent:yes,rev:' . $faz_amp_context['revision'] . ',__scope.banner:' . $banner->get_slug() . ',__scope.law:gdpr,__scope.fp:' . $faz_classic_scope['fingerprint'] . ',analytics:yes,marketing:yes';
+	amp_ok( false !== AMP_Consent_Rest::state_from_cookie( $faz_classic_cookie, $faz_amp_context ), 'AMP recognizes a cookie written by the classic GDPR rendition' );
 	$faz_fresh_check = $bridge->handle_check( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'accepted' ) ) );
 	amp_same( $faz_fresh_check->get_data()['consentStateValue'], 'accepted', 'control: the record just written reads back as a decision' );
 	// A record from before this fix: same scope, 300 days still to run.

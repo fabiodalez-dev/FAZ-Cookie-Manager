@@ -244,6 +244,12 @@ To replace the floating widget, put the link on every page and disable **Banner 
 
 No. A hosting cron that calls WordPress’s `wp-cron.php` runs the plugin’s scheduled events too. If your host already provides that job, do not add a duplicate. **System Status → Cron Jobs** includes a cPanel example and explains how to check the next scheduled times.
 
+= Why can I not see the banner after changing its privacy law? =
+
+A saved choice normally keeps the banner closed. Use the revisit control to reopen preferences. With Geo-Targeting on, visitors who need opt-in consent receive an opt-in version of your CCPA banner when no GDPR banner applies; an unknown country receives the protective fallback too. Its look and policy links are preserved.
+
+The WordPress Dashboard and FAZ screens explain fallback coverage and offer **Check the banner on your site**. This reopens the real banner for your administrator account without clearing consent or changing other visitors' choices. The global banner switch and configured page/region exclusions still apply. If a cache continues serving a banner-less page from an older version, purge that page cache and any external CDN cache after updating.
+
 = Why does the dashboard show -- for pageviews? =
 
 Pageview and banner interaction metrics show `--` when pageview tracking is disabled. This means unavailable, rather than zero visits. Consent logging is a separate setting and can remain enabled.

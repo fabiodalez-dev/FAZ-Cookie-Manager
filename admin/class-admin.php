@@ -2168,8 +2168,7 @@ class Admin {
 	 * The frontend resolves a ruleset from the visitor's country on every
 	 * request, and an unresolved country gets the opt-in fallback. When that
 	 * ruleset is opt-in and the only banners are opt-out, the visitor sees
-	 * either the banner rebuilt as an opt-in one (the default) or the banner as
-	 * it is under its own rules (Settings > Geolocation > missing_law_banner).
+	 * the banner rebuilt as an opt-in one, without waiving their jurisdiction.
 	 * Until 1.36.1 they saw nothing: the banner was hidden and only the
 	 * blocking stayed, and this notice was the only place that said so.
 	 *
@@ -2189,7 +2188,11 @@ class Admin {
 			return;
 		}
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		if ( ! $screen || false === strpos( (string) $screen->id, 'faz-cookie-manager' ) ) {
+		if ( ! $screen || ( 'dashboard' !== $screen->id && false === strpos( (string) $screen->id, 'faz-cookie-manager' ) ) ) {
+			return;
+		}
+		$settings = get_option( 'faz_settings', array() );
+		if ( isset( $settings['banner_control']['status'] ) && false === $settings['banner_control']['status'] ) {
 			return;
 		}
 		if ( ! class_exists( '\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller' ) ) {
@@ -2206,13 +2209,12 @@ class Admin {
 		// status, …), NOT Banner objects — an earlier draft of this method
 		// probed for get_settings()/get_status(), found neither, and could
 		// therefore never fire. Read the columns.
-		$has_active = false;
-		$has_opt_in = false;
+		$has_opt_out       = false;
+		$has_global_opt_in = false;
 		foreach ( $items as $item ) {
 			if ( ! is_object( $item ) || empty( $item->status ) ) {
 				continue;
 			}
-			$has_active = true;
 			$settings   = isset( $item->settings ) ? $item->settings : '';
 			if ( is_string( $settings ) ) {
 				$settings = json_decode( $settings, true );
@@ -2220,34 +2222,34 @@ class Admin {
 			$law = isset( $settings['settings']['applicableLaw'] )
 				? (string) $settings['settings']['applicableLaw']
 				: 'gdpr';
-			if ( 'ccpa' !== $law ) {
-				$has_opt_in = true;
+			if ( 'ccpa' === $law ) {
+				$has_opt_out = true;
+			} elseif ( empty( $item->target_countries ) ) {
+				$has_global_opt_in = true;
 			}
 		}
 
-		if ( ! $has_active || $has_opt_in ) {
+		if ( ! $has_opt_out || $has_global_opt_in ) {
 			return;
 		}
 
-		// Both modes show a banner now; the notice says which one, and what
-		// it means, so the choice made in Settings is never a silent one.
-		$main_banner = method_exists( '\\FazCookie\\Frontend\\Includes\\Geo_Runtime', 'missing_law_banner_mode' )
-			&& 'main_banner' === \FazCookie\Frontend\Includes\Geo_Runtime::missing_law_banner_mode();
-		if ( $main_banner ) {
-			$class   = 'notice-warning';
-			$title   = __( 'Visitors under an opt-in privacy law are seeing your opt-out banner.', 'faz-cookie-manager' );
-			$message = __( 'Every active banner uses the opt-out (CCPA) model, and Settings is set to show it as it is. Visitors from the EU, the UK, Brazil and other opt-in jurisdictions, and every visitor whose country cannot be detected, get its opt-out rules: optional cookies can be set before they act, which EU law does not allow for visitors in the EU. Add a banner with the GDPR law, or switch the setting back to the opt-in version.', 'faz-cookie-manager' );
-		} else {
-			$class   = 'notice-info';
-			$title   = __( 'Visitors under an opt-in privacy law are seeing an opt-in version of your banner.', 'faz-cookie-manager' );
-			$message = __( 'Every active banner uses the opt-out (CCPA) model. Visitors from the EU, the UK, Brazil and other opt-in jurisdictions, and every visitor whose country cannot be detected, see your banner with its look but with the default GDPR text and buttons, so they can accept or reject before any optional cookie is set. To use your own wording for them, add a banner with the GDPR law.', 'faz-cookie-manager' );
+		$class   = 'notice-info';
+		$title   = __( 'Visitors under an opt-in privacy law are seeing an opt-in version of your banner.', 'faz-cookie-manager' );
+		$message = __( 'No active GDPR banner covers every country. Visitors who need opt-in consent and have no matching GDPR banner see an opt-in version of your banner, with Accept and Reject buttons and your policy links. Optional cookies stay blocked until they choose. Add a global GDPR banner to use your own wording for them.', 'faz-cookie-manager' );
+		$state = \FazCookie\Frontend\Includes\Geo_Runtime::current_state();
+		if ( in_array( $state['mode'], array( 'baseline', 'degraded' ), true ) ) {
+			$message .= ' ' . __( 'No working country source is available, so every visitor receives the protective opt-in fallback.', 'faz-cookie-manager' );
 		}
+		$check_url = wp_nonce_url( add_query_arg( 'faz_banner_test', '1', home_url( '/' ) ), 'faz_banner_test', '_faz_test_nonce' );
 
 		printf(
-			'<div class="notice %s"><p><strong>%s</strong></p><p>%s</p><p><a href="%s" class="button button-secondary">%s</a> <a href="%s" class="button button-secondary">%s</a></p></div>',
+			'<div id="faz-optin-fallback-notice" class="notice %s"><p><strong>%s</strong></p><p>%s</p><p>%s</p><p><a href="%s" class="button button-primary" target="_blank" rel="noopener noreferrer">%s</a> <a href="%s" class="button button-secondary">%s</a> <a href="%s" class="button button-secondary">%s</a></p></div>',
 			esc_attr( $class ),
 			esc_html( $title ),
 			esc_html( $message ),
+			esc_html__( 'Already made a choice? The banner normally stays closed. Check it here to reopen it for your administrator account without clearing consent or changing other visitors\' choices.', 'faz-cookie-manager' ),
+			esc_url( $check_url ),
+			esc_html__( 'Check the banner on your site', 'faz-cookie-manager' ),
 			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-banner' ) ),
 			esc_html__( 'Open banner settings', 'faz-cookie-manager' ),
 			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-settings' ) ),

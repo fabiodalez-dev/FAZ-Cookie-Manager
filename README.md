@@ -185,6 +185,8 @@ An eight-step first run that configures the plugin for your jurisdiction instead
 - **Theme presets**: Light and dark themes
 - **Brand logo**: Upload custom logo via WordPress Media Library
 - **Live preview**: Real-time banner preview in admin as you edit
+- **Automatic opt-in fallback**: With Geo-Targeting on, a missing GDPR banner is covered by an opt-in rendition of the existing CCPA banner, preserving its look and policy links. Unknown countries use the protective fallback too.
+- **On-site banner check**: When fallback coverage is needed, the WordPress Dashboard and FAZ screens explain it and offer an administrator-only check. It reopens the real banner after a saved choice without clearing consent, ignoring privacy signals, or recording test interactions as visitor metrics.
 - **Responsive**: Adapts to mobile viewports, tested on 375px width
 - **RTL support**: Arabic, Hebrew, Persian, Urdu, and other RTL languages
 - **Consent expiry**: Capped at 180 days per Garante Privacy requirements

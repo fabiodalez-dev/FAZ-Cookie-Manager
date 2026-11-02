@@ -33,7 +33,12 @@ phpstan.neon
 # Release docs (local only)
 release.md
 PRODUCT.md
+DESIGN.md
 report.md
+
+# Local Impeccable skill files and generated workspace data
+impeccable/
+.impeccable/
 
 # wp.org assets + publishing guide (local only — never shipped, never tracked)
 # Excluded from the wp.org ZIP via .distignore and from git via this rule.

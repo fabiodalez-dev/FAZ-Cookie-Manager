@@ -2,6 +2,16 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Added
+- The WordPress Dashboard and FAZ screens explain when an automatic opt-in rendition is needed, including sites with country-restricted GDPR banners. The notice explicitly says when a missing country source affects every visitor. Its administrator-only on-site check reopens the real banner without resetting consent, ignoring privacy signals, or recording test interactions in visitor metrics or consent logs. The check is nonce-bound and is never shared through the page cache.
+
+### Fixed
+- When only opt-out banners exist, visitors whose jurisdiction requires opt-in consent receive a GDPR rendition that keeps each language's configured cookie-policy URL and translated controls. A stored `main_banner` fallback no longer waives the jurisdiction rules, and Settings explains the automatic rendition instead of offering that waiver. Malformed fallback values are normalized through the recursive settings sanitizer.
+- Language swaps preserve the selected CCPA A/B variant before converting it to the visitor's opt-in rendition.
+- AMP renders and records the same effective GDPR banner/law scope as the classic page on CCPA-only sites, so moving between those pages preserves an existing decision. Its consent lifetime follows the same rendition as well.
+
 ## [1.36.1] - 2026-11-01
 
 ### Fixed

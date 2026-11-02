@@ -1107,7 +1107,7 @@ class Frontend {
 			$faz_settings = $this->get_faz_settings();
 
 			// Pageview and banner interaction tracking (opt-in via Settings).
-			$pv_tracking = isset( $faz_settings['pageview_tracking'] ) && true === $faz_settings['pageview_tracking'];
+			$pv_tracking = isset( $faz_settings['pageview_tracking'] ) && true === $faz_settings['pageview_tracking'] && ! $this->is_admin_banner_test_request();
 			if ( $pv_tracking ) {
 				// Minted by the class that accepts it, like the consent token
 				// above: two copies of the same bucket arithmetic in two files
@@ -1186,7 +1186,7 @@ class Frontend {
 			}
 
 			// Add consent logging if enabled.
-			$log_consent_on  = isset( $faz_settings['consent_logs']['status'] ) && true === $faz_settings['consent_logs']['status'];
+			$log_consent_on  = isset( $faz_settings['consent_logs']['status'] ) && true === $faz_settings['consent_logs']['status'] && ! $this->is_admin_banner_test_request();
 			if ( $log_consent_on ) {
 				// A time-bucketed HMAC proving the page was rendered by this
 				// site. It is NOT a secret — it ships in the HTML — and the
@@ -2021,10 +2021,8 @@ class Frontend {
 					// this branch used to, left the visitor with no banner
 					// and no way to consent: on most of the sites that reach
 					// it, nobody ever saw a banner. Render the same banner as
-					// an opt-in one instead. When the administrator chose to
-					// show the main banner as it is (missing_law_banner =
-					// main_banner), Geo_Runtime waives the ruleset and this
-					// branch is not reached.
+					// an opt-in one instead. A saved fallback preference must
+					// never waive the visitor's opt-in requirements.
 					if ( ! $this->banner->apply_runtime_law_rendition( 'gdpr' ) ) {
 						$this->faz_law_fallback_suppress = true;
 					}
@@ -2572,6 +2570,10 @@ class Frontend {
 	 * @return void
 	 */
 	private function maybe_disable_country_page_cache() {
+		if ( $this->is_admin_banner_test_request() ) {
+			\FazCookie\Includes\Cache_Compatibility::define_no_cache_constants();
+			return;
+		}
 		if ( ! $this->is_country_dependent_output() ) {
 			return;
 		}
@@ -3081,6 +3083,10 @@ class Frontend {
 		// robots.txt etc., each running the DB-hitting is_country_dependent
 		// chain pointlessly.
 		if ( ! faz_is_front_end_request() ) {
+			return;
+		}
+		if ( $this->is_admin_banner_test_request() ) {
+			$this->send_page_cache_veto( 'admin-banner-test' );
 			return;
 		}
 		// Mirror load_banner()'s gating: when banner_control is off (or any
@@ -4078,6 +4084,7 @@ class Frontend {
 			'_expiry'       => $faz_expiry,
 			'_categories'   => $this->get_cookie_groups(),
 			'_activeLaw'         => $banner->get_law(),
+			'_adminBannerTest'   => $this->is_admin_banner_test_request(),
 			// WP Consent API regime for this visitor, computed by the SAME method
 			// that answers `wp_get_consent_type` server-side. wca.js declares
 			// window.wp_consent_type from this, not from _activeLaw: the banner's
@@ -4668,9 +4675,23 @@ class Frontend {
 	}
 
 	/**
-	 * Check if banner is disabled by FAZ settings (global toggle or page exclusion).
+	 * Whether an administrator explicitly requested the on-site banner check.
 	 *
-	 * @return boolean
+	 * This flag only reopens the UI. It never overrides consent or geo rules.
+	 *
+	 * @return bool
+	 */
+	private function is_admin_banner_test_request() {
+		return isset( $_GET['faz_banner_test'], $_GET['_faz_test_nonce'] )
+			&& '1' === $_GET['faz_banner_test']
+			&& current_user_can( 'manage_options' )
+			&& (bool) wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_faz_test_nonce'] ) ), 'faz_banner_test' );
+	}
+
+	/**
+	 * Whether settings deliberately disable the banner on this page.
+	 *
+	 * @return bool
 	 */
 	protected function is_banner_disabled_by_settings() {
 		$banner_status = $this->settings->get( 'banner_control', 'status' );

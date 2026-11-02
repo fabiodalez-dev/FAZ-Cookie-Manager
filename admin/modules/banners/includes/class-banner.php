@@ -468,8 +468,23 @@ class Banner extends Store {
 			$properties['settings']['consentExpiry']['value'] = $gdpr_expiry;
 		}
 
-		$this->data['settings']  = $properties;
-		$this->data['contents']  = array();
+		$contents = $this->normalize_multilingual_data( $this->data['contents'] );
+		$this->data['settings'] = $properties;
+		$this->data['contents'] = array();
+		// Policy URLs are site configuration, not law-specific notice copy.
+		// Build a COMPLETE GDPR language slot before restoring its link: a
+		// link-only slot would bypass get_contents()'s catalogue fallback and
+		// leave the title, description and button labels empty.
+		foreach ( $contents as $lang => $content ) {
+			$content = is_string( $content ) ? json_decode( $content, true ) : $content;
+			$link = isset( $content['notice']['elements']['privacyLink'] ) ? $content['notice']['elements']['privacyLink'] : '';
+			if ( ! is_string( $link ) || '' === trim( $link ) ) {
+				continue;
+			}
+			$translated = $this->get_translations( $lang );
+			$translated['notice']['elements']['privacyLink'] = $link;
+			$this->data['contents'][ $lang ] = $translated;
+		}
 		$this->runtime_rendition = 'gdpr';
 		return true;
 	}

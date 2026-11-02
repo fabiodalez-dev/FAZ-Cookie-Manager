@@ -5,6 +5,8 @@
 # VCS / dotfiles
 .coderabbit.yaml
 .claude/
+.impeccable/
+impeccable/
 .code-review-graph/
 .DS_Store
 .env*
@@ -38,6 +40,8 @@ package-lock.json
 phpstan.neon
 phpstan-bootstrap.php
 plan.md
+PRODUCT.md
+DESIGN.md
 release.md
 report.md
 README.md

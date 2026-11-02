@@ -2291,6 +2291,10 @@ async function _fazInit() {
         // server-selected template. Bootstrap pages render only after the
         // bounded decision above, preventing a GDPR→CCPA UI flash.
         _fazInitOperations();
+        // The administrator explicitly asked to inspect the real visitor
+        // banner. Reopen only its UI after normal consent/GPC reconciliation;
+        // never clear the cookie, seed new defaults or relax enforcement.
+        if (_fazStore && _fazStore._adminBannerTest) _fazShowBanner();
         // Second pass, intentionally not redundant with the pre-paint one at the
         // top: _fazInitOperations() restores server-allowed services (svc.*:yes)
         // and can unblock iframes that immediately set cookies, so re-run the
