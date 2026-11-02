@@ -606,6 +606,38 @@ test('a CCPA-only site still gets the cacheable strict shell, built from its ban
     } finally {
       await context.close();
     }
+
+    // The same shell when the live endpoint fails: the opt-in rendering stays
+    // authoritative, a stale CCPA grant is dropped, nothing optional runs.
+    const staleConsent = [
+      'consentid:stale-california',
+      'consent:yes',
+      'action:yes',
+      `__scope.banner:${caPayload.bannerSlug}`,
+      '__scope.law:ccpa',
+      `__scope.fp:${caPayload.scopeFingerprint}`,
+      'necessary:yes',
+      'marketing:yes',
+      `rev:${consentRevision}`,
+    ].join(',');
+    const failing = await browser.newContext({ baseURL: BASE_URL, extraHTTPHeaders: requestHeaders('US', 'CA') });
+    await failing.addCookies([{ name: 'fazcookie-consent', value: encodeURIComponent(staleConsent), url: BASE_URL }]);
+    const failingPage = await failing.newPage();
+    await failingPage.route('**/wp-json/faz/v1/banner/**', (route) => route.abort('failed'));
+    try {
+      await failingPage.goto(pageUrl, { waitUntil: 'domcontentloaded' });
+      await failingPage.waitForFunction(() => (window as any).fazcookie?._diag?.().geoBootstrapResolved === 'strict-fallback');
+      const state = await failingPage.evaluate(() => ({
+        law: (window as any).getFazConsent?.().activeLaw,
+        action: (window as any).fazcookie?._fazGetFromStore?.('action'),
+        optionalRan: (window as any).__fazBootstrapOptionalRan === true,
+      }));
+      expect(state, 'the opt-in shell stays authoritative and nothing optional runs').toEqual({ law: 'gdpr', action: '', optionalRan: false });
+      expect((await failing.cookies(BASE_URL)).some((cookie) => cookie.name === 'fazcookie-consent'), 'the stale CCPA consent is removed').toBe(false);
+      await expect(failingPage.locator('[data-faz-tag="reject-button"]').first(), 'the visitor can still reject').toBeVisible();
+    } finally {
+      await failing.close();
+    }
   } finally {
     wpEval(`
       global $wpdb;

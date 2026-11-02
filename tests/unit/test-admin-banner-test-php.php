@@ -18,6 +18,10 @@ foreach ( array(
 	array( array( 'faz_banner_test' => '1', '_faz_test_nonce' => array( 'valid' ) ), true, false ),
 	array( array( 'faz_banner_test' => '1', '_faz_test_nonce' => 'valid' ), false, false ),
 	array( array( 'faz_banner_test' => '1', '_faz_test_nonce' => 'valid' ), true, true ),
+	// The flag itself has to be '1': a valid nonce and an administrator are
+	// not enough, or any other value would reopen the banner too.
+	array( array( 'faz_banner_test' => '0', '_faz_test_nonce' => 'valid' ), true, false ),
+	array( array( 'faz_banner_test' => array( '1' ), '_faz_test_nonce' => 'valid' ), true, false ),
 ) as list( $query, $admin, $expected ) ) {
 	$_GET = $query;
 	$GLOBALS['faz_test_admin'] = $admin;
