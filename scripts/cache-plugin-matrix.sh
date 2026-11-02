@@ -82,6 +82,10 @@ configure_plugin() {
   case "$1" in
     wp-super-cache)
       set_wp_cache true
+      # In PHP mode WPSC serves a stored copy only when the URL's trailing slash
+      # matches wp_cache_slash_check, which the plugin writes from its settings
+      # page and nowhere else. Unset, every request to /faz-cache-matrix/ was
+      # rendered again and stored over the last copy, never served from it.
       wpe '
         global $wp_cache_config_file, $cache_enabled, $super_cache_enabled, $wp_cache_mod_rewrite, $cache_path, $wp_cache_not_logged_in, $wp_cache_make_known_anon;
         include_once WP_PLUGIN_DIR . "/wp-super-cache/wp-cache.php";
@@ -91,6 +95,7 @@ configure_plugin() {
         wp_cache_setting( "cache_enabled", true );
         wp_cache_setting( "super_cache_enabled", true );
         wp_cache_setting( "wp_cache_mutex_disabled", 1 );
+        wp_cache_setting( "wp_cache_slash_check", 1 );
         wp_cache_enable();
         wp_super_cache_enable();
         if ( function_exists( "wpsc_create_advanced_cache" ) ) { wpsc_create_advanced_cache(); }
