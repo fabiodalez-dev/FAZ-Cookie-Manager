@@ -693,6 +693,14 @@ class Template {
 			? \FazCookie\Frontend\Modules\Shortcodes\Shortcodes::transfer_regime()
 			: '';
 		$suffix = '' !== $regime ? ':' . $regime : '';
+		// An opt-out banner rendered as opt-in for this visitor (see
+		// Banner::apply_runtime_law_rendition()) is a different template from
+		// the same banner's own: separate slots, or each render would evict
+		// the other's.
+		$rendition = ( $this->banner && is_callable( array( $this->banner, 'get_runtime_rendition' ) ) ) ? (string) $this->banner->get_runtime_rendition() : '';
+		if ( '' !== $rendition ) {
+			$suffix .= ':as-' . sanitize_key( $rendition );
+		}
 		if ( $banner_id > 0 ) {
 			return 'banner_' . $banner_id . ':' . $this->language . $suffix;
 		}

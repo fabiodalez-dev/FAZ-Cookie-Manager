@@ -2014,18 +2014,20 @@ class Frontend {
 				if ( false !== $law_banner ) {
 					$this->banner = $law_banner;
 				} elseif ( 'gdpr' === $wanted_law && false !== $this->banner ) {
-					// Fail-closed: the resolved ruleset enforces an opt-in
-					// (gdpr-style) regime but the publisher has no active GDPR
-					// banner, so the only candidate is the country-selected
-					// opt-out (CCPA) banner. Keep it so server-side blocking
-					// still runs (start_output_buffer needs $this->template),
-					// but suppress its visible UI — showing an opt-out notice
-					// ("we use cookies, opt out here") while scripts are blocked
-					// opt-in style would misrepresent the true state. Scripts
-					// stay blocked; the visitor simply sees no (misleading)
-					// banner. A correctly-configured install (a GDPR banner
-					// exists) never reaches this branch.
-					$this->faz_law_fallback_suppress = true;
+					// The resolved ruleset is opt-in (gdpr-style) but every
+					// active banner is opt-out. Showing the opt-out notice
+					// ("we use cookies, opt out here") over opt-in blocking
+					// would misstate the visitor's rules, and hiding it, as
+					// this branch used to, left the visitor with no banner
+					// and no way to consent: on most of the sites that reach
+					// it, nobody ever saw a banner. Render the same banner as
+					// an opt-in one instead. When the administrator chose to
+					// show the main banner as it is (missing_law_banner =
+					// main_banner), Geo_Runtime waives the ruleset and this
+					// branch is not reached.
+					if ( ! $this->banner->apply_runtime_law_rendition( 'gdpr' ) ) {
+						$this->faz_law_fallback_suppress = true;
+					}
 				}
 			}
 		}

@@ -2162,20 +2162,16 @@ class Admin {
 	}
 
 	/**
-	 * Warn when every active banner is opt-out (CCPA) and none is opt-in.
+	 * Tell the administrator what opt-in visitors see when every active banner
+	 * is opt-out (CCPA) and none is opt-in.
 	 *
 	 * The frontend resolves a ruleset from the visitor's country on every
-	 * request. When that ruleset is opt-in (any GDPR-style regime) and the only
-	 * banner available is an opt-out one, Frontend::load_banner() fails closed:
-	 * scripts stay blocked but the banner UI is suppressed, because showing
-	 * "we use cookies, opt out here" while blocking opt-in style would
-	 * misrepresent the visitor's actual position.
-	 *
-	 * That is the correct outcome, and it is silent. Without this notice an
-	 * administrator sees no banner for European visitors, no error and no log
-	 * line, and nothing anywhere says why. The source comment for that branch
-	 * says "a correctly-configured install never reaches this branch" — this is
-	 * where the install gets told it is not one.
+	 * request, and an unresolved country gets the opt-in fallback. When that
+	 * ruleset is opt-in and the only banners are opt-out, the visitor sees
+	 * either the banner rebuilt as an opt-in one (the default) or the banner as
+	 * it is under its own rules (Settings > Geolocation > missing_law_banner).
+	 * Until 1.36.1 they saw nothing: the banner was hidden and only the
+	 * blocking stayed, and this notice was the only place that said so.
 	 *
 	 * @return void
 	 */
@@ -2233,12 +2229,29 @@ class Admin {
 			return;
 		}
 
+		// Both modes show a banner now; the notice says which one, and what
+		// it means, so the choice made in Settings is never a silent one.
+		$main_banner = method_exists( '\\FazCookie\\Frontend\\Includes\\Geo_Runtime', 'missing_law_banner_mode' )
+			&& 'main_banner' === \FazCookie\Frontend\Includes\Geo_Runtime::missing_law_banner_mode();
+		if ( $main_banner ) {
+			$class   = 'notice-warning';
+			$title   = __( 'Visitors under an opt-in privacy law are seeing your opt-out banner.', 'faz-cookie-manager' );
+			$message = __( 'Every active banner uses the opt-out (CCPA) model, and Settings is set to show it as it is. Visitors from the EU, the UK, Brazil and other opt-in jurisdictions, and every visitor whose country cannot be detected, get its opt-out rules: optional cookies can be set before they act, which EU law does not allow for visitors in the EU. Add a banner with the GDPR law, or switch the setting back to the opt-in version.', 'faz-cookie-manager' );
+		} else {
+			$class   = 'notice-info';
+			$title   = __( 'Visitors under an opt-in privacy law are seeing an opt-in version of your banner.', 'faz-cookie-manager' );
+			$message = __( 'Every active banner uses the opt-out (CCPA) model. Visitors from the EU, the UK, Brazil and other opt-in jurisdictions, and every visitor whose country cannot be detected, see your banner with its look but with the default GDPR text and buttons, so they can accept or reject before any optional cookie is set. To use your own wording for them, add a banner with the GDPR law.', 'faz-cookie-manager' );
+		}
+
 		printf(
-			'<div class="notice notice-warning"><p><strong>%s</strong></p><p>%s</p><p><a href="%s" class="button button-secondary">%s</a></p></div>',
-			esc_html__( 'Visitors under an opt-in privacy law are seeing no banner.', 'faz-cookie-manager' ),
-			esc_html__( 'Every active banner uses the opt-out (Do Not Sell) model. For a visitor in the EU, UK, Brazil or any other opt-in jurisdiction, showing an opt-out notice while their cookies are blocked would misstate their position, so the banner is hidden for them and only the blocking stays on. Add a second active banner set to the opt-in model to cover those visitors.', 'faz-cookie-manager' ),
+			'<div class="notice %s"><p><strong>%s</strong></p><p>%s</p><p><a href="%s" class="button button-secondary">%s</a> <a href="%s" class="button button-secondary">%s</a></p></div>',
+			esc_attr( $class ),
+			esc_html( $title ),
+			esc_html( $message ),
 			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-banner' ) ),
-			esc_html__( 'Open banner settings', 'faz-cookie-manager' )
+			esc_html__( 'Open banner settings', 'faz-cookie-manager' ),
+			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-settings' ) ),
+			esc_html__( 'Open geolocation settings', 'faz-cookie-manager' )
 		);
 	}
 

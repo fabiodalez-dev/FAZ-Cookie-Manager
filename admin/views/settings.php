@@ -666,6 +666,14 @@ defined( 'ABSPATH' ) || exit;
 				<?php endif; ?>
 			</div>
 			<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
+				<label for="faz-missing-law-banner"><?php esc_html_e( 'Visitors who need an opt-in banner when all your banners are opt-out', 'faz-cookie-manager' ); ?></label>
+				<select id="faz-missing-law-banner" class="faz-select" data-path="geolocation.missing_law_banner" style="width:auto;max-width:100%;">
+					<option value="gdpr_version"><?php esc_html_e( 'Show your banner as an opt-in (GDPR) banner (recommended)', 'faz-cookie-manager' ); ?></option>
+					<option value="main_banner"><?php esc_html_e( 'Show your banner as it is, with its own rules', 'faz-cookie-manager' ); ?></option>
+				</select>
+				<div class="faz-help"><?php esc_html_e( 'Applies when every active banner uses the opt-out (CCPA) model and a visitor needs opt-in consent: visitors from the EU, the UK, Brazil and other opt-in jurisdictions, and every visitor whose country cannot be detected. The first option keeps your banner\'s look and gives it the default GDPR text and buttons, so these visitors can accept or reject before any optional cookie is set. The second shows your opt-out banner and applies its rules to them, so optional cookies can be set before they act: EU law (ePrivacy Directive, Art. 5(3)) does not allow that for visitors in the EU, so choose it only if you are sure those rules do not apply to your audience. To use your own wording for these visitors, add a second banner with the GDPR law.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="geolocation.cache_geo_bootstrap">
 					<span class="faz-toggle-track"></span>

@@ -234,6 +234,14 @@ class Settings extends Store {
 				'cache_geo_bootstrap' => false,
 				'target_regions'      => array( 'eu', 'uk' ),
 				'default_behavior'    => 'show_banner',
+				// What a visitor sees when their jurisdiction needs an opt-in
+				// banner and every active banner is opt-out (CCPA). It used to
+				// be nothing at all: the blocking stayed and the banner was
+				// hidden, so on most such sites nobody ever saw a banner.
+				// 'gdpr_version' shows the main banner rebuilt as an opt-in
+				// banner (its look, the default GDPR text); 'main_banner'
+				// shows the main banner as it is and lets its own law apply.
+				'missing_law_banner'  => 'gdpr_version',
 				// Which GeoLite2 edition the downloader fetches and the lookup
 				// reads: 'country' (small, country-level only — the default and
 				// the historical behaviour) or 'city' (larger, adds region /
@@ -995,6 +1003,9 @@ class Settings extends Store {
 			case 'default_behavior':
 				$allowed = array( 'show_banner', 'no_banner' );
 				$value   = in_array( $value, $allowed, true ) ? $value : 'show_banner';
+				break;
+			case 'missing_law_banner':
+				$value = in_array( $value, array( 'gdpr_version', 'main_banner' ), true ) ? $value : 'gdpr_version';
 				break;
 			case 'target_regions':
 				if ( ! is_array( $value ) ) {

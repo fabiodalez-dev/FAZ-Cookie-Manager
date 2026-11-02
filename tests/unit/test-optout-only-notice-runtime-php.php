@@ -27,6 +27,19 @@ namespace {
 		return $url;
 	}
 
+	function __( $text, $domain = '' ) {
+		unset( $domain );
+		return $text;
+	}
+
+	function esc_html( $text ) {
+		return $text;
+	}
+
+	function esc_attr( $text ) {
+		return $text;
+	}
+
 	function admin_url( $path = '' ) {
 		return 'https://example.test/wp-admin/' . ltrim( $path, '/' );
 	}
@@ -35,9 +48,14 @@ namespace {
 namespace FazCookie\Frontend\Includes {
 	class Geo_Runtime {
 		public static $enabled = false;
+		public static $mode    = 'gdpr_version';
 
 		public static function is_enabled() {
 			return self::$enabled;
+		}
+
+		public static function missing_law_banner_mode() {
+			return self::$mode;
 		}
 	}
 }
@@ -106,8 +124,17 @@ namespace {
 	ob_start();
 	$admin->optout_only_banner_notice();
 	$output = ob_get_clean();
-	optout_notice_assert( false !== strpos( $output, 'Visitors under an opt-in privacy law are seeing no banner.' ), 'an active CCPA-only configuration emits the warning headline' );
-	optout_notice_assert( false !== strpos( $output, 'Every active banner uses the opt-out (Do Not Sell) model.' ), 'the CCPA-only warning explains the configuration gap' );
+	optout_notice_assert( false !== strpos( $output, 'are seeing an opt-in version of your banner.' ), 'by default the CCPA-only notice says opt-in visitors see an opt-in version' );
+	optout_notice_assert( false !== strpos( $output, 'notice-info' ), 'that default is information, not a warning' );
+	optout_notice_assert( false === strpos( $output, 'seeing no banner' ), 'nothing says these visitors see no banner any more' );
+
+	Geo_Runtime::$mode = 'main_banner';
+	ob_start();
+	$admin->optout_only_banner_notice();
+	$output = ob_get_clean();
+	optout_notice_assert( false !== strpos( $output, 'are seeing your opt-out banner.' ), 'with main_banner the notice says opt-in visitors see the opt-out banner' );
+	optout_notice_assert( false !== strpos( $output, 'notice-warning' ) && false !== strpos( $output, 'EU law does not allow' ), 'and warns, naming the legal consequence' );
+	Geo_Runtime::$mode = 'gdpr_version';
 
 	Controller::$items[] = (object) array(
 		'status'   => 1,
@@ -116,7 +143,7 @@ namespace {
 	ob_start();
 	$admin->optout_only_banner_notice();
 	$output = ob_get_clean();
-	optout_notice_assert( '' === $output, 'an active opt-in banner suppresses the warning' );
+	optout_notice_assert( '' === $output, 'an active opt-in banner suppresses the notice' );
 
 	echo "\n--\nChecks: {$run}\nFailed: {$failed}\n\n";
 	if ( $failed > 0 ) {

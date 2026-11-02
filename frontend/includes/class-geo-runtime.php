@@ -322,10 +322,59 @@ class Geo_Runtime {
 			return null;
 		}
 		if ( is_array( $ctx ) && isset( $ctx['ruleset'] ) && is_array( $ctx['ruleset'] ) ) {
+			if ( self::waives_ruleset_for_main_banner( $ctx['ruleset'], $key ) ) {
+				return null;
+			}
 			self::$ruleset_memo[ $key ] = $ctx['ruleset'];
 			return $ctx['ruleset'];
 		}
 		return null;
+	}
+
+	/**
+	 * What a visitor sees when their rules need a banner the site does not have.
+	 *
+	 * Settings > Geolocation > missing_law_banner. 'gdpr_version' (default)
+	 * renders the main banner rebuilt as an opt-in banner; 'main_banner' shows
+	 * the main banner as it is, under its own law.
+	 *
+	 * @return string 'gdpr_version' or 'main_banner'.
+	 */
+	public static function missing_law_banner_mode() {
+		$settings = get_option( 'faz_settings', array() );
+		$mode     = ( is_array( $settings ) && isset( $settings['geolocation']['missing_law_banner'] ) )
+			? (string) $settings['geolocation']['missing_law_banner']
+			: '';
+		return 'main_banner' === $mode ? 'main_banner' : 'gdpr_version';
+	}
+
+	/**
+	 * Whether the administrator chose to show the main banner, under its own
+	 * law, to a visitor whose ruleset asks for a law no active banner has.
+	 *
+	 * Then no ruleset applies to that visitor at all, rather than an opt-in
+	 * ruleset under an opt-out banner: the page, the blocking, Consent Mode and
+	 * the consent log all follow the banner the visitor actually sees. Only
+	 * the opt-in direction is waived. An opt-out ruleset with only an opt-in
+	 * banner keeps the opt-in banner, which is stricter than required.
+	 *
+	 * @param array  $ruleset Resolved ruleset.
+	 * @param string $country Visitor country.
+	 * @return bool
+	 */
+	private static function waives_ruleset_for_main_banner( $ruleset, $country ) {
+		if ( 'gdpr' !== self::model_to_law( $ruleset ) || 'main_banner' !== self::missing_law_banner_mode() ) {
+			return false;
+		}
+		$controller = '\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller';
+		if ( ! class_exists( $controller ) || ! method_exists( $controller, 'get_instance' ) ) {
+			return false;
+		}
+		$instance = $controller::get_instance();
+		if ( ! method_exists( $instance, 'has_active_banner_for_law' ) ) {
+			return false;
+		}
+		return ! $instance->has_active_banner_for_law( 'gdpr', $country );
 	}
 
 	/**

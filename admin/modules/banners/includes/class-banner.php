@@ -60,6 +60,14 @@ class Banner extends Store {
 	private $verified_withdrawal_alternative = false;
 
 	/**
+	 * Law this banner is rendered as for the current request, when it is not
+	 * its own: see apply_runtime_law_rendition(). Never saved.
+	 *
+	 * @var string
+	 */
+	private $runtime_rendition = '';
+
+	/**
 	 * Data array, with defaults.
 	 *
 	 * @var array
@@ -409,6 +417,101 @@ class Banner extends Store {
 		}
 
 		return $changed;
+	}
+
+	/**
+	 * Render an opt-out (CCPA) banner as an opt-in (GDPR) one, for this request.
+	 *
+	 * A visitor whose jurisdiction needs an opt-in banner, on a site whose
+	 * active banners are all opt-out, used to get no banner at all: the
+	 * opt-out notice would misstate their rules, so it was hidden and only the
+	 * blocking stayed. Most such sites never meant it. Geo-Targeting is on by
+	 * default, and switching the one banner to CCPA was enough to leave every
+	 * European visitor, and on a site with no country source every visitor,
+	 * with no way to consent.
+	 *
+	 * The banner keeps its look: type, position, theme, colours and every other
+	 * style. What depends on the law takes the GDPR defaults: the buttons and
+	 * panels the two default configurations switch differently (accept,
+	 * reject, settings, preference centre, Do Not Sell, the opt-out popup...),
+	 * a consent lifetime no longer than the GDPR default, and the default GDPR
+	 * text of each language, since the banner's own text was written for an
+	 * opt-out notice. Nothing is saved.
+	 *
+	 * @param string $law Law to render as. Only 'gdpr' is supported.
+	 * @return bool Whether the banner was changed.
+	 */
+	public function apply_runtime_law_rendition( $law ) {
+		if ( 'gdpr' !== $law || 'ccpa' !== $this->get_law() ) {
+			return false;
+		}
+		$properties = $this->get_settings();
+		if ( ! is_array( $properties ) ) {
+			return false;
+		}
+		$gdpr = Controller::get_default_configs( 'gdpr' );
+		$ccpa = Controller::get_default_configs( 'ccpa' );
+		if ( ! is_array( $gdpr ) || ! is_array( $ccpa ) ) {
+			return false;
+		}
+
+		$config               = isset( $properties['config'] ) && is_array( $properties['config'] ) ? $properties['config'] : array();
+		$properties['config'] = self::apply_law_switches(
+			$config,
+			isset( $gdpr['config'] ) && is_array( $gdpr['config'] ) ? $gdpr['config'] : array(),
+			isset( $ccpa['config'] ) && is_array( $ccpa['config'] ) ? $ccpa['config'] : array()
+		);
+		$properties['settings']['applicableLaw'] = 'gdpr';
+		$gdpr_expiry = isset( $gdpr['settings']['consentExpiry']['value'] ) ? (int) $gdpr['settings']['consentExpiry']['value'] : 0;
+		$expiry      = isset( $properties['settings']['consentExpiry']['value'] ) ? (int) $properties['settings']['consentExpiry']['value'] : 0;
+		if ( $gdpr_expiry > 0 && ( $expiry <= 0 || $expiry > $gdpr_expiry ) ) {
+			$properties['settings']['consentExpiry']['value'] = $gdpr_expiry;
+		}
+
+		$this->data['settings']  = $properties;
+		$this->data['contents']  = array();
+		$this->runtime_rendition = 'gdpr';
+		return true;
+	}
+
+	/**
+	 * Law the banner is rendered as for this request, or '' for its own.
+	 *
+	 * The template cache keys on it, so the opt-in rendition and the banner's
+	 * own opt-out markup never overwrite each other's stored copy.
+	 *
+	 * @return string
+	 */
+	public function get_runtime_rendition() {
+		return $this->runtime_rendition;
+	}
+
+	/**
+	 * Set every non-style value on which the two law defaults disagree to the
+	 * target law's default, and leave the rest of the banner as it is.
+	 *
+	 * Derived from the two default files rather than listed here, so a switch
+	 * added to them later is carried without touching this method.
+	 *
+	 * @param array $config Banner config.
+	 * @param array $target Default config of the law to render as.
+	 * @param array $source Default config of the banner's own law.
+	 * @return array
+	 */
+	private static function apply_law_switches( $config, $target, $source ) {
+		foreach ( $target as $key => $value ) {
+			if ( 'styles' === $key ) {
+				continue;
+			}
+			$from = array_key_exists( $key, $source ) ? $source[ $key ] : null;
+			if ( is_array( $value ) ) {
+				$current        = isset( $config[ $key ] ) && is_array( $config[ $key ] ) ? $config[ $key ] : array();
+				$config[ $key ] = self::apply_law_switches( $current, $value, is_array( $from ) ? $from : array() );
+			} elseif ( $value !== $from ) {
+				$config[ $key ] = $value;
+			}
+		}
+		return $config;
 	}
 
 	/**
