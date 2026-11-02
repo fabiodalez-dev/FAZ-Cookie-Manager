@@ -1,20 +1,19 @@
 import { test, expect } from '@playwright/test';
-import { getWpLoginPath } from '../utils/wp-auth';
+import { completeAdminLogin } from '../fixtures/wp-fixture';
 
 const BASE = process.env.WP_BASE_URL || 'http://127.0.0.1:9998';
 const USER = process.env.WP_ADMIN_USER || 'admin';
 const PASS = process.env.WP_ADMIN_PASS || 'admin';
-const WP_LOGIN_PATH = getWpLoginPath();
 
 test.describe('Scan progress UI', () => {
 	test.setTimeout(240_000);
 
+	// The shared login, not a hand-written one: under load wp-login.php's own
+	// scripts could leave the password field empty at the click, the required
+	// field then stopped the form, no POST left the browser and waitForURL
+	// timed out. completeAdminLogin checks the result and tries again.
 	test.beforeEach(async ({ page }) => {
-		await page.goto(`${BASE}${WP_LOGIN_PATH}`);
-		await page.fill('#user_login', USER);
-		await page.fill('#user_pass', PASS);
-		await page.click('#wp-submit');
-		await page.waitForURL(/wp-admin/);
+		await completeAdminLogin(page, BASE, USER, PASS);
 	});
 
 	test('shows total pages immediately after discover and updates progress', async ({ page }) => {
