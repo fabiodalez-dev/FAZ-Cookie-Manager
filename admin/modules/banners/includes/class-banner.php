@@ -938,6 +938,14 @@ class Banner extends Store {
 				// from closing the declaration and injecting free-form CSS.
 				$value = faz_sanitize_css_length( $value );
 				break;
+			case 'noticeOpacity':
+				// Becomes the alpha of the notice background colour, emitted
+				// as a custom-property value like borderRadius above.
+				$value = faz_sanitize_opacity_percent( $value );
+				break;
+			case 'textAlign':
+				$value = faz_sanitize_text_align( $value );
+				break;
 			case 'customCSS':
 				// customCSS field removed from the admin UI in 1.13.11 for
 				// wp.org compliance ("plugins must not allow arbitrary code

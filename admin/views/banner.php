@@ -489,6 +489,23 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 						</div>
 					</div>
 				</div>
+				<div class="faz-grid faz-grid-3" style="border-top:1px solid var(--faz-border);padding-top:16px;margin-top:4px;">
+					<div class="faz-form-group">
+						<label for="faz-b-notice-opacity"><?php esc_html_e( 'Background opacity (%)', 'faz-cookie-manager' ); ?></label>
+						<input type="number" class="faz-input faz-input-sm" id="faz-b-notice-opacity" min="50" max="100" step="5" placeholder="100" style="width:110px;" aria-describedby="faz-b-notice-opacity-help">
+						<div id="faz-b-notice-opacity-help" class="faz-help"><?php esc_html_e( 'Makes the banner background see-through, from 50 to 100. Text and buttons stay fully opaque. Leave empty for a solid background.', 'faz-cookie-manager' ); ?></div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-text-align"><?php esc_html_e( 'Text alignment', 'faz-cookie-manager' ); ?></label>
+						<select class="faz-select" id="faz-b-text-align" style="width:auto;max-width:200px;" aria-describedby="faz-b-text-align-help">
+							<option value=""><?php esc_html_e( 'Default', 'faz-cookie-manager' ); ?></option>
+							<option value="left"><?php esc_html_e( 'Left', 'faz-cookie-manager' ); ?></option>
+							<option value="center"><?php esc_html_e( 'Centre', 'faz-cookie-manager' ); ?></option>
+							<option value="right"><?php esc_html_e( 'Right', 'faz-cookie-manager' ); ?></option>
+						</select>
+						<div id="faz-b-text-align-help" class="faz-help"><?php esc_html_e( 'Aligns the banner title and description.', 'faz-cookie-manager' ); ?></div>
+					</div>
+				</div>
 			</div>
 		</div>
 

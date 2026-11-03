@@ -414,6 +414,78 @@ if ( ! function_exists( 'faz_sanitize_css_length' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_sanitize_opacity_percent' ) ) {
+	/**
+	 * Sanitise the banner background opacity, a whole percentage.
+	 *
+	 * The value becomes the alpha of a colour emitted inside a custom property
+	 * (class-template.php), so it is reduced to digits here. The floor of 50
+	 * keeps the notice readable over the page behind it: below that the text
+	 * competes with whatever the page shows, and its contrast can no longer be
+	 * relied on.
+	 *
+	 * @param mixed $value Raw admin value.
+	 * @return string An integer from 50 to 100, or '' for the shipped opaque look.
+	 */
+	function faz_sanitize_opacity_percent( $value ) {
+		if ( ! is_scalar( $value ) ) {
+			return '';
+		}
+		$value = trim( (string) $value );
+		if ( ! preg_match( '/^[0-9]{1,3}$/', $value ) ) {
+			return '';
+		}
+		$percent = (int) $value;
+		return ( $percent >= 50 && $percent <= 100 ) ? (string) $percent : '';
+	}
+}
+
+if ( ! function_exists( 'faz_sanitize_text_align' ) ) {
+	/**
+	 * Sanitise the notice text alignment against an allow-list.
+	 *
+	 * @param mixed $value Raw admin value.
+	 * @return string left, center or right, or '' to keep the template's own.
+	 */
+	function faz_sanitize_text_align( $value ) {
+		$value = is_string( $value ) ? strtolower( trim( $value ) ) : '';
+		return in_array( $value, array( 'left', 'center', 'right' ), true ) ? $value : '';
+	}
+}
+
+if ( ! function_exists( 'faz_color_with_opacity' ) ) {
+	/**
+	 * Apply an opacity percentage to a sanitised banner colour.
+	 *
+	 * Only the colour is made translucent, never the whole element: CSS
+	 * `opacity` on the notice would fade its text and buttons as well.
+	 * Hex and rgba colours are converted; a keyword such as `transparent` has
+	 * no alpha to set and is returned unchanged.
+	 *
+	 * @param string $color   Colour already passed through faz_sanitize_color().
+	 * @param string $percent Value from faz_sanitize_opacity_percent().
+	 * @return string
+	 */
+	function faz_color_with_opacity( $color, $percent ) {
+		$color = is_string( $color ) ? trim( $color ) : '';
+		if ( '' === $percent || '100' === (string) $percent || '' === $color ) {
+			return $color;
+		}
+		$alpha = round( (int) $percent / 100, 2 );
+		if ( preg_match( '/^#([0-9a-f]{3}|[0-9a-f]{6})$/i', $color, $m ) ) {
+			$hex = $m[1];
+			if ( 3 === strlen( $hex ) ) {
+				$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+			}
+			return 'rgba(' . hexdec( substr( $hex, 0, 2 ) ) . ',' . hexdec( substr( $hex, 2, 2 ) ) . ',' . hexdec( substr( $hex, 4, 2 ) ) . ',' . $alpha . ')';
+		}
+		if ( preg_match( '/^rgba\(\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9.]+)\s*\)$/i', $color, $m ) ) {
+			return 'rgba(' . (int) $m[1] . ',' . (int) $m[2] . ',' . (int) $m[3] . ',' . round( min( 1, (float) $m[4] ) * $alpha, 2 ) . ')';
+		}
+		return $color;
+	}
+}
+
 if ( ! function_exists( 'faz_asset_suffix' ) ) {
 	/**
 	 * Return `.min` when a production JavaScript build exists and debug is off.

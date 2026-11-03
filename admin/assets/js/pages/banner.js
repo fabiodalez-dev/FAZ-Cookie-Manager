@@ -1468,6 +1468,10 @@
 		// --faz-btn-border-radius when this is set, so a blank field leaves every
 		// existing banner byte-identical.
 		setVal('faz-b-border-radius', s.borderRadius || '');
+		// Same contract for the notice opacity and text alignment: empty emits
+		// nothing, so an untouched banner renders exactly as before.
+		setVal('faz-b-notice-opacity', s.noticeOpacity || '');
+		setVal('faz-b-text-align', s.textAlign || '');
 		setVal('faz-b-pref-type', s.preferenceCenterType || 'popup');
 		var wallEl = document.getElementById('faz-b-soft-cookie-wall');
 		if (wallEl) wallEl.checked = !!s.softCookieWall;
@@ -2165,6 +2169,8 @@
 		props.settings.position = getVal('faz-b-position');
 		props.settings.theme = getVal('faz-b-theme');
 		props.settings.borderRadius = getVal('faz-b-border-radius');
+		props.settings.noticeOpacity = getVal('faz-b-notice-opacity');
+		props.settings.textAlign = getVal('faz-b-text-align');
 		var wallEl = document.getElementById('faz-b-soft-cookie-wall');
 		props.settings.softCookieWall = wallEl ? wallEl.checked : false;
 		var law = getVal('faz-b-law') || 'gdpr';

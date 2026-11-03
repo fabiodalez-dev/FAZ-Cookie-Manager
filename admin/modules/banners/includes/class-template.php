@@ -630,6 +630,30 @@ class Template {
 				$css_vars['--faz-btn-border-radius'] = $radius;
 			}
 
+			// Notice background opacity. Only the background colour gets an
+			// alpha: CSS opacity on the notice would fade the text and the
+			// buttons with it. Both values are shape-checked on save, and the
+			// colour is re-checked here because the result is emitted the same
+			// way as every other colour above.
+			$opacity = isset( $properties['settings']['noticeOpacity'] )
+				? faz_sanitize_opacity_percent( $properties['settings']['noticeOpacity'] )
+				: '';
+			if ( '' !== $opacity && isset( $css_vars['--faz-notice-background-color'] ) ) {
+				$css_vars['--faz-notice-background-color'] = faz_sanitize_color(
+					faz_color_with_opacity( $css_vars['--faz-notice-background-color'], $opacity )
+				);
+			}
+
+			// Notice text alignment, an allow-listed keyword. The template CSS
+			// has no rule for it, so one is added below only when it is set:
+			// an empty setting leaves every existing banner as it was.
+			$text_align = isset( $properties['settings']['textAlign'] )
+				? faz_sanitize_text_align( $properties['settings']['textAlign'] )
+				: '';
+			if ( '' !== $text_align ) {
+				$css_vars['--faz-notice-text-align'] = $text_align;
+			}
+
 			if ( ! empty( $css_vars ) ) {
 				$vars_string = '';
 				foreach ( $css_vars as $var => $val ) {
@@ -646,6 +670,9 @@ class Template {
 					. '.faz-modal{' . $vars_string . '}'
 					. '.faz-btn-revisit-wrapper{' . $vars_string . '}'
 					. $this->styles;
+				if ( '' !== $text_align ) {
+					$this->styles .= '.faz-consent-container .faz-title,.faz-consent-container .faz-notice-des{text-align:var(--faz-notice-text-align);}';
+				}
 			}
 
 			$this->html = $dom->saveHTML( $dom->documentElement ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName

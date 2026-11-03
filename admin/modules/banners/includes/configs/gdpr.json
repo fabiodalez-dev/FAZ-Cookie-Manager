@@ -18,6 +18,8 @@
     },
     "theme": "light",
     "borderRadius": "",
+    "noticeOpacity": "",
+    "textAlign": "",
     "consentExpiry": {
       "status": true,
       "value": 180
