@@ -9698,8 +9698,10 @@ function _fazResetOptoutSuccessMessage() {
 
     if ( buttonWrapper ) buttonWrapper.style.display = "";
     if ( successMessage ) successMessage.classList.add( "faz-hide" );
-    if ( ccpaCheckbox ) ccpaCheckbox.disabled = false;
-    _fazClassRemove( "=optout-option", "faz-disabled", false );
+    // A GPC signal keeps the box locked: re-opening the popup must not hand
+    // back a control the note says cannot be changed.
+    if ( ccpaCheckbox ) ccpaCheckbox.disabled = _fazGpcLocksOptOut();
+    if ( ! _fazGpcLocksOptOut() ) _fazClassRemove( "=optout-option", "faz-disabled", false );
 
     const resetTimerEl =
         ( countdownElement && countdownElement.querySelector( "#fazCountdownTimer" ) ) ||
@@ -9770,11 +9772,34 @@ function _fazHandleOptoutPopupClose() {
     _fazHidePreferenceCenter();
 }
 
+/**
+ * Whether a Global Privacy Control signal is binding on the opt-out popup.
+ *
+ * Not in preview, where the signal is not honoured either (see
+ * _fazAcceptCookies), so the admin still sees the note and a working box.
+ *
+ * @returns {boolean}
+ */
+function _fazGpcLocksOptOut() {
+    return !_fazPreviewEnabled() && _fazGpcActive();
+}
+
 function _fazSetCCPAOptions() {
+    // The GPC note says a signal WAS detected. The geo runtime enables it for
+    // every visitor of a GPC jurisdiction, and the page may come from a cache,
+    // so only the browser knows whether the signal is there: drop the note when
+    // it is not, instead of telling the visitor something untrue.
+    const gpcLocked = _fazGpcLocksOptOut();
+    if (!gpcLocked && !_fazPreviewEnabled()) {
+        document.querySelectorAll('[data-faz-tag="optout-gpc-option"]').forEach(function (note) {
+            note.remove();
+        });
+    }
     var optOption = _fazStore._bannerConfig && _fazStore._bannerConfig.config && _fazStore._bannerConfig.config.optOption;
     if (!optOption) return;
     const toggle = optOption.toggle;
-    _fazClassRemove("=optout-option", "faz-disabled", false);
+    if (gpcLocked) _fazClassAdd("=optout-option", "faz-disabled", false);
+    else _fazClassRemove("=optout-option", "faz-disabled", false);
     const toggleDataCode = _fazStore._shortCodes.find(
         (code) => code.key === "faz_optout_toggle_label"
     );
@@ -9786,13 +9811,17 @@ function _fazSetCCPAOptions() {
         `[faz_optout_option_title]`,
         optOutTitle.content
     );
-    const checked = _fazRef._fazGetFromStore("consent") === "yes";
+    // With GPC the opt-out is already in force (_fazApplyGpcOptOut), but the
+    // signal records it as consent:no, so reading the key alone showed an
+    // unticked box that the visitor could flip to no effect. Show the opt-out
+    // that applies and lock it, as the GPC note promises.
+    const checked = gpcLocked || _fazRef._fazGetFromStore("consent") === "yes";
     _fazSetCheckBoxInfo(
         document.getElementById(`fazCCPAOptOut`),
         formattedLabel,
         {
             checked,
-            disabled: false,
+            disabled: gpcLocked,
             addListeners: true,
         },
         true
