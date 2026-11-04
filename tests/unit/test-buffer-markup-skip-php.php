@@ -358,18 +358,23 @@ namespace {
 		}
 	}
 
-	foreach ( array( 'text/plain', 'application/javascript', 'text/css', 'image/svg+xml', 'application/octet-stream' ) as $type ) {
+	foreach ( array( 'text/plain', 'application/javascript', 'text/css', 'application/octet-stream' ) as $type ) {
 		$GLOBALS['faz_ob_response_headers'] = array( 'content-type: ' . $type . '; charset=UTF-8' );
 		assert_true( faz_ob_run( $fragment ) === $fragment, $type . ': tag-shaped data is preserved' );
 	}
 
-	foreach ( array( 'application/xml', 'text/xml' ) as $type ) {
+	foreach ( array( 'application/xml', 'text/xml', 'image/svg+xml', 'application/vnd.builder+xml' ) as $type ) {
 		$GLOBALS['faz_ob_response_headers'] = array( 'Content-Type: ' . $type );
 		$xhtml = '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Page</title></head><body>'
 			. '<img src="https://cdn.tracker.test/a.png" /><script src="https://cdn.tracker.test/t.js"></script></body></html>';
 		$out = faz_ob_run( $xhtml );
 		assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/a.png"' ), $type . ': an XHTML page still parks images' );
 		assert_true( false !== strpos( $out, 'type="text/plain"' ), $type . ': an XHTML page still parks tracker scripts' );
+		$svg = '<svg xmlns="http://www.w3.org/2000/svg"><script href="https://cdn.tracker.test/t.js"></script><image href="https://cdn.tracker.test/a.png" /></svg>';
+		$out = faz_ob_run( $svg );
+		assert_true( false !== strpos( $out, 'data-faz-href="https://cdn.tracker.test/a.png"' ) && false !== strpos( $out, 'type="text/plain"' ), $type . ': active SVG scripts and images stay parked' );
+		$xml = '<response><![CDATA[' . $svg . ']]></response>';
+		assert_true( faz_ob_run( $xml ) === $xml, $type . ': SVG-looking CDATA remains XML data' );
 		$xml = '<response><html><![CDATA[' . $xhtml . ']]></html></response>';
 		assert_true( faz_ob_run( $xml ) === $xml, $type . ': XHTML-looking text in XML data stays byte-identical' );
 		$xml = '<response><html>' . htmlspecialchars( $fragment, ENT_QUOTES, 'UTF-8' ) . '</html></response>';
