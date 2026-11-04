@@ -518,7 +518,8 @@
     // images vanished on every Divi product page. `served` is filled by the
     // DOM backstop, which sees each parser insertion before the next parser-
     // run script, so the record is in place before any script can move it.
-    // Scripts are never recorded — see observed().
+    // Unchanged clones inherit the same record — see cloneNode below. Scripts
+    // are never recorded — see observed().
     //
     // The exemption is for the URL the server judged, not for the element:
     // the record keeps the element's URL attributes as the parser left them,
@@ -702,6 +703,28 @@
     // Resource elements the parser inserted, each with its URLs as inserted —
     // see unjudged().
     var served = sunk && typeof w.WeakMap === 'function' ? new w.WeakMap() : null;
+    // Divi's et_duplicate_menu clones the server menu (including Polylang's
+    // flag images), appends it, then queries the destination synchronously.
+    // A clone has no WeakMap entry of its own, so holding it left that query
+    // empty. Carry over only an existing parser verdict for the same resource
+    // and URL signature. Never grant a new verdict from the current URLs:
+    // detached Attr edits or a changed <base> may have redirected them since
+    // the parser's verdict. unjudged() checks the signature again on insertion.
+    replace(Node.prototype, 'cloneNode', function (original) {
+        return function () {
+            var clone = original.apply(this, arguments);
+            if (!served) return clone;
+            var source = resources(this), copies = resources(clone);
+            if (source.length !== copies.length) return clone;
+            source.forEach(function (el, i) {
+                var copy = copies[i], signature = served.get(el);
+                if (tagKey(el) !== 'SCRIPT' && signature !== undefined
+                    && tagKey(el) === tagKey(copy) && el.namespaceURI === copy.namespaceURI
+                    && signature === urls(copy)) served.set(copy, signature);
+            });
+            return clone;
+        };
+    });
     // Sheets a wrapper has already delivered, judged, on the safety release.
     // The backstop stays armed on that path and must not judge them again —
     // which is only sound because the delivery question (judgeCss) reads the
@@ -989,8 +1012,8 @@
         // Swallowed — with one acceptable exception, asked of the parser the
         // same way. An open <script> element swallows the page's bytes as
         // script TEXT, which fetches nothing, and a later write is judged on
-        // its own; write('<script src=x>') + write('</script>') is an ordinary
-        // pair and must not cost the exemption.
+        // its own; writing an opening script tag and then its closing tag is
+        // an ordinary pair and must not cost the exemption.
         var scripts = probe.querySelectorAll('script');
         var tail = scripts.length ? scripts[scripts.length - 1] : null;
         if (tail && String(tail.textContent).indexOf('faz-probe-open') !== -1) return;

@@ -37,7 +37,10 @@
  *   h. a changed fetching mode (link rel, input type) requires a new verdict;
  *   i. a parser image adopted into another document, re-inserted after this
  *      page's <base> moved to another host, is held: the record resolves
- *      against the page it is inserted into, not the adopting document.
+ *      against the page it is inserted into, not the adopting document;
+ *   j. Divi's mobile menu clone with Polylang flag images is inserted on the
+ *      same turn, including shallow, repeated and fragment clones; changed
+ *      URLs, script-built resources and parked scripts still need a verdict.
  *
  * The "parser" is the native appendChild captured before the bootstrap runs:
  * no wrapper sees the call and no sink tags the node, which is exactly how a
@@ -384,6 +387,77 @@ for (const route of ['DOMParser', 'createHTMLDocument']) {
   document.head.appendChild(base);
   box.appendChild(img);
   eq(`${route}: not in the document until the runtime answers`, box.contains(img), false);
+}
+
+console.log('j. Divi mobile menus cloned from server markup stay synchronous (#376)');
+{
+  const { document, parse } = boot();
+  const menu = parse('<ul><li><a href="/it/"><img src="/flags/it.png" srcset="/flags/it@2x.png 2x">Italiano</a></li></ul>');
+  await checkpoint();
+  const clone = menu.cloneNode(true);
+  const dest = document.createElement('nav');
+  document.getElementById('main').appendChild(dest);
+  dest.appendChild(clone);
+  ok('Divi can query its cloned Polylang flag on the next line', dest.querySelector('li img'));
+  eq('the clone has the actual destination as its parent', clone.parentNode, dest);
+  const copy = clone.cloneNode(true);
+  dest.replaceChildren(copy);
+  eq('a second-generation clone also arrives immediately', copy.parentNode, dest);
+  const shallow = menu.querySelector('img').cloneNode(false);
+  dest.append(shallow);
+  eq('a shallow resource clone also arrives immediately', shallow.parentNode, dest);
+  const fragment = document.createDocumentFragment();
+  fragment.appendChild(menu.cloneNode(true));
+  const fragmentClone = fragment.cloneNode(true);
+  dest.replaceChildren(fragmentClone);
+  ok('cloning a fragment retains the records of its descendants', dest.querySelector('li img'));
+}
+
+for (const changeAt of ['source', 'clone']) {
+  for (const attribute of ['src', 'srcset']) {
+    const { document, parse } = boot();
+    const image = parse('<img src="/flag.png" srcset="/flag@2x.png 2x">');
+    await checkpoint();
+    image.remove();
+    await checkpoint();
+    let clone;
+    if (changeAt === 'clone') clone = image.cloneNode(false);
+    // Detached Attr writes bypass the setter gate. The insertion must still
+    // compare with the original parser signature, never a fresh signature.
+    (clone || image).getAttributeNode(attribute).value = 'https://tracker.example/pixel';
+    if (!clone) clone = image.cloneNode(false);
+    document.getElementById('main').appendChild(clone);
+    eq(`${changeAt}: a changed ${attribute} still needs a verdict`, clone.isConnected, false);
+  }
+}
+{
+  const { document, parse } = boot();
+  const image = parse('<img src="flag.png">');
+  await checkpoint();
+  const clone = image.cloneNode(false);
+  const base = document.createElement('base');
+  base.href = 'https://tracker.example/';
+  document.head.appendChild(base);
+  document.getElementById('main').appendChild(clone);
+  eq('a cloned image redirected by a changed base still needs a verdict', clone.isConnected, false);
+}
+{
+  const { window, document, parse } = boot();
+  const script = parse('<script type="text/plain" data-faz-category="marketing" src="https://tracker.example/t.js"></script>');
+  await checkpoint();
+  const clone = script.cloneNode(true);
+  clone.type = 'text/javascript';
+  document.getElementById('main').appendChild(clone);
+  eq('a cloned server-parked script is still held', clone.isConnected, false);
+  const foreign = new window.DOMParser().parseFromString('<img src="https://tracker.example/pixel">', 'text/html');
+  const foreignClone = foreign.querySelector('img').cloneNode(false);
+  document.getElementById('main').appendChild(foreignClone);
+  eq('cloning DOMParser markup does not create a parser verdict', foreignClone.isConnected, false);
+  const built = document.createElement('img');
+  built.src = 'https://tracker.example/pixel';
+  const builtClone = built.cloneNode(false);
+  document.getElementById('main').appendChild(builtClone);
+  eq('cloning a script-built image does not create a parser verdict', builtClone.isConnected, false);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

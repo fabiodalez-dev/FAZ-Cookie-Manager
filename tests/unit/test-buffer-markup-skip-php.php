@@ -35,6 +35,8 @@
  *      `</ …>`, a CDATA-shaped bogus comment — cannot open a skip, in any
  *      pass, the script pass included (it already lost the tracker after
  *      them on 42728bbc).
+ *   8. Non-HTML response types, including Breakdance's front-end AJAX JSON,
+ *      are preserved byte-for-byte; HTML still blocks with builder markers.
  *
  * Run: php tests/unit/test-buffer-markup-skip-php.php
  *  or: bash scripts/run-unit-tests.sh
@@ -72,6 +74,15 @@ namespace FazCookie\Frontend\Includes {
 		public static function build( $service_id, $service_name, $category, $blocked_html, $thumbnail_url = '' ) {
 			return '<div class="faz-placeholder" data-faz-category="' . $category . '"><template class="faz-placeholder-content">' . $blocked_html . '</template></div>';
 		}
+	}
+}
+
+namespace FazCookie\Frontend {
+
+	// PHP's CLI SAPI does not retain response headers. Exercise the same
+	// callback with the headers a web SAPI exposes after wp_send_json().
+	function headers_list() {
+		return isset( $GLOBALS['faz_ob_response_headers'] ) ? $GLOBALS['faz_ob_response_headers'] : array();
 	}
 }
 
@@ -326,6 +337,39 @@ namespace {
 	) as $label => $construct ) {
 		$all_live_judged( faz_ob_run( '<html><body>' . $construct . $after . '<script>var a = 1;</script></body></html>' ), $label );
 	}
+
+	echo "\n-- non-HTML responses are not markup (#356, Breakdance front-end AJAX) --\n";
+
+	$fragment = '<img class="ti-star" src="https://cdn.tracker.test/a.png"><script src="https://cdn.tracker.test/t.js"></script>';
+	foreach ( array( 0, JSON_UNESCAPED_SLASHES ) as $flags ) {
+		$payload = json_encode( array( 'html' => $fragment, 'postsGeneratedCssFilePaths' => (object) array(), 'dependencies' => array() ), $flags );
+		foreach ( array( 'application/json; charset=UTF-8', 'Application/JSON', 'application/vnd.builder+json' ) as $type ) {
+			$GLOBALS['faz_ob_response_headers'] = array( 'Content-Type: ' . $type );
+			$out = faz_ob_run( $payload );
+			assert_true( $out === $payload, $type . ': the JSON response is byte-identical (encoding ' . $flags . ')' );
+			$decoded = json_decode( $out, true );
+			assert_true( JSON_ERROR_NONE === json_last_error() && $decoded['html'] === $fragment, 'JSON remains valid and its HTML field is preserved' );
+		}
+	}
+
+	foreach ( array( 'application/xml', 'text/plain', 'application/javascript', 'text/css', 'image/svg+xml', 'application/octet-stream' ) as $type ) {
+		$GLOBALS['faz_ob_response_headers'] = array( 'content-type: ' . $type . '; charset=UTF-8' );
+		assert_true( faz_ob_run( $fragment ) === $fragment, $type . ': tag-shaped data is preserved' );
+	}
+
+	// These markers alone must never exempt an ordinary visitor's HTML.
+	$_GET  = array( '_breakdance_doing_ajax' => 'yes', 'breakdance' => 'builder', 'breakdance_iframe' => 'true' );
+	$_POST = array( 'breakdance_ajax_at_any_url' => 'true' );
+	foreach ( array( array(), array( 'Content-Type: text/html; charset=UTF-8' ), array( 'CONTENT-TYPE: application/xhtml+xml' ) ) as $headers ) {
+		$GLOBALS['faz_ob_response_headers'] = $headers;
+		foreach ( array( '', '{not JSON} ', '[text] ', "\xEF\xBB\xBF" ) as $prefix ) {
+			$out = faz_ob_run( $prefix . $fragment );
+			assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/a.png"' ), 'HTML still parks images, including with a data-like prefix and builder URL markers' );
+			assert_true( false !== strpos( $out, 'type="text/plain"' ), 'HTML still parks tracker scripts' );
+		}
+	}
+	$_GET = $_POST = array();
+	$GLOBALS['faz_ob_response_headers'] = array();
 
 	echo "\n";
 	if ( 0 === $tests_failed ) {

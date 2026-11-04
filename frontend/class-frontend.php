@@ -4930,8 +4930,8 @@ class Frontend {
 	 *            `style` attributes neutralised in place (original in
 	 *            data-faz-css / data-faz-style) or parked whole.
 	 *
-	 * @param string $html Full page HTML.
-	 * @return string Modified HTML.
+	 * @param string $html Buffered response body.
+	 * @return string Modified HTML, or the original non-HTML response.
 	 */
 	public function process_output_buffer( $html ) {
 		// ob_start callbacks may receive null in edge cases (nested buffers, abort).
@@ -4939,6 +4939,24 @@ class Frontend {
 		$html = (string) $html;
 		if ( '' === $html ) {
 			return $this->refresh_srcdoc_proofs( $html );
+		}
+
+		// Some front-end endpoints (Breakdance's AJAX-at-any-URL, for
+		// example) send JSON after template_redirect has started this buffer.
+		// Inspect the response headers here, once the representation is known:
+		// rewriting tags inside JSON strings inserts unescaped attribute quotes
+		// and corrupts the payload. Only HTML is ours to rewrite; an absent
+		// Content-Type keeps the existing HTML behaviour. Request parameters or
+		// Accept headers must not let visitors opt an HTML page out of blocking.
+		$content_type = '';
+		foreach ( headers_list() as $header_line ) {
+			if ( 0 === stripos( $header_line, 'Content-Type:' ) ) {
+				$parts        = explode( ';', substr( $header_line, 13 ), 2 );
+				$content_type = strtolower( trim( $parts[0] ) );
+			}
+		}
+		if ( '' !== $content_type && ! in_array( $content_type, array( 'text/html', 'application/xhtml+xml' ), true ) ) {
+			return $html;
 		}
 
 		$blocked_categories = $this->get_blocked_categories();
