@@ -31,15 +31,13 @@ async function saveBanner(page: Page) {
 }
 
 async function openContent(page: Page) {
-  // The form is filled by the banner GET that loadBanner() sends on init: a
-  // field filled before it lands is overwritten, and a save sent before it is
-  // a no-op that never issues the PUT.
-  const loaded = page.waitForResponse(
-    (r) => /banners(\/|%2F)\d+/i.test(r.url()) && r.request().method() === 'GET' && r.ok(),
-    { timeout: 30_000 },
-  );
+  // loadBanner() fills the form asynchronously (the banner GET is served by
+  // apiFetch's preloading middleware, so no request reaches the network): a
+  // field filled before it runs is overwritten, and a save sent before it is a
+  // no-op that never issues the PUT. The banner name is filled after the
+  // settings, so a non-empty name means the form is ready.
   await page.goto(EDITOR, { waitUntil: 'domcontentloaded' });
-  await loaded;
+  await expect(page.locator('#faz-b-name')).not.toHaveValue('', { timeout: 30_000 });
   await page.click('button.faz-tab[data-tab="content"]');
   await expect(page.locator('#faz-b-notice-title')).toBeVisible();
 }

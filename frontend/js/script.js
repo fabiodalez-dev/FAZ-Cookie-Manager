@@ -9785,10 +9785,10 @@ function _fazGpcLocksOptOut() {
 }
 
 function _fazSetCCPAOptions() {
-    // The GPC note says a signal WAS detected. The geo runtime enables it for
-    // every visitor of a GPC jurisdiction, and the page may come from a cache,
-    // so only the browser knows whether the signal is there: drop the note when
-    // it is not, instead of telling the visitor something untrue.
+    // The GPC note says a signal WAS detected. The template always renders it
+    // and the page may come from a cache, so only the browser knows whether the
+    // signal is there: drop the note when it is not, instead of telling the
+    // visitor something untrue, and keep it wherever the lock below applies.
     const gpcLocked = _fazGpcLocksOptOut();
     if (!gpcLocked && !_fazPreviewEnabled()) {
         document.querySelectorAll('[data-faz-tag="optout-gpc-option"]').forEach(function (note) {

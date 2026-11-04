@@ -22,6 +22,8 @@ import { wpEval } from '../utils/wp-env';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 
 const CA = '/?faz_geo=US&faz_region=CA';
+// Iowa's ruleset neither honours nor requires GPC.
+const IOWA = '/?faz_geo=US&faz_region=IA';
 const TIMEOUT = 8000;
 
 let bannerId = 0;
@@ -126,6 +128,27 @@ test.describe('Opt-out popup and Global Privacy Control', () => {
       await expect(box).toBeChecked();
       await expect(box).toBeDisabled();
       await expect(page.locator('[data-faz-tag="optout-gpc-option"]').first()).toBeVisible();
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  test('outside a GPC jurisdiction the locked box still comes with the note that explains it', async ({ browser, wpBaseURL }) => {
+    // The client enforces the signal wherever the visitor is, so the lock
+    // applies here too; only the geo runtime used to enable the note.
+    // gpcOption is not part of the template's cache key, so a template built
+    // for California would otherwise be reused here and hide the difference.
+    wpEval(`delete_option( 'faz_banner_template' ); faz_clear_banner_template_cache();`);
+    const { ctx, page } = await visitor(browser, true);
+    try {
+      await page.goto(wpBaseURL + IOWA, { waitUntil: 'domcontentloaded' });
+      await expect.poll(() => consentCookie(ctx), { timeout: TIMEOUT }).toContain('gpc:1');
+      await openOptoutPopup(page);
+
+      const box = page.locator('#fazCCPAOptOut');
+      await expect(box).toBeChecked();
+      await expect(box).toBeDisabled();
+      await expect(page.locator('[data-faz-tag="optout-gpc-option"]').first(), 'the lock is explained').toBeVisible();
     } finally {
       await ctx.close();
     }

@@ -590,6 +590,13 @@ class Template {
 				if ( 'revisit-consent' === $tag && ! empty( $properties['config']['revisitConsent']['verifiedAlternative'] ) ) {
 					$enabled = true; // Hidden fallback; script.js checks the live footer.
 				}
+				// The GPC note explains why the opt-out is locked, and the lock
+				// follows the browser's signal wherever the visitor is. Only the
+				// browser knows whether the signal is there, so the note is always
+				// rendered and _fazSetCCPAOptions() drops it when it is not.
+				if ( 'optout-gpc-option' === $tag ) {
+					$enabled = true;
+				}
 
 				// Category toggles are required for GDPR granular consent — never remove.
 				if ( false === $enabled && 'detail-category-toggle' !== $tag ) {

@@ -31,7 +31,13 @@ async function saveBanner(page: Page) {
 }
 
 async function openColours(page: Page) {
+  // loadBanner() fills the form asynchronously (the banner GET is served by
+  // apiFetch's preloading middleware, so no request reaches the network): a
+  // field filled before it runs is overwritten, and a save sent before it is a
+  // no-op that never issues the PUT. The banner name is filled after the
+  // settings, so a non-empty name means the form is ready.
   await page.goto(EDITOR, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#faz-b-name')).not.toHaveValue('', { timeout: 30_000 });
   await page.click('button.faz-tab[data-tab="colours"]');
   await expect(page.locator('#faz-b-notice-opacity')).toBeVisible();
 }

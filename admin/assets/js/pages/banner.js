@@ -121,7 +121,12 @@
 			if (ratio < pair.min) issues.push({ label: pair.label, ratio: ratio, min: pair.min });
 		});
 		box.textContent = '';
-		if (!issues.length) { box.style.display = 'none'; return; }
+		// A translucent notice background lets the page show through, so the
+		// ratios above, measured on the solid colour, are not the ones a
+		// visitor sees. Say so instead of reporting a pass that may not hold.
+		var opacity = parseInt(getVal('faz-b-notice-opacity'), 10);
+		var translucent = opacity >= 50 && opacity < 100;
+		if (!issues.length && !translucent) { box.style.display = 'none'; return; }
 		box.style.display = 'block';
 		// Built with DOM nodes (no innerHTML) — labels are localized/static
 		// and ratios are numbers, but textContent keeps it injection-proof.
@@ -139,9 +144,17 @@
 			li.textContent = i.label + ' — ' + i.ratio.toFixed(2) + ':1 (min ' + i.min + ':1)';
 			ul.appendChild(li);
 		});
-		card.appendChild(h);
-		card.appendChild(p);
-		card.appendChild(ul);
+		if (issues.length) {
+			card.appendChild(h);
+			card.appendChild(p);
+			card.appendChild(ul);
+		}
+		if (translucent) {
+			var note = document.createElement('p');
+			note.style.margin = issues.length ? '6px 0 0' : '0';
+			note.textContent = fazI18n('banner.contrastOpacity', 'The notice background is translucent: the contrast of the title, description and buttons also depends on the page behind the banner, so check it on your site.');
+			card.appendChild(note);
+		}
 		box.appendChild(card);
 	}
 
@@ -2169,7 +2182,17 @@
 		props.settings.position = getVal('faz-b-position');
 		props.settings.theme = getVal('faz-b-theme');
 		props.settings.borderRadius = getVal('faz-b-border-radius');
-		props.settings.noticeOpacity = getVal('faz-b-notice-opacity');
+		// The server keeps only a whole number from 50 to 100 and stores
+		// anything else as empty; bring the field to what will be stored, so
+		// it does not keep showing a value that was dropped on save.
+		var opacityRaw = String(getVal('faz-b-notice-opacity') || '').trim();
+		var opacityNum = Number(opacityRaw);
+		var opacity = '';
+		if (opacityRaw !== '' && isFinite(opacityNum)) {
+			opacity = String(Math.min(100, Math.max(50, Math.round(opacityNum))));
+		}
+		if (opacity !== opacityRaw) setVal('faz-b-notice-opacity', opacity);
+		props.settings.noticeOpacity = opacity;
 		props.settings.textAlign = getVal('faz-b-text-align');
 		var wallEl = document.getElementById('faz-b-soft-cookie-wall');
 		props.settings.softCookieWall = wallEl ? wallEl.checked : false;

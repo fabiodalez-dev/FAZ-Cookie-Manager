@@ -779,6 +779,7 @@ class Admin {
 						// Colour-contrast checker (Colours tab, WCAG SC 1.4.3).
 						'contrastTitle'            => __( 'Accessibility: low colour contrast', 'faz-cookie-manager' ),
 						'contrastIntro'            => __( 'These colour pairs fall below the WCAG AA 4.5:1 minimum and may be hard to read:', 'faz-cookie-manager' ),
+						'contrastOpacity'          => __( 'The notice background is translucent: the contrast of the title, description and buttons also depends on the page behind the banner, so check it on your site.', 'faz-cookie-manager' ),
 						'cTitle'                   => __( 'Title vs banner background', 'faz-cookie-manager' ),
 						'cDesc'                    => __( 'Description vs banner background', 'faz-cookie-manager' ),
 						'cLink'                    => __( 'Link vs banner background', 'faz-cookie-manager' ),

@@ -131,6 +131,10 @@ export function resetDefaultBannerState(): void {
       $s['settings']['type'] = 'box';
       $s['settings']['preferenceCenterType'] = 'popup';
       $s['settings']['allowCloseButtonWithReject'] = false;
+      // Background opacity and text alignment change the computed style the
+      // rendering specs read; empty is the shipped look.
+      $s['settings']['noticeOpacity'] = '';
+      $s['settings']['textAlign'] = '';
       if ( ! isset( $s['config'] ) || ! is_array( $s['config'] ) ) { $s['config'] = array(); }
       if ( ! isset( $s['config']['notice'] ) || ! is_array( $s['config']['notice'] ) ) { $s['config']['notice'] = array(); }
       if ( ! isset( $s['config']['notice']['elements'] ) || ! is_array( $s['config']['notice']['elements'] ) ) { $s['config']['notice']['elements'] = array(); }
