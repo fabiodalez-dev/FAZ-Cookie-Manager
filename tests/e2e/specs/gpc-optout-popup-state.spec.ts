@@ -41,6 +41,10 @@ test.beforeAll(() => {
     $s['settings']['applicableLaw'] = 'ccpa';
     $ccpa = json_decode( file_get_contents( trailingslashit( WP_PLUGIN_DIR ) . 'faz-cookie-manager/admin/modules/banners/includes/configs/ccpa.json' ), true );
     $s['config'] = array_replace_recursive( isset( $s['config'] ) && is_array( $s['config'] ) ? $s['config'] : array(), $ccpa['config'] );
+    // ccpa.json ships respectGPC on; the geo runtime can only turn it on, for
+    // rulesets that honour GPC. Starting from off makes it a probe of that.
+    if ( ! isset( $s['behaviours'] ) || ! is_array( $s['behaviours'] ) ) { $s['behaviours'] = array(); }
+    $s['behaviours']['respectGPC'] = array( 'status' => false );
     $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => wp_json_encode( $s ) ), array( 'banner_id' => $row->banner_id ), array( '%s' ), array( '%d' ) );
     \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
     faz_clear_banner_template_cache();
@@ -107,6 +111,11 @@ test.describe('Opt-out popup and Global Privacy Control', () => {
     const { ctx, page } = await visitor(browser, true);
     try {
       await page.goto(wpBaseURL + CA, { waitUntil: 'domcontentloaded' });
+      // The other side of the Iowa probe: California's ruleset turns it on.
+      expect(
+        await page.evaluate(() => (window as any)._fazConfig?._bannerConfig?.behaviours?.respectGPC),
+        'California resolved to a ruleset that honours GPC',
+      ).toBe(true);
       await expect.poll(() => consentCookie(ctx), { timeout: TIMEOUT }).toContain('gpc:1');
       await openOptoutPopup(page);
 
@@ -151,8 +160,9 @@ test.describe('Opt-out popup and Global Privacy Control', () => {
     try {
       await page.goto(wpBaseURL + IOWA, { waitUntil: 'domcontentloaded' });
       // The page does not expose the ruleset id; what this case needs is a
-      // ruleset that does not honour GPC, and that is what the runtime writes
-      // into respectGPC (California's sets it to true).
+      // ruleset that does not honour GPC. The banner starts with respectGPC
+      // off (beforeAll) and the runtime turns it on only for such a ruleset,
+      // as California's does.
       expect(
         await page.evaluate(() => (window as any)._fazConfig?._bannerConfig?.behaviours?.respectGPC),
         'Iowa resolved to a ruleset that does not honour GPC',
