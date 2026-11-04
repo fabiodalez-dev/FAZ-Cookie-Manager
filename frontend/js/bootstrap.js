@@ -714,7 +714,9 @@
         return function () {
             var clone = original.apply(this, arguments);
             if (!served) return clone;
-            var source = resources(this), copies = resources(clone);
+            var self = this, deep = !!arguments[0];
+            // A shallow copy omits descendants, so compare only its root.
+            var source = resources(self).filter(function (el) { return deep || el === self; }), copies = resources(clone);
             if (source.length !== copies.length) return clone;
             source.forEach(function (el, i) {
                 var copy = copies[i], signature = served.get(el);

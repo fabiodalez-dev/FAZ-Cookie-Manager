@@ -79,8 +79,14 @@ namespace FazCookie\Frontend\Includes {
 
 namespace FazCookie\Frontend {
 
-	// PHP's CLI SAPI does not retain response headers. Exercise the same
-	// callback with the headers a web SAPI exposes after wp_send_json().
+	/**
+	 * Supply the response headers a web SAPI exposes after wp_send_json().
+	 *
+	 * PHP's CLI SAPI does not retain them, so this standalone harness uses
+	 * the current case's header list instead.
+	 *
+	 * @return string[] Response header lines.
+	 */
 	function headers_list() {
 		return isset( $GLOBALS['faz_ob_response_headers'] ) ? $GLOBALS['faz_ob_response_headers'] : array();
 	}

@@ -413,6 +413,23 @@ console.log('j. Divi mobile menus cloned from server markup stay synchronous (#3
   ok('cloning a fragment retains the records of its descendants', dest.querySelector('li img'));
 }
 
+for (const markup of [
+  '<video poster="/poster.png"><source src="/movie.mp4"></video>',
+  '<object data="/object.html"><embed src="/fallback.html"></object>',
+  '<table background="/background.png"><tbody><tr><td><img src="/flag.png"></td></tr></tbody></table>',
+]) {
+  for (const explicit of [false, true]) {
+    const { document, parse } = boot();
+    const source = parse(markup);
+    await checkpoint();
+    const clone = explicit ? source.cloneNode(false) : source.cloneNode();
+    const dest = document.getElementById('main');
+    dest.appendChild(clone);
+    eq(`${source.tagName}: a shallow clone keeps the root verdict when resource descendants are omitted (${explicit ? 'false' : 'default'})`, clone.parentNode, dest);
+    eq('the shallow clone still has no descendants', clone.childNodes.length, 0);
+  }
+}
+
 for (const changeAt of ['source', 'clone']) {
   for (const attribute of ['src', 'srcset']) {
     const { document, parse } = boot();
