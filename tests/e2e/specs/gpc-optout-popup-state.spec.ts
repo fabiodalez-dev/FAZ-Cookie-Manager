@@ -123,6 +123,14 @@ test.describe('Opt-out popup and Global Privacy Control', () => {
       await expect.poll(() => consentCookie(ctx), { timeout: TIMEOUT }).toContain('consent:yes');
       expect(await consentCookie(ctx)).toContain('marketing:no');
 
+      // Closing the popup runs _fazResetOptoutSuccessMessage(), which hands the
+      // box back; with the signal it must stay locked when the popup reopens.
+      await page.locator('[data-faz-tag="optout-close"]').first().click();
+      await expect(page.locator('[data-faz-tag="optout-popup"]').first()).toBeHidden({ timeout: TIMEOUT });
+      await openOptoutPopup(page);
+      await expect(box).toBeChecked();
+      await expect(box).toBeDisabled();
+
       await page.reload({ waitUntil: 'domcontentloaded' });
       await openOptoutPopup(page);
       await expect(box).toBeChecked();
@@ -142,6 +150,13 @@ test.describe('Opt-out popup and Global Privacy Control', () => {
     const { ctx, page } = await visitor(browser, true);
     try {
       await page.goto(wpBaseURL + IOWA, { waitUntil: 'domcontentloaded' });
+      // The page does not expose the ruleset id; what this case needs is a
+      // ruleset that does not honour GPC, and that is what the runtime writes
+      // into respectGPC (California's sets it to true).
+      expect(
+        await page.evaluate(() => (window as any)._fazConfig?._bannerConfig?.behaviours?.respectGPC),
+        'Iowa resolved to a ruleset that does not honour GPC',
+      ).toBe(false);
       await expect.poll(() => consentCookie(ctx), { timeout: TIMEOUT }).toContain('gpc:1');
       await openOptoutPopup(page);
 
