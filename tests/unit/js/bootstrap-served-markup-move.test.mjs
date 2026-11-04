@@ -471,8 +471,11 @@ for (const changeAt of ['source', 'clone']) {
   document.getElementById('main').appendChild(foreignClone);
   eq('cloning DOMParser markup does not create a parser verdict', foreignClone.isConnected, false);
   const built = document.createElement('img');
-  built.src = 'https://tracker.example/pixel';
+  const src = document.createAttribute('src');
+  src.value = 'https://tracker.example/pixel';
+  built.setAttributeNode(src);
   const builtClone = built.cloneNode(false);
+  eq('the script-built clone carries the remote URL', builtClone.getAttributeNode('src').value, src.value);
   document.getElementById('main').appendChild(builtClone);
   eq('cloning a script-built image does not create a parser verdict', builtClone.isConnected, false);
 }

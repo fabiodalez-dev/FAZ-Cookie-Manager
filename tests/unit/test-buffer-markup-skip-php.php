@@ -358,9 +358,24 @@ namespace {
 		}
 	}
 
-	foreach ( array( 'application/xml', 'text/plain', 'application/javascript', 'text/css', 'image/svg+xml', 'application/octet-stream' ) as $type ) {
+	foreach ( array( 'text/plain', 'application/javascript', 'text/css', 'image/svg+xml', 'application/octet-stream' ) as $type ) {
 		$GLOBALS['faz_ob_response_headers'] = array( 'content-type: ' . $type . '; charset=UTF-8' );
 		assert_true( faz_ob_run( $fragment ) === $fragment, $type . ': tag-shaped data is preserved' );
+	}
+
+	foreach ( array( 'application/xml', 'text/xml' ) as $type ) {
+		$GLOBALS['faz_ob_response_headers'] = array( 'Content-Type: ' . $type );
+		$xhtml = '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Page</title></head><body>'
+			. '<img src="https://cdn.tracker.test/a.png" /><script src="https://cdn.tracker.test/t.js"></script></body></html>';
+		$out = faz_ob_run( $xhtml );
+		assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/a.png"' ), $type . ': an XHTML page still parks images' );
+		assert_true( false !== strpos( $out, 'type="text/plain"' ), $type . ': an XHTML page still parks tracker scripts' );
+		$xml = '<response><html><![CDATA[' . $xhtml . ']]></html></response>';
+		assert_true( faz_ob_run( $xml ) === $xml, $type . ': XHTML-looking text in XML data stays byte-identical' );
+		$xml = '<response><html>' . htmlspecialchars( $fragment, ENT_QUOTES, 'UTF-8' ) . '</html></response>';
+		assert_true( faz_ob_run( $xml ) === $xml, $type . ': escaped HTML in XML data stays byte-identical' );
+		$out = faz_ob_run( '<broken>' . $fragment );
+		assert_true( false !== strpos( $out, 'data-faz-src=' ), $type . ': an unparseable body retains the existing blocking path' );
 	}
 
 	// These markers alone must never exempt an ordinary visitor's HTML.

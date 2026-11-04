@@ -4955,7 +4955,21 @@ class Frontend {
 				$content_type = strtolower( trim( $parts[0] ) );
 			}
 		}
-		if ( '' !== $content_type && ! in_array( $content_type, array( 'text/html', 'application/xhtml+xml' ), true ) ) {
+		$is_html = in_array( $content_type, array( '', 'text/html', 'application/xhtml+xml' ), true );
+		if ( in_array( $content_type, array( 'application/xml', 'text/xml' ), true ) ) {
+			// Browsers also execute XHTML served as generic XML. Let the XML
+			// parser distinguish actual XHTML elements from escaped/CDATA data.
+			// Without a parser or a successful parse, retain the existing
+			// blocking path. Do not load DTDs or expand external entities.
+			$is_html = true;
+			if ( class_exists( 'DOMDocument' ) ) {
+				$document = new \DOMDocument();
+				if ( $document->loadXML( $html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING ) ) {
+					$is_html = $document->getElementsByTagNameNS( 'http://www.w3.org/1999/xhtml', '*' )->length > 0;
+				}
+			}
+		}
+		if ( ! $is_html ) {
 			return $html;
 		}
 
