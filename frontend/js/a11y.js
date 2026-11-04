@@ -164,7 +164,10 @@
         if ( ! banner ) return;
         banner.setAttribute( 'role', 'dialog' );
         banner.setAttribute( 'aria-modal', 'true' );
-        banner.setAttribute( 'aria-labelledby', 'faz-banner-title' );
+        // An empty title is not rendered; the aria-label set by script.js names the dialog then.
+        if ( document.getElementById( 'faz-banner-title' ) ) {
+            banner.setAttribute( 'aria-labelledby', 'faz-banner-title' );
+        }
     }
 
     /**

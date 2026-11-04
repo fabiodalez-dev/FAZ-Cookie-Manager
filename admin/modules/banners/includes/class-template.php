@@ -571,6 +571,13 @@ class Template {
 						continue;
 					}
 				}
+				// An empty notice title is not rendered: the element keeps its
+				// bottom margin and a11y.js turns it into an <h2> with no text.
+				if ( 'title' === $tag && 0 === $element->getElementsByTagName( 'img' )->length
+					&& '' === trim( str_replace( "\xC2\xA0", ' ', $element->textContent ) ) ) {
+					$element->parentNode->removeChild( $element ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName
+					continue;
+				}
 				// Brand logo: set img src from config meta.url (custom upload).
 				if ( 'brand-logo' === $tag && isset( $config['meta']['url'] ) && '#' !== $config['meta']['url'] ) {
 					$logo_imgs = $element->getElementsByTagName( 'img' );
