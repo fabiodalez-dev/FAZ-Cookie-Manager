@@ -387,6 +387,54 @@ class Template {
 		return $this->styles;
 	}
 	/**
+	 * Rules for the Save button colours and the hover colours.
+	 *
+	 * Only what is set gets a rule: with these fields empty a banner keeps the
+	 * CSS it has today, where Save follows the Settings button and hover is the
+	 * template's 80% opacity. Save follows Settings on hover too, unless it has
+	 * colours of its own, because the Settings hover colours were not chosen
+	 * for them.
+	 *
+	 * @param array $css_vars Custom properties emitted for this banner.
+	 * @return string
+	 */
+	private static function custom_button_rules( $css_vars ) {
+		$is_set = static function ( $name ) use ( $css_vars ) {
+			return ! empty( $css_vars[ $name ] );
+		};
+		$hover  = static function ( $selector, $tag ) use ( $is_set ) {
+			$rule = '';
+			if ( $is_set( '--faz-' . $tag . '-hover-background-color' ) ) {
+				$rule .= 'background:var(--faz-' . $tag . '-hover-background-color);';
+			}
+			if ( $is_set( '--faz-' . $tag . '-hover-color' ) ) {
+				$rule .= 'color:var(--faz-' . $tag . '-hover-color);';
+			}
+			return '' === $rule ? '' : $selector . ':hover{' . $rule . 'opacity:1;}';
+		};
+
+		$save  = '.faz-btn-preferences[data-faz-tag="detail-save-button"]';
+		$rules = $hover( '.faz-btn-accept', 'accept-button' )
+			. $hover( '.faz-btn-reject', 'reject-button' )
+			. $hover( '.faz-btn-customize', 'settings-button' );
+
+		$save_rule = '';
+		foreach ( array( 'color' => 'color', 'background' => 'background-color', 'border-color' => 'border-color' ) as $property => $key ) {
+			if ( $is_set( '--faz-detail-save-button-custom-' . $key ) ) {
+				$save_rule .= $property . ':var(--faz-detail-save-button-custom-' . $key . ');';
+			}
+		}
+		if ( '' !== $save_rule ) {
+			$rules .= $save . '{' . $save_rule . '}';
+		}
+		$save_hover = $hover( $save, 'detail-save-button' );
+		if ( '' === $save_hover && '' === $save_rule ) {
+			$save_hover = $hover( $save, 'settings-button' );
+		}
+		return $rules . $save_hover;
+	}
+
+	/**
 	 * Get template HTML
 	 *
 	 * @return string
@@ -523,6 +571,7 @@ class Template {
 			}
 
 			$css_vars = array();
+			$revisit_custom = false;
 
 			foreach ( $elements as $element ) {
 				if ( ! $element instanceof \DOMElement ) {
@@ -583,6 +632,21 @@ class Template {
 					$logo_imgs = $element->getElementsByTagName( 'img' );
 					foreach ( $logo_imgs as $logo_img ) {
 						$logo_img->setAttribute( 'src', esc_url( $config['meta']['url'] ) );
+					}
+				}
+				// Revisit widget: a custom image replaces the default icon. script.js
+				// swaps the default icon for an inline SVG, and skips an image with
+				// this class whatever its URL says. The button already carries the
+				// accessible name, so the image needs no text of its own.
+				if ( 'revisit-consent' === $tag && ! empty( $config['meta']['url'] ) && '#' !== $config['meta']['url'] ) {
+					$revisit_url = esc_url_raw( $config['meta']['url'], array( 'http', 'https' ) );
+					if ( '' !== $revisit_url ) {
+						foreach ( $element->getElementsByTagName( 'img' ) as $revisit_img ) {
+							$revisit_img->setAttribute( 'src', $revisit_url );
+							$revisit_img->setAttribute( 'class', 'faz-revisit-custom-image' );
+							$revisit_img->setAttribute( 'alt', '' );
+						}
+						$revisit_custom = true;
 					}
 				}
 				$preview = $this->is_preview();
@@ -686,6 +750,10 @@ class Template {
 					. $this->styles;
 				if ( '' !== $text_align ) {
 					$this->styles .= '.faz-consent-container .faz-title,.faz-consent-container .faz-notice-des{text-align:var(--faz-notice-text-align);}';
+				}
+				$this->styles .= self::custom_button_rules( $css_vars );
+				if ( $revisit_custom ) {
+					$this->styles .= '.faz-btn-revisit-wrapper .faz-btn-revisit img.faz-revisit-custom-image{object-fit:contain;}';
 				}
 			}
 

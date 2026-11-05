@@ -57,6 +57,8 @@
 	// loadBanner()'s on-load check (outside FAZ.ready) can reach it; the
 	// in-FAZ.ready colour-change handlers call it too. Self-contained:
 	// only dependency is the module-level fazI18n() i18n helper.
+	// Colour fields whose empty value means "no setting", not a colour.
+	var FAZ_OPTIONAL_COLORS = { hover: ['accept', 'reject', 'settings'] };
 	var FAZ_CONTRAST_PAIRS = [
 		{ fg: 'faz-b-title-color',       bg: 'faz-b-notice-bg',       min: 4.5, label: fazI18n('banner.cTitle', 'Title vs banner background') },
 		{ fg: 'faz-b-desc-color',        bg: 'faz-b-notice-bg',       min: 4.5, label: fazI18n('banner.cDesc', 'Description vs banner background') },
@@ -65,6 +67,11 @@
 		{ fg: 'faz-b-reject-text',       bg: 'faz-b-reject-bg',       min: 4.5, label: fazI18n('banner.cReject', 'Reject button text vs its background') },
 		{ fg: 'faz-b-settings-text',     bg: 'faz-b-settings-bg',      min: 4.5, label: fazI18n('banner.cSettings', 'Settings button text vs its background'), fallbackBg: 'faz-b-notice-bg' },
 		{ fg: 'faz-b-catprev-save-text', bg: 'faz-b-catprev-save-bg',  min: 4.5, label: fazI18n('banner.cSave', 'Save button text vs its background') },
+		{ fg: 'faz-b-detail-save-text',  bg: 'faz-b-detail-save-bg',   min: 4.5, label: fazI18n('banner.cDetailSave', 'Preference center Save button text vs its background'), optional: true, fallbackFg: 'faz-b-settings-text' },
+		{ fg: 'faz-b-accept-hover-text', bg: 'faz-b-accept-hover-bg',  min: 4.5, label: fazI18n('banner.cAcceptHover', 'Accept button text vs its hover background'), optional: true, fallbackFg: 'faz-b-accept-text' },
+		{ fg: 'faz-b-reject-hover-text', bg: 'faz-b-reject-hover-bg',  min: 4.5, label: fazI18n('banner.cRejectHover', 'Reject button text vs its hover background'), optional: true, fallbackFg: 'faz-b-reject-text' },
+		{ fg: 'faz-b-settings-hover-text', bg: 'faz-b-settings-hover-bg', min: 4.5, label: fazI18n('banner.cSettingsHover', 'Settings button text vs its hover background'), optional: true, fallbackFg: 'faz-b-settings-text' },
+		{ fg: 'faz-b-detail-save-hover-text', bg: 'faz-b-detail-save-hover-bg', min: 4.5, label: fazI18n('banner.cSaveHover', 'Save button text vs its hover background'), optional: true, fallbackFg: 'faz-b-settings-text' },
 		{ fg: 'faz-b-catprev-label',     bg: 'faz-b-notice-bg',        min: 4.5, label: fazI18n('banner.cCatLabel', 'Category label vs banner background') },
 		{ fg: 'faz-b-donotsell-text',    bg: 'faz-b-notice-bg',        min: 4.5, label: fazI18n('banner.cDoNotSell', 'Do Not Sell text vs banner background') }
 	];
@@ -114,7 +121,10 @@
 		}
 		var issues = [];
 		FAZ_CONTRAST_PAIRS.forEach(function (pair) {
-			var fg = fazHexToRgb(fazReadColor(pair.fg));
+			// An optional field left empty has no colour to judge: its swatch
+			// still holds a value, so the text field is the one to read.
+			if (pair.optional && !getColor(pair.bg)) return;
+			var fg = fazHexToRgb(pair.fallbackFg && !getColor(pair.fg) ? fazReadColor(pair.fallbackFg) : fazReadColor(pair.fg));
 			var bg = fazResolveBg(pair);
 			if (!fg || !bg) return; // transparent/unknown foreground — can't judge
 			var ratio = fazContrastRatio(fg, bg);
@@ -1633,6 +1643,24 @@
 		var revisitStyles = revisit.styles || {};
 		setColor('faz-b-revisit-bg', revisitStyles['background-color'] || '#0056A7');
 		setColor('faz-b-revisit-icon', revisitStyles['color'] || '#FFFFFF');
+		var revisitImage = (revisit.meta && revisit.meta.url) || '';
+		if (revisitImage === '#') revisitImage = '';
+		setVal('faz-b-revisit-image-url', revisitImage);
+		updateImagePreview('faz-b-revisit-image', revisitImage);
+		var hoverButtons = (config.notice && config.notice.elements && config.notice.elements.buttons && config.notice.elements.buttons.elements) || {};
+		var detailSave = (config.preferenceCenter && config.preferenceCenter.elements && config.preferenceCenter.elements.buttons
+			&& config.preferenceCenter.elements.buttons.elements && config.preferenceCenter.elements.buttons.elements.save) || {};
+		FAZ_OPTIONAL_COLORS.hover.forEach(function (name) {
+			var styles = (hoverButtons[name] && hoverButtons[name].styles) || {};
+			setOptionalColor('faz-b-' + name + '-hover-bg', styles['hover-background-color']);
+			setOptionalColor('faz-b-' + name + '-hover-text', styles['hover-color']);
+		});
+		var detailSaveStyles = detailSave.styles || {};
+		setOptionalColor('faz-b-detail-save-bg', detailSaveStyles['custom-background-color']);
+		setOptionalColor('faz-b-detail-save-text', detailSaveStyles['custom-color']);
+		setOptionalColor('faz-b-detail-save-border', detailSaveStyles['custom-border-color']);
+		setOptionalColor('faz-b-detail-save-hover-bg', detailSaveStyles['hover-background-color']);
+		setOptionalColor('faz-b-detail-save-hover-text', detailSaveStyles['hover-color']);
 
 		// Behaviours
 		setChecked('faz-b-reload-toggle', b.reloadBannerOnAccept && b.reloadBannerOnAccept.status);
@@ -2313,6 +2341,20 @@
 		if (!props.config.revisitConsent.styles) props.config.revisitConsent.styles = {};
 		props.config.revisitConsent.styles['background-color'] = getColor('faz-b-revisit-bg');
 		props.config.revisitConsent.styles['color'] = getColor('faz-b-revisit-icon');
+		if (!props.config.revisitConsent.meta) props.config.revisitConsent.meta = {};
+		props.config.revisitConsent.meta.url = getVal('faz-b-revisit-image-url') || '#';
+		FAZ_OPTIONAL_COLORS.hover.forEach(function (name) {
+			ensureObj(btns, name + '.styles');
+			btns[name].styles['hover-background-color'] = getColor('faz-b-' + name + '-hover-bg');
+			btns[name].styles['hover-color'] = getColor('faz-b-' + name + '-hover-text');
+		});
+		ensureObj(props, 'config.preferenceCenter.elements.buttons.elements.save.styles');
+		var detailSaveOut = props.config.preferenceCenter.elements.buttons.elements.save.styles;
+		detailSaveOut['custom-background-color'] = getColor('faz-b-detail-save-bg');
+		detailSaveOut['custom-color'] = getColor('faz-b-detail-save-text');
+		detailSaveOut['custom-border-color'] = getColor('faz-b-detail-save-border');
+		detailSaveOut['hover-background-color'] = getColor('faz-b-detail-save-hover-bg');
+		detailSaveOut['hover-color'] = getColor('faz-b-detail-save-hover-text');
 
 		// Behaviours
 		if (!props.behaviours) props.behaviours = {};
@@ -2892,15 +2934,20 @@
 	// Cascade: wp.media (WordPress) → FilePond (ClassicPress) → native file input.
 
 	function initBrandLogoUploader() {
-		var uploadBtn = document.getElementById('faz-b-brandlogo-upload');
-		var removeBtn = document.getElementById('faz-b-brandlogo-remove');
-		var fileInput = document.getElementById('faz-b-brandlogo-file');
+		initImagePicker('faz-b-brandlogo', { mediaTitle: 'Select Brand Logo', uploading: 'Uploading logo\u2026', uploaded: 'Logo uploaded successfully.', dropLabel: 'Drag & drop a logo image or browse', fileName: 'logo' });
+		initImagePicker('faz-b-revisit-image', { mediaTitle: 'Select Revisit Widget Image', uploading: 'Uploading image\u2026', uploaded: 'Image uploaded successfully.', dropLabel: 'Drag & drop an image or browse', fileName: 'revisit-image' });
+	}
+
+	function initImagePicker(prefix, text) {
+		var uploadBtn = document.getElementById(prefix + '-upload');
+		var removeBtn = document.getElementById(prefix + '-remove');
+		var fileInput = document.getElementById(prefix + '-file');
 		var uploadInFlight = false;
 
 		function applyLogoUrl(url) {
-			setVal('faz-b-brandlogo-url', url || '');
-			updateBrandLogoPreview(url || '');
-			showBrandLogoStatus('', 'clear');
+			setVal(prefix + '-url', url || '');
+			updateImagePreview(prefix, url || '');
+			showImageStatus(prefix, '', 'clear');
 			syncFormToBannerData();
 			refreshPreview();
 		}
@@ -2911,7 +2958,7 @@
 				return;
 			}
 			if (!file || !window.fetch || !window.fazConfig || !fazConfig.api || !fazConfig.upload || !fazConfig.upload.mediaEndpoint) {
-				showBrandLogoStatus('Upload is not available.', 'error');
+				showImageStatus(prefix, 'Upload is not available.', 'error');
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
 				return;
@@ -2919,19 +2966,19 @@
 			var maxBytes = fazConfig.upload.maxSize || (2 * 1024 * 1024);
 			if (file.size > maxBytes) {
 				var maxMB = Math.floor(maxBytes / (1024 * 1024));
-				showBrandLogoStatus('File too large (max ' + maxMB + ' MB).', 'error');
+				showImageStatus(prefix, 'File too large (max ' + maxMB + ' MB).', 'error');
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
 				return;
 			}
 			uploadInFlight = true;
-			showBrandLogoStatus('Uploading logo\u2026');
+			showImageStatus(prefix, text.uploading);
 			window.fetch(fazConfig.upload.mediaEndpoint, {
 				method: 'POST',
 				credentials: 'same-origin',
 				headers: {
 					'X-WP-Nonce': (fazConfig.api.nonce || ''),
-					'Content-Disposition': 'attachment; filename="' + encodeURIComponent(file.name || 'logo') + '"',
+					'Content-Disposition': 'attachment; filename="' + encodeURIComponent(file.name || text.fileName) + '"',
 					'Content-Type': file.type || 'application/octet-stream',
 				},
 				body: file,
@@ -2946,12 +2993,12 @@
 				var url = payload && (payload.source_url || (payload.guid && payload.guid.rendered)) || '';
 				if (!url) throw new Error('Upload succeeded but no media URL was returned.');
 				applyLogoUrl(url);
-				showBrandLogoStatus('Logo uploaded successfully.', 'success');
+				showImageStatus(prefix, text.uploaded, 'success');
 				if (pond && typeof pond.removeFiles === 'function') pond.removeFiles();
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(true);
 			}).catch(function (err) {
-				showBrandLogoStatus('Upload failed: ' + (err.message || err), 'error');
+				showImageStatus(prefix, 'Upload failed: ' + (err.message || err), 'error');
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
 			}).then(function () {
@@ -2965,7 +3012,7 @@
 				// 1. WordPress media library (standard WP).
 				if (window.wp && window.wp.media && typeof window.wp.media === 'function') {
 					var frame = wp.media({
-						title: 'Select Brand Logo',
+						title: text.mediaTitle,
 						button: { text: 'Use this image' },
 						multiple: false,
 						library: { type: 'image' },
@@ -2981,7 +3028,7 @@
 				if (fileInput) {
 					fileInput.click();
 				} else {
-					showBrandLogoStatus('Media library unavailable.', 'error');
+					showImageStatus(prefix, 'Media library unavailable.', 'error');
 				}
 			});
 		}
@@ -2994,7 +3041,7 @@
 						allowMultiple: false,
 						credits: false,
 						acceptedFileTypes: ['image/*'],
-						labelIdle: 'Drag & drop a logo image or browse',
+						labelIdle: text.dropLabel,
 					});
 					if (pond && typeof pond.on === 'function') {
 						pond.on('addfile', function (error, item) {
@@ -3018,13 +3065,13 @@
 			removeBtn.addEventListener('click', function (e) {
 				e.preventDefault();
 				applyLogoUrl('');
-				showBrandLogoStatus('', 'clear');
+				showImageStatus(prefix, '', 'clear');
 			});
 		}
 	}
 
-	function showBrandLogoStatus(message, type) {
-		var status = document.getElementById('faz-b-brandlogo-upload-status');
+	function showImageStatus(prefix, message, type) {
+		var status = document.getElementById(prefix + '-upload-status');
 		if (!status) return;
 		if (!message || type === 'clear') {
 			status.textContent = '';
@@ -3037,8 +3084,12 @@
 	}
 
 	function updateBrandLogoPreview(url) {
-		var preview = document.getElementById('faz-b-brandlogo-preview');
-		var removeBtn = document.getElementById('faz-b-brandlogo-remove');
+		updateImagePreview('faz-b-brandlogo', url);
+	}
+
+	function updateImagePreview(prefix, url) {
+		var preview = document.getElementById(prefix + '-preview');
+		var removeBtn = document.getElementById(prefix + '-remove');
 		var safeUrl = sanitizeHttpUrl(url, false);
 		if (preview) {
 			if (safeUrl) {
@@ -3112,6 +3163,12 @@
 		if (picker) {
 			picker.value = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#FFFFFF';
 		}
+	}
+	function setOptionalColor(baseId, hex) {
+		var picker = document.getElementById(baseId);
+		var text = document.getElementById(baseId + '-hex');
+		if (text) text.value = hex || '';
+		if (picker && /^#[0-9a-fA-F]{6}$/.test(hex || '')) picker.value = hex;
 	}
 	function getColor(baseId) {
 		var text = document.getElementById(baseId + '-hex');

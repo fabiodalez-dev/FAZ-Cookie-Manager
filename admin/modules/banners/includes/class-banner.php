@@ -923,6 +923,11 @@ class Banner extends Store {
 			case 'color':
 			case 'border-color':
 			case 'background-color':
+			case 'hover-color':
+			case 'hover-background-color':
+			case 'custom-color':
+			case 'custom-background-color':
+			case 'custom-border-color':
 				// Admin-set colour values are later emitted as CSS custom-property
 				// values (class-template.php). esc_attr() at output does NOT strip
 				// CSS metacharacters ({ } ;), so sanitise to a strict colour here
@@ -945,6 +950,11 @@ class Banner extends Store {
 				break;
 			case 'textAlign':
 				$value = faz_sanitize_text_align( $value );
+				break;
+			case 'url':
+				// A link or image address, '#' when unset. It reaches the visitor's
+				// page in the banner config, so a dangerous scheme is dropped here.
+				$value = is_string( $value ) ? esc_url_raw( $value ) : '';
 				break;
 			case 'customCSS':
 				// customCSS field removed from the admin UI in 1.13.11 for

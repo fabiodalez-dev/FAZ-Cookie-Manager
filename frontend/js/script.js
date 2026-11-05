@@ -1967,7 +1967,7 @@ function _fazAddPositionClass() {
     revisitConsent.classList.add(revisitPosition);
 
     const revisitBtn = revisitConsent.querySelector('.faz-btn-revisit');
-    const revisitImg = revisitConsent.querySelector('.faz-btn-revisit img[src*="revisit"]');
+    const revisitImg = revisitConsent.querySelector('.faz-btn-revisit img[src*="revisit"]:not(.faz-revisit-custom-image)');
     if (revisitImg) {
         const svgMarkup = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50" fill="currentColor" aria-hidden="true">'
             + '<circle cx="23.5" cy="11.5" r="2.6"/><circle cx="27" cy="25" r="2.6"/>'
