@@ -483,6 +483,76 @@ namespace {
 		assert_true( faz_ob_run( $fragment ) === $fragment, $type . ': a well-formed data type is preserved' );
 	}
 
+	// Prefixed names: an XML document is free to bind XHTML or SVG to any prefix,
+	// and browsers fetch from <s:image> exactly as they do from <image>.
+	$is_xml = function ( $out ) {
+		$document = new \DOMDocument();
+		return $document->loadXML( $out, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING );
+	};
+	$prefixed_svg = '<s:svg xmlns:s="http://www.w3.org/2000/svg" xmlns:xl="http://www.w3.org/1999/xlink"><s:script href="https://cdn.tracker.test/t.js"></s:script><s:image href="https://cdn.tracker.test/a.png"/><s:use xlink:href="https://cdn.tracker.test/u.svg#a" xmlns:xlink="http://www.w3.org/1999/xlink"/></s:svg>';
+	$prefixed_xhtml = '<h:html xmlns:h="http://www.w3.org/1999/xhtml"><h:body><h:img src="https://cdn.tracker.test/a.png"/><h:script src="https://cdn.tracker.test/t.js"></h:script><h:iframe src="https://cdn.tracker.test/f.html"></h:iframe><h:video src="https://cdn.tracker.test/v.mp4"></h:video><h:link rel="stylesheet" href="https://cdn.tracker.test/s.css"/><h:style>@import url("https://cdn.tracker.test/i.css");</h:style></h:body></h:html>';
+	foreach ( array( 'application/xml', 'text/xml', 'image/svg+xml', 'application/xhtml+xml', 'application/vnd.builder+xml' ) as $type ) {
+		$GLOBALS['faz_ob_response_headers'] = array( 'Content-Type: ' . $type );
+		$out = faz_ob_run( $prefixed_svg );
+		assert_true( false !== strpos( $out, 'data-faz-href="https://cdn.tracker.test/a.png"' ), $type . ': a prefixed SVG image is parked' );
+		assert_true( false !== strpos( $out, '<s:script' ) && false !== strpos( $out, 'type="text/plain"' ), $type . ': a prefixed SVG script is parked and keeps its prefix' );
+		assert_true( false !== strpos( $out, 'data-faz-href="https://cdn.tracker.test/u.svg#a"' ), $type . ': a prefixed SVG use is parked' );
+		assert_true( false === strpos( $out, 'data-faz-xml-prefix' ), $type . ': the working marker does not reach the visitor' );
+		assert_true( $is_xml( $out ), $type . ': the prefixed SVG is still well-formed XML' );
+
+		$out = faz_ob_run( $prefixed_xhtml );
+		assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/a.png"' ), $type . ': a prefixed XHTML image is parked' );
+		assert_true( false !== strpos( $out, 'type="text/plain"' ), $type . ': a prefixed XHTML script is parked' );
+		assert_true( false === strpos( $out, ' src="https://cdn.tracker.test/f.html"' ), $type . ': a prefixed XHTML iframe is parked' );
+		assert_true( false === strpos( $out, ' src="https://cdn.tracker.test/v.mp4"' ), $type . ': a prefixed XHTML video is parked' );
+		assert_true( false === strpos( $out, ' href="https://cdn.tracker.test/s.css"' ), $type . ': a prefixed XHTML stylesheet is parked' );
+		assert_true( false === strpos( $out, 'data-faz-xml-prefix' ), $type . ': the marker does not reach the visitor from XHTML either' );
+		assert_true( false === strpos( $out, '@import url("https://cdn.tracker.test/i.css")' ), $type . ': a prefixed XHTML style is neutralised' );
+		assert_true( $is_xml( $out ), $type . ': the prefixed XHTML is still well-formed XML' );
+
+		$same = '<s:svg xmlns:s="http://www.w3.org/2000/svg"><s:image href="https://site.test/local.png"/><s:script>var a = 1;</s:script></s:svg>';
+		assert_true( faz_ob_run( $same ) === $same, $type . ': prefixed elements with nothing to block are byte-identical' );
+
+		// A prefix bound to something else is not XHTML or SVG, whatever its local name.
+		$out = faz_ob_run( '<s:svg xmlns:s="http://www.w3.org/2000/svg" xmlns:d="urn:data"><d:img src="https://cdn.tracker.test/a.png"/></s:svg>' );
+		assert_true( false !== strpos( $out, '<d:img src="https://cdn.tracker.test/a.png"/>' ), $type . ': an element in another namespace is left alone' );
+	}
+
+	// The XLink prefix is the document's choice too.
+	foreach ( array( 'application/xml', 'image/svg+xml' ) as $type ) {
+		$GLOBALS['faz_ob_response_headers'] = array( 'Content-Type: ' . $type );
+		$xl  = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xl="http://www.w3.org/1999/xlink"><image xl:href="https://cdn.tracker.test/a.png"/></svg>';
+		$out = faz_ob_run( $xl );
+		assert_true( false !== strpos( $out, 'data-faz-href="https://cdn.tracker.test/a.png"' ) && false === strpos( $out, 'href="https://cdn.tracker.test/a.png"/' ), $type . ': an XLink href under another prefix is parked' );
+		assert_true( $is_xml( $out ), $type . ': that SVG is still well-formed XML' );
+		$xl = '<s:svg xmlns:s="http://www.w3.org/2000/svg" xmlns:xl="http://www.w3.org/1999/xlink"><s:image xl:href="https://site.test/local.png"/></s:svg>';
+		assert_true( faz_ob_run( $xl ) === $xl, $type . ': with nothing to block the prefix comes back byte-identical' );
+	}
+
+	// An HTML parser has no namespace prefixes: <svg:image> is an unknown, inert element there.
+	$GLOBALS['faz_ob_response_headers'] = array( 'Content-Type: text/html; charset=UTF-8' );
+	$html_doc = '<html><body><svg:image href="https://cdn.tracker.test/a.png"></svg:image></body></html>';
+	assert_true( faz_ob_run( $html_doc ) === $html_doc, 'text/html: a colon in a tag name is left alone' );
+
+	// A namespace declared through an internal DTD entity (Illustrator's SVG
+	// export) reads as no namespace to the parser, which does not expand entities.
+	$illustrator = '<?xml version="1.0"?><!DOCTYPE svg [<!ENTITY ns_svg "http://www.w3.org/2000/svg"><!ENTITY ns_xlink "http://www.w3.org/1999/xlink">]>'
+		. '<svg xmlns="&ns_svg;" xmlns:xlink="&ns_xlink;"><image xlink:href="https://cdn.tracker.test/a.png"/></svg>';
+	$illustrator_prefixed = '<?xml version="1.0"?><!DOCTYPE s:svg [<!ENTITY ns_svg "http://www.w3.org/2000/svg">]>'
+		. '<s:svg xmlns:s="&ns_svg;"><s:image href="https://cdn.tracker.test/a.png"/></s:svg>';
+	foreach ( array( 'application/xml', 'image/svg+xml' ) as $type ) {
+		$GLOBALS['faz_ob_response_headers'] = array( 'Content-Type: ' . $type );
+		assert_true( false !== strpos( faz_ob_run( $illustrator ), 'data-faz-href="https://cdn.tracker.test/a.png"' ), $type . ': a namespace from an internal entity keeps the document blocked' );
+		$out = faz_ob_run( $illustrator_prefixed );
+		assert_true( false !== strpos( $out, 'data-faz-href="https://cdn.tracker.test/a.png"' ) && false !== strpos( $out, '<s:image' ), $type . ': so does a prefix bound through an internal entity' );
+		foreach ( array(
+			'an empty internal subset' => '<!DOCTYPE r []><r><![CDATA[<p>x</p>' . $fragment . ']]></r>',
+			'an external-only DOCTYPE' => '<!DOCTYPE r SYSTEM "r.dtd"><r><![CDATA[<p>x</p>' . $fragment . ']]></r>',
+		) as $label => $xml ) {
+			assert_true( faz_ob_run( $xml ) === $xml, $type . ': ' . $label . ' leaves XML data byte-identical' );
+		}
+	}
+
 	// These markers alone must never exempt an ordinary visitor's HTML.
 	$_GET  = array( '_breakdance_doing_ajax' => 'yes', 'breakdance' => 'builder', 'breakdance_iframe' => 'true' );
 	$_POST = array( 'breakdance_ajax_at_any_url' => 'true' );

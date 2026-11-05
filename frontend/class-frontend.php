@@ -83,6 +83,11 @@ class Frontend {
 	const ATTR_TOKEN = '/\G[\s\/"\'=>]*+([^\s"\'>\/=]++)(?:\s*+=\s*+("[^"]*+"|\'[^\']*+\'|[^\s>"\'][^\s>]*+))?/';
 
 	/**
+	 * Marker attribute holding an XML element's prefix while the passes run.
+	 */
+	const XML_PREFIX_MARKER = 'data-faz-xml-prefix';
+
+	/**
 	 * One attribute token, anchored at the offset it is asked from: whatever
 	 * cannot start a name (whitespace, a slash, a stray quote, `=`, `>`) is
 	 * skipped, then a name, then optionally `=` and a value shaped as in
@@ -4931,7 +4936,8 @@ class Frontend {
 	 *            data-faz-css / data-faz-style) or parked whole.
 	 *
 	 * @param string $html Buffered response body.
-	 * @return string Modified HTML, or the original non-HTML response.
+	 * @return string Modified HTML, the same HTML when nothing is blocked, or the
+	 *                original non-HTML response.
 	 */
 	public function process_output_buffer( $html ) {
 		// ob_start callbacks may receive null in edge cases (nested buffers, abort).
@@ -4963,22 +4969,35 @@ class Frontend {
 		$content_type = 1 === count( $content_types ) ? (string) key( $content_types ) : '';
 		$is_markup    = in_array( $content_type, array( '', 'text/html', 'application/xhtml+xml', '*/*', 'unknown/unknown', 'application/unknown', 'multipart/x-mixed-replace' ), true )
 			|| 1 !== preg_match( '/^[!#$%&\'*+.^_`|~0-9a-z-]+\/[!#$%&\'*+.^_`|~0-9a-z-]+$/D', $content_type );
-		if ( ! $is_markup && ( in_array( $content_type, array( 'application/xml', 'text/xml', 'text/xsl' ), true ) || '+xml' === substr( $content_type, -4 ) ) ) {
+		$prefixed       = array();
+		$xlink_prefixes = array();
+		if ( in_array( $content_type, array( 'application/xml', 'text/xml', 'text/xsl' ), true ) || '+xml' === substr( $content_type, -4 ) ) {
 			// XML media types can contain active XHTML or SVG documents, and an
 			// XSL stylesheet (including the simplified form, whose root only
 			// carries xsl:version) or a document that applies one (top-level
 			// xml-stylesheet PI) can produce them. Let the parser distinguish
 			// real elements from escaped/CDATA data. Without a parser or a
 			// successful parse, retain the existing blocking path. Do not load
-			// DTDs or expand external entities.
-			$is_markup = true;
+			// DTDs or expand external entities: an internal DTD subset is
+			// blocked instead, because a namespace declared through an entity
+			// (Illustrator's SVG export) is invisible to a parser that does not
+			// expand it, and browsers do expand it.
+			$document = null;
 			if ( class_exists( 'DOMDocument' ) ) {
-				$document = new \DOMDocument();
-				if ( $document->loadXML( $html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING ) ) {
-					$is_markup = $document->getElementsByTagNameNS( 'http://www.w3.org/1999/xhtml', '*' )->length > 0
-						|| $document->getElementsByTagNameNS( 'http://www.w3.org/2000/svg', '*' )->length > 0
-						|| $document->getElementsByTagNameNS( 'http://www.w3.org/1999/XSL/Transform', '*' )->length > 0
-						|| ( null !== $document->documentElement && $document->documentElement->hasAttributeNS( 'http://www.w3.org/1999/XSL/Transform', 'version' ) );
+				$candidate = new \DOMDocument();
+				if ( $candidate->loadXML( $html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING ) ) {
+					$document = $candidate;
+				}
+			}
+			$has_subset = null !== $document && null !== $document->doctype && ! empty( $document->doctype->internalSubset );
+			if ( ! $is_markup ) {
+				$is_markup = null === $document
+					|| $has_subset
+					|| $document->getElementsByTagNameNS( 'http://www.w3.org/1999/xhtml', '*' )->length > 0
+					|| $document->getElementsByTagNameNS( 'http://www.w3.org/2000/svg', '*' )->length > 0
+					|| $document->getElementsByTagNameNS( 'http://www.w3.org/1999/XSL/Transform', '*' )->length > 0
+					|| ( null !== $document->documentElement && $document->documentElement->hasAttributeNS( 'http://www.w3.org/1999/XSL/Transform', 'version' ) );
+				if ( ! $is_markup ) {
 					foreach ( $document->childNodes as $node ) {
 						if ( XML_PI_NODE === $node->nodeType && 'xml-stylesheet' === $node->nodeName ) {
 							$is_markup = true;
@@ -4987,11 +5006,159 @@ class Frontend {
 					}
 				}
 			}
+			if ( $is_markup ) {
+				$prefixed = self::xml_prefixed_names( $html, $has_subset ? null : $document );
+				if ( null !== $document && ! $has_subset ) {
+					$xlink_prefixes = self::xml_xlink_aliases( $document );
+				}
+			}
 		}
 		if ( ! $is_markup ) {
 			return $html;
 		}
+		if ( empty( $prefixed ) && empty( $xlink_prefixes ) ) {
+			return $this->block_buffered_markup( $html );
+		}
 
+		// Every pass below looks for unprefixed names. Give them the elements an
+		// XML document bound to XHTML or SVG through a prefix, then put the
+		// prefix back. HTML is not involved: its parser has no namespace
+		// prefixes, and <svg:image> is an unknown element there.
+		if ( ! empty( $xlink_prefixes ) ) {
+			// The passes know the conventional xlink:href; a document can bind XLink
+			// to any prefix. One alias at a time: a document rarely has more.
+			$alias = $xlink_prefixes[0];
+			$html  = (string) preg_replace( '#(\s)' . preg_quote( $alias, '#' ) . ':href(?=\s*=)#', '$1xlink:href', $html );
+			$out   = self::xml_restore_prefixes( $this->block_buffered_markup( empty( $prefixed ) ? $html : self::xml_strip_prefixes( $html, $prefixed ) ), $prefixed );
+			$back  = preg_replace( '#(\s)xlink:href(?=\s*=)#', '$1' . $alias . ':href', $out );
+			return null === $back ? $out : $back;
+		}
+		return self::xml_restore_prefixes( $this->block_buffered_markup( self::xml_strip_prefixes( $html, $prefixed ) ), $prefixed );
+	}
+
+	/**
+	 * Qualified names in an XML document that the blocking passes must treat as
+	 * the element they stand for.
+	 *
+	 * @param string            $html     Document.
+	 * @param \DOMDocument|null $document Parsed document whose namespaces can be
+	 *                                    trusted. Null without one, which keeps
+	 *                                    every prefixed name of an active element.
+	 * @return string[] Names such as `s:image`.
+	 */
+	private static function xml_prefixed_names( $html, $document ) {
+		$active = array( 'noscript', 'script', 'image', 'use', 'feimage', 'body', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'iframe', 'style', 'img', 'video', 'audio', 'source', 'embed', 'object', 'track', 'input', 'link' );
+		$names  = array();
+		if ( null === $document ) {
+			if ( preg_match_all( '#<([a-zA-Z_][\w.-]*+:(?:' . implode( '|', $active ) . '))(?=[\s/>])#i', $html, $matches ) ) {
+				$names = $matches[1];
+			}
+			return array_values( array_unique( $names ) );
+		}
+		foreach ( array( 'http://www.w3.org/1999/xhtml', 'http://www.w3.org/2000/svg' ) as $namespace ) {
+			foreach ( $document->getElementsByTagNameNS( $namespace, '*' ) as $element ) {
+				if ( '' !== (string) $element->prefix && in_array( strtolower( $element->localName ), $active, true ) ) {
+					$names[] = $element->prefix . ':' . $element->localName;
+				}
+			}
+		}
+		return array_values( array_unique( $names ) );
+	}
+
+	/**
+	 * Prefixes other than `xlink` that a parsed document binds to XLink on an
+	 * href attribute.
+	 *
+	 * @param \DOMDocument $document Parsed document.
+	 * @return string[] Prefixes.
+	 */
+	private static function xml_xlink_aliases( $document ) {
+		$aliases = array();
+		foreach ( ( new \DOMXPath( $document ) )->query( "//@*[namespace-uri()='http://www.w3.org/1999/xlink' and local-name()='href']" ) as $attribute ) {
+			if ( 'xlink' !== $attribute->prefix ) {
+				$aliases[] = $attribute->prefix;
+			}
+		}
+		return array_values( array_unique( $aliases ) );
+	}
+
+	/**
+	 * Rename prefixed tags to the name the passes look for, with the prefix kept
+	 * in a marker attribute. End tags carry it too: the passes step over an end
+	 * tag's attributes.
+	 *
+	 * @param string   $html  Document.
+	 * @param string[] $names Qualified names from xml_prefixed_names().
+	 * @return string Document for the passes.
+	 */
+	private static function xml_strip_prefixes( $html, $names ) {
+		$alternatives = implode( '|', array_map( 'preg_quote', $names ) );
+		$renamed      = preg_replace_callback(
+			'#<(/?)(' . $alternatives . ')(?=[\s/>])#',
+			function ( $m ) {
+				list( $prefix, $local ) = explode( ':', $m[2], 2 );
+				return '<' . $m[1] . $local . ' ' . self::XML_PREFIX_MARKER . '="' . $prefix . '"';
+			},
+			$html
+		);
+		return null === $renamed ? $html : $renamed;
+	}
+
+	/**
+	 * Undo xml_strip_prefixes() on the passes' output, wherever a pass moved the
+	 * marker among the tag's attributes. A pass that rewrites a whole element
+	 * (script, style) writes a plain end tag, which would leave the XML
+	 * malformed and the page unrendered, so end tags then follow their open tag.
+	 *
+	 * @param string   $html  Document after the passes.
+	 * @param string[] $names Qualified names from xml_prefixed_names().
+	 * @return string Document with its prefixes back.
+	 */
+	private static function xml_restore_prefixes( $html, $names ) {
+		if ( false === strpos( $html, self::XML_PREFIX_MARKER ) ) {
+			return $html;
+		}
+		$restored = preg_replace_callback(
+			'#<(/?)([a-zA-Z][^\s/>]*+)((?:(?!\s' . self::XML_PREFIX_MARKER . '=)\s++[^\s"\'>/=]++(?:\s*+=\s*+(?:"[^"]*+"|\'[^\']*+\'|[^\s>"\'][^\s>]*+))?)*+)\s' . self::XML_PREFIX_MARKER . '="([^"]*+)"#',
+			function ( $m ) {
+				return '<' . $m[1] . $m[4] . ':' . $m[2] . $m[3];
+			},
+			$html
+		);
+		if ( null === $restored ) {
+			return $html;
+		}
+		foreach ( $names as $name ) {
+			$local = substr( $name, (int) strpos( $name, ':' ) + 1 );
+			$stack = array();
+			$fixed = preg_replace_callback(
+				'#<(/?)(' . preg_quote( $name, '#' ) . '|' . preg_quote( $local, '#' ) . ')(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#',
+				function ( $m ) use ( &$stack ) {
+					if ( '' === $m[1] ) {
+						if ( '' === $m[4] ) {
+							$stack[] = $m[2];
+						}
+						return $m[0];
+					}
+					$open = array_pop( $stack );
+					return null === $open ? $m[0] : '</' . $open . $m[3] . '>';
+				},
+				$restored
+			);
+			if ( null !== $fixed ) {
+				$restored = $fixed;
+			}
+		}
+		return $restored;
+	}
+
+	/**
+	 * Run the blocking passes over a response already known to be markup.
+	 *
+	 * @param string $html Markup.
+	 * @return string Modified markup.
+	 */
+	private function block_buffered_markup( $html ) {
 		$blocked_categories = $this->get_blocked_categories();
 		$has_service_consent = ! empty( $this->get_service_consent() );
 		if ( empty( $blocked_categories ) && ! $has_service_consent ) {
