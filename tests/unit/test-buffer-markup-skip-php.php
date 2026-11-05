@@ -37,6 +37,8 @@
  *      them on 42728bbc).
  *   8. Non-HTML response types, including Breakdance's front-end AJAX JSON,
  *      are preserved byte-for-byte; HTML still blocks with builder markers.
+ *      A malformed, sniffed or conflicting Content-Type, an XSL stylesheet and
+ *      an xml-stylesheet document all render, so they are blocked too.
  *
  * Run: php tests/unit/test-buffer-markup-skip-php.php
  *  or: bash scripts/run-unit-tests.sh
@@ -78,6 +80,14 @@ namespace FazCookie\Frontend\Includes {
 }
 
 namespace FazCookie\Frontend {
+
+	// Lets the suite exercise the verdict on a server without the DOM extension.
+	function class_exists( $class, $autoload = true ) {
+		if ( 'DOMDocument' === $class && ! empty( $GLOBALS['faz_ob_no_dom'] ) ) {
+			return false;
+		}
+		return \class_exists( $class, $autoload );
+	}
 
 	/**
 	 * Supply the response headers a web SAPI exposes after wp_send_json().
@@ -363,7 +373,7 @@ namespace {
 		assert_true( faz_ob_run( $fragment ) === $fragment, $type . ': tag-shaped data is preserved' );
 	}
 
-	foreach ( array( 'application/xml', 'text/xml', 'image/svg+xml', 'application/vnd.builder+xml' ) as $type ) {
+	foreach ( array( 'application/xml', 'text/xml', 'text/xsl', 'image/svg+xml', 'application/vnd.builder+xml' ) as $type ) {
 		$GLOBALS['faz_ob_response_headers'] = array( 'Content-Type: ' . $type );
 		$xhtml = '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Page</title></head><body>'
 			. '<img src="https://cdn.tracker.test/a.png" /><script src="https://cdn.tracker.test/t.js"></script></body></html>';
@@ -373,14 +383,98 @@ namespace {
 		$svg = '<svg xmlns="http://www.w3.org/2000/svg"><script href="https://cdn.tracker.test/t.js"></script><image href="https://cdn.tracker.test/a.png" /></svg>';
 		$out = faz_ob_run( $svg );
 		assert_true( false !== strpos( $out, 'data-faz-href="https://cdn.tracker.test/a.png"' ) && false !== strpos( $out, 'type="text/plain"' ), $type . ': active SVG scripts and images stay parked' );
-		$xml = '<response><![CDATA[' . $svg . ']]></response>';
-		assert_true( faz_ob_run( $xml ) === $xml, $type . ': SVG-looking CDATA remains XML data' );
-		$xml = '<response><html><![CDATA[' . $xhtml . ']]></html></response>';
-		assert_true( faz_ob_run( $xml ) === $xml, $type . ': XHTML-looking text in XML data stays byte-identical' );
+		// Telling CDATA from elements takes the parser; composer.json does not
+		// require ext-dom, and without it these responses stay on the blocking path.
+		if ( \class_exists( 'DOMDocument' ) ) {
+			$xml = '<response><![CDATA[' . $svg . ']]></response>';
+			assert_true( faz_ob_run( $xml ) === $xml, $type . ': SVG-looking CDATA remains XML data' );
+			$xml = '<response><html><![CDATA[' . $xhtml . ']]></html></response>';
+			assert_true( faz_ob_run( $xml ) === $xml, $type . ': XHTML-looking text in XML data stays byte-identical' );
+		}
 		$xml = '<response><html>' . htmlspecialchars( $fragment, ENT_QUOTES, 'UTF-8' ) . '</html></response>';
 		assert_true( faz_ob_run( $xml ) === $xml, $type . ': escaped HTML in XML data stays byte-identical' );
 		$out = faz_ob_run( '<broken>' . $fragment );
 		assert_true( false !== strpos( $out, 'data-faz-src=' ), $type . ': an unparseable body retains the existing blocking path' );
+		$GLOBALS['faz_ob_no_dom'] = true;
+		$out = faz_ob_run( '<response><![CDATA[' . $fragment . ']]></response>' . $fragment );
+		$GLOBALS['faz_ob_no_dom'] = false;
+		assert_true( false !== strpos( $out, 'data-faz-src=' ), $type . ': without the DOM extension the existing blocking path is retained' );
+	}
+
+	$both_parked = function ( $out, $label ) {
+		assert_true( false !== strpos( $out, 'data-faz-src="https://cdn.tracker.test/a.png"' ), $label . ': the image is parked' );
+		assert_true( false !== strpos( $out, 'type="text/plain"' ), $label . ': the tracker script is parked' );
+	};
+
+	// A stylesheet's literal elements are fetched once it is applied, and they
+	// carry no XHTML namespace of their own.
+	$xsl = '<?xml version="1.0"?><xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:template match="/"><html><body>'
+		. '<img src="https://cdn.tracker.test/a.png"/><script src="https://cdn.tracker.test/t.js"></script></body></html></xsl:template></xsl:stylesheet>';
+	// A simplified stylesheet has no element in the XSL namespace at all: its
+	// root only carries xsl:version.
+	$simplified = '<html xsl:version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><body>'
+		. '<img src="https://cdn.tracker.test/a.png"/><script src="https://cdn.tracker.test/t.js"></script></body></html>';
+	// With an applied stylesheet, CDATA can reach the page through
+	// disable-output-escaping, so the plain-data reading no longer holds. The
+	// passes read `<![CDATA[` as a bogus comment ending at its first `>`, hence
+	// the leading <p>: this case is about the gate, not that span.
+	$pi_cdata = '<?xml version="1.0"?><?xml-stylesheet type="text/xsl" href="/s.xsl"?><response><![CDATA[<p>x</p>' . $fragment . ']]></response>';
+	foreach ( array( 'text/xml', 'application/xml', 'text/xsl', 'application/xslt+xml' ) as $type ) {
+		$GLOBALS['faz_ob_response_headers'] = array( 'Content-Type: ' . $type );
+		$both_parked( faz_ob_run( $xsl ), $type . ' XSL literals' );
+		$both_parked( faz_ob_run( $simplified ), $type . ' simplified stylesheet' );
+		$both_parked( faz_ob_run( $pi_cdata ), $type . ' xml-stylesheet with CDATA HTML' );
+		// Only a top-level PI with exactly that target applies a stylesheet.
+		if ( \class_exists( 'DOMDocument' ) ) {
+			$xml = '<response><?xml-stylesheet href="/s.xsl"?><![CDATA[' . $fragment . ']]></response>';
+			assert_true( faz_ob_run( $xml ) === $xml, $type . ': a nested xml-stylesheet PI leaves XML data byte-identical' );
+			$xml = '<?xml-stylesheet-x href="/s.xsl"?><response><![CDATA[' . $fragment . ']]></response>';
+			assert_true( faz_ob_run( $xml ) === $xml, $type . ': a look-alike PI target leaves XML data byte-identical' );
+			// Only the root's XSL-namespace version attribute makes a simplified stylesheet.
+			$xml = '<response version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><item xsl:version="1.0"><![CDATA[' . $fragment . ']]></item></response>';
+			assert_true( faz_ob_run( $xml ) === $xml, $type . ': a version attribute outside the XSL root rule leaves XML data byte-identical' );
+		}
+	}
+
+	// Core's sitemap takes the blocking path now and has nothing to park.
+	$GLOBALS['faz_ob_response_headers'] = array( 'Content-Type: application/xml; charset=UTF-8' );
+	$sitemap = '<?xml version="1.0" encoding="UTF-8"?>' . "\n" . '<?xml-stylesheet type="text/xsl" href="https://site.test/wp-sitemap-index.xsl" ?>' . "\n"
+		. '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>https://site.test/wp-sitemap-posts-post-1.xml</loc></sitemap></sitemapindex>' . "\n";
+	assert_true( faz_ob_run( $sitemap ) === $sitemap, 'a sitemap with an xml-stylesheet PI and no third-party tags comes out unchanged' );
+
+	// At least one browser engine may render these as HTML, so they fail closed.
+	foreach ( array( 'text/html,charset=utf-8', 'text/html, charset=utf-8', 'text/html charset=utf-8', 'charset=utf-8', 'html', 'text', '*/*', 'unknown/unknown', 'Unknown/Unknown', 'application/unknown', 'multipart/x-mixed-replace; boundary=x', 'application/json, text/html', 'text/html, application/json', 'text /html' ) as $type ) {
+		$GLOBALS['faz_ob_response_headers'] = array( 'Content-Type: ' . $type );
+		$both_parked( faz_ob_run( $fragment ), 'Content-Type "' . $type . '"' );
+	}
+
+	// nginx forwards only the first of two conflicting headers; php -S sends both
+	// and browsers use the last.
+	foreach ( array(
+		'text/html then JSON'    => array( 'Content-Type: text/html', 'Content-Type: application/json' ),
+		'JSON then text/html'    => array( 'Content-Type: application/json', 'Content-Type: text/html' ),
+		'JSON then text/plain'   => array( 'Content-Type: application/json', 'Content-Type: text/plain' ),
+		'an empty value then JSON' => array( 'Content-Type:', 'Content-Type: application/json' ),
+		'JSON then a malformed value' => array( 'Content-Type: application/json', 'Content-Type: html' ),
+	) as $label => $headers ) {
+		$GLOBALS['faz_ob_response_headers'] = $headers;
+		$both_parked( faz_ob_run( $fragment ), $label );
+	}
+
+	// One media type, however often it is repeated, is not a conflict.
+	foreach ( array(
+		'two identical JSON headers'    => array( 'Content-Type: application/json', 'Content-Type: application/json' ),
+		'JSON with different parameters' => array( 'Content-Type: application/json; charset=UTF-8', 'content-type: APPLICATION/JSON' ),
+		'another header naming the type' => array( 'X-Content-Type-Options: nosniff', 'Content-Type: application/json' ),
+	) as $label => $headers ) {
+		$GLOBALS['faz_ob_response_headers'] = $headers;
+		assert_true( faz_ob_run( $fragment ) === $fragment, $label . ': tag-shaped data is preserved' );
+	}
+
+	// Well-formed types stay data: this is an allowlist of markup, not a denylist.
+	foreach ( array( 'application/vnd.api+json', 'text/csv', 'text/htm', 'foo/bar' ) as $type ) {
+		$GLOBALS['faz_ob_response_headers'] = array( 'Content-Type: ' . $type );
+		assert_true( faz_ob_run( $fragment ) === $fragment, $type . ': a well-formed data type is preserved' );
 	}
 
 	// These markers alone must never exempt an ordinary visitor's HTML.

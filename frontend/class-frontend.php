@@ -4945,28 +4945,46 @@ class Frontend {
 		// example) send JSON after template_redirect has started this buffer.
 		// Inspect the response headers here, once the representation is known:
 		// rewriting tags inside JSON strings inserts unescaped attribute quotes
-		// and corrupts the payload. Only browser markup is ours to rewrite; an
-		// absent Content-Type keeps the existing blocking. Request parameters or
-		// Accept headers must not let visitors opt an HTML page out of blocking.
-		$content_type = '';
+		// and corrupts the payload. Blocking fails closed: only a response with
+		// exactly one well-formed, non-sniffed data media type skips it. An absent
+		// or malformed value, a type browsers sniff (`*/*`, `unknown/unknown`,
+		// `application/unknown`) and conflicting headers, of which nginx forwards
+		// only the first while php -S sends both and browsers use the last, may
+		// all render as HTML. Parameters do not make a type distinct. Request parameters or Accept headers must
+		// not let visitors opt an HTML page out of blocking.
+		$content_types = array();
 		foreach ( headers_list() as $header_line ) {
 			if ( 0 === stripos( $header_line, 'Content-Type:' ) ) {
-				$parts        = explode( ';', substr( $header_line, 13 ), 2 );
-				$content_type = strtolower( trim( $parts[0] ) );
+				$parts = explode( ';', substr( $header_line, 13 ), 2 );
+
+				$content_types[ strtolower( trim( $parts[0] ) ) ] = true;
 			}
 		}
-		$is_markup = in_array( $content_type, array( '', 'text/html', 'application/xhtml+xml' ), true );
-		if ( ! $is_markup && ( in_array( $content_type, array( 'application/xml', 'text/xml' ), true ) || '+xml' === substr( $content_type, -4 ) ) ) {
-			// XML media types can contain active XHTML or SVG documents. Let
-			// the parser distinguish real elements from escaped/CDATA data.
-			// Without a parser or a successful parse, retain the existing
-			// blocking path. Do not load DTDs or expand external entities.
+		$content_type = 1 === count( $content_types ) ? (string) key( $content_types ) : '';
+		$is_markup    = in_array( $content_type, array( '', 'text/html', 'application/xhtml+xml', '*/*', 'unknown/unknown', 'application/unknown', 'multipart/x-mixed-replace' ), true )
+			|| 1 !== preg_match( '/^[!#$%&\'*+.^_`|~0-9a-z-]+\/[!#$%&\'*+.^_`|~0-9a-z-]+$/D', $content_type );
+		if ( ! $is_markup && ( in_array( $content_type, array( 'application/xml', 'text/xml', 'text/xsl' ), true ) || '+xml' === substr( $content_type, -4 ) ) ) {
+			// XML media types can contain active XHTML or SVG documents, and an
+			// XSL stylesheet (including the simplified form, whose root only
+			// carries xsl:version) or a document that applies one (top-level
+			// xml-stylesheet PI) can produce them. Let the parser distinguish
+			// real elements from escaped/CDATA data. Without a parser or a
+			// successful parse, retain the existing blocking path. Do not load
+			// DTDs or expand external entities.
 			$is_markup = true;
 			if ( class_exists( 'DOMDocument' ) ) {
 				$document = new \DOMDocument();
 				if ( $document->loadXML( $html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING ) ) {
 					$is_markup = $document->getElementsByTagNameNS( 'http://www.w3.org/1999/xhtml', '*' )->length > 0
-						|| $document->getElementsByTagNameNS( 'http://www.w3.org/2000/svg', '*' )->length > 0;
+						|| $document->getElementsByTagNameNS( 'http://www.w3.org/2000/svg', '*' )->length > 0
+						|| $document->getElementsByTagNameNS( 'http://www.w3.org/1999/XSL/Transform', '*' )->length > 0
+						|| ( null !== $document->documentElement && $document->documentElement->hasAttributeNS( 'http://www.w3.org/1999/XSL/Transform', 'version' ) );
+					foreach ( $document->childNodes as $node ) {
+						if ( XML_PI_NODE === $node->nodeType && 'xml-stylesheet' === $node->nodeName ) {
+							$is_markup = true;
+							break;
+						}
+					}
 				}
 			}
 		}
