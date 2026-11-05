@@ -480,5 +480,53 @@ for (const changeAt of ['source', 'clone']) {
   eq('cloning a script-built image does not create a parser verdict', builtClone.isConnected, false);
 }
 
+console.log('j2. A menu copy carrying a parked script, and the other copy routes');
+{
+  const { document, parse } = boot();
+  // F009: a parked script inside a cloned server menu no longer empties the menu.
+  const scriptMenu = parse('<ul><li><a href="/it/"><img src="/flags/it.png">Italiano</a><script type="text/plain" data-faz-category="marketing" src="https://tracker.example/t.js"></script></li></ul>');
+  await checkpoint();
+  const scriptMenuClone = scriptMenu.cloneNode(true);
+  const main = document.getElementById('main');
+  // A held insertion keeps later ones in that container behind it, in order.
+  const dest = () => main.appendChild(document.createElement('nav'));
+  const scriptDest = dest();
+  scriptDest.appendChild(scriptMenuClone);
+  eq('a cloned menu with a server-parked script is inserted synchronously', scriptMenuClone.isConnected, true);
+  ok('and Divi can query the menu on the next line', scriptDest.contains(scriptMenuClone) && scriptMenuClone.querySelector('li img'));
+  eq('the parked script in it stays parked', scriptMenuClone.querySelector('script').getAttribute('type'), 'text/plain');
+  const flippedMenu = scriptMenu.cloneNode(true);
+  flippedMenu.querySelector('script').setAttribute('type', 'text/javascript');
+  dest().appendChild(flippedMenu);
+  eq('a cloned menu whose parked script was flipped is still held', flippedMenu.isConnected, false);
+  const redirected = scriptMenu.cloneNode(true);
+  // Detached Attr writes bypass the setter gate.
+  redirected.querySelector('script').getAttributeNode('src').value = 'https://tracker.example/other.js';
+  dest().appendChild(redirected);
+  eq('a cloned menu whose script URL changed is still held', redirected.isConnected, false);
+  // F008: the other copy routes carry the same verdict, under the same conditions.
+  const sourceMenu = parse('<ul class="imported"><li><img src="/flags/fr.png"></li></ul>');
+  await checkpoint();
+  const importedMenu = document.importNode(sourceMenu, true);
+  dest().appendChild(importedMenu);
+  eq('a menu copied with importNode is inserted synchronously', importedMenu.isConnected, true);
+  const importedShallow = document.importNode(sourceMenu.querySelector('img'));
+  dest().appendChild(importedShallow);
+  eq('a shallow importNode of a resource keeps its root verdict', importedShallow.isConnected, true);
+  const importedChanged = document.importNode(sourceMenu.querySelector('img'));
+  importedChanged.getAttributeNode('src').value = 'https://tracker.example/changed';
+  dest().appendChild(importedChanged);
+  eq('an imported copy with a new URL is still held', importedChanged.isConnected, false);
+  const rangeMenu = parse('<div class="ranged"><img src="/flags/de.png"></div>');
+  await checkpoint();
+  const range = document.createRange();
+  range.selectNodeContents(rangeMenu);
+  const rangeHost = dest();
+  const rangeCopy = range.cloneContents();
+  const rangeImage = rangeCopy.querySelector('img');
+  rangeHost.appendChild(rangeCopy);
+  eq('a menu copied with Range.cloneContents is inserted synchronously', rangeImage.isConnected, true);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -571,7 +571,7 @@
         // fetching resource without changing its URL. The server leaves a
         // canonical link alone; changing its rel to stylesheet while detached
         // must therefore require a new verdict before it can be reinserted.
-        var mode = tagKey(el) === 'LINK' ? 'rel' : tagKey(el) === 'INPUT' ? 'type' : '';
+        var mode = tagKey(el) === 'LINK' ? 'rel' : tagKey(el) === 'INPUT' || tagKey(el) === 'SCRIPT' ? 'type' : '';
         if (mode) out.push(['mode', mode, attr(el, mode)]);
         // Attribute values can contain newlines. Joining with that delimiter
         // made one background="/empty\nsrc=https://tracker/..." compare equal
@@ -703,6 +703,9 @@
     // Resource elements the parser inserted, each with its URLs as inserted —
     // see unjudged().
     var served = sunk && typeof w.WeakMap === 'function' ? new w.WeakMap() : null;
+    // The same for parser scripts, read only by the copy routes below. A script
+    // itself never gets a verdict in `served`: see the MutationObserver.
+    var servedScripts = served ? new w.WeakMap() : null;
     // Divi's et_duplicate_menu clones the server menu (including Polylang's
     // flag images), appends it, then queries the destination synchronously.
     // A clone has no WeakMap entry of its own, so holding it left that query
@@ -710,23 +713,42 @@
     // and URL signature. Never grant a new verdict from the current URLs:
     // detached Attr edits or a changed <base> may have redirected them since
     // the parser's verdict. unjudged() checks the signature again on insertion.
-    replace(Node.prototype, 'cloneNode', function (original) {
-        return function () {
-            var clone = original.apply(this, arguments);
-            if (!served) return clone;
-            var self = this, deep = !!arguments[0];
-            // A shallow copy omits descendants, so compare only its root.
-            var source = resources(self).filter(function (el) { return deep || el === self; }), copies = resources(clone);
-            if (source.length !== copies.length) return clone;
-            source.forEach(function (el, i) {
-                var copy = copies[i], signature = served.get(el);
-                if (tagKey(el) !== 'SCRIPT' && signature !== undefined
-                    && tagKey(el) === tagKey(copy) && el.namespaceURI === copy.namespaceURI
-                    && signature === urls(copy)) served.set(copy, signature);
-            });
-            return clone;
+    // A copied script (server-parked, or one the server let through) is the same
+    // judged script while its type and URL stay the same. Flipping a parked copy
+    // changes the signature and the insertion is held.
+    function carryVerdicts(source, copies) {
+        if (source.length !== copies.length) return;
+        source.forEach(function (el, i) {
+            var copy = copies[i], signature = tagKey(el) === 'SCRIPT' ? servedScripts.get(el) : served.get(el);
+            if (signature !== undefined && tagKey(el) === tagKey(copy) && el.namespaceURI === copy.namespaceURI
+                && signature === urls(copy)) served.set(copy, signature);
+        });
+    }
+    function copyRoute(deepAt, sourceAt) {
+        return function (original) {
+            return function () {
+                var clone = original.apply(this, arguments);
+                if (!served) return clone;
+                var from = sourceAt === undefined ? this : arguments[sourceAt], deep = !!arguments[deepAt];
+                // A shallow copy omits descendants, so compare only its root.
+                carryVerdicts(resources(from).filter(function (el) { return deep || el === from; }), resources(clone));
+                return clone;
+            };
         };
-    });
+    }
+    replace(Node.prototype, 'cloneNode', copyRoute(0));
+    if (d.importNode) replace(Document.prototype, 'importNode', copyRoute(1, 0));
+    if (w.Range && w.Range.prototype.cloneContents) {
+        replace(w.Range.prototype, 'cloneContents', function (original) {
+            return function () {
+                var copy = original.apply(this, arguments);
+                if (!served) return copy;
+                var range = this;
+                carryVerdicts(resources(range.commonAncestorContainer).filter(function (el) { return range.intersectsNode(el); }), resources(copy));
+                return copy;
+            };
+        });
+    }
     // Sheets a wrapper has already delivered, judged, on the safety release.
     // The backstop stays armed on that path and must not judge them again —
     // which is only sound because the delivery question (judgeCss) reads the
@@ -3048,7 +3070,10 @@
                         // back and moves it would run it with no verdict. A
                         // moved image, frame or media element fetches nothing
                         // its current attributes did not already fetch.
-                        if (served) resources(node).forEach(function (el) { if (tagKey(el) !== 'SCRIPT' && !served.has(el)) served.set(el, urls(el)); });
+                        if (served) resources(node).forEach(function (el) {
+                            var judged = tagKey(el) === 'SCRIPT' ? servedScripts : served;
+                            if (!judged.has(el)) judged.set(el, urls(el));
+                        });
                         continue;
                     }
                     resources(node).forEach(guard);
