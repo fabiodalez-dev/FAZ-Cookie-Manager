@@ -395,8 +395,14 @@ namespace {
 		assert_true( faz_ob_run( $xml ) === $xml, $type . ': escaped HTML in XML data stays byte-identical' );
 		$out = faz_ob_run( '<broken>' . $fragment );
 		assert_true( false !== strpos( $out, 'data-faz-src=' ), $type . ': an unparseable body retains the existing blocking path' );
+		// Well-formed, so only the missing parser can send it to the blocking path.
+		// The leading <p> is the first tag the passes skip in `<![CDATA[`.
+		$well_formed = '<response><![CDATA[<p>x</p>' . $fragment . ']]></response>';
+		if ( \class_exists( 'DOMDocument' ) ) {
+			assert_true( faz_ob_run( $well_formed ) === $well_formed, $type . ': with the DOM extension this CDATA stays byte-identical' );
+		}
 		$GLOBALS['faz_ob_no_dom'] = true;
-		$out = faz_ob_run( '<response><![CDATA[' . $fragment . ']]></response>' . $fragment );
+		$out = faz_ob_run( $well_formed );
 		$GLOBALS['faz_ob_no_dom'] = false;
 		assert_true( false !== strpos( $out, 'data-faz-src=' ), $type . ': without the DOM extension the existing blocking path is retained' );
 	}
