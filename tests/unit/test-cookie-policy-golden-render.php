@@ -749,6 +749,8 @@ foreach ( $fixtures as $fx ) {
 	if ( null !== $fx['option'] ) {
 		$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data'] = $fx['option'];
 	}
+	// Pin the opt-out path byte-for-byte; randomized output is tested separately.
+	$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data']['obfuscate_emails'] = false;
 	$GLOBALS['wpdb']->rows           = $fx['rows'];
 	$GLOBALS['wpdb']->tables_present = $fx['tables'] ?? true;
 	faz_reset_renderer_statics();
@@ -1114,6 +1116,45 @@ if ( ! $faz_update_mode ) {
 		$hash_of( $faz_retention_render( 'ccpa-california', 'en', 37 ) ) === $hash_of( $faz_retention_render( 'ccpa-california', 'en', 24 ) ),
 		'version hash of a CCPA policy, whose text does not state it, ignores the consent-log retention'
 	);
+
+	echo "\n-- randomized email presentation --\n";
+	foreach ( Generator::JURISDICTIONS as $jurisdiction ) {
+		foreach ( Generator::LANGUAGES as $language ) {
+			$settings = faz_fx_company() + array(
+				'jurisdiction'       => $jurisdiction,
+				'privacy_policy_url' => 'https://example.test/privacy',
+			);
+			$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data'] = $settings;
+			$atts = array( 'lang' => $language );
+			$encoded = Renderer::render( $atts );
+			$again   = Renderer::render( $atts );
+			$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data']['obfuscate_emails'] = false;
+			$plain = Renderer::render( $atts );
+			assert_true(
+				html_entity_decode( $encoded, ENT_QUOTES, 'UTF-8' ) === html_entity_decode( $plain, ENT_QUOTES, 'UTF-8' ),
+				"$jurisdiction/$language: default encoding preserves all visible content and attributes"
+			);
+			assert_true(
+				false === strpos( $encoded, 'privacy@example.test' ) && false === strpos( $encoded, 'dpo@example.test' ),
+				"$jurisdiction/$language: both contact fields are absent from raw HTML"
+			);
+			assert_true( $encoded !== $again, "$jurisdiction/$language: encoding is randomized on each render" );
+			assert_true(
+				$hash_of( $encoded ) === $hash_of( $again ) && $hash_of( $encoded ) === $hash_of( $plain ),
+				"$jurisdiction/$language: randomness and opt-out leave the policy version unchanged"
+			);
+		}
+	}
+	$settings = faz_fx_company();
+	$settings['company']['email'] = "privacy**tag&'box@example.test";
+	$settings['dpo']['email'] = 'dpo`tag`@example.test';
+	$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data'] = $settings;
+	$encoded = Renderer::render( array( 'lang' => 'en' ) );
+	$text = html_entity_decode( strip_tags( $encoded ), ENT_QUOTES, 'UTF-8' );
+	foreach ( array( $settings['company']['email'], $settings['dpo']['email'] ) as $email ) {
+		assert_true( false !== strpos( $text, $email ), 'Markdown-sensitive email characters remain readable verbatim' );
+		assert_true( false === strpos( $encoded, $email ), 'Markdown-sensitive addresses are also encoded' );
+	}
 }
 
 // ---------------------------------------------------------------------------

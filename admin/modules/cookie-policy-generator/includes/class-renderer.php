@@ -22,6 +22,7 @@
 namespace FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes;
 
 use FazCookie\Includes\Cookie_Content_I18n;
+use FazCookie\Includes\Email_Obfuscation;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -40,6 +41,7 @@ require_once __DIR__ . '/class-section-overrides.php';
 require_once __DIR__ . '/class-document-config.php';
 require_once __DIR__ . '/class-document-registry.php';
 require_once dirname( __DIR__, 4 ) . '/includes/class-cookie-content-i18n.php';
+require_once dirname( __DIR__, 4 ) . '/includes/class-email-obfuscation.php';
 
 /**
  * Cookie policy renderer.
@@ -332,6 +334,13 @@ class Renderer {
 		// surrounding `<p>` wrapper stripped so the injected block sits at the
 		// right nesting level.
 		$html_tokens   = array_intersect_key( $data, array_flip( $doc->html_tokens() ) );
+		// Valid email local parts can contain Markdown characters (* and `).
+		// Protect non-empty addresses without hiding genuinely missing values.
+		foreach ( array( 'COMPANY_EMAIL', 'DPO_EMAIL' ) as $email_token ) {
+			if ( isset( $data[ $email_token ] ) && is_string( $data[ $email_token ] ) && '' !== $data[ $email_token ] ) {
+				$html_tokens[ $email_token ] = $data[ $email_token ];
+			}
+		}
 		$data_for_md   = $data;
 		foreach ( array_keys( $html_tokens ) as $token_name ) {
 			$data_for_md[ $token_name ] = Generator::html_token_sentinel( $token_name );
@@ -441,7 +450,18 @@ class Renderer {
 				$allowed[ $tag ]['aria-level'] = true;
 			}
 		}
-		return $admin_notice . $wrapper_open . wp_kses( $html, $allowed ) . $wrapper_close;
+		$html = wp_kses( $html, $allowed );
+		// Random presentation must not change the consent policy-version hash.
+		if ( $settings['obfuscate_emails'] ?? true ) {
+			$html = Email_Obfuscation::apply(
+				$html,
+				array(
+					self::scalar_string( $settings['company']['email'] ?? '' ),
+					self::scalar_string( $settings['dpo']['email'] ?? '' ),
+				)
+			);
+		}
+		return $admin_notice . $wrapper_open . $html . $wrapper_close;
 	}
 
 	/**

@@ -76,6 +76,7 @@ A dedicated **Cookie Policy** admin tab and the `[faz_cookie_policy_complete]` s
 * **Multilingual** -- en, it, fr, de, es, pt-BR, bg, cs; override per render with `lang="it"` or let the browser decide.
 * **Editable per jurisdiction and language** -- replace any section with your own Markdown, placeholders included; leave one empty and it keeps receiving reviewed updates.
 * **Your company data** -- name, address, DPO email, retention period. Never seeded from `admin_email` or `blogname`.
+* **Email obfuscation** -- enabled by default; turn off "Obfuscate public email addresses" in Cookie Policy settings if needed. Privacy contact and privacy officer addresses are randomly encoded as HTML entities, including the legacy cookie policy contact link. Works without JavaScript in Chrome, Firefox and Safari; readable addresses and existing email links are preserved. Deters simple scrapers, not HTML-decoding bots. Cached pages retain their encoding until refreshed.
 * **Honest by default** -- a localised disclaimer states the templates are a starting point, not legal advice.
 
 The older `[faz_cookie_policy]` and `[faz_cookie_table]` shortcodes and the `faz/cookie-table` block are unchanged.

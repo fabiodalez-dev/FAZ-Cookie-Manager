@@ -122,6 +122,13 @@ $faz_cp_bundled_language_names = array(
 					<input type="email" id="cp-company-email" name="company.email" class="faz-input" required>
 				</div>
 				<div class="faz-form-group">
+					<label for="cp-obfuscate-emails">
+						<input type="checkbox" id="cp-obfuscate-emails" name="obfuscate_emails" checked>
+						<?php esc_html_e( 'Obfuscate public email addresses', 'faz-cookie-manager' ); ?>
+					</label>
+					<div class="faz-help"><?php esc_html_e( 'Randomly encodes privacy contact and privacy officer email addresses in cookie policies. Visitors can still read and copy them, and existing email links still work, without JavaScript. Deters simple scrapers, but cannot prevent collection by bots that decode HTML. Enabled by default.', 'faz-cookie-manager' ); ?></div>
+				</div>
+				<div class="faz-form-group">
 					<label for="cp-company-registry"><?php esc_html_e( 'Registry / VAT / CNPJ (optional)', 'faz-cookie-manager' ); ?></label>
 					<input type="text" id="cp-company-registry" name="company.registry" class="faz-input">
 				</div>

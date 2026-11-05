@@ -14,6 +14,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once __DIR__ . '/class-email-obfuscation.php';
+
 class Cookie_Policy_Shortcode {
 
 	/**
@@ -115,6 +117,10 @@ class Cookie_Policy_Shortcode {
 
 		</div>
 		<?php
-		return ob_get_clean();
+		$html     = ob_get_clean();
+		$settings = (array) get_option( 'faz_cookie_policy_data', array() );
+		return ( $settings['obfuscate_emails'] ?? true )
+			? Email_Obfuscation::apply( $html, array( $contact ) )
+			: $html;
 	}
 }
