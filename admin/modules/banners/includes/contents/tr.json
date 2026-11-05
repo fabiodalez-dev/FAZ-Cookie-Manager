@@ -35,8 +35,8 @@
                 "category": {
                     "elements": {
                         "alwaysEnabled": "Her Zaman Etkin",
-                        "enable": "İzin Ver",
-                        "disable": "İzin Verme"
+                        "enable": "Etkinleştir",
+                        "disable": "Devre dışı bırak"
                     }
                 },
                 "buttons": {
@@ -56,13 +56,13 @@
                 "optOption": {
                     "elements": {
                         "title": "Kişisel Verilerimi Satmayın veya Paylaşmayın",
-                        "enable": "İzin Ver",
-                        "disable": "İzin Verme"
+                        "enable": "Etkinleştir",
+                        "disable": "Devre dışı bırak"
                     }
                 },
                 "gpcOption": {
                     "elements": {
-                        "description": "<p>Tarayıcınızdan gelen <b>Global Privacy Control</b> sinyali doğrultusunda, bu web sitesinde kayıt ve izleme amaçlı tercihlerinizin dikkate alınması için uygun düzenlemeler uygulanmaktadır.</p>"
+                        "description": "<p>Tarayıcınızdan bir <b>Global Privacy Control</b> sinyali algıladığımız için bu web sitesindeki devre dışı bırakma tercihiniz uygulanmıştır; bu nedenle bu ayarı değiştiremezsiniz.</p>"
                     }
                 },
                 "showLess": "Daha az göster",
@@ -109,7 +109,7 @@
         "notice": {
             "elements": {
                 "title": "Çerezler ve Kişisel Verilerin Korunması",
-                "description": "<p>Web sitemiz veya üçüncü taraf araçlar, güvenli çalışma, kullanıcı deneyimi, performans ölçümü ve reklam/analitik hizmetleri için kişisel verileri işleyebilir. Kişisel verilerinizin işlenmesine ilişkin detayları aydınlatma metnimizde bulabilirsiniz. Gerekli çerezler zorunlu olup otomatik olarak çalışır; diğer çerez türleri için açık rıza tercihlerinizi ayrı şekilde yönetebilirsiniz.</p>",
+                "description": "<p>Bu web sitesi veya üçüncü taraf araçları kişisel verileri işler. \"Kişisel Verilerimi Satmayın veya Paylaşmayın\" bağlantısına tıklayarak kişisel bilgilerinizin satılmasını veya paylaşılmasını reddedebilirsiniz. Onay tercihleri simgesine tıklayarak onayınızı istediğiniz zaman değiştirebilir veya geri çekebilirsiniz.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {
@@ -135,14 +135,14 @@
         "preferenceCenter": {
             "elements": {
                 "title": "Çerez Tercihlerinizi Yönetin",
-                "description": "<p>Gerekli çerezler site güvenliği ve temel işlevler için zorunludur. Analitik, performans ve pazarlama amaçlı çerezler için açık rıza tercihinizi ayrı ayrı belirleyebilirsiniz. Verdiğiniz rızayı dilediğiniz zaman geri çekebilirsiniz.</p>",
+                "description": "<p>Sitede verimli şekilde gezinmenize ve belirli işlevleri yerine getirmenize yardımcı olmak için çerezler kullanıyoruz. Aşağıda her kategorinin altında çerezlerle ilgili ayrıntılı bilgileri bulabilirsiniz.</p><p>\"Gerekli\" olarak sınıflandırılan çerezler, sitenin temel işlevleri için zorunlu oldukları için tarayıcınızda saklanır.</p><p>Bu web sitesini nasıl kullandığınızı analiz etmemize, tercihlerinizi saklamamıza ve ilginizi çekebilecek içerik ve pazarlama materyallerini sunmamıza yardımcı olan üçüncü taraf çerezleri de kullanıyoruz.</p><p>Bu çerezlerin bir kısmını veya tamamını etkinleştirebilir ya da devre dışı bırakabilirsiniz; ancak bazılarını devre dışı bırakmak gezinme deneyiminizi etkileyebilir.</p>",
                 "showMore": "Daha fazla göster",
                 "showLess": "Daha az göster",
                 "category": {
                     "elements": {
                         "alwaysEnabled": "Her Zaman Etkin",
-                        "enable": "İzin Ver",
-                        "disable": "İzin Verme"
+                        "enable": "Etkinleştir",
+                        "disable": "Devre dışı bırak"
                     }
                 },
                 "buttons": {
@@ -158,17 +158,17 @@
         "optoutPopup": {
             "elements": {
                 "title": "İptal ve Rıza Tercihleri",
-                "description": "<p>İşleyiş, güvenlik, performans ve analiz amaçları için kullanılan çerezlerin ve benzeri teknolojilerin kullanımıyla ilgili tercihlerinizi yönetebilirsiniz. Gerekli çerezler dışındaki çerezlerin kullanımı için açık rıza alınır. Verdiğiniz rızayı dilediğiniz zaman geri çekebilirsiniz.</p>",
+                "description": "<p>Bu web sitesini nasıl kullandığınızı analiz etmemize, tercihlerinizi saklamamıza ve ilginizi çekebilecek içerik ve pazarlama materyallerini sunmamıza yardımcı olan üçüncü taraf çerezleri kullanıyoruz. \"Kişisel Verilerimi Satmayın veya Paylaşmayın\" seçeneğini işaretleyip \"Tercihlerimi Kaydet\" düğmesine tıklayarak bu çerezleri reddedebilirsiniz. Reddettikten sonra, aynı seçeneğin işaretini kaldırıp \"Tercihlerimi Kaydet\" düğmesine tıklayarak istediğiniz zaman yeniden izin verebilirsiniz.</p>",
                 "optOption": {
                     "elements": {
                         "title": "Kişisel Verilerimi Satmayın veya Paylaşmayın",
-                        "enable": "İzin Ver",
-                        "disable": "İzin Verme"
+                        "enable": "Etkinleştir",
+                        "disable": "Devre dışı bırak"
                     }
                 },
                 "gpcOption": {
                     "elements": {
-                        "description": "<p>Tarayıcınızdan gelen <b>Global Privacy Control</b> sinyali doğrultusunda, bu web sitesinde kayıt ve izleme amaçlı tercihlerinizin dikkate alınması için uygun düzenlemeler uygulanmaktadır.</p>"
+                        "description": "<p>Tarayıcınızdan bir <b>Global Privacy Control</b> sinyali algıladığımız için bu web sitesindeki devre dışı bırakma tercihiniz uygulanmıştır; bu nedenle bu ayarı değiştiremezsiniz.</p>"
                     }
                 },
                 "showLess": "Daha az göster",
