@@ -52,6 +52,10 @@ shopt -s nullglob
 js_suites=( tests/unit/js/*.test.mjs )
 shopt -u nullglob
 node_bin="${NODE_BIN:-node}"
+# jurisdiction-user-intent builds a jsdom window per scenario and peaks at about
+# 2 GB. It ran out of heap on the CI runner, with no explicit limit, as soon as
+# frontend/js grew a little.
+node_heap_mb="${NODE_HEAP_MB:-4096}"
 js_ran=0
 if [ "${#js_suites[@]}" -gt 0 ]; then
 	if ! command -v "$node_bin" >/dev/null 2>&1; then
@@ -60,7 +64,7 @@ if [ "${#js_suites[@]}" -gt 0 ]; then
 	else
 		js_ran=${#js_suites[@]}
 		for f in "${js_suites[@]}"; do
-			if "$node_bin" "$f" >"$log" 2>&1; then
+			if "$node_bin" --max-old-space-size="$node_heap_mb" "$f" >"$log" 2>&1; then
 				summary="$(grep -E 'passed' "$log" | tail -1)"
 				printf '  \033[32mPASS\033[0m  %-44s %s\n' "${f#tests/unit/}" "$summary"
 				pass=$((pass + 1))
