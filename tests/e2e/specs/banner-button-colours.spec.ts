@@ -34,6 +34,18 @@ async function pinBackgrounds(page: Page) {
   }
 }
 
+/** Writes the preference centre background, which has no field, into the stored banner. */
+function setPreferenceCentreBg(color: string) {
+  wpEval(`
+    global $wpdb;
+    $t = $wpdb->prefix . 'faz_banners';
+    $s = json_decode( $wpdb->get_var( "SELECT settings FROM {$t} WHERE banner_default = 1" ), true );
+    $s['config']['preferenceCenter']['styles']['background-color'] = '${color}';
+    $wpdb->update( $t, array( 'settings' => wp_json_encode( $s ) ), array( 'banner_default' => 1 ) );
+    \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+  `);
+}
+
 async function saveBanner(page: Page) {
   const response = page.waitForResponse(
     (r) => r.url().includes('banners') && !r.url().includes('preview')
@@ -241,6 +253,7 @@ test('a theme switch empties the Save and hover colours, which presets do not ca
 });
 
 test('the contrast check judges a Save text colour against the background it is shown on', async ({ page, loginAsAdmin }) => {
+  setPreferenceCentreBg('#ffffff');
   await loginAsAdmin(page);
   await openColours(page);
   await pinBackgrounds(page);
@@ -261,14 +274,7 @@ test('a transparent Save is judged against the preference centre, not the banner
   // The preference centre background comes from the theme preset and has no
   // field, so it is set in the stored banner. White text on it is readable,
   // while on the white banner it would not be.
-  wpEval(`
-    global $wpdb;
-    $t = $wpdb->prefix . 'faz_banners';
-    $s = json_decode( $wpdb->get_var( "SELECT settings FROM {$t} WHERE banner_default = 1" ), true );
-    $s['config']['preferenceCenter']['styles']['background-color'] = '#111111';
-    $wpdb->update( $t, array( 'settings' => wp_json_encode( $s ) ), array( 'banner_default' => 1 ) );
-    \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
-  `);
+  setPreferenceCentreBg('#111111');
   await loginAsAdmin(page);
   await openColours(page);
   await pinBackgrounds(page);
