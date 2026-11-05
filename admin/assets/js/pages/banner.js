@@ -101,7 +101,16 @@
 	}
 	function fazPreferenceCentreBg() {
 		var pc = bannerData && bannerData.properties && bannerData.properties.config && bannerData.properties.config.preferenceCenter;
-		return (pc && pc.styles && pc.styles['background-color']) || fazReadColor('faz-b-notice-bg');
+		if (pc && pc.styles && pc.styles['background-color']) return pc.styles['background-color'];
+		// A theme switch strips the stored styles and the template then takes
+		// the preset's, so read the preset selected in the form.
+		var presets = (typeof fazConfig !== 'undefined' && fazConfig.themePresets) || [];
+		var theme = getVal('faz-b-theme');
+		for (var i = 0; i < presets.length; i++) {
+			var ppc = presets[i].name === theme && presets[i].settings && presets[i].settings.preferenceCenter;
+			if (ppc && ppc.styles && ppc.styles['background-color']) return ppc.styles['background-color'];
+		}
+		return fazReadColor('faz-b-notice-bg');
 	}
 	function fazContrastRatio(fg, bg) {
 		var l1 = fazRelLuminance(fg), l2 = fazRelLuminance(bg);

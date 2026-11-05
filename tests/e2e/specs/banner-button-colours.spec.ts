@@ -26,6 +26,14 @@ async function openColours(page: Page) {
   await expect(page.locator('#faz-b-detail-save-bg-hex')).toBeVisible();
 }
 
+/** Pins the backgrounds a contrast test depends on, so the default theme cannot change what it measures. */
+async function pinBackgrounds(page: Page) {
+  for (const [id, value] of [['faz-b-notice-bg', '#ffffff'], ['faz-b-settings-bg', 'transparent']]) {
+    await page.locator(`#${id}-hex`).fill(value);
+    await page.locator(`#${id}-hex`).dispatchEvent('change');
+  }
+}
+
 async function saveBanner(page: Page) {
   const response = page.waitForResponse(
     (r) => r.url().includes('banners') && !r.url().includes('preview')
@@ -235,6 +243,7 @@ test('a theme switch empties the Save and hover colours, which presets do not ca
 test('the contrast check judges a Save text colour against the background it is shown on', async ({ page, loginAsAdmin }) => {
   await loginAsAdmin(page);
   await openColours(page);
+  await pinBackgrounds(page);
   // Only the text is set: the button keeps the Settings background, which by
   // default is transparent over a white banner.
   await page.locator('#faz-b-detail-save-text-hex').fill('#ffffff');
@@ -262,10 +271,29 @@ test('a transparent Save is judged against the preference centre, not the banner
   `);
   await loginAsAdmin(page);
   await openColours(page);
+  await pinBackgrounds(page);
   await page.locator('#faz-b-detail-save-text-hex').fill('#ffffff');
   await page.locator('#faz-b-detail-save-text-hex').dispatchEvent('change');
   // A white title on the white banner always warns: once it is listed the
   // check has run, so the absence of the Save pair below means something.
+  await page.locator('#faz-b-title-color-hex').fill('#ffffff');
+  await page.locator('#faz-b-title-color-hex').dispatchEvent('change');
+  const warnings = page.locator('#faz-contrast-warnings');
+  await expect(warnings).toContainText('Title vs banner background');
+  await expect(warnings).not.toContainText('Preference center Save button');
+});
+
+test('after a theme switch, Save is judged against the preference centre of the new preset', async ({ page, loginAsAdmin }) => {
+  await loginAsAdmin(page);
+  await openColours(page);
+  await page.click('button.faz-tab[data-tab="general"]');
+  await page.locator('#faz-b-theme').selectOption('dark');
+  await page.click('button.faz-tab[data-tab="colours"]');
+  // The switch strips the stored styles; the dark preset's preference centre
+  // is #121212, so white Save text is readable even on a white banner.
+  await pinBackgrounds(page);
+  await page.locator('#faz-b-detail-save-text-hex').fill('#ffffff');
+  await page.locator('#faz-b-detail-save-text-hex').dispatchEvent('change');
   await page.locator('#faz-b-title-color-hex').fill('#ffffff');
   await page.locator('#faz-b-title-color-hex').dispatchEvent('change');
   const warnings = page.locator('#faz-contrast-warnings');
