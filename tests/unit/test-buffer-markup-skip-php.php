@@ -486,6 +486,9 @@ namespace {
 	// Prefixed names: an XML document is free to bind XHTML or SVG to any prefix,
 	// and browsers fetch from <s:image> exactly as they do from <image>.
 	$is_xml = function ( $out ) {
+		if ( ! \class_exists( 'DOMDocument' ) ) {
+			return true;
+		}
 		$document = new \DOMDocument();
 		return $document->loadXML( $out, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING );
 	};
@@ -527,6 +530,15 @@ namespace {
 		assert_true( $is_xml( $out ), $type . ': that SVG is still well-formed XML' );
 		$xl = '<s:svg xmlns:s="http://www.w3.org/2000/svg" xmlns:xl="http://www.w3.org/1999/xlink"><s:image xl:href="https://site.test/local.png"/></s:svg>';
 		assert_true( faz_ob_run( $xl ) === $xl, $type . ': with nothing to block the prefix comes back byte-identical' );
+		// A real xlink:href stays one: the alias below is bound on its element only.
+		$xl = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="https://site.test/a.svg#a"/><image xmlns:xl="http://www.w3.org/1999/xlink" xl:href="https://site.test/local.png"/></svg>';
+		assert_true( faz_ob_run( $xl ) === $xl, $type . ': a real xlink:href next to an alias is byte-identical' );
+		$out = faz_ob_run( '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="https://site.test/a.svg#a"/><image xmlns:xl="http://www.w3.org/1999/xlink" xl:href="https://cdn.tracker.test/a.png"/></svg>' );
+		assert_true( false !== strpos( $out, '<use xlink:href="https://site.test/a.svg#a"/>' ) && false !== strpos( $out, 'data-faz-href="https://cdn.tracker.test/a.png"' ), $type . ': only the tracker behind the alias is parked' );
+		assert_true( false === strpos( $out, 'data-faz-xml-' ) && $is_xml( $out ), $type . ': no marker is left and the XML stays well-formed' );
+		// Two aliases in one document.
+		$out = faz_ob_run( '<svg xmlns="http://www.w3.org/2000/svg" xmlns:a="http://www.w3.org/1999/xlink" xmlns:b="http://www.w3.org/1999/xlink"><image a:href="https://cdn.tracker.test/a.png"/><use b:href="https://cdn.tracker.test/u.svg#a"/></svg>' );
+		assert_true( false !== strpos( $out, 'data-faz-href="https://cdn.tracker.test/a.png"' ) && false !== strpos( $out, 'data-faz-href="https://cdn.tracker.test/u.svg#a"' ), $type . ': every alias in a document is parked' );
 	}
 
 	// An HTML parser has no namespace prefixes: <svg:image> is an unknown, inert element there.

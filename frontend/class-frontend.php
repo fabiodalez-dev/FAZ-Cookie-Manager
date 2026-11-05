@@ -88,6 +88,12 @@ class Frontend {
 	const XML_PREFIX_MARKER = 'data-faz-xml-prefix';
 
 	/**
+	 * Marker attribute holding the prefix of an XLink href under another name
+	 * while the passes run.
+	 */
+	const XML_XLINK_MARKER = 'data-faz-xml-xlink';
+
+	/**
 	 * One attribute token, anchored at the offset it is asked from: whatever
 	 * cannot start a name (whitespace, a slash, a stray quote, `=`, `>`) is
 	 * skipped, then a name, then optionally `=` and a value shaped as in
@@ -5024,16 +5030,13 @@ class Frontend {
 		// XML document bound to XHTML or SVG through a prefix, then put the
 		// prefix back. HTML is not involved: its parser has no namespace
 		// prefixes, and <svg:image> is an unknown element there.
-		if ( ! empty( $xlink_prefixes ) ) {
-			// The passes know the conventional xlink:href; a document can bind XLink
-			// to any prefix. One alias at a time: a document rarely has more.
-			$alias = $xlink_prefixes[0];
-			$html  = (string) preg_replace( '#(\s)' . preg_quote( $alias, '#' ) . ':href(?=\s*=)#', '$1xlink:href', $html );
-			$out   = self::xml_restore_prefixes( $this->block_buffered_markup( empty( $prefixed ) ? $html : self::xml_strip_prefixes( $html, $prefixed ) ), $prefixed );
-			$back  = preg_replace( '#(\s)xlink:href(?=\s*=)#', '$1' . $alias . ':href', $out );
-			return null === $back ? $out : $back;
-		}
-		return self::xml_restore_prefixes( $this->block_buffered_markup( self::xml_strip_prefixes( $html, $prefixed ) ), $prefixed );
+		//
+		// The passes also know only the conventional xlink:href, and a document
+		// can bind XLink to any prefix. A marker singles out the renamed
+		// attributes, so a real xlink:href is not mistaken for one of them.
+		$markup = empty( $prefixed ) ? $html : self::xml_strip_prefixes( $html, $prefixed );
+		$markup = self::xml_alias_xlink( $markup, $xlink_prefixes );
+		return self::xml_unalias_xlink( self::xml_restore_prefixes( $this->block_buffered_markup( $markup ), $prefixed ) );
 	}
 
 	/**
@@ -5080,6 +5083,47 @@ class Frontend {
 			}
 		}
 		return array_values( array_unique( $aliases ) );
+	}
+
+	/**
+	 * Give XLink hrefs under another prefix the name the passes look for, with
+	 * that prefix kept in a marker attribute just before it.
+	 *
+	 * @param string   $html    Document.
+	 * @param string[] $aliases Prefixes from xml_xlink_aliases().
+	 * @return string Document for the passes.
+	 */
+	private static function xml_alias_xlink( $html, $aliases ) {
+		if ( empty( $aliases ) ) {
+			return $html;
+		}
+		$renamed = preg_replace_callback(
+			'#(\s)(' . implode( '|', array_map( 'preg_quote', $aliases ) ) . '):href(?=\s*=)#',
+			function ( $m ) {
+				return $m[1] . self::XML_XLINK_MARKER . '="' . $m[2] . '" xlink:href';
+			},
+			$html
+		);
+		return null === $renamed ? $html : $renamed;
+	}
+
+	/**
+	 * Undo xml_alias_xlink(): the marker goes, and the attribute it precedes gets
+	 * its prefix back when a pass has not parked it.
+	 *
+	 * @param string $html Document after the passes.
+	 * @return string Document without the marker.
+	 */
+	private static function xml_unalias_xlink( $html ) {
+		if ( false === strpos( $html, self::XML_XLINK_MARKER ) ) {
+			return $html;
+		}
+		$restored = preg_replace( '#' . self::XML_XLINK_MARKER . '="([^"]*+)"\s++xlink:href(?=\s*=)#', '$1:href', $html );
+		if ( null === $restored ) {
+			return $html;
+		}
+		$cleaned = preg_replace( '#\s*+' . self::XML_XLINK_MARKER . '="[^"]*+"#', '', $restored );
+		return null === $cleaned ? $restored : $cleaned;
 	}
 
 	/**
