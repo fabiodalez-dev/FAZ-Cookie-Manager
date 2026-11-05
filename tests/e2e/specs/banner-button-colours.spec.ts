@@ -216,6 +216,35 @@ test('a value that is not a colour never reaches the stylesheet', async ({ page,
   }
 });
 
+test('a theme switch empties the Save and hover colours, which presets do not carry', async ({ page, loginAsAdmin }) => {
+  await loginAsAdmin(page);
+  await openColours(page);
+  for (const id of ['faz-b-detail-save-bg', 'faz-b-accept-hover-bg']) {
+    await page.locator(`#${id}-hex`).fill('#7a1f5c');
+    await page.locator(`#${id}-hex`).dispatchEvent('change');
+  }
+  await page.click('button.faz-tab[data-tab="general"]');
+  const theme = page.locator('#faz-b-theme');
+  const current = await theme.inputValue();
+  await theme.selectOption(current === 'dark' ? 'light' : 'dark');
+  await page.click('button.faz-tab[data-tab="colours"]');
+  await expect(page.locator('#faz-b-detail-save-bg-hex')).toHaveValue('');
+  await expect(page.locator('#faz-b-accept-hover-bg-hex')).toHaveValue('');
+});
+
+test('the contrast check judges a Save text colour against the background it is shown on', async ({ page, loginAsAdmin }) => {
+  await loginAsAdmin(page);
+  await openColours(page);
+  // Only the text is set: the button keeps the Settings background, which by
+  // default is transparent over a white banner.
+  await page.locator('#faz-b-detail-save-text-hex').fill('#ffffff');
+  await page.locator('#faz-b-detail-save-text-hex').dispatchEvent('change');
+  await expect(page.locator('#faz-contrast-warnings')).toContainText('Preference center Save button text vs its background');
+  await page.locator('#faz-b-detail-save-text-hex').fill('#111111');
+  await page.locator('#faz-b-detail-save-text-hex').dispatchEvent('change');
+  await expect(page.locator('#faz-contrast-warnings')).not.toContainText('Preference center Save button');
+});
+
 test.describe('revisit widget image', () => {
   const setImage = async (page: Page, url: string) => {
     await openColours(page);

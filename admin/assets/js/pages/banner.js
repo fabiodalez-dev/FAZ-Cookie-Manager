@@ -58,7 +58,11 @@
 	// in-FAZ.ready colour-change handlers call it too. Self-contained:
 	// only dependency is the module-level fazI18n() i18n helper.
 	// Colour fields whose empty value means "no setting", not a colour.
-	var FAZ_OPTIONAL_COLORS = { hover: ['accept', 'reject', 'settings'] };
+	var FAZ_OPTIONAL_COLORS = {
+		hover: ['accept', 'reject', 'settings'],
+		ids: ['faz-b-detail-save-bg', 'faz-b-detail-save-text', 'faz-b-detail-save-border', 'faz-b-detail-save-hover-bg', 'faz-b-detail-save-hover-text',
+			'faz-b-accept-hover-bg', 'faz-b-accept-hover-text', 'faz-b-reject-hover-bg', 'faz-b-reject-hover-text', 'faz-b-settings-hover-bg', 'faz-b-settings-hover-text']
+	};
 	var FAZ_CONTRAST_PAIRS = [
 		{ fg: 'faz-b-title-color',       bg: 'faz-b-notice-bg',       min: 4.5, label: fazI18n('banner.cTitle', 'Title vs banner background') },
 		{ fg: 'faz-b-desc-color',        bg: 'faz-b-notice-bg',       min: 4.5, label: fazI18n('banner.cDesc', 'Description vs banner background') },
@@ -67,11 +71,11 @@
 		{ fg: 'faz-b-reject-text',       bg: 'faz-b-reject-bg',       min: 4.5, label: fazI18n('banner.cReject', 'Reject button text vs its background') },
 		{ fg: 'faz-b-settings-text',     bg: 'faz-b-settings-bg',      min: 4.5, label: fazI18n('banner.cSettings', 'Settings button text vs its background'), fallbackBg: 'faz-b-notice-bg' },
 		{ fg: 'faz-b-catprev-save-text', bg: 'faz-b-catprev-save-bg',  min: 4.5, label: fazI18n('banner.cSave', 'Save button text vs its background') },
-		{ fg: 'faz-b-detail-save-text',  bg: 'faz-b-detail-save-bg',   min: 4.5, label: fazI18n('banner.cDetailSave', 'Preference center Save button text vs its background'), optional: true, fallbackFg: 'faz-b-settings-text' },
-		{ fg: 'faz-b-accept-hover-text', bg: 'faz-b-accept-hover-bg',  min: 4.5, label: fazI18n('banner.cAcceptHover', 'Accept button text vs its hover background'), optional: true, fallbackFg: 'faz-b-accept-text' },
-		{ fg: 'faz-b-reject-hover-text', bg: 'faz-b-reject-hover-bg',  min: 4.5, label: fazI18n('banner.cRejectHover', 'Reject button text vs its hover background'), optional: true, fallbackFg: 'faz-b-reject-text' },
-		{ fg: 'faz-b-settings-hover-text', bg: 'faz-b-settings-hover-bg', min: 4.5, label: fazI18n('banner.cSettingsHover', 'Settings button text vs its hover background'), optional: true, fallbackFg: 'faz-b-settings-text' },
-		{ fg: 'faz-b-detail-save-hover-text', bg: 'faz-b-detail-save-hover-bg', min: 4.5, label: fazI18n('banner.cSaveHover', 'Save button text vs its hover background'), optional: true, fallbackFg: 'faz-b-settings-text' },
+		{ fg: 'faz-b-detail-save-text',  bg: 'faz-b-detail-save-bg',   min: 4.5, label: fazI18n('banner.cDetailSave', 'Preference center Save button text vs its background'), optional: true, fallbackFg: 'faz-b-settings-text', baseBg: 'faz-b-settings-bg' },
+		{ fg: 'faz-b-accept-hover-text', bg: 'faz-b-accept-hover-bg',  min: 4.5, label: fazI18n('banner.cAcceptHover', 'Accept button text vs its hover background'), optional: true, fallbackFg: 'faz-b-accept-text', baseBg: 'faz-b-accept-bg' },
+		{ fg: 'faz-b-reject-hover-text', bg: 'faz-b-reject-hover-bg',  min: 4.5, label: fazI18n('banner.cRejectHover', 'Reject button text vs its hover background'), optional: true, fallbackFg: 'faz-b-reject-text', baseBg: 'faz-b-reject-bg' },
+		{ fg: 'faz-b-settings-hover-text', bg: 'faz-b-settings-hover-bg', min: 4.5, label: fazI18n('banner.cSettingsHover', 'Settings button text vs its hover background'), optional: true, fallbackFg: 'faz-b-settings-text', baseBg: 'faz-b-settings-bg' },
+		{ fg: 'faz-b-detail-save-hover-text', bg: 'faz-b-detail-save-hover-bg', min: 4.5, label: fazI18n('banner.cSaveHover', 'Save button text vs its hover background'), optional: true, fallbackFg: 'faz-b-detail-save-text', fallbackFg2: 'faz-b-settings-text', baseBg: 'faz-b-detail-save-bg', baseBg2: 'faz-b-settings-bg' },
 		{ fg: 'faz-b-catprev-label',     bg: 'faz-b-notice-bg',        min: 4.5, label: fazI18n('banner.cCatLabel', 'Category label vs banner background') },
 		{ fg: 'faz-b-donotsell-text',    bg: 'faz-b-notice-bg',        min: 4.5, label: fazI18n('banner.cDoNotSell', 'Do Not Sell text vs banner background') }
 	];
@@ -121,11 +125,15 @@
 		}
 		var issues = [];
 		FAZ_CONTRAST_PAIRS.forEach(function (pair) {
-			// An optional field left empty has no colour to judge: its swatch
-			// still holds a value, so the text field is the one to read.
-			if (pair.optional && !getColor(pair.bg)) return;
-			var fg = fazHexToRgb(pair.fallbackFg && !getColor(pair.fg) ? fazReadColor(pair.fallbackFg) : fazReadColor(pair.fg));
-			var bg = fazResolveBg(pair);
+			// An optional pair with both fields empty adds nothing to judge. With
+			// one of them set, the other is the colour the visitor sees in its
+			// place: the button's own, then the Settings one. The swatch of an
+			// empty field still holds a value, so the text field is the one read.
+			if (pair.optional && !getColor(pair.fg) && !getColor(pair.bg)) return;
+			var fgId = [pair.fg, pair.fallbackFg, pair.fallbackFg2].filter(function (id) { return id && (!pair.optional || getColor(id)); })[0] || pair.fallbackFg;
+			var bgId = [pair.bg, pair.baseBg, pair.baseBg2].filter(function (id) { return id && (!pair.optional || getColor(id)); })[0] || pair.baseBg;
+			var fg = fazHexToRgb(fazReadColor(fgId));
+			var bg = fazResolveBg({ bg: bgId, fallbackBg: pair.optional ? 'faz-b-notice-bg' : pair.fallbackBg });
 			if (!fg || !bg) return; // transparent/unknown foreground — can't judge
 			var ratio = fazContrastRatio(fg, bg);
 			if (ratio < pair.min) issues.push({ label: pair.label, ratio: ratio, min: pair.min });
@@ -1875,6 +1883,9 @@
 		populateButtonColors('accept', btns.accept);
 		populateButtonColors('reject', btns.reject);
 		populateButtonColors('settings', btns.settings);
+		// Presets carry no Save or hover colours: empty them, or the sync below
+		// writes the previous ones back onto the new theme.
+		FAZ_OPTIONAL_COLORS.ids.forEach(function (id) { setOptionalColor(id, ''); });
 		var presetDns = (btns.donotSell && btns.donotSell.styles) || {};
 		setColor('faz-b-donotsell-text', presetDns.color || '#1863DC');
 
@@ -2934,8 +2945,20 @@
 	// Cascade: wp.media (WordPress) → FilePond (ClassicPress) → native file input.
 
 	function initBrandLogoUploader() {
-		initImagePicker('faz-b-brandlogo', { mediaTitle: 'Select Brand Logo', uploading: 'Uploading logo\u2026', uploaded: 'Logo uploaded successfully.', dropLabel: 'Drag & drop a logo image or browse', fileName: 'logo' });
-		initImagePicker('faz-b-revisit-image', { mediaTitle: 'Select Revisit Widget Image', uploading: 'Uploading image\u2026', uploaded: 'Image uploaded successfully.', dropLabel: 'Drag & drop an image or browse', fileName: 'revisit-image' });
+		initImagePicker('faz-b-brandlogo', {
+			mediaTitle: fazI18n('banner.logoMediaTitle', 'Select Brand Logo'),
+			uploading: fazI18n('banner.logoUploading', 'Uploading logo\u2026'),
+			uploaded: fazI18n('banner.logoUploaded', 'Logo uploaded successfully.'),
+			dropLabel: fazI18n('banner.logoDropLabel', 'Drag & drop a logo image or browse'),
+			fileName: 'logo'
+		});
+		initImagePicker('faz-b-revisit-image', {
+			mediaTitle: fazI18n('banner.revisitMediaTitle', 'Select Revisit Widget Image'),
+			uploading: fazI18n('banner.imageUploading', 'Uploading image\u2026'),
+			uploaded: fazI18n('banner.imageUploaded', 'Image uploaded successfully.'),
+			dropLabel: fazI18n('banner.imageDropLabel', 'Drag & drop an image or browse'),
+			fileName: 'revisit-image'
+		});
 	}
 
 	function initImagePicker(prefix, text) {
@@ -2943,6 +2966,9 @@
 		var removeBtn = document.getElementById(prefix + '-remove');
 		var fileInput = document.getElementById(prefix + '-file');
 		var uploadInFlight = false;
+		// Bumped by every choice; an upload that finishes after a newer choice
+		// (Remove, or a pick from the media library) is dropped.
+		var choice = 0;
 
 		function applyLogoUrl(url) {
 			setVal(prefix + '-url', url || '');
@@ -2958,7 +2984,7 @@
 				return;
 			}
 			if (!file || !window.fetch || !window.fazConfig || !fazConfig.api || !fazConfig.upload || !fazConfig.upload.mediaEndpoint) {
-				showImageStatus(prefix, 'Upload is not available.', 'error');
+				showImageStatus(prefix, fazI18n('banner.uploadUnavailable', 'Upload is not available.'), 'error');
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
 				return;
@@ -2966,12 +2992,13 @@
 			var maxBytes = fazConfig.upload.maxSize || (2 * 1024 * 1024);
 			if (file.size > maxBytes) {
 				var maxMB = Math.floor(maxBytes / (1024 * 1024));
-				showImageStatus(prefix, 'File too large (max ' + maxMB + ' MB).', 'error');
+				showImageStatus(prefix, fazI18n('banner.uploadTooLarge', 'File too large (max %s MB).').replace('%s', maxMB), 'error');
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
 				return;
 			}
 			uploadInFlight = true;
+			var mine = ++choice;
 			showImageStatus(prefix, text.uploading);
 			window.fetch(fazConfig.upload.mediaEndpoint, {
 				method: 'POST',
@@ -2985,20 +3012,22 @@
 			}).then(function (response) {
 				return response.json().catch(function () { return {}; }).then(function (payload) {
 					if (!response.ok) {
-						throw new Error((payload && payload.message) || 'Upload failed');
+						throw new Error((payload && payload.message) || fazI18n('banner.uploadFailedShort', 'Upload failed'));
 					}
 					return payload;
 				});
 			}).then(function (payload) {
 				var url = payload && (payload.source_url || (payload.guid && payload.guid.rendered)) || '';
-				if (!url) throw new Error('Upload succeeded but no media URL was returned.');
+				if (!url) throw new Error(fazI18n('banner.uploadNoUrl', 'Upload succeeded but no media URL was returned.'));
+				if (mine !== choice) return;
 				applyLogoUrl(url);
 				showImageStatus(prefix, text.uploaded, 'success');
 				if (pond && typeof pond.removeFiles === 'function') pond.removeFiles();
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(true);
 			}).catch(function (err) {
-				showImageStatus(prefix, 'Upload failed: ' + (err.message || err), 'error');
+				if (mine !== choice) return;
+				showImageStatus(prefix, fazI18n('banner.uploadFailed', 'Upload failed: %s').replace('%s', err.message || err), 'error');
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
 			}).then(function () {
@@ -3013,12 +3042,13 @@
 				if (window.wp && window.wp.media && typeof window.wp.media === 'function') {
 					var frame = wp.media({
 						title: text.mediaTitle,
-						button: { text: 'Use this image' },
+						button: { text: fazI18n('banner.useImage', 'Use this image') },
 						multiple: false,
 						library: { type: 'image' },
 					});
 					frame.on('select', function () {
 						var attachment = frame.state().get('selection').first().toJSON();
+						choice++;
 						applyLogoUrl(attachment.url || '');
 					});
 					frame.open();
@@ -3028,7 +3058,7 @@
 				if (fileInput) {
 					fileInput.click();
 				} else {
-					showImageStatus(prefix, 'Media library unavailable.', 'error');
+					showImageStatus(prefix, fazI18n('banner.mediaUnavailable', 'Media library unavailable.'), 'error');
 				}
 			});
 		}
@@ -3064,6 +3094,7 @@
 		if (removeBtn) {
 			removeBtn.addEventListener('click', function (e) {
 				e.preventDefault();
+				choice++;
 				applyLogoUrl('');
 				showImageStatus(prefix, '', 'clear');
 			});

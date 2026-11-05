@@ -643,7 +643,8 @@ class Template {
 					if ( '' !== $revisit_url ) {
 						foreach ( $element->getElementsByTagName( 'img' ) as $revisit_img ) {
 							$revisit_img->setAttribute( 'src', $revisit_url );
-							$revisit_img->setAttribute( 'class', 'faz-revisit-custom-image' );
+							// Added to the classes already there: skip-lazy keeps lazy loaders off it.
+							$revisit_img->setAttribute( 'class', trim( $revisit_img->getAttribute( 'class' ) . ' faz-revisit-custom-image' ) );
 							$revisit_img->setAttribute( 'alt', '' );
 						}
 						$revisit_custom = true;
