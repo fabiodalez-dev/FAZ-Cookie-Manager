@@ -242,7 +242,35 @@ test('the contrast check judges a Save text colour against the background it is 
   await expect(page.locator('#faz-contrast-warnings')).toContainText('Preference center Save button text vs its background');
   await page.locator('#faz-b-detail-save-text-hex').fill('#111111');
   await page.locator('#faz-b-detail-save-text-hex').dispatchEvent('change');
+  await page.locator('#faz-b-title-color-hex').fill('#ffffff');
+  await page.locator('#faz-b-title-color-hex').dispatchEvent('change');
+  await expect(page.locator('#faz-contrast-warnings')).toContainText('Title vs banner background');
   await expect(page.locator('#faz-contrast-warnings')).not.toContainText('Preference center Save button');
+});
+
+test('a transparent Save is judged against the preference centre, not the banner', async ({ page, loginAsAdmin }) => {
+  // The preference centre background comes from the theme preset and has no
+  // field, so it is set in the stored banner. White text on it is readable,
+  // while on the white banner it would not be.
+  wpEval(`
+    global $wpdb;
+    $t = $wpdb->prefix . 'faz_banners';
+    $s = json_decode( $wpdb->get_var( "SELECT settings FROM {$t} WHERE banner_default = 1" ), true );
+    $s['config']['preferenceCenter']['styles']['background-color'] = '#111111';
+    $wpdb->update( $t, array( 'settings' => wp_json_encode( $s ) ), array( 'banner_default' => 1 ) );
+    \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+  `);
+  await loginAsAdmin(page);
+  await openColours(page);
+  await page.locator('#faz-b-detail-save-text-hex').fill('#ffffff');
+  await page.locator('#faz-b-detail-save-text-hex').dispatchEvent('change');
+  // A white title on the white banner always warns: once it is listed the
+  // check has run, so the absence of the Save pair below means something.
+  await page.locator('#faz-b-title-color-hex').fill('#ffffff');
+  await page.locator('#faz-b-title-color-hex').dispatchEvent('change');
+  const warnings = page.locator('#faz-contrast-warnings');
+  await expect(warnings).toContainText('Title vs banner background');
+  await expect(warnings).not.toContainText('Preference center Save button');
 });
 
 test.describe('revisit widget image', () => {
