@@ -315,7 +315,11 @@ test.describe('Blocking compliance coverage', () => {
   });
 
   test.afterAll(async () => {
-    restoreActivePluginFiles(initialActivePluginFiles);
+    // Empty means beforeAll never read the list (a WP-CLI timeout under load):
+    // restoring it would deactivate every plugin on the site.
+    if (initialActivePluginFiles.length > 0) {
+      restoreActivePluginFiles(initialActivePluginFiles);
+    }
   });
 
   test.beforeEach(async () => {

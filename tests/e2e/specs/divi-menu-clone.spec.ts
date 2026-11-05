@@ -30,14 +30,20 @@ test.beforeAll(() => {
   if (!hasDivi) return;
   resetDefaultBannerState();
   // The tracker the buffer parks, inside a menu item, as a menu widget emits it.
+  fs.mkdirSync(path.dirname(FIXTURE), { recursive: true });
   fs.writeFileSync(FIXTURE, `<?php
 add_filter( 'nav_menu_item_title', function ( $title ) {
 	return $title . '<script src="${TRACKER}"></script>';
 } );
 `);
+  // Read first and kept apart from the changes below: if those fail halfway,
+  // afterAll still knows what to put back.
   const state = JSON.parse(wpEval(`
-    $previous = get_stylesheet();
-    $locations = get_theme_mod( 'nav_menu_locations' );
+    echo wp_json_encode( array( 'theme' => get_stylesheet(), 'locations' => wp_json_encode( get_theme_mod( 'nav_menu_locations' ) ) ) );
+  `).trim());
+  previousTheme = state.theme;
+  previousLocations = state.locations;
+  menuId = Number(wpEval(`
     switch_theme( 'Divi' );
     $id = wp_create_nav_menu( 'FAZ E2E Divi menu ' . wp_generate_password( 6, false ) );
     foreach ( array( 'First', 'Second' ) as $label ) {
@@ -45,18 +51,16 @@ add_filter( 'nav_menu_item_title', function ( $title ) {
     }
     set_theme_mod( 'nav_menu_locations', array( 'primary-menu' => $id ) );
     faz_clear_banner_template_cache();
-    echo wp_json_encode( array( 'theme' => $previous, 'locations' => wp_json_encode( $locations ), 'id' => $id ) );
+    echo (int) $id;
   `).trim());
-  previousTheme = state.theme;
-  previousLocations = state.locations;
-  menuId = state.id;
 });
 
 test.afterAll(() => {
   if (!hasDivi) return;
   fs.rmSync(FIXTURE, { force: true });
+  if (!previousTheme) return;
   wpEval(`
-    wp_delete_nav_menu( ${menuId} );
+    if ( ${menuId} > 0 ) { wp_delete_nav_menu( ${menuId} ); }
     switch_theme( '${previousTheme}' );
     $locations = json_decode( '${previousLocations}', true );
     set_theme_mod( 'nav_menu_locations', is_array( $locations ) ? $locations : array() );
@@ -80,7 +84,7 @@ test('a menu copy carrying a parked script stays synchronous, and the tracker do
     await route.continue();
   });
   try {
-    void page.goto(wpBaseURL + '/', { waitUntil: 'commit' }).catch(() => {});
+    void page.goto(wpBaseURL + '/', { waitUntil: 'domcontentloaded' }).catch(() => {});
     const parked = page.locator('#top-menu script[src*="fbevents"]').first();
     await expect(parked).toHaveAttribute('type', 'text/plain', { timeout: 10_000 });
 
