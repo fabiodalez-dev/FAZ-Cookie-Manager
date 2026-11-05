@@ -46,6 +46,7 @@ add_filter( 'nav_menu_item_title', function ( $title ) {
   menuId = Number(wpEval(`
     switch_theme( 'Divi' );
     $id = wp_create_nav_menu( 'FAZ E2E Divi menu ' . wp_generate_password( 6, false ) );
+    if ( is_wp_error( $id ) ) { WP_CLI::error( $id->get_error_message() ); }
     foreach ( array( 'First', 'Second' ) as $label ) {
       wp_update_nav_menu_item( $id, 0, array( 'menu-item-title' => $label, 'menu-item-url' => home_url( '/' ), 'menu-item-status' => 'publish' ) );
     }

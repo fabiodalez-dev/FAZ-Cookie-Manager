@@ -287,7 +287,7 @@ test.describe('Blocking compliance coverage', () => {
   // Snapshot of every active plugin file at the moment the suite starts.
   // The afterAll restores the exact option value without firing third-party
   // activation hooks, which avoids plugin redirects during WP-CLI cleanup.
-  let initialActivePluginFiles: string[] = [];
+  let initialActivePluginFiles: string[] | null = null;
 
   test.beforeAll(async () => {
     initialActivePluginFiles = listActivePluginFiles();
@@ -315,9 +315,9 @@ test.describe('Blocking compliance coverage', () => {
   });
 
   test.afterAll(async () => {
-    // Empty means beforeAll never read the list (a WP-CLI timeout under load):
-    // restoring it would deactivate every plugin on the site.
-    if (initialActivePluginFiles.length > 0) {
+    // Null means beforeAll never read the list (a WP-CLI timeout under load):
+    // there is nothing to restore, and an empty list would deactivate every plugin.
+    if (initialActivePluginFiles !== null) {
       restoreActivePluginFiles(initialActivePluginFiles);
     }
   });
