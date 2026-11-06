@@ -14,11 +14,13 @@ import { wpEval } from '../utils/wp-env';
 const EDITOR = '/wp-admin/admin.php?page=faz-cookie-manager-banner';
 const SAVE = '[data-faz-tag="detail-save-button"]';
 
+/** Converts #rrggbb to the rgb() form getComputedStyle returns. */
 const rgb = (hex: string) => {
   const n = parseInt(hex.slice(1), 16);
   return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
 };
 
+/** Opens the banner editor on the Colours tab once the banner has loaded. */
 async function openColours(page: Page) {
   await page.goto(EDITOR, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#faz-b-name')).not.toHaveValue('', { timeout: 30_000 });
@@ -46,6 +48,7 @@ function setPreferenceCentreBg(color: string) {
   `);
 }
 
+/** Clicks Save and fails the test unless the banner request answers 200. */
 async function saveBanner(page: Page) {
   const response = page.waitForResponse(
     (r) => r.url().includes('banners') && !r.url().includes('preview')
@@ -57,6 +60,7 @@ async function saveBanner(page: Page) {
   if (saved.status() !== 200) throw new Error(`Banner save failed (${saved.status()}): ${await saved.text()}`);
 }
 
+/** Fills colour fields by id (through their text inputs) and saves the banner. */
 async function setFields(page: Page, fields: Record<string, string>) {
   await openColours(page);
   for (const [id, value] of Object.entries(fields)) {
@@ -66,6 +70,7 @@ async function setFields(page: Page, fields: Record<string, string>) {
   await saveBanner(page);
 }
 
+/** Opens the home page in a fresh context, with no consent cookie, and waits for the banner. */
 async function visitor(browser: Browser) {
   const context = await browser.newContext();
   const front = await context.newPage();
@@ -74,11 +79,13 @@ async function visitor(browser: Browser) {
   return { context, front };
 }
 
+/** Opens the preference centre from the banner's Settings button. */
 async function openPreferences(front: Page) {
   await front.locator('[data-faz-tag="settings-button"]').first().click();
   await expect(front.locator(SAVE).first()).toBeVisible();
 }
 
+/** Reads the computed colours, opacity and transition of the first match. */
 const colours = (front: Page, selector: string) => front.locator(selector).first().evaluate((el) => {
   const s = getComputedStyle(el);
   return { color: s.color, background: s.backgroundColor, border: s.borderTopColor, opacity: s.opacity, transition: s.transitionDuration };
@@ -308,6 +315,7 @@ test('after a theme switch, Save is judged against the preference centre of the 
 });
 
 test.describe('revisit widget image', () => {
+  /** Writes the image URL into the hidden field, lets a change event sync the form, and saves. */
   const setImage = async (page: Page, url: string) => {
     await openColours(page);
     await page.evaluate((value) => {
@@ -317,6 +325,7 @@ test.describe('revisit widget image', () => {
     await saveBanner(page);
   };
 
+  /** Rejects as a new visitor so the revisit widget shows, and returns that session. */
   async function revisit(browser: Browser) {
     const session = await visitor(browser);
     await session.front.locator('[data-faz-tag="reject-button"]').first().click();

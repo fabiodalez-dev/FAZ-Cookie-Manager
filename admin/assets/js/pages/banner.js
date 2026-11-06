@@ -99,6 +99,12 @@
 		});
 		return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
 	}
+	/**
+	 * Background the preference centre is shown on: the stored one, else the
+	 * one of the preset selected in the form, else the banner background.
+	 *
+	 * @return {string} A colour as stored, or as read from a colour field.
+	 */
 	function fazPreferenceCentreBg() {
 		var pc = bannerData && bannerData.properties && bannerData.properties.config && bannerData.properties.config.preferenceCenter;
 		if (pc && pc.styles && pc.styles['background-color']) return pc.styles['background-color'];
@@ -2978,6 +2984,14 @@
 		});
 	}
 
+	/**
+	 * Wire an image field: media library or upload, preview and Remove.
+	 * Shared by the brand logo and the revisit widget image.
+	 *
+	 * @param {string} prefix Id prefix of the field's elements (`<prefix>-url`, `-upload`, `-remove`, `-file`, `-preview`).
+	 * @param {Object} text   Translated strings for the status line and the media frame.
+	 * @return {void}
+	 */
 	function initImagePicker(prefix, text) {
 		var uploadBtn = document.getElementById(prefix + '-upload');
 		var removeBtn = document.getElementById(prefix + '-remove');
@@ -3127,6 +3141,14 @@
 		}
 	}
 
+	/**
+	 * Show or clear the status line under an image field.
+	 *
+	 * @param {string} prefix  Id prefix of the field.
+	 * @param {string} message Text to show; empty clears the line.
+	 * @param {string} type    'error', 'success', 'info' or 'clear'.
+	 * @return {void}
+	 */
 	function showImageStatus(prefix, message, type) {
 		var status = document.getElementById(prefix + '-upload-status');
 		if (!status) return;
@@ -3144,6 +3166,13 @@
 		updateImagePreview('faz-b-brandlogo', url);
 	}
 
+	/**
+	 * Show the preview and the Remove button for an http(s) URL, hide both otherwise.
+	 *
+	 * @param {string} prefix Id prefix of the field.
+	 * @param {string} url    Image URL, or empty.
+	 * @return {void}
+	 */
 	function updateImagePreview(prefix, url) {
 		var preview = document.getElementById(prefix + '-preview');
 		var removeBtn = document.getElementById(prefix + '-remove');
@@ -3221,6 +3250,14 @@
 			picker.value = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#FFFFFF';
 		}
 	}
+	/**
+	 * Fill a colour field where empty means unset: the text field keeps the
+	 * empty value, and the picker only moves for a valid #rrggbb colour.
+	 *
+	 * @param {string} baseId Id of the picker; the text field is `<baseId>-hex`.
+	 * @param {string} hex    Stored value, possibly empty.
+	 * @return {void}
+	 */
 	function setOptionalColor(baseId, hex) {
 		var picker = document.getElementById(baseId);
 		var text = document.getElementById(baseId + '-hex');

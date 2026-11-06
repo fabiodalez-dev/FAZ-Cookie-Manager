@@ -811,6 +811,21 @@ class Template {
 		if ( '' !== $rendition ) {
 			$suffix .= ':as-' . sanitize_key( $rendition );
 		}
+		// A geo ruleset rewrites the config in memory before the template is
+		// built (Geo_Runtime::apply_ui_requirements(): equal prominence copies
+		// Accept's styles, hover colours included, onto Reject; other rules
+		// switch buttons and the preference centre on). Two rulesets that share
+		// banner, language and regime can therefore need different markup and
+		// CSS, so under a ruleset the slot carries a fingerprint of the
+		// effective config. Without one the config is the stored row, which a
+		// save clears the whole option for, so the historical key stays. The
+		// same clear on save keeps the fingerprinted slots from piling up.
+		if ( '' !== $regime ) {
+			$config  = isset( $this->properties['config'] ) && is_array( $this->properties['config'] )
+				? $this->properties['config']
+				: array();
+			$suffix .= ':cfg-' . substr( md5( (string) wp_json_encode( $config ) ), 0, 12 );
+		}
 		if ( $banner_id > 0 ) {
 			return 'banner_' . $banner_id . ':' . $this->language . $suffix;
 		}

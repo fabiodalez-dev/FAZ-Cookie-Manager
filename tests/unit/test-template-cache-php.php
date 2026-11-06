@@ -108,6 +108,8 @@ if ( ! function_exists( 'wp_json_encode' ) ) {
 require_once dirname( __DIR__, 2 ) . '/includes/class-store.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/class-banner.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/class-template.php';
+// The slot reads the applied geo ruleset's regime from here.
+require_once dirname( __DIR__, 2 ) . '/frontend/modules/shortcodes/class-shortcodes.php';
 
 use FazCookie\Admin\Modules\Banners\Includes\Template;
 
@@ -354,6 +356,36 @@ $without_fallback->load();
 $without_fallback->update();
 $fallback_template->load();
 faz_ok( 1 === $fallback_template->generated, 'verification regenerates a cached template to retain a fallback' );
+
+// A geo ruleset with equal prominence copies Accept's styles onto Reject in
+// memory. Another ruleset of the same regime without that rule must not be
+// served the template cached for it, nor evict it.
+\FazCookie\Frontend\Modules\Shortcodes\Shortcodes::set_applied_ruleset( array( 'id' => 'gdpr-italy' ) );
+$GLOBALS['faz_test_options']['faz_banner_template'] = array();
+$plain_config = array(
+	'notice' => array( 'elements' => array( 'buttons' => array( 'elements' => array(
+		'accept' => array( 'styles' => array( 'hover-background-color' => '#111111' ) ),
+		'reject' => array( 'styles' => array( 'hover-background-color' => '#222222' ) ),
+	) ) ) ),
+);
+$equal_config = $plain_config;
+$equal_config['notice']['elements']['buttons']['elements']['reject']['styles'] = $plain_config['notice']['elements']['buttons']['elements']['accept']['styles'];
+$equal_tpl = faz_make_template( $base_settings, $equal_config );
+$equal_tpl->load();
+$equal_tpl->update();
+$plain_tpl = faz_make_template( $base_settings, $plain_config );
+$plain_tpl->load();
+faz_ok( 1 === $plain_tpl->generated && 0 === $plain_tpl->set_called, 'a config rewritten by one ruleset is not served under another of the same regime' );
+$plain_tpl->update();
+$equal_again = faz_make_template( $base_settings, $equal_config );
+$equal_again->load();
+faz_ok( 0 === $equal_again->generated && 1 === $equal_again->set_called, 'the two configs keep separate slots instead of evicting each other' );
+\FazCookie\Frontend\Modules\Shortcodes\Shortcodes::set_applied_ruleset( null );
+// Without a ruleset the config is the stored row, and a save clears the option.
+$no_ruleset = faz_make_template( $base_settings, $plain_config );
+$slot_ref   = new ReflectionMethod( $no_ruleset, 'get_storage_key' );
+$slot_ref->setAccessible( true );
+faz_ok( 'banner_1:en' === $slot_ref->invoke( $no_ruleset ), 'without a ruleset the slot keeps its historical key' );
 
 // ---------- Result ----------
 echo "\n" . ( 0 === $faz_fail ? "ALL PASS ($faz_pass)\n" : "FAILED: $faz_fail, passed: $faz_pass\n" );
