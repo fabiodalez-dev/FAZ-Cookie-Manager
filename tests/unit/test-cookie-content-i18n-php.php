@@ -342,6 +342,10 @@ cookie_i18n_eq( Cookie_Content_I18n::duration( '5 years', 'hr' ), '5 godina', 'C
 cookie_i18n_eq( Cookie_Content_I18n::duration( '12 minutes', 'hr' ), '12 minuta', 'Croatian teens take the many form, not few' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( '21 hours', 'hr' ), '21 sat', 'Croatian numbers ending in 1 take the ONE form (21 sat, not 21 sati)' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( '11 hours', 'hr' ), '11 sati', 'except the 11 teen, which stays many' );
+// Turkish does not pluralise a noun after a numeral: "2 yıl", never "2 yıllar".
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1 year', 'tr' ), '1 yıl', 'Turkish singular duration is translated' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '2 years', 'tr' ), '2 yıl', 'Turkish keeps the noun singular after a numeral' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( 'session', 'tr' ), 'oturum', 'Turkish session duration is translated' );
 // Polish does NOT share that rule: CLDR gives it `one` for exactly 1, so 21 is
 // "21 lat" and never "21 rok". Pinned because the obvious generalisation from
 // Croatian to "all Slavic locales" produces exactly that error.
