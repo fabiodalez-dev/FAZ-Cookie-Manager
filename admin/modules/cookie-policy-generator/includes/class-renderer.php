@@ -451,7 +451,7 @@ class Renderer {
 			}
 		}
 		$html = wp_kses( $html, $allowed );
-		// Random presentation must not change the consent policy-version hash.
+		// Encoded after the policy-version hash, which therefore never sees it.
 		if ( $settings['obfuscate_emails'] ?? true ) {
 			$html = Email_Obfuscation::apply(
 				$html,

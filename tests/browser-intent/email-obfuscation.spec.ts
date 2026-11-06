@@ -4,7 +4,7 @@ import path from 'node:path';
 
 test.use({ javaScriptEnabled: false });
 
-test('random PHP email encoding remains readable and clickable without JavaScript', async ({ page }) => {
+test('PHP email encoding is stable and remains readable and clickable without JavaScript', async ({ page }) => {
   const helper = path.resolve('includes/class-email-obfuscation.php');
   const source = String.raw`
     define('ABSPATH', '.');
@@ -20,7 +20,7 @@ test('random PHP email encoding remains readable and clickable without JavaScrip
   const render = () => execFileSync(process.env.PHP_BIN || 'php', ['-n', '-r', source, helper], { encoding: 'utf8' });
   const html = render();
   expect(html).not.toContain('@');
-  expect(render()).not.toBe(html);
+  expect(render()).toBe(html);
   await page.setContent(html);
   const emails = ["privacy+test&'box@example.test", 'dpo@example.test'];
   for (let i = 0; i < emails.length; i++) {

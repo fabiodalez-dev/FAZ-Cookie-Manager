@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-11-05T19:07:21+00:00\n"
+"POT-Creation-Date: 2026-11-06T14:24:35+00:00\n"
 "PO-Revision-Date: 2026-04-02 13:06+0200\n"
 "Last-Translator: Yannic van Veen (Yard Digital Agency)\n"
 "Language-Team: Dutch\n"
@@ -141,13 +141,13 @@ msgid "Cookie Name"
 msgstr "Cookienaam"
 
 #: admin/class-admin.php:593
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:694
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:714
 #: admin/views/cookies.php:176 includes/class-cookie-table-shortcode.php:302
 msgid "Domain"
 msgstr "Domein"
 
 #: admin/class-admin.php:594
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:695
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:715
 #: admin/views/cookies.php:177
 #: frontend/modules/shortcodes/class-shortcodes.php:285
 #: includes/class-cookie-table-shortcode.php:303
@@ -159,7 +159,7 @@ msgid "e.g. 1 year"
 msgstr "bijv. 1 jaar"
 
 #: admin/class-admin.php:596
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:696
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:716
 #: admin/views/banner.php:973 admin/views/banner.php:1021
 #: admin/views/cookies.php:66 admin/views/cookies.php:178
 #: admin/views/cookies.php:295
@@ -1216,7 +1216,7 @@ msgstr "Opslaan van selectie mislukt."
 msgid "Scanning cookie inventory…"
 msgstr "Cookie-inventaris scannen…"
 
-#: admin/class-admin.php:956 admin/views/cookie-policy.php:194
+#: admin/class-admin.php:956 admin/views/cookie-policy.php:201
 #: admin/views/gvl.php:52
 msgid "Loading saved selection…"
 msgstr "Opgeslagen selectie laden…"
@@ -2380,15 +2380,15 @@ msgstr "Privacy contact e-mail"
 msgid "Postal address"
 msgstr "Postadres"
 
-#: admin/class-admin.php:3003 admin/views/cookie-policy.php:138
+#: admin/class-admin.php:3003 admin/views/cookie-policy.php:145
 msgid "DPO / Encarregado / Information Officer name"
 msgstr "Naam DPO / Encarregado / Information Officer"
 
-#: admin/class-admin.php:3004 admin/views/cookie-policy.php:142
+#: admin/class-admin.php:3004 admin/views/cookie-policy.php:149
 msgid "DPO / Encarregado / Information Officer email"
 msgstr "E-mail DPO / Encarregado / Information Officer"
 
-#: admin/class-admin.php:3005 admin/views/cookie-policy.php:292
+#: admin/class-admin.php:3005 admin/views/cookie-policy.php:299
 msgid "Separate Privacy Policy URL (required for POPIA)"
 msgstr "URL van afzonderlijk privacybeleid (vereist voor POPIA)"
 
@@ -2650,110 +2650,110 @@ msgstr "Er is geen beleidssjabloon beschikbaar voor die jurisdictie en taal."
 msgid "Complete all fields required for the selected jurisdiction before saving or previewing the Cookie Policy."
 msgstr "Vul alle velden in die vereist zijn voor de gekozen jurisdictie voordat je het cookiebeleid opslaat of bekijkt."
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:693
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:713
 #: admin/views/system-status.php:496
 #: frontend/modules/shortcodes/class-shortcodes.php:283
 #: includes/class-cookie-table-shortcode.php:301
 msgid "Cookie"
 msgstr "Cookie"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:697
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:717
 msgid "cookies"
 msgstr "cookies"
 
 #. translators: %s: recipient country name.
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:699
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:719
 #, php-format
 msgid "Transfers personal data to: %s"
 msgstr "Draagt persoonsgegevens over naar: %s"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:701
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:721
 #: frontend/modules/shortcodes/class-shortcodes.php:1184
 #: includes/class-cookie-table-shortcode.php:270
 msgid "Read the provider's privacy policy"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1137
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1157
 msgid "International data transfers"
 msgstr "Internationale gegevensoverdrachten"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1139
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1159
 msgid "Recipient country:"
 msgstr "Ontvangend land:"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1141
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1161
 #: frontend/modules/shortcodes/class-shortcodes.php:1151
 #: includes/class-cookie-table-shortcode.php:246
 msgid "Safeguard:"
 msgstr "Waarborg:"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1185
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1205
 msgid "Some cookies listed above may transfer your personal data to a country outside the EU/EEA that does not have an EU adequacy decision. Under Articles 44 to 49 of the GDPR, such transfers require a valid transfer mechanism (for example an adequacy decision, Standard Contractual Clauses, or your explicit and informed consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
 msgstr "Sommige van de hierboven vermelde cookies kunnen je persoonsgegevens overdragen aan een land buiten de EU/EER waarvoor geen adequaatheidsbesluit van de EU geldt. Op grond van de artikelen 44 tot en met 49 van de AVG is voor dergelijke doorgiften een geldig overdrachtsmechanisme vereist (bijvoorbeeld een adequaatheidsbesluit, standaardcontractbepalingen, of jouw uitdrukkelijke en geïnformeerde toestemming). Het ontvangende land en de door de beheerder van deze site beschreven waarborg staan hieronder vermeld, zodat je een weloverwogen keuze kunt maken."
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1187
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1207
 msgid "Some cookies listed above may transfer your personal data outside Brazil. Under Articles 33 to 36 of the LGPD, such transfers require a valid transfer mechanism (for example a destination country recognised by the ANPD as providing an adequate level of protection, standard contractual clauses approved by the ANPD, or your specific and highlighted consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
 msgstr "Sommige van de hierboven vermelde cookies kunnen je persoonsgegevens overdragen naar buiten Brazilië. Op grond van de artikelen 33 tot en met 36 van de LGPD is voor dergelijke doorgiften een geldig overdrachtsmechanisme vereist (bijvoorbeeld een land van bestemming waarvan de ANPD heeft erkend dat het een passend beschermingsniveau biedt, door de ANPD goedgekeurde standaardcontractbepalingen, of jouw specifieke en nadrukkelijke toestemming). Het ontvangende land en de door de beheerder van deze site beschreven waarborg staan hieronder vermeld, zodat je een weloverwogen keuze kunt maken."
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1189
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1209
 msgid "Some cookies listed above may transfer your personal information outside South Africa. Under section 72 of POPIA, such transfers require a valid ground (for example a recipient bound by a law, binding corporate rules or a binding agreement that provides a substantially similar level of protection, or your consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
 msgstr "Sommige van de hierboven vermelde cookies kunnen je persoonlijke informatie overdragen naar buiten Zuid-Afrika. Op grond van artikel 72 van POPIA is voor dergelijke doorgiften een geldige grond vereist (bijvoorbeeld een ontvanger die gebonden is aan een wet, bindende bedrijfsvoorschriften of een bindende overeenkomst die een wezenlijk vergelijkbaar beschermingsniveau biedt, of jouw toestemming). Het ontvangende land en de door de beheerder van deze site beschreven waarborg staan hieronder vermeld, zodat je een weloverwogen keuze kunt maken."
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1191
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1211
 msgid "Some cookies listed above may transfer your personal information to a country other than the one you are browsing from. The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
 msgstr "Sommige van de hierboven vermelde cookies kunnen je persoonlijke informatie overdragen naar een ander land dan het land van waaruit je deze site bezoekt. Het ontvangende land en de door de beheerder van deze site beschreven waarborg staan hieronder vermeld, zodat je een weloverwogen keuze kunt maken."
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1212
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1232
 msgid "Transfers personal data outside the EU/EEA"
 msgstr "Draagt persoonsgegevens over buiten de EU/EER"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1213
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1233
 msgid "transfers personal data outside the EU/EEA"
 msgstr "draagt persoonsgegevens over buiten de EU/EER"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1216
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1236
 msgid "Transfers personal data outside Brazil"
 msgstr "Draagt persoonsgegevens over buiten Brazilië"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1217
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1237
 msgid "transfers personal data outside Brazil"
 msgstr "draagt persoonsgegevens over buiten Brazilië"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1220
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1240
 msgid "Transfers personal information outside South Africa"
 msgstr "Draagt persoonlijke informatie over buiten Zuid-Afrika"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1221
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1241
 msgid "transfers personal information outside South Africa"
 msgstr "draagt persoonlijke informatie over buiten Zuid-Afrika"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1224
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1244
 msgid "Transfers personal data to another country"
 msgstr "Draagt persoonsgegevens over naar een ander land"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1225
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1245
 msgid "transfers personal data to another country"
 msgstr "draagt persoonsgegevens over naar een ander land"
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1730
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1750
 msgid "None declared."
 msgstr "Geen opgegeven."
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1745
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1765
 msgid "No cookies declared."
 msgstr "Geen cookies opgegeven."
 
 #. translators: 1: jurisdiction, 2: lang
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1855
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1875
 #, php-format
 msgid "FAZ Cookie Policy: no template scaffold found for jurisdiction \"%1$s\" and language \"%2$s\". Configure the generator under FAZ Cookie Manager → Cookie Policy."
 msgstr "FAZ Cookie Policy: geen sjabloonstructuur gevonden voor jurisdictie \"%1$s\" en taal \"%2$s\". Configureer de generator via FAZ Cookie Manager → Cookie Policy."
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1879
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1899
 msgid "FAZ Cookie Policy: visitors see this policy, but the company name or contact email it requires is missing. Fill them in in the Cookie Policy settings."
 msgstr "FAZ Cookie Policy: bezoekers zien dit beleid, maar de vereiste bedrijfsnaam of het contact-e-mailadres ontbreekt. Vul ze in bij de instellingen van het cookiebeleid."
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1880
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1900
 msgid "FAZ Cookie Policy: complete the fields required for the selected jurisdiction before publishing this policy."
 msgstr "FAZ Cookie Policy: vul de velden in die vereist zijn voor de gekozen jurisdictie voordat je dit beleid publiceert."
 
@@ -4420,7 +4420,7 @@ msgstr "Lees Meer Link"
 msgid "Cookie Policy URL"
 msgstr "Cookiebeleid URL"
 
-#: admin/views/banner.php:431 admin/views/cookie-policy.php:294
+#: admin/views/banner.php:431 admin/views/cookie-policy.php:301
 msgid "Type a page title to find its URL, or enter a link manually."
 msgstr ""
 
@@ -5317,219 +5317,227 @@ msgstr "Later beslissen"
 msgid "Company details"
 msgstr "Bedrijfsgegevens"
 
-#: admin/views/cookie-policy.php:125
+#: admin/views/cookie-policy.php:127
+msgid "Obfuscate public email addresses"
+msgstr ""
+
+#: admin/views/cookie-policy.php:129
+msgid "Encodes privacy contact and privacy officer email addresses in cookie policies as HTML character references. Visitors can still read and copy them, and existing email links still work, without JavaScript. Deters simple scrapers, but cannot prevent collection by bots that decode HTML. Enabled by default."
+msgstr ""
+
+#: admin/views/cookie-policy.php:132
 msgid "Registry / VAT / CNPJ (optional)"
 msgstr "Register / BTW / CNPJ (optioneel)"
 
-#: admin/views/cookie-policy.php:134
+#: admin/views/cookie-policy.php:141
 msgid "Privacy officer / DPO"
 msgstr "Privacyfunctionaris / DPO"
 
-#: admin/views/cookie-policy.php:144
+#: admin/views/cookie-policy.php:151
 msgid "Mandatory for LGPD (Art. 41). Under POPIA, the head of a public or private body is the Information Officer by default; name and contact email are required by this POPIA template. Recommended for GDPR where no DPO is legally required."
 msgstr "Verplicht voor LGPD (Art. 41). Onder POPIA is het hoofd van een publiek- of privaatrechtelijk orgaan standaard de Information Officer; naam en contact-e-mail zijn vereist voor dit POPIA-sjabloon. Aanbevolen voor AVG, waar geen DPO wettelijk verplicht is."
 
-#: admin/views/cookie-policy.php:152 admin/views/cookie-policy.php:222
+#: admin/views/cookie-policy.php:159 admin/views/cookie-policy.php:229
 msgid "Jurisdiction"
 msgstr "Rechtsgebied"
 
-#: admin/views/cookie-policy.php:156
+#: admin/views/cookie-policy.php:163
 msgid "Primary jurisdiction"
 msgstr "Primaire jurisdictie"
 
-#: admin/views/cookie-policy.php:158 admin/views/cookie-policy.php:224
+#: admin/views/cookie-policy.php:165 admin/views/cookie-policy.php:231
 msgid "GDPR (EU / EEA / UK)"
 msgstr "AVG (EU / EER / VK)"
 
-#: admin/views/cookie-policy.php:159 admin/views/cookie-policy.php:225
+#: admin/views/cookie-policy.php:166 admin/views/cookie-policy.php:232
 msgid "CCPA / CPRA (California, USA)"
 msgstr "CCPA / CPRA (Californië, VS)"
 
-#: admin/views/cookie-policy.php:160 admin/views/cookie-policy.php:226
+#: admin/views/cookie-policy.php:167 admin/views/cookie-policy.php:233
 msgid "LGPD (Brazil)"
 msgstr "LGPD (Brazilië)"
 
-#: admin/views/cookie-policy.php:161 admin/views/cookie-policy.php:227
+#: admin/views/cookie-policy.php:168 admin/views/cookie-policy.php:234
 #: admin/views/setup.php:137
 msgid "POPIA (South Africa)"
 msgstr "POPIA (Zuid-Afrika)"
 
-#: admin/views/cookie-policy.php:163
+#: admin/views/cookie-policy.php:170
 msgid "Override per shortcode call with [faz_cookie_policy_complete jurisdiction=\"...\"]."
 msgstr "Overschrijf per shortcode-aanroep met [faz_cookie_policy_complete jurisdiction=\"...\"]."
 
-#: admin/views/cookie-policy.php:164
+#: admin/views/cookie-policy.php:171
 msgid "For CCPA, review the rights section in Policy text below and configure the request methods your business provides. The default email-only wording does not fit every business."
 msgstr "Bekijk voor de CCPA het gedeelte over rechten onder Beleidstekst hieronder en configureer de verzoekkanalen die uw bedrijf aanbiedt. De standaardformulering met alleen een e-mailadres past niet bij elk bedrijf."
 
-#: admin/views/cookie-policy.php:181
+#: admin/views/cookie-policy.php:188
 msgid "Third-party services"
 msgstr "Diensten van derden"
 
-#: admin/views/cookie-policy.php:183 admin/views/cookie-policy.php:212
+#: admin/views/cookie-policy.php:190 admin/views/cookie-policy.php:219
 msgid "— advanced, optional"
 msgstr "— geavanceerd, optioneel"
 
-#: admin/views/cookie-policy.php:189
+#: admin/views/cookie-policy.php:196
 msgid "<strong>You probably don't need this.</strong> If you've run the cookie scanner (section 5 below), the policy already names every service from your site's actual cookies. This section is only useful for services that exchange data with third parties <em>without setting cookies</em> — for example: server-side Google Tag Manager, Meta CAPI server events, pixel iframes that block the visitor cookie store, embedded analytics that opt out of cookies. Leave it empty unless you know one of those applies."
 msgstr "<strong>U heeft dit waarschijnlijk niet nodig.</strong> Als u de cookie-scanner hebt uitgevoerd (sectie 5 hieronder), vermeldt het beleid al elke service van de daadwerkelijke cookies van uw site. Deze sectie is alleen nuttig voor diensten die gegevens uitwisselen met derden <em>zonder cookies in te stellen</em> — bijvoorbeeld: server-side Google Tag Manager, Meta CAPI-servergebeurtenissen, pixel-iframes die de bezoekercookieopslag blokkeren, ingebedde analytics die cookies weigeren. Laat het leeg tenzij u weet dat een van deze gevallen van toepassing is."
 
-#: admin/views/cookie-policy.php:193
+#: admin/views/cookie-policy.php:200
 msgid "Pre-tick services whose tracking domains were observed by the cookie scanner. You still need to click Save to commit."
 msgstr "Vink diensten aan waarvan de trackingdomeinen zijn gevonden door de cookiescanner. U moet nog op Opslaan klikken om te bevestigen."
 
-#: admin/views/cookie-policy.php:193 admin/views/gvl.php:50
+#: admin/views/cookie-policy.php:200 admin/views/gvl.php:50
 msgid "Auto-detect from cookie scan"
 msgstr "Automatische detectie via cookiescan"
 
-#: admin/views/cookie-policy.php:210
+#: admin/views/cookie-policy.php:217
 msgid "Policy text"
 msgstr "Beleidstekst"
 
-#: admin/views/cookie-policy.php:218
+#: admin/views/cookie-policy.php:225
 msgid "<strong>You probably don't need this.</strong> The shipped sections are reviewed starting points. Fill a box only to replace that section with your own wording — placeholders such as <code>{{COMPANY_NAME}}</code> keep working inside it. Text you write here is <strong>your</strong> document, so review the disclaimer setting below accordingly. Leave a box empty to keep the shipped text."
 msgstr "<strong>Dit heb je waarschijnlijk niet nodig.</strong> De meegeleverde secties zijn beoordeelde startpunten. Vul een vak alleen in om die sectie te vervangen door je eigen bewoording — placeholders zoals <code>{{COMPANY_NAME}}</code> blijven daarin werken. Tekst die je hier schrijft is <strong>jouw</strong> document, dus controleer de disclaimerinstelling hieronder dienovereenkomstig. Laat een vak leeg om de meegeleverde tekst te behouden."
 
-#: admin/views/cookie-policy.php:231 admin/views/cookies.php:49
+#: admin/views/cookie-policy.php:238 admin/views/cookies.php:49
 #: admin/views/setup.php:198
 msgid "Language"
 msgstr "Taal"
 
-#: admin/views/cookie-policy.php:247
+#: admin/views/cookie-policy.php:254
 msgid "Load sections"
 msgstr "Secties laden"
 
-#: admin/views/cookie-policy.php:252
+#: admin/views/cookie-policy.php:259
 msgid "CCPA request methods: the default rights section uses the privacy email. Email alone is appropriate only for a business operating exclusively online with a direct relationship with the consumers whose information it collects. Otherwise, replace the rights section below with at least two designated request methods, including a toll-free number and a method on your website. Use your real contact details in every published language."
 msgstr "CCPA-verzoekkanalen: het standaardgedeelte over rechten gebruikt het privacy-e-mailadres. Alleen e-mail is uitsluitend passend voor een bedrijf dat uitsluitend online actief is en een rechtstreekse relatie heeft met de consumenten van wie het gegevens verzamelt. Vervang anders het gedeelte over rechten hieronder door minstens twee aangewezen verzoekkanalen, waaronder een gratis telefoonnummer en een kanaal op uw website. Gebruik in elke gepubliceerde taal uw werkelijke contactgegevens."
 
-#: admin/views/cookie-policy.php:253
+#: admin/views/cookie-policy.php:260
 msgid "Also describe how to request a limit on sensitive information use and disclosure when that right applies. Provide the required website link and request method; an opt-out or limit request must not require identity verification or an account."
 msgstr "Beschrijf ook hoe een beperking van het gebruik en de verstrekking van gevoelige gegevens kan worden aangevraagd wanneer dat recht van toepassing is. Vermeld de vereiste websitelink en het verzoekkanaal; voor een bezwaar of een beperkingsverzoek mag geen identiteitsverificatie of account worden vereist."
 
-#: admin/views/cookie-policy.php:253
+#: admin/views/cookie-policy.php:260
 msgid "CPPA request guidance"
 msgstr "CPPA-richtlijnen voor verzoekkanalen"
 
-#: admin/views/cookie-policy.php:263
+#: admin/views/cookie-policy.php:270
 msgid "Cookies on this site"
 msgstr "Cookies op deze website"
 
 #. translators: %s: URL of the Cookies admin page
-#: admin/views/cookie-policy.php:271
+#: admin/views/cookie-policy.php:278
 #, php-format
 msgid "The cookie list is auto-populated from the <a href=\"%s\">Cookies admin page</a>. Add or scan cookies there; the generator reads the latest snapshot at render time."
 msgstr "De cookielijst wordt automatisch gevuld vanuit de <a href=\"%s\">beheerpagina voor cookies</a>. Voeg daar cookies toe of scan ze; de generator leest de laatste momentopname op het moment van renderen."
 
-#: admin/views/cookie-policy.php:283
+#: admin/views/cookie-policy.php:290
 msgid "Retention &amp; links"
 msgstr "Bewaring &amp; links"
 
-#: admin/views/cookie-policy.php:287
+#: admin/views/cookie-policy.php:294
 msgid "Declared fallback retention period (months)"
 msgstr "Opgegeven standaardbewaartermijn (maanden)"
 
-#: admin/views/cookie-policy.php:289
+#: admin/views/cookie-policy.php:296
 msgid "Used only as a policy declaration when no shorter cookie-specific period applies. It does not change consent-log or third-party analytics retention settings."
 msgstr "Wordt alleen gebruikt als beleidsverklaring wanneer geen kortere cookiespecifieke termijn van toepassing is. Dit wijzigt de bewaarinstellingen voor toestemmingslogboeken of analyses van derden niet."
 
-#: admin/views/cookie-policy.php:289
+#: admin/views/cookie-policy.php:296
 msgid "The period the policy states for consent records is the consent log retention set under Settings."
 msgstr "De termijn die het beleid voor toestemmingsregistraties vermeldt, is de bewaartermijn van het toestemmingslogboek die onder Instellingen is ingesteld."
 
-#: admin/views/cookie-policy.php:293
+#: admin/views/cookie-policy.php:300
 msgid "https://example.com/privacy"
 msgstr "https://example.com/privacy"
 
-#: admin/views/cookie-policy.php:302
+#: admin/views/cookie-policy.php:309
 msgid "Default language"
 msgstr "Standaardtaal"
 
-#: admin/views/cookie-policy.php:306
+#: admin/views/cookie-policy.php:313
 msgid "Force a specific language (otherwise follows visitor locale)"
 msgstr "Een specifieke taal forceren (anders wordt de taalinstelling van de bezoeker gevolgd)"
 
-#: admin/views/cookie-policy.php:308
+#: admin/views/cookie-policy.php:315
 msgid "Follow visitor locale (recommended)"
 msgstr "Volg de taalinstelling van de bezoeker (aanbevolen)"
 
-#: admin/views/cookie-policy.php:328
+#: admin/views/cookie-policy.php:335
 msgid "Footer disclaimer"
 msgstr "Voettekst disclaimer"
 
-#: admin/views/cookie-policy.php:335
+#: admin/views/cookie-policy.php:342
 msgid "Show the disclaimer at the bottom of the policy"
 msgstr "Toon de vrijwaring onderaan het beleid"
 
-#: admin/views/cookie-policy.php:337
+#: admin/views/cookie-policy.php:344
 msgid "When enabled, a short notice is appended to clarify that the generated policy is a template and not legal advice. Recommended for sites without an in-house legal review."
 msgstr "Wanneer ingeschakeld, wordt een korte mededeling toegevoegd om te verduidelijken dat het gegenereerde beleid een sjabloon is en geen juridisch advies. Aanbevolen voor sites zonder interne juridische beoordeling."
 
-#: admin/views/cookie-policy.php:340
+#: admin/views/cookie-policy.php:347
 msgid "Custom disclaimer text (optional)"
 msgstr "Aangepaste disclaimertekst (optioneel)"
 
-#: admin/views/cookie-policy.php:341
+#: admin/views/cookie-policy.php:348
 msgid "Leave empty to use the default localised disclaimer."
 msgstr "Leeg laten om de standaard gelokaliseerde disclaimer te gebruiken."
 
-#: admin/views/cookie-policy.php:342
+#: admin/views/cookie-policy.php:349
 msgid "Basic HTML is allowed (links, emphasis, line breaks). Leave blank to fall back to the standard FAZ disclaimer in the active language."
 msgstr "Basis-HTML is toegestaan (links, nadruk, regeleinden). Leeg laten om de standaard FAZ-disclaimer in de actieve taal te gebruiken."
 
-#: admin/views/cookie-policy.php:350
+#: admin/views/cookie-policy.php:357
 msgid "Save settings"
 msgstr "Instellingen opslaan"
 
-#: admin/views/cookie-policy.php:351 admin/views/geo-routing.php:42
+#: admin/views/cookie-policy.php:358 admin/views/geo-routing.php:42
 msgid "Preview"
 msgstr "Voorbeeld"
 
-#: admin/views/cookie-policy.php:361
+#: admin/views/cookie-policy.php:368
 msgid "Embed the policy"
 msgstr "Beleid insluiten"
 
-#: admin/views/cookie-policy.php:364
+#: admin/views/cookie-policy.php:371
 msgid "Paste this shortcode on any page or post:"
 msgstr "Plak deze shortcode op een willekeurige pagina of bericht:"
 
-#: admin/views/cookie-policy.php:366
+#: admin/views/cookie-policy.php:373
 msgid "With explicit language or jurisdiction:"
 msgstr "Met expliciete taal of jurisdictie:"
 
-#: admin/views/cookie-policy.php:372
+#: admin/views/cookie-policy.php:379
 msgid "By default the policy does <strong>not</strong> print its own title — your page already has one, so a second \"Cookie Policy\" heading would duplicate it. Add <code>show_title=\"true\"</code> if you embed the policy somewhere without a page title and want the heading back."
 msgstr "Standaard drukt de policy zijn eigen titel <strong>niet</strong> af — uw pagina heeft al een titel, zodat een tweede \"Cookiebeleid\"-kop een duplicaat zou zijn. Voeg <code>show_title=\"true\"</code> toe als u de policy ergens zonder paginatitel insluit en de kop wilt terugplaatsen."
 
-#: admin/views/cookie-policy.php:374
+#: admin/views/cookie-policy.php:381
 msgid "<strong>Note:</strong> the long-standing <code>[faz_cookie_policy]</code> shortcode (with <code>site_name</code> / <code>contact</code> / <code>show_table</code> attributes) is still supported for backward compatibility. The new <code>[faz_cookie_policy_complete]</code> renders the jurisdiction-aware template from the form above."
 msgstr "<strong>Opmerking:</strong> de bestaande shortcode <code>[faz_cookie_policy]</code> (met de attributen <code>site_name</code> / <code>contact</code> / <code>show_table</code>) wordt nog steeds ondersteund voor achterwaartse compatibiliteit. De nieuwe <code>[faz_cookie_policy_complete]</code> geeft de jurisdictie-bewuste sjabloon uit het bovenstaande formulier weer."
 
-#: admin/views/cookie-policy.php:377
+#: admin/views/cookie-policy.php:384
 msgid "Editor compatibility:"
 msgstr "Editorcompatibiliteit:"
 
-#: admin/views/cookie-policy.php:379
+#: admin/views/cookie-policy.php:386
 msgid "Classic editor: paste the shortcode anywhere in the content area."
 msgstr "Klassieke editor: plak de shortcode ergens in het inhoudsgebied."
 
-#: admin/views/cookie-policy.php:380
+#: admin/views/cookie-policy.php:387
 msgid "Gutenberg / block editor: add a <strong>Shortcode block</strong>, paste the code inside."
 msgstr "Gutenberg / blokkeneditor: voeg een <strong>Shortcode-blok</strong> toe en plak de code erin."
 
-#: admin/views/cookie-policy.php:381
+#: admin/views/cookie-policy.php:388
 msgid "Page builders (Bricks, Elementor, Beaver, Divi, WPBakery): use the builder's <strong>Shortcode</strong> widget/element and paste the code. Some builders (Bricks in particular) skip <code>the_content()</code> entirely on pages without a builder template, so the bare shortcode in the WP editor will not render — use the shortcode element of your builder instead."
 msgstr "Paginabouwers (Bricks, Elementor, Beaver, Divi, WPBakery): gebruik het <strong>Shortcode</strong>-widget/-element van de bouwer en plak de code. Sommige bouwers (Bricks in het bijzonder) slaan <code>the_content()</code> volledig over op pagina's zonder bouwerstemplate, waardoor de kale shortcode in de WP-editor niet wordt weergegeven — gebruik in plaats daarvan het shortcode-element van uw bouwer."
 
-#: admin/views/cookie-policy.php:382
+#: admin/views/cookie-policy.php:389
 msgid "Theme template files: <code>echo do_shortcode( '[faz_cookie_policy_complete]' );</code>"
 msgstr "Themasjabloonbestanden: <code>echo do_shortcode( '[faz_cookie_policy_complete]' );</code>"
 
-#: admin/views/cookie-policy.php:383
+#: admin/views/cookie-policy.php:390
 msgid "WordPress block templates (FSE themes like Twenty Twenty-Four/Five): add a Shortcode block to your <em>Single Page</em> template, or use the Shortcode block on the individual page."
 msgstr "WordPress bloksjablonen (FSE-thema's zoals Twenty Twenty-Four/Five): voeg een Shortcode-blok toe aan uw <em>Enkele pagina</em>-sjabloon, of gebruik het Shortcode-blok op de afzonderlijke pagina."
 
-#: admin/views/cookie-policy.php:391
+#: admin/views/cookie-policy.php:398
 msgid "Close preview"
 msgstr "Voorbeeld sluiten"
 
@@ -8122,7 +8130,7 @@ msgid "A button that opens the cookie consent preferences."
 msgstr "Een knop die de cookievoorkeuren opent."
 
 #: includes/blocks/class-blocks.php:173
-#: includes/class-cookie-policy-shortcode.php:95
+#: includes/class-cookie-policy-shortcode.php:97
 msgid "Manage Cookie Preferences"
 msgstr "Cookievoorkeuren beheren"
 
@@ -8162,110 +8170,110 @@ msgstr ""
 msgid "Downloaded %d cookie definitions"
 msgstr ""
 
-#: includes/class-cookie-policy-shortcode.php:69
+#: includes/class-cookie-policy-shortcode.php:71
 msgid "What Are Cookies"
 msgstr "Wat zijn cookies"
 
 #. translators: %s: site name
-#: includes/class-cookie-policy-shortcode.php:72
+#: includes/class-cookie-policy-shortcode.php:74
 #, php-format
 msgid "Cookies are small text files that are placed on your device when you visit %s. They are widely used to make websites work more efficiently, as well as to provide information to the website owners."
 msgstr "Cookies zijn kleine tekstbestanden die op je apparaat worden geplaatst wanneer je %s bezoekt. Ze worden veel gebruikt om websites efficiënter te laten werken en om informatie te verstrekken aan de eigenaren van de websites."
 
-#: includes/class-cookie-policy-shortcode.php:75
+#: includes/class-cookie-policy-shortcode.php:77
 msgid "How We Use Cookies"
 msgstr "Hoe wij cookies gebruiken"
 
 #. translators: %s: site name
-#: includes/class-cookie-policy-shortcode.php:78
+#: includes/class-cookie-policy-shortcode.php:80
 #, php-format
 msgid "%s uses cookies for several purposes, including:"
 msgstr "%s gebruikt cookies voor verschillende doeleinden, waaronder:"
 
-#: includes/class-cookie-policy-shortcode.php:81
+#: includes/class-cookie-policy-shortcode.php:83
 msgid "Necessary cookies"
 msgstr "Noodzakelijke cookies"
 
-#: includes/class-cookie-policy-shortcode.php:81
+#: includes/class-cookie-policy-shortcode.php:83
 msgid "These cookies are essential for the website to function properly. They enable basic functions like page navigation, access to secure areas, and shopping cart functionality. The website cannot function properly without these cookies."
 msgstr "Deze cookies zijn essentieel voor de goede werking van de website. Ze maken basisfuncties mogelijk zoals paginavigatie, toegang tot beveiligde gebieden en winkelwagenfunctionaliteit. De website kan niet goed werken zonder deze cookies."
 
-#: includes/class-cookie-policy-shortcode.php:82
+#: includes/class-cookie-policy-shortcode.php:84
 msgid "Functional cookies"
 msgstr "Functionele cookies"
 
-#: includes/class-cookie-policy-shortcode.php:82
+#: includes/class-cookie-policy-shortcode.php:84
 msgid "These cookies enable the website to remember choices you make (such as your language preference or region) and provide enhanced, more personalised features."
 msgstr "Deze cookies maken het de website mogelijk om keuzes die je maakt (zoals je taalvoorkeur of regio) te onthouden en bieden verbeterde, meer gepersonaliseerde functies."
 
-#: includes/class-cookie-policy-shortcode.php:83
+#: includes/class-cookie-policy-shortcode.php:85
 msgid "Analytics cookies"
 msgstr "Analysecookies"
 
-#: includes/class-cookie-policy-shortcode.php:83
+#: includes/class-cookie-policy-shortcode.php:85
 msgid "These cookies help us understand how visitors interact with the website by collecting and reporting information anonymously. This helps us improve the website and your experience."
 msgstr "Deze cookies helpen ons begrijpen hoe bezoekers met de website omgaan door informatie anoniem te verzamelen en te rapporteren. Dit helpt ons de website en je ervaring te verbeteren."
 
-#: includes/class-cookie-policy-shortcode.php:84
+#: includes/class-cookie-policy-shortcode.php:86
 msgid "Marketing cookies"
 msgstr "Marketingcookies"
 
-#: includes/class-cookie-policy-shortcode.php:84
+#: includes/class-cookie-policy-shortcode.php:86
 msgid "These cookies are used to deliver advertisements that are relevant to you and your interests. They are also used to limit the number of times you see an advertisement and help measure the effectiveness of advertising campaigns."
 msgstr "Deze cookies worden gebruikt om advertenties te leveren die relevant zijn voor je en je interesses. Ze worden ook gebruikt om het aantal keren dat je een advertentie ziet te beperken en helpen de effectiviteit van advertentiecampagnes te meten."
 
-#: includes/class-cookie-policy-shortcode.php:88
+#: includes/class-cookie-policy-shortcode.php:90
 msgid "Cookies We Use"
 msgstr "Cookies die wij gebruiken"
 
-#: includes/class-cookie-policy-shortcode.php:89
+#: includes/class-cookie-policy-shortcode.php:91
 msgid "The table below lists the cookies used on this website, along with their purpose, duration, and category."
 msgstr "De onderstaande tabel bevat een lijst van de op deze website gebruikte cookies, inclusief hun doel, duur en categorie."
 
-#: includes/class-cookie-policy-shortcode.php:93
+#: includes/class-cookie-policy-shortcode.php:95
 msgid "How to Manage Cookies"
 msgstr "Cookies beheren"
 
-#: includes/class-cookie-policy-shortcode.php:96
+#: includes/class-cookie-policy-shortcode.php:98
 msgid "You can also control cookies through your browser settings. Most browsers allow you to:"
 msgstr "Je kunt cookies ook via de instellingen van je browser beheren. De meeste browsers bieden de mogelijkheid om:"
 
-#: includes/class-cookie-policy-shortcode.php:98
+#: includes/class-cookie-policy-shortcode.php:100
 msgid "View what cookies are stored and delete them individually"
 msgstr "Te zien welke cookies er zijn opgeslagen en deze afzonderlijk te verwijderen"
 
-#: includes/class-cookie-policy-shortcode.php:99
+#: includes/class-cookie-policy-shortcode.php:101
 msgid "Block third-party cookies"
 msgstr "Cookies van derde partijen te blokkeren"
 
-#: includes/class-cookie-policy-shortcode.php:100
+#: includes/class-cookie-policy-shortcode.php:102
 msgid "Block cookies from specific sites"
 msgstr "Cookies van specifieke websites te blokkeren"
 
-#: includes/class-cookie-policy-shortcode.php:101
+#: includes/class-cookie-policy-shortcode.php:103
 msgid "Block all cookies from being set"
 msgstr "Blokkeer alle cookies"
 
-#: includes/class-cookie-policy-shortcode.php:102
+#: includes/class-cookie-policy-shortcode.php:104
 msgid "Delete all cookies when you close your browser"
 msgstr "Verwijder alle cookies wanneer je je browser afsluit"
 
-#: includes/class-cookie-policy-shortcode.php:104
+#: includes/class-cookie-policy-shortcode.php:106
 msgid "Please note that if you disable cookies, some features of this website may not function properly."
 msgstr "Let op: als je cookies uitschakelt, werken sommige functies van deze website mogelijk niet correct."
 
-#: includes/class-cookie-policy-shortcode.php:106
+#: includes/class-cookie-policy-shortcode.php:108
 msgid "More Information"
 msgstr "Meer informatie"
 
 #. translators: %s: contact email address wrapped in a mailto link
-#: includes/class-cookie-policy-shortcode.php:109
+#: includes/class-cookie-policy-shortcode.php:111
 #, php-format
 msgid "If you have questions about our use of cookies, please contact us at %s."
 msgstr "Als je vragen hebt over ons gebruik van cookies, neem dan contact met ons op via %s."
 
 #. translators: %s: current date
-#: includes/class-cookie-policy-shortcode.php:113
+#: includes/class-cookie-policy-shortcode.php:115
 #, php-format
 msgid "This cookie policy was last updated on %s."
 msgstr "Dit cookiebeleid is voor het laatst bijgewerkt op %s."

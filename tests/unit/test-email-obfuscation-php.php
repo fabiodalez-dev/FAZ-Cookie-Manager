@@ -68,7 +68,11 @@ namespace {
 		check( 1 === substr_count( $encoded, '<a ' ) && 2 === substr_count( $encoded, '"' ), 'encoding cannot break out of an attribute' );
 		$variants[ $encoded ] = true;
 	}
-	check( count( $variants ) > 1, 'encoding is randomized' );
+	check( 1 === count( $variants ), 'the same address always produces the same markup' );
+	$only = array_keys( $variants )[0];
+	check( 1 === preg_match( '/&#x[0-9a-f]+;/', $only ) && 1 === preg_match( '/&#[0-9]+;/', $only ), 'decimal and hexadecimal entities are mixed' );
+	$other = Email_Obfuscation::apply( '<p>' . esc_html( 'dpo@example.test' ) . '</p>', array( 'dpo@example.test' ) );
+	check( html_entity_decode( $other, ENT_QUOTES, 'UTF-8' ) === '<p>dpo@example.test</p>', 'a second address decodes to itself' );
 	check( Email_Obfuscation::apply( $html, array( '' ) ) === $html, 'empty fields do not modify HTML' );
 	$GLOBALS['options'] = array( 'admin_email' => $email, 'date_format' => 'Y-m-d' );
 	$shortcode = new Cookie_Policy_Shortcode();
