@@ -183,6 +183,15 @@ function faz_ok( $cond, $label ) {
 }
 
 /** Fresh Template double seeded with the given settings/config + banner_control. */
+/** Mirrors the real generate(): it normalises the config, then stores the result. */
+class Faz_Normalising_Template extends Faz_Test_Template {
+	public function generate() {
+		parent::generate();
+		$this->properties['config']['categoryPreview']['status'] = true;
+		$this->update();
+	}
+}
+
 function faz_make_template( array $settings, array $config = array(), array $banner_control = array(), $banner = null ) {
 	$GLOBALS['faz_test_options']['faz_settings'] = array( 'banner_control' => $banner_control );
 	$tpl                                         = new Faz_Test_Template();
@@ -380,6 +389,16 @@ $plain_tpl->update();
 $equal_again = faz_make_template( $base_settings, $equal_config );
 $equal_again->load();
 faz_ok( 0 === $equal_again->generated && 1 === $equal_again->set_called, 'the two configs keep separate slots instead of evicting each other' );
+// generate() normalises the config before it stores the template; the write
+// must land in the slot the next read of the same banner looks in.
+$GLOBALS['faz_test_options']['faz_banner_template'] = array();
+$raw_config = array( 'categoryPreview' => array( 'status' => false ) );
+foreach ( array( 'first', 'second' ) as $faz_visit ) {
+	$normalising = new Faz_Normalising_Template();
+	$normalising->faz_setup( new Faz_Test_Banner(), array( 'settings' => $base_settings, 'config' => $raw_config ) );
+	$normalising->load();
+}
+faz_ok( 0 === $normalising->generated && 1 === $normalising->set_called, 'a template stored after generate() normalised the config is found on the next visit' );
 \FazCookie\Frontend\Modules\Shortcodes\Shortcodes::set_applied_ruleset( null );
 // Without a ruleset the config is the stored row, and a save clears the option.
 $no_ruleset = faz_make_template( $base_settings, $plain_config );

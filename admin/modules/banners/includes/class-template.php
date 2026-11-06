@@ -105,6 +105,13 @@ class Template {
 	protected $cache_group = 'banner_template';
 
 	/**
+	 * Config fingerprint the slot was fixed with by load(), or null.
+	 *
+	 * @var string|null
+	 */
+	private $slot_config = null;
+
+	/**
 	 * Language of the template
 	 *
 	 * @var string
@@ -191,7 +198,11 @@ class Template {
 	 * @return void
 	 */
 	public function load() {
-		$stored = $this->get_stored();
+		// generate() normalises the config (categoryPreview) before update()
+		// stores the result, so the slot is fixed from the config as read here:
+		// otherwise the write could land in a slot the next read never looks in.
+		$this->slot_config = $this->config_fingerprint();
+		$stored            = $this->get_stored();
 		if ( true === $this->is_preview()
 			|| empty( $stored )
 			|| ! isset( $stored['layout_signature'] )
@@ -821,15 +832,24 @@ class Template {
 		// save clears the whole option for, so the historical key stays. The
 		// same clear on save keeps the fingerprinted slots from piling up.
 		if ( '' !== $regime ) {
-			$config  = isset( $this->properties['config'] ) && is_array( $this->properties['config'] )
-				? $this->properties['config']
-				: array();
-			$suffix .= ':cfg-' . substr( md5( (string) wp_json_encode( $config ) ), 0, 12 );
+			$suffix .= ':cfg-' . ( null !== $this->slot_config ? $this->slot_config : $this->config_fingerprint() );
 		}
 		if ( $banner_id > 0 ) {
 			return 'banner_' . $banner_id . ':' . $this->language . $suffix;
 		}
 		return $this->language . $suffix;
+	}
+
+	/**
+	 * Short fingerprint of the banner config as it stands now.
+	 *
+	 * @return string
+	 */
+	private function config_fingerprint() {
+		$config = isset( $this->properties['config'] ) && is_array( $this->properties['config'] )
+			? $this->properties['config']
+			: array();
+		return substr( md5( (string) wp_json_encode( $config ) ), 0, 12 );
 	}
 
 	/**
