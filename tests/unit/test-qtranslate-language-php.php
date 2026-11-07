@@ -280,6 +280,15 @@ namespace {
 		faz_seed( false, array( 'en', 'it', 'pt-br', 'uk' ) );
 		assert_eq( faz_i18n_selected_languages(), array( 'en', 'it', 'pt-br', 'uk', 'de' ), 'faz_i18n_selected_languages() maps the qTranslate enabled languages' );
 
+		if ( 'globals' !== $faz_scenario ) {
+			// The API is present but $q_config does not have qTranslate's
+			// shape: every helper falls back instead of reading it.
+			$GLOBALS['q_config'] = array( 'foo' => 'bar' );
+			faz_seed( false );
+			assert_eq( faz_i18n_default_language(), 'en', 'malformed $q_config → faz_i18n_default_language() falls back to the FAZ default' );
+			assert_eq( faz_i18n_selected_languages(), array( 'en' ), 'malformed $q_config → faz_i18n_selected_languages() returns only the default' );
+		}
+
 		if ( 'xt' === $faz_scenario ) {
 			faz_seed_qconfig( 'it', 4 );
 			faz_seed( true );
