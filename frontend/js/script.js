@@ -8106,11 +8106,12 @@ function _fazShouldBlockResource(category, target, serviceId) {
     }
 
     // Advanced Consent Mode (#165): let Consent-Mode-aware Google tags load
-    // gated by the denied `consent default`. gtm.js is not matched. Placed
-    // AFTER the per-service checks so an explicit svc.<id>:no (a deliberate
-    // rejection of this Google service) still hard-blocks it — the exemption
-    // only covers the pre-consent / category-default state.
-    if (_fazStore._gcmAdvanced && _fazIsGcmManaged(target)) return false;
+    // gated by the denied `consent default`. gtm.js is matched only under the
+    // container opt-in (#385). Placed AFTER the per-service checks so an
+    // explicit svc.<id>:no (a deliberate rejection of this Google service)
+    // still hard-blocks it — the exemption only covers the pre-consent /
+    // category-default state.
+    if (_fazIsAdvancedConsentExempt(target)) return false;
 
     // The server can attach only one category to a tag. That category is
     // not an exemption from other denied categories matching the same resource.
@@ -8304,7 +8305,8 @@ function _fazIsDeferredPlaceholderType(type) {
 /**
  * Advanced Consent Mode (#165): whether a URL is a Consent-Mode-aware Google
  * tag (gtag.js / GA4 / Ads) that may load before consent. gtag-direct only —
- * the GTM container (gtm.js) is intentionally NOT matched, so it stays blocked.
+ * the GTM container (gtm.js) is intentionally NOT matched here; it is
+ * _fazIsGtmContainer()'s, consulted only under the #385 opt-in.
  * These URL patterns are kept in sync with is_gcm_managed_script() in
  * frontend/class-frontend.php; the PHP side additionally matches server-rendered
  * inline gtag bootstrap calls (gtag('config'/'js'), which have no client-side
@@ -8333,6 +8335,45 @@ function _fazIsGcmManaged(u) {
     return _fazHostMatches(parts.host, 'googleadservices.com')
         || _fazHostMatches(parts.host, 'googlesyndication.com')
         || _fazHostMatches(parts.host, 'doubleclick.net');
+}
+
+/**
+ * Advanced Consent Mode for the Google Tag Manager container (#385): whether a
+ * URL is the container loader, googletagmanager.com (or a subdomain) with the
+ * exact path /gtm.js. Not /ns.html (the noscript frame, which runs without any
+ * Consent Mode default) and not /gtag/js (that is _fazIsGcmManaged()'s). Host
+ * and path are read with _fazUrlParts(), so a look-alike host or the name in a
+ * query string does not count. Kept in sync with is_gtm_container_script() in
+ * frontend/class-frontend.php.
+ *
+ * @param {string} u URL.
+ * @returns {boolean}
+ */
+function _fazIsGtmContainer(u) {
+    if (!u) return false;
+    var parts = _fazUrlParts(String(u).toLowerCase());
+    if (!parts.host) return false;
+    return _fazHostMatches(parts.host, 'googletagmanager.com') && parts.path === '/gtm.js';
+}
+
+/**
+ * Whether Advanced Consent Mode lets a URL load before consent: a gtag-direct
+ * Google tag (_fazIsGcmManaged) whenever Advanced mode is on, and the Tag
+ * Manager container only when the site owner also opted it in
+ * (_gcmAdvancedGtm, #385). The container answer still yields to an explicit
+ * svc.<id>:no for the service its URL belongs to, because the container is
+ * usually injected by an inline snippet that carries no data-faz-service the
+ * callers' own per-service check could read. Mirrors
+ * is_advanced_consent_exempt() in frontend/class-frontend.php.
+ *
+ * @param {string} u URL.
+ * @returns {boolean}
+ */
+function _fazIsAdvancedConsentExempt(u) {
+    if (!_fazStore._gcmAdvanced) return false;
+    if (_fazIsGcmManaged(u)) return true;
+    if (!_fazStore._gcmAdvancedGtm || !_fazIsGtmContainer(u)) return false;
+    return _fazGetServiceConsentForTarget(u) !== "no";
 }
 
 /**
@@ -8441,10 +8482,11 @@ function _fazShouldChangeType(element, src, typeOverride) {
     // Advanced Consent Mode (#165): let Consent-Mode-aware Google tags load
     // before consent (the synchronous denied `consent default` in <head> keeps
     // their pre-consent hits cookieless); mirrors the server-side
-    // is_gcm_managed_script() exemption. gtm.js stays blocked (not matched).
+    // is_advanced_consent_exempt(). gtm.js stays blocked unless the site
+    // owner opted the container in (#385).
     // Placed AFTER the explicit per-service check above so an svc.<id>:no
     // (deliberate rejection of this Google service) still hard-blocks it.
-    if (_fazStore._gcmAdvanced && _fazIsGcmManaged(url)) return false;
+    if (_fazIsAdvancedConsentExempt(url)) return false;
     // Tracker decision (also the exemption gate): block when the element's
     // declared category is to be blocked OR its URL matches a known provider —
     // matching the MutationObserver path. A native ES module / first-party WP

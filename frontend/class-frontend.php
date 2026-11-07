@@ -3556,8 +3556,10 @@ class Frontend {
 	 * gtag exemption is active (the denied default is already in front of
 	 * them in this response), and then still pass through the output buffer
 	 * like any pasted tag, so an explicit per-service rejection keeps them
-	 * blocked. In every other case they, and the Tag Manager container always,
-	 * are printed already parked (see Google_Tag::render()).
+	 * blocked. The Tag Manager container goes out live only when the site
+	 * owner also opted it in (`advanced_mode_gtm`, #385) and its own service
+	 * is not explicitly denied. In every other case the tags are printed
+	 * already parked (see Google_Tag::render()).
 	 *
 	 * @return void
 	 */
@@ -3582,6 +3584,10 @@ class Frontend {
 			$ids,
 			array(
 				'gtag_unblocked' => $this->gcm_advanced_exemption_active(),
+				// The container goes out live only under the opt-in (#385), and
+				// never past an explicit denial of its own service: the inline
+				// loader carries no URL the per-service matcher could read.
+				'gtm_unblocked'  => $this->gcm_gtm_exemption_active() && ! $this->is_service_explicitly_denied( 'google-tag-manager' ),
 				'data_layer'     => $this->gcm_datalayer_name(),
 				'hints'          => $hints,
 			)
@@ -3620,6 +3626,22 @@ class Frontend {
 		return $this->gcm_default_emitted
 			&& $this->gcm_settings
 			&& $this->gcm_settings->is_advanced_mode();
+	}
+
+	/**
+	 * Whether the Google Tag Manager container may load before consent on this
+	 * request (#385): the gtag exemption is active (Advanced mode on AND the
+	 * denied default emitted in this response) and the site owner opted the
+	 * container in with `advanced_mode_gtm`. Read through get() rather than a
+	 * dedicated settings method so the condition is the same two-part guard
+	 * as the gtag one plus a single site-wide flag — identical for every
+	 * visitor, so Cache Compatibility Mode output does not vary.
+	 *
+	 * @return bool
+	 */
+	private function gcm_gtm_exemption_active() {
+		return $this->gcm_advanced_exemption_active()
+			&& faz_sanitize_bool( $this->gcm_settings->get( 'advanced_mode_gtm' ) );
 	}
 
 	/**
@@ -4384,6 +4406,13 @@ class Frontend {
 		// the client blocker so dynamically-injected Google tags (which bypass
 		// the output buffer) are also allowed to load before consent.
 		$store['_gcmAdvanced'] = $this->gcm_settings ? (bool) $this->gcm_settings->is_advanced_mode() : false;
+		// Tag Manager container under Advanced mode (#385). Emitted ONLY when
+		// true so the _fazConfig blob stays byte-identical for every install
+		// that leaves the opt-in off. Site-wide, so it does not vary per
+		// visitor under Cache Compatibility Mode.
+		if ( $store['_gcmAdvanced'] && faz_sanitize_bool( $this->gcm_settings->get( 'advanced_mode_gtm' ) ) ) {
+			$store['_gcmAdvancedGtm'] = true;
+		}
 
 		// IAB vendor data for preference center.
 		// Mirror the asset-enqueue gate above: the IAB/TCF preference UI is
@@ -5776,8 +5805,9 @@ class Frontend {
 		// has already emitted a synchronous `consent default → denied` at the top
 		// of <head>, so these send cookieless/modeled pings and upgrade on
 		// consent instead of being hard-blocked. The GTM *container* (gtm.js) is
-		// intentionally NOT exempt: it can host non-Google tags that ignore
-		// Consent Mode.
+		// NOT exempt by default: it can host non-Google tags that ignore
+		// Consent Mode. Only the explicit `advanced_mode_gtm` opt-in (#385)
+		// adds it, see is_advanced_consent_exempt().
 		//
 		// The exemption is only sound while that default actually precedes the
 		// stack in THIS response — gcm_advanced_exemption_active() checks the
@@ -5789,9 +5819,7 @@ class Frontend {
 		// (`svc.<id>:no` → $svc_blocked === true), that deliberate choice wins
 		// and the tag stays hard-blocked. The exemption only applies to the
 		// pre-consent / category-default state, not an explicit rejection.
-		if ( true !== $svc_blocked
-			&& $this->gcm_advanced_exemption_active()
-			&& $this->is_gcm_managed_script( $attrs, $content ) ) {
+		if ( true !== $svc_blocked && $this->is_advanced_consent_exempt( $attrs, $content ) ) {
 			return $full;
 		}
 
@@ -5804,7 +5832,9 @@ class Frontend {
 	 *
 	 * Deliberately gtag-direct only: the GTM container (`gtm.js`) is excluded
 	 * because it can host non-Google tags that don't read Consent Mode, so
-	 * exempting it would let those load ungated.
+	 * exempting it would let those load ungated. The container has its own
+	 * matcher, is_gtm_container_script(), consulted only under the explicit
+	 * `advanced_mode_gtm` opt-in (#385) — see is_advanced_consent_exempt().
 	 *
 	 * The URL needles are kept in sync with `_fazIsGcmManaged()` in
 	 * frontend/js/script.js. The inline-call needles (`gtag('config'` /
@@ -5870,6 +5900,83 @@ class Frontend {
 			}
 		}
 
+		return false;
+	}
+
+	/**
+	 * Whether Advanced Consent Mode lets this script load before consent on
+	 * this request: a gtag-direct Google tag under the gtag exemption, or —
+	 * only with the `advanced_mode_gtm` opt-in (#385) — the Tag Manager
+	 * container. Callers check an explicit per-service denial first; this
+	 * method only answers the pre-consent / category-default question.
+	 *
+	 * Mirrors _fazIsAdvancedConsentExempt() in frontend/js/script.js.
+	 *
+	 * @param string $attrs   Script tag attributes.
+	 * @param string $content Inline script body.
+	 * @return bool
+	 */
+	private function is_advanced_consent_exempt( $attrs, $content ) {
+		if ( ! $this->gcm_advanced_exemption_active() ) {
+			return false;
+		}
+		if ( $this->is_gcm_managed_script( $attrs, $content ) ) {
+			return true;
+		}
+		return $this->gcm_gtm_exemption_active() && $this->is_gtm_container_script( $attrs, $content );
+	}
+
+	/**
+	 * Whether a script is the Google Tag Manager container loader (#385).
+	 *
+	 * A `src` is matched as host plus exact path: the host must be
+	 * googletagmanager.com or a subdomain of it (host_is_or_subdomain_of(),
+	 * so `googletagmanager.com.evil.example` and a query carrying the name do
+	 * not count) and the path must be `/gtm.js` — not the `/ns.html` noscript
+	 * frame, which runs without JavaScript and therefore without any Consent
+	 * Mode default, and not `/gtag/js`, which is_gcm_managed_script() owns.
+	 *
+	 * An inline body has no URL to read, so the standard container snippet —
+	 * which builds `https://www.googletagmanager.com/gtm.js?id=` + id — is
+	 * matched on the URL literal it carries, with that literal's host held to
+	 * the same host test. Only the URL literal counts: `gtm.start` or a
+	 * `dataLayer.push({` on its own is data for the container, not the
+	 * container. Server-side containers on a first-party domain are not
+	 * matched and keep waiting for consent.
+	 *
+	 * The URL needle is kept in sync with _fazIsGtmContainer() in
+	 * frontend/js/script.js.
+	 *
+	 * @param string $attrs   Script tag attributes.
+	 * @param string $content Inline script body.
+	 * @return bool
+	 */
+	private function is_gtm_container_script( $attrs, $content ) {
+		$ctx = $this->get_provider_match_context( $attrs, $content );
+		$url = (string) $ctx['url'];
+		if ( '' !== $url ) {
+			foreach ( preg_split( '/[\s,]+/', $url, -1, PREG_SPLIT_NO_EMPTY ) as $faz_candidate ) {
+				$faz_host = strtolower( (string) \wp_parse_url( $faz_candidate, PHP_URL_HOST ) );
+				if ( '' !== $faz_host
+					&& $this->host_is_or_subdomain_of( $faz_host, 'googletagmanager.com' )
+					&& '/gtm.js' === strtolower( (string) \wp_parse_url( $faz_candidate, PHP_URL_PATH ) ) ) {
+					return true;
+				}
+			}
+			// A script with a src runs the src, never its body.
+			return false;
+		}
+		// The literal must be a URL whose HOST passes the same test, so a body
+		// mentioning `notgoogletagmanager.com/gtm.js` or
+		// `googletagmanager.com.evil.example/gtm.js` does not count.
+		if ( ! preg_match_all( '#(?:https?:)?//([a-z0-9.-]+)/gtm\.js(?![a-z0-9_.-])#i', (string) $ctx['content'], $faz_m ) ) {
+			return false;
+		}
+		foreach ( $faz_m[1] as $faz_host ) {
+			if ( $this->host_is_or_subdomain_of( strtolower( $faz_host ), 'googletagmanager.com' ) ) {
+				return true;
+			}
+		}
 		return false;
 	}
 
@@ -9696,6 +9803,20 @@ class Frontend {
 	}
 
 	/**
+	 * Whether the visitor explicitly denied one service (`svc.<id>:no`).
+	 *
+	 * Empty under Cache Compatibility Mode and the jurisdiction shell (see
+	 * get_service_consent()), where the same choice is enforced client-side.
+	 *
+	 * @param string $service_id Service id.
+	 * @return bool
+	 */
+	private function is_service_explicitly_denied( $service_id ) {
+		$consent = $this->get_service_consent();
+		return isset( $consent[ $service_id ] ) && 'no' === $consent[ $service_id ];
+	}
+
+	/**
 	 * Parse per-service consent entries from the consent cookie.
 	 *
 	 * Service consent keys use the format "svc.service-id:yes|no".
@@ -13310,8 +13431,7 @@ class Frontend {
 		// Match the output-buffer exemption for Advanced Consent Mode (same
 		// emitted-default condition, see gcm_advanced_exemption_active()), but
 		// an explicit service denial still wins over a cookieless bootstrap.
-		if ( true !== $svc_blocked && $this->gcm_advanced_exemption_active()
-			&& $this->is_gcm_managed_script( $attrs, $content ) ) {
+		if ( true !== $svc_blocked && $this->is_advanced_consent_exempt( $attrs, $content ) ) {
 			return false;
 		}
 		return $should_block ? $matched_category : false;

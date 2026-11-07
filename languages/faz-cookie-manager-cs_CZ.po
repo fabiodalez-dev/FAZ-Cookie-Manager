@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-11-06T14:24:35+00:00\n"
+"POT-Creation-Date: 2026-11-07T14:25:04+00:00\n"
 "PO-Revision-Date: 2026-08-01 13:45+0200\n"
 "Last-Translator: \n"
 "Language-Team: Czech\n"
@@ -50,7 +50,7 @@ msgid "Cookie Banner"
 msgstr "Cookie Banner"
 
 #: admin/class-admin.php:286 admin/views/base.php:21
-#: frontend/class-frontend.php:4164
+#: frontend/class-frontend.php:4186
 #: frontend/modules/banner-rest/class-banner-rest.php:609
 msgid "Cookies"
 msgstr "Cookies"
@@ -3740,6 +3740,10 @@ msgid "Advanced Consent Mode: load Google tags before consent."
 msgstr "Režim pokročilého souhlasu: načíst tagy Google před udělením souhlasu."
 
 #: admin/modules/gcm/api/class-api.php:183
+msgid "Advanced Consent Mode: also load the Google Tag Manager container before consent."
+msgstr ""
+
+#: admin/modules/gcm/api/class-api.php:188
 msgid "Google tag IDs the plugin loads itself (G-, GT-, AW-, DC-, GTM-), comma-separated."
 msgstr ""
 
@@ -4378,7 +4382,7 @@ msgstr "Jazyk:"
 msgid "Notice Title"
 msgstr "Nadpis banneru"
 
-#: admin/views/banner.php:383 frontend/class-frontend.php:4159
+#: admin/views/banner.php:383 frontend/class-frontend.php:4181
 #: frontend/modules/banner-rest/class-banner-rest.php:603
 msgid "We value your privacy"
 msgstr "Vážíme si vašeho soukromí"
@@ -4867,7 +4871,7 @@ msgstr "Text pro opt-out (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Text modálního okna «Předvolby odhlášení», které návštěvník uvidí po kliknutí na odkaz «Do Not Sell or Share My Personal Information». Zobrazuje se pouze u bannerů CCPA / zákonů států USA (a Obojí). Řídí se jazykem vybraným výše."
 
-#: admin/views/banner.php:1018 frontend/class-frontend.php:4161
+#: admin/views/banner.php:1018 frontend/class-frontend.php:4183
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "Opt-out Preferences"
 msgstr "Předvolby odhlášení"
@@ -5230,7 +5234,7 @@ msgstr ""
 msgid "Date"
 msgstr "Datum"
 
-#: admin/views/consent-logs.php:87 frontend/class-frontend.php:4158
+#: admin/views/consent-logs.php:87 frontend/class-frontend.php:4180
 #: frontend/modules/banner-rest/class-banner-rest.php:604
 #: includes/class-dsar-admin.php:139 includes/class-utils.php:1773
 #: includes/class-utils.php:1815
@@ -5937,7 +5941,7 @@ msgid "Let the plugin load Google Analytics 4 or a Google tag (G-, GT-), Google 
 msgstr ""
 
 #: admin/views/gcm.php:37
-msgid "Each tag waits for the same consent a copy pasted into the theme would: Google Analytics for Analytics, Google Ads and Floodlight for Marketing, the Tag Manager container for its catalogue category. With Advanced Consent Mode on, Google Analytics and Google Ads load before consent in cookieless mode; a Tag Manager container always waits for consent, because it can run tags that ignore Consent Mode."
+msgid "Each tag waits for the same consent a copy pasted into the theme would: Google Analytics for Analytics, Google Ads and Floodlight for Marketing, the Tag Manager container for its catalogue category. With Advanced Consent Mode on, Google Analytics and Google Ads load before consent in cookieless mode; a Tag Manager container waits for consent, because it can run tags that ignore Consent Mode, unless you also turn on the Tag Manager option under Advanced Consent Mode."
 msgstr ""
 
 #: admin/views/gcm.php:38
@@ -6020,34 +6024,50 @@ msgid "This lets Google tags (gtag.js / GA4 / Google Ads) load BEFORE consent."
 msgstr "Díky tomu se tagy Google (gtag.js / GA4 / Google Ads) načtou JEŠTĚ PŘED udělením souhlasu."
 
 #: admin/views/gcm.php:146
-msgid "They run with consent default → denied, so pre-consent hits are cookieless (Google's \"Advanced\"/modeled mode) and upgrade to full measurement once the visitor accepts. Non-Google trackers and the Google Tag Manager container (gtm.js) stay fully blocked."
-msgstr "Fungují s výchozím nastavením souhlasu → zamítnuto, takže přístupy před udělením souhlasu probíhají bez souborů cookie (režim \"Pokročilý\"/modelovaný režim společnosti Google) a po souhlasu návštěvníka se přejde na plné měření. Sledovací nástroje jiných poskytovatelů než Google a kontejner Google Tag Manager (gtm.js) zůstávají zcela blokovány."
+msgid "They run with consent default → denied, so pre-consent hits are cookieless (Google's \"Advanced\"/modeled mode) and upgrade to full measurement once the visitor accepts. Non-Google trackers stay fully blocked, and so does the Google Tag Manager container (gtm.js) unless you turn on the option below."
+msgstr "Fungují s výchozím nastavením souhlasu → zamítnuto, takže přístupy před udělením souhlasu probíhají bez souborů cookie (režim \"Pokročilý\"/modelovaný režim společnosti Google) a po souhlasu návštěvníka se přejde na plné měření. Sledovací nástroje jiných poskytovatelů než Google zůstávají zcela blokovány, stejně jako kontejner Google Tag Manager (gtm.js), pokud nezapnete možnost níže."
 
 #: admin/views/gcm.php:147
 msgid "Leave this OFF for the strictest, block-everything-before-consent behaviour. Loading Google before consent is a legal judgement call: some EU authorities still treat cookieless pings as a third-party transfer, so enabling it is your responsibility as the site operator. Default: off."
 msgstr "Nechte tuto možnost VYPNUTOU, pokud chcete nastavit nejpřísnější chování, při kterém se před udělením souhlasu blokuje vše. Načítání služby Google před udělením souhlasu je otázkou právního posouzení: některé orgány v EU stále považují požadavky bez souborů cookie za předávání údajů třetím stranám, takže za jejich povolení nesete odpovědnost vy jako provozovatel webu. Výchozí nastavení: vypnuto."
 
-#: admin/views/gcm.php:155
+#: admin/views/gcm.php:154
+msgid "Also load the Google Tag Manager container before consent"
+msgstr ""
+
+#: admin/views/gcm.php:157
+msgid "For sites that configure Google Analytics 4 and Google Ads conversions inside Google Tag Manager. The container (gtm.js) loads before consent behind the same consent default → denied, so the Google tags in it can send cookieless pings that Google uses for conversion modelling. The noscript iframe stays blocked, and an explicit rejection of the Google Tag Manager service still blocks the container. Only works together with Advanced Consent Mode. Default: off."
+msgstr ""
+
+#: admin/views/gcm.php:160
+msgid "You become responsible for every tag inside the container."
+msgstr ""
+
+#: admin/views/gcm.php:161
+msgid "A container can run tags that do not read Consent Mode: Meta Pixel, LinkedIn, TikTok, Hotjar, custom HTML. The plugin still blocks the trackers it recognises when the container injects them, but it cannot see every tag a container can run, so it no longer guarantees that nothing tracks before consent. Before turning this on, open each non-Google tag in Tag Manager and set its Consent Settings to \"Require additional consent for tag to fire\" with the matching consent type (for example ad_storage), or use a trigger that waits for consent."
+msgstr ""
+
+#: admin/views/gcm.php:169
 msgid "Google Additional Consent Mode (GACM)"
 msgstr "Google Additional Consent Mode (GACM)"
 
-#: admin/views/gcm.php:162
+#: admin/views/gcm.php:176
 msgid "Enable GACM"
 msgstr "Povolit GACM"
 
-#: admin/views/gcm.php:166
+#: admin/views/gcm.php:180
 msgid "Ad Technology Provider IDs"
 msgstr "ID poskytovatelů reklamních technologií"
 
-#: admin/views/gcm.php:167
+#: admin/views/gcm.php:181
 msgid "Comma-separated provider IDs, e.g. 89,91,128"
 msgstr "ID poskytovatelů oddělené čárkami, např. 89,91,128"
 
-#: admin/views/gcm.php:168
+#: admin/views/gcm.php:182
 msgid "Google Ad Tech Provider IDs to include in the AC string."
 msgstr "ID poskytovatelů Google Ad Tech k zahrnutí do řetězce AC."
 
-#: admin/views/gcm.php:174
+#: admin/views/gcm.php:188
 msgid "Save GCM Settings"
 msgstr "Uložit nastavení GCM"
 
@@ -7953,86 +7973,86 @@ msgstr "{name} povoleno, zakázat {name}"
 msgid "{name} disabled, enable {name}"
 msgstr "{name} zakázáno, povolit {name}"
 
-#: frontend/class-frontend.php:4160
+#: frontend/class-frontend.php:4182
 #: frontend/modules/banner-rest/class-banner-rest.php:605
 msgid "Your cookie preferences have been saved."
 msgstr "Vaše předvolby cookies byly uloženy."
 
-#: frontend/class-frontend.php:4162
+#: frontend/class-frontend.php:4184
 #: frontend/modules/banner-rest/class-banner-rest.php:607
 msgid "Customise Consent Preferences"
 msgstr "Přizpůsobit předvolby souhlasu"
 
-#: frontend/class-frontend.php:4163
+#: frontend/class-frontend.php:4185
 #: frontend/modules/banner-rest/class-banner-rest.php:608
 msgid "Service consent"
 msgstr "Souhlas se službou"
 
-#: frontend/class-frontend.php:4165
+#: frontend/class-frontend.php:4187
 #: frontend/modules/banner-rest/class-banner-rest.php:610
 msgid "Cookie consent"
 msgstr "Souhlas s cookies"
 
-#: frontend/class-frontend.php:4166
+#: frontend/class-frontend.php:4188
 #: frontend/modules/banner-rest/class-banner-rest.php:611
 msgid "Vendor consent"
 msgstr "Souhlas dodavatele"
 
-#: frontend/class-frontend.php:4167
+#: frontend/class-frontend.php:4189
 #: frontend/modules/banner-rest/class-banner-rest.php:612
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Tyto soubory cookie nastavuje vložená služba na své vlastní doméně a jejich chování lze řídit povolením nebo zablokováním výše uvedené vložené služby – nelze je odstranit jednotlivě."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:4171
+#: frontend/class-frontend.php:4193
 #: frontend/modules/banner-rest/class-banner-rest.php:617
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Potvrzuji, že mi je alespoň %d let"
 
-#: frontend/class-frontend.php:4172
+#: frontend/class-frontend.php:4194
 #: frontend/modules/banner-rest/class-banner-rest.php:618
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Potvrďte prosím, že splňujete minimální věk pro přijetí volitelných cookies."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:4179
+#: frontend/class-frontend.php:4201
 #: frontend/modules/banner-rest/class-banner-rest.php:620
 #, php-format
 msgid "Banner closes automatically in %d s..."
 msgstr "Banner se automaticky zavře za %d s..."
 
-#: frontend/class-frontend.php:4182
+#: frontend/class-frontend.php:4204
 #: frontend/modules/banner-rest/class-banner-rest.php:623
 msgid "Consent"
 msgstr "Souhlas"
 
-#: frontend/class-frontend.php:4183
+#: frontend/class-frontend.php:4205
 #: frontend/modules/banner-rest/class-banner-rest.php:624
 msgid "Cookie retention"
 msgstr "Doba uchování cookies"
 
-#: frontend/class-frontend.php:4184
+#: frontend/class-frontend.php:4206
 #: frontend/modules/banner-rest/class-banner-rest.php:625
 msgid "Features"
 msgstr "Funkce"
 
-#: frontend/class-frontend.php:4185
+#: frontend/class-frontend.php:4207
 #: frontend/modules/banner-rest/class-banner-rest.php:626
 msgid "Legitimate Interest"
 msgstr "Oprávněný zájem"
 
-#: frontend/class-frontend.php:4186
+#: frontend/class-frontend.php:4208
 #: frontend/modules/banner-rest/class-banner-rest.php:627
 msgid "Some vendors process your data on the basis of legitimate interest rather than consent. You have the right to object: switch a purpose off to object to that processing."
 msgstr "Někteří dodavatelé zpracovávají vaše údaje na základě oprávněného zájmu namísto souhlasu. Máte právo vznést námitku: vypnutím účelu vznesete námitku proti tomuto zpracování."
 
-#: frontend/class-frontend.php:4187
+#: frontend/class-frontend.php:4209
 #: frontend/modules/banner-rest/class-banner-rest.php:628
 msgid "IAB Vendor Consent"
 msgstr "Souhlas pro dodavatele IAB"
 
-#: frontend/class-frontend.php:4188
+#: frontend/class-frontend.php:4210
 #: frontend/modules/banner-rest/class-banner-rest.php:629
 msgid "Allow processing based on legitimate interest"
 msgstr "Povolit zpracování na základě oprávněného zájmu"
@@ -9194,6 +9214,9 @@ msgstr "Tlačítko"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Odkaz"
+
+#~ msgid "They run with consent default → denied, so pre-consent hits are cookieless (Google's \"Advanced\"/modeled mode) and upgrade to full measurement once the visitor accepts. Non-Google trackers and the Google Tag Manager container (gtm.js) stay fully blocked."
+#~ msgstr "Fungují s výchozím nastavením souhlasu → zamítnuto, takže přístupy před udělením souhlasu probíhají bez souborů cookie (režim \"Pokročilý\"/modelovaný režim společnosti Google) a po souhlasu návštěvníka se přejde na plné měření. Sledovací nástroje jiných poskytovatelů než Google a kontejner Google Tag Manager (gtm.js) zůstávají zcela blokovány."
 
 #~ msgid "Safe fallback: no active global GDPR banner is available for the strict shell, so these pages bypass the full-page cache."
 #~ msgstr "Bezpečný záložní režim: pro přísný shell není k dispozici žádný aktivní globální banner GDPR, proto tyto stránky obcházejí celostránkovou mezipaměť."
