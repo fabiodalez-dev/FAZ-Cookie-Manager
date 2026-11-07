@@ -19,6 +19,12 @@ import { test, expect } from '../fixtures/wp-fixture';
 import { wpEval, upsertPage } from '../utils/wp-env';
 import { acquireSharedWordPressLock, releaseSharedWordPressLock } from '../utils/shared-wordpress-lock';
 
+/** Decode the HTML character references the cookie policy uses to encode contact addresses (#383). */
+const decodeCharRefs = (html: string): string =>
+  html
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
+
 const ADMIN_PAGE = '/wp-admin/admin.php?page=faz-cookie-manager-cookie-policy';
 
 let savedData = '';
@@ -503,7 +509,10 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
     expect(legacyOut, 'legacy shortcode renders').toMatch(/<div class="faz-cookie-policy"/);
     expect(legacyOut, 'legacy "How to Manage Cookies" section').toContain('Manage Cookies');
     expect(legacyOut, 'legacy site_name substituted').toContain('QA Cookie Site');
-    expect(legacyOut, 'legacy contact substituted').toContain('qa@example.com');
+    // The address is encoded as HTML character references (#383): it must
+    // not appear in clear, and must decode back to the configured contact.
+    expect(legacyOut, 'legacy contact is encoded').not.toContain('qa@example.com');
+    expect(decodeCharRefs(legacyOut), 'legacy contact substituted').toContain('qa@example.com');
     // show_table="no" should hide the "Cookies We Use" section.
     expect(legacyOut, 'show_table=no hides table section').not.toContain('Cookies We Use');
 

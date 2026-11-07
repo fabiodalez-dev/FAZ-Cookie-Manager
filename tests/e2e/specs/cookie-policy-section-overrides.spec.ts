@@ -11,6 +11,12 @@ import { test, expect } from '../fixtures/wp-fixture';
 import { wpEval } from '../utils/wp-env';
 import { acquireSharedWordPressLock, releaseSharedWordPressLock } from '../utils/shared-wordpress-lock';
 
+/** Decode the HTML character references the cookie policy uses to encode contact addresses (#383). */
+const decodeCharRefs = (html: string): string =>
+  html
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
+
 const ADMIN_PAGE = '/wp-admin/admin.php?page=faz-cookie-manager-cookie-policy';
 const RENDERER = '\\FazCookie\\Admin\\Modules\\Cookie_Policy_Generator\\Includes\\Renderer';
 const MARKER = 'Slovenská politika súborov cookie E2E';
@@ -204,6 +210,8 @@ test('CCPA request methods can be authored and survive save and public rendering
   const published = render('en', 'ccpa-california');
   expect(published).toContain('href="https://example.test/privacy-requests"');
   expect(published).toContain('1-800-555-0100');
-  expect(published).toContain('privacy@example.test');
+  // {{COMPANY_EMAIL}} is encoded as HTML character references (#383).
+  expect(published).not.toContain('privacy@example.test');
+  expect(decodeCharRefs(published)).toContain('privacy@example.test');
   expect(render('en')).toBe(englishBefore);
 });
