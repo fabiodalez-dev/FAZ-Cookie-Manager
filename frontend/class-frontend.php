@@ -5942,7 +5942,11 @@ class Frontend {
 	 * matched on the URL literal it carries, with that literal's host held to
 	 * the same host test. Only the URL literal counts: `gtm.start` or a
 	 * `dataLayer.push({` on its own is data for the container, not the
-	 * container. Server-side containers on a first-party domain are not
+	 * container. The literal has to open a string, so a gtm.js URL inside
+	 * another URL's query string does not count, and a body that also matches
+	 * a non-Google catalogue service (a GTM snippet bundled with a Meta Pixel
+	 * one) is not the container either: the exemption would cover the whole
+	 * <script>. Server-side containers on a first-party domain are not
 	 * matched and keep waiting for consent.
 	 *
 	 * The URL needle is kept in sync with _fazIsGtmContainer() in
@@ -5969,12 +5973,60 @@ class Frontend {
 		}
 		// The literal must be a URL whose HOST passes the same test, so a body
 		// mentioning `notgoogletagmanager.com/gtm.js` or
-		// `googletagmanager.com.evil.example/gtm.js` does not count.
-		if ( ! preg_match_all( '#(?:https?:)?//([a-z0-9.-]+)/gtm\.js(?![a-z0-9_.-])#i', (string) $ctx['content'], $faz_m ) ) {
+		// `googletagmanager.com.evil.example/gtm.js` does not count. It must
+		// also open a string literal (a quote or backtick right before it), so a
+		// gtm.js URL carried in another URL's query string, as in
+		// `x.gif?u=//www.googletagmanager.com/gtm.js`, is not the container.
+		$faz_body = (string) $ctx['content'];
+		if ( ! preg_match_all( '#(?<=["\'`])(?:https?:)?//([a-z0-9.-]+)/gtm\.js(?![a-z0-9_.-])#i', $faz_body, $faz_m ) ) {
 			return false;
 		}
+		$faz_found = false;
 		foreach ( $faz_m[1] as $faz_host ) {
 			if ( $this->host_is_or_subdomain_of( strtolower( $faz_host ), 'googletagmanager.com' ) ) {
+				$faz_found = true;
+				break;
+			}
+		}
+		// The exemption covers the whole <script>, so a body that also carries
+		// another tracker's code (header-script boxes often hold the GTM snippet
+		// next to a Meta Pixel or Hotjar one) is not "the container": it waits
+		// for consent like any other tag.
+		return $faz_found && ! $this->inline_body_names_non_google_service( $faz_body );
+	}
+
+	/**
+	 * Whether an inline script body matches a catalogue service other than the
+	 * Consent-Mode-aware Google ones (#385 review).
+	 *
+	 * Every pattern of the per-service map is tested against the body: plain
+	 * code fragments (`fbq(`) as substrings, URL fragments
+	 * (`connect.facebook.net`) with the same boundary rule the URL matcher
+	 * uses. Google Tag Manager, Google Analytics, Google Ads and Site Kit's
+	 * gtag handle are the services Advanced Consent Mode already lets run
+	 * behind the denied default; any other match means the body runs code the
+	 * consent default does not govern.
+	 *
+	 * @param string $content Inline script body.
+	 * @return bool
+	 */
+	private function inline_body_names_non_google_service( $content ) {
+		$content = (string) $content;
+		if ( '' === $content ) {
+			return false;
+		}
+		$allowed = array( 'google-tag-manager', 'google-analytics', 'google-ads', 'google-sitekit' );
+		$lower   = strtolower( $content );
+		foreach ( $this->get_pattern_service_map() as $pattern => $service_ids ) {
+			$pattern = (string) $pattern;
+			if ( '' === $pattern || ! array_diff( (array) $service_ids, $allowed ) ) {
+				continue;
+			}
+			$is_url  = false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' );
+			$matched = $is_url
+				? $this->provider_pattern_matches_lc( $lower, strtolower( $pattern ) )
+				: false !== stripos( $content, $pattern );
+			if ( $matched ) {
 				return true;
 			}
 		}

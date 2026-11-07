@@ -213,6 +213,10 @@ namespace {
 				'googletagmanager.com/ns.html' => array( 'google-tag-manager' ),
 				'GTM-ABC123'                   => array( 'google-tag-manager' ),
 				'googletagmanager.com/gtag/js' => array( 'google-analytics' ),
+				"gtag('config'"                => array( 'google-analytics' ),
+				'connect.facebook.net'         => array( 'meta-pixel' ),
+				'fbq('                         => array( 'meta-pixel' ),
+				'static.hotjar.com'            => array( 'hotjar' ),
 			),
 			'provider_match_meta_cache' => null,
 			'service_match_meta_cache'  => null,
@@ -286,6 +290,16 @@ namespace {
 	ok( false === faz_gtm_call( $fe, 'is_gtm_container_script', '', 'dataLayer.push({"gtm.start":1,event:"gtm.js"});' ), 'container DATA (gtm.start / dataLayer.push) is not the container' );
 	ok( false === faz_gtm_call( $fe, 'is_gtm_container_script', '', 'fbq("init","1");' ), 'an unrelated inline script is not' );
 
+	echo "\nis_gtm_container_script() — an inline body that is ONLY the container\n";
+	$sq_body = "(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-ABC123');";
+	ok( true === faz_gtm_call( $fe, 'is_gtm_container_script', '', $sq_body ), 'Google\'s single-quoted snippet is the container' );
+	ok( true === faz_gtm_call( $fe, 'is_gtm_container_script', '', $snippet_body . "gtag('config','G-TEST');" ), 'the container next to a gtag config call (Consent Mode aware) still is' );
+	ok( false === faz_gtm_call( $fe, 'is_gtm_container_script', '', $snippet_body . '!function(f,b,e,v,n,t,s){t.src="https://connect.facebook.net/en_US/fbevents.js"}(window,document,"script");fbq("init","1");' ), 'the container bundled with a Meta Pixel snippet is not exempted' );
+	ok( false === faz_gtm_call( $fe, 'is_gtm_container_script', '', $snippet_body . 'fbq("track","PageView");' ), 'the container next to a bare fbq() call is not exempted' );
+	ok( false === faz_gtm_call( $fe, 'is_gtm_container_script', '', $snippet_body . 'h._hjSettings={hjid:1};r.src="https://static.hotjar.com/c/hotjar-1.js";' ), 'the container bundled with Hotjar is not exempted' );
+	ok( false === faz_gtm_call( $fe, 'is_gtm_container_script', '', 'var i=new Image();i.src="https://tracker.example/x.gif?u=//www.googletagmanager.com/gtm.js";' ), 'a gtm.js URL inside another URL\'s query string is not the container' );
+	ok( false === faz_gtm_call( $fe, 'is_gtm_container_script', '', 'var u="https://tracker.example/r?to=https://www.googletagmanager.com/gtm.js";' ), 'nor is an absolute gtm.js URL carried as a parameter' );
+
 	// =====================================================================
 	// 2. The output buffer
 	// =====================================================================
@@ -295,6 +309,9 @@ namespace {
 	ok( faz_gtm_live( $out, $gtm_src ), 'the gtm.js loader is left running' );
 	ok( faz_gtm_live( $out, $gtm_inline ), 'the inline container snippet is left running' );
 	ok( faz_gtm_live( $out, $gtag_loader ), 'gtag.js keeps its exemption' );
+	$bundled = '<script>' . $snippet_body . 'fbq("init","1");fbq("track","PageView");</script>';
+	$bout    = faz_gtm_page( faz_gtm_frontend( true, true ), true, $bundled );
+	ok( ! faz_gtm_live( $bout, $bundled ), 'a <script> that bundles the container with a Meta Pixel call waits for consent' );
 	ok( ! faz_gtm_live( $out, $fb_pixel ) && false !== strpos( $out, 'data-faz-category="marketing"' ), 'a non-Google tracker stays blocked' );
 	ok( false === strpos( $out, '<iframe src="https://www.googletagmanager.com/ns.html' ), 'the noscript iframe stays blocked: no JS, no consent default' );
 	ok( false !== strpos( $out, "gtag('consent','default'," ), 'the denied default is in front of the container' );
