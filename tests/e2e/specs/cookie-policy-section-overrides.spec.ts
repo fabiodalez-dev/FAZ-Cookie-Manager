@@ -212,6 +212,6 @@ test('CCPA request methods can be authored and survive save and public rendering
   expect(published).toContain('1-800-555-0100');
   // {{COMPANY_EMAIL}} is encoded as HTML character references (#383).
   expect(published).not.toContain('privacy@example.test');
-  expect(decodeCharRefs(published)).toContain('privacy@example.test');
+  expect(decodeCharRefs(published)).toContain('Contact: privacy@example.test.');
   expect(render('en')).toBe(englishBefore);
 });
