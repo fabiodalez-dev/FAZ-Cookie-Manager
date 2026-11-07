@@ -1176,13 +1176,21 @@ var _revisitFazConsent = function () {
     var activeLaw = (typeof _fazGetLaw === "function") ? _fazGetLaw() : "";
     var actionRecorded = _fazRef && _fazRef._fazGetFromStore && _fazRef._fazGetFromStore("action");
     var hasOptoutPopup = !!document.querySelector('[data-faz-tag="optout-popup"]');
+    var openedBanner = false;
     if (activeLaw === "ccpa" && actionRecorded && hasOptoutPopup) {
         _fazSetPreferenceAction("donotsell-button");
     } else {
         _fazShowBanner();
+        openedBanner = true;
     }
     _fazToggleRevisit();
     _fazUpdateVendorCheckboxStates();
+    // The widget that was just activated is now hidden, and a focused element
+    // that disappears drops focus on <body>: a keyboard user was left behind
+    // the dialog they had opened (wp.org "accessibility-97"). Move focus into
+    // the banner, as for any dialog that opens. The opt-out popup path above
+    // already does this through _fazShowPreferenceCenter().
+    if (openedBanner) _fazFocusFirstControl(_fazGetBanner());
 };
 /**
  * Search an element by it's data-faz-tag attribute
@@ -1374,12 +1382,16 @@ _fazRef._fazRandomString = function (length, allChars = true) {
  * Remove banner if necessary.
  */
 function _fazRemoveBanner() {
+    // Read before hiding: once the container is display:none the focused
+    // button no longer says where the visitor was.
+    const focusWasInConsentUi = _fazConsentUiHasFocus();
     _fazHideBanner();
     _fazRemoveCookieWall();
     if (_fazStore._bannerConfig.config.revisitConsent.status === true ||
         _fazStore._bannerConfig.config.revisitConsent.verifiedAlternative === true) {
         _fazShowRevisit();
     }
+    _fazFocusRevisitIfFocusLost(focusWasInConsentUi);
 }
 
 /**
@@ -3023,6 +3035,7 @@ function _fazGetPreferenceCenter() {
     return element && element.closest('.faz-modal') || false;
 }
 function _fazHidePreferenceCenter() {
+    const focusWasInConsentUi = _fazConsentUiHasFocus();
     // Reset the opt-out success UI (timers + visibility) on every close so a
     // re-opened popup never shows a stale "honored" message or a dead countdown.
     _fazResetOptoutSuccessMessage();
@@ -3063,6 +3076,11 @@ function _fazHidePreferenceCenter() {
     // (the revisit widget or the [faz_cookie_settings] shortcode) falls back to
     // the law default instead of inheriting the previous trigger's panel.
     _fazStore._preferenceOriginTag = false;
+    // The opener may be gone: a returning visitor who opened the panel from
+    // the reopened banner closes it onto a banner that stays hidden, so the
+    // Customise button can no longer take focus. Hand it to the revisit
+    // widget, the control that reopens everything, instead of <body>.
+    _fazFocusRevisitIfFocusLost(focusWasInConsentUi, isPushdown ? null : element);
 }
 // Which preference panel to show: the opt-out popup when the visitor reached it
 // via the Do-Not-Sell control, the GDPR detail panel via the settings control,
@@ -3231,6 +3249,101 @@ function _fazShowRevisit() {
     if (revisit.classList.contains('faz-revisit-hide')) revisit.classList.remove('faz-revisit-hide');
 }
 
+/**
+ * The revisit widget's control, only while it is actually on screen.
+ *
+ * @returns {HTMLElement|false}
+ */
+function _fazGetRevisitButton() {
+    const revisit = _fazGetRevisit();
+    if (!revisit || revisit.classList.contains('faz-revisit-hide')) return false;
+    const control = revisit.querySelector('button, a[href], [tabindex]:not([tabindex="-1"])');
+    return control && _fazIsRendered(control) ? control : false;
+}
+
+/**
+ * True when the element is on screen for a keyboard user: connected, with a
+ * layout box, and not visibility:hidden (the closed modal keeps its box and
+ * hides with visibility, so a box alone is not enough).
+ */
+function _fazIsRendered(element) {
+    if (!element || !element.isConnected || !element.getClientRects) return false;
+    if (typeof element.checkVisibility === 'function') {
+        return element.checkVisibility({ visibilityProperty: true });
+    }
+    if (element.getClientRects().length === 0) return false;
+    return window.getComputedStyle(element).visibility !== 'hidden';
+}
+
+/**
+ * Whether keyboard focus is currently inside a consent surface: the banner,
+ * the pushdown panel it contains, or the preference/opt-out modal.
+ *
+ * @returns {boolean}
+ */
+function _fazConsentUiHasFocus() {
+    const active = document.activeElement;
+    if (!active || active === document.body || active === document.documentElement || !active.closest) return false;
+    return !!active.closest('.faz-consent-container, .faz-modal');
+}
+
+/**
+ * Focus is lost when it sits on <body> or on an element that no longer has a
+ * layout box — the button the visitor pressed inside a surface just hidden.
+ *
+ * @returns {boolean}
+ */
+function _fazFocusIsLost() {
+    const active = document.activeElement;
+    if (!active || active === document.body || active === document.documentElement) return true;
+    return !_fazIsRendered(active);
+}
+
+/**
+ * After a consent surface closes, give focus to the revisit widget when it
+ * would otherwise be lost.
+ *
+ * Without this a keyboard user who decided in the banner was left on <body>
+ * with the browser's sequential-focus starting point on the hidden button,
+ * which sits AFTER the widget in the DOM: the next Tab went into the page and
+ * the widget was reachable only by tabbing through the whole document — the
+ * "Tab skips the cookie icon" report (wp.org "accessibility-97"). Only acts
+ * when focus was inside the consent UI, so it never moves focus on page load.
+ *
+ * @param {boolean} focusWasInConsentUi Read before the surface was hidden.
+ * @param {HTMLElement|null} [closedSurface] The modal/sidebar just closed.
+ */
+function _fazFocusRevisitIfFocusLost(focusWasInConsentUi, closedSurface) {
+    if (!focusWasInConsentUi) return;
+    // A sidebar slides out over 0.4s and stays visible meanwhile, so a control
+    // inside the surface that was just closed counts as lost too.
+    const leftInClosedSurface = !!(closedSurface && closedSurface.contains(document.activeElement));
+    if (!leftInClosedSurface && !_fazFocusIsLost()) return;
+    const control = _fazGetRevisitButton();
+    if (control) control.focus();
+}
+
+/**
+ * Focus the first visible, enabled control inside `root`, or `root` itself
+ * (made programmatically focusable) when it has none.
+ *
+ * @param {HTMLElement|false} root
+ */
+function _fazFocusFirstControl(root) {
+    if (!root) return;
+    const candidates = root.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
+    );
+    for (let i = 0; i < candidates.length; i++) {
+        if (candidates[i] !== root && _fazIsRendered(candidates[i])) {
+            candidates[i].focus();
+            return;
+        }
+    }
+    if (!root.hasAttribute('tabindex')) root.setAttribute('tabindex', '-1');
+    root.focus();
+}
+
 /** Check the actual visitor page, including theme CSS and disabled ancestors. */
 function _fazHasUsableWithdrawalControl() {
     return Array.from(document.querySelectorAll('[data-faz-open-preferences]')).some(function (control) {
@@ -3344,6 +3457,67 @@ function _fazLoopFocus() {
     );
     _fazAttachFocusLoop(firstElementPopup, lastElementPopup, true);
     _fazAttachFocusLoop(lastElementPopup, firstElementPopup);
+    // The edge handlers above are bound to the first/last control in SOURCE
+    // order when the surface opens. When that control is one the layout does
+    // not display (the pushdown panel's reject button, a control inside a
+    // collapsed section), its handler never runs and Tab walks out of the
+    // dialog into the page. A surface-level handler re-reads the controls that
+    // are actually rendered at the moment Tab is pressed; it defers to an edge
+    // handler that already handled the key.
+    _fazAttachSurfaceTrap(_fazGetBanner());
+    _fazAttachSurfaceTrap(document.querySelector('.faz-modal'));
+}
+
+/**
+ * Bind the rendered-controls focus trap once per surface element.
+ *
+ * @param {HTMLElement|false|null} surface The banner container or the modal.
+ */
+function _fazAttachSurfaceTrap(surface) {
+    if (!surface || surface.__fazSurfaceTrap) return;
+    surface.__fazSurfaceTrap = true;
+    surface.addEventListener('keydown', _fazTrapSurfaceTab);
+}
+
+/**
+ * The part of `surface` that must hold focus right now, or null when the
+ * surface is closed: the open preference panel inside the modal, the
+ * expanded pushdown panel while focus is in it, or else the whole banner.
+ *
+ * @param {HTMLElement} surface
+ * @returns {HTMLElement|null}
+ */
+function _fazOpenTrapRoot(surface) {
+    if (surface.classList.contains('faz-modal')) {
+        if (!surface.classList.contains('faz-modal-open')) return null;
+        return surface.querySelector('[data-faz-tag="' + _fazActivePreferenceTag() + '"]') || surface;
+    }
+    if (surface.classList.contains('faz-hide')) return null;
+    // Inside an expanded pushdown panel the panel cycles on its own, as its
+    // edge handlers do; from the notice the whole banner is the cycle.
+    const panel = surface.classList.contains('faz-consent-bar-expand') && document.activeElement
+        ? document.activeElement.closest('[data-faz-tag="detail"]')
+        : null;
+    return panel && surface.contains(panel) ? panel : surface;
+}
+
+function _fazTrapSurfaceTab(event) {
+    if (event.key !== 'Tab' || event.defaultPrevented) return;
+    const root = _fazOpenTrapRoot(event.currentTarget);
+    if (!root) return;
+    const controls = Array.from(root.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([disabled]):not([tabindex="-1"])'
+    )).filter(_fazIsRendered);
+    if (!controls.length) return;
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    const active = document.activeElement;
+    const atEdge = event.shiftKey
+        ? (active === first || active === root || !root.contains(active))
+        : (active === last || !root.contains(active));
+    if (!atEdge) return;
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
 }
 // Tracks the currently-attached focus-loop handler per (element, isReverse)
 // pair so repeated _fazLoopFocus() calls (legitimate dynamic re-init OR
@@ -3373,6 +3547,13 @@ function _fazAttachFocusLoop(element, targetElement, isReverse = false) {
                 (!isReverse && event.shiftKey)
             )
                 return;
+            // An expanded pushdown panel sits in the banner AFTER the notice,
+            // so the notice's own wrap (last button → first button) would
+            // make the panel unreachable by Tab. While it is expanded, let
+            // Tab leave the notice's last control into the panel; the panel
+            // keeps its own wrap, and _fazTrapSurfaceTab holds the banner.
+            if (element.closest && element.closest('.faz-consent-bar-expand') &&
+                !element.closest('[data-faz-tag="detail"]')) return;
             event.preventDefault();
             targetElement.focus();
         };
@@ -3717,9 +3898,19 @@ function _fazFocusIntoElement(element) {
     var root = element.classList && element.classList.contains('faz-preference-center')
         ? element
         : (element.querySelector('.faz-preference-center') || element);
-    var focusTarget = root.querySelector(
+    var candidates = root.querySelectorAll(
         'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
     );
+    // The first control in source order can be one the layout hides (the
+    // pushdown panel keeps a close button it does not display), and focus()
+    // on it is a silent no-op that leaves focus on the opener. Prefer the
+    // first control that is actually rendered; keep the first match as the
+    // fallback for a panel still mid-transition, which the retries below cover.
+    var focusTarget = null;
+    for (var c = 0; c < candidates.length; c++) {
+        if (_fazIsRendered(candidates[c])) { focusTarget = candidates[c]; break; }
+    }
+    if (!focusTarget) focusTarget = candidates[0] || null;
     if (!focusTarget) {
         if (!root.hasAttribute('tabindex')) root.setAttribute('tabindex', '-1');
         focusTarget = root;
@@ -3736,9 +3927,16 @@ function _fazFocusIntoElement(element) {
     // Every retry first checks that the panel is still in the open state
     // (by re-querying the "currently active preference center" via the same
     // selector the hide path toggles). If closed, the callback is a no-op.
+    // Only reclaim focus that has left the consent UI (a theme script or an
+    // animation pulling it to the page or <body>). Since the first-control
+    // pick prefers a RENDERED control, these retries really do move focus,
+    // so they must not pull it off a control the visitor reached inside the
+    // panel's wrapper but outside the inner .faz-preference-center.
     var retry = function () {
         if (!_fazIsPreferenceCenterOpen(root)) return;
-        if (!root.contains(document.activeElement)) focusTarget.focus();
+        if (root.contains(document.activeElement)) return;
+        if (_fazConsentUiHasFocus() && !_fazFocusIsLost()) return;
+        focusTarget.focus();
     };
 
     tracker.raf = window.requestAnimationFrame(retry);
