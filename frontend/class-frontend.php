@@ -3630,18 +3630,19 @@ class Frontend {
 
 	/**
 	 * Whether the Google Tag Manager container may load before consent on this
-	 * request (#385): the gtag exemption is active (Advanced mode on AND the
-	 * denied default emitted in this response) and the site owner opted the
-	 * container in with `advanced_mode_gtm`. Read through get() rather than a
-	 * dedicated settings method so the condition is the same two-part guard
-	 * as the gtag one plus a single site-wide flag — identical for every
-	 * visitor, so Cache Compatibility Mode output does not vary.
+	 * request (#385): the denied default was emitted in this response and
+	 * Gcm_Settings::is_advanced_gtm_mode() is true (Advanced mode on AND the
+	 * site owner opted the container in with `advanced_mode_gtm`). The settings
+	 * class is the one place that condition is written; the `_gcmAdvancedGtm`
+	 * store flag reads it too, so server and browser cannot drift apart. The
+	 * answer is site-wide, identical for every visitor, so Cache Compatibility
+	 * Mode output does not vary.
 	 *
 	 * @return bool
 	 */
 	private function gcm_gtm_exemption_active() {
 		return $this->gcm_advanced_exemption_active()
-			&& faz_sanitize_bool( $this->gcm_settings->get( 'advanced_mode_gtm' ) );
+			&& $this->gcm_settings->is_advanced_gtm_mode();
 	}
 
 	/**
@@ -4410,7 +4411,7 @@ class Frontend {
 		// true so the _fazConfig blob stays byte-identical for every install
 		// that leaves the opt-in off. Site-wide, so it does not vary per
 		// visitor under Cache Compatibility Mode.
-		if ( $store['_gcmAdvanced'] && faz_sanitize_bool( $this->gcm_settings->get( 'advanced_mode_gtm' ) ) ) {
+		if ( $store['_gcmAdvanced'] && $this->gcm_settings->is_advanced_gtm_mode() ) {
 			$store['_gcmAdvancedGtm'] = true;
 		}
 

@@ -132,12 +132,22 @@ namespace {
 		}
 	}
 
-	// Minimal Gcm_Settings double: advanced flag + a key→value bag.
+	// Minimal Gcm_Settings double: advanced flag + a key→value bag. The
+	// container answer mirrors the real Gcm_Settings::is_advanced_gtm_mode()
+	// unless a test pins it through $gtm_mode, which is how the suite proves
+	// the frontend asks the settings class instead of re-deriving it.
 	class FazTest_GcmSettings {
 		public $advanced = true;
 		public $bag      = array();
+		public $gtm_mode = null;
 		public function is_advanced_mode() {
 			return (bool) $this->advanced;
+		}
+		public function is_advanced_gtm_mode() {
+			if ( null !== $this->gtm_mode ) {
+				return (bool) $this->gtm_mode;
+			}
+			return $this->is_advanced_mode() && faz_sanitize_bool( $this->get( 'advanced_mode_gtm' ) );
 		}
 		public function get( $key ) {
 			return array_key_exists( $key, $this->bag ) ? $this->bag[ $key ] : null;
@@ -322,6 +332,19 @@ namespace {
 	$fe  = faz_gtm_frontend( true, true, array( 'google-analytics' => 'no' ) );
 	$out = faz_gtm_page( $fe, true, $gtm_src );
 	ok( faz_gtm_live( $out, $gtm_src ), 'a denial of another service does not hold the container' );
+
+	echo "\none source of truth: Gcm_Settings::is_advanced_gtm_mode()\n";
+	// The raw option says on, but the settings class says off (as it would for
+	// any condition it adds later). The frontend must follow the class.
+	$fe       = faz_gtm_frontend( true, true );
+	$rp       = new ReflectionProperty( Frontend::class, 'gcm_settings' );
+	$rp->setAccessible( true );
+	$rp->getValue( $fe )->gtm_mode = false;
+	$out = faz_gtm_page( $fe, true, $gtm_src . $gtm_inline . $gtag_loader );
+	ok( ! faz_gtm_live( $out, $gtm_src ) && ! faz_gtm_live( $out, $gtm_inline ), 'is_advanced_gtm_mode() false → the container stays blocked whatever the raw option holds' );
+	ok( faz_gtm_live( $out, $gtag_loader ), '…and gtag.js keeps its exemption' );
+	$fe_src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' );
+	ok( 0 === preg_match( "/get\(\s*'advanced_mode_gtm'\s*\)/", $fe_src ), 'class-frontend.php never reads advanced_mode_gtm raw (store flag and exemption both go through the settings class)' );
 
 	// =====================================================================
 	// 3. The built-in GTM- container

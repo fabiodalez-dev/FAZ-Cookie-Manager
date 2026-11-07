@@ -139,6 +139,9 @@ namespace {
 		public function is_advanced_mode() {
 			return (bool) $this->advanced;
 		}
+		public function is_advanced_gtm_mode() {
+			return $this->is_advanced_mode() && ! empty( $this->bag['advanced_mode_gtm'] );
+		}
 		public function get( $key ) {
 			return array_key_exists( $key, $this->bag ) ? $this->bag[ $key ] : null;
 		}

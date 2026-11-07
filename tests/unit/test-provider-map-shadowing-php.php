@@ -370,7 +370,7 @@ namespace {
 	$fe = arrange( array( 'tracker' => 'analytics' ), array() );
 	eq( $fe->filter_inline_script_attributes( $attrs, 'tracker();' ), $attrs, 'E10 allowed inline category is unchanged' );
 	$fe = arrange( array( 'gtag(' => 'analytics' ), array( 'analytics' ) );
-	setp( $fe, 'gcm_settings', new class { public function is_advanced_mode() { return true; } } );
+	setp( $fe, 'gcm_settings', new class { public function is_advanced_mode() { return true; } public function is_advanced_gtm_mode() { return false; } } );
 	// The exemption is conditioned on the synchronous denied `consent default`
 	// having been printed in this response (print_gcm_default_inline sets the
 	// flag); without it the gtag stack would run with no consent signal, so it
