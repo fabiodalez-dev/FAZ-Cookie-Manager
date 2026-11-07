@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-11-07T14:25:04+00:00\n"
+"POT-Creation-Date: 2026-11-07T14:44:45+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -49,7 +49,7 @@ msgid "Cookie Banner"
 msgstr "Banner cookie"
 
 #: admin/class-admin.php:286 admin/views/base.php:21
-#: frontend/class-frontend.php:4186
+#: frontend/class-frontend.php:4187
 #: frontend/modules/banner-rest/class-banner-rest.php:609
 msgid "Cookies"
 msgstr "Cookie"
@@ -4372,7 +4372,7 @@ msgstr "Lingua:"
 msgid "Notice Title"
 msgstr "Titolo dell'avviso"
 
-#: admin/views/banner.php:383 frontend/class-frontend.php:4181
+#: admin/views/banner.php:383 frontend/class-frontend.php:4182
 #: frontend/modules/banner-rest/class-banner-rest.php:603
 msgid "We value your privacy"
 msgstr "La tua privacy è importante"
@@ -4861,7 +4861,7 @@ msgstr "Testo opt-out (Do Not Sell)"
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr "Testo del modale «Preferenze di opt-out» che il visitatore vede dopo aver cliccato il link «Do Not Sell or Share My Personal Information». Mostrato solo sui banner CCPA / US State Laws (ed Entrambi). Segue la lingua selezionata qui sopra."
 
-#: admin/views/banner.php:1018 frontend/class-frontend.php:4183
+#: admin/views/banner.php:1018 frontend/class-frontend.php:4184
 #: frontend/modules/banner-rest/class-banner-rest.php:606
 msgid "Opt-out Preferences"
 msgstr "Preferenze di opt-out"
@@ -5224,7 +5224,7 @@ msgstr "\"Riportata\" significa che era già registrata per questo visitatore e 
 msgid "Date"
 msgstr "Data"
 
-#: admin/views/consent-logs.php:87 frontend/class-frontend.php:4180
+#: admin/views/consent-logs.php:87 frontend/class-frontend.php:4181
 #: frontend/modules/banner-rest/class-banner-rest.php:604
 #: includes/class-dsar-admin.php:139 includes/class-utils.php:1773
 #: includes/class-utils.php:1815
@@ -6026,16 +6026,16 @@ msgid "Also load the Google Tag Manager container before consent"
 msgstr "Carica anche il contenitore di Google Tag Manager prima del consenso"
 
 #: admin/views/gcm.php:157
-msgid "For sites that configure Google Analytics 4 and Google Ads conversions inside Google Tag Manager. The container (gtm.js) loads before consent behind the same consent default → denied, so the Google tags in it can send cookieless pings that Google uses for conversion modelling. The noscript iframe stays blocked, and an explicit rejection of the Google Tag Manager service still blocks the container. Only works together with Advanced Consent Mode. Default: off."
-msgstr "Per i siti che configurano Google Analytics 4 e le conversioni di Google Ads dentro Google Tag Manager. Il contenitore (gtm.js) si carica prima del consenso dietro lo stesso consent default → denied, così i tag Google al suo interno possono inviare ping senza cookie che Google usa per la modellazione delle conversioni. L'iframe noscript resta bloccato, e un rifiuto esplicito del servizio Google Tag Manager blocca comunque il contenitore. Funziona solo insieme alla modalità di consenso avanzata. Predefinito: disattivato."
+msgid "For sites that configure Google Analytics 4 and Google Ads conversions inside Google Tag Manager. The container (gtm.js) loads before consent behind the same consent default → denied, so the Google tags in it can send cookieless pings that Google uses for conversion modelling. It loads for every visitor, including those who reject all categories: that is the point of the option, and for them the Google tags inside it stay on denied. With per-service consent turned on, a visitor who switches off the Google Tag Manager service keeps the container blocked. The noscript iframe stays blocked. Only works together with Advanced Consent Mode. Default: off."
+msgstr "Per i siti che configurano Google Analytics 4 e le conversioni di Google Ads dentro Google Tag Manager. Il contenitore (gtm.js) si carica prima del consenso dietro lo stesso consent default → denied, così i tag Google al suo interno possono inviare ping senza cookie che Google usa per la modellazione delle conversioni. Si carica per ogni visitatore, anche per chi rifiuta tutte le categorie: è lo scopo dell'opzione, e per loro i tag Google al suo interno restano su denied. Con il consenso per servizio attivo, un visitatore che disattiva il servizio Google Tag Manager mantiene bloccato il contenitore. L'iframe noscript resta bloccato. Funziona solo insieme alla modalità di consenso avanzata. Predefinito: disattivato."
 
 #: admin/views/gcm.php:160
 msgid "You become responsible for every tag inside the container."
 msgstr "Diventi responsabile di ogni tag dentro il contenitore."
 
 #: admin/views/gcm.php:161
-msgid "A container can run tags that do not read Consent Mode: Meta Pixel, LinkedIn, TikTok, Hotjar, custom HTML. The plugin still blocks the trackers it recognises when the container injects them, but it cannot see every tag a container can run, so it no longer guarantees that nothing tracks before consent. Before turning this on, open each non-Google tag in Tag Manager and set its Consent Settings to \"Require additional consent for tag to fire\" with the matching consent type (for example ad_storage), or use a trigger that waits for consent."
-msgstr "Un contenitore può eseguire tag che non leggono Consent Mode: Meta Pixel, LinkedIn, TikTok, Hotjar, HTML personalizzato. Il plugin continua a bloccare i tracker che riconosce quando il contenitore li inserisce, ma non può vedere ogni tag che un contenitore può eseguire, quindi non garantisce più che nulla tracci prima del consenso. Prima di attivare questa opzione, apri ogni tag non Google in Tag Manager e imposta nelle sue Impostazioni consenso \"Richiedi un consenso aggiuntivo per l'attivazione del tag\" con il tipo di consenso corrispondente (per esempio ad_storage), oppure usa un attivatore che aspetti il consenso."
+msgid "A container can run tags that do not read Consent Mode: Meta Pixel, LinkedIn, TikTok, Hotjar, custom HTML. The plugin still blocks the trackers it recognises when the container injects them, but it cannot see every tag a container can run, so it no longer guarantees that nothing tracks before consent. Before turning this on, open each non-Google tag in Tag Manager and set its Consent Settings to \"Require additional consent for tag to fire\" with the matching consent type (for example ad_storage), or use a trigger that waits for consent. Keep the Tag Manager snippet in a script of its own: a script that also holds another tracker's code (for example a Meta Pixel snippet pasted in the same box) keeps waiting for consent."
+msgstr "Un contenitore può eseguire tag che non leggono Consent Mode: Meta Pixel, LinkedIn, TikTok, Hotjar, HTML personalizzato. Il plugin continua a bloccare i tracker che riconosce quando il contenitore li inserisce, ma non può vedere ogni tag che un contenitore può eseguire, quindi non garantisce più che nulla tracci prima del consenso. Prima di attivare questa opzione, apri ogni tag non Google in Tag Manager e imposta nelle sue Impostazioni consenso \"Richiedi un consenso aggiuntivo per l'attivazione del tag\" con il tipo di consenso corrispondente (per esempio ad_storage), oppure usa un attivatore che aspetti il consenso. Tieni lo snippet di Tag Manager in uno script a sé: uno script che contiene anche il codice di un altro tracker (per esempio uno snippet di Meta Pixel incollato nello stesso riquadro) continua ad aspettare il consenso."
 
 #: admin/views/gcm.php:169
 msgid "Google Additional Consent Mode (GACM)"
@@ -7950,86 +7950,86 @@ msgstr "{name} abilitato, disabilita {name}"
 msgid "{name} disabled, enable {name}"
 msgstr "{name} disabilitato, abilita {name}"
 
-#: frontend/class-frontend.php:4182
+#: frontend/class-frontend.php:4183
 #: frontend/modules/banner-rest/class-banner-rest.php:605
 msgid "Your cookie preferences have been saved."
 msgstr "Le tue preferenze sui cookie sono state salvate."
 
-#: frontend/class-frontend.php:4184
+#: frontend/class-frontend.php:4185
 #: frontend/modules/banner-rest/class-banner-rest.php:607
 msgid "Customise Consent Preferences"
 msgstr "Personalizza le preferenze di consenso"
 
-#: frontend/class-frontend.php:4185
+#: frontend/class-frontend.php:4186
 #: frontend/modules/banner-rest/class-banner-rest.php:608
 msgid "Service consent"
 msgstr "Consenso al servizio"
 
-#: frontend/class-frontend.php:4187
+#: frontend/class-frontend.php:4188
 #: frontend/modules/banner-rest/class-banner-rest.php:610
 msgid "Cookie consent"
 msgstr "Consenso ai cookie"
 
-#: frontend/class-frontend.php:4188
+#: frontend/class-frontend.php:4189
 #: frontend/modules/banner-rest/class-banner-rest.php:611
 msgid "Vendor consent"
 msgstr "Consenso fornitore"
 
-#: frontend/class-frontend.php:4189
+#: frontend/class-frontend.php:4190
 #: frontend/modules/banner-rest/class-banner-rest.php:612
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Questi cookie sono impostati dal servizio incorporato sul proprio dominio e si controllano consentendo o bloccando l'embed qui sopra — non possono essere rimossi singolarmente."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:4193
+#: frontend/class-frontend.php:4194
 #: frontend/modules/banner-rest/class-banner-rest.php:617
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Confermo di avere almeno %d anni"
 
-#: frontend/class-frontend.php:4194
+#: frontend/class-frontend.php:4195
 #: frontend/modules/banner-rest/class-banner-rest.php:618
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Conferma di avere l’età minima per accettare i cookie facoltativi."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:4201
+#: frontend/class-frontend.php:4202
 #: frontend/modules/banner-rest/class-banner-rest.php:620
 #, php-format
 msgid "Banner closes automatically in %d s..."
 msgstr "Il banner si chiude automaticamente tra %d s..."
 
-#: frontend/class-frontend.php:4204
+#: frontend/class-frontend.php:4205
 #: frontend/modules/banner-rest/class-banner-rest.php:623
 msgid "Consent"
 msgstr "Consenso"
 
-#: frontend/class-frontend.php:4205
+#: frontend/class-frontend.php:4206
 #: frontend/modules/banner-rest/class-banner-rest.php:624
 msgid "Cookie retention"
 msgstr "Durata dei cookie"
 
-#: frontend/class-frontend.php:4206
+#: frontend/class-frontend.php:4207
 #: frontend/modules/banner-rest/class-banner-rest.php:625
 msgid "Features"
 msgstr "Funzionalità"
 
-#: frontend/class-frontend.php:4207
+#: frontend/class-frontend.php:4208
 #: frontend/modules/banner-rest/class-banner-rest.php:626
 msgid "Legitimate Interest"
 msgstr "Legittimo interesse"
 
-#: frontend/class-frontend.php:4208
+#: frontend/class-frontend.php:4209
 #: frontend/modules/banner-rest/class-banner-rest.php:627
 msgid "Some vendors process your data on the basis of legitimate interest rather than consent. You have the right to object: switch a purpose off to object to that processing."
 msgstr "Alcuni fornitori trattano i tuoi dati sulla base del legittimo interesse anziché del consenso. Hai il diritto di opporti: disattiva una finalità per opporti a quel trattamento."
 
-#: frontend/class-frontend.php:4209
+#: frontend/class-frontend.php:4210
 #: frontend/modules/banner-rest/class-banner-rest.php:628
 msgid "IAB Vendor Consent"
 msgstr "Consenso ai fornitori IAB"
 
-#: frontend/class-frontend.php:4210
+#: frontend/class-frontend.php:4211
 #: frontend/modules/banner-rest/class-banner-rest.php:629
 msgid "Allow processing based on legitimate interest"
 msgstr "Consenti il trattamento basato sul legittimo interesse"
@@ -9213,6 +9213,12 @@ msgstr "Pulsante"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Collegamento"
+
+#~ msgid "For sites that configure Google Analytics 4 and Google Ads conversions inside Google Tag Manager. The container (gtm.js) loads before consent behind the same consent default → denied, so the Google tags in it can send cookieless pings that Google uses for conversion modelling. The noscript iframe stays blocked, and an explicit rejection of the Google Tag Manager service still blocks the container. Only works together with Advanced Consent Mode. Default: off."
+#~ msgstr "Per i siti che configurano Google Analytics 4 e le conversioni di Google Ads dentro Google Tag Manager. Il contenitore (gtm.js) si carica prima del consenso dietro lo stesso consent default → denied, così i tag Google al suo interno possono inviare ping senza cookie che Google usa per la modellazione delle conversioni. L'iframe noscript resta bloccato, e un rifiuto esplicito del servizio Google Tag Manager blocca comunque il contenitore. Funziona solo insieme alla modalità di consenso avanzata. Predefinito: disattivato."
+
+#~ msgid "A container can run tags that do not read Consent Mode: Meta Pixel, LinkedIn, TikTok, Hotjar, custom HTML. The plugin still blocks the trackers it recognises when the container injects them, but it cannot see every tag a container can run, so it no longer guarantees that nothing tracks before consent. Before turning this on, open each non-Google tag in Tag Manager and set its Consent Settings to \"Require additional consent for tag to fire\" with the matching consent type (for example ad_storage), or use a trigger that waits for consent."
+#~ msgstr "Un contenitore può eseguire tag che non leggono Consent Mode: Meta Pixel, LinkedIn, TikTok, Hotjar, HTML personalizzato. Il plugin continua a bloccare i tracker che riconosce quando il contenitore li inserisce, ma non può vedere ogni tag che un contenitore può eseguire, quindi non garantisce più che nulla tracci prima del consenso. Prima di attivare questa opzione, apri ogni tag non Google in Tag Manager e imposta nelle sue Impostazioni consenso \"Richiedi un consenso aggiuntivo per l'attivazione del tag\" con il tipo di consenso corrispondente (per esempio ad_storage), oppure usa un attivatore che aspetti il consenso."
 
 #~ msgid "Each tag waits for the same consent a copy pasted into the theme would: Google Analytics for Analytics, Google Ads and Floodlight for Marketing, the Tag Manager container for its catalogue category. With Advanced Consent Mode on, Google Analytics and Google Ads load before consent in cookieless mode; a Tag Manager container always waits for consent, because it can run tags that ignore Consent Mode."
 #~ msgstr "Ogni tag aspetta lo stesso consenso che aspetterebbe una copia incollata nel tema: Google Analytics la categoria Analitici, Google Ads e Floodlight la categoria Marketing, il contenitore di Tag Manager la categoria del suo catalogo. Con la modalità di consenso avanzata attiva, Google Analytics e Google Ads si caricano prima del consenso in modalità senza cookie; un contenitore di Tag Manager aspetta sempre il consenso, perché può eseguire tag che ignorano Consent Mode."
