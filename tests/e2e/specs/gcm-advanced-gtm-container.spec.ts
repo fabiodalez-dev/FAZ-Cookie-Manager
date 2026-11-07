@@ -129,7 +129,12 @@ test.describe.serial('GTM container under Advanced Consent Mode (#385)', () => {
   test('admin: the container toggle is shown only with Advanced Consent Mode on', async ({ page, loginAsAdmin }) => {
     setGcm({ status: true, advanced_mode: false, advanced_mode_gtm: false, google_tag_ids: '' });
     await loginAsAdmin(page);
+    // The form is filled from GET faz/v1/gcm after DOMContentLoaded; saving
+    // before that response lands posts the unfilled form, so wait for it.
+    const loaded = page.waitForResponse((r) => r.url().includes('faz/v1/gcm') && r.request().method() === 'GET');
     await page.goto('/wp-admin/admin.php?page=faz-cookie-manager-gcm', { waitUntil: 'domcontentloaded' });
+    await loaded;
+    await expect(page.locator('[data-path="status"]')).toBeChecked();
     const group = page.locator('#faz-gcm-advanced-gtm-group');
     const advanced = page.locator('[data-path="advanced_mode"]');
     await expect(advanced).toBeAttached();
@@ -144,7 +149,7 @@ test.describe.serial('GTM container under Advanced Consent Mode (#385)', () => {
       (el as HTMLInputElement).checked = true;
       el.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    const saved = page.waitForResponse((r) => r.url().includes('gcm') && r.request().method() === 'POST');
+    const saved = page.waitForResponse((r) => r.url().includes('faz/v1/gcm') && r.request().method() === 'POST');
     await page.click('#faz-gcm-save');
     expect((await saved).status()).toBe(200);
     const stored = wpEval(
