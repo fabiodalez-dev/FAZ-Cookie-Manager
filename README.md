@@ -374,13 +374,13 @@ Detects visitor country for geo-targeted banner display:
 - **11 bundled languages**: English, German, French, Italian, Spanish, Polish, Portuguese (PT + BR), Hungarian, Finnish, Dutch
 - **180+ selectable languages** in the admin configuration
 - **Browser language detection**: resolved client-side from `navigator.languages` so full-page/CDN caches cannot serve the wrong language to visitors (see below)
-- **Plugin integration**: Polylang, WPML, TranslatePress, Weglot auto-detected (URL-based, always cache-safe)
+- **Plugin integration**: Polylang, WPML, TranslatePress, Weglot and the qTranslate family (original qTranslate, mqTranslate, qTranslate Plus, zTranslate, qTranslate-X, qTranslate-XT) auto-detected (URL-based and cache-safe; WPML parameter mode and qTranslate query mode fall back to the default under Cache Compatibility Mode)
 - **Per-language banner content**: Separate title, description, button text per language
 - **RTL auto-detection**: Arabic, Hebrew, Persian, Kurdish, Urdu
 
 #### Full-page cache and CDN compatibility
 
-When **no URL-based multilingual plugin** (WPML/Polylang/TranslatePress/Weglot)
+When **no URL-based multilingual plugin** (WPML/Polylang/TranslatePress/Weglot/qTranslate)
 is installed and **two or more languages** are selected in the admin, the
 banner HTML is rendered server-side in the **site default language**, the
 same document for every visitor, so it is safe to cache under one key per URL.

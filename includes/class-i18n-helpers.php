@@ -78,7 +78,253 @@ if ( ! function_exists( 'faz_i18n_is_multilingual' ) ) {
 			$status = true;
 		}
 
+		// qTranslate family (original, mqTranslate, qTranslate Plus, zTranslate,
+		// qTranslate-X, qTranslate-XT). Without this the install looked
+		// monolingual, the server rendered the FAZ default and
+		// faz_browser_detect_enabled() let the browser pick the banner language
+		// instead of the visitor's qTranslate choice.
+		if ( faz_qtranslate_active() ) {
+			$status = true;
+		}
+
 		return $status;
+	}
+}
+
+if ( ! function_exists( 'faz_qtranslate_config' ) ) {
+
+	/**
+	 * The qTranslate configuration global, when it has the shape every member
+	 * of the family gives it.
+	 *
+	 * All of them keep their state in `global $q_config`, with the same keys:
+	 * `language` (current), `default_language`, `enabled_languages`,
+	 * `url_mode` and `locale` (code => WordPress locale). Verified in
+	 * qTranslate 2.5.40b qtranslate.php / qtranslate_core.php (qtrans_init),
+	 * mqTranslate 2015.4.0-alpha1 mqtranslate.php, qTranslate Plus 2.7.2
+	 * ppqtranslate.php, zTranslate 2.6.3 ztranslate.php, qTranslate-X 3.4.6.8
+	 * qtranslate_options.php and qTranslate-XT 3.16.2 src/options.php +
+	 * src/init.php (qtranxf_init_language).
+	 *
+	 * @return array|null The global, or null when it is absent or not shaped
+	 *                    like qTranslate's (another plugin's variable).
+	 */
+	function faz_qtranslate_config() {
+		if ( ! isset( $GLOBALS['q_config'] ) || ! is_array( $GLOBALS['q_config'] ) ) {
+			return null;
+		}
+		$config = $GLOBALS['q_config'];
+		if (
+			empty( $config['enabled_languages'] )
+			|| ! is_array( $config['enabled_languages'] )
+			|| empty( $config['default_language'] )
+			|| ! is_string( $config['default_language'] )
+		) {
+			return null;
+		}
+		return $config;
+	}
+}
+
+if ( ! function_exists( 'faz_qtranslate_active' ) ) {
+
+	/**
+	 * Whether a member of the qTranslate family is active.
+	 *
+	 * Detected by API presence, never by plugin slug, so forks and renamed
+	 * installs are covered:
+	 *   - qtranxf_getLanguage() and QTX_VERSION / QTX_URL_PATH: qTranslate-X
+	 *     (2.9.7.3 – 3.4.6.8, qtranslate_utils.php / qtranslate.php) and
+	 *     qTranslate-XT (3.5 – 3.16.2, src/language_config.php:3,
+	 *     qtranslate.php:58, src/options.php:23-26);
+	 *   - qtrans_getLanguage() and QT_URL_PATH: original qTranslate 2.5.40b
+	 *     (qtranslate_utils.php:63, qtranslate.php:96-98) and mqTranslate
+	 *     2015.4.0-alpha1 (mqtranslate_utils.php:62, mqtranslate.php:118-120);
+	 *     X/XT also define qtrans_getLanguage() as an opt-in alias;
+	 *   - ppqtrans_getLanguage(): qTranslate Plus 2.7.2 (wordpress.org slug
+	 *     qtranslate-xp, ppqtranslate_utils.php:65; it reuses QT_URL_*);
+	 *   - ztrans_getLanguage() and ZT_URL_PATH: zTranslate 2.6.3
+	 *     (ztranslate_utils.php:63, ztranslate.php:104-106);
+	 *   - otherwise the shared `$q_config` global alone, when it carries
+	 *     qTranslate's shape (see faz_qtranslate_config()).
+	 *
+	 * @return bool
+	 */
+	function faz_qtranslate_active() {
+		if (
+			function_exists( 'qtranxf_getLanguage' )
+			|| function_exists( 'qtrans_getLanguage' )
+			|| function_exists( 'ppqtrans_getLanguage' )
+			|| function_exists( 'ztrans_getLanguage' )
+		) {
+			return true;
+		}
+		if (
+			defined( 'QTX_VERSION' )
+			|| defined( 'QTX_URL_PATH' )
+			|| defined( 'QT_URL_PATH' )
+			|| defined( 'ZT_URL_PATH' )
+		) {
+			return true;
+		}
+		return null !== faz_qtranslate_config();
+	}
+}
+
+if ( ! function_exists( 'faz_qtranslate_language_in_url' ) ) {
+
+	/**
+	 * Whether qTranslate is active AND the language of this request is keyed
+	 * by its URL, so reading it is safe under Cache Compatibility Mode.
+	 *
+	 * Every member of the family numbers `$q_config['url_mode']` the same way:
+	 *   1 = query string (?lang=xx)    QTX_URL_QUERY / QT_URL_QUERY / ZT_URL_QUERY
+	 *   2 = pre-path (/xx/)            QTX_URL_PATH  / QT_URL_PATH  / ZT_URL_PATH
+	 *   3 = pre-domain (xx.domain.com) QTX_URL_DOMAIN / QT_URL_DOMAIN / ZT_URL_DOMAIN
+	 *   4 = one domain per language    QTX_URL_DOMAINS (qTranslate-X 3.0+ and XT)
+	 *
+	 * Modes 2-4 are URL-keyed: a page rendered there carries the language the
+	 * URL names, or the default on an unprefixed URL. When a cookie or the
+	 * browser asks for another language on an unprefixed URL, X/XT redirect to
+	 * the prefixed one rather than render it (qtranxf_detect_language_front()
+	 * in XT 3.16.2 src/language_detect.php and X 3.4.6.8 qtranslate_core.php
+	 * set `doredirect`; the original qTranslate redirects from qtrans_init()).
+	 * So a URL-keyed full-page cache stores one entry per language, exactly
+	 * like Polylang or WPML directory mode.
+	 *
+	 * Mode 1 is not: the language rides in a query string many caches strip
+	 * or ignore, and on an unprefixed URL it comes from the visitor's cookie
+	 * or browser. It is treated like WPML's parameter mode. A `lang` query
+	 * argument on a mode 2-4 URL is the same query-string language (qTranslate
+	 * lets it override the URL), so it is not URL-keyed either.
+	 *
+	 * @return bool
+	 */
+	function faz_qtranslate_language_in_url() {
+		if ( ! faz_qtranslate_active() ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- presence check only, the value is never read.
+		if ( isset( $_GET['lang'] ) ) {
+			return false;
+		}
+		$config = isset( $GLOBALS['q_config'] ) && is_array( $GLOBALS['q_config'] ) ? $GLOBALS['q_config'] : array();
+		$mode   = isset( $config['url_mode'] ) && is_numeric( $config['url_mode'] ) ? (int) $config['url_mode'] : 0;
+		return in_array( $mode, array( 2, 3, 4 ), true );
+	}
+}
+
+if ( ! function_exists( 'faz_qtranslate_raw_language' ) ) {
+
+	/**
+	 * The current language code as qTranslate reports it (its own code, which
+	 * is not always ISO: 'pb' is Brazilian Portuguese in qTranslate-XT).
+	 *
+	 * Uses the newest accessor available, then the shared global. All of them
+	 * return `$q_config['language']`; the accessor is preferred because it is
+	 * the public API. qTranslate-XT declares qtranxf_getLanguage(): string, so
+	 * calling it before qtranxf_init_language() has run (plugins_loaded,
+	 * priority 2) throws a TypeError on the null language: that is caught and
+	 * treated as "no language yet".
+	 *
+	 * @return string Empty string when no language is set.
+	 */
+	function faz_qtranslate_raw_language() {
+		foreach ( array( 'qtranxf_getLanguage', 'qtrans_getLanguage', 'ppqtrans_getLanguage', 'ztrans_getLanguage' ) as $accessor ) {
+			if ( ! function_exists( $accessor ) ) {
+				continue;
+			}
+			try {
+				$language = call_user_func( $accessor );
+			} catch ( \Throwable $e ) {
+				$language = '';
+			}
+			if ( is_string( $language ) && '' !== $language ) {
+				return $language;
+			}
+			break;
+		}
+		if ( isset( $GLOBALS['q_config']['language'] ) && is_string( $GLOBALS['q_config']['language'] ) ) {
+			return $GLOBALS['q_config']['language'];
+		}
+		return '';
+	}
+}
+
+if ( ! function_exists( 'faz_qtranslate_map_language' ) ) {
+
+	/**
+	 * Map a qTranslate language code to the FAZ code selected for it.
+	 *
+	 * qTranslate codes are admin-defined two/three-letter tags with a locale
+	 * attached (`$q_config['locale'][ $code ]`): XT ships 'pb' => 'pt_BR' and
+	 * 'ua' => 'uk', and the original qTranslate gives 'pt' the locale pt_BR.
+	 * FAZ codes are ISO 639-1 plus a few regional forms ('pt-br', 'zh-hans').
+	 * The candidates are tried in this order against the FAZ selected
+	 * languages, each through faz_get_lang_map():
+	 *   1. the full locale, lowercased and hyphenated (pt_BR → pt-br);
+	 *   2. the qTranslate code itself;
+	 *   3. the language part of the locale (uk, ro).
+	 * The first selected one wins. With none selected the code is returned
+	 * unchanged and faz_current_language() falls back to the default.
+	 *
+	 * @param string $code qTranslate language code.
+	 * @return string
+	 */
+	function faz_qtranslate_map_language( $code ) {
+		$code = is_string( $code ) ? trim( $code ) : '';
+		if ( '' === $code ) {
+			return '';
+		}
+		$config  = isset( $GLOBALS['q_config'] ) && is_array( $GLOBALS['q_config'] ) ? $GLOBALS['q_config'] : array();
+		$locales = isset( $config['locale'] ) && is_array( $config['locale'] ) ? $config['locale'] : array();
+		$locale  = '';
+		if ( isset( $locales[ $code ] ) && is_string( $locales[ $code ] ) ) {
+			$locale = $locales[ $code ];
+		} elseif ( isset( $locales[ strtolower( $code ) ] ) && is_string( $locales[ strtolower( $code ) ] ) ) {
+			$locale = $locales[ strtolower( $code ) ];
+		}
+		$locale = strtolower( str_replace( '_', '-', $locale ) );
+
+		// Chinese locales name the region, FAZ names the script.
+		$aliases = array(
+			'zh-cn' => 'zh-hans',
+			'zh-sg' => 'zh-hans',
+			'zh-tw' => 'zh-hant',
+			'zh-hk' => 'zh-hant',
+		);
+
+		$candidates = array();
+		if ( '' !== $locale ) {
+			$candidates[] = isset( $aliases[ $locale ] ) ? $aliases[ $locale ] : $locale;
+		}
+		$candidates[] = strtolower( $code );
+		if ( '' !== $locale ) {
+			$parts        = explode( '-', $locale );
+			$candidates[] = $parts[0];
+		}
+
+		$selected = faz_selected_languages();
+		$map      = faz_get_lang_map();
+		foreach ( $candidates as $candidate ) {
+			$candidate = isset( $map[ $candidate ] ) ? $map[ $candidate ] : $candidate;
+			if ( in_array( $candidate, $selected, true ) ) {
+				return $candidate;
+			}
+		}
+		return strtolower( $code );
+	}
+}
+
+if ( ! function_exists( 'faz_qtranslate_current_language' ) ) {
+
+	/**
+	 * The visitor's qTranslate language, as a FAZ code.
+	 *
+	 * @return string Empty string when qTranslate has no language yet.
+	 */
+	function faz_qtranslate_current_language() {
+		return faz_qtranslate_map_language( faz_qtranslate_raw_language() );
 	}
 }
 
@@ -173,7 +419,8 @@ if ( ! function_exists( 'faz_current_language' ) ) {
 	 * Returns the current language code of the site.
 	 *
 	 * IMPORTANT: this function is cache-safe. When no URL-based multilingual
-	 * plugin is active (WPML, Polylang, TranslatePress, Weglot), the function
+	 * plugin is active (WPML, Polylang, TranslatePress, Weglot, the qTranslate
+	 * family), the function
 	 * returns the site's default language rather than parsing the visitor's
 	 * Accept-Language header. Accept-Language parsing on the server would
 	 * contaminate full-page/CDN caches with the first visitor's language and
@@ -250,6 +497,18 @@ if ( ! function_exists( 'faz_current_language' ) ) {
 				// (subdirectory/subdomain), never a cookie, so it is URL-keyed
 				// and cache-safe even under Cache Compatibility Mode.
 				$current_language = weglot_get_current_language();
+			} elseif ( faz_qtranslate_active() ) {
+				// qTranslate family. Its pre-path, pre-domain and per-domain
+				// modes put the language in the URL, so — like WPML's
+				// directory/domain modes — the language is read even under
+				// Cache Compatibility Mode. Its query mode (?lang=xx), or a
+				// ?lang= override on any URL, can carry a cookie- or
+				// browser-negotiated language a shared cache would hand to
+				// everyone: under cache-compat that falls back to the default,
+				// exactly like WPML's parameter mode.
+				if ( ! $cache_compatibility || faz_qtranslate_language_in_url() ) {
+					$current_language = faz_qtranslate_current_language();
+				}
 			} elseif ( ! $cache_compatibility || faz_wpml_language_in_url() ) {
 				// WPML. Normally skipped under cache-compat: WPML's
 				// "language as a URL parameter" (and browser/cookie) negotiation
@@ -667,6 +926,9 @@ if ( ! function_exists( 'faz_i18n_default_language' ) ) {
 		if ( faz_i18n_is_multilingual() ) {
 			if ( function_exists( 'pll_default_language' ) ) {
 				$default = pll_default_language();
+			} elseif ( faz_qtranslate_active() && ! faz_wpml_active() ) {
+				$config  = faz_qtranslate_config();
+				$default = null !== $config ? faz_qtranslate_map_language( $config['default_language'] ) : faz_default_language();
 			} else {
 				$null    = null;
 				$default = apply_filters( 'wpml_default_language', $null );
@@ -762,6 +1024,16 @@ if ( ! function_exists( 'faz_i18n_selected_languages' ) ) {
 		if ( faz_i18n_is_multilingual() ) {
 			if ( faz_wpml_active() ) {
 				return faz_i18n_wpml_languages();
+			} elseif ( ! function_exists( 'pll_languages_list' ) && faz_qtranslate_active() ) {
+				$config = faz_qtranslate_config();
+				if ( null === $config ) {
+					return $languages;
+				}
+				$mapped = array();
+				foreach ( $config['enabled_languages'] as $code ) {
+					$mapped[] = faz_qtranslate_map_language( $code );
+				}
+				return array_values( array_unique( array_filter( $mapped ) ) );
 			} else {
 				return faz_i18n_pll_languages();
 			}
