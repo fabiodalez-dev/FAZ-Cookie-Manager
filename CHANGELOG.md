@@ -2,6 +2,11 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Added
+- Google Consent Mode → Advanced Settings: **Also load the Google Tag Manager container before consent** (#385), an opt-in on top of Advanced Consent Mode, off by default and shown only while Advanced mode is on. Advanced mode already let gtag.js, GA4 and Google Ads load before consent behind the denied default, but kept the container (gtm.js) blocked because it can run tags that ignore Consent Mode; a site that configures GA4 and Google Ads conversions inside Tag Manager therefore lost every cookieless ping from visitors who had not consented. With the option on, the container — a pasted snippet, a `gtm.js` script or the built-in GTM- tag — loads before consent under the same conditions as gtag.js: Advanced mode on and the denied default printed in the same response (so never on AMP or a page without `wp_head()`). An explicit rejection of the Google Tag Manager service still blocks it, the noscript `ns.html` iframe stays blocked, and the container is recognised by host and exact `/gtm.js` path, never by a substring. The settings page warns that the site owner becomes responsible for the Consent Settings of every non-Google tag inside the container.
+
 ## [1.37.0] - 2026-11-02
 
 ### Fixed

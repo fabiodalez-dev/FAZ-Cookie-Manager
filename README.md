@@ -278,6 +278,8 @@ Full GCM v2 integration with all required consent signals:
 - **Wait for update** -- configurable delay (ms) for slow-loading CMPs
 - **URL passthrough** -- pass ad click info even when consent denied
 - **Ads data redaction** -- redact ad data when consent denied
+- **Advanced Consent Mode** (opt-in, default off) -- gtag.js / GA4 / Google Ads load before consent behind a synchronous `consent default` with every signal denied, so they send cookieless pings for modelling; non-Google trackers stay blocked
+- **Google Tag Manager container before consent** (opt-in on top of Advanced, default off, #385) -- the container (gtm.js) loads before consent too, so GA4 and Ads conversion tags configured inside it send cookieless pings. The container can run non-Google tags that ignore Consent Mode, so the site owner must set Consent Settings ("Require additional consent for tag to fire") on each of them in Tag Manager; an explicit rejection of the Google Tag Manager service and the noscript iframe stay blocked
 
 ### Google Additional Consent Mode (GACM)
 

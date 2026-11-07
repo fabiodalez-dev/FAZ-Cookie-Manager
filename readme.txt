@@ -196,7 +196,7 @@ Documentation / Privacy:
 
 Used only when you enter one or more Google tag IDs under Google Consent Mode → Google Tag, to load Google's tag in the visitor's browser on your behalf. The plugin loads nothing from Google while that field is empty.
 
-Triggered when: a visitor accepts the consent category the tag belongs to (Analytics for G-/GT- IDs, Marketing for AW-/DC- IDs, the catalogue category of Google Tag Manager for GTM- IDs). With Advanced Consent Mode enabled, the gtag.js tags for G-/GT-/AW-/DC- IDs load on page view before consent in Google's cookieless mode; Tag Manager containers always wait for consent. Nothing is loaded on pages where the consent banner is turned off.
+Triggered when: a visitor accepts the consent category the tag belongs to (Analytics for G-/GT- IDs, Marketing for AW-/DC- IDs, the catalogue category of Google Tag Manager for GTM- IDs). With Advanced Consent Mode enabled, the gtag.js tags for G-/GT-/AW-/DC- IDs load on page view before consent in Google's cookieless mode; Tag Manager containers wait for consent unless you also turn on "Also load the Google Tag Manager container before consent", in which case they load on page view as well, behind the same denied consent default. Nothing is loaded on pages where the consent banner is turned off.
 
 Data sent: by the visitor's browser, directly to Google: the visitor IP address, standard browser request data, the configured tag IDs, and whatever the tag itself collects under the consent state the plugin signals. Your server sends nothing to Google.
 
@@ -267,6 +267,12 @@ It's free and open source (GPL-3.0). There are no premium upgrades, no feature g
 = Is it compatible with Google Consent Mode v2? =
 
 Yes. The plugin sends all 7 consent signals (`ad_storage`, `analytics_storage`, `ad_user_data`, `ad_personalization`, `functionality_storage`, `personalization_storage`, `security_storage`) and supports Google Additional Consent Mode (GACM) for ad technology providers.
+
+In Basic mode (the default) Google's tags are blocked until the visitor consents. Advanced Consent Mode, off by default, lets gtag.js, GA4 and Google Ads load before consent with every signal denied, so they send cookieless pings Google can use for modelling; other trackers stay blocked.
+
+= My Google Ads conversions are set up in Google Tag Manager. Can they send cookieless pings before consent? =
+
+Turn on Advanced Consent Mode and then **Also load the Google Tag Manager container before consent** under Google Consent Mode → Advanced Settings. The container then loads behind the same denied consent default as gtag.js, and the Google tags inside it can send cookieless pings. A container can also run tags that ignore Consent Mode (Meta Pixel, LinkedIn, custom HTML…): the plugin still blocks the trackers it recognises when the container injects them, but it cannot see every tag, so before turning this on set "Require additional consent for tag to fire" in each non-Google tag's Consent Settings in Tag Manager. A visitor who explicitly rejects the Google Tag Manager service keeps it blocked, and the noscript iframe is never loaded before consent.
 
 = Does the banner block cookies before consent? =
 
