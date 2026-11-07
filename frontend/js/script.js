@@ -3459,11 +3459,14 @@ function _fazLoopFocus() {
     _fazAttachFocusLoop(lastElementPopup, firstElementPopup);
     // The edge handlers above are bound to the first/last control in SOURCE
     // order when the surface opens. When that control is one the layout does
-    // not display (the pushdown panel's reject button, a control inside a
-    // collapsed section), its handler never runs and Tab walks out of the
-    // dialog into the page. A surface-level handler re-reads the controls that
-    // are actually rendered at the moment Tab is pressed; it defers to an edge
-    // handler that already handled the key.
+    // not display, its handler never runs and Tab walks out of the dialog
+    // into the page: that is the expanded pushdown panel, whose last control
+    // in source order is a button the layout hides (covered by
+    // a11y-keyboard-revisit.spec.ts). A surface-level handler re-reads the
+    // controls that are actually rendered at the moment Tab is pressed; it
+    // defers to an edge handler that already handled the key. On the modal
+    // (popup/sidebar) the edge controls are displayed with the default
+    // templates, so there the trap is only a safety net.
     _fazAttachSurfaceTrap(_fazGetBanner());
     _fazAttachSurfaceTrap(document.querySelector('.faz-modal'));
 }

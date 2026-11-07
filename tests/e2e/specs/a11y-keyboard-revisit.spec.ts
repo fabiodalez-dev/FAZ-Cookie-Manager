@@ -78,6 +78,29 @@ function focusInfo(page: Page) {
   });
 }
 
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([disabled]):not([tabindex="-1"])';
+
+/**
+ * Focus the first or last control under `rootSelector` that is actually on
+ * screen (a layout box and not visibility:hidden), and return its tag/name, or
+ * '' when nothing could be focused.
+ */
+function focusRendered(page: Page, rootSelector: string, which: 'first' | 'last') {
+  return page.evaluate(([sel, edge, focusable]) => {
+    const root = document.querySelector(sel);
+    if (!root) return '';
+    const rendered = (Array.from(root.querySelectorAll(focusable)) as HTMLElement[]).filter((el) =>
+      el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden');
+    const target = edge === 'first' ? rendered[0] : rendered[rendered.length - 1];
+    if (!target) return '';
+    target.focus();
+    return document.activeElement === target
+      ? (target.getAttribute('data-faz-tag') || target.id || target.tagName.toLowerCase())
+      : '';
+  }, [rootSelector, which, FOCUSABLE] as const);
+}
+
 /** Wait briefly for focus to reach `where`; return where it ended up. */
 async function settleFocus(page: Page, where: string, timeoutMs = 2_000): Promise<string> {
   const deadline = Date.now() + timeoutMs;
@@ -182,6 +205,40 @@ test.describe('Keyboard access to the revisit widget and the preference centre (
             expect.soft(ok, `${key} #${i + 1} stays on a visible control in the preference centre (got ${info.where}/${info.tag}, visible=${info.visible})`).toBe(true);
             if (!ok) break;
           }
+        }
+
+        // ── Pushdown: the expanded panel is reachable and holds Tab ──────
+        // The loop above accepts either surface, because the expanded panel is
+        // part of the banner dialog; it cannot tell a panel that holds focus
+        // from one Tab walks straight out of. These two checks can. The panel
+        // sits in the banner AFTER the notice, so the notice must let Tab
+        // through to it instead of wrapping to its own first button; and once
+        // in the panel, Tab past its last displayed control must wrap inside
+        // the panel. The edge handler is bound to the last control in SOURCE
+        // order, which the pushdown layout does not display, so it never ran
+        // and Tab left the panel for the page.
+        if (layout.pushdown) {
+          const panel = '.faz-consent-container [data-faz-tag="detail"]';
+          const lastInNotice = await focusRendered(page, '[data-faz-tag="notice"]', 'last');
+          expect(lastInNotice, 'the notice has a displayed control to start from').not.toBe('');
+          await page.keyboard.press('Tab');
+          const fromNotice = await focusInfo(page);
+          expect.soft(fromNotice.where, `Tab from the notice's last control enters the expanded panel (got ${fromNotice.where}/${fromNotice.tag})`).toBe('preference');
+
+          for (const [key, edge] of [['Tab', 'last'], ['Shift+Tab', 'first']] as const) {
+            const start = await focusRendered(page, panel, edge);
+            expect(start, `the panel has a displayed ${edge} control`).not.toBe('');
+            for (let i = 0; i < 40; i++) {
+              await page.keyboard.press(key);
+              const info = await focusInfo(page);
+              const ok = info.where === 'preference' && info.visible;
+              expect.soft(ok, `${key} #${i + 1} from the panel's ${edge} control stays in the panel (got ${info.where}/${info.tag}, visible=${info.visible})`).toBe(true);
+              if (!ok) break;
+            }
+          }
+          // Leave focus inside the panel, where the Escape step below expects
+          // a visitor to press it.
+          await focusRendered(page, panel, 'first');
         }
 
         // ── Escape closes it and returns focus to the opener ──────────────
