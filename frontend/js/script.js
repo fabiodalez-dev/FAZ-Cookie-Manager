@@ -3269,7 +3269,7 @@ function _fazGetRevisitButton() {
 function _fazIsRendered(element) {
     if (!element || !element.isConnected || !element.getClientRects) return false;
     if (typeof element.checkVisibility === 'function') {
-        return element.checkVisibility({ visibilityProperty: true });
+        return element.checkVisibility({ visibilityProperty: true, checkVisibilityCSS: true });
     }
     if (element.getClientRects().length === 0) return false;
     return window.getComputedStyle(element).visibility !== 'hidden';
