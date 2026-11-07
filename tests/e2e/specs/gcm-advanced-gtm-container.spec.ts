@@ -69,6 +69,20 @@ async function openHome(page: Page): Promise<void> {
 
 const requested = (requests: string[], id: string) => requests.some((u) => u.includes(`/gtm.js?id=${id}`));
 
+/**
+ * The pasted-snippet half needs WP_PATH: the mu-plugin that prints the snippet
+ * is written only then. Without it a "not requested" assertion on PASTED_ID
+ * would pass without the snippet ever being on the page, so it is not made,
+ * and the test records why instead of reporting a silent green.
+ */
+function expectPastedNotRequested(requests: string[], message: string): void {
+  if (!process.env.WP_PATH) {
+    test.info().annotations.push({ type: 'skip-part', description: `${message}: not checked, WP_PATH is unset so no snippet is pasted` });
+    return;
+  }
+  expect(requested(requests, PASTED_ID), message).toBe(false);
+}
+
 /** The first dataLayer entries, flattened to something comparable. */
 async function dataLayerHead(page: Page): Promise<Array<{ kind: string; detail: unknown }>> {
   return page.evaluate(() => {
@@ -173,7 +187,7 @@ test.describe.serial('GTM container under Advanced Consent Mode (#385)', () => {
       await openHome(page);
       await page.waitForTimeout(1500);
       expect(requested(requests, GTM_ID), 'built-in container not requested').toBe(false);
-      expect(requested(requests, PASTED_ID), 'pasted container not requested').toBe(false);
+      expectPastedNotRequested(requests, 'pasted container not requested');
     } finally {
       await context.close();
     }
@@ -186,7 +200,7 @@ test.describe.serial('GTM container under Advanced Consent Mode (#385)', () => {
       await openHome(page);
       await page.waitForTimeout(1500);
       expect(requested(requests, GTM_ID)).toBe(false);
-      expect(requested(requests, PASTED_ID)).toBe(false);
+      expectPastedNotRequested(requests, 'pasted container not requested without Advanced mode');
     } finally {
       await context.close();
     }
@@ -207,7 +221,7 @@ test.describe.serial('GTM container under Advanced Consent Mode (#385)', () => {
       await openHome(page);
       await page.waitForTimeout(1500);
       expect(requested(requests, GTM_ID), 'built-in container held by the service denial').toBe(false);
-      expect(requested(requests, PASTED_ID), 'pasted container held by the service denial').toBe(false);
+      expectPastedNotRequested(requests, 'pasted container held by the service denial');
     } finally {
       await context.close();
       restoreOption('faz_settings', settings);
