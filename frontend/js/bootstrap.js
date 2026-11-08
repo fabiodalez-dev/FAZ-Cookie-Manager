@@ -2419,26 +2419,41 @@
                 // and a replay swaps the real rule into the placeholder's
                 // CURRENT position, wherever later inserts and deletes moved
                 // it. A caller that deleted the placeholder deleted the rule.
+                // An @import may only follow other @imports, so it is held by
+                // an @import of its own: an empty data: sheet for a media query
+                // that never matches, which loads nothing from the network.
+                var holder = /^\s*@import\b/i.test(String(css))
+                    ? '@import url("data:text/css,") not all;'
+                    : '@media not all{}';
                 var at = Number(args[1]);
                 if (!isFinite(at) || at < 0) at = 0;
                 var length = (sheet.cssRules && sheet.cssRules.length) || 0;
                 if (at > length) at = length;
                 var slot = null;
                 try {
-                    original.call(sheet, '@media not all{}', at);
+                    original.call(sheet, holder, at);
                     slot = sheet.cssRules[at] || null;
                 } catch (error) { slot = null; }
                 defer(function (policy) {
                     if (!allowedCss(policy, css)) return;
-                    if (!slot) return sheet[name].apply(sheet, args);
                     var rules = sheet.cssRules || [];
+                    if (!slot) {
+                        // No placeholder could be placed (a hierarchy constraint
+                        // of the sheet): the rule goes where the caller asked,
+                        // brought inside the sheet as it stands now, because the
+                        // sheet is one rule shorter than the caller believed and
+                        // an index past the end would lose the rule to an
+                        // IndexSizeError.
+                        var to = at > rules.length ? rules.length : at;
+                        return sheet[name].call(sheet, args[0], to);
+                    }
                     for (var i = 0; i < rules.length; i++) {
                         if (rules[i] !== slot) continue;
                         sheet.deleteRule(i);
                         try { return sheet[name].call(sheet, args[0], i); }
                         catch (error) {
                             // Keep every later index where the caller expects it.
-                            try { original.call(sheet, '@media not all{}', i); } catch (_e) { /* nothing left to hold */ }
+                            try { original.call(sheet, holder, i); } catch (_e) { /* nothing left to hold */ }
                             throw error;
                         }
                     }

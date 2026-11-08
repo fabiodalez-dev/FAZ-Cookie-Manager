@@ -2346,6 +2346,46 @@ const ruleText = (sheet) => Array.from(sheet.cssRules, (r) => r.cssText).join(' 
     /fc-a/.test(sheet.cssRules[0].cssText) && /fc-b/.test(sheet.cssRules[1].cssText) && /fc-c/.test(sheet.cssRules[2].cssText));
 }
 
+{
+  // A replay whose insertion throws must put the placeholder back, so the
+  // rules after it keep the indexes the caller was given.
+  const { window, document } = boot();
+  const { sheet } = fullCalendarSheet(document);
+  const realInsert = sheet.insertRule;
+  sheet.insertRule = function (rule) {
+    if (String(rule).indexOf('tracker.test') !== -1) throw new window.DOMException('refused by the engine', 'SyntaxError');
+    return realInsert.apply(this, arguments);
+  };
+  const warn = window.console.warn;
+  window.console.warn = function () {};
+  runtimeHandoff(window);
+  window.console.warn = warn;
+  eq('#391: a replay that throws leaves the sheet at four rules', sheet.cssRules.length, 4);
+  ok('#391: with the placeholder back in the held slot',
+    sheet.cssRules[1].cssText.indexOf('tracker.test') === -1 && /not all/.test(sheet.cssRules[1].cssText));
+  ok('#391: and the later rules where they were',
+    /fc-b/.test(sheet.cssRules[2].cssText) && /fc-c/.test(sheet.cssRules[3].cssText));
+}
+{
+  // An @import can only follow other @imports: a held one is held by an
+  // @import placeholder, which loads nothing, and replays into the same slot.
+  const { window, document } = boot();
+  const style = document.createElement('style');
+  document.head.appendChild(style);
+  const sheet = style.sheet;
+  let error = null;
+  try {
+    sheet.insertRule('@import url(https://tracker.test/a.css);', 0);
+    sheet.insertRule('.after{color:red}', 1);
+  } catch (e) { error = e; }
+  eq('#391: a held @import keeps its slot without an error', error && error.name, null);
+  eq('#391: both slots exist while the @import is held', sheet.cssRules.length, 2);
+  ok('#391: the held @import names no tracker', sheet.cssRules[0].cssText.indexOf('tracker.test') === -1);
+  runtimeHandoff(window);
+  ok('#391: the handoff puts the @import back first',
+    sheet.cssRules.length === 2 && /tracker\.test/.test(sheet.cssRules[0].cssText) && /after/.test(sheet.cssRules[1].cssText));
+}
+
 console.log('');
 console.log(`bootstrap-deferred-hold: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
