@@ -298,9 +298,9 @@ console.log('\nbootstrap: CSS that a regex would miss and an engine would fetch'
   document.head.appendChild(style);
   const sheet = style.sheet;
   sheet.insertRule('.p{background-image:url("https://tracker.test/a)b")}', 0);
-  eq('a quoted URL containing ")" is held', sheet.cssRules.length, 0);
+  ok('a quoted URL containing ")" is held', sheet.cssRules.length === 1 && sheet.cssRules[0].cssText.indexOf('tracker.test') === -1);
   runtimeHandoff(window);
-  eq('and the normal handoff applies it', sheet.cssRules.length, 1);
+  ok('and the normal handoff applies it', sheet.cssRules.length === 1 && sheet.cssRules[0].cssText.indexOf('tracker.test') !== -1);
 }
 
 {
@@ -311,7 +311,7 @@ console.log('\nbootstrap: CSS that a regex would miss and an engine would fetch'
   sheet.insertRule('.p{background-image:url("https://tracker.test/a)b")}', 0);
   window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
   await new Promise((r) => setTimeout(r, 0));
-  eq('the safety release does not apply it either', sheet.cssRules.length, 0);
+  ok('the safety release does not apply it either', Array.from(sheet.cssRules, (r) => r.cssText).join(' ').indexOf('tracker.test') === -1);
 }
 
 // deleteData adds no text at all — it was handed a length — yet removing what
@@ -2001,7 +2001,7 @@ for (const name of ['deleteContents', 'extractContents']) {
   eq('premise: a grouping rule with no URL is inserted at once', sheet.cssRules.length, 1);
   const group = sheet.cssRules[0];
   group.insertRule('.q{background-image:url(https://tracker.test/group.png)}', 0);
-  eq('a rule inserted into a grouping rule is held', group.cssRules.length, 0);
+  ok('a rule inserted into a grouping rule is held', group.cssRules.length === 1 && group.cssRules[0].cssText.indexOf('tracker.test') === -1);
   runtimeHandoff(window);
   eq('addRule applies at handoff', sheet.cssRules.length, 2);
   eq('and so does the grouping rule insertion', group.cssRules.length, 1);
@@ -2293,6 +2293,57 @@ console.log('\nhandoff: the policy matches URLs the way the runtime does');
     endpoint('https://connect.facebook.net/en_US/fbevents.js'), 'connect.facebook.net/en_US/fbevents.js');
   eq('a protocol-relative URL normalises too',
     endpoint('//connect.facebook.net/x.js'), 'connect.facebook.net/x.js');
+}
+
+// #391: a library that builds a sheet rule by rule inserts rule i at index i
+// (FullCalendar's global bundle). Holding one rule without filling its slot
+// left the sheet one rule short, and the next native insertRule threw
+// IndexSizeError, so the bundle aborted and the calendar never rendered.
+function fullCalendarSheet(document) {
+  const style = document.createElement('style');
+  document.head.appendChild(style);
+  const sheet = style.sheet;
+  const rules = [
+    '.fc-a{color:red}',
+    '.fc-icon{background-image:url(https://tracker.test/icons.png)}',
+    '.fc-b{color:blue}',
+    '.fc-c{color:green}',
+  ];
+  let error = null;
+  try { rules.forEach((rule, i) => { sheet.insertRule(rule, i); }); } catch (e) { error = e; }
+  return { sheet, error };
+}
+const ruleText = (sheet) => Array.from(sheet.cssRules, (r) => r.cssText).join(' ');
+{
+  const { window, document } = boot();
+  const { sheet, error } = fullCalendarSheet(document);
+  eq('#391: sequential insertRule calls past a held rule do not throw', error && error.name, null);
+  eq('#391: every rule keeps its slot while one is held', sheet.cssRules.length, 4);
+  ok('#391: the held slot fetches nothing', ruleText(sheet).indexOf('tracker.test') === -1);
+  ok('#391: the later rules sit at the indexes the caller asked for',
+    /fc-b/.test(sheet.cssRules[2].cssText) && /fc-c/.test(sheet.cssRules[3].cssText));
+  runtimeHandoff(window);
+  eq('#391: after the handoff the sheet still has four rules', sheet.cssRules.length, 4);
+  ok('#391: the handoff puts the held rule back in its own slot', /tracker\.test/.test(sheet.cssRules[1].cssText));
+}
+{
+  const { window, document } = boot();
+  const { sheet } = fullCalendarSheet(document);
+  window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
+  await new Promise((r) => setTimeout(r, 0));
+  eq('#391: the safety release keeps the placeholder, not the rule', sheet.cssRules.length, 4);
+  ok('#391: and the tracker URL never lands', ruleText(sheet).indexOf('tracker.test') === -1);
+}
+{
+  // A caller that deletes the slot it was given deleted the rule: the replay
+  // must not resurrect it at some other index.
+  const { window, document } = boot();
+  const { sheet } = fullCalendarSheet(document);
+  sheet.deleteRule(1);
+  runtimeHandoff(window);
+  eq('#391: a deleted slot is not replayed', sheet.cssRules.length, 3);
+  ok('#391: and the remaining rules keep their order',
+    /fc-a/.test(sheet.cssRules[0].cssText) && /fc-b/.test(sheet.cssRules[1].cssText) && /fc-c/.test(sheet.cssRules[2].cssText));
 }
 
 console.log('');

@@ -2402,22 +2402,48 @@
                         sheet.replace.apply(sheet, args).then(resolve, reject);
                     });
                 });
-                defer(function (policy) { if (allowedCss(policy, css)) sheet[name].apply(sheet, args); });
+                if (name !== 'insertRule') {
+                    defer(function (policy) { if (allowedCss(policy, css)) sheet[name].apply(sheet, args); });
+                    // addRule answers -1 by specification, whatever happened.
+                    return name === 'addRule' ? -1 : undefined;
+                }
                 // insertRule must answer synchronously with an index, and the
-                // rule it would describe does not exist yet. Report the index the
-                // caller asked for, clamped into the sheet as the spec requires,
-                // which is also the index the rule lands on if it is replayed.
-                // A caller that immediately deleteRule()s that index operates on
-                // a sheet one rule short; there is no synchronous answer that
-                // avoids it, and the alternative — fetching before consent to
-                // keep an index honest — is not a trade worth making. addRule
-                // answers -1 by specification, whatever happened.
-                if (name === 'addRule') return -1;
-                if (name !== 'insertRule') return undefined;
+                // caller's next insertRule usually names the index after it:
+                // libraries that build a sheet rule by rule (FullCalendar, #391)
+                // insert rule i at index i. Holding the rule without filling its
+                // slot left the sheet one rule short, so the next native
+                // insertRule was handed an index past the end and threw
+                // IndexSizeError, aborting the library. The slot is held by an
+                // @media query that can never match — valid CSS that fetches
+                // nothing, the same placeholder the runtime's own gate uses —
+                // and a replay swaps the real rule into the placeholder's
+                // CURRENT position, wherever later inserts and deletes moved
+                // it. A caller that deleted the placeholder deleted the rule.
                 var at = Number(args[1]);
                 if (!isFinite(at) || at < 0) at = 0;
                 var length = (sheet.cssRules && sheet.cssRules.length) || 0;
-                return at > length ? length : at;
+                if (at > length) at = length;
+                var slot = null;
+                try {
+                    original.call(sheet, '@media not all{}', at);
+                    slot = sheet.cssRules[at] || null;
+                } catch (error) { slot = null; }
+                defer(function (policy) {
+                    if (!allowedCss(policy, css)) return;
+                    if (!slot) return sheet[name].apply(sheet, args);
+                    var rules = sheet.cssRules || [];
+                    for (var i = 0; i < rules.length; i++) {
+                        if (rules[i] !== slot) continue;
+                        sheet.deleteRule(i);
+                        try { return sheet[name].call(sheet, args[0], i); }
+                        catch (error) {
+                            // Keep every later index where the caller expects it.
+                            try { original.call(sheet, '@media not all{}', i); } catch (_e) { /* nothing left to hold */ }
+                            throw error;
+                        }
+                    }
+                });
+                return at;
             };
         });
     }); });
