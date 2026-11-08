@@ -715,6 +715,18 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.38.0 — 2026-11-08
+
+- Google Consent Mode → Advanced Settings: a new opt-in, off by default, loads the Google Tag Manager container before consent when Advanced Consent Mode is on (#385), so Google tags configured inside Tag Manager send cookieless pings for visitors who have not consented. The container loads for every visitor, unless per-service consent is on and the visitor switches off the Google Tag Manager service, and it never loads early on AMP or on a page without wp_head(). The settings page warns that the site owner becomes responsible for the consent settings of every non-Google tag inside it.
+- qTranslate support (qTranslate-XT, qTranslate-X, qTranslate, mqTranslate, qTranslate Plus and zTranslate): the banner follows the language chosen in qTranslate instead of the browser language. With Cache Compatibility Mode on and qTranslate's query mode (?lang=), cached pages show the default language; the URL modes (/en/ or per domain) are followed.
+- Keyboard access: after a choice, focus moves to the cookie icon, which has a visible focus ring; the icon moves focus into the banner it reopens, Customise into the preferences, Tab stays inside the open dialog, and Escape returns focus to the button that opened the preferences. All banner layouts.
+- Banner → Colours: background opacity and text alignment; Save button colours, hover colours for the banner buttons, and a custom image for the revisit widget. All empty by default, so existing banners look the same.
+- Cookie Policy: privacy contact and DPO addresses are obfuscated as HTML character references by default, so scrapers that read the page source do not get them (#383, by roboes). Visitors see and use them as before.
+- Turkish banner, preference centre and category texts (#381, by gven09), and Turkish cookie duration units.
+- Fixed: the opt-out popup no longer says a Global Privacy Control signal was detected when the browser sends none, and with the signal the Do Not Sell checkbox is ticked and locked.
+- Fixed: FullCalendar calendars (for example PowerPack Event Calendar) did not render with FAZ active (#391).
+- Fixed: Divi's mobile menu could be empty with Polylang (#376), the output buffer broke Breakdance's builder JSON responses (#356), and a WordPress notice appeared on every page because of a closing script tag in a comment (#361).
+
 ### 1.37.0 — 2026-11-02
 
 - With Geo-Targeting on and only a CCPA banner active, visitors who need opt-in consent saw no banner at all (#377): visitors from the EU and the UK, and every visitor on a site that cannot detect the country. They now see your banner as an opt-in banner, with its look and policy links, the default GDPR text and Accept and Reject buttons, and nothing optional runs until they choose. AMP and language swaps show the same banner.
