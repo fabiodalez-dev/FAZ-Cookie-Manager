@@ -406,6 +406,10 @@ class Template {
 	 * colours of its own, because the Settings hover colours were not chosen
 	 * for them.
 	 *
+	 * A button with hover colours also changes them over 0.2 seconds, in both
+	 * directions, so the rule sits on the button and not on :hover. It is left
+	 * out for visitors who ask the system for reduced motion.
+	 *
 	 * @param array $css_vars Custom properties emitted for this banner.
 	 * @return string
 	 */
@@ -415,13 +419,16 @@ class Template {
 		};
 		$hover  = static function ( $selector, $tag ) use ( $is_set ) {
 			$rule = '';
-			if ( $is_set( '--faz-' . $tag . '-hover-background-color' ) ) {
-				$rule .= 'background:var(--faz-' . $tag . '-hover-background-color);';
+			foreach ( array( 'background' => 'background-color', 'color' => 'color', 'border-color' => 'border-color' ) as $property => $key ) {
+				if ( $is_set( '--faz-' . $tag . '-hover-' . $key ) ) {
+					$rule .= $property . ':var(--faz-' . $tag . '-hover-' . $key . ');';
+				}
 			}
-			if ( $is_set( '--faz-' . $tag . '-hover-color' ) ) {
-				$rule .= 'color:var(--faz-' . $tag . '-hover-color);';
+			if ( '' === $rule ) {
+				return '';
 			}
-			return '' === $rule ? '' : $selector . ':hover{' . $rule . 'opacity:1;}';
+			return $selector . ':hover{' . $rule . 'opacity:1;}'
+				. '@media (prefers-reduced-motion:no-preference){' . $selector . '{transition:background-color .2s,color .2s,border-color .2s;}}';
 		};
 
 		$save  = '.faz-btn-preferences[data-faz-tag="detail-save-button"]';
@@ -443,6 +450,39 @@ class Template {
 			$save_hover = $hover( $save, 'settings-button' );
 		}
 		return $rules . $save_hover;
+	}
+
+	/**
+	 * Rules for the revisit widget size, image size and border.
+	 *
+	 * Empty settings add nothing, so the widget keeps the template's 45px
+	 * circle with a 30px icon. The sizes are sanitised again here because a
+	 * stored banner may predate the settings. The image is never larger than
+	 * the widget that holds it.
+	 *
+	 * @param array $revisit  The banner's revisitConsent config.
+	 * @param array $css_vars Custom properties emitted for this banner.
+	 * @return string
+	 */
+	private static function revisit_widget_rules( $revisit, $css_vars ) {
+		$widget = faz_sanitize_pixel_size( isset( $revisit['widgetSize'] ) ? $revisit['widgetSize'] : '', 30, 100 );
+		$image  = faz_sanitize_pixel_size( isset( $revisit['imageSize'] ) ? $revisit['imageSize'] : '', 12, 100 );
+		if ( '' !== $image ) {
+			$image = (string) min( (int) $image, '' !== $widget ? (int) $widget : 45 );
+		}
+
+		$wrapper = '';
+		if ( '' !== $widget ) {
+			$wrapper .= 'width:' . $widget . 'px;height:' . $widget . 'px;';
+		}
+		if ( ! empty( $css_vars['--faz-revisit-consent-border-color'] ) ) {
+			$wrapper .= 'border:1px solid var(--faz-revisit-consent-border-color);box-sizing:border-box;';
+		}
+		$rules = '' === $wrapper ? '' : '.faz-btn-revisit-wrapper{' . $wrapper . '}';
+		if ( '' !== $image ) {
+			$rules .= '.faz-btn-revisit-wrapper .faz-btn-revisit img,.faz-btn-revisit-wrapper .faz-btn-revisit svg{width:' . $image . 'px;height:' . $image . 'px;}';
+		}
+		return $rules;
 	}
 
 	/**
@@ -767,6 +807,10 @@ class Template {
 				if ( $revisit_custom ) {
 					$this->styles .= '.faz-btn-revisit-wrapper .faz-btn-revisit img.faz-revisit-custom-image{object-fit:contain;}';
 				}
+				$this->styles .= self::revisit_widget_rules(
+					isset( $properties['config']['revisitConsent'] ) ? $properties['config']['revisitConsent'] : array(),
+					$css_vars
+				);
 			}
 
 			$this->html = $dom->saveHTML( $dom->documentElement ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName

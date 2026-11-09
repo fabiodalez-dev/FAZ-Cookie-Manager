@@ -1,5 +1,6 @@
 /**
- * Preference centre Save colours, per-button hover colours, custom revisit image.
+ * Preference centre Save colours, per-button hover colours and borders, custom
+ * revisit image, revisit widget size and border.
  *
  * Asked for on the wp.org forum ("More Control than Colours"). Driven the way an
  * administrator does it (Colours tab, save, template regeneration) and read from
@@ -134,7 +135,11 @@ test('with every field empty, Save follows Settings and hover is the 80% opacity
     const css = await front.locator('style').evaluateAll((all) => all.map((s) => s.textContent || '').join(''));
     expect(css).not.toContain('detail-save-button-custom');
     expect(css).not.toContain('-hover-background-color');
-    expect((await hovered(front, '[data-faz-tag="accept-button"]')).opacity).toBe('0.8');
+    expect(css).not.toContain('-hover-border-color');
+    expect(css).not.toContain('revisit-consent-border-color');
+    const accept = await hovered(front, '[data-faz-tag="accept-button"]');
+    expect(accept.opacity).toBe('0.8');
+    expect(accept.transition).toBe('0s');
     await openPreferences(front);
     const save = await colours(front, SAVE);
     expect(save.background).toBe(rgb('#112233'));
@@ -193,6 +198,41 @@ test('a hover colour applies to its button only, at full opacity', async ({ page
     expect(settings.opacity).toBe('0.8');
   } finally {
     await context.close();
+  }
+});
+
+test('a hover border colour applies on hover, and the colours change over 0.2 seconds', async ({ page, browser, loginAsAdmin }) => {
+  await loginAsAdmin(page);
+  await setFields(page, {
+    'faz-b-settings-border': '#0a5c36',
+    'faz-b-settings-hover-bg': '#222222',
+    'faz-b-settings-hover-border': '#ff0000',
+  });
+  const { context, front } = await visitor(browser);
+  try {
+    const settings = '[data-faz-tag="settings-button"]';
+    const idle = await colours(front, settings);
+    expect(idle.border).toBe(rgb('#0a5c36'));
+    expect(idle.transition).toBe('0.2s, 0.2s, 0.2s');
+    const hover = await hovered(front, settings);
+    expect(hover.border).toBe(rgb('#ff0000'));
+    expect(hover.background).toBe(rgb('#222222'));
+    // A button without hover colours keeps the opacity fade and no transition.
+    expect((await colours(front, '[data-faz-tag="accept-button"]')).transition).toBe('0s');
+  } finally {
+    await context.close();
+  }
+
+  // A visitor whose system asks for reduced motion gets the colours at once.
+  const reduced = await browser.newContext({ reducedMotion: 'reduce' });
+  try {
+    const front2 = await reduced.newPage();
+    await front2.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(front2.locator('[data-faz-tag="settings-button"]').first()).toBeVisible();
+    expect((await colours(front2, '[data-faz-tag="settings-button"]')).transition).toBe('0s');
+    expect((await hovered(front2, '[data-faz-tag="settings-button"]')).border).toBe(rgb('#ff0000'));
+  } finally {
+    await reduced.close();
   }
 });
 
@@ -363,6 +403,81 @@ test.describe('revisit widget image', () => {
     } finally {
       await session.context.close();
     }
+  });
+
+  /** Fills plain fields of the Colours tab by id and saves the banner. */
+  const setRevisit = async (page: Page, fields: Record<string, string>) => {
+    await openColours(page);
+    for (const [id, value] of Object.entries(fields)) {
+      await page.locator(`#${id}`).fill(value);
+      await page.locator(`#${id}`).dispatchEvent('change');
+    }
+    await saveBanner(page);
+  };
+
+  /** Reads the widget's box and the size of the icon or image inside it. */
+  const widgetBox = (front: Page) => front.locator('[data-faz-tag="revisit-consent"]').evaluate((el) => {
+    const s = getComputedStyle(el);
+    const icon = el.querySelector('.faz-btn-revisit svg, .faz-btn-revisit img') as Element;
+    const r = icon.getBoundingClientRect();
+    return { width: s.width, height: s.height, border: `${s.borderTopWidth} ${s.borderTopStyle} ${s.borderTopColor}`, icon: `${r.width}x${r.height}` };
+  });
+
+  test('left empty, the widget is the 45px circle with a 30px icon and no border', async ({ page, browser, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await setRevisit(page, { 'faz-b-revisit-widget-size': '', 'faz-b-revisit-image-size': '', 'faz-b-revisit-border-hex': '' });
+    const session = await revisit(browser);
+    try {
+      const box = await widgetBox(session.front);
+      expect(box.width).toBe('45px');
+      expect(box.height).toBe('45px');
+      expect(box.icon).toBe('30x30');
+      expect(box.border).toMatch(/^0px none/);
+    } finally {
+      await session.context.close();
+    }
+  });
+
+  test('the widget size, the icon size and the border colour reach the widget', async ({ page, browser, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await setRevisit(page, { 'faz-b-revisit-widget-size': '60', 'faz-b-revisit-image-size': '40', 'faz-b-revisit-border-hex': '#ff0000' });
+    let session = await revisit(browser);
+    try {
+      const box = await widgetBox(session.front);
+      expect(box.width).toBe('60px');
+      expect(box.height).toBe('60px');
+      expect(box.icon).toBe('40x40');
+      expect(box.border).toBe(`1px solid ${rgb('#ff0000')}`);
+    } finally {
+      await session.context.close();
+    }
+
+    // The same sizes apply to a custom image.
+    await setImage(page, `${new URL(page.url()).origin}/wp-content/plugins/faz-cookie-manager/frontend/images/revisit.svg?custom=1`);
+    session = await revisit(browser);
+    try {
+      expect((await widgetBox(session.front)).icon).toBe('40x40');
+    } finally {
+      await session.context.close();
+    }
+  });
+
+  test('an icon larger than the widget is shown at the widget size, and an out-of-range size is brought into range', async ({ page, browser, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await setRevisit(page, { 'faz-b-revisit-widget-size': '', 'faz-b-revisit-image-size': '80' });
+    const session = await revisit(browser);
+    try {
+      const box = await widgetBox(session.front);
+      expect(box.width).toBe('45px');
+      expect(box.icon).toBe('45x45');
+    } finally {
+      await session.context.close();
+    }
+
+    await setRevisit(page, { 'faz-b-revisit-widget-size': '500', 'faz-b-revisit-image-size': '3' });
+    await openColours(page);
+    await expect(page.locator('#faz-b-revisit-widget-size')).toHaveValue('100');
+    await expect(page.locator('#faz-b-revisit-image-size')).toHaveValue('12');
   });
 
   test('a non-http image URL is ignored', async ({ page, browser, loginAsAdmin }) => {

@@ -61,7 +61,8 @@
 	var FAZ_OPTIONAL_COLORS = {
 		hover: ['accept', 'reject', 'settings'],
 		ids: ['faz-b-detail-save-bg', 'faz-b-detail-save-text', 'faz-b-detail-save-border', 'faz-b-detail-save-hover-bg', 'faz-b-detail-save-hover-text',
-			'faz-b-accept-hover-bg', 'faz-b-accept-hover-text', 'faz-b-reject-hover-bg', 'faz-b-reject-hover-text', 'faz-b-settings-hover-bg', 'faz-b-settings-hover-text']
+			'faz-b-accept-hover-bg', 'faz-b-accept-hover-text', 'faz-b-reject-hover-bg', 'faz-b-reject-hover-text', 'faz-b-settings-hover-bg', 'faz-b-settings-hover-text',
+			'faz-b-accept-hover-border', 'faz-b-reject-hover-border', 'faz-b-settings-hover-border', 'faz-b-detail-save-hover-border']
 	};
 	var FAZ_CONTRAST_PAIRS = [
 		{ fg: 'faz-b-title-color',       bg: 'faz-b-notice-bg',       min: 4.5, label: fazI18n('banner.cTitle', 'Title vs banner background') },
@@ -1678,6 +1679,9 @@
 		if (revisitImage === '#') revisitImage = '';
 		setVal('faz-b-revisit-image-url', revisitImage);
 		updateImagePreview('faz-b-revisit-image', revisitImage);
+		setOptionalColor('faz-b-revisit-border', revisitStyles['border-color']);
+		setVal('faz-b-revisit-widget-size', revisit.widgetSize || '');
+		setVal('faz-b-revisit-image-size', revisit.imageSize || '');
 		var hoverButtons = (config.notice && config.notice.elements && config.notice.elements.buttons && config.notice.elements.buttons.elements) || {};
 		var detailSave = (config.preferenceCenter && config.preferenceCenter.elements && config.preferenceCenter.elements.buttons
 			&& config.preferenceCenter.elements.buttons.elements && config.preferenceCenter.elements.buttons.elements.save) || {};
@@ -1685,6 +1689,7 @@
 			var styles = (hoverButtons[name] && hoverButtons[name].styles) || {};
 			setOptionalColor('faz-b-' + name + '-hover-bg', styles['hover-background-color']);
 			setOptionalColor('faz-b-' + name + '-hover-text', styles['hover-color']);
+			setOptionalColor('faz-b-' + name + '-hover-border', styles['hover-border-color']);
 		});
 		var detailSaveStyles = detailSave.styles || {};
 		setOptionalColor('faz-b-detail-save-bg', detailSaveStyles['custom-background-color']);
@@ -1692,6 +1697,7 @@
 		setOptionalColor('faz-b-detail-save-border', detailSaveStyles['custom-border-color']);
 		setOptionalColor('faz-b-detail-save-hover-bg', detailSaveStyles['hover-background-color']);
 		setOptionalColor('faz-b-detail-save-hover-text', detailSaveStyles['hover-color']);
+		setOptionalColor('faz-b-detail-save-hover-border', detailSaveStyles['hover-border-color']);
 
 		// Behaviours
 		setChecked('faz-b-reload-toggle', b.reloadBannerOnAccept && b.reloadBannerOnAccept.status);
@@ -2377,10 +2383,14 @@
 		props.config.revisitConsent.styles['color'] = getColor('faz-b-revisit-icon');
 		if (!props.config.revisitConsent.meta) props.config.revisitConsent.meta = {};
 		props.config.revisitConsent.meta.url = getVal('faz-b-revisit-image-url') || '#';
+		props.config.revisitConsent.styles['border-color'] = getColor('faz-b-revisit-border');
+		props.config.revisitConsent.widgetSize = readPixelSize('faz-b-revisit-widget-size', 30, 100);
+		props.config.revisitConsent.imageSize = readPixelSize('faz-b-revisit-image-size', 12, 100);
 		FAZ_OPTIONAL_COLORS.hover.forEach(function (name) {
 			ensureObj(btns, name + '.styles');
 			btns[name].styles['hover-background-color'] = getColor('faz-b-' + name + '-hover-bg');
 			btns[name].styles['hover-color'] = getColor('faz-b-' + name + '-hover-text');
+			btns[name].styles['hover-border-color'] = getColor('faz-b-' + name + '-hover-border');
 		});
 		ensureObj(props, 'config.preferenceCenter.elements.buttons.elements.save.styles');
 		var detailSaveOut = props.config.preferenceCenter.elements.buttons.elements.save.styles;
@@ -2389,6 +2399,7 @@
 		detailSaveOut['custom-border-color'] = getColor('faz-b-detail-save-border');
 		detailSaveOut['hover-background-color'] = getColor('faz-b-detail-save-hover-bg');
 		detailSaveOut['hover-color'] = getColor('faz-b-detail-save-hover-text');
+		detailSaveOut['hover-border-color'] = getColor('faz-b-detail-save-hover-border');
 
 		// Behaviours
 		if (!props.behaviours) props.behaviours = {};
@@ -3263,6 +3274,27 @@
 		var text = document.getElementById(baseId + '-hex');
 		if (text) text.value = hex || '';
 		if (picker && /^#[0-9a-fA-F]{6}$/.test(hex || '')) picker.value = hex;
+	}
+	/**
+	 * Read a size in whole pixels, '' when the field is empty.
+	 *
+	 * A number outside the range is brought into it and written back, like the
+	 * notice opacity, so the field shows the size the banner will use.
+	 *
+	 * @param {string} id  Field id.
+	 * @param {number} min Smallest size.
+	 * @param {number} max Largest size.
+	 * @return {string}
+	 */
+	function readPixelSize(id, min, max) {
+		var raw = String(getVal(id) || '').trim();
+		var num = Number(raw);
+		var size = '';
+		if (raw !== '' && isFinite(num)) {
+			size = String(Math.min(max, Math.max(min, Math.round(num))));
+		}
+		if (size !== raw) setVal(id, size);
+		return size;
 	}
 	function getColor(baseId) {
 		var text = document.getElementById(baseId + '-hex');
