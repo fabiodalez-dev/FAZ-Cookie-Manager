@@ -440,6 +440,33 @@ if ( ! function_exists( 'faz_sanitize_opacity_percent' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_sanitize_pixel_size' ) ) {
+	/**
+	 * Sanitise a size in whole pixels, such as the revisit widget size.
+	 *
+	 * The value is written into a CSS rule (class-template.php), so it is
+	 * reduced to digits here. A value outside the range is dropped rather than
+	 * clamped, like the opacity above: the setting falls back to the shipped
+	 * size instead of becoming one nobody chose.
+	 *
+	 * @param mixed $value Raw admin value.
+	 * @param int   $min   Smallest accepted size.
+	 * @param int   $max   Largest accepted size.
+	 * @return string An integer from $min to $max, or '' for the shipped size.
+	 */
+	function faz_sanitize_pixel_size( $value, $min, $max ) {
+		if ( ! is_scalar( $value ) ) {
+			return '';
+		}
+		$value = trim( (string) $value );
+		if ( ! preg_match( '/^[0-9]{1,3}$/', $value ) ) {
+			return '';
+		}
+		$size = (int) $value;
+		return ( $size >= $min && $size <= $max ) ? (string) $size : '';
+	}
+}
+
 if ( ! function_exists( 'faz_sanitize_text_align' ) ) {
 	/**
 	 * Sanitise the notice text alignment against an allow-list.

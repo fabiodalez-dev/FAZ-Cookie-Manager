@@ -925,6 +925,7 @@ class Banner extends Store {
 			case 'background-color':
 			case 'hover-color':
 			case 'hover-background-color':
+			case 'hover-border-color':
 			case 'custom-color':
 			case 'custom-background-color':
 			case 'custom-border-color':
@@ -950,6 +951,14 @@ class Banner extends Store {
 				break;
 			case 'textAlign':
 				$value = faz_sanitize_text_align( $value );
+				break;
+			case 'widgetSize':
+				// Revisit widget side, written into a CSS rule by class-template.php.
+				$value = faz_sanitize_pixel_size( $value, 30, 100 );
+				break;
+			case 'imageSize':
+				// Revisit icon or image side, written into a CSS rule like widgetSize.
+				$value = faz_sanitize_pixel_size( $value, 12, 100 );
 				break;
 			case 'url':
 				// A link or image address, '#' when unset. It reaches the visitor's

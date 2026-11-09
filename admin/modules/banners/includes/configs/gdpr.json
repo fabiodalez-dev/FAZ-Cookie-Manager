@@ -116,7 +116,8 @@
                 "background-color": "#1863DC",
                 "border-color": "#1863DC",
                 "hover-color": "",
-                "hover-background-color": ""
+                "hover-background-color": "",
+                "hover-border-color": ""
               }
             },
             "reject": {
@@ -128,7 +129,8 @@
                 "background-color": "#1863DC",
                 "border-color": "#1863DC",
                 "hover-color": "",
-                "hover-background-color": ""
+                "hover-background-color": "",
+                "hover-border-color": ""
               }
             },
             "settings": {
@@ -140,7 +142,8 @@
                 "background-color": "transparent",
                 "border-color": "#1863DC",
                 "hover-color": "",
-                "hover-background-color": ""
+                "hover-background-color": "",
+                "hover-border-color": ""
               }
             },
             "readMore": {
@@ -341,7 +344,8 @@
                 "custom-background-color": "",
                 "custom-border-color": "",
                 "hover-color": "",
-                "hover-background-color": ""
+                "hover-background-color": "",
+                "hover-border-color": ""
               }
             }
           }
@@ -529,12 +533,15 @@
       "status": true,
       "tag": "revisit-consent",
       "position": "bottom-left",
+      "widgetSize": "",
+      "imageSize": "",
       "meta": {
         "url": "#"
       },
       "styles": {
         "background-color": "#0056A7",
-        "color": "#FFFFFF"
+        "color": "#FFFFFF",
+        "border-color": ""
       },
       "elements": {
         "title": {

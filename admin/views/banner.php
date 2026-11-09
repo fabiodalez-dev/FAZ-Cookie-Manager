@@ -739,7 +739,7 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 		<div class="faz-card">
 			<div class="faz-card-header"><h3><?php esc_html_e( 'Button Hover Colours', 'faz-cookie-manager' ); ?></h3></div>
 			<div class="faz-card-body">
-				<p class="faz-help" style="margin-bottom:.75rem;"><?php esc_html_e( 'Left empty, a button keeps its colours and fades to 80% opacity on hover.', 'faz-cookie-manager' ); ?></p>
+				<p class="faz-help" style="margin-bottom:.75rem;"><?php esc_html_e( 'Left empty, a button keeps its colours and fades to 80% opacity on hover.', 'faz-cookie-manager' ); ?> <?php esc_html_e( 'A button with hover colours changes to them in 0.2 seconds, unless the visitor\'s system asks for reduced motion.', 'faz-cookie-manager' ); ?></p>
 <?php if ( $faz_equal_weight['all'] ) : ?>
 				<p class="faz-help" style="margin-bottom:.75rem;"><?php esc_html_e( 'While jurisdiction routing is active the Reject hover colours are overridden by the Accept ones, like its other colours.', 'faz-cookie-manager' ); ?></p>
 <?php endif; ?>
@@ -759,6 +759,13 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 						</div>
 					</div>
 					<div class="faz-form-group">
+						<label for="faz-b-accept-hover-border-hex"><?php esc_html_e( 'Accept hover — Border', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-accept-hover-border" aria-label="<?php esc_attr_e( 'Accept hover — Border', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-accept-hover-border-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
 						<label for="faz-b-reject-hover-bg-hex"><?php esc_html_e( 'Reject hover — Background', 'faz-cookie-manager' ); ?></label>
 						<div class="faz-input-color-wrap">
 							<input type="color" id="faz-b-reject-hover-bg" aria-label="<?php esc_attr_e( 'Reject hover — Background', 'faz-cookie-manager' ); ?>">
@@ -770,6 +777,13 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 						<div class="faz-input-color-wrap">
 							<input type="color" id="faz-b-reject-hover-text" aria-label="<?php esc_attr_e( 'Reject hover — Text', 'faz-cookie-manager' ); ?>">
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-reject-hover-text-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-reject-hover-border-hex"><?php esc_html_e( 'Reject hover — Border', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-reject-hover-border" aria-label="<?php esc_attr_e( 'Reject hover — Border', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-reject-hover-border-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
 						</div>
 					</div>
 					<div class="faz-form-group">
@@ -787,6 +801,13 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 						</div>
 					</div>
 					<div class="faz-form-group">
+						<label for="faz-b-settings-hover-border-hex"><?php esc_html_e( 'Settings hover — Border', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-settings-hover-border" aria-label="<?php esc_attr_e( 'Settings hover — Border', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-settings-hover-border-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
 						<label for="faz-b-detail-save-hover-bg-hex"><?php esc_html_e( 'Save hover — Background', 'faz-cookie-manager' ); ?></label>
 						<div class="faz-input-color-wrap">
 							<input type="color" id="faz-b-detail-save-hover-bg" aria-label="<?php esc_attr_e( 'Save hover — Background', 'faz-cookie-manager' ); ?>">
@@ -798,6 +819,13 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 						<div class="faz-input-color-wrap">
 							<input type="color" id="faz-b-detail-save-hover-text" aria-label="<?php esc_attr_e( 'Save hover — Text', 'faz-cookie-manager' ); ?>">
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-detail-save-hover-text-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-detail-save-hover-border-hex"><?php esc_html_e( 'Save hover — Border', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-detail-save-hover-border" aria-label="<?php esc_attr_e( 'Save hover — Border', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-detail-save-hover-border-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
 						</div>
 					</div>
 				</div>
@@ -822,6 +850,21 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-revisit-icon-hex" style="width:90px;">
 						</div>
 					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-revisit-border-hex"><?php esc_html_e( 'Border', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-revisit-border" aria-label="<?php esc_attr_e( 'Revisit widget border', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-revisit-border-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'None', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-revisit-widget-size"><?php esc_html_e( 'Widget size (px)', 'faz-cookie-manager' ); ?></label>
+						<input type="number" class="faz-input faz-input-sm" id="faz-b-revisit-widget-size" min="30" max="100" step="1" placeholder="45" style="width:90px;">
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-revisit-image-size"><?php esc_html_e( 'Icon or image size (px)', 'faz-cookie-manager' ); ?></label>
+						<input type="number" class="faz-input faz-input-sm" id="faz-b-revisit-image-size" min="12" max="100" step="1" placeholder="30" style="width:90px;">
+					</div>
 				</div>
 				<div class="faz-form-group" style="margin-top:16px;">
 					<label><?php esc_html_e( 'Custom Image', 'faz-cookie-manager' ); ?></label>
@@ -834,7 +877,7 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 					<input type="file" id="faz-b-revisit-image-file" accept="image/*" style="display:none;">
 					<input type="hidden" id="faz-b-revisit-image-url" value="">
 					<div id="faz-b-revisit-image-upload-status" role="status" aria-live="polite" aria-atomic="true" style="display:none;margin-top:6px;font-size:13px;"></div>
-					<div class="faz-help"><?php esc_html_e( 'Shown at 30×30 pixels in place of the default icon, which the Icon colour applies to. Left empty, the default icon is used.', 'faz-cookie-manager' ); ?></div>
+					<div class="faz-help"><?php esc_html_e( 'Shown in place of the default icon, at the icon or image size above. The Icon colour applies only to the default icon. Left empty, the default icon is used.', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>
