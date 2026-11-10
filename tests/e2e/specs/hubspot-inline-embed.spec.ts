@@ -1,6 +1,5 @@
 import { test, expect } from '../fixtures/wp-fixture';
-import { execFileSync } from 'node:child_process';
-import { WP_PATH } from '../utils/wp-env';
+import { wp } from '../utils/wp-env';
 
 /**
  * GitHub issue #396: HubSpot forms disappeared with FAZ active.
@@ -26,10 +25,6 @@ const FAKE_LIBRARY = `window.hbspt = { forms: { create: function (o) {
   document.getElementById('faz-e2e-hubspot-slot').appendChild(d);
 } } };`;
 
-function wp(args: string[]): string {
-  return execFileSync('wp', [`--path=${WP_PATH}`, ...args], { encoding: 'utf8' }).trim();
-}
-
 let postId = '';
 let pageUrl = '';
 
@@ -48,14 +43,14 @@ test.describe('HubSpot legacy embed (#396)', () => {
       'post', 'create', '--post_type=page', '--post_status=publish',
       '--post_title=FAZ E2E HubSpot embed', `--post_content=${content}`,
       `--user=${process.env.WP_ADMIN_USER || 'admin'}`, '--porcelain',
-    ]);
+    ], { allowRetry: false }).trim();
     if (!/^\d+$/.test(raw)) throw new Error(`Expected a post ID, got ${JSON.stringify(raw)}`);
     postId = raw;
-    pageUrl = wp(['post', 'get', postId, '--field=url']);
+    pageUrl = wp(['post', 'get', postId, '--field=url']).trim();
   });
 
   test.afterAll(() => {
-    if (postId) wp(['post', 'delete', postId, '--force']);
+    if (postId) wp(['post', 'delete', postId, '--force'], { allowRetry: false });
   });
 
   test('the inline call waits with its library and renders the form after Accept, without a reload', async ({ browser }) => {
@@ -84,11 +79,18 @@ test.describe('HubSpot legacy embed (#396)', () => {
     expect(libraryRequests).toBe(0);
     await expect(page.locator('.faz-e2e-hubspot-form')).toHaveCount(0);
 
+    // The form must render in THIS document: a reload after consent would
+    // run both halves afresh and pass for the wrong reason.
+    let navigations = 0;
+    page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) navigations++; });
+    const marker = await page.evaluate(() => { (window as unknown as { __fazNoReload: number }).__fazNoReload = 1; return 1; });
     await page.locator('[data-faz-tag="accept-button"]').first().click();
 
     await expect(page.locator('.faz-e2e-hubspot-form')).toHaveText('form faz-e2e');
     expect(libraryRequests).toBe(1);
     expect(errors.filter((m) => /hbspt/.test(m))).toEqual([]);
+    expect(navigations).toBe(0);
+    expect(await page.evaluate(() => (window as unknown as { __fazNoReload?: number }).__fazNoReload)).toBe(marker);
     await context.close();
   });
 });
