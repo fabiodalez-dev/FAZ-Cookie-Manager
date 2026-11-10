@@ -1330,7 +1330,6 @@ function _fazWhenBannerCssReady(callback) {
 function _fazRemoveStyles() {
     // Reveal only once the banner stylesheet applies, or the first visible
     // frame would be an unstyled banner.
-    const nodes = _fazRenderedNodes;
     _fazWhenBannerCssReady(function (link) {
         _fazRevealBanner();
         const enableHover = function () {
@@ -1338,7 +1337,9 @@ function _fazRemoveStyles() {
             // On a timeout, wait for the sheet to apply before starting this.
             window.requestAnimationFrame(function () {
                 window.requestAnimationFrame(function () {
-                    nodes.forEach(function (node) {
+                    // Read at fire time: a language swap may have rebuilt
+                    // the banner while the stylesheet was pending.
+                    _fazRenderedNodes.forEach(function (node) {
                         if (node.nodeType === 1) node.classList.add('faz-hover-ready');
                     });
                 });
