@@ -12,15 +12,18 @@ import { wpEval } from '../utils/wp-env';
 
 const EDITOR = '/wp-admin/admin.php?page=faz-cookie-manager-banner';
 
-/** Opens the banner editor once it has loaded the banner (the name can be empty). */
+/**
+ * Opens the banner editor once the form holds the banner. The editor asks for
+ * its first preview only after filling the form from the stored banner, so the
+ * preview request is the signal; the banner name can be empty.
+ */
 async function openEditor(page: Page) {
-  const loaded = page.waitForResponse(
-    (r) => /banners/.test(r.url()) && r.request().method() === 'GET' && r.status() === 200,
+  const filled = page.waitForResponse(
+    (r) => /banners\/preview/.test(r.url()) && r.request().method() === 'POST' && r.status() === 200,
     { timeout: 30_000 },
   );
   await page.goto(EDITOR, { waitUntil: 'domcontentloaded' });
-  await loaded;
-  await page.waitForTimeout(500);
+  await filled;
 }
 
 const restoreBanner = `
@@ -175,4 +178,31 @@ test('the close button in the open box goes back to the notice', async ({ browse
   await expect(container.locator('[data-faz-tag="accept-button"]').first()).toBeVisible();
   await expect(settings).toHaveAttribute('aria-expanded', 'false');
   await context.close();
+});
+
+test('the compact phone layout keeps Accept and Reject the same width, and the chevron off the label', async ({ browser }) => {
+  setBanner('box', 'pushdown', 'bottom-right');
+  wpEval(`
+    $s = get_option( 'faz_settings', array() );
+    update_option( 'faz_e2e_boxpd_layout', isset( $s['banner_control']['mobile_layout'] ) ? $s['banner_control']['mobile_layout'] : '', false );
+    $s['banner_control']['mobile_layout'] = 'compact';
+    update_option( 'faz_settings', $s );
+    delete_option( 'faz_banner_template' );
+  `);
+  try {
+    const { context, container } = await visit(browser, 375, 700);
+    const width = async (cls: string) => (await container.locator(`.faz-notice-btn-wrapper .${cls}`).first().boundingBox())?.width || 0;
+    expect(Math.abs((await width('faz-btn-accept')) - (await width('faz-btn-reject')))).toBeLessThanOrEqual(1);
+    const customize = container.locator('.faz-notice-btn-wrapper .faz-btn-customize').first();
+    expect(await customize.evaluate((el) => parseFloat(getComputedStyle(el).paddingRight))).toBeGreaterThanOrEqual(28);
+    await context.close();
+  } finally {
+    wpEval(`
+      $s = get_option( 'faz_settings', array() );
+      $s['banner_control']['mobile_layout'] = get_option( 'faz_e2e_boxpd_layout', '' );
+      update_option( 'faz_settings', $s );
+      delete_option( 'faz_e2e_boxpd_layout' );
+      delete_option( 'faz_banner_template' );
+    `);
+  }
 });

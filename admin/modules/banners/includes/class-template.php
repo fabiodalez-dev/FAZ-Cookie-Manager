@@ -581,6 +581,11 @@ class Template {
 			$container = $finder->query( '//div[contains(@class,"faz-consent-container")]' )->item( 0 );
 			if ( $container instanceof \DOMElement ) {
 				$container->setAttribute( 'id', 'faz-consent' );
+				// Box + Pushdown keeps the faz-box-* position classes on classic
+				// markup; this class lets rules written for that markup find it.
+				if ( $this->box_pushdown ) {
+					$container->setAttribute( 'class', trim( $container->getAttribute( 'class' ) . ' faz-box-pushdown' ) );
+				}
 			}
 
 			// Banner or box + pushdown: strip inline category preview (only classic shows it).
@@ -696,7 +701,10 @@ class Template {
 					foreach ( $logo_imgs as $logo_img ) {
 						$logo_img->setAttribute( 'src', esc_url( $config['meta']['url'] ) );
 					}
-					$logo_beside = isset( $config['meta']['placement'] ) && 'beside' === faz_sanitize_logo_placement( $config['meta']['placement'] );
+					// Only for a logo that is shown: with the logo off the grid
+					// would keep an empty column and strip the text's padding.
+					$logo_beside = ! empty( $config['status'] )
+						&& isset( $config['meta']['placement'] ) && 'beside' === faz_sanitize_logo_placement( $config['meta']['placement'] );
 				}
 				// Revisit widget: a custom image replaces the default icon. script.js
 				// swaps the default icon for an inline SVG, and skips an image with
@@ -870,8 +878,12 @@ class Template {
 			. $c . '.faz-box-top-right{top:40px;right:40px;}'
 			. $c . ' .faz-notice-group{display:block;}'
 			. $c . ' .faz-notice-btn-wrapper{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:8px;margin:16px 0 0;}'
-			// Above the box position rules that add a top margin to the first button.
-			. $c . '[class*="faz-box-"] .faz-consent-bar .faz-notice-group .faz-notice-btn-wrapper .faz-btn{flex:1 1 auto;margin:0;}'
+			// The flex basis stays at the specificity of the compact phone layout,
+			// which comes later and wins, so Accept and Reject keep equal widths
+			// there. The margin reset has to beat the box rules that push the
+			// first button down, and compact resets the margin to 0 as well.
+			. $c . ':where(.faz-box-pushdown) .faz-notice-btn-wrapper .faz-btn{flex:1 1 auto;}'
+			. $c . '.faz-box-pushdown .faz-consent-bar .faz-notice-group .faz-notice-btn-wrapper .faz-btn{margin:0;}'
 			. $open . ' .faz-consent-bar{display:none;}'
 			. $open . ' .faz-preference-wrapper{display:block;}'
 			. $open . ' .faz-preference-header .faz-btn-close{display:inline-block;}'
