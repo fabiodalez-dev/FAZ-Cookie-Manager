@@ -63,6 +63,14 @@ class Template {
 	protected $banner_pushdown = false;
 
 	/**
+	 * Whether this is a box+pushdown combo (GitHub #392): the classic template,
+	 * for its embedded preference wrapper, laid out as a corner box.
+	 *
+	 * @var boolean
+	 */
+	protected $box_pushdown = false;
+
+	/**
 	 * Theme presets to be applied on the template
 	 *
 	 * @var array
@@ -239,7 +247,8 @@ class Template {
 		// Banner + pushdown uses the classic template (which has preference-wrapper for
 		// pushdown expansion) but without inline category toggles.
 		$this->banner_pushdown = ( $this->type === 'banner' && $this->ptype === 'pushdown' );
-		if ( $this->banner_pushdown ) {
+		$this->box_pushdown    = ( $this->type === 'box' && $this->ptype === 'pushdown' );
+		if ( $this->banner_pushdown || $this->box_pushdown ) {
 			$this->type = 'classic';
 			if ( isset( $this->properties['config']['categoryPreview'] ) ) {
 				$this->properties['config']['categoryPreview']['status'] = false;
@@ -532,8 +541,8 @@ class Template {
 				$container->setAttribute( 'id', 'faz-consent' );
 			}
 
-			// Banner + pushdown: strip inline category preview (only classic shows it).
-			if ( $this->banner_pushdown ) {
+			// Banner or box + pushdown: strip inline category preview (only classic shows it).
+			if ( $this->banner_pushdown || $this->box_pushdown ) {
 				$preview_nodes = $finder->query( '//*[contains(@class, "faz-category-direct-preview-wrapper")]' );
 				foreach ( $preview_nodes as $node ) {
 					$node->parentNode->removeChild( $node ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName
@@ -583,6 +592,7 @@ class Template {
 
 			$css_vars = array();
 			$revisit_custom = false;
+			$logo_beside    = false;
 
 			foreach ( $elements as $element ) {
 				if ( ! $element instanceof \DOMElement ) {
@@ -644,6 +654,7 @@ class Template {
 					foreach ( $logo_imgs as $logo_img ) {
 						$logo_img->setAttribute( 'src', esc_url( $config['meta']['url'] ) );
 					}
+					$logo_beside = isset( $config['meta']['placement'] ) && 'beside' === faz_sanitize_logo_placement( $config['meta']['placement'] );
 				}
 				// Revisit widget: a custom image replaces the default icon. script.js
 				// swaps the default icon for an inline SVG, and skips an image with
@@ -768,6 +779,12 @@ class Template {
 					$this->styles .= '.faz-btn-revisit-wrapper .faz-btn-revisit img.faz-revisit-custom-image{object-fit:contain;}';
 				}
 			}
+			if ( $logo_beside ) {
+				$this->styles .= self::logo_beside_rules();
+			}
+			if ( $this->box_pushdown ) {
+				$this->styles .= self::box_pushdown_rules();
+			}
 
 			$this->html = $dom->saveHTML( $dom->documentElement ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName
 		} catch ( \Exception $e ) {
@@ -775,6 +792,80 @@ class Template {
 			$this->html = $html;
 		}
 		return $this->html;
+	}
+
+	/**
+	 * Rules that lay the classic template out as a corner box (GitHub #392).
+	 *
+	 * Box + pushdown loads the classic HTML, whose preference wrapper sits in
+	 * the banner itself, so Customise opens the categories in the same box
+	 * instead of a separate window. The classic CSS is written for a bar across
+	 * the page: these rules give it the box's width, corners and offsets, stack
+	 * the text over the buttons as the box does, and open the wrapper for the
+	 * box position classes, which the classic rules do not know. Open, the
+	 * preferences replace the notice, as the classic bar does on a phone, and
+	 * the header's close button, hidden in the bar, takes the visitor back to
+	 * it. With the notice gone, the panel's own Accept and Reject buttons are
+	 * shown next to Save, stacked as on a phone, so the three choices stay
+	 * one click away. The categories scroll inside the box, not past the screen.
+	 * Below 440px the box takes the full width, as the box template does.
+	 *
+	 * @return string
+	 */
+	private static function box_pushdown_rules() {
+		$c   = '.faz-consent-container';
+		$box = $c . '.faz-box-bottom-left,' . $c . '.faz-box-bottom-right,' . $c . '.faz-box-top-left,' . $c . '.faz-box-top-right';
+		$open = $c . '[class*="faz-box-"].faz-consent-bar-expand';
+		return $c . '{width:440px;max-width:calc(100% - 80px);border-radius:6px;}'
+			. $c . ' .faz-consent-bar,' . $c . ' .faz-preference-center{border-radius:6px;}'
+			. $c . '.faz-box-bottom-left{bottom:40px;left:40px;}'
+			. $c . '.faz-box-bottom-right{bottom:40px;right:40px;}'
+			. $c . '.faz-box-top-left{top:40px;left:40px;}'
+			. $c . '.faz-box-top-right{top:40px;right:40px;}'
+			. $c . ' .faz-notice-group{display:block;}'
+			. $c . ' .faz-notice-btn-wrapper{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:8px;margin:16px 0 0;}'
+			// Above the box position rules that add a top margin to the first button.
+			. $c . '[class*="faz-box-"] .faz-consent-bar .faz-notice-group .faz-notice-btn-wrapper .faz-btn{flex:1 1 auto;margin:0;}'
+			. $open . ' .faz-consent-bar{display:none;}'
+			. $open . ' .faz-preference-wrapper{display:block;}'
+			. $open . ' .faz-preference-header .faz-btn-close{display:inline-block;}'
+			. $open . ' .faz-preference-center{display:flex;flex-direction:column;max-height:calc(100vh - 80px);overflow:hidden;border:1px solid var(--faz-detail-border-color,#f4f4f4);box-shadow:0 -1px 10px 0 #acabab4d;}'
+			. $open . ' .faz-preference-body-wrapper{overflow-y:auto;flex:1 1 auto;}'
+			. $open . ' .faz-prefrence-btn-wrapper{display:block;}'
+			. $open . ' .faz-prefrence-btn-wrapper .faz-btn{width:100%;margin:10px 0 0;}'
+			. $open . ' .faz-prefrence-btn-wrapper .faz-btn:first-child{margin-top:0;}'
+			. $open . ' .faz-prefrence-btn-wrapper .faz-btn-accept,' . $open . ' .faz-prefrence-btn-wrapper .faz-btn-reject{display:block;}'
+			. '@media (max-width:576px){' . $c . '.faz-box-bottom-left,' . $c . '.faz-box-bottom-right{bottom:0;}' . $c . '.faz-box-top-left,' . $c . '.faz-box-top-right{top:0;}'
+			. $c . '.faz-box-bottom-left,' . $c . '.faz-box-top-left{left:0;}' . $c . '.faz-box-bottom-right,' . $c . '.faz-box-top-right{right:0;}'
+			. $open . ' .faz-preference-center{max-height:100vh;}}'
+			. '@media (max-width:440px){' . $box . '{width:100%;max-width:100%;}}';
+	}
+
+	/**
+	 * Rules that put the brand logo beside the title and text (GitHub #393).
+	 *
+	 * The notice becomes a two-column grid: the logo on the start side, the
+	 * title, description and buttons on the other. The classic banner's inline
+	 * categories span both columns, and the close button stays out of the grid
+	 * because it is positioned absolutely.
+	 *
+	 * On small screens the templates pad each text element on both sides. The
+	 * text keeps its padding on the far side only, and the logo keeps it on the
+	 * near side, so the gap between them is the same 16px at every width.
+	 * Logical properties keep the layout mirrored in right-to-left languages.
+	 *
+	 * @return string
+	 */
+	private static function logo_beside_rules() {
+		// No child combinator: the stylesheet is stored HTML-escaped, and `>`
+		// would reach the browser as `&gt;` and void the rule.
+		$bar = '.faz-consent-container .faz-consent-bar';
+		return $bar . '{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:start;}'
+			. $bar . ' .faz-custom-brand-logo-wrapper{grid-column:1;grid-row:1;padding-inline-end:0;}'
+			. $bar . ' .faz-custom-brand-logo-wrapper .faz-custom-brand-logo{margin:0;margin-inline-end:16px;padding-inline-end:0;}'
+			. $bar . ' .faz-notice{grid-column:2;grid-row:1;}'
+			. $bar . ' .faz-category-direct-preview-wrapper{grid-column:1/-1;}'
+			. $bar . ' .faz-notice .faz-title,' . $bar . ' .faz-notice .faz-notice-des,' . $bar . ' .faz-notice .faz-notice-btn-wrapper{padding-inline-start:0;}';
 	}
 
 	/**
