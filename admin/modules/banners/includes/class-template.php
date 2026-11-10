@@ -406,9 +406,8 @@ class Template {
 	 * colours of its own, because the Settings hover colours were not chosen
 	 * for them.
 	 *
-	 * A button with hover colours also changes them over 0.2 seconds, in both
-	 * directions, so the rule sits on the button and not on :hover. It is left
-	 * out for visitors who ask the system for reduced motion.
+	 * The runtime enables the transition after the initial styles have painted.
+	 * It applies in both directions and respects the reduced-motion preference.
 	 *
 	 * @param array $css_vars Custom properties emitted for this banner.
 	 * @return string
@@ -428,7 +427,8 @@ class Template {
 				return '';
 			}
 			return $selector . ':hover{' . $rule . 'opacity:1;}'
-				. '@media (prefers-reduced-motion:no-preference){' . $selector . '{transition:background-color .2s,color .2s,border-color .2s;}}';
+				. '@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){'
+				. $selector . ':where(.faz-hover-ready *){transition:background-color .2s,color .2s,border-color .2s;}}';
 		};
 
 		$save  = '.faz-btn-preferences[data-faz-tag="detail-save-button"]';
@@ -456,9 +456,8 @@ class Template {
 	 * Rules for the revisit widget size, image size and border.
 	 *
 	 * Empty settings add nothing, so the widget keeps the template's 45px
-	 * circle with a 30px icon. The sizes are sanitised again here because a
-	 * stored banner may predate the settings. The image is never larger than
-	 * the widget that holds it.
+	 * circle with a 30px icon. A configured widget keeps the image inside its
+	 * border and clips it to the rounded button without clipping the tooltip.
 	 *
 	 * @param array $revisit  The banner's revisitConsent config.
 	 * @param array $css_vars Custom properties emitted for this banner.
@@ -467,22 +466,25 @@ class Template {
 	private static function revisit_widget_rules( $revisit, $css_vars ) {
 		$widget = faz_sanitize_pixel_size( isset( $revisit['widgetSize'] ) ? $revisit['widgetSize'] : '', 30, 100 );
 		$image  = faz_sanitize_pixel_size( isset( $revisit['imageSize'] ) ? $revisit['imageSize'] : '', 12, 100 );
-		if ( '' !== $image ) {
-			$image = (string) min( (int) $image, '' !== $widget ? (int) $widget : 45 );
-		}
+		$border = ! empty( $css_vars['--faz-revisit-consent-border-color'] );
+		$inner  = ( '' !== $widget ? (int) $widget : 45 ) - ( $border ? 2 : 0 );
 
 		$wrapper = '';
 		if ( '' !== $widget ) {
 			$wrapper .= 'width:' . $widget . 'px;height:' . $widget . 'px;';
 		}
-		if ( ! empty( $css_vars['--faz-revisit-consent-border-color'] ) ) {
+		if ( $border ) {
 			$wrapper .= 'border:1px solid var(--faz-revisit-consent-border-color);box-sizing:border-box;';
 		}
-		$rules = '' === $wrapper ? '' : '.faz-btn-revisit-wrapper{' . $wrapper . '}';
-		if ( '' !== $image ) {
-			$rules .= '.faz-btn-revisit-wrapper .faz-btn-revisit img,.faz-btn-revisit-wrapper .faz-btn-revisit svg{width:' . $image . 'px;height:' . $image . 'px;}';
+		if ( '' === $wrapper && '' === $image ) {
+			return '';
 		}
-		return $rules;
+
+		$size  = min( '' !== $image ? (int) $image : 30, $inner );
+		$rules = '' === $wrapper ? '' : '.faz-btn-revisit-wrapper{' . $wrapper . '}';
+		return $rules
+			. '.faz-btn-revisit-wrapper .faz-btn-revisit{width:100%;height:100%;border-radius:inherit;overflow:hidden;}'
+			. '.faz-btn-revisit-wrapper .faz-btn-revisit img,.faz-btn-revisit-wrapper .faz-btn-revisit svg{width:' . $size . 'px;height:' . $size . 'px;max-width:none;}';
 	}
 
 	/**
