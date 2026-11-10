@@ -5,7 +5,7 @@
     "category": "marketing",
     "patterns": [
         "js.hs-scripts.com/",
-        "hbspt.forms.create",
+        "hbspt.forms.create(",
         "js.hsforms.net",
         "track.hubspot.com",
         "js.hs-analytics.net",

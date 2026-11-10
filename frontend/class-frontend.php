@@ -6022,7 +6022,7 @@ class Frontend {
 			if ( '' === $pattern || ! array_diff( (array) $service_ids, $allowed ) ) {
 				continue;
 			}
-			$is_url  = false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' );
+			$is_url  = self::is_url_fragment_pattern( $pattern );
 			$matched = $is_url
 				? $this->provider_pattern_matches_lc( $lower, strtolower( $pattern ) )
 				: false !== stripos( $content, $pattern );
@@ -10051,7 +10051,7 @@ class Frontend {
 				$service_meta[] = array(
 					'pattern'     => $pattern,
 					'lower'       => strtolower( $pattern ),
-					'is_url'      => false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' ),
+					'is_url'      => self::is_url_fragment_pattern( $pattern ),
 					'service_ids' => $service_ids,
 				);
 			}
@@ -10622,12 +10622,44 @@ class Frontend {
 			$meta[]  = array(
 				'pattern'  => $pattern,
 				'lower'    => strtolower( $pattern ),
-				'is_url'   => false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' ),
+				'is_url'   => self::is_url_fragment_pattern( $pattern ),
 				'category' => $category,
 			);
 		}
 		$this->provider_match_meta_cache = $meta;
 		return $meta;
+	}
+
+	/**
+	 * Whether a catalogue pattern is a URL fragment rather than a code signature.
+	 *
+	 * URL fragments (hosts, paths, file names) are matched against a tag's URL
+	 * only. Code signatures are matched against an inline body as well. The old
+	 * test called anything with a dot a URL, so a dotted signature such as
+	 * `hbspt.forms.create(` or `mixpanel.init(` never matched the inline script
+	 * it names (GitHub issue #396): the HubSpot embed call ran before consent,
+	 * failed because its library was held, and was gone when consent arrived.
+	 *
+	 * A pattern with a parenthesis or a space is code, since neither can occur
+	 * in a host or a file name. `({` is the exception: a call whose argument is
+	 * an object literal, such as `dataLayer.push({`, hands data to a container
+	 * and requests nothing, which is how is_gtm_container_script() reads it too.
+	 *
+	 * @param string $pattern Catalogue pattern.
+	 * @return bool
+	 */
+	private static function is_url_fragment_pattern( $pattern ) {
+		$pattern = (string) $pattern;
+		if ( false !== strpos( $pattern, '/' ) ) {
+			return true;
+		}
+		if ( false === strpos( $pattern, '.' ) ) {
+			return false;
+		}
+		if ( false !== strpos( $pattern, '({' ) ) {
+			return true;
+		}
+		return ! preg_match( '/[()\s]/', $pattern );
 	}
 
 	/**
@@ -13448,7 +13480,7 @@ class Frontend {
 			// rankMath.links object contains youtu.be, facebook.com, etc.).
 			// Handle and id are still checked against all patterns (a handle like
 			// 'google-analytics.js' legitimately identifies an analytics script).
-			$is_url_pattern = false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' );
+			$is_url_pattern = self::is_url_fragment_pattern( $pattern );
 			$matched        = (
 				( '' !== $handle && false !== stripos( $handle, $pattern ) ) ||
 				( '' !== $id && false !== stripos( $id, $pattern ) )
