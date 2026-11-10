@@ -6025,7 +6025,7 @@ class Frontend {
 			$is_url  = self::is_url_fragment_pattern( $pattern );
 			$matched = $is_url
 				? $this->provider_pattern_matches_lc( $lower, strtolower( $pattern ) )
-				: false !== stripos( $content, $pattern );
+				: self::code_signature_in( $content, $pattern );
 			if ( $matched ) {
 				return true;
 			}
@@ -10066,7 +10066,7 @@ class Frontend {
 			$matched = ( '' !== $url_lc && $this->provider_pattern_matches_lc( $url_lc, $m['lower'] ) );
 			if ( ! $matched ) {
 				if ( ! $m['is_url'] ) {
-					$matched = false !== stripos( $inline, $m['pattern'] );
+					$matched = self::code_signature_in( $inline, $m['pattern'] );
 				} elseif ( $is_data_uri_payload ) {
 					if ( null === $inline_lc ) {
 						$inline_lc = strtolower( $inline );
@@ -10571,7 +10571,7 @@ class Frontend {
 				$matched = true;
 			} elseif ( ! $m['is_url'] ) {
 				// Code-signature patterns (fbq(, gtag, _ga …) match inline content.
-				if ( false !== stripos( $inline, $m['pattern'] ) ) {
+				if ( self::code_signature_in( $inline, $m['pattern'] ) ) {
 					$matched = true;
 				}
 			} elseif ( $is_data_uri_payload ) {
@@ -10660,6 +10660,34 @@ class Frontend {
 			return true;
 		}
 		return ! preg_match( '/[()\s]/', $pattern );
+	}
+
+	/**
+	 * Whether an inline body contains a code signature.
+	 *
+	 * A signature without a dot keeps the plain case-insensitive substring
+	 * test it has always had. A dotted one names an object and its method, so
+	 * it must start where an identifier starts: Adobe's `s.t()` is a call on
+	 * `s`, not the tail of `charts.t()`. A dot before it still counts, so
+	 * `window.mixpanel.init(` matches `mixpanel.init(`.
+	 *
+	 * @param string $haystack Inline script body.
+	 * @param string $pattern  Code signature.
+	 * @return bool
+	 */
+	private static function code_signature_in( $haystack, $pattern ) {
+		$haystack = (string) $haystack;
+		$pattern  = (string) $pattern;
+		if ( '' === $haystack || '' === $pattern ) {
+			return false;
+		}
+		if ( false === stripos( $haystack, $pattern ) ) {
+			return false;
+		}
+		if ( false === strpos( $pattern, '.' ) || ! preg_match( '/^[A-Za-z0-9_$]/', $pattern ) ) {
+			return true;
+		}
+		return 1 === preg_match( '/(?<![A-Za-z0-9_$])' . preg_quote( $pattern, '/' ) . '/i', $haystack );
 	}
 
 	/**
@@ -13490,7 +13518,7 @@ class Frontend {
 					// URL-fragment pattern with no src context — skip to avoid false positives.
 					continue;
 				}
-				$matched = '' !== $body && false !== stripos( $body, $pattern );
+				$matched = '' !== $body && self::code_signature_in( $body, $pattern );
 			}
 			if ( ! $matched ) {
 				continue;

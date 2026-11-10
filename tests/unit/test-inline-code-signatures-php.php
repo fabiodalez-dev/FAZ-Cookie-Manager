@@ -187,6 +187,18 @@ namespace {
 	eq( callm( $fe, 'match_script_to_provider', array( ' src="https://js.hsforms.net/forms/embed/v2.js"', '', $map, $blocked ) ), 'marketing',
 		'B5 the library tag is still matched by its URL' );
 
+	echo "\n  D. a dotted signature starts where an identifier starts\n";
+	$adobe = array( 's.t()' => 'analytics', 'mixpanel.init(' => 'analytics' );
+	$fe    = arrange( $adobe, $blocked );
+	eq( callm( $fe, 'match_script_to_provider', array( '', 'var s = s_gi("rsid"); s.t();', $adobe, $blocked ) ), 'analytics',
+		'D1 an Adobe s.t() call is held' );
+	eq( callm( $fe, 'match_script_to_provider', array( '', 'charts.t(); points.t();', $adobe, $blocked ) ), false,
+		'D2 charts.t() is not taken for Adobe s.t()' );
+	eq( callm( $fe, 'match_script_to_provider', array( '', 'window.mixpanel.init("t");', $adobe, $blocked ) ), 'analytics',
+		'D3 a dot before the signature still counts (window.mixpanel.init)' );
+	eq( callm( $fe, 'match_script_to_provider', array( '', 'mymixpanel.init("t");', $adobe, $blocked ) ), false,
+		'D4 a longer identifier ending in the name does not match' );
+
 	echo "\n  C. the shipped catalogue\n";
 	$catalogue = json_decode( file_get_contents( dirname( __DIR__, 2 ) . '/includes/data/known-providers.json' ), true );
 	eq( in_array( 'hbspt.forms.create(', $catalogue['hubspot']['patterns'], true ), true,
