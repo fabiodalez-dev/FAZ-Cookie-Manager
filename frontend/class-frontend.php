@@ -11728,10 +11728,13 @@ class Frontend {
 			// centred vertically because the stretched button is no longer the
 			// 40px it was positioned for. Customise is not one of the compared
 			// options, so the extra padding cannot unbalance accept and reject.
+			// Box + Pushdown (#392) renders the same classic markup in a box.
 			. '#faz-consent.faz-classic-top .faz-notice-btn-wrapper .faz-btn-customize,'
-			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn-customize{padding-right:28px;}'
+			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn-customize,'
+			. '#faz-consent.faz-box-pushdown .faz-notice-btn-wrapper .faz-btn-customize{padding-right:28px;}'
 			. '#faz-consent.faz-classic-top .faz-notice-btn-wrapper .faz-btn-customize::after,'
-			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn-customize::after{top:calc(50% - 3px);}'
+			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn-customize::after,'
+			. '#faz-consent.faz-box-pushdown .faz-notice-btn-wrapper .faz-btn-customize::after{top:calc(50% - 3px);}'
 			// The Do-Not-Sell control is a flex child of this same wrapper, last
 			// in the markup. On a single row it would have to share the first
 			// line with the accept/reject pair, and at 360px their 40% bases

@@ -12,15 +12,18 @@ import { wpEval } from '../utils/wp-env';
 
 const EDITOR = '/wp-admin/admin.php?page=faz-cookie-manager-banner';
 
-/** Opens the banner editor once it has loaded the banner (the name can be empty). */
+/**
+ * Opens the banner editor once the form holds the banner. The editor asks for
+ * its first preview only after filling the form from the stored banner, so the
+ * preview request is the signal; the banner name can be empty.
+ */
 async function openEditor(page: Page) {
-  const loaded = page.waitForResponse(
-    (r) => /banners/.test(r.url()) && r.request().method() === 'GET' && r.status() === 200,
+  const filled = page.waitForResponse(
+    (r) => /banners\/preview/.test(r.url()) && r.request().method() === 'POST' && r.status() === 200,
     { timeout: 30_000 },
   );
   await page.goto(EDITOR, { waitUntil: 'domcontentloaded' });
-  await loaded;
-  await page.waitForTimeout(500);
+  await filled;
 }
 
 // resetBaseline() does not restore the banner row, so it is kept and put back.
@@ -33,14 +36,14 @@ const restoreBanner = `
 `;
 
 /** Writes the logo and banner type into the stored banner, as a save would. */
-function setBanner(type: string, placement: string, preferenceCenterType = 'popup') {
+function setBanner(type: string, placement: string, preferenceCenterType = 'popup', logoOn = true) {
   wpEval(`
     global $wpdb;
     $t = $wpdb->prefix . 'faz_banners';
     $s = json_decode( $wpdb->get_var( "SELECT settings FROM {$t} WHERE banner_default = 1" ), true );
     $s['settings']['type'] = '${type}';
     $s['settings']['preferenceCenterType'] = '${preferenceCenterType}';
-    $s['config']['notice']['elements']['brandLogo']['status'] = true;
+    $s['config']['notice']['elements']['brandLogo']['status'] = ${logoOn ? 'true' : 'false'};
     $s['config']['notice']['elements']['brandLogo']['meta']['url'] = plugins_url( 'frontend/images/cookie.png', WP_PLUGIN_DIR . '/faz-cookie-manager/faz-cookie-manager.php' );
     $s['config']['notice']['elements']['brandLogo']['meta']['placement'] = '${placement}';
     $wpdb->update( $t, array( 'settings' => wp_json_encode( $s ) ), array( 'banner_default' => 1 ) );
@@ -167,4 +170,23 @@ test('beside on a phone: same 16px gap, no horizontal scroll', async ({ browser 
   expect(l.logo.x).toBeGreaterThanOrEqual(l.bar.x + 20);
   expect(l.textRight).toBeLessThanOrEqual(l.bar.x + l.bar.width - 20);
   expect(l.overflow).toBe(false);
+});
+
+test('with the logo switched off, beside adds nothing and the text keeps its padding', async ({ browser }) => {
+  setBanner('box', 'beside', 'popup', false);
+  const context = await browser.newContext({ viewport: { width: 375, height: 700 } });
+  const front = await context.newPage();
+  await front.goto('/', { waitUntil: 'domcontentloaded' });
+  const bar = front.locator('.faz-consent-container .faz-consent-bar').first();
+  await expect(bar.locator('[data-faz-tag="accept-button"]').first()).toBeVisible();
+  await expect(bar.locator('.faz-custom-brand-logo')).toHaveCount(0);
+  expect(await bar.evaluate((el) => getComputedStyle(el).display)).not.toBe('grid');
+  const barBox = await bar.boundingBox();
+  const textLeft = await bar.locator('[data-faz-tag="description"]').first().evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    return range.getBoundingClientRect().left;
+  });
+  expect(textLeft).toBeGreaterThanOrEqual((barBox?.x || 0) + 20);
+  await context.close();
 });
