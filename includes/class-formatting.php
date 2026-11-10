@@ -480,6 +480,19 @@ if ( ! function_exists( 'faz_sanitize_text_align' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_sanitize_logo_placement' ) ) {
+	/**
+	 * Sanitise where the banner logo sits: 'beside' the title, or '' for the
+	 * template's place above it.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return string 'beside' or ''.
+	 */
+	function faz_sanitize_logo_placement( $value ) {
+		return is_string( $value ) && 'beside' === strtolower( trim( $value ) ) ? 'beside' : '';
+	}
+}
+
 if ( ! function_exists( 'faz_color_with_opacity' ) ) {
 	/**
 	 * Apply an opacity percentage to a sanitised banner colour.

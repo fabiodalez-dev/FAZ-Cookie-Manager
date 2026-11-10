@@ -260,7 +260,7 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 						<option value="classic"><?php esc_html_e( 'Classic', 'faz-cookie-manager' ); ?></option>
 					</select>
 					<div class="faz-help" id="faz-b-type-ccpa-hint" style="display:none;color:#92400e;" role="status" aria-live="polite" aria-atomic="true">
-						<?php esc_html_e( 'Classic and Full-width with a Pushdown preference center have no opt-out popup, so they are not available for a CCPA / US State Laws banner — the "Do Not Sell" link needs a working opt-out to be compliant. Use Box, or Full-width with Popup/Sidebar.', 'faz-cookie-manager' ); ?>
+						<?php esc_html_e( 'Classic, and Full-width or Box with a Pushdown preference center, have no opt-out popup, so they are not available for a CCPA / US State Laws banner — the "Do Not Sell" link needs a working opt-out to be compliant. Use Box or Full-width with Popup/Sidebar.', 'faz-cookie-manager' ); ?>
 					</div>
 				</div>
 
@@ -361,6 +361,14 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 					<input type="hidden" id="faz-b-brandlogo-url" value="">
 					<div id="faz-b-brandlogo-upload-status" role="status" aria-live="polite" aria-atomic="true" style="display:none;margin-top:6px;font-size:13px;"></div>
 					<div class="faz-help"><?php esc_html_e( 'Select or upload a logo. Uses the media library on WordPress, or file upload on ClassicPress.', 'faz-cookie-manager' ); ?></div>
+				</div>
+				<div class="faz-form-group">
+					<label for="faz-b-brandlogo-placement"><?php esc_html_e( 'Logo position', 'faz-cookie-manager' ); ?></label>
+					<select class="faz-select" id="faz-b-brandlogo-placement" style="width:auto;max-width:240px;" aria-describedby="faz-b-brandlogo-placement-help">
+						<option value=""><?php esc_html_e( 'Above the title', 'faz-cookie-manager' ); ?></option>
+						<option value="beside"><?php esc_html_e( 'Beside the title and text', 'faz-cookie-manager' ); ?></option>
+					</select>
+					<div id="faz-b-brandlogo-placement-help" class="faz-help"><?php esc_html_e( 'Beside puts the logo in its own column, to the left of the title, the description and the buttons.', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>

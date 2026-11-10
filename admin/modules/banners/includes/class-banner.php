@@ -317,7 +317,7 @@ class Banner extends Store {
 	/**
 	 * Apply non-persistent runtime fixes required for a working opt-out UI.
 	 *
-	 * Classic (including the legacy banner+pushdown combination) has no
+	 * Classic (including the banner+pushdown and box+pushdown combinations) has no
 	 * opt-out popup. A CCPA banner, or a GDPR+CCPA banner with Do Not Sell
 	 * enabled, must therefore render with a popup-capable layout. This changes
 	 * only the in-memory Banner object used for frontend output; the editor
@@ -404,7 +404,7 @@ class Banner extends Store {
 				$properties['config']['categoryPreview']['status'] = false;
 			}
 			$changed = true;
-		} elseif ( $shows_do_not_sell && 'banner' === $type && 'pushdown' === $ptype ) {
+		} elseif ( $shows_do_not_sell && ( 'banner' === $type || 'box' === $type ) && 'pushdown' === $ptype ) {
 			$properties['settings']['preferenceCenterType'] = 'popup';
 			if ( isset( $properties['config']['categoryPreview'] ) && is_array( $properties['config']['categoryPreview'] ) ) {
 				$properties['config']['categoryPreview']['status'] = false;
@@ -954,6 +954,9 @@ class Banner extends Store {
 			case 'imageSize':
 				// Revisit icon or image side, written into a CSS rule like widgetSize.
 				$value = faz_sanitize_pixel_size( $value, 12, 100 );
+				break;
+			case 'placement':
+				$value = faz_sanitize_logo_placement( $value );
 				break;
 			case 'url':
 				// A link or image address, '#' when unset. It reaches the visitor's

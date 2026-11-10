@@ -2922,6 +2922,24 @@ function _fazGetPtype() {
     }
     return _fazStore._bannerConfig.settings.preferenceCenterType;
 }
+/**
+ * Whether the preference centre opens inside the banner (pushdown).
+ *
+ * The centred popup never does. A box does only when it was rendered with the
+ * classic template's embedded preference wrapper, which is what box + pushdown
+ * builds (GitHub #392); a box rendered without it, as every box was before,
+ * keeps the popup preference centre.
+ *
+ * @returns {boolean}
+ */
+function _fazIsPushdown() {
+    if (_fazGetPtype() !== 'pushdown') return false;
+    const type = _fazGetType();
+    if (type === 'popup') return false;
+    if (type !== 'box') return true;
+    const banner = _fazGetBanner();
+    return !!(banner && banner.querySelector('.faz-preference-wrapper'));
+}
 function _fazGetBanner() {
     const notice = _fazGetElementByTag('notice');
     const container = notice && notice.closest('.faz-consent-container') || false;
@@ -3059,7 +3077,7 @@ function _fazRemoveCookieWall() {
     if (wall) wall.remove();
 }
 function _fazGetPreferenceCenter() {
-    if (_fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1) {
+    if (_fazIsPushdown()) {
         return _fazGetBanner();
     }
     let element = _fazGetLaw() === 'ccpa' ? _fazGetElementByTag("optout-popup") : _fazGetElementByTag("detail");
@@ -3079,7 +3097,7 @@ function _fazHidePreferenceCenter() {
 
     // ARIA attributes remain always present - only aria-expanded on settings button changes
     // The modal relationship is permanent, only visibility changes
-    const isPushdown = _fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1;
+    const isPushdown = _fazIsPushdown();
 
     if (!isPushdown) {
         _fazHideOverLay();
@@ -3170,7 +3188,7 @@ function _fazShowPreferenceCenter() {
         element.querySelector('[data-faz-tag="' + _fazActivePreferenceTag() + '"]') ||
         element.querySelector('.faz-preference-center');
     _fazSetPreferenceCenterAccessibility(preferenceCenter);
-    const isPushdown = _fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1;
+    const isPushdown = _fazIsPushdown();
 
     if (!isPushdown) {
         _fazShowOverLay();
@@ -3218,7 +3236,7 @@ function _fazTogglePreferenceCenter() {
     if (!element) return;
     const isOpen = element.classList.contains(_fazGetPreferenceClass());
     element.classList.toggle(_fazGetPreferenceClass());
-    const isPushdown = _fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1;
+    const isPushdown = _fazIsPushdown();
     if (isPushdown) {
         const preferenceCenter = element.querySelector('.faz-preference-center');
         _fazSetPreferenceCenterAccessibility(preferenceCenter);
@@ -3256,7 +3274,7 @@ function _fazTogglePreferenceCenter() {
 }
 function _fazGetPreferenceClass() {
     // Pushdown (expand) only works for classic/full-width; box/popup fall back to popup modal
-    if (_fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1) {
+    if (_fazIsPushdown()) {
         return 'faz-consent-bar-expand';
     }
     return 'faz-modal-open';
@@ -3455,7 +3473,7 @@ function _fazWatchWithdrawalControl() {
 function _fazSetPreferenceAction(tagName = false) {
     _fazStore._preferenceOriginTag = tagName;
     _fazStore._prefTriggerElement = document.activeElement;
-    const isPushdown = _fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1;
+    const isPushdown = _fazIsPushdown();
     if (isPushdown) {
         _fazTogglePreferenceCenter();
     } else {
@@ -3809,7 +3827,7 @@ function _fazRenderBanner() {
     _fazRenderedNodes = Array.prototype.slice.call(fragment.childNodes);
     document.body.insertBefore(fragment, document.body.firstChild);
     _fazWatchWithdrawalControl();
-    if (_fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1) _fazToggleAriaExpandStatus("=settings-button", "false");
+    if (_fazIsPushdown()) _fazToggleAriaExpandStatus("=settings-button", "false");
     // Run each decoration helper in isolation: the banner template is already
     // in the DOM at this point, so a single helper throwing (e.g. a fragile
     // selector on a localized category name, or a render edge case) must NOT

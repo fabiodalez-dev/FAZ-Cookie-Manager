@@ -528,7 +528,7 @@
 				if (prefEl.options[j].value === 'pushdown') { pushdownOpt = prefEl.options[j]; break; }
 			}
 			if (pushdownOpt) {
-				var pushdownDisabled = lawShowsDoNotSell && typeEl.value === 'banner';
+				var pushdownDisabled = lawShowsDoNotSell && (typeEl.value === 'banner' || typeEl.value === 'box');
 				pushdownOpt.disabled = pushdownDisabled;
 				fazSetOptionUnavailable(pushdownOpt, pushdownDisabled);
 			}
@@ -547,7 +547,7 @@
 			if (prefEl) prefEl.value = 'popup';
 			updatePositionOptions();
 			migrated = true;
-		} else if (lawShowsDoNotSell && typeEl.value === 'banner' && prefEl && prefEl.value === 'pushdown') {
+		} else if (lawShowsDoNotSell && (typeEl.value === 'banner' || typeEl.value === 'box') && prefEl && prefEl.value === 'pushdown') {
 			prefEl.value = 'popup';
 			migrated = true;
 		}
@@ -793,7 +793,9 @@
 				prefEl.disabled = true;
 			} else {
 				prefEl.disabled = false;
-				if ((type === 'box' || type === 'popup') && prefEl.value === 'pushdown') {
+				// Box + pushdown opens the preferences inside the box (#392);
+				// only the centred popup has no pushdown layout.
+				if (type === 'popup' && prefEl.value === 'pushdown') {
 					prefEl.value = 'popup';
 				}
 				// Popup has no sidebar template — disable the option and fall back
@@ -1718,6 +1720,7 @@
 		}
 		setVal('faz-b-brandlogo-url', logoUrl);
 		updateBrandLogoPreview(logoUrl);
+		setVal('faz-b-brandlogo-placement', (brandLogo.meta && brandLogo.meta.placement === 'beside') ? 'beside' : '');
 	}
 
 	function toggleDoNotSellColorRow(law) {
@@ -2353,6 +2356,7 @@
 		if (!props.config.notice.elements.brandLogo.meta) props.config.notice.elements.brandLogo.meta = {};
 		var logoUrl = getVal('faz-b-brandlogo-url');
 		props.config.notice.elements.brandLogo.meta.url = logoUrl || '#';
+		props.config.notice.elements.brandLogo.meta.placement = getVal('faz-b-brandlogo-placement') === 'beside' ? 'beside' : '';
 
 		// Category preview colours
 		ensureObj(props, 'config.categoryPreview.elements.title.styles');

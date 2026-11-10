@@ -419,6 +419,21 @@ namespace {
 	assert_eq( $out['settings']['type'], 'banner', 'CCPA banner+pushdown → type stays banner (not box)' );
 	assert_eq( $out['config']['categoryPreview']['status'], false, 'CCPA banner+pushdown → inline toggles suppressed' );
 
+	// 4b. CCPA Box + Pushdown (#392) → popup too: box + pushdown renders the
+	//     classic HTML, which has no opt-out popup either.
+	$b = faz_banner_with( 'ccpa', 'box', 'pushdown', false );
+	$changed = $b->apply_runtime_layout_compatibility();
+	assert_eq( $changed, true, 'CCPA box+pushdown → changed' );
+	$out = $b->peek( 'settings' );
+	assert_eq( $out['settings']['preferenceCenterType'], 'popup', 'CCPA box+pushdown → popup' );
+	assert_eq( $out['settings']['type'], 'box', 'CCPA box+pushdown → type stays box' );
+
+	// 4c. GDPR Box + Pushdown is left as it is.
+	$b = faz_banner_with( 'gdpr', 'box', 'pushdown', false );
+	$b->apply_runtime_layout_compatibility();
+	$out = $b->peek( 'settings' );
+	assert_eq( $out['settings']['preferenceCenterType'], 'pushdown', 'GDPR box+pushdown → pushdown kept' );
+
 	// 5. CCPA Full-width(banner) ALREADY popup → only the donotSell/optoutPopup
 	//    enable flags fire; the layout (type/ptype) is left alone but the method
 	//    still reports "changed" because it enabled the opt-out entry points.

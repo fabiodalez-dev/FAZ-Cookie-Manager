@@ -99,7 +99,8 @@
           "status": false,
           "tag": "brand-logo",
           "meta": {
-            "url": "#"
+            "url": "#",
+            "placement": ""
           }
         },
         "buttons": {
