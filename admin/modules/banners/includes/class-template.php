@@ -838,6 +838,9 @@ class Template {
 			// first button down, and compact resets the margin to 0 as well.
 			. $c . ':where(.faz-box-pushdown) .faz-notice-btn-wrapper .faz-btn{flex:1 1 auto;}'
 			. $c . '.faz-box-pushdown .faz-consent-bar .faz-notice-group .faz-notice-btn-wrapper .faz-btn{margin:0;}'
+			// The classic right-to-left rule indents the row by 15px for the
+			// inline categories beside it, which the box does not have.
+			. $c . '.faz-box-pushdown .faz-notice-btn-wrapper{margin-left:0;margin-right:0;}'
 			. $open . ' .faz-consent-bar{display:none;}'
 			. $open . ' .faz-preference-wrapper{display:block;}'
 			. $open . ' .faz-preference-header .faz-btn-close{display:inline-block;}'

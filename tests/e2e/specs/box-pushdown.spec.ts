@@ -151,6 +151,31 @@ test('on a phone the box takes the full width', async ({ browser }) => {
   await context.close();
 });
 
+for (const width of [375, 500]) {
+  test(`at ${width}px Accept and Reject have the same width in the default phone layout`, async ({ browser }) => {
+    setBanner('box', 'pushdown', 'bottom-right');
+    const { context, container } = await visit(browser, width, 800);
+    const box = async (cls: string) => (await container.locator(`.faz-notice-btn-wrapper .${cls}`).first().boundingBox())?.width || 0;
+    const accept = await box('faz-btn-accept');
+    expect(accept).toBeGreaterThan(0);
+    expect(Math.abs(accept - (await box('faz-btn-reject')))).toBeLessThanOrEqual(1);
+    expect(Math.abs(accept - (await box('faz-btn-customize')))).toBeLessThanOrEqual(1);
+    await context.close();
+  });
+}
+
+test('in a right-to-left language the button row lines up with the text', async ({ browser }) => {
+  setBanner('box', 'pushdown', 'bottom-right');
+  const { context, container } = await visit(browser);
+  const margins = await container.evaluate((el) => {
+    el.querySelector('[data-faz-tag="notice"]')?.classList.add('faz-rtl');
+    const row = getComputedStyle(el.querySelector('.faz-notice-btn-wrapper')!);
+    return [row.marginLeft, row.marginRight];
+  });
+  expect(margins).toEqual(['0px', '0px']);
+  await context.close();
+});
+
 test('a Box with the Popup preference centre is unchanged', async ({ browser }) => {
   setBanner('box', 'popup', 'bottom-right');
   const { context, front, container } = await visit(browser);

@@ -11604,9 +11604,11 @@ class Frontend {
 			// The classic template stretched only Accept to the full width and
 			// left Customise and Reject to share the row after it, so Accept was
 			// both first and wider than Reject. Every button takes its own full
-			// row, as in the other templates.
+			// row, as in the other templates. Box + Pushdown (#392) renders the
+			// classic markup in a box and needs the same.
 			. '#faz-consent.faz-classic-top .faz-notice-btn-wrapper .faz-btn,'
-			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn{width:100%;margin-right:0;margin-left:0;}'
+			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn,'
+			. '#faz-consent.faz-box-pushdown .faz-notice-btn-wrapper .faz-btn{width:100%;margin-right:0;margin-left:0;}'
 			. '}'
 			// Box and popup (at 440px) and banner (at 425px) gave Accept a 16px
 			// top margin as the first button under the description; it now
@@ -11765,7 +11767,8 @@ class Frontend {
 			// compact values are restored with the same selectors, later.
 			. self::first_notice_button_selector( array( 'box-bottom-left', 'box-bottom-right', 'box-top-left', 'box-top-right', 'popup-center', 'banner-top', 'banner-bottom' ) ) . ','
 			. '#faz-consent.faz-classic-top .faz-notice-btn-wrapper .faz-btn,'
-			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn{width:auto;margin:0;}'
+			. '#faz-consent.faz-classic-bottom .faz-notice-btn-wrapper .faz-btn,'
+			. '#faz-consent.faz-box-pushdown .faz-notice-btn-wrapper .faz-btn{width:auto;margin:0;}'
 			. '}'
 			. '@media (max-width:360px){'
 			// 40% rather than calc(50% - 4px): the exact value lands on the
