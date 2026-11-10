@@ -10668,12 +10668,14 @@ class Frontend {
 	 * A signature without a dot keeps the plain case-insensitive substring
 	 * test it has always had. A dotted one names an object and its method, so
 	 * it must start where an identifier starts: Adobe's `s.t()` is a call on
-	 * `s`, not the tail of `charts.t()`, nor a property of another object as
-	 * in `this.s.t()` or a minified `e.s.t()`. The global object is the one
-	 * owner that still counts, so `window.mixpanel.init(` matches
-	 * `mixpanel.init(`. JavaScript allows whitespace before a call's
-	 * parenthesis and between tokens, so `hbspt.forms.create ({` matches
-	 * `hbspt.forms.create(` and `new  google.maps.` matches `new google.maps.`.
+	 * `s`, not the tail of `charts.t()`. A distinctive owner may follow a dot,
+	 * so `window.mixpanel.init(` and a minified `w.mixpanel.init(` match
+	 * `mixpanel.init(`; an owner of one or two characters may follow only the
+	 * global object, so `this.s.t()` or a minified `e.s.t()` is not Adobe's
+	 * `s.t()`. JavaScript allows whitespace around a member dot, before a
+	 * call's parenthesis and between tokens, so `hbspt . forms.create ({`
+	 * matches `hbspt.forms.create(` and `new  google.maps.` matches
+	 * `new google.maps.`.
 	 *
 	 * @param string $haystack Inline script body.
 	 * @param string $pattern  Code signature.
@@ -10696,7 +10698,15 @@ class Frontend {
 		$regex = preg_quote( trim( $pattern ), '/' );
 		$regex = preg_replace( '/\s+/', '\\s+', $regex );
 		$regex = preg_replace( '/(?:\\\\s\+)?\\\\\(/', '\\s*\\(', $regex );
-		$owner = '(?:(?<![A-Za-z0-9_$.])|(?<=\\bwindow\\.)|(?<=\\bself\\.)|(?<=\\bglobalThis\\.))';
+		$regex = str_replace( '\\.', '\\s*\\.\\s*', $regex );
+		// A short owner such as Adobe's `s` or FullStory's `FS` is too common
+		// to accept behind another object, so only the global object may
+		// qualify it. A distinctive owner may sit behind any object, such as a
+		// minified alias of window (`w.mixpanel.init(`): missing it would let
+		// the tracker run before consent.
+		$owner = strlen( $lead[0] ) > 2
+			? '(?<![A-Za-z0-9_$])'
+			: '(?:(?<![A-Za-z0-9_$.])|(?<=\\bwindow\\.)|(?<=\\bself\\.)|(?<=\\bglobalThis\\.)|(?<=\\btop\\.)|(?<=\\bparent\\.))';
 		return 1 === preg_match( '/' . $owner . $regex . '/i', $haystack );
 	}
 

@@ -205,6 +205,12 @@ namespace {
 		'D6 s.t() on another object (this.s, a minified e.s) is not Adobe' );
 	eq( callm( $fe, 'match_script_to_provider', array( '', 'mixpanel.init ("t");', $adobe, $blocked ) ), 'analytics',
 		'D7 whitespace before the call parenthesis still matches' );
+	eq( callm( $fe, 'match_script_to_provider', array( '', "mixpanel . init\n(\"t\");", $adobe, $blocked ) ), 'analytics',
+		'D7b whitespace around the member dot still matches' );
+	eq( callm( $fe, 'match_script_to_provider', array( '', '(function(w){w.mixpanel.init("t");})(window);', $adobe, $blocked ) ), 'analytics',
+		'D8 a distinctive owner behind a minified alias of window still matches' );
+	eq( callm( $fe, 'match_script_to_provider', array( '', 'top.s.t();', $adobe, $blocked ) ), 'analytics',
+		'D9 a short owner behind the global object still matches (top.s.t)' );
 
 	echo "\n  E. the GTM exemption still sees a spaced HubSpot call\n";
 	$fe = arrange( array( 'hbspt.forms.create(' => 'marketing' ), $blocked );
