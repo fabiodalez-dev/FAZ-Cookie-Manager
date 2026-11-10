@@ -813,18 +813,13 @@ class Banner extends Store {
 		$result  = array();
 		$excludes = self::get_excludes();
 		foreach ( $defaults as $key => $data ) {
-			$value    = isset( $settings[ $key ] ) ? $settings[ $key ] : $data;
-			$defaults = $data;
+			$value = isset( $settings[ $key ] ) ? $settings[ $key ] : $data;
 			if ( in_array( $key, $excludes, true ) ) {
 				$result[ $key ] = $function( $key, $value );
-				continue;
-			}
-			if ( is_array( $value ) ) {
-				$result[ $key ] = self::sanitize_settings( $function, $value, $defaults );
-			} else {
-				if ( is_string( $key ) ) {
-					$result[ $key ] = $function( $key, $value );
-				}
+			} elseif ( is_array( $data ) ) {
+				$result[ $key ] = self::sanitize_settings( $function, is_array( $value ) ? $value : array(), $data );
+			} elseif ( is_string( $key ) ) {
+				$result[ $key ] = $function( $key, is_scalar( $value ) ? $value : $data );
 			}
 		}
 		return $result;

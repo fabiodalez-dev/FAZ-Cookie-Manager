@@ -1292,13 +1292,13 @@ var _fazBannerCssWaitMs = 2000;
  * waits for load or error, with a short fail-open timeout so a stalled CDN
  * can never keep the consent prompt hidden.
  *
- * @param {Function} callback Runs once, when the sheet is usable.
+ * @param {Function} callback Receives the stylesheet link, if present, on load, error or timeout.
  */
 function _fazWhenBannerCssReady(callback) {
     var link = null;
     try { link = document.querySelector('link[data-faz-banner-css]'); } catch (e) { link = null; }
     if (!link) { callback(); return; }
-    if (link.sheet) { link.media = 'all'; callback(); return; }
+    if (link.sheet) { link.media = 'all'; callback(link); return; }
     // Keep the pending sheet non-blocking until load, including after the
     // bounded fail-open callback. A late load must still apply the styles.
     link.media = 'print';
@@ -1317,7 +1317,7 @@ function _fazWhenBannerCssReady(callback) {
         done = true;
         link.removeEventListener('load', finish);
         link.removeEventListener('error', finish);
-        callback();
+        callback(link);
     };
     link.addEventListener('load', finish);
     link.addEventListener('error', finish);
@@ -1330,7 +1330,26 @@ function _fazWhenBannerCssReady(callback) {
 function _fazRemoveStyles() {
     // Reveal only once the banner stylesheet applies, or the first visible
     // frame would be an unstyled banner.
-    _fazWhenBannerCssReady(_fazRevealBanner);
+    const nodes = _fazRenderedNodes;
+    _fazWhenBannerCssReady(function (link) {
+        _fazRevealBanner();
+        const enableHover = function () {
+            // Let the browser paint the initial colours before arming hover.
+            // On a timeout, wait for the sheet to apply before starting this.
+            window.requestAnimationFrame(function () {
+                window.requestAnimationFrame(function () {
+                    nodes.forEach(function (node) {
+                        if (node.nodeType === 1) node.classList.add('faz-hover-ready');
+                    });
+                });
+            });
+        };
+        if (link && link.media !== 'all') {
+            link.addEventListener('load', enableHover, { once: true });
+        } else {
+            enableHover();
+        }
+    });
 }
 
 function _fazRevealBanner() {
@@ -2961,6 +2980,17 @@ function _fazReRenderVisibleBanner() {
     // _fazRenderBanner() inserts the rebuilt banner at body-top and resets
     // _fazRenderedNodes to the new nodes.
     _fazRenderBanner();
+    // The stylesheet has already applied, so the rebuilt nodes can take the
+    // hover transitions at once: a node inserted with its final colours has no
+    // earlier style to animate from.
+    var hoverReady = oldNodes.some(function (n) {
+        return n && n.nodeType === 1 && n.classList.contains('faz-hover-ready');
+    });
+    if (hoverReady) {
+        _fazRenderedNodes.forEach(function (n) {
+            if (n && n.nodeType === 1) n.classList.add('faz-hover-ready');
+        });
+    }
     _fazShowBanner();
     _fazSetInitialState();
     // New banner is fully in place; drop the previous-language nodes. This whole

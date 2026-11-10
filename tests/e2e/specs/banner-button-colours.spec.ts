@@ -72,9 +72,10 @@ async function setFields(page: Page, fields: Record<string, string>) {
 }
 
 /** Opens the home page in a fresh context, with no consent cookie, and waits for the banner. */
-async function visitor(browser: Browser) {
+async function visitor(browser: Browser, setup?: (front: Page) => Promise<void>) {
   const context = await browser.newContext();
   const front = await context.newPage();
+  await setup?.(front);
   await front.goto('/', { waitUntil: 'domcontentloaded' });
   await expect(front.locator('.faz-consent-container [data-faz-tag="accept-button"]').first()).toBeVisible();
   return { context, front };
@@ -208,15 +209,37 @@ test('a hover border colour applies on hover, and the colours change over 0.2 se
     'faz-b-settings-hover-bg': '#222222',
     'faz-b-settings-hover-border': '#ff0000',
   });
-  const { context, front } = await visitor(browser);
+  const settings = '[data-faz-tag="settings-button"]';
+  const { context, front } = await visitor(browser, async (front) => {
+    await front.addInitScript((selector) => {
+      document.addEventListener('transitionrun', (event) => {
+        const target = event.target;
+        if (target instanceof Element && target.matches(selector) && event.propertyName === 'border-top-color') {
+          const count = Number(target.getAttribute('data-test-border-transitions'));
+          target.setAttribute('data-test-border-transitions', String(count + 1));
+        }
+      });
+    }, settings);
+    // Hold the banner stylesheet past the fail-open timeout, as a slow CDN
+    // does: the banner is shown first and its colours arrive later. That
+    // arrival must not play as a transition.
+    await front.route(/\/faz-cookie-manager\/assets\/banner-[^/]+\.css/, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await route.continue();
+    });
+  });
   try {
-    const settings = '[data-faz-tag="settings-button"]';
-    const idle = await colours(front, settings);
-    expect(idle.border).toBe(rgb('#0a5c36'));
-    expect(idle.transition).toBe('0.2s, 0.2s, 0.2s');
+    const button = front.locator(settings).first();
+    await expect(button).toHaveCSS('border-top-color', rgb('#0a5c36'), { timeout: 10_000 });
+    await expect(button).toHaveCSS('transition-duration', '0.2s, 0.2s, 0.2s');
+    expect(await button.getAttribute('data-test-border-transitions')).toBeNull();
     const hover = await hovered(front, settings);
     expect(hover.border).toBe(rgb('#ff0000'));
     expect(hover.background).toBe(rgb('#222222'));
+    await expect(button).toHaveAttribute('data-test-border-transitions', '1');
+    await front.mouse.move(1, 1);
+    await expect(button).toHaveAttribute('data-test-border-transitions', '2');
+    await expect(button).toHaveCSS('border-top-color', rgb('#0a5c36'));
     // A button without hover colours keeps the opacity fade and no transition.
     expect((await colours(front, '[data-faz-tag="accept-button"]')).transition).toBe('0s');
   } finally {
@@ -234,6 +257,43 @@ test('a hover border colour applies on hover, and the colours change over 0.2 se
   } finally {
     await reduced.close();
   }
+});
+
+test('the preview endpoint discards arrays in scalar colour and size fields without warnings', () => {
+  const result = JSON.parse(wpEval(`
+    wp_set_current_user( (int) get_users( array( 'role' => 'administrator', 'fields' => 'ID', 'number' => 1 ) )[0] );
+    $request = new WP_REST_Request( 'POST', '/faz/v1/banners/preview' );
+    $request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+    $request->set_header( 'Content-Type', 'application/json' );
+    $request->set_body( wp_json_encode( array(
+      'name' => 'Invalid scalar settings',
+      'status' => true,
+      'default' => false,
+      'contents' => array(),
+      'properties' => array( 'config' => array(
+        'revisitConsent' => array( 'widgetSize' => array( 80 ), 'imageSize' => array( 50 ), 'styles' => array( 'border-color' => array( '#123456' ) ) ),
+        'notice' => array( 'elements' => array( 'buttons' => array( 'elements' => array(
+          'accept' => array( 'styles' => array( 'hover-border-color' => array( '#123456' ) ) ),
+        ) ) ) ),
+      ) ),
+    ) ) );
+    $warnings = array();
+    set_error_handler( static function ( $severity, $message ) use ( &$warnings ) {
+      $warnings[] = $message;
+      return true;
+    }, E_WARNING );
+    try {
+      $response = rest_do_request( $request );
+    } finally {
+      restore_error_handler();
+    }
+    echo wp_json_encode( array( 'status' => $response->get_status(), 'styles' => $response->get_data()['styles'] ?? '', 'warnings' => $warnings ) );
+  `));
+  expect(result.status).toBe(200);
+  expect(result.warnings).toEqual([]);
+  expect(result.styles).not.toContain('-hover-border-color');
+  expect(result.styles).not.toContain('--faz-revisit-consent-border-color');
+  expect(result.styles).not.toMatch(/width:(80|50)px;height:\1px/);
 });
 
 test('Save hovers like Settings unless it has colours of its own', async ({ page, browser, loginAsAdmin }) => {
@@ -366,8 +426,8 @@ test.describe('revisit widget image', () => {
   };
 
   /** Rejects as a new visitor so the revisit widget shows, and returns that session. */
-  async function revisit(browser: Browser) {
-    const session = await visitor(browser);
+  async function revisit(browser: Browser, setup?: (front: Page) => Promise<void>) {
+    const session = await visitor(browser, setup);
     await session.front.locator('[data-faz-tag="reject-button"]').first().click();
     await expect(session.front.locator('[data-faz-tag="revisit-consent"]')).toBeVisible();
     return session;
@@ -457,6 +517,35 @@ test.describe('revisit widget image', () => {
     session = await revisit(browser);
     try {
       expect((await widgetBox(session.front)).icon).toBe('40x40');
+    } finally {
+      await session.context.close();
+    }
+  });
+
+  test('an opaque image at the default size stays inside a small widget border', async ({ page, browser, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    const imageUrl = new URL('/faz-e2e-revisit-opaque.png', page.url()).href;
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQI12N4J8gAAALwAQAR6IPOAAAAAElFTkSuQmCC', 'base64');
+    await setRevisit(page, { 'faz-b-revisit-widget-size': '30', 'faz-b-revisit-image-size': '', 'faz-b-revisit-border-hex': '#123456' });
+    await setImage(page, imageUrl);
+    const session = await revisit(browser, (front) => front.route(imageUrl, (route) => route.fulfill({ contentType: 'image/png', body: png })));
+    try {
+      const widget = session.front.locator('[data-faz-tag="revisit-consent"]');
+      await expect.poll(() => widget.locator('img').evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
+      const box = await widgetBox(session.front);
+      expect(box).toEqual({ width: '30px', height: '30px', icon: '28x28', border: `1px solid ${rgb('#123456')}` });
+      const clipping = await widget.evaluate((el) => {
+        const button = el.querySelector('button')!;
+        const img = button.querySelector('img')!;
+        const buttonStyle = getComputedStyle(button);
+        return {
+          topInset: img.getBoundingClientRect().top - el.getBoundingClientRect().top,
+          radius: buttonStyle.borderTopLeftRadius,
+          buttonOverflow: buttonStyle.overflow,
+          widgetOverflow: getComputedStyle(el).overflow,
+        };
+      });
+      expect(clipping).toEqual({ topInset: 1, radius: '50%', buttonOverflow: 'hidden', widgetOverflow: 'visible' });
     } finally {
       await session.context.close();
     }
