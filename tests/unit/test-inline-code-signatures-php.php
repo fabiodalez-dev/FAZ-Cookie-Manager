@@ -147,7 +147,8 @@ namespace {
 
 	function is_code( $pattern ) {
 		if ( ! method_exists( Frontend::class, 'is_url_fragment_pattern' ) ) {
-			return null;
+			fwrite( STDERR, "  Frontend::is_url_fragment_pattern() is missing: the classification cannot be tested.\n" );
+			exit( 1 );
 		}
 		$m = new ReflectionMethod( Frontend::class, 'is_url_fragment_pattern' );
 		$m->setAccessible( true );
@@ -198,6 +199,18 @@ namespace {
 		'D3 a dot before the signature still counts (window.mixpanel.init)' );
 	eq( callm( $fe, 'match_script_to_provider', array( '', 'mymixpanel.init("t");', $adobe, $blocked ) ), false,
 		'D4 a longer identifier ending in the name does not match' );
+	eq( callm( $fe, 'match_script_to_provider', array( '', '$mixpanel.init("t");', $adobe, $blocked ) ), false,
+		'D5 an identifier starting with $ is another identifier ($mixpanel)' );
+	eq( callm( $fe, 'match_script_to_provider', array( '', 'var c = this.s.t(); e.s.t();', $adobe, $blocked ) ), false,
+		'D6 s.t() on another object (this.s, a minified e.s) is not Adobe' );
+	eq( callm( $fe, 'match_script_to_provider', array( '', 'mixpanel.init ("t");', $adobe, $blocked ) ), 'analytics',
+		'D7 whitespace before the call parenthesis still matches' );
+
+	echo "\n  E. the GTM exemption still sees a spaced HubSpot call\n";
+	$fe = arrange( array( 'hbspt.forms.create(' => 'marketing' ), $blocked );
+	setp( $fe, 'pattern_service_cache', array( 'hbspt.forms.create(' => array( 'hubspot' ) ) );
+	eq( callm( $fe, 'inline_body_names_non_google_service', array( "(function(w,d,s,l,i){})(window,document,'script','dataLayer','GTM-X');\nhbspt.forms.create ({portalId:1});" ) ), true,
+		'E1 a GTM snippet that also calls hbspt.forms.create ( is not exempted' );
 
 	echo "\n  C. the shipped catalogue\n";
 	$catalogue = json_decode( file_get_contents( dirname( __DIR__, 2 ) . '/includes/data/known-providers.json' ), true );

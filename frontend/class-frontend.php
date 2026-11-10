@@ -10668,8 +10668,12 @@ class Frontend {
 	 * A signature without a dot keeps the plain case-insensitive substring
 	 * test it has always had. A dotted one names an object and its method, so
 	 * it must start where an identifier starts: Adobe's `s.t()` is a call on
-	 * `s`, not the tail of `charts.t()`. A dot before it still counts, so
-	 * `window.mixpanel.init(` matches `mixpanel.init(`.
+	 * `s`, not the tail of `charts.t()`, nor a property of another object as
+	 * in `this.s.t()` or a minified `e.s.t()`. The global object is the one
+	 * owner that still counts, so `window.mixpanel.init(` matches
+	 * `mixpanel.init(`. JavaScript allows whitespace before a call's
+	 * parenthesis and between tokens, so `hbspt.forms.create ({` matches
+	 * `hbspt.forms.create(` and `new  google.maps.` matches `new google.maps.`.
 	 *
 	 * @param string $haystack Inline script body.
 	 * @param string $pattern  Code signature.
@@ -10681,13 +10685,19 @@ class Frontend {
 		if ( '' === $haystack || '' === $pattern ) {
 			return false;
 		}
-		if ( false === stripos( $haystack, $pattern ) ) {
+		if ( false === strpos( $pattern, '.' ) || ! preg_match( '/^[A-Za-z0-9_$]/', $pattern ) ) {
+			return false !== stripos( $haystack, $pattern );
+		}
+		// Cheap filter on the identifier the signature starts with.
+		$lead = preg_split( '/[\s(.]/', $pattern, 2 );
+		if ( '' !== $lead[0] && false === stripos( $haystack, $lead[0] ) ) {
 			return false;
 		}
-		if ( false === strpos( $pattern, '.' ) || ! preg_match( '/^[A-Za-z0-9_$]/', $pattern ) ) {
-			return true;
-		}
-		return 1 === preg_match( '/(?<![A-Za-z0-9_$])' . preg_quote( $pattern, '/' ) . '/i', $haystack );
+		$regex = preg_quote( trim( $pattern ), '/' );
+		$regex = preg_replace( '/\s+/', '\\s+', $regex );
+		$regex = preg_replace( '/(?:\\\\s\+)?\\\\\(/', '\\s*\\(', $regex );
+		$owner = '(?:(?<![A-Za-z0-9_$.])|(?<=\\bwindow\\.)|(?<=\\bself\\.)|(?<=\\bglobalThis\\.))';
+		return 1 === preg_match( '/' . $owner . $regex . '/i', $haystack );
 	}
 
 	/**
