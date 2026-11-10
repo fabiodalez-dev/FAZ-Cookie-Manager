@@ -715,6 +715,14 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.39.0 — 2026-11-11
+
+- Box banners can now use the Pushdown preference centre: the categories open inside the corner box, with Accept, Reject and Save one click away and equal button widths on phones (#392). CCPA / Do Not Sell banners keep the popup.
+- Brand Logo: a new "Logo position" setting puts the logo beside the title and text instead of above them (#393).
+- Banner buttons: a hover border colour, and a 0.2-second colour transition for buttons with hover colours (skipped for reduced motion). Revisit widget: size, icon or image size, and a border colour. All empty by default, so existing banners look the same.
+- Fixed: HubSpot forms embedded with the legacy hbspt.forms.create() code only appeared after a reload (#396). The inline call is now held with its library and runs after consent; the same applies to the inline calls of Mixpanel, Segment, Heap, PostHog, TikTok, Sentry, Klaviyo, AdSense and Google Maps.
+- Fixed: an array posted into a banner colour or size field raised PHP warnings in the preview and save.
+
 ### 1.38.0 — 2026-11-08
 
 - Google Consent Mode → Advanced Settings: a new opt-in, off by default, loads the Google Tag Manager container before consent when Advanced Consent Mode is on (#385), so Google tags configured inside Tag Manager send cookieless pings for visitors who have not consented. The container loads for every visitor, unless per-service consent is on and the visitor switches off the Google Tag Manager service, and it never loads early on AMP or on a page without wp_head(). The settings page warns that the site owner becomes responsible for the consent settings of every non-Google tag inside it.

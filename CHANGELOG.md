@@ -2,6 +2,18 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.39.0] - 2026-11-11
+
+### Added
+- Banner → Preference Center: **Pushdown** is now available for the Box type (#392). The categories open inside the corner box instead of a separate window: the preferences replace the notice, the header's close button goes back to it, and the panel shows Accept and Reject next to Save so all three choices stay one click away. The categories scroll inside the box on a short screen, and below 440px the box takes the full width. On phones every button takes its own row, so Accept is never wider than Reject. A CCPA or "Do Not Sell" banner still uses the Popup preference centre, because the opt-out popup needs it.
+- Banner → Brand Logo: **Logo position**, "Above the title" (the default) or "Beside the title and text" (#393). Beside turns the notice into two columns with a 16px gap, mirrored in right-to-left languages. With the logo off or without an image no rule is added.
+- Banner → Buttons: a hover border colour for Accept, Reject, Settings and Save, next to the hover background and text colours of 1.38.0 (requested on wordpress.org, "More control than colours"). A button with hover colours changes to them over 0.2 seconds on devices with a mouse, skipped when the visitor's system asks for reduced motion; the transition is armed only after the banner has painted, so a stylesheet that arrives late is not played as an animation.
+- Banner → Colours → Revisit Widget: widget size (30–100 px), icon or image size (12–100 px) and a border colour. The icon or image stays inside the widget and its border, and is clipped to the round button without clipping the tooltip. Every new field is empty by default, and an empty field adds no CSS, so existing banners look the same.
+
+### Fixed
+- HubSpot forms embedded with the legacy code (`hbspt.forms.create(...)` after the `js.hsforms.net` library) did not appear until a reload (#396). The library was held until marketing consent but the inline call was not, so it ran at once, failed and was gone when consent arrived. Dotted code signatures in the provider catalogue are now matched against inline scripts, which also holds the inline calls of Mixpanel, Segment (`analytics.load(`), Heap, PostHog, TikTok (`ttq.load(`), Sentry, Klaviyo (`_learnq.push(`), AdSense (`adsbygoogle.push(`) and Google Maps (`new google.maps.`) until their category is accepted. A signature matches where an identifier starts, with any whitespace JavaScript allows around dots and before the call, and a one- or two-letter owner such as Adobe's `s.t()` only on its own or behind the global object, so `charts.t()` or a minified `e.s.t()` is not taken for it. Host names and file names (`youtu.be`, `AppMeasurement.js`) still match URLs only, and `dataLayer.push({` is still left to the Tag Manager container.
+- An array posted into a scalar banner setting (a colour or a size) raised PHP warnings in the banner preview and save, and a scalar posted into a group of settings survived as a scalar. Settings are now sanitised following the shape of the defaults.
+
 ## [1.38.0] - 2026-11-08
 
 ### Added

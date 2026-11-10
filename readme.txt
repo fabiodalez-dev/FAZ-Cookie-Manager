@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.38.0
+Stable tag: 1.39.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -500,6 +500,13 @@ The full changelog (every release back to 1.0.0) lives at:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
+
+= 1.39.0 =
+* Added: Box banners can now use the Pushdown preference centre: the categories open inside the corner box, with Accept, Reject and Save one click away and equal button widths on phones (#392). CCPA / Do Not Sell banners keep the popup.
+* Added: Brand Logo: a new "Logo position" setting puts the logo beside the title and text instead of above them (#393).
+* Added: Banner buttons: a hover border colour, and a 0.2-second colour transition for buttons with hover colours (skipped for reduced motion). Revisit widget: size, icon or image size, and a border colour. All empty by default, so existing banners look the same.
+* Fixed: HubSpot forms embedded with the legacy hbspt.forms.create() code only appeared after a reload (#396). The inline call is now held with its library and runs after consent; the same applies to the inline calls of Mixpanel, Segment, Heap, PostHog, TikTok, Sentry, Klaviyo, AdSense and Google Maps.
+* Fixed: an array posted into a banner colour or size field raised PHP warnings in the preview and save.
 
 = 1.38.0 =
 * Added: Google Consent Mode → Advanced Settings: a new opt-in, off by default, loads the Google Tag Manager container before consent when Advanced Consent Mode is on (#385), so Google tags configured inside Tag Manager send cookieless pings for visitors who have not consented. The container loads for every visitor, unless per-service consent is on and the visitor switches off the Google Tag Manager service, and it never loads early on AMP or on a page without wp_head(). The settings page warns that the site owner becomes responsible for the consent settings of every non-Google tag inside it.
