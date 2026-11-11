@@ -2389,7 +2389,11 @@
 		props.config.revisitConsent.meta.url = getVal('faz-b-revisit-image-url') || '#';
 		props.config.revisitConsent.styles['border-color'] = getColor('faz-b-revisit-border');
 		props.config.revisitConsent.widgetSize = readPixelSize('faz-b-revisit-widget-size', 30, 100);
-		props.config.revisitConsent.imageSize = readPixelSize('faz-b-revisit-image-size', 12, 100);
+		// The image is drawn inside the widget and its 1px border, so the field
+		// shows the size that is actually rendered (class-template.php).
+		var revisitInner = (Number(props.config.revisitConsent.widgetSize) || 45)
+			- (props.config.revisitConsent.styles['border-color'] ? 2 : 0);
+		props.config.revisitConsent.imageSize = readPixelSize('faz-b-revisit-image-size', 12, revisitInner);
 		FAZ_OPTIONAL_COLORS.hover.forEach(function (name) {
 			ensureObj(btns, name + '.styles');
 			btns[name].styles['hover-background-color'] = getColor('faz-b-' + name + '-hover-bg');

@@ -554,6 +554,9 @@ test.describe('revisit widget image', () => {
   test('an icon larger than the widget is shown at the widget size, and an out-of-range size is brought into range', async ({ page, browser, loginAsAdmin }) => {
     await loginAsAdmin(page);
     await setRevisit(page, { 'faz-b-revisit-widget-size': '', 'faz-b-revisit-image-size': '80' });
+    // The field shows the size that is rendered, not the one typed.
+    await openColours(page);
+    await expect(page.locator('#faz-b-revisit-image-size')).toHaveValue('45');
     const session = await revisit(browser);
     try {
       const box = await widgetBox(session.front);
@@ -567,6 +570,11 @@ test.describe('revisit widget image', () => {
     await openColours(page);
     await expect(page.locator('#faz-b-revisit-widget-size')).toHaveValue('100');
     await expect(page.locator('#faz-b-revisit-image-size')).toHaveValue('12');
+
+    // With a 1px border the image fits inside it: 30px widget, 28px image.
+    await setRevisit(page, { 'faz-b-revisit-widget-size': '30', 'faz-b-revisit-image-size': '100', 'faz-b-revisit-border-hex': '#123456' });
+    await openColours(page);
+    await expect(page.locator('#faz-b-revisit-image-size')).toHaveValue('28');
   });
 
   test('a non-http image URL is ignored', async ({ page, browser, loginAsAdmin }) => {
