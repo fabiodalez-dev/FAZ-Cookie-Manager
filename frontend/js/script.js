@@ -6711,7 +6711,7 @@ function _fazPrepareStyleTagHtml(full, attrs, css) {
  * the appropriate end tag. Past an <svg>/<math>/<select>/<frameset> start tag
  * (or from the start, with `uncertain`, for a foreign or <select> context) the
  * parser may read <style> content as markup: there a sheet is rewritten only
- * when its content has no "<" or "&", where both readings agree, and the walk
+ * when its content has no "<", where both readings give the same tokens, and the walk
  * stops at anything else. It also stops at script data carrying "<!--" and at
  * anything unterminated. Where it stops, the rest of the string is returned
  * unchanged: an unparked sheet is a missed block, a misread one is live markup.
@@ -6828,10 +6828,12 @@ function _fazRewriteRealStyleTags(html, fn, uncertain) {
         if (uncertain && (tag.selfClosing || body.indexOf("<") !== -1)) break;
         var endTag = scanTag(m.index + 2);
         if (!endTag) break;
-        // "&" is literal in RAWTEXT and a character reference in markup: the
-        // structure is the same, the text is not, so such a sheet is left as
-        // it is rather than parked with an original it does not have.
-        if (tag.name === "style" && !(uncertain && body.indexOf("&") !== -1)) {
+        // "&" is literal in RAWTEXT and a character reference in markup, so
+        // where the element may be foreign the text parked as its original
+        // can differ from the live one by a decoded reference. The structure
+        // cannot (there is no "<"), and a query-string "&" is routine in font
+        // and tracker URLs: the sheet is parked (fail closed).
+        if (tag.name === "style") {
             var full = s.slice(lt, endTag.end);
             var rep = fn(full, s.slice(tag.attrsStart, tag.gt), body);
             if (rep !== full) { out += s.slice(last, lt) + rep; last = endTag.end; }

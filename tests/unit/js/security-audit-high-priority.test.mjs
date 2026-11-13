@@ -213,6 +213,8 @@ const FOREIGN_SHEETS = [
   ['a <style> in <foreignObject> (HTML integration point)', '<svg><foreignObject><style>.p{background:url(https://tracker.test/b.png)}</style></foreignObject></svg>', null],
   ['a <style> after a breakout tag closed the <svg>', '<svg><p>x</p><style>.p{background:url(https://tracker.test/c.png)}</style>', null],
   ['a <style> written into an SVG element (foreign context)', '<style>.p{background:url(https://tracker.test/d.png)}</style>', 'svg'],
+  ['a <style> with a query-string "&" after an inline SVG icon', '<div><svg><use href="#i"/></svg></div><style>@import url(https://tracker.test/css2?family=Roboto&display=swap);</style>', null],
+  ['a <style> with "&" written into an SVG element', '<style>.p{background:url(https://tracker.test/p.png?a=1&b=2)}</style>', 'svg'],
 ];
 function parkedIn(w, html, ctx, host) {
   const el = ctx === 'svg' ? w.document.createElementNS(SVG_NS, 'svg') : w.document.createElement('div');
