@@ -32,6 +32,27 @@ trait IP_Hasher {
 	}
 
 	/**
+	 * Hash of the address a per-client LIMIT is accounted against.
+	 *
+	 * Same keying as hash_ip(), but on faz_ip_rate_bucket(): an IPv6 client is
+	 * one /64, so rotating /128s inside its own prefix no longer resets the
+	 * per-address ceilings and windows. hash_ip() itself stays the per-address
+	 * pseudonym written into records.
+	 *
+	 * @since 1.39.1
+	 * @return string 64-char hex string.
+	 */
+	private function rate_hash() {
+		$ip = \faz_resolve_client_ip();
+		if ( empty( $ip ) ) {
+			$ip = 'no-ip';
+		} elseif ( function_exists( 'faz_ip_rate_bucket' ) ) {
+			$ip = \faz_ip_rate_bucket( $ip );
+		}
+		return hash_hmac( 'sha256', $ip, wp_salt( 'auth' ) );
+	}
+
+	/**
 	 * Whether the hash above identifies ONE visitor.
 	 *
 	 * `hash_ip()` is a hash of whatever `faz_resolve_client_ip()` returned, and

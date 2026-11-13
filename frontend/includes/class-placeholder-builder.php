@@ -20,6 +20,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Placeholder_Builder {
 
 	/**
+	 * Response-local key the runtime requires on a placeholder Accept button.
+	 *
+	 * Post content can carry data-faz-accept (wp_kses_post keeps data-* on
+	 * every tag); only buttons built here also carry this per-response key,
+	 * which content saved before the response cannot know.
+	 *
+	 * @return string
+	 */
+	private static function accept_key() {
+		return class_exists( '\\FazCookie\\Frontend\\Frontend' ) && method_exists( '\\FazCookie\\Frontend\\Frontend', 'response_key' )
+			? (string) \FazCookie\Frontend\Frontend::response_key()
+			: '';
+	}
+
+	/**
 	 * Service icons as inline SVG paths (compact, 24x24 viewBox).
 	 *
 	 * @var array<string,string>
@@ -233,7 +248,7 @@ class Placeholder_Builder {
 			$html .= '<span class="faz-placeholder-svcname">' . esc_html( $service_name ) . '</span>';
 		}
 		$html .= '<p class="faz-placeholder-msg">' . $message . '</p>';
-		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '" data-faz-accept-service="' . esc_attr( $service_id ) . '">' . $button_text . '</button>';
+		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '" data-faz-accept-service="' . esc_attr( $service_id ) . '" data-faz-accept-key="' . esc_attr( self::accept_key() ) . '">' . $button_text . '</button>';
 		$html .= '</div>';
 
 		// Hidden original content for JS to restore after consent.
@@ -320,7 +335,7 @@ class Placeholder_Builder {
 			$html .= '<span class="faz-placeholder-svcname">' . esc_html( $service_name ) . '</span>';
 		}
 		$html .= '<p class="faz-placeholder-msg">' . $message . '</p>';
-		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '" data-faz-accept-service="' . esc_attr( $service_id ) . '">' . $button_text . '</button>';
+		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '" data-faz-accept-service="' . esc_attr( $service_id ) . '" data-faz-accept-key="' . esc_attr( self::accept_key() ) . '">' . $button_text . '</button>';
 		$html .= '</div>';
 		$html .= '</div>';
 

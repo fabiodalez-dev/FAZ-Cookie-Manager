@@ -66,6 +66,7 @@ if ( ! class_exists( 'Faz_Static_Ip_Scanner_Logger_Stub' ) ) {
 	}
 	class_alias( Faz_Static_Ip_Scanner_Logger_Stub::class, 'FazCookie\\Admin\\Modules\\Scanner\\Includes\\Scanner_Logger' );
 }
+require_once dirname( __DIR__, 2 ) . '/includes/class-utils.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-controller.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/scanner/api/class-api.php';
 
@@ -86,6 +87,12 @@ faz_static_ip_check( 'public IPv6 is bracketed', Controller::build_static_resolv
 faz_static_ip_check( 'private IPv4 is rejected', Controller::build_static_resolve_entry( 'https://example.com/', '192.168.1.10' ), '' );
 faz_static_ip_check( 'loopback is rejected', Controller::build_static_resolve_entry( 'https://example.com/', '127.0.0.1' ), '' );
 faz_static_ip_check( 'non-HTTP scheme is rejected', Controller::build_static_resolve_entry( 'ftp://example.com/', '8.8.8.8' ), '' );
+// Non-global ranges that FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+// let through (2026-11 audit): CGNAT and a cloud metadata address in it,
+// benchmarking, IETF protocol assignments, NAT64 and IPv4-mapped IPv6.
+foreach ( array( '100.100.100.200', '100.64.0.1', '198.18.0.1', '192.0.0.8', '64:ff9b::a9fe:a9fe', '::ffff:169.254.169.254', '2001:db8::1' ) as $faz_non_global ) {
+	faz_static_ip_check( "non-global {$faz_non_global} is rejected", Controller::build_static_resolve_entry( 'http://example.com/', $faz_non_global ), '' );
+}
 
 $canonical_host = new ReflectionMethod( Controller::class, 'canonical_scan_host' );
 $canonical_host->setAccessible( true );

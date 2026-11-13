@@ -6607,12 +6607,27 @@ class Frontend {
 			return $full;
 		}
 
-		list( $parked, $renamed ) = $this->rename_attr_tokens( $attrs, array( 'background' => 'data-faz-background' ) );
+		// An author-written data-faz-background on the same tag must not ride
+		// along with this park (see with_park_proof()).
+		list( $parked, $renamed ) = $this->rename_attr_tokens( $this->strip_attr_tokens( $attrs, 'data-faz-background' ), array( 'background' => 'data-faz-background' ) );
 		if ( empty( $renamed ) ) {
 			return $full;
 		}
 
-		return '<' . $tag . $this->label_category_first( $parked, $matched_category ) . '>';
+		return '<' . $tag . $this->with_park_proof( $this->label_category_first( $parked, $matched_category ), 'background' ) . '>';
+	}
+
+	/**
+	 * Response-local key for server-built consent controls.
+	 *
+	 * Placeholder_Builder stamps it on the placeholder Accept button so the
+	 * runtime can tell that button apart from a data-faz-accept attribute
+	 * written into post content (wp_kses_post keeps data-* on every tag).
+	 *
+	 * @return string
+	 */
+	public static function response_key() {
+		return self::srcdoc_key();
 	}
 
 	/** Response-local proof for server parks; deliberately excluded from static config. */
@@ -6772,6 +6787,10 @@ class Frontend {
 			if ( false === $category ) {
 				continue;
 			}
+			if ( 'data-faz-data' === $parked_name ) {
+				// Drop an author-written park key so only this park's value is proven.
+				$parked = $this->strip_attr_tokens( $parked, 'data-faz-data' );
+			}
 			list( $parked, $renamed ) = $this->rename_attr_tokens( $parked, array( $name => $parked_name ) );
 			if ( empty( $renamed ) ) {
 				continue; // A bare attribute with no value fetches nothing.
@@ -6793,7 +6812,11 @@ class Frontend {
 			$out = ' data-faz-srcset-category="' . esc_attr( $srcset_category ) . '"' . $this->strip_attr_tokens( $out, 'data-faz-srcset-category' );
 		}
 		$label = array() !== $categories ? $categories[0] : $srcset_category;
-		return '<' . $tag . $this->label_category_first( $out, $label ) . $close . '>';
+		$out   = $this->label_category_first( $out, $label );
+		if ( 'object' === $tag && $this->has_attr_token( $out, 'data-faz-data' ) ) {
+			$out = $this->with_park_proof( $out, 'data' );
+		}
+		return '<' . $tag . $out . $close . '>';
 	}
 
 	/**
@@ -6904,7 +6927,7 @@ class Frontend {
 
 		// Every style token leaves on its own bytes (the parser keeps the first
 		// of a duplicated attribute, and the first is the one judged above).
-		list( $parked, $renamed ) = $this->rename_attr_tokens( $attrs, array( 'style' => 'data-faz-style' ) );
+		list( $parked, $renamed ) = $this->rename_attr_tokens( $this->strip_attr_tokens( $attrs, 'data-faz-style' ), array( 'style' => 'data-faz-style' ) );
 		if ( empty( $renamed ) ) {
 			return $full;
 		}
@@ -6920,6 +6943,7 @@ class Frontend {
 			}
 		}
 		$out = $labelled ? $live . $parked : $this->label_category_first( $live . $parked, reset( $categories ) );
+		$out = $this->with_park_proof( $out, 'style' );
 		return '<' . $tag . $out . $close . '>';
 	}
 
@@ -7235,6 +7259,32 @@ class Frontend {
 	 */
 	private function label_category_first( $attrs, $category ) {
 		return ' data-faz-category="' . esc_attr( $category ) . '"' . $this->strip_attr_tokens( $attrs, 'data-faz-category' );
+	}
+
+	/**
+	 * Prove that THIS response parked an attribute the runtime restores into
+	 * a sink kses guards (object data, style, background).
+	 *
+	 * wp_kses_post keeps data-* on every post tag, so an Author could write
+	 * data-faz-data / data-faz-style / data-faz-background into a post and the
+	 * restore pass wrote them back as live attributes kses refuses. The runtime
+	 * now restores those three only when the tag carries the response-local
+	 * key and names the attribute in data-faz-park. A list already on the tag
+	 * is extended only when its key is this response's: an author-written list
+	 * is replaced, never inherited.
+	 *
+	 * @param string          $attrs Attribute string.
+	 * @param string|string[] $names Parked attribute name(s): data, style, background.
+	 * @return string
+	 */
+	private function with_park_proof( $attrs, $names ) {
+		$key   = self::srcdoc_key();
+		$prior = $key === $this->extract_tag_attr( $attrs, 'data-faz-park-key' ) ? (string) $this->extract_tag_attr( $attrs, 'data-faz-park' ) : '';
+		$list  = array_values( array_unique( array_filter( array_merge( preg_split( '/\s+/', $prior ), (array) $names ) ) ) );
+		$attrs = $this->strip_attr_tokens( $this->strip_attr_tokens( $attrs, 'data-faz-park' ), 'data-faz-park-key' );
+		// Metadata first, like label_category_first(): the tag's own bytes,
+		// a self-closing slash included, keep their place at the end.
+		return ' data-faz-park="' . esc_attr( implode( ' ', $list ) ) . '" data-faz-park-key="' . esc_attr( $key ) . '"' . $attrs;
 	}
 
 	/**

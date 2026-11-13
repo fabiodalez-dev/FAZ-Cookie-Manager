@@ -43,6 +43,10 @@ namespace {
 	// A 404 and a search results page are ordinary pages for BLOCKING, but
 	// every one of them has its own URL, so recording them lets anyone mint
 	// rows by requesting URLs that do not exist. Controlled per case.
+	function apply_filters( $tag, $value ) { return $value; }
+	// The write side records only requests that name the page canonically:
+	// GET/HEAD, a Host the site is served on, no `//` path spelling.
+	function home_url() { return 'https://example.test'; }
 	function is_404() { return ! empty( $GLOBALS['faz_test_is_404'] ); }
 	function is_search() { return ! empty( $GLOBALS['faz_test_is_search'] ); }
 
@@ -412,6 +416,48 @@ namespace {
 	$row = $pdo->query( 'SELECT * FROM wp_faz_embed_placeholders' )->fetch( PDO::FETCH_ASSOC );
 	inventory_check( 1 === (int) $pdo->query( 'SELECT COUNT(*) FROM wp_faz_embed_placeholders' )->fetchColumn(), 'same-second observations keep exactly one row without a duplicate error' );
 	inventory_check( '2026-09-15 12:00:00' === $row['first_seen'] && '2026-09-16 13:00:00' === $row['last_seen'], 'refresh preserves first_seen and advances last_seen' );
+
+	// 2026-11 audit: the page key comes from the request, so only requests
+	// that name the page canonically may write, and a GPC render is only
+	// authoritative when no routing parameter the key drops changed it.
+	$faz_audit_case = static function ( $server, $setup ) use ( $note ) {
+		$GLOBALS['wpdb']->queries       = array();
+		$GLOBALS['wpdb']->writes        = array();
+		$GLOBALS['faz_test_transients'] = array();
+		$saved                          = $_SERVER;
+		foreach ( $server as $k => $v ) {
+			$_SERVER[ $k ] = $v;
+		}
+		$setup();
+		$note->invoke( null, 'youtube', 'marketing' );
+		Embed_Inventory::complete_render();
+		Embed_Inventory::flush();
+		$queries  = $GLOBALS['wpdb']->queries;
+		$_SERVER  = $saved;
+		unset( $GLOBALS['wp'] );
+		return $queries;
+	};
+	$faz_none = static function () {};
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'POST', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( array() === $q, 'a POST render of a page writes no inventory row (POST skips the canonical redirect)' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'attacker-chosen.invalid', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( array() === $q, 'a Host the site is not served on writes no row' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test:8081', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( array() === $q, 'a non-default port writes no row' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '//page/' ), $faz_none );
+	inventory_check( array() === $q, 'a //path spelling writes no row' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( ! empty( $q ), 'control: the canonical GET still writes' );
+	$q = $faz_audit_case(
+		array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '/?order=ASC', 'HTTP_SEC_GPC' => '1' ),
+		static function () { $GLOBALS['wp'] = (object) array( 'query_vars' => array( 'order' => 'ASC' ) ); }
+	);
+	inventory_check( 0 === count( array_filter( $q, static function ( $x ) { return false !== stripos( $x, 'DELETE' ); } ) ), 'a GPC render reordered by a dropped routing var (?order=) does not clear the page' );
+	$q = $faz_audit_case(
+		array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '/?utm_source=x', 'HTTP_SEC_GPC' => '1' ),
+		static function () { $GLOBALS['wp'] = (object) array( 'query_vars' => array() ); }
+	);
+	inventory_check( 1 === count( array_filter( $q, static function ( $x ) { return false !== stripos( $x, 'DELETE' ); } ) ), 'control: a GPC render through a tracking parameter is still authoritative' );
 
 	echo "\nPassed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );

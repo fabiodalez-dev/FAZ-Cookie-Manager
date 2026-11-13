@@ -69,7 +69,7 @@ for (const consent of ['refused', 'accept']) {
         <!-- What the server-side pass emits for a blocked SVG reference: both
              spellings park into one attribute, so there is one restore branch. -->
         <svg><image id="server-parked" data-faz-category="analytics" data-faz-href="https://tracker.example.test/server.svg" width="1" height="1"/></svg>
-        <table id="server-bg" data-faz-category="analytics" data-faz-background="https://tracker.example.test/server-bg.png"><tr><td>bg</td></tr></table>
+        <table id="server-bg" data-faz-park="background" data-faz-park-key="browser-response-proof" data-faz-category="analytics" data-faz-background="https://tracker.example.test/server-bg.png"><tr><td>bg</td></tr></table>
         <iframe id="server-doc" data-faz-srcdoc-key="browser-response-proof" data-faz-category="analytics" data-faz-srcdoc="&lt;img src=&quot;https://tracker.example.test/doc.png&quot;&gt;"></iframe>
         <svg id="holder"></svg>
         <script>

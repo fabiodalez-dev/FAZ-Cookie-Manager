@@ -2093,8 +2093,147 @@
     function escapeAttr(value) {
         return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     }
-    function parkMarkup(policy, markup) {
-        return String(markup == null ? '' : markup).replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, function (full, attrs, css) {
+    // Only <style> elements the tokenizer really starts are rewritten — see
+    // _fazRewriteRealStyleTags() in script.js, which this mirrors: a regex over
+    // the raw string also matched "<style>" text inside a quoted attribute or a
+    // comment, and the rewrite turned sanitised markup into live markup.
+    function rewriteRealStyleTags(html, fn, uncertain) {
+        var s = String(html), n = s.length, out = "", last = 0, i = 0;
+        uncertain = !!uncertain;
+        var RAW = { style: 1, script: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1, textarea: 1, title: 1 };
+        function isAlpha(c) { return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z"); }
+        function isSpace(c) { return c === " " || c === "\t" || c === "\n" || c === "\f" || c === "\r"; }
+        function toGt(p) { var g = s.indexOf(">", p); return g === -1 ? n : g + 1; }
+        // p is the first character of the tag name; returns null when unterminated.
+        function scanTag(p) {
+            var start = p;
+            while (p < n && !isSpace(s.charAt(p)) && s.charAt(p) !== "/" && s.charAt(p) !== ">") p++;
+            var tag = { name: s.slice(start, p).toLowerCase(), attrsStart: p, gt: -1, end: -1, selfClosing: false };
+            while (p < n) {
+                var ch = s.charAt(p);
+                if (ch === ">") { tag.gt = p; tag.end = p + 1; return tag; }
+                if (ch === "/") {
+                    if (s.charAt(p + 1) === ">") { tag.selfClosing = true; tag.gt = p + 1; tag.end = p + 2; return tag; }
+                    p++; continue;
+                }
+                if (isSpace(ch)) { p++; continue; }
+                p++; // first name character, even "=" or a quote
+                while (p < n) { var cq = s.charAt(p); if (isSpace(cq) || cq === "/" || cq === ">" || cq === "=") break; p++; }
+                while (p < n && isSpace(s.charAt(p))) p++;
+                if (s.charAt(p) !== "=") continue;
+                p++;
+                while (p < n && isSpace(s.charAt(p))) p++;
+                var qc = s.charAt(p);
+                if (qc === '"' || qc === "'") {
+                    var close = s.indexOf(qc, p + 1);
+                    if (close === -1) return null;
+                    p = close + 1;
+                } else {
+                    while (p < n && !isSpace(s.charAt(p)) && s.charAt(p) !== ">") p++;
+                }
+            }
+            return null;
+        }
+        while (i < n) {
+            var lt = s.indexOf("<", i);
+            if (lt === -1) break;
+            var c = s.charAt(lt + 1);
+            if (s.substr(lt, 4) === "<!--") {
+                var j = lt + 4;
+                if (s.charAt(j) === ">") { i = j + 1; continue; }
+                if (s.substr(j, 2) === "->") { i = j + 2; continue; }
+                var cend = -1;
+                for (var k = j; k < n - 2; k++) {
+                    if (s.charAt(k) !== "-" || s.charAt(k + 1) !== "-") continue;
+                    if (s.charAt(k + 2) === ">") { cend = k + 3; break; }
+                    if (s.charAt(k + 2) === "!" && s.charAt(k + 3) === ">") { cend = k + 4; break; }
+                }
+                if (cend === -1) break;
+                i = cend; continue;
+            }
+            if (c === "!") {
+                // CDATA is text up to "]]>" in foreign content and a bogus comment
+                // up to the first ">" in HTML: the two agree only when that first
+                // ">" is the one closing "]]>".
+                if (uncertain && s.substr(lt, 9) === "<![CDATA[") {
+                    var cd = s.indexOf("]]>", lt + 9);
+                    if (cd === -1 || s.indexOf(">", lt + 2) !== cd + 2) break;
+                    i = cd + 3; continue;
+                }
+                i = toGt(lt + 2); continue;
+            }
+            if (c === "?") { i = toGt(lt + 2); continue; }
+            if (c === "/") {
+                var c2 = s.charAt(lt + 2);
+                if (c2 === ">") { i = lt + 3; continue; }
+                if (!isAlpha(c2)) { i = toGt(lt + 2); continue; }
+                var etag = scanTag(lt + 2);
+                if (!etag) break;
+                i = etag.end; continue;
+            }
+            if (!isAlpha(c)) { i = lt + 1; continue; }
+            var tag = scanTag(lt + 1);
+            if (!tag) break;
+            // From an <svg>/<math> start tag on, the parser may be in foreign
+            // content, where <style> and the RAWTEXT/RCDATA elements parse their
+            // content as markup; and where foreign content ends depends on the
+            // open-element stack (breakout tags, integration points, stray end
+            // tags), which a scan cannot follow. A legacy <select> or a <frameset>
+            // ignores the <style> start tag and leaves its content in the data
+            // state too. Past any of these the walk only acts where both readings
+            // give the same tokens (see below) and stops everywhere else.
+            if (tag.name === "svg" || tag.name === "math" || tag.name === "select" || tag.name === "frameset") {
+                if (!tag.selfClosing || tag.name === "select" || tag.name === "frameset") uncertain = true;
+                i = tag.end; continue;
+            }
+            if (tag.name === "plaintext") break;
+            if (!RAW[tag.name]) { i = tag.end; continue; }
+            var re = new RegExp("</" + tag.name + "(?=[\\t\\n\\f\\r />])", "ig");
+            re.lastIndex = tag.end;
+            var m = re.exec(s);
+            if (!m) break;
+            var body = s.slice(tag.end, m.index);
+            // "<!--" in script data enters the escaped states, where "<script"
+            // and "</script" move the real end of the script: stop rather than
+            // guess it.
+            if (tag.name === "script" && body.indexOf("<!--") !== -1) break;
+            // Where the element may be foreign (or an ignored tag), its content is
+            // markup. Without a "<" in it, markup and RAWTEXT/RCDATA give the
+            // same text up to the same end tag; with one they may not, and a
+            // self-closing start tag ends a foreign element right there.
+            if (uncertain && (tag.selfClosing || body.indexOf("<") !== -1)) break;
+            var endTag = scanTag(m.index + 2);
+            if (!endTag) break;
+            // "&" is literal in RAWTEXT and a character reference in markup, so
+            // where the element may be foreign the text parked as its original
+            // can differ from the live one by a decoded reference. The structure
+            // cannot (there is no "<"), and a query-string "&" is routine in font
+            // and tracker URLs: the sheet is parked (fail closed).
+            if (tag.name === "style") {
+                var full = s.slice(lt, endTag.end);
+                var rep = fn(full, s.slice(tag.attrsStart, tag.gt), body);
+                if (rep !== full) { out += s.slice(last, lt) + rep; last = endTag.end; }
+            }
+            i = endTag.end;
+        }
+        return last === 0 ? s : out + s.slice(last);
+    }
+    // _fazMarkupContextMode() in script.js: "html", "uncertain" (a foreign or
+    // <select>/<frameset> context, where <style> may not be RAWTEXT) or "text"
+    // (a context whose content is text from the first byte).
+    function markupContextMode(context) {
+        var el = context;
+        if (el && el.nodeType === 11) el = el.host || null;
+        if (!el || el.nodeType !== 1) return 'html';
+        var ns = el.namespaceURI;
+        if (ns && ns !== 'http://www.w3.org/1999/xhtml') return 'uncertain';
+        var name = String(el.localName || '').toLowerCase();
+        if (/^(style|script|textarea|title|xmp|iframe|noembed|noframes|noscript|plaintext)$/.test(name)) return 'text';
+        if (name === 'select' || name === 'frameset') return 'uncertain';
+        return 'html';
+    }
+    function parkMarkup(policy, markup, uncertain) {
+        return rewriteRealStyleTags(String(markup == null ? '' : markup), function (full, attrs, css) {
             attrs = attrs || '';
             if (/\bdata-faz-css\s*=/i.test(attrs)) return full;
             var verdict = css ? judgeCss(policy, css) : null;
@@ -2104,7 +2243,7 @@
             var category = /\bdata-faz-category\s*=/i.test(attrs) ? '' : ' data-faz-category="' + escapeAttr(parkCategory(policy, verdict.hit)) + '"';
             return '<style' + attrs + ' data-faz-css="' + escapeAttr(encoded) + '"' + category + '>'
                 + parkedForm(policy, css, verdict) + '</style>';
-        });
+        }, uncertain);
     }
     // `host` is where the parsed nodes land: the sheets that are new in it
     // afterwards are the ones this delivery judged, and the backstop — still
@@ -2113,8 +2252,11 @@
     // theme for a comment.
     function deliverMarkup(policy, markup, apply, host) {
         if (!policy || !policy.sameOriginOnly) return apply(markup);
+        // `host` is also the fragment-parsing context: see markupContextMode().
+        var mode = markupContextMode(host);
+        if (mode === 'text') return apply(markup);
         var before = sheets(host);
-        apply(parkMarkup(policy, markup));
+        apply(parkMarkup(policy, markup, mode !== 'html'));
         sheets(host).forEach(function (el) {
             if (before.indexOf(el) !== -1) return;
             // The parser builds no text node for an empty element, so a
@@ -2847,6 +2989,16 @@
         var target = parkTarget(tagKey(el), key);
         setAttr(el, target.value, value);
         if (key === 'srcdoc') setAttr(el, 'data-faz-srcdoc-key', (window._fazConfig || {})._srcdocKey || '');
+        // Provenance for the parks the runtime restores only when proven
+        // (_fazProveParked() in script.js): the response key plus the name.
+        var provenName = { 'data-faz-data': 'data', 'data-faz-background': 'background' }[target.value];
+        var proofKey = (window._fazConfig || {})._srcdocKey || '';
+        if (provenName && proofKey) {
+            var provenList = attr(el, 'data-faz-park-key') === proofKey ? String(attr(el, 'data-faz-park') || '') : '';
+            if ((' ' + provenList + ' ').indexOf(' ' + provenName + ' ') === -1) provenList = (provenList ? provenList + ' ' : '') + provenName;
+            setAttr(el, 'data-faz-park', provenList);
+            setAttr(el, 'data-faz-park-key', proofKey);
+        }
         // A list restores by re-reading every candidate, so it carries no
         // category of its own; writing one there would collide with a src/href
         // park on the same element.

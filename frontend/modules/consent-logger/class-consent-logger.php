@@ -969,7 +969,7 @@ class Consent_Logger {
 		if ( '' === $ip || ! function_exists( 'faz_ip_cache_key' ) ) {
 			return false;
 		}
-		$key   = 'faz_consent_ip_free_' . faz_ip_cache_key( $ip );
+		$key   = 'faz_consent_ip_free_' . faz_ip_cache_key( function_exists( 'faz_ip_rate_bucket' ) ? faz_ip_rate_bucket( $ip ) : $ip );
 		$now   = time();
 		$state = get_transient( $key );
 		if ( ! is_array( $state ) || ! isset( $state['until'], $state['n'] ) || (int) $state['until'] <= $now ) {

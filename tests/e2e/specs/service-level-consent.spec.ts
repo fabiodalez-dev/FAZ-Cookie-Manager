@@ -133,6 +133,9 @@ test.describe('Service-level consent — placeholder button (#134)', () => {
       const btn = document.createElement('button');
       btn.className = 'faz-placeholder-btn';
       Object.entries(a).forEach(([k, v]) => btn.setAttribute(k, v));
+      // A server-built placeholder carries the response-local key; the runtime
+      // ignores data-faz-accept on anything without it (forged post markup).
+      btn.setAttribute('data-faz-accept-key', String((window as any)._fazConfig?._srcdocKey || ''));
       btn.id = 'faz-test-ph';
       document.body.appendChild(btn);
       btn.click();

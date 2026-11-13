@@ -50,6 +50,9 @@ function loadFrontend({ gpc = true, cookie = '', revision = 1, ageGate = false }
     _ageGate: ageGate ? { enabled: true, minAge: 16 } : { enabled: false },
     _bannerConfig: { settings: { applicableLaw: 'gdpr' }, behaviours: { respectGPC: false }, config: { revisitConsent: { status: false } } },
     _shortCodes: [],
+    // Response-local key the server stamps on its placeholder buttons; the
+    // runtime ignores data-faz-accept on anything that lacks it.
+    _srcdocKey: 'test-response-key',
     i18n: {},
   };
   const realAdd = window.document.addEventListener.bind(window.document);
@@ -69,6 +72,7 @@ function acceptOnPlaceholder(w, serviceId, category) {
   const btn = w.document.createElement('button');
   btn.setAttribute('data-faz-accept', category);
   btn.setAttribute('data-faz-accept-service', serviceId);
+  btn.setAttribute('data-faz-accept-key', 'test-response-key');
   w.document.body.appendChild(btn);
   btn.click();
 }
@@ -201,7 +205,7 @@ const w13 = loadFrontend({ ageGate: true });
 w13.eval('_fazApplyGpcOptOut()');
 w13.eval('_fazWatchBannerElement()');
 w13.document.body.innerHTML =
-  '<button data-faz-accept="functional" data-faz-accept-service="google-maps"></button>' +
+  '<button data-faz-accept="functional" data-faz-accept-service="google-maps" data-faz-accept-key="test-response-key"></button>' +
   '<div data-faz-tag="notice-buttons"></div>';
 w13.eval('_fazRenderAgeConfirmations()');
 check('(l) the age row is rendered above the accept surface', !!w13.document.querySelector('.faz-age-confirm-cb'));

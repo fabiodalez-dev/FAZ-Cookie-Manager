@@ -18,6 +18,7 @@ import { expect } from '@playwright/test';
 import { test } from '../fixtures/wp-fixture';
 import { stampedDsarFields } from '../utils/dsar-form';
 import { upsertPage, wpEval } from '../utils/wp-env';
+import { installLoopbackPeer, removeLoopbackPeer, PUBLIC_PEER_HEADERS } from '../utils/loopback-peer';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -185,6 +186,10 @@ test.describe('CCPA opt-out form — security fixes', () => {
   test('CCPA-SEC-01: rate limit blocks second opt-out within 60 seconds', async ({
     page, wpBaseURL,
   }) => {
+    // The window applies only to an address that identifies one visitor
+    // (faz-test's loopback peer does not): present a public one.
+    installLoopbackPeer();
+    try {
     await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
     const nonce = await page.locator('form.faz-dnsmpi-form input[name="nonce"]').inputValue();
 
@@ -196,7 +201,7 @@ test.describe('CCPA opt-out form — security fixes', () => {
     // reached. Simulate what a real browser sends for the page's own form
     // POST; cross-origin rejection coverage lives in the PHP unit suite
     // (test-dnsmpi-csrf-php.php).
-    const sameOriginHeaders = { 'Sec-Fetch-Site': 'same-origin' };
+    const sameOriginHeaders = { 'Sec-Fetch-Site': 'same-origin', ...PUBLIC_PEER_HEADERS };
 
     const res1 = await page.request.post(`${wpBaseURL}${AJAX_URL_PATH}`, { form: formPayload, headers: sameOriginHeaders });
     const body1 = await res1.json() as { success: boolean };
@@ -225,6 +230,25 @@ test.describe('CCPA opt-out form — security fixes', () => {
     const body2 = await res2.json() as { success: boolean; data?: string };
     expect(body2.success, 'second CCPA opt-out within 60 s must be blocked').toBe(false);
     expect(String(body2.data ?? '').toLowerCase()).toContain('too many');
+    } finally {
+      removeLoopbackPeer();
+    }
+  });
+
+  test('CCPA-SEC-01b: a shared (loopback) address does not refuse the next visitor', async ({
+    page, wpBaseURL,
+  }) => {
+    // 2026-11 audit: keyed on an address that is not one visitor's, the
+    // 60-second window refused every other visitor's opt-out for a minute.
+    removeLoopbackPeer();
+    await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
+    const nonce = await page.locator('form.faz-dnsmpi-form input[name="nonce"]').inputValue();
+    const headers = { 'Sec-Fetch-Site': 'same-origin' };
+    const res1 = await page.request.post(`${wpBaseURL}${AJAX_URL_PATH}`, { form: { action: 'faz_dnsmpi_optout', nonce }, headers });
+    expect(((await res1.json()) as { success: boolean }).success, 'first opt-out succeeds').toBe(true);
+    await page.context().clearCookies();
+    const res2 = await page.request.post(`${wpBaseURL}${AJAX_URL_PATH}`, { form: { action: 'faz_dnsmpi_optout', nonce }, headers });
+    expect(((await res2.json()) as { success: boolean }).success, 'a second visitor behind the same shared address is not refused').toBe(true);
   });
 
   test('CCPA-SEC-02: opt-out cookie is readable so client cannot undo server blocking', async ({

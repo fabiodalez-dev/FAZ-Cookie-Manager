@@ -48,6 +48,24 @@ class Do_Not_Sell_Shortcode {
 	const STATUS_FIELD   = 'dnsmpi_optout';
 	const STATUS_RESCIND = 'dns_rescinded';
 
+	/**
+	 * Site-wide ceiling on per-request admin notification mail, per 24 hours.
+	 *
+	 * Every accepted opt-out mailed admin_email, and the only bound was the
+	 * per-address 60-second window, which an address-rotating client walks
+	 * past. The DSAR form already caps its own per-request mail the same way.
+	 * Past the ceiling the opt-out is still recorded and honoured; only the
+	 * mail is skipped (every opt-out stays visible in the consent log).
+	 * Filterable via `faz_dnsmpi_max_notifications_per_day`.
+	 */
+	const MAX_NOTIFICATIONS_PER_DAY = 50;
+
+	/**
+	 * Option holding the admin-mail window: array( 'n' => count, 'start' => epoch ).
+	 * Prefixed faz_dnsmpi_rl_ like the other Do-Not-Sell throttles.
+	 */
+	const MAIL_WINDOW_OPTION = 'faz_dnsmpi_rl_mail_day';
+
 	public function __construct() {
 		add_shortcode( 'faz_do_not_sell', array( $this, 'render' ) );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_optout' ) );
@@ -333,27 +351,26 @@ class Do_Not_Sell_Shortcode {
 			return;
 		}
 
-		// Rate limiting: atomic DB-backed lock via add_option (MySQL INSERT IGNORE),
-		// plus a transient for the 60-second durability window.
-		$rl_key   = 'faz_dnsmpi_rl_'   . substr( $this->hash_ip(), 0, 16 );
-		$lock_key = 'faz_dnsmpi_lock_' . substr( $this->hash_ip(), 0, 16 );
-
-		if ( false !== get_transient( $rl_key ) || ! add_option( $lock_key, 1, '', 'no' ) ) {
+		// Rate limiting: per-connection 60-second window (see claim_window()).
+		$lock_key = $this->claim_window( 'faz_dnsmpi_' );
+		if ( false === $lock_key ) {
 			wp_send_json_error( __( 'Too many requests. Please wait 1 minute before submitting again.', 'faz-cookie-manager' ) );
 			return;
 		}
-		// Lock acquired — write durability transient, then process and release.
-		set_transient( $rl_key, 1, 60 );
 
 		try {
 			$ip_hash = $this->hash_ip();
 			$this->log_optout( $ip_hash );
 			$this->set_optout_cookie();
-			$this->notify_admin( $ip_hash );
+			if ( $this->claim_notification() ) {
+				$this->notify_admin( $ip_hash );
+			}
 		} finally {
 			// Release DB lock regardless of success or exception; the transient
 			// maintains the ongoing 60-second throttle window.
-			delete_option( $lock_key );
+			if ( is_string( $lock_key ) ) {
+				delete_option( $lock_key );
+			}
 		}
 
 		wp_send_json_success(
@@ -385,15 +402,12 @@ class Do_Not_Sell_Shortcode {
 		// Idempotency: if the opt-out cookie is already absent, nothing to do.
 		$has_optout_cookie = isset( $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] ) && '1' === $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ];
 
-		// Rate limiting: atomic DB-backed lock plus 60-second transient window.
-		$rl_key   = 'faz_dnsmpi_rsc_rl_'   . substr( $this->hash_ip(), 0, 16 );
-		$lock_key = 'faz_dnsmpi_rsc_lock_' . substr( $this->hash_ip(), 0, 16 );
-
-		if ( false !== get_transient( $rl_key ) || ! add_option( $lock_key, 1, '', 'no' ) ) {
+		// Rate limiting: same per-connection window as the opt-out.
+		$lock_key = $this->claim_window( 'faz_dnsmpi_rsc_' );
+		if ( false === $lock_key ) {
 			wp_send_json_error( __( 'Too many requests. Please wait 1 minute before submitting again.', 'faz-cookie-manager' ) );
 			return;
 		}
-		set_transient( $rl_key, 1, 60 );
 
 		try {
 			$this->clear_optout_cookie();
@@ -402,7 +416,9 @@ class Do_Not_Sell_Shortcode {
 				$this->log_rescind( $ip_hash );
 			}
 		} finally {
-			delete_option( $lock_key );
+			if ( is_string( $lock_key ) ) {
+				delete_option( $lock_key );
+			}
 		}
 
 		wp_send_json_success(
@@ -512,6 +528,88 @@ class Do_Not_Sell_Shortcode {
 	private function log_rescind( $ip_hash ) {
 		unset( $ip_hash ); // Central logger derives its own hashed IP.
 		$this->log_dnsmpi_event( 'dnsmpi-rsc', self::STATUS_RESCIND );
+	}
+
+	/**
+	 * Claim the per-connection 60-second window for an opt-out or rescind.
+	 *
+	 * The window is keyed on the client address, so it is skipped when that
+	 * address does not identify one visitor (a proxy's own address, a private
+	 * or loopback peer, no address at all): there every visitor shares one
+	 * bucket, and one request refused everyone else's CCPA opt-out for a
+	 * minute — the IP_Hasher contract the DSAR form already follows. The lock
+	 * row holds its claim time so a request that died between add_option()
+	 * and its finally block cannot hold the address forever.
+	 *
+	 * @param string $prefix Option/transient prefix ('faz_dnsmpi_' or 'faz_dnsmpi_rsc_').
+	 * @return string|bool Lock option name to release, true when no window
+	 *                     applies, false when the window is held (refuse).
+	 */
+	private function claim_window( $prefix ) {
+		if ( ! $this->ip_identifies_visitor() ) {
+			return true;
+		}
+		$hash     = substr( $this->rate_hash(), 0, 16 );
+		$rl_key   = $prefix . 'rl_' . $hash;
+		$lock_key = $prefix . 'lock_' . $hash;
+
+		if ( false !== get_transient( $rl_key ) ) {
+			return false;
+		}
+		if ( ! add_option( $lock_key, time(), '', 'no' ) ) {
+			$held = (int) get_option( $lock_key, 0 );
+			if ( $held > 0 && ( time() - $held ) < 120 ) {
+				return false;
+			}
+			// Stale lock (or a pre-1.39.1 row holding the literal 1): reclaim it.
+			delete_option( $lock_key );
+			if ( ! add_option( $lock_key, time(), '', 'no' ) ) {
+				return false;
+			}
+		}
+		// Lock acquired — write the durability transient for the window.
+		set_transient( $rl_key, 1, 60 );
+		return $lock_key;
+	}
+
+	/**
+	 * Whether this opt-out may still send its own admin notification in the
+	 * current 24-hour window.
+	 *
+	 * The window is fixed: it closes 24 hours after the FIRST mail in it, like
+	 * the DSAR form's site-wide ceiling (DSAR_Shortcode::window_bump()). A
+	 * transient re-set on every mail would push its own expiry forward, so on
+	 * a site with an opt-out a day the counter would never reset and the mail
+	 * would stop for good once it reached the ceiling. It is kept in a
+	 * non-autoloaded option, which an object-cache flush cannot reset either.
+	 *
+	 * @return bool
+	 */
+	private function claim_notification() {
+		$max = (int) apply_filters( 'faz_dnsmpi_max_notifications_per_day', self::MAX_NOTIFICATIONS_PER_DAY );
+		if ( $max <= 0 ) {
+			return false;
+		}
+		$now   = time();
+		$data  = get_option( self::MAIL_WINDOW_OPTION );
+		$start = is_array( $data ) && isset( $data['start'] ) ? (int) $data['start'] : 0;
+		$count = is_array( $data ) && isset( $data['n'] ) ? (int) $data['n'] : 0;
+		if ( ! $start || $now - $start >= 86400 ) {
+			$start = $now;
+			$count = 0;
+		}
+		if ( $count >= $max ) {
+			return false;
+		}
+		update_option(
+			self::MAIL_WINDOW_OPTION,
+			array(
+				'n'     => $count + 1,
+				'start' => $start,
+			),
+			false
+		);
+		return true;
 	}
 
 	/**
