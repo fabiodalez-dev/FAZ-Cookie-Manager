@@ -214,6 +214,9 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				// DSAR_Shortcode::site_count()), so the _transient_faz% sweep
 				// above does not reach it.
 				'faz_dsar_rl_cnt_all',
+				// The Do-Not-Sell admin-mail window, an option for the same
+				// reason (Do_Not_Sell_Shortcode::claim_notification()).
+				'faz_dnsmpi_rl_mail_day',
 				// When the first form-stamping version started running: the
 				// epoch of the stampless grace window (DSAR_Shortcode::
 				// record_stamp_epoch()). Written once with add_option.

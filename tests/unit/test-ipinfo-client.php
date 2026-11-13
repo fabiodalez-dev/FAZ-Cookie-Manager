@@ -52,6 +52,10 @@ function apply_filters( $hook, $val ) {
 	return $val;
 }
 function wp_remote_get( $url, $args = array() ) {
+	$GLOBALS['_faz_test_http_calls'] = ( $GLOBALS['_faz_test_http_calls'] ?? 0 ) + 1;
+	if ( ! empty( $GLOBALS['_faz_test_http_stub'] ) ) {
+		return $GLOBALS['_faz_test_http_stub'];
+	}
 	// Default stub — return error so no real HTTP.
 	return new WP_Error( 'stub', 'no HTTP in unit test' );
 }
@@ -288,6 +292,27 @@ assert_eq( $pr['vpn'], null, 'Truncated JSON body → null (no exception)' );
 // Array-at-root (not an object) — should parse-fail.
 $pr = $parse( '[true, false, false]' );
 assert_eq( $pr['vpn'], null, 'JSON array at root (not object) → null' );
+
+// ---------- An account-level refusal is remembered for the whole site ----------
+
+echo "\n-- ipinfo refusal (401/402/403/429) --\n";
+$GLOBALS['_faz_test_options']['faz_geo_ipinfo_optin'] = true;
+$GLOBALS['_faz_test_cache']                           = array();
+$GLOBALS['_faz_test_http_stub']                       = array( 'response' => array( 'code' => 429 ), 'body' => '{}' );
+$GLOBALS['_faz_test_http_calls']                      = 0;
+$refusal_client = new Ipinfo_Client();
+$r1 = $refusal_client->lookup( '203.0.113.71' );
+assert_eq( $r1['vpn'], null, 'a 429 from ipinfo gives no verdict' );
+assert_eq( $GLOBALS['_faz_test_http_calls'], 1, 'the first lookup calls ipinfo once' );
+$r2 = $refusal_client->lookup( '198.51.100.72' );
+assert_eq( $r2['vpn'], null, 'a second visitor with another address gets no verdict either' );
+assert_eq( $GLOBALS['_faz_test_http_calls'], 1, 'and ipinfo is not called again while the refusal is remembered' );
+$GLOBALS['_faz_test_http_stub'] = null;
+$GLOBALS['_faz_test_cache']     = array();
+$refusal_client->lookup( '198.51.100.73' );
+assert_eq( $GLOBALS['_faz_test_http_calls'], 2, 'a transport failure is not remembered: the next lookup calls again' );
+$refusal_client->lookup( '198.51.100.74' );
+assert_eq( $GLOBALS['_faz_test_http_calls'], 3, 'and neither is the one after it' );
 
 // ---------- Summary ----------
 

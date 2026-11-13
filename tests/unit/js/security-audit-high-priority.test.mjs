@@ -206,6 +206,25 @@ console.log('\n4c. runtime markup gate: no rewrite where the parser and the scan
   ok('control: a real <style> before an inline SVG is still parked', !!s && !!s.getAttribute('data-faz-css'));
 }
 
+// Sheets the browser applies in or after foreign content: parked where the
+// HTML and the foreign reading of the string agree (no "<" or "&" inside).
+const FOREIGN_SHEETS = [
+  ['an SVG <style>', '<svg><style>@import url(https://tracker.test/a.css);</style></svg>', null],
+  ['a <style> in <foreignObject> (HTML integration point)', '<svg><foreignObject><style>.p{background:url(https://tracker.test/b.png)}</style></foreignObject></svg>', null],
+  ['a <style> after a breakout tag closed the <svg>', '<svg><p>x</p><style>.p{background:url(https://tracker.test/c.png)}</style>', null],
+  ['a <style> written into an SVG element (foreign context)', '<style>.p{background:url(https://tracker.test/d.png)}</style>', 'svg'],
+];
+function parkedIn(w, html, ctx, host) {
+  const el = ctx === 'svg' ? w.document.createElementNS(SVG_NS, 'svg') : w.document.createElement('div');
+  if (host) w.document.body.appendChild(el);
+  el.innerHTML = html;
+  const st = el.querySelector('style');
+  return !!st && !!st.getAttribute('data-faz-css');
+}
+for (const [label, html, ctx] of FOREIGN_SHEETS) {
+  ok(`${label} is still parked`, parkedIn(runtime({ aggressive: true }), html, ctx));
+}
+
 console.log('\n4b. bootstrap safety release: the same rule');
 await (async () => {
   const dom = new JSDOM('<!DOCTYPE html><html><head></head><body></body></html>', { runScripts: 'outside-only', url: 'http://site.test/' });
@@ -238,6 +257,9 @@ await (async () => {
   w.document.body.appendChild(s6);
   s6.insertAdjacentHTML('beforeend', x(DESYNC.svgCtx));
   ok('same through insertAdjacentHTML inside an SVG element', s6.querySelector('image') === null);
+  for (const [label, html, ctx] of FOREIGN_SHEETS) {
+    ok(`${label} is still parked`, parkedIn(w, x(html), ctx, true));
+  }
 })();
 
 // ---------------------------------------------------------------- 7

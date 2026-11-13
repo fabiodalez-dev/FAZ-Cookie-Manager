@@ -60,6 +60,12 @@ class Do_Not_Sell_Shortcode {
 	 */
 	const MAX_NOTIFICATIONS_PER_DAY = 50;
 
+	/**
+	 * Option holding the admin-mail window: array( 'n' => count, 'start' => epoch ).
+	 * Prefixed faz_dnsmpi_rl_ like the other Do-Not-Sell throttles.
+	 */
+	const MAIL_WINDOW_OPTION = 'faz_dnsmpi_rl_mail_day';
+
 	public function __construct() {
 		add_shortcode( 'faz_do_not_sell', array( $this, 'render' ) );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_optout' ) );
@@ -567,7 +573,15 @@ class Do_Not_Sell_Shortcode {
 	}
 
 	/**
-	 * Whether this opt-out may still send its own admin notification today.
+	 * Whether this opt-out may still send its own admin notification in the
+	 * current 24-hour window.
+	 *
+	 * The window is fixed: it closes 24 hours after the FIRST mail in it, like
+	 * the DSAR form's site-wide ceiling (DSAR_Shortcode::window_bump()). A
+	 * transient re-set on every mail would push its own expiry forward, so on
+	 * a site with an opt-out a day the counter would never reset and the mail
+	 * would stop for good once it reached the ceiling. It is kept in a
+	 * non-autoloaded option, which an object-cache flush cannot reset either.
 	 *
 	 * @return bool
 	 */
@@ -576,11 +590,25 @@ class Do_Not_Sell_Shortcode {
 		if ( $max <= 0 ) {
 			return false;
 		}
-		$count = (int) get_transient( 'faz_dnsmpi_mail_day' );
+		$now   = time();
+		$data  = get_option( self::MAIL_WINDOW_OPTION );
+		$start = is_array( $data ) && isset( $data['start'] ) ? (int) $data['start'] : 0;
+		$count = is_array( $data ) && isset( $data['n'] ) ? (int) $data['n'] : 0;
+		if ( ! $start || $now - $start >= 86400 ) {
+			$start = $now;
+			$count = 0;
+		}
 		if ( $count >= $max ) {
 			return false;
 		}
-		set_transient( 'faz_dnsmpi_mail_day', $count + 1, 86400 );
+		update_option(
+			self::MAIL_WINDOW_OPTION,
+			array(
+				'n'     => $count + 1,
+				'start' => $start,
+			),
+			false
+		);
 		return true;
 	}
 

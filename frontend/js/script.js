@@ -6708,18 +6708,22 @@ function _fazPrepareStyleTagHtml(full, attrs, css) {
  * real <img> (mutation XSS through the consent wrappers). This walks the
  * string with the tokenizer's own rules: data state, tags with quoted
  * attributes, comments and bogus comments, RAWTEXT/RCDATA elements ending at
- * the appropriate end tag. The walk stops at an <svg>/<math> start tag and at
- * script data carrying "<!--", where the parser's state depends on more than
- * a string scan can track; anything unterminated stops it too. Where it stops,
- * the rest of the string is returned unchanged: an unparked sheet is a missed
- * block, a misread one is live markup.
+ * the appropriate end tag. Past an <svg>/<math>/<select>/<frameset> start tag
+ * (or from the start, with `uncertain`, for a foreign or <select> context) the
+ * parser may read <style> content as markup: there a sheet is rewritten only
+ * when its content has no "<" or "&", where both readings agree, and the walk
+ * stops at anything else. It also stops at script data carrying "<!--" and at
+ * anything unterminated. Where it stops, the rest of the string is returned
+ * unchanged: an unparked sheet is a missed block, a misread one is live markup.
  *
  * @param {string} html
  * @param {function(string, string, string): string} fn
+ * @param {boolean=} uncertain
  * @returns {string}
  */
-function _fazRewriteRealStyleTags(html, fn) {
+function _fazRewriteRealStyleTags(html, fn, uncertain) {
     var s = String(html), n = s.length, out = "", last = 0, i = 0;
+    uncertain = !!uncertain;
     var RAW = { style: 1, script: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1, textarea: 1, title: 1 };
     function isAlpha(c) { return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z"); }
     function isSpace(c) { return c === " " || c === "\t" || c === "\n" || c === "\f" || c === "\r"; }
@@ -6771,7 +6775,17 @@ function _fazRewriteRealStyleTags(html, fn) {
             if (cend === -1) break;
             i = cend; continue;
         }
-        if (c === "!") { i = toGt(lt + 2); continue; }
+        if (c === "!") {
+            // CDATA is text up to "]]>" in foreign content and a bogus comment
+            // up to the first ">" in HTML: the two agree only when that first
+            // ">" is the one closing "]]>".
+            if (uncertain && s.substr(lt, 9) === "<![CDATA[") {
+                var cd = s.indexOf("]]>", lt + 9);
+                if (cd === -1 || s.indexOf(">", lt + 2) !== cd + 2) break;
+                i = cd + 3; continue;
+            }
+            i = toGt(lt + 2); continue;
+        }
         if (c === "?") { i = toGt(lt + 2); continue; }
         if (c === "/") {
             var c2 = s.charAt(lt + 2);
@@ -6784,13 +6798,16 @@ function _fazRewriteRealStyleTags(html, fn) {
         if (!isAlpha(c)) { i = lt + 1; continue; }
         var tag = scanTag(lt + 1);
         if (!tag) break;
-        // Foreign content is not followed: inside <svg>/<math> a <style> parses
-        // its content as markup, and where foreign content ends depends on the
+        // From an <svg>/<math> start tag on, the parser may be in foreign
+        // content, where <style> and the RAWTEXT/RCDATA elements parse their
+        // content as markup; and where foreign content ends depends on the
         // open-element stack (breakout tags, integration points, stray end
-        // tags) — a counter got it wrong. The walk stops, and the rest of the
-        // string is passed on as it is.
-        if (tag.name === "svg" || tag.name === "math") {
-            if (!tag.selfClosing) break;
+        // tags), which a scan cannot follow. A legacy <select> or a <frameset>
+        // ignores the <style> start tag and leaves its content in the data
+        // state too. Past any of these the walk only acts where both readings
+        // give the same tokens (see below) and stops everywhere else.
+        if (tag.name === "svg" || tag.name === "math" || tag.name === "select" || tag.name === "frameset") {
+            if (!tag.selfClosing || tag.name === "select" || tag.name === "frameset") uncertain = true;
             i = tag.end; continue;
         }
         if (tag.name === "plaintext") break;
@@ -6799,15 +6816,24 @@ function _fazRewriteRealStyleTags(html, fn) {
         re.lastIndex = tag.end;
         var m = re.exec(s);
         if (!m) break;
+        var body = s.slice(tag.end, m.index);
         // "<!--" in script data enters the escaped states, where "<script"
         // and "</script" move the real end of the script: stop rather than
         // guess it.
-        if (tag.name === "script" && s.slice(tag.end, m.index).indexOf("<!--") !== -1) break;
+        if (tag.name === "script" && body.indexOf("<!--") !== -1) break;
+        // Where the element may be foreign (or an ignored tag), its content is
+        // markup. Without a "<" in it, markup and RAWTEXT/RCDATA give the
+        // same text up to the same end tag; with one they may not, and a
+        // self-closing start tag ends a foreign element right there.
+        if (uncertain && (tag.selfClosing || body.indexOf("<") !== -1)) break;
         var endTag = scanTag(m.index + 2);
         if (!endTag) break;
-        if (tag.name === "style") {
+        // "&" is literal in RAWTEXT and a character reference in markup: the
+        // structure is the same, the text is not, so such a sheet is left as
+        // it is rather than parked with an original it does not have.
+        if (tag.name === "style" && !(uncertain && body.indexOf("&") !== -1)) {
             var full = s.slice(lt, endTag.end);
-            var rep = fn(full, s.slice(tag.attrsStart, tag.gt), s.slice(tag.end, m.index));
+            var rep = fn(full, s.slice(tag.attrsStart, tag.gt), body);
             if (rep !== full) { out += s.slice(last, lt) + rep; last = endTag.end; }
         }
         i = endTag.end;
@@ -6816,25 +6842,31 @@ function _fazRewriteRealStyleTags(html, fn) {
 }
 
 /**
- * True when markup parsed with `context` as the fragment-parsing context
- * starts in HTML content. An SVG or MathML context parses the string as
- * foreign content from its first byte, where <style> is not RAWTEXT and the
- * rewrite would land inside what the parser reads as markup.
+ * How markup parsed with `context` as the fragment-parsing context starts:
+ * "html" in HTML content; "uncertain" in foreign content (an SVG or MathML
+ * context) or a <select>/<frameset>, where <style> may not be RAWTEXT; "text"
+ * for a context whose content is text from the first byte (<style>, <script>,
+ * <textarea>…), which no markup rewrite applies to.
  */
-function _fazMarkupContextIsHtml(context) {
+function _fazMarkupContextMode(context) {
     var el = context;
     if (el && el.nodeType === 11) el = el.host || null; // a shadow root parses in its host
-    if (!el || el.nodeType !== 1) return true;
+    if (!el || el.nodeType !== 1) return "html";
     var ns = el.namespaceURI;
-    return !ns || ns === "http://www.w3.org/1999/xhtml";
+    if (ns && ns !== "http://www.w3.org/1999/xhtml") return "uncertain";
+    var name = String(el.localName || "").toLowerCase();
+    if (/^(style|script|textarea|title|xmp|iframe|noembed|noframes|noscript|plaintext)$/.test(name)) return "text";
+    if (name === "select" || name === "frameset") return "uncertain";
+    return "html";
 }
 
 function _fazPrepareStyleHtmlString(html, context) {
     if (!html || typeof html !== "string" || html.toLowerCase().indexOf("<style") === -1) return html;
-    if (!_fazMarkupContextIsHtml(context)) return html;
+    var mode = _fazMarkupContextMode(context);
+    if (mode === "text") return html;
     return _fazRewriteRealStyleTags(html, function (full, attrs, css) {
         try { return _fazPrepareStyleTagHtml(full, attrs || "", css || ""); } catch (e) { return full; }
-    });
+    }, mode !== "html");
 }
 
 function _fazGateHtmlStyleStringSetter(proto, prop) {
