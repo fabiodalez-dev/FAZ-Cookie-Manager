@@ -152,6 +152,60 @@ const ATTR_PAYLOAD = '<abbr title="<style>u{background:url(//tracker.test/x)}<im
   ok('and the markup after it is unchanged', !!d.querySelector('i') && d.querySelector('i').textContent === 'after');
 }
 
+// Markup the HTML parser does NOT read as a RAWTEXT <style>, while a scanner
+// can: a foreign <style> (MathML/SVG) parses its content as markup, and the
+// url("…") the rewrite writes then closes a quoted attribute early.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const DESYNC = {
+  // </svg> inside <math> is ignored by the parser; a counter took it as a close.
+  stray: '<math></svg><style><a title="url(https://tracker.test/x)</style><img src=x onerror=window.__pwned=1>">t</a></style></math>',
+  // <!--<script> inside script data moves where </script> ends the script.
+  script: '<script><!--<script></script><style>a{background:url(//tracker.test/<script>)}</style></script><img src=x onerror=window.__pwned=1>',
+  // innerHTML on an SVG element parses in foreign content from the first byte.
+  svgCtx: '<style><a title="url(https://tracker.test/x)</style><image href=x onerror=window.__pwned=1>">t</a></style>',
+};
+{
+  // Control: without any wrapper, none of these strings carries live markup.
+  const plain = new JSDOM('<!DOCTYPE html><body></body>').window.document;
+  const d1 = plain.createElement('div'); d1.innerHTML = DESYNC.stray;
+  const d2 = plain.createElement('div'); d2.innerHTML = DESYNC.script;
+  const s3 = plain.createElementNS(SVG_NS, 'svg'); s3.innerHTML = DESYNC.svgCtx;
+  ok('control: the parser alone builds no <img>/<image> from these strings', !d1.querySelector('img') && !d2.querySelector('img') && !s3.querySelector('image'));
+}
+console.log('\n4c. runtime markup gate: no rewrite where the parser and the scanner can disagree');
+{
+  const w = runtime({ aggressive: true });
+  const d = w.document.createElement('div');
+  d.innerHTML = DESYNC.stray;
+  ok('a stray </svg> inside <math> does not make the foreign <style> look like a real one', d.querySelector('img') === null);
+}
+{
+  const w = runtime({ aggressive: true });
+  const d = w.document.createElement('div');
+  d.innerHTML = DESYNC.script;
+  ok('an escaped <!--<script> in script data does not end the script early after the rewrite', d.querySelector('img') === null);
+}
+{
+  const w = runtime({ aggressive: true });
+  const s = w.document.createElementNS(SVG_NS, 'svg');
+  s.innerHTML = DESYNC.svgCtx;
+  ok('innerHTML on an SVG element (foreign context) is not rewritten into live markup', s.querySelector('image') === null);
+}
+{
+  const w = runtime({ aggressive: true });
+  const s = w.document.createElementNS(SVG_NS, 'svg');
+  w.document.body.appendChild(s);
+  s.insertAdjacentHTML('beforeend', DESYNC.svgCtx);
+  ok('same through insertAdjacentHTML inside an SVG element', s.querySelector('image') === null);
+}
+{
+  const w = runtime({ aggressive: true });
+  const d = w.document.createElement('div');
+  d.innerHTML = '<style>.p{background:url(https://tracker.test/a.png)}</style><svg><path d="M0 0"/></svg>';
+  const s = d.querySelector('style');
+  ok('control: a real <style> before an inline SVG is still parked', !!s && !!s.getAttribute('data-faz-css'));
+}
+
 console.log('\n4b. bootstrap safety release: the same rule');
 await (async () => {
   const dom = new JSDOM('<!DOCTYPE html><html><head></head><body></body></html>', { runScripts: 'outside-only', url: 'http://site.test/' });
@@ -170,6 +224,20 @@ await (async () => {
   d2.innerHTML = '<style>.p{background:url(//a.example/x.png)}</style>';
   const s = d2.querySelector('style');
   ok('control: a real cross-origin <style> is still parked on the safety release', !!s && !!s.getAttribute('data-faz-css'));
+  const x = (v) => v.replace(/tracker\.test/g, 'a.example');
+  const d3 = w.document.createElement('div');
+  d3.innerHTML = x(DESYNC.stray);
+  ok('a stray </svg> inside <math> does not make the foreign <style> look like a real one', d3.querySelector('img') === null);
+  const d4 = w.document.createElement('div');
+  d4.innerHTML = x(DESYNC.script);
+  ok('an escaped <!--<script> in script data does not end the script early after the rewrite', d4.querySelector('img') === null);
+  const s5 = w.document.createElementNS(SVG_NS, 'svg');
+  s5.innerHTML = x(DESYNC.svgCtx);
+  ok('innerHTML on an SVG element (foreign context) is not rewritten into live markup', s5.querySelector('image') === null);
+  const s6 = w.document.createElementNS(SVG_NS, 'svg');
+  w.document.body.appendChild(s6);
+  s6.insertAdjacentHTML('beforeend', x(DESYNC.svgCtx));
+  ok('same through insertAdjacentHTML inside an SVG element', s6.querySelector('image') === null);
 })();
 
 // ---------------------------------------------------------------- 7

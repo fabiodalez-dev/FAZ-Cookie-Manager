@@ -2098,7 +2098,7 @@
     // the raw string also matched "<style>" text inside a quoted attribute or a
     // comment, and the rewrite turned sanitised markup into live markup.
     function rewriteRealStyleTags(html, fn) {
-        var s = String(html), n = s.length, out = "", last = 0, i = 0, foreign = 0;
+        var s = String(html), n = s.length, out = "", last = 0, i = 0;
         var RAW = { style: 1, script: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1, textarea: 1, title: 1 };
         function isAlpha(c) { return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z"); }
         function isSpace(c) { return c === " " || c === "\t" || c === "\n" || c === "\f" || c === "\r"; }
@@ -2150,14 +2150,7 @@
                 if (cend === -1) break;
                 i = cend; continue;
             }
-            if (c === "!") {
-                if (foreign > 0 && s.substr(lt, 9) === "<![CDATA[") {
-                    var cd = s.indexOf("]]>", lt + 9);
-                    if (cd === -1) break;
-                    i = cd + 3; continue;
-                }
-                i = toGt(lt + 2); continue;
-            }
+            if (c === "!") { i = toGt(lt + 2); continue; }
             if (c === "?") { i = toGt(lt + 2); continue; }
             if (c === "/") {
                 var c2 = s.charAt(lt + 2);
@@ -2165,14 +2158,18 @@
                 if (!isAlpha(c2)) { i = toGt(lt + 2); continue; }
                 var etag = scanTag(lt + 2);
                 if (!etag) break;
-                if (foreign > 0 && (etag.name === "svg" || etag.name === "math")) foreign--;
                 i = etag.end; continue;
             }
             if (!isAlpha(c)) { i = lt + 1; continue; }
             var tag = scanTag(lt + 1);
             if (!tag) break;
-            if (tag.name === "svg" || tag.name === "math" || foreign > 0) {
-                if ((tag.name === "svg" || tag.name === "math") && !tag.selfClosing) foreign++;
+            // Foreign content is not followed: inside <svg>/<math> a <style> parses
+            // its content as markup, and where foreign content ends depends on the
+            // open-element stack (breakout tags, integration points, stray end
+            // tags) — a counter got it wrong. The walk stops, and the rest of the
+            // string is passed on as it is.
+            if (tag.name === "svg" || tag.name === "math") {
+                if (!tag.selfClosing) break;
                 i = tag.end; continue;
             }
             if (tag.name === "plaintext") break;
@@ -2181,6 +2178,10 @@
             re.lastIndex = tag.end;
             var m = re.exec(s);
             if (!m) break;
+            // "<!--" in script data enters the escaped states, where "<script"
+            // and "</script" move the real end of the script: stop rather than
+            // guess it.
+            if (tag.name === "script" && s.slice(tag.end, m.index).indexOf("<!--") !== -1) break;
             var endTag = scanTag(m.index + 2);
             if (!endTag) break;
             if (tag.name === "style") {
@@ -2191,6 +2192,13 @@
             i = endTag.end;
         }
         return last === 0 ? s : out + s.slice(last);
+    }
+    function markupContextIsHtml(context) {
+        var el = context;
+        if (el && el.nodeType === 11) el = el.host || null;
+        if (!el || el.nodeType !== 1) return true;
+        var ns = el.namespaceURI;
+        return !ns || ns === 'http://www.w3.org/1999/xhtml';
     }
     function parkMarkup(policy, markup) {
         return rewriteRealStyleTags(String(markup == null ? '' : markup), function (full, attrs, css) {
@@ -2212,6 +2220,10 @@
     // theme for a comment.
     function deliverMarkup(policy, markup, apply, host) {
         if (!policy || !policy.sameOriginOnly) return apply(markup);
+        // `host` is also the fragment-parsing context. An SVG or MathML one
+        // parses the string as foreign content, where <style> is not RAWTEXT:
+        // the markup is not rewritten there (see markupContextIsHtml()).
+        if (!markupContextIsHtml(host)) return apply(markup);
         var before = sheets(host);
         apply(parkMarkup(policy, markup));
         sheets(host).forEach(function (el) {

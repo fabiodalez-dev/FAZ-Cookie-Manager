@@ -6708,16 +6708,18 @@ function _fazPrepareStyleTagHtml(full, attrs, css) {
  * real <img> (mutation XSS through the consent wrappers). This walks the
  * string with the tokenizer's own rules: data state, tags with quoted
  * attributes, comments and bogus comments, RAWTEXT/RCDATA elements ending at
- * the appropriate end tag. Content inside <svg>/<math> is left alone, since
- * a foreign <style> is not RAWTEXT. Anything unterminated stops the walk and
- * the rest of the string is returned unchanged.
+ * the appropriate end tag. The walk stops at an <svg>/<math> start tag and at
+ * script data carrying "<!--", where the parser's state depends on more than
+ * a string scan can track; anything unterminated stops it too. Where it stops,
+ * the rest of the string is returned unchanged: an unparked sheet is a missed
+ * block, a misread one is live markup.
  *
  * @param {string} html
  * @param {function(string, string, string): string} fn
  * @returns {string}
  */
 function _fazRewriteRealStyleTags(html, fn) {
-    var s = String(html), n = s.length, out = "", last = 0, i = 0, foreign = 0;
+    var s = String(html), n = s.length, out = "", last = 0, i = 0;
     var RAW = { style: 1, script: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1, textarea: 1, title: 1 };
     function isAlpha(c) { return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z"); }
     function isSpace(c) { return c === " " || c === "\t" || c === "\n" || c === "\f" || c === "\r"; }
@@ -6769,14 +6771,7 @@ function _fazRewriteRealStyleTags(html, fn) {
             if (cend === -1) break;
             i = cend; continue;
         }
-        if (c === "!") {
-            if (foreign > 0 && s.substr(lt, 9) === "<![CDATA[") {
-                var cd = s.indexOf("]]>", lt + 9);
-                if (cd === -1) break;
-                i = cd + 3; continue;
-            }
-            i = toGt(lt + 2); continue;
-        }
+        if (c === "!") { i = toGt(lt + 2); continue; }
         if (c === "?") { i = toGt(lt + 2); continue; }
         if (c === "/") {
             var c2 = s.charAt(lt + 2);
@@ -6784,14 +6779,18 @@ function _fazRewriteRealStyleTags(html, fn) {
             if (!isAlpha(c2)) { i = toGt(lt + 2); continue; }
             var etag = scanTag(lt + 2);
             if (!etag) break;
-            if (foreign > 0 && (etag.name === "svg" || etag.name === "math")) foreign--;
             i = etag.end; continue;
         }
         if (!isAlpha(c)) { i = lt + 1; continue; }
         var tag = scanTag(lt + 1);
         if (!tag) break;
-        if (tag.name === "svg" || tag.name === "math" || foreign > 0) {
-            if ((tag.name === "svg" || tag.name === "math") && !tag.selfClosing) foreign++;
+        // Foreign content is not followed: inside <svg>/<math> a <style> parses
+        // its content as markup, and where foreign content ends depends on the
+        // open-element stack (breakout tags, integration points, stray end
+        // tags) — a counter got it wrong. The walk stops, and the rest of the
+        // string is passed on as it is.
+        if (tag.name === "svg" || tag.name === "math") {
+            if (!tag.selfClosing) break;
             i = tag.end; continue;
         }
         if (tag.name === "plaintext") break;
@@ -6800,6 +6799,10 @@ function _fazRewriteRealStyleTags(html, fn) {
         re.lastIndex = tag.end;
         var m = re.exec(s);
         if (!m) break;
+        // "<!--" in script data enters the escaped states, where "<script"
+        // and "</script" move the real end of the script: stop rather than
+        // guess it.
+        if (tag.name === "script" && s.slice(tag.end, m.index).indexOf("<!--") !== -1) break;
         var endTag = scanTag(m.index + 2);
         if (!endTag) break;
         if (tag.name === "style") {
@@ -6812,8 +6815,23 @@ function _fazRewriteRealStyleTags(html, fn) {
     return last === 0 ? s : out + s.slice(last);
 }
 
-function _fazPrepareStyleHtmlString(html) {
+/**
+ * True when markup parsed with `context` as the fragment-parsing context
+ * starts in HTML content. An SVG or MathML context parses the string as
+ * foreign content from its first byte, where <style> is not RAWTEXT and the
+ * rewrite would land inside what the parser reads as markup.
+ */
+function _fazMarkupContextIsHtml(context) {
+    var el = context;
+    if (el && el.nodeType === 11) el = el.host || null; // a shadow root parses in its host
+    if (!el || el.nodeType !== 1) return true;
+    var ns = el.namespaceURI;
+    return !ns || ns === "http://www.w3.org/1999/xhtml";
+}
+
+function _fazPrepareStyleHtmlString(html, context) {
     if (!html || typeof html !== "string" || html.toLowerCase().indexOf("<style") === -1) return html;
+    if (!_fazMarkupContextIsHtml(context)) return html;
     return _fazRewriteRealStyleTags(html, function (full, attrs, css) {
         try { return _fazPrepareStyleTagHtml(full, attrs || "", css || ""); } catch (e) { return full; }
     });
@@ -6830,7 +6848,9 @@ function _fazGateHtmlStyleStringSetter(proto, prop) {
         get: function () { return nativeGet.call(this); },
         set: function (val) {
             var html = String(val == null ? "" : val);
-            try { html = _fazPrepareStyleHtmlString(html); } catch (e) { /* fail open */ }
+            // outerHTML parses in the parent; innerHTML in the element itself.
+            var context = prop === "outerHTML" ? this.parentNode : this;
+            try { html = _fazPrepareStyleHtmlString(html, context); } catch (e) { /* fail open */ }
             nativeSet.call(this, html);
         }
     });
@@ -6845,7 +6865,8 @@ function _fazGateInsertAdjacentHtml(proto) {
         enumerable: true,
         value: function (position, html) {
             var s = String(html == null ? "" : html);
-            try { s = _fazPrepareStyleHtmlString(s); } catch (e) { /* fail open */ }
+            var context = /^(beforebegin|afterend)$/i.test(String(position)) ? this.parentNode : this;
+            try { s = _fazPrepareStyleHtmlString(s, context); } catch (e) { /* fail open */ }
             return native.call(this, position, s);
         }
     });
@@ -6871,7 +6892,7 @@ function _fazGateHtmlStringMethod(proto, name) {
             // second, and dropping it would change what the sanitiser does.
             var args = Array.prototype.slice.call(arguments);
             var html = String(args[0] == null ? "" : args[0]);
-            try { args[0] = _fazPrepareStyleHtmlString(html); } catch (e) { /* fail open */ }
+            try { args[0] = _fazPrepareStyleHtmlString(html, this); } catch (e) { /* fail open */ }
             return native.apply(this, args);
         }
     });
