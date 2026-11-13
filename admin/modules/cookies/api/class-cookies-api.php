@@ -1295,14 +1295,27 @@ class Cookies_API extends API_Controller {
 			return $meta;
 		}
 
-		$decoded = $meta;
+		// Unwrap every JSON-string layer, not just the first. The readers
+		// decode more than once (Cookie_Controller::prepare_json, then
+		// Cookie::get_meta on the remaining string), so a meta value whose
+		// decoded form is itself the JSON text of an object used to pass this
+		// gate untouched and come out the other side with opt_in_script
+		// intact, ready to be re-serialised by the next privileged save.
+		$decoded         = $meta;
 		$was_json_string = false;
-		if ( is_string( $meta ) ) {
-			$tentative = json_decode( $meta, true );
-			if ( is_array( $tentative ) ) {
-				$decoded = $tentative;
-				$was_json_string = true;
+		for ( $depth = 0; is_string( $decoded ) && $depth < 4; $depth++ ) {
+			$tentative = json_decode( $decoded, true );
+			if ( null === $tentative || JSON_ERROR_NONE !== json_last_error() ) {
+				break;
 			}
+			$decoded         = $tentative;
+			$was_json_string = true;
+		}
+
+		// Still JSON after the depth bound: refuse rather than guess what a
+		// deeper reader would find. No legitimate meta is nested this deep.
+		if ( is_string( $decoded ) && null !== json_decode( $decoded, true ) ) {
+			return wp_json_encode( array() );
 		}
 
 		if ( ! is_array( $decoded ) ) {

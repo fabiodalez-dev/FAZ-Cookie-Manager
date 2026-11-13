@@ -1124,7 +1124,14 @@ class Activator {
 			// front-end request. The admin_init migration retries it anyway.
 			unset( $e );
 		}
-		if ( true === faz_first_time_install() ) {
+		// The fresh-install branch writes the FULL default settings over
+		// faz_settings, so it must only ever run for a site that has none. The
+		// first-install flag used to be a network-wide site transient: on
+		// multisite, any other subsite whose install() ran inside its 30-minute
+		// window (network activation, a new subsite, the lazy upgrade on init)
+		// had its whole configuration reset to defaults. The per-site option
+		// check is the invariant; the per-site flag below is the cause fix.
+		if ( true === faz_first_time_install() && false === get_option( 'faz_settings', false ) ) {
 			add_option( 'faz_first_time_activated_plugin', 'true', '', false );
 			// Arm the guided setup wizard for genuine fresh installs ONLY. The
 			// onboarding.completed flag defaults to true in Settings::get_defaults(),
@@ -1634,9 +1641,12 @@ class Activator {
 			delete_site_transient( '_faz_first_time_install' );
 		}
 
+		// Per SITE (set_transient), not per network: whether this is a first
+		// install is a fact about this site's faz_settings. The site transient
+		// above is only read for back-compat and expires on its own.
 		if ( false === get_option( 'faz_settings', false ) ) {
-			if ( false === get_site_transient( 'faz_first_time_install' ) ) {
-				set_site_transient( 'faz_first_time_install', true, $ttl );
+			if ( false === get_transient( 'faz_first_time_install' ) ) {
+				set_transient( 'faz_first_time_install', true, $ttl );
 			}
 		}
 	}

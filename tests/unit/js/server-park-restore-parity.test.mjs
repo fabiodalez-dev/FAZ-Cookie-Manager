@@ -59,6 +59,9 @@ function ok(label, cond) {
 function runtimeConfig() {
   return {
     _block: '1',
+    // Response-local key: parks of object data / style / background are
+    // restored only when they carry it (see _fazProveParked()).
+    _srcdocKey: 'test-response-key',
     _categories: [
       { slug: 'necessary', isNecessary: true },
       { slug: 'functional', isNecessary: false },
@@ -163,7 +166,7 @@ const ORIG = 'background-image:url(https://tracker.test/p.png);min-height:300px'
 // 2a — the common shape: the live attribute carries the neutralised copy.
 {
   const w = runtimeOnly({
-    body: `<div id="h" data-faz-category="marketing" data-faz-style="${ORIG}" style="background-image:url(&quot;data:application/octet-stream,&quot;);min-height:300px">x</div>`,
+    body: `<div id="h" data-faz-category="marketing" data-faz-park="style" data-faz-park-key="test-response-key" data-faz-style="${ORIG}" style="background-image:url(&quot;data:application/octet-stream,&quot;);min-height:300px">x</div>`,
   });
   const el = w.document.getElementById('h');
   restore(w);
@@ -178,7 +181,7 @@ const ORIG = 'background-image:url(https://tracker.test/p.png);min-height:300px'
 // 2b — parked WHOLE (a form the in-place rewrite could not reach): no live style at all.
 {
   const w = runtimeOnly({
-    body: '<div id="h" data-faz-category="marketing" data-faz-style="background:u\\72l(https://tracker.test/a.png)">x</div>',
+    body: '<div id="h" data-faz-category="marketing" data-faz-park="style" data-faz-park-key="test-response-key" data-faz-style="background:u\\72l(https://tracker.test/a.png)">x</div>',
   });
   const el = w.document.getElementById('h');
   restore(w);
@@ -190,7 +193,7 @@ const ORIG = 'background-image:url(https://tracker.test/p.png);min-height:300px'
 // 2c — two providers in one value: both categories have to be allowed.
 {
   const mixed = 'background:url(https://tracker.test/a.png),url(https://tile.openstreetmap.org/1/1/1.png)';
-  const w = runtimeOnly({ body: `<div id="h" data-faz-category="marketing" data-faz-style="${mixed}" style="">x</div>` });
+  const w = runtimeOnly({ body: `<div id="h" data-faz-category="marketing" data-faz-park="style" data-faz-park-key="test-response-key" data-faz-style="${mixed}" style="">x</div>` });
   const el = w.document.getElementById('h');
   consent(w, { marketing: 'yes' });
   restore(w);
@@ -202,7 +205,7 @@ const ORIG = 'background-image:url(https://tracker.test/p.png);min-height:300px'
 // 2d — another parked key on the same element keeps the category label.
 {
   const w = runtimeOnly({
-    body: `<img id="m" data-faz-category="marketing" data-faz-src="https://tile.openstreetmap.org/x.png" data-faz-style="background:url(https://tracker.test/a.png)">`,
+    body: `<img id="m" data-faz-category="marketing" data-faz-src="https://tile.openstreetmap.org/x.png" data-faz-park="style" data-faz-park-key="test-response-key" data-faz-style="background:url(https://tracker.test/a.png)">`,
   });
   const el = w.document.getElementById('m');
   consent(w, { marketing: 'yes' });
@@ -272,7 +275,7 @@ console.log('\n4. the server\'s media shapes restore through the existing branch
 {
   const w = runtimeOnly({
     body: `<video id="v" data-faz-category="marketing" data-faz-src="https://tracker.test/v.mp4" data-faz-poster="https://tracker.test/p.jpg" controls></video>`
-      + `<object id="o" data-faz-category="marketing" data-faz-data="${TRACKER}"></object>`
+      + `<object id="o" data-faz-category="marketing" data-faz-park="data" data-faz-park-key="test-response-key" data-faz-data="${TRACKER}"></object>`
       + `<picture><source id="s" data-faz-srcset="https://tracker.test/px.png 1x" data-faz-srcset-category="marketing"></picture>`,
   });
   consent(w, { marketing: 'yes' });

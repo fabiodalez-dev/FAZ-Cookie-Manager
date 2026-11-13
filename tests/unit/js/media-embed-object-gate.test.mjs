@@ -61,6 +61,9 @@ const OWN_MP4 = '/wp-content/uploads/clip.mp4';
 function runtimeConfig() {
   return {
     _block: '1',
+    // Response-local key: parks of object data / style / background are
+    // restored only when they carry it (see _fazProveParked()).
+    _srcdocKey: 'test-response-key',
     _categories: [
       { slug: 'necessary', isNecessary: true },
       { slug: 'marketing', isNecessary: false },

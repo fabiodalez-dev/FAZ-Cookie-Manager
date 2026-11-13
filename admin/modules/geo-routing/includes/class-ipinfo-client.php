@@ -34,6 +34,11 @@ class Ipinfo_Client {
 
 	const CACHE_GROUP    = 'faz_geo_ipinfo';
 	const CACHE_TTL      = DAY_IN_SECONDS;
+	/** How long a failed lookup is remembered before ipinfo is asked again. */
+	const ERROR_TTL      = 300;
+
+	/** HTTP status of the last lookup (0 for a transport failure). */
+	private $last_http_status = 0;
 	const REQUEST_TIMEOUT = 3;
 
 	/**
@@ -68,22 +73,51 @@ class Ipinfo_Client {
 		// Hash IP for cache key — Constitution VIII / NFR-03.
 		$ip_hash = $this->hash_ip( $ip );
 
-		// Cache hit (after opt-in confirmed)?
-		$cached = wp_cache_get( $ip_hash, self::CACHE_GROUP );
-		if ( false !== $cached && is_array( $cached ) ) {
+		// Cache hit (after opt-in confirmed)? Without a persistent object
+		// cache, wp_cache_* lives for one request, so every anonymous page
+		// view or banner REST call paid for a fresh lookup on the operator's
+		// key and any client could loop to drain the quota. A transient
+		// carries the verdict across requests on those installs.
+		$persistent = ! function_exists( 'get_transient' ) || ( function_exists( 'wp_using_ext_object_cache' ) && wp_using_ext_object_cache() );
+		$cached     = $persistent ? wp_cache_get( $ip_hash, self::CACHE_GROUP ) : get_transient( 'faz_ipinfo_' . $ip_hash );
+		if ( false !== $cached && is_array( $cached ) && array_key_exists( 'vpn', $cached ) ) {
 			return array( 'vpn' => $cached['vpn'], 'source' => 'cache' );
 		}
 
 		// Make the call.
-		$result = $this->http_lookup( $ip, $api_key );
+		$this->last_http_status = 0;
+		$result                 = $this->http_lookup( $ip, $api_key );
 		if ( null === $result['vpn'] ) {
-			// Error — do NOT cache (preserve retry next request).
+			// A transport failure is not cached: it says nothing about the
+			// address and the next request may well succeed. A refusal by
+			// ipinfo itself — quota exhausted, rate limited, key rejected — is
+			// remembered briefly, or every anonymous request would keep
+			// calling (and billing) an upstream that has already said no.
+			if ( in_array( $this->last_http_status, array( 401, 402, 403, 429 ), true ) ) {
+				$this->cache_verdict( $persistent, $ip_hash, array( 'vpn' => null ), self::ERROR_TTL );
+			}
 			return $result;
 		}
 
 		// Cache success.
-		wp_cache_set( $ip_hash, array( 'vpn' => $result['vpn'] ), self::CACHE_GROUP, self::CACHE_TTL );
+		$this->cache_verdict( $persistent, $ip_hash, array( 'vpn' => $result['vpn'] ), self::CACHE_TTL );
 		return $result;
+	}
+
+	/**
+	 * Store a verdict where the next request can read it.
+	 *
+	 * @param bool   $persistent Whether a persistent object cache is in use.
+	 * @param string $ip_hash    Cache key from hash_ip().
+	 * @param array  $value      array( 'vpn' => bool|null ).
+	 * @param int    $ttl        Seconds.
+	 */
+	private function cache_verdict( $persistent, $ip_hash, $value, $ttl ) {
+		if ( $persistent ) {
+			wp_cache_set( $ip_hash, $value, self::CACHE_GROUP, $ttl );
+		} else {
+			set_transient( 'faz_ipinfo_' . $ip_hash, $value, $ttl );
+		}
 	}
 
 	/**
@@ -157,6 +191,7 @@ class Ipinfo_Client {
 		}
 
 		$code = wp_remote_retrieve_response_code( $response );
+		$this->last_http_status = (int) $code;
 		if ( 200 !== (int) $code ) {
 			$this->log_failure( "http_$code", '' );
 			return array( 'vpn' => null, 'source' => 'error' );
