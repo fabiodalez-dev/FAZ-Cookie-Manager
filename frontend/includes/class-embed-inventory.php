@@ -341,7 +341,10 @@ class Embed_Inventory {
 			if ( false === strpos( $h, ']' ) || ']' === substr( $h, -1 ) ) {
 				$parts = explode( ':', $h );
 				if ( count( $parts ) <= 2 ) {
-					$parts[0] = rtrim( $parts[0], '.' );
+					// Exactly one dot: "name." is the fully-qualified
+					// spelling, "name.." is not a name at all, and rtrim()
+					// would have accepted any number of them, one new key each.
+					$parts[0] = (string) preg_replace( '/(?<!\.)\.$/', '', $parts[0] );
 					$h        = implode( ':', $parts );
 				}
 			}

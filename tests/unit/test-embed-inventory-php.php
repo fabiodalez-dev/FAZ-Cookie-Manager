@@ -456,6 +456,10 @@ namespace {
 	inventory_check( ! empty( $q ), 'a fully-qualified name with its trailing dot still writes' );
 	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test.:8081', 'REQUEST_URI' => '/page/' ), $faz_none );
 	inventory_check( array() === $q, 'but the trailing dot does not let a non-default port through' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test..', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( array() === $q, 'two trailing dots write no row (one spelling per name, not one per dot)' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test.....', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( array() === $q, 'nor do five' );
 	$q = $faz_audit_case(
 		array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '/?order=ASC', 'HTTP_SEC_GPC' => '1' ),
 		static function () { $GLOBALS['wp'] = (object) array( 'query_vars' => array( 'order' => 'ASC' ) ); }
