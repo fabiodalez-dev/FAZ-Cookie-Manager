@@ -6716,15 +6716,25 @@ function _fazPrepareStyleTagHtml(full, attrs, css) {
  * anything unterminated. Where it stops, the rest of the string is returned
  * unchanged: an unparked sheet is a missed block, a misread one is live markup.
  *
+ * `noScripting` is for markup parsed in a document without a window (a
+ * DOMParser or createHTMLDocument document, a <template>'s content). The
+ * scripting flag is off there, so the parser may read <noscript> content as
+ * markup instead of RAWTEXT, and browsers do not agree (Chromium and WebKit
+ * read markup, Firefox RAWTEXT for createHTMLDocument). A walk that guessed
+ * either way could end the element where the parser does not, so it stops at
+ * the <noscript> start tag and leaves the rest unchanged.
+ *
  * @param {string} html
  * @param {function(string, string, string): string} fn
  * @param {boolean=} uncertain
+ * @param {boolean=} noScripting
  * @returns {string}
  */
-function _fazRewriteRealStyleTags(html, fn, uncertain) {
+function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
     var s = String(html), n = s.length, out = "", last = 0, i = 0;
     uncertain = !!uncertain;
     var RAW = { style: 1, script: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1, textarea: 1, title: 1 };
+
     function isAlpha(c) { return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z"); }
     function isSpace(c) { return c === " " || c === "\t" || c === "\n" || c === "\f" || c === "\r"; }
     function toGt(p) { var g = s.indexOf(">", p); return g === -1 ? n : g + 1; }
@@ -6811,6 +6821,7 @@ function _fazRewriteRealStyleTags(html, fn, uncertain) {
             i = tag.end; continue;
         }
         if (tag.name === "plaintext") break;
+        if (noScripting && tag.name === "noscript") break;
         if (!RAW[tag.name]) { i = tag.end; continue; }
         var re = new RegExp("</" + tag.name + "(?=[\\t\\n\\f\\r />])", "ig");
         re.lastIndex = tag.end;
@@ -6850,6 +6861,18 @@ function _fazRewriteRealStyleTags(html, fn, uncertain) {
  * for a context whose content is text from the first byte (<style>, <script>,
  * <textarea>…), which no markup rewrite applies to.
  */
+/**
+ * Whether markup parsed with `context` lands in a document without a window
+ * (DOMParser, createHTMLDocument, a <template>'s content), where the scripting
+ * flag is off and <noscript> may parse as markup.
+ */
+function _fazScriptingDisabledFor(context) {
+    var el = context;
+    if (el && el.nodeType === 11) el = el.host || el;
+    var doc = el ? (el.nodeType === 9 ? el : el.ownerDocument) : null;
+    return !!doc && !doc.defaultView;
+}
+
 function _fazMarkupContextMode(context) {
     var el = context;
     if (el && el.nodeType === 11) el = el.host || null; // a shadow root parses in its host
@@ -6868,7 +6891,7 @@ function _fazPrepareStyleHtmlString(html, context) {
     if (mode === "text") return html;
     return _fazRewriteRealStyleTags(html, function (full, attrs, css) {
         try { return _fazPrepareStyleTagHtml(full, attrs || "", css || ""); } catch (e) { return full; }
-    }, mode !== "html");
+    }, mode !== "html", _fazScriptingDisabledFor(context));
 }
 
 function _fazGateHtmlStyleStringSetter(proto, prop) {
@@ -10052,7 +10075,19 @@ function _fazWatchBannerElement() {
         // exception). Only the server-built placeholder button carries the
         // response-local key (the same per-response secret that proves srcdoc
         // parks), which post content saved earlier cannot know.
-        if (!_fazStore._srcdocKey || btn.getAttribute("data-faz-accept-key") !== _fazStore._srcdocKey) return;
+        //
+        // A placeholder built by a DIFFERENT response carries a different key:
+        // content loaded later over AJAX (infinite scroll, "load more", AJAX
+        // pagination) runs the_content in its own request, and a page cached
+        // before the key existed has none. Granting from such a button would
+        // reopen the hole above, and ignoring the click left a dead "Accept"
+        // button. Open the preference center instead: the visitor consents in
+        // FAZ's own dialog, so a forged button can only ever show it.
+        if (!_fazStore._srcdocKey || btn.getAttribute("data-faz-accept-key") !== _fazStore._srcdocKey) {
+            event.preventDefault();
+            _revisitFazConsent();
+            return;
+        }
         var cat = btn.getAttribute("data-faz-accept");
         var serviceId = btn.getAttribute("data-faz-accept-service");
         if (

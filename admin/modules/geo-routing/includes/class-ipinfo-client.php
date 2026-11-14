@@ -38,6 +38,10 @@ class Ipinfo_Client {
 	const ERROR_TTL      = 300;
 	/** Site-wide marker of an account-level refusal (401/402/403/429). */
 	const REFUSED_KEY    = 'refused';
+	/** Site-wide count of upstream lookups in the current hour. */
+	const BUDGET_KEY     = 'budget';
+	/** Default ceiling of new upstream lookups per hour (filterable). */
+	const LOOKUPS_PER_HOUR = 120;
 
 	/** HTTP status of the last lookup (0 for a transport failure). */
 	private $last_http_status = 0;
@@ -72,8 +76,11 @@ class Ipinfo_Client {
 			return array( 'vpn' => null, 'source' => 'skip' );
 		}
 
-		// Hash IP for cache key — Constitution VIII / NFR-03.
-		$ip_hash = $this->hash_ip( $ip );
+		// Hash IP for cache key — Constitution VIII / NFR-03. An IPv6 client
+		// controls its whole /64, so the verdict is cached per /64 (what
+		// faz_ip_rate_bucket() returns): keyed on the exact address, walking
+		// the /64 minted a new upstream call and a new cache row per request.
+		$ip_hash = $this->hash_ip( function_exists( 'faz_ip_rate_bucket' ) ? faz_ip_rate_bucket( $ip ) : $ip );
 
 		// Cache hit (after opt-in confirmed)? Without a persistent object
 		// cache, wp_cache_* lives for one request, so every anonymous page
@@ -89,6 +96,16 @@ class Ipinfo_Client {
 		// ipinfo refused the account recently (see below): no call, whatever
 		// the address.
 		if ( false !== $this->cache_read( $persistent, self::REFUSED_KEY ) ) {
+			return array( 'vpn' => null, 'source' => 'error' );
+		}
+
+		// A site-wide hourly ceiling on NEW lookups. The cache above stops a
+		// client repeating itself; it cannot stop one that rotates addresses,
+		// and without a persistent object cache every miss is also two
+		// wp_options rows kept for a day. Past the ceiling the lookup is
+		// skipped (no VPN verdict, the geo rules decide without it), so the
+		// operator's quota and the options table are both bounded.
+		if ( ! $this->claim_lookup( $persistent ) ) {
 			return array( 'vpn' => null, 'source' => 'error' );
 		}
 
@@ -112,6 +129,46 @@ class Ipinfo_Client {
 		// Cache success.
 		$this->cache_verdict( $persistent, $ip_hash, array( 'vpn' => $result['vpn'] ), self::CACHE_TTL );
 		return $result;
+	}
+
+	/**
+	 * Take one slot of the hourly upstream-lookup budget.
+	 *
+	 * The window is fixed (it closes an hour after the first lookup in it).
+	 * Not atomic: concurrent misses can overshoot by the number the server
+	 * runs at once, which is fine for a flood ceiling.
+	 *
+	 * @param bool $persistent Whether a persistent object cache is in use.
+	 * @return bool False when the hour's budget is spent.
+	 */
+	private function claim_lookup( $persistent ) {
+		$max = function_exists( 'apply_filters' )
+			? (int) apply_filters( 'faz_ipinfo_lookups_per_hour', self::LOOKUPS_PER_HOUR )
+			: self::LOOKUPS_PER_HOUR;
+		if ( $max <= 0 ) {
+			return true; // 0 switches the ceiling off.
+		}
+		$now  = time();
+		$data = $this->cache_read( $persistent, self::BUDGET_KEY );
+		$start = is_array( $data ) && isset( $data['start'] ) ? (int) $data['start'] : 0;
+		$count = is_array( $data ) && isset( $data['n'] ) ? (int) $data['n'] : 0;
+		if ( ! $start || $now - $start >= 3600 ) {
+			$start = $now;
+			$count = 0;
+		}
+		if ( $count >= $max ) {
+			return false;
+		}
+		$this->cache_verdict(
+			$persistent,
+			self::BUDGET_KEY,
+			array(
+				'n'     => $count + 1,
+				'start' => $start,
+			),
+			max( 1, 3600 - ( $now - $start ) )
+		);
+		return true;
 	}
 
 	/**

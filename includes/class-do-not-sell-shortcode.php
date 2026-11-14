@@ -583,12 +583,56 @@ class Do_Not_Sell_Shortcode {
 	 * would stop for good once it reached the ceiling. It is kept in a
 	 * non-autoloaded option, which an object-cache flush cannot reset either.
 	 *
+	 * The read and the write happen under a short lock. Opt-outs from different
+	 * addresses do not share the per-address lock, so without one N parallel
+	 * requests all read the same count, all pass the ceiling and all send,
+	 * which is the burst from rotating addresses the ceiling exists to stop.
+	 * A request that cannot get the lock sends no mail: under that much
+	 * contention the site is being flooded, and the ceiling is a flood limit.
+	 *
 	 * @return bool
 	 */
 	private function claim_notification() {
 		$max = (int) apply_filters( 'faz_dnsmpi_max_notifications_per_day', self::MAX_NOTIFICATIONS_PER_DAY );
 		if ( $max <= 0 ) {
 			return false;
+		}
+		$lock = self::MAIL_WINDOW_OPTION . '_lock';
+		$held = false;
+		for ( $try = 0; $try < 10; $try++ ) {
+			// add_option() is an INSERT on a unique name: exactly one request wins.
+			if ( add_option( $lock, time(), '', 'no' ) ) {
+				$held = true;
+				break;
+			}
+			$since = (int) get_option( $lock, 0 );
+			if ( $since > 0 && time() - $since > 10 ) {
+				// A request died holding it: reclaim, and retry the INSERT.
+				delete_option( $lock );
+				continue;
+			}
+			usleep( 20000 );
+		}
+		if ( ! $held ) {
+			return false;
+		}
+		try {
+			return $this->claim_notification_locked( $max );
+		} finally {
+			delete_option( $lock );
+		}
+	}
+
+	/**
+	 * claim_notification()'s read-modify-write; the caller holds the lock.
+	 *
+	 * @param int $max Mails allowed per window.
+	 * @return bool
+	 */
+	private function claim_notification_locked( $max ) {
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			// Read the row, not a copy this request cached before the lock.
+			wp_cache_delete( self::MAIL_WINDOW_OPTION, 'options' );
 		}
 		$now   = time();
 		$data  = get_option( self::MAIL_WINDOW_OPTION );

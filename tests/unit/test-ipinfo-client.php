@@ -314,6 +314,39 @@ assert_eq( $GLOBALS['_faz_test_http_calls'], 2, 'a transport failure is not reme
 $refusal_client->lookup( '198.51.100.74' );
 assert_eq( $GLOBALS['_faz_test_http_calls'], 3, 'and neither is the one after it' );
 
+// ---------- Hourly lookup budget ----------
+// The per-address cache cannot stop a client that rotates addresses: every
+// new one is an upstream call on the operator's key and, without a persistent
+// object cache, two wp_options rows kept for a day. A site-wide hourly
+// ceiling bounds both.
+echo "\nhourly lookup budget\n";
+$GLOBALS['_faz_test_cache']        = array();
+$GLOBALS['_faz_test_http_calls']   = 0;
+$GLOBALS['_faz_test_http_stub']    = array( 'response' => array( 'code' => 200 ), 'body' => '{"vpn":false}' );
+$GLOBALS['_faz_test_filters']['faz_ipinfo_lookups_per_hour'] = function () { return 3; };
+$GLOBALS['_faz_test_options']['faz_geo_ipinfo_optin']   = true;
+$GLOBALS['_faz_test_options']['faz_geo_ipinfo_api_key'] = Secrets::encrypt( 'mykey' );
+$budget_client = new Ipinfo_Client();
+foreach ( array( '203.0.113.1', '203.0.113.2', '203.0.113.3', '203.0.113.4', '203.0.113.5' ) as $rot_ip ) {
+	$budget_client->lookup( $rot_ip );
+}
+assert_eq( $GLOBALS['_faz_test_http_calls'], 3, 'five rotating addresses with a ceiling of 3 cost three upstream calls' );
+$r = $budget_client->lookup( '203.0.113.1' );
+assert_eq( $r['source'], 'cache', 'an address already looked up is still answered from the cache past the ceiling' );
+$over = $budget_client->lookup( '203.0.113.9' );
+assert_eq( $over['vpn'], null, 'a new address past the ceiling gets no verdict' );
+assert_eq( $GLOBALS['_faz_test_http_calls'], 3, 'and costs no upstream call' );
+
+// An IPv6 client walking its /64 is one cache entry.
+$GLOBALS['_faz_test_cache']      = array();
+$GLOBALS['_faz_test_http_calls'] = 0;
+$GLOBALS['_faz_test_filters']['faz_ipinfo_lookups_per_hour'] = function () { return 100; };
+foreach ( array( '2001:db8:1:2::1', '2001:db8:1:2::2', '2001:db8:1:2:ffff::3' ) as $v6 ) {
+	$budget_client->lookup( $v6 );
+}
+assert_eq( $GLOBALS['_faz_test_http_calls'], 1, 'three addresses in one IPv6 /64 cost one upstream call' );
+unset( $GLOBALS['_faz_test_filters']['faz_ipinfo_lookups_per_hour'], $GLOBALS['_faz_test_http_stub'] );
+
 // ---------- Summary ----------
 
 echo "\n--\n";

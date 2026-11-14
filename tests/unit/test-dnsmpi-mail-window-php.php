@@ -34,6 +34,17 @@ namespace {
 		$GLOBALS['faz_test_options'][ $name ] = $value;
 		return true;
 	}
+	function add_option( $name, $value = '', $deprecated = '', $autoload = 'yes' ) {
+		if ( array_key_exists( $name, $GLOBALS['faz_test_options'] ) ) {
+			return false;
+		}
+		$GLOBALS['faz_test_options'][ $name ] = $value;
+		return true;
+	}
+	function delete_option( $name ) {
+		unset( $GLOBALS['faz_test_options'][ $name ] );
+		return true;
+	}
 	function apply_filters( $hook, $value, ...$args ) {
 		return isset( $GLOBALS['faz_test_filters'][ $hook ] ) ? $GLOBALS['faz_test_filters'][ $hook ]( $value ) : $value;
 	}
@@ -94,6 +105,18 @@ namespace {
 	$GLOBALS['faz_test_options'][ $key ] = array( 'n' => 3, 'start' => time() - 24 * 3600 - 1 );
 	check( true === $claim->invoke( $obj ), 'a full window older than 24 hours is replaced by a new one' );
 	check( 1 === $GLOBALS['faz_test_options'][ $key ]['n'], 'the new window counts this mail as its first' );
+
+	// Concurrency: a request that finds the window locked by another one does
+	// not read the count it is about to change.
+	$lock = $key . '_lock';
+	$GLOBALS['faz_test_options'][ $key ]  = array( 'n' => 0, 'start' => time() );
+	$GLOBALS['faz_test_options'][ $lock ] = time();
+	check( false === $claim->invoke( $obj ), 'while another request holds the window lock, no mail is claimed' );
+	check( 0 === $GLOBALS['faz_test_options'][ $key ]['n'], 'and the count is untouched' );
+	check( time() === $GLOBALS['faz_test_options'][ $lock ] || time() - 1 === $GLOBALS['faz_test_options'][ $lock ], 'and the other request\'s lock is left in place' );
+	$GLOBALS['faz_test_options'][ $lock ] = time() - 60;
+	check( true === $claim->invoke( $obj ), 'a lock left by a request that died is reclaimed' );
+	check( ! array_key_exists( $lock, $GLOBALS['faz_test_options'] ), 'and released after the claim' );
 
 	$GLOBALS['faz_test_filters']['faz_dnsmpi_max_notifications_per_day'] = function () {
 		return 0;

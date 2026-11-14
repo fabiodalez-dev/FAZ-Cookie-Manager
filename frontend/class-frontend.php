@@ -45,6 +45,32 @@ use FazCookie\Frontend\Includes\Geo_Runtime;
 class Frontend {
 
 	/**
+	 * Upgrade the plugin's own http:// asset URLs in banner markup for this
+	 * request when the page is served over HTTPS.
+	 *
+	 * The shared template cache keeps only a server-verified scheme (see
+	 * Template::get_assets_path()), so behind a TLS-terminating proxy whose
+	 * siteurl is http:// it holds http:// icon URLs. Every route that hands
+	 * that cached markup to a browser must upgrade it per request, or the
+	 * banner and revisit icons are mixed content on the https page: the inline
+	 * render does it in banner_html(), the banner REST payload (language swap,
+	 * geo bootstrap) through here. Per request only, never written back.
+	 *
+	 * @param string $html Banner markup.
+	 * @return string
+	 */
+	public static function https_plugin_urls_for_request( $html ) {
+		if ( ! is_string( $html ) || '' === $html || ! defined( 'FAZ_PLUGIN_URL' ) || ! function_exists( 'faz_request_is_https' ) || ! faz_request_is_https() ) {
+			return $html;
+		}
+		$http_url = str_replace( 'https://', 'http://', FAZ_PLUGIN_URL );
+		if ( false === strpos( $html, $http_url ) ) {
+			return $html;
+		}
+		return str_replace( $http_url, set_url_scheme( FAZ_PLUGIN_URL, 'https' ), $html );
+	}
+
+	/**
 	 * Instagram Feed's settings page slug, where its GDPR option lives.
 	 *
 	 * Pinned by tests/unit/test-smash-balloon-gdpr-php.php against the slug the
@@ -3229,8 +3255,7 @@ class Frontend {
 		if ( faz_request_is_https() && defined( 'FAZ_PLUGIN_URL' ) ) {
 			$http_url = str_replace( 'https://', 'http://', FAZ_PLUGIN_URL );
 			if ( strpos( $html, $http_url ) !== false ) {
-				$https_url = set_url_scheme( FAZ_PLUGIN_URL, 'https' );
-				$html      = str_replace( $http_url, $https_url, $html );
+				$html = self::https_plugin_urls_for_request( $html );
 
 				// Auto-repair the cached template so subsequent requests
 				// skip this replacement entirely — but ONLY on a server-verified

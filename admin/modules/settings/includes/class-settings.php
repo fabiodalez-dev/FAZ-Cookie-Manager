@@ -756,7 +756,12 @@ class Settings extends Store {
 				// core's reject_unsafe_urls (see faz_ip_is_globally_routable()).
 				// On multisite it decides where the web server connects, which is
 				// network authority: a subsite admin keeps whatever is stored.
-				if ( function_exists( 'is_multisite' ) && is_multisite() && ! current_user_can( 'manage_network_options' ) ) {
+				// WP-CLI runs with shell access to the server, which is more than
+				// network authority, so `wp faz settings` may set it without
+				// --user. Any other context without the capability (cron, a
+				// background save) keeps the stored value rather than clearing it.
+				$is_cli = defined( 'WP_CLI' ) && WP_CLI;
+				if ( ! $is_cli && function_exists( 'is_multisite' ) && is_multisite() && ! current_user_can( 'manage_network_options' ) ) {
 					$stored = get_option( 'faz_settings', array() );
 					$value  = isset( $stored['scanner']['static_ip'] ) ? (string) $stored['scanner']['static_ip'] : '';
 				}

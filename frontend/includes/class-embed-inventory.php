@@ -325,7 +325,35 @@ class Embed_Inventory {
 			}
 		}
 		// Nothing to compare against (a bootstrap without home_url()): do not guess.
-		return empty( $known ) || in_array( $host, $known, true );
+		if ( empty( $known ) ) {
+			return true;
+		}
+		// Spellings of the same origin: a trailing dot on the name, an
+		// explicit default port. They are not new keys a script can mint
+		// without limit (two spellings per name), and refusing them stopped
+		// every recording on sites whose front end forwards `:443`. A proxy
+		// that forwards a different name altogether (Host: backend:8080) is
+		// named in the Trusted origins setting, which faz_trusted_origins()
+		// reads above.
+		$canon = static function ( $h ) {
+			$h = strtolower( (string) $h );
+			$h = (string) preg_replace( '/:(?:80|443)$/', '', $h );
+			if ( false === strpos( $h, ']' ) || ']' === substr( $h, -1 ) ) {
+				$parts = explode( ':', $h );
+				if ( count( $parts ) <= 2 ) {
+					$parts[0] = rtrim( $parts[0], '.' );
+					$h        = implode( ':', $parts );
+				}
+			}
+			return $h;
+		};
+		$host = $canon( $host );
+		foreach ( $known as $k ) {
+			if ( $canon( $k ) === $host ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -337,7 +365,13 @@ class Embed_Inventory {
 		if ( empty( $_SERVER['REQUEST_URI'] ) ) {
 			return false;
 		}
-		$parts = faz_parse_url( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) );
+		// Not sanitize_text_field(): it deletes %XX octets, so `?%6Frder=x`
+		// would parse as `rder` while PHP and WordPress decode it to `order`,
+		// and an encoded name would slip past this guard. The value is only
+		// parsed here, never stored or printed; parse_str() decodes the names
+		// exactly as PHP did when it built the query vars.
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- parsed only, never output; see above.
+		$parts = faz_parse_url( (string) wp_unslash( $_SERVER['REQUEST_URI'] ) );
 		if ( ! is_array( $parts ) || empty( $parts['query'] ) ) {
 			return false;
 		}

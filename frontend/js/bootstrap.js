@@ -2097,7 +2097,7 @@
     // _fazRewriteRealStyleTags() in script.js, which this mirrors: a regex over
     // the raw string also matched "<style>" text inside a quoted attribute or a
     // comment, and the rewrite turned sanitised markup into live markup.
-    function rewriteRealStyleTags(html, fn, uncertain) {
+    function rewriteRealStyleTags(html, fn, uncertain, noScripting) {
         var s = String(html), n = s.length, out = "", last = 0, i = 0;
         uncertain = !!uncertain;
         var RAW = { style: 1, script: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1, textarea: 1, title: 1 };
@@ -2187,6 +2187,9 @@
                 i = tag.end; continue;
             }
             if (tag.name === "plaintext") break;
+            // _fazRewriteRealStyleTags(): without a window <noscript> may be
+            // markup or RAWTEXT depending on the browser, so stop there.
+            if (noScripting && tag.name === 'noscript') break;
             if (!RAW[tag.name]) { i = tag.end; continue; }
             var re = new RegExp("</" + tag.name + "(?=[\\t\\n\\f\\r />])", "ig");
             re.lastIndex = tag.end;
@@ -2221,6 +2224,13 @@
     // _fazMarkupContextMode() in script.js: "html", "uncertain" (a foreign or
     // <select>/<frameset> context, where <style> may not be RAWTEXT) or "text"
     // (a context whose content is text from the first byte).
+    // _fazScriptingDisabledFor() in script.js.
+    function scriptingDisabledFor(context) {
+        var el = context;
+        if (el && el.nodeType === 11) el = el.host || el;
+        var doc = el ? (el.nodeType === 9 ? el : el.ownerDocument) : null;
+        return !!doc && !doc.defaultView;
+    }
     function markupContextMode(context) {
         var el = context;
         if (el && el.nodeType === 11) el = el.host || null;
@@ -2232,7 +2242,7 @@
         if (name === 'select' || name === 'frameset') return 'uncertain';
         return 'html';
     }
-    function parkMarkup(policy, markup, uncertain) {
+    function parkMarkup(policy, markup, uncertain, noScripting) {
         return rewriteRealStyleTags(String(markup == null ? '' : markup), function (full, attrs, css) {
             attrs = attrs || '';
             if (/\bdata-faz-css\s*=/i.test(attrs)) return full;
@@ -2243,7 +2253,7 @@
             var category = /\bdata-faz-category\s*=/i.test(attrs) ? '' : ' data-faz-category="' + escapeAttr(parkCategory(policy, verdict.hit)) + '"';
             return '<style' + attrs + ' data-faz-css="' + escapeAttr(encoded) + '"' + category + '>'
                 + parkedForm(policy, css, verdict) + '</style>';
-        }, uncertain);
+        }, uncertain, noScripting);
     }
     // `host` is where the parsed nodes land: the sheets that are new in it
     // afterwards are the ones this delivery judged, and the backstop — still
@@ -2256,7 +2266,7 @@
         var mode = markupContextMode(host);
         if (mode === 'text') return apply(markup);
         var before = sheets(host);
-        apply(parkMarkup(policy, markup, mode !== 'html'));
+        apply(parkMarkup(policy, markup, mode !== 'html', scriptingDisabledFor(host)));
         sheets(host).forEach(function (el) {
             if (before.indexOf(el) !== -1) return;
             // The parser builds no text node for an empty element, so a

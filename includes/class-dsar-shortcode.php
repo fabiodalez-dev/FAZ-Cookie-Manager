@@ -2144,14 +2144,7 @@ class DSAR_Shortcode {
 	 */
 	private function send_confirmation( $name, $email, $type ) {
 		$site_name  = get_bloginfo( 'name' );
-		// The address was typed into a public form and is not verified, so this
-		// mail can be aimed at a third party. Do not let it carry a link the
-		// submitter wrote: drop URL-looking text from the greeting, and fall
-		// back to the address itself when nothing else is left.
-		$name = trim( (string) preg_replace( '~(?:[a-z][a-z0-9+.-]*://|www\.)\S*~i', '', (string) $name ) );
-		if ( '' === $name ) {
-			$name = $email;
-		}
+		$name       = self::greeting_name( $name, $email );
 		$type_label = self::get_type_label( $type );
 
 		wp_mail(
@@ -2166,6 +2159,32 @@ class DSAR_Shortcode {
 				$type_label
 			)
 		);
+	}
+
+	/**
+	 * The name the confirmation mail greets the requester with.
+	 *
+	 * The address was typed into a public form and is not verified, so this
+	 * mail can be aimed at a third party, under the site's name. It must not
+	 * carry a link the submitter wrote. Mail clients auto-link more than
+	 * scheme:// and www. text: a bare domain ("evil-example.com/login"), an
+	 * address and a path are linked too. Every word that looks like one of
+	 * those is dropped, the rest is capped at 60 characters, and the address
+	 * itself is used when nothing is left.
+	 *
+	 * @param string $name  Name typed into the form.
+	 * @param string $email Requester's address.
+	 * @return string
+	 */
+	public static function greeting_name( $name, $email ) {
+		$name = (string) preg_replace( '~\S*(?:://|www\.|@|/|\\\\|[\p{L}\p{N}-]\.[\p{L}]{2,})\S*~iu', '', (string) $name );
+		$name = trim( (string) preg_replace( '~\s+~u', ' ', $name ) );
+		if ( function_exists( 'mb_substr' ) ) {
+			$name = trim( mb_substr( $name, 0, 60 ) );
+		} else {
+			$name = trim( substr( $name, 0, 60 ) );
+		}
+		return '' === $name ? (string) $email : $name;
 	}
 
 	/**

@@ -114,6 +114,18 @@ function clickButton(w, attrs) {
   ok('a wrong key does not grant it either', get(w, 'marketing') !== 'yes');
 }
 {
+  // A placeholder from another response (AJAX-loaded content, a page cached
+  // before the key existed) must not be a dead button: it opens the
+  // preference center, where the visitor consents in FAZ's own UI.
+  const w = runtime();
+  let opened = 0;
+  safe(() => { w.eval('_revisitFazConsent = function () { window.__fazRevisits = (window.__fazRevisits || 0) + 1; }'); });
+  clickButton(w, { 'data-faz-accept': 'marketing', 'data-faz-accept-key': 'key-of-another-response' });
+  opened = w.__fazRevisits || 0;
+  ok('a placeholder with another response\'s key opens the preference center', opened === 1);
+  ok('and still grants nothing by itself', get(w, 'marketing') !== 'yes');
+}
+{
   const w = runtime();
   clickButton(w, { 'data-faz-accept': 'marketing', 'data-faz-accept-key': KEY });
   ok('control: the server-built button (response key) still grants the category', get(w, 'marketing') === 'yes');
