@@ -10914,6 +10914,25 @@ class Frontend {
 			// because the loop below uses `0 === strpos($name, $prefix)`,
 			// which is a leading-substring match.
 			'comment_author_',
+			// Divi Builder editor state. Every name below is written by the
+			// builder's own scripts (builder.js, the Visual Builder bundle)
+			// for the post being edited — `et-saved-post-{ID}-bb`,
+			// `et-editing-post-{ID}-fb` and so on — so only a logged-in
+			// editor ever holds one. A scan run from an editor's browser
+			// picked them up as "uncategorized" and they reached the cookie
+			// declaration, one row per edited post. Listing the prefixes here
+			// keeps them out of every visitor-facing surface and stops the
+			// shredder from deleting the builder's autosave bookkeeping. The
+			// broad `et_` / `_et_` Divi prefixes are deliberately NOT listed:
+			// some of those reach visitors (split testing, for one).
+			'et-saved-post-',
+			'et-saving-post-',
+			'et-editing-post-',
+			'et-editor-available-post-',
+			'et-syncing-post-',
+			'et-recommend-sync-post-',
+			'et-reloaded-post-',     // Older Visual Builder releases (Open Cookie Database).
+			'et-pb-recent-items-',
 		);
 		foreach ( $prefixes as $prefix ) {
 			if ( 0 === strpos( $name, $prefix ) ) {
