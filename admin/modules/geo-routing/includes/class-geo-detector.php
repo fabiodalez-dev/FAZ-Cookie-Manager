@@ -176,7 +176,14 @@ class Geo_Detector {
 				&& method_exists( '\\FazCookie\\Includes\\Geolocation', 'country_header_in_play' )
 				&& \FazCookie\Includes\Geolocation::country_header_in_play() );
 		if ( ! $from_header ) {
-			wp_cache_set( $ip_hash, $result, self::CACHE_GROUP, self::CACHE_TTL );
+			// A failed ipinfo lookup (refusal, budget, transport) leaves the VPN
+			// verdict unknown. ipinfo remembers that failure for ERROR_TTL only;
+			// kept here for the full hour, the address would go without a VPN
+			// verdict long after ipinfo could answer again.
+			$ttl = isset( $vpn_result['source'] ) && 'error' === $vpn_result['source']
+				? min( self::CACHE_TTL, Ipinfo_Client::ERROR_TTL )
+				: self::CACHE_TTL;
+			wp_cache_set( $ip_hash, $result, self::CACHE_GROUP, $ttl );
 		}
 		return $result;
 	}

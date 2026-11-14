@@ -598,31 +598,27 @@ class Do_Not_Sell_Shortcode {
 			return false;
 		}
 		$lock = self::MAIL_WINDOW_OPTION . '_lock';
+		// The value names this request, so a release or a reclaim removes
+		// only the lock it means and never one another request took since.
+		$mine = time() . ':' . bin2hex( random_bytes( 6 ) );
 		$held = false;
 		for ( $try = 0; $try < 10; $try++ ) {
-			// add_option() refuses a name it can read, then writes with
-			// INSERT … ON DUPLICATE KEY UPDATE. Two requests that both pass the
-			// read in the same second change 0 rows on the second write and only
-			// one wins; across a second boundary both could. The same pattern
-			// guards the per-address lock above, and this one only bounds a
-			// mail ceiling, so a rare extra mail is the worst case.
-			if ( add_option( $lock, time(), '', 'no' ) ) {
+			if ( $this->insert_mail_lock( $lock, $mine ) ) {
 				$held = true;
 				break;
 			}
-			$since = (int) get_option( $lock, 0 );
-			if ( $since > 0 && time() - $since > 10 ) {
-				// A request died holding it: reclaim, and retry the INSERT.
-				delete_option( $lock );
+			$seen = $this->read_mail_lock( $lock );
+			if ( null === $seen ) {
+				// Released between the INSERT and the read: try again now.
+				continue;
+			}
+			if ( time() - (int) $seen > 10 ) {
+				// A request died holding it: remove that lock (only that one)
+				// and retry the INSERT.
+				$this->delete_mail_lock( $lock, $seen );
 				continue;
 			}
 			usleep( 20000 );
-			if ( function_exists( 'wp_cache_delete' ) ) {
-				// The failed add_option() cached the row for this request;
-				// without this every retry answers from that copy and never
-				// sees the holder release the lock.
-				wp_cache_delete( $lock, 'options' );
-			}
 		}
 		if ( ! $held ) {
 			return false;
@@ -630,8 +626,53 @@ class Do_Not_Sell_Shortcode {
 		try {
 			return $this->claim_notification_locked( $max );
 		} finally {
-			delete_option( $lock );
+			$this->delete_mail_lock( $lock, $mine );
 		}
+	}
+
+	/**
+	 * Take the mail-window lock: true for exactly one request.
+	 *
+	 * INSERT IGNORE on the unique option_name inserts for one request and
+	 * changes nothing for the others. add_option() is not a mutex: it writes
+	 * with INSERT … ON DUPLICATE KEY UPDATE, which reports success to a second
+	 * request whose value differs, and it answers from a cached copy of a row
+	 * another request has already deleted.
+	 *
+	 * @param string $lock  Option name.
+	 * @param string $value This request's lock value.
+	 * @return bool
+	 */
+	private function insert_mail_lock( $lock, $value ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- a mutex row needs INSERT IGNORE, which the options API does not offer; $wpdb->options is core's own table name.
+		return 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $lock, $value ) );
+	}
+
+	/**
+	 * The lock row's value as stored, never a cached copy, or null.
+	 *
+	 * @param string $lock Option name.
+	 * @return string|null
+	 */
+	private function read_mail_lock( $lock ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the holder releases the row from another request, so a cached read would never see it go; $wpdb->options is core's own table name.
+		$value = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $lock ) );
+		return null === $value ? null : (string) $value;
+	}
+
+	/**
+	 * Delete the lock row only while it still holds `$value`.
+	 *
+	 * @param string $lock  Option name.
+	 * @param string $value The value this request took or found stale.
+	 * @return void
+	 */
+	private function delete_mail_lock( $lock, $value ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-delete in one statement; delete_option() removes the row by name and would drop a lock another request took after this one's expired.
+		$wpdb->delete( $wpdb->options, array( 'option_name' => $lock, 'option_value' => $value ), array( '%s', '%s' ) );
 	}
 
 	/**

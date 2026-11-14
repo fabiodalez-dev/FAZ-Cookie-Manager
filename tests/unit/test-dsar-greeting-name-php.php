@@ -39,7 +39,7 @@ t( 'Dr. Smith' === $g( 'Dr. Smith' ), 'an abbreviation with a dot is kept' );
 t( 'J.R.R. Tolkien' === $g( 'J.R.R. Tolkien' ), 'initials are kept' );
 t( 'José Müller' === $g( 'José Müller' ), 'non-ASCII letters are kept' );
 t( 'jane@example.test' === $g( 'https://evil.test' ), 'nothing left falls back to the address' );
-t( 60 >= mb_strlen( $g( str_repeat( 'Long ', 40 ) ) ), 'the greeting is capped at 60 characters' );
+t( 60 >= strlen( $g( str_repeat( 'Long ', 40 ) ) ), 'the greeting is capped at 60 characters' );
 
 echo "\ndsar greeting name: $ok passed, $ko failed\n";
 exit( $ko > 0 ? 1 : 0 );

@@ -243,10 +243,15 @@ for (const [label, html, ctx] of FOREIGN_SHEETS) {
 const WALK_SHEETS = [
   ['a <style> inside an element named like an Object.prototype key', '<constructor><style>@import url(https://tracker.test/e.css);</style></constructor>', null],
   ['a <style> after a script with an HTML comment in it', '<script><!--x</script><style>@import url("https://tracker.test/g.css");</style>', null],
+  ['an SVG <style> whose tracker URL is spelled with numeric references', '<svg><style>@import url(&#47;&#47;tracker.test/i.css);</style></svg>', null],
+  ['a <style> in an SVG context whose tracker URL is spelled with named references', '<style>@import url(&sol;&sol;tracker.test/j.css);</style>', 'svg'],
 ];
+// Control: a same-origin sheet with a reference stays as written.
+const LOCAL_REF_SHEET = ['<svg><style>.p{background:url(/x.png?a=1&amp;b=2)}</style></svg>', null];
 for (const [label, html, ctx] of WALK_SHEETS) {
   ok(`${label} is parked`, parkedIn(runtime({ aggressive: true }), html, ctx));
 }
+ok('control: a same-origin SVG sheet with "&amp;" is not parked', !parkedIn(runtime({ aggressive: true }), LOCAL_REF_SHEET[0], LOCAL_REF_SHEET[1]));
 
 console.log('\n4b. bootstrap safety release: the same rule');
 await (async () => {
@@ -286,6 +291,7 @@ await (async () => {
   for (const [label, html, ctx] of WALK_SHEETS) {
     ok(`${label} is parked`, parkedIn(w, x(html), ctx, true));
   }
+  ok('control: a same-origin SVG sheet with "&amp;" is not parked', !parkedIn(w, LOCAL_REF_SHEET[0], LOCAL_REF_SHEET[1], true));
 })();
 
 // ---------------------------------------------------------------- 7

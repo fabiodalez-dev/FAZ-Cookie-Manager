@@ -319,6 +319,16 @@
             return desc && typeof desc.get === 'function' ? desc.get : null;
         } catch (e) { return null; }
     }());
+    // One pass, as the parser decodes markup text once: for a sheet the
+    // markup walk may hand to a foreign parser (rewriteRealStyleTags()).
+    function decodeOnce(text) {
+        if (!markupParse) return text;
+        try {
+            var doc = markupParse.call(new MarkupParser(), '<textarea>\n' + text.replace(/<\/(textarea)/gi, '&lt;/$1') + '</textarea>', 'text/html');
+            var area = doc && doc.getElementsByTagName('textarea')[0];
+            return area ? String(textareaValue ? textareaValue.call(area) : area.value) : text;
+        } catch (e) { return text; }
+    }
     function decodeReferences(text) {
         if (!markupParse || text.indexOf('&') === -1) return text;
         try {
@@ -2218,7 +2228,10 @@
             // and tracker URLs: the sheet is parked (fail closed).
             if (tag.name === "style") {
                 var full = s.slice(lt, endTag.end);
-                var rep = fn(full, s.slice(tag.attrsStart, tag.gt), body);
+                // _fazRewriteRealStyleTags(): where the element may be foreign the
+                // callback also gets the text with references decoded.
+                var live = uncertain && body.indexOf("&") !== -1 ? decodeOnce(body) : null;
+                var rep = fn(full, s.slice(tag.attrsStart, tag.gt), body, live);
                 if (rep !== full) { out += s.slice(last, lt) + rep; last = endTag.end; }
             }
             i = endTag.end;
@@ -2247,10 +2260,16 @@
         return 'html';
     }
     function parkMarkup(policy, markup, uncertain, noScripting) {
-        return rewriteRealStyleTags(String(markup == null ? '' : markup), function (full, attrs, css) {
+        return rewriteRealStyleTags(String(markup == null ? '' : markup), function (full, attrs, css, live) {
             attrs = attrs || '';
             if (/\bdata-faz-css\s*=/i.test(attrs)) return full;
             var verdict = css ? judgeCss(policy, css) : null;
+            // _fazPrepareStyleTagHtml(): a URL refused only once references are
+            // decoded parks the sheet whole, with the decoded text as original.
+            if (!verdict && typeof live === 'string' && live !== css) {
+                verdict = judgeCss(policy, live);
+                if (verdict) { verdict = { hit: verdict.hit, whole: true }; css = live; }
+            }
             if (!verdict) return full;
             var encoded = base64(css);
             if (!encoded) return full;

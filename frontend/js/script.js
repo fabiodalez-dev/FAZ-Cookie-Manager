@@ -6679,9 +6679,21 @@ function _fazEscapeHtmlAttr(value) {
         .replace(/</g, "&lt;");
 }
 
-function _fazPrepareStyleTagHtml(full, attrs, css) {
-    if (!_fazStore._block || !css || typeof css !== "string" || !_fazCssShouldBlock(css)) return full;
+function _fazPrepareStyleTagHtml(full, attrs, css, live) {
+    if (!_fazStore._block || !css || typeof css !== "string") return full;
     if (attrs && /\bdata-faz-css\s*=/i.test(attrs)) return full;
+    if (!_fazCssShouldBlock(css)) {
+        // `live`: the text a foreign parser would apply (references decoded).
+        // A URL refused only in that reading is spelled to slip past the
+        // check: park the sheet whole, since no live text reads the same
+        // both ways, and keep the decoded text as the original to restore.
+        if (typeof live !== "string" || live === css || !_fazCssShouldBlock(live)) return full;
+        var enc = _fazBase64EncodeUtf8(live);
+        if (!enc) return full;
+        return '<style' + (attrs || '') +
+            ' data-faz-css="' + _fazEscapeHtmlAttr(enc) + '"' +
+            ' data-faz-category="' + _fazEscapeHtmlAttr(_fazCssBlockedCategory(live)) + '"></style>';
+    }
     var rewritten = _fazNeutralizeCssUrls(css);
     if (rewritten === css) return full;
     var encoded = _fazBase64EncodeUtf8(css);
@@ -6697,7 +6709,21 @@ function _fazPrepareStyleTagHtml(full, attrs, css) {
 }
 
 /**
- * Call `fn(full, attrs, css)` for every <style> element the HTML tokenizer
+ * Character references in `text` decoded the way the HTML parser decodes
+ * them in markup (once), through an inert DOMParser document: a <textarea>
+ * builds no element from its content. `text` carries no "<" here (the walk
+ * stops before), and the leading newline is the one the parser drops.
+ */
+function _fazDecodeCharRefs(text) {
+    try {
+        var doc = new DOMParser().parseFromString("<textarea>\n" + text + "</textarea>", "text/html");
+        var area = doc && doc.getElementsByTagName("textarea")[0];
+        return area ? String(area.value) : text;
+    } catch (e) { return text; }
+}
+
+/**
+ * Call `fn(full, attrs, css, live)` for every <style> element the HTML tokenizer
  * would really start in `html`, and splice in what it returns.
  *
  * A regex over the raw string cannot tell a <style> start tag from the text
@@ -6850,7 +6876,12 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
         // and tracker URLs: the sheet is parked (fail closed).
         if (tag.name === "style") {
             var full = s.slice(lt, endTag.end);
-            var rep = fn(full, s.slice(tag.attrsStart, tag.gt), body);
+            // Where the element may be foreign, the parser decodes character
+            // references in the sheet: the callback also gets the text the
+            // browser would apply, so "&#47;&#47;tracker" is judged as
+            // "//tracker" and not as a relative path.
+            var live = uncertain && body.indexOf("&") !== -1 ? _fazDecodeCharRefs(body) : null;
+            var rep = fn(full, s.slice(tag.attrsStart, tag.gt), body, live);
             if (rep !== full) { out += s.slice(last, lt) + rep; last = endTag.end; }
         }
         i = endTag.end;
@@ -6893,8 +6924,8 @@ function _fazPrepareStyleHtmlString(html, context) {
     if (!html || typeof html !== "string" || html.toLowerCase().indexOf("<style") === -1) return html;
     var mode = _fazMarkupContextMode(context);
     if (mode === "text") return html;
-    return _fazRewriteRealStyleTags(html, function (full, attrs, css) {
-        try { return _fazPrepareStyleTagHtml(full, attrs || "", css || ""); } catch (e) { return full; }
+    return _fazRewriteRealStyleTags(html, function (full, attrs, css, live) {
+        try { return _fazPrepareStyleTagHtml(full, attrs || "", css || "", live); } catch (e) { return full; }
     }, mode !== "html", _fazScriptingDisabledFor(context));
 }
 

@@ -57,6 +57,9 @@ namespace {
 	function update_option( $name, $value, $autoload = null ) {
 		$GLOBALS['faz_test_options'][ $name ] = $value;
 		$GLOBALS['faz_test_cache'][ $name ]   = $value;
+		if ( isset( $GLOBALS['faz_test_on_window_write'] ) ) {
+			( $GLOBALS['faz_test_on_window_write'] )();
+		}
 		return true;
 	}
 	function add_option( $name, $value = '', $deprecated = '', $autoload = 'yes' ) {
@@ -75,6 +78,44 @@ namespace {
 		unset( $GLOBALS['faz_test_cache'][ $key ] );
 		return true;
 	}
+	// The three statements the mail lock runs against wp_options, on the same
+	// in-memory rows. A hook runs after the SELECT, to let a test act as
+	// another request between this one's read and its next statement.
+	class Faz_Test_Wpdb {
+		public $options = 'wp_options';
+		public function prepare( $sql, ...$args ) {
+			return array( $sql, $args );
+		}
+		public function query( $q ) {
+			if ( 0 !== strpos( $q[0], 'INSERT IGNORE' ) ) {
+				throw new \RuntimeException( 'unexpected query: ' . $q[0] );
+			}
+			list( $name, $value ) = $q[1];
+			if ( array_key_exists( $name, $GLOBALS['faz_test_options'] ) ) {
+				return 0;
+			}
+			$GLOBALS['faz_test_options'][ $name ] = $value;
+			return 1;
+		}
+		public function get_var( $q ) {
+			$name  = $q[1][0];
+			$value = array_key_exists( $name, $GLOBALS['faz_test_options'] ) ? (string) $GLOBALS['faz_test_options'][ $name ] : null;
+			if ( isset( $GLOBALS['faz_test_after_read'] ) ) {
+				( $GLOBALS['faz_test_after_read'] )();
+			}
+			return $value;
+		}
+		public function delete( $table, $where, $format = null ) {
+			$name = $where['option_name'];
+			if ( array_key_exists( $name, $GLOBALS['faz_test_options'] ) && (string) $GLOBALS['faz_test_options'][ $name ] === (string) $where['option_value'] ) {
+				unset( $GLOBALS['faz_test_options'][ $name ], $GLOBALS['faz_test_cache'][ $name ] );
+				return 1;
+			}
+			return 0;
+		}
+	}
+	$GLOBALS['wpdb'] = new Faz_Test_Wpdb();
+
 	// Each invoke below stands for a new request: a fresh options cache.
 	function faz_test_new_request() {
 		$GLOBALS['faz_test_cache'] = array();
@@ -165,6 +206,32 @@ namespace {
 	check( true === $claim->invoke( $obj ), 'a lock released while this request waits is taken on the retry' );
 	check( 1 === $GLOBALS['faz_test_options'][ $key ]['n'], 'and the mail is counted' );
 	unset( $GLOBALS['faz_test_on_wait'] );
+
+	// Two requests find the same stale lock. The other one removes it and
+	// takes its own between this one's read and its delete: that new lock
+	// must survive, or both requests would run the count at once.
+	faz_test_new_request();
+	$GLOBALS['faz_test_options'][ $key ]  = array( 'n' => 0, 'start' => time() );
+	$GLOBALS['faz_test_options'][ $lock ] = ( time() - 60 ) . ':stale';
+	$GLOBALS['faz_test_after_read']       = function () use ( $lock ) {
+		unset( $GLOBALS['faz_test_after_read'] );
+		$GLOBALS['faz_test_options'][ $lock ] = time() . ':other';
+	};
+	check( false === $claim->invoke( $obj ), 'a stale lock reclaimed by another request first is not taken over' );
+	check( isset( $GLOBALS['faz_test_options'][ $lock ] ) && time() . ':other' === $GLOBALS['faz_test_options'][ $lock ], 'and the other request\'s new lock is not deleted' );
+	check( 0 === $GLOBALS['faz_test_options'][ $key ]['n'], 'and the count is untouched' );
+	unset( $GLOBALS['faz_test_options'][ $lock ], $GLOBALS['faz_test_after_read'] );
+
+	// This request's lock expired while it ran and another request took the
+	// lock: the release removes only this request's own value.
+	faz_test_new_request();
+	$GLOBALS['faz_test_options'][ $key ] = array( 'n' => 0, 'start' => time() );
+	$GLOBALS['faz_test_on_window_write'] = function () use ( $lock ) {
+		$GLOBALS['faz_test_options'][ $lock ] = time() . ':next';
+	};
+	check( true === $claim->invoke( $obj ), 'a request whose lock was taken over still counts its own mail' );
+	check( isset( $GLOBALS['faz_test_options'][ $lock ] ) && time() . ':next' === $GLOBALS['faz_test_options'][ $lock ], 'and its release leaves the next request\'s lock in place' );
+	unset( $GLOBALS['faz_test_on_window_write'], $GLOBALS['faz_test_options'][ $lock ] );
 
 	$GLOBALS['faz_test_filters']['faz_dnsmpi_max_notifications_per_day'] = function () {
 		return 0;
