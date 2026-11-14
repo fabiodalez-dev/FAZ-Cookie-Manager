@@ -403,7 +403,7 @@ class Cookie_Policy_Api {
 				'lang'         => isset( $body['lang'] ) ? sanitize_text_field( (string) $body['lang'] ) : '',
 				'jurisdiction' => isset( $body['jurisdiction'] ) ? sanitize_text_field( (string) $body['jurisdiction'] ) : '',
 			);
-			$html = Renderer::render( $atts );
+			$html = Renderer::render_preview( $atts );
 		} finally {
 			if ( null !== $filter ) {
 				remove_filter( 'pre_option_' . self::OPTION, $filter );

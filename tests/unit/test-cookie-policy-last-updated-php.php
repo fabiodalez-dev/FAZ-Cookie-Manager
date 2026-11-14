@@ -9,7 +9,8 @@
  * for a different path).
  *
  * The WordPress stubs and the fake $wpdb are the ones of
- * test-cookie-policy-golden-render.php, plus a writable update_option().
+ * test-cookie-policy-golden-render.php, plus writable add_option() and
+ * update_option() and an apply_filters() that runs registered callbacks.
  *
  * Run: php tests/unit/test-cookie-policy-last-updated-php.php
  */
@@ -19,6 +20,25 @@ if ( ! function_exists( 'update_option' ) ) {
 		$GLOBALS['faz_test_state']['options'][ $name ] = $value;
 		$GLOBALS['faz_test_state']['writes']          = ( $GLOBALS['faz_test_state']['writes'] ?? 0 ) + 1;
 		return true;
+	}
+}
+
+if ( ! function_exists( 'add_option' ) ) {
+	function add_option( $name, $value = '', $deprecated = '', $autoload = 'yes' ) {
+		if ( array_key_exists( $name, $GLOBALS['faz_test_state']['options'] ) ) {
+			return false;
+		}
+		$GLOBALS['faz_test_state']['options'][ $name ] = $value;
+		$GLOBALS['faz_test_state']['writes']          = ( $GLOBALS['faz_test_state']['writes'] ?? 0 ) + 1;
+		return true;
+	}
+}
+if ( ! function_exists( 'apply_filters' ) ) {
+	function apply_filters( $tag, $value, ...$args ) {
+		foreach ( $GLOBALS['faz_test_filters'][ $tag ] ?? array() as $cb ) {
+			$value = $cb( $value, ...$args );
+		}
+		return $value;
 	}
 }
 
@@ -345,17 +365,55 @@ $h1 = preg_match( '/data-faz-policy-version="([^"]+)"/', $render( '2026-11-15 09
 $h2 = preg_match( '/data-faz-policy-version="([^"]+)"/', $render( '2026-12-01 09:00:00' ), $m2 ) ? $m2[1] : '';
 t( '' !== $h1 && $h1 === $h2, 'the policy version hash stays stable across days' );
 
-// Bounded storage.
-$dates = array();
-for ( $i = 0; $i < 70; $i++ ) {
-	$dates[ sprintf( '%06x.%06x', $i, $i ) ] = sprintf( '2025-01-%02d 00:00:00', 1 + ( $i % 28 ) );
-}
-$GLOBALS['faz_test_state']['options'][ Renderer::CONTENT_DATES_OPTION ] = $dates;
-$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data']['company']['email'] = 'new@example.test';
+$rows_of = static function () {
+	return array_filter(
+		$GLOBALS['faz_test_state']['options'],
+		static function ( $k ) { return 0 === strpos( $k, Renderer::CONTENT_DATE_PREFIX ); },
+		ARRAY_FILTER_USE_KEY
+	);
+};
+
+// Changing the text and then changing it back is a change too.
+$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data']['company']['email'] = 'temp@example.test';
 $render( '2026-12-02 09:00:00' );
-$stored = $GLOBALS['faz_test_state']['options'][ Renderer::CONTENT_DATES_OPTION ];
-t( count( $stored ) === Renderer::CONTENT_DATES_MAX, 'the stored history is capped at ' . Renderer::CONTENT_DATES_MAX . ' versions (got ' . count( $stored ) . ')' );
-t( in_array( '2026-12-02 09:00:00', $stored, true ), 'and the cap drops the oldest, not the newest' );
+$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data']['company']['email'] = 'dpo@example.test';
+$reverted = $date_of( $render( '2026-12-05 09:00:00' ) );
+t( 'December 5, 2026' === $reverted, "reverting to an earlier text moves the date to the revert (got '$reverted')" );
+
+// One row per variant: changes overwrite it instead of piling up.
+t( 1 === count( $rows_of() ), 'a single language keeps a single row however often its text changes (got ' . count( $rows_of() ) . ')' );
+
+// Each language has its own row, so one cannot evict or overwrite another.
+$GLOBALS['faz_test_state']['now'] = '2026-12-06 09:00:00';
+faz_reset_renderer_statics();
+$it = preg_match( '/Ultimo aggiornamento:<\/strong>\s*([^<]+)/', Renderer::render( array( 'lang' => 'it' ) ), $mi ) ? trim( $mi[1] ) : '';
+t( '6 dicembre 2026' === $it, "a second language records its own day (got '$it')" );
+t( 2 === count( $rows_of() ), 'and its own row' );
+t( 'December 5, 2026' === $date_of( $render( '2026-12-07 09:00:00' ) ), 'the first language keeps its date' );
+
+// The admin preview of unsaved settings never dates a text.
+$writes = $GLOBALS['faz_test_state']['writes'] ?? 0;
+$saved  = $GLOBALS['faz_test_state']['options']['faz_cookie_policy_data'];
+$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data']['company']['email'] = 'draft@example.test';
+$GLOBALS['faz_test_state']['now'] = '2026-12-08 09:00:00';
+faz_reset_renderer_statics();
+$preview = $date_of( Renderer::render_preview( array( 'lang' => 'en' ) ) );
+t( $writes === ( $GLOBALS['faz_test_state']['writes'] ?? 0 ), 'previewing a draft writes nothing' );
+t( 'December 8, 2026' === $preview, "the preview shows today for a text not yet published (got '$preview')" );
+$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data'] = $saved;
+t( 'December 5, 2026' === $date_of( Renderer::render_preview( array( 'lang' => 'en' ) ) ), 'previewing the published text shows its real date' );
+$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data']['company']['email'] = 'draft@example.test';
+$published = $date_of( $render( '2026-12-12 09:00:00' ) );
+t( 'December 12, 2026' === $published, "the draft saved days later is dated on the day it is served, not the preview day (got '$published')" );
+
+// A date set through the public filter wins.
+$GLOBALS['faz_test_filters']['faz_cookie_policy_data'][] = static function ( $data ) {
+	$data['LAST_UPDATED_DATE'] = 'January 1, 2026';
+	return $data;
+};
+$pinned = $date_of( $render( '2026-12-20 09:00:00' ) );
+t( 'January 1, 2026' === $pinned, "a date set by the faz_cookie_policy_data filter is kept (got '$pinned')" );
+$GLOBALS['faz_test_filters'] = array();
 
 echo "\ncookie policy last updated: $ok passed, $ko failed\n";
 exit( $ko > 0 ? 1 : 0 );

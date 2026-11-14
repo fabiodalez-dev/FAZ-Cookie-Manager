@@ -321,12 +321,19 @@ class Renderer {
 			isset( $data['COMPANY_NAME'] ) && is_scalar( $data['COMPANY_NAME'] ) ? (string) $data['COMPANY_NAME'] : ''
 		);
 
-		// "Last updated" is the day this text first appeared, not today. The
-		// scaffold is final from here on, so the key below is computed from
-		// the same inputs as the version hash stamped further down.
-		if ( array_key_exists( 'LAST_UPDATED_DATE', $data ) ) {
+		// "Last updated" is the day this text started being served, not today.
+		// The scaffold is final from here on, so the key below is computed from
+		// the same inputs as the version hash stamped further down. Only the
+		// default value is replaced: a site that sets its own date through the
+		// faz_cookie_policy_data filter (the date legal approved the text, say)
+		// keeps it.
+		if ( array_key_exists( 'LAST_UPDATED_DATE', $data )
+			&& esc_html( self::format_date( $lang ) ) === $data['LAST_UPDATED_DATE'] ) {
 			$data['LAST_UPDATED_DATE'] = esc_html(
-				self::format_date( $lang, self::content_changed_at( $template_path, $data, $scaffold ) )
+				self::format_date(
+					$lang,
+					self::content_changed_at( $doc->option() . '|' . $jurisdiction . '|' . $lang, $template_path, $data, $scaffold )
+				)
 			);
 		}
 
@@ -2006,60 +2013,103 @@ class Renderer {
 	// ---------- Misc helpers ----------
 
 	/**
-	 * Option recording when each version of the policy text first appeared.
+	 * Prefix of the options recording since when each policy variant has
+	 * served its current text.
 	 *
-	 * Shape: array( '<content key>' => 'Y-m-d H:i:s' site-local ).
+	 * One option per variant (document, jurisdiction, language), shape
+	 * array( 'key' => '<content key>', 'since' => 'Y-m-d H:i:s' site-local ).
+	 * One row each rather than one shared array: the first renders of two
+	 * languages right after a scan run at the same moment, and a shared
+	 * read-modify-write would let one of them drop the other's date. The rows
+	 * are bounded by the variants a site serves, so nothing ever has to be
+	 * evicted, and the faz_% sweep in uninstall.php removes them.
 	 */
-	const CONTENT_DATES_OPTION = 'faz_policy_content_dates';
-
-	/** Versions remembered; the oldest drop off first. */
-	const CONTENT_DATES_MAX = 50;
+	const CONTENT_DATE_PREFIX = 'faz_policy_date_';
 
 	/**
-	 * When the policy text a visitor is about to read first appeared.
+	 * Whether a render may record a new date. Off while the admin previews
+	 * unsaved settings: a draft is not a text visitors were ever served.
+	 *
+	 * @var bool
+	 */
+	private static $record_content_dates = true;
+
+	/**
+	 * Render for the admin preview: same output, but a text seen only in the
+	 * preview never gets a date, so saving it days later dates it on the day
+	 * visitors actually start reading it.
+	 *
+	 * @param array<string,string> $atts Shortcode attributes.
+	 * @return string HTML.
+	 */
+	public static function render_preview( $atts = array() ) {
+		$previous                   = self::$record_content_dates;
+		self::$record_content_dates = false;
+		try {
+			return self::render( $atts );
+		} finally {
+			self::$record_content_dates = $previous;
+		}
+	}
+
+	/**
+	 * Since when the policy variant a visitor is about to read has served
+	 * this exact text.
 	 *
 	 * "Last updated" used to print the day of the request, so the date moved
 	 * every day while the declaration stayed the same — the opposite of what
-	 * the line tells a visitor. It now prints the day this exact text was
-	 * first rendered, so it moves only when the text does.
+	 * the line tells a visitor. It now prints the day the variant's text last
+	 * changed, so it moves only when the text does. A text changed and then
+	 * changed back is a change too, and moves the date.
 	 *
-	 * The key is the policy version hash computed WITHOUT the page's own URL.
-	 * Generator::policy_version_hash() includes {{COOKIE_POLICY_URL}}, which is
-	 * the request path: keyed on that, every path that renders the policy would
-	 * mint a new entry, and any anonymous visitor could make the site write to
-	 * the database at will. Without it, only a change to the template, the
-	 * settings or the cookie inventory produces a new key.
+	 * The content key is the policy version hash computed WITHOUT the page's
+	 * own URL. Generator::policy_version_hash() includes {{COOKIE_POLICY_URL}},
+	 * which is the request path: keyed on that, every path that renders the
+	 * policy would look like a new text, and any anonymous visitor could make
+	 * the site write to the database at will. Without it, only a change to the
+	 * template, the settings or the cookie inventory changes the key; and
+	 * since the row is per variant, even a key that changed on every request
+	 * would overwrite one row, never add rows.
 	 *
-	 * Known limit: a text changed and then changed back shows the date of its
-	 * first appearance, not of the revert.
-	 *
+	 * @param string $variant            Document option, jurisdiction and language.
 	 * @param string $template_path      Bundled template path.
 	 * @param array  $data               Substitution data.
 	 * @param string $effective_scaffold Scaffold the hash is computed from.
 	 * @return string Site-local 'Y-m-d H:i:s'.
 	 */
-	private static function content_changed_at( $template_path, array $data, $effective_scaffold ) {
+	private static function content_changed_at( $variant, $template_path, array $data, $effective_scaffold ) {
 		$now = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
-		if ( ! function_exists( 'get_option' ) || ! function_exists( 'update_option' ) ) {
+		if ( ! function_exists( 'get_option' ) || ! function_exists( 'update_option' ) || ! function_exists( 'add_option' ) ) {
 			return $now;
 		}
 		unset( $data['COOKIE_POLICY_URL'] );
-		$key = Generator::policy_version_hash( $template_path, $data, $effective_scaffold );
+		$key  = Generator::policy_version_hash( $template_path, $data, $effective_scaffold );
+		$name = self::CONTENT_DATE_PREFIX . md5( (string) $variant );
 
-		$dates = get_option( self::CONTENT_DATES_OPTION, array() );
-		if ( ! is_array( $dates ) ) {
-			$dates = array();
+		$row   = get_option( $name, null );
+		$valid = is_array( $row )
+			&& isset( $row['key'], $row['since'] )
+			&& is_string( $row['key'] )
+			&& is_string( $row['since'] )
+			&& false !== strtotime( $row['since'] );
+		if ( $valid && $row['key'] === $key ) {
+			return $row['since'];
 		}
-		if ( isset( $dates[ $key ] ) && is_string( $dates[ $key ] ) && false !== strtotime( $dates[ $key ] ) ) {
-			return $dates[ $key ];
+		if ( ! self::$record_content_dates ) {
+			return $now;
 		}
 
-		$dates[ $key ] = $now;
-		if ( count( $dates ) > self::CONTENT_DATES_MAX ) {
-			asort( $dates );
-			$dates = array_slice( $dates, -self::CONTENT_DATES_MAX, null, true );
+		$value = array(
+			'key'   => $key,
+			'since' => $now,
+		);
+		if ( null === $row ) {
+			// add_option() is an INSERT on a unique name, so when two first
+			// renders race only one row is written and neither overwrites it.
+			add_option( $name, $value, '', 'no' );
+		} else {
+			update_option( $name, $value, false );
 		}
-		update_option( self::CONTENT_DATES_OPTION, $dates, false );
 		return $now;
 	}
 

@@ -49,6 +49,12 @@ foreach ( $editor_cookies as $name ) {
 	t( 'wordpress-internal' === $cat( $name ), "$name is filed under wordpress-internal by the scanner" );
 }
 
+// Drift check: every prefix the frontend treats as internal has a scanner
+// entry filing it under wordpress-internal, and vice versa for the names above.
+foreach ( Frontend::DIVI_EDITOR_COOKIE_PREFIXES as $prefix ) {
+	t( 'wordpress-internal' === $cat( $prefix . '1-bb' ), "Cookie_Database files every frontend prefix ($prefix) as wordpress-internal" );
+}
+
 // The broad Divi prefixes are NOT editor-only: split testing sets visitor
 // cookies, and those must stay declarable and blockable.
 foreach ( array( 'et_pb_ab_view_page_12', '_et_pb_ab_shortcode_tracking', 'et_pb_ab_subject_7' ) as $name ) {

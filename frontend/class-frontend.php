@@ -45,6 +45,36 @@ use FazCookie\Frontend\Includes\Geo_Runtime;
 class Frontend {
 
 	/**
+	 * Divi Builder editor state cookies.
+	 *
+	 * Every name below is written by the builder's own scripts (builder.js,
+	 * the Visual Builder bundle) for the post being edited —
+	 * `et-saved-post-{ID}-bb`, `et-editing-post-{ID}-fb` and so on — so only a
+	 * logged-in editor ever holds one. A scan run from an editor's browser
+	 * picked them up as "uncategorized" and they reached the cookie
+	 * declaration, one row per edited post. is_wp_internal_cookie() treats
+	 * them as internal, which keeps them out of every visitor-facing surface
+	 * and stops the shredder from deleting the builder's autosave
+	 * bookkeeping; the upgrade migration moves rows already stored. The broad
+	 * `et_` / `_et_` Divi prefixes are deliberately NOT listed: some of those
+	 * reach visitors (split testing, for one).
+	 *
+	 * Cookie_Database carries one entry per prefix so new scans file them
+	 * under wordpress-internal; tests/unit/test-divi-editor-cookies-php.php
+	 * fails if the two lists drift apart.
+	 */
+	const DIVI_EDITOR_COOKIE_PREFIXES = array(
+		'et-saved-post-',
+		'et-saving-post-',
+		'et-editing-post-',
+		'et-editor-available-post-',
+		'et-syncing-post-',
+		'et-recommend-sync-post-',
+		'et-reloaded-post-',     // Older Visual Builder releases (Open Cookie Database).
+		'et-pb-recent-items-',
+	);
+
+	/**
 	 * Instagram Feed's settings page slug, where its GDPR option lives.
 	 *
 	 * Pinned by tests/unit/test-smash-balloon-gdpr-php.php against the slug the
@@ -10914,27 +10944,8 @@ class Frontend {
 			// because the loop below uses `0 === strpos($name, $prefix)`,
 			// which is a leading-substring match.
 			'comment_author_',
-			// Divi Builder editor state. Every name below is written by the
-			// builder's own scripts (builder.js, the Visual Builder bundle)
-			// for the post being edited — `et-saved-post-{ID}-bb`,
-			// `et-editing-post-{ID}-fb` and so on — so only a logged-in
-			// editor ever holds one. A scan run from an editor's browser
-			// picked them up as "uncategorized" and they reached the cookie
-			// declaration, one row per edited post. Listing the prefixes here
-			// keeps them out of every visitor-facing surface and stops the
-			// shredder from deleting the builder's autosave bookkeeping. The
-			// broad `et_` / `_et_` Divi prefixes are deliberately NOT listed:
-			// some of those reach visitors (split testing, for one).
-			'et-saved-post-',
-			'et-saving-post-',
-			'et-editing-post-',
-			'et-editor-available-post-',
-			'et-syncing-post-',
-			'et-recommend-sync-post-',
-			'et-reloaded-post-',     // Older Visual Builder releases (Open Cookie Database).
-			'et-pb-recent-items-',
 		);
-		foreach ( $prefixes as $prefix ) {
+		foreach ( array_merge( $prefixes, self::DIVI_EDITOR_COOKIE_PREFIXES ) as $prefix ) {
 			if ( 0 === strpos( $name, $prefix ) ) {
 				return true;
 			}
