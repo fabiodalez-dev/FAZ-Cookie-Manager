@@ -6682,18 +6682,20 @@ function _fazEscapeHtmlAttr(value) {
 function _fazPrepareStyleTagHtml(full, attrs, css, live) {
     if (!_fazStore._block || !css || typeof css !== "string") return full;
     if (attrs && /\bdata-faz-css\s*=/i.test(attrs)) return full;
-    if (!_fazCssShouldBlock(css)) {
-        // `live`: the text a foreign parser would apply (references decoded).
-        // A URL refused only in that reading is spelled to slip past the
-        // check: park the sheet whole, since no live text reads the same
-        // both ways, and keep the decoded text as the original to restore.
-        if (typeof live !== "string" || live === css || !_fazCssShouldBlock(live)) return full;
+    // `live`: the text a foreign parser would apply (references decoded).
+    // When it differs from the raw text and is refused, the decision is taken
+    // on it, whether or not the raw text is refused too: neutralising the
+    // raw text would leave a URL spelled with references in place, and the
+    // parser would decode it. No live text reads the same both ways, so the
+    // sheet is parked whole, with the decoded text as the original.
+    if (typeof live === "string" && live !== css && _fazCssShouldBlock(live)) {
         var enc = _fazBase64EncodeUtf8(live);
         if (!enc) return full;
         return '<style' + (attrs || '') +
             ' data-faz-css="' + _fazEscapeHtmlAttr(enc) + '"' +
             ' data-faz-category="' + _fazEscapeHtmlAttr(_fazCssBlockedCategory(live)) + '"></style>';
     }
+    if (!_fazCssShouldBlock(css)) return full;
     var rewritten = _fazNeutralizeCssUrls(css);
     if (rewritten === css) return full;
     var encoded = _fazBase64EncodeUtf8(css);

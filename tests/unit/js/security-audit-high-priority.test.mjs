@@ -228,12 +228,13 @@ const FOREIGN_SHEETS = [
   ['a <style> with a query-string "&" after an inline SVG icon', '<div><svg><use href="#i"/></svg></div><style>@import url(https://tracker.test/css2?family=Roboto&display=swap);</style>', null],
   ['a <style> with "&" written into an SVG element', '<style>.p{background:url(https://tracker.test/p.png?a=1&b=2)}</style>', 'svg'],
 ];
-function parkedIn(w, html, ctx, host) {
+function parkedIn(w, html, ctx, host, clean) {
   const el = ctx === 'svg' ? w.document.createElementNS(SVG_NS, 'svg') : w.document.createElement('div');
   if (host) w.document.body.appendChild(el);
   el.innerHTML = html;
   const st = el.querySelector('style');
-  return !!st && !!st.getAttribute('data-faz-css');
+  // `clean`: the live text the browser applies names no tracker host either.
+  return !!st && !!st.getAttribute('data-faz-css') && (!clean || !/tracker\.test|a\.example/.test(st.textContent));
 }
 for (const [label, html, ctx] of FOREIGN_SHEETS) {
   ok(`${label} is still parked`, parkedIn(runtime({ aggressive: true }), html, ctx));
@@ -247,11 +248,12 @@ const WALK_SHEETS = [
   ['a <style> in an SVG context whose tracker URL is spelled with named references', '<style>@import url(&sol;&sol;tracker.test/j.css);</style>', 'svg'],
   ['an SVG <style> with a "<" in a CSS comment', '<svg><style>@import url("https://tracker.test/k.css");/*<*/</style></svg>', null],
   ['a <style> after a <select>, with a "<" in a CSS comment', '<select></select><style>/* < */@import url(https://tracker.test/l.css);</style>', null],
+  ['an SVG <style> with a plain and a reference-spelled tracker URL', '<svg><style>@import url(https://tracker.test/m.css);@import url(&#47;&#47;tracker.test/n.css);</style></svg>', null],
 ];
 // Control: a same-origin sheet with a reference stays as written.
 const LOCAL_REF_SHEET = ['<svg><style>.p{background:url(/x.png?a=1&amp;b=2)}</style></svg>', null];
 for (const [label, html, ctx] of WALK_SHEETS) {
-  ok(`${label} is parked`, parkedIn(runtime({ aggressive: true }), html, ctx));
+  ok(`${label} is parked`, parkedIn(runtime({ aggressive: true }), html, ctx, false, true));
 }
 ok('control: a same-origin SVG sheet with "&amp;" is not parked', !parkedIn(runtime({ aggressive: true }), LOCAL_REF_SHEET[0], LOCAL_REF_SHEET[1]));
 
@@ -291,7 +293,7 @@ await (async () => {
     ok(`${label} is still parked`, parkedIn(w, x(html), ctx, true));
   }
   for (const [label, html, ctx] of WALK_SHEETS) {
-    ok(`${label} is parked`, parkedIn(w, x(html), ctx, true));
+    ok(`${label} is parked`, parkedIn(w, x(html), ctx, true, true));
   }
   ok('control: a same-origin SVG sheet with "&amp;" is not parked', !parkedIn(w, LOCAL_REF_SHEET[0], LOCAL_REF_SHEET[1], true));
 })();

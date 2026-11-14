@@ -2266,13 +2266,16 @@
         return rewriteRealStyleTags(String(markup == null ? '' : markup), function (full, attrs, css, live) {
             attrs = attrs || '';
             if (/\bdata-faz-css\s*=/i.test(attrs)) return full;
-            var verdict = css ? judgeCss(policy, css) : null;
-            // _fazPrepareStyleTagHtml(): a URL refused only once references are
-            // decoded parks the sheet whole, with the decoded text as original.
-            if (!verdict && typeof live === 'string' && live !== css) {
-                verdict = judgeCss(policy, live);
-                if (verdict) { verdict = { hit: verdict.hit, whole: true }; css = live; }
+            // _fazPrepareStyleTagHtml(): when the decoded reading differs and is
+            // refused, it decides, and the sheet is parked whole with the
+            // decoded text as original; neutralising the raw text would leave
+            // a reference-spelled URL for the parser to decode.
+            var verdict = null;
+            if (typeof live === 'string' && live !== css) {
+                var decoded = judgeCss(policy, live);
+                if (decoded) { verdict = { hit: decoded.hit, whole: true }; css = live; }
             }
+            if (!verdict) verdict = css ? judgeCss(policy, css) : null;
             if (!verdict) return full;
             var encoded = base64(css);
             if (!encoded) return full;
