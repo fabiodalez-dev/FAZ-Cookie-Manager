@@ -239,6 +239,15 @@ for (const [label, html, ctx] of FOREIGN_SHEETS) {
   ok(`${label} is still parked`, parkedIn(runtime({ aggressive: true }), html, ctx));
 }
 
+// Sheets the walk must not lose to a lookup or a stop that is too wide.
+const WALK_SHEETS = [
+  ['a <style> inside an element named like an Object.prototype key', '<constructor><style>@import url(https://tracker.test/e.css);</style></constructor>', null],
+  ['a <style> after a script with an HTML comment in it', '<script><!--x</script><style>@import url("https://tracker.test/g.css");</style>', null],
+];
+for (const [label, html, ctx] of WALK_SHEETS) {
+  ok(`${label} is parked`, parkedIn(runtime({ aggressive: true }), html, ctx));
+}
+
 console.log('\n4b. bootstrap safety release: the same rule');
 await (async () => {
   const dom = new JSDOM('<!DOCTYPE html><html><head></head><body></body></html>', { runScripts: 'outside-only', url: 'http://site.test/' });
@@ -273,6 +282,9 @@ await (async () => {
   ok('same through insertAdjacentHTML inside an SVG element', s6.querySelector('image') === null);
   for (const [label, html, ctx] of FOREIGN_SHEETS) {
     ok(`${label} is still parked`, parkedIn(w, x(html), ctx, true));
+  }
+  for (const [label, html, ctx] of WALK_SHEETS) {
+    ok(`${label} is parked`, parkedIn(w, x(html), ctx, true));
   }
 })();
 

@@ -2190,16 +2190,20 @@
             // _fazRewriteRealStyleTags(): without a window <noscript> may be
             // markup or RAWTEXT depending on the browser, so stop there.
             if (noScripting && tag.name === 'noscript') break;
-            if (!RAW[tag.name]) { i = tag.end; continue; }
+            // Own properties only: a "<constructor>" start tag would read a
+            // truthy value from Object.prototype and hide a following <style>.
+            if (!Object.prototype.hasOwnProperty.call(RAW, tag.name)) { i = tag.end; continue; }
             var re = new RegExp("</" + tag.name + "(?=[\\t\\n\\f\\r />])", "ig");
             re.lastIndex = tag.end;
             var m = re.exec(s);
             if (!m) break;
             var body = s.slice(tag.end, m.index);
-            // "<!--" in script data enters the escaped states, where "<script"
-            // and "</script" move the real end of the script: stop rather than
-            // guess it.
-            if (tag.name === "script" && body.indexOf("<!--") !== -1) break;
+            // "<!--" in script data enters the escaped states. There the first
+            // "</script" still ends the script, unless a "<script" start after
+            // the "<!--" entered the double-escaped state, where it does not:
+            // only then is the real end unknown, and the walk stops.
+            var esc = tag.name === "script" ? body.indexOf("<!--") : -1;
+            if (esc !== -1 && /<script[\t\n\f\r \/>]/i.test(body.slice(esc))) break;
             // Where the element may be foreign (or an ignored tag), its content is
             // markup. Without a "<" in it, markup and RAWTEXT/RCDATA give the
             // same text up to the same end tag; with one they may not, and a
