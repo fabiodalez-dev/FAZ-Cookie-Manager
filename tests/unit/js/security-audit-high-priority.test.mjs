@@ -219,7 +219,7 @@ console.log('\n4c. runtime markup gate: no rewrite where the parser and the scan
 }
 
 // Sheets the browser applies in or after foreign content: parked where the
-// HTML and the foreign reading of the string agree (no "<" or "&" inside).
+// HTML and the foreign reading of the string agree (no "<" that opens markup).
 const FOREIGN_SHEETS = [
   ['an SVG <style>', '<svg><style>@import url(https://tracker.test/a.css);</style></svg>', null],
   ['a <style> in <foreignObject> (HTML integration point)', '<svg><foreignObject><style>.p{background:url(https://tracker.test/b.png)}</style></foreignObject></svg>', null],
@@ -245,6 +245,8 @@ const WALK_SHEETS = [
   ['a <style> after a script with an HTML comment in it', '<script><!--x</script><style>@import url("https://tracker.test/g.css");</style>', null],
   ['an SVG <style> whose tracker URL is spelled with numeric references', '<svg><style>@import url(&#47;&#47;tracker.test/i.css);</style></svg>', null],
   ['a <style> in an SVG context whose tracker URL is spelled with named references', '<style>@import url(&sol;&sol;tracker.test/j.css);</style>', 'svg'],
+  ['an SVG <style> with a "<" in a CSS comment', '<svg><style>@import url("https://tracker.test/k.css");/*<*/</style></svg>', null],
+  ['a <style> after a <select>, with a "<" in a CSS comment', '<select></select><style>/* < */@import url(https://tracker.test/l.css);</style>', null],
 ];
 // Control: a same-origin sheet with a reference stays as written.
 const LOCAL_REF_SHEET = ['<svg><style>.p{background:url(/x.png?a=1&amp;b=2)}</style></svg>', null];

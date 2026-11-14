@@ -2215,16 +2215,19 @@
             var esc = tag.name === "script" ? body.indexOf("<!--") : -1;
             if (esc !== -1 && /<script[\t\n\f\r \/>]/i.test(body.slice(esc))) break;
             // Where the element may be foreign (or an ignored tag), its content is
-            // markup. Without a "<" in it, markup and RAWTEXT/RCDATA give the
-            // same text up to the same end tag; with one they may not, and a
-            // self-closing start tag ends a foreign element right there.
-            if (uncertain && (tag.selfClosing || body.indexOf("<") !== -1)) break;
+            // markup. A "<" opens a tag, an end tag, a comment or a bogus comment
+            // there only before an ASCII letter, "/", "!" or "?"; any other "<" is
+            // text in both readings (a CSS comment's "/* < */"). Without such a
+            // "<", markup and RAWTEXT/RCDATA give the same text up to the same end
+            // tag; with one they may not, and a self-closing start tag ends a
+            // foreign element right there.
+            if (uncertain && (tag.selfClosing || /<[A-Za-z!\/?]/.test(body))) break;
             var endTag = scanTag(m.index + 2);
             if (!endTag) break;
             // "&" is literal in RAWTEXT and a character reference in markup, so
             // where the element may be foreign the text parked as its original
             // can differ from the live one by a decoded reference. The structure
-            // cannot (there is no "<"), and a query-string "&" is routine in font
+            // cannot (no "<" in it opens markup), and a query-string "&" is routine in font
             // and tracker URLs: the sheet is parked (fail closed).
             if (tag.name === "style") {
                 var full = s.slice(lt, endTag.end);

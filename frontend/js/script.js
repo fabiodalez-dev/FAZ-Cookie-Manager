@@ -6711,7 +6711,7 @@ function _fazPrepareStyleTagHtml(full, attrs, css, live) {
 /**
  * Character references in `text` decoded the way the HTML parser decodes
  * them in markup (once), through an inert DOMParser document: a <textarea>
- * builds no element from its content. `text` carries no "<" here (the walk
+ * builds no element from its content. `text` has no "<" that opens markup (the walk
  * stops before), and the leading newline is the one the parser drops.
  */
 function _fazDecodeCharRefs(text) {
@@ -6737,8 +6737,8 @@ function _fazDecodeCharRefs(text) {
  * the appropriate end tag. Past an <svg>/<math>/<select>/<frameset> start tag
  * (or from the start, with `uncertain`, for a foreign or <select> context) the
  * parser may read <style> content as markup: there a sheet is rewritten only
- * when its content has no "<", where both readings give the same tokens, and the walk
- * stops at anything else. It also stops at script data carrying "<!--" and at
+ * when no "<" in its content opens markup, where both readings give the same tokens, and the walk
+ * stops at anything else. It also stops at script data that may enter the double-escaped state ("<!--" then "<script") and at
  * anything unterminated. Where it stops, the rest of the string is returned
  * unchanged: an unparked sheet is a missed block, a misread one is live markup.
  *
@@ -6863,16 +6863,19 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
         var esc = tag.name === "script" ? body.indexOf("<!--") : -1;
         if (esc !== -1 && /<script[\t\n\f\r \/>]/i.test(body.slice(esc))) break;
         // Where the element may be foreign (or an ignored tag), its content is
-        // markup. Without a "<" in it, markup and RAWTEXT/RCDATA give the
-        // same text up to the same end tag; with one they may not, and a
-        // self-closing start tag ends a foreign element right there.
-        if (uncertain && (tag.selfClosing || body.indexOf("<") !== -1)) break;
+        // markup. A "<" opens a tag, an end tag, a comment or a bogus comment
+        // there only before an ASCII letter, "/", "!" or "?"; any other "<" is
+        // text in both readings (a CSS comment's "/* < */"). Without such a
+        // "<", markup and RAWTEXT/RCDATA give the same text up to the same end
+        // tag; with one they may not, and a self-closing start tag ends a
+        // foreign element right there.
+        if (uncertain && (tag.selfClosing || /<[A-Za-z!\/?]/.test(body))) break;
         var endTag = scanTag(m.index + 2);
         if (!endTag) break;
         // "&" is literal in RAWTEXT and a character reference in markup, so
         // where the element may be foreign the text parked as its original
         // can differ from the live one by a decoded reference. The structure
-        // cannot (there is no "<"), and a query-string "&" is routine in font
+        // cannot (no "<" in it opens markup), and a query-string "&" is routine in font
         // and tracker URLs: the sheet is parked (fail closed).
         if (tag.name === "style") {
             var full = s.slice(lt, endTag.end);
