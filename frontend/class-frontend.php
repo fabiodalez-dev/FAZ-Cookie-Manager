@@ -3255,7 +3255,8 @@ class Frontend {
 		if ( faz_request_is_https() && defined( 'FAZ_PLUGIN_URL' ) ) {
 			$http_url = str_replace( 'https://', 'http://', FAZ_PLUGIN_URL );
 			if ( strpos( $html, $http_url ) !== false ) {
-				$html = self::https_plugin_urls_for_request( $html );
+				$https_url = set_url_scheme( FAZ_PLUGIN_URL, 'https' );
+				$html      = self::https_plugin_urls_for_request( $html );
 
 				// Auto-repair the cached template so subsequent requests
 				// skip this replacement entirely — but ONLY on a server-verified

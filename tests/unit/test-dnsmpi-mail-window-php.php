@@ -18,6 +18,18 @@
  * @package FazCookie\Tests\Unit
  */
 
+namespace FazCookie\Includes {
+
+	// claim_notification() waits with an unqualified usleep(), so inside the
+	// class's namespace this one answers: no real sleep, and a hook that lets
+	// a test act as the other request while this one waits.
+	function usleep( $microseconds ) {
+		if ( isset( $GLOBALS['faz_test_on_wait'] ) ) {
+			( $GLOBALS['faz_test_on_wait'] )();
+		}
+	}
+}
+
 namespace {
 
 	if ( ! defined( 'ABSPATH' ) ) {
@@ -27,23 +39,45 @@ namespace {
 	$GLOBALS['faz_test_options'] = array();
 	$GLOBALS['faz_test_filters'] = array();
 
+	// A per-request copy of the rows read, the way core's 'options' cache
+	// group behaves without a persistent object cache: get_option() answers
+	// from it once it has read a row, so a row another request deletes stays
+	// visible here until wp_cache_delete() drops the copy.
+	$GLOBALS['faz_test_cache'] = array();
+
 	function get_option( $name, $default = false ) {
-		return array_key_exists( $name, $GLOBALS['faz_test_options'] ) ? $GLOBALS['faz_test_options'][ $name ] : $default;
+		if ( array_key_exists( $name, $GLOBALS['faz_test_cache'] ) ) {
+			return $GLOBALS['faz_test_cache'][ $name ];
+		}
+		if ( ! array_key_exists( $name, $GLOBALS['faz_test_options'] ) ) {
+			return $default;
+		}
+		return $GLOBALS['faz_test_cache'][ $name ] = $GLOBALS['faz_test_options'][ $name ];
 	}
 	function update_option( $name, $value, $autoload = null ) {
 		$GLOBALS['faz_test_options'][ $name ] = $value;
+		$GLOBALS['faz_test_cache'][ $name ]   = $value;
 		return true;
 	}
 	function add_option( $name, $value = '', $deprecated = '', $autoload = 'yes' ) {
-		if ( array_key_exists( $name, $GLOBALS['faz_test_options'] ) ) {
+		// Core refuses a name get_option() can read, cached copy included.
+		if ( false !== get_option( $name ) ) {
 			return false;
 		}
 		$GLOBALS['faz_test_options'][ $name ] = $value;
 		return true;
 	}
 	function delete_option( $name ) {
-		unset( $GLOBALS['faz_test_options'][ $name ] );
+		unset( $GLOBALS['faz_test_options'][ $name ], $GLOBALS['faz_test_cache'][ $name ] );
 		return true;
+	}
+	function wp_cache_delete( $key, $group = '' ) {
+		unset( $GLOBALS['faz_test_cache'][ $key ] );
+		return true;
+	}
+	// Each invoke below stands for a new request: a fresh options cache.
+	function faz_test_new_request() {
+		$GLOBALS['faz_test_cache'] = array();
 	}
 	function apply_filters( $hook, $value, ...$args ) {
 		return isset( $GLOBALS['faz_test_filters'][ $hook ] ) ? $GLOBALS['faz_test_filters'][ $hook ]( $value ) : $value;
@@ -114,9 +148,23 @@ namespace {
 	check( false === $claim->invoke( $obj ), 'while another request holds the window lock, no mail is claimed' );
 	check( 0 === $GLOBALS['faz_test_options'][ $key ]['n'], 'and the count is untouched' );
 	check( time() === $GLOBALS['faz_test_options'][ $lock ] || time() - 1 === $GLOBALS['faz_test_options'][ $lock ], 'and the other request\'s lock is left in place' );
+	faz_test_new_request();
 	$GLOBALS['faz_test_options'][ $lock ] = time() - 60;
 	check( true === $claim->invoke( $obj ), 'a lock left by a request that died is reclaimed' );
 	check( ! array_key_exists( $lock, $GLOBALS['faz_test_options'] ), 'and released after the claim' );
+
+	// The holder releases the lock while this request waits for it. The
+	// failed add_option() cached the lock row for this request, so the retry
+	// must drop that copy or it never sees the release and sends no mail.
+	faz_test_new_request();
+	$GLOBALS['faz_test_options'][ $key ]  = array( 'n' => 0, 'start' => time() );
+	$GLOBALS['faz_test_options'][ $lock ] = time();
+	$GLOBALS['faz_test_on_wait']          = function () use ( $lock ) {
+		unset( $GLOBALS['faz_test_options'][ $lock ] );
+	};
+	check( true === $claim->invoke( $obj ), 'a lock released while this request waits is taken on the retry' );
+	check( 1 === $GLOBALS['faz_test_options'][ $key ]['n'], 'and the mail is counted' );
+	unset( $GLOBALS['faz_test_on_wait'] );
 
 	$GLOBALS['faz_test_filters']['faz_dnsmpi_max_notifications_per_day'] = function () {
 		return 0;

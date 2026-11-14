@@ -600,7 +600,12 @@ class Do_Not_Sell_Shortcode {
 		$lock = self::MAIL_WINDOW_OPTION . '_lock';
 		$held = false;
 		for ( $try = 0; $try < 10; $try++ ) {
-			// add_option() is an INSERT on a unique name: exactly one request wins.
+			// add_option() refuses a name it can read, then writes with
+			// INSERT … ON DUPLICATE KEY UPDATE. Two requests that both pass the
+			// read in the same second change 0 rows on the second write and only
+			// one wins; across a second boundary both could. The same pattern
+			// guards the per-address lock above, and this one only bounds a
+			// mail ceiling, so a rare extra mail is the worst case.
 			if ( add_option( $lock, time(), '', 'no' ) ) {
 				$held = true;
 				break;
@@ -612,6 +617,12 @@ class Do_Not_Sell_Shortcode {
 				continue;
 			}
 			usleep( 20000 );
+			if ( function_exists( 'wp_cache_delete' ) ) {
+				// The failed add_option() cached the row for this request;
+				// without this every retry answers from that copy and never
+				// sees the holder release the lock.
+				wp_cache_delete( $lock, 'options' );
+			}
 		}
 		if ( ! $held ) {
 			return false;
