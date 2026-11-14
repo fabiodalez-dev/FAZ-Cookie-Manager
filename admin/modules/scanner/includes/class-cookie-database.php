@@ -72,6 +72,60 @@ class Cookie_Database {
 			'duration'    => 'session',
 			'description' => 'Stores the selected language during login.',
 		),
+		// Divi Builder — editor-only state, one cookie per edited post
+		// (`et-saved-post-{ID}-bb`). Durations are the ones builder.js passes
+		// to wpCookies.set(); `et-reloaded-post-` is not in current Divi
+		// releases and comes from the Open Cookie Database. Same prefixes as
+		// Frontend::is_wp_internal_cookie(), so the scanner files them where
+		// the display layer already hides them instead of under Uncategorized.
+		'et-saved-post-'            => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => '5 minutes',
+			'description' => 'Divi Builder: marks a post as saved in the editor.',
+			'match'       => 'prefix',
+		),
+		'et-saving-post-'           => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => '5 minutes',
+			'description' => 'Divi Builder: marks a post save in progress in the editor.',
+			'match'       => 'prefix',
+		),
+		'et-editing-post-'          => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => '5 minutes',
+			'description' => 'Divi Builder: marks a post as open in the editor.',
+			'match'       => 'prefix',
+		),
+		'et-editor-available-post-' => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => '30 minutes',
+			'description' => 'Divi Builder: records that the editor is available for a post.',
+			'match'       => 'prefix',
+		),
+		'et-syncing-post-'          => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => '30 seconds',
+			'description' => 'Divi Builder: synchronises the editor state between builder views.',
+			'match'       => 'prefix',
+		),
+		'et-recommend-sync-post-'   => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => '30 seconds',
+			'description' => 'Divi Builder: suggests synchronising the editor state between builder views.',
+			'match'       => 'prefix',
+		),
+		'et-reloaded-post-'         => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => 'session',
+			'description' => 'Divi Builder: marks a post reloaded in the Visual Builder.',
+			'match'       => 'prefix',
+		),
+		'et-pb-recent-items-'       => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => 'session',
+			'description' => 'Divi Builder: remembers the colours and fonts recently used in the editor.',
+			'match'       => 'prefix',
+		),
 		// Automattic Tracks (Jetpack). Classified `analytics`, not
 		// `wordpress-internal`, and the distinction is load-bearing:
 		// `wordpress-internal` means ALWAYS allowed and NEVER declared

@@ -321,6 +321,15 @@ class Renderer {
 			isset( $data['COMPANY_NAME'] ) && is_scalar( $data['COMPANY_NAME'] ) ? (string) $data['COMPANY_NAME'] : ''
 		);
 
+		// "Last updated" is the day this text first appeared, not today. The
+		// scaffold is final from here on, so the key below is computed from
+		// the same inputs as the version hash stamped further down.
+		if ( array_key_exists( 'LAST_UPDATED_DATE', $data ) ) {
+			$data['LAST_UPDATED_DATE'] = esc_html(
+				self::format_date( $lang, self::content_changed_at( $template_path, $data, $scaffold ) )
+			);
+		}
+
 		// FR-03 step 6+7: substitute + convert.
 		//
 		// HTML-valued tokens (COOKIE_CATEGORIES, THIRD_PARTY_SERVICES) MUST NOT
@@ -1997,16 +2006,77 @@ class Renderer {
 	// ---------- Misc helpers ----------
 
 	/**
-	 * Format the current date in the policy template's language.
+	 * Option recording when each version of the policy text first appeared.
+	 *
+	 * Shape: array( '<content key>' => 'Y-m-d H:i:s' site-local ).
+	 */
+	const CONTENT_DATES_OPTION = 'faz_policy_content_dates';
+
+	/** Versions remembered; the oldest drop off first. */
+	const CONTENT_DATES_MAX = 50;
+
+	/**
+	 * When the policy text a visitor is about to read first appeared.
+	 *
+	 * "Last updated" used to print the day of the request, so the date moved
+	 * every day while the declaration stayed the same — the opposite of what
+	 * the line tells a visitor. It now prints the day this exact text was
+	 * first rendered, so it moves only when the text does.
+	 *
+	 * The key is the policy version hash computed WITHOUT the page's own URL.
+	 * Generator::policy_version_hash() includes {{COOKIE_POLICY_URL}}, which is
+	 * the request path: keyed on that, every path that renders the policy would
+	 * mint a new entry, and any anonymous visitor could make the site write to
+	 * the database at will. Without it, only a change to the template, the
+	 * settings or the cookie inventory produces a new key.
+	 *
+	 * Known limit: a text changed and then changed back shows the date of its
+	 * first appearance, not of the revert.
+	 *
+	 * @param string $template_path      Bundled template path.
+	 * @param array  $data               Substitution data.
+	 * @param string $effective_scaffold Scaffold the hash is computed from.
+	 * @return string Site-local 'Y-m-d H:i:s'.
+	 */
+	private static function content_changed_at( $template_path, array $data, $effective_scaffold ) {
+		$now = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+		if ( ! function_exists( 'get_option' ) || ! function_exists( 'update_option' ) ) {
+			return $now;
+		}
+		unset( $data['COOKIE_POLICY_URL'] );
+		$key = Generator::policy_version_hash( $template_path, $data, $effective_scaffold );
+
+		$dates = get_option( self::CONTENT_DATES_OPTION, array() );
+		if ( ! is_array( $dates ) ) {
+			$dates = array();
+		}
+		if ( isset( $dates[ $key ] ) && is_string( $dates[ $key ] ) && false !== strtotime( $dates[ $key ] ) ) {
+			return $dates[ $key ];
+		}
+
+		$dates[ $key ] = $now;
+		if ( count( $dates ) > self::CONTENT_DATES_MAX ) {
+			asort( $dates );
+			$dates = array_slice( $dates, -self::CONTENT_DATES_MAX, null, true );
+		}
+		update_option( self::CONTENT_DATES_OPTION, $dates, false );
+		return $now;
+	}
+
+	/**
+	 * Format a date in the policy template's language.
 	 *
 	 * Localises the month name to the template language (not the site locale)
 	 * and assembles day/month/year in that language's conventional order.
 	 *
-	 * @param string $lang Template language code.
+	 * @param string      $lang Template language code.
+	 * @param string|null $when Site-local 'Y-m-d H:i:s'; null for today.
 	 * @return string Human-readable localised date.
 	 */
-	private static function format_date( $lang ) {
-		$ts      = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+	private static function format_date( $lang, $when = null ) {
+		$ts = is_string( $when ) && '' !== $when
+			? $when
+			: ( function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' ) );
 		$ts_unix = strtotime( $ts );
 		// date_i18n() localises month names to the SITE locale, not the policy
 		// template's language, so an it/fr/bg policy on an English site still
