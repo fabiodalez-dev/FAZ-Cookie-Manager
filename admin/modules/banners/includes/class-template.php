@@ -120,6 +120,14 @@ class Template {
 	private $slot_config = null;
 
 	/**
+	 * Cache generation this render read the banner under (see
+	 * faz_banner_template_generation()). null = not yet captured.
+	 *
+	 * @var string|null
+	 */
+	private $generation = null;
+
+	/**
 	 * Language of the template
 	 *
 	 * @var string
@@ -210,11 +218,13 @@ class Template {
 		// stores the result, so the slot is fixed from the config as read here:
 		// otherwise the write could land in a slot the next read never looks in.
 		$this->slot_config = $this->config_fingerprint();
+		$this->generation  = $this->current_generation();
 		$stored            = $this->get_stored();
 		if ( true === $this->is_preview()
 			|| empty( $stored )
 			|| ! isset( $stored['layout_signature'] )
-			|| $this->get_layout_signature() !== $stored['layout_signature'] ) {
+			|| $this->get_layout_signature() !== $stored['layout_signature']
+			|| $this->generation !== ( isset( $stored['generation'] ) ? (string) $stored['generation'] : '' ) ) {
 			$this->generate();
 		} else {
 			$this->set_template();
@@ -1089,6 +1099,19 @@ class Template {
 	 * @return void
 	 */
 	public function update() {
+		if ( null === $this->generation ) {
+			$this->generation = $this->current_generation();
+		}
+		// A clear since this render read the banner means the template below
+		// was built from the state before an admin save. Writing it would put
+		// that state back, and nothing in the layout signature would reject
+		// it. The slot's generation tag already keeps readers off it; skipping
+		// the write also keeps the slots of the new generation from being
+		// overwritten with this request's stale copy of the whole row.
+		if ( function_exists( 'faz_banner_template_generation_is_current' )
+			&& ! faz_banner_template_generation_is_current( $this->generation ) ) {
+			return;
+		}
 		$cache_key = $this->get_cache_key();
 		$stored    = get_option( $cache_key, array() );
 		$stored    = is_array( $stored ) && ! empty( $stored ) ? $stored : array();
@@ -1100,6 +1123,7 @@ class Template {
 				faz_allowed_html()
 			),
 			'layout_signature' => $this->get_layout_signature(),
+			'generation'       => $this->generation,
 		);
 		// autoload=false: each entry carries the full rendered banner HTML+CSS
 		// (~30-45 KB) per banner per language — loading it on every request via
@@ -1109,6 +1133,15 @@ class Template {
 			$stored,
 			false
 		);
+	}
+
+	/**
+	 * The cache generation as this request sees it.
+	 *
+	 * @return string
+	 */
+	private function current_generation() {
+		return function_exists( 'faz_banner_template_generation' ) ? faz_banner_template_generation() : '';
 	}
 
 	/**

@@ -94,7 +94,13 @@ class Activator {
 		add_action( 'init', array( '\FazCookie\Frontend\Includes\Embed_Inventory', 'maybe_create_table' ), 6 );
 		// Consolidate one-time migrations into a single admin_init callback
 		// to avoid 7 separate get_option() calls on every admin page load.
-		add_action( 'admin_init', array( __CLASS__, 'run_pending_migrations' ) );
+		add_action( 'admin_init', array( __CLASS__, 'run_pending_migrations_on_admin_init' ) );
+		// The triggers that do not need anyone in wp-admin: a one-off event
+		// scheduled by every upgrade (install()), and the daily event, which
+		// retries a step that declined. wp-cron runs on visitor traffic, so a
+		// site whose admin nobody opens still migrates.
+		add_action( self::MIGRATIONS_HOOK, array( __CLASS__, 'run_pending_migrations' ) );
+		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_pending_migrations' ) );
 		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
 		// A footer withdrawal link lives in a theme or block template, so it can
 		// disappear with an edit the plugin never sees. Re-check it daily on the
@@ -144,6 +150,45 @@ class Activator {
 	 * Rows converted per backfill batch.
 	 */
 	const GMT_BACKFILL_BATCH = 500;
+
+	/**
+	 * One-off cron event that runs the migration batch after an upgrade.
+	 */
+	const MIGRATIONS_HOOK = 'faz_run_pending_migrations';
+
+	/**
+	 * admin_init entry point of the migration batch.
+	 *
+	 * admin_init also fires for anonymous admin-ajax.php and admin-post.php
+	 * requests. While a step declined (the seed claim held by another request,
+	 * a backfill event that could not be scheduled), each of them re-ran the
+	 * batch's guard reads and the faz_clear_cache action in its `finally`,
+	 * which purges caches site-wide. Visitors no longer drive the batch: a
+	 * logged-in request does, and for sites nobody administers the cron
+	 * events registered in init() do.
+	 *
+	 * @return void
+	 */
+	public static function run_pending_migrations_on_admin_init() {
+		if ( ! is_user_logged_in() ) {
+			return;
+		}
+		self::run_pending_migrations();
+	}
+
+	/**
+	 * Schedule the migration batch to run on the next cron pass.
+	 *
+	 * @return void
+	 */
+	private static function schedule_pending_migrations() {
+		if ( get_option( 'faz_migrations_version' ) === self::MIGRATIONS_VERSION ) {
+			return;
+		}
+		if ( ! wp_next_scheduled( self::MIGRATIONS_HOOK ) ) {
+			wp_schedule_single_event( time(), self::MIGRATIONS_HOOK );
+		}
+	}
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -1056,8 +1101,139 @@ class Activator {
 	public static function check_version() {
 		self::repair_db_version_namespace();
 		if ( ! defined( 'IFRAME_REQUEST' ) && version_compare( get_option( 'faz_version', '0.0.0' ), FAZ_VERSION, '<' ) ) {
-			self::install();
+			self::install_under_claim( array( __CLASS__, 'install' ) );
 		}
+	}
+
+	/**
+	 * Option holding the single-runner claim of the lazy upgrade.
+	 */
+	const INSTALL_CLAIM = 'faz_install_claim';
+
+	/**
+	 * Seconds after which an install claim is taken over.
+	 *
+	 * Also the back-off of an upgrade that keeps failing: the claim of a failed
+	 * attempt is left in place, so the next attempt waits this long.
+	 */
+	const INSTALL_CLAIM_TTL = 300;
+
+	/**
+	 * Run the lazy upgrade in one request at a time.
+	 *
+	 * check_version() runs on `init` for every request, anonymous ones
+	 * included, and until faz_version is bumped on the last line of install()
+	 * every one of them saw an upgrade to do: after a release each concurrent
+	 * request re-ran the whole install() (dbDelta probes, the migration chain,
+	 * the cache rotations and the page-cache purge across every supported cache
+	 * plugin). If a step kept throwing, faz_version was never bumped and every
+	 * request repeated the full-site purge.
+	 *
+	 * The claim is an add_option() row (the options table is UNIQUE on
+	 * option_name, so exactly one request creates it), taken over by age with a
+	 * compare-and-delete, on the model of seed_own_consent_cookie(). It is
+	 * released on success only: after a throw or a fatal it stays until it is
+	 * INSTALL_CLAIM_TTL old, so a failing step is retried once per window
+	 * instead of on every request. A claim written for another plugin version
+	 * is stale at once, so a fix released for a failing upgrade is not held
+	 * back by the previous release's claim.
+	 *
+	 * Activation and wp_initialize_site call install() directly and are not
+	 * gated: they are one-off, admin-driven, and must not be skipped.
+	 *
+	 * @param callable $installer The upgrade to run (install()).
+	 * @return bool Whether this request ran it.
+	 */
+	private static function install_under_claim( $installer ) {
+		$claim = get_option( self::INSTALL_CLAIM );
+		if ( false !== $claim && ! self::install_claim_is_stale( $claim ) ) {
+			return false;
+		}
+		if ( false !== $claim ) {
+			global $wpdb;
+			// Conditional on the value read, for the reason spelled out in
+			// seed_own_consent_cookie(): two requests that read the same stale
+			// claim must not both end up holding a new one.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-delete; delete_option() has no conditional form.
+			$won_takeover = $wpdb->delete(
+				$wpdb->options,
+				array(
+					'option_name'  => self::INSTALL_CLAIM,
+					'option_value' => (string) $claim,
+				),
+				array( '%s', '%s' )
+			);
+			if ( ! $won_takeover ) {
+				return false;
+			}
+			wp_cache_delete( self::INSTALL_CLAIM, 'options' );
+		}
+		$value = time() . ':' . FAZ_VERSION;
+		if ( ! add_option( self::INSTALL_CLAIM, $value, '', false ) ) {
+			return false;
+		}
+		// faz_version is autoloaded, so this request's copy is the one it loaded
+		// at the start. A request that finished the upgrade and released its
+		// claim in between would otherwise be followed by a second full run.
+		if ( ! version_compare( self::stored_version(), FAZ_VERSION, '<' ) ) {
+			self::release_install_claim( $value );
+			return false;
+		}
+		// No finally: a throw keeps the claim, which is the back-off.
+		call_user_func( $installer );
+		self::release_install_claim( $value );
+		return true;
+	}
+
+	/**
+	 * Whether an install claim may be taken over.
+	 *
+	 * @param mixed $claim Stored claim, "<unix time>:<plugin version>".
+	 * @return bool
+	 */
+	private static function install_claim_is_stale( $claim ) {
+		$parts = explode( ':', (string) $claim, 2 );
+		if ( ! isset( $parts[1] ) || FAZ_VERSION !== $parts[1] ) {
+			return true;
+		}
+		return ( time() - (int) $parts[0] ) >= self::INSTALL_CLAIM_TTL;
+	}
+
+	/**
+	 * Release the install claim, only if it is still the one this request wrote.
+	 *
+	 * @param string $value Claim value written by this request.
+	 * @return void
+	 */
+	private static function release_install_claim( $value ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-delete: a claim taken over meanwhile belongs to another request.
+		$wpdb->delete(
+			$wpdb->options,
+			array(
+				'option_name'  => self::INSTALL_CLAIM,
+				'option_value' => (string) $value,
+			),
+			array( '%s', '%s' )
+		);
+		wp_cache_delete( self::INSTALL_CLAIM, 'options' );
+	}
+
+	/**
+	 * The stored faz_version, read past this request's option cache.
+	 *
+	 * @return string
+	 */
+	private static function stored_version() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the request's autoloaded copy is exactly what may be stale here.
+		$value = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
+				'faz_version'
+			)
+		);
+		return is_string( $value ) && '' !== $value ? $value : '0.0.0';
 	}
 
 	/**
@@ -1206,6 +1382,10 @@ class Activator {
 		// expires (or until they manually purge). See `purge_page_caches()`
 		// for the matrix of supported cache plugins.
 		self::purge_page_caches();
+		// The migration batch is not run by visitors (see
+		// run_pending_migrations_on_admin_init()): hand it to cron so an
+		// upgrade migrates even where nobody opens wp-admin.
+		self::schedule_pending_migrations();
 		do_action( 'faz_after_activate', FAZ_VERSION );
 		// Bump `faz_version` LAST so a fatal in any of the steps above
 		// (table create, migration, purge) leaves the version flag at the
