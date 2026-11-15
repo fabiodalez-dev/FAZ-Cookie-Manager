@@ -1953,7 +1953,7 @@ class Controller {
 
 		// Try sitemap.xml.
 		$sitemap_url = trailingslashit( $site_url ) . 'sitemap.xml';
-		$response    = $this->remote_get(
+		$response    = $this->remote_get_same_site(
 			$sitemap_url,
 			array(
 				'timeout'   => 15,
@@ -1974,17 +1974,23 @@ class Controller {
 					if ( isset( $xml->sitemap ) ) {
 						foreach ( $xml->sitemap as $sitemap ) {
 							if ( isset( $sitemap->loc ) ) {
-								$sub_url = (string) $sitemap->loc;
-								// Validate sitemap URL belongs to the same host.
-								if ( wp_parse_url( $sub_url, PHP_URL_HOST ) !== wp_parse_url( home_url(), PHP_URL_HOST ) ) {
+								// Same scheme, host AND port as the site, no
+								// userinfo: the check every other scanner fetch
+								// uses. A bare host comparison let a sitemap
+								// index point the scanner at the site host on
+								// any port, and core's wp_http_validate_url()
+								// exempts the site host from its port and
+								// private-address checks.
+								$safe_sub = $this->sanitize_scanned_urls( array( (string) $sitemap->loc ) );
+								if ( empty( $safe_sub ) ) {
 									continue;
 								}
-								$sub_response = $this->remote_get(
+								$sub_url      = $safe_sub[0];
+								$sub_response = $this->remote_get_same_site(
 									$sub_url,
 									array(
-										'timeout'     => 15,
-										'sslverify'   => (bool) apply_filters( 'faz_scanner_sslverify', true, $sub_url ),
-										'redirection' => 0,
+										'timeout'   => 15,
+										'sslverify' => (bool) apply_filters( 'faz_scanner_sslverify', true, $sub_url ),
 									)
 								);
 								if ( ! is_wp_error( $sub_response ) && 200 === wp_remote_retrieve_response_code( $sub_response ) ) {
@@ -2026,7 +2032,7 @@ class Controller {
 
 		// If sitemap didn't yield enough pages, parse homepage links.
 		if ( count( $pages ) < $max ) {
-			$homepage_response = $this->remote_get(
+			$homepage_response = $this->remote_get_same_site(
 				$site_url,
 				array(
 					'timeout'   => 15,
@@ -2067,6 +2073,50 @@ class Controller {
 		}
 
 		return array_unique( array_slice( $pages, 0, $max ) );
+	}
+
+	/**
+	 * GET a URL of this site, following redirects only within the site.
+	 *
+	 * Core's automatic redirect following validates only the first URL, so
+	 * discover_pages() used to follow a sitemap or homepage redirect to any
+	 * public host. Here every hop is fetched with 'redirection' => 0 and the
+	 * next Location goes through sanitize_scanned_urls() first, the same
+	 * manual loop scan_page() and the server-side scan use. A redirect that
+	 * leaves the site ends the walk and its 3xx response is returned, which
+	 * the callers treat as "no sitemap" / "no homepage links".
+	 *
+	 * @param string $url  First URL (the caller builds it from the site URL).
+	 * @param array  $args WordPress HTTP arguments; 'redirection' is forced to 0.
+	 * @return array|\WP_Error
+	 */
+	private function remote_get_same_site( $url, $args = array() ) {
+		$args['redirection'] = 0;
+		$current             = (string) $url;
+		$response            = new \WP_Error( 'faz_scanner_no_request', 'No request was made.' );
+		for ( $hop = 0; $hop < 5; ++$hop ) {
+			$response = $this->remote_get( $current, $args );
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
+			$status = (int) wp_remote_retrieve_response_code( $response );
+			if ( $status < 300 || $status >= 400 ) {
+				return $response;
+			}
+			$location = wp_remote_retrieve_header( $response, 'location' );
+			if ( is_array( $location ) ) {
+				$location = end( $location );
+			}
+			if ( empty( $location ) ) {
+				return $response;
+			}
+			$safe = $this->sanitize_scanned_urls( array( \WP_Http::make_absolute_url( (string) $location, $current ) ) );
+			if ( empty( $safe ) ) {
+				return $response;
+			}
+			$current = $safe[0];
+		}
+		return $response;
 	}
 
 	/**
@@ -2429,6 +2479,9 @@ class Controller {
 		$static_ip = $settings->get( 'scanner', 'static_ip' );
 		$entry     = self::build_static_resolve_entry( $url, $static_ip );
 		if ( '' === $entry ) {
+			if ( ! $is_validated_loopback && $this->site_host_resolves_to_internal_address( $url_host, $site_host ) ) {
+				return new \WP_Error( 'faz_scanner_internal_address', __( 'The site hostname resolves to a private or reserved address, so the scanner did not fetch it.', 'faz-cookie-manager' ) );
+			}
 			return wp_remote_get( $url, $args );
 		}
 
@@ -2455,6 +2508,58 @@ class Controller {
 			return new \WP_Error( 'faz_scanner_static_ip_transport', __( 'Static IP pinning requires the WordPress cURL HTTP transport.', 'faz-cookie-manager' ) );
 		}
 		return $response;
+	}
+
+	/**
+	 * Whether the site's own host resolves to a non-public address, on the
+	 * installs where that is not the administrator's own choice.
+	 *
+	 * wp_http_validate_url() exempts the home host from its private-address
+	 * check, so reject_unsafe_urls protects every host except the one the
+	 * scanner fetches. On multisite with mapped domains the DNS of a subsite
+	 * host may belong to the subsite owner, who could point it at an internal
+	 * address and have the server fetch it. The check is therefore on by
+	 * default on multisite only; a single-site administrator already controls
+	 * both the DNS and the server, and split-horizon DNS (the site host
+	 * resolving to 10.x inside its own network) is common there. Filter
+	 * `faz_scanner_require_public_site_ip` to change the default either way.
+	 * A host that does not resolve is left to fail in the request itself.
+	 * Pinning a static IP (Settings > Scanner) bypasses this: that address is
+	 * validated on its own.
+	 *
+	 * @param string $url_host  Canonical host being fetched.
+	 * @param string $site_host Canonical site host.
+	 * @return bool
+	 */
+	private function site_host_resolves_to_internal_address( $url_host, $site_host ) {
+		if ( '' === $url_host || ! self::scan_hosts_match( $url_host, $site_host ) ) {
+			// Any other host keeps core's own validation (reject_unsafe_urls).
+			return false;
+		}
+		$required = (bool) apply_filters( 'faz_scanner_require_public_site_ip', function_exists( 'is_multisite' ) && is_multisite(), $url_host );
+		if ( ! $required || ! function_exists( 'faz_ip_is_globally_routable' ) ) {
+			return false;
+		}
+		foreach ( $this->resolve_scan_host( $url_host ) as $address ) {
+			if ( ! faz_ip_is_globally_routable( $address ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Addresses a scan host resolves to (IPv4 A records; an IP literal as is).
+	 *
+	 * @param string $host Canonical host.
+	 * @return string[]
+	 */
+	protected function resolve_scan_host( $host ) {
+		if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
+			return array( $host );
+		}
+		$addresses = function_exists( 'gethostbynamel' ) ? gethostbynamel( $host ) : false;
+		return is_array( $addresses ) ? $addresses : array();
 	}
 
 	/**

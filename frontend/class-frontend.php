@@ -4892,6 +4892,9 @@ class Frontend {
 		status_header( 200 );
 		nocache_headers();
 		header( 'X-Robots-Tag: noindex, nofollow', true );
+		foreach ( self::banner_preview_frame_headers( home_url( '/' ), admin_url() ) as $faz_preview_header ) {
+			header( $faz_preview_header, true );
+		}
 
 		add_filter( 'show_admin_bar', '__return_false', PHP_INT_MAX );
 		show_admin_bar( false );
@@ -4901,6 +4904,58 @@ class Frontend {
 			require $template;
 		}
 		exit;
+	}
+
+	/**
+	 * Anti-framing headers for the admin banner preview frame.
+	 *
+	 * The frame is an administrator-only view (manage_options, no nonce),
+	 * and only the banner customizer in wp-admin ever embeds it. Restricting
+	 * its ancestors to this site, and to the admin origin when wp-admin is
+	 * served from another host, keeps any other site from framing it inside
+	 * a logged-in administrator's browser. X-Frame-Options cannot name a
+	 * second origin, so it is sent only when wp-admin and the site share one;
+	 * browsers that understand frame-ancestors ignore it in either case.
+	 *
+	 * @param string $home_url  Site front URL.
+	 * @param string $admin_url wp-admin URL (the page that embeds the frame).
+	 * @return string[] Header lines.
+	 */
+	public static function banner_preview_frame_headers( $home_url, $admin_url ) {
+		$home_origin  = self::url_origin( $home_url );
+		$admin_origin = self::url_origin( $admin_url );
+		$ancestors    = "'self'";
+		$same_origin  = '' === $admin_origin || $admin_origin === $home_origin;
+		if ( ! $same_origin ) {
+			$ancestors .= ' ' . $admin_origin;
+		}
+		$headers = array( 'Content-Security-Policy: frame-ancestors ' . $ancestors );
+		if ( $same_origin ) {
+			$headers[] = 'X-Frame-Options: SAMEORIGIN';
+		}
+		return $headers;
+	}
+
+	/**
+	 * Scheme, host and port of a URL, lowercased, or '' when it has none.
+	 *
+	 * @param string $url URL.
+	 * @return string
+	 */
+	private static function url_origin( $url ) {
+		$parts = wp_parse_url( (string) $url );
+		if ( ! is_array( $parts ) || empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+			return '';
+		}
+		$scheme = strtolower( $parts['scheme'] );
+		if ( 'http' !== $scheme && 'https' !== $scheme ) {
+			return '';
+		}
+		$origin = $scheme . '://' . strtolower( $parts['host'] );
+		if ( ! empty( $parts['port'] ) ) {
+			$origin .= ':' . (int) $parts['port'];
+		}
+		return $origin;
 	}
 
 	/**

@@ -983,8 +983,11 @@ class Api extends Rest_Controller {
 
 				// Sanitize banner contents — strip dangerous HTML from all text
 				// values to prevent stored XSS via crafted import files.
-				$safe_contents = $this->sanitize_banner_contents( $banner['contents'] ?? array() );
-				$safe_settings = $this->sanitize_banner_settings( $banner['settings'] ?? array() );
+				// Decoded first: a column sent as a JSON string would otherwise
+				// reach the sanitizers as one opaque string whose \u003c
+				// escapes hide the markup from kses.
+				$safe_contents = $this->sanitize_banner_contents( $this->decode_json_import( $banner['contents'] ?? array() ) );
+				$safe_settings = $this->sanitize_banner_settings( $this->decode_json_import( $banner['settings'] ?? array() ) );
 
 				$row = array(
 					'banner_id'      => $banner_id,
@@ -1040,9 +1043,9 @@ class Api extends Rest_Controller {
 				$cat_meta = array_key_exists( 'meta', $cat ) ? Cookies_API::sanitize_meta_for_current_user( $cat['meta'] ) : null;
 				$result   = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 					'category_id'        => absint( $cat['category_id'] ?? 0 ),
-					'name'               => $this->encode_json_column( $cat['name'] ?? null, array() ),
+					'name'               => $this->encode_json_column( $this->sanitize_import_text( $cat['name'] ?? null ), array() ),
 					'slug'               => sanitize_text_field( $cat['slug'] ?? '' ),
-					'description'        => $this->encode_json_column( $cat['description'] ?? null, array() ),
+					'description'        => $this->encode_json_column( $this->sanitize_import_text( $cat['description'] ?? null ), array() ),
 					'prior_consent'      => absint( $cat['prior_consent'] ?? 0 ),
 					'visibility'         => absint( $cat['visibility'] ?? 1 ),
 					'priority'           => absint( $cat['priority'] ?? 0 ),
@@ -1085,7 +1088,7 @@ class Api extends Rest_Controller {
 					'cookie_id'   => absint( $cookie['cookie_id'] ?? 0 ),
 					'name'        => sanitize_text_field( $cookie['name'] ?? '' ),
 					'slug'        => sanitize_text_field( $cookie['slug'] ?? '' ),
-					'description' => $this->encode_json_column( $cookie['description'] ?? null, '' ),
+					'description' => $this->encode_json_column( $this->sanitize_import_text( $cookie['description'] ?? null ), '' ),
 					'duration'    => sanitize_text_field( $cookie['duration'] ?? '' ),
 					'domain'      => sanitize_text_field( $cookie['domain'] ?? '' ),
 					'category'    => absint( $cookie['category'] ?? 0 ),
@@ -1246,6 +1249,67 @@ class Api extends Rest_Controller {
 			return wp_json_encode( $value );
 		}
 		return wp_json_encode( $value );
+	}
+
+	/**
+	 * Unwrap the JSON-string layers of an imported column value.
+	 *
+	 * Exports carry the JSON columns decoded, but older exports and other
+	 * tools pass them back as JSON text, sometimes more than once. Every
+	 * layer is unwrapped (bounded) so the sanitizers see the real strings.
+	 * A value that is not JSON is returned unchanged.
+	 *
+	 * @param mixed $value Raw import fragment.
+	 * @return mixed
+	 */
+	private function decode_json_import( $value ) {
+		for ( $depth = 0; is_string( $value ) && '' !== $value && $depth < 4; $depth++ ) {
+			$decoded = json_decode( $value, true );
+			if ( null === $decoded || JSON_ERROR_NONE !== json_last_error() ) {
+				break;
+			}
+			$value = $decoded;
+		}
+		return $value;
+	}
+
+	/**
+	 * Sanitise an imported multilingual text column (category name and
+	 * description, cookie description) at import time.
+	 *
+	 * The read-time getters run wp_kses_post() as well, but a reader that
+	 * takes the raw column (a shortcode, a third-party query) should not
+	 * depend on that: the value is stored already filtered. Same filter as
+	 * the getters, so nothing an administrator can type is lost.
+	 *
+	 * @param mixed $value Raw import fragment ({lang: text}, JSON text or a string).
+	 * @return mixed Sanitised value, null when it was null.
+	 */
+	private function sanitize_import_text( $value ) {
+		if ( null === $value ) {
+			return null;
+		}
+		$value = $this->decode_json_import( $value );
+		if ( is_string( $value ) ) {
+			return wp_kses_post( $value );
+		}
+		if ( is_array( $value ) ) {
+			$clean = array();
+			foreach ( $value as $key => $item ) {
+				if ( is_string( $item ) ) {
+					$clean[ $key ] = wp_kses_post( $item );
+				} elseif ( is_array( $item ) ) {
+					$clean[ $key ] = $this->sanitize_import_text( $item );
+				} elseif ( is_bool( $item ) || is_int( $item ) || is_float( $item ) ) {
+					$clean[ $key ] = $item;
+				}
+			}
+			return $clean;
+		}
+		if ( is_bool( $value ) || is_int( $value ) || is_float( $value ) ) {
+			return $value;
+		}
+		return null;
 	}
 
 	/**

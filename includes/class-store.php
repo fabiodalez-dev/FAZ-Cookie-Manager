@@ -319,12 +319,12 @@ abstract class Store {
 				$content    = '' !== $translated ? $translated : $content;
 			}
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
-			$contents[ $lang ] = is_string( $content ) ? stripslashes( wp_kses_post( $content ) ) : '';
+			$contents[ $lang ] = is_string( $content ) ? wp_kses_post( stripslashes( $content ) ) : '';
 		}
 		// Preserve extra language keys beyond faz_selected_languages().
 		foreach ( $data as $lang => $content ) {
 			if ( ! isset( $contents[ $lang ] ) && is_string( $content ) ) {
-				$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
+				$contents[ $lang ] = wp_kses_post( stripslashes( $content ) );
 			}
 		}
 		if ( '' !== $language ) {
