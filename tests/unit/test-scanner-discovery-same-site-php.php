@@ -44,8 +44,17 @@ function trailingslashit( $v ) {
 function esc_url_raw( $v ) {
 	return (string) $v;
 }
-function add_action() {}
-function remove_action() {}
+$GLOBALS['sd_hooks'] = array();
+function add_action( $hook, $cb = null, $prio = 10, $args = 1 ) {
+	if ( 'http_api_curl' === $hook ) {
+		$GLOBALS['sd_hooks'][] = $cb;
+	}
+}
+function remove_action( $hook, $cb = null, $prio = 10 ) {
+	if ( 'http_api_curl' === $hook ) {
+		$GLOBALS['sd_hooks'] = array_values( array_filter( $GLOBALS['sd_hooks'], function ( $h ) use ( $cb ) { return $h !== $cb; } ) );
+	}
+}
 function apply_filters( $hook, $value ) {
 	return $value;
 }
@@ -76,8 +85,15 @@ class WP_Http {
 		return $p['scheme'] . '://' . $p['host'] . ( isset( $p['port'] ) ? ':' . $p['port'] : '' ) . '/' . ltrim( $maybe_relative, '/' );
 	}
 }
+$GLOBALS['sd_throw'] = false;
 function wp_remote_get( $url, $args = array() ) {
 	$GLOBALS['sd_calls'][] = array( 'url' => $url, 'args' => $args );
+	foreach ( $GLOBALS['sd_hooks'] as $hook ) {
+		$hook( 'fake-curl-handle', $args, $url );
+	}
+	if ( $GLOBALS['sd_throw'] ) {
+		throw new RuntimeException( 'transport blew up' );
+	}
 	if ( isset( $GLOBALS['sd_responses'][ $url ] ) ) {
 		return $GLOBALS['sd_responses'][ $url ];
 	}
@@ -118,11 +134,26 @@ require_once dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-cont
 
 use FazCookie\Admin\Modules\Scanner\Includes\Controller;
 
+// DNS doubles inside the controller's namespace: its unqualified calls to
+// dns_get_record() / gethostbynamel() resolve here before the global ones.
+$GLOBALS['sd_dns'] = array();
+$GLOBALS['sd_v4']  = false;
+eval( 'namespace FazCookie\\Admin\\Modules\\Scanner\\Includes; function dns_get_record( $h, $t ) { return $GLOBALS["sd_dns"]; } function gethostbynamel( $h ) { return $GLOBALS["sd_v4"]; }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- test double only.
+
 /** Controller with a scripted resolver. */
 class Faz_Sd_Controller extends Controller {
 	public $resolved = array();
+	public $curl     = true;
+	public $pins     = array();
 	protected function resolve_scan_host( $host ) {
 		return $this->resolved;
+	}
+	protected function curl_resolve_available() {
+		return $this->curl;
+	}
+	protected function apply_curl_resolve( $handle, $entry ) {
+		$this->pins[] = $entry;
+		return true;
 	}
 }
 
@@ -200,7 +231,49 @@ check( is_wp_error( $r ) && 'faz_scanner_internal_address' === $r->get_error_cod
 $c->resolved = array( '93.184.216.34' );
 check( ! is_wp_error( $c->remote_get( 'https://example.com/', array() ) ), 'multisite: a public address is fetched' );
 $c->resolved = array();
-check( ! is_wp_error( $c->remote_get( 'https://example.com/', array() ) ), 'multisite: a host that does not resolve is left to the request itself' );
+check( is_wp_error( $c->remote_get( 'https://example.com/', array() ) ), 'multisite: a host that does not resolve is refused (no checked address to pin)' );
+$c->resolved = array( '93.184.216.34', 'fd00::1' );
+$GLOBALS['sd_calls'] = array();
+$r = $c->remote_get( 'https://example.com/', array() );
+check( is_wp_error( $r ) && 'faz_scanner_internal_address' === $r->get_error_code(), 'multisite: a private AAAA record next to a public A record is refused' );
+check( array() === $GLOBALS['sd_calls'], 'and no request is sent' );
+
+echo "\nA and AAAA records are both resolved\n";
+$plain   = new Controller();
+$resolve = new ReflectionMethod( Controller::class, 'resolve_scan_host' );
+$resolve->setAccessible( true );
+$GLOBALS['sd_dns'] = array( array( 'type' => 'A', 'ip' => '93.184.216.34' ), array( 'type' => 'AAAA', 'ipv6' => 'fd00::1' ) );
+$GLOBALS['sd_v4']  = array( '93.184.216.34' );
+$got = $resolve->invoke( $plain, 'example.com' );
+check( in_array( 'fd00::1', $got, true ), 'an AAAA record is part of the checked addresses' );
+check( in_array( '93.184.216.34', $got, true ), 'and so is the A record' );
+$GLOBALS['sd_dns'] = false;
+check( array( '93.184.216.34' ) === $resolve->invoke( $plain, 'example.com' ), 'dns_get_record() failing: gethostbynamel() still supplies the A records' );
+$GLOBALS['sd_dns'] = array();
+$GLOBALS['sd_v4']  = false;
+
+echo "\nthe checked address is pinned on the connection\n";
+$c->pins             = array();
+$c->resolved         = array( '2606:4700:4700::1111', '93.184.216.34' );
+$GLOBALS['sd_calls'] = array();
+$r = $c->remote_get( 'https://example.com/page/', array() );
+check( ! is_wp_error( $r ) && 1 === count( $GLOBALS['sd_calls'] ), 'public A and AAAA records: the request is sent' );
+check( array( 'example.com:443:93.184.216.34' ) === $c->pins, 'CURLOPT_RESOLVE pins host:port to the checked IPv4 address' );
+check( array() === $GLOBALS['sd_hooks'], 'the http_api_curl hook is removed after the request' );
+$GLOBALS['sd_throw'] = true;
+try {
+	$c->remote_get( 'https://example.com/page/', array() );
+} catch ( RuntimeException $e ) {
+	unset( $e );
+}
+$GLOBALS['sd_throw'] = false;
+check( array() === $GLOBALS['sd_hooks'], 'and also when the request fails' );
+$c->curl             = false;
+$GLOBALS['sd_calls'] = array();
+$r = $c->remote_get( 'https://example.com/page/', array() );
+check( is_wp_error( $r ) && 'faz_scanner_pin_transport' === $r->get_error_code(), 'without cURL the request is refused, not sent unpinned' );
+check( array() === $GLOBALS['sd_calls'], 'and nothing is sent' );
+$c->curl = true;
 $GLOBALS['sd_multisite'] = false;
 $c->resolved             = array( '10.0.0.5' );
 check( ! is_wp_error( $c->remote_get( 'https://example.com/', array() ) ), 'single site: split-horizon DNS to a private address keeps working' );
