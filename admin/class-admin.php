@@ -2291,7 +2291,11 @@ class Admin {
 			return;
 		}
 
-		if ( ! faz_is_admin_page() ) {
+		// The capability is checked here, not only through the screen gate:
+		// rendering this notice also consumes the transient, so a user who
+		// cannot manage the plugin must neither see the count nor clear it
+		// for the administrator, whichever screen the hook ends up on.
+		if ( ! faz_is_admin_page() || ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
 
@@ -2369,7 +2373,10 @@ class Admin {
 		if ( empty( $unmatched ) || ! is_array( $unmatched ) ) {
 			return;
 		}
-		if ( ! faz_is_admin_page() ) {
+		// Explicit capability, like the sibling notices: the screen gate alone
+		// follows WordPress page access, and this notice mints the nonce of
+		// the dismiss action below.
+		if ( ! faz_is_admin_page() || ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
 
@@ -2405,6 +2412,10 @@ class Admin {
 	 * @return void
 	 */
 	public function ajax_dismiss_unmatched_vendors() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => 'forbidden' ), 403 );
+			return;
+		}
 		check_ajax_referer( 'faz_dismiss_unmatched', '_wpnonce' );
 		delete_transient( 'faz_unmatched_vendors' );
 		wp_die();

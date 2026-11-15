@@ -628,16 +628,24 @@ class Cookies_API extends API_Controller {
 					// to unauthenticated callers; only admins with 'edit' context see it.
 					'context'           => array( 'edit' ),
 					// Only users with unfiltered_html (administrators on single-site,
-					// super-admins on multisite) may save arbitrary JS. Everyone else gets
-					// an empty string, which preserves the existing value.
-					'sanitize_callback' => array( __CLASS__, 'sanitize_script_field' ),
+					// super-admins on multisite) may save arbitrary JS. Anyone else who
+					// sends a non-empty script gets a 403; an empty value is accepted.
+					// Under arg_options, like policy_url above: that is the only place
+					// rest_get_endpoint_args_for_schema() copies a callback from, so a
+					// property-level sanitize_callback never ran on single-item writes
+					// and the refusal fell back to the silent strip in Cookie::set_meta.
+					'arg_options'       => array(
+						'sanitize_callback' => array( __CLASS__, 'sanitize_script_field' ),
+					),
 					'maxLength'         => 10000,
 				),
 				'opt_out_script' => array(
 					'description'       => __( 'JavaScript executed when this cookie\'s category is rejected or revoked.', 'faz-cookie-manager' ),
 					'type'              => 'string',
 					'context'           => array( 'edit' ),
-					'sanitize_callback' => array( __CLASS__, 'sanitize_script_field' ),
+					'arg_options'       => array(
+						'sanitize_callback' => array( __CLASS__, 'sanitize_script_field' ),
+					),
 					'maxLength'         => 10000,
 				),
 			),
