@@ -23,6 +23,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Nothing in this job pushes or fetches with the token; do not leave
+          # it in .git/config for every later step (same rule as quality.yml).
+          persist-credentials: false
 
       # Build a wp.org-shape copy (mirrors scripts/build-release.sh).
       # Excludes run-scan.php because Plugin Check cannot parse its CLI
@@ -67,8 +71,14 @@ jobs:
           # mirror tag is verified before this pin is advanced. Leaving core at
           # null can make an unrelated upstream tag/update change break the gate.
           # An unpinned @wordpress/env can introduce a boot regression (see #579)
-          # without any change to the plugin under test.
-          npm -g --no-fund i @wordpress/env@11.7.0
+          # without any change to the plugin under test. `npm -g i` pinned
+          # only the top package: its ~400 transitive dependencies floated on
+          # every run. .github/wp-env/package-lock.json pins the whole tree;
+          # regenerate it with `npm install --package-lock-only` in that
+          # directory when the version above is advanced.
+          npm ci --prefix .github/wp-env --no-fund --no-audit
+          export PATH="$GITHUB_WORKSPACE/.github/wp-env/node_modules/.bin:$PATH"
+          echo "$GITHUB_WORKSPACE/.github/wp-env/node_modules/.bin" >> "$GITHUB_PATH"
           wp-env start --update
           # wp-env can exit 0 without actually starting Docker (see #579) —
           # this turns that silent failure into a loud one.

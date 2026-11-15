@@ -69,10 +69,10 @@ jobs:
         # tag that MOVES — it has already advanced through ninety v0.1.x
         # releases. This is the one action here that runs an agent with access
         # to the repository, so a mutable ref is the last place to accept one.
-        # Pullfrog's versioning page supports pinning and notes nothing is
-        # lost: the action fetches its steps from npm either way, so the agent
-        # still tracks patch releases without this file changing. Bump the SHA
-        # to update.
+        # On its own the SHA freezes only the bootstrap: the bootstrap then
+        # fetches `pullfrog@^<version>` from npm. PULLFROG_FORCE_LOCAL_CLI in
+        # this step's env makes it run the source at this SHA instead, so the
+        # pin covers the code that actually runs. Bump the SHA to update.
         uses: pullfrog/pullfrog@0d318bef8c7cf7ae3f193ef32b2bc74e1d94b4d1 # v0.1.90
         with:
           prompt: ${{ inputs.prompt }}
@@ -90,21 +90,23 @@ jobs:
           # to `enabled`.
           shell: restricted
         env:
-          # add at least one provider API key
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_GENERATIVE_AI_API_KEY:
-            ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
-          KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
-          META_MODEL_API_KEY: ${{ secrets.META_MODEL_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          # Run the action's own source at the pinned SHA, with its pnpm
+          # lockfile, instead of `npx pullfrog@^<version>` from npm. Without
+          # this, runCli.ts resolves a caret range at run time, so the SHA pin
+          # above froze only the bootstrap and every new npm release ran here
+          # unreviewed. Source mode is the path the action itself uses on its
+          # own main branch (runCli.ts, PULLFROG_FORCE_LOCAL_CLI). The cost is
+          # that patch releases now arrive only when the SHA is bumped.
+          PULLFROG_FORCE_LOCAL_CLI: "1"
+          # Provider credentials. The primary run authenticates through
+          # Pullfrog's token service with the OIDC token above, so it needs
+          # none; `gh secret list` shows PULLFROG_OAUTH_FALLBACK as the only
+          # secret in this repository (2026-11). The thirteen provider keys
+          # the template listed here all resolved to empty strings, and each
+          # one was a name that would start feeding a credential to this step
+          # the day a secret with that name was added for something else.
+          # Add a key here only together with the secret it reads, e.g.
+          # ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
           # for Amazon Bedrock (https://docs.pullfrog.com/bedrock)
           # AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
@@ -148,20 +150,10 @@ jobs:
           push: disabled
           shell: restricted
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Same source-mode pin as the primary run.
+          PULLFROG_FORCE_LOCAL_CLI: "1"
+          # The one credential this step exists for.
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.PULLFROG_OAUTH_FALLBACK }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_GENERATIVE_AI_API_KEY:
-            ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
-          KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
-          META_MODEL_API_KEY: ${{ secrets.META_MODEL_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
       # The first run's failure was held back by continue-on-error; when the
       # fallback did not save it, the check reports it. The review is not a
       # required check, so a red run never blocks a merge.

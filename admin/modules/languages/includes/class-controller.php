@@ -276,45 +276,6 @@ class Controller {
 		return trailingslashit( $upload_dir );
 	}
 
-	public function download( $src ) {
-        $upload_dir = $this->get_upload_path('languages/banners/');
-
-        if ( ! file_exists( $upload_dir ) ) {
-            wp_mkdir_p( $upload_dir );
-        }
-
-        // download file — `download_url()` lives in wp-admin/includes/file.php
-        // which is NOT auto-loaded on REST requests (only inside the admin
-        // screen). Without this guard the call fatals with
-        // "undefined function FazCookie\Admin\Modules\...\download_url()"
-        // because PHP resolves the unqualified name in the current namespace
-        // first. Matches the wp_tempnam() defensive pattern in class-gvl.php.
-        if ( ! function_exists( 'download_url' ) ) {
-            require_once ABSPATH . 'wp-admin/includes/file.php';
-        }
-        $tmpfile = \download_url( $src, 25 );
-        $file    = $upload_dir . basename( $src );
-
-        //check for errors
-        if ( !is_wp_error( $tmpfile ) ) {
-            //remove current file
-            if ( file_exists( $file ) && strpos( realpath( $file ), realpath( $upload_dir ) ) === 0 ) {
-                wp_delete_file( $file );
-            }
-
-            //in case the server prevents deletion, we check it again.
-            if ( ! file_exists( $file ) ) {
-                copy( $tmpfile, $file );
-            }
-        } else {
-            return $tmpfile;
-        }
-
-        if ( is_string( $tmpfile ) && file_exists( $tmpfile ) && strpos( realpath( $tmpfile ), realpath( sys_get_temp_dir() ) ) === 0 ) {
-            wp_delete_file( $tmpfile );
-        }
-    }
-
 	public function get_translations($lang) {
 		if ($lang != 'en' && $this->is_faz_translated($lang)) {
 			$safe_lang   = sanitize_file_name( $lang );

@@ -102,9 +102,10 @@ echo "\n== Ipinfo_Client + Secrets — unit tests (T020) ==\n\n";
 
 $enc = Secrets::encrypt( 'svn_secret_token_42' );
 assert_true( strlen( $enc ) > 3, 'Secrets::encrypt produces non-empty output' );
-// L1-SP1-S003 fix (1.15.0): v2 format = 'v2:<8-hex-keyhint>:<base64>'.
-assert_true( 0 === strpos( $enc, 'v2:' ), 'Encrypted blob starts with v2: version prefix (post L1-SP1-S003 fix)' );
-assert_true( preg_match( '/^v2:[0-9a-f]{8}:/', $enc ) === 1, 'v2 prefix carries 8-hex keyhint for salt-rotation detection' );
+// 1.39.1: v3 format = 'v3:<8-hex-keyhint>:<base64(nonce . secretbox)>'
+// (the key hint, introduced with v2 by L1-SP1-S003, is kept).
+assert_true( 0 === strpos( $enc, 'v3:' ), 'Encrypted blob starts with the v3: version prefix' );
+assert_true( preg_match( '/^v3:[0-9a-f]{8}:/', $enc ) === 1, 'v3 prefix carries 8-hex keyhint for salt-rotation detection' );
 
 $dec = Secrets::decrypt( $enc );
 assert_eq( $dec, 'svn_secret_token_42', 'Secrets::decrypt roundtrips encrypted plaintext' );
@@ -121,6 +122,22 @@ assert_eq( $empty_enc, '', 'Secrets::encrypt empty → empty (no salt leak)' );
 // Cannot encrypt non-string.
 $weird = Secrets::encrypt( 12345 );
 assert_eq( $weird, '', 'Secrets::encrypt non-string → empty' );
+
+// ---------- A v2 key saved by 1.39.0 opens and is rewritten as v3 ----------
+$legacy_salt = wp_salt( 'auth' );
+$legacy_ks   = '';
+while ( strlen( $legacy_ks ) < strlen( 'svn_secret_token_42' ) ) {
+	$legacy_ks .= hash( 'sha256', $legacy_salt . strlen( $legacy_ks ), true );
+}
+$legacy_v2 = 'v2:' . substr( hash( 'sha256', 'faz_secrets_v2|' . $legacy_salt ), 0, 8 ) . ':'
+	. base64_encode( 'svn_secret_token_42' ^ substr( $legacy_ks, 0, strlen( 'svn_secret_token_42' ) ) );
+$GLOBALS['_faz_test_options']['faz_geo_ipinfo_api_key'] = $legacy_v2;
+$upgrade_client = new Ipinfo_Client();
+assert_eq( $upgrade_client->get_api_key(), 'svn_secret_token_42', 'get_api_key() opens a v2 key saved by an earlier version' );
+$stored_after = (string) $GLOBALS['_faz_test_options']['faz_geo_ipinfo_api_key'];
+assert_true( 0 === strpos( $stored_after, 'v3:' ), 'get_api_key() rewrites the stored v2 key as v3' );
+assert_eq( Secrets::decrypt( $stored_after ), 'svn_secret_token_42', 'the rewritten v3 key opens to the same key' );
+unset( $GLOBALS['_faz_test_options']['faz_geo_ipinfo_api_key'] );
 
 // ---------- Ipinfo_Client opt-in gating ----------
 

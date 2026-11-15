@@ -7,7 +7,7 @@ function esc_html( $s ) { return htmlspecialchars($s); }
 define('DAY_IN_SECONDS',86400);
 $GLOBALS['policy_options']=array();
 function get_option($key,$default=false) {return $GLOBALS['policy_options'][$key] ?? $default;}
-class PolicySecrets { public static function decrypt($value){return $value;} }
+class PolicySecrets { public static function decrypt($value){return $value;} public static function needs_upgrade($value){return false;} }
 class PolicyGeo { public static function has_database(){return true;} }
 // The footer route is configured but its verification is never satisfied, as
 // on a site whose probe went stale: the policy text must still describe the

@@ -247,7 +247,17 @@ class Ipinfo_Client {
 		if ( '' === $enc ) {
 			return '';
 		}
-		return Secrets::decrypt( $enc );
+		$plain = Secrets::decrypt( $enc );
+		// A key saved before 1.39.1 is a v2 XOR value, whose keystream every
+		// other v2 value under the same salt shares. Rewrite it once in the
+		// authenticated v3 format; the v2 copy then no longer sits in the row.
+		if ( '' !== $plain && Secrets::needs_upgrade( $enc ) && function_exists( 'update_option' ) ) {
+			$upgraded = Secrets::encrypt( $plain );
+			if ( '' !== $upgraded && $plain === Secrets::decrypt( $upgraded ) ) {
+				update_option( 'faz_geo_ipinfo_api_key', $upgraded, false );
+			}
+		}
+		return $plain;
 	}
 
 	/**
