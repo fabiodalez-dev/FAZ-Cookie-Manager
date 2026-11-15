@@ -3,6 +3,7 @@ import { expect, test } from '../fixtures/wp-fixture';
 import { clickFirstVisible } from '../utils/ui';
 import { fazApiGet, fazApiPost, openSettingsPage, type FazApiResponse } from '../utils/faz-api';
 import {
+  bustDetectionCache,
   deactivatePluginsExcept,
   enableProviderMatrixCustomScenario,
   ensureFixturePlugin,
@@ -11,8 +12,10 @@ import {
   listActivePluginFiles,
   readProviderMatrixHits,
   readProviderMatrixUrl,
+  removeSeededCookie,
   restoreActivePluginFiles,
   resetProviderMatrixState,
+  seedDetectedCookie,
   wpEval,
 } from '../utils/wp-env';
 
@@ -530,6 +533,15 @@ test.describe('Blocking compliance coverage', () => {
     const nonce = await openSettingsPage(page, loginAsAdmin);
     const original = await getSettings(page, nonce);
 
+    // The per-service list is built from DETECTED cookies (discovered=1), so
+    // the toggles this scenario clicks exist only if a scan once saw _ga and
+    // _clck. A later run that left those rows as manual ones (discovered=0)
+    // made the Google Analytics toggle vanish and this test time out waiting
+    // for it. Arrange the precondition here rather than inherit it.
+    seedDetectedCookie('_ga');
+    seedDetectedCookie('_clck');
+    bustDetectionCache();
+
     try {
       await postSettings(page, nonce, {
         banner_control: {
@@ -662,6 +674,9 @@ test.describe('Blocking compliance coverage', () => {
           restoreError,
         );
       }
+      removeSeededCookie('_ga');
+      removeSeededCookie('_clck');
+      bustDetectionCache();
       resetProviderMatrixState();
     }
   });
