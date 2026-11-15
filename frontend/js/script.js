@@ -79,6 +79,29 @@ function _fazCompareVersions(a, b) {
 // runtime stands down exactly as it did before, with a precise reason (the
 // `!_fazStore` branch below reads this report).
 const _FAZ_STATIC_CONFIG_PREFIX = 'window._fazStaticConfig=';
+// A global the runtime trusts must be a plain object this realm's scripts
+// made. A name that no script has defined is answered by the document instead
+// (named-property access on window): `<a id="_fazStaticConfig">` in a post
+// makes window._fazStaticConfig an element, two elements sharing an id make it
+// an HTMLCollection, an <iframe name> makes it a WindowProxy, and each is
+// truthy and typeof 'object'. Their class tag says what they are
+// ([object HTMLAnchorElement], [object HTMLCollection], [object Window]); a
+// JSON object or `{}` says [object Object]. The tag, not the prototype, so an
+// object another realm built (a test harness, a same-origin frame) still
+// counts. Reads nothing but its argument (see the old-WebKit note below).
+function _fazIsPlainObject(value) {
+    if (!value || typeof value !== 'object') return false;
+    try { return Object.prototype.toString.call(value) === '[object Object]'; } catch (e) { return false; }
+}
+// The static configuration counts as applied only when it is a plain object;
+// anything else is treated as absent, so recovery runs and the fail-closed
+// guard holds. Its keys are not checked against the three PHP offloads today:
+// a newer PHP side may offload more, and a cached older runtime must not stand
+// down over that (the recovery path, which parses an untrusted body, does
+// check them in _fazIsRecoveredStaticConfig()).
+function _fazStaticConfigApplied() {
+    return _fazIsPlainObject(window._fazStaticConfig);
+}
 // Matched on the file name only: an uploads offload or CDN rewrite may move
 // the directory, and the recovery below validates whatever it fetches.
 const _FAZ_STATIC_CONFIG_FILE_RE = /\/config-[0-9a-f]{32}\.js(?:[?#]|$)/;
@@ -132,6 +155,17 @@ function _fazIsRecoveredStaticConfig(value, cfg) {
         && (!catalogue || typeof catalogue !== 'object' || (Array.isArray(catalogue) && catalogue.length !== 0))) return false;
     return true;
 }
+// window.fazcookie, made a plain object of this runtime's own when it is not
+// one. Post content is parsed before this deferred script runs, so
+// `<a id="fazcookie"></a><a id="fazcookie" name="_fazInitDone"></a>` would
+// otherwise hand every `window.fazcookie || {}` an HTMLCollection whose
+// `_fazInitDone` item is truthy, and the banner would never initialise. An
+// own property on window shadows the document's named properties, so one
+// assignment is enough for the rest of the page view.
+function _fazOwnPublicObject() {
+    if (!_fazIsPlainObject(window.fazcookie)) window.fazcookie = {};
+    return window.fazcookie;
+}
 // Where an optimiser parks a delayed script's URL instead of `src`
 // (Perfmatters, WP Rocket, LiteSpeed, generic lazy loaders).
 const _FAZ_STATIC_CONFIG_SRC_ATTRS = ['src', 'data-src', 'data-pmdelayedscript', 'data-rocket-src', 'data-litespeed-src', 'data-lazy-src'];
@@ -140,7 +174,7 @@ const _fazStaticConfigRecovery = (function () {
     try {
         var cfg = window._fazConfig;
         if (!cfg || !cfg._staticConfigRequired) return report;
-        if (window._fazStaticConfig && typeof window._fazStaticConfig === 'object') return report;
+        if (_fazStaticConfigApplied()) return report;
         var doc = window.document;
         var tagSrc = function (el) {
             for (var i = 0; i < _FAZ_STATIC_CONFIG_SRC_ATTRS.length; i++) {
@@ -232,14 +266,14 @@ const _fazStaticConfigRecovery = (function () {
 })();
 // Optimisers may delay the small inline merge while the external configuration
 // and runtime are already available. Merge before any blocking decisions.
-if (window._fazConfig && window._fazStaticConfig) {
+if (window._fazConfig && _fazStaticConfigApplied()) {
     Object.keys(window._fazStaticConfig).forEach(function (key) {
         if (!(key in window._fazConfig)) window._fazConfig[key] = window._fazStaticConfig[key];
     });
 }
 // A failed static dependency must never release the bootstrap without its
 // provider rules. Keep resources parked and let a reload retry the asset.
-const _fazStaticConfigMissing = window._fazConfig && window._fazConfig._staticConfigRequired && !window._fazStaticConfig;
+const _fazStaticConfigMissing = window._fazConfig && window._fazConfig._staticConfigRequired && !_fazStaticConfigApplied();
 const _fazStore = _fazStaticConfigMissing ? null : window._fazConfig;
 // Announce the runtime before anything else runs. An optimiser that turns the
 // inline bootstrap into a deferred script can execute it AFTER this file; it
@@ -316,6 +350,29 @@ function _fazCookieDomainForHost(rootDomain, hostname) {
     return '';
 }
 
+/**
+ * A value made safe to put inside a double-quoted CSS attribute selector,
+ * `[data-x="` + _fazCssAttrValue(v) + `"]`. Service ids and category slugs
+ * reach these selectors from markup (a placeholder's data-faz-accept and
+ * data-faz-accept-service) and from configuration; one quote or backslash in
+ * them made querySelector throw a SyntaxError and the click did nothing.
+ * CSS.escape where the browser has it; otherwise the characters that can end
+ * or break a quoted string are escaped by hand (CSSOM's serialize-a-string).
+ * Reads nothing but its argument (old-WebKit rule above).
+ *
+ * @param {*} value
+ * @returns {string}
+ */
+function _fazCssAttrValue(value) {
+    var text = String(value == null ? '' : value);
+    if (typeof CSS !== 'undefined' && CSS && typeof CSS.escape === 'function') return CSS.escape(text);
+    return text.replace(/[\u0000-\u001f\u007f"\\]/g, function (ch) {
+        if (ch === '\u0000') return '\ufffd';
+        if (ch === '"' || ch === '\\') return '\\' + ch;
+        return '\\' + ch.charCodeAt(0).toString(16) + ' ';
+    });
+}
+
 if ( ! _fazStore ) {
     // _fazConfig is injected by wp_localize_script. If it is missing (e.g. a
     // JS-defer plugin scoped the localize block inside a DOMContentLoaded
@@ -357,7 +414,7 @@ if ( ! _fazStore ) {
             + ( _fazStaticVerdict || ' Check the Network tab for wp-content/uploads/faz-cookie-manager/assets/config-*.js.' )
         : '[FAZ Cookie Manager] _fazConfig is not defined — banner disabled. If you use a JS optimisation plugin (WP Rocket, LiteSpeed, etc.), exclude _fazConfig from deferral.' );
     // Expose a no-op stub so any external callers (GTM, etc.) do not crash.
-    window.fazcookie = window.fazcookie || {};
+    _fazOwnPublicObject();
 } else {
 
 _fazStore._backupNodes = [];
@@ -377,8 +434,7 @@ _fazStore._optoutSuccessCountdownInterval = null;
 _fazStore._optoutSuccessAutoCloseTimer = null;
 _fazStore._optoutSuccessSubtextTemplate = "";
 
-window.fazcookie = window.fazcookie || {};
-_fazRef = window.fazcookie;
+_fazRef = _fazOwnPublicObject();
 _fazRef._fazConsentStore = new Map();
 
 // Build marker `_FAZ_BUILD` — declared at the top of this file (the version
@@ -2703,11 +2759,12 @@ _fazDomReady(async function () {
     // A second _fazInit call inserts a second banner into the DOM; _fazGetBanner
     // uses querySelector (first match), so clicking Reject hides banner #1 while
     // banner #2 stays visible. window.fazcookie persists across executions
-    // (initialised as window.fazcookie = window.fazcookie || {}), so this flag
-    // survives the second run and makes it a no-op.
-    if (window.fazcookie && window.fazcookie._fazInitDone) return;
-    window.fazcookie = window.fazcookie || {};
-    window.fazcookie._fazInitDone = true;
+    // (_fazOwnPublicObject() keeps an existing plain object), so this flag
+    // survives the second run and makes it a no-op. Read through the same
+    // helper: a named element in post content must never stand in for it.
+    var _fazPublic = _fazOwnPublicObject();
+    if (_fazPublic._fazInitDone === true) return;
+    _fazPublic._fazInitDone = true;
     try {
         await _fazInit();
     } catch (err) {
@@ -4587,7 +4644,7 @@ function _fazAcceptCookies(choice = "all", ungated = false, source = "preference
             // here and the grant was written straight back, leaving Reject All
             // as the only way out.
             var toggle = document.querySelector(
-                '.faz-service-toggle[data-service="' + id + '"]'
+                '.faz-service-toggle[data-service="' + _fazCssAttrValue(id) + '"]'
             );
             if (toggle && !toggle.checked) {
                 _fazRef._fazConsentStore.delete("gpcx." + id);
@@ -9594,7 +9651,17 @@ function _fazAfterConsent() {
                 var iframe = document.createElement('iframe');
                 iframe.classList.add('faz-hidden');
                 iframe.classList.add('faz-consent-bridge');
-                iframe.src = targetUrl + '?faz_consent_forward=1';
+                // The marker must land in the query string: the receiver on
+                // the target site only listens on that bridge URL. A target
+                // that already has a query or a fragment kept the old
+                // concatenation from reaching it there.
+                var bridgeUrl = targetUrl + '?faz_consent_forward=1';
+                try {
+                    var parsedTarget = new URL(targetUrl, window.location.href);
+                    parsedTarget.searchParams.set('faz_consent_forward', '1');
+                    bridgeUrl = parsedTarget.href;
+                } catch (e) { /* keep the plain concatenation */ }
+                iframe.src = bridgeUrl;
                 iframe.addEventListener('load', function() {
                     try {
                         iframe.contentWindow.postMessage({
@@ -10599,12 +10666,12 @@ function _fazBindServiceCategorySync(category) {
         catToggle.setAttribute('data-faz-service-sync-bound', '1');
         catToggle.addEventListener('change', function() {
             var isChecked = catToggle.checked;
-            document.querySelectorAll('.faz-service-toggle[data-category="' + category.slug + '"]')
+            document.querySelectorAll('.faz-service-toggle[data-category="' + _fazCssAttrValue(category.slug) + '"]')
                 .forEach(function(svcToggle) {
                     svcToggle.checked = isChecked;
                 });
             if (_fazStore._perCookieConsent) {
-                document.querySelectorAll('.faz-cookie-toggle[data-category="' + category.slug + '"]')
+                document.querySelectorAll('.faz-cookie-toggle[data-category="' + _fazCssAttrValue(category.slug) + '"]')
                     .forEach(function(ckToggle) {
                         ckToggle.checked = isChecked;
                     });
@@ -10656,7 +10723,7 @@ function _fazBuildServiceRow(service, serviceList) {
         // nested rows stay coherent with the service they belong to.
         if (_fazStore._perCookieConsent) {
             var on = checkbox.checked;
-            document.querySelectorAll('.faz-cookie-toggle[data-service="' + service.id + '"]')
+            document.querySelectorAll('.faz-cookie-toggle[data-service="' + _fazCssAttrValue(service.id) + '"]')
                 .forEach(function(ckToggle) { ckToggle.checked = on; });
         }
     });
@@ -10799,11 +10866,11 @@ function _fazInjectServiceToggle(service) {
     if (!accordionEl) return;
     var accordionBody = accordionEl.querySelector('.faz-accordion-body');
     if (!accordionBody) return;
-    if (accordionBody.querySelector('.faz-service-toggle[data-service="' + service.id + '"]')) return;
+    if (accordionBody.querySelector('.faz-service-toggle[data-service="' + _fazCssAttrValue(service.id) + '"]')) return;
 
     if (_fazStore._perCookieConsent) _fazInjectCookieToggleStyles();
 
-    var serviceList = accordionBody.querySelector('.faz-service-list[data-faz-category="' + service.category + '"]');
+    var serviceList = accordionBody.querySelector('.faz-service-list[data-faz-category="' + _fazCssAttrValue(service.category) + '"]');
     if (!serviceList) {
         serviceList = document.createElement('div');
         serviceList.className = 'faz-service-list';
@@ -11647,7 +11714,7 @@ window._fazAcceptService = function (serviceId, categorySlug, trustService) {
     }
 
     var serviceToggle = document.querySelector(
-        '.faz-service-toggle[data-service="' + serviceId + '"][data-category="' + categorySlug + '"]'
+        '.faz-service-toggle[data-service="' + _fazCssAttrValue(serviceId) + '"][data-category="' + _fazCssAttrValue(categorySlug) + '"]'
     );
     var syntheticToggle = null;
     if (!serviceToggle) {
@@ -11753,7 +11820,7 @@ window._fazAcceptCategory = function (categorySlug) {
             var cbDirect = document.getElementById("fazCategoryDirect" + cat.slug);
             if (cbDirect) cbDirect.checked = true;
             // Sync service toggles for this category.
-            document.querySelectorAll('.faz-service-toggle[data-category="' + cat.slug + '"]')
+            document.querySelectorAll('.faz-service-toggle[data-category="' + _fazCssAttrValue(cat.slug) + '"]')
                 .forEach(function(svcToggle) { svcToggle.checked = true; });
             break;
         }
@@ -11771,7 +11838,7 @@ window._fazAcceptCategory = function (categorySlug) {
             if (cbR) cbR.checked = previousCategoryValue === "yes";
             var cbDirectR = document.getElementById("fazCategoryDirect" + categorySlugToRollback);
             if (cbDirectR) cbDirectR.checked = previousCategoryValue === "yes";
-            document.querySelectorAll('.faz-service-toggle[data-category="' + categorySlugToRollback + '"]')
+            document.querySelectorAll('.faz-service-toggle[data-category="' + _fazCssAttrValue(categorySlugToRollback) + '"]')
                 .forEach(function(svcToggle) { svcToggle.checked = previousCategoryValue === "yes"; });
         }
         _fazCategoriesBeforeConsent = null;
@@ -11937,6 +12004,15 @@ window.getFazCookieConsent = function (cookieName) {
 // Cross-domain consent forwarding: listen for incoming consent from other domains.
 window.addEventListener('message', function(event) {
     if (!_fazStore._consentForwarding || !_fazStore._consentForwarding.enabled) return;
+    // Only the bridge receives. The sender (_fazAcceptCookies above) loads
+    // this site in a hidden iframe at `?faz_consent_forward=1` and posts into
+    // that frame from the page that embeds it, so a genuine forward always
+    // arrives in a framed bridge document and always comes from its parent.
+    // Without both checks every page of this site, in any tab, took a forward
+    // from any window of an allowed origin that held a reference to it (an
+    // opener, a popup it opened, a frame of it).
+    if (window.parent === window || event.source !== window.parent) return;
+    if (!/[?&]faz_consent_forward=1(?:&|$)/.test(String(window.location.search || ''))) return;
     var targets = _fazStore._consentForwarding.targets || [];
     // Origin allow-list: event.origin is compared directly, in this handler
     // body, against each configured target's origin. Any message from an
