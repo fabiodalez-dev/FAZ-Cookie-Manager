@@ -12,6 +12,15 @@
  * @package FazCookie\Tests\Unit
  */
 
+namespace FazCookie\Admin\Modules\Geo_Routing\Includes {
+	// Ipinfo_Client calls time() unqualified, so inside its namespace this
+	// one answers: the same clock as the transient shims, never the wall clock.
+	function time() {
+		return $GLOBALS['faz_test_now'];
+	}
+}
+
+namespace {
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', __DIR__ );
 }
@@ -21,33 +30,27 @@ define( 'HOUR_IN_SECONDS', 3600 );
 
 // Stub WP functions before requiring class files. get_transient() exists
 // here, so the client takes the transient branch, the default on a site
-// without a persistent object cache. A transient keeps its expiry, and a
-// test moves time forward by moving the stored expiries back.
+// without a persistent object cache. The client and these shims read one
+// controlled clock, and a test moves time forward by advancing it.
+$GLOBALS['faz_test_now']         = 1700000000;
 $GLOBALS['_faz_test_transients'] = array();
 function get_transient( $name ) {
 	if ( ! isset( $GLOBALS['_faz_test_transients'][ $name ] ) ) {
 		return false;
 	}
 	list( $value, $expires ) = $GLOBALS['_faz_test_transients'][ $name ];
-	if ( $expires <= time() ) {
+	if ( $expires <= $GLOBALS['faz_test_now'] ) {
 		unset( $GLOBALS['_faz_test_transients'][ $name ] );
 		return false;
 	}
 	return $value;
 }
 function set_transient( $name, $value, $ttl = 0 ) {
-	$GLOBALS['_faz_test_transients'][ $name ] = array( $value, time() + (int) $ttl, (int) $ttl );
+	$GLOBALS['_faz_test_transients'][ $name ] = array( $value, $GLOBALS['faz_test_now'] + (int) $ttl, (int) $ttl );
 	return true;
 }
 function faz_test_advance( $seconds ) {
-	foreach ( $GLOBALS['_faz_test_transients'] as $name => $entry ) {
-		$GLOBALS['_faz_test_transients'][ $name ][1] = $entry[1] - $seconds;
-		foreach ( array( 'start', 'until' ) as $stamp ) {
-			if ( is_array( $entry[0] ) && isset( $entry[0][ $stamp ] ) ) {
-				$GLOBALS['_faz_test_transients'][ $name ][0][ $stamp ] = $entry[0][ $stamp ] - $seconds;
-			}
-		}
-	}
+	$GLOBALS['faz_test_now'] += $seconds;
 }
 function faz_test_ttl( $name ) {
 	return isset( $GLOBALS['_faz_test_transients'][ $name ] ) ? $GLOBALS['_faz_test_transients'][ $name ][2] : null;
@@ -166,3 +169,4 @@ tr_check( 3 === $GLOBALS['_faz_test_http_calls'], 'after the hour a new window o
 
 echo "\nPassed: $passed\nFailed: $failed\n";
 exit( $failed > 0 ? 1 : 0 );
+}

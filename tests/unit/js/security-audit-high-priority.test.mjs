@@ -252,10 +252,19 @@ const WALK_SHEETS = [
 ];
 // Control: a same-origin sheet with a reference stays as written.
 const LOCAL_REF_SHEET = ['<svg><style>.p{background:url(/x.png?a=1&amp;b=2)}</style></svg>', null];
+// The sheet is delivered as written: present, not parked, and with the text
+// the SVG parser makes of it (the reference decoded, nothing emptied).
+function keptAsWritten(w, host) {
+  const el = w.document.createElement('div');
+  if (host) w.document.body.appendChild(el);
+  el.innerHTML = LOCAL_REF_SHEET[0];
+  const st = el.querySelector('style');
+  return !!st && !st.hasAttribute('data-faz-css') && st.textContent === '.p{background:url(/x.png?a=1&b=2)}';
+}
 for (const [label, html, ctx] of WALK_SHEETS) {
   ok(`${label} is parked`, parkedIn(runtime({ aggressive: true }), html, ctx, false, true));
 }
-ok('control: a same-origin SVG sheet with "&amp;" is not parked', !parkedIn(runtime({ aggressive: true }), LOCAL_REF_SHEET[0], LOCAL_REF_SHEET[1]));
+ok('control: a same-origin SVG sheet with "&amp;" is delivered as written', keptAsWritten(runtime({ aggressive: true })));
 
 console.log('\n4b. bootstrap safety release: the same rule');
 await (async () => {
@@ -295,7 +304,7 @@ await (async () => {
   for (const [label, html, ctx] of WALK_SHEETS) {
     ok(`${label} is parked`, parkedIn(w, x(html), ctx, true, true));
   }
-  ok('control: a same-origin SVG sheet with "&amp;" is not parked', !parkedIn(w, LOCAL_REF_SHEET[0], LOCAL_REF_SHEET[1], true));
+  ok('control: a same-origin SVG sheet with "&amp;" is delivered as written', keptAsWritten(w, true));
 })();
 
 // ---------------------------------------------------------------- 7

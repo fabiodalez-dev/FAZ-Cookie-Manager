@@ -269,6 +269,23 @@ namespace {
 	check( 4 === $GLOBALS['faz_test_options'][ $key ]['n'], 'and the mails the others counted stay counted' );
 	unset( $GLOBALS['faz_test_after_read'] );
 
+	// No window yet: this request reads nothing, and before its write another
+	// request opens the window with its own mail. The INSERT that would open
+	// it again must lose, not replace that window.
+	faz_test_new_request();
+	unset( $GLOBALS['faz_test_options'][ $key ] );
+	$opened                         = array( 'n' => 1, 'start' => time() - 5 );
+	$GLOBALS['faz_test_after_read'] = function ( $name ) use ( $key, $opened ) {
+		if ( $key !== $name ) {
+			return;
+		}
+		unset( $GLOBALS['faz_test_after_read'] );
+		$GLOBALS['faz_test_options'][ $key ] = $opened;
+	};
+	check( false === $claim->invoke( $obj ), 'a request that finds no window, while another opens one, sends no mail' );
+	check( $opened === $GLOBALS['faz_test_options'][ $key ], 'and the other request\'s window is kept as it opened it' );
+	unset( $GLOBALS['faz_test_after_read'] );
+
 	$GLOBALS['faz_test_filters']['faz_dnsmpi_max_notifications_per_day'] = function () {
 		return 0;
 	};
