@@ -857,6 +857,21 @@
 	 * The __tcfapi() - implements required TCF v2.3 commands.
 	 */
 	function tcfapi(command, version, callback, parameter) {
+		return dispatch(command, version, callback, parameter, null);
+	}
+
+	/**
+	 * The router behind __tcfapi. `owner` is who registers or removes a
+	 * listener: null for code on this page (a direct __tcfapi call, the stub
+	 * queue, a message this window posted to itself) and the posting window for
+	 * a call relayed through the __tcfapiLocator protocol. The relay answers any
+	 * origin, as the protocol requires, and listener ids are sequential, so
+	 * without an owner any frame could remove another vendor's listener by
+	 * guessing its id and stop that vendor's consent-change notifications. A
+	 * listener is removed only by the party that registered it; for callers on
+	 * this page nothing changes.
+	 */
+	function dispatch(command, version, callback, parameter, owner) {
 		if (typeof callback !== "function") return;
 
 		var consent, purposes, tcStr, data;
@@ -891,7 +906,7 @@
 
 			case "addEventListener": {
 				listenerId++;
-				listeners[listenerId] = { callback: callback };
+				listeners[listenerId] = { callback: callback, owner: owner || null };
 				consent  = readConsent();
 				purposes = buildPurposeConsent(consent);
 				var sfAdd = buildSpecialFeatureOptins(consent);
@@ -912,7 +927,8 @@
 			}
 
 			case "removeEventListener":
-				if (parameter && listeners[parameter]) {
+				if (parameter && listeners.hasOwnProperty(parameter) && listeners[parameter]
+					&& listeners[parameter].owner === (owner || null)) {
 					delete listeners[parameter];
 					callback(true);
 				} else {
@@ -993,7 +1009,10 @@
 		}
 		if (!json || !json.__tcfapiCall) return;
 		var call = json.__tcfapiCall;
-		tcfapi(call.command, call.version, function (retValue, success) {
+		// A message this window posted to itself is a call from this page. One
+		// with no source window owns nothing anyone else registered.
+		var caller = event.source === window ? null : (event.source || {});
+		dispatch(call.command, call.version, function (retValue, success) {
 			var msg = {
 				__tcfapiReturn: {
 					returnValue: retValue,
@@ -1014,7 +1033,7 @@
 					replyOrigin
 				);
 			}
-		}, call.parameter);
+		}, call.parameter, caller);
 	}, false);
 
 	// Track banner visibility for ping displayStatus.

@@ -69,7 +69,15 @@
     // predates this file: it never sets _fazRuntimeStarted, but it creates
     // that Map as its first act, so finding one means it has already run.
     if (w._fazBootstrap || w._fazRuntimeStarted || !w._fazConfig || !w._fazConfig._block) return;
-    if (w.fazcookie && w.fazcookie._fazConsentStore) return;
+    // Only a store on a real object counts. An optimiser that defers this
+    // script runs it after post content is parsed, and there
+    // `<a id="fazcookie"></a><a id="fazcookie" name="_fazConsentStore">`
+    // answers window.fazcookie with an HTMLCollection whose named item is
+    // truthy: the bootstrap would stand down with no runtime behind it.
+    // (Past the accessor installed further down, the document can no longer
+    // answer for window.fazcookie at all.)
+    if (w.fazcookie && Object.prototype.toString.call(w.fazcookie) === '[object Object]'
+        && Object.prototype.toString.call(w.fazcookie._fazConsentStore) === '[object Map]') return;
     var queue = [], undo = [], scripts = [], pending = true, handoffs = [], staged = new WeakMap();
     // The fuse. Every held operation is a closure kept alive until the
     // handoff, and nothing about a page bounds how many it makes: a loop that
