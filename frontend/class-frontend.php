@@ -3291,7 +3291,7 @@ class Frontend {
 							$repaired = true;
 						}
 					}
-					if ( $repaired ) {
+					if ( $repaired && self::template_cache_write_is_current() ) {
 						// autoload=false — keep the multi-KB template blob out of alloptions.
 						update_option( $cache_key, $stored, false );
 					}
@@ -3326,6 +3326,25 @@ class Frontend {
 		echo '<template id="fazBannerTemplate">';
 		echo wp_kses( $html, faz_allowed_html() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_kses() is the escape.
 		echo '</template>';
+	}
+
+	/**
+	 * Whether a repair of the stored banner template may be written back.
+	 *
+	 * Both repairs below rewrite the whole option from the copy this request
+	 * read. If an admin save cleared the cache since, that copy is the state
+	 * before the save, and writing it back would bring the cleared slots back.
+	 * They would be ignored (each slot carries the generation it was built
+	 * under), but the write would still overwrite the slots of the new
+	 * generation built meanwhile. The per-request rewrite is unaffected.
+	 *
+	 * @return bool
+	 */
+	private static function template_cache_write_is_current() {
+		if ( ! function_exists( 'faz_banner_template_generation_is_current' ) ) {
+			return true;
+		}
+		return faz_banner_template_generation_is_current( faz_banner_template_generation() );
 	}
 
 	/**
@@ -3411,7 +3430,7 @@ class Frontend {
 			$server_verified_https = is_ssl()
 				|| 0 === stripos( (string) get_option( 'siteurl' ), 'https://' );
 			$forged_scheme_only = ( 'https' === $current['scheme'] ) && ! $server_verified_https;
-			if ( $repaired && ! $forged_scheme_only ) {
+			if ( $repaired && ! $forged_scheme_only && self::template_cache_write_is_current() ) {
 				// autoload=false — keep the multi-KB template blob out of alloptions.
 				update_option( $cache_key, $stored, false );
 			}

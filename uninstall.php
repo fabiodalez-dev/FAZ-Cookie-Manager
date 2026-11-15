@@ -166,6 +166,8 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				'faz_migration_options',
 				'faz_privacy_content_snapshot',
 				'faz_banner_template',
+				'faz_template_cache_generation',
+				'faz_install_claim',
 				'faz_gvl_data',
 				'faz_gvl_meta',
 				'faz_gvl_purposes',
@@ -232,6 +234,7 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 			// must not leave the event behind.
 			if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
 				wp_clear_scheduled_hook( 'faz_consent_log_gmt_backfill' );
+				wp_clear_scheduled_hook( 'faz_run_pending_migrations' );
 			}
 
 			// Clean up Do Not Sell / DSAR atomic lock options (created by add_option,

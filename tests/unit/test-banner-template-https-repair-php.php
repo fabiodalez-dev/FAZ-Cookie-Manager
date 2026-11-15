@@ -41,6 +41,21 @@ function add_filter() { return true; }
 function apply_filters( $hook, $value, ...$args ) { return $value; }
 function faz_disable_banner() { return false; }
 
+// Banner template cache generation (class-i18n-helpers.php): the request saw
+// 'g1'; the stored value is what a fresh read returns.
+$GLOBALS['faz_repair_generation'] = array( 'request' => 'g1', 'stored' => 'g1' );
+function faz_banner_template_generation( $fresh = false ) {
+	return $GLOBALS['faz_repair_generation'][ $fresh ? 'stored' : 'request' ];
+}
+function faz_banner_template_generation_is_current( $generation ) {
+	return (string) $generation === faz_banner_template_generation( true );
+}
+
+// Reached once the repair has decided not to write (the second case below).
+function wp_parse_url( $url, $component = -1 ) { return parse_url( $url, $component ); }
+function faz_allowed_html() { return array(); }
+function wp_kses( $html, $allowed = array() ) { return (string) $html; }
+
 class Faz_Repair_Stop extends RuntimeException {}
 function add_action() { throw new Faz_Repair_Stop(); }
 function update_option( $name, $value, $autoload = null ) {
@@ -106,6 +121,20 @@ repair_check(
 	false === strpos( $saved_html, 'src="frontend/' ),
 	'the plugin URL prefix is not deleted'
 );
+
+// An admin save cleared the cache after this request read it: the repair of
+// its pre-save copy must not be written back over the new generation.
+unset( $GLOBALS['faz_repair_saved'] );
+$GLOBALS['faz_repair_generation']['stored'] = 'g2';
+ob_start();
+try {
+	$frontend->banner_html();
+} catch ( Faz_Repair_Stop $e ) {
+	// Reached update_option(): the stale copy was written.
+}
+$rendered = ob_get_clean();
+repair_check( ! isset( $GLOBALS['faz_repair_saved'] ), 'a repair read before a cache clear is not written back' );
+repair_check( false !== strpos( $rendered, 'https://origin.example.test/wp-content/plugins/faz-cookie-manager/frontend/images/revisit.svg' ), 'the request itself still gets the https:// icon URL' );
 
 echo "\nPassed: $passed\nFailed: $failed\n";
 exit( $failed > 0 ? 1 : 0 );
