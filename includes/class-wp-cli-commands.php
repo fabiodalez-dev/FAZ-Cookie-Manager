@@ -76,7 +76,9 @@ class WP_CLI_Commands {
 	 * ## OPTIONS
 	 *
 	 * [<file>]
-	 * : Output file path. Default: faz-settings-{date}.json in current directory.
+	 * : Output file path: a bare file name (written to the exports directory)
+	 * or an absolute path inside the uploads directory. Default:
+	 * uploads/faz-cookie-manager/exports/faz-settings-{date}-{random}.json.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -172,7 +174,8 @@ class WP_CLI_Commands {
 		if ( ! is_dir( $exports_base ) ) {
 			wp_mkdir_p( $exports_base );
 		}
-		$default_name   = 'faz-settings-' . gmdate( 'Y-m-d' ) . '.json';
+		self::guard_exports_dir( $exports_base );
+		$default_name   = self::default_export_name();
 		$requested_path = isset( $args[0] ) ? (string) $args[0] : '';
 		$file           = '';
 		if ( '' === $requested_path ) {
@@ -227,6 +230,12 @@ class WP_CLI_Commands {
 			$file = $abs_target;
 		}
 
+		// realpath() above resolved only the parent: a symlink planted at the
+		// leaf itself would still be followed by file_put_contents().
+		if ( ! self::is_writable_export_target( $file ) ) {
+			WP_CLI::error( "Refusing to write through a symlink or into a directory: {$file}" );
+			return;
+		}
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- CLI context, target path validated above to live inside wp_upload_dir().
 		if ( false === file_put_contents( $file, $json ) ) {
 			WP_CLI::error( "Failed to write to {$file}" );
@@ -234,6 +243,65 @@ class WP_CLI_Commands {
 		}
 
 		WP_CLI::success( "Settings exported to {$file} (" . size_format( strlen( $json ) ) . ')' );
+	}
+
+	/**
+	 * Default export file name: dated, with a random part.
+	 *
+	 * The exports directory sits under uploads and is reachable over HTTP
+	 * wherever the server does not honour the deny rule guard_exports_dir()
+	 * writes (nginx ignores .htaccess). A name made only of the date could be
+	 * fetched by anyone who guessed the day.
+	 *
+	 * @since 1.39.1
+	 * @return string
+	 */
+	private static function default_export_name() {
+		try {
+			$rand = bin2hex( random_bytes( 6 ) );
+		} catch ( \Exception $e ) {
+			$rand = substr( md5( uniqid( '', true ) ), 0, 12 );
+		}
+		return 'faz-settings-' . gmdate( 'Y-m-d' ) . '-' . $rand . '.json';
+	}
+
+	/**
+	 * Put an index.php and an Apache deny rule in the exports directory.
+	 *
+	 * Existing files are left as they are.
+	 *
+	 * @since 1.39.1
+	 * @param string $dir Exports directory.
+	 * @return void
+	 */
+	private static function guard_exports_dir( $dir ) {
+		if ( ! is_dir( $dir ) ) {
+			return;
+		}
+		$dir   = trailingslashit( $dir );
+		$files = array(
+			'index.php' => "<?php\n// Silence is golden.\n",
+			'.htaccess' => "# FAZ Cookie Manager: settings exports are not served over HTTP.\n<IfModule mod_authz_core.c>\n\tRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n\tDeny from all\n</IfModule>\n",
+		);
+		foreach ( $files as $name => $body ) {
+			if ( ! file_exists( $dir . $name ) && ! is_link( $dir . $name ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- CLI context, fixed file inside the plugin's own uploads directory.
+				file_put_contents( $dir . $name, $body );
+			}
+		}
+	}
+
+	/**
+	 * Whether the export may be written at $file.
+	 *
+	 * False for a symlink (dangling or not) and for an existing directory.
+	 *
+	 * @since 1.39.1
+	 * @param string $file Target path.
+	 * @return bool
+	 */
+	private static function is_writable_export_target( $file ) {
+		return ! is_link( $file ) && ! is_dir( $file );
 	}
 
 	/**

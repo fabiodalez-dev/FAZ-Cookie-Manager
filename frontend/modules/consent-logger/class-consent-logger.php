@@ -933,11 +933,18 @@ class Consent_Logger {
 			return false;
 		}
 		$controller = Controller::get_instance();
-		if ( ! method_exists( $controller, 'current_ip_hash' ) ) {
-			return false;
-		}
-		$here = (string) $controller->current_ip_hash();
-		if ( '' === $here || ! hash_equals( (string) $row['ip_hash'], $here ) ) {
+		if ( method_exists( $controller, 'ip_hash_matches' ) ) {
+			// Knows both the current formula and the one rows written before
+			// 1.39.1 carry.
+			if ( ! $controller->ip_hash_matches( (string) $row['ip_hash'] ) ) {
+				return false;
+			}
+		} elseif ( method_exists( $controller, 'current_ip_hash' ) ) {
+			$here = (string) $controller->current_ip_hash();
+			if ( '' === $here || ! hash_equals( (string) $row['ip_hash'], $here ) ) {
+				return false;
+			}
+		} else {
 			return false;
 		}
 		// Both sides are site-time strings (log_consent() writes created_at with

@@ -211,24 +211,73 @@ class Controller {
 	/**
 	 * Pseudonymise an IP address before it is stored.
 	 *
-	 * A salted one-way hash, keyed by the installation's salt. It is
-	 * pseudonymisation in the sense of GDPR Art. 4(5), not anonymisation: the
-	 * same address always yields the same value for the life of the salt, so
-	 * rows from one address stay linkable for the retention period, and
-	 * anyone holding wp-config's salts and a candidate address can confirm a
-	 * match. The row is therefore still personal data, kept as the server-side
-	 * witness of where a consent came from and purged with the row. The
-	 * wording shown to administrators (the eraser message, the readme) says
-	 * exactly this, and no more.
+	 * An HMAC-SHA256 of the address under a key derived from the
+	 * installation's auth salt and dedicated to this column (since 1.39.1;
+	 * the same construction as includes/class-ip-hasher.php, with its own
+	 * key so the consent-log value cannot be matched against the DSAR or
+	 * Do-Not-Sell records). It is pseudonymisation in the sense of GDPR Art.
+	 * 4(5), not anonymisation: the same address always yields the same value
+	 * for the life of the salt, so rows from one address stay linkable for
+	 * the retention period, and anyone holding wp-config's salts and a
+	 * candidate address can confirm a match. The row is therefore still
+	 * personal data, kept as the server-side witness of where a consent came
+	 * from and purged with the row. The wording shown to administrators (the
+	 * eraser message, the readme) says exactly this, and no more.
+	 *
+	 * Rows written before 1.39.1 carry sha256( ip . wp_salt() ) and are left
+	 * as they are: the value cannot be recomputed without the address, which
+	 * is not stored. ip_hash_matches() accepts both formulas.
 	 *
 	 * @param string $ip The IP address.
-	 * @return string SHA256 hash of IP + salt.
+	 * @return string 64-char hex HMAC, or '' without an address.
 	 */
 	private function hash_ip( $ip ) {
 		if ( empty( $ip ) ) {
 			return '';
 		}
+		return hash_hmac( 'sha256', (string) $ip, self::ip_hash_key() );
+	}
+
+	/**
+	 * The formula consent-log rows carried before 1.39.1.
+	 *
+	 * @param string $ip The IP address.
+	 * @return string
+	 */
+	private function legacy_hash_ip( $ip ) {
+		if ( empty( $ip ) ) {
+			return '';
+		}
 		return hash( 'sha256', $ip . \wp_salt() );
+	}
+
+	/**
+	 * HMAC key of the consent-log ip_hash column.
+	 *
+	 * @return string Raw 32-byte key.
+	 */
+	private static function ip_hash_key() {
+		return hash_hmac( 'sha256', 'faz_consent_log_ip_hash', (string) \wp_salt( 'auth' ), true );
+	}
+
+	/**
+	 * Whether a stored ip_hash was written from this request's address.
+	 *
+	 * Accepts the current HMAC and the pre-1.39.1 salted hash, so a row
+	 * written just before an update is still recognised after it.
+	 *
+	 * @since 1.39.1
+	 * @param string $stored The row's ip_hash.
+	 * @return bool
+	 */
+	public function ip_hash_matches( $stored ) {
+		$stored = (string) $stored;
+		$ip     = $this->get_visitor_ip();
+		if ( '' === $stored || empty( $ip ) ) {
+			return false;
+		}
+		return hash_equals( $stored, $this->hash_ip( $ip ) )
+			|| hash_equals( $stored, $this->legacy_hash_ip( $ip ) );
 	}
 
 	/**
