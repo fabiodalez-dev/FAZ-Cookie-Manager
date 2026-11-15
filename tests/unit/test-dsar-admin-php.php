@@ -303,7 +303,12 @@ namespace {
 	foreach ( array( 'pending', 'forwarded', 'completed', 'erased' ) as $status ) {
 		check( DSAR_Admin::status_label( $status ) !== $status, "$status has a human-readable label" );
 	}
-	assert_eq( DSAR_Admin::status_label( 'something-else' ), 'something-else', 'an unknown status is shown as-is rather than blanked' );
+	// An unknown status is not blanked (the key stays readable for whoever
+	// investigates the record) but never comes back raw either: the label
+	// reaches mail and exports, where nothing escapes it.
+	assert_eq( DSAR_Admin::status_label( 'something-else' ), 'unknown (something-else)', 'an unknown status is labelled Unknown, with its key' );
+	assert_eq( DSAR_Admin::status_label( "<img src=x onerror=alert(1)>\r\nBcc: x@y" ), 'unknown (imgsrcxonerroralert1bccxy)', 'and stored markup or header text in the key does not survive' );
+	assert_eq( DSAR_Admin::status_label( '<>' ), 'unknown', 'a key with nothing printable left is just Unknown' );
 
 	echo "\n";
 	if ( $fail ) {

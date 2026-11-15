@@ -2202,6 +2202,11 @@ class DSAR_Shortcode {
 			'restrict'    => __( 'Right to Restrict Processing (Art. 18 GDPR)', 'faz-cookie-manager' ),
 			'object'      => __( 'Right to Object (Art. 21 GDPR)', 'faz-cookie-manager' ),
 		);
-		return isset( $labels[ $type ] ) ? $labels[ $type ] : $type;
+		if ( isset( $labels[ $type ] ) ) {
+			return $labels[ $type ];
+		}
+		// Never the raw stored value: it reaches the admin mail and the erased
+		// record's title, where nothing escapes it.
+		return DSAR_Admin::unknown_label( $type );
 	}
 }

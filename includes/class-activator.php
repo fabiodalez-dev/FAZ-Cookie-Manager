@@ -962,26 +962,45 @@ class Activator {
 		}
 		$cutoff  = gmdate( 'Y-m-d H:i:s', time() - ( $retention * MONTH_IN_SECONDS ) );
 		$deleted = 0;
-		$old_ids = get_posts(
-			array(
-				'post_type'        => 'faz_dsar',
-				'post_status'      => 'any',
-				'posts_per_page'   => 200,
-				'fields'           => 'ids',
-				'no_found_rows'    => true,
-				// phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.SuppressFilters_suppress_filters -- intentional: this DSAR retention cleanup must find and delete EVERY expired faz_dsar record regardless of third-party query filters (e.g. multilingual language scoping), so filters are suppressed on this internal housekeeping query. Not a wp.org plugin_repo error (WordPressVIPMinimum only).
-				'suppress_filters' => true,
-				'date_query'       => array(
-					array(
-						'column' => 'post_date_gmt',
-						'before' => $cutoff,
+		// Oldest first, batch after batch, until the expired set is empty. One
+		// newest-first batch of 200 a day fell behind a form that accepts 500
+		// records a day, and what it left behind were the OLDEST records, the
+		// ones furthest past the retention. 'any' also skips the trash, so a
+		// record an administrator binned (name, email, message intact) was
+		// never purged at all. The batch cap bounds one cron run; whatever is
+		// left is picked up the next day, oldest first again.
+		for ( $batch = 0; $batch < 25; $batch++ ) {
+			$old_ids = get_posts(
+				array(
+					'post_type'        => 'faz_dsar',
+					'post_status'      => array( 'any', 'trash' ),
+					'posts_per_page'   => 200,
+					'fields'           => 'ids',
+					'no_found_rows'    => true,
+					'orderby'          => 'date',
+					'order'            => 'ASC',
+					// phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.SuppressFilters_suppress_filters -- intentional: this DSAR retention cleanup must find and delete EVERY expired faz_dsar record regardless of third-party query filters (e.g. multilingual language scoping), so filters are suppressed on this internal housekeeping query. Not a wp.org plugin_repo error (WordPressVIPMinimum only).
+					'suppress_filters' => true,
+					'date_query'       => array(
+						array(
+							'column' => 'post_date_gmt',
+							'before' => $cutoff,
+						),
 					),
-				),
-			)
-		);
-		foreach ( (array) $old_ids as $post_id ) {
-			if ( wp_delete_post( (int) $post_id, true ) ) {
-				$deleted++;
+				)
+			);
+			$old_ids = (array) $old_ids;
+			$removed = 0;
+			foreach ( $old_ids as $post_id ) {
+				if ( wp_delete_post( (int) $post_id, true ) ) {
+					$removed++;
+				}
+			}
+			$deleted += $removed;
+			// A short batch is the last one. A batch where nothing could be
+			// deleted would come back identical, so it ends the run too.
+			if ( count( $old_ids ) < 200 || 0 === $removed ) {
+				break;
 			}
 		}
 		return $deleted;
