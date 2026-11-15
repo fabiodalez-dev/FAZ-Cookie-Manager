@@ -20,6 +20,7 @@ use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
 use FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger;
 use FazCookie\Admin\Modules\Pageviews\Api\Api as Pageviews_Api;
 use FazCookie\Frontend\Modules\Banner_Rest\Banner_Rest;
+use FazCookie\Frontend\Modules\Park_Proofs\Park_Proofs;
 use FazCookie\Includes\Geolocation;
 use FazCookie\Includes\Ab_Test;
 use FazCookie\Includes\Gvl;
@@ -30,6 +31,7 @@ use FazCookie\Includes\Cookie_Policy_Shortcode;
 use FazCookie\Includes\Do_Not_Sell_Shortcode;
 use FazCookie\Includes\Cookie_Settings_Shortcode;
 use FazCookie\Frontend\Includes\Placeholder_Builder;
+use FazCookie\Frontend\Includes\Park_Proof;
 use FazCookie\Frontend\Includes\Embed_Inventory;
 use FazCookie\Frontend\Includes\Geo_Runtime;
 /**
@@ -408,6 +410,7 @@ class Frontend {
 		$this->gcm_settings = new Gcm_Settings();
 		new Consent_Logger();
 		new Banner_Rest();
+		new Park_Proofs();
 		new Cookie_Table_Shortcode();
 		new Cookie_Policy_Shortcode();
 		new Do_Not_Sell_Shortcode();
@@ -4250,6 +4253,9 @@ class Frontend {
 			'_languageMap'        => function_exists( 'faz_get_lang_map' ) ? faz_get_lang_map() : array(),
 			'_browserDetect'      => function_exists( 'faz_browser_detect_enabled' ) ? faz_browser_detect_enabled() : false,
 			'_bannerEndpoint'     => esc_url_raw( rest_url( 'faz/v1/banner/' ) ),
+			// Vouches for a signed park that arrived under another response's
+			// key (see Park_Proof and _fazQueueParkVerify()).
+			'_parkProofEndpoint'  => esc_url_raw( rest_url( 'faz/v1/park-proofs' ) ),
 			// Consent revision: when the admin bumps this, returning visitors
 			// with a lower revision in their cookie are treated as having no
 			// consent, and the banner is shown again. See Settings →
@@ -5630,6 +5636,10 @@ class Frontend {
 				$inert_stash
 			);
 		}
+
+		// 5c. Signed parks served under an older key (a cached fragment):
+		// re-keyed to this response, after every pass that parks.
+		$html = $this->refresh_park_proofs( $html, $failed_passes, $inert_stash );
 
 		// 6. Block <script data-faz-waitfor="category"> (deferred dependency scripts).
 		if ( false !== stripos( $html, 'data-faz-waitfor' ) ) {
@@ -7307,10 +7317,96 @@ class Frontend {
 		$key   = self::srcdoc_key();
 		$prior = $key === $this->extract_tag_attr( $attrs, 'data-faz-park-key' ) ? (string) $this->extract_tag_attr( $attrs, 'data-faz-park' ) : '';
 		$list  = array_values( array_unique( array_filter( array_merge( preg_split( '/\s+/', $prior ), (array) $names ) ) ) );
-		$attrs = $this->strip_attr_tokens( $this->strip_attr_tokens( $attrs, 'data-faz-park' ), 'data-faz-park-key' );
+		$attrs = $this->strip_attr_tokens( $this->strip_attr_tokens( $this->strip_attr_tokens( $attrs, 'data-faz-park' ), 'data-faz-park-key' ), 'data-faz-park-sig' );
+		// The signature lets a later response, or the park-proofs route, vouch
+		// for this park under another key (see Park_Proof). An author-written
+		// signature is stripped above with the rest of the proof.
+		$sig = $this->park_signature_for( $attrs, $list );
 		// Metadata first, like label_category_first(): the tag's own bytes,
 		// a self-closing slash included, keep their place at the end.
-		return ' data-faz-park="' . esc_attr( implode( ' ', $list ) ) . '" data-faz-park-key="' . esc_attr( $key ) . '"' . $attrs;
+		return ' data-faz-park="' . esc_attr( implode( ' ', $list ) ) . '" data-faz-park-key="' . esc_attr( $key ) . '"'
+			. ( '' !== $sig ? ' data-faz-park-sig="' . esc_attr( $sig ) . '"' : '' ) . $attrs;
+	}
+
+	/**
+	 * Park_Proof::signature() over the values the tag carries for `$names`,
+	 * as the browser reads them (character references decoded).
+	 *
+	 * @param string   $attrs Attribute string.
+	 * @param string[] $names Parked names.
+	 * @return string Signature, or '' when a value is missing.
+	 */
+	private function park_signature_for( $attrs, array $names ) {
+		// Without a signature the park is still proven for this response, as
+		// it always was; only the vouching under another key is lost.
+		if ( ! function_exists( 'wp_salt' ) || ! class_exists( Park_Proof::class ) ) {
+			return '';
+		}
+		$values = array();
+		foreach ( $names as $name ) {
+			$raw = $this->extract_tag_attr( $attrs, 'data-faz-' . $name );
+			if ( '' === $raw ) {
+				return '';
+			}
+			$values[] = self::decode_html_references( $raw );
+		}
+		return Park_Proof::signature( array_values( $names ), $values );
+	}
+
+	/**
+	 * Re-key the signed parks a response serves under an older key.
+	 *
+	 * A fragment a cache stored with its parks, and a later response embeds,
+	 * carries the key of the response that parked it, so the runtime of the
+	 * page serving it would not restore those parks. A tag whose signature
+	 * verifies against its current values gets this response's key; any
+	 * other tag, an author-written proof included, is left exactly as it is.
+	 *
+	 * @param string $html        Markup with the inert spans stashed.
+	 * @param array  $failed      Failed pass kinds, appended to.
+	 * @param array  $inert_stash Inert stash (see run_markup_pass()).
+	 * @return string
+	 */
+	private function refresh_park_proofs( $html, array &$failed, array &$inert_stash ) {
+		if ( false === stripos( $html, 'data-faz-park-sig' ) ) {
+			return $html;
+		}
+		return $this->run_markup_pass(
+			$html,
+			'#' . self::non_opening_token_skip() . '<([a-zA-Z][^\s/>]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+			'park-proof',
+			function ( $m ) {
+				return $this->refresh_park_proof_tag( $m );
+			},
+			$failed,
+			$inert_stash
+		);
+	}
+
+	/**
+	 * refresh_park_proofs() for one opening tag.
+	 *
+	 * @param array $m Regex match: full tag, name, attributes, self-closing slash.
+	 * @return string
+	 */
+	private function refresh_park_proof_tag( $m ) {
+		$full  = $m[0];
+		$attrs = isset( $m[2] ) ? $m[2] : '';
+		if ( false === stripos( $attrs, 'data-faz-park-sig' ) ) {
+			return $full;
+		}
+		if ( self::srcdoc_key() === $this->extract_tag_attr( $attrs, 'data-faz-park-key' ) ) {
+			return $full;
+		}
+		$names = preg_split( '/\s+/', trim( (string) $this->extract_tag_attr( $attrs, 'data-faz-park' ) ), -1, PREG_SPLIT_NO_EMPTY );
+		if ( ! Park_Proof::names_are_valid( $names ) ) {
+			return $full;
+		}
+		$expected = $this->park_signature_for( $attrs, $names );
+		if ( '' === $expected || ! hash_equals( $expected, (string) $this->extract_tag_attr( $attrs, 'data-faz-park-sig' ) ) ) {
+			return $full;
+		}
+		return '<' . $m[1] . $this->with_park_proof( $attrs, $names ) . ( isset( $m[3] ) ? $m[3] : '' ) . '>';
 	}
 
 	/**
@@ -7503,7 +7599,16 @@ class Frontend {
 		$stash = array();
 		$marker = '';
 		$result = $this->stash_iframe_srcdocs( $html, array(), array(), $this->stash_nonce(), $stash, $marker );
-		return null === $result ? $html : strtr( $result, $stash );
+		$html   = null === $result ? $html : strtr( $result, $stash );
+		if ( false === stripos( $html, 'data-faz-park-sig' ) ) {
+			return $html;
+		}
+		// The signed parks too, with the inert spans stashed: a tag-shaped
+		// string inside a script is not an element and is never rewritten.
+		$inert  = array();
+		$failed = array();
+		$html   = $this->refresh_park_proofs( $this->stash_inert_spans( $html, $this->stash_nonce(), $inert ), $failed, $inert );
+		return empty( $inert ) ? $html : strtr( $html, $inert );
 	}
 
 	private function stash_nonce() {
@@ -7833,6 +7938,7 @@ class Frontend {
 		'media'      => array( 'tags' => array( 'video', 'audio', 'source', 'embed', 'object', 'track', 'input' ), 'shape' => 'open3' ),
 		'link'       => array( 'tags' => array( 'link' ), 'shape' => 'open' ),
 		'style-attr' => array( 'tags' => '*', 'shape' => 'open3' ),
+		'park-proof' => array( 'tags' => '*', 'shape' => 'open3' ),
 		'waitfor'    => array( 'tags' => array( 'script' ), 'shape' => 'body' ),
 	);
 

@@ -5411,6 +5411,64 @@ function _fazParkProven(el, name) {
         && (" " + String(el.getAttribute("data-faz-park") || "") + " ").indexOf(" " + name + " ") !== -1;
 }
 
+// A park made by ANOTHER response — markup the page fetched later (infinite
+// scroll, "load more") was parked by its own response, under its own key —
+// is not proven here, and stayed parked after consent until a reload. The
+// server signs what it parks (data-faz-park-sig, see Park_Proof in PHP), so
+// such a tag is sent to the park-proofs route, which says whether this site
+// signed exactly those values. Only a confirmed tag, whose values have not
+// changed since, is given this page's key; the restore pass then runs again.
+// A tag is asked about once. Author-written proofs carry no valid signature
+// and are never confirmed.
+var _fazParkAsked = typeof WeakSet === "function" ? new WeakSet() : null;
+var _fazParkQueue = [];
+var _fazParkBusy = false;
+function _fazQueueParkVerify(el) {
+    if (!_fazParkAsked || _fazParkAsked.has(el)) return;
+    if (!_fazStore || !_fazStore._parkProofEndpoint || !_fazStore._srcdocKey || typeof fetch !== "function") return;
+    var key = el.getAttribute("data-faz-park-key");
+    if (!el.getAttribute("data-faz-park-sig") || !key || key === _fazStore._srcdocKey) return;
+    _fazParkAsked.add(el);
+    _fazParkQueue.push(el);
+    if (_fazParkQueue.length === 1 && !_fazParkBusy) setTimeout(_fazFlushParkVerify, 0);
+}
+function _fazParkItem(el) {
+    var names = String(el.getAttribute("data-faz-park") || "").split(/\s+/).filter(Boolean);
+    return {
+        names: names,
+        values: names.map(function (n) { return el.getAttribute("data-faz-" + n) || ""; }),
+        sig: el.getAttribute("data-faz-park-sig") || ""
+    };
+}
+function _fazFlushParkVerify() {
+    if (_fazParkBusy || !_fazParkQueue.length) return;
+    _fazParkBusy = true;
+    var els = _fazParkQueue.splice(0, 50);
+    var items = els.map(_fazParkItem);
+    fetch(_fazStore._parkProofEndpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: items })
+    }).then(function (res) {
+        return res && res.ok ? res.json() : null;
+    }).then(function (data) {
+        var valid = data && Array.isArray(data.valid) ? data.valid : [];
+        var confirmed = false;
+        els.forEach(function (el, i) {
+            if (valid[i] !== true) return;
+            // Confirmed for the values sent: a value changed since is not.
+            if (JSON.stringify(_fazParkItem(el)) !== JSON.stringify(items[i])) return;
+            el.setAttribute("data-faz-park-key", _fazStore._srcdocKey);
+            confirmed = true;
+        });
+        if (confirmed) _fazUnblockServerSide();
+    }).catch(function () { /* stays parked: the safe failure */ }).then(function () {
+        _fazParkBusy = false;
+        if (_fazParkQueue.length) _fazFlushParkVerify();
+    });
+}
+
 function _fazGateResourceSetAttribute(proto, opts) {
     if (!proto || typeof proto.setAttribute !== "function") return;
     var native = proto.setAttribute;
@@ -8042,8 +8100,8 @@ function _fazUnblockServerSide() {
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
             var bg = el.getAttribute("data-faz-background");
-            if (!_fazParkProven(el, "background")) return; // not parked by this response (post markup)
             if (_fazShouldBlockResource(cat, bg, el.getAttribute("data-faz-service") || "")) return;
+            if (!_fazParkProven(el, "background")) { _fazQueueParkVerify(el); return; } // not proven by this response
             if (!_fazIsAllowedScheme(bg)) return;
             el.setAttribute("background", bg);
             if (!el.getAttribute("background")) return; // the gate re-parked it
@@ -8071,8 +8129,8 @@ function _fazUnblockServerSide() {
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
             var parked = el.getAttribute("data-faz-data");
-            if (!_fazParkProven(el, "data")) return; // not parked by this response (post markup)
             if (_fazShouldBlockResource(cat, parked, el.getAttribute("data-faz-service") || "")) return;
+            if (!_fazParkProven(el, "data")) { _fazQueueParkVerify(el); return; } // not proven by this response
             // The one restore on this page that is an HTML sink rather than a
             // resource fetch: <object data> can load a document, and a
             // data:text/html payload there would run in this origin. So the
@@ -8153,8 +8211,8 @@ function _fazUnblockServerSide() {
     document.querySelectorAll('[data-faz-style]')
         .forEach(function (el) {
             var css = el.getAttribute("data-faz-style") || "";
-            if (!_fazParkProven(el, "style")) return; // not parked by this response (post markup)
             if (!css || _fazCssShouldBlock(css)) return;
+            if (!_fazParkProven(el, "style")) { _fazQueueParkVerify(el); return; } // not proven by this response
             el.setAttribute("style", css);
             el.removeAttribute("data-faz-style");
             var otherKeys = ["data-faz-src", "data-faz-srcset", "data-faz-href", "data-faz-imagesrcset", "data-faz-background", "data-faz-poster", "data-faz-data", "data-faz-srcdoc"];
