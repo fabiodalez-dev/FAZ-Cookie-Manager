@@ -112,6 +112,13 @@ $result                       = $detector->detect( '203.0.113.7' );
 ttl_check( null === $result['vpn'], 'precondition: an ipinfo failure leaves the VPN verdict unknown' );
 ttl_check( Ipinfo_Client::ERROR_TTL === ttl_of_last_detect(), 'that result is cached no longer than ipinfo remembers the failure' );
 
+// A refusal marker that has 1 second left: the result goes with it.
+$ipinfo->answer             = array( 'vpn' => null, 'source' => 'error', 'retry_after' => 1 );
+$GLOBALS['_faz_test_cache'] = array();
+$GLOBALS['_faz_test_ttl']   = array();
+$detector->detect( '203.0.113.10' );
+ttl_check( 1 === ttl_of_last_detect(), 'a failure ipinfo says ends in 1 second is cached for 1 second, not ERROR_TTL' );
+
 $ipinfo->answer             = array( 'vpn' => false, 'source' => 'ipinfo' );
 $GLOBALS['_faz_test_cache'] = array();
 $GLOBALS['_faz_test_ttl']   = array();

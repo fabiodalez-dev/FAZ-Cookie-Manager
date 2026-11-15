@@ -678,16 +678,23 @@ class Do_Not_Sell_Shortcode {
 	/**
 	 * claim_notification()'s read-modify-write; the caller holds the lock.
 	 *
+	 * The write is a compare-and-swap on the row as read, not a plain
+	 * update_option(): the lock is reclaimed after 10 seconds, so a holder
+	 * that stalls between its read and its write can resume after another
+	 * request has counted a mail, and a plain write would then put back a
+	 * count that misses that mail. When the row changed in between, this
+	 * request sends no mail.
+	 *
 	 * @param int $max Mails allowed per window.
 	 * @return bool
 	 */
 	private function claim_notification_locked( $max ) {
-		if ( function_exists( 'wp_cache_delete' ) ) {
-			// Read the row, not a copy this request cached before the lock.
-			wp_cache_delete( self::MAIL_WINDOW_OPTION, 'options' );
-		}
+		global $wpdb;
+		$name = self::MAIL_WINDOW_OPTION;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the compare-and-swap below needs the row exactly as stored, never a cached copy; $wpdb->options is core's own table name.
+		$raw   = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) );
+		$data  = null === $raw ? false : maybe_unserialize( $raw );
 		$now   = time();
-		$data  = get_option( self::MAIL_WINDOW_OPTION );
 		$start = is_array( $data ) && isset( $data['start'] ) ? (int) $data['start'] : 0;
 		$count = is_array( $data ) && isset( $data['n'] ) ? (int) $data['n'] : 0;
 		if ( ! $start || $now - $start >= 86400 ) {
@@ -697,15 +704,23 @@ class Do_Not_Sell_Shortcode {
 		if ( $count >= $max ) {
 			return false;
 		}
-		update_option(
-			self::MAIL_WINDOW_OPTION,
+		$next = maybe_serialize(
 			array(
 				'n'     => $count + 1,
 				'start' => $start,
-			),
-			false
+			)
 		);
-		return true;
+		if ( null === $raw ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the first row of a window is created only if no other request created it first; $wpdb->options is core's own table name.
+			$swapped = 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, $next ) );
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-swap: the row is replaced only while it still holds the value read above.
+			$swapped = 1 === (int) $wpdb->update( $wpdb->options, array( 'option_value' => $next ), array( 'option_name' => $name, 'option_value' => $raw ), array( '%s' ), array( '%s', '%s' ) );
+		}
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( $name, 'options' );
+		}
+		return $swapped;
 	}
 
 	/**

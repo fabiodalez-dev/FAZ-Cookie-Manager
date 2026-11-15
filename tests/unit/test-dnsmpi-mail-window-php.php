@@ -57,9 +57,7 @@ namespace {
 	function update_option( $name, $value, $autoload = null ) {
 		$GLOBALS['faz_test_options'][ $name ] = $value;
 		$GLOBALS['faz_test_cache'][ $name ]   = $value;
-		if ( isset( $GLOBALS['faz_test_on_window_write'] ) ) {
-			( $GLOBALS['faz_test_on_window_write'] )();
-		}
+		faz_test_window_written( $name );
 		return true;
 	}
 	function add_option( $name, $value = '', $deprecated = '', $autoload = 'yes' ) {
@@ -73,6 +71,12 @@ namespace {
 	function delete_option( $name ) {
 		unset( $GLOBALS['faz_test_options'][ $name ], $GLOBALS['faz_test_cache'][ $name ] );
 		return true;
+	}
+	function maybe_serialize( $data ) {
+		return is_array( $data ) || is_object( $data ) ? serialize( $data ) : $data;
+	}
+	function maybe_unserialize( $data ) {
+		return is_string( $data ) && 0 === strpos( $data, 'a:' ) ? unserialize( $data ) : $data;
 	}
 	function wp_cache_delete( $key, $group = '' ) {
 		unset( $GLOBALS['faz_test_cache'][ $key ] );
@@ -94,16 +98,26 @@ namespace {
 			if ( array_key_exists( $name, $GLOBALS['faz_test_options'] ) ) {
 				return 0;
 			}
-			$GLOBALS['faz_test_options'][ $name ] = $value;
+			$GLOBALS['faz_test_options'][ $name ] = maybe_unserialize( $value );
+			faz_test_window_written( $name );
 			return 1;
 		}
 		public function get_var( $q ) {
 			$name  = $q[1][0];
-			$value = array_key_exists( $name, $GLOBALS['faz_test_options'] ) ? (string) $GLOBALS['faz_test_options'][ $name ] : null;
+			$value = array_key_exists( $name, $GLOBALS['faz_test_options'] ) ? (string) maybe_serialize( $GLOBALS['faz_test_options'][ $name ] ) : null;
 			if ( isset( $GLOBALS['faz_test_after_read'] ) ) {
-				( $GLOBALS['faz_test_after_read'] )();
+				( $GLOBALS['faz_test_after_read'] )( $name );
 			}
 			return $value;
+		}
+		public function update( $table, $data, $where, $format = null, $where_format = null ) {
+			$name = $where['option_name'];
+			if ( ! array_key_exists( $name, $GLOBALS['faz_test_options'] ) || (string) maybe_serialize( $GLOBALS['faz_test_options'][ $name ] ) !== (string) $where['option_value'] ) {
+				return 0;
+			}
+			$GLOBALS['faz_test_options'][ $name ] = maybe_unserialize( $data['option_value'] );
+			faz_test_window_written( $name );
+			return 1;
 		}
 		public function delete( $table, $where, $format = null ) {
 			$name = $where['option_name'];
@@ -115,6 +129,11 @@ namespace {
 		}
 	}
 	$GLOBALS['wpdb'] = new Faz_Test_Wpdb();
+	function faz_test_window_written( $name ) {
+		if ( isset( $GLOBALS['faz_test_on_window_write'] ) && \FazCookie\Includes\Do_Not_Sell_Shortcode::MAIL_WINDOW_OPTION === $name ) {
+			( $GLOBALS['faz_test_on_window_write'] )();
+		}
+	}
 
 	// Each invoke below stands for a new request: a fresh options cache.
 	function faz_test_new_request() {
@@ -232,6 +251,23 @@ namespace {
 	check( true === $claim->invoke( $obj ), 'a request whose lock was taken over still counts its own mail' );
 	check( isset( $GLOBALS['faz_test_options'][ $lock ] ) && time() . ':next' === $GLOBALS['faz_test_options'][ $lock ], 'and its release leaves the next request\'s lock in place' );
 	unset( $GLOBALS['faz_test_on_window_write'], $GLOBALS['faz_test_options'][ $lock ] );
+
+	// This request stalls between reading the count and writing it, past the
+	// lock's 10 seconds; another request reclaims the lock and counts a mail.
+	// The stale write must not put back a count that misses that mail.
+	faz_test_new_request();
+	$GLOBALS['faz_test_options'][ $key ] = array( 'n' => 1, 'start' => time() );
+	$GLOBALS['faz_test_after_read']      = function ( $name ) use ( $key ) {
+		if ( $key !== $name ) {
+			return;
+		}
+		unset( $GLOBALS['faz_test_after_read'] );
+		// Other requests counted mails meanwhile.
+		$GLOBALS['faz_test_options'][ $key ]['n'] = 4;
+	};
+	check( false === $claim->invoke( $obj ), 'a stalled request whose count changed under it sends no mail' );
+	check( 4 === $GLOBALS['faz_test_options'][ $key ]['n'], 'and the mails the others counted stay counted' );
+	unset( $GLOBALS['faz_test_after_read'] );
 
 	$GLOBALS['faz_test_filters']['faz_dnsmpi_max_notifications_per_day'] = function () {
 		return 0;

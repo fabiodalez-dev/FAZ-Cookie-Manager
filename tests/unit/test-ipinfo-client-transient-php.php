@@ -42,8 +42,10 @@ function set_transient( $name, $value, $ttl = 0 ) {
 function faz_test_advance( $seconds ) {
 	foreach ( $GLOBALS['_faz_test_transients'] as $name => $entry ) {
 		$GLOBALS['_faz_test_transients'][ $name ][1] = $entry[1] - $seconds;
-		if ( is_array( $entry[0] ) && isset( $entry[0]['start'] ) ) {
-			$GLOBALS['_faz_test_transients'][ $name ][0]['start'] = $entry[0]['start'] - $seconds;
+		foreach ( array( 'start', 'until' ) as $stamp ) {
+			if ( is_array( $entry[0] ) && isset( $entry[0][ $stamp ] ) ) {
+				$GLOBALS['_faz_test_transients'][ $name ][0][ $stamp ] = $entry[0][ $stamp ] - $seconds;
+			}
 		}
 	}
 }
@@ -138,7 +140,10 @@ $client->lookup( '203.0.113.71' );
 tr_check( Ipinfo_Client::ERROR_TTL === faz_test_ttl( $refused ), 'a 429 is stored as a transient for ERROR_TTL' );
 $client->lookup( '198.51.100.72' );
 tr_check( 1 === $GLOBALS['_faz_test_http_calls'], 'and another address is not looked up while it lasts' );
-faz_test_advance( Ipinfo_Client::ERROR_TTL + 1 );
+faz_test_advance( Ipinfo_Client::ERROR_TTL - 1 );
+$late = $client->lookup( '198.51.100.75' );
+tr_check( isset( $late['retry_after'] ) && 1 === $late['retry_after'], 'a refusal answered 1 second before the marker expires says retry_after 1' );
+faz_test_advance( 2 );
 $GLOBALS['_faz_test_http_stub'] = array( 'response' => array( 'code' => 200 ), 'body' => '{"vpn":true}' );
 $client->lookup( '198.51.100.73' );
 tr_check( 2 === $GLOBALS['_faz_test_http_calls'], 'once the refusal has expired, ipinfo is asked again' );
@@ -150,9 +155,10 @@ $GLOBALS['_faz_test_http_stub']  = array( 'response' => array( 'code' => 200 ), 
 $GLOBALS['_faz_test_filters']['faz_ipinfo_lookups_per_hour'] = function () { return 2; };
 $client = new Ipinfo_Client();
 foreach ( array( '203.0.113.1', '203.0.113.2', '203.0.113.3' ) as $ip ) {
-	$client->lookup( $ip );
+	$last = $client->lookup( $ip );
 }
 tr_check( 2 === $GLOBALS['_faz_test_http_calls'], 'with a budget of 2, the third new address in the hour is not looked up' );
+tr_check( isset( $last['retry_after'] ) && $last['retry_after'] > 3500 && $last['retry_after'] <= 3600, 'and that refusal says how long the window has left' );
 tr_check( faz_test_ttl( $budget ) > 0 && faz_test_ttl( $budget ) <= 3600, 'the budget transient lives no longer than the window' );
 faz_test_advance( 3601 );
 $client->lookup( '203.0.113.4' );

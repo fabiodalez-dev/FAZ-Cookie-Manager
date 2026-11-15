@@ -48,6 +48,14 @@ class Ipinfo_Client {
 	const REQUEST_TIMEOUT = 3;
 
 	/**
+	 * Seconds until the hourly budget opens again, set when claim_lookup()
+	 * refuses.
+	 *
+	 * @var int
+	 */
+	private $budget_retry_after = 0;
+
+	/**
 	 * Lookup VPN/proxy status for an IP address.
 	 *
 	 * @param string $ip Visitor IP (cleartext — needed for ipinfo lookup;
@@ -95,8 +103,16 @@ class Ipinfo_Client {
 
 		// ipinfo refused the account recently (see below): no call, whatever
 		// the address.
-		if ( false !== $this->cache_read( $persistent, self::REFUSED_KEY ) ) {
-			return array( 'vpn' => null, 'source' => 'error' );
+		// `retry_after` says how long that answer stays true, so a caller
+		// that caches it (Geo_Detector) keeps it no longer than the marker.
+		$refused = $this->cache_read( $persistent, self::REFUSED_KEY );
+		if ( false !== $refused ) {
+			$until = is_array( $refused ) && isset( $refused['until'] ) ? (int) $refused['until'] : 0;
+			return array(
+				'vpn'         => null,
+				'source'      => 'error',
+				'retry_after' => $until > 0 ? max( 1, min( self::ERROR_TTL, $until - time() ) ) : self::ERROR_TTL,
+			);
 		}
 
 		// A site-wide hourly ceiling on NEW lookups. The cache above stops a
@@ -106,7 +122,11 @@ class Ipinfo_Client {
 		// skipped (no VPN verdict, the geo rules decide without it), so the
 		// operator's quota and the options table are both bounded.
 		if ( ! $this->claim_lookup( $persistent ) ) {
-			return array( 'vpn' => null, 'source' => 'error' );
+			return array(
+				'vpn'         => null,
+				'source'      => 'error',
+				'retry_after' => $this->budget_retry_after,
+			);
 		}
 
 		// Make the call.
@@ -121,7 +141,16 @@ class Ipinfo_Client {
 			// still pay a full upstream call (up to the timeout) to an upstream
 			// that has already said no.
 			if ( in_array( $this->last_http_status, array( 401, 402, 403, 429 ), true ) ) {
-				$this->cache_verdict( $persistent, self::REFUSED_KEY, array( 'vpn' => null ), self::ERROR_TTL );
+				$this->cache_verdict(
+					$persistent,
+					self::REFUSED_KEY,
+					array(
+						'vpn'   => null,
+						'until' => time() + self::ERROR_TTL,
+					),
+					self::ERROR_TTL
+				);
+				$result['retry_after'] = self::ERROR_TTL;
 			}
 			return $result;
 		}
@@ -157,6 +186,7 @@ class Ipinfo_Client {
 			$count = 0;
 		}
 		if ( $count >= $max ) {
+			$this->budget_retry_after = max( 1, 3600 - ( $now - $start ) );
 			return false;
 		}
 		$this->cache_verdict(

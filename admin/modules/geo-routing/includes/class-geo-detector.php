@@ -177,12 +177,20 @@ class Geo_Detector {
 				&& \FazCookie\Includes\Geolocation::country_header_in_play() );
 		if ( ! $from_header ) {
 			// A failed ipinfo lookup (refusal, budget, transport) leaves the VPN
-			// verdict unknown. ipinfo remembers that failure for ERROR_TTL only;
-			// kept here for the full hour, the address would go without a VPN
-			// verdict long after ipinfo could answer again.
-			$ttl = isset( $vpn_result['source'] ) && 'error' === $vpn_result['source']
-				? min( self::CACHE_TTL, Ipinfo_Client::ERROR_TTL )
-				: self::CACHE_TTL;
+			// verdict unknown. Kept here for the full hour, the address would go
+			// without a VPN verdict long after ipinfo could answer again: it is
+			// kept for ERROR_TTL at most, and no longer than ipinfo says the
+			// failure lasts (`retry_after`: what is left of a refusal marker or
+			// of a spent hourly budget). A transport failure carries no
+			// `retry_after` and is kept for ERROR_TTL, so an outage does not
+			// cost every request a call up to the timeout.
+			$ttl = self::CACHE_TTL;
+			if ( isset( $vpn_result['source'] ) && 'error' === $vpn_result['source'] ) {
+				$ttl = min( self::CACHE_TTL, Ipinfo_Client::ERROR_TTL );
+				if ( isset( $vpn_result['retry_after'] ) && (int) $vpn_result['retry_after'] > 0 ) {
+					$ttl = min( $ttl, (int) $vpn_result['retry_after'] );
+				}
+			}
 			wp_cache_set( $ip_hash, $result, self::CACHE_GROUP, $ttl );
 		}
 		return $result;
