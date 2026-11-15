@@ -358,6 +358,8 @@ Yes. Place `[faz_dsar_form]` on any page to show a GDPR-compliant request form c
 
 They need to be, and since 1.34.1 the plugin resolves the visitor's address on its own for the one case it can verify by itself: a request arriving from Cloudflare's published edge ranges, where `CF-Connecting-IP` is read, and only there, because Cloudflare writes that header itself. Every other topology is resolved once you declare it, one line each.
 
+That trust rests on one precondition: only your own Cloudflare zone can reach the origin from those ranges. Any Cloudflare customer can send requests from the same edge addresses (a Worker, for example) with a `CF-Connecting-IP` or `CF-IPCountry` of their choosing, so if the origin accepts connections from any Cloudflare address it accepts those too. Lock the origin to your zone with Authenticated Origin Pulls using a certificate of your own zone (mTLS between Cloudflare and your server), with Cloudflare Tunnel, or with a secret request header your zone adds through a Transform Rule and your server checks; a firewall that only admits Cloudflare's IP list does not tell your zone apart from someone else's.
+
 For another CDN, add its published edge ranges and every per-visitor key in the plugin follows. A peer matched that way is read through `faz_proxy_forwarded_header`, which defaults to `HTTP_X_FORWARDED_FOR` and is read from the right-hand end of the chain, so for an edge that appends to `X-Forwarded-For` the range is all you need:
 
 `add_filter( 'faz_trusted_proxy_cidrs', function ( $cidrs ) { return array_merge( $cidrs, array( '203.0.113.0/24' ) ); } );`

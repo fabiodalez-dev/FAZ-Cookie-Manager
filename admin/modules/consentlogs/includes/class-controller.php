@@ -1019,10 +1019,20 @@ class Controller {
 		global $wpdb;
 
 		$table = $this->get_table_name();
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $consent_id is bound via prepare(%s). Read right before the row it informs is written: a cached answer could be stale.
+		// created_at is site time, which repeats an hour when DST falls back:
+		// a withdrawal written at 02:30 (second pass) sorts before an exception
+		// row written at 02:45 (first pass), and the carry would skip the
+		// boundary that withdrawal draws. created_at_gmt is monotonic, so it
+		// decides first wherever the column exists; rows written before it
+		// (NULL, which sorts last in DESC on MySQL and SQLite) fall back to
+		// created_at, and log_id breaks same-second ties.
+		$order = get_option( 'faz_consent_log_gmt_column_added' )
+			? 'created_at_gmt DESC, created_at DESC, log_id DESC'
+			: 'created_at DESC, log_id DESC';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $order is one of two literals above; $consent_id is bound via prepare(%s). Read right before the row it informs is written: a cached answer could be stale.
 		$item = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE consent_id = %s ORDER BY created_at DESC, log_id DESC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT * FROM {$table} WHERE consent_id = %s ORDER BY {$order} LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$consent_id
 			),
 			ARRAY_A

@@ -477,6 +477,30 @@ namespace {
 	);
 	inventory_check( 0 === count( array_filter( $q, static function ( $x ) { return false !== stripos( $x, 'DELETE' ); } ) ), 'a percent-encoded routing var (?%6Frder=) is caught like the plain one' );
 
+	// The beacon's pageUrl carries the request Host only when the site is
+	// served on it: otherwise Host would be a visitor-chosen input of the
+	// cached HTML and of every consent row's URL.
+	$faz_saved_server = $_SERVER;
+	$_SERVER = array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '/page/' );
+	inventory_check( 'https://example.test/page' === Embed_Inventory::log_page_url(), 'log_page_url() names a page on a known host like current_url()' );
+	$_SERVER = array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'attacker.invalid', 'REQUEST_URI' => '/page/' );
+	inventory_check( '' === Embed_Inventory::log_page_url(), 'log_page_url() is empty for a Host the site is not served on' );
+	$_SERVER = $faz_saved_server;
+
+	// prune() compares last_seen (written as current_time( 'mysql' ), site
+	// time) with its cutoff, so the cutoff is computed on that clock too. A
+	// site clock pinned far from the real one tells the two apart.
+	date_default_timezone_set( 'UTC' );
+	$GLOBALS['wpdb']->queries = array();
+	$GLOBALS['inventory_now'] = '2020-01-15 12:00:00';
+	Embed_Inventory::prune( 1 );
+	unset( $GLOBALS['inventory_now'] );
+	inventory_check(
+		1 === count( $GLOBALS['wpdb']->queries )
+			&& false !== strpos( $GLOBALS['wpdb']->queries[0], "last_seen < '2019-12-15 12:00:00'" ),
+		'prune() computes its cutoff on the site clock last_seen is written with'
+	);
+
 	echo "\nPassed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );
 }

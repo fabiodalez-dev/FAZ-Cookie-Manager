@@ -1249,7 +1249,10 @@ class Frontend {
 						// (?p=, ?lang=) the inventory keys on. It varies by page,
 						// never by visitor, so a cached copy stays correct.
 						'cookieNames'    => function_exists( 'faz_consent_cookie_names' ) ? faz_consent_cookie_names() : array(),
-						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::current_url() : '',
+						// Only for a request on a host the site is served on (see
+						// Embed_Inventory::log_page_url()): Host is not a cache
+						// key or a row value the visitor should get to choose.
+						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::log_page_url() : '',
 						// Where the beacon fetches a current token when the one
 						// above is refused as stale — a page an edge cache kept
 						// past the token window. See
