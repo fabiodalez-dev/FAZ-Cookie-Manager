@@ -426,9 +426,19 @@ class Geo_Detector {
 	 * its own edge trusted adds the range to `faz_trusted_proxy_cidrs` and names
 	 * the header it writes with `faz_proxy_forwarded_header`.
 	 *
+	 * The whole resolution is faz_resolve_client_ip()'s when it is loaded, so
+	 * a site that opted into the legacy `faz_trust_proxy_headers` /
+	 * `faz_trusted_proxies` path gets the same address here as in the
+	 * throttles and the consent log's ip_hash; reading only
+	 * faz_forwarded_client_ip() skipped that path and split one request into
+	 * two addresses.
+	 *
 	 * @return string Cleartext IP, or '' when there is no REMOTE_ADDR at all.
 	 */
 	private function resolve_client_ip() {
+		if ( function_exists( 'faz_resolve_client_ip' ) ) {
+			return (string) \faz_resolve_client_ip();
+		}
 		$remote_addr = ! empty( $_SERVER['REMOTE_ADDR'] )
 			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 			? (string) $_SERVER['REMOTE_ADDR']

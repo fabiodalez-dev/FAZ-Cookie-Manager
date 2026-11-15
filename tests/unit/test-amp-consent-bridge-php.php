@@ -491,6 +491,14 @@ namespace {
 	amp_same( AMP_Consent_Rest::decode_state_string( $signed_state, $context_new_revision ), false, 'revision bump invalidates signed AMP state' );
 	$expired = AMP_Consent_Rest::encode_state_string( array( 'state' => 'accepted', 'purposes' => array( 'analytics' => true, 'marketing' => true ), 'expires' => time() - 1 ), $context );
 	amp_same( AMP_Consent_Rest::decode_state_string( $expired, $context ), false, 'expired signed AMP state is rejected' );
+	// The cookie reader refuses a record with more life left than the
+	// context's expiry permits (+1 day of slack); the signed-state reader
+	// must agree, or a state minted before the admin shortened the expiry is
+	// honoured on cache-origin checks until its original exp.
+	$too_long = AMP_Consent_Rest::encode_state_string( array( 'state' => 'accepted', 'purposes' => array( 'analytics' => true, 'marketing' => true ), 'expires' => time() + 300 * DAY_IN_SECONDS ), $context );
+	amp_same( AMP_Consent_Rest::decode_state_string( $too_long, $context ), false, 'signed AMP state with more lifetime left than expiry_days is rejected' );
+	$within = AMP_Consent_Rest::encode_state_string( array( 'state' => 'accepted', 'purposes' => array( 'analytics' => true, 'marketing' => true ), 'expires' => time() + 180 * DAY_IN_SECONDS ), $context );
+	amp_same( AMP_Consent_Rest::decode_state_string( $within, $context )['state'], 'accepted', 'control: a state at exactly expiry_days is honoured' );
 	amp_same( AMP_Consent_Rest::state_from_cookie( $GLOBALS['faz_test_cookie'], $context_new_revision ), false, 'revision bump invalidates synchronized cookie state' );
 
 	// ── The AMP cookie must not destroy what it does not own ────────────────
@@ -1027,6 +1035,14 @@ namespace {
 	amp_same( $bridge->cors_origin_for_tests(), '', 'a POST is not treated as a preflight' );
 	$bridge->authorize_preflight( null, null, new Faz_AMP_Test_Request( array(), '/wp/v2/posts', '', '', 'OPTIONS' ) );
 	amp_same( $bridge->cors_origin_for_tests(), '', 'an unrelated route is left alone' );
+
+	// WordPress matches route patterns case-insensitively, so a case variant
+	// reaches the handlers; it must reach the preflight guard too.
+	$_SERVER = array( 'HTTP_AMP_SAME_ORIGIN' => 'true' );
+	$bridge->authorize_preflight( null, null, new Faz_AMP_Test_Request( array(), '/faz/v1/AMP-Consent/Check', '', '', 'OPTIONS' ) );
+	amp_same( $bridge->cors_origin_for_tests(), 'https://publisher.example', 'a case-variant route is authorised by the preflight guard' );
+	$bridge->authorize_preflight( null, null, new Faz_AMP_Test_Request( array(), '/faz/v1/AMP-CONSENT/update', '', '', 'POST' ) );
+	amp_same( $bridge->cors_origin_for_tests(), '', 'and a case-variant request resets the inherited origin' );
 
 	// ── Where a logged AMP consent claims to have been given ───────────────
 	// resolve_consent_url() trusts the referer only when its origin is the

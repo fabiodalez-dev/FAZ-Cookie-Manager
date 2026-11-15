@@ -596,7 +596,20 @@ namespace {
 	$row = end( $GLOBALS['wpdb']->rows );
 	eq( $row['created_at_gmt'] ?? null, '2026-06-19 10:00:00', 'an insert writes created_at_gmt with current_time( mysql, true )' );
 	eq( $row['created_at'] ?? null, '2026-06-19 12:00:00', 'next to the unchanged site-time created_at' );
+	// The previous-row lookup decides on the UTC instant once it exists: site
+	// time repeats an hour at the DST fall-back, and a withdrawal written in
+	// the second pass would sort before an exception row of the first.
+	$prev_m = new ReflectionMethod( $ctrl, 'get_previous_consent_row' );
+	$prev_m->setAccessible( true );
+	$GLOBALS['wpdb']->row_queries = array();
+	$prev_m->invoke( $ctrl, 'cid-gmt' );
+	$prev_q = $GLOBALS['wpdb']->row_queries[0] ?? '';
+	ok( false !== strpos( $prev_q, 'ORDER BY created_at_gmt DESC, created_at DESC, log_id DESC' ), 'with the column, the previous row is the latest by created_at_gmt (DST-safe)' );
 	unset( $GLOBALS['__faz_options']['faz_consent_log_gmt_column_added'] );
+	$GLOBALS['wpdb']->row_queries = array();
+	$prev_m->invoke( $ctrl, 'cid-gmt' );
+	$prev_q = $GLOBALS['wpdb']->row_queries[0] ?? '';
+	ok( false === strpos( $prev_q, 'created_at_gmt' ) && false !== strpos( $prev_q, 'ORDER BY created_at DESC, log_id DESC' ), 'without the column, the lookup does not name it' );
 
 	// ---------- summary ----------
 	echo "\n--\nTests:  $run\nPassed: $pass\nFailed: $fail\n\n";

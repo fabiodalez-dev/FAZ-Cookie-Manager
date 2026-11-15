@@ -89,6 +89,31 @@ class Consent_Logger {
 	const FREE_EXCEPTIONS_PER_ADDRESS = 5;
 
 	/**
+	 * Statuses only the server writes, never the browser beacon.
+	 *
+	 * dnsmpi_optout and dns_rescinded are written by Do_Not_Sell_Shortcode
+	 * through admin-ajax, pmp_grant by no current caller; the beacon posts
+	 * accepted, rejected or partial only. Accepted on this route, any of them
+	 * is a row the client asserted in a status the register presents as the
+	 * server's own.
+	 *
+	 * @since 1.39.1
+	 */
+	const SERVER_ONLY_STATUSES = array( 'dnsmpi_optout', 'dns_rescinded', 'pmp_grant' );
+
+	/**
+	 * Categories-map keys only the server writes (lower case).
+	 *
+	 * meta.pmp_privacy is the Paid Memberships Pro integration's attestation
+	 * that a member's privacy setting produced the row. The
+	 * meta.gpc_exception_served/carried namespaces are reserved separately by
+	 * Gpc_Exception_Audit::decide().
+	 *
+	 * @since 1.39.1
+	 */
+	const SERVER_ONLY_KEYS = array( 'meta.pmp_privacy' );
+
+	/**
 	 * Read-only AJAX action that hands out the current origin tokens.
 	 *
 	 * The inline beacons (consent log and pageview, printed by
@@ -643,6 +668,15 @@ class Consent_Logger {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function handle_rest_consent( $request ) {
+		// With consent logging off the beacon is no longer printed, but pages a
+		// cache rendered while it was on still carry it and a token the window
+		// accepts for days. Nothing is recorded, and nothing is counted as a
+		// refusal: the site chose not to keep the register.
+		$faz_settings = get_option( 'faz_settings', array() );
+		if ( ! is_array( $faz_settings ) || ! isset( $faz_settings['consent_logs']['status'] ) || true !== $faz_settings['consent_logs']['status'] ) {
+			return rest_ensure_response( array( 'logged' => false ) );
+		}
+
 		// The HMAC is intentionally cache-compatible, hence it is public to any
 		// visitor who receives the page and is not a CSRF credential by itself.
 		// Require a browser-provided same-origin signal before accepting it; this
@@ -698,7 +732,10 @@ class Consent_Logger {
 
 		// Dual guardrail: per-IP AND per-consent_id throttle.
 		// The IP check prevents a single client from flooding with different consent_ids.
-		// The consent_id check prevents replaying the same consent_id from different IPs.
+		// The consent_id check prevents replaying the same consent_id from one
+		// address. faz_throttle_request() appends the address to every key, so
+		// it is per (consent_id, address): a replay spread across addresses is
+		// bounded by each address's own IP window, not by this one.
 		$consent_id           = $request->get_param( 'consent_id' );
 		$sanitized_consent_id = sanitize_text_field( (string) ( $consent_id ?? '' ) );
 		$is_ip_throttled      = faz_throttle_request( 'faz_consent_ip', 10 );
@@ -712,7 +749,16 @@ class Consent_Logger {
 		// path. Read here, above the IP gate, because the gate's one exception
 		// below needs it.
 		$status = sanitize_key( (string) $request->get_param( 'status' ) );
-		if ( ! in_array( $status, array( 'accepted', 'rejected', 'partial', 'dnsmpi_optout', 'dns_rescinded', 'pmp_grant' ), true ) ) {
+		// The server-only statuses are refused outright rather than folded:
+		// log_consent() stores them verbatim for its internal callers.
+		if ( in_array( $status, self::SERVER_ONLY_STATUSES, true ) ) {
+			return new \WP_Error(
+				'invalid_status',
+				'This status cannot be recorded from the browser.',
+				array( 'status' => 400 )
+			);
+		}
+		if ( ! in_array( $status, array( 'accepted', 'rejected', 'partial' ), true ) ) {
 			$status = '';
 		}
 
@@ -798,7 +844,10 @@ class Consent_Logger {
 			// That silently weakened the 300s guarantee by one request; arming it
 			// here keeps replays throttled from the very first repeat while a real
 			// change still always lands.
-			$consent_key   = 'faz_consent_' . substr( md5( $sanitized_consent_id ), 0, 8 );
+			// The whole digest. Eight hex digits (32 bits) let a caller grind,
+			// in seconds, an id that shares another id's window and change caps.
+			$hash          = md5( $sanitized_consent_id );
+			$consent_key   = 'faz_consent_' . $hash;
 			$window_closed = faz_throttle_request( $consent_key, 300 );
 
 			// The FIRST change in a window is always free; the ones after it are
@@ -810,7 +859,6 @@ class Consent_Logger {
 			// the per-IP throttle alone does not stop across a distributed set of
 			// addresses sharing one consent_id.
 			if ( $status_changed ) {
-				$hash = substr( md5( $sanitized_consent_id ), 0, 8 );
 				if ( faz_throttle_request( 'faz_consent_chg1_' . $hash, 300 ) ) {
 					// A change already landed in this window — throttle the rest.
 					$status_changed = ! faz_throttle_request( 'faz_consent_chgn_' . $hash, 10 );
@@ -878,7 +926,7 @@ class Consent_Logger {
 		$data = array(
 			'consent_id' => $request->get_param( 'consent_id' ),
 			'status'     => $request->get_param( 'status' ),
-			'categories' => $request->get_param( 'categories' ),
+			'categories' => self::strip_server_only_keys( $request->get_param( 'categories' ) ),
 			'url'        => $request->get_param( 'url' ),
 			'banner_slug' => $request->get_param( 'banner_slug' ),
 			'policy_revision' => $request->get_param( 'policy_revision' ),
@@ -913,6 +961,30 @@ class Consent_Logger {
 		}
 
 		return rest_ensure_response( $result );
+	}
+
+	/**
+	 * Drop the categories-map keys only the server may write.
+	 *
+	 * Compared as log_consent() will store the key (sanitize_text_field(),
+	 * 190 characters) and without regard to case, so no spelling of a
+	 * reserved key survives to the row.
+	 *
+	 * @param mixed $categories The posted map.
+	 * @return mixed The map without the server-only keys.
+	 */
+	private static function strip_server_only_keys( $categories ) {
+		if ( ! is_array( $categories ) && ! is_object( $categories ) ) {
+			return $categories;
+		}
+		$categories = (array) $categories;
+		foreach ( array_keys( $categories ) as $key ) {
+			$stored = strtolower( substr( sanitize_text_field( (string) $key ), 0, 190 ) );
+			if ( in_array( $stored, self::SERVER_ONLY_KEYS, true ) ) {
+				unset( $categories[ $key ] );
+			}
+		}
+		return $categories;
 	}
 
 	/**

@@ -57,6 +57,7 @@ class Deactivator {
 		// Unschedule all cron jobs.
 		wp_clear_scheduled_hook( 'faz_download_cookie_definitions' );
 		wp_clear_scheduled_hook( 'faz_daily_cleanup' );
+		wp_clear_scheduled_hook( 'faz_pageview_retention_continue' );
 		wp_clear_scheduled_hook( 'faz_weekly_gvl_update' );
 		wp_clear_scheduled_hook( 'faz_gvl_bootstrap' );
 		wp_clear_scheduled_hook( 'faz_weekly_definitions_update' );

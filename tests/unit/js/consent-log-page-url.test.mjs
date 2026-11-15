@@ -66,7 +66,7 @@ check(
 // function so the two sides cannot drift.
 const localize = PHP.slice(PHP.indexOf("'_fazConsentLog',"), PHP.indexOf('$inline_js =', PHP.indexOf("'_fazConsentLog',")));
 check('_fazConsentLog carries pageUrl', /'pageUrl'\s*=>/.test(localize));
-check('computed by Embed_Inventory::current_url()', localize.includes('Embed_Inventory::current_url()'));
+check('computed by Embed_Inventory::log_page_url() (current_url() on a known host only)', localize.includes('Embed_Inventory::log_page_url()'));
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);
