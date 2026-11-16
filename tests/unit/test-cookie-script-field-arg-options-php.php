@@ -1,15 +1,18 @@
 <?php
 /**
  * Regression test (2026-11 security audit, hardening note): the REST refusal
- * of opt_in_script / opt_out_script for a user without unfiltered_html really
- * runs on single-item writes.
+ * of opt_in_script / opt_out_script for a user without unfiltered_html is a
+ * 403 from the permission check, not a sanitiser.
  *
- * The schema set sanitize_callback at property level. WordPress builds the
- * endpoint args with rest_get_endpoint_args_for_schema(), which copies
- * callbacks only from arg_options, so sanitize_script_field() never ran on
- * POST /faz/v1/cookies(/id) and the only protection left was the silent strip
- * in Cookie::set_meta(). This test replays core's arg building on the real
- * schema and checks the callback that comes out of it.
+ * The schema set sanitize_callback at property level, which core's
+ * rest_get_endpoint_args_for_schema() never copies, so the refusal never ran
+ * on POST /faz/v1/cookies(/id). Moving it under arg_options made it run, but
+ * WordPress sanitises before the permission callback and wraps a sanitiser's
+ * WP_Error in a 400 rest_invalid_param, so even a subscriber got 400. The
+ * gate now lives in create_item_permissions_check() and
+ * update_item_permissions_check(); the E2E spec cookie-api-security.spec.ts
+ * checks the status codes against real WordPress. This test replays core's
+ * arg building on the real schema and checks no WP_Error sanitiser is back.
  *
  * Run: php tests/unit/test-cookie-script-field-arg-options-php.php
  *
@@ -94,22 +97,23 @@ namespace {
 	$schema = $api->get_item_schema();
 	$args   = core_endpoint_args( $schema );
 
-	echo "\nscript fields: the REST arg runs sanitize_script_field\n";
+	echo "\nscript fields: the gate is not a sanitiser (that would answer 400)\n";
 	foreach ( array( 'opt_in_script', 'opt_out_script' ) as $field ) {
 		$cb = $args[ $field ]['sanitize_callback'] ?? null;
-		check( array( Cookies_API::class, 'sanitize_script_field' ) === $cb, "{$field}: the endpoint arg carries sanitize_script_field" );
+		check( 'rest_sanitize_request_arg' === $cb, "{$field}: the endpoint arg keeps core's sanitiser" );
 		check( 10000 === ( $schema['properties'][ $field ]['maxLength'] ?? null ), "{$field}: maxLength stays on the schema for rest_validate_request_arg" );
-
-		$GLOBALS['faz_unfiltered_html'] = false;
-		$out = is_callable( $cb ) ? call_user_func( $cb, 'alert(1)', null, $field ) : null;
-		check( is_wp_error( $out ) && 403 === ( $out->data['status'] ?? null ), "{$field}: a non-empty script from a user without unfiltered_html is refused with 403" );
-		$out = is_callable( $cb ) ? call_user_func( $cb, '', null, $field ) : null;
-		check( '' === $out, "{$field}: an empty value is still accepted from that user" );
-
-		$GLOBALS['faz_unfiltered_html'] = true;
-		$out = is_callable( $cb ) ? call_user_func( $cb, 'console.log(1)', null, $field ) : null;
-		check( 'console.log(1)' === $out, "{$field}: a user with unfiltered_html saves the script" );
 	}
+	foreach ( array( 'create_item_permissions_check', 'update_item_permissions_check' ) as $method ) {
+		$declared = ( new ReflectionMethod( Cookies_API::class, $method ) )->getDeclaringClass()->getName();
+		check( Cookies_API::class === $declared, "{$method}: Cookies_API carries the script gate" );
+	}
+
+	$GLOBALS['faz_unfiltered_html'] = false;
+	$out = Cookies_API::sanitize_script_field( 'alert(1)', null, 'opt_in_script' );
+	check( is_wp_error( $out ) && 403 === ( $out->data['status'] ?? null ), 'sanitize_script_field: a non-empty script from a user without unfiltered_html is refused with 403' );
+	check( '' === Cookies_API::sanitize_script_field( '', null, 'opt_in_script' ), 'sanitize_script_field: an empty value is accepted from that user' );
+	$GLOBALS['faz_unfiltered_html'] = true;
+	check( 'console.log(1)' === Cookies_API::sanitize_script_field( 'console.log(1)', null, 'opt_in_script' ), 'sanitize_script_field: a user with unfiltered_html saves the script' );
 
 	echo "\n{$passed} passed, {$failed} failed\n";
 	exit( $failed ? 1 : 0 );
