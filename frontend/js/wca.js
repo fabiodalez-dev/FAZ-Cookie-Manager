@@ -19,9 +19,12 @@ function resolveConsentType(activeLaw) {
     const fromLabel = activeLaw && consentType[activeLaw] ? consentType[activeLaw] : 'optin';
     // script.js aliases a `_fazCfg` payload to `_fazConfig` at load; read both
     // so the verdict is found whichever name the page localised.
-    const store = typeof _fazConfig !== 'undefined' && _fazConfig
-        ? _fazConfig
-        : (typeof _fazCfg !== 'undefined' && _fazCfg ? _fazCfg : null);
+    // Plain objects only: a missing localize block lets an element with that
+    // id answer the name, and an element is not a configuration.
+    const plain = (v) => {
+        try { return v && typeof v === 'object' && Object.prototype.toString.call(v) === '[object Object]' ? v : null; } catch (e) { return null; }
+    };
+    const store = plain(window._fazConfig) || plain(window._fazCfg);
     const verdict = store && (store._wpConsentType === 'optin' || store._wpConsentType === 'optout')
         ? store._wpConsentType
         : null;

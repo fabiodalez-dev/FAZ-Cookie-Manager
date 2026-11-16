@@ -1,8 +1,18 @@
 /**
  * WordPress localize object mapped to a constant.
  */
-if ( typeof window._fazConfig === 'undefined' && typeof window._fazCfg !== 'undefined' && window._fazCfg !== null ) {
-    window._fazConfig = window._fazCfg;
+// Only a plain object counts as the configuration. When the localize block is
+// missing (an optimiser dropped or delayed it) the name is answered by the
+// document instead: `<a id="_fazConfig">` in a post makes window._fazConfig an
+// element, which is truthy, so the runtime would start on it. Anything else is
+// treated as absent; the own property this writes also shadows the element
+// for every script that runs later. _fazIsPlainObject is hoisted from below.
+if ( !_fazIsPlainObject( window._fazConfig ) ) {
+    if ( _fazIsPlainObject( window._fazCfg ) ) {
+        window._fazConfig = window._fazCfg;
+    } else if ( window._fazConfig ) {
+        window._fazConfig = undefined;
+    }
 }
 // Build marker — bump when shipping behavioural changes to this file. Lets
 // `fazcookie._diag().build` reveal at a glance whether a cache (CDN / optimizer)

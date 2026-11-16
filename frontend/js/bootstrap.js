@@ -68,7 +68,14 @@
     // A consent store on window.fazcookie is the same fact for a runtime that
     // predates this file: it never sets _fazRuntimeStarted, but it creates
     // that Map as its first act, so finding one means it has already run.
-    if (w._fazBootstrap || w._fazRuntimeStarted || !w._fazConfig || !w._fazConfig._block) return;
+    // The configuration counts only as a plain object: deferred past post
+    // content, `<form id="_fazConfig"><input name="_block">` would otherwise
+    // answer both reads with elements and arm the bootstrap on them.
+    function config() {
+        var c = w._fazConfig;
+        try { return c && typeof c === 'object' && Object.prototype.toString.call(c) === '[object Object]' ? c : null; } catch (e) { return null; }
+    }
+    if (w._fazBootstrap || w._fazRuntimeStarted || !config() || !config()._block) return;
     // Only a store on a real object counts. An optimiser that defers this
     // script runs it after post content is parsed, and there
     // `<a id="fazcookie"></a><a id="fazcookie" name="_fazConsentStore">`
@@ -3035,11 +3042,11 @@
         if (policy === safety) noteSafetyPark(el, key, value, false);
         var target = parkTarget(tagKey(el), key);
         setAttr(el, target.value, value);
-        if (key === 'srcdoc') setAttr(el, 'data-faz-srcdoc-key', (window._fazConfig || {})._srcdocKey || '');
+        if (key === 'srcdoc') setAttr(el, 'data-faz-srcdoc-key', (config() || {})._srcdocKey || '');
         // Provenance for the parks the runtime restores only when proven
         // (_fazProveParked() in script.js): the response key plus the name.
         var provenName = { 'data-faz-data': 'data', 'data-faz-background': 'background' }[target.value];
-        var proofKey = (window._fazConfig || {})._srcdocKey || '';
+        var proofKey = (config() || {})._srcdocKey || '';
         if (provenName && proofKey) {
             var provenList = attr(el, 'data-faz-park-key') === proofKey ? String(attr(el, 'data-faz-park') || '') : '';
             if ((' ' + provenList + ' ').indexOf(' ' + provenName + ' ') === -1) provenList = (provenList ? provenList + ' ' : '') + provenName;

@@ -13,7 +13,17 @@
 (function () {
 	"use strict";
 
-	var cfg = window._fazTcfConfig || {};
+	// The localized objects count only as plain objects. Deferred past post
+	// content, a missing localize block lets `<a id="_fazTcfConfig">` answer
+	// the name with an element; that is treated as absent.
+	function plain(value) {
+		try { return value && typeof value === "object" && Object.prototype.toString.call(value) === "[object Object]" ? value : null; } catch (e) { return null; }
+	}
+	function fazConfig() {
+		return plain(window._fazConfig) || {};
+	}
+
+	var cfg = plain(window._fazTcfConfig) || {};
 
 	var CMP_ID             = cfg.cmpId || 0;
 	var CMP_VERSION        = 1;
@@ -32,7 +42,7 @@
 	 * Push a value as `length` bits into the bits array (MSB first).
 	 */
 	function cookieName(name) {
-		return ((window._fazConfig || {})._cookieNames || {})[name] || name;
+		return (fazConfig()._cookieNames || {})[name] || name;
 	}
 	function readCookie(name) {
 		var prefix = cookieName(name) + '=';
@@ -167,7 +177,8 @@
 
 	function isConsentCookieStale(pairs) {
 		if (!pairs) return false;
-		var config = window._fazConfig || {};
+		var config = window._fazConfig;
+		config = config && Object.prototype.toString.call(config) === '[object Object]' ? config : {};
 		// Defensive only. The server never activates the cached jurisdiction
 		// shell while IAB TCF is on (Frontend::get_geo_bootstrap_status() returns
 		// reason 'iab', pinned by test-geo-cache-bootstrap-php.php), and this
@@ -706,7 +717,7 @@
 	 * the record is written host-only there instead.
 	 */
 	function cookieDomain() {
-		var configured = (window._fazConfig && window._fazConfig._rootDomain) ? String(window._fazConfig._rootDomain).trim() : "";
+		var configured = fazConfig()._rootDomain ? String(fazConfig()._rootDomain).trim() : "";
 		var root = configured.toLowerCase().replace(/\.$/, "");
 		var host = String(location.hostname || "").toLowerCase().replace(/\.$/, "");
 		var bare = root.charAt(0) === "." ? root.slice(1) : root;
@@ -719,8 +730,8 @@
 	 */
 	function setEuconsentCookie(tcString) {
 		var expiry = 180; // days - matches FAZ consent cookie
-		if (window._fazConfig && window._fazConfig._expiry) {
-			expiry = window._fazConfig._expiry;
+		if (fazConfig()._expiry) {
+			expiry = fazConfig()._expiry;
 		}
 		var date = new Date();
 		date.setTime(date.getTime() + (expiry * 24 * 60 * 60 * 1000));
@@ -740,8 +751,8 @@
 		// Deletion still tries the configured scope unconditionally: on a host
 		// inside it that is where the record lives, and on one outside it the
 		// browser simply ignores an expiry for a domain it cannot set.
-		if (window._fazConfig && window._fazConfig._rootDomain) {
-			document.cookie = expired + ";domain=" + window._fazConfig._rootDomain + ";SameSite=Lax" + secure;
+		if (fazConfig()._rootDomain) {
+			document.cookie = expired + ";domain=" + fazConfig()._rootDomain + ";SameSite=Lax" + secure;
 		}
 	}
 
