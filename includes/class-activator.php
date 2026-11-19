@@ -133,7 +133,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.11.14.1';
+	const MIGRATIONS_VERSION = '2026.11.14.2';
 
 	/**
 	 * Continuation event of the created_at_gmt backfill on large tables.
@@ -193,7 +193,7 @@ class Activator {
 			self::clear_necessary_optout_flags();
 			self::normalize_legacy_functional_optout_flags();
 			self::move_sourcebuster_to_marketing();
-			self::move_divi_editor_cookies_to_internal();
+			$all_complete = self::move_divi_editor_cookies_to_internal() && $all_complete;
 			self::reset_stale_per_cookie_consent();
 			$all_complete = self::refresh_necessary_disclosure_text() && $all_complete;
 			self::demote_bulky_autoloaded_options();
@@ -2708,10 +2708,12 @@ class Activator {
 	 * and the uncategorized warnings agree with what visitors see. Only rows
 	 * still in Uncategorized are moved: a row someone put in a category on
 	 * purpose stays where it is.
+	 *
+	 * @return bool Whether the migration is complete.
 	 */
 	public static function move_divi_editor_cookies_to_internal() {
 		if ( get_option( 'faz_move_divi_editor_internal_done' ) ) {
-			return;
+			return true;
 		}
 		global $wpdb;
 		$cookies    = $wpdb->prefix . 'faz_cookies';
@@ -2719,7 +2721,7 @@ class Activator {
 		foreach ( array( $cookies, $categories ) as $table ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the activation/upgrade path.
 			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
-				return; // No table yet: retried on the next run, marker not set.
+				return false;
 			}
 		}
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $categories is $wpdb->prefix + literal (escaped via esc_sql); slug bound via %s; one-shot migration read.
@@ -2727,11 +2729,8 @@ class Activator {
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- same table and justification as above.
 		$uncategorized = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT category_id FROM `' . esc_sql( $categories ) . '` WHERE slug = %s', 'uncategorized' ) );
 		if ( $internal <= 0 || $uncategorized <= 0 ) {
-			// ensure_wordpress_internal_category() runs earlier in the same
-			// batch; with either category still missing there is nothing to
-			// move from or to, now or later.
-			update_option( 'faz_move_divi_editor_internal_done', 1, false );
-			return;
+			// The prerequisite category creation or lookup can fail temporarily.
+			return false;
 		}
 		$moved = 0;
 		foreach ( \FazCookie\Frontend\Frontend::DIVI_EDITOR_COOKIE_PREFIXES as $prefix ) {
@@ -2745,6 +2744,9 @@ class Activator {
 				)
 			);
 			if ( false === $n ) {
+				if ( $moved > 0 ) {
+					Cookie_Controller::get_instance()->delete_cache();
+				}
 				// Throw so run_pending_migrations() withholds the version marker
 				// and the move is retried on the next admin load.
 				throw new \RuntimeException( 'FAZ: failed to move the Divi editor cookies to WordPress Internal; migration will retry.' );
@@ -2754,7 +2756,8 @@ class Activator {
 		if ( $moved > 0 ) {
 			Cookie_Controller::get_instance()->delete_cache();
 		}
-		update_option( 'faz_move_divi_editor_internal_done', 1, false );
+		return update_option( 'faz_move_divi_editor_internal_done', 1, false )
+			|| (bool) get_option( 'faz_move_divi_editor_internal_done' );
 	}
 
 	/**

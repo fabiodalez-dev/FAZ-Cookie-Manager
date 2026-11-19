@@ -4,9 +4,8 @@
  *
  * It used to print the day of the request, so a declaration nobody had touched
  * showed a new date every day. It now prints the day the exact text a visitor
- * reads first appeared, keyed by the policy version hash computed without the
- * page URL (an anonymous visitor must not be able to mint new keys by asking
- * for a different path).
+ * reads changed, keyed by the sanitized body with the default self URL
+ * normalized so the request path cannot change the date.
  *
  * The WordPress stubs and the fake $wpdb are the ones of
  * test-cookie-policy-golden-render.php, plus writable add_option() and
@@ -414,6 +413,34 @@ $GLOBALS['faz_test_filters']['faz_cookie_policy_data'][] = static function ( $da
 $pinned = $date_of( $render( '2026-12-20 09:00:00' ) );
 t( 'January 1, 2026' === $pinned, "a date set by the faz_cookie_policy_data filter is kept (got '$pinned')" );
 $GLOBALS['faz_test_filters'] = array();
+
+$GLOBALS['faz_test_filters']['faz_cookie_policy_data'][] = static function ( $data ) {
+	$data['LAST_UPDATED_DATE'] = 'December 20, 2026';
+	return $data;
+};
+t( 'December 20, 2026' === $date_of( $render( '2026-12-20 09:00:00' ) ), 'an explicit date that is today still overrides the saved date' );
+$GLOBALS['faz_test_filters'] = array();
+
+$policy = &$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data'];
+$policy['disclaimer'] = array( 'text' => 'Updated disclaimer.' );
+$html = $render( '2026-12-21 09:00:00' );
+t( false !== strpos( $html, 'Updated disclaimer.' ) && 'December 21, 2026' === $date_of( $html ), 'editing only the visible disclaimer changes the date' );
+$policy['disclaimer']['show'] = false;
+t( 'December 22, 2026' === $date_of( $render( '2026-12-22 09:00:00' ) ), 'hiding the disclaimer changes the date too' );
+
+$policy['section_overrides']['gdpr-strict']['en'][0] = array(
+	'anchor' => '# Cookie Policy',
+	'text'   => "# Cookie Policy\n\n**Last updated:** {{LAST_UPDATED_DATE}}\n\n[Read this policy]({{COOKIE_POLICY_URL}}).",
+);
+$html = $render( '2026-12-23 09:00:00', '/original-policy/' );
+t( false !== strpos( $html, 'href="https://example.test/original-policy/"' ), 'the displayed self-link has the real request URL' );
+$html = $render( '2026-12-24 09:00:00', '/alias-policy/' );
+t( false !== strpos( $html, 'href="https://example.test/alias-policy/"' ) && 'December 23, 2026' === $date_of( $html ), 'a different self-link leaves the date unchanged' );
+
+$policy['jurisdiction'] = 'ccpa-california';
+t( 'December 24, 2026' === $date_of( $render( '2026-12-24 09:00:00' ) ), 'the CCPA variant establishes its own date' );
+$policy['dpo']['name'] = 'Unpublished DPO';
+t( 'December 24, 2026' === $date_of( $render( '2026-12-25 09:00:00' ) ), 'a DPO field not displayed in CCPA does not change the date' );
 
 echo "\ncookie policy last updated: $ok passed, $ko failed\n";
 exit( $ko > 0 ? 1 : 0 );

@@ -170,8 +170,17 @@ dv_eq( $threw, true, 'a failed UPDATE throws so the batch retries' );
 dv_eq( get_option( 'faz_move_divi_editor_internal_done', 0 ), 0, 'and leaves the marker unset' );
 
 $db = dv_site( array( array( 'et-saved-post-1-bb', UNCATEGORIZED ) ), false );
-Activator::move_divi_editor_cookies_to_internal();
+dv_eq( Activator::move_divi_editor_cookies_to_internal(), false, 'the missing prerequisite defers completion' );
 dv_eq( dv_cat( $db, 'et-saved-post-1-bb' ), UNCATEGORIZED, 'without an internal category nothing moves' );
+dv_eq( get_option( 'faz_move_divi_editor_internal_done' ), false, 'a missing category does not set the marker' );
+$db->pdo->exec( 'INSERT INTO wp_faz_cookie_categories VALUES (' . INTERNAL . ", 'wordpress-internal')" );
+dv_eq( Activator::move_divi_editor_cookies_to_internal(), true, 'retry completes when the category exists' );
+dv_eq( dv_cat( $db, 'et-saved-post-1-bb' ), INTERNAL, 'the previously skipped row is moved on retry' );
+
+$db = dv_site( array() );
+$db->pdo->exec( 'DROP TABLE wp_faz_cookies' );
+dv_eq( Activator::move_divi_editor_cookies_to_internal(), false, 'a missing table also defers completion' );
+dv_eq( get_option( 'faz_move_divi_editor_internal_done' ), false, 'the missing table does not set the marker' );
 
 echo "\ndivi editor migration: $passed passed, $failed failed\n";
 exit( $failed > 0 ? 1 : 0 );

@@ -136,13 +136,33 @@ namespace {
 		public $prefix     = 'wp_';
 		public $options    = 'wp_options';
 		public $last_error = '';
+		public $has_divi_tables = true;
 		public function __call( $name, $args ) { return array(); }
-		public function get_var( $q = null ) { return null; }
+		public function get_var( $q = null ) {
+			if ( 'divi_table:wp_faz_cookies' === $q || 'divi_table:wp_faz_cookie_categories' === $q ) {
+				return $this->has_divi_tables ? substr( $q, strlen( 'divi_table:' ) ) : null;
+			}
+			if ( 'divi_slug:wordpress-internal' === $q ) {
+				return 7;
+			}
+			if ( 'divi_slug:uncategorized' === $q ) {
+				return 8;
+			}
+			return null;
+		}
 		public function get_row( $q = null, $o = null ) { return null; }
 		public function get_col( $q = null ) { return array(); }
 		public function get_results( $q = null, $o = null ) { return array(); }
 		public function query( $q ) { return 0; }
-		public function prepare( $q ) { return $q; }
+		public function prepare( $q, ...$args ) {
+			if ( 'SHOW TABLES LIKE %s' === $q ) {
+				return 'divi_table:' . $args[0];
+			}
+			if ( 'SELECT category_id FROM `wp_faz_cookie_categories` WHERE slug = %s' === $q ) {
+				return 'divi_slug:' . $args[0];
+			}
+			return $q;
+		}
 		public function update( $t, $d, $w, $f = null, $wf = null ) { return 1; }
 		public function delete( $t, $w, $f = null ) { return 1; }
 		public function insert( $t, $d, $f = null ) { return 1; }
@@ -152,6 +172,7 @@ namespace {
 	$GLOBALS['wpdb'] = new Faz_Mig_Wpdb();
 
 	require_once dirname( __DIR__, 2 ) . '/includes/class-activator.php';
+	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 
 	use FazCookie\Includes\Activator;
 
@@ -209,6 +230,13 @@ namespace {
 		1 === count( array_keys( $fired, 'faz_clear_cache', true ) ),
 		'it fires exactly once for the whole batch, not once per migration'
 	);
+
+	$GLOBALS['wpdb']->has_divi_tables = false;
+	mig_run();
+	mig_check( false === get_option( 'faz_migrations_version' ), 'missing Divi migration tables keep the batch pending' );
+	$GLOBALS['wpdb']->has_divi_tables = true;
+	Activator::run_pending_migrations();
+	mig_check( Activator::MIGRATIONS_VERSION === get_option( 'faz_migrations_version' ), 'repairing the tables lets the pending batch finish' );
 
 	/* ── 2. Already migrated → nothing fires ──────────────────────────────── */
 
