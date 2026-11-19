@@ -2454,7 +2454,8 @@ class Controller {
 	 * @return array|\WP_Error
 	 */
 	public function remote_get( $url, $args = array() ) {
-		$url_host              = self::canonical_scan_host( wp_parse_url( $url, PHP_URL_HOST ) );
+		$request_host          = strtolower( trim( (string) wp_parse_url( $url, PHP_URL_HOST ), '[]' ) );
+		$url_host              = self::canonical_scan_host( $request_host );
 		$site_host             = self::canonical_scan_host( wp_parse_url( home_url(), PHP_URL_HOST ) );
 		$is_validated_loopback = self::is_loopback_scan_host( $url_host )
 			&& self::is_loopback_scan_host( $site_host )
@@ -2486,7 +2487,7 @@ class Controller {
 			// Check every address the host has, then connect to one of the
 			// checked ones: checking and letting cURL resolve again would leave
 			// the DNS free to change in between.
-			$addresses = $this->resolve_scan_host( $url_host );
+			$addresses = $this->resolve_scan_host( $request_host );
 			if ( empty( $addresses ) ) {
 				return new \WP_Error( 'faz_scanner_unresolved_host', __( 'The site hostname could not be resolved, so the scanner did not fetch it.', 'faz-cookie-manager' ) );
 			}
@@ -2513,20 +2514,39 @@ class Controller {
 		if ( ! $this->curl_resolve_available() ) {
 			return $no_transport;
 		}
+		if ( $this->pin_would_use_proxy( $url ) ) {
+			return new \WP_Error( 'faz_scanner_pin_proxy', __( 'Scanner IP pinning requires a direct HTTP connection. Check your outgoing proxy settings.', 'faz-cookie-manager' ) );
+		}
 
-		$applied  = false;
-		$resolver = function ( $handle, $parsed_args, $request_url ) use ( $entry, $url_host, &$applied ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
-			$request_host = self::canonical_scan_host( wp_parse_url( $request_url, PHP_URL_HOST ) );
-			if ( ! self::scan_hosts_match( $request_host, $url_host ) ) {
+		// The caller validates redirect hops. A shared cURL handle must never
+		// follow a redirect that has no pin of its own.
+		$args['redirection'] = 0;
+		$applied             = false;
+		$pin_failed          = new \RuntimeException( 'Scanner HTTP pin unavailable.' );
+		$resolver = function ( $handle, $parsed_args, $request_url ) use ( $entry, $url, $pin_failed, &$applied ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
+			if ( $url !== $request_url ) {
 				return;
 			}
-			$applied = $this->apply_curl_resolve( $handle, $entry ) || $applied;
+			$applied = $this->apply_curl_resolve( $handle, $entry );
+			if ( ! $applied ) {
+				throw $pin_failed;
+			}
 		};
-		add_action( 'http_api_curl', $resolver, 10, 3 );
+		$reject_streams = static function () use ( $pin_failed ) {
+			throw $pin_failed;
+		};
+		add_action( 'http_api_curl', $resolver, PHP_INT_MAX, 3 );
+		add_action( 'requests-fsockopen.before_request', $reject_streams, 10, 0 );
 		try {
 			$response = wp_remote_get( $url, $args );
+		} catch ( \RuntimeException $error ) {
+			if ( $pin_failed !== $error ) {
+				throw $error;
+			}
+			return $no_transport;
 		} finally {
-			remove_action( 'http_api_curl', $resolver, 10 );
+			remove_action( 'http_api_curl', $resolver, PHP_INT_MAX );
+			remove_action( 'requests-fsockopen.before_request', $reject_streams, 10 );
 		}
 
 		// Backstop: another transport answered despite cURL being available.
@@ -2537,12 +2557,42 @@ class Controller {
 	}
 
 	/**
+	 * Whether an outgoing proxy is configured for this pinned request.
+	 *
+	 * A proxy resolves the hostname independently of CURLOPT_RESOLVE. Respect
+	 * WordPress proxy exclusions and decline pinned requests when libcurl has
+	 * an ambient proxy configured, so the scanner cannot bypass egress policy.
+	 *
+	 * @param string $url Requested URL.
+	 * @return bool
+	 */
+	private function pin_would_use_proxy( $url ) {
+		if ( class_exists( '\\WP_HTTP_Proxy' ) ) {
+			$proxy = new \WP_HTTP_Proxy();
+			if ( $proxy->is_enabled() && $proxy->send_through_proxy( $url ) ) {
+				return true;
+			}
+		}
+		$variables = 'https' === strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) )
+			? array( 'https_proxy', 'HTTPS_PROXY', 'all_proxy', 'ALL_PROXY' )
+			: array( 'http_proxy', 'all_proxy', 'ALL_PROXY' );
+		foreach ( $variables as $variable ) {
+			$value = getenv( $variable );
+			if ( false !== $value && '' !== $value ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Whether this PHP can pin a connection with CURLOPT_RESOLVE.
 	 *
 	 * @return bool
 	 */
 	protected function curl_resolve_available() {
-		return function_exists( 'curl_init' ) && function_exists( 'curl_setopt' ) && defined( 'CURLOPT_RESOLVE' );
+		return function_exists( 'curl_init' ) && function_exists( 'curl_exec' )
+			&& function_exists( 'curl_setopt' ) && defined( 'CURLOPT_RESOLVE' );
 	}
 
 	/**

@@ -3871,6 +3871,10 @@ msgstr "L’ancoraggio a IP statico richiede il trasporto HTTP cURL di WordPress
 msgid "Checking the site hostname address requires the WordPress cURL HTTP transport."
 msgstr "Il controllo dell’indirizzo del nome host del sito richiede il trasporto HTTP cURL di WordPress."
 
+#: admin/modules/scanner/includes/class-controller.php:2518
+msgid "Scanner IP pinning requires a direct HTTP connection. Check your outgoing proxy settings."
+msgstr "Il pinning dell’indirizzo IP dello scanner richiede una connessione HTTP diretta. Controlla le impostazioni del proxy in uscita."
+
 #: admin/modules/settings/api/class-api.php:365
 #: admin/modules/settings/includes/class-onboarding.php:160
 #: admin/modules/settings/includes/class-onboarding.php:349

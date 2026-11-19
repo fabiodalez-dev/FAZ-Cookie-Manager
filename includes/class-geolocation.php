@@ -1480,10 +1480,11 @@ class Geolocation {
 							if ( '' === $chunk ) {
 								throw new \RuntimeException( 'Truncated tar entry.' );
 							}
-							if ( false === fwrite( $out, $chunk ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+							$length = strlen( $chunk );
+							if ( $length !== fwrite( $out, $chunk ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
 								throw new \RuntimeException( 'Cannot write the extracted file.' );
 							}
-							$left -= strlen( $chunk );
+							$left -= $length;
 						}
 					} finally {
 						fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose

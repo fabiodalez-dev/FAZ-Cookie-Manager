@@ -39,6 +39,16 @@ function apply_filters( $tag, $value ) { return $value; }
 function esc_html( $s ) { return (string) $s; }
 function __( $t, $d = 'default' ) { return $t; }
 
+// Simulate an incomplete disk write at the production call site.
+// phpcs:ignore Squiz.PHP.Eval.Discouraged -- fixed test double in the writer's namespace.
+eval( 'namespace FazCookie\Includes; function fwrite( $out, $bytes ) {
+	if ( ! empty( $GLOBALS["faz_mmdb_short_write"] ) ) {
+		$GLOBALS["faz_mmdb_short_write"] = false;
+		return \fwrite( $out, substr( $bytes, 0, 6 ) );
+	}
+	return \fwrite( $out, $bytes );
+}' );
+
 $root = dirname( __DIR__, 2 );
 require_once $root . '/includes/class-mmdb-reader.php';
 require_once $root . '/includes/class-geolocation.php';
@@ -154,6 +164,13 @@ ms_check( true === $res, 'a MaxMind-shaped archive installs' );
 ms_check( file_exists( $data_dir . 'GeoLite2-City.mmdb' ) && $city === file_get_contents( $data_dir . 'GeoLite2-City.mmdb' ), 'the installed .mmdb is byte-identical to the entry' );
 ms_check( ! file_exists( $faz_tmp . '/city.tar' ), 'no decompressed .tar is written next to the download' );
 ms_check( array() === glob( $data_dir . '.*.tmp' ), 'no staging file is left behind' );
+
+$arc = tar_gz( $faz_tmp . '/short-write.tar.gz', tar_entry( 'GeoLite2-City.mmdb', mm_build( 'GeoLite2-City', 1048576 ) ) );
+$GLOBALS['faz_mmdb_short_write'] = true;
+$res = $extract->invoke( null, $arc, 'GeoLite2-City' );
+ms_check( is_wp_error( $res ), 'a short disk write fails extraction even when later bytes contain valid metadata' );
+ms_check( $city === file_get_contents( $data_dir . 'GeoLite2-City.mmdb' ), 'a short write preserves the active database' );
+ms_check( array() === glob( $data_dir . '.*.tmp' ), 'a short write leaves no staging file behind' );
 
 $country = mm_build( 'GeoLite2-Country' );
 $long    = str_repeat( 'd', 120 ) . '/GeoLite2-Country.mmdb';

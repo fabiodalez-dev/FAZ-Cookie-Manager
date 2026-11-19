@@ -1151,9 +1151,8 @@ class Activator {
 	 * plugin). If a step kept throwing, faz_version was never bumped and every
 	 * request repeated the full-site purge.
 	 *
-	 * The claim is an add_option() row (the options table is UNIQUE on
-	 * option_name, so exactly one request creates it), taken over by age with a
-	 * compare-and-delete, on the model of seed_own_consent_cookie(). It is
+	 * The claim is inserted atomically on the unique option name, then
+	 * taken over by age with a compare-and-delete. It is
 	 * released on success only: after a throw or a fatal it stays until it is
 	 * INSTALL_CLAIM_TTL old, so a failing step is retried once per window
 	 * instead of on every request. A claim written for another plugin version
@@ -1167,12 +1166,12 @@ class Activator {
 	 * @return bool Whether this request ran it.
 	 */
 	private static function install_under_claim( $installer ) {
-		$claim = get_option( self::INSTALL_CLAIM );
-		if ( false !== $claim && ! self::install_claim_is_stale( $claim ) ) {
+		global $wpdb;
+		$claim = self::read_install_option( self::INSTALL_CLAIM );
+		if ( null !== $claim && ! self::install_claim_is_stale( $claim ) ) {
 			return false;
 		}
-		if ( false !== $claim ) {
-			global $wpdb;
+		if ( null !== $claim ) {
 			// Conditional on the value read, for the reason spelled out in
 			// seed_own_consent_cookie(): two requests that read the same stale
 			// claim must not both end up holding a new one.
@@ -1188,16 +1187,18 @@ class Activator {
 			if ( ! $won_takeover ) {
 				return false;
 			}
-			wp_cache_delete( self::INSTALL_CLAIM, 'options' );
 		}
-		$value = time() . ':' . FAZ_VERSION;
-		if ( ! add_option( self::INSTALL_CLAIM, $value, '', false ) ) {
+		$value = time() . ':' . FAZ_VERSION . ':' . wp_generate_uuid4();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the unique option name makes this insert atomic; add_option() uses an upsert.
+		$inserted = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::INSTALL_CLAIM, $value ) );
+		if ( 1 !== $inserted ) {
 			return false;
 		}
 		// faz_version is autoloaded, so this request's copy is the one it loaded
 		// at the start. A request that finished the upgrade and released its
 		// claim in between would otherwise be followed by a second full run.
-		if ( ! version_compare( self::stored_version(), FAZ_VERSION, '<' ) ) {
+		$version = self::read_install_option( 'faz_version' );
+		if ( ! version_compare( $version ?: '0.0.0', FAZ_VERSION, '<' ) ) {
 			self::release_install_claim( $value );
 			return false;
 		}
@@ -1210,11 +1211,11 @@ class Activator {
 	/**
 	 * Whether an install claim may be taken over.
 	 *
-	 * @param mixed $claim Stored claim, "<unix time>:<plugin version>".
+	 * @param string $claim Stored claim, "<unix time>:<plugin version>[:<owner>]".
 	 * @return bool
 	 */
 	private static function install_claim_is_stale( $claim ) {
-		$parts = explode( ':', (string) $claim, 2 );
+		$parts = explode( ':', $claim, 3 );
 		if ( ! isset( $parts[1] ) || FAZ_VERSION !== $parts[1] ) {
 			return true;
 		}
@@ -1238,24 +1239,24 @@ class Activator {
 			),
 			array( '%s', '%s' )
 		);
-		wp_cache_delete( self::INSTALL_CLAIM, 'options' );
 	}
 
 	/**
-	 * The stored faz_version, read past this request's option cache.
+	 * Read upgrade coordination state directly from the options table.
 	 *
-	 * @return string
+	 * @param string $name Option name.
+	 * @return string|null
 	 */
-	private static function stored_version() {
+	private static function read_install_option( $name ) {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the request's autoloaded copy is exactly what may be stale here.
 		$value = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
-				'faz_version'
+				$name
 			)
 		);
-		return is_string( $value ) && '' !== $value ? $value : '0.0.0';
+		return is_string( $value ) ? $value : null;
 	}
 
 	/**

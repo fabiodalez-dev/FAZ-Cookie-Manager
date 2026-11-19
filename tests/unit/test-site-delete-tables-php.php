@@ -8,12 +8,22 @@
  * consent log (ip_hash, user agent), pageviews, embed inventory and banner /
  * cookie / category tables behind.
  *
- * Runs the production faz_drop_site_tables() extracted from the bootstrap.
+ * Loads the production must-use helper without the regular plugin bootstrap.
  *
  * Run: php tests/unit/test-site-delete-tables-php.php
  */
 
-$source = file_get_contents( dirname( __DIR__, 2 ) . '/faz-cookie-manager.php' );
+define( 'ABSPATH', __DIR__ . '/' );
+$GLOBALS['sdt_multisite'] = false;
+$GLOBALS['sdt_hooks']     = array();
+function is_multisite() {
+	return $GLOBALS['sdt_multisite'];
+}
+function add_filter( $hook, $callback, $priority, $accepted_args ) {
+	$GLOBALS['sdt_hooks'][] = array( $hook, $callback, $priority, $accepted_args );
+}
+$root   = dirname( __DIR__, 2 );
+$helper = $root . '/includes/multisite-cleanup.php';
 
 $pass = 0;
 $fail = 0;
@@ -24,13 +34,18 @@ function sdt_ok( $cond, $label ) {
 
 echo "\n== Subsite deletion drops the plugin tables ==\n\n";
 
-$has_function = (bool) preg_match( '/^function faz_drop_site_tables\(.*?^}/ms', $source, $match );
-sdt_ok( $has_function, '01 the bootstrap defines faz_drop_site_tables()' );
-sdt_ok( 1 === preg_match( "/add_filter\(\s*'wpmu_drop_tables',\s*'faz_drop_site_tables',\s*10,\s*2\s*\)/", $source ), '02 it is hooked on wpmu_drop_tables with the site id' );
+require $helper;
+sdt_ok( array() === $GLOBALS['sdt_hooks'], 'single-site does not register a hook' );
+$GLOBALS['sdt_multisite'] = true;
+require $helper;
+require $helper;
+sdt_ok(
+	array( array( 'wpmu_drop_tables', 'faz_drop_site_tables', 10, 2 ) ) === $GLOBALS['sdt_hooks'],
+	'the standalone helper registers exactly once even if both the MU and regular copies are loaded'
+);
+sdt_ok( false !== strpos( file_get_contents( $root . '/faz-cookie-manager.php' ), '/includes/multisite-cleanup.php' ), 'the plugin bootstrap includes the same helper' );
 
-if ( $has_function ) {
-	eval( $match[0] ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- production function body, test-only file.
-
+if ( function_exists( 'faz_drop_site_tables' ) ) {
 	class Faz_Sdt_Wpdb {
 		public function get_blog_prefix( $blog_id ) { return 1 === $blog_id ? 'wp_' : 'wp_' . $blog_id . '_'; }
 	}

@@ -264,13 +264,45 @@ class Ipinfo_Client {
 		// A key saved before 1.39.1 is a v2 XOR value, whose keystream every
 		// other v2 value under the same salt shares. Rewrite it once in the
 		// authenticated v3 format; the v2 copy then no longer sits in the row.
-		if ( '' !== $plain && Secrets::needs_upgrade( $enc ) && function_exists( 'update_option' ) ) {
+		if ( '' !== $plain && Secrets::needs_upgrade( $enc ) ) {
 			$upgraded = Secrets::encrypt( $plain );
 			if ( '' !== $upgraded && $plain === Secrets::decrypt( $upgraded ) ) {
-				update_option( 'faz_geo_ipinfo_api_key', $upgraded, false );
+				return $this->replace_legacy_key( $enc, $upgraded, $plain );
 			}
 		}
 		return $plain;
+	}
+
+	/**
+	 * Re-encrypt only if the saved key is still the one this request read.
+	 *
+	 * @param string $previous Legacy ciphertext.
+	 * @param string $upgraded Replacement ciphertext.
+	 * @param string $plain    Decrypted legacy value.
+	 * @return string The key this request should use.
+	 */
+	private function replace_legacy_key( $previous, $upgraded, $plain ) {
+		global $wpdb;
+		$name = 'faz_geo_ipinfo_api_key';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- update_option() cannot compare against the legacy value in the same write.
+		$updated = $wpdb->update(
+			$wpdb->options,
+			array( 'option_value' => $upgraded, 'autoload' => 'no' ),
+			array( 'option_name' => $name, 'option_value' => $previous ),
+			array( '%s', '%s' ),
+			array( '%s', '%s' )
+		);
+		if ( false === $updated ) {
+			return $plain;
+		}
+		wp_cache_delete( $name, 'options' );
+		$autoloaded = wp_cache_get( 'alloptions', 'options' );
+		if ( is_array( $autoloaded ) && isset( $autoloaded[ $name ] ) ) {
+			wp_cache_delete( 'alloptions', 'options' );
+		}
+		// Another request rotated or removed the key. Read its value before
+		// attempting the provider lookup.
+		return 1 === $updated ? $plain : Secrets::decrypt( get_option( $name, '' ) );
 	}
 
 	/**

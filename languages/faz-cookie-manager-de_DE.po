@@ -3871,6 +3871,10 @@ msgstr "Die statische IP-Bindung erfordert den cURL-HTTP-Transport von WordPress
 msgid "Checking the site hostname address requires the WordPress cURL HTTP transport."
 msgstr "Die Prüfung der Adresse des Website-Hostnamens erfordert den cURL-HTTP-Transport von WordPress."
 
+#: admin/modules/scanner/includes/class-controller.php:2518
+msgid "Scanner IP pinning requires a direct HTTP connection. Check your outgoing proxy settings."
+msgstr "Für die IP-Bindung des Scanners ist eine direkte HTTP-Verbindung erforderlich. Prüfe die Einstellungen des ausgehenden Proxys."
+
 #: admin/modules/settings/api/class-api.php:365
 #: admin/modules/settings/includes/class-onboarding.php:160
 #: admin/modules/settings/includes/class-onboarding.php:349

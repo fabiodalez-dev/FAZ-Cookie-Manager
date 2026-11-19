@@ -45,14 +45,24 @@ function esc_url_raw( $v ) {
 	return (string) $v;
 }
 $GLOBALS['sd_hooks'] = array();
+$GLOBALS['sd_stream_hooks'] = array();
+$GLOBALS['sd_stream_transport'] = false;
+$GLOBALS['sd_proxy'] = false;
+$GLOBALS['sd_sent'] = 0;
 function add_action( $hook, $cb = null, $prio = 10, $args = 1 ) {
 	if ( 'http_api_curl' === $hook ) {
 		$GLOBALS['sd_hooks'][] = $cb;
+	}
+	if ( 'requests-fsockopen.before_request' === $hook ) {
+		$GLOBALS['sd_stream_hooks'][] = $cb;
 	}
 }
 function remove_action( $hook, $cb = null, $prio = 10 ) {
 	if ( 'http_api_curl' === $hook ) {
 		$GLOBALS['sd_hooks'] = array_values( array_filter( $GLOBALS['sd_hooks'], function ( $h ) use ( $cb ) { return $h !== $cb; } ) );
+	}
+	if ( 'requests-fsockopen.before_request' === $hook ) {
+		$GLOBALS['sd_stream_hooks'] = array_values( array_filter( $GLOBALS['sd_stream_hooks'], function ( $h ) use ( $cb ) { return $h !== $cb; } ) );
 	}
 }
 function apply_filters( $hook, $value ) {
@@ -85,12 +95,23 @@ class WP_Http {
 		return $p['scheme'] . '://' . $p['host'] . ( isset( $p['port'] ) ? ':' . $p['port'] : '' ) . '/' . ltrim( $maybe_relative, '/' );
 	}
 }
+class WP_HTTP_Proxy {
+	public function is_enabled() { return $GLOBALS['sd_proxy']; }
+	public function send_through_proxy( $url ) { return $url !== 'https://example.com/bypassed/'; }
+}
 $GLOBALS['sd_throw'] = false;
 function wp_remote_get( $url, $args = array() ) {
 	$GLOBALS['sd_calls'][] = array( 'url' => $url, 'args' => $args );
-	foreach ( $GLOBALS['sd_hooks'] as $hook ) {
-		$hook( 'fake-curl-handle', $args, $url );
+	if ( $GLOBALS['sd_stream_transport'] ) {
+		foreach ( $GLOBALS['sd_stream_hooks'] as $hook ) {
+			$hook();
+		}
+	} else {
+		foreach ( $GLOBALS['sd_hooks'] as $hook ) {
+			$hook( 'fake-curl-handle', $args, $url );
+		}
 	}
+	++$GLOBALS['sd_sent'];
 	if ( $GLOBALS['sd_throw'] ) {
 		throw new RuntimeException( 'transport blew up' );
 	}
@@ -145,7 +166,10 @@ class Faz_Sd_Controller extends Controller {
 	public $resolved = array();
 	public $curl     = true;
 	public $pins     = array();
+	public $pin_succeeds = true;
+	public $resolved_host;
 	protected function resolve_scan_host( $host ) {
+		$this->resolved_host = $host;
 		return $this->resolved;
 	}
 	protected function curl_resolve_available() {
@@ -153,7 +177,7 @@ class Faz_Sd_Controller extends Controller {
 	}
 	protected function apply_curl_resolve( $handle, $entry ) {
 		$this->pins[] = $entry;
-		return true;
+		return $this->pin_succeeds;
 	}
 }
 
@@ -274,6 +298,27 @@ $r = $c->remote_get( 'https://example.com/page/', array() );
 check( is_wp_error( $r ) && 'faz_scanner_pin_transport' === $r->get_error_code(), 'without cURL the request is refused, not sent unpinned' );
 check( array() === $GLOBALS['sd_calls'], 'and nothing is sent' );
 $c->curl = true;
+$GLOBALS['sd_proxy'] = true;
+$GLOBALS['sd_calls'] = array();
+$r = $c->remote_get( 'https://example.com/page/', array() );
+check( is_wp_error( $r ) && 'faz_scanner_pin_proxy' === $r->get_error_code(), 'WordPress proxy is incompatible with a pinned fetch' );
+check( array() === $GLOBALS['sd_calls'], 'the proxy request is refused before entering the HTTP API' );
+check( ! is_wp_error( $c->remote_get( 'https://example.com/bypassed/', array() ) ), 'a WordPress proxy exclusion still permits the direct pinned connection' );
+$GLOBALS['sd_proxy'] = false;
+
+$sent = $GLOBALS['sd_sent'];
+$c->pin_succeeds = false;
+$r = $c->remote_get( 'https://example.com/page/', array() );
+check( is_wp_error( $r ) && $sent === $GLOBALS['sd_sent'], 'a failed cURL pin aborts before the network send' );
+$c->pin_succeeds = true;
+$GLOBALS['sd_stream_transport'] = true;
+$r = $c->remote_get( 'https://example.com/page/', array() );
+check( is_wp_error( $r ) && $sent === $GLOBALS['sd_sent'], 'the fallback stream transport aborts before connecting' );
+check( array() === $GLOBALS['sd_stream_hooks'], 'the stream guard is removed after the request' );
+$GLOBALS['sd_stream_transport'] = false;
+
+$c->remote_get( 'https://www.example.com/page/', array() );
+check( 'www.example.com' === $c->resolved_host, 'an allowed www alias resolves and pins its own DNS name' );
 $GLOBALS['sd_multisite'] = false;
 $c->resolved             = array( '10.0.0.5' );
 check( ! is_wp_error( $c->remote_get( 'https://example.com/', array() ) ), 'single site: split-horizon DNS to a private address keeps working' );

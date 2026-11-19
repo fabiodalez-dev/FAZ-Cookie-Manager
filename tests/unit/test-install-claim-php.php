@@ -61,6 +61,7 @@ namespace {
 	function add_filter() { return true; }
 	function apply_filters( $tag, $value ) { return $value; }
 	function wp_cache_delete( $key, $group = '' ) { return true; }
+	function wp_generate_uuid4() { return uniqid( 'claim-', true ); }
 	function is_user_logged_in() { return $GLOBALS['faz_claim_logged']; }
 	function is_admin() { return false; }
 	function wp_doing_cron() { return false; }
@@ -81,12 +82,27 @@ namespace {
 		}
 	);
 
-	/** Options-table double: compare-and-delete and uncached reads. */
+	/** Options-table double: insert-if-absent, compare-and-delete and uncached reads. */
 	class Faz_Claim_Wpdb {
 		public $prefix  = 'wp_';
 		public $options = 'wp_options';
+		public $before_insert;
 		public function __call( $name, $args ) { return array(); }
 		public function prepare( $query, ...$args ) { return array( $query, $args ); }
+		public function query( $prepared ) {
+			if ( 0 !== strpos( $prepared[0], 'INSERT IGNORE INTO wp_options' ) ) {
+				return 0;
+			}
+			list( $name, $value ) = $prepared[1];
+			if ( $this->before_insert ) {
+				( $this->before_insert )( $name );
+			}
+			if ( array_key_exists( $name, $GLOBALS['faz_claim_options'] ) ) {
+				return 0;
+			}
+			$GLOBALS['faz_claim_options'][ $name ] = $value;
+			return 1;
+		}
 		public function get_var( $prepared = null ) {
 			if ( is_array( $prepared ) && isset( $prepared[1][0] ) && array_key_exists( $prepared[1][0], $GLOBALS['faz_claim_options'] ) ) {
 				return (string) $GLOBALS['faz_claim_options'][ $prepared[1][0] ];
@@ -155,6 +171,15 @@ namespace {
 	$runs = 0;
 	$GLOBALS['faz_claim_options'][ Activator::INSTALL_CLAIM ] = ( $GLOBALS['faz_claim_now'] - 10 ) . ':' . FAZ_VERSION;
 	claim_ok( false === claim_run( $install ) && 0 === $runs, '02 a request that finds a live claim does not run install()' );
+
+	claim_reset();
+	$winner = ( $GLOBALS['faz_claim_now'] - 1 ) . ':' . FAZ_VERSION . ':other-request';
+	$GLOBALS['wpdb']->before_insert = static function ( $name ) use ( $winner ) {
+		$GLOBALS['faz_claim_options'][ $name ] = $winner;
+	};
+	claim_ok( false === claim_run( $install ) && 0 === $runs, '02b a claim inserted after the read prevents a second upgrade' );
+	claim_ok( $winner === get_option( Activator::INSTALL_CLAIM ), '02c the losing request preserves the winner claim' );
+	$GLOBALS['wpdb']->before_insert = null;
 
 	// 3. A request whose option copy predates another's finished upgrade does not re-run it.
 	claim_reset();

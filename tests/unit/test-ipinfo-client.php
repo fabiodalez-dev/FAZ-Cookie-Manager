@@ -42,6 +42,26 @@ function wp_cache_set( $key, $val, $group = '', $ttl = 0 ) {
 	$GLOBALS['_faz_test_cache'][ "$group:$key" ] = $val;
 	return true;
 }
+function wp_cache_delete( $key, $group = '' ) {
+	unset( $GLOBALS['_faz_test_cache'][ "$group:$key" ] );
+}
+class Faz_Ipinfo_Options_Table {
+	public $options = 'wp_options';
+	public $before_update;
+
+	public function update( $table, $values, $where ) {
+		$name = $where['option_name'];
+		if ( $this->before_update ) {
+			( $this->before_update )( $name );
+		}
+		if ( ( $GLOBALS['_faz_test_options'][ $name ] ?? null ) !== $where['option_value'] ) {
+			return 0;
+		}
+		$GLOBALS['_faz_test_options'][ $name ] = $values['option_value'];
+		return 1;
+	}
+}
+$GLOBALS['wpdb'] = new Faz_Ipinfo_Options_Table();
 function wp_salt( $scheme = 'auth' ) {
 	return 'test-salt-' . $scheme;
 }
@@ -137,6 +157,14 @@ assert_eq( $upgrade_client->get_api_key(), 'svn_secret_token_42', 'get_api_key()
 $stored_after = (string) $GLOBALS['_faz_test_options']['faz_geo_ipinfo_api_key'];
 assert_true( 0 === strpos( $stored_after, 'v3:' ), 'get_api_key() rewrites the stored v2 key as v3' );
 assert_eq( Secrets::decrypt( $stored_after ), 'svn_secret_token_42', 'the rewritten v3 key opens to the same key' );
+$rotated = Secrets::encrypt( 'rotated-mock-key' );
+$GLOBALS['_faz_test_options']['faz_geo_ipinfo_api_key'] = $legacy_v2;
+$GLOBALS['wpdb']->before_update = static function ( $name ) use ( $rotated ) {
+	$GLOBALS['_faz_test_options'][ $name ] = $rotated;
+};
+assert_eq( $upgrade_client->get_api_key(), 'rotated-mock-key', 'a lookup uses the concurrently rotated key' );
+assert_eq( get_option( 'faz_geo_ipinfo_api_key' ), $rotated, 'the legacy rewrite preserves the rotated key' );
+$GLOBALS['wpdb']->before_update = null;
 unset( $GLOBALS['_faz_test_options']['faz_geo_ipinfo_api_key'] );
 
 // ---------- Ipinfo_Client opt-in gating ----------

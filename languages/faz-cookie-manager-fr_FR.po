@@ -3871,6 +3871,10 @@ msgstr "L'épinglage d'IP statique nécessite le transport HTTP cURL de WordPres
 msgid "Checking the site hostname address requires the WordPress cURL HTTP transport."
 msgstr "La vérification de l’adresse du nom d’hôte du site nécessite le transport HTTP cURL de WordPress."
 
+#: admin/modules/scanner/includes/class-controller.php:2518
+msgid "Scanner IP pinning requires a direct HTTP connection. Check your outgoing proxy settings."
+msgstr "L’épinglage de l’adresse IP par le scanner nécessite une connexion HTTP directe. Vérifiez les paramètres de votre proxy sortant."
+
 #: admin/modules/settings/api/class-api.php:365
 #: admin/modules/settings/includes/class-onboarding.php:160
 #: admin/modules/settings/includes/class-onboarding.php:349

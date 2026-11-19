@@ -378,6 +378,10 @@ Anything else keeps using the connection's own address and ignores forwarded hea
 
 Where no per-visitor address can be resolved, the per-connection limit on `[faz_dsar_form]` is **skipped** rather than applied to everyone at once: five submissions must never close the form for unrelated people for 24 hours, since GDPR Art. 12(2) requires the controller to facilitate requests. The site-wide limits and the one-per-address-per-hour limit still bound a flood, the hourly summary email says the per-connection limit is not in force, and `faz_dsar_max_per_ip_per_day` changes it (`0` switches it off).
 
+= How are FAZ tables removed when a multisite subsite is deleted? =
+
+With network activation, FAZ adds its tables to WordPress's deletion routine automatically. If FAZ is active only on individual subsites, copy `includes/multisite-cleanup.php` from the FAZ plugin directory to `wp-content/mu-plugins/faz-multisite-cleanup.php`, or to your configured must-use plugin directory. WordPress then loads the cleanup hook from Network Admin even when FAZ is inactive on the main site. The helper drops only the FAZ tables belonging to the subsite WordPress is deleting.
+
 = How do I run my own script when a category is consented? =
 
 Listen for `fazcookie_consent_ready` on `document`. It announces the initial consent state once on **every** page load and fires again with `action: 'update'` if the visitor changes consent on that page, so the code runs both where the visitor accepts and on every page afterwards:

@@ -3874,6 +3874,10 @@ msgstr "Fiksiranje statičke IP adrese zahtijeva WordPress cURL HTTP transport."
 msgid "Checking the site hostname address requires the WordPress cURL HTTP transport."
 msgstr "Provjera adrese naziva hosta web-mjesta zahtijeva WordPressov cURL HTTP prijenos."
 
+#: admin/modules/scanner/includes/class-controller.php:2518
+msgid "Scanner IP pinning requires a direct HTTP connection. Check your outgoing proxy settings."
+msgstr "Fiksiranje IP adrese skenera zahtijeva izravnu HTTP vezu. Provjerite postavke izlaznog proxy poslužitelja."
+
 #: admin/modules/settings/api/class-api.php:365
 #: admin/modules/settings/includes/class-onboarding.php:160
 #: admin/modules/settings/includes/class-onboarding.php:349
