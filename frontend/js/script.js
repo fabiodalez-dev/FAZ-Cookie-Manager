@@ -5418,8 +5418,8 @@ function _fazParkProven(el, name) {
 // such a tag is sent to the park-proofs route, which says whether this site
 // signed exactly those values. Only a confirmed tag, whose values have not
 // changed since, is given this page's key; the restore pass then runs again.
-// A tag is asked about once. Author-written proofs carry no valid signature
-// and are never confirmed.
+// An unavailable verifier gets one retry. A verdict is final for this
+// element, and only a positive verdict for its current values unblocks it.
 var _fazParkAsked = typeof WeakSet === "function" ? new WeakSet() : null;
 var _fazParkQueue = [];
 var _fazParkBusy = false;
@@ -5440,19 +5440,30 @@ function _fazParkItem(el) {
         sig: el.getAttribute("data-faz-park-sig") || ""
     };
 }
+function _fazFetchParkProofs(items, mayRetry) {
+    return Promise.resolve().then(function () {
+        return fetch(_fazStore._parkProofEndpoint, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items: items })
+        });
+    }).then(function (res) {
+        if (!res || res.status === 408 || res.status >= 500) throw new Error("Park proof verification unavailable");
+        return res && res.ok ? res.json() : null;
+    }).catch(function () {
+        if (!mayRetry) return null;
+        return new Promise(function (resolve) { setTimeout(resolve, 500); }).then(function () {
+            return _fazFetchParkProofs(items, false);
+        });
+    });
+}
 function _fazFlushParkVerify() {
     if (_fazParkBusy || !_fazParkQueue.length) return;
     _fazParkBusy = true;
     var els = _fazParkQueue.splice(0, 50);
     var items = els.map(_fazParkItem);
-    fetch(_fazStore._parkProofEndpoint, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: items })
-    }).then(function (res) {
-        return res && res.ok ? res.json() : null;
-    }).then(function (data) {
+    _fazFetchParkProofs(items, true).then(function (data) {
         var valid = data && Array.isArray(data.valid) ? data.valid : [];
         var confirmed = false;
         els.forEach(function (el, i) {

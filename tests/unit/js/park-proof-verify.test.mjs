@@ -9,8 +9,8 @@
  * pass now sends such a tag to POST /faz/v1/park-proofs and, for a tag the
  * route confirms and whose values have not changed since, gives it this
  * page's key and restores it. Unsigned (author-written) proofs are never
- * sent, a refusal or a failure leaves the tag parked, and a tag is asked
- * about once.
+ * sent and a refusal leaves the tag parked. A temporary failure is retried
+ * once without relaxing any of the proof checks.
  *
  * fetch() is a stub standing in for the route; what it answers is decided
  * per test, by signature.
@@ -43,7 +43,7 @@ function eq(label, actual, expected) {
   }
 }
 const ok = (label, cond) => eq(label, !!cond, true);
-const settle = () => new Promise((r) => setTimeout(r, 30));
+const settle = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 
 function page(body, { endpoint = ENDPOINT, answer = 'by-signature', beforeAnswer = null } = {}) {
   const dom = new JSDOM(`<!DOCTYPE html><html><head></head><body>${body}</body></html>`, { runScripts: 'outside-only', url: SITE });
@@ -52,7 +52,9 @@ function page(body, { endpoint = ENDPOINT, answer = 'by-signature', beforeAnswer
   window.fetch = (url, init) => {
     const sent = JSON.parse(init.body);
     calls.push({ url: String(url), method: init.method, items: sent.items });
-    if (answer === 'reject') return Promise.reject(new Error('offline'));
+    if (answer === 'reject' || (answer === 'offline-once' && calls.length === 1)) {
+      return Promise.reject(new Error('offline'));
+    }
     if (beforeAnswer) beforeAnswer(window);
     const valid = sent.items.map((it) => it.sig === GOOD);
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ valid }) });
@@ -130,11 +132,22 @@ console.log('\n2. refused, unsigned, failed or changed: stays parked');
   eq('and stays parked', w.document.getElementById('h').getAttribute('data-faz-style'), CSS);
 }
 {
-  const { window: w } = page(styleTag(GOOD), { answer: 'reject' });
+  const { window: w, calls } = page(styleTag(GOOD), { answer: 'reject' });
   consent(w);
   restore(w);
+  await settle(600);
+  restore(w);
   await settle();
-  eq('a failed request leaves the style parked', w.document.getElementById('h').getAttribute('data-faz-style'), CSS);
+  eq('a persistent failure is retried only once', calls.length, 2);
+  eq('a repeated failure leaves the style parked', w.document.getElementById('h').getAttribute('style'), '');
+}
+{
+  const { window: w, calls } = page(styleTag(GOOD), { answer: 'offline-once' });
+  consent(w);
+  restore(w);
+  await settle(600);
+  eq('a temporary failure is retried once', calls.length, 2);
+  eq('a valid proof received on retry restores the style', w.document.getElementById('h').getAttribute('style'), CSS);
 }
 {
   const { window: w } = page(styleTag(GOOD), {

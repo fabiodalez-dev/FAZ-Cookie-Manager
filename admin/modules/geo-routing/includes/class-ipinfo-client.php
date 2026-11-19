@@ -42,6 +42,8 @@ class Ipinfo_Client {
 	const BUDGET_KEY     = 'budget';
 	/** Default ceiling of new upstream lookups per hour (filterable). */
 	const LOOKUPS_PER_HOUR = 120;
+	/** Ceiling of new upstream lookups per hour for one IPv6 /64. */
+	const IPV6_LOOKUPS_PER_HOUR = 20;
 
 	/** HTTP status of the last lookup (0 for a transport failure). */
 	private $last_http_status = 0;
@@ -84,11 +86,9 @@ class Ipinfo_Client {
 			return array( 'vpn' => null, 'source' => 'skip' );
 		}
 
-		// Hash IP for cache key — Constitution VIII / NFR-03. An IPv6 client
-		// controls its whole /64, so the verdict is cached per /64 (what
-		// faz_ip_rate_bucket() returns): keyed on the exact address, walking
-		// the /64 minted a new upstream call and a new cache row per request.
-		$ip_hash = $this->hash_ip( function_exists( 'faz_ip_rate_bucket' ) ? faz_ip_rate_bucket( $ip ) : $ip );
+		// The provider classifies individual addresses, including within an
+		// IPv6 /64. Only the lookup budget is shared across the prefix.
+		$ip_hash = $this->hash_ip( $ip );
 
 		// Cache hit (after opt-in confirmed)? Without a persistent object
 		// cache, wp_cache_* lives for one request, so every anonymous page
@@ -121,7 +121,7 @@ class Ipinfo_Client {
 		// wp_options rows kept for a day. Past the ceiling the lookup is
 		// skipped (no VPN verdict, the geo rules decide without it), so the
 		// operator's quota and the options table are both bounded.
-		if ( ! $this->claim_lookup( $persistent ) ) {
+		if ( ! $this->claim_lookup( $persistent, $ip ) ) {
 			return array(
 				'vpn'         => null,
 				'source'      => 'error',
@@ -167,10 +167,11 @@ class Ipinfo_Client {
 	 * Not atomic: concurrent misses can overshoot by the number the server
 	 * runs at once, which is fine for a flood ceiling.
 	 *
-	 * @param bool $persistent Whether a persistent object cache is in use.
+	 * @param bool   $persistent Whether a persistent object cache is in use.
+	 * @param string $ip         Address to look up.
 	 * @return bool False when the hour's budget is spent.
 	 */
-	private function claim_lookup( $persistent ) {
+	private function claim_lookup( $persistent, $ip ) {
 		$max = function_exists( 'apply_filters' )
 			? (int) apply_filters( 'faz_ipinfo_lookups_per_hour', self::LOOKUPS_PER_HOUR )
 			: self::LOOKUPS_PER_HOUR;
@@ -178,27 +179,39 @@ class Ipinfo_Client {
 			return true; // 0 switches the ceiling off.
 		}
 		$now  = time();
-		$data = $this->cache_read( $persistent, self::BUDGET_KEY );
-		$start = is_array( $data ) && isset( $data['start'] ) ? (int) $data['start'] : 0;
-		$count = is_array( $data ) && isset( $data['n'] ) ? (int) $data['n'] : 0;
-		if ( ! $start || $now - $start >= 3600 ) {
-			$start = $now;
-			$count = 0;
-		}
-		if ( $count >= $max ) {
-			$this->budget_retry_after = max( 1, 3600 - ( $now - $start ) );
+		$site = $this->lookup_window( $persistent, self::BUDGET_KEY, $now );
+		if ( $site['n'] >= $max ) {
+			$this->budget_retry_after = $site['start'] + HOUR_IN_SECONDS - $now;
 			return false;
 		}
-		$this->cache_verdict(
-			$persistent,
-			self::BUDGET_KEY,
-			array(
-				'n'     => $count + 1,
-				'start' => $start,
-			),
-			max( 1, 3600 - ( $now - $start ) )
-		);
+		$bucket = function_exists( 'faz_ip_rate_bucket' ) ? faz_ip_rate_bucket( $ip ) : $ip;
+		if ( '/64' === substr( $bucket, -3 ) ) {
+			$key    = self::BUDGET_KEY . '_v6_' . $this->hash_ip( $bucket );
+			$prefix = $this->lookup_window( $persistent, $key, $now );
+			if ( $prefix['n'] >= self::IPV6_LOOKUPS_PER_HOUR ) {
+				$this->budget_retry_after = $prefix['start'] + HOUR_IN_SECONDS - $now;
+				return false;
+			}
+			$this->count_lookup( $persistent, $key, $prefix, $now );
+		}
+		$this->count_lookup( $persistent, self::BUDGET_KEY, $site, $now );
 		return true;
+	}
+
+	/** Read the active hourly window, or start one at the current time. */
+	private function lookup_window( $persistent, $key, $now ) {
+		$data  = $this->cache_read( $persistent, $key );
+		$start = is_array( $data ) ? (int) ( $data['start'] ?? 0 ) : 0;
+		if ( ! $start || $now - $start >= HOUR_IN_SECONDS ) {
+			return array( 'n' => 0, 'start' => $now );
+		}
+		return array( 'n' => (int) ( $data['n'] ?? 0 ), 'start' => $start );
+	}
+
+	/** Count an upstream lookup without extending the window. */
+	private function count_lookup( $persistent, $key, array $window, $now ) {
+		++$window['n'];
+		$this->cache_verdict( $persistent, $key, $window, $window['start'] + HOUR_IN_SECONDS - $now );
 	}
 
 	/**

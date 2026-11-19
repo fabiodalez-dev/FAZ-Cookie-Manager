@@ -337,14 +337,24 @@ $over = $budget_client->lookup( '203.0.113.9' );
 assert_eq( $over['vpn'], null, 'a new address past the ceiling gets no verdict' );
 assert_eq( $GLOBALS['_faz_test_http_calls'], 3, 'and costs no upstream call' );
 
-// An IPv6 client walking its /64 is one cache entry.
+// IPv6 verdicts belong to individual addresses. Only the budget is shared.
 $GLOBALS['_faz_test_cache']      = array();
 $GLOBALS['_faz_test_http_calls'] = 0;
 $GLOBALS['_faz_test_filters']['faz_ipinfo_lookups_per_hour'] = function () { return 100; };
-foreach ( array( '2001:db8:1:2::1', '2001:db8:1:2::2', '2001:db8:1:2:ffff::3' ) as $v6 ) {
-	$budget_client->lookup( $v6 );
+$first = $budget_client->lookup( '2001:db8:1:2::1' );
+$GLOBALS['_faz_test_http_stub']['body'] = '{"vpn":true}';
+$second = $budget_client->lookup( '2001:db8:1:2::2' );
+assert_false( $first['vpn'], 'the first address has its own VPN verdict' );
+assert_true( $second['vpn'], 'another address in the same /64 gets a different VPN verdict' );
+assert_eq( $second['source'], 'ipinfo', 'the other address goes to ipinfo' );
+for ( $index = 3; $index <= Ipinfo_Client::IPV6_LOOKUPS_PER_HOUR; ++$index ) {
+	$budget_client->lookup( '2001:db8:1:2::' . dechex( $index ) );
 }
-assert_eq( $GLOBALS['_faz_test_http_calls'], 1, 'three addresses in one IPv6 /64 cost one upstream call' );
+$over = $budget_client->lookup( '2001:db8:1:2::ffff' );
+assert_eq( $over['vpn'], null, 'a new address in an exhausted prefix gets no verdict' );
+assert_eq( $GLOBALS['_faz_test_http_calls'], Ipinfo_Client::IPV6_LOOKUPS_PER_HOUR, 'the prefix limit prevents another call' );
+assert_eq( $budget_client->lookup( '2001:db8:1:3::1' )['source'], 'ipinfo', 'another prefix can still make a lookup' );
+assert_false( $budget_client->lookup( '2001:db8:1:2::1' )['vpn'], 'cached verdicts remain available after the prefix hits its limit' );
 unset( $GLOBALS['_faz_test_filters']['faz_ipinfo_lookups_per_hour'], $GLOBALS['_faz_test_http_stub'] );
 
 // ---------- Summary ----------
