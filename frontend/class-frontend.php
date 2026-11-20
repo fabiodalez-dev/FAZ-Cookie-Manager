@@ -5640,6 +5640,12 @@ class Frontend {
 			@ini_set( 'pcre.recursion_limit', (string) $old_recursion ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,Squiz.PHP.DiscouragedFunctions.Discouraged -- restoring the original PCRE recursion_limit value (paired with the temporary raise above).
 		}
 
+		// WP Maps reads only opening tags, so it runs while script and style
+		// bodies, comments and <noscript> blocks are still stashed: a
+		// `<div class='wpgmp_map'>` written inside a JavaScript string is text,
+		// and rewriting it with double-quoted keys would end that string.
+		$html = $this->process_wpgmp_map_widgets( $html, $blocked_categories, $providers );
+
 		// Restore <noscript> blocks we stashed before the filter pass.
 		if ( ! empty( $noscript_stash ) ) {
 			$html = strtr( $html, $noscript_stash );
@@ -5663,7 +5669,6 @@ class Frontend {
 		$html = $this->process_social_embeds( $html, $blocked_categories );
 		$html = $this->process_elementor_video_widgets( $html, $blocked_categories, $providers );
 		$html = $this->process_bricks_map_widgets( $html, $blocked_categories, $providers );
-		$html = $this->process_wpgmp_map_widgets( $html, $blocked_categories, $providers );
 
 		// Put every srcdoc back, last of all, so no pass above — the embed
 		// detectors included — ever saw its markup.
@@ -14691,14 +14696,9 @@ class Frontend {
 		if ( faz_is_machine_readable_request() || wp_doing_cron() ) {
 			return $content;
 		}
-		if ( ! $this->template ) {
-			return $content;
-		}
-		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
-			return $content;
-		}
-		// AMP pages disallow custom scripts — content blocking is unnecessary.
-		if ( apply_filters( 'faz_is_amp_request', false ) ) {
+		// The rest of the stand-down, shared with every caller that promises
+		// something on this pass's behalf (wpgmp_consent_handled_by_faz()).
+		if ( ! $this->page_content_is_gated() ) {
 			return $content;
 		}
 
@@ -14786,6 +14786,10 @@ class Frontend {
 		}
 		$this->log_markup_pass_failure( $failed_passes, 'content filter' );
 
+		// Before the inert spans come back, as in the full-page buffer: a map
+		// div spelled inside a script body is not a map.
+		$content = $this->process_wpgmp_map_widgets( $content, $blocked_categories, $providers );
+
 		if ( ! empty( $inert_stash ) ) {
 			$content = strtr( $content, $inert_stash );
 		}
@@ -14798,7 +14802,6 @@ class Frontend {
 		// data-settings, so the generic <iframe> blocker above never sees one).
 		$content = $this->process_elementor_video_widgets( $content, $blocked_categories, $providers );
 		$content = $this->process_bricks_map_widgets( $content, $blocked_categories, $providers );
-		$content = $this->process_wpgmp_map_widgets( $content, $blocked_categories, $providers );
 
 		// Last, so no pass above can have written into the value: the marker
 		// goes back to the ORIGINAL token — `srcdoc=…` when the document is
@@ -15497,11 +15500,16 @@ class Frontend {
 		// The API tag WP Maps 5 enqueues (handle wpgmp-google-api).
 		$src    = 'id="wpgmp-google-api-js" src="https://maps.google.com/maps/api/js?callback=wpgmpInitMap"';
 		$google = true;
+		// Led by tag_token_skip(), as the img and iframe passes are: a
+		// `<div class="wpgmp_map">` quoted inside another tag's value (a tooltip
+		// library keeping HTML in an attribute) is not an element. Script and
+		// style bodies are not in the buffer at all when this runs (see the
+		// callers). Only the opening tag is read.
 		$result = preg_replace_callback(
-			'#<div\b(?=[^>]*\bwpgmp_map(?:_container)?\b)([^>]*)>#i',
+			'#' . self::tag_token_skip( 'div' ) . '<div(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
 			function ( $m ) use ( $src, $blocked_categories, $providers, &$google ) {
 				$attrs = $m[1];
-				if ( ! preg_match( '/\bclass\s*=\s*(["\'])(.*?)\1/is', $attrs, $class ) ) {
+				if ( false === stripos( $attrs, 'wpgmp_map' ) || ! preg_match( '/\bclass\s*=\s*(["\'])(.*?)\1/is', $attrs, $class ) ) {
 					return $m[0];
 				}
 				$classes = preg_split( '/\s+/', strtolower( trim( $class[2] ) ) );
@@ -15544,13 +15552,44 @@ class Frontend {
 	 * the next page load. Where this plugin gates the page, it already parks
 	 * the Maps API and shows its own placeholder until the visitor accepts (see
 	 * process_wpgmp_map_widgets()), so WP Maps is told to print the map.
-	 * Elsewhere — no banner on this page — WP Maps' own answer stands.
+	 * Elsewhere — wherever the content pass stands down (no banner, the banner
+	 * disabled or excluded on this page, script blocking excluded on this page,
+	 * AMP, a feed) — nothing parks the map, and WP Maps' own answer stands.
 	 *
 	 * @param bool $accepted WP Maps' answer so far.
 	 * @return bool
 	 */
 	public function wpgmp_consent_handled_by_faz( $accepted ) {
-		return $this->template ? true : (bool) $accepted;
+		return $this->page_content_is_gated() ? true : (bool) $accepted;
+	}
+
+	/**
+	 * Whether the content pass (filter_content_blocking() and the embed
+	 * detectors it runs) parks third-party markup on this request.
+	 *
+	 * One answer for every caller that has to agree with it, so a promise made
+	 * on the content pass's behalf — wpgmp_consent_handled_by_faz() telling WP
+	 * Maps the map is handled — cannot outlive a stand-down added here.
+	 *
+	 * @return bool
+	 */
+	protected function page_content_is_gated() {
+		if ( is_admin() ) {
+			return false;
+		}
+		// Never a machine-readable representation (feeds, REST, cron mail):
+		// see filter_content_blocking().
+		if ( faz_is_machine_readable_request() || wp_doing_cron() ) {
+			return false;
+		}
+		if ( ! $this->template ) {
+			return false;
+		}
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
+			return false;
+		}
+		// AMP pages disallow custom scripts — content blocking is unnecessary.
+		return ! apply_filters( 'faz_is_amp_request', false );
 	}
 
 	/**

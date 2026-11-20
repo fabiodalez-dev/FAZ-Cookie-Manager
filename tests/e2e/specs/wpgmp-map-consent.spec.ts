@@ -61,12 +61,17 @@ function container(id: number, provider: string): string {
 // .wpgmp_map on the page, and records whether the box had a size then.
 const INIT = "function wpgmpInitMap(){document.querySelectorAll('.wpgmp_map').forEach(function(m){m.setAttribute('data-map-drawn',m.offsetHeight>0?'visible':'hidden');});}";
 
+const TEMPLATE_IN_JS = "<div class='wpgmp_map' id='map9' data-map-id='9'></div>";
+
 function pageContent(): string {
   return (
     '<!-- wp:html -->' +
     container(1, 'google') +
     container(2, 'leaflet') +
     `<script>${INIT}</script>` +
+    // A map div spelled inside a JavaScript string is text: the blocker must
+    // not rewrite it, or its double-quoted keys end the string.
+    `<script>window.fazTpl = "${TEMPLATE_IN_JS}";</script>` +
     '<script id="wpgmp-google-api-js" src="https://maps.google.com/maps/api/js?key=E2E&amp;loading=async&amp;callback=wpgmpInitMap&amp;ver=5.0.3"></script>' +
     '<!-- /wp:html -->'
   );
@@ -99,6 +104,7 @@ test.describe('WP Maps Google map: placeholder before consent, map after', () =>
       await page.waitForTimeout(500);
       expect(googleRequests(), 'the Maps API is not requested before consent').toBe(0);
       await expect(googleMap(page)).not.toHaveAttribute('data-map-drawn', /.*/);
+      expect(await page.evaluate(() => (window as unknown as { fazTpl?: string }).fazTpl), 'a map div inside a script string is left as written').toBe(TEMPLATE_IN_JS);
     } finally {
       await ctx.close();
     }

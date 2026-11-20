@@ -122,7 +122,28 @@ if ( ! function_exists( 'get_transient' ) ) {
 	}
 	if ( ! function_exists( 'apply_filters' ) ) {
 		function apply_filters( $tag, $value ) {
-			return $value;
+			return array_key_exists( $tag, $GLOBALS['__faz_filters'] ?? array() ) ? $GLOBALS['__faz_filters'][ $tag ] : $value;
+		}
+	}
+	// The request context page_content_is_gated() reads, one switch each.
+	if ( ! function_exists( 'is_admin' ) ) {
+		function is_admin() {
+			return ! empty( $GLOBALS['__faz_ctx']['admin'] );
+		}
+	}
+	if ( ! function_exists( 'wp_doing_cron' ) ) {
+		function wp_doing_cron() {
+			return ! empty( $GLOBALS['__faz_ctx']['cron'] );
+		}
+	}
+	if ( ! function_exists( 'faz_is_machine_readable_request' ) ) {
+		function faz_is_machine_readable_request() {
+			return ! empty( $GLOBALS['__faz_ctx']['feed'] );
+		}
+	}
+	if ( ! function_exists( 'faz_disable_banner' ) ) {
+		function faz_disable_banner() {
+			return ! empty( $GLOBALS['__faz_ctx']['disable_banner'] );
 		}
 	}
 	if ( ! function_exists( 'faz_get_valid_consent_cookie' ) ) {
@@ -151,6 +172,17 @@ if ( ! function_exists( 'get_transient' ) ) {
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 
 	use FazCookie\Frontend\Frontend;
+
+	// The two per-page exclusions read settings this harness does not build;
+	// each is answered from the same switchboard as the request context.
+	class FazTest_Gated_Frontend extends Frontend {
+		protected function is_banner_disabled_by_settings() {
+			return ! empty( $GLOBALS['__faz_ctx']['banner_excluded'] );
+		}
+		protected function is_blocking_disabled_for_page() {
+			return ! empty( $GLOBALS['__faz_ctx']['blocking_excluded'] );
+		}
+	}
 
 	// ---------- assert helpers ----------
 
@@ -435,14 +467,37 @@ if ( ! function_exists( 'get_transient' ) ) {
 	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: svc.google-maps:no keeps the map blocked although Functional is accepted' );
 	$fe = faz_arrange( 'consentid:x,consent:yes,action:yes,functional:no,svc.google-maps:yes', true );
 	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'functional' ), $wpgmp_rule ) ), $wpgmp_map, 'WP Maps: svc.google-maps:yes loads the map although Functional is denied' );
-	// WP Maps' own "Cookies Acceptance" gate is answered by FAZ wherever FAZ
-	// gates the page: the map markup is printed and FAZ parks the API.
-	$fe = faz_arrange( '', false );
-	faz_set_prop( $fe, 'template', array( 'html' => '<div></div>' ) );
-	assert_eq( faz_call( $fe, 'wpgmp_consent_handled_by_faz', array( false ) ), true, 'WP Maps gate: answered true where FAZ gates the page' );
-	faz_set_prop( $fe, 'template', null );
-	assert_eq( faz_call( $fe, 'wpgmp_consent_handled_by_faz', array( false ) ), false, 'WP Maps gate: left alone where FAZ shows no banner' );
-	assert_eq( faz_call( $fe, 'wpgmp_consent_handled_by_faz', array( true ) ), true, 'WP Maps gate: …in both directions' );
+	// A map div quoted inside another tag's value (a tooltip library keeping
+	// HTML in an attribute) is text, not an element: rewriting it with
+	// double-quoted keys would close the value early.
+	$fe     = faz_arrange( '', false );
+	$quoted = '<span data-tip="<div class=\'wpgmp_map\' id=\'map7\'></div>">tip</span>';
+	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $quoted, array( 'functional' ), $wpgmp_rule ) ), $quoted, 'WP Maps: a map div quoted inside an attribute value is left alone' );
+	// WP Maps' own "Cookies Acceptance" gate is answered by FAZ only where the
+	// content pass parks the map: everywhere else nothing would stop the Maps
+	// API, and WP Maps' own answer has to stand.
+	$gate = ( new ReflectionClass( 'FazTest_Gated_Frontend' ) )->newInstanceWithoutConstructor();
+	faz_set_prop( $gate, 'template', array( 'html' => '<div></div>' ) );
+	$GLOBALS['__faz_ctx'] = array();
+	assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( false ) ), true, 'WP Maps gate: answered true where FAZ gates the page' );
+	foreach ( array(
+		'banner_excluded'   => 'the banner is excluded on this page',
+		'blocking_excluded' => 'script blocking is excluded on this page',
+		'disable_banner'    => 'faz_disable_banner() is true',
+		'admin'             => 'an admin screen',
+		'feed'              => 'a feed or other machine-readable request',
+		'cron'              => 'a cron run',
+	) as $switch => $label ) {
+		$GLOBALS['__faz_ctx'] = array( $switch => true );
+		assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( false ) ), false, "WP Maps gate: left alone where {$label}" );
+		assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( true ) ), true, "WP Maps gate: …WP Maps' own yes stands there too ({$switch})" );
+	}
+	$GLOBALS['__faz_ctx']     = array();
+	$GLOBALS['__faz_filters'] = array( 'faz_is_amp_request' => true );
+	assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( false ) ), false, 'WP Maps gate: left alone on an AMP page' );
+	$GLOBALS['__faz_filters'] = array();
+	faz_set_prop( $gate, 'template', null );
+	assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( false ) ), false, 'WP Maps gate: left alone where FAZ shows no banner' );
 
 	echo "\n";
 	echo "  Passed: {$tests_passed}\n";
