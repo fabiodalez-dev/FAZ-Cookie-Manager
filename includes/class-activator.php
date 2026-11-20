@@ -133,7 +133,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.10.18.1';
+	const MIGRATIONS_VERSION = '2026.11.14.2';
 
 	/**
 	 * Continuation event of the created_at_gmt backfill on large tables.
@@ -193,6 +193,7 @@ class Activator {
 			self::clear_necessary_optout_flags();
 			self::normalize_legacy_functional_optout_flags();
 			self::move_sourcebuster_to_marketing();
+			$all_complete = self::move_divi_editor_cookies_to_internal() && $all_complete;
 			self::reset_stale_per_cookie_consent();
 			$all_complete = self::refresh_necessary_disclosure_text() && $all_complete;
 			self::demote_bulky_autoloaded_options();
@@ -2694,6 +2695,87 @@ class Activator {
 			);
 		}
 		update_option( 'faz_move_sourcebuster_marketing_done', 1, false );
+	}
+
+	/**
+	 * File the Divi Builder editor cookies already in the list as internal.
+	 *
+	 * Until 1.39.0 a scan run from an editor's browser stored each
+	 * `et-saved-post-{ID}-bb` (and the other editor cookies, see
+	 * Frontend::DIVI_EDITOR_COOKIE_PREFIXES) under Uncategorized, one row per
+	 * edited post. Visitors stopped seeing them as soon as the frontend
+	 * learned the prefixes; this moves the stored rows too, so the admin list
+	 * and the uncategorized warnings agree with what visitors see. Only rows
+	 * still in Uncategorized are moved: a row someone put in a category on
+	 * purpose stays where it is.
+	 *
+	 * @return bool Whether the migration is complete.
+	 */
+	public static function move_divi_editor_cookies_to_internal() {
+		if ( get_option( 'faz_move_divi_editor_internal_done' ) ) {
+			return true;
+		}
+		global $wpdb;
+		$cookies    = $wpdb->prefix . 'faz_cookies';
+		$categories = $wpdb->prefix . 'faz_cookie_categories';
+		foreach ( array( $cookies, $categories ) as $table ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the activation/upgrade path.
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+				return false;
+			}
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $categories is $wpdb->prefix + literal (escaped via esc_sql); slug bound via %s; one-shot migration read.
+		$internal = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT category_id FROM `' . esc_sql( $categories ) . '` WHERE slug = %s', 'wordpress-internal' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- same table and justification as above.
+		$uncategorized = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT category_id FROM `' . esc_sql( $categories ) . '` WHERE slug = %s', 'uncategorized' ) );
+		if ( $internal <= 0 || $uncategorized <= 0 ) {
+			// The prerequisite category creation or lookup can fail temporarily.
+			// With no editor cookie stored there is nothing to wait for: new
+			// scans already file them as internal, so finish instead of holding
+			// the whole migration batch back on every admin request.
+			$pending = 0;
+			foreach ( \FazCookie\Frontend\Frontend::DIVI_EDITOR_COOKIE_PREFIXES as $prefix ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $cookies is $wpdb->prefix + literal (escaped via esc_sql); value bound via prepare(); one-shot migration read.
+				$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM `' . esc_sql( $cookies ) . '` WHERE name LIKE %s', $wpdb->esc_like( $prefix ) . '%' ) );
+				if ( null === $count ) {
+					// A failed COUNT is not zero rows: finishing here would set the
+					// marker and strand an editor cookie in Uncategorized for good.
+					return false;
+				}
+				$pending += (int) $count;
+			}
+			if ( 0 === $pending ) {
+				return update_option( 'faz_move_divi_editor_internal_done', 1, false )
+					|| (bool) get_option( 'faz_move_divi_editor_internal_done' );
+			}
+			return false;
+		}
+		$moved = 0;
+		foreach ( \FazCookie\Frontend\Frontend::DIVI_EDITOR_COOKIE_PREFIXES as $prefix ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $cookies is $wpdb->prefix + literal (escaped via esc_sql); every value bound via prepare(); one-shot idempotent migration write.
+			$n = $wpdb->query(
+				$wpdb->prepare(
+					'UPDATE `' . esc_sql( $cookies ) . '` SET category = %d WHERE name LIKE %s AND category = %d',
+					$internal,
+					$wpdb->esc_like( $prefix ) . '%',
+					$uncategorized
+				)
+			);
+			if ( false === $n ) {
+				if ( $moved > 0 ) {
+					Cookie_Controller::get_instance()->delete_cache();
+				}
+				// Throw so run_pending_migrations() withholds the version marker
+				// and the move is retried on the next admin load.
+				throw new \RuntimeException( 'FAZ: failed to move the Divi editor cookies to WordPress Internal; migration will retry.' );
+			}
+			$moved += (int) $n;
+		}
+		if ( $moved > 0 ) {
+			Cookie_Controller::get_instance()->delete_cache();
+		}
+		return update_option( 'faz_move_divi_editor_internal_done', 1, false )
+			|| (bool) get_option( 'faz_move_divi_editor_internal_done' );
 	}
 
 	/**
