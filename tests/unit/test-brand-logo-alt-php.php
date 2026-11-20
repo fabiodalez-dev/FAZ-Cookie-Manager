@@ -19,6 +19,19 @@ namespace FazCookie\Includes {
 	}
 }
 
+namespace FazCookie\Admin\Modules\Banners\Includes {
+	// The banners the alt listener checks the edited image against.
+	class Controller {
+		public static $items = array();
+		public static function get_instance() {
+			return new self();
+		}
+		public function get_items() {
+			return self::$items;
+		}
+	}
+}
+
 namespace {
 
 	if ( ! defined( 'ABSPATH' ) ) {
@@ -94,11 +107,18 @@ namespace {
 	$GLOBALS['faz_test_filters'] = array();
 
 	echo "\n== The cached template is rebuilt when an alt changes ==\n";
-	Banners::maybe_flush_on_alt_change( 7, 41, '_wp_attachment_image_alt' );
-	check( 1 === $GLOBALS['faz_test_cleared'], 'an alt write clears the template cache' );
-	Banners::maybe_flush_on_alt_change( 8, 41, '_wp_attached_file' );
-	Banners::maybe_flush_on_alt_change( 9, 41, '_edit_lock' );
-	check( 1 === $GLOBALS['faz_test_cleared'], 'any other meta key leaves it alone' );
+	$logo_banner = function ( $url, $status = true ) {
+		return (object) array( 'settings' => array( 'config' => array( 'notice' => array( 'elements' => array( 'brandLogo' => array( 'status' => $status, 'meta' => array( 'url' => $url ) ) ) ) ) ) );
+	};
+	\FazCookie\Admin\Modules\Banners\Includes\Controller::$items = array( 1 => $logo_banner( $up . 'no-alt.png', false ), 2 => $logo_banner( $up . 'acme-logo-300x100.png' ) );
+	check( true === Banners::maybe_flush_on_alt_change( 7, 41, '_wp_attachment_image_alt' ), "the logo's own alt: it says to purge the page cache" );
+	check( 1 === $GLOBALS['faz_test_cleared'], 'and clears the template cache' );
+	check( false === Banners::maybe_flush_on_alt_change( 7, 42, '_wp_attachment_image_alt' ), 'the alt of an image no banner shows (or shows with the logo off): no page purge' );
+	check( 2 === $GLOBALS['faz_test_cleared'], 'but the template is still rebuilt' );
+	check( false === Banners::maybe_flush_on_alt_change( 8, 41, '_wp_attached_file' ) && false === Banners::maybe_flush_on_alt_change( 9, 41, '_edit_lock' ), 'any other meta key: no purge' );
+	check( 2 === $GLOBALS['faz_test_cleared'], 'and no template rebuild' );
+	\FazCookie\Admin\Modules\Banners\Includes\Controller::$items = array();
+	check( false === Banners::maybe_flush_on_alt_change( 7, 41, '_wp_attachment_image_alt' ), 'no banner with a logo: no purge' );
 	// Hooked on every request by Admin::__construct(), not by Banners::init():
 	// the attachment edit screen saves through post.php, where the admin
 	// modules are not loaded (constructing Admin here would boot the plugin).
@@ -106,7 +126,8 @@ namespace {
 	$ctor  = substr( $admin, (int) strpos( $admin, 'public function __construct(' ) );
 	$ctor  = substr( $ctor, 0, (int) strpos( $ctor, "\n\t}\n" ) );
 	check( 1 === preg_match( "/array\\(\\s*'added_post_meta',\\s*'updated_post_meta',\\s*'deleted_post_meta'\\s*\\)/", $ctor ), 'Admin::__construct() hooks added, updated and deleted post meta' );
-	check( false !== strpos( $ctor, "Banners::class, 'maybe_flush_on_alt_change' ), 10, 3 )" ), 'with the static callback and its three arguments' );
+	check( false !== strpos( $ctor, "array( \$this, 'on_attachment_alt_change' ), 10, 3 )" ), 'with on_attachment_alt_change() and its three arguments' );
+	check( 1 === preg_match( "/function on_attachment_alt_change\\(.*?Banners::maybe_flush_on_alt_change\\(.*?has_action\\( 'faz_purge_page_cache' \\).*?load_cache_module\\(\\).*?do_action\\( 'faz_purge_page_cache' \\)/s", $admin ), 'which loads the cache module where it is missing and purges cached pages for a logo' );
 	$banners_src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/banners/class-banners.php' );
 	check( false === strpos( $banners_src, "add_action( \$hook, array( \$this, 'maybe_flush_on_alt_change' )" ), 'Banners::init() no longer registers a second copy' );
 

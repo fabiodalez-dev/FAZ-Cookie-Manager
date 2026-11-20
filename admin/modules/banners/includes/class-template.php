@@ -955,6 +955,30 @@ class Template {
 	}
 
 	/**
+	 * Media Library attachment a brand logo URL points to.
+	 *
+	 * A URL to one of the image's generated sizes (`logo-300x100.png`) is
+	 * retried as the original, which is what attachment_url_to_postid() knows.
+	 *
+	 * @param string $url Logo URL from the banner config.
+	 * @return int Attachment id, 0 for an external URL or none.
+	 */
+	public static function brand_logo_attachment_id( $url ) {
+		$url = preg_replace( '/[?#].*$/', '', trim( (string) $url ) );
+		if ( '' === $url || '#' === $url || ! function_exists( 'attachment_url_to_postid' ) ) {
+			return 0;
+		}
+		$id = (int) attachment_url_to_postid( $url );
+		if ( $id <= 0 ) {
+			$original = preg_replace( '/-\d+x\d+(?=\.[a-z0-9]+$)/i', '', $url );
+			if ( $original !== $url ) {
+				$id = (int) attachment_url_to_postid( $original );
+			}
+		}
+		return max( 0, $id );
+	}
+
+	/**
 	 * Alt text of the Media Library image a brand logo URL points to.
 	 *
 	 * The logo setting stores only the URL, so the attachment is looked up
@@ -968,18 +992,9 @@ class Template {
 	 */
 	public static function brand_logo_alt( $url ) {
 		$alt = '';
-		$url = preg_replace( '/[?#].*$/', '', trim( (string) $url ) );
-		if ( '' !== $url && '#' !== $url && function_exists( 'attachment_url_to_postid' ) ) {
-			$id = (int) attachment_url_to_postid( $url );
-			if ( $id <= 0 ) {
-				$original = preg_replace( '/-\d+x\d+(?=\.[a-z0-9]+$)/i', '', $url );
-				if ( $original !== $url ) {
-					$id = (int) attachment_url_to_postid( $original );
-				}
-			}
-			if ( $id > 0 ) {
-				$alt = trim( wp_strip_all_tags( (string) get_post_meta( $id, '_wp_attachment_image_alt', true ) ) );
-			}
+		$id  = self::brand_logo_attachment_id( $url );
+		if ( $id > 0 ) {
+			$alt = trim( wp_strip_all_tags( (string) get_post_meta( $id, '_wp_attachment_image_alt', true ) ) );
 		}
 		/**
 		 * Filter the alt text of the banner's brand logo.

@@ -87,7 +87,7 @@ class Admin {
 		// rebuild it. Hooked here, on every request, because the attachment
 		// edit screen saves through post.php, where the modules are not loaded.
 		foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $alt_hook ) {
-			add_action( $alt_hook, array( \FazCookie\Admin\Modules\Banners\Banners::class, 'maybe_flush_on_alt_change' ), 10, 3 );
+			add_action( $alt_hook, array( $this, 'on_attachment_alt_change' ), 10, 3 );
 		}
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
 		if ( is_multisite() ) {
@@ -218,6 +218,26 @@ class Admin {
 		// if WordPress processes a REST request that was not detected above
 		// (e.g. internal REST calls without REST_REQUEST defined).
 		add_action( 'rest_api_init', array( $this, 'load_modules' ), 1 );
+	}
+
+	/**
+	 * Rebuild the banner, and purge cached pages when the edited image is a
+	 * banner's logo, after an attachment's alt text changes (#404).
+	 *
+	 * @param int|int[] $meta_id   Meta id(s).
+	 * @param int       $object_id Post id.
+	 * @param string    $meta_key  Meta key.
+	 * @return void
+	 */
+	public function on_attachment_alt_change( $meta_id, $object_id, $meta_key ) {
+		if ( ! \FazCookie\Admin\Modules\Banners\Banners::maybe_flush_on_alt_change( $meta_id, $object_id, $meta_key ) ) {
+			return;
+		}
+		// post.php does not load the modules, so nothing would hear the purge.
+		if ( ! has_action( 'faz_purge_page_cache' ) ) {
+			$this->load_cache_module();
+		}
+		do_action( 'faz_purge_page_cache' );
 	}
 
 	/**

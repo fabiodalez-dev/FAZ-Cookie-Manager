@@ -54,15 +54,45 @@ class Banners extends Modules {
 	 * full attachment edit screen saves the alt through post.php, where the
 	 * admin modules are not loaded.
 	 *
+	 * Returns whether the image is a banner's logo, so the caller purges the
+	 * page cache only then: pages cached with the banner keep the old alt, but
+	 * an alt edited on any other image must not empty the whole cache.
+	 *
 	 * @param int|int[] $meta_id   Meta id(s).
 	 * @param int       $object_id Post id.
 	 * @param string    $meta_key  Meta key.
-	 * @return void
+	 * @return bool True when the image is shown as a banner's brand logo.
 	 */
 	public static function maybe_flush_on_alt_change( $meta_id, $object_id, $meta_key ) {
-		if ( '_wp_attachment_image_alt' === $meta_key && function_exists( 'faz_clear_banner_template_cache' ) ) {
+		if ( '_wp_attachment_image_alt' !== $meta_key ) {
+			return false;
+		}
+		if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
 			faz_clear_banner_template_cache();
 		}
+		return self::is_brand_logo_attachment( (int) $object_id );
+	}
+
+	/**
+	 * Whether an attachment is the brand logo shown by any banner.
+	 *
+	 * @param int $attachment_id Attachment id.
+	 * @return bool
+	 */
+	public static function is_brand_logo_attachment( $attachment_id ) {
+		if ( $attachment_id <= 0 ) {
+			return false;
+		}
+		foreach ( (array) Controller::get_instance()->get_items() as $banner ) {
+			$logo = isset( $banner->settings['config']['notice']['elements']['brandLogo'] ) ? $banner->settings['config']['notice']['elements']['brandLogo'] : null;
+			if ( ! is_array( $logo ) || empty( $logo['status'] ) || empty( $logo['meta']['url'] ) ) {
+				continue;
+			}
+			if ( Template::brand_logo_attachment_id( (string) $logo['meta']['url'] ) === $attachment_id ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
