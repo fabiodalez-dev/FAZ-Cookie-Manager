@@ -7,7 +7,13 @@
  * @package FazCookie
  */
 
-if ( ! defined( 'ABSPATH' ) || ! is_multisite() ) {
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+// Single site: nothing to clean up. `return`, not `exit`: the plugin
+// bootstrap includes this file on every request.
+if ( ! is_multisite() ) {
 	return;
 }
 
