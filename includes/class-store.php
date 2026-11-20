@@ -129,6 +129,43 @@ abstract class Store {
 	}
 
 	/**
+	 * Whether the migration has completed, read from the database itself.
+	 *
+	 * get_option() answers from the options cache loaded at the start of the
+	 * request (or from a persistent object cache), so it cannot see a migration
+	 * another request finished meanwhile. The export, the import and the
+	 * migration's own re-check after taking its lock need the committed state.
+	 *
+	 * @return bool
+	 */
+	public static function text_unslashed_in_db() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- must bypass the options cache to see another request's commit.
+		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s", self::TEXT_UNSLASHED_OPTION ) );
+	}
+
+	/**
+	 * Run the one-time unslash migration now if it is still pending.
+	 *
+	 * The import and the export cannot wait for the next admin page load: a
+	 * clean file written into rows the migration has not converted yet would
+	 * lose a real backslash when it runs.
+	 *
+	 * @return bool True when the stored text is in the clean form.
+	 */
+	public static function ensure_text_unslashed() {
+		if ( self::text_unslashed_in_db() ) {
+			return true;
+		}
+		try {
+			Activator::unslash_cookie_text();
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+		return self::text_unslashed_in_db();
+	}
+
+	/**
 	 * Undo the legacy slashing on a value read from the database, only while the
 	 * one-time migration has not run yet.
 	 *

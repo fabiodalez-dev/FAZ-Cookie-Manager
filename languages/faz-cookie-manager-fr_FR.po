@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: faz-cookie-manager\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-11-10T23:19:43+00:00\n"
+"POT-Creation-Date: 2026-11-11T00:18:43+00:00\n"
 "PO-Revision-Date: 2026-03-23\n"
 "Last-Translator: Pascal (contributed by user pascalminator)\n"
 "Language-Team: French\n"
@@ -3955,6 +3955,14 @@ msgstr "Repli sûr : le jeu de règles RGPD strict n'a pas pu être chargé ; ce
 #: admin/modules/settings/api/class-api.php:938
 msgid "Invalid export file."
 msgstr "Fichier d'exportation non valide."
+
+#: admin/modules/settings/api/class-api.php:933
+msgid "The cookie texts were being upgraded while the export was read. Please export again."
+msgstr ""
+
+#: admin/modules/settings/api/class-api.php:965
+msgid "The cookie texts are being upgraded. Please try the import again in a minute."
+msgstr ""
 
 #: admin/modules/settings/api/class-api.php:1011
 msgid "Failed to import banners. Transaction rolled back."

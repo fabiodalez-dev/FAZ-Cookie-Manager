@@ -64,7 +64,21 @@ if ( ! defined( 'ARRAY_A' ) ) {
 $GLOBALS['faz_test_options'] = array();
 
 function get_option( $name, $default = false ) {
-	return array_key_exists( $name, $GLOBALS['faz_test_options'] ) ? $GLOBALS['faz_test_options'][ $name ] : $default;
+	if ( array_key_exists( $name, $GLOBALS['faz_test_options'] ) ) {
+		return $GLOBALS['faz_test_options'][ $name ];
+	}
+	// The migration writes its flag with SQL inside its transaction, so the
+	// stub falls back to the test database the way the options API reads it.
+	if ( isset( $GLOBALS['wpdb'] ) && $GLOBALS['wpdb'] instanceof Faz_Sqlite_Wpdb ) {
+		$value = $GLOBALS['wpdb']->get_var( "SELECT option_value FROM wp_options WHERE option_name = '" . str_replace( "'", "''", $name ) . "'" );
+		return null === $value ? $default : $value;
+	}
+	return $default;
+}
+$GLOBALS['faz_test_cache_deletes'] = array();
+function wp_cache_delete( $key, $group = '' ) {
+	$GLOBALS['faz_test_cache_deletes'][] = $group . ':' . $key;
+	return true;
 }
 function update_option( $name, $value, $autoload = null ) {
 	$GLOBALS['faz_test_options'][ $name ] = $value;
@@ -110,6 +124,9 @@ class Faz_Sqlite_Wpdb {
 	public $prefix  = 'wp_';
 	public $options = 'wp_options';
 	public $fail_updates = false;
+	public $fail_queries = array(); // Exact statements that return false.
+	public $fail_reads   = false;   // Reads of the categories table report an error.
+	public $last_error   = '';
 	public $pdo;
 	public $log = array();
 
@@ -134,6 +151,7 @@ class Faz_Sqlite_Wpdb {
 	private function sqlite( $query ) {
 		$query = str_replace( '`', '"', $query );
 		$query = preg_replace( '/^INSERT IGNORE INTO/', 'INSERT OR IGNORE INTO', $query );
+		$query = str_replace( 'ON DUPLICATE KEY UPDATE', 'ON CONFLICT("option_name") DO UPDATE SET', $query );
 		return 'START TRANSACTION' === $query ? 'BEGIN' : $query;
 	}
 	public function get_var( $query ) {
@@ -146,10 +164,22 @@ class Faz_Sqlite_Wpdb {
 		return false === $value ? null : $value;
 	}
 	public function get_results( $query, $output = ARRAY_A ) {
+		$this->last_error = '';
+		// wpdb::get_results() hands back an empty array when the query fails.
+		if ( $this->fail_reads && false !== strpos( $query, 'wp_faz_cookie_categories' ) ) {
+			$this->last_error = 'Table is marked as crashed';
+			return array();
+		}
 		return $this->pdo->query( $this->sqlite( $query ) )->fetchAll( PDO::FETCH_ASSOC );
 	}
 	public function query( $query ) {
 		$this->log[] = $query;
+		$this->last_error = '';
+		foreach ( $this->fail_queries as $prefix ) {
+			if ( 0 === strpos( $query, $prefix ) ) {
+				return false;
+			}
+		}
 		if ( $this->fail_updates && 0 === strpos( $query, 'UPDATE `wp_faz_cookie_categories`' ) ) {
 			return false;
 		}
@@ -312,7 +342,8 @@ sl_eq( sl_cookie( $db, 4 ), "Visitor's legacy plain text", 'a legacy plain-strin
 sl_eq( sl_col( $db, 'wp_faz_cookies', 'cookie_id', 5, 'description' ), null, 'NULL columns are left alone' );
 sl_eq( sl_cat( $db, 1, 'description' )['en'], "Can't be switched off", 'category description unslashed' );
 sl_eq( sl_cat( $db, 2, 'name' )['en'], "Partners' cookies", 'category name unslashed' );
-sl_eq( get_option( Store::TEXT_UNSLASHED_OPTION ), 1, 'the completion flag is written' );
+sl_eq( Store::text_unslashed_in_db(), true, 'the completion flag is written' );
+sl_eq( in_array( 'options:alloptions', $GLOBALS['faz_test_cache_deletes'], true ), true, 'and the cached options are dropped so get_option() sees it' );
 sl_eq( Store::legacy_slashes_pending(), false, 'and the getters stop unslashing' );
 sl_eq( null === $db->get_var( "SELECT option_value FROM wp_options WHERE option_name = 'faz_cookie_text_unslash_lock'" ), true, 'the mutex is released' );
 sl_eq( \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::$busts > 0, true, 'the cookie caches are busted' );
@@ -351,6 +382,91 @@ $db->fail_updates = false;
 sl_eq( Activator::unslash_cookie_text(), true, 'the retry succeeds' );
 sl_eq( sl_cookie( $db, 2 )['en'], 'Path C:\\temp', 'and strips exactly once' );
 
+// The flag is written inside the transaction: a COMMIT that fails leaves
+// neither converted rows nor a flag, so the retry converts them exactly once.
+$db = sl_site();
+$db->fail_queries = array( 'COMMIT' );
+$threw = false;
+try {
+	Activator::unslash_cookie_text();
+} catch ( \RuntimeException $e ) {
+	$threw = true;
+}
+sl_eq( $threw, true, 'a failed COMMIT throws' );
+sl_eq( Store::text_unslashed_in_db(), false, 'and no flag survives it' );
+sl_eq( sl_cookie( $db, 1 )['en'], "It\\'s the visitor\\'s id", 'nor converted rows' );
+$flag_at = null;
+foreach ( $db->log as $i => $q ) {
+	if ( false !== strpos( $q, 'ON DUPLICATE KEY UPDATE' ) ) {
+		$flag_at = $i;
+	}
+}
+$commit_at = array_search( 'COMMIT', $db->log, true );
+sl_eq( null !== $flag_at && false !== $commit_at && $flag_at < $commit_at, true, 'the flag is written before the COMMIT, in the same transaction' );
+$db->fail_queries = array();
+sl_eq( Activator::unslash_cookie_text(), true, 'the retry succeeds' );
+sl_eq( sl_cookie( $db, 2 )['en'], 'Path C:\\temp', 'and strips exactly once' );
+
+// The flag write itself fails: rolled back, no flag, no rows.
+$db = sl_site();
+$db->fail_queries = array( 'INSERT INTO `wp_options`' );
+$threw = false;
+try {
+	Activator::unslash_cookie_text();
+} catch ( \RuntimeException $e ) {
+	$threw = true;
+}
+sl_eq( $threw, true, 'a flag that cannot be written throws, so the batch withholds its marker' );
+sl_eq( sl_cookie( $db, 1 )['en'], "It\\'s the visitor\\'s id", 'and the rows are rolled back with it' );
+
+// START TRANSACTION fails: nothing is written outside a transaction.
+$db = sl_site();
+$db->fail_queries = array( 'START TRANSACTION' );
+$threw = false;
+try {
+	Activator::unslash_cookie_text();
+} catch ( \RuntimeException $e ) {
+	$threw = true;
+}
+sl_eq( $threw, true, 'a transaction that cannot start throws' );
+sl_eq( sl_cookie( $db, 1 )['en'], "It\\'s the visitor\\'s id", 'before any row is rewritten' );
+sl_eq( null === $db->get_var( "SELECT option_value FROM wp_options WHERE option_name = 'faz_cookie_text_unslash_lock'" ), true, 'and the mutex is released' );
+
+// A failed read looks like an empty table to is_array(); last_error tells them apart.
+$db = sl_site();
+$db->fail_reads = true;
+$threw = false;
+try {
+	Activator::unslash_cookie_text();
+} catch ( \RuntimeException $e ) {
+	$threw = true;
+}
+sl_eq( $threw, true, 'a categories read that fails is not taken for an empty table' );
+sl_eq( sl_cookie( $db, 1 )['en'], "It\\'s the visitor\\'s id", 'the cookie rows converted before it are rolled back' );
+sl_eq( Store::text_unslashed_in_db(), false, 'and no flag is written' );
+sl_eq( null === $db->get_var( "SELECT option_value FROM wp_options WHERE option_name = 'faz_cookie_text_unslash_lock'" ), true, 'and the mutex is released' );
+
+// Another request finished between this request's flag read and its claim:
+// the cached read said pending, the database says done.
+$db = sl_site();
+$db->pdo->exec( "INSERT INTO wp_options (option_name, option_value, autoload) VALUES ('faz_cookie_text_unslashed_done', '1', 'yes')" );
+$db->pdo->exec( "UPDATE wp_faz_cookies SET description = '{\"en\":\"Path C:\\\\temp\"}' WHERE cookie_id = 2" ); // Clean, as that run left it.
+$GLOBALS['faz_test_options'] = array( Store::TEXT_UNSLASHED_OPTION => 0 ); // Stale cache.
+sl_eq( Activator::unslash_cookie_text(), true, 'a run that finds the flag once it holds the lock reports done' );
+sl_eq( sl_cookie( $db, 2 )['en'], 'Path C:\\temp', 'and does not strip the converted rows again' );
+sl_eq( null === $db->get_var( "SELECT option_value FROM wp_options WHERE option_name = 'faz_cookie_text_unslash_lock'" ), true, 'and releases the mutex' );
+
+// The import and the export run the migration first (Store::ensure_text_unslashed()).
+$db = sl_site();
+sl_eq( Store::ensure_text_unslashed(), true, 'ensure_text_unslashed(): a pending site is converted on the spot' );
+sl_eq( sl_cookie( $db, 1 )['en'], "It's the visitor's id", 'its rows are clean before the import writes' );
+$db = sl_site();
+$db->pdo->exec( "INSERT INTO wp_options (option_name, option_value, autoload) VALUES ('faz_cookie_text_unslash_lock', '" . time() . "', 'no')" );
+sl_eq( Store::ensure_text_unslashed(), false, 'ensure_text_unslashed(): false while another request holds the lock, so the import is refused' );
+$db = sl_site();
+$db->fail_queries = array( 'START TRANSACTION' );
+sl_eq( Store::ensure_text_unslashed(), false, 'ensure_text_unslashed(): false, not a throw, when the migration fails' );
+
 // No tables yet: retried later.
 sl_site( false );
 sl_eq( Activator::unslash_cookie_text(), false, 'no tables: declines so it is retried' );
@@ -363,7 +479,10 @@ echo "\n5. wiring\n";
 $activator = file_get_contents( $root . '/includes/class-activator.php' );
 sl_eq( 1 === preg_match( '/function run_pending_migrations\(\).*?self::unslash_cookie_text\(\).*?self::refresh_necessary_disclosure_text\(\)/s', $activator ), true, 'run_pending_migrations() runs it, before the stock-text comparison' );
 $api = file_get_contents( $root . '/admin/modules/settings/api/class-api.php' );
-sl_eq( 1 === preg_match( "/empty\( \\\$data\['text_unslashed'\] \) && ! \\\\FazCookie\\\\Includes\\\\Store::legacy_slashes_pending\(\)/", $api ), true, 'import unslashes only a pre-fix file, and only on a migrated site' );
+sl_eq( 1 === preg_match( "/if \( ! \\\\FazCookie\\\\Includes\\\\Store::ensure_text_unslashed\(\) \) \{\s*return new WP_Error\( 'faz_text_migration_pending'.*?\\\$unslash_text = empty\( \\\$data\['text_unslashed'\] \);/s", $api ), true, 'import converts the site first, refuses while it cannot, then unslashes only a pre-fix file' );
+foreach ( array( 'REST' => $api, 'WP-CLI' => file_get_contents( $root . '/includes/class-wp-cli-commands.php' ) ) as $where => $src ) {
+	sl_eq( 1 === preg_match( "/\\\$text_unslashed = \\\\FazCookie\\\\Includes\\\\Store::ensure_text_unslashed\(\);.*?'text_unslashed' => \\\$text_unslashed,\s*\);\s*if \( \\\$text_unslashed !== \\\\FazCookie\\\\Includes\\\\Store::text_unslashed_in_db\(\) \)/s", $src ), true, "the $where export marks the state its rows were read in, and refuses if it changed meanwhile" );
+}
 sl_eq( substr_count( $api, '$text_column( $c' ), 4, 'import routes the four text columns through it' );
 sl_eq( substr_count( $api, "'text_unslashed' =>" ), 1, 'the REST export marks its format' );
 sl_eq( substr_count( file_get_contents( $root . '/includes/class-wp-cli-commands.php' ), "'text_unslashed' =>" ), 1, 'the WP-CLI export marks its format' );

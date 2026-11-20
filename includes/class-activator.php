@@ -2731,8 +2731,8 @@ class Activator {
 	 * it is the value the admin screen and the banner were showing anyway.
 	 *
 	 * stripslashes() is not idempotent, so the step must run exactly once:
-	 *  - a completion flag (Store::TEXT_UNSLASHED_OPTION) gates it, written only
-	 *    after the rows are committed;
+	 *  - a completion flag (Store::TEXT_UNSLASHED_OPTION) gates it, written in
+	 *    the same transaction as the rows and re-read once the lock is held;
 	 *  - an INSERT IGNORE mutex in wp_options keeps two concurrent admin requests
 	 *    (admin_init also fires on admin-ajax.php, heartbeat included) from both
 	 *    stripping; a request that finds the lock held declines and retries;
@@ -2761,6 +2761,13 @@ class Activator {
 		if ( ! self::claim_text_unslash_lock() ) {
 			return false; // Another request is doing it; the batch retries and finds the flag.
 		}
+		// The flag read above may be stale: another request can have finished,
+		// and released the lock, between that read and this claim.
+		if ( Store::text_unslashed_in_db() ) {
+			self::release_text_unslash_lock();
+			self::forget_text_unslashed_option();
+			return true;
+		}
 
 		$targets = array(
 			array(
@@ -2777,13 +2784,19 @@ class Activator {
 
 		$changed = false;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration transaction.
-		$wpdb->query( 'START TRANSACTION' );
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			// Without a transaction a failure half-way could not be rolled back,
+			// and the retry would strip the rows already written a second time.
+			self::release_text_unslash_lock();
+			throw new \RuntimeException( 'FAZ: could not start the cookie text unslash transaction; migration will retry.' );
+		}
 		try {
 			foreach ( $targets as $target ) {
 				$table = esc_sql( $target['table'] );
 				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table is $wpdb->prefix + literal (escaped); column names are literals from $targets; no user input; one-shot migration read.
 				$rows = $wpdb->get_results( 'SELECT `' . $target['id'] . '`, `' . implode( '`, `', $target['columns'] ) . '` FROM `' . $table . '`', ARRAY_A );
-				if ( ! is_array( $rows ) ) {
+				// get_results() returns an empty array on a failed query too.
+				if ( ! is_array( $rows ) || '' !== (string) $wpdb->last_error ) {
 					throw new \RuntimeException( 'FAZ: could not read the cookie text to unslash; migration will retry.' );
 				}
 				foreach ( $rows as $row ) {
@@ -2817,6 +2830,16 @@ class Activator {
 					$changed = $changed || $written > 0;
 				}
 			}
+			// The completion flag is written inside the same transaction as the
+			// rows: written after the COMMIT, a request that died in between would
+			// leave converted rows with no flag, and the next run would strip them
+			// again. Autoloaded: Store::legacy_slashes_pending() reads it on every
+			// request that renders a cookie or category, the frontend included.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the options API cannot join a transaction; the option cache is cleared after the COMMIT.
+			$flagged = $wpdb->query( $wpdb->prepare( "INSERT INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, '1', 'yes') ON DUPLICATE KEY UPDATE `option_value` = '1'", Store::TEXT_UNSLASHED_OPTION ) );
+			if ( false === $flagged ) {
+				throw new \RuntimeException( 'FAZ: could not record the cookie text unslash; migration will retry.' );
+			}
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration transaction.
 			if ( false === $wpdb->query( 'COMMIT' ) ) {
 				throw new \RuntimeException( 'FAZ: could not commit the unslashed cookie text; migration will retry.' );
@@ -2828,9 +2851,7 @@ class Activator {
 			throw $e instanceof \RuntimeException ? $e : new \RuntimeException( 'FAZ: unslashing the cookie text failed; migration will retry.', 0, $e );
 		}
 
-		// Autoloaded: Store::legacy_slashes_pending() reads it on every request
-		// that renders a cookie or category, the frontend banner included.
-		update_option( Store::TEXT_UNSLASHED_OPTION, 1, true );
+		self::forget_text_unslashed_option();
 		self::release_text_unslash_lock();
 		if ( $changed ) {
 			self::refresh_cookie_translation_caches();
@@ -2864,6 +2885,18 @@ class Activator {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-set takeover of an abandoned mutex row.
 		$taken = $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->options}` SET `option_value` = %s WHERE `option_name` = %s AND `option_value` = %s", $now, self::TEXT_UNSLASH_LOCK, $held ) );
 		return 1 === (int) $taken;
+	}
+
+	/**
+	 * Drop the cached copies of the completion flag, written behind the options
+	 * API's back, so get_option() reads the committed value.
+	 *
+	 * @return void
+	 */
+	private static function forget_text_unslashed_option() {
+		wp_cache_delete( Store::TEXT_UNSLASHED_OPTION, 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
 	}
 
 	/**

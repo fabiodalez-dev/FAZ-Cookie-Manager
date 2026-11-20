@@ -833,10 +833,17 @@ class Api extends Rest_Controller {
 	 * Consent logs, pageview data, and sensitive API keys are excluded.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
-	 * @return WP_REST_Response
+	 * @return WP_REST_Response|WP_Error
 	 */
 	public function export_settings( $request ) {
 		global $wpdb;
+
+		// The file says whether its cookie and category text is in the clean
+		// form (text_unslashed), so that marker has to describe the rows read
+		// below. Converting them first makes it true for good; if that cannot
+		// happen now, the marker is re-read after the rows and the export is
+		// refused when the migration finished in between.
+		$text_unslashed = \FazCookie\Includes\Store::ensure_text_unslashed();
 
 		$settings     = get_option( 'faz_settings' );
 		$gcm_settings = get_option( 'faz_gcm_settings' );
@@ -920,8 +927,11 @@ class Api extends Rest_Controller {
 			// Whether the cookie and category text above is stored without the legacy
 			// slashes (see Store::TEXT_UNSLASHED_OPTION). The import reads it to
 			// unslash a file written by an older version.
-			'text_unslashed' => ! \FazCookie\Includes\Store::legacy_slashes_pending(),
+			'text_unslashed' => $text_unslashed,
 		);
+		if ( $text_unslashed !== \FazCookie\Includes\Store::text_unslashed_in_db() ) {
+			return new WP_Error( 'faz_text_migration_running', __( 'The cookie texts were being upgraded while the export was read. Please export again.', 'faz-cookie-manager' ), array( 'status' => 503 ) );
+		}
 
 		return rest_ensure_response( $export );
 	}
@@ -945,13 +955,18 @@ class Api extends Rest_Controller {
 		$imported = array();
 
 		// Files exported before the slashing fix carry the cookie and category
-		// text as the old setters stored it ("It\'s"). Once this site has been
-		// migrated it stores and serves that text clean, so such a file is
-		// unslashed on the way in, once; a file marked text_unslashed is already
-		// clean and must not be (that would eat a real backslash). While this
-		// site still awaits the migration its rows are in the old shape too, so
-		// the file is taken as it is and the migration converts both together.
-		$unslash_text = empty( $data['text_unslashed'] ) && ! \FazCookie\Includes\Store::legacy_slashes_pending();
+		// text as the old setters stored it ("It\'s"); a file marked
+		// text_unslashed is already clean. The site's own rows must be in the
+		// clean form before either is written: the one-time migration strips a
+		// level of slashes from every row, so a clean file imported ahead of it
+		// would lose a real backslash. It is run here if it is still pending,
+		// and the import is refused while it cannot complete.
+		if ( ! \FazCookie\Includes\Store::ensure_text_unslashed() ) {
+			return new WP_Error( 'faz_text_migration_pending', __( 'The cookie texts are being upgraded. Please try the import again in a minute.', 'faz-cookie-manager' ), array( 'status' => 503 ) );
+		}
+		// A pre-fix file is unslashed on the way in, once; a marked one is not
+		// (that would eat a real backslash).
+		$unslash_text = empty( $data['text_unslashed'] );
 		$text_column  = static function ( $value ) use ( $unslash_text ) {
 			return $unslash_text ? \FazCookie\Includes\Store::unslash_text_column( $value ) : $value;
 		};

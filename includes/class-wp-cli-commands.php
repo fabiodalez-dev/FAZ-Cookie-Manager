@@ -92,6 +92,13 @@ class WP_CLI_Commands {
 	public function export_settings( $args, $assoc_args ) {
 		global $wpdb;
 
+		// The file says whether its cookie and category text is in the clean
+		// form (text_unslashed), so that marker has to describe the rows read
+		// below. Converting them first makes it true for good; if that cannot
+		// happen now, the marker is re-read after the rows and the export is
+		// refused when the migration finished in between.
+		$text_unslashed = \FazCookie\Includes\Store::ensure_text_unslashed();
+
 		$settings     = get_option( 'faz_settings' );
 		$gcm_settings = get_option( 'faz_gcm_settings' );
 
@@ -157,8 +164,12 @@ class WP_CLI_Commands {
 			// Whether the cookie and category text above is stored without the legacy
 			// slashes (see Store::TEXT_UNSLASHED_OPTION). The import reads it to
 			// unslash a file written by an older version.
-			'text_unslashed' => ! \FazCookie\Includes\Store::legacy_slashes_pending(),
+			'text_unslashed' => $text_unslashed,
 		);
+		if ( $text_unslashed !== \FazCookie\Includes\Store::text_unslashed_in_db() ) {
+			WP_CLI::error( 'The cookie texts were being upgraded while the export was read. Please export again.' );
+			return;
+		}
 
 		$json = wp_json_encode( $export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
 
