@@ -82,6 +82,13 @@ class Admin {
 		self::$modules = $this->get_default_modules();
 		$this->load();
 		$this->maybe_load_modules();
+		// The banner's brand logo takes its alt text from the Media Library
+		// (#404) and the built template is cached, so an alt edit has to
+		// rebuild it. Hooked here, on every request, because the attachment
+		// edit screen saves through post.php, where the modules are not loaded.
+		foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $alt_hook ) {
+			add_action( $alt_hook, array( $this, 'on_attachment_alt_change' ), 10, 3 );
+		}
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
 		if ( is_multisite() ) {
 			add_action( 'network_admin_menu', array( $this, 'register_network_menu' ) );
@@ -214,6 +221,27 @@ class Admin {
 	}
 
 	/**
+	 * Rebuild the banner, and purge cached pages when the edited image is a
+	 * banner's logo, after an attachment's alt text changes (#404).
+	 *
+	 * @param int|int[] $meta_id   Meta id(s).
+	 * @param int       $object_id Post id.
+	 * @param string    $meta_key  Meta key.
+	 * @return void
+	 */
+	public function on_attachment_alt_change( $meta_id, $object_id, $meta_key ) {
+		if ( ! \FazCookie\Admin\Modules\Banners\Banners::maybe_flush_on_alt_change( $meta_id, $object_id, $meta_key ) ) {
+			return;
+		}
+		// post.php does not load the modules, so no adapter would hear the
+		// purge. Asked unconditionally: a listener another plugin hooks on the
+		// same action does not mean the adapters are there, and the call is a
+		// no-op once the cache module is loaded, by either path.
+		$this->load_cache_module();
+		do_action( 'faz_purge_page_cache' );
+	}
+
+	/**
 	 * Instantiate only the cache module (purge listeners), exactly once.
 	 *
 	 * @return void
@@ -254,6 +282,9 @@ class Admin {
 			$class      = implode( '_', $parts );
 			$class_name = 'FazCookie\\Admin\\Modules\\' . ucfirst( $module ) . '\\' . ucfirst( $class );
 
+			if ( 'cache' === $module ) {
+				self::$cache_module_loaded = true; // load_cache_module() must not add a second copy.
+			}
 			if ( class_exists( $class_name ) ) {
 				$module_obj = new $class_name( $module );
 				if ( $module_obj instanceof $class_name ) {
