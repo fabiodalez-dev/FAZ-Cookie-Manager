@@ -19,7 +19,9 @@
 import { expect, test } from '../fixtures/wp-fixture';
 import type { Page } from '@playwright/test';
 import { resetDefaultBannerState } from '../utils/seed-defaults';
-import { wpEval } from '../utils/wp-env';
+import { upsertPage, wp, wpEval } from '../utils/wp-env';
+
+const PAGE_SLUG = 'faz-e2e-keyboard-consent';
 
 type Layout = {
   name: string;
@@ -91,7 +93,11 @@ function focusRendered(page: Page, rootSelector: string, which: 'first' | 'last'
     const root = document.querySelector(sel);
     if (!root) return '';
     const rendered = (Array.from(root.querySelectorAll(focusable)) as HTMLElement[]).filter((el) =>
-      el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden');
+      el.getClientRects().length > 0 &&
+      getComputedStyle(el).visibility === 'visible' &&
+      !el.matches(':disabled') &&
+      !el.closest('[hidden], [inert]') &&
+      (!el.hasAttribute('tabindex') || el.tabIndex >= 0));
     const target = edge === 'first' ? rendered[0] : rendered[rendered.length - 1];
     if (!target) return '';
     target.focus();
@@ -121,12 +127,20 @@ async function tabTo(page: Page, where: string, max = 8): Promise<boolean> {
 }
 
 test.describe('Keyboard access to the revisit widget and the preference centre (wp.org accessibility-97)', () => {
+  let pageId: number;
+
   test.beforeAll(() => {
     resetDefaultBannerState();
+    // The home page has a YouTube embed that takes focus after consent.
+    pageId = upsertPage(PAGE_SLUG, 'Keyboard consent test', '<p><a href="#details">Jump to details</a></p><p id="details">Keyboard test content</p>');
   });
 
   test.afterAll(() => {
-    resetDefaultBannerState();
+    try {
+      if (pageId) wp(['post', 'delete', String(pageId), '--force']);
+    } finally {
+      resetDefaultBannerState();
+    }
   });
 
   for (const layout of LAYOUTS) {
@@ -136,7 +150,7 @@ test.describe('Keyboard access to the revisit widget and the preference centre (
       const page = await context.newPage();
       try {
         // ── First visit: the decision taken with the keyboard ──────────────
-        await page.goto('/', { waitUntil: 'domcontentloaded' });
+        await page.goto(`/${PAGE_SLUG}/`, { waitUntil: 'domcontentloaded' });
         const accept = page.locator('[data-faz-tag="notice"] [data-faz-tag="accept-button"]').first();
         await expect(accept).toBeVisible({ timeout: 15_000 });
         await accept.focus();
@@ -151,8 +165,14 @@ test.describe('Keyboard access to the revisit widget and the preference centre (
         await expect.soft(revisitButton, 'focus moves to the revisit widget after a decision').toBeFocused();
 
         // ── A later page view: reach the widget with Tab ───────────────────
-        await page.goto('/', { waitUntil: 'domcontentloaded' });
+        await page.goto(`/${PAGE_SLUG}/`, { waitUntil: 'domcontentloaded' });
+        await expect(page.locator('html')).toHaveClass(/\bfaz-ready\b/, { timeout: 15_000 });
         await expect(revisitButton).toBeVisible({ timeout: 15_000 });
+        // Start at the top of the new document, outside the consent widget.
+        await page.evaluate(() => {
+          document.body.tabIndex = -1;
+          document.body.focus();
+        });
         expect(await tabTo(page, 'revisit'), 'Tab reaches the revisit widget').toBe(true);
         await expect(revisitButton).toHaveAccessibleName(/.+/);
         // The closed consent UI holds no tab stops: the next Tab leaves the
@@ -166,12 +186,10 @@ test.describe('Keyboard access to the revisit widget and the preference centre (
 
         // A focus ring that stands out from the coloured disc: drawn on the
         // wrapper (outside the disc), not only the UA ring on the inner button.
-        const ring = await revisitWrapper.evaluate((el) => {
-          const s = getComputedStyle(el);
-          return { style: s.outlineStyle, width: parseFloat(s.outlineWidth) };
-        });
-        expect.soft(ring.style, 'revisit widget shows a focus indicator').not.toBe('none');
-        expect.soft(ring.width, 'revisit focus indicator is at least 2px').toBeGreaterThanOrEqual(2);
+        await expect.configure({ soft: true }).poll(() => revisitWrapper.evaluate((el) => {
+          const style = getComputedStyle(el);
+          return style.outlineStyle === 'none' ? 0 : parseFloat(style.outlineWidth);
+        }), { message: 'revisit widget shows a focus indicator at least 2px wide' }).toBeGreaterThanOrEqual(2);
 
         // ── Enter opens the consent dialog and focus goes into it ─────────
         await page.keyboard.press('Enter');
@@ -207,16 +225,8 @@ test.describe('Keyboard access to the revisit widget and the preference centre (
           }
         }
 
-        // ── Pushdown: the expanded panel is reachable and holds Tab ──────
-        // The loop above accepts either surface, because the expanded panel is
-        // part of the banner dialog; it cannot tell a panel that holds focus
-        // from one Tab walks straight out of. These two checks can. The panel
-        // sits in the banner AFTER the notice, so the notice must let Tab
-        // through to it instead of wrapping to its own first button; and once
-        // in the panel, Tab past its last displayed control must wrap inside
-        // the panel. The edge handler is bound to the last control in SOURCE
-        // order, which the pushdown layout does not display, so it never ran
-        // and Tab left the panel for the page.
+        // The notice's last control leads into the expanded pushdown panel.
+        // Inside that panel, Tab and Shift+Tab wrap at its visible edges.
         if (layout.pushdown) {
           const panel = '.faz-consent-container [data-faz-tag="detail"]';
           const lastInNotice = await focusRendered(page, '[data-faz-tag="notice"]', 'last');

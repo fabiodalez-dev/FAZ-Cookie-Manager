@@ -3,6 +3,8 @@ import { expect, test } from '../fixtures/wp-fixture';
 import { resetDefaultBannerState } from '../utils/seed-defaults';
 import { wpEval } from '../utils/wp-env';
 
+declare function _fazLoopFocus(): void;
+
 // Ensure the banner is in "box / bottom-left" mode before a11y tests run.
 // Other specs may leave the banner in a different type (e.g. "banner" / full-
 // width) which changes the set of focusable elements and the focus-trap
@@ -113,8 +115,8 @@ test.describe('Native a11y — focus loop on banner', () => {
 
     // Collect all visible, non-disabled focusable elements in the notice.
     const focusables = notice.locator(
-      	'a:not([disabled]), button:not([disabled]), [tabindex]:not([disabled]):not([tabindex="-1"])'
-    );
+      'a[href], button, [tabindex]'
+    ).and(notice.locator(':visible:not(:disabled):not([tabindex="-1"])'));
     await expect(focusables.first()).toBeVisible();
 
     // Focus the last button in the banner.
@@ -161,7 +163,9 @@ test.describe('Native a11y — a11y.js runtime fixes', () => {
     const banner = page.locator('.faz-consent-container');
     await expect(banner).toBeVisible();
 
-    await page.locator('[data-faz-tag="notice"] button').first().focus();
+    const accept = banner.locator('[data-faz-tag="accept-button"]');
+    await accept.focus();
+    await expect(accept).toBeFocused();
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300); // give any side-effect time to settle
 
@@ -275,123 +279,58 @@ test.describe('Native a11y — a11y.js runtime fixes', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Regression test for issue #124 — _fazAttachFocusLoop must not accumulate
-// keydown listeners across repeated _fazLoopFocus() calls. Pre-fix, each
-// call appended a NEW keydown handler with raw addEventListener and never
-// removed the old one; the most-recently-registered handler ran last per
-// FIFO order, and its closed-over targetElement pointed at a (potentially
-// detached) DOM node from the FIRST registration cycle. Under full-suite
-// load, the focus-trap E2E fixture (which injects new focusables + re-
-// invokes _fazLoopFocus) ended up with Tab routing to nowhere.
-//
-// Fix: module-scope WeakMap keyed by (element, isReverse) replaces the
-// previous handler before attaching a new one. This test verifies that
-// counting handlers per element does NOT grow with repeated _fazLoopFocus
-// calls — and that Tab dispatch still produces the expected focus jump
-// after multiple cycles.
-// ---------------------------------------------------------------------------
+// Re-initializing a surface keeps one listener and reads the current
+// controls when Tab is pressed (regression #124).
 test.describe('Native a11y — focus loop listener cleanup (regression #124)', () => {
   test('multiple _fazLoopFocus() calls do not accumulate keydown listeners', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     const notice = page.locator('[data-faz-tag="notice"]');
     await expect(notice).toBeVisible();
+    await page.waitForFunction(() => typeof _fazLoopFocus === 'function');
 
-    // Verify the runtime is loaded and the focus-loop function exists.
-    await page.waitForFunction(
-      () => typeof (window as any)._fazLoopFocus === 'function'
-        && typeof (window as any)._fazGetFocusableElements === 'function',
-      undefined,
-      { timeout: 5000 },
-    );
-
-    // Probe: instrument addEventListener on the document.querySelector
-    // result for the "last focusable" of the notice container, count
-    // keydown attachments before and after 5 _fazLoopFocus invocations.
-    // Pre-fix this counter grew linearly with each call; post-fix it
-    // stays at 1 (the WeakMap removes the prior handler before adding).
-    const handlerGrowth = await page.evaluate(() => {
-      const notice = document.querySelector('[data-faz-tag="notice"]');
-      if (!notice) return { ok: false, reason: 'no_notice' };
-      const focusables = notice.querySelectorAll(
-        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([disabled]):not([tabindex="-1"])',
-      );
-      if (focusables.length < 2) return { ok: false, reason: 'too_few_focusables' };
-
-      const last = focusables[focusables.length - 1] as HTMLElement;
-      let attachCount = 0;
-      const originalAddEventListener = last.addEventListener.bind(last);
-      last.addEventListener = function (type: string, listener: any, options?: any) {
-        if (type === 'keydown') attachCount++;
-        return originalAddEventListener(type, listener, options);
+    const added = await notice.evaluate((element) => {
+      const surface = element.closest('.faz-consent-container');
+      if (!surface) throw new Error('Missing consent surface');
+      const originalAdd = surface.addEventListener;
+      let keydownListeners = 0;
+      surface.addEventListener = function (
+        type: string,
+        listener: EventListenerOrEventListenerObject | null,
+        options?: boolean | AddEventListenerOptions,
+      ) {
+        if (type === 'keydown') keydownListeners++;
+        originalAdd.call(this, type, listener, options);
       };
 
-      // 5 cycles. Each call to _fazLoopFocus invokes _fazAttachFocusLoop
-      // twice for the popup pair AND once for the notice pair on `last`
-      // (depending on which is "last"). Pre-fix this stacked to N×2 or
-      // similar; post-fix the per-(element,slot) WeakMap means
-      // addEventListener gets called the same number of times BUT each
-      // call is paired with a removeEventListener of the prior handler.
-      // We can't directly count net live listeners, but we CAN verify
-      // that the handler keeps working after the cycles (the integration
-      // assertion below), and that addEventListener was called per
-      // cycle (the WeakMap path always adds a fresh handler — just
-      // removes the old one first).
-      for (let i = 0; i < 5; i++) {
-        (window as any)._fazLoopFocus();
+      try {
+        for (let i = 0; i < 5; i++) _fazLoopFocus();
+      } finally {
+        surface.addEventListener = originalAdd;
       }
 
-      // After 5 cycles, the WeakMap path will have called add+remove
-      // 5 times each. The integration assertion below pins the real
-      // user-visible behaviour: Tab on last → focus first. If the bug
-      // returned, multiple handlers would race and focus would land
-      // on a stale DOM node.
-      return {
-        ok: true,
-        attach_count: attachCount,
-        focusables_count: focusables.length,
-        last_tag: last.tagName,
-      };
+      const first = document.createElement('button');
+      first.id = 'faz-test-first-tab-stop';
+      first.textContent = 'First test control';
+      const last = document.createElement('button');
+      last.id = 'faz-test-last-tab-stop';
+      last.textContent = 'Last test control';
+      const skipped = document.createElement('button');
+      skipped.tabIndex = -1;
+      skipped.textContent = 'Programmatic focus only';
+      surface.prepend(first);
+      surface.append(last, skipped);
+      return keydownListeners;
     });
+    expect(added, 'reinitialization adds no listeners to the consent surface').toBe(0);
 
-    expect(handlerGrowth.ok, `focus probe setup ok (reason: ${handlerGrowth.reason})`).toBeTruthy();
-    expect(handlerGrowth.focusables_count, 'banner has ≥2 focusable buttons').toBeGreaterThanOrEqual(2);
-
-    // Integration assertion: after the 5 stress cycles, Tab dispatch on
-    // the last focusable element MUST still produce a valid focus jump.
-    // Pre-fix, stacked handlers would race on `.focus()` and the last-
-    // registered closure pointed at stale DOM, so focus would either
-    // land nowhere or on an unexpected element.
-    const tabResult = await page.evaluate(() => {
-      const notice = document.querySelector('[data-faz-tag="notice"]');
-      if (!notice) return { ok: false };
-      const focusables = notice.querySelectorAll(
-        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([disabled]):not([tabindex="-1"])',
-      );
-      if (focusables.length < 2) return { ok: false };
-      const first = focusables[0] as HTMLElement;
-      const last = focusables[focusables.length - 1] as HTMLElement;
-      last.focus();
-      last.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Tab' }));
-      return {
-        ok: true,
-        focused_id: (document.activeElement as HTMLElement | null)?.id || '',
-        focused_tag: (document.activeElement as HTMLElement | null)?.tagName || '',
-        expected_first_tag: first.tagName,
-        expected_first_id: first.id,
-      };
-    });
-
-    expect(tabResult.ok, 'Tab probe setup ok').toBeTruthy();
-    // Post-fix: focus lands on the FIRST focusable (Tab wraps).
-    // Pre-fix: focus landed on a stale DOM node or stayed on last.
-    expect(
-      tabResult.focused_tag,
-      `Tab from last should focus first focusable (expected ${tabResult.expected_first_tag} got ${tabResult.focused_tag}) — regression #124 may have returned`,
-    ).toBe(tabResult.expected_first_tag);
+    const first = page.locator('#faz-test-first-tab-stop');
+    const last = page.locator('#faz-test-last-tab-stop');
+    await last.focus();
+    await page.keyboard.press('Tab');
+    await expect(first).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(last).toBeFocused();
   });
-
-
 });
 
 test.describe('Native a11y — upstream parity (CookieYes 3.5.x)', () => {
