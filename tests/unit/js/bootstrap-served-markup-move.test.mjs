@@ -528,5 +528,75 @@ console.log('j2. A menu copy carrying a parked script, and the other copy routes
   eq('a menu copied with Range.cloneContents is inserted synchronously', rangeImage.isConnected, true);
 }
 
+// jQuery 3.7's parseHTML() + buildFragment(), reduced to the DOM calls they
+// make: the markup is parsed in an inert document (createHTMLDocument), moved
+// into a fragment of that document, and the fragment's children are the
+// result. The caller reads them on the very next line.
+function jqParseHTML(document, html) {
+  const context = document.implementation.createHTMLDocument('');
+  const fragment = context.createDocumentFragment();
+  const tmp = fragment.appendChild(context.createElement('div'));
+  tmp.innerHTML = html;
+  const nodes = Array.prototype.slice.call(tmp.childNodes);
+  fragment.firstChild.textContent = '';
+  fragment.textContent = '';
+  nodes.forEach((node) => fragment.appendChild(node));
+  return Array.prototype.slice.call(fragment.childNodes);
+}
+// jQuery's appendTo(): the nodes go into a fragment of the destination's
+// document, and the fragment into the destination.
+function jqAppendTo(document, nodes, target) {
+  const fragment = document.createDocumentFragment();
+  nodes.forEach((node) => fragment.appendChild(node));
+  target.appendChild(fragment);
+}
+
+console.log('k. Owl Carousel loop clones built from outerHTML strings (Signify Pro logo slider)');
+{
+  const { document, parse } = boot();
+  // Owl 2.3.4 builds its loop clones as `$(item.outerHTML + …)`, a string
+  // parse of the server's own slides, while the runtime is still downloading.
+  const carousel = parse('<div class="owl-carousel"><div class="owl-stage">'
+    + '<div class="owl-item"><a href="https://www.uni.lu"><img src="/wp-content/uploads/UL.png"></a></div>'
+    + '<div class="owl-item"><a href="https://www.jku.at"><img src="/wp-content/uploads/JKU.png" srcset="/wp-content/uploads/JKU-2x.png 2x"></a></div>'
+    + '</div></div>');
+  await checkpoint();
+  const stage = carousel.querySelector('.owl-stage');
+  const html = Array.prototype.map.call(stage.children, (item) => item.outerHTML).join('');
+  const clones = jqParseHTML(document, html);
+  eq('the string parse returns the slides it was given', clones.length, 2);
+  jqAppendTo(document, clones, stage);
+  eq('the clones are in the stage on the same turn', stage.children.length, 4);
+  ok('and their images with them', stage.children[2]?.querySelector('img') && stage.children[3]?.querySelector('img'));
+}
+{
+  const { document, parse } = boot();
+  parse('<div id="box"><img src="/wp-content/uploads/UL.png"></div>');
+  await checkpoint();
+  // An inert document fetches nothing, so even an image the server never
+  // served may be built there; the verdict is asked when it reaches the page.
+  const parsed = jqParseHTML(document, '<div><img src="https://tracker.example/pixel.gif"></div>');
+  eq('markup with an unserved image still parses into an inert document', parsed.length, 1);
+  const holder = document.createElement('div');
+  document.getElementById('main').appendChild(holder);
+  jqAppendTo(document, parsed, holder);
+  eq('but its image does not reach the page until the runtime answers', holder.querySelector('img'), null);
+  // The same URL as a server image, on another element type, is a new verdict.
+  const frame = jqParseHTML(document, '<iframe src="/wp-content/uploads/UL.png"></iframe>');
+  const frameHost = document.createElement('div');
+  document.getElementById('main').appendChild(frameHost);
+  jqAppendTo(document, frame, frameHost);
+  eq('a served URL on another tag is still held', frameHost.querySelector('iframe'), null);
+  // A string-built script never inherits anything, even at a served URL.
+  const served = parse('<div><script type="text/plain" data-faz-category="marketing" src="https://tracker.example/t.js"></script></div>');
+  await checkpoint();
+  const script = jqParseHTML(document, served.innerHTML)[0];
+  script.setAttribute('type', 'text/javascript');
+  const scriptHost = document.createElement('div');
+  document.getElementById('main').appendChild(scriptHost);
+  scriptHost.appendChild(document.importNode(script, true));
+  eq('a string-built copy of a parked script is still held', scriptHost.querySelector('script'), null);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

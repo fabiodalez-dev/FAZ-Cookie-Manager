@@ -579,10 +579,40 @@
         // element could then fetch the new URL without an insertion verdict.
         return JSON.stringify(out.sort());
     }
-    function unjudged(node) {
+    // A document with no browsing context — createHTMLDocument(), DOMParser,
+    // a <template>'s content — loads nothing: no image fetches, no script
+    // runs, no frame navigates. An insertion there has nothing to hold, and
+    // holding it broke every string parse made in the download window:
+    // jQuery.parseHTML() builds the markup in exactly such a document, moves
+    // it into a fragment and returns the fragment's children on the next
+    // line, so `$('<div><img …></div>')` came back EMPTY. Owl Carousel 2.3.4
+    // builds its loop clones that way, and the Signify Pro logo slider showed
+    // positions with no slides in them until a resize rebuilt it. The verdict
+    // is still asked where it matters: adopting those nodes into this page.
+    function inert(container) {
+        var doc = container && (container.nodeType === 9 ? container : container.ownerDocument);
+        return !!doc && doc !== d && !doc.defaultView;
+    }
+    // The key a parser verdict is filed under in servedKeys: the same element
+    // type, in the same namespace, with the same URLs.
+    function servedKey(el, signature) {
+        return tagKey(el) + '\n' + (el.namespaceURI || '') + '\n' + signature;
+    }
+    function unjudged(node, container) {
+        if (container && inert(container)) return [];
         var found = resources(node);
         if (!served) return found;
-        return found.filter(function (el) { return !served.has(el) || served.get(el) !== urls(el); });
+        // A copy the page serialized and parsed back — Owl's clones, a
+        // `$(el.outerHTML)` — has no provenance left for carryVerdicts() to
+        // follow, but its URLs are the ones the server judged and the parser
+        // already fetched on this page: it asks for nothing the server did not
+        // let through. The match is on the whole signature, resolved against
+        // this page's base, and never for a script (servedKeys holds none).
+        return found.filter(function (el) {
+            var signature = urls(el);
+            if (served.has(el) && served.get(el) === signature) return false;
+            return !(servedKeys && servedKeys.has(servedKey(el, signature)));
+        });
     }
     // Every <style> in a subtree, the node itself included, in any namespace —
     // querySelectorAll('style') matches both, since a CSS type selector with no
@@ -706,6 +736,9 @@
     // The same for parser scripts, read only by the copy routes below. A script
     // itself never gets a verdict in `served`: see the MutationObserver.
     var servedScripts = served ? new w.WeakMap() : null;
+    // Every verdict `served` records, by element type, namespace and URL
+    // signature rather than by element — see unjudged(). Scripts never enter.
+    var servedKeys = served && typeof w.Set === 'function' ? new w.Set() : null;
     // Divi's et_duplicate_menu clones the server menu (including Polylang's
     // flag images), appends it, then queries the destination synchronously.
     // A clone has no WeakMap entry of its own, so holding it left that query
@@ -1234,7 +1267,7 @@
                 // stops counting — the same bookkeeping replaceWith needs.
                 var dropped = name === 'replaceChild' ? ref : null;
                 var pendingRef = !!ref && pendingChild(self, ref);
-                var carries = unjudged(node).length
+                var carries = unjudged(node, self).length
                     || styleRisk(node)
                     || waitingFragment(node)
                     || pendingRef
@@ -1320,7 +1353,7 @@
                     // One joined string, in call order, judged against the text
                     // the owner will actually hold. Per-argument tests missed a
                     // URL split across two arguments of one call.
-                    var carries = args.some(function (n) { return unjudged(n).length || styleRisk(n) || waitingFragment(n); })
+                    var carries = args.some(function (n) { return unjudged(n, container).length || styleRisk(n) || waitingFragment(n); })
                         || !!(styleOwner && cssRisk(containerText(styleOwner, self, name), args));
                     // Queued behind an earlier held insertion into the same
                     // container, as appendChild always was: otherwise a plain
@@ -1557,7 +1590,7 @@
                     // queued INTO it, as in the Node and ParentNode wrappers.
                     // Inserted natively it lands empty, and the held child
                     // later replays into the orphaned fragment and is lost.
-                    var carries = unjudged(node).length
+                    var carries = unjudged(node, range.startContainer).length
                         || styleRisk(node)
                         || waitingFragment(node)
                         || cssURL(surrounded())
@@ -1651,7 +1684,7 @@
             var el = this, where = String(position).toLowerCase();
             var outside = where === 'beforebegin' || where === 'afterend';
             var container = outside ? el.parentNode : el;
-            if (!unjudged(node).length && !styleRisk(node) && !(container && waiting.has(container))) return original.call(el, position, node);
+            if (!unjudged(node, container).length && !styleRisk(node) && !(container && waiting.has(container))) return original.call(el, position, node);
             // An unknown position, a non-element, a parentless element asked
             // for a sibling, an element placed inside itself: the engine
             // throws or does nothing, and so does this.
@@ -3112,8 +3145,11 @@
                         // moved image, frame or media element fetches nothing
                         // its current attributes did not already fetch.
                         if (served) resources(node).forEach(function (el) {
-                            var judged = tagKey(el) === 'SCRIPT' ? servedScripts : served;
-                            if (!judged.has(el)) judged.set(el, urls(el));
+                            var script = tagKey(el) === 'SCRIPT', judged = script ? servedScripts : served;
+                            if (judged.has(el)) return;
+                            var signature = urls(el);
+                            judged.set(el, signature);
+                            if (!script && servedKeys) servedKeys.add(servedKey(el, signature));
                         });
                         continue;
                     }
