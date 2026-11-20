@@ -473,6 +473,19 @@ if ( ! function_exists( 'get_transient' ) ) {
 	$fe     = faz_arrange( '', false );
 	$quoted = '<span data-tip="<div class=\'wpgmp_map\' id=\'map7\'></div>">tip</span>';
 	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $quoted, array( 'functional' ), $wpgmp_rule ) ), $quoted, 'WP Maps: a map div quoted inside an attribute value is left alone' );
+	// The class is read from the tag's own token, never from inside another
+	// attribute's value, and the hidden class is written there too.
+	$fe   = faz_arrange( '', false );
+	$tip  = '<div data-tip=\'<div class="wpgmp_map"></div>\' class="description">Contatti</div>';
+	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $tip, array( 'functional' ), $wpgmp_rule ) ), $tip, 'WP Maps: class="wpgmp_map" inside another attribute does not make a div a map' );
+	$real = str_replace( '<div class="wpgmp_map " ', '<div data-tip=\'<b class="x">\' class="wpgmp_map " ', $wpgmp_map );
+	$out  = faz_call( $fe, 'process_wpgmp_map_widgets', array( $real, array( 'functional' ), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: a map with a class-shaped string in another attribute is still parked' );
+	assert_eq( false !== strpos( $out, 'data-tip=\'<b class="x">\'' ), true, 'WP Maps: …and that attribute value is left as written' );
+	assert_eq( (bool) preg_match( '#<div class="wpgmp_map\s+faz-hidden" data-tip=#', $out ), true, 'WP Maps: …the hidden class goes on the tag\'s own class token' );
+	$bare = str_replace( 'class="wpgmp_map "', 'class=wpgmp_map', $wpgmp_map );
+	$out  = faz_call( $fe, 'process_wpgmp_map_widgets', array( $bare, array( 'functional' ), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: an unquoted class value is read too' );
 	// WP Maps' own "Cookies Acceptance" gate is answered by FAZ only where the
 	// content pass parks the map: everywhere else nothing would stop the Maps
 	// API, and WP Maps' own answer has to stand.

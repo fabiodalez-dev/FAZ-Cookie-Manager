@@ -15509,10 +15509,18 @@ class Frontend {
 			'#' . self::tag_token_skip( 'div' ) . '<div(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
 			function ( $m ) use ( $src, $blocked_categories, $providers, &$google ) {
 				$attrs = $m[1];
-				if ( false === stripos( $attrs, 'wpgmp_map' ) || ! preg_match( '/\bclass\s*=\s*(["\'])(.*?)\1/is', $attrs, $class ) ) {
+				if ( false === stripos( $attrs, 'wpgmp_map' ) ) {
 					return $m[0];
 				}
-				$classes = preg_split( '/\s+/', strtolower( trim( $class[2] ) ) );
+				// The tag's own class token, read as the tokenizer reads it: a
+				// regex over the whole string found `class="wpgmp_map"` inside
+				// another attribute's value (`data-tip='<div class="wpgmp_map">'`)
+				// and hid an ordinary div behind a map placeholder.
+				$class = $this->extract_tag_attr( $attrs, 'class' );
+				if ( '' === $class ) {
+					return $m[0];
+				}
+				$classes = preg_split( '/\s+/', strtolower( trim( $class ) ) );
 				if ( in_array( 'wpgmp_map_container', $classes, true ) ) {
 					$provider = preg_grep( '/^wpgmp-map-provider-/', $classes );
 					$google   = empty( $provider ) || in_array( 'wpgmp-map-provider-google', $provider, true );
@@ -15524,15 +15532,19 @@ class Frontend {
 				// The next map is judged by its own container.
 				$is_google = $google;
 				$google    = true;
-				if ( ! $is_google || false !== stripos( $attrs, 'data-faz-category' ) ) {
+				if ( ! $is_google || $this->has_attr_token( $attrs, 'data-faz-category' ) ) {
 					return $m[0];
 				}
 				$category = $this->blocked_google_map_category( $attrs, $src, $blocked_categories, $providers );
 				if ( '' === $category ) {
 					return $m[0];
 				}
-				$widget = '<div' . $attrs . ' data-faz-category="' . esc_attr( $category ) . '" data-faz-service="google-maps">';
-				return Placeholder_Builder::build_social( 'google-maps', Placeholder_Builder::get_service_name( 'google-maps' ), $category ) . self::faz_add_hidden_class( $widget );
+				// The class token is written here rather than through
+				// faz_add_hidden_class(), whose regex would extend the first
+				// `class="` in the string, quoted values included.
+				$widget = '<div class="' . esc_attr( $class . ' faz-hidden' ) . '"' . $this->strip_attr_tokens( $attrs, 'class' )
+					. ' data-faz-category="' . esc_attr( $category ) . '" data-faz-service="google-maps">';
+				return Placeholder_Builder::build_social( 'google-maps', Placeholder_Builder::get_service_name( 'google-maps' ), $category ) . $widget;
 			},
 			$content
 		);
