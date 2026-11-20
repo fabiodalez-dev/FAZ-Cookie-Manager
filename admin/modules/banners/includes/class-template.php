@@ -698,8 +698,14 @@ class Template {
 				// Brand logo: set img src from config meta.url (custom upload).
 				if ( 'brand-logo' === $tag && isset( $config['meta']['url'] ) && '#' !== $config['meta']['url'] ) {
 					$logo_imgs = $element->getElementsByTagName( 'img' );
+					// The image's own alt text names whose logo it is (WCAG 1.1.1);
+					// the template's generic "Brand logo" stays when it has none.
+					$logo_alt = self::brand_logo_alt( (string) $config['meta']['url'] );
 					foreach ( $logo_imgs as $logo_img ) {
 						$logo_img->setAttribute( 'src', esc_url( $config['meta']['url'] ) );
+						if ( '' !== $logo_alt ) {
+							$logo_img->setAttribute( 'alt', $logo_alt );
+						}
 					}
 					// Only for a logo that is shown: with the logo off the grid
 					// would keep an empty column and strip the text's padding.
@@ -937,6 +943,44 @@ class Template {
 	public function is_preview() {
 		return defined( 'FAZ_PREVIEW_REQUEST' ) && FAZ_PREVIEW_REQUEST;
 	}
+	/**
+	 * Alt text of the Media Library image a brand logo URL points to.
+	 *
+	 * The logo setting stores only the URL, so the attachment is looked up
+	 * from it. A URL to one of the image's generated sizes
+	 * (`logo-300x100.png`) is retried as the original, which is what
+	 * attachment_url_to_postid() knows. An external URL, or an image without
+	 * alt text, returns '' and the template keeps its generic text.
+	 *
+	 * @param string $url Logo URL from the banner config.
+	 * @return string Plain text, '' when there is none.
+	 */
+	public static function brand_logo_alt( $url ) {
+		$alt = '';
+		$url = preg_replace( '/[?#].*$/', '', trim( (string) $url ) );
+		if ( '' !== $url && '#' !== $url && function_exists( 'attachment_url_to_postid' ) ) {
+			$id = (int) attachment_url_to_postid( $url );
+			if ( $id <= 0 ) {
+				$original = preg_replace( '/-\d+x\d+(?=\.[a-z0-9]+$)/i', '', $url );
+				if ( $original !== $url ) {
+					$id = (int) attachment_url_to_postid( $original );
+				}
+			}
+			if ( $id > 0 ) {
+				$alt = trim( wp_strip_all_tags( (string) get_post_meta( $id, '_wp_attachment_image_alt', true ) ) );
+			}
+		}
+		/**
+		 * Filter the alt text of the banner's brand logo.
+		 *
+		 * Return '' to keep the template's generic "Brand logo".
+		 *
+		 * @param string $alt Alt text found in the Media Library, or ''.
+		 * @param string $url Logo URL.
+		 */
+		return trim( (string) apply_filters( 'faz_brand_logo_alt', $alt, $url ) );
+	}
+
 	/**
 	 * Return the language-aware cache key for the banner template option.
 	 *
