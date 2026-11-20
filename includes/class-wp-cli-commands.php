@@ -154,6 +154,10 @@ class WP_CLI_Commands {
 			'banners'      => $banners ? $banners : array(),
 			'categories'   => $categories ? $categories : array(),
 			'cookies'      => $cookies ? $cookies : array(),
+			// Whether the cookie and category text above is stored without the legacy
+			// slashes (see Store::TEXT_UNSLASHED_OPTION). The import reads it to
+			// unslash a file written by an older version.
+			'text_unslashed' => ! \FazCookie\Includes\Store::legacy_slashes_pending(),
 		);
 
 		$json = wp_json_encode( $export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );

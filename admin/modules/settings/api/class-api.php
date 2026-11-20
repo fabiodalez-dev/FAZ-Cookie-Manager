@@ -917,6 +917,10 @@ class Api extends Rest_Controller {
 			'banners'      => $banners ? $banners : array(),
 			'categories'   => $categories ? $categories : array(),
 			'cookies'      => $cookies ? $cookies : array(),
+			// Whether the cookie and category text above is stored without the legacy
+			// slashes (see Store::TEXT_UNSLASHED_OPTION). The import reads it to
+			// unslash a file written by an older version.
+			'text_unslashed' => ! \FazCookie\Includes\Store::legacy_slashes_pending(),
 		);
 
 		return rest_ensure_response( $export );
@@ -939,6 +943,18 @@ class Api extends Rest_Controller {
 		}
 
 		$imported = array();
+
+		// Files exported before the slashing fix carry the cookie and category
+		// text as the old setters stored it ("It\'s"). Once this site has been
+		// migrated it stores and serves that text clean, so such a file is
+		// unslashed on the way in, once; a file marked text_unslashed is already
+		// clean and must not be (that would eat a real backslash). While this
+		// site still awaits the migration its rows are in the old shape too, so
+		// the file is taken as it is and the migration converts both together.
+		$unslash_text = empty( $data['text_unslashed'] ) && ! \FazCookie\Includes\Store::legacy_slashes_pending();
+		$text_column  = static function ( $value ) use ( $unslash_text ) {
+			return $unslash_text ? \FazCookie\Includes\Store::unslash_text_column( $value ) : $value;
+		};
 
 		// --- Settings ---
 		if ( ! empty( $data['settings'] ) && is_array( $data['settings'] ) ) {
@@ -1040,9 +1056,9 @@ class Api extends Rest_Controller {
 				$cat_meta = array_key_exists( 'meta', $cat ) ? Cookies_API::sanitize_meta_for_current_user( $cat['meta'] ) : null;
 				$result   = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 					'category_id'        => absint( $cat['category_id'] ?? 0 ),
-					'name'               => $this->encode_json_column( $cat['name'] ?? null, array() ),
+					'name'               => $this->encode_json_column( $text_column( $cat['name'] ?? null ), array() ),
 					'slug'               => sanitize_text_field( $cat['slug'] ?? '' ),
-					'description'        => $this->encode_json_column( $cat['description'] ?? null, array() ),
+					'description'        => $this->encode_json_column( $text_column( $cat['description'] ?? null ), array() ),
 					'prior_consent'      => absint( $cat['prior_consent'] ?? 0 ),
 					'visibility'         => absint( $cat['visibility'] ?? 1 ),
 					'priority'           => absint( $cat['priority'] ?? 0 ),
@@ -1085,8 +1101,8 @@ class Api extends Rest_Controller {
 					'cookie_id'   => absint( $cookie['cookie_id'] ?? 0 ),
 					'name'        => sanitize_text_field( $cookie['name'] ?? '' ),
 					'slug'        => sanitize_text_field( $cookie['slug'] ?? '' ),
-					'description' => $this->encode_json_column( $cookie['description'] ?? null, '' ),
-					'duration'    => sanitize_text_field( $cookie['duration'] ?? '' ),
+					'description' => $this->encode_json_column( $text_column( $cookie['description'] ?? null ), '' ),
+					'duration'    => sanitize_text_field( $text_column( $cookie['duration'] ?? '' ) ),
 					'domain'      => sanitize_text_field( $cookie['domain'] ?? '' ),
 					'category'    => absint( $cookie['category'] ?? 0 ),
 					'type'        => sanitize_text_field( $cookie['type'] ?? '' ),

@@ -120,6 +120,11 @@ function esc_url_raw( $url, $protocols = null ) {
 }
 function esc_url( $v ) { return htmlspecialchars( (string) $v, ENT_QUOTES, 'UTF-8' ); }
 function wp_json_encode( $v ) { return json_encode( $v ); }
+// Store::legacy_slashes_pending() reads the unslash flag. Absent = migration
+// pending, so the getters keep their pre-fix unslashing.
+if ( ! function_exists( 'get_option' ) ) {
+	function get_option( $name, $default = false ) { return $default; }
+}
 function wp_kses_post( $v ) { return strip_tags( (string) $v, '<a><strong><em><span><small><br><code>' ); }
 function wp_kses( $string, $allowed = array() ) { return strip_tags( (string) $string, '<a><strong><em><span><small><br><code>' ); }
 function wp_filter_post_kses( $v ) { return (string) $v; }

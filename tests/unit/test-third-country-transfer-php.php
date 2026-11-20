@@ -114,6 +114,11 @@ if ( ! function_exists( 'wp_json_encode' ) ) {
 if ( ! function_exists( 'stripslashes' ) ) {
 	// PHP built-in; never redefined.
 }
+// Store::legacy_slashes_pending() reads the unslash flag. Absent = migration
+// pending, so the getters keep their pre-fix unslashing.
+if ( ! function_exists( 'get_option' ) ) {
+	function get_option( $name, $default = false ) { return $default; }
+}
 if ( ! function_exists( 'wp_kses_post' ) ) {
 	function wp_kses_post( $v ) {
 		return wp_kses( $v, array() );
