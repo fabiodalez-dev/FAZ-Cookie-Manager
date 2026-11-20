@@ -2274,7 +2274,17 @@ class Renderer {
 			return home_url( '/' );
 		}
 		$path = '/' . ltrim( $path, '/' );
-		return home_url( $path );
+		// REQUEST_URI is the full path from the web root, and home_url( $path )
+		// appends to the home path: on a subdirectory install
+		// (https://example.com/blog) that gave /blog/blog/cookie-policy/. Only
+		// the origin comes from home_url(); the path is the request's own.
+		$home = wp_parse_url( home_url( '/' ) );
+		if ( ! is_array( $home ) || empty( $home['scheme'] ) || empty( $home['host'] ) ) {
+			return home_url( $path );
+		}
+		return $home['scheme'] . '://' . $home['host']
+			. ( empty( $home['port'] ) ? '' : ':' . (int) $home['port'] )
+			. $path;
 	}
 
 	/**

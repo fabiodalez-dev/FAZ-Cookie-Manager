@@ -949,6 +949,8 @@ add_action( 'wp_initialize_site', function( $new_site ) {
 	restore_current_blog();
 }, 900, 1 );
 
+require_once __DIR__ . '/includes/multisite-cleanup.php';
+
 $faz_loader = new \FazCookie\Includes\CLI();
 $faz_loader->run();
 

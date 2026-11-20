@@ -73,5 +73,30 @@ $GLOBALS['faz_proxy_siteurl'] = 'http://origin.example.test';
 $GLOBALS['faz_proxy_ssl']     = true;
 proxy_check( faz_request_is_https(), 'native is_ssl remains the first HTTPS signal' );
 
+// The banner REST payload hands the cached markup (server-verified scheme,
+// so http:// behind this proxy) to the browser: it must be upgraded per
+// request like the inline render, or the icons are mixed content.
+if ( ! defined( 'ABSPATH' ) ) {
+	define( 'ABSPATH', __DIR__ . '/' );
+}
+require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
+$cached_icon = '<img src="http://origin.example.test/wp-content/plugins/faz-cookie-manager/frontend/images/revisit.svg">';
+$GLOBALS['faz_proxy_ssl']          = false;
+$_SERVER['HTTP_X_FORWARDED_PROTO'] = 'https';
+proxy_check(
+	false !== strpos( \FazCookie\Frontend\Frontend::https_plugin_urls_for_request( $cached_icon ), 'src="https://origin.example.test/wp-content/plugins/faz-cookie-manager/' ),
+	'cached http:// icon URLs are upgraded for an https request behind the proxy'
+);
+unset( $_SERVER['HTTP_X_FORWARDED_PROTO'] );
+proxy_check(
+	$cached_icon === \FazCookie\Frontend\Frontend::https_plugin_urls_for_request( $cached_icon ),
+	'and left alone on a plain-HTTP request'
+);
+$rest_src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/frontend/modules/banner-rest/class-banner-rest.php' );
+proxy_check(
+	1 === preg_match( "/'html'\\s*=>\\s*Frontend::https_plugin_urls_for_request\\(/", $rest_src ),
+	'the banner REST payload goes through the same upgrade'
+);
+
 echo "\nproxy HTTPS assets: {$passed} passed, {$failed} failed\n";
 exit( $failed > 0 ? 1 : 0 );

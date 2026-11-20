@@ -115,11 +115,18 @@ class Cookie extends Store {
 					'type'          => $data->type,
 					'discovered'    => $data->discovered,
 					'url_pattern'   => $data->url_pattern,
-					'meta'          => $data->meta,
 					'date_created'  => $data->date_created,
 					'date_modified' => $data->date_modified,
 				)
 			);
+			// The stored meta is loaded as it is, not through set_meta(): that
+			// setter strips the script keys for a user without unfiltered_html,
+			// and doing so on READ removed an administrator's opt-in/opt-out
+			// scripts from memory, so any later save by that user (a
+			// description edit, a bulk category move) persisted the loss. What
+			// the user writes is still gated, in set_meta().
+			$this->set_object_data( 'meta', $data->meta );
+			$this->decoded_meta = null;
 			$this->set_loaded( true );
 		}
 	}
@@ -260,12 +267,12 @@ class Cookie extends Store {
 				$content    = '' !== $translated ? $translated : $content;
 			}
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
-			$contents[ $lang ] = is_string( $content ) ? stripslashes( wp_kses_post( $content ) ) : '';
+			$contents[ $lang ] = is_string( $content ) ? wp_kses_post( stripslashes( $content ) ) : '';
 		}
 		// Preserve extra language keys beyond faz_selected_languages().
 		foreach ( $data as $lang => $content ) {
 			if ( ! isset( $contents[ $lang ] ) && is_string( $content ) ) {
-				$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
+				$contents[ $lang ] = wp_kses_post( stripslashes( $content ) );
 			}
 		}
 		return $contents;
@@ -997,10 +1004,84 @@ class Cookie extends Store {
 			is_callable( array( '\\FazCookie\\Admin\\Modules\\Cookies\\Api\\Cookies_API', 'sanitize_meta_for_current_user' ) )
 			&& function_exists( 'current_user_can' )
 		) {
+			// Scripts this row already carries were stored by someone allowed
+			// to store them. A user below the gate can neither change them nor,
+			// by saving any other field, remove them: the incoming script keys
+			// are stripped and the stored ones are put back.
+			$kept = current_user_can( 'unfiltered_html' ) ? array() : $this->stored_script_meta();
+			if ( ! empty( $kept ) ) {
+				// The setters merge into get_meta(), so the stored scripts come
+				// back in $data unchanged; they are not a write, and must not
+				// be reported as a stripped one (faz_meta_script_keys_stripped).
+				$data = self::drop_unchanged_script_meta( $data, $kept );
+			}
 			$data = \FazCookie\Admin\Modules\Cookies\Api\Cookies_API::sanitize_meta_for_current_user( $data );
+			if ( ! empty( $kept ) ) {
+				$data = self::merge_script_meta( $data, $kept );
+			}
 		}
 		$this->set_object_data( 'meta', $data );
 		$this->decoded_meta = null;
+	}
+
+	/**
+	 * The non-empty script keys of the meta currently held by this object.
+	 *
+	 * @return array<string,string>
+	 */
+	private function stored_script_meta() {
+		$meta = $this->get_meta();
+		$kept = array();
+		foreach ( array( 'opt_in_script', 'opt_out_script' ) as $key ) {
+			if ( isset( $meta[ $key ] ) && '' !== (string) $meta[ $key ] ) {
+				$kept[ $key ] = (string) $meta[ $key ];
+			}
+		}
+		return $kept;
+	}
+
+	/**
+	 * Remove the script keys of $data that equal the stored ones.
+	 *
+	 * @param array|string $data Incoming meta (array or JSON).
+	 * @param array        $kept Stored script keys.
+	 * @return array|string Same shape as $data.
+	 */
+	private static function drop_unchanged_script_meta( $data, $kept ) {
+		$was_string = is_string( $data );
+		$decoded    = $was_string ? json_decode( $data, true ) : $data;
+		if ( ! is_array( $decoded ) ) {
+			return $data;
+		}
+		foreach ( $kept as $key => $value ) {
+			if ( isset( $decoded[ $key ] ) && (string) $decoded[ $key ] === $value ) {
+				unset( $decoded[ $key ] );
+			}
+		}
+		return $was_string ? wp_json_encode( $decoded ) : $decoded;
+	}
+
+	/**
+	 * Put stored script keys back into a gated meta value.
+	 *
+	 * @param array|string $data Meta after the capability gate (array or JSON).
+	 * @param array        $kept Script keys to restore.
+	 * @return array|string Same shape as $data.
+	 */
+	private static function merge_script_meta( $data, $kept ) {
+		if ( is_array( $data ) ) {
+			return array_merge( $data, $kept );
+		}
+		if ( null === $data || '' === $data ) {
+			return wp_json_encode( $kept );
+		}
+		if ( is_string( $data ) ) {
+			$decoded = json_decode( $data, true );
+			if ( is_array( $decoded ) ) {
+				return wp_json_encode( array_merge( $decoded, $kept ) );
+			}
+		}
+		return $data;
 	}
 	/**
 	 * Get contents by language.

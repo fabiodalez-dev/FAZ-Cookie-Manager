@@ -45,6 +45,16 @@ class DSAR_Shortcode {
 	const MESSAGE_MAX_LENGTH = 5000;
 
 	/**
+	 * Longest requester name kept, in characters.
+	 *
+	 * The name is echoed into the confirmation mail sent to the address typed
+	 * into this public form. Uncapped, it let an anonymous script make the site
+	 * mail ~64 KB of attacker text, under the site's own name, to any third
+	 * party. A real name fits comfortably in 100 characters.
+	 */
+	const NAME_MAX_LENGTH = 100;
+
+	/**
 	 * Default minimum seconds between a form being rendered and submitted.
 	 *
 	 * The nonce is not a per-submission cost. For an anonymous visitor
@@ -464,7 +474,7 @@ class DSAR_Shortcode {
 
 				<div class="faz-dsar-field">
 					<label for="<?php echo esc_attr( $id ); ?>-name"><?php esc_html_e( 'Full Name', 'faz-cookie-manager' ); ?> *</label>
-					<input type="text" id="<?php echo esc_attr( $id ); ?>-name" name="dsar_name" required aria-required="true" autocomplete="name">
+					<input type="text" id="<?php echo esc_attr( $id ); ?>-name" name="dsar_name" maxlength="<?php echo esc_attr( self::NAME_MAX_LENGTH ); ?>" required aria-required="true" autocomplete="name">
 				</div>
 
 				<div class="faz-dsar-field">
@@ -596,6 +606,7 @@ class DSAR_Shortcode {
 		// told half a story.
 
 		$name     = isset( $_POST['dsar_name'] ) ? sanitize_text_field( wp_unslash( $_POST['dsar_name'] ) ) : '';
+		$name     = function_exists( 'mb_substr' ) ? mb_substr( $name, 0, self::NAME_MAX_LENGTH ) : substr( $name, 0, self::NAME_MAX_LENGTH );
 		$email       = isset( $_POST['dsar_email'] ) ? sanitize_email( wp_unslash( $_POST['dsar_email'] ) ) : '';
 		$type        = isset( $_POST['dsar_type'] ) ? sanitize_key( wp_unslash( $_POST['dsar_type'] ) ) : '';
 		$message     = isset( $_POST['dsar_message'] ) ? sanitize_textarea_field( wp_unslash( $_POST['dsar_message'] ) ) : '';
@@ -773,7 +784,7 @@ class DSAR_Shortcode {
 	 * @return array{0:string,1:string}
 	 */
 	private function connection_lock_keys() {
-		$hash = substr( $this->hash_ip(), 0, 16 );
+		$hash = substr( $this->rate_hash(), 0, 16 );
 		return array( 'faz_dsar_rl_' . $hash, 'faz_dsar_lock_' . $hash );
 	}
 
@@ -1765,7 +1776,36 @@ class DSAR_Shortcode {
 
 	/** Transient key for the per-email hourly throttle. */
 	private function email_rl_key( $email ) {
-		return 'faz_dsar_rl_em_' . substr( hash_hmac( 'sha256', strtolower( $email ), \wp_salt() ), 0, 16 );
+		return 'faz_dsar_rl_em_' . substr( hash_hmac( 'sha256', self::mailbox_key( $email ), \wp_salt() ), 0, 16 );
+	}
+
+	/**
+	 * The mailbox an address delivers to, for throttling.
+	 *
+	 * victim+1@ and victim+2@ (and Gmail's dot variants) reach one inbox, and
+	 * keying the hourly limit on the raw address gave each spelling its own
+	 * slot, so one recipient could be sent most of the day's confirmations.
+	 *
+	 * @param string $email Address as submitted.
+	 * @return string Lower-cased address without a +tag (and without dots for Gmail).
+	 */
+	private static function mailbox_key( $email ) {
+		$email = strtolower( trim( (string) $email ) );
+		$at    = strrpos( $email, '@' );
+		if ( false === $at ) {
+			return $email;
+		}
+		$local  = substr( $email, 0, $at );
+		$domain = substr( $email, $at + 1 );
+		$plus   = strpos( $local, '+' );
+		if ( false !== $plus ) {
+			$local = substr( $local, 0, $plus );
+		}
+		if ( 'gmail.com' === $domain || 'googlemail.com' === $domain ) {
+			$local  = str_replace( '.', '', $local );
+			$domain = 'gmail.com';
+		}
+		return $local . '@' . $domain;
 	}
 
 	/**
@@ -1782,7 +1822,7 @@ class DSAR_Shortcode {
 
 	/** Transient key for this client's 24-hour counter. */
 	private function ip_day_key() {
-		return 'faz_dsar_rl_cnt_ip_' . substr( $this->hash_ip(), 0, 16 );
+		return 'faz_dsar_rl_cnt_ip_' . substr( $this->rate_hash(), 0, 16 );
 	}
 
 	/**
@@ -2082,8 +2122,12 @@ class DSAR_Shortcode {
 			);
 		}
 
-		// Strip CRLF and angle brackets to prevent SMTP header injection via name or email.
-		$safe_name  = str_replace( array( "\r", "\n", '<', '>', '"' ), '', $name );
+		// Strip CRLF and angle brackets to prevent SMTP header injection via name
+		// or email. Commas and semicolons go too: wp_mail() splits Reply-To on
+		// commas, so a name like 'Jane,attacker@example.test' used to add the
+		// attacker as a second Reply-To on a mail whose admin is told to reply
+		// with the requester's personal data.
+		$safe_name  = str_replace( array( "\r", "\n", '<', '>', '"', ',', ';' ), '', $name );
 		$safe_email = str_replace( array( "\r", "\n" ), '', $email );
 
 		wp_mail(
@@ -2100,6 +2144,7 @@ class DSAR_Shortcode {
 	 */
 	private function send_confirmation( $name, $email, $type ) {
 		$site_name  = get_bloginfo( 'name' );
+		$name       = self::greeting_name( $name, $email );
 		$type_label = self::get_type_label( $type );
 
 		wp_mail(
@@ -2117,6 +2162,32 @@ class DSAR_Shortcode {
 	}
 
 	/**
+	 * The name the confirmation mail greets the requester with.
+	 *
+	 * The address was typed into a public form and is not verified, so this
+	 * mail can be aimed at a third party, under the site's name. It must not
+	 * carry a link the submitter wrote. Mail clients auto-link more than
+	 * scheme:// and www. text: a bare domain ("evil-example.com/login"), an
+	 * address and a path are linked too. Every word that looks like one of
+	 * those is dropped, the rest is capped at 60 characters, and the address
+	 * itself is used when nothing is left.
+	 *
+	 * @param string $name  Name typed into the form.
+	 * @param string $email Requester's address.
+	 * @return string
+	 */
+	public static function greeting_name( $name, $email ) {
+		$name = (string) preg_replace( '~\S*(?:://|www\.|@|/|\\\\|[\p{L}\p{N}-]\.[\p{L}]{2,})\S*~iu', '', (string) $name );
+		$name = trim( (string) preg_replace( '~\s+~u', ' ', $name ) );
+		if ( function_exists( 'mb_substr' ) ) {
+			$name = trim( mb_substr( $name, 0, 60 ) );
+		} else {
+			$name = trim( substr( $name, 0, 60 ) );
+		}
+		return '' === $name ? (string) $email : $name;
+	}
+
+	/**
 	 * Map a DSAR type key to a human-readable label.
 	 *
 	 * @param string $type One of: access, erasure, portability, rectify, restrict, object.
@@ -2131,6 +2202,11 @@ class DSAR_Shortcode {
 			'restrict'    => __( 'Right to Restrict Processing (Art. 18 GDPR)', 'faz-cookie-manager' ),
 			'object'      => __( 'Right to Object (Art. 21 GDPR)', 'faz-cookie-manager' ),
 		);
-		return isset( $labels[ $type ] ) ? $labels[ $type ] : $type;
+		if ( isset( $labels[ $type ] ) ) {
+			return $labels[ $type ];
+		}
+		// Never the raw stored value: it reaches the admin mail and the erased
+		// record's title, where nothing escapes it.
+		return DSAR_Admin::unknown_label( $type );
 	}
 }

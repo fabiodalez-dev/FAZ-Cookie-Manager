@@ -77,16 +77,16 @@ function faz_consent_is_throttled( $consent_id, $status, $previous ) {
 	if ( '' !== $consent_id ) {
 		$status = sanitize_key( $status );
 		// Allowlisted BEFORE the comparison — see the shipped guard.
-		if ( ! in_array( $status, array( 'accepted', 'rejected', 'partial', 'dnsmpi_optout', 'dns_rescinded', 'pmp_grant' ), true ) ) {
+		if ( ! in_array( $status, array( 'accepted', 'rejected', 'partial' ), true ) ) {
 			$status = '';
 		}
 		$status_changed = '' !== $status && $status !== $previous;
 		// Armed unconditionally; its verdict is ignored only for a change.
-		$key           = 'faz_consent_' . substr( md5( $consent_id ), 0, 8 );
+		$hash          = md5( $consent_id );
+		$key           = 'faz_consent_' . $hash;
 		$window_closed = faz_test_throttle( $key, 300 );
 		// First change in the window is free; later ones are rate-limited.
 		if ( $status_changed ) {
-			$hash = substr( md5( $consent_id ), 0, 8 );
 			if ( faz_test_throttle( 'faz_consent_chg1_' . $hash, 300 ) ) {
 				$status_changed = ! faz_test_throttle( 'faz_consent_chgn_' . $hash, 10 );
 			}
@@ -233,8 +233,12 @@ wcheck(
 	'the previous status is read back from the log rather than assumed'
 );
 wcheck(
-	false !== strpos( $src, "'accepted', 'rejected', 'partial', 'dnsmpi_optout', 'dns_rescinded', 'pmp_grant'" ),
+	false !== strpos( $src, "if ( ! in_array( \$status, array( 'accepted', 'rejected', 'partial' ), true ) ) {" ),
 	'the shipped guard still allowlists the status before comparing it'
+);
+wcheck(
+	false !== strpos( $src, "\$hash          = md5( \$sanitized_consent_id );" ) && false === strpos( $src, 'substr( md5( $sanitized_consent_id ), 0, 8 )' ),
+	'the per-consent_id keys carry the whole digest, not a grindable 32-bit prefix'
 );
 wcheck(
 	false !== strpos( $src, "'faz_consent_chg1_'" ) && false !== strpos( $src, "'faz_consent_chgn_'" ),

@@ -1,8 +1,18 @@
 /**
  * WordPress localize object mapped to a constant.
  */
-if ( typeof window._fazConfig === 'undefined' && typeof window._fazCfg !== 'undefined' && window._fazCfg !== null ) {
-    window._fazConfig = window._fazCfg;
+// Only a plain object counts as the configuration. When the localize block is
+// missing (an optimiser dropped or delayed it) the name is answered by the
+// document instead: `<a id="_fazConfig">` in a post makes window._fazConfig an
+// element, which is truthy, so the runtime would start on it. Anything else is
+// treated as absent; the own property this writes also shadows the element
+// for every script that runs later. _fazIsPlainObject is hoisted from below.
+if ( !_fazIsPlainObject( window._fazConfig ) ) {
+    if ( _fazIsPlainObject( window._fazCfg ) ) {
+        window._fazConfig = window._fazCfg;
+    } else if ( window._fazConfig ) {
+        window._fazConfig = undefined;
+    }
 }
 // Build marker — bump when shipping behavioural changes to this file. Lets
 // `fazcookie._diag().build` reveal at a glance whether a cache (CDN / optimizer)
@@ -79,6 +89,29 @@ function _fazCompareVersions(a, b) {
 // runtime stands down exactly as it did before, with a precise reason (the
 // `!_fazStore` branch below reads this report).
 const _FAZ_STATIC_CONFIG_PREFIX = 'window._fazStaticConfig=';
+// A global the runtime trusts must be a plain object this realm's scripts
+// made. A name that no script has defined is answered by the document instead
+// (named-property access on window): `<a id="_fazStaticConfig">` in a post
+// makes window._fazStaticConfig an element, two elements sharing an id make it
+// an HTMLCollection, an <iframe name> makes it a WindowProxy, and each is
+// truthy and typeof 'object'. Their class tag says what they are
+// ([object HTMLAnchorElement], [object HTMLCollection], [object Window]); a
+// JSON object or `{}` says [object Object]. The tag, not the prototype, so an
+// object another realm built (a test harness, a same-origin frame) still
+// counts. Reads nothing but its argument (see the old-WebKit note below).
+function _fazIsPlainObject(value) {
+    if (!value || typeof value !== 'object') return false;
+    try { return Object.prototype.toString.call(value) === '[object Object]'; } catch (e) { return false; }
+}
+// The static configuration counts as applied only when it is a plain object;
+// anything else is treated as absent, so recovery runs and the fail-closed
+// guard holds. Its keys are not checked against the three PHP offloads today:
+// a newer PHP side may offload more, and a cached older runtime must not stand
+// down over that (the recovery path, which parses an untrusted body, does
+// check them in _fazIsRecoveredStaticConfig()).
+function _fazStaticConfigApplied() {
+    return _fazIsPlainObject(window._fazStaticConfig);
+}
 // Matched on the file name only: an uploads offload or CDN rewrite may move
 // the directory, and the recovery below validates whatever it fetches.
 const _FAZ_STATIC_CONFIG_FILE_RE = /\/config-[0-9a-f]{32}\.js(?:[?#]|$)/;
@@ -132,6 +165,17 @@ function _fazIsRecoveredStaticConfig(value, cfg) {
         && (!catalogue || typeof catalogue !== 'object' || (Array.isArray(catalogue) && catalogue.length !== 0))) return false;
     return true;
 }
+// window.fazcookie, made a plain object of this runtime's own when it is not
+// one. Post content is parsed before this deferred script runs, so
+// `<a id="fazcookie"></a><a id="fazcookie" name="_fazInitDone"></a>` would
+// otherwise hand every `window.fazcookie || {}` an HTMLCollection whose
+// `_fazInitDone` item is truthy, and the banner would never initialise. An
+// own property on window shadows the document's named properties, so one
+// assignment is enough for the rest of the page view.
+function _fazOwnPublicObject() {
+    if (!_fazIsPlainObject(window.fazcookie)) window.fazcookie = {};
+    return window.fazcookie;
+}
 // Where an optimiser parks a delayed script's URL instead of `src`
 // (Perfmatters, WP Rocket, LiteSpeed, generic lazy loaders).
 const _FAZ_STATIC_CONFIG_SRC_ATTRS = ['src', 'data-src', 'data-pmdelayedscript', 'data-rocket-src', 'data-litespeed-src', 'data-lazy-src'];
@@ -140,7 +184,7 @@ const _fazStaticConfigRecovery = (function () {
     try {
         var cfg = window._fazConfig;
         if (!cfg || !cfg._staticConfigRequired) return report;
-        if (window._fazStaticConfig && typeof window._fazStaticConfig === 'object') return report;
+        if (_fazStaticConfigApplied()) return report;
         var doc = window.document;
         var tagSrc = function (el) {
             for (var i = 0; i < _FAZ_STATIC_CONFIG_SRC_ATTRS.length; i++) {
@@ -232,14 +276,14 @@ const _fazStaticConfigRecovery = (function () {
 })();
 // Optimisers may delay the small inline merge while the external configuration
 // and runtime are already available. Merge before any blocking decisions.
-if (window._fazConfig && window._fazStaticConfig) {
+if (window._fazConfig && _fazStaticConfigApplied()) {
     Object.keys(window._fazStaticConfig).forEach(function (key) {
         if (!(key in window._fazConfig)) window._fazConfig[key] = window._fazStaticConfig[key];
     });
 }
 // A failed static dependency must never release the bootstrap without its
 // provider rules. Keep resources parked and let a reload retry the asset.
-const _fazStaticConfigMissing = window._fazConfig && window._fazConfig._staticConfigRequired && !window._fazStaticConfig;
+const _fazStaticConfigMissing = window._fazConfig && window._fazConfig._staticConfigRequired && !_fazStaticConfigApplied();
 const _fazStore = _fazStaticConfigMissing ? null : window._fazConfig;
 // Announce the runtime before anything else runs. An optimiser that turns the
 // inline bootstrap into a deferred script can execute it AFTER this file; it
@@ -316,6 +360,29 @@ function _fazCookieDomainForHost(rootDomain, hostname) {
     return '';
 }
 
+/**
+ * A value made safe to put inside a double-quoted CSS attribute selector,
+ * `[data-x="` + _fazCssAttrValue(v) + `"]`. Service ids and category slugs
+ * reach these selectors from markup (a placeholder's data-faz-accept and
+ * data-faz-accept-service) and from configuration; one quote or backslash in
+ * them made querySelector throw a SyntaxError and the click did nothing.
+ * CSS.escape where the browser has it; otherwise the characters that can end
+ * or break a quoted string are escaped by hand (CSSOM's serialize-a-string).
+ * Reads nothing but its argument (old-WebKit rule above).
+ *
+ * @param {*} value
+ * @returns {string}
+ */
+function _fazCssAttrValue(value) {
+    var text = String(value == null ? '' : value);
+    if (typeof CSS !== 'undefined' && CSS && typeof CSS.escape === 'function') return CSS.escape(text);
+    return text.replace(/[\u0000-\u001f\u007f"\\]/g, function (ch) {
+        if (ch === '\u0000') return '\ufffd';
+        if (ch === '"' || ch === '\\') return '\\' + ch;
+        return '\\' + ch.charCodeAt(0).toString(16) + ' ';
+    });
+}
+
 if ( ! _fazStore ) {
     // _fazConfig is injected by wp_localize_script. If it is missing (e.g. a
     // JS-defer plugin scoped the localize block inside a DOMContentLoaded
@@ -357,7 +424,7 @@ if ( ! _fazStore ) {
             + ( _fazStaticVerdict || ' Check the Network tab for wp-content/uploads/faz-cookie-manager/assets/config-*.js.' )
         : '[FAZ Cookie Manager] _fazConfig is not defined — banner disabled. If you use a JS optimisation plugin (WP Rocket, LiteSpeed, etc.), exclude _fazConfig from deferral.' );
     // Expose a no-op stub so any external callers (GTM, etc.) do not crash.
-    window.fazcookie = window.fazcookie || {};
+    _fazOwnPublicObject();
 } else {
 
 _fazStore._backupNodes = [];
@@ -377,8 +444,7 @@ _fazStore._optoutSuccessCountdownInterval = null;
 _fazStore._optoutSuccessAutoCloseTimer = null;
 _fazStore._optoutSuccessSubtextTemplate = "";
 
-window.fazcookie = window.fazcookie || {};
-_fazRef = window.fazcookie;
+_fazRef = _fazOwnPublicObject();
 _fazRef._fazConsentStore = new Map();
 
 // Build marker `_FAZ_BUILD` — declared at the top of this file (the version
@@ -2166,7 +2232,7 @@ function _fazApplyBannerPayload(payload) {
         _fazStore._wpConsentType = payload.wpConsentType;
     }
     if (typeof payload.html === 'string' && payload.html !== '') {
-        var tpl = document.getElementById('fazBannerTemplate');
+        var tpl = _fazFindBannerTemplate();
         if (tpl) _fazWriteBannerTemplate(tpl, payload.html);
     }
     if (typeof payload.styles === 'string' && payload.styles !== '') {
@@ -2631,6 +2697,33 @@ function _fazIsTemplateElement(template) {
 }
 
 /**
+ * Locate the plugin's own banner template.
+ *
+ * document.getElementById() returns the FIRST element carrying the id, and
+ * the real template is printed in wp_footer, after the_content. wp_kses_post
+ * keeps `id` on every post tag, so an Author or Contributor could ship a
+ * <div id="fazBannerTemplate"> in a post and have it read as the banner,
+ * with "Accept all" bound to a button labelled "Reject" (DOM clobbering).
+ *
+ * Only the two element types the server has ever printed are accepted — a
+ * <template> or the legacy <script type="text/template">, neither of which
+ * post kses lets a lower-privileged author write — and the LAST match wins,
+ * because the footer template comes after any post content.
+ *
+ * @returns {Element|null}
+ */
+function _fazFindBannerTemplate() {
+    var nodes = document.querySelectorAll('[id="fazBannerTemplate"]');
+    for (var i = nodes.length - 1; i >= 0; i--) {
+        var node = nodes[i];
+        var name = String(node.nodeName).toLowerCase();
+        if (name === 'template' && node.content) return node;
+        if (name === 'script' && String(node.getAttribute('type') || '').toLowerCase() === 'text/template') return node;
+    }
+    return null;
+}
+
+/**
  * Read the banner template markup.
  *
  * The server prints a <template> (see Frontend::banner_html()), whose
@@ -2676,11 +2769,12 @@ _fazDomReady(async function () {
     // A second _fazInit call inserts a second banner into the DOM; _fazGetBanner
     // uses querySelector (first match), so clicking Reject hides banner #1 while
     // banner #2 stays visible. window.fazcookie persists across executions
-    // (initialised as window.fazcookie = window.fazcookie || {}), so this flag
-    // survives the second run and makes it a no-op.
-    if (window.fazcookie && window.fazcookie._fazInitDone) return;
-    window.fazcookie = window.fazcookie || {};
-    window.fazcookie._fazInitDone = true;
+    // (_fazOwnPublicObject() keeps an existing plain object), so this flag
+    // survives the second run and makes it a no-op. Read through the same
+    // helper: a named element in post content must never stand in for it.
+    var _fazPublic = _fazOwnPublicObject();
+    if (_fazPublic._fazInitDone === true) return;
+    _fazPublic._fazInitDone = true;
     try {
         await _fazInit();
     } catch (err) {
@@ -3804,7 +3898,7 @@ function _fazSetCheckBoxAriaLabel(boxElem, isChecked, formattedLabel, isCCPA = f
  * Render banner after processing.
  */
 function _fazRenderBanner() {
-    const template = document.getElementById('fazBannerTemplate');
+    const template = _fazFindBannerTemplate();
     // Guard: the template element is absent when banner_html() was suppressed
     // (e.g. PMP-exempt members who still get script.js for GCM signals) or
     // when the banner template cache is empty. Without this check the next
@@ -4560,7 +4654,7 @@ function _fazAcceptCookies(choice = "all", ungated = false, source = "preference
             // here and the grant was written straight back, leaving Reject All
             // as the only way out.
             var toggle = document.querySelector(
-                '.faz-service-toggle[data-service="' + id + '"]'
+                '.faz-service-toggle[data-service="' + _fazCssAttrValue(id) + '"]'
             );
             if (toggle && !toggle.checked) {
                 _fazRef._fazConsentStore.delete("gpcx." + id);
@@ -5357,6 +5451,102 @@ function _fazMarkupBlockedCategory(el, markup) {
     }
     return "";
 }
+// Provenance of a park (2026-11 security audit). wp_kses_post keeps data-*
+// on every post tag, so an Author or Contributor could write data-faz-data,
+// data-faz-style or data-faz-background straight into post content, and the
+// restore pass turned them into live attributes kses itself refuses: <object
+// data> pointing anywhere, style that skipped safecss, background on table
+// cells. A park this response really made — on the server, in the bootstrap
+// or here — carries the response-local key (the srcdoc proof) and the names
+// it parked. A list is only extended when the key on it is this response's,
+// so an author-written list is never inherited.
+var _FAZ_PROVEN_PARKS = { "data-faz-data": "data", "data-faz-background": "background", "data-faz-style": "style" };
+function _fazProveParked(el, parkAttr, setter) {
+    var name = _FAZ_PROVEN_PARKS[parkAttr];
+    if (!name || !el || typeof el.getAttribute !== "function") return;
+    var key = (_fazStore && _fazStore._srcdocKey) || "";
+    if (!key) return;
+    var set = setter || function (n, v) { el.setAttribute(n, v); };
+    var list = el.getAttribute("data-faz-park-key") === key ? String(el.getAttribute("data-faz-park") || "") : "";
+    if ((" " + list + " ").indexOf(" " + name + " ") === -1) list = (list ? list + " " : "") + name;
+    set("data-faz-park", list);
+    set("data-faz-park-key", key);
+}
+function _fazParkProven(el, name) {
+    var key = (_fazStore && _fazStore._srcdocKey) || "";
+    return !!key && el.getAttribute("data-faz-park-key") === key
+        && (" " + String(el.getAttribute("data-faz-park") || "") + " ").indexOf(" " + name + " ") !== -1;
+}
+
+// A park made by ANOTHER response — markup the page fetched later (infinite
+// scroll, "load more") was parked by its own response, under its own key —
+// is not proven here, and stayed parked after consent until a reload. The
+// server signs what it parks (data-faz-park-sig, see Park_Proof in PHP), so
+// such a tag is sent to the park-proofs route, which says whether this site
+// signed exactly those values. Only a confirmed tag, whose values have not
+// changed since, is given this page's key; the restore pass then runs again.
+// An unavailable verifier gets one retry. A verdict is final for this
+// element, and only a positive verdict for its current values unblocks it.
+var _fazParkAsked = typeof WeakSet === "function" ? new WeakSet() : null;
+var _fazParkQueue = [];
+var _fazParkBusy = false;
+function _fazQueueParkVerify(el) {
+    if (!_fazParkAsked || _fazParkAsked.has(el)) return;
+    if (!_fazStore || !_fazStore._parkProofEndpoint || !_fazStore._srcdocKey || typeof fetch !== "function") return;
+    var key = el.getAttribute("data-faz-park-key");
+    if (!el.getAttribute("data-faz-park-sig") || !key || key === _fazStore._srcdocKey) return;
+    _fazParkAsked.add(el);
+    _fazParkQueue.push(el);
+    if (_fazParkQueue.length === 1 && !_fazParkBusy) setTimeout(_fazFlushParkVerify, 0);
+}
+function _fazParkItem(el) {
+    var names = String(el.getAttribute("data-faz-park") || "").split(/\s+/).filter(Boolean);
+    return {
+        names: names,
+        values: names.map(function (n) { return el.getAttribute("data-faz-" + n) || ""; }),
+        sig: el.getAttribute("data-faz-park-sig") || ""
+    };
+}
+function _fazFetchParkProofs(items, mayRetry) {
+    return Promise.resolve().then(function () {
+        return fetch(_fazStore._parkProofEndpoint, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items: items })
+        });
+    }).then(function (res) {
+        if (!res || res.status === 408 || res.status >= 500) throw new Error("Park proof verification unavailable");
+        return res && res.ok ? res.json() : null;
+    }).catch(function () {
+        if (!mayRetry) return null;
+        return new Promise(function (resolve) { setTimeout(resolve, 500); }).then(function () {
+            return _fazFetchParkProofs(items, false);
+        });
+    });
+}
+function _fazFlushParkVerify() {
+    if (_fazParkBusy || !_fazParkQueue.length) return;
+    _fazParkBusy = true;
+    var els = _fazParkQueue.splice(0, 50);
+    var items = els.map(_fazParkItem);
+    _fazFetchParkProofs(items, true).then(function (data) {
+        var valid = data && Array.isArray(data.valid) ? data.valid : [];
+        var confirmed = false;
+        els.forEach(function (el, i) {
+            if (valid[i] !== true) return;
+            // Confirmed for the values sent: a value changed since is not.
+            if (JSON.stringify(_fazParkItem(el)) !== JSON.stringify(items[i])) return;
+            el.setAttribute("data-faz-park-key", _fazStore._srcdocKey);
+            confirmed = true;
+        });
+        if (confirmed) _fazUnblockServerSide();
+    }).catch(function () { /* stays parked: the safe failure */ }).then(function () {
+        _fazParkBusy = false;
+        if (_fazParkQueue.length) _fazFlushParkVerify();
+    });
+}
+
 function _fazGateResourceSetAttribute(proto, opts) {
     if (!proto || typeof proto.setAttribute !== "function") return;
     var native = proto.setAttribute;
@@ -5369,6 +5559,7 @@ function _fazGateResourceSetAttribute(proto, opts) {
         if ((n === opts.urlAttr || (opts.urlAltAttr && n === opts.urlAltAttr)) && _fazImgShouldBlock(el, value)) {
             native.call(el, opts.parkAttr, String(value));
             native.call(el, "data-faz-category", _fazImgCategory(String(value)));
+            _fazProveParked(el, opts.parkAttr, function (n, v) { native.call(el, n, v); });
             if (opts.hideOnPark && el.classList && !_fazHasLiveSrcdoc(el)) el.classList.add("faz-hidden");
             // Same runtime per-service reveal as the src-property gate: a
             // lazy-loader that parks the embed via setAttribute('src') is
@@ -5444,6 +5635,8 @@ function _fazGateResourceSetAttribute(proto, opts) {
                     if (local === opts.urlAttr && (nsStr === "" || nsStr === "http://www.w3.org/1999/xlink") && _fazImgShouldBlock(this, value)) {
                         native.call(this, opts.parkAttr, String(value));
                         native.call(this, "data-faz-category", _fazImgCategory(String(value)));
+                        var parkedEl = this;
+                        _fazProveParked(parkedEl, opts.parkAttr, function (n, v) { native.call(parkedEl, n, v); });
                         return;
                     }
                 } else if (nsStr === "" && judge(this, local, value)) {
@@ -5549,6 +5742,7 @@ function _fazGateBackgroundSetter(proto) {
                 if (_fazImgShouldBlock(this, val)) {
                     this.setAttribute("data-faz-background", String(val));
                     this.setAttribute("data-faz-category", _fazImgCategory(String(val)));
+                    _fazProveParked(this, "data-faz-background");
                     return;
                 }
             } catch (e) { /* fall through to the native setter on any error */ }
@@ -5577,6 +5771,7 @@ function _fazGateUrlPropertySetter(proto, prop, parkAttr) {
                 if (_fazImgShouldBlock(this, val)) {
                     this.setAttribute(parkAttr, String(val));
                     if (!this.getAttribute("data-faz-category")) this.setAttribute("data-faz-category", _fazImgCategory(String(val)));
+                    _fazProveParked(this, parkAttr);
                     return;
                 }
             } catch (e) { /* fall through to the native setter on any error */ }
@@ -5687,6 +5882,7 @@ function _fazParkResourceElementIfBlocked(el) {
             if (data && _fazImgShouldBlock(el, data)) {
                 el.setAttribute("data-faz-data", data);
                 el.setAttribute("data-faz-category", _fazImgCategory(data));
+                _fazProveParked(el, "data-faz-data");
                 el.removeAttribute("data");
             }
         } else if (tag === "image" || tag === "use" || tag === "feimage" || (tag === "script" && el.namespaceURI === "http://www.w3.org/2000/svg")) {
@@ -5712,6 +5908,7 @@ function _fazParkResourceElementIfBlocked(el) {
         if (bg && _fazImgShouldBlock(el, bg)) {
             el.setAttribute("data-faz-background", bg);
             el.setAttribute("data-faz-category", _fazImgCategory(bg));
+            _fazProveParked(el, "data-faz-background");
             el.removeAttribute("background");
         }
         if (tag === "link") {
@@ -6618,9 +6815,23 @@ function _fazEscapeHtmlAttr(value) {
         .replace(/</g, "&lt;");
 }
 
-function _fazPrepareStyleTagHtml(full, attrs, css) {
-    if (!_fazStore._block || !css || typeof css !== "string" || !_fazCssShouldBlock(css)) return full;
+function _fazPrepareStyleTagHtml(full, attrs, css, live) {
+    if (!_fazStore._block || !css || typeof css !== "string") return full;
     if (attrs && /\bdata-faz-css\s*=/i.test(attrs)) return full;
+    // `live`: the text a foreign parser would apply (references decoded).
+    // When it differs from the raw text and is refused, the decision is taken
+    // on it, whether or not the raw text is refused too: neutralising the
+    // raw text would leave a URL spelled with references in place, and the
+    // parser would decode it. No live text reads the same both ways, so the
+    // sheet is parked whole, with the decoded text as the original.
+    if (typeof live === "string" && live !== css && _fazCssShouldBlock(live)) {
+        var enc = _fazBase64EncodeUtf8(live);
+        if (!enc) return full;
+        return '<style' + (attrs || '') +
+            ' data-faz-css="' + _fazEscapeHtmlAttr(enc) + '"' +
+            ' data-faz-category="' + _fazEscapeHtmlAttr(_fazCssBlockedCategory(live)) + '"></style>';
+    }
+    if (!_fazCssShouldBlock(css)) return full;
     var rewritten = _fazNeutralizeCssUrls(css);
     if (rewritten === css) return full;
     var encoded = _fazBase64EncodeUtf8(css);
@@ -6635,11 +6846,228 @@ function _fazPrepareStyleTagHtml(full, attrs, css) {
         '</style>';
 }
 
-function _fazPrepareStyleHtmlString(html) {
+/**
+ * Character references in `text` decoded the way the HTML parser decodes
+ * them in markup (once), through an inert DOMParser document: a <textarea>
+ * builds no element from its content. `text` has no "<" that opens markup (the walk
+ * stops before), and the leading newline is the one the parser drops.
+ */
+function _fazDecodeCharRefs(text) {
+    try {
+        var doc = new DOMParser().parseFromString("<textarea>\n" + text + "</textarea>", "text/html");
+        var area = doc && doc.getElementsByTagName("textarea")[0];
+        return area ? String(area.value) : text;
+    } catch (e) { return text; }
+}
+
+/**
+ * Call `fn(full, attrs, css, live)` for every <style> element the HTML tokenizer
+ * would really start in `html`, and splice in what it returns.
+ *
+ * A regex over the raw string cannot tell a <style> start tag from the text
+ * "<style>" inside a quoted attribute value, a comment or a RAWTEXT/RCDATA
+ * element. Rewriting that text injected quotes and `>` (or deleted a closing
+ * quote) and turned markup a page script had sanitised into live markup — an
+ * attribute value carrying "<style>…<img onerror=…>…</style>" came out as a
+ * real <img> (mutation XSS through the consent wrappers). This walks the
+ * string with the tokenizer's own rules: data state, tags with quoted
+ * attributes, comments and bogus comments, RAWTEXT/RCDATA elements ending at
+ * the appropriate end tag. Past an <svg>/<math>/<select>/<frameset> start tag
+ * (or from the start, with `uncertain`, for a foreign or <select> context) the
+ * parser may read <style> content as markup: there a sheet is rewritten only
+ * when no "<" in its content opens markup, where both readings give the same tokens, and the walk
+ * stops at anything else. It also stops at script data that may enter the double-escaped state ("<!--" then "<script") and at
+ * anything unterminated. Where it stops, the rest of the string is returned
+ * unchanged: an unparked sheet is a missed block, a misread one is live markup.
+ *
+ * `noScripting` is for markup parsed in a document without a window (a
+ * DOMParser or createHTMLDocument document, a <template>'s content). The
+ * scripting flag is off there, so the parser may read <noscript> content as
+ * markup instead of RAWTEXT, and browsers do not agree (Chromium and WebKit
+ * read markup, Firefox RAWTEXT for createHTMLDocument). A walk that guessed
+ * either way could end the element where the parser does not, so it stops at
+ * the <noscript> start tag and leaves the rest unchanged.
+ *
+ * @param {string} html
+ * @param {function(string, string, string): string} fn
+ * @param {boolean=} uncertain
+ * @param {boolean=} noScripting
+ * @returns {string}
+ */
+function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
+    var s = String(html), n = s.length, out = "", last = 0, i = 0;
+    uncertain = !!uncertain;
+    var RAW = { style: 1, script: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1, textarea: 1, title: 1 };
+
+    function isAlpha(c) { return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z"); }
+    function isSpace(c) { return c === " " || c === "\t" || c === "\n" || c === "\f" || c === "\r"; }
+    function toGt(p) { var g = s.indexOf(">", p); return g === -1 ? n : g + 1; }
+    // p is the first character of the tag name; returns null when unterminated.
+    function scanTag(p) {
+        var start = p;
+        while (p < n && !isSpace(s.charAt(p)) && s.charAt(p) !== "/" && s.charAt(p) !== ">") p++;
+        var tag = { name: s.slice(start, p).toLowerCase(), attrsStart: p, gt: -1, end: -1, selfClosing: false };
+        while (p < n) {
+            var ch = s.charAt(p);
+            if (ch === ">") { tag.gt = p; tag.end = p + 1; return tag; }
+            if (ch === "/") {
+                if (s.charAt(p + 1) === ">") { tag.selfClosing = true; tag.gt = p + 1; tag.end = p + 2; return tag; }
+                p++; continue;
+            }
+            if (isSpace(ch)) { p++; continue; }
+            p++; // first name character, even "=" or a quote
+            while (p < n) { var cq = s.charAt(p); if (isSpace(cq) || cq === "/" || cq === ">" || cq === "=") break; p++; }
+            while (p < n && isSpace(s.charAt(p))) p++;
+            if (s.charAt(p) !== "=") continue;
+            p++;
+            while (p < n && isSpace(s.charAt(p))) p++;
+            var qc = s.charAt(p);
+            if (qc === '"' || qc === "'") {
+                var close = s.indexOf(qc, p + 1);
+                if (close === -1) return null;
+                p = close + 1;
+            } else {
+                while (p < n && !isSpace(s.charAt(p)) && s.charAt(p) !== ">") p++;
+            }
+        }
+        return null;
+    }
+    while (i < n) {
+        var lt = s.indexOf("<", i);
+        if (lt === -1) break;
+        var c = s.charAt(lt + 1);
+        if (s.substr(lt, 4) === "<!--") {
+            var j = lt + 4;
+            if (s.charAt(j) === ">") { i = j + 1; continue; }
+            if (s.substr(j, 2) === "->") { i = j + 2; continue; }
+            var cend = -1;
+            for (var k = j; k < n - 2; k++) {
+                if (s.charAt(k) !== "-" || s.charAt(k + 1) !== "-") continue;
+                if (s.charAt(k + 2) === ">") { cend = k + 3; break; }
+                if (s.charAt(k + 2) === "!" && s.charAt(k + 3) === ">") { cend = k + 4; break; }
+            }
+            if (cend === -1) break;
+            i = cend; continue;
+        }
+        if (c === "!") {
+            // CDATA is text up to "]]>" in foreign content and a bogus comment
+            // up to the first ">" in HTML: the two agree only when that first
+            // ">" is the one closing "]]>".
+            if (uncertain && s.substr(lt, 9) === "<![CDATA[") {
+                var cd = s.indexOf("]]>", lt + 9);
+                if (cd === -1 || s.indexOf(">", lt + 2) !== cd + 2) break;
+                i = cd + 3; continue;
+            }
+            i = toGt(lt + 2); continue;
+        }
+        if (c === "?") { i = toGt(lt + 2); continue; }
+        if (c === "/") {
+            var c2 = s.charAt(lt + 2);
+            if (c2 === ">") { i = lt + 3; continue; }
+            if (!isAlpha(c2)) { i = toGt(lt + 2); continue; }
+            var etag = scanTag(lt + 2);
+            if (!etag) break;
+            i = etag.end; continue;
+        }
+        if (!isAlpha(c)) { i = lt + 1; continue; }
+        var tag = scanTag(lt + 1);
+        if (!tag) break;
+        // From an <svg>/<math> start tag on, the parser may be in foreign
+        // content, where <style> and the RAWTEXT/RCDATA elements parse their
+        // content as markup; and where foreign content ends depends on the
+        // open-element stack (breakout tags, integration points, stray end
+        // tags), which a scan cannot follow. A legacy <select> or a <frameset>
+        // ignores the <style> start tag and leaves its content in the data
+        // state too. Past any of these the walk only acts where both readings
+        // give the same tokens (see below) and stops everywhere else.
+        if (tag.name === "svg" || tag.name === "math" || tag.name === "select" || tag.name === "frameset") {
+            if (!tag.selfClosing || tag.name === "select" || tag.name === "frameset") uncertain = true;
+            i = tag.end; continue;
+        }
+        if (tag.name === "plaintext") break;
+        if (noScripting && tag.name === "noscript") break;
+        // Own properties only: a "<constructor>" start tag would read a
+        // truthy value from Object.prototype and hide a following <style>.
+        if (!Object.prototype.hasOwnProperty.call(RAW, tag.name)) { i = tag.end; continue; }
+        var re = new RegExp("</" + tag.name + "(?=[\\t\\n\\f\\r />])", "ig");
+        re.lastIndex = tag.end;
+        var m = re.exec(s);
+        if (!m) break;
+        var body = s.slice(tag.end, m.index);
+        // "<!--" in script data enters the escaped states. There the first
+        // "</script" still ends the script, unless a "<script" start after
+        // the "<!--" entered the double-escaped state, where it does not:
+        // only then is the real end unknown, and the walk stops.
+        var esc = tag.name === "script" ? body.indexOf("<!--") : -1;
+        if (esc !== -1 && /<script[\t\n\f\r \/>]/i.test(body.slice(esc))) break;
+        // Where the element may be foreign (or an ignored tag), its content is
+        // markup. A "<" opens a tag, an end tag, a comment or a bogus comment
+        // there only before an ASCII letter, "/", "!" or "?"; any other "<" is
+        // text in both readings (a CSS comment's "/* < */"). Without such a
+        // "<", markup and RAWTEXT/RCDATA give the same text up to the same end
+        // tag; with one they may not, and a self-closing start tag ends a
+        // foreign element right there.
+        if (uncertain && (tag.selfClosing || /<[A-Za-z!\/?]/.test(body))) break;
+        var endTag = scanTag(m.index + 2);
+        if (!endTag) break;
+        // "&" is literal in RAWTEXT and a character reference in markup, so
+        // where the element may be foreign the text parked as its original
+        // can differ from the live one by a decoded reference. The structure
+        // cannot (no "<" in it opens markup), and a query-string "&" is routine in font
+        // and tracker URLs: the sheet is parked (fail closed).
+        if (tag.name === "style") {
+            var full = s.slice(lt, endTag.end);
+            // Where the element may be foreign, the parser decodes character
+            // references in the sheet: the callback also gets the text the
+            // browser would apply, so "&#47;&#47;tracker" is judged as
+            // "//tracker" and not as a relative path.
+            var live = uncertain && body.indexOf("&") !== -1 ? _fazDecodeCharRefs(body) : null;
+            var rep = fn(full, s.slice(tag.attrsStart, tag.gt), body, live);
+            if (rep !== full) { out += s.slice(last, lt) + rep; last = endTag.end; }
+        }
+        i = endTag.end;
+    }
+    return last === 0 ? s : out + s.slice(last);
+}
+
+/**
+ * How markup parsed with `context` as the fragment-parsing context starts:
+ * "html" in HTML content; "uncertain" in foreign content (an SVG or MathML
+ * context) or a <select>/<frameset>, where <style> may not be RAWTEXT; "text"
+ * for a context whose content is text from the first byte (<style>, <script>,
+ * <textarea>…), which no markup rewrite applies to.
+ */
+/**
+ * Whether markup parsed with `context` lands in a document without a window
+ * (DOMParser, createHTMLDocument, a <template>'s content), where the scripting
+ * flag is off and <noscript> may parse as markup.
+ */
+function _fazScriptingDisabledFor(context) {
+    var el = context;
+    if (el && el.nodeType === 11) el = el.host || el;
+    var doc = el ? (el.nodeType === 9 ? el : el.ownerDocument) : null;
+    return !!doc && !doc.defaultView;
+}
+
+function _fazMarkupContextMode(context) {
+    var el = context;
+    if (el && el.nodeType === 11) el = el.host || null; // a shadow root parses in its host
+    if (!el || el.nodeType !== 1) return "html";
+    var ns = el.namespaceURI;
+    if (ns && ns !== "http://www.w3.org/1999/xhtml") return "uncertain";
+    var name = String(el.localName || "").toLowerCase();
+    if (/^(style|script|textarea|title|xmp|iframe|noembed|noframes|noscript|plaintext)$/.test(name)) return "text";
+    if (name === "select" || name === "frameset") return "uncertain";
+    return "html";
+}
+
+function _fazPrepareStyleHtmlString(html, context) {
     if (!html || typeof html !== "string" || html.toLowerCase().indexOf("<style") === -1) return html;
-    return html.replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, function (full, attrs, css) {
-        try { return _fazPrepareStyleTagHtml(full, attrs || "", css || ""); } catch (e) { return full; }
-    });
+    var mode = _fazMarkupContextMode(context);
+    if (mode === "text") return html;
+    return _fazRewriteRealStyleTags(html, function (full, attrs, css, live) {
+        try { return _fazPrepareStyleTagHtml(full, attrs || "", css || "", live); } catch (e) { return full; }
+    }, mode !== "html", _fazScriptingDisabledFor(context));
 }
 
 function _fazGateHtmlStyleStringSetter(proto, prop) {
@@ -6653,7 +7081,9 @@ function _fazGateHtmlStyleStringSetter(proto, prop) {
         get: function () { return nativeGet.call(this); },
         set: function (val) {
             var html = String(val == null ? "" : val);
-            try { html = _fazPrepareStyleHtmlString(html); } catch (e) { /* fail open */ }
+            // outerHTML parses in the parent; innerHTML in the element itself.
+            var context = prop === "outerHTML" ? this.parentNode : this;
+            try { html = _fazPrepareStyleHtmlString(html, context); } catch (e) { /* fail open */ }
             nativeSet.call(this, html);
         }
     });
@@ -6668,7 +7098,8 @@ function _fazGateInsertAdjacentHtml(proto) {
         enumerable: true,
         value: function (position, html) {
             var s = String(html == null ? "" : html);
-            try { s = _fazPrepareStyleHtmlString(s); } catch (e) { /* fail open */ }
+            var context = /^(beforebegin|afterend)$/i.test(String(position)) ? this.parentNode : this;
+            try { s = _fazPrepareStyleHtmlString(s, context); } catch (e) { /* fail open */ }
             return native.call(this, position, s);
         }
     });
@@ -6694,7 +7125,7 @@ function _fazGateHtmlStringMethod(proto, name) {
             // second, and dropping it would change what the sanitiser does.
             var args = Array.prototype.slice.call(arguments);
             var html = String(args[0] == null ? "" : args[0]);
-            try { args[0] = _fazPrepareStyleHtmlString(html); } catch (e) { /* fail open */ }
+            try { args[0] = _fazPrepareStyleHtmlString(html, this); } catch (e) { /* fail open */ }
             return native.apply(this, args);
         }
     });
@@ -7748,6 +8179,7 @@ function _fazUnblockServerSide() {
             var cat = el.getAttribute("data-faz-category");
             var bg = el.getAttribute("data-faz-background");
             if (_fazShouldBlockResource(cat, bg, el.getAttribute("data-faz-service") || "")) return;
+            if (!_fazParkProven(el, "background")) { _fazQueueParkVerify(el); return; } // not proven by this response
             if (!_fazIsAllowedScheme(bg)) return;
             el.setAttribute("background", bg);
             if (!el.getAttribute("background")) return; // the gate re-parked it
@@ -7776,6 +8208,7 @@ function _fazUnblockServerSide() {
             var cat = el.getAttribute("data-faz-category");
             var parked = el.getAttribute("data-faz-data");
             if (_fazShouldBlockResource(cat, parked, el.getAttribute("data-faz-service") || "")) return;
+            if (!_fazParkProven(el, "data")) { _fazQueueParkVerify(el); return; } // not proven by this response
             // The one restore on this page that is an HTML sink rather than a
             // resource fetch: <object data> can load a document, and a
             // data:text/html payload there would run in this origin. So the
@@ -7857,6 +8290,7 @@ function _fazUnblockServerSide() {
         .forEach(function (el) {
             var css = el.getAttribute("data-faz-style") || "";
             if (!css || _fazCssShouldBlock(css)) return;
+            if (!_fazParkProven(el, "style")) { _fazQueueParkVerify(el); return; } // not proven by this response
             el.setAttribute("style", css);
             el.removeAttribute("data-faz-style");
             var otherKeys = ["data-faz-src", "data-faz-srcset", "data-faz-href", "data-faz-imagesrcset", "data-faz-background", "data-faz-poster", "data-faz-data", "data-faz-srcdoc"];
@@ -9238,7 +9672,17 @@ function _fazAfterConsent() {
                 var iframe = document.createElement('iframe');
                 iframe.classList.add('faz-hidden');
                 iframe.classList.add('faz-consent-bridge');
-                iframe.src = targetUrl + '?faz_consent_forward=1';
+                // The marker must land in the query string: the receiver on
+                // the target site only listens on that bridge URL. A target
+                // that already has a query or a fragment kept the old
+                // concatenation from reaching it there.
+                var bridgeUrl = targetUrl + '?faz_consent_forward=1';
+                try {
+                    var parsedTarget = new URL(targetUrl, window.location.href);
+                    parsedTarget.searchParams.set('faz_consent_forward', '1');
+                    bridgeUrl = parsedTarget.href;
+                } catch (e) { /* keep the plain concatenation */ }
+                iframe.src = bridgeUrl;
                 iframe.addEventListener('load', function() {
                     try {
                         iframe.contentWindow.postMessage({
@@ -9811,6 +10255,25 @@ function _fazWatchBannerElement() {
     document.querySelector("body").addEventListener("click", function (event) {
         var btn = event.target.closest("[data-faz-accept]");
         if (!btn) return;
+        // Provenance: wp_kses_post keeps data-* on every post tag, so an
+        // Author or Contributor can write data-faz-accept on any element and
+        // turn an ordinary click into a consent grant (and, under GPC, a GPC
+        // exception). Only the server-built placeholder button carries the
+        // response-local key (the same per-response secret that proves srcdoc
+        // parks), which post content saved earlier cannot know.
+        //
+        // A placeholder built by a DIFFERENT response carries a different key:
+        // content loaded later over AJAX (infinite scroll, "load more", AJAX
+        // pagination) runs the_content in its own request, and a page cached
+        // before the key existed has none. Granting from such a button would
+        // reopen the hole above, and ignoring the click left a dead "Accept"
+        // button. Open the preference center instead: the visitor consents in
+        // FAZ's own dialog, so a forged button can only ever show it.
+        if (!_fazStore._srcdocKey || btn.getAttribute("data-faz-accept-key") !== _fazStore._srcdocKey) {
+            event.preventDefault();
+            _revisitFazConsent();
+            return;
+        }
         var cat = btn.getAttribute("data-faz-accept");
         var serviceId = btn.getAttribute("data-faz-accept-service");
         if (
@@ -10224,12 +10687,12 @@ function _fazBindServiceCategorySync(category) {
         catToggle.setAttribute('data-faz-service-sync-bound', '1');
         catToggle.addEventListener('change', function() {
             var isChecked = catToggle.checked;
-            document.querySelectorAll('.faz-service-toggle[data-category="' + category.slug + '"]')
+            document.querySelectorAll('.faz-service-toggle[data-category="' + _fazCssAttrValue(category.slug) + '"]')
                 .forEach(function(svcToggle) {
                     svcToggle.checked = isChecked;
                 });
             if (_fazStore._perCookieConsent) {
-                document.querySelectorAll('.faz-cookie-toggle[data-category="' + category.slug + '"]')
+                document.querySelectorAll('.faz-cookie-toggle[data-category="' + _fazCssAttrValue(category.slug) + '"]')
                     .forEach(function(ckToggle) {
                         ckToggle.checked = isChecked;
                     });
@@ -10281,7 +10744,7 @@ function _fazBuildServiceRow(service, serviceList) {
         // nested rows stay coherent with the service they belong to.
         if (_fazStore._perCookieConsent) {
             var on = checkbox.checked;
-            document.querySelectorAll('.faz-cookie-toggle[data-service="' + service.id + '"]')
+            document.querySelectorAll('.faz-cookie-toggle[data-service="' + _fazCssAttrValue(service.id) + '"]')
                 .forEach(function(ckToggle) { ckToggle.checked = on; });
         }
     });
@@ -10424,11 +10887,11 @@ function _fazInjectServiceToggle(service) {
     if (!accordionEl) return;
     var accordionBody = accordionEl.querySelector('.faz-accordion-body');
     if (!accordionBody) return;
-    if (accordionBody.querySelector('.faz-service-toggle[data-service="' + service.id + '"]')) return;
+    if (accordionBody.querySelector('.faz-service-toggle[data-service="' + _fazCssAttrValue(service.id) + '"]')) return;
 
     if (_fazStore._perCookieConsent) _fazInjectCookieToggleStyles();
 
-    var serviceList = accordionBody.querySelector('.faz-service-list[data-faz-category="' + service.category + '"]');
+    var serviceList = accordionBody.querySelector('.faz-service-list[data-faz-category="' + _fazCssAttrValue(service.category) + '"]');
     if (!serviceList) {
         serviceList = document.createElement('div');
         serviceList.className = 'faz-service-list';
@@ -11272,7 +11735,7 @@ window._fazAcceptService = function (serviceId, categorySlug, trustService) {
     }
 
     var serviceToggle = document.querySelector(
-        '.faz-service-toggle[data-service="' + serviceId + '"][data-category="' + categorySlug + '"]'
+        '.faz-service-toggle[data-service="' + _fazCssAttrValue(serviceId) + '"][data-category="' + _fazCssAttrValue(categorySlug) + '"]'
     );
     var syntheticToggle = null;
     if (!serviceToggle) {
@@ -11378,7 +11841,7 @@ window._fazAcceptCategory = function (categorySlug) {
             var cbDirect = document.getElementById("fazCategoryDirect" + cat.slug);
             if (cbDirect) cbDirect.checked = true;
             // Sync service toggles for this category.
-            document.querySelectorAll('.faz-service-toggle[data-category="' + cat.slug + '"]')
+            document.querySelectorAll('.faz-service-toggle[data-category="' + _fazCssAttrValue(cat.slug) + '"]')
                 .forEach(function(svcToggle) { svcToggle.checked = true; });
             break;
         }
@@ -11396,7 +11859,7 @@ window._fazAcceptCategory = function (categorySlug) {
             if (cbR) cbR.checked = previousCategoryValue === "yes";
             var cbDirectR = document.getElementById("fazCategoryDirect" + categorySlugToRollback);
             if (cbDirectR) cbDirectR.checked = previousCategoryValue === "yes";
-            document.querySelectorAll('.faz-service-toggle[data-category="' + categorySlugToRollback + '"]')
+            document.querySelectorAll('.faz-service-toggle[data-category="' + _fazCssAttrValue(categorySlugToRollback) + '"]')
                 .forEach(function(svcToggle) { svcToggle.checked = previousCategoryValue === "yes"; });
         }
         _fazCategoriesBeforeConsent = null;
@@ -11562,6 +12025,15 @@ window.getFazCookieConsent = function (cookieName) {
 // Cross-domain consent forwarding: listen for incoming consent from other domains.
 window.addEventListener('message', function(event) {
     if (!_fazStore._consentForwarding || !_fazStore._consentForwarding.enabled) return;
+    // Only the bridge receives. The sender (_fazAcceptCookies above) loads
+    // this site in a hidden iframe at `?faz_consent_forward=1` and posts into
+    // that frame from the page that embeds it, so a genuine forward always
+    // arrives in a framed bridge document and always comes from its parent.
+    // Without both checks every page of this site, in any tab, took a forward
+    // from any window of an allowed origin that held a reference to it (an
+    // opener, a popup it opened, a frame of it).
+    if (window.parent === window || event.source !== window.parent) return;
+    if (!/[?&]faz_consent_forward=1(?:&|$)/.test(String(window.location.search || ''))) return;
     var targets = _fazStore._consentForwarding.targets || [];
     // Origin allow-list: event.origin is compared directly, in this handler
     // body, against each configured target's origin. Any message from an

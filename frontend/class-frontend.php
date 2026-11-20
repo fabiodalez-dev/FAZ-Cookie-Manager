@@ -20,6 +20,7 @@ use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
 use FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger;
 use FazCookie\Admin\Modules\Pageviews\Api\Api as Pageviews_Api;
 use FazCookie\Frontend\Modules\Banner_Rest\Banner_Rest;
+use FazCookie\Frontend\Modules\Park_Proofs\Park_Proofs;
 use FazCookie\Includes\Geolocation;
 use FazCookie\Includes\Ab_Test;
 use FazCookie\Includes\Gvl;
@@ -30,6 +31,7 @@ use FazCookie\Includes\Cookie_Policy_Shortcode;
 use FazCookie\Includes\Do_Not_Sell_Shortcode;
 use FazCookie\Includes\Cookie_Settings_Shortcode;
 use FazCookie\Frontend\Includes\Placeholder_Builder;
+use FazCookie\Frontend\Includes\Park_Proof;
 use FazCookie\Frontend\Includes\Embed_Inventory;
 use FazCookie\Frontend\Includes\Geo_Runtime;
 /**
@@ -43,6 +45,32 @@ use FazCookie\Frontend\Includes\Geo_Runtime;
  * @author     Fabio D'Alessandro
  */
 class Frontend {
+
+	/**
+	 * Upgrade the plugin's own http:// asset URLs in banner markup for this
+	 * request when the page is served over HTTPS.
+	 *
+	 * The shared template cache keeps only a server-verified scheme (see
+	 * Template::get_assets_path()), so behind a TLS-terminating proxy whose
+	 * siteurl is http:// it holds http:// icon URLs. Every route that hands
+	 * that cached markup to a browser must upgrade it per request, or the
+	 * banner and revisit icons are mixed content on the https page: the inline
+	 * render does it in banner_html(), the banner REST payload (language swap,
+	 * geo bootstrap) through here. Per request only, never written back.
+	 *
+	 * @param string $html Banner markup.
+	 * @return string
+	 */
+	public static function https_plugin_urls_for_request( $html ) {
+		if ( ! is_string( $html ) || '' === $html || ! defined( 'FAZ_PLUGIN_URL' ) || ! function_exists( 'faz_request_is_https' ) || ! faz_request_is_https() ) {
+			return $html;
+		}
+		$http_url = str_replace( 'https://', 'http://', FAZ_PLUGIN_URL );
+		if ( false === strpos( $html, $http_url ) ) {
+			return $html;
+		}
+		return str_replace( $http_url, set_url_scheme( FAZ_PLUGIN_URL, 'https' ), $html );
+	}
 
 	/**
 	 * Instagram Feed's settings page slug, where its GDPR option lives.
@@ -382,6 +410,7 @@ class Frontend {
 		$this->gcm_settings = new Gcm_Settings();
 		new Consent_Logger();
 		new Banner_Rest();
+		new Park_Proofs();
 		new Cookie_Table_Shortcode();
 		new Cookie_Policy_Shortcode();
 		new Do_Not_Sell_Shortcode();
@@ -1220,7 +1249,10 @@ class Frontend {
 						// (?p=, ?lang=) the inventory keys on. It varies by page,
 						// never by visitor, so a cached copy stays correct.
 						'cookieNames'    => function_exists( 'faz_consent_cookie_names' ) ? faz_consent_cookie_names() : array(),
-						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::current_url() : '',
+						// Only for a request on a host the site is served on (see
+						// Embed_Inventory::log_page_url()): Host is not a cache
+						// key or a row value the visitor should get to choose.
+						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::log_page_url() : '',
 						// Where the beacon fetches a current token when the one
 						// above is refused as stale — a page an edge cache kept
 						// past the token window. See
@@ -3230,7 +3262,7 @@ class Frontend {
 			$http_url = str_replace( 'https://', 'http://', FAZ_PLUGIN_URL );
 			if ( strpos( $html, $http_url ) !== false ) {
 				$https_url = set_url_scheme( FAZ_PLUGIN_URL, 'https' );
-				$html      = str_replace( $http_url, $https_url, $html );
+				$html      = self::https_plugin_urls_for_request( $html );
 
 				// Auto-repair the cached template so subsequent requests
 				// skip this replacement entirely — but ONLY on a server-verified
@@ -3262,7 +3294,7 @@ class Frontend {
 							$repaired = true;
 						}
 					}
-					if ( $repaired ) {
+					if ( $repaired && self::template_cache_write_is_current() ) {
 						// autoload=false — keep the multi-KB template blob out of alloptions.
 						update_option( $cache_key, $stored, false );
 					}
@@ -3297,6 +3329,25 @@ class Frontend {
 		echo '<template id="fazBannerTemplate">';
 		echo wp_kses( $html, faz_allowed_html() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_kses() is the escape.
 		echo '</template>';
+	}
+
+	/**
+	 * Whether a repair of the stored banner template may be written back.
+	 *
+	 * Both repairs below rewrite the whole option from the copy this request
+	 * read. If an admin save cleared the cache since, that copy is the state
+	 * before the save, and writing it back would bring the cleared slots back.
+	 * They would be ignored (each slot carries the generation it was built
+	 * under), but the write would still overwrite the slots of the new
+	 * generation built meanwhile. The per-request rewrite is unaffected.
+	 *
+	 * @return bool
+	 */
+	private static function template_cache_write_is_current() {
+		if ( ! function_exists( 'faz_banner_template_generation_is_current' ) ) {
+			return true;
+		}
+		return faz_banner_template_generation_is_current( faz_banner_template_generation() );
 	}
 
 	/**
@@ -3382,7 +3433,7 @@ class Frontend {
 			$server_verified_https = is_ssl()
 				|| 0 === stripos( (string) get_option( 'siteurl' ), 'https://' );
 			$forged_scheme_only = ( 'https' === $current['scheme'] ) && ! $server_verified_https;
-			if ( $repaired && ! $forged_scheme_only ) {
+			if ( $repaired && ! $forged_scheme_only && self::template_cache_write_is_current() ) {
 				// autoload=false — keep the multi-KB template blob out of alloptions.
 				update_option( $cache_key, $stored, false );
 			}
@@ -4224,6 +4275,9 @@ class Frontend {
 			'_languageMap'        => function_exists( 'faz_get_lang_map' ) ? faz_get_lang_map() : array(),
 			'_browserDetect'      => function_exists( 'faz_browser_detect_enabled' ) ? faz_browser_detect_enabled() : false,
 			'_bannerEndpoint'     => esc_url_raw( rest_url( 'faz/v1/banner/' ) ),
+			// Vouches for a signed park that arrived under another response's
+			// key (see Park_Proof and _fazQueueParkVerify()).
+			'_parkProofEndpoint'  => esc_url_raw( rest_url( 'faz/v1/park-proofs' ) ),
 			// Consent revision: when the admin bumps this, returning visitors
 			// with a lower revision in their cookie are treated as having no
 			// consent, and the banner is shown again. See Settings →
@@ -4860,6 +4914,9 @@ class Frontend {
 		status_header( 200 );
 		nocache_headers();
 		header( 'X-Robots-Tag: noindex, nofollow', true );
+		foreach ( self::banner_preview_frame_headers( home_url( '/' ), admin_url() ) as $faz_preview_header ) {
+			header( $faz_preview_header, true );
+		}
 
 		add_filter( 'show_admin_bar', '__return_false', PHP_INT_MAX );
 		show_admin_bar( false );
@@ -4869,6 +4926,58 @@ class Frontend {
 			require $template;
 		}
 		exit;
+	}
+
+	/**
+	 * Anti-framing headers for the admin banner preview frame.
+	 *
+	 * The frame is an administrator-only view (manage_options, no nonce),
+	 * and only the banner customizer in wp-admin ever embeds it. Restricting
+	 * its ancestors to this site, and to the admin origin when wp-admin is
+	 * served from another host, keeps any other site from framing it inside
+	 * a logged-in administrator's browser. X-Frame-Options cannot name a
+	 * second origin, so it is sent only when wp-admin and the site share one;
+	 * browsers that understand frame-ancestors ignore it in either case.
+	 *
+	 * @param string $home_url  Site front URL.
+	 * @param string $admin_url wp-admin URL (the page that embeds the frame).
+	 * @return string[] Header lines.
+	 */
+	public static function banner_preview_frame_headers( $home_url, $admin_url ) {
+		$home_origin  = self::url_origin( $home_url );
+		$admin_origin = self::url_origin( $admin_url );
+		$ancestors    = "'self'";
+		$same_origin  = '' === $admin_origin || $admin_origin === $home_origin;
+		if ( ! $same_origin ) {
+			$ancestors .= ' ' . $admin_origin;
+		}
+		$headers = array( 'Content-Security-Policy: frame-ancestors ' . $ancestors );
+		if ( $same_origin ) {
+			$headers[] = 'X-Frame-Options: SAMEORIGIN';
+		}
+		return $headers;
+	}
+
+	/**
+	 * Scheme, host and port of a URL, lowercased, or '' when it has none.
+	 *
+	 * @param string $url URL.
+	 * @return string
+	 */
+	private static function url_origin( $url ) {
+		$parts = wp_parse_url( (string) $url );
+		if ( ! is_array( $parts ) || empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+			return '';
+		}
+		$scheme = strtolower( $parts['scheme'] );
+		if ( 'http' !== $scheme && 'https' !== $scheme ) {
+			return '';
+		}
+		$origin = $scheme . '://' . strtolower( $parts['host'] );
+		if ( ! empty( $parts['port'] ) ) {
+			$origin .= ':' . (int) $parts['port'];
+		}
+		return $origin;
 	}
 
 	/**
@@ -5604,6 +5713,10 @@ class Frontend {
 				$inert_stash
 			);
 		}
+
+		// 5c. Signed parks served under an older key (a cached fragment):
+		// re-keyed to this response, after every pass that parks.
+		$html = $this->refresh_park_proofs( $html, $failed_passes, $inert_stash );
 
 		// 6. Block <script data-faz-waitfor="category"> (deferred dependency scripts).
 		if ( false !== stripos( $html, 'data-faz-waitfor' ) ) {
@@ -6607,12 +6720,27 @@ class Frontend {
 			return $full;
 		}
 
-		list( $parked, $renamed ) = $this->rename_attr_tokens( $attrs, array( 'background' => 'data-faz-background' ) );
+		// An author-written data-faz-background on the same tag must not ride
+		// along with this park (see with_park_proof()).
+		list( $parked, $renamed ) = $this->rename_attr_tokens( $this->strip_attr_tokens( $attrs, 'data-faz-background' ), array( 'background' => 'data-faz-background' ) );
 		if ( empty( $renamed ) ) {
 			return $full;
 		}
 
-		return '<' . $tag . $this->label_category_first( $parked, $matched_category ) . '>';
+		return '<' . $tag . $this->with_park_proof( $this->label_category_first( $parked, $matched_category ), 'background' ) . '>';
+	}
+
+	/**
+	 * Response-local key for server-built consent controls.
+	 *
+	 * Placeholder_Builder stamps it on the placeholder Accept button so the
+	 * runtime can tell that button apart from a data-faz-accept attribute
+	 * written into post content (wp_kses_post keeps data-* on every tag).
+	 *
+	 * @return string
+	 */
+	public static function response_key() {
+		return self::srcdoc_key();
 	}
 
 	/** Response-local proof for server parks; deliberately excluded from static config. */
@@ -6772,6 +6900,10 @@ class Frontend {
 			if ( false === $category ) {
 				continue;
 			}
+			if ( 'data-faz-data' === $parked_name ) {
+				// Drop an author-written park key so only this park's value is proven.
+				$parked = $this->strip_attr_tokens( $parked, 'data-faz-data' );
+			}
 			list( $parked, $renamed ) = $this->rename_attr_tokens( $parked, array( $name => $parked_name ) );
 			if ( empty( $renamed ) ) {
 				continue; // A bare attribute with no value fetches nothing.
@@ -6793,7 +6925,11 @@ class Frontend {
 			$out = ' data-faz-srcset-category="' . esc_attr( $srcset_category ) . '"' . $this->strip_attr_tokens( $out, 'data-faz-srcset-category' );
 		}
 		$label = array() !== $categories ? $categories[0] : $srcset_category;
-		return '<' . $tag . $this->label_category_first( $out, $label ) . $close . '>';
+		$out   = $this->label_category_first( $out, $label );
+		if ( 'object' === $tag && $this->has_attr_token( $out, 'data-faz-data' ) ) {
+			$out = $this->with_park_proof( $out, 'data' );
+		}
+		return '<' . $tag . $out . $close . '>';
 	}
 
 	/**
@@ -6904,7 +7040,7 @@ class Frontend {
 
 		// Every style token leaves on its own bytes (the parser keeps the first
 		// of a duplicated attribute, and the first is the one judged above).
-		list( $parked, $renamed ) = $this->rename_attr_tokens( $attrs, array( 'style' => 'data-faz-style' ) );
+		list( $parked, $renamed ) = $this->rename_attr_tokens( $this->strip_attr_tokens( $attrs, 'data-faz-style' ), array( 'style' => 'data-faz-style' ) );
 		if ( empty( $renamed ) ) {
 			return $full;
 		}
@@ -6920,6 +7056,7 @@ class Frontend {
 			}
 		}
 		$out = $labelled ? $live . $parked : $this->label_category_first( $live . $parked, reset( $categories ) );
+		$out = $this->with_park_proof( $out, 'style' );
 		return '<' . $tag . $out . $close . '>';
 	}
 
@@ -7238,6 +7375,118 @@ class Frontend {
 	}
 
 	/**
+	 * Prove that THIS response parked an attribute the runtime restores into
+	 * a sink kses guards (object data, style, background).
+	 *
+	 * wp_kses_post keeps data-* on every post tag, so an Author could write
+	 * data-faz-data / data-faz-style / data-faz-background into a post and the
+	 * restore pass wrote them back as live attributes kses refuses. The runtime
+	 * now restores those three only when the tag carries the response-local
+	 * key and names the attribute in data-faz-park. A list already on the tag
+	 * is extended only when its key is this response's: an author-written list
+	 * is replaced, never inherited.
+	 *
+	 * @param string          $attrs Attribute string.
+	 * @param string|string[] $names Parked attribute name(s): data, style, background.
+	 * @return string
+	 */
+	private function with_park_proof( $attrs, $names ) {
+		$key   = self::srcdoc_key();
+		$prior = $key === $this->extract_tag_attr( $attrs, 'data-faz-park-key' ) ? (string) $this->extract_tag_attr( $attrs, 'data-faz-park' ) : '';
+		$list  = array_values( array_unique( array_filter( array_merge( preg_split( '/\s+/', $prior ), (array) $names ) ) ) );
+		$attrs = $this->strip_attr_tokens( $this->strip_attr_tokens( $this->strip_attr_tokens( $attrs, 'data-faz-park' ), 'data-faz-park-key' ), 'data-faz-park-sig' );
+		// The signature lets a later response, or the park-proofs route, vouch
+		// for this park under another key (see Park_Proof). An author-written
+		// signature is stripped above with the rest of the proof.
+		$sig = $this->park_signature_for( $attrs, $list );
+		// Metadata first, like label_category_first(): the tag's own bytes,
+		// a self-closing slash included, keep their place at the end.
+		return ' data-faz-park="' . esc_attr( implode( ' ', $list ) ) . '" data-faz-park-key="' . esc_attr( $key ) . '"'
+			. ( '' !== $sig ? ' data-faz-park-sig="' . esc_attr( $sig ) . '"' : '' ) . $attrs;
+	}
+
+	/**
+	 * Park_Proof::signature() over the values the tag carries for `$names`,
+	 * as the browser reads them (character references decoded).
+	 *
+	 * @param string   $attrs Attribute string.
+	 * @param string[] $names Parked names.
+	 * @return string Signature, or '' when a value is missing.
+	 */
+	private function park_signature_for( $attrs, array $names ) {
+		// Without a signature the park is still proven for this response, as
+		// it always was; only the vouching under another key is lost.
+		if ( ! function_exists( 'wp_salt' ) || ! class_exists( Park_Proof::class ) ) {
+			return '';
+		}
+		$values = array();
+		foreach ( $names as $name ) {
+			$raw = $this->extract_tag_attr( $attrs, 'data-faz-' . $name );
+			if ( '' === $raw ) {
+				return '';
+			}
+			$values[] = self::decode_html_references( $raw );
+		}
+		return Park_Proof::signature( array_values( $names ), $values );
+	}
+
+	/**
+	 * Re-key the signed parks a response serves under an older key.
+	 *
+	 * A fragment a cache stored with its parks, and a later response embeds,
+	 * carries the key of the response that parked it, so the runtime of the
+	 * page serving it would not restore those parks. A tag whose signature
+	 * verifies against its current values gets this response's key; any
+	 * other tag, an author-written proof included, is left exactly as it is.
+	 *
+	 * @param string $html        Markup with the inert spans stashed.
+	 * @param array  $failed      Failed pass kinds, appended to.
+	 * @param array  $inert_stash Inert stash (see run_markup_pass()).
+	 * @return string
+	 */
+	private function refresh_park_proofs( $html, array &$failed, array &$inert_stash ) {
+		if ( false === stripos( $html, 'data-faz-park-sig' ) ) {
+			return $html;
+		}
+		return $this->run_markup_pass(
+			$html,
+			'#' . self::non_opening_token_skip() . '<([a-zA-Z][^\s/>]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+			'park-proof',
+			function ( $m ) {
+				return $this->refresh_park_proof_tag( $m );
+			},
+			$failed,
+			$inert_stash
+		);
+	}
+
+	/**
+	 * refresh_park_proofs() for one opening tag.
+	 *
+	 * @param array $m Regex match: full tag, name, attributes, self-closing slash.
+	 * @return string
+	 */
+	private function refresh_park_proof_tag( $m ) {
+		$full  = $m[0];
+		$attrs = isset( $m[2] ) ? $m[2] : '';
+		if ( false === stripos( $attrs, 'data-faz-park-sig' ) ) {
+			return $full;
+		}
+		if ( self::srcdoc_key() === $this->extract_tag_attr( $attrs, 'data-faz-park-key' ) ) {
+			return $full;
+		}
+		$names = preg_split( '/\s+/', trim( (string) $this->extract_tag_attr( $attrs, 'data-faz-park' ) ), -1, PREG_SPLIT_NO_EMPTY );
+		if ( ! Park_Proof::names_are_valid( $names ) ) {
+			return $full;
+		}
+		$expected = $this->park_signature_for( $attrs, $names );
+		if ( '' === $expected || ! hash_equals( $expected, (string) $this->extract_tag_attr( $attrs, 'data-faz-park-sig' ) ) ) {
+			return $full;
+		}
+		return '<' . $m[1] . $this->with_park_proof( $attrs, $names ) . ( isset( $m[3] ) ? $m[3] : '' ) . '>';
+	}
+
+	/**
 	 * Whether the attribute string carries a token of this name.
 	 *
 	 * @param string $attrs Attribute string.
@@ -7427,7 +7676,16 @@ class Frontend {
 		$stash = array();
 		$marker = '';
 		$result = $this->stash_iframe_srcdocs( $html, array(), array(), $this->stash_nonce(), $stash, $marker );
-		return null === $result ? $html : strtr( $result, $stash );
+		$html   = null === $result ? $html : strtr( $result, $stash );
+		if ( false === stripos( $html, 'data-faz-park-sig' ) ) {
+			return $html;
+		}
+		// The signed parks too, with the inert spans stashed: a tag-shaped
+		// string inside a script is not an element and is never rewritten.
+		$inert  = array();
+		$failed = array();
+		$html   = $this->refresh_park_proofs( $this->stash_inert_spans( $html, $this->stash_nonce(), $inert ), $failed, $inert );
+		return empty( $inert ) ? $html : strtr( $html, $inert );
 	}
 
 	private function stash_nonce() {
@@ -7757,6 +8015,7 @@ class Frontend {
 		'media'      => array( 'tags' => array( 'video', 'audio', 'source', 'embed', 'object', 'track', 'input' ), 'shape' => 'open3' ),
 		'link'       => array( 'tags' => array( 'link' ), 'shape' => 'open' ),
 		'style-attr' => array( 'tags' => '*', 'shape' => 'open3' ),
+		'park-proof' => array( 'tags' => '*', 'shape' => 'open3' ),
 		'waitfor'    => array( 'tags' => array( 'script' ), 'shape' => 'body' ),
 	);
 

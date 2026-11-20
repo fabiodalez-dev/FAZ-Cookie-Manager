@@ -144,8 +144,13 @@ class DSAR_Admin {
 			<?php foreach ( $rows as $label => $value ) : ?>
 				<tr>
 					<th scope="row" style="width:180px;"><?php echo esc_html( $label ); ?></th>
-					<?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- every value is escaped individually above; the email cell is an intentional mailto anchor. ?>
-					<td><?php echo $value; ?></td>
+					<?php
+					// Each cell is escaped where it is built; the allowlist here
+					// is the second line, so a row added later that forgets to
+					// escape still cannot put markup beyond a link, <code> or
+					// <em> on this screen.
+					?>
+					<td><?php echo wp_kses( $value, self::details_cell_allowed_html() ); ?></td>
 				</tr>
 			<?php endforeach; ?>
 			</tbody>
@@ -507,7 +512,41 @@ class DSAR_Admin {
 			// stays. Without an entry here the screen printed the raw key.
 			'erased'    => __( 'Personal data erased — record kept for accountability', 'faz-cookie-manager' ),
 		);
-		return isset( $labels[ $status ] ) ? $labels[ $status ] : $status;
+		if ( isset( $labels[ $status ] ) ) {
+			return $labels[ $status ];
+		}
+		return self::unknown_label( $status );
+	}
+
+	/**
+	 * Label for a stored key outside the known vocabulary.
+	 *
+	 * The raw meta value used to come back as the label, and it also reaches
+	 * the notification mail, the erased record's title and exports, where no
+	 * HTML escaping applies. A fixed word plus the key reduced to sanitize_key()
+	 * keeps the value readable for whoever investigates the record without
+	 * carrying arbitrary stored text anywhere.
+	 *
+	 * @param string $key Stored key.
+	 * @return string
+	 */
+	public static function unknown_label( $key ) {
+		$word = __( 'unknown', 'faz-cookie-manager' );
+		$key  = sanitize_key( (string) $key );
+		return '' === $key ? $word : $word . ' (' . $key . ')';
+	}
+
+	/**
+	 * Markup the request details table may contain.
+	 *
+	 * @return array
+	 */
+	private static function details_cell_allowed_html() {
+		return array(
+			'a'    => array( 'href' => true ),
+			'code' => array(),
+			'em'   => array(),
+		);
 	}
 
 	/**

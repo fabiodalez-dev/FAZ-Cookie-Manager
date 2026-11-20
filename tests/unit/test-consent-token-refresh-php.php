@@ -172,15 +172,16 @@ namespace {
 		return $result instanceof WP_Error ? $result->get_error_code() : 'logged';
 	};
 
-	$GLOBALS['faz_options'] = array();
+	$faz_logs_on = array( 'faz_settings' => array( 'consent_logs' => array( 'status' => true ) ) );
+	$GLOBALS['faz_options'] = $faz_logs_on;
 	ref_check( 'invalid_token' === $post( array( 'can_refresh' => 1 ) ), 'a stale token is still refused when the beacon can refresh' );
 	ref_check( 0 === ref_stale_count(), 'but that refusal is not counted as a lost record: the beacon will resend' );
 	ref_check( 'invalid_token' === $post( array() ), 'the resend (no flag) refused again' );
 	ref_check( 1 === ref_stale_count(), 'is counted' );
-	$GLOBALS['faz_options'] = array();
+	$GLOBALS['faz_options'] = $faz_logs_on;
 	$post( array( 'can_refresh' => '0' ) );
 	ref_check( 1 === ref_stale_count(), 'a beacon that cannot refresh (a page cached before this change) is counted as before' );
-	$GLOBALS['faz_options'] = array();
+	$GLOBALS['faz_options'] = $faz_logs_on;
 	$fresh = $logger->handle_rest_consent( new WP_REST_Request( array( 'token' => Consent_Logger::current_token(), 'consent_id' => 'abc', 'status' => 'rejected', 'categories' => array(), 'can_refresh' => 1 ) ) );
 	ref_check( ! ( $fresh instanceof WP_Error ), 'premise: a fresh token is accepted, flag or no flag' );
 	ref_check( 0 === ref_stale_count(), 'and counts nothing' );

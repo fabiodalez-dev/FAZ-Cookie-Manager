@@ -44,6 +44,13 @@ class Controller {
 	private $db_version = '1.2';
 
 	/**
+	 * One-off cron hook that resumes a retention purge stopped at its cap.
+	 *
+	 * @since 1.39.1
+	 */
+	const RETENTION_CONTINUE_HOOK = 'faz_pageview_retention_continue';
+
+	/**
 	 * Return the current instance of the class
 	 *
 	 * @return Controller
@@ -381,7 +388,9 @@ class Controller {
 
 		$table    = $this->get_table_name();
 		$months   = absint( $months );
-		$cutoff   = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months" ) );
+		// On the clock created_at is on: record_event() writes
+		// current_time( 'mysql' ), site time, as cleanup_old_logs() corrects.
+		$cutoff   = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months", strtotime( current_time( 'mysql' ) ) ) );
 
 		// Batched DELETE — same rationale as ConsentLogs::cleanup_old_logs():
 		// the first purge on a long-lived install can match a huge row count,
@@ -461,6 +470,48 @@ class Controller {
 			// smaller number leaves expired rows behind.
 		} while ( count( $ids ) === $batch_size && $deleted < $max_rows );
 
+		// Stopped by the cap, not by running out of expired rows. One run a day
+		// at the default cap removes 200000 rows, and one address may insert
+		// five a second (432000 a day), so a purge that only ever ran daily
+		// could fall behind for good. The rest is resumed by a one-off event a
+		// few minutes later, each run still bounded by the same cap, until a
+		// run ends below it.
+		if ( $deleted >= $max_rows ) {
+			self::schedule_retention_continuation();
+		}
+
 		return (int) $deleted;
+	}
+
+	/**
+	 * Schedule the next slice of a purge that stopped at its cap.
+	 *
+	 * @since 1.39.1
+	 * @return void
+	 */
+	private static function schedule_retention_continuation() {
+		if ( ! function_exists( 'wp_schedule_single_event' ) || wp_next_scheduled( self::RETENTION_CONTINUE_HOOK ) ) {
+			return;
+		}
+		wp_schedule_single_event( time() + 15 * 60, self::RETENTION_CONTINUE_HOOK );
+	}
+
+	/**
+	 * Cron callback: resume the pageview retention purge.
+	 *
+	 * Reads the retention setting again instead of carrying the one the first
+	 * slice ran with, so an administrator who turned the purge off (0) or
+	 * lengthened the window in the meantime is obeyed by the next slice.
+	 *
+	 * @since 1.39.1
+	 * @return void
+	 */
+	public static function continue_retention() {
+		$settings = get_option( 'faz_settings' );
+		$months   = isset( $settings['pageviews']['retention'] ) ? (int) $settings['pageviews']['retention'] : 6;
+		$months   = (int) apply_filters( 'faz_pageviews_retention_months', $months );
+		if ( $months > 0 ) {
+			self::get_instance()->cleanup_old_records( $months );
+		}
 	}
 }

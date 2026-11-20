@@ -42,6 +42,26 @@ function wp_cache_set( $key, $val, $group = '', $ttl = 0 ) {
 	$GLOBALS['_faz_test_cache'][ "$group:$key" ] = $val;
 	return true;
 }
+function wp_cache_delete( $key, $group = '' ) {
+	unset( $GLOBALS['_faz_test_cache'][ "$group:$key" ] );
+}
+class Faz_Ipinfo_Options_Table {
+	public $options = 'wp_options';
+	public $before_update;
+
+	public function update( $table, $values, $where ) {
+		$name = $where['option_name'];
+		if ( $this->before_update ) {
+			( $this->before_update )( $name );
+		}
+		if ( ( $GLOBALS['_faz_test_options'][ $name ] ?? null ) !== $where['option_value'] ) {
+			return 0;
+		}
+		$GLOBALS['_faz_test_options'][ $name ] = $values['option_value'];
+		return 1;
+	}
+}
+$GLOBALS['wpdb'] = new Faz_Ipinfo_Options_Table();
 function wp_salt( $scheme = 'auth' ) {
 	return 'test-salt-' . $scheme;
 }
@@ -52,6 +72,10 @@ function apply_filters( $hook, $val ) {
 	return $val;
 }
 function wp_remote_get( $url, $args = array() ) {
+	$GLOBALS['_faz_test_http_calls'] = ( $GLOBALS['_faz_test_http_calls'] ?? 0 ) + 1;
+	if ( ! empty( $GLOBALS['_faz_test_http_stub'] ) ) {
+		return $GLOBALS['_faz_test_http_stub'];
+	}
 	// Default stub — return error so no real HTTP.
 	return new WP_Error( 'stub', 'no HTTP in unit test' );
 }
@@ -98,9 +122,10 @@ echo "\n== Ipinfo_Client + Secrets — unit tests (T020) ==\n\n";
 
 $enc = Secrets::encrypt( 'svn_secret_token_42' );
 assert_true( strlen( $enc ) > 3, 'Secrets::encrypt produces non-empty output' );
-// L1-SP1-S003 fix (1.15.0): v2 format = 'v2:<8-hex-keyhint>:<base64>'.
-assert_true( 0 === strpos( $enc, 'v2:' ), 'Encrypted blob starts with v2: version prefix (post L1-SP1-S003 fix)' );
-assert_true( preg_match( '/^v2:[0-9a-f]{8}:/', $enc ) === 1, 'v2 prefix carries 8-hex keyhint for salt-rotation detection' );
+// 1.39.1: v3 format = 'v3:<8-hex-keyhint>:<base64(nonce . secretbox)>'
+// (the key hint, introduced with v2 by L1-SP1-S003, is kept).
+assert_true( 0 === strpos( $enc, 'v3:' ), 'Encrypted blob starts with the v3: version prefix' );
+assert_true( preg_match( '/^v3:[0-9a-f]{8}:/', $enc ) === 1, 'v3 prefix carries 8-hex keyhint for salt-rotation detection' );
 
 $dec = Secrets::decrypt( $enc );
 assert_eq( $dec, 'svn_secret_token_42', 'Secrets::decrypt roundtrips encrypted plaintext' );
@@ -117,6 +142,30 @@ assert_eq( $empty_enc, '', 'Secrets::encrypt empty → empty (no salt leak)' );
 // Cannot encrypt non-string.
 $weird = Secrets::encrypt( 12345 );
 assert_eq( $weird, '', 'Secrets::encrypt non-string → empty' );
+
+// ---------- A v2 key saved by 1.39.0 opens and is rewritten as v3 ----------
+$legacy_salt = wp_salt( 'auth' );
+$legacy_ks   = '';
+while ( strlen( $legacy_ks ) < strlen( 'svn_secret_token_42' ) ) {
+	$legacy_ks .= hash( 'sha256', $legacy_salt . strlen( $legacy_ks ), true );
+}
+$legacy_v2 = 'v2:' . substr( hash( 'sha256', 'faz_secrets_v2|' . $legacy_salt ), 0, 8 ) . ':'
+	. base64_encode( 'svn_secret_token_42' ^ substr( $legacy_ks, 0, strlen( 'svn_secret_token_42' ) ) );
+$GLOBALS['_faz_test_options']['faz_geo_ipinfo_api_key'] = $legacy_v2;
+$upgrade_client = new Ipinfo_Client();
+assert_eq( $upgrade_client->get_api_key(), 'svn_secret_token_42', 'get_api_key() opens a v2 key saved by an earlier version' );
+$stored_after = (string) $GLOBALS['_faz_test_options']['faz_geo_ipinfo_api_key'];
+assert_true( 0 === strpos( $stored_after, 'v3:' ), 'get_api_key() rewrites the stored v2 key as v3' );
+assert_eq( Secrets::decrypt( $stored_after ), 'svn_secret_token_42', 'the rewritten v3 key opens to the same key' );
+$rotated = Secrets::encrypt( 'rotated-mock-key' );
+$GLOBALS['_faz_test_options']['faz_geo_ipinfo_api_key'] = $legacy_v2;
+$GLOBALS['wpdb']->before_update = static function ( $name ) use ( $rotated ) {
+	$GLOBALS['_faz_test_options'][ $name ] = $rotated;
+};
+assert_eq( $upgrade_client->get_api_key(), 'rotated-mock-key', 'a lookup uses the concurrently rotated key' );
+assert_eq( get_option( 'faz_geo_ipinfo_api_key' ), $rotated, 'the legacy rewrite preserves the rotated key' );
+$GLOBALS['wpdb']->before_update = null;
+unset( $GLOBALS['_faz_test_options']['faz_geo_ipinfo_api_key'] );
 
 // ---------- Ipinfo_Client opt-in gating ----------
 
@@ -288,6 +337,70 @@ assert_eq( $pr['vpn'], null, 'Truncated JSON body → null (no exception)' );
 // Array-at-root (not an object) — should parse-fail.
 $pr = $parse( '[true, false, false]' );
 assert_eq( $pr['vpn'], null, 'JSON array at root (not object) → null' );
+
+// ---------- An account-level refusal is remembered for the whole site ----------
+
+echo "\n-- ipinfo refusal (401/402/403/429) --\n";
+$GLOBALS['_faz_test_options']['faz_geo_ipinfo_optin'] = true;
+$GLOBALS['_faz_test_cache']                           = array();
+$GLOBALS['_faz_test_http_stub']                       = array( 'response' => array( 'code' => 429 ), 'body' => '{}' );
+$GLOBALS['_faz_test_http_calls']                      = 0;
+$refusal_client = new Ipinfo_Client();
+$r1 = $refusal_client->lookup( '203.0.113.71' );
+assert_eq( $r1['vpn'], null, 'a 429 from ipinfo gives no verdict' );
+assert_eq( $GLOBALS['_faz_test_http_calls'], 1, 'the first lookup calls ipinfo once' );
+$r2 = $refusal_client->lookup( '198.51.100.72' );
+assert_eq( $r2['vpn'], null, 'a second visitor with another address gets no verdict either' );
+assert_eq( $GLOBALS['_faz_test_http_calls'], 1, 'and ipinfo is not called again while the refusal is remembered' );
+$GLOBALS['_faz_test_http_stub'] = null;
+$GLOBALS['_faz_test_cache']     = array();
+$refusal_client->lookup( '198.51.100.73' );
+assert_eq( $GLOBALS['_faz_test_http_calls'], 2, 'a transport failure is not remembered: the next lookup calls again' );
+$refusal_client->lookup( '198.51.100.74' );
+assert_eq( $GLOBALS['_faz_test_http_calls'], 3, 'and neither is the one after it' );
+
+// ---------- Hourly lookup budget ----------
+// The per-address cache cannot stop a client that rotates addresses: every
+// new one is an upstream call on the operator's key and, without a persistent
+// object cache, two wp_options rows kept for a day. A site-wide hourly
+// ceiling bounds both.
+echo "\nhourly lookup budget\n";
+$GLOBALS['_faz_test_cache']        = array();
+$GLOBALS['_faz_test_http_calls']   = 0;
+$GLOBALS['_faz_test_http_stub']    = array( 'response' => array( 'code' => 200 ), 'body' => '{"vpn":false}' );
+$GLOBALS['_faz_test_filters']['faz_ipinfo_lookups_per_hour'] = function () { return 3; };
+$GLOBALS['_faz_test_options']['faz_geo_ipinfo_optin']   = true;
+$GLOBALS['_faz_test_options']['faz_geo_ipinfo_api_key'] = Secrets::encrypt( 'mykey' );
+$budget_client = new Ipinfo_Client();
+foreach ( array( '203.0.113.1', '203.0.113.2', '203.0.113.3', '203.0.113.4', '203.0.113.5' ) as $rot_ip ) {
+	$budget_client->lookup( $rot_ip );
+}
+assert_eq( $GLOBALS['_faz_test_http_calls'], 3, 'five rotating addresses with a ceiling of 3 cost three upstream calls' );
+$r = $budget_client->lookup( '203.0.113.1' );
+assert_eq( $r['source'], 'cache', 'an address already looked up is still answered from the cache past the ceiling' );
+$over = $budget_client->lookup( '203.0.113.9' );
+assert_eq( $over['vpn'], null, 'a new address past the ceiling gets no verdict' );
+assert_eq( $GLOBALS['_faz_test_http_calls'], 3, 'and costs no upstream call' );
+
+// IPv6 verdicts belong to individual addresses. Only the budget is shared.
+$GLOBALS['_faz_test_cache']      = array();
+$GLOBALS['_faz_test_http_calls'] = 0;
+$GLOBALS['_faz_test_filters']['faz_ipinfo_lookups_per_hour'] = function () { return 100; };
+$first = $budget_client->lookup( '2001:db8:1:2::1' );
+$GLOBALS['_faz_test_http_stub']['body'] = '{"vpn":true}';
+$second = $budget_client->lookup( '2001:db8:1:2::2' );
+assert_false( $first['vpn'], 'the first address has its own VPN verdict' );
+assert_true( $second['vpn'], 'another address in the same /64 gets a different VPN verdict' );
+assert_eq( $second['source'], 'ipinfo', 'the other address goes to ipinfo' );
+for ( $index = 3; $index <= Ipinfo_Client::IPV6_LOOKUPS_PER_HOUR; ++$index ) {
+	$budget_client->lookup( '2001:db8:1:2::' . dechex( $index ) );
+}
+$over = $budget_client->lookup( '2001:db8:1:2::ffff' );
+assert_eq( $over['vpn'], null, 'a new address in an exhausted prefix gets no verdict' );
+assert_eq( $GLOBALS['_faz_test_http_calls'], Ipinfo_Client::IPV6_LOOKUPS_PER_HOUR, 'the prefix limit prevents another call' );
+assert_eq( $budget_client->lookup( '2001:db8:1:3::1' )['source'], 'ipinfo', 'another prefix can still make a lookup' );
+assert_false( $budget_client->lookup( '2001:db8:1:2::1' )['vpn'], 'cached verdicts remain available after the prefix hits its limit' );
+unset( $GLOBALS['_faz_test_filters']['faz_ipinfo_lookups_per_hour'], $GLOBALS['_faz_test_http_stub'] );
 
 // ---------- Summary ----------
 

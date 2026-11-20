@@ -34,7 +34,28 @@ class Ipinfo_Client {
 
 	const CACHE_GROUP    = 'faz_geo_ipinfo';
 	const CACHE_TTL      = DAY_IN_SECONDS;
+	/** How long a failed lookup is remembered before ipinfo is asked again. */
+	const ERROR_TTL      = 300;
+	/** Site-wide marker of an account-level refusal (401/402/403/429). */
+	const REFUSED_KEY    = 'refused';
+	/** Site-wide count of upstream lookups in the current hour. */
+	const BUDGET_KEY     = 'budget';
+	/** Default ceiling of new upstream lookups per hour (filterable). */
+	const LOOKUPS_PER_HOUR = 120;
+	/** Ceiling of new upstream lookups per hour for one IPv6 /64. */
+	const IPV6_LOOKUPS_PER_HOUR = 20;
+
+	/** HTTP status of the last lookup (0 for a transport failure). */
+	private $last_http_status = 0;
 	const REQUEST_TIMEOUT = 3;
+
+	/**
+	 * Seconds until the hourly budget opens again, set when claim_lookup()
+	 * refuses.
+	 *
+	 * @var int
+	 */
+	private $budget_retry_after = 0;
 
 	/**
 	 * Lookup VPN/proxy status for an IP address.
@@ -65,25 +86,159 @@ class Ipinfo_Client {
 			return array( 'vpn' => null, 'source' => 'skip' );
 		}
 
-		// Hash IP for cache key — Constitution VIII / NFR-03.
+		// The provider classifies individual addresses, including within an
+		// IPv6 /64. Only the lookup budget is shared across the prefix.
 		$ip_hash = $this->hash_ip( $ip );
 
-		// Cache hit (after opt-in confirmed)?
-		$cached = wp_cache_get( $ip_hash, self::CACHE_GROUP );
-		if ( false !== $cached && is_array( $cached ) ) {
+		// Cache hit (after opt-in confirmed)? Without a persistent object
+		// cache, wp_cache_* lives for one request, so every anonymous page
+		// view or banner REST call paid for a fresh lookup on the operator's
+		// key and any client could loop to drain the quota. A transient
+		// carries the verdict across requests on those installs.
+		$persistent = ! function_exists( 'get_transient' ) || ( function_exists( 'wp_using_ext_object_cache' ) && wp_using_ext_object_cache() );
+		$cached     = $this->cache_read( $persistent, $ip_hash );
+		if ( false !== $cached && is_array( $cached ) && array_key_exists( 'vpn', $cached ) ) {
 			return array( 'vpn' => $cached['vpn'], 'source' => 'cache' );
 		}
 
+		// ipinfo refused the account recently (see below): no call, whatever
+		// the address.
+		// `retry_after` says how long that answer stays true, so a caller
+		// that caches it (Geo_Detector) keeps it no longer than the marker.
+		$refused = $this->cache_read( $persistent, self::REFUSED_KEY );
+		if ( false !== $refused ) {
+			$until = is_array( $refused ) && isset( $refused['until'] ) ? (int) $refused['until'] : 0;
+			return array(
+				'vpn'         => null,
+				'source'      => 'error',
+				'retry_after' => $until > 0 ? max( 1, min( self::ERROR_TTL, $until - time() ) ) : self::ERROR_TTL,
+			);
+		}
+
+		// A site-wide hourly ceiling on NEW lookups. The cache above stops a
+		// client repeating itself; it cannot stop one that rotates addresses,
+		// and without a persistent object cache every miss is also two
+		// wp_options rows kept for a day. Past the ceiling the lookup is
+		// skipped (no VPN verdict, the geo rules decide without it), so the
+		// operator's quota and the options table are both bounded.
+		if ( ! $this->claim_lookup( $persistent, $ip ) ) {
+			return array(
+				'vpn'         => null,
+				'source'      => 'error',
+				'retry_after' => $this->budget_retry_after,
+			);
+		}
+
 		// Make the call.
-		$result = $this->http_lookup( $ip, $api_key );
+		$this->last_http_status = 0;
+		$result                 = $this->http_lookup( $ip, $api_key );
 		if ( null === $result['vpn'] ) {
-			// Error — do NOT cache (preserve retry next request).
+			// A transport failure is not cached: it says nothing about the
+			// address and the next request may well succeed. A refusal by
+			// ipinfo itself — quota exhausted, rate limited, key rejected — is
+			// about the account, not the address, so it is remembered briefly
+			// for the whole site: keyed per address, every new visitor would
+			// still pay a full upstream call (up to the timeout) to an upstream
+			// that has already said no.
+			if ( in_array( $this->last_http_status, array( 401, 402, 403, 429 ), true ) ) {
+				$this->cache_verdict(
+					$persistent,
+					self::REFUSED_KEY,
+					array(
+						'vpn'   => null,
+						'until' => time() + self::ERROR_TTL,
+					),
+					self::ERROR_TTL
+				);
+				$result['retry_after'] = self::ERROR_TTL;
+			}
 			return $result;
 		}
 
 		// Cache success.
-		wp_cache_set( $ip_hash, array( 'vpn' => $result['vpn'] ), self::CACHE_GROUP, self::CACHE_TTL );
+		$this->cache_verdict( $persistent, $ip_hash, array( 'vpn' => $result['vpn'] ), self::CACHE_TTL );
 		return $result;
+	}
+
+	/**
+	 * Take one slot of the hourly upstream-lookup budget.
+	 *
+	 * The window is fixed (it closes an hour after the first lookup in it).
+	 * Not atomic: concurrent misses can overshoot by the number the server
+	 * runs at once, which is fine for a flood ceiling.
+	 *
+	 * @param bool   $persistent Whether a persistent object cache is in use.
+	 * @param string $ip         Address to look up.
+	 * @return bool False when the hour's budget is spent.
+	 */
+	private function claim_lookup( $persistent, $ip ) {
+		$max = function_exists( 'apply_filters' )
+			? (int) apply_filters( 'faz_ipinfo_lookups_per_hour', self::LOOKUPS_PER_HOUR )
+			: self::LOOKUPS_PER_HOUR;
+		if ( $max <= 0 ) {
+			return true; // 0 switches the ceiling off.
+		}
+		$now  = time();
+		$site = $this->lookup_window( $persistent, self::BUDGET_KEY, $now );
+		if ( $site['n'] >= $max ) {
+			$this->budget_retry_after = $site['start'] + HOUR_IN_SECONDS - $now;
+			return false;
+		}
+		$bucket = function_exists( 'faz_ip_rate_bucket' ) ? faz_ip_rate_bucket( $ip ) : $ip;
+		if ( '/64' === substr( $bucket, -3 ) ) {
+			$key    = self::BUDGET_KEY . '_v6_' . $this->hash_ip( $bucket );
+			$prefix = $this->lookup_window( $persistent, $key, $now );
+			if ( $prefix['n'] >= self::IPV6_LOOKUPS_PER_HOUR ) {
+				$this->budget_retry_after = $prefix['start'] + HOUR_IN_SECONDS - $now;
+				return false;
+			}
+			$this->count_lookup( $persistent, $key, $prefix, $now );
+		}
+		$this->count_lookup( $persistent, self::BUDGET_KEY, $site, $now );
+		return true;
+	}
+
+	/** Read the active hourly window, or start one at the current time. */
+	private function lookup_window( $persistent, $key, $now ) {
+		$data  = $this->cache_read( $persistent, $key );
+		$start = is_array( $data ) ? (int) ( $data['start'] ?? 0 ) : 0;
+		if ( ! $start || $now - $start >= HOUR_IN_SECONDS ) {
+			return array( 'n' => 0, 'start' => $now );
+		}
+		return array( 'n' => (int) ( $data['n'] ?? 0 ), 'start' => $start );
+	}
+
+	/** Count an upstream lookup without extending the window. */
+	private function count_lookup( $persistent, $key, array $window, $now ) {
+		++$window['n'];
+		$this->cache_verdict( $persistent, $key, $window, $window['start'] + HOUR_IN_SECONDS - $now );
+	}
+
+	/**
+	 * Read a cached entry from where cache_verdict() wrote it.
+	 *
+	 * @param bool   $persistent Whether a persistent object cache is in use.
+	 * @param string $key        Address hash or REFUSED_KEY.
+	 * @return mixed false when absent.
+	 */
+	private function cache_read( $persistent, $key ) {
+		return $persistent ? wp_cache_get( $key, self::CACHE_GROUP ) : get_transient( 'faz_ipinfo_' . $key );
+	}
+
+	/**
+	 * Store a verdict where the next request can read it.
+	 *
+	 * @param bool   $persistent Whether a persistent object cache is in use.
+	 * @param string $key        Cache key from hash_ip(), or REFUSED_KEY.
+	 * @param array  $value      array( 'vpn' => bool|null ).
+	 * @param int    $ttl        Seconds.
+	 */
+	private function cache_verdict( $persistent, $key, $value, $ttl ) {
+		if ( $persistent ) {
+			wp_cache_set( $key, $value, self::CACHE_GROUP, $ttl );
+		} else {
+			set_transient( 'faz_ipinfo_' . $key, $value, $ttl );
+		}
 	}
 
 	/**
@@ -105,7 +260,49 @@ class Ipinfo_Client {
 		if ( '' === $enc ) {
 			return '';
 		}
-		return Secrets::decrypt( $enc );
+		$plain = Secrets::decrypt( $enc );
+		// A key saved before 1.39.1 is a v2 XOR value, whose keystream every
+		// other v2 value under the same salt shares. Rewrite it once in the
+		// authenticated v3 format; the v2 copy then no longer sits in the row.
+		if ( '' !== $plain && Secrets::needs_upgrade( $enc ) ) {
+			$upgraded = Secrets::encrypt( $plain );
+			if ( '' !== $upgraded && $plain === Secrets::decrypt( $upgraded ) ) {
+				return $this->replace_legacy_key( $enc, $upgraded, $plain );
+			}
+		}
+		return $plain;
+	}
+
+	/**
+	 * Re-encrypt only if the saved key is still the one this request read.
+	 *
+	 * @param string $previous Legacy ciphertext.
+	 * @param string $upgraded Replacement ciphertext.
+	 * @param string $plain    Decrypted legacy value.
+	 * @return string The key this request should use.
+	 */
+	private function replace_legacy_key( $previous, $upgraded, $plain ) {
+		global $wpdb;
+		$name = 'faz_geo_ipinfo_api_key';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- update_option() cannot compare against the legacy value in the same write.
+		$updated = $wpdb->update(
+			$wpdb->options,
+			array( 'option_value' => $upgraded, 'autoload' => 'no' ),
+			array( 'option_name' => $name, 'option_value' => $previous ),
+			array( '%s', '%s' ),
+			array( '%s', '%s' )
+		);
+		if ( false === $updated ) {
+			return $plain;
+		}
+		wp_cache_delete( $name, 'options' );
+		$autoloaded = wp_cache_get( 'alloptions', 'options' );
+		if ( is_array( $autoloaded ) && isset( $autoloaded[ $name ] ) ) {
+			wp_cache_delete( 'alloptions', 'options' );
+		}
+		// Another request rotated or removed the key. Read its value before
+		// attempting the provider lookup.
+		return 1 === $updated ? $plain : Secrets::decrypt( get_option( $name, '' ) );
 	}
 
 	/**
@@ -157,6 +354,7 @@ class Ipinfo_Client {
 		}
 
 		$code = wp_remote_retrieve_response_code( $response );
+		$this->last_http_status = (int) $code;
 		if ( 200 !== (int) $code ) {
 			$this->log_failure( "http_$code", '' );
 			return array( 'vpn' => null, 'source' => 'error' );

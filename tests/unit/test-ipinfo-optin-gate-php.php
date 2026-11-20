@@ -35,6 +35,7 @@ namespace {
 		define( 'ABSPATH', __DIR__ . '/' );
 	}
 	define( 'DAY_IN_SECONDS', 86400 );
+	define( 'HOUR_IN_SECONDS', 3600 );
 
 	$GLOBALS['faz_options']   = array();
 	$GLOBALS['faz_cache']     = array();
@@ -105,6 +106,9 @@ namespace FazCookie\Admin\Modules\Geo_Routing\Includes {
 		}
 		public static function encrypt( $v ) {
 			return (string) $v;
+		}
+		public static function needs_upgrade( $v ) {
+			return false;
 		}
 	}
 }
