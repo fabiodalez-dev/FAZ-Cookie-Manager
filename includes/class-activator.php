@@ -2775,7 +2775,7 @@ class Activator {
 			return true;
 		}
 		// The flag can join the transaction only when the options table is
-		// transactional. On MyISAM a ROLLBACK would leave it set over rows that
+		// known to be transactional. On MyISAM a ROLLBACK would leave it set over rows that
 		// went back to their slashed form, and every later run would skip them:
 		// there it is written right after the COMMIT instead, which leaves only
 		// a crash between the two statements uncovered.
@@ -2923,9 +2923,9 @@ class Activator {
 	 * Whether a ROLLBACK undoes a write to the options table.
 	 *
 	 * WordPress does not pick the engine of its own tables, so a legacy host can
-	 * still have wp_options on MyISAM. An engine the probe cannot read (no
-	 * access to INFORMATION_SCHEMA) is taken for InnoDB, the default since
-	 * MySQL 5.5.
+	 * still have wp_options on MyISAM. Only an engine read as InnoDB counts: one
+	 * the probe cannot read is treated as MyISAM, so the flag goes after the
+	 * COMMIT rather than into a transaction that may not take it back.
 	 *
 	 * @return bool
 	 */
@@ -2933,7 +2933,7 @@ class Activator {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time engine probe in the upgrade path.
 		$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT `ENGINE` FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $wpdb->options ) );
-		return ! is_string( $engine ) || '' === $engine || 0 === strcasecmp( $engine, 'InnoDB' );
+		return is_string( $engine ) && 0 === strcasecmp( $engine, 'InnoDB' );
 	}
 
 	/**

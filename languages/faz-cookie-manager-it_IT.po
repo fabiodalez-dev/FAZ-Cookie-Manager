@@ -3956,13 +3956,10 @@ msgstr "Fallback sicuro: non è stato possibile caricare il set di regole GDPR r
 msgid "Invalid export file."
 msgstr "File di esportazione non valido."
 
-#: admin/modules/settings/api/class-api.php:933
-msgid "The cookie texts were being upgraded while the export was read. Please export again."
-msgstr "I testi dei cookie erano in aggiornamento durante la lettura dell'esportazione. Esporta di nuovo."
-
-#: admin/modules/settings/api/class-api.php:965
-msgid "The cookie texts are being upgraded. Please try the import again in a minute."
-msgstr "I testi dei cookie sono in aggiornamento. Riprova l'importazione tra un minuto."
+#: admin/modules/settings/api/class-api.php:847
+#: admin/modules/settings/api/class-api.php:964
+msgid "The cookie texts are being upgraded. Please try again in a minute."
+msgstr "I testi dei cookie sono in aggiornamento. Riprova tra un minuto."
 
 #: admin/modules/settings/api/class-api.php:1011
 msgid "Failed to import banners. Transaction rolled back."

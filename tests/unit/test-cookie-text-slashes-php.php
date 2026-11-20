@@ -125,6 +125,7 @@ class Faz_Sqlite_Wpdb {
 	public $options = 'wp_options';
 	public $fail_updates = false;
 	public $fail_queries = array(); // Exact statements that return false.
+	public $fail_once    = array(); // Same, for the first matching statement only.
 	public $fail_reads   = false;   // Reads of the categories table report an error.
 	public $last_error   = '';
 	public $engine       = 'InnoDB'; // What INFORMATION_SCHEMA reports for wp_options.
@@ -186,6 +187,12 @@ class Faz_Sqlite_Wpdb {
 	public function query( $query ) {
 		$this->log[] = $query;
 		$this->last_error = '';
+		foreach ( $this->fail_once as $k => $prefix ) {
+			if ( 0 === strpos( $query, $prefix ) ) {
+				unset( $this->fail_once[ $k ] );
+				return false;
+			}
+		}
 		foreach ( $this->fail_queries as $prefix ) {
 			if ( 0 === strpos( $query, $prefix ) ) {
 				return false;
@@ -531,6 +538,29 @@ try {
 sl_eq( $threw, true, 'MyISAM options: a flag that cannot be written after the COMMIT throws' );
 sl_eq( null !== $db->get_var( "SELECT option_value FROM wp_options WHERE option_name = 'faz_cookie_text_unslash_lock'" ), true, 'MyISAM options: and keeps the mutex, so no run strips the committed rows again before it expires' );
 
+// MyISAM: the first write after the COMMIT fails, the second one records it.
+$db = sl_site();
+$db->engine = 'MyISAM';
+$db->fail_once = array( 'INSERT INTO `wp_options` (`option_name`, `option_value`, `autoload`) VALUES (\'faz_cookie_text_unslashed_done\'' );
+sl_eq( Activator::unslash_cookie_text(), true, 'MyISAM options: a flag write that fails once is retried and the run reports done' );
+$flag_writes = count( array_filter( $db->log, function ( $q ) { return false !== strpos( $q, 'ON DUPLICATE KEY UPDATE' ); } ) );
+sl_eq( $flag_writes, 2, 'MyISAM options: two attempts were made' );
+sl_eq( Store::text_unslashed_in_db(), true, 'MyISAM options: the flag is set' );
+sl_eq( null === $db->get_var( "SELECT option_value FROM wp_options WHERE option_name = 'faz_cookie_text_unslash_lock'" ), true, 'MyISAM options: and the mutex is released' );
+sl_eq( sl_cookie( $db, 2 )['en'], 'Path C:\\temp', 'MyISAM options: the text is converted once' );
+
+// An engine the probe cannot read is not taken for InnoDB.
+$db = sl_site();
+$db->engine = null;
+$db->fail_queries = array( 'COMMIT' );
+try {
+	Activator::unslash_cookie_text();
+} catch ( \RuntimeException $e ) {
+	unset( $e );
+}
+$flag_writes = count( array_filter( $db->log, function ( $q ) { return false !== strpos( $q, 'ON DUPLICATE KEY UPDATE' ); } ) );
+sl_eq( $flag_writes, 0, 'unknown engine: no flag inside a transaction that may not take it back' );
+
 // The import and the export run the migration first (Store::ensure_text_unslashed()).
 $db = sl_site();
 sl_eq( Store::ensure_text_unslashed(), true, 'ensure_text_unslashed(): a pending site is converted on the spot' );
@@ -556,7 +586,8 @@ sl_eq( 1 === preg_match( '/function run_pending_migrations\(\).*?self::unslash_c
 $api = file_get_contents( $root . '/admin/modules/settings/api/class-api.php' );
 sl_eq( 1 === preg_match( "/if \( ! \\\\FazCookie\\\\Includes\\\\Store::ensure_text_unslashed\(\) \) \{\s*return new WP_Error\( 'faz_text_migration_pending'.*?\\\$unslash_text = empty\( \\\$data\['text_unslashed'\] \);/s", $api ), true, 'import converts the site first, refuses while it cannot, then unslashes only a pre-fix file' );
 foreach ( array( 'REST' => $api, 'WP-CLI' => file_get_contents( $root . '/includes/class-wp-cli-commands.php' ) ) as $where => $src ) {
-	sl_eq( 1 === preg_match( "/\\\$text_unslashed = \\\\FazCookie\\\\Includes\\\\Store::ensure_text_unslashed\(\);.*?'text_unslashed' => \\\$text_unslashed,\s*\);\s*try \{\s*\\\$text_unslashed_now = \\\\FazCookie\\\\Includes\\\\Store::text_unslashed_in_db\(\);\s*\} catch \( \\\\RuntimeException \\\$e \) \{\s*\\\$text_unslashed_now = null;.*?if \( \\\$text_unslashed !== \\\$text_unslashed_now \)/s", $src ), true, "the $where export marks the state its rows were read in, and refuses if it changed meanwhile or cannot be read" );
+	$export = substr( $src, (int) strpos( $src, 'if ( ! \\FazCookie\\Includes\\Store::ensure_text_unslashed() ) {' ) );
+	sl_eq( 1 === preg_match( "/^if \\( ! \\\\FazCookie\\\\Includes\\\\Store::ensure_text_unslashed\\(\\) \\) \\{\\s*(return new WP_Error\\( 'faz_text_migration_pending'|WP_CLI::error\\().*?'text_unslashed' => true,/s", $export ), true, "the $where export is refused until the rows are clean, and then marks them clean" );
 }
 sl_eq( substr_count( $api, '$text_column( $c' ), 4, 'import routes the four text columns through it' );
 sl_eq( substr_count( $api, "'text_unslashed' =>" ), 1, 'the REST export marks its format' );

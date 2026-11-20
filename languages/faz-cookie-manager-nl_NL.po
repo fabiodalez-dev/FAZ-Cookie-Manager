@@ -3957,12 +3957,9 @@ msgstr "Veilige terugval: de strikte AVG-regelset kon niet worden geladen, daaro
 msgid "Invalid export file."
 msgstr "Ongeldig exportbestand."
 
-#: admin/modules/settings/api/class-api.php:933
-msgid "The cookie texts were being upgraded while the export was read. Please export again."
-msgstr ""
-
-#: admin/modules/settings/api/class-api.php:965
-msgid "The cookie texts are being upgraded. Please try the import again in a minute."
+#: admin/modules/settings/api/class-api.php:847
+#: admin/modules/settings/api/class-api.php:964
+msgid "The cookie texts are being upgraded. Please try again in a minute."
 msgstr ""
 
 #: admin/modules/settings/api/class-api.php:1011
