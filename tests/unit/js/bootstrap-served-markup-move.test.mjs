@@ -590,12 +590,78 @@ console.log('k. Owl Carousel loop clones built from outerHTML strings (Signify P
   // A string-built script never inherits anything, even at a served URL.
   const served = parse('<div><script type="text/plain" data-faz-category="marketing" src="https://tracker.example/t.js"></script></div>');
   await checkpoint();
-  const script = jqParseHTML(document, served.innerHTML)[0];
+  // Built directly in an inert document, as parseHTML does, so the case does
+  // not depend on the parse itself working.
+  const script = document.implementation.createHTMLDocument('').importNode(served.querySelector('script'), true);
   script.setAttribute('type', 'text/javascript');
   const scriptHost = document.createElement('div');
   document.getElementById('main').appendChild(scriptHost);
   scriptHost.appendChild(document.importNode(script, true));
   eq('a string-built copy of a parked script is still held', scriptHost.querySelector('script'), null);
+}
+
+console.log('k2. the clones of a CDN-hosted slide keep their image past the backstop');
+{
+  // Photon, Cloudflare or BunnyCDN rewrite uploads to another host. The parser
+  // served that URL, so its string-built copy carries the same verdict — also
+  // when the DOM backstop looks at it, because the innerHTML sink tagged it.
+  const { document, parse } = boot();
+  const carousel = parse('<div class="owl-carousel"><div class="owl-stage">'
+    + '<div class="owl-item"><img src="https://i0.wp.com/site.test/wp-content/uploads/UL.png" srcset="https://i0.wp.com/site.test/wp-content/uploads/UL.png?w=400 400w"></div>'
+    + '</div></div>');
+  await checkpoint();
+  const stage = carousel.querySelector('.owl-stage');
+  const clones = jqParseHTML(document, stage.innerHTML);
+  jqAppendTo(document, clones, stage);
+  await checkpoint();
+  const copy = stage.children[1] && stage.children[1].querySelector('img');
+  eq('the CDN image keeps its src after the observer has seen it', copy && copy.getAttribute('src'), 'https://i0.wp.com/site.test/wp-content/uploads/UL.png');
+  eq('and its srcset', copy && copy.getAttribute('srcset'), 'https://i0.wp.com/site.test/wp-content/uploads/UL.png?w=400 400w');
+  eq('nothing is parked on it', copy && copy.hasAttribute('data-faz-src'), false);
+  // A string-built copy whose URL the server never served is still parked.
+  const foreign = jqParseHTML(document, '<div><img src="https://tracker.example/pixel.gif"></div>');
+  jqAppendTo(document, foreign, document.getElementById('main'));
+  await checkpoint();
+  const pixel = document.querySelector('img[data-faz-src="https://tracker.example/pixel.gif"]')
+    || document.querySelector('img[src="https://tracker.example/pixel.gif"]');
+  eq('an unserved cross-origin copy is still not live', pixel ? pixel.getAttribute('src') : null, null);
+}
+
+console.log('k3. every insertion route into an inert document passes; into the page it is held');
+{
+  const routes = {
+    appendChild: (dst, n) => dst.appendChild(n),
+    insertBefore: (dst, n) => dst.insertBefore(n, dst.firstChild),
+    replaceChild: (dst, n) => dst.replaceChild(n, dst.firstChild),
+    append: (dst, n) => dst.append(n),
+    prepend: (dst, n) => dst.prepend(n),
+    before: (dst, n) => dst.firstChild.before(n),
+    after: (dst, n) => dst.firstChild.after(n),
+    replaceWith: (dst, n) => dst.firstChild.replaceWith(n),
+    replaceChildren: (dst, n) => dst.replaceChildren(n),
+    'insertAdjacentElement(beforebegin)': (dst, n) => dst.firstChild.insertAdjacentElement('beforebegin', n),
+    'insertAdjacentElement(afterbegin)': (dst, n) => dst.insertAdjacentElement('afterbegin', n),
+    'insertAdjacentElement(beforeend)': (dst, n) => dst.insertAdjacentElement('beforeend', n),
+    'insertAdjacentElement(afterend)': (dst, n) => dst.firstChild.insertAdjacentElement('afterend', n),
+    'Range.insertNode': (dst, n) => { const r = dst.ownerDocument.createRange(); r.setStart(dst, 0); r.insertNode(n); },
+  };
+  for (const [name, insert] of Object.entries(routes)) {
+    const { document } = boot();
+    await checkpoint();
+    const inertDoc = document.implementation.createHTMLDocument('');
+    const inertHost = inertDoc.createElement('div');
+    inertHost.appendChild(inertDoc.createElement('span'));
+    const image = inertDoc.createElement('img');
+    image.setAttribute('src', 'https://tracker.example/pixel.gif');
+    insert(inertHost, image);
+    eq(`${name}: an unserved image lands in an inert document at once`, image.parentNode !== null && inertHost.contains(image), true);
+    const pageHost = document.createElement('div');
+    pageHost.appendChild(document.createElement('span'));
+    document.getElementById('main').appendChild(pageHost);
+    const adopted = document.importNode(image, true);
+    insert(pageHost, adopted);
+    eq(`${name}: the same image is held on its way into the page`, pageHost.contains(adopted), false);
+  }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

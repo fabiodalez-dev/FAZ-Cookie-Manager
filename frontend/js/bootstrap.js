@@ -611,8 +611,20 @@
         return found.filter(function (el) {
             var signature = urls(el);
             if (served.has(el) && served.get(el) === signature) return false;
-            return !(servedKeys && servedKeys.has(servedKey(el, signature)));
+            return !servedCopy(el, signature);
         });
+    }
+    // Whether `el`, as it is NOW, asks for exactly what a parser-served element
+    // of the same type and namespace asked for. Never true for a script.
+    // Shared by the insertion wrappers (unjudged) and the DOM backstop (guard):
+    // a copy the wrappers let through was still tagged by the innerHTML sink
+    // that built it, so the backstop judged it again and parked every URL that
+    // is not same-origin — the clones of a slide served from a CDN (Photon,
+    // Cloudflare, BunnyCDN) lost their image although the server had served
+    // that very URL.
+    function servedCopy(el, signature) {
+        if (!servedKeys || tagKey(el) === 'SCRIPT') return false;
+        return servedKeys.has(servedKey(el, signature === undefined ? urls(el) : signature));
     }
     // Every <style> in a subtree, the node itself included, in any namespace —
     // querySelectorAll('style') matches both, since a CSS type selector with no
@@ -2995,6 +3007,10 @@
         // and the handoff list that policy.script judges with the real rules.
         if (tagKey(el) === 'SCRIPT') return;
         if (tagKey(el) === 'INPUT' && String(attr(el, 'type') || '').toLowerCase() !== 'image') return;
+        // A copy of parser-served markup, URLs unchanged: the server already
+        // judged that request and the parser already made it (see servedCopy).
+        // A URL changed since is a different signature and is parked below.
+        if (servedCopy(el)) return;
         var values = staged.get(el);
         heldAttrs(el).forEach(function (prop) {
             var key = prop.toLowerCase();
