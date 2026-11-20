@@ -282,9 +282,11 @@ require_once $faz_root . '/admin/modules/cookie-policy-generator/includes/class-
 require_once $faz_root . '/admin/modules/cookie-policy-generator/includes/class-template-translations.php';
 require_once $faz_root . '/admin/modules/cookie-policy-generator/includes/class-section-overrides.php';
 require_once $faz_root . '/admin/modules/cookie-policy-generator/includes/class-renderer.php';
+require_once $faz_root . '/admin/modules/cookie-policy-generator/includes/class-version-ledger.php';
 
 use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Generator;
 use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Renderer;
+use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Version_Ledger;
 
 function faz_reset_renderer_statics() {
 	foreach ( array(
@@ -441,6 +443,41 @@ $policy['jurisdiction'] = 'ccpa-california';
 t( 'December 24, 2026' === $date_of( $render( '2026-12-24 09:00:00' ) ), 'the CCPA variant establishes its own date' );
 $policy['dpo']['name'] = 'Unpublished DPO';
 t( 'December 24, 2026' === $date_of( $render( '2026-12-25 09:00:00' ) ), 'a DPO field not displayed in CCPA does not change the date' );
+
+// A preview that throws must not leave recording switched off for the rest
+// of the request: the next public render of a changed text records its date.
+$GLOBALS['faz_test_filters']['faz_cookie_policy_data'][] = static function ( $data ) {
+	throw new \RuntimeException( 'filter failure' );
+};
+$threw = false;
+try {
+	faz_reset_renderer_statics();
+	Renderer::render_preview( array( 'lang' => 'en' ) );
+} catch ( \RuntimeException $e ) {
+	$threw = true;
+}
+$GLOBALS['faz_test_filters'] = array();
+t( $threw, 'the failing preview propagates its exception' );
+$policy['dpo']['name'] = 'After the failed preview';
+$policy['jurisdiction'] = 'gdpr-strict';
+$render( '2026-12-26 09:00:00' );
+// Rendered again the next day: only a date that was really recorded survives.
+t( 'December 26, 2026' === $date_of( $render( '2026-12-27 08:00:00' ) ), 'after a failed preview a public render still records the new date' );
+
+// The admin's version ledger renders the policy too, from wp-admin where the
+// locale and the variants differ from what visitors read. It must not date
+// anything: neither a new variant row nor a changed text.
+$policy['dpo']['name'] = 'Changed only for the ledger';
+$writes = $GLOBALS['faz_test_state']['writes'] ?? 0;
+$rows   = $rows_of();
+$GLOBALS['faz_test_state']['now'] = '2026-12-27 09:00:00';
+faz_reset_renderer_statics();
+$hash = Version_Ledger::current_hash( array( 'lang' => 'fr' ) );
+faz_reset_renderer_statics();
+Version_Ledger::current_hash( array( 'lang' => 'en' ) );
+t( '' !== $hash, 'the ledger still reads a version hash' );
+t( $writes === ( $GLOBALS['faz_test_state']['writes'] ?? 0 ) && $rows === $rows_of(), 'the version ledger writes no policy date' );
+t( 'December 28, 2026' === $date_of( $render( '2026-12-28 09:00:00' ) ), 'the changed text is dated when a visitor is first served it' );
 
 echo "\ncookie policy last updated: $ok passed, $ko failed\n";
 exit( $ko > 0 ? 1 : 0 );

@@ -2730,6 +2730,18 @@ class Activator {
 		$uncategorized = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT category_id FROM `' . esc_sql( $categories ) . '` WHERE slug = %s', 'uncategorized' ) );
 		if ( $internal <= 0 || $uncategorized <= 0 ) {
 			// The prerequisite category creation or lookup can fail temporarily.
+			// With no editor cookie stored there is nothing to wait for: new
+			// scans already file them as internal, so finish instead of holding
+			// the whole migration batch back on every admin request.
+			$pending = 0;
+			foreach ( \FazCookie\Frontend\Frontend::DIVI_EDITOR_COOKIE_PREFIXES as $prefix ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $cookies is $wpdb->prefix + literal (escaped via esc_sql); value bound via prepare(); one-shot migration read.
+				$pending += (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM `' . esc_sql( $cookies ) . '` WHERE name LIKE %s', $wpdb->esc_like( $prefix ) . '%' ) );
+			}
+			if ( 0 === $pending ) {
+				return update_option( 'faz_move_divi_editor_internal_done', 1, false )
+					|| (bool) get_option( 'faz_move_divi_editor_internal_done' );
+			}
 			return false;
 		}
 		$moved = 0;

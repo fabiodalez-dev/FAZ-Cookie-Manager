@@ -37,6 +37,9 @@ if ( ! function_exists( 'get_option' ) ) {
 }
 if ( ! function_exists( 'update_option' ) ) {
 	function update_option( $name, $value, $autoload = null ) {
+		if ( in_array( $name, $GLOBALS['faz_test_refuse_options'] ?? array(), true ) ) {
+			return false;
+		}
 		$GLOBALS['faz_test_options'][ $name ] = $value;
 		return true;
 	}
@@ -53,6 +56,9 @@ if ( ! function_exists( 'esc_sql' ) ) {
 class Faz_Sqlite_Wpdb {
 	public $prefix = 'wp_';
 	public $fail   = false;
+	/** Fail only the Nth UPDATE (1-based); 0 = never. */
+	public $fail_on = 0;
+	private $updates = 0;
 	public $pdo;
 
 	public function __construct() {
@@ -87,6 +93,9 @@ class Faz_Sqlite_Wpdb {
 		return false === $value ? null : $value;
 	}
 	public function query( $query ) {
+		if ( 0 === stripos( ltrim( $query ), 'UPDATE' ) && ++$this->updates === $this->fail_on ) {
+			return false;
+		}
 		return $this->fail ? false : $this->pdo->exec( $this->sqlite( $query ) );
 	}
 }
@@ -181,6 +190,45 @@ $db = dv_site( array() );
 $db->pdo->exec( 'DROP TABLE wp_faz_cookies' );
 dv_eq( Activator::move_divi_editor_cookies_to_internal(), false, 'a missing table also defers completion' );
 dv_eq( get_option( 'faz_move_divi_editor_internal_done' ), false, 'the missing table does not set the marker' );
+
+echo "\nPartial failure, then retry\n";
+$db = dv_site( array(
+	array( 'et-saved-post-1-bb', UNCATEGORIZED ),
+	array( 'et-saving-post-1-bb', UNCATEGORIZED ),
+	array( 'et-pb-recent-items-fonts', UNCATEGORIZED ),
+	array( 'et-saved-post-2-bb', MARKETING ),
+) );
+$db->fail_on = 2; // the first prefix moves, the second UPDATE fails
+$threw = false;
+try {
+	Activator::move_divi_editor_cookies_to_internal();
+} catch ( \RuntimeException $e ) {
+	$threw = true;
+}
+dv_eq( $threw, true, 'a failure on a later UPDATE throws too' );
+dv_eq( get_option( 'faz_move_divi_editor_internal_done', 0 ), 0, 'and leaves the marker unset' );
+dv_eq( Cookie_Controller::$busts, 1, 'the rows already moved bust the cache' );
+$db->fail_on = 0;
+dv_eq( Activator::move_divi_editor_cookies_to_internal(), true, 'the retry completes' );
+dv_eq( dv_cat( $db, 'et-saved-post-1-bb' ), INTERNAL, 'the row moved before the failure stays moved' );
+dv_eq( dv_cat( $db, 'et-saving-post-1-bb' ), INTERNAL, 'the row of the failed UPDATE moves on retry' );
+dv_eq( dv_cat( $db, 'et-pb-recent-items-fonts' ), INTERNAL, 'the rows after it move on retry' );
+dv_eq( dv_cat( $db, 'et-saved-post-2-bb' ), MARKETING, 'Marketing is still left alone' );
+
+echo "\nMarker write refused\n";
+$db = dv_site( array( array( 'et-saved-post-1-bb', UNCATEGORIZED ) ) );
+$GLOBALS['faz_test_refuse_options'] = array( 'faz_move_divi_editor_internal_done' );
+dv_eq( Activator::move_divi_editor_cookies_to_internal(), false, 'a refused marker write reports the migration incomplete' );
+dv_eq( get_option( 'faz_move_divi_editor_internal_done', 0 ), 0, 'and the marker stays absent' );
+dv_eq( Cookie_Controller::$busts, 1, 'the moved rows still bust the cache' );
+$GLOBALS['faz_test_refuse_options'] = array();
+dv_eq( Activator::move_divi_editor_cookies_to_internal(), true, 'the retry reports completion' );
+dv_eq( dv_cat( $db, 'et-saved-post-1-bb' ), INTERNAL, 'and the row is where the first run put it' );
+
+echo "\nMissing category, nothing to move\n";
+$db = dv_site( array( array( 'some-other-cookie', UNCATEGORIZED ) ), false );
+dv_eq( Activator::move_divi_editor_cookies_to_internal(), true, 'with no editor cookie stored a missing category does not hold the batch back' );
+dv_eq( get_option( 'faz_move_divi_editor_internal_done' ), 1, 'and the marker is set' );
 
 echo "\ndivi editor migration: $passed passed, $failed failed\n";
 exit( $failed > 0 ? 1 : 0 );
