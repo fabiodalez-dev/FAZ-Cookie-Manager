@@ -2736,7 +2736,13 @@ class Activator {
 			$pending = 0;
 			foreach ( \FazCookie\Frontend\Frontend::DIVI_EDITOR_COOKIE_PREFIXES as $prefix ) {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $cookies is $wpdb->prefix + literal (escaped via esc_sql); value bound via prepare(); one-shot migration read.
-				$pending += (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM `' . esc_sql( $cookies ) . '` WHERE name LIKE %s', $wpdb->esc_like( $prefix ) . '%' ) );
+				$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM `' . esc_sql( $cookies ) . '` WHERE name LIKE %s', $wpdb->esc_like( $prefix ) . '%' ) );
+				if ( null === $count ) {
+					// A failed COUNT is not zero rows: finishing here would set the
+					// marker and strand an editor cookie in Uncategorized for good.
+					return false;
+				}
+				$pending += (int) $count;
 			}
 			if ( 0 === $pending ) {
 				return update_option( 'faz_move_divi_editor_internal_done', 1, false )

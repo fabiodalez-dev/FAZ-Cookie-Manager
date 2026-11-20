@@ -83,7 +83,11 @@ class Faz_Sqlite_Wpdb {
 		$query = str_replace( '`', '"', $query );
 		return preg_replace( "/LIKE ('(?:[^']|'')*')/", "LIKE $1 ESCAPE '\\\\'", $query );
 	}
+	public $fail_count = false;
 	public function get_var( $query ) {
+		if ( $this->fail_count && false !== stripos( $query, 'COUNT(' ) ) {
+			return null;
+		}
 		if ( preg_match( "/^SHOW TABLES LIKE '(.+)'$/", $query, $m ) ) {
 			$st = $this->pdo->query( "SELECT name FROM sqlite_master WHERE type = 'table' AND name = " . $this->pdo->quote( $m[1] ) );
 		} else {
@@ -229,6 +233,11 @@ echo "\nMissing category, nothing to move\n";
 $db = dv_site( array( array( 'some-other-cookie', UNCATEGORIZED ) ), false );
 dv_eq( Activator::move_divi_editor_cookies_to_internal(), true, 'with no editor cookie stored a missing category does not hold the batch back' );
 dv_eq( get_option( 'faz_move_divi_editor_internal_done' ), 1, 'and the marker is set' );
+
+$db = dv_site( array( array( 'some-other-cookie', UNCATEGORIZED ) ), false );
+$db->fail_count = true;
+dv_eq( Activator::move_divi_editor_cookies_to_internal(), false, 'a COUNT that fails is not taken for zero editor cookies' );
+dv_eq( get_option( 'faz_move_divi_editor_internal_done' ), false, 'and the marker stays unset' );
 
 echo "\ndivi editor migration: $passed passed, $failed failed\n";
 exit( $failed > 0 ? 1 : 0 );
