@@ -46,9 +46,10 @@ class Banners extends Modules {
 	/**
 	 * Rebuild the banner template when an image's alt text changes.
 	 *
-	 * Any attachment, not only the current logo: telling them apart would need
-	 * the banner config on every meta write, and alt edits are rare admin
-	 * actions while a rebuild costs one template build.
+	 * The template is rebuilt for any attachment, not only the current logo:
+	 * alt edits are rare admin actions and a rebuild costs one template build.
+	 * Only the page-cache purge, which empties every cached page, waits for the
+	 * logo check below.
 	 *
 	 * Registered by Admin::__construct() on every request, not by init(): the
 	 * full attachment edit screen saves the alt through post.php, where the
