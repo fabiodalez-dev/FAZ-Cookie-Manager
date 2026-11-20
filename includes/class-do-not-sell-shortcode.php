@@ -358,11 +358,17 @@ class Do_Not_Sell_Shortcode {
 			return;
 		}
 
+		// Without a per-address window (see claim_window()) the opt-out itself
+		// is always honoured, but its audit row and mail are bounded site-wide.
+		$audit = is_string( $lock_key ) || $this->claim_shared_audit_slot();
+
 		try {
 			$ip_hash = $this->hash_ip();
-			$this->log_optout( $ip_hash );
+			if ( $audit ) {
+				$this->log_optout( $ip_hash );
+			}
 			$this->set_optout_cookie();
-			if ( $this->claim_notification() ) {
+			if ( $audit && $this->claim_notification() ) {
 				$this->notify_admin( $ip_hash );
 			}
 		} finally {
@@ -409,9 +415,11 @@ class Do_Not_Sell_Shortcode {
 			return;
 		}
 
+		$audit = is_string( $lock_key ) || $this->claim_shared_audit_slot();
+
 		try {
 			$this->clear_optout_cookie();
-			if ( $has_optout_cookie ) {
+			if ( $has_optout_cookie && $audit ) {
 				$ip_hash = $this->hash_ip();
 				$this->log_rescind( $ip_hash );
 			}
@@ -451,7 +459,7 @@ class Do_Not_Sell_Shortcode {
 		}
 		$controller_class::get_instance()->log_consent(
 			array(
-				'consent_id' => $consent_prefix . '-' . bin2hex( random_bytes( 8 ) ),
+				'consent_id' => $consent_prefix . '-' . self::random_hex( 8 ),
 				'status'     => $status,
 				// Empty STRING, not array(): log_consent() json-encodes an array
 				// (array() → "[]"), but a DNSMPI opt-out carries no category map,
@@ -531,6 +539,49 @@ class Do_Not_Sell_Shortcode {
 	}
 
 	/**
+	 * Whether a request whose address does not identify one visitor may write
+	 * its audit row (and ask for the admin mail).
+	 *
+	 * claim_window() is skipped there so one visitor cannot refuse everyone
+	 * else's opt-out, and the opt-out itself is always applied. The audit row
+	 * is not a right, though, and without a bound a script replaying the
+	 * public nonce wrote one consent-log row per request. A single site-wide
+	 * slot per second caps that write; a real opt-out that loses the race is
+	 * still applied through its cookie.
+	 *
+	 * @return bool True when this request may write the audit row.
+	 */
+	private function claim_shared_audit_slot() {
+		$key = 'faz_dnsmpi_shared_audit';
+		if ( function_exists( 'wp_using_ext_object_cache' ) && wp_using_ext_object_cache() ) {
+			return (bool) wp_cache_add( $key, 1, 'faz_throttle', 1 );
+		}
+		if ( false !== get_transient( $key ) ) {
+			return false;
+		}
+		set_transient( $key, 1, 1 );
+		return true;
+	}
+
+	/**
+	 * Hex token that survives a host without a usable entropy source.
+	 *
+	 * random_bytes() throws there; the opt-out has already been applied when
+	 * the log and the mail lock ask for a token, so a throw would answer a
+	 * 500 for a request that succeeded.
+	 *
+	 * @param int $bytes Number of random bytes.
+	 * @return string
+	 */
+	private static function random_hex( $bytes ) {
+		try {
+			return bin2hex( random_bytes( $bytes ) );
+		} catch ( \Throwable $e ) {
+			return function_exists( 'wp_generate_password' ) ? wp_generate_password( $bytes * 2, false, false ) : substr( hash( 'sha256', uniqid( '', true ) ), 0, $bytes * 2 );
+		}
+	}
+
+	/**
 	 * Claim the per-connection 60-second window for an opt-out or rescind.
 	 *
 	 * The window is keyed on the client address, so it is skipped when that
@@ -600,7 +651,7 @@ class Do_Not_Sell_Shortcode {
 		$lock = self::MAIL_WINDOW_OPTION . '_lock';
 		// The value names this request, so a release or a reclaim removes
 		// only the lock it means and never one another request took since.
-		$mine = time() . ':' . bin2hex( random_bytes( 6 ) );
+		$mine = time() . ':' . self::random_hex( 6 );
 		$held = false;
 		for ( $try = 0; $try < 10; $try++ ) {
 			if ( $this->insert_mail_lock( $lock, $mine ) ) {
