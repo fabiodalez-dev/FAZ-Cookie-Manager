@@ -651,17 +651,52 @@ console.log('k3. every insertion route into an inert document passes; into the p
     const inertDoc = document.implementation.createHTMLDocument('');
     const inertHost = inertDoc.createElement('div');
     inertHost.appendChild(inertDoc.createElement('span'));
-    const image = inertDoc.createElement('img');
-    image.setAttribute('src', 'https://tracker.example/pixel.gif');
+    // Markup, not setAttribute(): the attribute gate stages a script's write
+    // without putting it on the element, and importNode() copies only the
+    // attributes that are there.
+    const source = inertDoc.createElement('div');
+    source.innerHTML = '<img src="https://tracker.example/pixel.gif">';
+    const image = source.firstChild;
+    eq(`${name}: the inert image carries the remote URL`, image.getAttributeNode('src')?.value, 'https://tracker.example/pixel.gif');
     insert(inertHost, image);
     eq(`${name}: an unserved image lands in an inert document at once`, image.parentNode !== null && inertHost.contains(image), true);
     const pageHost = document.createElement('div');
     pageHost.appendChild(document.createElement('span'));
     document.getElementById('main').appendChild(pageHost);
     const adopted = document.importNode(image, true);
+    eq(`${name}: so does the copy imported into the page`, adopted.getAttributeNode('src')?.value, 'https://tracker.example/pixel.gif');
     insert(pageHost, adopted);
     eq(`${name}: the same image is held on its way into the page`, pageHost.contains(adopted), false);
   }
+}
+
+console.log('k4. a copy let through on a served URL is not recorded as the parser\'s');
+{
+  // While the document parses, an UNTAGGED insertion is taken for the
+  // parser's, and the observer records its URLs as served. A script-built
+  // image admitted only because its URL matched a served one is not the
+  // parser's: if its URL is rewritten before the observer looks (an Attr node,
+  // a route no setter sees), that new URL must be parked, not recorded.
+  const { document, parse } = boot();
+  parse('<div><img src="/wp-content/uploads/UL.png"></div>');
+  await checkpoint();
+  const img = document.createElement('img');
+  const src = document.createAttribute('src');
+  src.value = '/wp-content/uploads/UL.png';
+  img.setAttributeNode(src);
+  document.getElementById('main').appendChild(img);
+  eq('the copy on a served URL is inserted at once', img.isConnected, true);
+  src.value = 'https://tracker.example/pixel.gif';
+  await checkpoint();
+  eq('the URL rewritten after the insertion is parked', img.getAttribute('src'), null);
+  eq('and kept for the runtime to judge', img.getAttribute('data-faz-src'), 'https://tracker.example/pixel.gif');
+  // Nor does that URL become a served one for the next copy.
+  const next = document.createElement('img');
+  const nextSrc = document.createAttribute('src');
+  nextSrc.value = 'https://tracker.example/pixel.gif';
+  next.setAttributeNode(nextSrc);
+  document.getElementById('main').appendChild(next);
+  eq('a later copy on the rewritten URL is still held', next.isConnected, false);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

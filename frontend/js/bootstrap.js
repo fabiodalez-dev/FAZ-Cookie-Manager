@@ -611,7 +611,11 @@
         return found.filter(function (el) {
             var signature = urls(el);
             if (served.has(el) && served.get(el) === signature) return false;
-            return !servedCopy(el, signature);
+            if (!servedCopy(el, signature)) return true;
+            // Let through on its URLs alone, not because the parser made it:
+            // the observer must not take it for the parser's (see observed()).
+            if (admitted) admitted.add(el);
+            return false;
         });
     }
     // Whether `el`, as it is NOW, asks for exactly what a parser-served element
@@ -751,6 +755,14 @@
     // Every verdict `served` records, by element type, namespace and URL
     // signature rather than by element — see unjudged(). Scripts never enter.
     var servedKeys = served && typeof w.Set === 'function' ? new w.Set() : null;
+    // Elements a wrapper let through because servedCopy() matched, not because
+    // the parser inserted them. While the document parses, an untagged
+    // insertion is taken for the parser's and its URLs as they are when the
+    // observer looks are recorded as served — so a script that inserted an
+    // image on a served URL and rewrote it through its Attr node before that
+    // look had the NEW URL recorded, kept by guard() and admitted for every
+    // later copy. These go to guard() instead, which judges them as they are.
+    var admitted = served ? new w.WeakSet() : null;
     // Divi's et_duplicate_menu clones the server menu (including Polylang's
     // flag images), appends it, then queries the destination synchronously.
     // A clone has no WeakMap entry of its own, so holding it left that query
@@ -3163,6 +3175,7 @@
                         if (served) resources(node).forEach(function (el) {
                             var script = tagKey(el) === 'SCRIPT', judged = script ? servedScripts : served;
                             if (judged.has(el)) return;
+                            if (admitted && admitted.has(el)) return guard(el);
                             var signature = urls(el);
                             judged.set(el, signature);
                             if (!script && servedKeys) servedKeys.add(servedKey(el, signature));
