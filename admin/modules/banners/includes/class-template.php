@@ -697,16 +697,7 @@ class Template {
 				}
 				// Brand logo: set img src from config meta.url (custom upload).
 				if ( 'brand-logo' === $tag && isset( $config['meta']['url'] ) && '#' !== $config['meta']['url'] ) {
-					$logo_imgs = $element->getElementsByTagName( 'img' );
-					// The image's own alt text names whose logo it is (WCAG 1.1.1);
-					// the template's generic "Brand logo" stays when it has none.
-					$logo_alt = self::brand_logo_alt( (string) $config['meta']['url'] );
-					foreach ( $logo_imgs as $logo_img ) {
-						$logo_img->setAttribute( 'src', esc_url( $config['meta']['url'] ) );
-						if ( '' !== $logo_alt ) {
-							$logo_img->setAttribute( 'alt', $logo_alt );
-						}
-					}
+					self::apply_brand_logo( $element, (string) $config['meta']['url'] );
 					// Only for a logo that is shown: with the logo off the grid
 					// would keep an empty column and strip the text's padding.
 					$logo_beside = ! empty( $config['status'] )
@@ -943,6 +934,26 @@ class Template {
 	public function is_preview() {
 		return defined( 'FAZ_PREVIEW_REQUEST' ) && FAZ_PREVIEW_REQUEST;
 	}
+	/**
+	 * Point the brand-logo images at the configured URL and name them.
+	 *
+	 * The image's own alt text names whose logo it is (WCAG 1.1.1); the
+	 * template's generic "Brand logo" stays when it has none.
+	 *
+	 * @param \DOMElement $element The brand-logo element.
+	 * @param string      $url     Logo URL from the banner config.
+	 * @return void
+	 */
+	public static function apply_brand_logo( $element, $url ) {
+		$logo_alt = self::brand_logo_alt( $url );
+		foreach ( $element->getElementsByTagName( 'img' ) as $logo_img ) {
+			$logo_img->setAttribute( 'src', esc_url( $url ) );
+			if ( '' !== $logo_alt ) {
+				$logo_img->setAttribute( 'alt', $logo_alt );
+			}
+		}
+	}
+
 	/**
 	 * Alt text of the Media Library image a brand logo URL points to.
 	 *

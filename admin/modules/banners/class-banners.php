@@ -41,11 +41,6 @@ class Banners extends Modules {
 		add_action( 'faz_after_update_banner', array( $this->controller, 'delete_cache' ) );
 		add_action( 'faz_after_update_banner', array( Template::get_instance(), 'delete_cache' ) );
 		add_action( 'faz_reinstall_tables', array( $this->controller, 'reinstall' ) );
-		// The brand logo takes its alt text from the Media Library (#404), and
-		// the built template is cached: an alt edited there has to rebuild it.
-		foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $hook ) {
-			add_action( $hook, array( $this, 'maybe_flush_on_alt_change' ), 10, 3 );
-		}
 	}
 
 	/**
@@ -55,12 +50,16 @@ class Banners extends Modules {
 	 * the banner config on every meta write, and alt edits are rare admin
 	 * actions while a rebuild costs one template build.
 	 *
+	 * Registered by Admin::__construct() on every request, not by init(): the
+	 * full attachment edit screen saves the alt through post.php, where the
+	 * admin modules are not loaded.
+	 *
 	 * @param int|int[] $meta_id   Meta id(s).
 	 * @param int       $object_id Post id.
 	 * @param string    $meta_key  Meta key.
 	 * @return void
 	 */
-	public function maybe_flush_on_alt_change( $meta_id, $object_id, $meta_key ) {
+	public static function maybe_flush_on_alt_change( $meta_id, $object_id, $meta_key ) {
 		if ( '_wp_attachment_image_alt' === $meta_key && function_exists( 'faz_clear_banner_template_cache' ) ) {
 			faz_clear_banner_template_cache();
 		}

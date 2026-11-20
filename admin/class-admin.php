@@ -82,6 +82,13 @@ class Admin {
 		self::$modules = $this->get_default_modules();
 		$this->load();
 		$this->maybe_load_modules();
+		// The banner's brand logo takes its alt text from the Media Library
+		// (#404) and the built template is cached, so an alt edit has to
+		// rebuild it. Hooked here, on every request, because the attachment
+		// edit screen saves through post.php, where the modules are not loaded.
+		foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $alt_hook ) {
+			add_action( $alt_hook, array( \FazCookie\Admin\Modules\Banners\Banners::class, 'maybe_flush_on_alt_change' ), 10, 3 );
+		}
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
 		if ( is_multisite() ) {
 			add_action( 'network_admin_menu', array( $this, 'register_network_menu' ) );

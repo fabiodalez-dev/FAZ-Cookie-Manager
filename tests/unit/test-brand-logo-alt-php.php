@@ -12,6 +12,13 @@
  * Run: php tests/unit/test-brand-logo-alt-php.php
  */
 
+namespace FazCookie\Includes {
+	// class-banners.php extends it; the callback under test needs nothing from it.
+	if ( ! class_exists( Modules::class ) ) {
+		abstract class Modules {}
+	}
+}
+
 namespace {
 
 	if ( ! defined( 'ABSPATH' ) ) {
@@ -45,12 +52,17 @@ namespace {
 	function add_action( $hook, $callback, $priority = 10, $args = 1 ) {
 		$GLOBALS['faz_test_actions'][ $hook ][] = $callback;
 	}
+	function esc_url( $url ) {
+		return (string) $url;
+	}
 	function faz_clear_banner_template_cache() {
 		$GLOBALS['faz_test_cleared']++;
 	}
 
 	require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/class-template.php';
+	require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/class-banners.php';
 
+	use FazCookie\Admin\Modules\Banners\Banners;
 	use FazCookie\Admin\Modules\Banners\Includes\Template;
 
 	$passed = 0;
@@ -82,15 +94,39 @@ namespace {
 	$GLOBALS['faz_test_filters'] = array();
 
 	echo "\n== The cached template is rebuilt when an alt changes ==\n";
-	$src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/banners/class-banners.php' );
-	check( false !== strpos( $src, "'_wp_attachment_image_alt' === \$meta_key" ), 'the banners module watches the alt meta key' );
-	foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $hook ) {
-		check( false !== strpos( $src, "'" . $hook . "'" ), "it listens on $hook" );
-	}
+	Banners::maybe_flush_on_alt_change( 7, 41, '_wp_attachment_image_alt' );
+	check( 1 === $GLOBALS['faz_test_cleared'], 'an alt write clears the template cache' );
+	Banners::maybe_flush_on_alt_change( 8, 41, '_wp_attached_file' );
+	Banners::maybe_flush_on_alt_change( 9, 41, '_edit_lock' );
+	check( 1 === $GLOBALS['faz_test_cleared'], 'any other meta key leaves it alone' );
+	// Hooked on every request by Admin::__construct(), not by Banners::init():
+	// the attachment edit screen saves through post.php, where the admin
+	// modules are not loaded (constructing Admin here would boot the plugin).
+	$admin = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/class-admin.php' );
+	$ctor  = substr( $admin, (int) strpos( $admin, 'public function __construct(' ) );
+	$ctor  = substr( $ctor, 0, (int) strpos( $ctor, "\n\t}\n" ) );
+	check( 1 === preg_match( "/array\\(\\s*'added_post_meta',\\s*'updated_post_meta',\\s*'deleted_post_meta'\\s*\\)/", $ctor ), 'Admin::__construct() hooks added, updated and deleted post meta' );
+	check( false !== strpos( $ctor, "Banners::class, 'maybe_flush_on_alt_change' ), 10, 3 )" ), 'with the static callback and its three arguments' );
+	$banners_src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/banners/class-banners.php' );
+	check( false === strpos( $banners_src, "add_action( \$hook, array( \$this, 'maybe_flush_on_alt_change' )" ), 'Banners::init() no longer registers a second copy' );
 
-	echo "\n== The template build sets it on the logo image ==\n";
+	echo "\n== The rendered logo carries it ==\n";
+	$render = function ( $url ) {
+		$doc = new DOMDocument();
+		$doc->loadHTML( '<div data-faz-tag="brand-logo"><img src="#" alt="Brand logo"></div>' );
+		$el = $doc->getElementsByTagName( 'div' )->item( 0 );
+		Template::apply_brand_logo( $el, $url );
+		$img = $el->getElementsByTagName( 'img' )->item( 0 );
+		return array( $img->getAttribute( 'src' ), $img->getAttribute( 'alt' ) );
+	};
+	list( $src, $alt ) = $render( $up . 'acme-logo.png' );
+	check( $up . 'acme-logo.png' === $src && 'Acme Srl logo' === $alt, 'a logo with alt text renders it on the img' );
+	list( $src, $alt ) = $render( $up . 'no-alt.png' );
+	check( $up . 'no-alt.png' === $src && 'Brand logo' === $alt, 'a logo without alt text keeps "Brand logo"' );
+	list( , $alt ) = $render( 'https://cdn.other.test/logo.png' );
+	check( 'Brand logo' === $alt, 'an external logo keeps "Brand logo"' );
 	$tpl = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/class-template.php' );
-	check( 1 === preg_match( '/brand_logo_alt\(.*?\$logo_img->setAttribute\(\s*\'alt\',\s*\$logo_alt\s*\)/s', $tpl ), 'prepare_html() writes the alt on the brand-logo img' );
+	check( false !== strpos( $tpl, "self::apply_brand_logo( \$element, (string) \$config['meta']['url'] );" ), 'prepare_html() renders the brand-logo block through apply_brand_logo()' );
 
 	echo "\nPassed: $passed\nFailed: $failed\n";
 	exit( $failed > 0 ? 1 : 0 );
