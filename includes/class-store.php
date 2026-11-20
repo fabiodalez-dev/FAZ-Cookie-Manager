@@ -136,12 +136,22 @@ abstract class Store {
 	 * another request finished meanwhile. The export, the import and the
 	 * migration's own re-check after taking its lock need the committed state.
 	 *
+	 * A failed read throws instead of answering "not done": get_var() returns
+	 * null for a missing row and for a failed query alike, and taking a failure
+	 * for "pending" would let the migration strip rows another request already
+	 * converted.
+	 *
 	 * @return bool
+	 * @throws \RuntimeException When the flag cannot be read.
 	 */
 	public static function text_unslashed_in_db() {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- must bypass the options cache to see another request's commit.
-		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s", self::TEXT_UNSLASHED_OPTION ) );
+		$value = $wpdb->get_var( $wpdb->prepare( "SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s", self::TEXT_UNSLASHED_OPTION ) );
+		if ( '' !== (string) $wpdb->last_error ) {
+			throw new \RuntimeException( 'FAZ: could not read the cookie text unslash flag.' );
+		}
+		return (bool) $value;
 	}
 
 	/**
@@ -151,18 +161,19 @@ abstract class Store {
 	 * clean file written into rows the migration has not converted yet would
 	 * lose a real backslash when it runs.
 	 *
-	 * @return bool True when the stored text is in the clean form.
+	 * @return bool True when the stored text is in the clean form; false when it
+	 *              is not, or the state could not be read.
 	 */
 	public static function ensure_text_unslashed() {
-		if ( self::text_unslashed_in_db() ) {
-			return true;
-		}
 		try {
+			if ( self::text_unslashed_in_db() ) {
+				return true;
+			}
 			Activator::unslash_cookie_text();
+			return self::text_unslashed_in_db();
 		} catch ( \Throwable $e ) {
 			return false;
 		}
-		return self::text_unslashed_in_db();
 	}
 
 	/**

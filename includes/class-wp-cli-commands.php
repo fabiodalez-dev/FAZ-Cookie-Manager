@@ -166,7 +166,12 @@ class WP_CLI_Commands {
 			// unslash a file written by an older version.
 			'text_unslashed' => $text_unslashed,
 		);
-		if ( $text_unslashed !== \FazCookie\Includes\Store::text_unslashed_in_db() ) {
+		try {
+			$text_unslashed_now = \FazCookie\Includes\Store::text_unslashed_in_db();
+		} catch ( \RuntimeException $e ) {
+			$text_unslashed_now = null; // Unknown: the marker cannot be vouched for.
+		}
+		if ( $text_unslashed !== $text_unslashed_now ) {
 			WP_CLI::error( 'The cookie texts were being upgraded while the export was read. Please export again.' );
 			return;
 		}

@@ -2763,11 +2763,23 @@ class Activator {
 		}
 		// The flag read above may be stale: another request can have finished,
 		// and released the lock, between that read and this claim.
-		if ( Store::text_unslashed_in_db() ) {
+		try {
+			$already_done = Store::text_unslashed_in_db();
+		} catch ( \RuntimeException $e ) {
+			self::release_text_unslash_lock();
+			throw $e;
+		}
+		if ( $already_done ) {
 			self::release_text_unslash_lock();
 			self::forget_text_unslashed_option();
 			return true;
 		}
+		// The flag can join the transaction only when the options table is
+		// transactional. On MyISAM a ROLLBACK would leave it set over rows that
+		// went back to their slashed form, and every later run would skip them:
+		// there it is written right after the COMMIT instead, which leaves only
+		// a crash between the two statements uncovered.
+		$flag_in_transaction = self::options_table_is_transactional();
 
 		$targets = array(
 			array(
@@ -2833,11 +2845,8 @@ class Activator {
 			// The completion flag is written inside the same transaction as the
 			// rows: written after the COMMIT, a request that died in between would
 			// leave converted rows with no flag, and the next run would strip them
-			// again. Autoloaded: Store::legacy_slashes_pending() reads it on every
-			// request that renders a cookie or category, the frontend included.
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the options API cannot join a transaction; the option cache is cleared after the COMMIT.
-			$flagged = $wpdb->query( $wpdb->prepare( "INSERT INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, '1', 'yes') ON DUPLICATE KEY UPDATE `option_value` = '1'", Store::TEXT_UNSLASHED_OPTION ) );
-			if ( false === $flagged ) {
+			// again.
+			if ( $flag_in_transaction && ! self::write_text_unslashed_flag() ) {
 				throw new \RuntimeException( 'FAZ: could not record the cookie text unslash; migration will retry.' );
 			}
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration transaction.
@@ -2849,6 +2858,14 @@ class Activator {
 			$wpdb->query( 'ROLLBACK' );
 			self::release_text_unslash_lock();
 			throw $e instanceof \RuntimeException ? $e : new \RuntimeException( 'FAZ: unslashing the cookie text failed; migration will retry.', 0, $e );
+		}
+		if ( ! $flag_in_transaction && ! self::write_text_unslashed_flag() && ! self::write_text_unslashed_flag() ) {
+			// The rows are committed and cannot be taken back; the write is tried
+			// twice. The lock is left to expire rather than released, so no run
+			// strips the rows again before then. Past it, this is the same
+			// window as a crash between the COMMIT and the flag.
+			self::forget_text_unslashed_option();
+			throw new \RuntimeException( 'FAZ: the cookie text was unslashed but the flag could not be recorded.' );
 		}
 
 		self::forget_text_unslashed_option();
@@ -2885,6 +2902,38 @@ class Activator {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-set takeover of an abandoned mutex row.
 		$taken = $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->options}` SET `option_value` = %s WHERE `option_name` = %s AND `option_value` = %s", $now, self::TEXT_UNSLASH_LOCK, $held ) );
 		return 1 === (int) $taken;
+	}
+
+	/**
+	 * Write the completion flag behind the options API, which cannot join a
+	 * transaction; the cached copies are dropped by the caller.
+	 *
+	 * Autoloaded: Store::legacy_slashes_pending() reads it on every request that
+	 * renders a cookie or category, the frontend included.
+	 *
+	 * @return bool False when the write failed.
+	 */
+	private static function write_text_unslashed_flag() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the options API cannot join a transaction; the option cache is cleared after the COMMIT.
+		return false !== $wpdb->query( $wpdb->prepare( "INSERT INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, '1', 'yes') ON DUPLICATE KEY UPDATE `option_value` = '1'", Store::TEXT_UNSLASHED_OPTION ) );
+	}
+
+	/**
+	 * Whether a ROLLBACK undoes a write to the options table.
+	 *
+	 * WordPress does not pick the engine of its own tables, so a legacy host can
+	 * still have wp_options on MyISAM. An engine the probe cannot read (no
+	 * access to INFORMATION_SCHEMA) is taken for InnoDB, the default since
+	 * MySQL 5.5.
+	 *
+	 * @return bool
+	 */
+	private static function options_table_is_transactional() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time engine probe in the upgrade path.
+		$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT `ENGINE` FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $wpdb->options ) );
+		return ! is_string( $engine ) || '' === $engine || 0 === strcasecmp( $engine, 'InnoDB' );
 	}
 
 	/**

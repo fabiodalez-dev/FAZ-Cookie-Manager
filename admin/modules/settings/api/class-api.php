@@ -929,7 +929,12 @@ class Api extends Rest_Controller {
 			// unslash a file written by an older version.
 			'text_unslashed' => $text_unslashed,
 		);
-		if ( $text_unslashed !== \FazCookie\Includes\Store::text_unslashed_in_db() ) {
+		try {
+			$text_unslashed_now = \FazCookie\Includes\Store::text_unslashed_in_db();
+		} catch ( \RuntimeException $e ) {
+			$text_unslashed_now = null; // Unknown: the marker cannot be vouched for.
+		}
+		if ( $text_unslashed !== $text_unslashed_now ) {
 			return new WP_Error( 'faz_text_migration_running', __( 'The cookie texts were being upgraded while the export was read. Please export again.', 'faz-cookie-manager' ), array( 'status' => 503 ) );
 		}
 
