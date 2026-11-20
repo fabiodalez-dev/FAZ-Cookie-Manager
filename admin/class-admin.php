@@ -233,10 +233,11 @@ class Admin {
 		if ( ! \FazCookie\Admin\Modules\Banners\Banners::maybe_flush_on_alt_change( $meta_id, $object_id, $meta_key ) ) {
 			return;
 		}
-		// post.php does not load the modules, so nothing would hear the purge.
-		if ( ! has_action( 'faz_purge_page_cache' ) ) {
-			$this->load_cache_module();
-		}
+		// post.php does not load the modules, so no adapter would hear the
+		// purge. Asked unconditionally: a listener another plugin hooks on the
+		// same action does not mean the adapters are there, and the call is a
+		// no-op once the cache module is loaded, by either path.
+		$this->load_cache_module();
 		do_action( 'faz_purge_page_cache' );
 	}
 
@@ -281,6 +282,9 @@ class Admin {
 			$class      = implode( '_', $parts );
 			$class_name = 'FazCookie\\Admin\\Modules\\' . ucfirst( $module ) . '\\' . ucfirst( $class );
 
+			if ( 'cache' === $module ) {
+				self::$cache_module_loaded = true; // load_cache_module() must not add a second copy.
+			}
 			if ( class_exists( $class_name ) ) {
 				$module_obj = new $class_name( $module );
 				if ( $module_obj instanceof $class_name ) {

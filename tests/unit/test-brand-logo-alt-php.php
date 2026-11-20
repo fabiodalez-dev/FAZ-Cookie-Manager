@@ -32,6 +32,22 @@ namespace FazCookie\Admin\Modules\Banners\Includes {
 	}
 }
 
+namespace FazCookie\Admin\Modules\Cache {
+	// The cache module: constructing it hooks the page-cache adapters.
+	class Cache {
+		public static $built = 0;
+		public function __construct( $name ) {
+			self::$built++;
+			add_action( 'faz_purge_page_cache', function () {
+				$GLOBALS['faz_test_adapter_purges']++;
+			} );
+		}
+		public function is_active() {
+			return true;
+		}
+	}
+}
+
 namespace {
 
 	if ( ! defined( 'ABSPATH' ) ) {
@@ -65,6 +81,14 @@ namespace {
 	function add_action( $hook, $callback, $priority = 10, $args = 1 ) {
 		$GLOBALS['faz_test_actions'][ $hook ][] = $callback;
 	}
+	function has_action( $hook ) {
+		return ! empty( $GLOBALS['faz_test_actions'][ $hook ] );
+	}
+	function do_action( $hook, ...$args ) {
+		foreach ( $GLOBALS['faz_test_actions'][ $hook ] ?? array() as $callback ) {
+			call_user_func_array( $callback, $args );
+		}
+	}
 	function esc_url( $url ) {
 		return (string) $url;
 	}
@@ -74,6 +98,7 @@ namespace {
 
 	require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/includes/class-template.php';
 	require_once dirname( __DIR__, 2 ) . '/admin/modules/banners/class-banners.php';
+	require_once dirname( __DIR__, 2 ) . '/admin/class-admin.php';
 
 	use FazCookie\Admin\Modules\Banners\Banners;
 	use FazCookie\Admin\Modules\Banners\Includes\Template;
@@ -107,8 +132,8 @@ namespace {
 	$GLOBALS['faz_test_filters'] = array();
 
 	echo "\n== The cached template is rebuilt when an alt changes ==\n";
-	$logo_banner = function ( $url, $status = true ) {
-		return (object) array( 'settings' => array( 'config' => array( 'notice' => array( 'elements' => array( 'brandLogo' => array( 'status' => $status, 'meta' => array( 'url' => $url ) ) ) ) ) ) );
+	$logo_banner = function ( $url, $status = true, $banner_status = 1, $banner_default = 0 ) {
+		return (object) array( 'status' => $banner_status, 'banner_default' => $banner_default, 'settings' => array( 'config' => array( 'notice' => array( 'elements' => array( 'brandLogo' => array( 'status' => $status, 'meta' => array( 'url' => $url ) ) ) ) ) ) );
 	};
 	\FazCookie\Admin\Modules\Banners\Includes\Controller::$items = array( 1 => $logo_banner( $up . 'no-alt.png', false ), 2 => $logo_banner( $up . 'acme-logo-300x100.png' ) );
 	check( true === Banners::maybe_flush_on_alt_change( 7, 41, '_wp_attachment_image_alt' ), "the logo's own alt: it says to purge the page cache" );
@@ -117,8 +142,47 @@ namespace {
 	check( 2 === $GLOBALS['faz_test_cleared'], 'but the template is still rebuilt' );
 	check( false === Banners::maybe_flush_on_alt_change( 8, 41, '_wp_attached_file' ) && false === Banners::maybe_flush_on_alt_change( 9, 41, '_edit_lock' ), 'any other meta key: no purge' );
 	check( 2 === $GLOBALS['faz_test_cleared'], 'and no template rebuild' );
+	\FazCookie\Admin\Modules\Banners\Includes\Controller::$items = array( 1 => $logo_banner( $up . 'acme-logo.png', true, 0, 0 ), 2 => $logo_banner( $up . 'no-alt.png' ) );
+	check( false === Banners::is_brand_logo_attachment( 41 ), 'the logo of a disabled banner that is not the default: no purge, it is never shown' );
+	\FazCookie\Admin\Modules\Banners\Includes\Controller::$items = array( 1 => $logo_banner( $up . 'acme-logo.png', true, 0, 1 ) );
+	check( true === Banners::is_brand_logo_attachment( 41 ), 'the logo of the default banner, even disabled: purge, the selector falls back to it' );
 	\FazCookie\Admin\Modules\Banners\Includes\Controller::$items = array();
 	check( false === Banners::maybe_flush_on_alt_change( 7, 41, '_wp_attachment_image_alt' ), 'no banner with a logo: no purge' );
+
+	echo "\n== Admin::on_attachment_alt_change() reaches the cache adapters ==\n";
+	$admin_class = new ReflectionClass( \FazCookie\Admin\Admin::class );
+	$set_static  = function ( $name, $value ) use ( $admin_class ) {
+		$prop = $admin_class->getProperty( $name );
+		$prop->setAccessible( true );
+		$prop->setValue( null, $value );
+	};
+	$set_static( 'modules', array( 'cache' ) );
+	$set_static( 'active_modules', array() );
+	$set_static( 'cache_module_loaded', false );
+	$admin_obj = $admin_class->newInstanceWithoutConstructor(); // The constructor boots the whole plugin.
+	$GLOBALS['faz_test_actions']        = array();
+	$GLOBALS['faz_test_adapter_purges'] = 0;
+	$GLOBALS['faz_test_other_purges']   = 0;
+	// Another plugin listens on the same action, as post.php would see it.
+	add_action( 'faz_purge_page_cache', function () {
+		$GLOBALS['faz_test_other_purges']++;
+	} );
+	\FazCookie\Admin\Modules\Banners\Includes\Controller::$items = array( 1 => $logo_banner( $up . 'acme-logo.png' ) );
+	$admin_obj->on_attachment_alt_change( 7, 42, '_wp_attachment_image_alt' );
+	check( 0 === \FazCookie\Admin\Modules\Cache\Cache::$built && 0 === $GLOBALS['faz_test_other_purges'], 'an image no banner shows: the cache module is not loaded and nothing is purged' );
+	$admin_obj->on_attachment_alt_change( 7, 41, '_wp_attachment_image_alt' );
+	check( 1 === \FazCookie\Admin\Modules\Cache\Cache::$built, 'the logo: the cache module is loaded although another listener is already on the action' );
+	check( 1 === $GLOBALS['faz_test_adapter_purges'] && 1 === $GLOBALS['faz_test_other_purges'], 'and the purge reaches the adapters' );
+	$admin_obj->on_attachment_alt_change( 7, 41, '_wp_attachment_image_alt' );
+	check( 1 === \FazCookie\Admin\Modules\Cache\Cache::$built && 2 === $GLOBALS['faz_test_adapter_purges'], 'a second edit does not load a second copy, so each adapter purges once' );
+	// Modules loaded by load_modules() first (REST, AJAX, FAZ pages).
+	$set_static( 'cache_module_loaded', false );
+	\FazCookie\Admin\Modules\Cache\Cache::$built = 0;
+	$GLOBALS['faz_test_actions']        = array();
+	$GLOBALS['faz_test_adapter_purges'] = 0;
+	$admin_obj->load_modules();
+	$admin_obj->on_attachment_alt_change( 7, 41, '_wp_attachment_image_alt' );
+	check( 1 === \FazCookie\Admin\Modules\Cache\Cache::$built && 1 === $GLOBALS['faz_test_adapter_purges'], 'after load_modules(): no second cache module, one purge per adapter' );
 	// Hooked on every request by Admin::__construct(), not by Banners::init():
 	// the attachment edit screen saves through post.php, where the admin
 	// modules are not loaded (constructing Admin here would boot the plugin).
@@ -127,7 +191,6 @@ namespace {
 	$ctor  = substr( $ctor, 0, (int) strpos( $ctor, "\n\t}\n" ) );
 	check( 1 === preg_match( "/array\\(\\s*'added_post_meta',\\s*'updated_post_meta',\\s*'deleted_post_meta'\\s*\\)/", $ctor ), 'Admin::__construct() hooks added, updated and deleted post meta' );
 	check( false !== strpos( $ctor, "array( \$this, 'on_attachment_alt_change' ), 10, 3 )" ), 'with on_attachment_alt_change() and its three arguments' );
-	check( 1 === preg_match( "/function on_attachment_alt_change\\(.*?Banners::maybe_flush_on_alt_change\\(.*?has_action\\( 'faz_purge_page_cache' \\).*?load_cache_module\\(\\).*?do_action\\( 'faz_purge_page_cache' \\)/s", $admin ), 'which loads the cache module where it is missing and purges cached pages for a logo' );
 	$banners_src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/banners/class-banners.php' );
 	check( false === strpos( $banners_src, "add_action( \$hook, array( \$this, 'maybe_flush_on_alt_change' )" ), 'Banners::init() no longer registers a second copy' );
 

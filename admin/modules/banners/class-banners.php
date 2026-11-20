@@ -75,7 +75,11 @@ class Banners extends Modules {
 	}
 
 	/**
-	 * Whether an attachment is the brand logo shown by any banner.
+	 * Whether an attachment is the brand logo of a banner that can be shown.
+	 *
+	 * A disabled banner is never rendered, except the default one, which
+	 * Controller::get_active_banner_for_country() falls back to whatever its
+	 * status.
 	 *
 	 * @param int $attachment_id Attachment id.
 	 * @return bool
@@ -85,6 +89,9 @@ class Banners extends Modules {
 			return false;
 		}
 		foreach ( (array) Controller::get_instance()->get_items() as $banner ) {
+			if ( 1 !== (int) ( $banner->status ?? 0 ) && 1 !== (int) ( $banner->banner_default ?? 0 ) ) {
+				continue;
+			}
 			$logo = isset( $banner->settings['config']['notice']['elements']['brandLogo'] ) ? $banner->settings['config']['notice']['elements']['brandLogo'] : null;
 			if ( ! is_array( $logo ) || empty( $logo['status'] ) || empty( $logo['meta']['url'] ) ) {
 				continue;
