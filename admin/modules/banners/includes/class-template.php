@@ -1143,6 +1143,19 @@ class Template {
 	public function get_assets_path( $path ) {
 		$base_name  = wp_basename( $path );
 		$assets_url = defined( 'FAZ_APP_ASSETS_URL' ) ? FAZ_APP_ASSETS_URL : '';
+		// This URL is written into the shared template cache (update()), which
+		// anonymous requests regenerate — the public banner REST route among
+		// them — and which every later visitor is served. FAZ_APP_ASSETS_URL
+		// takes its scheme from faz_request_is_https(), which also trusts a
+		// client-sent X-Forwarded-Proto, so one anonymous request could persist
+		// https:// icon URLs on an http-only site (or the reverse) for everyone.
+		// Persist only a server-verified scheme; Frontend::banner_html() still
+		// upgrades the per-request render behind a TLS-terminating proxy.
+		if ( '' !== $assets_url && function_exists( 'set_url_scheme' ) ) {
+			$verified_https = ( function_exists( 'is_ssl' ) && is_ssl() )
+				|| 0 === stripos( (string) get_option( 'siteurl' ), 'https://' );
+			$assets_url     = set_url_scheme( $assets_url, $verified_https ? 'https' : 'http' );
+		}
 		return $assets_url . $base_name;
 	}
 	/**

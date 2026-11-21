@@ -664,3 +664,35 @@ export async function seedConsentedCookie(
     sameSite: 'Lax',
   }]);
 }
+
+/**
+ * Insert a detected provider cookie row (discovered=1) if absent; idempotent.
+ *
+ * The per-service preference list is built from wp_faz_cookies rows with
+ * discovered=1 (get_detected_cookie_names + provider_has_detected_cookie), so
+ * a spec that needs a provider's toggle must arrange that row itself instead
+ * of relying on what an earlier scan left on the site: a manual or imported
+ * row is discovered=0 and does not count. Pair with removeSeededCookie() and
+ * bustDetectionCache().
+ */
+export function seedDetectedCookie(name: string): void {
+  wpEval(
+    `global $wpdb;$t=$wpdb->prefix.'faz_cookies';` +
+      `$n=${JSON.stringify(name)};` +
+      `$exists=(int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $t WHERE name=%s AND discovered=1",$n));` +
+      `if(!$exists){$wpdb->insert($t,array('name'=>$n,'slug'=>sanitize_title($n),'description'=>'e2e seed','duration'=>'session','domain'=>'example.com','category'=>0,'type'=>'http','discovered'=>1,'date_created'=>current_time('mysql'),'date_modified'=>current_time('mysql')));}`,
+  );
+}
+
+/** Remove the rows seedDetectedCookie() inserted (and only those). */
+export function removeSeededCookie(name: string): void {
+  wpEval(
+    `global $wpdb;$t=$wpdb->prefix.'faz_cookies';` +
+      `$wpdb->query($wpdb->prepare("DELETE FROM $t WHERE name=%s AND description=%s",${JSON.stringify(name)},'e2e seed'));`,
+  );
+}
+
+/** Bust the detected-cookie-name transient so the next page load rebuilds the per-service list. */
+export function bustDetectionCache(): void {
+  wpEval(`delete_transient('faz_detected_cookie_names');`);
+}

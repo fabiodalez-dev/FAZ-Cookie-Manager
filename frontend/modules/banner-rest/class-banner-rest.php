@@ -304,7 +304,10 @@ class Banner_Rest {
 			// The WP Consent API regime for the banner actually returned; the
 			// client replaces the shell's `_wpConsentType` with it.
 			'wpConsentType'    => Frontend::resolve_wp_consent_type( $runtime_ruleset, $cache_compatibility, $active_law ),
-			'html'             => $html,
+			// The cached markup keeps a server-verified scheme; behind a
+			// TLS-terminating proxy it is upgraded per request, as the inline
+			// render does.
+			'html'             => Frontend::https_plugin_urls_for_request( $html ),
 			'styles'           => Frontend::prepare_banner_styles( $styles ),
 			'shortCodes'       => $short_codes,
 			'categories'       => $categories,

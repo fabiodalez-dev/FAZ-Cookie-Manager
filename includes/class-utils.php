@@ -234,6 +234,13 @@ if ( ! function_exists( 'faz_first_time_install' ) ) {
 	 * @return boolean
 	 */
 	function faz_first_time_install() {
+		// Per-site flag (1.39.1+). The network-wide site transients below are
+		// read only so an activation already in flight across the upgrade
+		// completes; every caller that writes defaults also checks that the
+		// site has no faz_settings of its own.
+		if ( (bool) get_transient( 'faz_first_time_install' ) ) {
+			return true;
+		}
 		if ( (bool) get_site_transient( 'faz_first_time_install' ) ) {
 			return true;
 		}
@@ -1095,7 +1102,7 @@ if ( ! function_exists( 'faz_throttle_request' ) ) {
 		// digest rotates monthly, so a window armed in the last seconds of a
 		// month closes early once: one extra request per address per month,
 		// against a window the E2E suites pin by prefix, not by suffix.
-		$key = $prefix . '_' . faz_ip_cache_key( $client_ip );
+		$key = $prefix . '_' . faz_ip_cache_key( faz_ip_rate_bucket( $client_ip ) );
 
 		if ( wp_using_ext_object_cache() ) {
 			// Persistent object cache — atomic wp_cache_add().
@@ -1108,6 +1115,74 @@ if ( ! function_exists( 'faz_throttle_request' ) ) {
 		}
 		set_transient( $key, 1, $ttl );
 		return false;
+	}
+}
+
+if ( ! function_exists( 'faz_ip_is_globally_routable' ) ) {
+	/**
+	 * Whether an address is globally routable (safe to pin a server fetch to).
+	 *
+	 * FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE is not "public": it
+	 * lets through 100.64.0.0/10 (CGNAT, and the 100.100.100.200 metadata
+	 * endpoint some clouds use), 192.0.0.0/24, 198.18.0.0/15, NAT64 and, on
+	 * PHP < 8.2, IPv4-mapped IPv6. The scanner pins its fetches to such an
+	 * address with CURLOPT_RESOLVE, and core's reject_unsafe_urls skips every
+	 * IP check for the site's own host, so this list is the only control on
+	 * where that request really goes. It mirrors wp_http_validate_url()'s
+	 * notion of an external address.
+	 *
+	 * @since 1.39.1
+	 * @param string $ip Address to test.
+	 * @return bool
+	 */
+	function faz_ip_is_globally_routable( $ip ) {
+		$ip = trim( (string) $ip );
+		if ( ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+			return false;
+		}
+		if ( defined( 'FILTER_FLAG_GLOBAL_RANGE' ) && ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE ) ) {
+			return false;
+		}
+		$non_global = array(
+			'0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
+			'192.0.0.0/24', '192.0.2.0/24', '192.88.99.0/24', '192.168.0.0/16', '198.18.0.0/15',
+			'198.51.100.0/24', '203.0.113.0/24', '224.0.0.0/4', '240.0.0.0/4',
+			'::/128', '::1/128', '::ffff:0:0/96', '64:ff9b::/96', '64:ff9b:1::/48', '100::/64',
+			'2001::/23', '2001:db8::/32', '2002::/16', 'fc00::/7', 'fe80::/10', 'ff00::/8',
+		);
+		return ! faz_ip_in_cidr_list( $ip, $non_global );
+	}
+}
+
+if ( ! function_exists( 'faz_ip_rate_bucket' ) ) {
+	/**
+	 * The address a per-client LIMIT is accounted against.
+	 *
+	 * An IPv6 client usually holds a whole /64 (one routed prefix per host or
+	 * VPS), so keying a window on the full /128 let one client start every
+	 * request with a fresh bucket and walk past every per-address throttle.
+	 * IPv6 addresses are therefore reduced to their /64; IPv4 is unchanged.
+	 * Only limits use this: caches keyed per address (geolocation) keep the
+	 * exact address.
+	 *
+	 * @since 1.39.1
+	 * @param string $ip Cleartext address.
+	 * @return string The address, or "<prefix>::/64" for IPv6.
+	 */
+	function faz_ip_rate_bucket( $ip ) {
+		$ip = (string) $ip;
+		if ( false === strpos( $ip, ':' ) || ! function_exists( 'inet_pton' ) ) {
+			return $ip;
+		}
+		$packed = @inet_pton( $ip ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- invalid input returns false, handled below.
+		if ( false === $packed || 16 !== strlen( $packed ) ) {
+			return $ip;
+		}
+		// An IPv4-mapped address (::ffff:a.b.c.d) is one IPv4 client.
+		if ( 0 === strpos( $packed, str_repeat( "\0", 10 ) . "\xff\xff" ) ) {
+			return (string) inet_ntop( substr( $packed, 12 ) );
+		}
+		return inet_ntop( substr( $packed, 0, 8 ) . str_repeat( "\0", 8 ) ) . '/64';
 	}
 }
 

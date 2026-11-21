@@ -40,6 +40,22 @@ function apply_filters( $hook, $val ) {
 	}
 	return $val;
 }
+function wp_cache_add( $key, $val, $group = '', $ttl = 0 ) {
+	$k = "$group:$key";
+	if ( isset( $GLOBALS['_faz_test_cache'][ $k ] ) ) {
+		return false;
+	}
+	$GLOBALS['_faz_test_cache'][ $k ] = $val;
+	return true;
+}
+function wp_cache_incr( $key, $offset = 1, $group = '' ) {
+	$k = "$group:$key";
+	if ( ! isset( $GLOBALS['_faz_test_cache'][ $k ] ) ) {
+		return false;
+	}
+	$GLOBALS['_faz_test_cache'][ $k ] = (int) $GLOBALS['_faz_test_cache'][ $k ] + $offset;
+	return $GLOBALS['_faz_test_cache'][ $k ];
+}
 // faz_forwarded_client_ip() sanitises the forwarded header before parsing it.
 // Mirrors WordPress: strip tags, then collapse whitespace — NOT a no-op stub,
 // because a stub that passed the value through unchanged would hide a header
