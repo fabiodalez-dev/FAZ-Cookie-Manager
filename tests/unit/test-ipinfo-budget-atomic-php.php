@@ -97,16 +97,20 @@ function wp_cache_get( $key, $group = '' ) {
 	return faz_cache_live( $k ) ? $GLOBALS['_faz_test_cache'][ $k ] : false;
 }
 function wp_cache_set( $key, $val, $group = '', $ttl = 0 ) {
+	$GLOBALS['faz_test_cache_set_log'][] = $key;
 	$k = "$group:$key";
 	$GLOBALS['_faz_test_cache'][ $k ]     = $val;
 	$GLOBALS['_faz_test_cache_exp'][ $k ] = $ttl ? $GLOBALS['faz_test_now'] + (int) $ttl : 0;
 	return true;
 }
 function wp_cache_add( $key, $val, $group = '', $ttl = 0 ) {
-	if ( faz_cache_live( "$group:$key" ) ) {
+	$k = "$group:$key";
+	if ( faz_cache_live( $k ) ) {
 		return false;
 	}
-	return wp_cache_set( $key, $val, $group, $ttl );
+	$GLOBALS['_faz_test_cache'][ $k ]     = $val;
+	$GLOBALS['_faz_test_cache_exp'][ $k ] = $ttl ? $GLOBALS['faz_test_now'] + (int) $ttl : 0;
+	return true;
 }
 function wp_cache_incr( $key, $offset = 1, $group = '' ) {
 	$k = "$group:$key";
@@ -404,11 +408,14 @@ foreach ( array_keys( $GLOBALS['_faz_test_cache'] ) as $k ) {
 		unset( $GLOBALS['_faz_test_cache'][ $k ], $GLOBALS['_faz_test_cache_exp'][ $k ] );
 	}
 }
+$GLOBALS['faz_test_cache_set_log'] = array();
 faz_test_advance( 30 );
 for ( $i = 11; $i <= 50; $i++ ) {
 	$client->lookup( '2001:db8:7:7::' . dechex( $i ) );
 }
 tr_check( $GLOBALS['_faz_test_http_calls'] <= Ipinfo_Client::IPV6_LOOKUPS_PER_HOUR, 'a /64 whose counter was dropped mid-window still stays within 20 lookups (got ' . $GLOBALS['_faz_test_http_calls'] . ')' );
+$set_counters = array_filter( $GLOBALS['faz_test_cache_set_log'], function ( $k ) { return false !== strpos( $k, '_n_' ); } );
+tr_check( array() === array_values( $set_counters ), 'a lost counter is created already spent, in one add: it is never written to afterwards, so no request can take a slot in between' );
 
 // 11. A backend whose incr creates a missing key (Redis INCRBY) still gives
 // every counter an expiry.

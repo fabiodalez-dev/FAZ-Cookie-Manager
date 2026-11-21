@@ -45,7 +45,7 @@ class Ipinfo_Client {
 	/** Ceiling of new upstream lookups per hour for one IPv6 /64. */
 	const IPV6_LOOKUPS_PER_HOUR = 20;
 	/** Seconds into a window after which a missing object-cache counter means it was dropped (see reserve_slot()). */
-	const WINDOW_GRACE = 5;
+	const WINDOW_GRACE = 2;
 
 	/** HTTP status of the last lookup (0 for a transport failure). */
 	private $last_http_status = 0;
@@ -304,15 +304,19 @@ class Ipinfo_Client {
 			// it. A backend whose incr() creates a missing key (Redis INCRBY)
 			// would otherwise leave it with no expiry at all; add() is
 			// create-if-absent and incr() keeps the entry's expiry.
-			if ( wp_cache_add( $counter, 0, self::CACHE_GROUP, $left ) && $now - $start >= self::WINDOW_GRACE ) {
-				// The window is well underway and its counter was not there: the
-				// cache dropped it, and with it the slots already taken. Counting
-				// on from zero would hand the window's ceiling out a second time,
-				// so the rest of this window is treated as spent (a lookup is
-				// skipped, never a decision). A counter created in the first
-				// seconds of a window is just two requests racing to add it.
-				wp_cache_set( $counter, $max, self::CACHE_GROUP, $left );
-			}
+			//
+			// What the counter starts at is decided in that one add(), so there is
+			// no moment where it exists at zero and a concurrent request can take
+			// a slot before it is marked spent. A counter missing WINDOW_GRACE
+			// seconds or more into its window was dropped by the cache, and with
+			// it the slots already taken: counting on from zero would hand the
+			// ceiling out a second time, so it starts at the ceiling and the rest
+			// of the window is refused (a lookup is skipped, never a decision).
+			// Inside the first seconds a missing counter cannot be told from two
+			// requests racing to add it, and a drop there is not detected: the
+			// evidence of it would have to live in the same cache.
+			$base = ( $now - $start >= self::WINDOW_GRACE ) ? $max : 0;
+			wp_cache_add( $counter, $base, self::CACHE_GROUP, $left );
 			$n = wp_cache_incr( $counter, 1, self::CACHE_GROUP );
 			if ( false === $n || $n > $max ) {
 				return max( 1, $start + HOUR_IN_SECONDS - $now );
