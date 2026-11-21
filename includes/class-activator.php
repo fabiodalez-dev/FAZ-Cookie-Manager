@@ -2826,11 +2826,11 @@ class Activator {
 						if ( $unslashed === $stored ) {
 							continue;
 						}
-						// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table/column names are literals (table escaped); every value bound via prepare(); one-shot migration write, caches busted below.
 						// The comparison is binary: under the case- and accent-insensitive
 						// collation the tables inherit, "= %s" also matches a value saved
 						// meanwhile that differs only in case or accents, and the UPDATE
 						// would overwrite it with the old text.
+						// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table/column names are literals (table escaped); every value bound via prepare(); one-shot migration write, caches busted below.
 						$written = $wpdb->query( $wpdb->prepare( 'UPDATE `' . $table . '` SET `' . $column . '` = %s WHERE `' . $target['id'] . '` = %d AND CAST(`' . $column . '` AS BINARY) = CAST(%s AS BINARY)', $unslashed, (int) $row[ $target['id'] ], $stored ) );
 						if ( false === $written ) {
 							throw new \RuntimeException( 'FAZ: failed to unslash the cookie text; migration will retry.' );
