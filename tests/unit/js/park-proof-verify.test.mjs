@@ -85,7 +85,7 @@ function page(body, { endpoint = ENDPOINT, answer = 'by-signature', beforeAnswer
   window.document.addEventListener = realAdd;
   return { window, calls };
 }
-const consent = (w) => { w.fazcookie._fazGetFromStore = (k) => ({ marketing: 'yes', necessary: 'yes' }[k]); };
+const consent = (w) => { w.fazcookie._fazGetFromStore = (k) => ({ consent: 'yes', marketing: 'yes', necessary: 'yes' }[k]); };
 const restore = (w) => w.eval('_fazUnblockServerSide()');
 
 const CSS = 'background:url(https://tracker.test/hero.jpg)';
@@ -236,6 +236,30 @@ console.log('\n5. a signed park inserted after the restore pass');
   await settle();
   eq('before consent it is neither asked about nor restored', calls.length, 0);
   eq('premise: still parked', w.document.getElementById('h').getAttribute('data-faz-style'), CSS);
+}
+{
+  // GDPR, no choice recorded yet, but the category was seeded "yes" in memory
+  // from prior consent (consent stays "no"): the late-park pass must hold, as
+  // _fazUnblock() does. Both a signed style and a parked script stay put.
+  const { window: w, calls } = page('<div id="feed"></div>');
+  w.fazcookie._fazGetFromStore = (k) => ({ consent: 'no', marketing: 'yes', necessary: 'yes' }[k]);
+  w.eval('_fazUnblockServerSide()');
+  w.document.getElementById('feed').insertAdjacentHTML('beforeend', styleTag(GOOD)
+    + '<script id="s" type="text/plain" data-faz-category="marketing" src="https://tracker.test/t.js"></script>');
+  await settle(60);
+  eq('under GDPR with no choice yet a seeded category is not asked about', calls.length, 0);
+  eq('its style stays parked', w.document.getElementById('h').getAttribute('data-faz-style'), CSS);
+  eq('and its script stays inert', w.document.getElementById('s').getAttribute('type'), 'text/plain');
+}
+{
+  // The same page once the visitor has chosen: restored (control).
+  const { window: w, calls } = page('<div id="feed"></div>');
+  w.fazcookie._fazGetFromStore = (k) => ({ consent: 'yes', marketing: 'yes', necessary: 'yes' }[k]);
+  w.eval('_fazUnblockServerSide()');
+  w.document.getElementById('feed').insertAdjacentHTML('beforeend', styleTag(GOOD));
+  await settle(60);
+  eq('with an affirmative choice the same insertion is restored', w.document.getElementById('h').getAttribute('style'), CSS);
+  eq('after one request', calls.length, 1);
 }
 {
   const { window: w, calls } = page('<div id="feed"></div>');

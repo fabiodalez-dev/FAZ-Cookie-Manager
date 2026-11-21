@@ -2937,7 +2937,11 @@ function _fazToggleRevisit(force = false) {
 // check is `=== 'gdpr'` / `=== 'ccpa'`, and the bare `else` historically meant
 // opt-out — an un-normalised 'lgpd' would have fallen through to it).
 function _fazGetLaw() {
-    var raw = _fazCurrentLaw() || _fazStore._bannerConfig.settings.applicableLaw;
+    // A page with no banner config (the restore pass can run on one, and the
+    // late-park watcher runs for the page's whole life) is read as GDPR, the
+    // strict default this function returns for anything it does not know.
+    var cfg = _fazStore._bannerConfig;
+    var raw = _fazCurrentLaw() || (cfg && cfg.settings ? cfg.settings.applicableLaw : "");
     return String(raw) === 'ccpa' ? 'ccpa' : 'gdpr';
 }
 function _fazGetType() {
@@ -7515,11 +7519,12 @@ function _fazMutationObserver(mutations) {
 }
 
 /**
- * Restore resources whose effective category/service decision is granted.
+ * Whether the restore pass may run at all yet: not under GDPR before the
+ * visitor has made a choice (a targeted GPC/DNSMPI opt-out excepted).
  *
- * @returns {void}
+ * @returns {boolean}
  */
-function _fazUnblock() {
+function _fazRestoreAllowed() {
     const fazconsent = _fazRef._fazGetFromStore("consent");
     // GPC and DNSMPI are targeted sale/share opt-outs, not blanket GDPR
     // rejections. Once every category has its explicit value, permit the normal
@@ -7529,12 +7534,20 @@ function _fazUnblock() {
     const targetedSaleShareOptOut =
         _fazRef._fazGetFromStore("gpc") === "1" ||
         _fazRef._fazGetFromStore("dnsmpi") === "1";
-    if (
+    return !(
         _fazGetLaw() === "gdpr" &&
         (!fazconsent || fazconsent !== "yes") &&
         !targetedSaleShareOptOut
-    )
-        return;
+    );
+}
+
+/**
+ * Restore resources whose effective category/service decision is granted.
+ *
+ * @returns {void}
+ */
+function _fazUnblock() {
+    if (!_fazRestoreAllowed()) return;
     _fazStore._backupNodes = _fazStore._backupNodes.filter(
         ({ position, node, uniqueID, anchor }) => {
             try {
@@ -8397,7 +8410,10 @@ function _fazWatchLateParks(mutations) {
                 _fazLateParkScheduled = true;
                 setTimeout(function () {
                     _fazLateParkScheduled = false;
-                    _fazUnblockServerSide();
+                    // The same gate _fazUnblock() applies: under GDPR with no
+                    // choice yet a category seeded "yes" from prior consent
+                    // stays parked, here as on the consent pass.
+                    if (_fazRestoreAllowed()) _fazUnblockServerSide();
                 }, 0);
                 return;
             }

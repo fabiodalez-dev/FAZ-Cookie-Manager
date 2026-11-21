@@ -71,15 +71,49 @@ function update_option( $key, $value, $autoload = null ) {
 	$GLOBALS['_faz_test_options'][ $key ] = $value;
 	return true;
 }
+/**
+ * A persistent object cache with the properties the budget relies on: entries
+ * expire on the shared test clock, add() is create-if-absent, and incr()
+ * changes the value but keeps the entry's own expiry.
+ */
+$GLOBALS['faz_test_ext_cache'] = false;
+function wp_using_ext_object_cache() {
+	return ! empty( $GLOBALS['faz_test_ext_cache'] );
+}
+function faz_cache_live( $k ) {
+	if ( ! isset( $GLOBALS['_faz_test_cache'][ $k ] ) ) {
+		return false;
+	}
+	$exp = $GLOBALS['_faz_test_cache_exp'][ $k ] ?? 0;
+	if ( $exp && $exp <= $GLOBALS['faz_test_now'] ) {
+		unset( $GLOBALS['_faz_test_cache'][ $k ], $GLOBALS['_faz_test_cache_exp'][ $k ] );
+		return false;
+	}
+	return true;
+}
 function wp_cache_get( $key, $group = '' ) {
 	$k = "$group:$key";
-	return isset( $GLOBALS['_faz_test_cache'][ $k ] )
-		? $GLOBALS['_faz_test_cache'][ $k ]
-		: false;
+	return faz_cache_live( $k ) ? $GLOBALS['_faz_test_cache'][ $k ] : false;
 }
 function wp_cache_set( $key, $val, $group = '', $ttl = 0 ) {
-	$GLOBALS['_faz_test_cache'][ "$group:$key" ] = $val;
+	$k = "$group:$key";
+	$GLOBALS['_faz_test_cache'][ $k ]     = $val;
+	$GLOBALS['_faz_test_cache_exp'][ $k ] = $ttl ? $GLOBALS['faz_test_now'] + (int) $ttl : 0;
 	return true;
+}
+function wp_cache_add( $key, $val, $group = '', $ttl = 0 ) {
+	if ( faz_cache_live( "$group:$key" ) ) {
+		return false;
+	}
+	return wp_cache_set( $key, $val, $group, $ttl );
+}
+function wp_cache_incr( $key, $offset = 1, $group = '' ) {
+	$k = "$group:$key";
+	if ( ! faz_cache_live( $k ) ) {
+		return false;
+	}
+	$GLOBALS['_faz_test_cache'][ $k ] = (int) $GLOBALS['_faz_test_cache'][ $k ] + $offset;
+	return $GLOBALS['_faz_test_cache'][ $k ];
 }
 function wp_salt( $scheme = 'auth' ) {
 	return 'test-salt-' . $scheme;
@@ -305,6 +339,51 @@ $GLOBALS['_faz_test_http_calls'] = 0;
 $client = new Ipinfo_Client();
 $res    = $client->lookup( '203.0.113.50' );
 tr_check( 0 === $GLOBALS['_faz_test_http_calls'] && null === $res['vpn'], 'a database that cannot take the slot makes no upstream call and gives no verdict' );
+
+// 9. A persistent object cache: the counter belongs to its window. The start
+// and the counter are separate entries; here the counter was evicted and
+// re-added later, so it outlives the window it counted. It must not be read
+// into the next one.
+echo "\n== Ipinfo_Client budget: persistent object cache ==\n\n";
+$GLOBALS['faz_test_ext_cache']   = true;
+$GLOBALS['_faz_test_cache']      = array();
+$GLOBALS['_faz_test_cache_exp']  = array();
+$GLOBALS['_faz_test_http_calls'] = 0;
+$GLOBALS['_faz_test_filters']['faz_ipinfo_lookups_per_hour'] = function () { return 4; };
+$client = new Ipinfo_Client();
+$t0     = $GLOBALS['faz_test_now'];
+$client->lookup( '203.0.113.60' );
+$client->lookup( '203.0.113.61' );
+tr_check( 2 === $GLOBALS['_faz_test_http_calls'], 'two lookups are counted in the first window' );
+// Evict the counter and let another lookup re-add it 1000 s into the window:
+// its expiry is now later than the start entry\'s.
+foreach ( array_keys( $GLOBALS['_faz_test_cache'] ) as $k ) {
+	if ( false !== strpos( $k, 'budget_n_' ) ) {
+		unset( $GLOBALS['_faz_test_cache'][ $k ], $GLOBALS['_faz_test_cache_exp'][ $k ] );
+	}
+}
+faz_test_advance( 1000 );
+$client->lookup( '203.0.113.62' );
+$counters = array_values( array_filter( array_keys( $GLOBALS['_faz_test_cache'] ), function ( $k ) { return false !== strpos( $k, 'budget_n_' ); } ) );
+tr_check( 1 === count( $counters ) && false !== strpos( $counters[0], 'budget_n_' . $t0 ), 'the counter is named after the window it counts' );
+// The start entry expires at t0 + 3600; the counter at t0 + 4600.
+faz_test_advance( 2700 ); // t0 + 3700: a new window.
+$GLOBALS['_faz_test_http_calls'] = 0;
+for ( $i = 70; $i < 76; $i++ ) {
+	$client->lookup( '203.0.113.' . $i );
+}
+tr_check( 4 === $GLOBALS['_faz_test_http_calls'], 'the new window allows its own 4 lookups, not 4 minus what the old counter held (got ' . $GLOBALS['_faz_test_http_calls'] . ')' );
+// Overlap on this backend: incr is the atomic step, so n lookups count n.
+$GLOBALS['_faz_test_cache']      = array();
+$GLOBALS['_faz_test_cache_exp']  = array();
+$GLOBALS['_faz_test_http_calls'] = 0;
+$GLOBALS['_faz_test_filters']['faz_ipinfo_lookups_per_hour'] = function () { return 1000; };
+$client = new Ipinfo_Client();
+for ( $i = 1; $i <= 40; $i++ ) {
+	$client->lookup( '2001:db8:9:9::' . dechex( $i ) );
+}
+tr_check( Ipinfo_Client::IPV6_LOOKUPS_PER_HOUR === $GLOBALS['_faz_test_http_calls'], 'one /64 stops at its ceiling of 20 on the object-cache backend (got ' . $GLOBALS['_faz_test_http_calls'] . ')' );
+$GLOBALS['faz_test_ext_cache'] = false;
 
 function get_transient_keys_with( $needle ) {
 	return array_values( array_filter( array_keys( $GLOBALS['_faz_test_transients'] ), function ( $k ) use ( $needle ) {

@@ -227,6 +227,11 @@ class Ipinfo_Client {
 		return isset( $GLOBALS['wpdb'] ) && is_object( $GLOBALS['wpdb'] ) ? 'sql' : 'transient';
 	}
 
+	/** Cache key of the counter of the window that began at `$start` ('object' backend). */
+	private function object_counter_key( $key, $start ) {
+		return $key . '_n_' . (int) $start;
+	}
+
 	/** Option holding one budget window on the 'sql' backend: "start:count". */
 	private function window_option( $key ) {
 		return 'faz_ipinfo_win_' . $key;
@@ -249,8 +254,8 @@ class Ipinfo_Client {
 			return $row;
 		}
 		if ( 'object' === $mode ) {
-			$count = wp_cache_get( $key . '_n', self::CACHE_GROUP );
 			$start = (int) wp_cache_get( $key . '_s', self::CACHE_GROUP );
+			$count = $start > 0 ? wp_cache_get( $this->object_counter_key( $key, $start ), self::CACHE_GROUP ) : false;
 			return ( $start > 0 && false !== $count ) ? array( 'n' => (int) $count, 'start' => $start ) : array( 'n' => 0, 'start' => $now );
 		}
 		$data  = $this->cache_read( false, $key );
@@ -287,9 +292,14 @@ class Ipinfo_Client {
 			wp_cache_add( $key . '_s', $now, self::CACHE_GROUP, HOUR_IN_SECONDS );
 			$start = (int) wp_cache_get( $key . '_s', self::CACHE_GROUP );
 			$start = $start > 0 ? $start : $now;
-			$n     = wp_cache_incr( $key . '_n', 1, self::CACHE_GROUP );
+			// The counter is named after the window it counts. It and the start
+			// are separate cache entries that may not expire together (one can
+			// be evicted and re-added later), and a counter that outlived its
+			// window must not be read into the next one.
+			$counter = $this->object_counter_key( $key, $start );
+			$n       = wp_cache_incr( $counter, 1, self::CACHE_GROUP );
 			if ( false === $n ) {
-				$n = wp_cache_add( $key . '_n', 1, self::CACHE_GROUP, HOUR_IN_SECONDS ) ? 1 : wp_cache_incr( $key . '_n', 1, self::CACHE_GROUP );
+				$n = wp_cache_add( $counter, 1, self::CACHE_GROUP, HOUR_IN_SECONDS ) ? 1 : wp_cache_incr( $counter, 1, self::CACHE_GROUP );
 			}
 			if ( false === $n || $n > $max ) {
 				return max( 1, $start + HOUR_IN_SECONDS - $now );
