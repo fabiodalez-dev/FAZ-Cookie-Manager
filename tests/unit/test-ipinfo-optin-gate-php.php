@@ -56,6 +56,22 @@ namespace {
 		$GLOBALS['faz_cache'][ $group ][ $key ] = $value;
 		return true;
 	}
+	function wp_cache_add( $key, $val, $group = '', $ttl = 0 ) {
+		$k = "$group:$key";
+		if ( isset( $GLOBALS['_faz_test_cache'][ $k ] ) ) {
+			return false;
+		}
+		$GLOBALS['_faz_test_cache'][ $k ] = $val;
+		return true;
+	}
+	function wp_cache_incr( $key, $offset = 1, $group = '' ) {
+		$k = "$group:$key";
+		if ( ! isset( $GLOBALS['_faz_test_cache'][ $k ] ) ) {
+			return false;
+		}
+		$GLOBALS['_faz_test_cache'][ $k ] = (int) $GLOBALS['_faz_test_cache'][ $k ] + $offset;
+		return $GLOBALS['_faz_test_cache'][ $k ];
+	}
 	function wp_salt( $scheme = 'auth' ) {
 		return 'test-salt';
 	}

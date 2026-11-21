@@ -248,14 +248,13 @@ class Ipinfo_Client {
 			}
 			return $row;
 		}
-		$persistent = 'object' === $mode;
-		$data       = $this->cache_read( $persistent, $key );
-		$start      = is_array( $data ) ? (int) ( $data['start'] ?? 0 ) : 0;
 		if ( 'object' === $mode ) {
 			$count = wp_cache_get( $key . '_n', self::CACHE_GROUP );
 			$start = (int) wp_cache_get( $key . '_s', self::CACHE_GROUP );
-			return ( $start && false !== $count ) ? array( 'n' => (int) $count, 'start' => $start ) : array( 'n' => 0, 'start' => $now );
+			return ( $start > 0 && false !== $count ) ? array( 'n' => (int) $count, 'start' => $start ) : array( 'n' => 0, 'start' => $now );
 		}
+		$data  = $this->cache_read( false, $key );
+		$start = is_array( $data ) ? (int) ( $data['start'] ?? 0 ) : 0;
 		if ( ! $start || $now - $start >= HOUR_IN_SECONDS ) {
 			return array( 'n' => 0, 'start' => $now );
 		}
@@ -324,20 +323,18 @@ class Ipinfo_Client {
 			}
 			$old = $row['start'] . ':' . $row['n'];
 			if ( $now - $row['start'] >= HOUR_IN_SECONDS ) {
-				$new  = $now . ':1';
-				$left = 0;
+				$new = $now . ':1';
 			} elseif ( $row['n'] >= $max ) {
 				return max( 1, $row['start'] + HOUR_IN_SECONDS - $now );
 			} else {
-				$new  = $row['start'] . ':' . ( $row['n'] + 1 );
-				$left = 0;
+				$new = $row['start'] . ':' . ( $row['n'] + 1 );
 			}
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- compare-and-set on the value this request read; $wpdb->options is core's own table name.
 			if ( 1 === (int) $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", $new, $name, $old ) ) ) {
 				if ( self::BUDGET_KEY === $key && $now - $row['start'] >= HOUR_IN_SECONDS ) {
 					$this->sweep_expired_windows( $now );
 				}
-				return $left;
+				return 0;
 			}
 		}
 		return 1;
