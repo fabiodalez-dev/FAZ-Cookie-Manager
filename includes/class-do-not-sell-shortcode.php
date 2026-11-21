@@ -66,6 +66,12 @@ class Do_Not_Sell_Shortcode {
 	 */
 	const MAIL_WINDOW_OPTION = 'faz_dnsmpi_rl_mail_day';
 
+	/**
+	 * Option holding the second the shared-address audit slot was last taken
+	 * in (see claim_shared_audit_slot()).
+	 */
+	const SHARED_AUDIT_OPTION = 'faz_dnsmpi_shared_audit_slot';
+
 	public function __construct() {
 		add_shortcode( 'faz_do_not_sell', array( $this, 'render' ) );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_optout' ) );
@@ -549,18 +555,33 @@ class Do_Not_Sell_Shortcode {
 	 * slot per second caps that write; a real opt-out that loses the race is
 	 * still applied through its cookie.
 	 *
+	 * The slot is taken in one statement. A transient read and written in two
+	 * gave the slot to every request that read it before the first one wrote
+	 * it, so a burst from concurrent workers wrote one row per worker. Without
+	 * a persistent object cache it is a single options row holding the second
+	 * it was last taken in: INSERT IGNORE creates it for one request, and a
+	 * later second takes it over with an UPDATE that only matches an older
+	 * second, which one request alone can win. A query that fails gives no
+	 * slot: the audit row is skipped, the opt-out is not.
+	 *
 	 * @return bool True when this request may write the audit row.
 	 */
 	private function claim_shared_audit_slot() {
-		$key = 'faz_dnsmpi_shared_audit';
 		if ( function_exists( 'wp_using_ext_object_cache' ) && wp_using_ext_object_cache() ) {
-			return (bool) wp_cache_add( $key, 1, 'faz_throttle', 1 );
+			return (bool) wp_cache_add( 'faz_dnsmpi_shared_audit', 1, 'faz_throttle', 1 );
 		}
-		if ( false !== get_transient( $key ) ) {
+		global $wpdb;
+		if ( ! isset( $wpdb ) ) {
 			return false;
 		}
-		set_transient( $key, 1, 1 );
-		return true;
+		$name = self::SHARED_AUDIT_OPTION;
+		$now  = time();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the slot must be taken in one statement, which the options API cannot express; $wpdb->options is core's own table name.
+		if ( 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, (string) $now ) ) ) {
+			return true;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- compare-and-set on the second the slot was last taken in; $wpdb->options is core's own table name.
+		return 1 === (int) $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND CAST(option_value AS UNSIGNED) < %d", (string) $now, $name, $now ) );
 	}
 
 	/**

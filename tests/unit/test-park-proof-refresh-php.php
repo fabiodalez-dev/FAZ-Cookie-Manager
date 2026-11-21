@@ -226,6 +226,42 @@ namespace {
 	$out       = faz_ob_run( faz_ob_frontend( $providers, array() ), '<html><body>' . $in_script . '</body></html>' );
 	assert_true( false !== strpos( $out, $in_script ), 'a signed tag inside a script string is not an element and is not rewritten' );
 
+	echo "\n-- a cached park on a tag that gets one more park keeps its own --\n";
+
+	$bg     = 'https://cdn.tracker.test/bg.png';
+	$bg_sig = Park_Proof::signature( array( 'background' ), array( $bg ) );
+	$td     = '<table><tr><td style="background-image:url(' . $poster . ')" data-faz-category="marketing" data-faz-park="background" data-faz-park-key="old-response-key" data-faz-park-sig="' . $bg_sig . '" data-faz-background="' . $bg . '">x</td></tr></table>';
+	$out    = faz_ob_run( faz_ob_frontend( $providers, $blocked ), '<html><body>' . $td . '</body></html>' );
+	$names  = preg_split( '/\s+/', (string) faz_attr_value( $out, 'data-faz-park' ), -1, PREG_SPLIT_NO_EMPTY );
+	sort( $names );
+	assert_true( array( 'background', 'style' ) === $names, 'the style park extends the signed background list instead of replacing it (got ' . implode( ' ', $names ) . ')' );
+	assert_true( $key === faz_attr_value( $out, 'data-faz-park-key' ), 'under this response\'s key' );
+	$listed = preg_split( '/\s+/', (string) faz_attr_value( $out, 'data-faz-park' ), -1, PREG_SPLIT_NO_EMPTY );
+	$vals   = array_map( function ( $n ) use ( $out ) {
+		return (string) faz_attr_value( $out, 'data-faz-' . $n );
+	}, $listed );
+	assert_true( Park_Proof::signature( $listed, $vals ) === faz_attr_value( $out, 'data-faz-park-sig' ), 'with one signature over both parked values' );
+
+	$forged_td = str_replace( $bg_sig, str_repeat( 'd', 64 ), $td );
+	$out       = faz_ob_run( faz_ob_frontend( $providers, $blocked ), '<html><body>' . $forged_td . '</body></html>' );
+	assert_true( 'style' === faz_attr_value( $out, 'data-faz-park' ), 'a foreign list whose signature does not verify is still replaced, not inherited' );
+
+	echo "\n-- the signature is over the value getAttribute() returns --\n";
+
+	// What the browser reads (see tests/browser-intent/park-proof-value-as-read.spec.ts).
+	foreach (
+		array(
+			'a numeric reference spelling a named one' => array( 'background:url(' . $poster . '?a=1&#38;quot;b)', 'background:url(' . $poster . '?a=1&quot;b)' ),
+			'a literal CRLF'                           => array( "background:url({$poster})\r\n;color:red", "background:url({$poster})\n;color:red" ),
+			'a literal CR'                             => array( "background:url({$poster})\r;color:red", "background:url({$poster})\n;color:red" ),
+		) as $label => list( $raw, $read )
+	) {
+		$sig  = Park_Proof::signature( array( 'style' ), array( $read ) );
+		$frag = '<div style="" data-faz-category="marketing" data-faz-park="style" data-faz-park-key="old-response-key" data-faz-park-sig="' . $sig . '" data-faz-style="' . $raw . '">x</div>';
+		$out  = faz_ob_run( faz_ob_frontend( $providers, array() ), '<html><body>' . $frag . '</body></html>' );
+		assert_true( $key === faz_attr_value( $out, 'data-faz-park-key' ), "a fragment signed over the browser's reading is re-keyed: $label" );
+	}
+
 	echo "\n";
 	echo "park proof refresh: {$tests_passed} passed, {$tests_failed} failed\n";
 	exit( $tests_failed > 0 ? 1 : 0 );

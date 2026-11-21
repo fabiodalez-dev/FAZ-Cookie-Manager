@@ -7306,8 +7306,9 @@ class Frontend {
 	 * restore pass wrote them back as live attributes kses refuses. The runtime
 	 * now restores those three only when the tag carries the response-local
 	 * key and names the attribute in data-faz-park. A list already on the tag
-	 * is extended only when its key is this response's: an author-written list
-	 * is replaced, never inherited.
+	 * is extended only when this response vouches for it (see
+	 * vouched_park_names()): an author-written list is replaced, never
+	 * inherited.
 	 *
 	 * @param string          $attrs Attribute string.
 	 * @param string|string[] $names Parked attribute name(s): data, style, background.
@@ -7315,8 +7316,7 @@ class Frontend {
 	 */
 	private function with_park_proof( $attrs, $names ) {
 		$key   = self::srcdoc_key();
-		$prior = $key === $this->extract_tag_attr( $attrs, 'data-faz-park-key' ) ? (string) $this->extract_tag_attr( $attrs, 'data-faz-park' ) : '';
-		$list  = array_values( array_unique( array_filter( array_merge( preg_split( '/\s+/', $prior ), (array) $names ) ) ) );
+		$list  = array_values( array_unique( array_filter( array_merge( $this->vouched_park_names( $attrs ), (array) $names ) ) ) );
 		$attrs = $this->strip_attr_tokens( $this->strip_attr_tokens( $this->strip_attr_tokens( $attrs, 'data-faz-park' ), 'data-faz-park-key' ), 'data-faz-park-sig' );
 		// The signature lets a later response, or the park-proofs route, vouch
 		// for this park under another key (see Park_Proof). An author-written
@@ -7329,8 +7329,34 @@ class Frontend {
 	}
 
 	/**
+	 * The parked names already on a tag that this response can vouch for.
+	 *
+	 * Under this response's key the list is this response's own. Under another
+	 * key — a fragment a cache stored with its parks — it counts only when its
+	 * signature verifies against the values the tag carries now. Checking it
+	 * here, and not only in the later re-keying pass, matters when a pass
+	 * parks one more attribute on such a tag: extending the list re-keys it,
+	 * and a foreign list dropped at that point left its own parks (a
+	 * background signed by the earlier response) parked after consent.
+	 *
+	 * @param string $attrs Attribute string.
+	 * @return string[]
+	 */
+	private function vouched_park_names( $attrs ) {
+		$names = preg_split( '/\s+/', trim( (string) $this->extract_tag_attr( $attrs, 'data-faz-park' ) ), -1, PREG_SPLIT_NO_EMPTY );
+		if ( self::srcdoc_key() === $this->extract_tag_attr( $attrs, 'data-faz-park-key' ) ) {
+			return $names;
+		}
+		if ( ! class_exists( Park_Proof::class ) || ! Park_Proof::names_are_valid( $names ) ) {
+			return array();
+		}
+		$expected = $this->park_signature_for( $attrs, $names );
+		return ( '' !== $expected && hash_equals( $expected, (string) $this->extract_tag_attr( $attrs, 'data-faz-park-sig' ) ) ) ? $names : array();
+	}
+
+	/**
 	 * Park_Proof::signature() over the values the tag carries for `$names`,
-	 * as the browser reads them (character references decoded).
+	 * as the browser reads them (see attr_value_as_read()).
 	 *
 	 * @param string   $attrs Attribute string.
 	 * @param string[] $names Parked names.
@@ -7348,9 +7374,48 @@ class Frontend {
 			if ( '' === $raw ) {
 				return '';
 			}
-			$values[] = self::decode_html_references( $raw );
+			$values[] = self::attr_value_as_read( $raw );
 		}
 		return Park_Proof::signature( array_values( $names ), $values );
+	}
+
+	/**
+	 * An attribute value exactly as getAttribute() returns it, for signing.
+	 *
+	 * The runtime sends the park-proofs route the values it reads, so the
+	 * signature must be over the same string or a real park is refused.
+	 * decode_html_references() is for judging and decodes twice on purpose
+	 * (`&#38;quot;` becomes `"` there, but the browser reads `&quot;`), and it
+	 * keeps CR, which the parser's input stream turns into LF (CRLF and a lone
+	 * CR both) before any attribute exists. Here line breaks are normalised
+	 * first and every reference is decoded once, in a single left-to-right
+	 * pass: numeric ones as decode_html_references() does them, named ones
+	 * with a semicolon through html_entity_decode() one at a time, and the four
+	 * legacy names without one under the same rule as there.
+	 *
+	 * @param string $raw Attribute value as written in the markup.
+	 * @return string
+	 */
+	private static function attr_value_as_read( $raw ) {
+		$value = str_replace( array( "\r\n", "\r" ), "\n", (string) $raw );
+		if ( false === strpos( $value, '&' ) ) {
+			return $value;
+		}
+		$decoded = preg_replace_callback(
+			'/&(?:#[xX][0-9a-fA-F]+;?|#[0-9]+;?|[A-Za-z][A-Za-z0-9]*;|(?:amp|lt|gt|quot|AMP|LT|GT|QUOT)(?![;A-Za-z0-9=]))/',
+			function ( $m ) {
+				$ref = $m[0];
+				if ( '#' === $ref[1] ) {
+					return self::decode_html_references( $ref );
+				}
+				if ( ';' !== substr( $ref, -1 ) ) {
+					return self::decode_html_references( $ref );
+				}
+				return html_entity_decode( $ref, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			},
+			$value
+		);
+		return null === $decoded ? $value : $decoded;
 	}
 
 	/**
@@ -7398,12 +7463,8 @@ class Frontend {
 		if ( self::srcdoc_key() === $this->extract_tag_attr( $attrs, 'data-faz-park-key' ) ) {
 			return $full;
 		}
-		$names = preg_split( '/\s+/', trim( (string) $this->extract_tag_attr( $attrs, 'data-faz-park' ) ), -1, PREG_SPLIT_NO_EMPTY );
-		if ( ! Park_Proof::names_are_valid( $names ) ) {
-			return $full;
-		}
-		$expected = $this->park_signature_for( $attrs, $names );
-		if ( '' === $expected || ! hash_equals( $expected, (string) $this->extract_tag_attr( $attrs, 'data-faz-park-sig' ) ) ) {
+		$names = $this->vouched_park_names( $attrs );
+		if ( array() === $names ) {
 			return $full;
 		}
 		return '<' . $m[1] . $this->with_park_proof( $attrs, $names ) . ( isset( $m[3] ) ? $m[3] : '' ) . '>';

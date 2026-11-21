@@ -55,6 +55,9 @@ function page(body, { endpoint = ENDPOINT, answer = 'by-signature', beforeAnswer
     if (answer === 'reject' || (answer === 'offline-once' && calls.length === 1)) {
       return Promise.reject(new Error('offline'));
     }
+    if (answer === 'hang-once' && calls.length === 1) return new Promise(() => {});
+    if (answer === 'hang-twice' && calls.length <= 2) return new Promise(() => {});
+    if (answer === 'hang-body' && calls.length === 1) return Promise.resolve({ ok: true, json: () => new Promise(() => {}) });
     if (beforeAnswer) beforeAnswer(window);
     const valid = sent.items.map((it) => it.sig === GOOD);
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ valid }) });
@@ -190,6 +193,85 @@ console.log('\n3. object data and background');
   eq('both are asked about in one request', calls.length === 1 && calls[0].items.length, 2);
   eq('a confirmed <object data> is restored', w.document.getElementById('o').getAttribute('data'), URL_);
   eq('a confirmed background is restored', w.document.getElementById('t').getAttribute('background'), BG);
+}
+
+console.log('\n4. a verifier that never answers does not hold the queue');
+{
+  const { window: w, calls } = page(styleTag(GOOD), { answer: 'hang-once' });
+  w._FAZ_PARK_VERIFY_TIMEOUT_MS = 40;
+  consent(w);
+  restore(w);
+  await settle(700);
+  eq('a request left pending is given up and retried once', calls.length, 2);
+  eq('and the answer to the retry restores the style', w.document.getElementById('h').getAttribute('style'), CSS);
+}
+{
+  const { window: w, calls } = page(styleTag(GOOD), { answer: 'hang-body' });
+  w._FAZ_PARK_VERIFY_TIMEOUT_MS = 40;
+  consent(w);
+  restore(w);
+  await settle(700);
+  eq('a response whose body never arrives is timed out too', calls.length, 2);
+  eq('and the retry restores the style', w.document.getElementById('h').getAttribute('style'), CSS);
+}
+{
+  const { window: w, calls } = page(styleTag(GOOD), { answer: 'hang-twice' });
+  w._FAZ_PARK_VERIFY_TIMEOUT_MS = 40;
+  consent(w);
+  restore(w);
+  await settle(700);
+  eq('two pending attempts leave the first tag parked', w.document.getElementById('h').getAttribute('style'), '');
+  w.document.body.insertAdjacentHTML('beforeend', styleTag(GOOD).replace('id="h"', 'id="h2"'));
+  restore(w);
+  await settle();
+  eq('and the queue is free: a later tag is asked about', calls.length, 3);
+  eq('and restored', w.document.getElementById('h2').getAttribute('style'), CSS);
+}
+
+console.log('\n5. a signed park inserted after the restore pass');
+{
+  const { window: w, calls } = page('<div id="feed"></div>');
+  restore(w);
+  w.document.getElementById('feed').insertAdjacentHTML('beforeend', styleTag(GOOD));
+  await settle();
+  eq('before consent it is neither asked about nor restored', calls.length, 0);
+  eq('premise: still parked', w.document.getElementById('h').getAttribute('data-faz-style'), CSS);
+}
+{
+  const { window: w, calls } = page('<div id="feed"></div>');
+  consent(w);
+  restore(w);
+  // The blocking observer is still connected here and does not handle parked
+  // attributes; _fazAfterConsent() disconnecting it changes nothing for this
+  // watcher, which is a separate observer.
+  w.document.getElementById('feed').insertAdjacentHTML('beforeend', `<article>${styleTag(GOOD)}</article>`);
+  await settle(60);
+  eq('after consent it is asked about once', calls.length, 1);
+  eq('and restored without another consent event', w.document.getElementById('h').getAttribute('style'), CSS);
+}
+{
+  const { window: w, calls } = page('<div id="feed"></div>');
+  consent(w);
+  restore(w);
+  w.document.getElementById('feed').insertAdjacentHTML('beforeend', styleTag(''));
+  await settle(60);
+  eq('an unsigned late tag is not sent', calls.length, 0);
+  eq('and stays parked', w.document.getElementById('h').getAttribute('data-faz-style'), CSS);
+}
+
+console.log('\n6. more than one batch');
+{
+  const tags = Array.from({ length: 51 }, (_, i) => styleTag(i % 2 === 0 ? GOOD : BAD).replace('id="h"', `id="t${i}"`)).join('');
+  const { window: w, calls } = page(tags);
+  consent(w);
+  restore(w);
+  await settle(80);
+  eq('51 signed tags are asked about in two requests', calls.length, 2);
+  eq('the first with 50 items', calls[0] && calls[0].items.length, 50);
+  eq('the second with the one left over', calls[1] && calls[1].items.length, 1);
+  const restored = (i) => w.document.getElementById(`t${i}`).getAttribute('style') === CSS;
+  ok('verdicts of the first batch go to their own tags (0 restored, 1 refused, 48 restored, 49 refused)', restored(0) && !restored(1) && restored(48) && !restored(49));
+  ok('the tag in the second batch is restored on its own verdict', restored(50));
 }
 
 console.log(`\npark proof verify: ${passed} passed, ${failed} failed`);

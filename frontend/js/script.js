@@ -5420,9 +5420,13 @@ function _fazParkProven(el, name) {
 // changed since, is given this page's key; the restore pass then runs again.
 // An unavailable verifier gets one retry. A verdict is final for this
 // element, and only a positive verdict for its current values unblocks it.
+// An attempt that has not answered, body included, within
+// _FAZ_PARK_VERIFY_TIMEOUT_MS counts as unavailable: a request left pending
+// kept the queue busy, so no later batch was ever asked about.
 var _fazParkAsked = typeof WeakSet === "function" ? new WeakSet() : null;
 var _fazParkQueue = [];
 var _fazParkBusy = false;
+var _FAZ_PARK_VERIFY_TIMEOUT_MS = 8000;
 function _fazQueueParkVerify(el) {
     if (!_fazParkAsked || _fazParkAsked.has(el)) return;
     if (!_fazStore || !_fazStore._parkProofEndpoint || !_fazStore._srcdocKey || typeof fetch !== "function") return;
@@ -5441,16 +5445,33 @@ function _fazParkItem(el) {
     };
 }
 function _fazFetchParkProofs(items, mayRetry) {
-    return Promise.resolve().then(function () {
-        return fetch(_fazStore._parkProofEndpoint, {
+    var controller = typeof AbortController === "function" ? new AbortController() : null;
+    var timer = null;
+    var expired = new Promise(function (resolve, reject) {
+        timer = setTimeout(function () {
+            if (controller) controller.abort();
+            reject(new Error("Park proof verification timed out"));
+        }, _FAZ_PARK_VERIFY_TIMEOUT_MS);
+    });
+    var attempt = Promise.resolve().then(function () {
+        var init = {
             method: "POST",
             credentials: "same-origin",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ items: items })
-        });
+        };
+        if (controller) init.signal = controller.signal;
+        return fetch(_fazStore._parkProofEndpoint, init);
     }).then(function (res) {
         if (!res || res.status === 408 || res.status >= 500) throw new Error("Park proof verification unavailable");
         return res && res.ok ? res.json() : null;
+    });
+    return Promise.race([attempt, expired]).then(function (data) {
+        clearTimeout(timer);
+        return data;
+    }, function (err) {
+        clearTimeout(timer);
+        throw err;
     }).catch(function () {
         if (!mayRetry) return null;
         return new Promise(function (resolve) { setTimeout(resolve, 500); }).then(function () {
@@ -8354,6 +8375,39 @@ _fazNodeListObserver.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ["type"],
 });
+// A signed park inserted after the restore pass ran — "load more" markup a
+// cache stored with its parks, arriving once the visitor has consented — was
+// never looked at again: the pass runs on consent, and _fazNodeListObserver,
+// which does not handle parked attributes anyway, is disconnected once nothing
+// is blocked any more. This observer stays connected for the page's life and
+// only notices a tag carrying data-faz-park-sig, then runs the restore pass
+// once per batch. That pass is what judges it: the consent rules of each kind
+// of park, and the park-proofs route for a key that is not this page's. Before
+// consent nothing is restored and nothing is asked, as on the first pass.
+var _fazLateParkScheduled = false;
+function _fazWatchLateParks(mutations) {
+    if (_fazLateParkScheduled) return;
+    for (var i = 0; i < mutations.length; i++) {
+        var added = mutations[i].addedNodes || [];
+        for (var j = 0; j < added.length; j++) {
+            var node = added[j];
+            if (!node || node.nodeType !== 1) continue;
+            if ((node.hasAttribute && node.hasAttribute("data-faz-park-sig"))
+                || (node.querySelector && node.querySelector("[data-faz-park-sig]"))) {
+                _fazLateParkScheduled = true;
+                setTimeout(function () {
+                    _fazLateParkScheduled = false;
+                    _fazUnblockServerSide();
+                }, 0);
+                return;
+            }
+        }
+    }
+}
+if (typeof MutationObserver === "function" && _fazParkAsked) {
+    new MutationObserver(_fazWatchLateParks).observe(document.documentElement, { childList: true, subtree: true });
+}
+
 function _fazCleanHostName(name) {
     return name.replace(/^www./, "");
 }

@@ -537,12 +537,13 @@ test.describe('Blocking compliance coverage', () => {
     // the toggles this scenario clicks exist only if a scan once saw _ga and
     // _clck. A later run that left those rows as manual ones (discovered=0)
     // made the Google Analytics toggle vanish and this test time out waiting
-    // for it. Arrange the precondition here rather than inherit it.
-    seedDetectedCookie('_ga');
-    seedDetectedCookie('_clck');
-    bustDetectionCache();
-
+    // for it. Arrange the precondition here rather than inherit it, inside
+    // the try: a second seed that fails must not leave the first row behind.
     try {
+      seedDetectedCookie('_ga');
+      seedDetectedCookie('_clck');
+      bustDetectionCache();
+
       await postSettings(page, nonce, {
         banner_control: {
           ...(original.banner_control ?? {}),
@@ -674,10 +675,22 @@ test.describe('Blocking compliance coverage', () => {
           restoreError,
         );
       }
-      removeSeededCookie('_ga');
-      removeSeededCookie('_clck');
-      bustDetectionCache();
-      resetProviderMatrixState();
+      // Each step on its own: a WP-CLI error in one must neither skip the
+      // others nor replace the test's own failure.
+      const cleanup: Array<[string, () => void]> = [
+        ['remove _ga', () => removeSeededCookie('_ga')],
+        ['remove _clck', () => removeSeededCookie('_clck')],
+        ['bust detection cache', () => bustDetectionCache()],
+        ['reset provider matrix', () => resetProviderMatrixState()],
+      ];
+      for (const [label, step] of cleanup) {
+        try {
+          step();
+        } catch (cleanupError) {
+          // eslint-disable-next-line no-console
+          console.warn(`[blocking-compliance per-service finally] ${label} failed:`, cleanupError);
+        }
+      }
     }
   });
 

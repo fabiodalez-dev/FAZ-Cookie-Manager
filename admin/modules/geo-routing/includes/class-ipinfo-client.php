@@ -163,9 +163,17 @@ class Ipinfo_Client {
 	/**
 	 * Take one slot of the hourly upstream-lookup budget.
 	 *
-	 * The window is fixed (it closes an hour after the first lookup in it).
-	 * Not atomic: concurrent misses can overshoot by the number the server
-	 * runs at once, which is fine for a flood ceiling.
+	 * The window is fixed (it closes an hour after the first lookup in it) and
+	 * a slot is taken as one atomic step, never as a read followed by a write:
+	 * misses that overlap would all read the same count and each write back
+	 * n + 1, so a flood timed to overlap got up to as many lookups per counted
+	 * slot as the server runs requests at once, for the whole window. See
+	 * reserve_slot() for how each backend does it.
+	 *
+	 * The /64 is taken before the site: a prefix over its own ceiling must not
+	 * spend the shared budget, which is what a flood rotating through /64s
+	 * would drain. A site budget that is already spent is read first and
+	 * refuses without writing, so a flood past it creates no per-prefix rows.
 	 *
 	 * @param bool   $persistent Whether a persistent object cache is in use.
 	 * @param string $ip         Address to look up.
@@ -179,39 +187,190 @@ class Ipinfo_Client {
 			return true; // 0 switches the ceiling off.
 		}
 		$now  = time();
-		$site = $this->lookup_window( $persistent, self::BUDGET_KEY, $now );
+		$mode = $this->budget_backend( $persistent );
+		$site = $this->peek_window( $mode, self::BUDGET_KEY, $now );
 		if ( $site['n'] >= $max ) {
-			$this->budget_retry_after = $site['start'] + HOUR_IN_SECONDS - $now;
+			$this->budget_retry_after = max( 1, $site['start'] + HOUR_IN_SECONDS - $now );
 			return false;
 		}
 		$bucket = function_exists( 'faz_ip_rate_bucket' ) ? faz_ip_rate_bucket( $ip ) : $ip;
 		if ( '/64' === substr( $bucket, -3 ) ) {
-			$key    = self::BUDGET_KEY . '_v6_' . $this->hash_ip( $bucket );
-			$prefix = $this->lookup_window( $persistent, $key, $now );
-			if ( $prefix['n'] >= self::IPV6_LOOKUPS_PER_HOUR ) {
-				$this->budget_retry_after = $prefix['start'] + HOUR_IN_SECONDS - $now;
+			$left = $this->reserve_slot( $mode, self::BUDGET_KEY . '_v6_' . $this->hash_ip( $bucket ), self::IPV6_LOOKUPS_PER_HOUR, $now );
+			if ( $left > 0 ) {
+				$this->budget_retry_after = $left;
 				return false;
 			}
-			$this->count_lookup( $persistent, $key, $prefix, $now );
 		}
-		$this->count_lookup( $persistent, self::BUDGET_KEY, $site, $now );
+		$left = $this->reserve_slot( $mode, self::BUDGET_KEY, $max, $now );
+		if ( $left > 0 ) {
+			$this->budget_retry_after = $left;
+			return false;
+		}
 		return true;
 	}
 
-	/** Read the active hourly window, or start one at the current time. */
-	private function lookup_window( $persistent, $key, $now ) {
-		$data  = $this->cache_read( $persistent, $key );
-		$start = is_array( $data ) ? (int) ( $data['start'] ?? 0 ) : 0;
+	/**
+	 * Where the budget counters live.
+	 *
+	 * 'object' with a persistent object cache (wp_cache_add / wp_cache_incr are
+	 * atomic there), 'sql' otherwise (one options row per window, changed by
+	 * conditional statements), 'transient' only where there is no database
+	 * handle at all, which is no WordPress request.
+	 *
+	 * @param bool $persistent Whether a persistent object cache is in use.
+	 * @return string
+	 */
+	private function budget_backend( $persistent ) {
+		if ( $persistent ) {
+			return 'object';
+		}
+		return isset( $GLOBALS['wpdb'] ) && is_object( $GLOBALS['wpdb'] ) ? 'sql' : 'transient';
+	}
+
+	/** Option holding one budget window on the 'sql' backend: "start:count". */
+	private function window_option( $key ) {
+		return 'faz_ipinfo_win_' . $key;
+	}
+
+	/**
+	 * The active hourly window, or an empty one starting now. Read only.
+	 *
+	 * @param string $mode Backend from budget_backend().
+	 * @param string $key  BUDGET_KEY or a per-prefix key.
+	 * @param int    $now  Current time.
+	 * @return array{n:int,start:int}
+	 */
+	private function peek_window( $mode, $key, $now ) {
+		if ( 'sql' === $mode ) {
+			$row = $this->read_window_row( $key );
+			if ( null === $row || $now - $row['start'] >= HOUR_IN_SECONDS ) {
+				return array( 'n' => 0, 'start' => $now );
+			}
+			return $row;
+		}
+		$persistent = 'object' === $mode;
+		$data       = $this->cache_read( $persistent, $key );
+		$start      = is_array( $data ) ? (int) ( $data['start'] ?? 0 ) : 0;
+		if ( 'object' === $mode ) {
+			$count = wp_cache_get( $key . '_n', self::CACHE_GROUP );
+			$start = (int) wp_cache_get( $key . '_s', self::CACHE_GROUP );
+			return ( $start && false !== $count ) ? array( 'n' => (int) $count, 'start' => $start ) : array( 'n' => 0, 'start' => $now );
+		}
 		if ( ! $start || $now - $start >= HOUR_IN_SECONDS ) {
 			return array( 'n' => 0, 'start' => $now );
 		}
 		return array( 'n' => (int) ( $data['n'] ?? 0 ), 'start' => $start );
 	}
 
-	/** Count an upstream lookup without extending the window. */
-	private function count_lookup( $persistent, $key, array $window, $now ) {
+	/**
+	 * Take one slot of a window if it has one left, as a single atomic step.
+	 *
+	 * - 'object': wp_cache_add() opens the window (the first request to add it
+	 *   wins) and wp_cache_incr() counts, which the cache backend does in one
+	 *   operation; a count past the ceiling is a refusal.
+	 * - 'sql': the window is one options row, "start:count". It is created with
+	 *   INSERT IGNORE, replaced when its hour is over and incremented with an
+	 *   UPDATE that only matches the value this request read, so two requests
+	 *   cannot both turn n into n + 1. A request that loses retries on the new
+	 *   value; one that keeps losing is refused, which skips a lookup and never
+	 *   a decision. A transient could not do this: it is read and written as
+	 *   two operations.
+	 * - 'transient': read and write, not atomic, for a context with no database.
+	 *
+	 * @param string $mode Backend from budget_backend().
+	 * @param string $key  BUDGET_KEY or a per-prefix key.
+	 * @param int    $max  Slots per window.
+	 * @param int    $now  Current time.
+	 * @return int 0 when a slot was taken, otherwise the seconds the window has left.
+	 */
+	private function reserve_slot( $mode, $key, $max, $now ) {
+		if ( 'object' === $mode ) {
+			wp_cache_add( $key . '_s', $now, self::CACHE_GROUP, HOUR_IN_SECONDS );
+			$start = (int) wp_cache_get( $key . '_s', self::CACHE_GROUP );
+			$start = $start > 0 ? $start : $now;
+			$n     = wp_cache_incr( $key . '_n', 1, self::CACHE_GROUP );
+			if ( false === $n ) {
+				$n = wp_cache_add( $key . '_n', 1, self::CACHE_GROUP, HOUR_IN_SECONDS ) ? 1 : wp_cache_incr( $key . '_n', 1, self::CACHE_GROUP );
+			}
+			if ( false === $n || $n > $max ) {
+				return max( 1, $start + HOUR_IN_SECONDS - $now );
+			}
+			return 0;
+		}
+		if ( 'sql' === $mode ) {
+			return $this->reserve_slot_sql( $key, $max, $now );
+		}
+		$window = $this->peek_window( $mode, $key, $now );
+		if ( $window['n'] >= $max ) {
+			return max( 1, $window['start'] + HOUR_IN_SECONDS - $now );
+		}
 		++$window['n'];
-		$this->cache_verdict( $persistent, $key, $window, $window['start'] + HOUR_IN_SECONDS - $now );
+		$this->cache_verdict( false, $key, $window, $window['start'] + HOUR_IN_SECONDS - $now );
+		return 0;
+	}
+
+	/** The 'sql' half of reserve_slot(). */
+	private function reserve_slot_sql( $key, $max, $now ) {
+		global $wpdb;
+		$name = $this->window_option( $key );
+		for ( $try = 0; $try < 4; $try++ ) {
+			$row = $this->read_window_row( $key );
+			if ( null === $row ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- a window must be opened in one statement, which the options API cannot express; $wpdb->options is core's own table name.
+				if ( 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, $now . ':1' ) ) ) {
+					return 0;
+				}
+				continue;
+			}
+			$old = $row['start'] . ':' . $row['n'];
+			if ( $now - $row['start'] >= HOUR_IN_SECONDS ) {
+				$new  = $now . ':1';
+				$left = 0;
+			} elseif ( $row['n'] >= $max ) {
+				return max( 1, $row['start'] + HOUR_IN_SECONDS - $now );
+			} else {
+				$new  = $row['start'] . ':' . ( $row['n'] + 1 );
+				$left = 0;
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- compare-and-set on the value this request read; $wpdb->options is core's own table name.
+			if ( 1 === (int) $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", $new, $name, $old ) ) ) {
+				if ( self::BUDGET_KEY === $key && $now - $row['start'] >= HOUR_IN_SECONDS ) {
+					$this->sweep_expired_windows( $now );
+				}
+				return $left;
+			}
+		}
+		return 1;
+	}
+
+	/**
+	 * The stored window of the 'sql' backend, read past the options cache so a
+	 * change another request just made is seen.
+	 *
+	 * @return array{n:int,start:int}|null
+	 */
+	private function read_window_row( $key ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the value must come from the database, not the options cache; $wpdb->options is core's own table name.
+		$value = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $this->window_option( $key ) ) );
+		if ( ! is_string( $value ) || false === strpos( $value, ':' ) ) {
+			return null;
+		}
+		list( $start, $n ) = array_map( 'intval', explode( ':', $value, 2 ) );
+		return $start > 0 ? array( 'n' => $n, 'start' => $start ) : null;
+	}
+
+	/**
+	 * Drop the per-prefix windows whose hour is over. Runs when the site
+	 * window rolls over, so a flood that rotated through /64s leaves no rows
+	 * behind for longer than the next hour (a transient has an expiry sweep, a
+	 * plain option does not).
+	 */
+	private function sweep_expired_windows( $now ) {
+		global $wpdb;
+		$like = $wpdb->esc_like( $this->window_option( self::BUDGET_KEY . '_v6_' ) ) . '%';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- housekeeping of this class's own rows; $wpdb->options is core's own table name.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING_INDEX(option_value, ':', 1) AS UNSIGNED) < %d", $like, $now - HOUR_IN_SECONDS ) );
 	}
 
 	/**

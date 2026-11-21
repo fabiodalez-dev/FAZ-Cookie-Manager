@@ -26,6 +26,18 @@ namespace FazCookie\Admin\Modules\Consentlogs\Includes {
 	}
 }
 
+namespace FazCookie\Includes {
+	// The handlers' clock is the test's, as the transient stubs' is.
+	function time() {
+		return isset( $GLOBALS['faz_test_now'] ) ? (int) $GLOBALS['faz_test_now'] : \time();
+	}
+	// Every cookie the handlers set or clear, in order: array( name, value ).
+	function setcookie( $name, $value = '', $options = array() ) {
+		$GLOBALS['faz_test_cookies'][] = array( $name, $value );
+		return true;
+	}
+}
+
 namespace FazCookie\Tests\Unit {
 	class Json_Response extends \Exception {
 		public $success;
@@ -71,7 +83,47 @@ namespace {
 	function wp_using_ext_object_cache() {
 		return false;
 	}
+	$GLOBALS['faz_test_cookies']      = array();
+	$GLOBALS['faz_test_stale_reads'] = false; // Every request read the transients before any wrote them.
+
+	/**
+	 * The two statements the shared audit slot runs, on an in-memory options
+	 * table, with MySQL's semantics: INSERT IGNORE affects one row or none,
+	 * the conditional UPDATE only a row that still matches.
+	 */
+	class Faz_Test_Wpdb {
+		public $options = 'wp_options';
+		public $rows    = array();
+		public function prepare( $query, ...$args ) {
+			foreach ( $args as $arg ) {
+				$query = preg_replace( '/%[sd]/', is_int( $arg ) ? (string) $arg : "'" . addslashes( (string) $arg ) . "'", $query, 1 );
+			}
+			return $query;
+		}
+		public function query( $query ) {
+			if ( preg_match( "/^INSERT IGNORE INTO wp_options \\(option_name, option_value, autoload\\) VALUES \\('([^']*)', '([^']*)', 'no'\\)$/", $query, $m ) ) {
+				if ( array_key_exists( $m[1], $this->rows ) ) {
+					return 0;
+				}
+				$this->rows[ $m[1] ] = $m[2];
+				return 1;
+			}
+			if ( preg_match( "/^UPDATE wp_options SET option_value = '([^']*)' WHERE option_name = '([^']*)' AND CAST\\(option_value AS UNSIGNED\\) < (\\d+)$/", $query, $m ) ) {
+				if ( ! array_key_exists( $m[2], $this->rows ) || (int) $this->rows[ $m[2] ] >= (int) $m[3] ) {
+					return 0;
+				}
+				$this->rows[ $m[2] ] = $m[1];
+				return 1;
+			}
+			return false;
+		}
+	}
+	$GLOBALS['wpdb'] = new Faz_Test_Wpdb();
+
 	function get_transient( $key ) {
+		if ( $GLOBALS['faz_test_stale_reads'] ) {
+			return false;
+		}
 		$t = $GLOBALS['faz_test_transients'][ $key ] ?? null;
 		return ( null === $t || $t[1] <= $GLOBALS['faz_test_now'] ) ? false : $t[0];
 	}
@@ -180,6 +232,44 @@ namespace {
 		faz_optout( $handler, '127.0.0.1', 1002, 'handle_rescind', true );
 	}
 	check( $before + 1 === count( Controller::$rows ), 'rescinds from a shared address are bounded the same way' );
+
+	echo "\n== The opt-out cookie is applied whether or not the audit row is written ==\n";
+	$GLOBALS['faz_test_cookies'] = array();
+	for ( $i = 0; $i < 10; $i++ ) {
+		faz_optout( $handler, '127.0.0.1', 1003 );
+	}
+	$set = array_filter( $GLOBALS['faz_test_cookies'], function ( $c ) {
+		return Do_Not_Sell_Shortcode::COOKIE_NAME === $c[0] && '1' === $c[1];
+	} );
+	check( 10 === count( $set ), 'each of 10 opt-outs in one second sets the opt-out cookie, the 9 without an audit slot included (got ' . count( $set ) . ')' );
+	$GLOBALS['faz_test_cookies'] = array();
+	for ( $i = 0; $i < 10; $i++ ) {
+		faz_optout( $handler, '127.0.0.1', 1004, 'handle_rescind', true );
+	}
+	$cleared = array_filter( $GLOBALS['faz_test_cookies'], function ( $c ) {
+		return Do_Not_Sell_Shortcode::COOKIE_NAME === $c[0] && '' === $c[1];
+	} );
+	check( 10 === count( $cleared ), 'each of 10 rescinds in one second clears it, the 9 without an audit slot included (got ' . count( $cleared ) . ')' );
+
+	echo "\n== Concurrent requests: one slot, not one per request that read it first ==\n";
+	Controller::$rows                = array();
+	$GLOBALS['faz_test_stale_reads'] = true; // Each request reads before any writes.
+	for ( $i = 0; $i < 5; $i++ ) {
+		faz_optout( $handler, '127.0.0.1', 1005 );
+	}
+	$GLOBALS['faz_test_stale_reads'] = false;
+	check( 1 === count( Controller::$rows ), 'five opt-outs that all read before any wrote still write one row in that second (got ' . count( Controller::$rows ) . ')' );
+	$GLOBALS['wpdb']->rows = array();
+	$broken = new class() extends Faz_Test_Wpdb {
+		public function query( $query ) {
+			return false;
+		}
+	};
+	$GLOBALS['wpdb'] = $broken;
+	Controller::$rows = array();
+	check( true === faz_optout( $handler, '127.0.0.1', 1006 ), 'a slot query that fails still answers the opt-out with success' );
+	check( 0 === count( Controller::$rows ), 'and writes no audit row' );
+	$GLOBALS['wpdb'] = new Faz_Test_Wpdb();
 
 	echo "\n== Identifying address: the per-address window still applies ==\n";
 	Controller::$rows = array();

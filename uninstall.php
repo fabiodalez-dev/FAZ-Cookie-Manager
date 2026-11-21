@@ -218,6 +218,9 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				// reason (Do_Not_Sell_Shortcode::claim_notification()).
 				'faz_dnsmpi_rl_mail_day',
 				'faz_dnsmpi_rl_mail_day_lock',
+				// The shared-address audit slot (Do_Not_Sell_Shortcode::
+				// claim_shared_audit_slot()), a single options row.
+				'faz_dnsmpi_shared_audit_slot',
 				// When the first form-stamping version started running: the
 				// epoch of the stampless grace window (DSAR_Shortcode::
 				// record_stamp_epoch()). Written once with add_option.
