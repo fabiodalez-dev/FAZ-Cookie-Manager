@@ -20,13 +20,13 @@
 
 <p>Correggere il salvataggio era la parte facile. Le righe già scritte andavano ripulite, e togliere le barre non è un'operazione che si può ripetere: la seconda volta toglie una barra che l'amministratore aveva scritto davvero. La migrazione deve quindi girare una volta sola, anche con due richieste di amministrazione che partono nello stesso istante, anche se il server si ferma a metà. Usa un blocco nel database, una transazione, e un confronto su ogni campo prima di scriverlo, così un testo che qualcuno ha salvato nel frattempo non viene toccato. Sui server dove la tabella delle opzioni non supporta le transazioni, il segnale di «fatto» si scrive subito dopo, invece che dentro: lì restano scoperti due casi, un server che si ferma esattamente fra la fine della transazione e quella scrittura, oppure una scrittura che fallisce due volte di fila; nel secondo il blocco resta acceso dieci minuti, e allo scadere la migrazione può ripartire. In entrambi i casi un testo con una barra vera può perderla. Mentre la migrazione gira, per pochi secondi, esportazione e importazione rispondono di riprovare tra un minuto, invece di produrre un file che sbaglierebbe una barra.</p>
 
-<h2>Le altre quattro</h2>
+<h2>Altre segnalazioni e una correzione di accessibilità</h2>
 
 <p>Il logo del banner aveva sempre lo stesso testo alternativo, «Brand logo», e un lettore di schermo annunciava quello invece del nome dell'azienda. Ora il plugin prende il testo alternativo dell'immagine nella Libreria media, e una modifica fatta lì si vede al caricamento successivo della pagina, senza dover risalvare il banner.</p>
 
 <p>Le mappe di WP Maps restavano un riquadro vuoto finché il visitatore non accettava i cookie, perché il plugin le disegna da JavaScript e non c'era nulla da sostituire con un segnaposto. Ora prima del consenso compare il segnaposto di Google Maps, e dopo «Accetta» la mappa viene disegnata senza ricaricare la pagina.</p>
 
-<p>Il tasto Esc, su un banner con il pulsante di chiusura accanto a «Rifiuta», registrava un rifiuto che il visitatore non aveva scelto. Ora Esc sul banner non fa nulla, come prevedono le linee guida sull'accessibilità che il plugin segue, e nel centro preferenze chiude il pannello e riporta il cursore sul pulsante che l'aveva aperto.</p>
+<p>Durante l’audit è emerso anche un problema di accessibilità. Il tasto Esc, su un banner con il pulsante di chiusura accanto a «Rifiuta», registrava un rifiuto che il visitatore non aveva scelto. Ora Esc sul banner non fa nulla, come prevedono le linee guida sull'accessibilità che il plugin segue, e nel centro preferenze chiude il pannello e riporta il cursore sul pulsante che l'aveva aperto.</p>
 
 <p>Infine due casi da sito reale. I cookie che Divi crea mentre si modifica una pagina finivano nell'elenco dei cookie da dichiarare, uno per ogni pagina modificata: ora sono cookie interni di WordPress, che i visitatori non ricevono mai. E un carosello di loghi costruito con Owl Carousel restava vuoto finché non si ridimensionava la finestra, perché il plugin tratteneva le copie delle slide che la libreria prepara in un documento invisibile.</p>
 
