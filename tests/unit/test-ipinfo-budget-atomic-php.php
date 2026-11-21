@@ -76,7 +76,8 @@ function update_option( $key, $value, $autoload = null ) {
  * expire on the shared test clock, add() is create-if-absent, and incr()
  * changes the value but keeps the entry's own expiry.
  */
-$GLOBALS['faz_test_ext_cache'] = false;
+$GLOBALS['faz_test_ext_cache']   = false;
+$GLOBALS['faz_test_incr_creates'] = false;
 function wp_using_ext_object_cache() {
 	return ! empty( $GLOBALS['faz_test_ext_cache'] );
 }
@@ -110,6 +111,10 @@ function wp_cache_add( $key, $val, $group = '', $ttl = 0 ) {
 function wp_cache_incr( $key, $offset = 1, $group = '' ) {
 	$k = "$group:$key";
 	if ( ! faz_cache_live( $k ) ) {
+		if ( ! empty( $GLOBALS['faz_test_incr_creates'] ) ) {
+			// Redis Object Cache: INCRBY creates the key, with no expiry.
+			return wp_cache_set( $key, $offset, $group, 0 ) ? $offset : false;
+		}
 		return false;
 	}
 	$GLOBALS['_faz_test_cache'][ $k ] = (int) $GLOBALS['_faz_test_cache'][ $k ] + $offset;
@@ -383,6 +388,44 @@ for ( $i = 1; $i <= 40; $i++ ) {
 	$client->lookup( '2001:db8:9:9::' . dechex( $i ) );
 }
 tr_check( Ipinfo_Client::IPV6_LOOKUPS_PER_HOUR === $GLOBALS['_faz_test_http_calls'], 'one /64 stops at its ceiling of 20 on the object-cache backend (got ' . $GLOBALS['_faz_test_http_calls'] . ')' );
+
+// 10. The counter is dropped while its window is under way: the slots already
+// taken are not handed out a second time.
+$GLOBALS['_faz_test_cache']      = array();
+$GLOBALS['_faz_test_cache_exp']  = array();
+$GLOBALS['_faz_test_http_calls'] = 0;
+$GLOBALS['_faz_test_filters']['faz_ipinfo_lookups_per_hour'] = function () { return 1000; };
+$client = new Ipinfo_Client();
+for ( $i = 1; $i <= 10; $i++ ) {
+	$client->lookup( '2001:db8:7:7::' . dechex( $i ) );
+}
+foreach ( array_keys( $GLOBALS['_faz_test_cache'] ) as $k ) {
+	if ( false !== strpos( $k, 'budget_v6_' ) && false !== strpos( $k, '_n_' ) ) {
+		unset( $GLOBALS['_faz_test_cache'][ $k ], $GLOBALS['_faz_test_cache_exp'][ $k ] );
+	}
+}
+faz_test_advance( 30 );
+for ( $i = 11; $i <= 50; $i++ ) {
+	$client->lookup( '2001:db8:7:7::' . dechex( $i ) );
+}
+tr_check( $GLOBALS['_faz_test_http_calls'] <= Ipinfo_Client::IPV6_LOOKUPS_PER_HOUR, 'a /64 whose counter was dropped mid-window still stays within 20 lookups (got ' . $GLOBALS['_faz_test_http_calls'] . ')' );
+
+// 11. A backend whose incr creates a missing key (Redis INCRBY) still gives
+// every counter an expiry.
+$GLOBALS['faz_test_incr_creates'] = true;
+$GLOBALS['_faz_test_cache']       = array();
+$GLOBALS['_faz_test_cache_exp']   = array();
+$client = new Ipinfo_Client();
+$client->lookup( '203.0.113.90' );
+$client->lookup( '2001:db8:8:8::1' );
+$nonexpiring = array();
+foreach ( $GLOBALS['_faz_test_cache'] as $k => $v ) {
+	if ( false !== strpos( $k, '_n_' ) && empty( $GLOBALS['_faz_test_cache_exp'][ $k ] ) ) {
+		$nonexpiring[] = $k;
+	}
+}
+tr_check( array() === $nonexpiring, 'every window counter carries an expiry on an incr that creates keys (without: ' . implode( ', ', $nonexpiring ) . ')' );
+$GLOBALS['faz_test_incr_creates'] = false;
 $GLOBALS['faz_test_ext_cache'] = false;
 
 function get_transient_keys_with( $needle ) {
