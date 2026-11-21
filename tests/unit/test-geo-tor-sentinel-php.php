@@ -91,20 +91,18 @@ namespace {
 		return true;
 	}
 	function wp_cache_add( $key, $val, $group = '', $ttl = 0 ) {
-		$k = "$group:$key";
-		if ( isset( $GLOBALS['_faz_test_cache'][ $k ] ) ) {
+		if ( isset( $GLOBALS['__faz_cache'][ $group ][ $key ] ) ) {
 			return false;
 		}
-		$GLOBALS['_faz_test_cache'][ $k ] = $val;
+		$GLOBALS['__faz_cache'][ $group ][ $key ] = $val;
 		return true;
 	}
 	function wp_cache_incr( $key, $offset = 1, $group = '' ) {
-		$k = "$group:$key";
-		if ( ! isset( $GLOBALS['_faz_test_cache'][ $k ] ) ) {
+		if ( ! isset( $GLOBALS['__faz_cache'][ $group ][ $key ] ) ) {
 			return false;
 		}
-		$GLOBALS['_faz_test_cache'][ $k ] = (int) $GLOBALS['_faz_test_cache'][ $k ] + $offset;
-		return $GLOBALS['_faz_test_cache'][ $k ];
+		$GLOBALS['__faz_cache'][ $group ][ $key ] = (int) $GLOBALS['__faz_cache'][ $group ][ $key ] + $offset;
+		return $GLOBALS['__faz_cache'][ $group ][ $key ];
 	}
 	function wp_salt( $scheme = 'auth' ) {
 		return 'test-salt-' . $scheme;
