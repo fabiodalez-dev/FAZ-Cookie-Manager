@@ -15890,9 +15890,13 @@ class Frontend {
 		// library keeping HTML in an attribute) is not an element. Script and
 		// style bodies are not in the buffer at all when this runs (see the
 		// callers). Match closing divs before the skip alternative so each
-		// provider applies only underneath its own container.
+		// provider applies only underneath its own container. A <noscript>
+		// body is text to a browser that runs scripts, and the content pass
+		// does not stash it (find_inert_spans() walks past it): skipped whole,
+		// so a `</div>` written there does not end the container around it.
 		$result = preg_replace_callback(
-			'#</div(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>|' . self::tag_token_skip( 'div' )
+			'#<noscript(?=[\s/>])' . self::ATTR_WALK . '>.*?</noscript(?=[\s/>])[^>]*+>(*SKIP)(*FAIL)'
+				. '|</div(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>|' . self::tag_token_skip( 'div' )
 				. '<div(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
 			function ( $m ) use ( $src, $blocked_categories, $providers, &$container_providers, &$div_depth ) {
 				if ( ! isset( $m[1] ) ) {

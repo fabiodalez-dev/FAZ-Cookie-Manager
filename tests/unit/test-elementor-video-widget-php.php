@@ -472,6 +472,16 @@ if ( ! function_exists( 'get_transient' ) ) {
 	$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $nested, array( 'functional' ), $wpgmp_rule ) );
 	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: a nested Google map does not change the outer Leaflet provider' );
 	assert_eq( false !== strpos( $out, '<div class="wpgmp_map" id="map-leaflet">' ), true, 'WP Maps: outer Leaflet canvas remains visible' );
+	// A <noscript> body is text to a browser running scripts, and the content
+	// pass does not stash it: a `</div>` written there closes nothing.
+	$noscript = '<div class="wpgmp_map_container wpgmp-map-provider-leaflet"><noscript><p></div></p></noscript>'
+		. '<div class="wpgmp_map" id="map-leaflet"></div></div>';
+	$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $noscript, array( 'functional' ), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 0, 'WP Maps: a </div> inside <noscript> does not close the Leaflet container' );
+	// A real close after the noscript still ends the container.
+	$after = '<div class="wpgmp_map_container wpgmp-map-provider-leaflet"><noscript>x</noscript></div>' . $canvas;
+	$out   = faz_call( $fe, 'process_wpgmp_map_widgets', array( $after, array( 'functional' ), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: the container still closes at its real </div> after a <noscript>' );
 
 	// Two maps, one of them Leaflet: only the Google one is parked.
 	$second = str_replace( array( 'wpgmp-map-1', 'map1', 'data-map-id="1"' ), array( 'wpgmp-map-2', 'map2', 'data-map-id="2"' ), $osm );
