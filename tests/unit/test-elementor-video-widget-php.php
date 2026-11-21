@@ -59,6 +59,12 @@ namespace FazCookie\Frontend\Includes {
 			return '<div data-placeholder="' . $service_id . '" data-cat="' . $category . '"></div>';
 		}
 	}
+
+	// The output buffer records the finished render; nothing to record here.
+	class Embed_Inventory {
+		public static function complete_render() {
+		}
+	}
 }
 
 namespace {
@@ -486,6 +492,51 @@ if ( ! function_exists( 'get_transient' ) ) {
 	$bare = str_replace( 'class="wpgmp_map "', 'class=wpgmp_map', $wpgmp_map );
 	$out  = faz_call( $fe, 'process_wpgmp_map_widgets', array( $bare, array( 'functional' ), $wpgmp_rule ) );
 	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: an unquoted class value is read too' );
+
+	// The map is judged as its API script is judged by filter_script_loader_tag():
+	// a rule written on the handle decides as one written on the URL, in either
+	// direction. Matching only the URL let a handle rule release the API while
+	// the map stayed behind the catalogue category's placeholder.
+	foreach ( array(
+		'handle' => 'wpgmp-google-api',
+		'URL'    => 'maps.google.com',
+	) as $kind => $pattern ) {
+		faz_set_prop( $fe, 'provider_match_meta_cache', null );
+		assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'functional' ), array( $pattern => 'marketing' ) ) ), $wpgmp_map, "WP Maps: a {$kind} rule in an accepted category loads the map, as it loads the API" );
+		faz_set_prop( $fe, 'provider_match_meta_cache', null );
+		$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'marketing' ), array( $pattern => 'marketing' ) ) );
+		assert_eq( faz_category( $out ), 'marketing', "WP Maps: a {$kind} rule in a denied category parks the map under that category" );
+	}
+	faz_set_prop( $fe, 'provider_match_meta_cache', null );
+	$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'marketing' ), array( 'maps.google.com' => 'functional', 'wpgmp-google-api' => 'marketing' ) ) );
+	assert_eq( faz_category( $out ), 'marketing', 'WP Maps: URL allowed, handle denied — the denied match decides, as for the tag' );
+	faz_set_prop( $fe, 'provider_match_meta_cache', null );
+
+	// Both entry points run the detector while script bodies are stashed: a
+	// real map and the same div spelled inside a JavaScript string give one
+	// placeholder, and the script comes back byte for byte.
+	$js_tpl = '<script>window.fazTpl = "<div class=\'wpgmp_map\' id=\'map9\' data-map-id=\'9\'></div>";</script>';
+	$page   = $js_tpl . $wpgmp_map;
+	$entry  = ( new ReflectionClass( 'FazTest_Gated_Frontend' ) )->newInstanceWithoutConstructor();
+	faz_set_prop( $entry, 'template', array( 'html' => '<div></div>' ) );
+	faz_set_prop( $entry, 'settings_option_cache', array( 'script_blocking' => array( 'whitelist_patterns' => array() ) ) );
+	faz_set_prop( $entry, 'blocked_categories_cache', array( 'functional' ) );
+	faz_set_prop( $entry, 'provider_map_cache', $wpgmp_rule );
+	faz_set_prop( $entry, 'service_consent_cache', array() );
+	$GLOBALS['__faz_ctx'] = array();
+	foreach ( array(
+		'content filter' => function () use ( $entry, $page ) {
+			return $entry->filter_content_blocking( $page );
+		},
+		'output buffer'  => function () use ( $entry, $page ) {
+			return faz_call( $entry, 'block_buffered_markup', array( $page ) );
+		},
+	) as $label => $run ) {
+		$out = $run();
+		assert_eq( substr_count( $out, 'data-placeholder="google-maps"' ), 1, "WP Maps ({$label}): one placeholder, for the real map only" );
+		assert_eq( 0 === strpos( $out, $js_tpl ), true, "WP Maps ({$label}): the script holding the same div is left untouched" );
+	}
+
 	// WP Maps' own "Cookies Acceptance" gate is answered by FAZ only where the
 	// content pass parks the map: everywhere else nothing would stop the Maps
 	// API, and WP Maps' own answer has to stand.

@@ -15424,7 +15424,7 @@ class Frontend {
 				// included, so an exemption or rule written on either (as the
 				// Script Blocking screen shows the tag) covers the widget too.
 				$src      = 'id="bricks-google-maps-js" src="https://maps.googleapis.com/maps/api/js?callback=bricksMap"';
-				$category = $this->blocked_google_map_category( $attrs, $src, $blocked_categories, $providers );
+				$category = $this->blocked_google_map_category( $attrs, $src, 'bricks-google-maps', $blocked_categories, $providers );
 				if ( '' === $category ) {
 					return $m[0];
 				}
@@ -15443,21 +15443,43 @@ class Frontend {
 	 *
 	 * Such a map is an empty element a page script fills once the Maps API
 	 * calls back, so it is judged as that API script tag: whitelist entries and
-	 * provider rules written on the URL or on the handle id cover the map, the
+	 * provider rules written on the URL or on the handle cover the map, the
 	 * Google Maps catalogue category applies when no rule matches, and a
 	 * per-service choice for google-maps wins over the category both ways.
 	 *
+	 * Provider rules are read as filter_script_loader_tag() reads them for the
+	 * tag itself — on the script URL and on the handle — with the same
+	 * fail-closed order (a blocked match decides, an allowed one is a
+	 * fallback). Matching only the URL let a rule written on the handle
+	 * (`wpgmp-google-api` → marketing) release the API while the map stayed
+	 * behind its placeholder under the catalogue category, or the reverse.
+	 *
 	 * @param string $attrs              The element's attributes (faz-skip etc.).
 	 * @param string $src                The API script tag the element stands for.
+	 * @param string $handle             That script's registered handle.
 	 * @param array  $blocked_categories Blocked category slugs.
 	 * @param array  $providers          Merged provider category map.
 	 * @return string
 	 */
-	private function blocked_google_map_category( $attrs, $src, $blocked_categories, $providers ) {
+	private function blocked_google_map_category( $attrs, $src, $handle, $blocked_categories, $providers ) {
 		if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src, '' ) ) {
 			return '';
 		}
 		$category = $this->match_script_to_provider( $src, '', $providers, $blocked_categories );
+		if ( ! in_array( $category, $blocked_categories, true ) ) {
+			foreach ( $providers as $pattern => $handle_category ) {
+				if ( '' === (string) $pattern || false === stripos( $handle, (string) $pattern ) ) {
+					continue;
+				}
+				if ( in_array( $handle_category, $blocked_categories, true ) ) {
+					$category = $handle_category;
+					break;
+				}
+				if ( ! $category ) {
+					$category = $handle_category;
+				}
+			}
+		}
 		if ( ! $category ) {
 			$known    = Known_Providers::get_all();
 			$category = $known['google-maps']['category'] ?? 'functional';
@@ -15535,7 +15557,7 @@ class Frontend {
 				if ( ! $is_google || $this->has_attr_token( $attrs, 'data-faz-category' ) ) {
 					return $m[0];
 				}
-				$category = $this->blocked_google_map_category( $attrs, $src, $blocked_categories, $providers );
+				$category = $this->blocked_google_map_category( $attrs, $src, 'wpgmp-google-api', $blocked_categories, $providers );
 				if ( '' === $category ) {
 					return $m[0];
 				}
