@@ -661,6 +661,10 @@ class Frontend {
 		add_filter( 'widget_text', array( $this, 'filter_content_blocking' ), 1000 );
 		add_filter( 'widget_block_content', array( $this, 'filter_content_blocking' ), 1000 );
 		add_filter( 'embed_oembed_html', array( $this, 'filter_oembed_blocking' ), 1000, 2 );
+		// WP Maps' own "Cookies Acceptance" gate. After its built-in CMP checks
+		// (priority 10), which do not know this plugin.
+		add_filter( 'wpgmp_accept_cookies', array( $this, 'wpgmp_consent_handled_by_faz' ), 20 );
+		add_filter( 'wpgmp_is_cookies_accepted', array( $this, 'wpgmp_consent_handled_by_faz' ), 20 );
 
 		// The cookie-scripts map and the per-service detected-cookie-names
 		// transients are invalidated on cookie / category / settings writes by
@@ -5635,6 +5639,12 @@ class Frontend {
 		if ( false !== $old_recursion && '' !== $old_recursion ) {
 			@ini_set( 'pcre.recursion_limit', (string) $old_recursion ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,Squiz.PHP.DiscouragedFunctions.Discouraged -- restoring the original PCRE recursion_limit value (paired with the temporary raise above).
 		}
+
+		// WP Maps reads only opening tags, so it runs while script and style
+		// bodies, comments and <noscript> blocks are still stashed: a
+		// `<div class='wpgmp_map'>` written inside a JavaScript string is text,
+		// and rewriting it with double-quoted keys would end that string.
+		$html = $this->process_wpgmp_map_widgets( $html, $blocked_categories, $providers );
 
 		// Restore <noscript> blocks we stashed before the filter pass.
 		if ( ! empty( $noscript_stash ) ) {
@@ -14686,14 +14696,9 @@ class Frontend {
 		if ( faz_is_machine_readable_request() || wp_doing_cron() ) {
 			return $content;
 		}
-		if ( ! $this->template ) {
-			return $content;
-		}
-		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
-			return $content;
-		}
-		// AMP pages disallow custom scripts — content blocking is unnecessary.
-		if ( apply_filters( 'faz_is_amp_request', false ) ) {
+		// The rest of the stand-down, shared with every caller that promises
+		// something on this pass's behalf (wpgmp_consent_handled_by_faz()).
+		if ( ! $this->page_content_is_gated() ) {
 			return $content;
 		}
 
@@ -14780,6 +14785,10 @@ class Frontend {
 			);
 		}
 		$this->log_markup_pass_failure( $failed_passes, 'content filter' );
+
+		// Before the inert spans come back, as in the full-page buffer: a map
+		// div spelled inside a script body is not a map.
+		$content = $this->process_wpgmp_map_widgets( $content, $blocked_categories, $providers );
 
 		if ( ! empty( $inert_stash ) ) {
 			$content = strtr( $content, $inert_stash );
@@ -15414,21 +15423,9 @@ class Frontend {
 				// it is judged as that tag: its handle id and its callback query
 				// included, so an exemption or rule written on either (as the
 				// Script Blocking screen shows the tag) covers the widget too.
-				$src = 'id="bricks-google-maps-js" src="https://maps.googleapis.com/maps/api/js?callback=bricksMap"';
-				if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src, '' ) ) {
-					return $m[0];
-				}
-				$category = $this->match_script_to_provider( $src, '', $providers, $blocked_categories );
-				if ( ! $category ) {
-					$known = Known_Providers::get_all();
-					$category = $known['google-maps']['category'] ?? 'functional';
-				}
-				$blocked = in_array( $category, $blocked_categories, true );
-				$consent = $this->get_service_consent();
-				if ( isset( $consent['google-maps'] ) ) {
-					$blocked = 'yes' !== $consent['google-maps'];
-				}
-				if ( ! $blocked ) {
+				$src      = 'id="bricks-google-maps-js" src="https://maps.googleapis.com/maps/api/js?callback=bricksMap"';
+				$category = $this->blocked_google_map_category( $attrs, $src, 'bricks-google-maps', $blocked_categories, $providers );
+				if ( '' === $category ) {
 					return $m[0];
 				}
 				$attrs = preg_replace( '/\sdata-bricks-map-options\s*=/i', ' data-faz-bricks-map-options=', $attrs, 1 );
@@ -15438,6 +15435,213 @@ class Frontend {
 			$content
 		);
 		return null !== $result ? $result : $content;
+	}
+
+	/**
+	 * The category a JavaScript-drawn Google map is parked under on this
+	 * render, or '' when it may load.
+	 *
+	 * Such a map is an empty element a page script fills once the Maps API
+	 * calls back, so it is judged as that API script tag: whitelist entries and
+	 * provider rules written on the URL or on the handle cover the map, the
+	 * Google Maps catalogue category applies when no rule matches, and a
+	 * per-service choice for google-maps wins over the category both ways.
+	 *
+	 * Provider rules are read as filter_script_loader_tag() reads them for the
+	 * tag itself — in map order, each on the script URL and on the handle —
+	 * with the same fail-closed rule (the first blocked match decides, the
+	 * first allowed one is a fallback), so the map and its API tag always land
+	 * in the same category. Matching only the URL let a rule written on the handle
+	 * (`wpgmp-google-api` → marketing) release the API while the map stayed
+	 * behind its placeholder under the catalogue category, or the reverse.
+	 *
+	 * @param string $attrs              The element's attributes (faz-skip etc.).
+	 * @param string $src                The API script tag the element stands for.
+	 * @param string $handle             That script's registered handle.
+	 * @param array  $blocked_categories Blocked category slugs.
+	 * @param array  $providers          Merged provider category map.
+	 * @return string
+	 */
+	private function blocked_google_map_category( $attrs, $src, $handle, $blocked_categories, $providers ) {
+		if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src, '' ) ) {
+			return '';
+		}
+		// One pass over the map in its order, each rule tried on the handle and
+		// on the URL, exactly as filter_script_loader_tag() walks it for the
+		// tag. Matching the URL first and the handle second picked a different
+		// rule whenever both matched: with `wpgmp-google-api` → marketing ahead
+		// of `maps.google.com` → functional and both blocked, the tag was
+		// parked under marketing and the map under functional, so accepting
+		// one of the two released only half of the map.
+		$url      = preg_match( '/\ssrc\s*=\s*"([^"]*)"/i', ' ' . $src, $src_match ) ? $src_match[1] : '';
+		$category = false;
+		foreach ( $providers as $pattern => $rule_category ) {
+			$pattern = (string) $pattern;
+			if ( '' === $pattern ) {
+				continue;
+			}
+			if ( false === stripos( $handle, $pattern ) && false === stripos( $url, $pattern ) ) {
+				continue;
+			}
+			if ( in_array( $rule_category, $blocked_categories, true ) ) {
+				$category = $rule_category;
+				break;
+			}
+			if ( false === $category ) {
+				$category = $rule_category;
+			}
+		}
+		if ( ! $category ) {
+			$known    = Known_Providers::get_all();
+			$category = $known['google-maps']['category'] ?? 'functional';
+		}
+		$blocked = in_array( $category, $blocked_categories, true );
+		$consent = $this->get_service_consent();
+		if ( isset( $consent['google-maps'] ) ) {
+			$blocked = 'yes' !== $consent['google-maps'];
+		}
+		return $blocked ? (string) $category : '';
+	}
+
+	/**
+	 * Give a WP Maps (wp-google-map-plugin) Google map the same consent UI as
+	 * an iframe.
+	 *
+	 * WP Maps prints an empty `<div class="wpgmp_map" id="mapN">` and draws it
+	 * from JavaScript when the Maps API calls back `wpgmpInitMap`. The API
+	 * script is parked like any Google Maps tag, so before consent the visitor
+	 * saw an empty box with no way to accept — and the only way to show a
+	 * notice was WP Maps' own server-side "Cookies Acceptance" gate plus a code
+	 * snippet. Here the map div is hidden behind the Google Maps placeholder,
+	 * as the Bricks map is, and script.js reveals it when the visitor accepts,
+	 * before the released API calls WP Maps back. The container is left alone:
+	 * listings and filters it may hold do not depend on Google.
+	 *
+	 * Only Google-provider maps: WP Maps 5 also draws OpenStreetMap through
+	 * Leaflet, marked by a `wpgmp-map-provider-*` class on the container;
+	 * before that class existed every map was a Google map.
+	 *
+	 * @param string $content            HTML content.
+	 * @param array  $blocked_categories Blocked category slugs.
+	 * @param array  $providers          Merged provider category map.
+	 * @return string
+	 */
+	private function process_wpgmp_map_widgets( $content, $blocked_categories, $providers ) {
+		if ( false === stripos( $content, 'wpgmp_map' ) ) {
+			return $content;
+		}
+		// The API tag WP Maps 5 enqueues (handle wpgmp-google-api).
+		$src = 'id="wpgmp-google-api-js" src="https://maps.google.com/maps/api/js?callback=wpgmpInitMap"';
+		$container_providers = array();
+		$div_depth = 0;
+		// Led by tag_token_skip(), as the img and iframe passes are: a
+		// `<div class="wpgmp_map">` quoted inside another tag's value (a tooltip
+		// library keeping HTML in an attribute) is not an element. Script and
+		// style bodies are not in the buffer at all when this runs (see the
+		// callers). Match closing divs before the skip alternative so each
+		// provider applies only underneath its own container.
+		$result = preg_replace_callback(
+			'#</div(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>|' . self::tag_token_skip( 'div' )
+				. '<div(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
+			function ( $m ) use ( $src, $blocked_categories, $providers, &$container_providers, &$div_depth ) {
+				if ( ! isset( $m[1] ) ) {
+					unset( $container_providers[ $div_depth ] );
+					$div_depth = max( 0, $div_depth - 1 );
+					return $m[0];
+				}
+				++$div_depth;
+				$attrs = $m[1];
+				if ( false === stripos( $attrs, 'wpgmp_map' ) ) {
+					return $m[0];
+				}
+				// The tag's own class token, read as the tokenizer reads it: a
+				// regex over the whole string found `class="wpgmp_map"` inside
+				// another attribute's value (`data-tip='<div class="wpgmp_map">'`)
+				// and hid an ordinary div behind a map placeholder.
+				$class = $this->extract_tag_attr( $attrs, 'class' );
+				if ( '' === $class ) {
+					return $m[0];
+				}
+				$classes = preg_split( '/\s+/', strtolower( trim( $class ) ) );
+				if ( in_array( 'wpgmp_map_container', $classes, true ) ) {
+					$provider = preg_grep( '/^wpgmp-map-provider-/', $classes );
+					$container_providers[ $div_depth ] = empty( $provider ) || in_array( 'wpgmp-map-provider-google', $provider, true );
+					return $m[0];
+				}
+				if ( ! in_array( 'wpgmp_map', $classes, true ) ) {
+					return $m[0];
+				}
+				$is_google = empty( $container_providers ) || end( $container_providers );
+				if ( ! $is_google || $this->has_attr_token( $attrs, 'data-faz-category' ) ) {
+					return $m[0];
+				}
+				$category = $this->blocked_google_map_category( $attrs, $src, 'wpgmp-google-api', $blocked_categories, $providers );
+				if ( '' === $category ) {
+					return $m[0];
+				}
+				// The class token is written here rather than through
+				// faz_add_hidden_class(), whose regex would extend the first
+				// `class="` in the string, quoted values included.
+				$widget = '<div class="' . esc_attr( $class . ' faz-hidden' ) . '"' . $this->strip_attr_tokens( $attrs, 'class' )
+					. ' data-faz-category="' . esc_attr( $category ) . '" data-faz-service="google-maps">';
+				return Placeholder_Builder::build_social( 'google-maps', Placeholder_Builder::get_service_name( 'google-maps' ), $category ) . $widget;
+			},
+			$content
+		);
+		return null !== $result ? $result : $content;
+	}
+
+	/**
+	 * Answer WP Maps' "Cookies Acceptance" gate (filters wpgmp_accept_cookies
+	 * and wpgmp_is_cookies_accepted).
+	 *
+	 * WP Maps decides on the server, while it builds the page, whether to print
+	 * the map or a "no map" notice, and it recognises only a fixed list of
+	 * consent plugins. With that option on and this plugin active, the notice
+	 * was printed for every visitor and never went away: nothing here told WP
+	 * Maps that consent had been given. A server-side answer would not be right
+	 * either — the page is cached and shared, and the map would appear only on
+	 * the next page load. Where this plugin gates the page, it already parks
+	 * the Maps API and shows its own placeholder until the visitor accepts (see
+	 * process_wpgmp_map_widgets()), so WP Maps is told to print the map.
+	 * Elsewhere — wherever the content pass stands down (no banner, the banner
+	 * disabled or excluded on this page, script blocking excluded on this page,
+	 * AMP, a feed) — nothing parks the map, and WP Maps' own answer stands.
+	 *
+	 * @param bool $accepted WP Maps' answer so far.
+	 * @return bool
+	 */
+	public function wpgmp_consent_handled_by_faz( $accepted ) {
+		return $this->page_content_is_gated() ? true : (bool) $accepted;
+	}
+
+	/**
+	 * Whether the content pass (filter_content_blocking() and the embed
+	 * detectors it runs) parks third-party markup on this request.
+	 *
+	 * One answer for every caller that has to agree with it, so a promise made
+	 * on the content pass's behalf — wpgmp_consent_handled_by_faz() telling WP
+	 * Maps the map is handled — cannot outlive a stand-down added here.
+	 *
+	 * @return bool
+	 */
+	protected function page_content_is_gated() {
+		if ( is_admin() ) {
+			return false;
+		}
+		// Never a machine-readable representation (feeds, REST, cron mail):
+		// see filter_content_blocking().
+		if ( faz_is_machine_readable_request() || wp_doing_cron() ) {
+			return false;
+		}
+		if ( ! $this->template ) {
+			return false;
+		}
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
+			return false;
+		}
+		// AMP pages disallow custom scripts — content blocking is unnecessary.
+		return ! apply_filters( 'faz_is_amp_request', false );
 	}
 
 	/**

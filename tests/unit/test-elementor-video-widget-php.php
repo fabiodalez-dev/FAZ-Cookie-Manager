@@ -59,6 +59,12 @@ namespace FazCookie\Frontend\Includes {
 			return '<div data-placeholder="' . $service_id . '" data-cat="' . $category . '"></div>';
 		}
 	}
+
+	// The output buffer records the finished render; nothing to record here.
+	class Embed_Inventory {
+		public static function complete_render() {
+		}
+	}
 }
 
 namespace {
@@ -122,7 +128,28 @@ if ( ! function_exists( 'get_transient' ) ) {
 	}
 	if ( ! function_exists( 'apply_filters' ) ) {
 		function apply_filters( $tag, $value ) {
-			return $value;
+			return array_key_exists( $tag, $GLOBALS['__faz_filters'] ?? array() ) ? $GLOBALS['__faz_filters'][ $tag ] : $value;
+		}
+	}
+	// The request context page_content_is_gated() reads, one switch each.
+	if ( ! function_exists( 'is_admin' ) ) {
+		function is_admin() {
+			return ! empty( $GLOBALS['__faz_ctx']['admin'] );
+		}
+	}
+	if ( ! function_exists( 'wp_doing_cron' ) ) {
+		function wp_doing_cron() {
+			return ! empty( $GLOBALS['__faz_ctx']['cron'] );
+		}
+	}
+	if ( ! function_exists( 'faz_is_machine_readable_request' ) ) {
+		function faz_is_machine_readable_request() {
+			return ! empty( $GLOBALS['__faz_ctx']['feed'] );
+		}
+	}
+	if ( ! function_exists( 'faz_disable_banner' ) ) {
+		function faz_disable_banner() {
+			return ! empty( $GLOBALS['__faz_ctx']['disable_banner'] );
 		}
 	}
 	if ( ! function_exists( 'faz_get_valid_consent_cookie' ) ) {
@@ -151,6 +178,17 @@ if ( ! function_exists( 'get_transient' ) ) {
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 
 	use FazCookie\Frontend\Frontend;
+
+	// The two per-page exclusions read settings this harness does not build;
+	// each is answered from the same switchboard as the request context.
+	class FazTest_Gated_Frontend extends Frontend {
+		protected function is_banner_disabled_by_settings() {
+			return ! empty( $GLOBALS['__faz_ctx']['banner_excluded'] );
+		}
+		protected function is_blocking_disabled_for_page() {
+			return ! empty( $GLOBALS['__faz_ctx']['blocking_excluded'] );
+		}
+	}
 
 	// ---------- assert helpers ----------
 
@@ -392,6 +430,160 @@ if ( ! function_exists( 'get_transient' ) ) {
 	assert_eq( count( array_intersect( array( '_fazConfig', '_fazStaticConfig', '_fazGcm', '_fazConsentLog', 'other' ), $rocket ) ), 5, 'Rocket: FAZ inline markers are excluded and existing entries kept' );
 	$leaflet = str_replace( 'data-bricks-map-options', 'data-bricks-leaflet-options', $map );
 	assert_eq( faz_call( $fe, 'process_bricks_map_widgets', array( $leaflet, array( 'functional' ), array() ) ), $leaflet, 'Bricks: Leaflet is not treated as Google Maps' );
+
+	// WP Maps (wp-google-map-plugin) draws its map from JavaScript into an
+	// empty div once the Maps API calls back wpgmpInitMap — the same shape as
+	// Bricks, reported on the wp.org forum ("WP Maps support"). The markup is
+	// the one WP Maps 5.0.3 prints.
+	$wpgmp_map  = '<div class="wpgmp_map_container wpgmp-map-provider-google wpgmp-map-1" rel="map1" data-plugin-version="5.0.3"><div class="wpgmp_map_parent">'
+		. '<div class="wpgmp_map " style="width:100%;height:450px" id="map1" data-map-id="1"></div></div></div>';
+	$wpgmp_rule = array( 'maps.google.com' => 'functional' );
+	$fe  = faz_arrange( '', false );
+	$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'functional' ), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: a denied map gets one placeholder' );
+	assert_eq( (bool) preg_match( '#<div data-placeholder="google-maps" data-cat="functional"></div><div class="wpgmp_map#', $out ), true, 'WP Maps: the placeholder is the Google Maps one' );
+	assert_eq( (bool) preg_match( '#</div>\s*<div class="wpgmp_map\s+faz-hidden"[^>]*id="map1"[^>]*data-faz-category="functional" data-faz-service="google-maps">#', $out ), true, 'WP Maps: the map div follows the placeholder, hidden and labelled for release' );
+	assert_eq( 0 === strpos( $out, '<div class="wpgmp_map_container wpgmp-map-provider-google wpgmp-map-1" rel="map1"' ), true, 'WP Maps: the container (listings, filters) is left visible' );
+	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $out, array( 'functional' ), $wpgmp_rule ) ), $out, 'WP Maps: the second buffer pass is idempotent' );
+	$fe = faz_arrange( '', false );
+	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array(), $wpgmp_rule ) ), $wpgmp_map, 'WP Maps: granted category stays intact' );
+	$fe = faz_arrange( '', false );
+	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'functional' ), array( 'maps.google.com' => 'necessary' ) ) ), $wpgmp_map, 'WP Maps: explicit Necessary rule wins' );
+	$fe = faz_arrange( '', false, array( 'maps.google.com' ) );
+	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'functional' ), $wpgmp_rule ) ), $wpgmp_map, 'WP Maps: Maps whitelist is respected' );
+	$fe = faz_arrange( '', false, array( 'wpgmp-google-api' ) );
+	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'functional' ), $wpgmp_rule ) ), $wpgmp_map, 'WP Maps: an exemption on the API script handle id covers the map' );
+	$fe   = faz_arrange( '', false );
+	$skip = str_replace( 'class="wpgmp_map "', 'class="wpgmp_map faz-skip"', $wpgmp_map );
+	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $skip, array( 'functional' ), $wpgmp_rule ) ), $skip, 'WP Maps: faz-skip is respected' );
+	$osm = str_replace( 'wpgmp-map-provider-google', 'wpgmp-map-provider-leaflet', $wpgmp_map );
+	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $osm, array( 'functional' ), $wpgmp_rule ) ), $osm, 'WP Maps: an OpenStreetMap/Leaflet map is not treated as Google Maps' );
+	// Before 5.x the container carried no provider class, and every map was Google.
+	$legacy = str_replace( ' wpgmp-map-provider-google', '', $wpgmp_map );
+	$out    = faz_call( $fe, 'process_wpgmp_map_widgets', array( $legacy, array( 'functional' ), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: a container with no provider class is a Google map' );
+	// A provider belongs to the containing div, including after a nested map.
+	$canvas = '<div class="wpgmp_map" id="map-standalone"></div>';
+	$empty_leaflet = '<div class="wpgmp_map_container wpgmp-map-provider-leaflet"><div>Filters</div></div>';
+	$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $empty_leaflet . $canvas, array( 'functional' ), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: a closed Leaflet container does not change an adjacent legacy map' );
+	$nested = '<div class="wpgmp_map_container wpgmp-map-provider-leaflet">' . $wpgmp_map
+		. '<span title="</div>">Filters</span><div class="wpgmp_map" id="map-leaflet"></div></div>';
+	$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $nested, array( 'functional' ), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: a nested Google map does not change the outer Leaflet provider' );
+	assert_eq( false !== strpos( $out, '<div class="wpgmp_map" id="map-leaflet">' ), true, 'WP Maps: outer Leaflet canvas remains visible' );
+
+	// Two maps, one of them Leaflet: only the Google one is parked.
+	$second = str_replace( array( 'wpgmp-map-1', 'map1', 'data-map-id="1"' ), array( 'wpgmp-map-2', 'map2', 'data-map-id="2"' ), $osm );
+	$out    = faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map . $second, array( 'functional' ), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: each map is judged by its own container' );
+	assert_eq( false !== strpos( $out, '<div class="wpgmp_map " style="width:100%;height:450px" id="map2" data-map-id="2"></div>' ), true, 'WP Maps: the Leaflet map next to it is untouched' );
+	// Per-service consent wins over the category, both ways.
+	$fe  = faz_arrange( 'consentid:x,consent:yes,action:yes,functional:yes,svc.google-maps:no', true );
+	$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array(), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: svc.google-maps:no keeps the map blocked although Functional is accepted' );
+	$fe = faz_arrange( 'consentid:x,consent:yes,action:yes,functional:no,svc.google-maps:yes', true );
+	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'functional' ), $wpgmp_rule ) ), $wpgmp_map, 'WP Maps: svc.google-maps:yes loads the map although Functional is denied' );
+	// A map div quoted inside another tag's value (a tooltip library keeping
+	// HTML in an attribute) is text, not an element: rewriting it with
+	// double-quoted keys would close the value early.
+	$fe     = faz_arrange( '', false );
+	$quoted = '<span data-tip="<div class=\'wpgmp_map\' id=\'map7\'></div>">tip</span>';
+	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $quoted, array( 'functional' ), $wpgmp_rule ) ), $quoted, 'WP Maps: a map div quoted inside an attribute value is left alone' );
+	// The class is read from the tag's own token, never from inside another
+	// attribute's value, and the hidden class is written there too.
+	$fe   = faz_arrange( '', false );
+	$tip  = '<div data-tip=\'<div class="wpgmp_map"></div>\' class="description">Contatti</div>';
+	assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $tip, array( 'functional' ), $wpgmp_rule ) ), $tip, 'WP Maps: class="wpgmp_map" inside another attribute does not make a div a map' );
+	$real = str_replace( '<div class="wpgmp_map " ', '<div data-tip=\'<b class="x">\' class="wpgmp_map " ', $wpgmp_map );
+	$out  = faz_call( $fe, 'process_wpgmp_map_widgets', array( $real, array( 'functional' ), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: a map with a class-shaped string in another attribute is still parked' );
+	assert_eq( false !== strpos( $out, 'data-tip=\'<b class="x">\'' ), true, 'WP Maps: …and that attribute value is left as written' );
+	assert_eq( (bool) preg_match( '#<div class="wpgmp_map\s+faz-hidden" data-tip=#', $out ), true, 'WP Maps: …the hidden class goes on the tag\'s own class token' );
+	$bare = str_replace( 'class="wpgmp_map "', 'class=wpgmp_map', $wpgmp_map );
+	$out  = faz_call( $fe, 'process_wpgmp_map_widgets', array( $bare, array( 'functional' ), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: an unquoted class value is read too' );
+
+	// The map is judged as its API script is judged by filter_script_loader_tag():
+	// a rule written on the handle decides as one written on the URL, in either
+	// direction. Matching only the URL let a handle rule release the API while
+	// the map stayed behind the catalogue category's placeholder.
+	foreach ( array(
+		'handle' => 'wpgmp-google-api',
+		'URL'    => 'maps.google.com',
+	) as $kind => $pattern ) {
+		faz_set_prop( $fe, 'provider_match_meta_cache', null );
+		assert_eq( faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'functional' ), array( $pattern => 'marketing' ) ) ), $wpgmp_map, "WP Maps: a {$kind} rule in an accepted category loads the map, as it loads the API" );
+		faz_set_prop( $fe, 'provider_match_meta_cache', null );
+		$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'marketing' ), array( $pattern => 'marketing' ) ) );
+		assert_eq( faz_category( $out ), 'marketing', "WP Maps: a {$kind} rule in a denied category parks the map under that category" );
+	}
+	faz_set_prop( $fe, 'provider_match_meta_cache', null );
+	$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'marketing' ), array( 'maps.google.com' => 'functional', 'wpgmp-google-api' => 'marketing' ) ) );
+	assert_eq( faz_category( $out ), 'marketing', 'WP Maps: URL allowed, handle denied — the denied match decides, as for the tag' );
+	// Both rules denied: the first in map order decides, whichever of handle
+	// or URL it is written on — the tag filter walks the map once, so a
+	// URL-first pass parked the map under a different category than its tag.
+	foreach ( array(
+		'marketing'  => array( 'wpgmp-google-api' => 'marketing', 'maps.google.com' => 'functional' ),
+		'functional' => array( 'maps.google.com' => 'functional', 'wpgmp-google-api' => 'marketing' ),
+	) as $expected => $rules ) {
+		faz_set_prop( $fe, 'provider_match_meta_cache', null );
+		$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'marketing', 'functional' ), $rules ) );
+		assert_eq( faz_category( $out ), $expected, "WP Maps: both rules denied — the first in map order ({$expected}) decides, as for the tag" );
+	}
+	faz_set_prop( $fe, 'provider_match_meta_cache', null );
+
+	// Both entry points run the detector while script bodies are stashed: a
+	// real map and the same div spelled inside a JavaScript string give one
+	// placeholder, and the script comes back byte for byte.
+	$js_tpl = '<script>window.fazTpl = "<div class=\'wpgmp_map\' id=\'map9\' data-map-id=\'9\'></div>";</script>';
+	$page   = $js_tpl . $wpgmp_map;
+	$entry  = ( new ReflectionClass( 'FazTest_Gated_Frontend' ) )->newInstanceWithoutConstructor();
+	faz_set_prop( $entry, 'template', array( 'html' => '<div></div>' ) );
+	faz_set_prop( $entry, 'settings_option_cache', array( 'script_blocking' => array( 'whitelist_patterns' => array() ) ) );
+	faz_set_prop( $entry, 'blocked_categories_cache', array( 'functional' ) );
+	faz_set_prop( $entry, 'provider_map_cache', $wpgmp_rule );
+	faz_set_prop( $entry, 'service_consent_cache', array() );
+	$GLOBALS['__faz_ctx'] = array();
+	foreach ( array(
+		'content filter' => function () use ( $entry, $page ) {
+			return $entry->filter_content_blocking( $page );
+		},
+		'output buffer'  => function () use ( $entry, $page ) {
+			return faz_call( $entry, 'block_buffered_markup', array( $page ) );
+		},
+	) as $label => $run ) {
+		$out = $run();
+		assert_eq( substr_count( $out, 'data-placeholder="google-maps"' ), 1, "WP Maps ({$label}): one placeholder, for the real map only" );
+		assert_eq( 0 === strpos( $out, $js_tpl ), true, "WP Maps ({$label}): the script holding the same div is left untouched" );
+	}
+
+	// WP Maps' own "Cookies Acceptance" gate is answered by FAZ only where the
+	// content pass parks the map: everywhere else nothing would stop the Maps
+	// API, and WP Maps' own answer has to stand.
+	$gate = ( new ReflectionClass( 'FazTest_Gated_Frontend' ) )->newInstanceWithoutConstructor();
+	faz_set_prop( $gate, 'template', array( 'html' => '<div></div>' ) );
+	$GLOBALS['__faz_ctx'] = array();
+	assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( false ) ), true, 'WP Maps gate: answered true where FAZ gates the page' );
+	foreach ( array(
+		'banner_excluded'   => 'the banner is excluded on this page',
+		'blocking_excluded' => 'script blocking is excluded on this page',
+		'disable_banner'    => 'faz_disable_banner() is true',
+		'admin'             => 'an admin screen',
+		'feed'              => 'a feed or other machine-readable request',
+		'cron'              => 'a cron run',
+	) as $switch => $label ) {
+		$GLOBALS['__faz_ctx'] = array( $switch => true );
+		assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( false ) ), false, "WP Maps gate: left alone where {$label}" );
+		assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( true ) ), true, "WP Maps gate: …WP Maps' own yes stands there too ({$switch})" );
+	}
+	$GLOBALS['__faz_ctx']     = array();
+	$GLOBALS['__faz_filters'] = array( 'faz_is_amp_request' => true );
+	assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( false ) ), false, 'WP Maps gate: left alone on an AMP page' );
+	$GLOBALS['__faz_filters'] = array();
+	faz_set_prop( $gate, 'template', null );
+	assert_eq( faz_call( $gate, 'wpgmp_consent_handled_by_faz', array( false ) ), false, 'WP Maps gate: left alone where FAZ shows no banner' );
 
 	echo "\n";
 	echo "  Passed: {$tests_passed}\n";
