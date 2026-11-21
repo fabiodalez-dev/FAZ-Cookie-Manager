@@ -462,6 +462,17 @@ if ( ! function_exists( 'get_transient' ) ) {
 	$legacy = str_replace( ' wpgmp-map-provider-google', '', $wpgmp_map );
 	$out    = faz_call( $fe, 'process_wpgmp_map_widgets', array( $legacy, array( 'functional' ), $wpgmp_rule ) );
 	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: a container with no provider class is a Google map' );
+	// A provider belongs to the containing div, including after a nested map.
+	$canvas = '<div class="wpgmp_map" id="map-standalone"></div>';
+	$empty_leaflet = '<div class="wpgmp_map_container wpgmp-map-provider-leaflet"><div>Filters</div></div>';
+	$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $empty_leaflet . $canvas, array( 'functional' ), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: a closed Leaflet container does not change an adjacent legacy map' );
+	$nested = '<div class="wpgmp_map_container wpgmp-map-provider-leaflet">' . $wpgmp_map
+		. '<span title="</div>">Filters</span><div class="wpgmp_map" id="map-leaflet"></div></div>';
+	$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $nested, array( 'functional' ), $wpgmp_rule ) );
+	assert_eq( substr_count( $out, 'data-placeholder=' ), 1, 'WP Maps: a nested Google map does not change the outer Leaflet provider' );
+	assert_eq( false !== strpos( $out, '<div class="wpgmp_map" id="map-leaflet">' ), true, 'WP Maps: outer Leaflet canvas remains visible' );
+
 	// Two maps, one of them Leaflet: only the Google one is parked.
 	$second = str_replace( array( 'wpgmp-map-1', 'map1', 'data-map-id="1"' ), array( 'wpgmp-map-2', 'map2', 'data-map-id="2"' ), $osm );
 	$out    = faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map . $second, array( 'functional' ), $wpgmp_rule ) );
