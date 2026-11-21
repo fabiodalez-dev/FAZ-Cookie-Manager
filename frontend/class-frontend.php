@@ -20,6 +20,7 @@ use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
 use FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger;
 use FazCookie\Admin\Modules\Pageviews\Api\Api as Pageviews_Api;
 use FazCookie\Frontend\Modules\Banner_Rest\Banner_Rest;
+use FazCookie\Frontend\Modules\Park_Proofs\Park_Proofs;
 use FazCookie\Includes\Geolocation;
 use FazCookie\Includes\Ab_Test;
 use FazCookie\Includes\Gvl;
@@ -30,6 +31,7 @@ use FazCookie\Includes\Cookie_Policy_Shortcode;
 use FazCookie\Includes\Do_Not_Sell_Shortcode;
 use FazCookie\Includes\Cookie_Settings_Shortcode;
 use FazCookie\Frontend\Includes\Placeholder_Builder;
+use FazCookie\Frontend\Includes\Park_Proof;
 use FazCookie\Frontend\Includes\Embed_Inventory;
 use FazCookie\Frontend\Includes\Geo_Runtime;
 /**
@@ -43,6 +45,32 @@ use FazCookie\Frontend\Includes\Geo_Runtime;
  * @author     Fabio D'Alessandro
  */
 class Frontend {
+
+	/**
+	 * Upgrade the plugin's own http:// asset URLs in banner markup for this
+	 * request when the page is served over HTTPS.
+	 *
+	 * The shared template cache keeps only a server-verified scheme (see
+	 * Template::get_assets_path()), so behind a TLS-terminating proxy whose
+	 * siteurl is http:// it holds http:// icon URLs. Every route that hands
+	 * that cached markup to a browser must upgrade it per request, or the
+	 * banner and revisit icons are mixed content on the https page: the inline
+	 * render does it in banner_html(), the banner REST payload (language swap,
+	 * geo bootstrap) through here. Per request only, never written back.
+	 *
+	 * @param string $html Banner markup.
+	 * @return string
+	 */
+	public static function https_plugin_urls_for_request( $html ) {
+		if ( ! is_string( $html ) || '' === $html || ! defined( 'FAZ_PLUGIN_URL' ) || ! function_exists( 'faz_request_is_https' ) || ! faz_request_is_https() ) {
+			return $html;
+		}
+		$http_url = str_replace( 'https://', 'http://', FAZ_PLUGIN_URL );
+		if ( false === strpos( $html, $http_url ) ) {
+			return $html;
+		}
+		return str_replace( $http_url, set_url_scheme( FAZ_PLUGIN_URL, 'https' ), $html );
+	}
 
 	/**
 	 * Instagram Feed's settings page slug, where its GDPR option lives.
@@ -382,6 +410,7 @@ class Frontend {
 		$this->gcm_settings = new Gcm_Settings();
 		new Consent_Logger();
 		new Banner_Rest();
+		new Park_Proofs();
 		new Cookie_Table_Shortcode();
 		new Cookie_Policy_Shortcode();
 		new Do_Not_Sell_Shortcode();
@@ -661,6 +690,10 @@ class Frontend {
 		add_filter( 'widget_text', array( $this, 'filter_content_blocking' ), 1000 );
 		add_filter( 'widget_block_content', array( $this, 'filter_content_blocking' ), 1000 );
 		add_filter( 'embed_oembed_html', array( $this, 'filter_oembed_blocking' ), 1000, 2 );
+		// WP Maps' own "Cookies Acceptance" gate. After its built-in CMP checks
+		// (priority 10), which do not know this plugin.
+		add_filter( 'wpgmp_accept_cookies', array( $this, 'wpgmp_consent_handled_by_faz' ), 20 );
+		add_filter( 'wpgmp_is_cookies_accepted', array( $this, 'wpgmp_consent_handled_by_faz' ), 20 );
 
 		// The cookie-scripts map and the per-service detected-cookie-names
 		// transients are invalidated on cookie / category / settings writes by
@@ -1220,7 +1253,10 @@ class Frontend {
 						// (?p=, ?lang=) the inventory keys on. It varies by page,
 						// never by visitor, so a cached copy stays correct.
 						'cookieNames'    => function_exists( 'faz_consent_cookie_names' ) ? faz_consent_cookie_names() : array(),
-						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::current_url() : '',
+						// Only for a request on a host the site is served on (see
+						// Embed_Inventory::log_page_url()): Host is not a cache
+						// key or a row value the visitor should get to choose.
+						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::log_page_url() : '',
 						// Where the beacon fetches a current token when the one
 						// above is refused as stale — a page an edge cache kept
 						// past the token window. See
@@ -3230,7 +3266,7 @@ class Frontend {
 			$http_url = str_replace( 'https://', 'http://', FAZ_PLUGIN_URL );
 			if ( strpos( $html, $http_url ) !== false ) {
 				$https_url = set_url_scheme( FAZ_PLUGIN_URL, 'https' );
-				$html      = str_replace( $http_url, $https_url, $html );
+				$html      = self::https_plugin_urls_for_request( $html );
 
 				// Auto-repair the cached template so subsequent requests
 				// skip this replacement entirely — but ONLY on a server-verified
@@ -3262,7 +3298,7 @@ class Frontend {
 							$repaired = true;
 						}
 					}
-					if ( $repaired ) {
+					if ( $repaired && self::template_cache_write_is_current() ) {
 						// autoload=false — keep the multi-KB template blob out of alloptions.
 						update_option( $cache_key, $stored, false );
 					}
@@ -3297,6 +3333,25 @@ class Frontend {
 		echo '<template id="fazBannerTemplate">';
 		echo wp_kses( $html, faz_allowed_html() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_kses() is the escape.
 		echo '</template>';
+	}
+
+	/**
+	 * Whether a repair of the stored banner template may be written back.
+	 *
+	 * Both repairs below rewrite the whole option from the copy this request
+	 * read. If an admin save cleared the cache since, that copy is the state
+	 * before the save, and writing it back would bring the cleared slots back.
+	 * They would be ignored (each slot carries the generation it was built
+	 * under), but the write would still overwrite the slots of the new
+	 * generation built meanwhile. The per-request rewrite is unaffected.
+	 *
+	 * @return bool
+	 */
+	private static function template_cache_write_is_current() {
+		if ( ! function_exists( 'faz_banner_template_generation_is_current' ) ) {
+			return true;
+		}
+		return faz_banner_template_generation_is_current( faz_banner_template_generation() );
 	}
 
 	/**
@@ -3382,7 +3437,7 @@ class Frontend {
 			$server_verified_https = is_ssl()
 				|| 0 === stripos( (string) get_option( 'siteurl' ), 'https://' );
 			$forged_scheme_only = ( 'https' === $current['scheme'] ) && ! $server_verified_https;
-			if ( $repaired && ! $forged_scheme_only ) {
+			if ( $repaired && ! $forged_scheme_only && self::template_cache_write_is_current() ) {
 				// autoload=false — keep the multi-KB template blob out of alloptions.
 				update_option( $cache_key, $stored, false );
 			}
@@ -4224,6 +4279,9 @@ class Frontend {
 			'_languageMap'        => function_exists( 'faz_get_lang_map' ) ? faz_get_lang_map() : array(),
 			'_browserDetect'      => function_exists( 'faz_browser_detect_enabled' ) ? faz_browser_detect_enabled() : false,
 			'_bannerEndpoint'     => esc_url_raw( rest_url( 'faz/v1/banner/' ) ),
+			// Vouches for a signed park that arrived under another response's
+			// key (see Park_Proof and _fazQueueParkVerify()).
+			'_parkProofEndpoint'  => esc_url_raw( rest_url( 'faz/v1/park-proofs' ) ),
 			// Consent revision: when the admin bumps this, returning visitors
 			// with a lower revision in their cookie are treated as having no
 			// consent, and the banner is shown again. See Settings →
@@ -4860,6 +4918,9 @@ class Frontend {
 		status_header( 200 );
 		nocache_headers();
 		header( 'X-Robots-Tag: noindex, nofollow', true );
+		foreach ( self::banner_preview_frame_headers( home_url( '/' ), admin_url() ) as $faz_preview_header ) {
+			header( $faz_preview_header, true );
+		}
 
 		add_filter( 'show_admin_bar', '__return_false', PHP_INT_MAX );
 		show_admin_bar( false );
@@ -4869,6 +4930,58 @@ class Frontend {
 			require $template;
 		}
 		exit;
+	}
+
+	/**
+	 * Anti-framing headers for the admin banner preview frame.
+	 *
+	 * The frame is an administrator-only view (manage_options, no nonce),
+	 * and only the banner customizer in wp-admin ever embeds it. Restricting
+	 * its ancestors to this site, and to the admin origin when wp-admin is
+	 * served from another host, keeps any other site from framing it inside
+	 * a logged-in administrator's browser. X-Frame-Options cannot name a
+	 * second origin, so it is sent only when wp-admin and the site share one;
+	 * browsers that understand frame-ancestors ignore it in either case.
+	 *
+	 * @param string $home_url  Site front URL.
+	 * @param string $admin_url wp-admin URL (the page that embeds the frame).
+	 * @return string[] Header lines.
+	 */
+	public static function banner_preview_frame_headers( $home_url, $admin_url ) {
+		$home_origin  = self::url_origin( $home_url );
+		$admin_origin = self::url_origin( $admin_url );
+		$ancestors    = "'self'";
+		$same_origin  = '' === $admin_origin || $admin_origin === $home_origin;
+		if ( ! $same_origin ) {
+			$ancestors .= ' ' . $admin_origin;
+		}
+		$headers = array( 'Content-Security-Policy: frame-ancestors ' . $ancestors );
+		if ( $same_origin ) {
+			$headers[] = 'X-Frame-Options: SAMEORIGIN';
+		}
+		return $headers;
+	}
+
+	/**
+	 * Scheme, host and port of a URL, lowercased, or '' when it has none.
+	 *
+	 * @param string $url URL.
+	 * @return string
+	 */
+	private static function url_origin( $url ) {
+		$parts = wp_parse_url( (string) $url );
+		if ( ! is_array( $parts ) || empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+			return '';
+		}
+		$scheme = strtolower( $parts['scheme'] );
+		if ( 'http' !== $scheme && 'https' !== $scheme ) {
+			return '';
+		}
+		$origin = $scheme . '://' . strtolower( $parts['host'] );
+		if ( ! empty( $parts['port'] ) ) {
+			$origin .= ':' . (int) $parts['port'];
+		}
+		return $origin;
 	}
 
 	/**
@@ -5605,6 +5718,10 @@ class Frontend {
 			);
 		}
 
+		// 5c. Signed parks served under an older key (a cached fragment):
+		// re-keyed to this response, after every pass that parks.
+		$html = $this->refresh_park_proofs( $html, $failed_passes, $inert_stash );
+
 		// 6. Block <script data-faz-waitfor="category"> (deferred dependency scripts).
 		if ( false !== stripos( $html, 'data-faz-waitfor' ) ) {
 			$html = $this->run_markup_pass(
@@ -5635,6 +5752,12 @@ class Frontend {
 		if ( false !== $old_recursion && '' !== $old_recursion ) {
 			@ini_set( 'pcre.recursion_limit', (string) $old_recursion ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,Squiz.PHP.DiscouragedFunctions.Discouraged -- restoring the original PCRE recursion_limit value (paired with the temporary raise above).
 		}
+
+		// WP Maps reads only opening tags, so it runs while script and style
+		// bodies, comments and <noscript> blocks are still stashed: a
+		// `<div class='wpgmp_map'>` written inside a JavaScript string is text,
+		// and rewriting it with double-quoted keys would end that string.
+		$html = $this->process_wpgmp_map_widgets( $html, $blocked_categories, $providers );
 
 		// Restore <noscript> blocks we stashed before the filter pass.
 		if ( ! empty( $noscript_stash ) ) {
@@ -6607,12 +6730,27 @@ class Frontend {
 			return $full;
 		}
 
-		list( $parked, $renamed ) = $this->rename_attr_tokens( $attrs, array( 'background' => 'data-faz-background' ) );
+		// An author-written data-faz-background on the same tag must not ride
+		// along with this park (see with_park_proof()).
+		list( $parked, $renamed ) = $this->rename_attr_tokens( $this->strip_attr_tokens( $attrs, 'data-faz-background' ), array( 'background' => 'data-faz-background' ) );
 		if ( empty( $renamed ) ) {
 			return $full;
 		}
 
-		return '<' . $tag . $this->label_category_first( $parked, $matched_category ) . '>';
+		return '<' . $tag . $this->with_park_proof( $this->label_category_first( $parked, $matched_category ), 'background' ) . '>';
+	}
+
+	/**
+	 * Response-local key for server-built consent controls.
+	 *
+	 * Placeholder_Builder stamps it on the placeholder Accept button so the
+	 * runtime can tell that button apart from a data-faz-accept attribute
+	 * written into post content (wp_kses_post keeps data-* on every tag).
+	 *
+	 * @return string
+	 */
+	public static function response_key() {
+		return self::srcdoc_key();
 	}
 
 	/** Response-local proof for server parks; deliberately excluded from static config. */
@@ -6772,6 +6910,10 @@ class Frontend {
 			if ( false === $category ) {
 				continue;
 			}
+			if ( 'data-faz-data' === $parked_name ) {
+				// Drop an author-written park key so only this park's value is proven.
+				$parked = $this->strip_attr_tokens( $parked, 'data-faz-data' );
+			}
 			list( $parked, $renamed ) = $this->rename_attr_tokens( $parked, array( $name => $parked_name ) );
 			if ( empty( $renamed ) ) {
 				continue; // A bare attribute with no value fetches nothing.
@@ -6793,7 +6935,11 @@ class Frontend {
 			$out = ' data-faz-srcset-category="' . esc_attr( $srcset_category ) . '"' . $this->strip_attr_tokens( $out, 'data-faz-srcset-category' );
 		}
 		$label = array() !== $categories ? $categories[0] : $srcset_category;
-		return '<' . $tag . $this->label_category_first( $out, $label ) . $close . '>';
+		$out   = $this->label_category_first( $out, $label );
+		if ( 'object' === $tag && $this->has_attr_token( $out, 'data-faz-data' ) ) {
+			$out = $this->with_park_proof( $out, 'data' );
+		}
+		return '<' . $tag . $out . $close . '>';
 	}
 
 	/**
@@ -6904,7 +7050,7 @@ class Frontend {
 
 		// Every style token leaves on its own bytes (the parser keeps the first
 		// of a duplicated attribute, and the first is the one judged above).
-		list( $parked, $renamed ) = $this->rename_attr_tokens( $attrs, array( 'style' => 'data-faz-style' ) );
+		list( $parked, $renamed ) = $this->rename_attr_tokens( $this->strip_attr_tokens( $attrs, 'data-faz-style' ), array( 'style' => 'data-faz-style' ) );
 		if ( empty( $renamed ) ) {
 			return $full;
 		}
@@ -6920,6 +7066,7 @@ class Frontend {
 			}
 		}
 		$out = $labelled ? $live . $parked : $this->label_category_first( $live . $parked, reset( $categories ) );
+		$out = $this->with_park_proof( $out, 'style' );
 		return '<' . $tag . $out . $close . '>';
 	}
 
@@ -7238,6 +7385,179 @@ class Frontend {
 	}
 
 	/**
+	 * Prove that THIS response parked an attribute the runtime restores into
+	 * a sink kses guards (object data, style, background).
+	 *
+	 * wp_kses_post keeps data-* on every post tag, so an Author could write
+	 * data-faz-data / data-faz-style / data-faz-background into a post and the
+	 * restore pass wrote them back as live attributes kses refuses. The runtime
+	 * now restores those three only when the tag carries the response-local
+	 * key and names the attribute in data-faz-park. A list already on the tag
+	 * is extended only when this response vouches for it (see
+	 * vouched_park_names()): an author-written list is replaced, never
+	 * inherited.
+	 *
+	 * @param string          $attrs Attribute string.
+	 * @param string|string[] $names Parked attribute name(s): data, style, background.
+	 * @return string
+	 */
+	private function with_park_proof( $attrs, $names ) {
+		$key   = self::srcdoc_key();
+		$list  = array_values( array_unique( array_filter( array_merge( $this->vouched_park_names( $attrs ), (array) $names ) ) ) );
+		$attrs = $this->strip_attr_tokens( $this->strip_attr_tokens( $this->strip_attr_tokens( $attrs, 'data-faz-park' ), 'data-faz-park-key' ), 'data-faz-park-sig' );
+		// The signature lets a later response, or the park-proofs route, vouch
+		// for this park under another key (see Park_Proof). An author-written
+		// signature is stripped above with the rest of the proof.
+		$sig = $this->park_signature_for( $attrs, $list );
+		// Metadata first, like label_category_first(): the tag's own bytes,
+		// a self-closing slash included, keep their place at the end.
+		return ' data-faz-park="' . esc_attr( implode( ' ', $list ) ) . '" data-faz-park-key="' . esc_attr( $key ) . '"'
+			. ( '' !== $sig ? ' data-faz-park-sig="' . esc_attr( $sig ) . '"' : '' ) . $attrs;
+	}
+
+	/**
+	 * The parked names already on a tag that this response can vouch for.
+	 *
+	 * Under this response's key the list is this response's own. Under another
+	 * key — a fragment a cache stored with its parks — it counts only when its
+	 * signature verifies against the values the tag carries now. Checking it
+	 * here, and not only in the later re-keying pass, matters when a pass
+	 * parks one more attribute on such a tag: extending the list re-keys it,
+	 * and a foreign list dropped at that point left its own parks (a
+	 * background signed by the earlier response) parked after consent.
+	 *
+	 * @param string $attrs Attribute string.
+	 * @return string[]
+	 */
+	private function vouched_park_names( $attrs ) {
+		$names = preg_split( '/\s+/', trim( (string) $this->extract_tag_attr( $attrs, 'data-faz-park' ) ), -1, PREG_SPLIT_NO_EMPTY );
+		if ( self::srcdoc_key() === $this->extract_tag_attr( $attrs, 'data-faz-park-key' ) ) {
+			return $names;
+		}
+		if ( ! class_exists( Park_Proof::class ) || ! Park_Proof::names_are_valid( $names ) ) {
+			return array();
+		}
+		$expected = $this->park_signature_for( $attrs, $names );
+		return ( '' !== $expected && hash_equals( $expected, (string) $this->extract_tag_attr( $attrs, 'data-faz-park-sig' ) ) ) ? $names : array();
+	}
+
+	/**
+	 * Park_Proof::signature() over the values the tag carries for `$names`,
+	 * as the browser reads them (see attr_value_as_read()).
+	 *
+	 * @param string   $attrs Attribute string.
+	 * @param string[] $names Parked names.
+	 * @return string Signature, or '' when a value is missing.
+	 */
+	private function park_signature_for( $attrs, array $names ) {
+		// Without a signature the park is still proven for this response, as
+		// it always was; only the vouching under another key is lost.
+		if ( ! function_exists( 'wp_salt' ) || ! class_exists( Park_Proof::class ) ) {
+			return '';
+		}
+		$values = array();
+		foreach ( $names as $name ) {
+			$raw = $this->extract_tag_attr( $attrs, 'data-faz-' . $name );
+			if ( '' === $raw ) {
+				return '';
+			}
+			$values[] = self::attr_value_as_read( $raw );
+		}
+		return Park_Proof::signature( array_values( $names ), $values );
+	}
+
+	/**
+	 * An attribute value exactly as getAttribute() returns it, for signing.
+	 *
+	 * The runtime sends the park-proofs route the values it reads, so the
+	 * signature must be over the same string or a real park is refused.
+	 * decode_html_references() is for judging and decodes twice on purpose
+	 * (`&#38;quot;` becomes `"` there, but the browser reads `&quot;`), and it
+	 * keeps CR, which the parser's input stream turns into LF (CRLF and a lone
+	 * CR both) before any attribute exists. Here line breaks are normalised
+	 * first and every reference is decoded once, in a single left-to-right
+	 * pass: numeric ones as decode_html_references() does them, named ones
+	 * with a semicolon through html_entity_decode() one at a time, and the four
+	 * legacy names without one under the same rule as there.
+	 *
+	 * @param string $raw Attribute value as written in the markup.
+	 * @return string
+	 */
+	private static function attr_value_as_read( $raw ) {
+		$value = str_replace( array( "\r\n", "\r" ), "\n", (string) $raw );
+		if ( false === strpos( $value, '&' ) ) {
+			return $value;
+		}
+		$decoded = preg_replace_callback(
+			'/&(?:#[xX][0-9a-fA-F]+;?|#[0-9]+;?|[A-Za-z][A-Za-z0-9]*;|(?:amp|lt|gt|quot|AMP|LT|GT|QUOT)(?![;A-Za-z0-9=]))/',
+			function ( $m ) {
+				$ref = $m[0];
+				if ( '#' === $ref[1] ) {
+					return self::decode_html_references( $ref );
+				}
+				if ( ';' !== substr( $ref, -1 ) ) {
+					return self::decode_html_references( $ref );
+				}
+				return html_entity_decode( $ref, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			},
+			$value
+		);
+		return null === $decoded ? $value : $decoded;
+	}
+
+	/**
+	 * Re-key the signed parks a response serves under an older key.
+	 *
+	 * A fragment a cache stored with its parks, and a later response embeds,
+	 * carries the key of the response that parked it, so the runtime of the
+	 * page serving it would not restore those parks. A tag whose signature
+	 * verifies against its current values gets this response's key; any
+	 * other tag, an author-written proof included, is left exactly as it is.
+	 *
+	 * @param string $html        Markup with the inert spans stashed.
+	 * @param array  $failed      Failed pass kinds, appended to.
+	 * @param array  $inert_stash Inert stash (see run_markup_pass()).
+	 * @return string
+	 */
+	private function refresh_park_proofs( $html, array &$failed, array &$inert_stash ) {
+		if ( false === stripos( $html, 'data-faz-park-sig' ) ) {
+			return $html;
+		}
+		return $this->run_markup_pass(
+			$html,
+			'#' . self::non_opening_token_skip() . '<([a-zA-Z][^\s/>]*+)(?=[\s/>])(' . self::ATTR_WALK . ')(/?)\s*+>#is',
+			'park-proof',
+			function ( $m ) {
+				return $this->refresh_park_proof_tag( $m );
+			},
+			$failed,
+			$inert_stash
+		);
+	}
+
+	/**
+	 * refresh_park_proofs() for one opening tag.
+	 *
+	 * @param array $m Regex match: full tag, name, attributes, self-closing slash.
+	 * @return string
+	 */
+	private function refresh_park_proof_tag( $m ) {
+		$full  = $m[0];
+		$attrs = isset( $m[2] ) ? $m[2] : '';
+		if ( false === stripos( $attrs, 'data-faz-park-sig' ) ) {
+			return $full;
+		}
+		if ( self::srcdoc_key() === $this->extract_tag_attr( $attrs, 'data-faz-park-key' ) ) {
+			return $full;
+		}
+		$names = $this->vouched_park_names( $attrs );
+		if ( array() === $names ) {
+			return $full;
+		}
+		return '<' . $m[1] . $this->with_park_proof( $attrs, $names ) . ( isset( $m[3] ) ? $m[3] : '' ) . '>';
+	}
+
+	/**
 	 * Whether the attribute string carries a token of this name.
 	 *
 	 * @param string $attrs Attribute string.
@@ -7427,7 +7747,16 @@ class Frontend {
 		$stash = array();
 		$marker = '';
 		$result = $this->stash_iframe_srcdocs( $html, array(), array(), $this->stash_nonce(), $stash, $marker );
-		return null === $result ? $html : strtr( $result, $stash );
+		$html   = null === $result ? $html : strtr( $result, $stash );
+		if ( false === stripos( $html, 'data-faz-park-sig' ) ) {
+			return $html;
+		}
+		// The signed parks too, with the inert spans stashed: a tag-shaped
+		// string inside a script is not an element and is never rewritten.
+		$inert  = array();
+		$failed = array();
+		$html   = $this->refresh_park_proofs( $this->stash_inert_spans( $html, $this->stash_nonce(), $inert ), $failed, $inert );
+		return empty( $inert ) ? $html : strtr( $html, $inert );
 	}
 
 	private function stash_nonce() {
@@ -7757,6 +8086,7 @@ class Frontend {
 		'media'      => array( 'tags' => array( 'video', 'audio', 'source', 'embed', 'object', 'track', 'input' ), 'shape' => 'open3' ),
 		'link'       => array( 'tags' => array( 'link' ), 'shape' => 'open' ),
 		'style-attr' => array( 'tags' => '*', 'shape' => 'open3' ),
+		'park-proof' => array( 'tags' => '*', 'shape' => 'open3' ),
 		'waitfor'    => array( 'tags' => array( 'script' ), 'shape' => 'body' ),
 	);
 
@@ -10865,6 +11195,36 @@ class Frontend {
 	 * @return array
 	 */
 	/**
+	 * Divi Builder editor state cookies.
+	 *
+	 * Every name below is written by the builder's own scripts (builder.js,
+	 * the Visual Builder bundle) for the post being edited —
+	 * `et-saved-post-{ID}-bb`, `et-editing-post-{ID}-fb` and so on — so only a
+	 * logged-in editor ever holds one. A scan run from an editor's browser
+	 * picked them up as "uncategorized" and they reached the cookie
+	 * declaration, one row per edited post. is_wp_internal_cookie() treats
+	 * them as internal, which keeps them out of every visitor-facing surface
+	 * and stops the shredder from deleting the builder's autosave
+	 * bookkeeping; the upgrade migration moves rows already stored. The broad
+	 * `et_` / `_et_` Divi prefixes are deliberately NOT listed: some of those
+	 * reach visitors (split testing, for one).
+	 *
+	 * Cookie_Database carries one entry per prefix so new scans file them
+	 * under wordpress-internal; tests/unit/test-divi-editor-cookies-php.php
+	 * fails if the two lists drift apart.
+	 */
+	const DIVI_EDITOR_COOKIE_PREFIXES = array(
+		'et-saved-post-',
+		'et-saving-post-',
+		'et-editing-post-',
+		'et-editor-available-post-',
+		'et-syncing-post-',
+		'et-recommend-sync-post-',
+		'et-reloaded-post-',     // Older Visual Builder releases (Open Cookie Database).
+		'et-pb-recent-items-',
+	);
+
+	/**
 	 * Check if a cookie name is a WordPress-internal cookie.
 	 * These are admin-only cookies that visitors never receive
 	 * and must never appear in the consent banner.
@@ -10915,7 +11275,7 @@ class Frontend {
 			// which is a leading-substring match.
 			'comment_author_',
 		);
-		foreach ( $prefixes as $prefix ) {
+		foreach ( array_merge( $prefixes, self::DIVI_EDITOR_COOKIE_PREFIXES ) as $prefix ) {
 			if ( 0 === strpos( $name, $prefix ) ) {
 				return true;
 			}
@@ -11539,6 +11899,7 @@ class Frontend {
 		return '.faz-hidden{display:none!important;visibility:hidden!important}'
 			. '.faz-hide{display:none!important}'
 			. '.faz-consent-bridge{width:0;height:0;border:0}'
+			. '.faz-btn-revisit-wrapper[data-faz-tag="revisit-consent"]:focus-within{outline:2px solid #1863dc;outline-offset:3px;box-shadow:0 0 0 3px #fff}'
 			. '.video-placeholder-normal,.video-placeholder-youtube{min-height:200px;display:flex;align-items:center;justify-content:center;width:100%;max-width:100%;box-sizing:border-box}';
 	}
 
@@ -14686,14 +15047,9 @@ class Frontend {
 		if ( faz_is_machine_readable_request() || wp_doing_cron() ) {
 			return $content;
 		}
-		if ( ! $this->template ) {
-			return $content;
-		}
-		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
-			return $content;
-		}
-		// AMP pages disallow custom scripts — content blocking is unnecessary.
-		if ( apply_filters( 'faz_is_amp_request', false ) ) {
+		// The rest of the stand-down, shared with every caller that promises
+		// something on this pass's behalf (wpgmp_consent_handled_by_faz()).
+		if ( ! $this->page_content_is_gated() ) {
 			return $content;
 		}
 
@@ -14780,6 +15136,10 @@ class Frontend {
 			);
 		}
 		$this->log_markup_pass_failure( $failed_passes, 'content filter' );
+
+		// Before the inert spans come back, as in the full-page buffer: a map
+		// div spelled inside a script body is not a map.
+		$content = $this->process_wpgmp_map_widgets( $content, $blocked_categories, $providers );
 
 		if ( ! empty( $inert_stash ) ) {
 			$content = strtr( $content, $inert_stash );
@@ -15414,21 +15774,9 @@ class Frontend {
 				// it is judged as that tag: its handle id and its callback query
 				// included, so an exemption or rule written on either (as the
 				// Script Blocking screen shows the tag) covers the widget too.
-				$src = 'id="bricks-google-maps-js" src="https://maps.googleapis.com/maps/api/js?callback=bricksMap"';
-				if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src, '' ) ) {
-					return $m[0];
-				}
-				$category = $this->match_script_to_provider( $src, '', $providers, $blocked_categories );
-				if ( ! $category ) {
-					$known = Known_Providers::get_all();
-					$category = $known['google-maps']['category'] ?? 'functional';
-				}
-				$blocked = in_array( $category, $blocked_categories, true );
-				$consent = $this->get_service_consent();
-				if ( isset( $consent['google-maps'] ) ) {
-					$blocked = 'yes' !== $consent['google-maps'];
-				}
-				if ( ! $blocked ) {
+				$src      = 'id="bricks-google-maps-js" src="https://maps.googleapis.com/maps/api/js?callback=bricksMap"';
+				$category = $this->blocked_google_map_category( $attrs, $src, 'bricks-google-maps', $blocked_categories, $providers );
+				if ( '' === $category ) {
 					return $m[0];
 				}
 				$attrs = preg_replace( '/\sdata-bricks-map-options\s*=/i', ' data-faz-bricks-map-options=', $attrs, 1 );
@@ -15438,6 +15786,217 @@ class Frontend {
 			$content
 		);
 		return null !== $result ? $result : $content;
+	}
+
+	/**
+	 * The category a JavaScript-drawn Google map is parked under on this
+	 * render, or '' when it may load.
+	 *
+	 * Such a map is an empty element a page script fills once the Maps API
+	 * calls back, so it is judged as that API script tag: whitelist entries and
+	 * provider rules written on the URL or on the handle cover the map, the
+	 * Google Maps catalogue category applies when no rule matches, and a
+	 * per-service choice for google-maps wins over the category both ways.
+	 *
+	 * Provider rules are read as filter_script_loader_tag() reads them for the
+	 * tag itself — in map order, each on the script URL and on the handle —
+	 * with the same fail-closed rule (the first blocked match decides, the
+	 * first allowed one is a fallback), so the map and its API tag always land
+	 * in the same category. Matching only the URL let a rule written on the handle
+	 * (`wpgmp-google-api` → marketing) release the API while the map stayed
+	 * behind its placeholder under the catalogue category, or the reverse.
+	 *
+	 * @param string $attrs              The element's attributes (faz-skip etc.).
+	 * @param string $src                The API script tag the element stands for.
+	 * @param string $handle             That script's registered handle.
+	 * @param array  $blocked_categories Blocked category slugs.
+	 * @param array  $providers          Merged provider category map.
+	 * @return string
+	 */
+	private function blocked_google_map_category( $attrs, $src, $handle, $blocked_categories, $providers ) {
+		if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src, '' ) ) {
+			return '';
+		}
+		// One pass over the map in its order, each rule tried on the handle and
+		// on the URL, exactly as filter_script_loader_tag() walks it for the
+		// tag. Matching the URL first and the handle second picked a different
+		// rule whenever both matched: with `wpgmp-google-api` → marketing ahead
+		// of `maps.google.com` → functional and both blocked, the tag was
+		// parked under marketing and the map under functional, so accepting
+		// one of the two released only half of the map.
+		$url      = preg_match( '/\ssrc\s*=\s*"([^"]*)"/i', ' ' . $src, $src_match ) ? $src_match[1] : '';
+		$category = false;
+		foreach ( $providers as $pattern => $rule_category ) {
+			$pattern = (string) $pattern;
+			if ( '' === $pattern ) {
+				continue;
+			}
+			if ( false === stripos( $handle, $pattern ) && false === stripos( $url, $pattern ) ) {
+				continue;
+			}
+			if ( in_array( $rule_category, $blocked_categories, true ) ) {
+				$category = $rule_category;
+				break;
+			}
+			if ( false === $category ) {
+				$category = $rule_category;
+			}
+		}
+		if ( ! $category ) {
+			$known    = Known_Providers::get_all();
+			$category = $known['google-maps']['category'] ?? 'functional';
+		}
+		$blocked = in_array( $category, $blocked_categories, true );
+		$consent = $this->get_service_consent();
+		if ( isset( $consent['google-maps'] ) ) {
+			$blocked = 'yes' !== $consent['google-maps'];
+		}
+		return $blocked ? (string) $category : '';
+	}
+
+	/**
+	 * Give a WP Maps (wp-google-map-plugin) Google map the same consent UI as
+	 * an iframe.
+	 *
+	 * WP Maps prints an empty `<div class="wpgmp_map" id="mapN">` and draws it
+	 * from JavaScript when the Maps API calls back `wpgmpInitMap`. The API
+	 * script is parked like any Google Maps tag, so before consent the visitor
+	 * saw an empty box with no way to accept — and the only way to show a
+	 * notice was WP Maps' own server-side "Cookies Acceptance" gate plus a code
+	 * snippet. Here the map div is hidden behind the Google Maps placeholder,
+	 * as the Bricks map is, and script.js reveals it when the visitor accepts,
+	 * before the released API calls WP Maps back. The container is left alone:
+	 * listings and filters it may hold do not depend on Google.
+	 *
+	 * Only Google-provider maps: WP Maps 5 also draws OpenStreetMap through
+	 * Leaflet, marked by a `wpgmp-map-provider-*` class on the container;
+	 * before that class existed every map was a Google map.
+	 *
+	 * @param string $content            HTML content.
+	 * @param array  $blocked_categories Blocked category slugs.
+	 * @param array  $providers          Merged provider category map.
+	 * @return string
+	 */
+	private function process_wpgmp_map_widgets( $content, $blocked_categories, $providers ) {
+		if ( false === stripos( $content, 'wpgmp_map' ) ) {
+			return $content;
+		}
+		// The API tag WP Maps 5 enqueues (handle wpgmp-google-api).
+		$src = 'id="wpgmp-google-api-js" src="https://maps.google.com/maps/api/js?callback=wpgmpInitMap"';
+		$container_providers = array();
+		$div_depth = 0;
+		// Led by tag_token_skip(), as the img and iframe passes are: a
+		// `<div class="wpgmp_map">` quoted inside another tag's value (a tooltip
+		// library keeping HTML in an attribute) is not an element. Script and
+		// style bodies are not in the buffer at all when this runs (see the
+		// callers). Match closing divs before the skip alternative so each
+		// provider applies only underneath its own container. A <noscript>
+		// body is text to a browser that runs scripts, and the content pass
+		// does not stash it (find_inert_spans() walks past it): skipped whole,
+		// so a `</div>` written there does not end the container around it.
+		$result = preg_replace_callback(
+			'#<noscript(?=[\s/>])' . self::ATTR_WALK . '>.*?</noscript(?=[\s/>])[^>]*+>(*SKIP)(*FAIL)'
+				. '|</div(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>|' . self::tag_token_skip( 'div' )
+				. '<div(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
+			function ( $m ) use ( $src, $blocked_categories, $providers, &$container_providers, &$div_depth ) {
+				if ( ! isset( $m[1] ) ) {
+					unset( $container_providers[ $div_depth ] );
+					$div_depth = max( 0, $div_depth - 1 );
+					return $m[0];
+				}
+				++$div_depth;
+				$attrs = $m[1];
+				if ( false === stripos( $attrs, 'wpgmp_map' ) ) {
+					return $m[0];
+				}
+				// The tag's own class token, read as the tokenizer reads it: a
+				// regex over the whole string found `class="wpgmp_map"` inside
+				// another attribute's value (`data-tip='<div class="wpgmp_map">'`)
+				// and hid an ordinary div behind a map placeholder.
+				$class = $this->extract_tag_attr( $attrs, 'class' );
+				if ( '' === $class ) {
+					return $m[0];
+				}
+				$classes = preg_split( '/\s+/', strtolower( trim( $class ) ) );
+				if ( in_array( 'wpgmp_map_container', $classes, true ) ) {
+					$provider = preg_grep( '/^wpgmp-map-provider-/', $classes );
+					$container_providers[ $div_depth ] = empty( $provider ) || in_array( 'wpgmp-map-provider-google', $provider, true );
+					return $m[0];
+				}
+				if ( ! in_array( 'wpgmp_map', $classes, true ) ) {
+					return $m[0];
+				}
+				$is_google = empty( $container_providers ) || end( $container_providers );
+				if ( ! $is_google || $this->has_attr_token( $attrs, 'data-faz-category' ) ) {
+					return $m[0];
+				}
+				$category = $this->blocked_google_map_category( $attrs, $src, 'wpgmp-google-api', $blocked_categories, $providers );
+				if ( '' === $category ) {
+					return $m[0];
+				}
+				// The class token is written here rather than through
+				// faz_add_hidden_class(), whose regex would extend the first
+				// `class="` in the string, quoted values included.
+				$widget = '<div class="' . esc_attr( $class . ' faz-hidden' ) . '"' . $this->strip_attr_tokens( $attrs, 'class' )
+					. ' data-faz-category="' . esc_attr( $category ) . '" data-faz-service="google-maps">';
+				return Placeholder_Builder::build_social( 'google-maps', Placeholder_Builder::get_service_name( 'google-maps' ), $category ) . $widget;
+			},
+			$content
+		);
+		return null !== $result ? $result : $content;
+	}
+
+	/**
+	 * Answer WP Maps' "Cookies Acceptance" gate (filters wpgmp_accept_cookies
+	 * and wpgmp_is_cookies_accepted).
+	 *
+	 * WP Maps decides on the server, while it builds the page, whether to print
+	 * the map or a "no map" notice, and it recognises only a fixed list of
+	 * consent plugins. With that option on and this plugin active, the notice
+	 * was printed for every visitor and never went away: nothing here told WP
+	 * Maps that consent had been given. A server-side answer would not be right
+	 * either — the page is cached and shared, and the map would appear only on
+	 * the next page load. Where this plugin gates the page, it already parks
+	 * the Maps API and shows its own placeholder until the visitor accepts (see
+	 * process_wpgmp_map_widgets()), so WP Maps is told to print the map.
+	 * Elsewhere — wherever the content pass stands down (no banner, the banner
+	 * disabled or excluded on this page, script blocking excluded on this page,
+	 * AMP, a feed) — nothing parks the map, and WP Maps' own answer stands.
+	 *
+	 * @param bool $accepted WP Maps' answer so far.
+	 * @return bool
+	 */
+	public function wpgmp_consent_handled_by_faz( $accepted ) {
+		return $this->page_content_is_gated() ? true : (bool) $accepted;
+	}
+
+	/**
+	 * Whether the content pass (filter_content_blocking() and the embed
+	 * detectors it runs) parks third-party markup on this request.
+	 *
+	 * One answer for every caller that has to agree with it, so a promise made
+	 * on the content pass's behalf — wpgmp_consent_handled_by_faz() telling WP
+	 * Maps the map is handled — cannot outlive a stand-down added here.
+	 *
+	 * @return bool
+	 */
+	protected function page_content_is_gated() {
+		if ( is_admin() ) {
+			return false;
+		}
+		// Never a machine-readable representation (feeds, REST, cron mail):
+		// see filter_content_blocking().
+		if ( faz_is_machine_readable_request() || wp_doing_cron() ) {
+			return false;
+		}
+		if ( ! $this->template ) {
+			return false;
+		}
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
+			return false;
+		}
+		// AMP pages disallow custom scripts — content blocking is unnecessary.
+		return ! apply_filters( 'faz_is_amp_request', false );
 	}
 
 	/**

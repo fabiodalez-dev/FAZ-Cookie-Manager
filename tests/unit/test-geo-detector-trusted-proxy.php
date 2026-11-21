@@ -40,6 +40,22 @@ function apply_filters( $hook, $val ) {
 	}
 	return $val;
 }
+function wp_cache_add( $key, $val, $group = '', $ttl = 0 ) {
+	$k = "$group:$key";
+	if ( isset( $GLOBALS['_faz_test_cache'][ $k ] ) ) {
+		return false;
+	}
+	$GLOBALS['_faz_test_cache'][ $k ] = $val;
+	return true;
+}
+function wp_cache_incr( $key, $offset = 1, $group = '' ) {
+	$k = "$group:$key";
+	if ( ! isset( $GLOBALS['_faz_test_cache'][ $k ] ) ) {
+		return false;
+	}
+	$GLOBALS['_faz_test_cache'][ $k ] = (int) $GLOBALS['_faz_test_cache'][ $k ] + $offset;
+	return $GLOBALS['_faz_test_cache'][ $k ];
+}
 // faz_forwarded_client_ip() sanitises the forwarded header before parsing it.
 // Mirrors WordPress: strip tags, then collapse whitespace — NOT a no-op stub,
 // because a stub that passed the value through unchanged would hide a header
@@ -248,6 +264,19 @@ $_SERVER = array(
 );
 $ip = $resolve_client->invoke( $detector );
 assert_eq( $ip, '2001:db8::42', 'CF v6 edge + v6 CF-Connecting-IP → trusted' );
+
+// Case 7: the legacy opt-in (faz_trust_proxy_headers + faz_trusted_proxies)
+// that faz_resolve_client_ip() honours. The detector must resolve the same
+// request to the same address as the throttles and the consent log.
+$GLOBALS['_faz_test_filters']['faz_trust_proxy_headers'] = function () { return true; };
+$GLOBALS['_faz_test_filters']['faz_trusted_proxies']     = function () { return array( '198.51.100.0/24' ); };
+$_SERVER = array(
+	'REMOTE_ADDR'          => '198.51.100.5',
+	'HTTP_X_FORWARDED_FOR' => '8.8.8.8',
+);
+assert_eq( $resolve_client->invoke( $detector ), \faz_resolve_client_ip(), 'legacy trusted-proxy opt-in: detector and faz_resolve_client_ip() agree' );
+assert_eq( $resolve_client->invoke( $detector ), '8.8.8.8', 'and both read the forwarded visitor' );
+unset( $GLOBALS['_faz_test_filters']['faz_trust_proxy_headers'], $GLOBALS['_faz_test_filters']['faz_trusted_proxies'] );
 
 // ---------- detect() — a header-derived country is not cached ----------
 // The object cache is keyed on the address hash alone, and an address is not

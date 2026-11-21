@@ -120,6 +120,14 @@ class Template {
 	private $slot_config = null;
 
 	/**
+	 * Cache generation this render read the banner under (see
+	 * faz_banner_template_generation()). null = not yet captured.
+	 *
+	 * @var string|null
+	 */
+	private $generation = null;
+
+	/**
 	 * Language of the template
 	 *
 	 * @var string
@@ -210,11 +218,13 @@ class Template {
 		// stores the result, so the slot is fixed from the config as read here:
 		// otherwise the write could land in a slot the next read never looks in.
 		$this->slot_config = $this->config_fingerprint();
+		$this->generation  = $this->current_generation();
 		$stored            = $this->get_stored();
 		if ( true === $this->is_preview()
 			|| empty( $stored )
 			|| ! isset( $stored['layout_signature'] )
-			|| $this->get_layout_signature() !== $stored['layout_signature'] ) {
+			|| $this->get_layout_signature() !== $stored['layout_signature']
+			|| $this->generation !== ( isset( $stored['generation'] ) ? (string) $stored['generation'] : '' ) ) {
 			$this->generate();
 		} else {
 			$this->set_template();
@@ -697,10 +707,7 @@ class Template {
 				}
 				// Brand logo: set img src from config meta.url (custom upload).
 				if ( 'brand-logo' === $tag && isset( $config['meta']['url'] ) && '#' !== $config['meta']['url'] ) {
-					$logo_imgs = $element->getElementsByTagName( 'img' );
-					foreach ( $logo_imgs as $logo_img ) {
-						$logo_img->setAttribute( 'src', esc_url( $config['meta']['url'] ) );
-					}
+					self::apply_brand_logo( $element, (string) $config['meta']['url'] );
 					// Only for a logo that is shown: with the logo off the grid
 					// would keep an empty column and strip the text's padding.
 					$logo_beside = ! empty( $config['status'] )
@@ -938,6 +945,79 @@ class Template {
 		return defined( 'FAZ_PREVIEW_REQUEST' ) && FAZ_PREVIEW_REQUEST;
 	}
 	/**
+	 * Point the brand-logo images at the configured URL and name them.
+	 *
+	 * The image's own alt text names whose logo it is (WCAG 1.1.1); the
+	 * template's generic "Brand logo" stays when it has none.
+	 *
+	 * @param \DOMElement $element The brand-logo element.
+	 * @param string      $url     Logo URL from the banner config.
+	 * @return void
+	 */
+	public static function apply_brand_logo( $element, $url ) {
+		$logo_alt = self::brand_logo_alt( $url );
+		foreach ( $element->getElementsByTagName( 'img' ) as $logo_img ) {
+			$logo_img->setAttribute( 'src', esc_url( $url ) );
+			if ( '' !== $logo_alt ) {
+				$logo_img->setAttribute( 'alt', $logo_alt );
+			}
+		}
+	}
+
+	/**
+	 * Media Library attachment a brand logo URL points to.
+	 *
+	 * A URL to one of the image's generated sizes (`logo-300x100.png`) is
+	 * retried as the original, which is what attachment_url_to_postid() knows.
+	 *
+	 * @param string $url Logo URL from the banner config.
+	 * @return int Attachment id, 0 for an external URL or none.
+	 */
+	public static function brand_logo_attachment_id( $url ) {
+		$url = preg_replace( '/[?#].*$/', '', trim( (string) $url ) );
+		if ( '' === $url || '#' === $url || ! function_exists( 'attachment_url_to_postid' ) ) {
+			return 0;
+		}
+		$id = (int) attachment_url_to_postid( $url );
+		if ( $id <= 0 ) {
+			$original = preg_replace( '/-\d+x\d+(?=\.[a-z0-9]+$)/i', '', $url );
+			if ( $original !== $url ) {
+				$id = (int) attachment_url_to_postid( $original );
+			}
+		}
+		return max( 0, $id );
+	}
+
+	/**
+	 * Alt text of the Media Library image a brand logo URL points to.
+	 *
+	 * The logo setting stores only the URL, so the attachment is looked up
+	 * from it. A URL to one of the image's generated sizes
+	 * (`logo-300x100.png`) is retried as the original, which is what
+	 * attachment_url_to_postid() knows. An external URL, or an image without
+	 * alt text, returns '' and the template keeps its generic text.
+	 *
+	 * @param string $url Logo URL from the banner config.
+	 * @return string Plain text, '' when there is none.
+	 */
+	public static function brand_logo_alt( $url ) {
+		$alt = '';
+		$id  = self::brand_logo_attachment_id( $url );
+		if ( $id > 0 ) {
+			$alt = trim( wp_strip_all_tags( (string) get_post_meta( $id, '_wp_attachment_image_alt', true ) ) );
+		}
+		/**
+		 * Filter the alt text of the banner's brand logo.
+		 *
+		 * Return '' to keep the template's generic "Brand logo".
+		 *
+		 * @param string $alt Alt text found in the Media Library, or ''.
+		 * @param string $url Logo URL.
+		 */
+		return trim( (string) apply_filters( 'faz_brand_logo_alt', $alt, $url ) );
+	}
+
+	/**
 	 * Return the language-aware cache key for the banner template option.
 	 *
 	 * @return string
@@ -1089,6 +1169,19 @@ class Template {
 	 * @return void
 	 */
 	public function update() {
+		if ( null === $this->generation ) {
+			$this->generation = $this->current_generation();
+		}
+		// A clear since this render read the banner means the template below
+		// was built from the state before an admin save. Writing it would put
+		// that state back, and nothing in the layout signature would reject
+		// it. The slot's generation tag already keeps readers off it; skipping
+		// the write also keeps the slots of the new generation from being
+		// overwritten with this request's stale copy of the whole row.
+		if ( function_exists( 'faz_banner_template_generation_is_current' )
+			&& ! faz_banner_template_generation_is_current( $this->generation ) ) {
+			return;
+		}
 		$cache_key = $this->get_cache_key();
 		$stored    = get_option( $cache_key, array() );
 		$stored    = is_array( $stored ) && ! empty( $stored ) ? $stored : array();
@@ -1100,6 +1193,7 @@ class Template {
 				faz_allowed_html()
 			),
 			'layout_signature' => $this->get_layout_signature(),
+			'generation'       => $this->generation,
 		);
 		// autoload=false: each entry carries the full rendered banner HTML+CSS
 		// (~30-45 KB) per banner per language — loading it on every request via
@@ -1109,6 +1203,15 @@ class Template {
 			$stored,
 			false
 		);
+	}
+
+	/**
+	 * The cache generation as this request sees it.
+	 *
+	 * @return string
+	 */
+	private function current_generation() {
+		return function_exists( 'faz_banner_template_generation' ) ? faz_banner_template_generation() : '';
 	}
 
 	/**
@@ -1143,6 +1246,19 @@ class Template {
 	public function get_assets_path( $path ) {
 		$base_name  = wp_basename( $path );
 		$assets_url = defined( 'FAZ_APP_ASSETS_URL' ) ? FAZ_APP_ASSETS_URL : '';
+		// This URL is written into the shared template cache (update()), which
+		// anonymous requests regenerate — the public banner REST route among
+		// them — and which every later visitor is served. FAZ_APP_ASSETS_URL
+		// takes its scheme from faz_request_is_https(), which also trusts a
+		// client-sent X-Forwarded-Proto, so one anonymous request could persist
+		// https:// icon URLs on an http-only site (or the reverse) for everyone.
+		// Persist only a server-verified scheme; Frontend::banner_html() still
+		// upgrades the per-request render behind a TLS-terminating proxy.
+		if ( '' !== $assets_url && function_exists( 'set_url_scheme' ) ) {
+			$verified_https = ( function_exists( 'is_ssl' ) && is_ssl() )
+				|| 0 === stripos( (string) get_option( 'siteurl' ), 'https://' );
+			$assets_url     = set_url_scheme( $assets_url, $verified_https ? 'https' : 'http' );
+		}
 		return $assets_url . $base_name;
 	}
 	/**

@@ -14,7 +14,9 @@ namespace {
 	}
 
 	function sanitize_key( $value ) { return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $value ) ); }
-	function sanitize_text_field( $value ) { return trim( (string) $value ); }
+	// Like WordPress, strips percent-encoded octets: the GPC guard below must
+	// not depend on a sanitiser that hides encoded parameter names.
+	function sanitize_text_field( $value ) { return trim( preg_replace( '/%[a-f0-9]{2}/i', '', (string) $value ) ); }
 	function wp_unslash( $value ) { return $value; }
 	function is_admin() { return false; }
 	function wp_doing_cron() { return false; }
@@ -43,6 +45,10 @@ namespace {
 	// A 404 and a search results page are ordinary pages for BLOCKING, but
 	// every one of them has its own URL, so recording them lets anyone mint
 	// rows by requesting URLs that do not exist. Controlled per case.
+	function apply_filters( $tag, $value ) { return $value; }
+	// The write side records only requests that name the page canonically:
+	// GET/HEAD, a Host the site is served on, no `//` path spelling.
+	function home_url() { return 'https://example.test'; }
 	function is_404() { return ! empty( $GLOBALS['faz_test_is_404'] ); }
 	function is_search() { return ! empty( $GLOBALS['faz_test_is_search'] ); }
 
@@ -412,6 +418,88 @@ namespace {
 	$row = $pdo->query( 'SELECT * FROM wp_faz_embed_placeholders' )->fetch( PDO::FETCH_ASSOC );
 	inventory_check( 1 === (int) $pdo->query( 'SELECT COUNT(*) FROM wp_faz_embed_placeholders' )->fetchColumn(), 'same-second observations keep exactly one row without a duplicate error' );
 	inventory_check( '2026-09-15 12:00:00' === $row['first_seen'] && '2026-09-16 13:00:00' === $row['last_seen'], 'refresh preserves first_seen and advances last_seen' );
+
+	// 2026-11 audit: the page key comes from the request, so only requests
+	// that name the page canonically may write, and a GPC render is only
+	// authoritative when no routing parameter the key drops changed it.
+	$faz_audit_case = static function ( $server, $setup ) use ( $note ) {
+		$GLOBALS['wpdb']->queries       = array();
+		$GLOBALS['wpdb']->writes        = array();
+		$GLOBALS['faz_test_transients'] = array();
+		$saved                          = $_SERVER;
+		foreach ( $server as $k => $v ) {
+			$_SERVER[ $k ] = $v;
+		}
+		$setup();
+		$note->invoke( null, 'youtube', 'marketing' );
+		Embed_Inventory::complete_render();
+		Embed_Inventory::flush();
+		$queries  = $GLOBALS['wpdb']->queries;
+		$_SERVER  = $saved;
+		unset( $GLOBALS['wp'] );
+		return $queries;
+	};
+	$faz_none = static function () {};
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'POST', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( array() === $q, 'a POST render of a page writes no inventory row (POST skips the canonical redirect)' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'attacker-chosen.invalid', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( array() === $q, 'a Host the site is not served on writes no row' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test:8081', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( array() === $q, 'a non-default port writes no row' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '//page/' ), $faz_none );
+	inventory_check( array() === $q, 'a //path spelling writes no row' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( ! empty( $q ), 'control: the canonical GET still writes' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test:443', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( ! empty( $q ), 'an explicit default port (a front end forwarding :443) still writes' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test.', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( ! empty( $q ), 'a fully-qualified name with its trailing dot still writes' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test.:8081', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( array() === $q, 'but the trailing dot does not let a non-default port through' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test..', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( array() === $q, 'two trailing dots write no row (one spelling per name, not one per dot)' );
+	$q = $faz_audit_case( array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test.....', 'REQUEST_URI' => '/page/' ), $faz_none );
+	inventory_check( array() === $q, 'nor do five' );
+	$q = $faz_audit_case(
+		array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '/?order=ASC', 'HTTP_SEC_GPC' => '1' ),
+		static function () { $GLOBALS['wp'] = (object) array( 'query_vars' => array( 'order' => 'ASC' ) ); }
+	);
+	inventory_check( 0 === count( array_filter( $q, static function ( $x ) { return false !== stripos( $x, 'DELETE' ); } ) ), 'a GPC render reordered by a dropped routing var (?order=) does not clear the page' );
+	$q = $faz_audit_case(
+		array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '/?utm_source=x', 'HTTP_SEC_GPC' => '1' ),
+		static function () { $GLOBALS['wp'] = (object) array( 'query_vars' => array() ); }
+	);
+	inventory_check( 1 === count( array_filter( $q, static function ( $x ) { return false !== stripos( $x, 'DELETE' ); } ) ), 'control: a GPC render through a tracking parameter is still authoritative' );
+
+	$q = $faz_audit_case(
+		array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '/?%6Frder=ASC', 'HTTP_SEC_GPC' => '1' ),
+		static function () { $GLOBALS['wp'] = (object) array( 'query_vars' => array( 'order' => 'ASC' ) ); }
+	);
+	inventory_check( 0 === count( array_filter( $q, static function ( $x ) { return false !== stripos( $x, 'DELETE' ); } ) ), 'a percent-encoded routing var (?%6Frder=) is caught like the plain one' );
+
+	// The beacon's pageUrl carries the request Host only when the site is
+	// served on it: otherwise Host would be a visitor-chosen input of the
+	// cached HTML and of every consent row's URL.
+	$faz_saved_server = $_SERVER;
+	$_SERVER = array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test', 'REQUEST_URI' => '/page/' );
+	inventory_check( 'https://example.test/page' === Embed_Inventory::log_page_url(), 'log_page_url() names a page on a known host like current_url()' );
+	$_SERVER = array( 'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'attacker.invalid', 'REQUEST_URI' => '/page/' );
+	inventory_check( '' === Embed_Inventory::log_page_url(), 'log_page_url() is empty for a Host the site is not served on' );
+	$_SERVER = $faz_saved_server;
+
+	// prune() compares last_seen (written as current_time( 'mysql' ), site
+	// time) with its cutoff, so the cutoff is computed on that clock too. A
+	// site clock pinned far from the real one tells the two apart.
+	date_default_timezone_set( 'UTC' );
+	$GLOBALS['wpdb']->queries = array();
+	$GLOBALS['inventory_now'] = '2020-01-15 12:00:00';
+	Embed_Inventory::prune( 1 );
+	unset( $GLOBALS['inventory_now'] );
+	inventory_check(
+		1 === count( $GLOBALS['wpdb']->queries )
+			&& false !== strpos( $GLOBALS['wpdb']->queries[0], "last_seen < '2019-12-15 12:00:00'" ),
+		'prune() computes its cutoff on the site clock last_seen is written with'
+	);
 
 	echo "\nPassed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );

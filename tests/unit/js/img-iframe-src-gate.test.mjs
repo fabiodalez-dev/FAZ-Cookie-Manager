@@ -58,6 +58,9 @@ function loadFrontend(options = {}) {
   // consent cookie, so both categories are blocked until consent.
   window._fazConfig = {
     _block: '1',
+    // Response-local key: parks of object data / style / background are
+    // restored only when they carry it (see _fazProveParked()).
+    _srcdocKey: 'test-response-key',
     _categories: [
       { slug: 'necessary', isNecessary: true },
       { slug: 'functional', isNecessary: false },
@@ -655,6 +658,8 @@ native.call(parkedInput, 'data-faz-category', 'functional');
 w.document.body.appendChild(parkedInput);
 const parkedObject = w.document.createElement('object');
 native.call(parkedObject, 'data-faz-data', OSM);
+native.call(parkedObject, 'data-faz-park', 'data');
+native.call(parkedObject, 'data-faz-park-key', 'test-response-key');
 native.call(parkedObject, 'data-faz-category', 'functional');
 w.document.body.appendChild(parkedObject);
 const parkedPoster = w.document.createElement('video');

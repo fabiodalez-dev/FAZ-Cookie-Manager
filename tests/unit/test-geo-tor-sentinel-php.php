@@ -90,6 +90,20 @@ namespace {
 		$GLOBALS['__faz_cache'][ $group ][ $key ] = $value;
 		return true;
 	}
+	function wp_cache_add( $key, $val, $group = '', $ttl = 0 ) {
+		if ( isset( $GLOBALS['__faz_cache'][ $group ][ $key ] ) ) {
+			return false;
+		}
+		$GLOBALS['__faz_cache'][ $group ][ $key ] = $val;
+		return true;
+	}
+	function wp_cache_incr( $key, $offset = 1, $group = '' ) {
+		if ( ! isset( $GLOBALS['__faz_cache'][ $group ][ $key ] ) ) {
+			return false;
+		}
+		$GLOBALS['__faz_cache'][ $group ][ $key ] = (int) $GLOBALS['__faz_cache'][ $group ][ $key ] + $offset;
+		return $GLOBALS['__faz_cache'][ $group ][ $key ];
+	}
 	function wp_salt( $scheme = 'auth' ) {
 		return 'test-salt-' . $scheme;
 	}

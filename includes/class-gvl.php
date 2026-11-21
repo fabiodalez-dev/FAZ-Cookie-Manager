@@ -25,6 +25,18 @@ class Gvl {
 	const PURPOSES_KEY = 'faz_gvl_purposes';
 
 	/**
+	 * Largest vendor-list body download() accepts (the list is ~1 MB today).
+	 * A body cut at this size by limit_response_size is not valid JSON and
+	 * is refused, instead of the whole upstream response sitting in memory.
+	 */
+	const MAX_GVL_BYTES = 16777216;
+
+	/**
+	 * Largest purposes-<lang>.json body download_purposes() accepts.
+	 */
+	const MAX_PURPOSES_BYTES = 2097152;
+
+	/**
 	 * Singleton instance.
 	 *
 	 * @var self|null
@@ -59,8 +71,9 @@ class Gvl {
 		$response = wp_remote_get(
 			self::GVL_URL,
 			array(
-				'timeout'    => 60,
-				'user-agent' => 'FAZCookieManager/1.0 (WordPress)',
+				'timeout'             => 60,
+				'user-agent'          => 'FAZCookieManager/1.0 (WordPress)',
+				'limit_response_size' => self::MAX_GVL_BYTES,
 			)
 		);
 
@@ -84,7 +97,8 @@ class Gvl {
 		}
 
 		$body = wp_remote_retrieve_body( $response );
-		$data = json_decode( $body, true );
+		// A body that reached the cap was cut by limit_response_size.
+		$data = strlen( $body ) >= self::MAX_GVL_BYTES ? null : json_decode( $body, true );
 
 		if ( ! is_array( $data ) || empty( $data['vendorListVersion'] ) || empty( $data['vendors'] ) ) {
 			return array(
@@ -149,8 +163,9 @@ class Gvl {
 		$response = wp_remote_get(
 			$url,
 			array(
-				'timeout'    => 30,
-				'user-agent' => 'FAZCookieManager/1.0 (WordPress)',
+				'timeout'             => 30,
+				'user-agent'          => 'FAZCookieManager/1.0 (WordPress)',
+				'limit_response_size' => self::MAX_PURPOSES_BYTES,
 			)
 		);
 
@@ -164,7 +179,7 @@ class Gvl {
 		}
 
 		$body = wp_remote_retrieve_body( $response );
-		$data = json_decode( $body, true );
+		$data = strlen( $body ) >= self::MAX_PURPOSES_BYTES ? null : json_decode( $body, true );
 
 		if ( ! is_array( $data ) || empty( $data['purposes'] ) ) {
 			return array( 'success' => false, 'message' => 'Invalid purposes JSON' );

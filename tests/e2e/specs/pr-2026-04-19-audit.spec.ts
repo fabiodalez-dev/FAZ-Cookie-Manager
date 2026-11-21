@@ -245,7 +245,7 @@ function clearConsentThrottle(scope: 'all' | 'consent' | 'ip' = 'all'): void {
     scope === 'ip'
       ? '^_transient(_timeout)?_faz_consent_ip_'
       : scope === 'consent'
-        ? '^_transient(_timeout)?_faz_consent_[0-9a-f]{8}_'
+        ? '^_transient(_timeout)?_faz_consent_[0-9a-f]{32}_'
         : '^_transient(_timeout)?_faz_consent';
 
   wpEval(`

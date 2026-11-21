@@ -28,6 +28,10 @@ namespace FazCookie\Frontend\Modules\Banner_Rest {
 	class Banner_Rest {}
 }
 
+namespace FazCookie\Frontend\Modules\Park_Proofs {
+	class Park_Proofs {}
+}
+
 namespace FazCookie\Frontend\Modules\Legal_Links {
 	class Legal_Links {}
 }

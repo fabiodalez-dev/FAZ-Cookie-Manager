@@ -176,7 +176,22 @@ class Geo_Detector {
 				&& method_exists( '\\FazCookie\\Includes\\Geolocation', 'country_header_in_play' )
 				&& \FazCookie\Includes\Geolocation::country_header_in_play() );
 		if ( ! $from_header ) {
-			wp_cache_set( $ip_hash, $result, self::CACHE_GROUP, self::CACHE_TTL );
+			// A failed ipinfo lookup (refusal, budget, transport) leaves the VPN
+			// verdict unknown. Kept here for the full hour, the address would go
+			// without a VPN verdict long after ipinfo could answer again: it is
+			// kept for ERROR_TTL at most, and no longer than ipinfo says the
+			// failure lasts (`retry_after`: what is left of a refusal marker or
+			// of a spent hourly budget). A transport failure carries no
+			// `retry_after` and is kept for ERROR_TTL, so an outage does not
+			// cost every request a call up to the timeout.
+			$ttl = self::CACHE_TTL;
+			if ( isset( $vpn_result['source'] ) && 'error' === $vpn_result['source'] ) {
+				$ttl = min( self::CACHE_TTL, Ipinfo_Client::ERROR_TTL );
+				if ( isset( $vpn_result['retry_after'] ) && (int) $vpn_result['retry_after'] > 0 ) {
+					$ttl = min( $ttl, (int) $vpn_result['retry_after'] );
+				}
+			}
+			wp_cache_set( $ip_hash, $result, self::CACHE_GROUP, $ttl );
 		}
 		return $result;
 	}
@@ -411,9 +426,19 @@ class Geo_Detector {
 	 * its own edge trusted adds the range to `faz_trusted_proxy_cidrs` and names
 	 * the header it writes with `faz_proxy_forwarded_header`.
 	 *
+	 * The whole resolution is faz_resolve_client_ip()'s when it is loaded, so
+	 * a site that opted into the legacy `faz_trust_proxy_headers` /
+	 * `faz_trusted_proxies` path gets the same address here as in the
+	 * throttles and the consent log's ip_hash; reading only
+	 * faz_forwarded_client_ip() skipped that path and split one request into
+	 * two addresses.
+	 *
 	 * @return string Cleartext IP, or '' when there is no REMOTE_ADDR at all.
 	 */
 	private function resolve_client_ip() {
+		if ( function_exists( 'faz_resolve_client_ip' ) ) {
+			return (string) \faz_resolve_client_ip();
+		}
 		$remote_addr = ! empty( $_SERVER['REMOTE_ADDR'] )
 			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 			? (string) $_SERVER['REMOTE_ADDR']

@@ -57,11 +57,15 @@ namespace {
 	$GLOBALS['faz_geo_actions'] = array();
 
 	function get_option( $name, $default = false ) {
-		// The Necessary-disclosure migration needs the cookie tables, which
-		// this harness does not stand up, and since it reports a decline the
-		// batch would withhold its marker. It is driven for real by
-		// test-necessary-disclosure-php.php; here it counts as already done.
-		if ( 'faz_necessary_disclosure_text_done' === $name && ! array_key_exists( $name, $GLOBALS['faz_geo_options'] ) ) {
+		// These two migrations need cookie tables, which their own suites
+		// exercise. The geo migration harness treats them as completed.
+		if ( in_array( $name, array( 'faz_necessary_disclosure_text_done', 'faz_move_divi_editor_internal_done' ), true )
+			&& ! array_key_exists( $name, $GLOBALS['faz_geo_options'] ) ) {
+			return 1;
+		}
+		// Likewise the cookie-text unslash migration, driven for real by
+		// test-cookie-text-slashes-php.php.
+		if ( 'faz_cookie_text_unslashed_done' === $name && ! array_key_exists( $name, $GLOBALS['faz_geo_options'] ) ) {
 			return 1;
 		}
 		return array_key_exists( $name, $GLOBALS['faz_geo_options'] )

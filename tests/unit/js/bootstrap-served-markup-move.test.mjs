@@ -528,5 +528,176 @@ console.log('j2. A menu copy carrying a parked script, and the other copy routes
   eq('a menu copied with Range.cloneContents is inserted synchronously', rangeImage.isConnected, true);
 }
 
+// jQuery 3.7's parseHTML() + buildFragment(), reduced to the DOM calls they
+// make: the markup is parsed in an inert document (createHTMLDocument), moved
+// into a fragment of that document, and the fragment's children are the
+// result. The caller reads them on the very next line.
+function jqParseHTML(document, html) {
+  const context = document.implementation.createHTMLDocument('');
+  const fragment = context.createDocumentFragment();
+  const tmp = fragment.appendChild(context.createElement('div'));
+  tmp.innerHTML = html;
+  const nodes = Array.prototype.slice.call(tmp.childNodes);
+  fragment.firstChild.textContent = '';
+  fragment.textContent = '';
+  nodes.forEach((node) => fragment.appendChild(node));
+  return Array.prototype.slice.call(fragment.childNodes);
+}
+// jQuery's appendTo(): the nodes go into a fragment of the destination's
+// document, and the fragment into the destination.
+function jqAppendTo(document, nodes, target) {
+  const fragment = document.createDocumentFragment();
+  nodes.forEach((node) => fragment.appendChild(node));
+  target.appendChild(fragment);
+}
+
+console.log('k. Owl Carousel loop clones built from outerHTML strings (Signify Pro logo slider)');
+{
+  const { document, parse } = boot();
+  // Owl 2.3.4 builds its loop clones as `$(item.outerHTML + …)`, a string
+  // parse of the server's own slides, while the runtime is still downloading.
+  const carousel = parse('<div class="owl-carousel"><div class="owl-stage">'
+    + '<div class="owl-item"><a href="https://www.uni.lu"><img src="/wp-content/uploads/UL.png"></a></div>'
+    + '<div class="owl-item"><a href="https://www.jku.at"><img src="/wp-content/uploads/JKU.png" srcset="/wp-content/uploads/JKU-2x.png 2x"></a></div>'
+    + '</div></div>');
+  await checkpoint();
+  const stage = carousel.querySelector('.owl-stage');
+  const html = Array.prototype.map.call(stage.children, (item) => item.outerHTML).join('');
+  const clones = jqParseHTML(document, html);
+  eq('the string parse returns the slides it was given', clones.length, 2);
+  jqAppendTo(document, clones, stage);
+  eq('the clones are in the stage on the same turn', stage.children.length, 4);
+  ok('and their images with them', stage.children[2]?.querySelector('img') && stage.children[3]?.querySelector('img'));
+}
+{
+  const { document, parse } = boot();
+  parse('<div id="box"><img src="/wp-content/uploads/UL.png"></div>');
+  await checkpoint();
+  // An inert document fetches nothing, so even an image the server never
+  // served may be built there; the verdict is asked when it reaches the page.
+  const parsed = jqParseHTML(document, '<div><img src="https://tracker.example/pixel.gif"></div>');
+  eq('markup with an unserved image still parses into an inert document', parsed.length, 1);
+  const holder = document.createElement('div');
+  document.getElementById('main').appendChild(holder);
+  jqAppendTo(document, parsed, holder);
+  eq('but its image does not reach the page until the runtime answers', holder.querySelector('img'), null);
+  // The same URL as a server image, on another element type, is a new verdict.
+  const frame = jqParseHTML(document, '<iframe src="/wp-content/uploads/UL.png"></iframe>');
+  const frameHost = document.createElement('div');
+  document.getElementById('main').appendChild(frameHost);
+  jqAppendTo(document, frame, frameHost);
+  eq('a served URL on another tag is still held', frameHost.querySelector('iframe'), null);
+  // A string-built script never inherits anything, even at a served URL.
+  const served = parse('<div><script type="text/plain" data-faz-category="marketing" src="https://tracker.example/t.js"></script></div>');
+  await checkpoint();
+  // Built directly in an inert document, as parseHTML does, so the case does
+  // not depend on the parse itself working.
+  const script = document.implementation.createHTMLDocument('').importNode(served.querySelector('script'), true);
+  script.setAttribute('type', 'text/javascript');
+  const scriptHost = document.createElement('div');
+  document.getElementById('main').appendChild(scriptHost);
+  scriptHost.appendChild(document.importNode(script, true));
+  eq('a string-built copy of a parked script is still held', scriptHost.querySelector('script'), null);
+}
+
+console.log('k2. the clones of a CDN-hosted slide keep their image past the backstop');
+{
+  // Photon, Cloudflare or BunnyCDN rewrite uploads to another host. The parser
+  // served that URL, so its string-built copy carries the same verdict — also
+  // when the DOM backstop looks at it, because the innerHTML sink tagged it.
+  const { document, parse } = boot();
+  const carousel = parse('<div class="owl-carousel"><div class="owl-stage">'
+    + '<div class="owl-item"><img src="https://i0.wp.com/site.test/wp-content/uploads/UL.png" srcset="https://i0.wp.com/site.test/wp-content/uploads/UL.png?w=400 400w"></div>'
+    + '</div></div>');
+  await checkpoint();
+  const stage = carousel.querySelector('.owl-stage');
+  const clones = jqParseHTML(document, stage.innerHTML);
+  jqAppendTo(document, clones, stage);
+  await checkpoint();
+  const copy = stage.children[1] && stage.children[1].querySelector('img');
+  eq('the CDN image keeps its src after the observer has seen it', copy && copy.getAttribute('src'), 'https://i0.wp.com/site.test/wp-content/uploads/UL.png');
+  eq('and its srcset', copy && copy.getAttribute('srcset'), 'https://i0.wp.com/site.test/wp-content/uploads/UL.png?w=400 400w');
+  eq('nothing is parked on it', copy && copy.hasAttribute('data-faz-src'), false);
+  // A string-built copy whose URL the server never served is still parked.
+  const foreign = jqParseHTML(document, '<div><img src="https://tracker.example/pixel.gif"></div>');
+  jqAppendTo(document, foreign, document.getElementById('main'));
+  await checkpoint();
+  const pixel = document.querySelector('img[data-faz-src="https://tracker.example/pixel.gif"]')
+    || document.querySelector('img[src="https://tracker.example/pixel.gif"]');
+  eq('an unserved cross-origin copy is still not live', pixel ? pixel.getAttribute('src') : null, null);
+}
+
+console.log('k3. every insertion route into an inert document passes; into the page it is held');
+{
+  const routes = {
+    appendChild: (dst, n) => dst.appendChild(n),
+    insertBefore: (dst, n) => dst.insertBefore(n, dst.firstChild),
+    replaceChild: (dst, n) => dst.replaceChild(n, dst.firstChild),
+    append: (dst, n) => dst.append(n),
+    prepend: (dst, n) => dst.prepend(n),
+    before: (dst, n) => dst.firstChild.before(n),
+    after: (dst, n) => dst.firstChild.after(n),
+    replaceWith: (dst, n) => dst.firstChild.replaceWith(n),
+    replaceChildren: (dst, n) => dst.replaceChildren(n),
+    'insertAdjacentElement(beforebegin)': (dst, n) => dst.firstChild.insertAdjacentElement('beforebegin', n),
+    'insertAdjacentElement(afterbegin)': (dst, n) => dst.insertAdjacentElement('afterbegin', n),
+    'insertAdjacentElement(beforeend)': (dst, n) => dst.insertAdjacentElement('beforeend', n),
+    'insertAdjacentElement(afterend)': (dst, n) => dst.firstChild.insertAdjacentElement('afterend', n),
+    'Range.insertNode': (dst, n) => { const r = dst.ownerDocument.createRange(); r.setStart(dst, 0); r.insertNode(n); },
+  };
+  for (const [name, insert] of Object.entries(routes)) {
+    const { document } = boot();
+    await checkpoint();
+    const inertDoc = document.implementation.createHTMLDocument('');
+    const inertHost = inertDoc.createElement('div');
+    inertHost.appendChild(inertDoc.createElement('span'));
+    // Markup, not setAttribute(): the attribute gate stages a script's write
+    // without putting it on the element, and importNode() copies only the
+    // attributes that are there.
+    const source = inertDoc.createElement('div');
+    source.innerHTML = '<img src="https://tracker.example/pixel.gif">';
+    const image = source.firstChild;
+    eq(`${name}: the inert image carries the remote URL`, image.getAttributeNode('src')?.value, 'https://tracker.example/pixel.gif');
+    insert(inertHost, image);
+    eq(`${name}: an unserved image lands in an inert document at once`, image.parentNode !== null && inertHost.contains(image), true);
+    const pageHost = document.createElement('div');
+    pageHost.appendChild(document.createElement('span'));
+    document.getElementById('main').appendChild(pageHost);
+    const adopted = document.importNode(image, true);
+    eq(`${name}: so does the copy imported into the page`, adopted.getAttributeNode('src')?.value, 'https://tracker.example/pixel.gif');
+    insert(pageHost, adopted);
+    eq(`${name}: the same image is held on its way into the page`, pageHost.contains(adopted), false);
+  }
+}
+
+console.log('k4. a copy let through on a served URL is not recorded as the parser\'s');
+{
+  // While the document parses, an UNTAGGED insertion is taken for the
+  // parser's, and the observer records its URLs as served. A script-built
+  // image admitted only because its URL matched a served one is not the
+  // parser's: if its URL is rewritten before the observer looks (an Attr node,
+  // a route no setter sees), that new URL must be parked, not recorded.
+  const { document, parse } = boot();
+  parse('<div><img src="/wp-content/uploads/UL.png"></div>');
+  await checkpoint();
+  const img = document.createElement('img');
+  const src = document.createAttribute('src');
+  src.value = '/wp-content/uploads/UL.png';
+  img.setAttributeNode(src);
+  document.getElementById('main').appendChild(img);
+  eq('the copy on a served URL is inserted at once', img.isConnected, true);
+  src.value = 'https://tracker.example/pixel.gif';
+  await checkpoint();
+  eq('the URL rewritten after the insertion is parked', img.getAttribute('src'), null);
+  eq('and kept for the runtime to judge', img.getAttribute('data-faz-src'), 'https://tracker.example/pixel.gif');
+  // Nor does that URL become a served one for the next copy.
+  const next = document.createElement('img');
+  const nextSrc = document.createAttribute('src');
+  nextSrc.value = 'https://tracker.example/pixel.gif';
+  next.setAttributeNode(nextSrc);
+  document.getElementById('main').appendChild(next);
+  eq('a later copy on the rewritten URL is still held', next.isConnected, false);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

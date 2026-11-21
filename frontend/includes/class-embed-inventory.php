@@ -163,6 +163,15 @@ class Embed_Inventory {
 		if ( ! self::routing_params_parsed() ) {
 			return;
 		}
+		// The page key comes from the request (Host + path), and only GET/HEAD
+		// go through core's canonical redirect. A POST, an unknown Host, a
+		// non-default port or a `//page/` spelling renders the same page under
+		// a new key, so a script could mint rows without limit, one per
+		// spelling. Those requests are still blocked; they are just not
+		// recorded. The oEmbed card (?embed=true) is not the page either.
+		if ( ! self::request_names_canonical_page() ) {
+			return;
+		}
 
 		// Usually, nothing seen is not information.
 		//
@@ -188,7 +197,13 @@ class Embed_Inventory {
 		$raw_consent  = function_exists( 'faz_get_valid_consent_cookie' ) ? (string) faz_get_valid_consent_cookie() : '';
 		$gpc_snapshot = self::$render_complete && '' === $raw_consent
 			&& isset( $_SERVER['HTTP_SEC_GPC'] )
-			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
+			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) )
+			// Authoritative only when the render IS the keyed page. A query
+			// var the key drops (order, orderby, author_name, embed, …) still
+			// changes what WordPress renders, so an anonymous GPC request with
+			// one of them could empty the page's evidence and make every
+			// genuine GPC exception log as unverified.
+			&& ! self::has_dropped_query_params();
 
 		// A visit that saw nothing and is not authoritative has nothing to say.
 		if ( empty( $seen ) && ! $gpc_snapshot ) {
@@ -267,6 +282,126 @@ class Embed_Inventory {
 		$normalized = faz_normalize_page_url( (string) $url );
 		$normalized = (string) preg_replace( '#^[a-z][a-z0-9+.\-]*://#i', '', $normalized );
 		return '' === $normalized ? '' : md5( $normalized );
+	}
+
+	/**
+	 * Whether this request names the page the way its key will be read back.
+	 *
+	 * @return bool
+	 */
+	private static function request_names_canonical_page() {
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : 'GET';
+		if ( 'GET' !== $method && 'HEAD' !== $method ) {
+			return false;
+		}
+		if ( function_exists( 'is_embed' ) && is_embed() ) {
+			return false;
+		}
+		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+		$path = (string) strtok( $uri, '?#' );
+		if ( false !== strpos( $path, '//' ) ) {
+			return false;
+		}
+		$host = isset( $_SERVER['HTTP_HOST'] ) ? strtolower( sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) ) ) : '';
+		if ( '' === $host ) {
+			return false;
+		}
+		$known = array();
+		$urls  = array();
+		if ( function_exists( 'home_url' ) ) {
+			$urls[] = home_url();
+		}
+		if ( function_exists( 'site_url' ) ) {
+			$urls[] = site_url();
+		}
+		if ( function_exists( 'faz_trusted_origins' ) ) {
+			$urls = array_merge( $urls, (array) faz_trusted_origins() );
+		}
+		foreach ( $urls as $u ) {
+			$u = (string) $u;
+			$p = wp_parse_url( false === strpos( $u, '://' ) ? 'http://' . $u : $u );
+			if ( is_array( $p ) && ! empty( $p['host'] ) ) {
+				$known[] = strtolower( $p['host'] ) . ( empty( $p['port'] ) ? '' : ':' . $p['port'] );
+			}
+		}
+		// Nothing to compare against (a bootstrap without home_url()): do not guess.
+		if ( empty( $known ) ) {
+			return true;
+		}
+		// Spellings of the same origin: a trailing dot on the name, an
+		// explicit default port. They are not new keys a script can mint
+		// without limit (two spellings per name), and refusing them stopped
+		// every recording on sites whose front end forwards `:443`. A proxy
+		// that forwards a different name altogether (Host: backend:8080) is
+		// named in the Trusted origins setting, which faz_trusted_origins()
+		// reads above.
+		$canon = static function ( $h ) {
+			$h = strtolower( (string) $h );
+			$h = (string) preg_replace( '/:(?:80|443)$/', '', $h );
+			if ( false === strpos( $h, ']' ) || ']' === substr( $h, -1 ) ) {
+				$parts = explode( ':', $h );
+				if ( count( $parts ) <= 2 ) {
+					// Exactly one dot: "name." is the fully-qualified
+					// spelling, "name.." is not a name at all, and rtrim()
+					// would have accepted any number of them, one new key each.
+					$parts[0] = (string) preg_replace( '/(?<!\.)\.$/', '', $parts[0] );
+					$h        = implode( ':', $parts );
+				}
+			}
+			return $h;
+		};
+		$host = $canon( $host );
+		foreach ( $known as $k ) {
+			if ( $canon( $k ) === $host ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether the request carries a routing parameter the page key drops.
+	 *
+	 * @return bool
+	 */
+	private static function has_dropped_query_params() {
+		if ( empty( $_SERVER['REQUEST_URI'] ) ) {
+			return false;
+		}
+		// Not sanitize_text_field(): it deletes %XX octets, so `?%6Frder=x`
+		// would parse as `rder` while PHP and WordPress decode it to `order`,
+		// and an encoded name would slip past this guard. The value is only
+		// parsed here, never stored or printed; parse_str() decodes the names
+		// exactly as PHP did when it built the query vars.
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- parsed only, never output; see above.
+		$parts = faz_parse_url( (string) wp_unslash( $_SERVER['REQUEST_URI'] ) );
+		if ( ! is_array( $parts ) || empty( $parts['query'] ) ) {
+			return false;
+		}
+		parse_str( $parts['query'], $all );
+		$kept = faz_normalize_page_url( 'http://h/?' . $parts['query'] );
+		$pos  = strpos( $kept, '?' );
+		$keep = array();
+		if ( false !== $pos ) {
+			parse_str( substr( $kept, $pos + 1 ), $keep );
+		}
+		$dropped = array_diff( array_keys( $all ), array_keys( $keep ) );
+		if ( empty( $dropped ) ) {
+			return false;
+		}
+		// Only a dropped parameter WordPress actually parsed changed the render
+		// (order, orderby, author_name, embed, …). Tracking parameters such as
+		// utm_* or a campaign tag reach no query var and leave the page as is,
+		// so a GPC visit arriving through a tagged link stays authoritative.
+		if ( ! isset( $GLOBALS['wp'] ) || ! is_object( $GLOBALS['wp'] ) || ! isset( $GLOBALS['wp']->query_vars ) || ! is_array( $GLOBALS['wp']->query_vars ) ) {
+			return false;
+		}
+		foreach ( $dropped as $param ) {
+			if ( array_key_exists( $param, $GLOBALS['wp']->query_vars ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -450,6 +585,24 @@ class Embed_Inventory {
 	}
 
 	/**
+	 * The page URL the consent-log beacon is given (`_fazConsentLog.pageUrl`).
+	 *
+	 * current_url() when this request names the page the way record() would
+	 * store it, '' otherwise. The Host header is the visitor's to choose, so
+	 * baking it into the page unconditionally made it an input of the cached
+	 * HTML and of the URL every consent row carries. A request that
+	 * record() would not write for has no inventory row for the beacon's URL
+	 * to match anyway; with '' the beacon names the page from
+	 * window.location, as it does on a page without this value.
+	 *
+	 * @since 1.39.1
+	 * @return string
+	 */
+	public static function log_page_url() {
+		return self::request_names_canonical_page() ? self::current_url() : '';
+	}
+
+	/**
 	 * Create the table when missing or outdated.
 	 *
 	 * @return void
@@ -498,7 +651,10 @@ class Embed_Inventory {
 		$months = max( 1, (int) $months );
 		global $wpdb;
 		$table  = self::table();
-		$cutoff = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months" ) );
+		// On the clock last_seen is on: record() writes current_time( 'mysql' ),
+		// site time. A UTC cutoff pruned early or late by the site's offset,
+		// the same mismatch cleanup_old_logs() corrects for the consent log.
+		$cutoff = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months", strtotime( current_time( 'mysql' ) ) ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is plugin prefix + literal; cutoff is bound. Portable DELETE (no LIMIT): SQLite rejects DELETE … LIMIT.
 		$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE last_seen < %s", $cutoff ) );
 	}

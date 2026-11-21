@@ -166,6 +166,8 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				'faz_migration_options',
 				'faz_privacy_content_snapshot',
 				'faz_banner_template',
+				'faz_template_cache_generation',
+				'faz_install_claim',
 				'faz_gvl_data',
 				'faz_gvl_meta',
 				'faz_gvl_purposes',
@@ -185,6 +187,8 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				'faz_consent_log_gmt_cursor',
 				'faz_reset_stale_per_cookie_consent_done',
 				'faz_normalize_legacy_functional_optout_done',
+				'faz_cookie_text_unslashed_done',
+				'faz_cookie_text_unslash_lock',
 				'faz_functional_optout_notice',
 				'faz_migrations_version',
 				'faz_cookie_definitions',
@@ -193,6 +197,7 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				'faz_file_write_access',
 				'faz_legal_doc_acknowledged',
 				'faz_legal_doc_material_pending',
+				'faz_move_divi_editor_internal_done',
 				// Scanner consecutive-miss tally and the bulk-delete recycle bin.
 				// The faz_% catch-all further down would sweep both, but naming
 				// them here keeps the explicit list the audit trail it is meant
@@ -214,6 +219,13 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				// DSAR_Shortcode::site_count()), so the _transient_faz% sweep
 				// above does not reach it.
 				'faz_dsar_rl_cnt_all',
+				// The Do-Not-Sell admin-mail window, an option for the same
+				// reason (Do_Not_Sell_Shortcode::claim_notification()).
+				'faz_dnsmpi_rl_mail_day',
+				'faz_dnsmpi_rl_mail_day_lock',
+				// The shared-address audit slot (Do_Not_Sell_Shortcode::
+				// claim_shared_audit_slot()), a single options row.
+				'faz_dnsmpi_shared_audit_slot',
 				// When the first form-stamping version started running: the
 				// epoch of the stampless grace window (DSAR_Shortcode::
 				// record_stamp_epoch()). Written once with add_option.
@@ -228,6 +240,7 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 			// must not leave the event behind.
 			if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
 				wp_clear_scheduled_hook( 'faz_consent_log_gmt_backfill' );
+				wp_clear_scheduled_hook( 'faz_run_pending_migrations' );
 			}
 
 			// Clean up Do Not Sell / DSAR atomic lock options (created by add_option,

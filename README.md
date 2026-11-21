@@ -715,6 +715,16 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.40.0 — 2026-11-21
+
+- Security: closes the 20 leads and 50 of the hardening notes of a full security audit of 1.39.0 (#401, #403): the banner and placeholder Accept buttons can no longer be forged from post content, restored style/background/object values must be signed by the server, scripts cannot be planted by users without `unfiltered_html`, multisite settings and tables stay per site, and the ipinfo, Do-Not-Sell and DSAR limits are tighter (IPv6 counted per /64). On multisite the scanner requires the site host to resolve to public addresses; single sites can opt in with the `faz_scanner_require_public_site_ip` filter.
+- WP Maps Google maps show the Google Maps placeholder until consent and are drawn after Accept without a reload (#406).
+- Fixed: an apostrophe in a cookie or category description was shown as `\'` in the cookie table, the block, the cookie policy and the export (#408). Existing texts are cleaned once on upgrade.
+- Fixed: the brand logo takes its alt text from the Media Library instead of "Brand logo" (#404).
+- Fixed: Escape no longer records a rejection when the close button is shown next to Reject, or when it collapses the pushdown panel (#409).
+- Fixed: Divi Builder editor cookies are filed as WordPress Internal and hidden from visitors; the cookie policy's "Last updated on" moves only when the policy changes (#402).
+- Fixed: Owl Carousel loop sliders (for example Signify Pro's logo slider) stayed empty until a resize (#405).
+
 ### 1.39.0 — 2026-11-11
 
 - Box banners can now use the Pushdown preference centre: the categories open inside the corner box, with Accept, Reject and Save one click away and equal button widths on phones (#392). CCPA / Do Not Sell banners keep the popup.

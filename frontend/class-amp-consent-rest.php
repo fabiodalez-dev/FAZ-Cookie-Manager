@@ -164,6 +164,24 @@ class AMP_Consent_Rest {
 	}
 
 	/**
+	 * The request's route as WordPress matches it: lower case.
+	 *
+	 * WP_REST_Server matches route patterns with the `i` flag, so
+	 * /faz/v1/AMP-Consent/check dispatches to the same handler as the
+	 * lower-case path. Compared case-sensitively, that spelling reached the
+	 * handlers while skipping the preflight state reset and the replacement of
+	 * core's reflected credentialed CORS headers.
+	 *
+	 * @since 1.39.1
+	 * @param mixed $request REST request.
+	 * @return string
+	 */
+	private static function normalized_route( $request ) {
+		$route = is_object( $request ) && method_exists( $request, 'get_route' ) ? (string) $request->get_route() : '';
+		return strtolower( $route );
+	}
+
+	/**
 	 * Establish the CORS origin for a preflight against the AMP routes.
 	 *
 	 * Returns $result untouched — this is an authorisation side effect, not a
@@ -185,12 +203,14 @@ class AMP_Consent_Rest {
 	 * @return mixed
 	 */
 	public function authorize_preflight( $result, $server, $request ) {
+		// See normalized_route(): every spelling WordPress dispatches to these
+		// routes must reach both of the guards below.
 		if ( ! is_object( $request ) || ! method_exists( $request, 'get_method' ) ) {
 			return $result;
 		}
-		$route = method_exists( $request, 'get_route' ) ? (string) $request->get_route() : '';
-		if ( '/' . self::REST_NAMESPACE . self::CHECK_ROUTE !== $route
-			&& '/' . self::REST_NAMESPACE . self::UPDATE_ROUTE !== $route ) {
+		$route = self::normalized_route( $request );
+		if ( strtolower( '/' . self::REST_NAMESPACE . self::CHECK_ROUTE ) !== $route
+			&& strtolower( '/' . self::REST_NAMESPACE . self::UPDATE_ROUTE ) !== $route ) {
 			return $result;
 		}
 		$this->cors_origin        = '';
@@ -926,6 +946,25 @@ class AMP_Consent_Rest {
 		// other caches have different domains. Publishers may add only the exact
 		// verified origins they use; the default never trusts every AMP-cache
 		// subdomain, because onUpdateHref carries a static source-origin query.
+		/**
+		 * Filters whether an origin is a trusted AMP cache for this site.
+		 *
+		 * Returning true adds the origin to the CREDENTIALED CORS allowlist of
+		 * faz/v1/amp-consent/check and /update: a page on that origin can read
+		 * each visitor's consent state and write consent on the visitor's
+		 * behalf. Return true only for an exact origin
+		 * (`https://<host>` compared with ===) that the official AMP cache
+		 * registry (https://cdn.ampproject.org/caches.json) lists for this
+		 * site, such as the hashed `<sha256-base32>.cdn.ampproject.org`
+		 * hostname a long or IDN domain is served from. Never match by suffix
+		 * or pattern (`*.cdn.ampproject.org`, `str_ends_with()`): every
+		 * subdomain of a cache is a different publisher's content.
+		 *
+		 * @since 1.27.0
+		 * @param bool   $allowed     Whether the default rule accepted it.
+		 * @param string $origin      Normalized request origin (scheme://host[:port]).
+		 * @param string $site_origin Normalized publisher origin.
+		 */
 		return (bool) apply_filters( 'faz_amp_consent_allowed_cache_origin', $allowed, $origin, $site_origin );
 	}
 
@@ -1483,6 +1522,14 @@ class AMP_Consent_Rest {
 		) {
 			return false;
 		}
+		// The same ceiling state_from_cookie() applies: a record minted before
+		// the admin shortened the consent expiry, or under a 365-day CCPA
+		// context now resolved as opt-in, has more life left than the regime
+		// applied now permits, and the two readers must agree on it.
+		if ( isset( $context['expiry_days'] )
+			&& absint( $data['exp'] ) > time() + ( absint( $context['expiry_days'] ) + 1 ) * DAY_IN_SECONDS ) {
+			return false;
+		}
 		$state = self::sanitize_state( isset( $data['state'] ) ? $data['state'] : '' );
 		if ( ! in_array( $state, array( 'accepted', 'rejected' ), true ) ) {
 			return false;
@@ -1652,8 +1699,8 @@ class AMP_Consent_Rest {
 	 */
 	public function serve_cors_headers( $served, $result, $request, $server ) {
 		unset( $result, $server );
-		$route = method_exists( $request, 'get_route' ) ? (string) $request->get_route() : '';
-		if ( 0 !== strpos( $route, '/' . self::REST_NAMESPACE . '/amp-consent/' ) ) {
+		$route = self::normalized_route( $request );
+		if ( 0 !== strpos( $route, strtolower( '/' . self::REST_NAMESPACE . '/amp-consent/' ) ) ) {
 			return $served;
 		}
 		if ( ! headers_sent() ) {

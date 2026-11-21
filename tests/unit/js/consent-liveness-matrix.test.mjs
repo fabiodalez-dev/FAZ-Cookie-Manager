@@ -74,6 +74,7 @@ function load(cfg, cookie = '') {
       config: { revisitConsent: { status: false } },
     },
     _shortCodes: [],
+    _srcdocKey: 'test-response-key',
     i18n: {},
   };
   const realAdd = window.document.addEventListener.bind(window.document);
@@ -113,6 +114,7 @@ function embedClick(w, cfg) {
   const btn = w.document.createElement('button');
   btn.setAttribute('data-faz-accept', 'functional');
   btn.setAttribute('data-faz-accept-service', 'google-maps');
+  btn.setAttribute('data-faz-accept-key', 'test-response-key');
   w.document.body.appendChild(btn);
   btn.click();
 }

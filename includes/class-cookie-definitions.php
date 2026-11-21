@@ -20,9 +20,25 @@ class Cookie_Definitions {
 	/**
 	 * Raw GitHub URL for the JSON definitions file.
 	 * Points to the user's fork so they can sync upstream updates.
+	 *
+	 * Deliberately a branch, not a commit: the point of the weekly opt-in
+	 * refresh is to pick up new definitions between plugin releases, and a
+	 * commit pin would freeze the data to the release that shipped it (the
+	 * bundled snapshot already does that). What the branch can deliver is
+	 * bounded instead: valid_definition() accepts only the known category
+	 * values, and the body is size-capped (MAX_RESPONSE_BYTES).
 	 */
 	// phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- JSON cookie classification data, never executable code or a remotely hosted plugin asset.
 	const SOURCE_URL = 'https://raw.githubusercontent.com/fabiodalez-dev/Open-Cookie-Database/master/open-cookie-database.json';
+
+	/**
+	 * Largest response body update_definitions() accepts, in bytes.
+	 *
+	 * The dataset is ~2.8 MB today. Without a cap the whole body of whatever
+	 * the URL returned sat in memory and then went through json_decode();
+	 * a body cut at this size is not valid JSON and the refresh is refused.
+	 */
+	const MAX_RESPONSE_BYTES = 16777216;
 
 	/**
 	 * Bundled snapshot shipped with the plugin for first-run lookups.
@@ -131,8 +147,9 @@ class Cookie_Definitions {
 		$response = wp_remote_get(
 			self::SOURCE_URL,
 			array(
-				'timeout'    => 30,
-				'user-agent' => 'FAZCookieManager/1.0 (WordPress)',
+				'timeout'             => 30,
+				'user-agent'          => 'FAZCookieManager/1.0 (WordPress)',
+				'limit_response_size' => self::MAX_RESPONSE_BYTES,
 			)
 		);
 
@@ -155,7 +172,8 @@ class Cookie_Definitions {
 		}
 
 		$body = wp_remote_retrieve_body( $response );
-		$data = json_decode( $body, true );
+		// A body that reached the cap was cut by limit_response_size.
+		$data = strlen( $body ) >= self::MAX_RESPONSE_BYTES ? null : json_decode( $body, true );
 
 		if ( ! is_array( $data ) || empty( $data ) ) {
 			return array(
@@ -626,7 +644,29 @@ class Cookie_Definitions {
 				return false;
 			}
 		}
+		// Only the categories the database is known to use. map_category()
+		// already turns an unknown value into 'uncategorized', but a refresh
+		// carrying values nobody has seen is not the dataset this code was
+		// written against, and is refused whole like any other malformed one.
+		if ( isset( $entry['category'] ) && ! self::is_known_category( $entry['category'] ) ) {
+			return false;
+		}
 		return ! isset( $entry['wildcardMatch'] ) || is_scalar( $entry['wildcardMatch'] );
+	}
+
+	/**
+	 * Whether a raw Open Cookie Database category is one of the known values.
+	 *
+	 * The known set is the keys of $category_map plus "Uncategorized" (and
+	 * the empty string, which the database uses for "not stated"), compared
+	 * case-insensitively as map_category() does.
+	 *
+	 * @param string $category Raw category.
+	 * @return bool
+	 */
+	private static function is_known_category( $category ) {
+		$lower = strtolower( trim( (string) $category ) );
+		return '' === $lower || 'uncategorized' === $lower || isset( self::$category_map[ $lower ] );
 	}
 
 	/** Reject the whole refresh rather than save a partially malformed dataset. */

@@ -16,10 +16,10 @@
  * Plugin Name:       FAZ Cookie Manager
  * Plugin URI:        https://github.com/fabiodalez-dev/faz-cookie-manager
  * Description:       A comprehensive GDPR/CCPA cookie consent manager with built-in cookie scanner, local consent logging, Google Consent Mode v2, and IAB TCF v2.3 support.
- * Version:           1.39.0
+ * Version:           1.40.0
  * Requires at least: 5.0
  * Tested up to:      7.1
- * Stable tag:        1.39.0
+ * Stable tag:        1.40.0
  * Requires PHP:      7.4
  * Author:            Fabio D'Alessandro
  * Author URI:        https://fabiodalez.it/
@@ -51,7 +51,7 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
-define( 'FAZ_VERSION', '1.39.0' );
+define( 'FAZ_VERSION', '1.40.0' );
 define( 'FAZ_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 define( 'FAZ_PLUGIN_BASEPATH', plugin_dir_path( __FILE__ ) );
 define( 'FAZ_PLUGIN_FILENAME', __FILE__ );
@@ -948,6 +948,8 @@ add_action( 'wp_initialize_site', function( $new_site ) {
 	\FazCookie\Includes\Activator::install();
 	restore_current_blog();
 }, 900, 1 );
+
+require_once __DIR__ . '/includes/multisite-cleanup.php';
 
 $faz_loader = new \FazCookie\Includes\CLI();
 $faz_loader->run();

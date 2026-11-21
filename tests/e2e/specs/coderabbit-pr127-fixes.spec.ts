@@ -196,21 +196,35 @@ test.describe('CodeRabbit PR #127 fixes', () => {
     await context.clearCookies();
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => typeof (window as any)._fazConfig !== 'undefined', null, { timeout: 10_000 });
-    // `_fazStore` is a const alias of `window._fazConfig` captured at load, so
-    // mutating `window._fazConfig._consentForwarding` is visible to the message
-    // handler (it re-reads `_fazStore._consentForwarding` per message). The
-    // target is PROTOCOL-RELATIVE: pre-fix `new URL('//host/..')` without a
-    // base threw and the target was silently dropped → message rejected; post-
-    // fix it resolves against the page URL, matches event.origin, and the
-    // forwarded consent cookie is written (then the handler reloads).
-    await page.evaluate(() => {
-      (window as any)._fazConfig._consentForwarding = {
+    // The receiver only listens on the framed bridge URL and only to its
+    // parent window (security hardening 2026-11), so the forward is sent the
+    // way the sender sends it: from this page into a same-origin iframe at
+    // ?faz_consent_forward=1. `_fazStore` is a const alias of the frame's
+    // `window._fazConfig` captured at load, so mutating its
+    // `_consentForwarding` is visible to the message handler (it re-reads
+    // `_fazStore._consentForwarding` per message). The target is
+    // PROTOCOL-RELATIVE: pre-fix `new URL('//host/..')` without a base threw
+    // and the target was silently dropped → message rejected; post-fix it
+    // resolves against the page URL, matches event.origin, and the forwarded
+    // consent cookie is written (then the handler reloads the frame).
+    await page.evaluate(async () => {
+      const frame = document.createElement('iframe');
+      frame.src = '/?faz_consent_forward=1';
+      await new Promise<void>((resolve) => {
+        frame.addEventListener('load', () => resolve(), { once: true });
+        document.body.appendChild(frame);
+      });
+      const fw = frame.contentWindow as any;
+      for (let i = 0; i < 100 && typeof fw._fazConfig === 'undefined'; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      fw._fazConfig._consentForwarding = {
         enabled: true,
         targets: ['//' + window.location.host + '/consent-bridge'],
       };
       // action:yes is required by the handler's anti-default guard; necessary:yes
       // keeps it a well-formed consent string.
-      window.postMessage(
+      fw.postMessage(
         { type: 'faz_consent_forward', consent: 'action:yes,necessary:yes' },
         window.location.origin,
       );
