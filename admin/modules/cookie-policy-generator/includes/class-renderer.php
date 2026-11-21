@@ -342,6 +342,16 @@ class Renderer {
 			}
 		}
 		$data_for_md   = $data;
+		// Normalize the default self-link while hashing the rendered body.
+		// The real URL is restored after sanitizing and still goes into the
+		// separate policy version hash.
+		$self_url = $data['COOKIE_POLICY_URL'] ?? '';
+		$normalise_self_url = is_string( $self_url ) && '' !== $self_url
+			&& false !== strpos( $scaffold, '{{COOKIE_POLICY_URL}}' )
+			&& esc_url( self::current_url() ) === $self_url;
+		if ( $normalise_self_url ) {
+			$data_for_md['COOKIE_POLICY_URL'] = self::POLICY_URL_PLACEHOLDER;
+		}
 		foreach ( array_keys( $html_tokens ) as $token_name ) {
 			$data_for_md[ $token_name ] = Generator::html_token_sentinel( $token_name );
 		}
@@ -384,7 +394,8 @@ class Renderer {
 		// rendered policy does not duplicate the WordPress page title it is
 		// usually placed inside. `show_title="true"` keeps it. The policy stays
 		// self-referential either way — the intro paragraph names itself.
-		if ( ! self::should_show_title( $atts ) ) {
+		$show_title = self::should_show_title( $atts );
+		if ( ! $show_title ) {
 			$markdown = self::strip_leading_h1( $markdown );
 		}
 		$html     = Generator::markdown_to_html( $markdown );
@@ -451,6 +462,14 @@ class Renderer {
 			}
 		}
 		$html = wp_kses( $html, $allowed );
+		if ( false !== strpos( $html, self::POLICY_DATE_PLACEHOLDER ) ) {
+			$variant = $doc->option() . '|' . $jurisdiction . '|' . $lang . ( $show_title ? '|title' : '' );
+			$since   = self::content_changed_at( $variant, hash( 'sha256', $html ) );
+			$html    = str_replace( self::POLICY_DATE_PLACEHOLDER, esc_html( self::format_date( $lang, $since ) ), $html );
+		}
+		if ( $normalise_self_url ) {
+			$html = str_replace( self::POLICY_URL_PLACEHOLDER, $self_url, $html );
+		}
 		// Encoded after the policy-version hash, which therefore never sees it.
 		if ( $settings['obfuscate_emails'] ?? true ) {
 			$html = Email_Obfuscation::apply(
@@ -581,7 +600,7 @@ class Renderer {
 			'DPO_NAME'               => esc_html( self::scalar_string( $dpo['name'] ?? '' ) ),
 			'COOKIE_CATEGORIES'      => self::build_cookie_list_html( $lang, $jurisdiction ),
 			'THIRD_PARTY_SERVICES'   => self::build_services_list( $settings, $lang ),
-			'LAST_UPDATED_DATE'      => esc_html( self::format_date( $lang ) ),
+			'LAST_UPDATED_DATE'      => self::POLICY_DATE_PLACEHOLDER,
 			'COOKIE_POLICY_URL'      => esc_url( self::current_url() ),
 			'PRIVACY_POLICY_URL'     => esc_url( self::privacy_policy_url( $settings ) ),
 			'RETENTION_PERIOD'       => esc_html( self::format_retention( $settings, $lang ) ),
@@ -621,6 +640,8 @@ class Renderer {
 		 * Filter the data array passed to the template substitution.
 		 *
 		 * Use this to inject site-specific placeholders or override defaults.
+		 * LAST_UPDATED_DATE defaults to an internal placeholder. Replace it
+		 * with a formatted date to override the automatic date.
 		 * Returned values are NOT auto-escaped — the renderer wp_kses_post's
 		 * the whole output, so safe HTML is allowed.
 		 *
@@ -1997,16 +2018,112 @@ class Renderer {
 	// ---------- Misc helpers ----------
 
 	/**
-	 * Format the current date in the policy template's language.
+	 * Prefix of the options recording since when each policy variant has
+	 * served its current text.
+	 *
+	 * One option per variant (document, jurisdiction, language), shape
+	 * array( 'key' => '<content key>', 'since' => 'Y-m-d H:i:s' site-local ).
+	 * One row each rather than one shared array: the first renders of two
+	 * languages right after a scan run at the same moment, and a shared
+	 * read-modify-write would let one of them drop the other's date. The rows
+	 * are bounded by the variants a site serves, so nothing ever has to be
+	 * evicted, and the faz_% sweep in uninstall.php removes them.
+	 */
+	const CONTENT_DATE_PREFIX = 'faz_policy_date_';
+
+	private const POLICY_DATE_PLACEHOLDER = 'FAZPOLICYAUTODATE87C0';
+	private const POLICY_URL_PLACEHOLDER  = 'https://faz-policy.invalid/request-path-87c0';
+
+	/**
+	 * Whether a render may record a new date. Off while the admin previews
+	 * unsaved settings: a draft is not a text visitors were ever served.
+	 *
+	 * @var bool
+	 */
+	private static $record_content_dates = true;
+
+	/**
+	 * Render for the admin preview: same output, but a text seen only in the
+	 * preview never gets a date, so saving it days later dates it on the day
+	 * visitors actually start reading it.
+	 *
+	 * @param array<string,string> $atts Shortcode attributes.
+	 * @return string HTML.
+	 */
+	public static function render_preview( $atts = array() ) {
+		$previous                   = self::$record_content_dates;
+		self::$record_content_dates = false;
+		try {
+			return self::render( $atts );
+		} finally {
+			self::$record_content_dates = $previous;
+		}
+	}
+
+	/**
+	 * Since when the policy variant a visitor is about to read has served
+	 * this exact text.
+	 *
+	 * "Last updated" used to print the day of the request, so the date moved
+	 * every day while the declaration stayed the same — the opposite of what
+	 * the line tells a visitor. It now prints the day the variant's text last
+	 * changed, so it moves only when the text does. A text changed and then
+	 * changed back is a change too, and moves the date.
+	 *
+	 * The key hashes the sanitized policy HTML with placeholders for the
+	 * automatic date and the request URL. It includes the rendered disclaimer
+	 * and ignores settings that have no effect on this variant.
+	 *
+	 * @param string $variant Document option, jurisdiction, language and title mode.
+	 * @param string $key     Hash of the sanitized body.
+	 * @return string Site-local 'Y-m-d H:i:s'.
+	 */
+	private static function content_changed_at( $variant, $key ) {
+		$now = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+		if ( ! function_exists( 'get_option' ) || ! function_exists( 'update_option' ) || ! function_exists( 'add_option' ) ) {
+			return $now;
+		}
+		$name = self::CONTENT_DATE_PREFIX . md5( (string) $variant );
+
+		$row   = get_option( $name, null );
+		$valid = is_array( $row )
+			&& isset( $row['key'], $row['since'] )
+			&& is_string( $row['key'] )
+			&& is_string( $row['since'] )
+			&& false !== strtotime( $row['since'] );
+		if ( $valid && $row['key'] === $key ) {
+			return $row['since'];
+		}
+		if ( ! self::$record_content_dates ) {
+			return $now;
+		}
+
+		$value = array(
+			'key'   => $key,
+			'since' => $now,
+		);
+		if ( null === $row ) {
+			add_option( $name, $value, '', 'no' );
+		} else {
+			update_option( $name, $value, false );
+		}
+		return $now;
+	}
+
+	/**
+	 * Format a date in the policy template's language.
 	 *
 	 * Localises the month name to the template language (not the site locale)
 	 * and assembles day/month/year in that language's conventional order.
 	 *
-	 * @param string $lang Template language code.
+	 * @param string      $lang Template language code.
+	 * @param string|null $when Site-local 'Y-m-d H:i:s'; null for today.
 	 * @return string Human-readable localised date.
 	 */
-	private static function format_date( $lang ) {
-		$ts      = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+	private static function format_date( $lang, $when = null ) {
+		$ts = is_string( $when ) && '' !== $when
+			? $when
+			: ( function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' ) );
 		$ts_unix = strtotime( $ts );
 		// date_i18n() localises month names to the SITE locale, not the policy
 		// template's language, so an it/fr/bg policy on an English site still
