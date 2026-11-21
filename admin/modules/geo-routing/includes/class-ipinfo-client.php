@@ -326,7 +326,12 @@ class Ipinfo_Client {
 				// answered above it. An answer at or below it means the entry was
 				// dropped between the two calls and incr() recreated it at 1 with
 				// no expiry: refuse, and put the ceiling and the expiry back, or
-				// the rest of the window would count on from 1.
+				// the rest of the window would count on from 1. A request that
+				// increments the recreated entry before this set() still takes a
+				// slot: the object-cache API has no compare-and-set to close that
+				// gap, and it needs an eviction inside the add()/incr() pair plus
+				// a concurrent request inside the same few microseconds, so it is
+				// a documented limit (a lookup is skipped, never a decision).
 				wp_cache_set( $counter, $max, self::CACHE_GROUP, $left );
 				return max( 1, $start + HOUR_IN_SECONDS - $now );
 			}
