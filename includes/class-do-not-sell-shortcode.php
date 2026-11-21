@@ -48,6 +48,30 @@ class Do_Not_Sell_Shortcode {
 	const STATUS_FIELD   = 'dnsmpi_optout';
 	const STATUS_RESCIND = 'dns_rescinded';
 
+	/**
+	 * Site-wide ceiling on per-request admin notification mail, per 24 hours.
+	 *
+	 * Every accepted opt-out mailed admin_email, and the only bound was the
+	 * per-address 60-second window, which an address-rotating client walks
+	 * past. The DSAR form already caps its own per-request mail the same way.
+	 * Past the ceiling the opt-out is still recorded and honoured; only the
+	 * mail is skipped (every opt-out stays visible in the consent log).
+	 * Filterable via `faz_dnsmpi_max_notifications_per_day`.
+	 */
+	const MAX_NOTIFICATIONS_PER_DAY = 50;
+
+	/**
+	 * Option holding the admin-mail window: array( 'n' => count, 'start' => epoch ).
+	 * Prefixed faz_dnsmpi_rl_ like the other Do-Not-Sell throttles.
+	 */
+	const MAIL_WINDOW_OPTION = 'faz_dnsmpi_rl_mail_day';
+
+	/**
+	 * Option holding the second the shared-address audit slot was last taken
+	 * in (see claim_shared_audit_slot()).
+	 */
+	const SHARED_AUDIT_OPTION = 'faz_dnsmpi_shared_audit_slot';
+
 	public function __construct() {
 		add_shortcode( 'faz_do_not_sell', array( $this, 'render' ) );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_optout' ) );
@@ -333,27 +357,32 @@ class Do_Not_Sell_Shortcode {
 			return;
 		}
 
-		// Rate limiting: atomic DB-backed lock via add_option (MySQL INSERT IGNORE),
-		// plus a transient for the 60-second durability window.
-		$rl_key   = 'faz_dnsmpi_rl_'   . substr( $this->hash_ip(), 0, 16 );
-		$lock_key = 'faz_dnsmpi_lock_' . substr( $this->hash_ip(), 0, 16 );
-
-		if ( false !== get_transient( $rl_key ) || ! add_option( $lock_key, 1, '', 'no' ) ) {
+		// Rate limiting: per-connection 60-second window (see claim_window()).
+		$lock_key = $this->claim_window( 'faz_dnsmpi_' );
+		if ( false === $lock_key ) {
 			wp_send_json_error( __( 'Too many requests. Please wait 1 minute before submitting again.', 'faz-cookie-manager' ) );
 			return;
 		}
-		// Lock acquired — write durability transient, then process and release.
-		set_transient( $rl_key, 1, 60 );
+
+		// Without a per-address window (see claim_window()) the opt-out itself
+		// is always honoured, but its audit row and mail are bounded site-wide.
+		$audit = is_string( $lock_key ) || $this->claim_shared_audit_slot();
 
 		try {
 			$ip_hash = $this->hash_ip();
-			$this->log_optout( $ip_hash );
+			if ( $audit ) {
+				$this->log_optout( $ip_hash );
+			}
 			$this->set_optout_cookie();
-			$this->notify_admin( $ip_hash );
+			if ( $audit && $this->claim_notification() ) {
+				$this->notify_admin( $ip_hash );
+			}
 		} finally {
 			// Release DB lock regardless of success or exception; the transient
 			// maintains the ongoing 60-second throttle window.
-			delete_option( $lock_key );
+			if ( is_string( $lock_key ) ) {
+				delete_option( $lock_key );
+			}
 		}
 
 		wp_send_json_success(
@@ -385,24 +414,25 @@ class Do_Not_Sell_Shortcode {
 		// Idempotency: if the opt-out cookie is already absent, nothing to do.
 		$has_optout_cookie = isset( $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] ) && '1' === $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ];
 
-		// Rate limiting: atomic DB-backed lock plus 60-second transient window.
-		$rl_key   = 'faz_dnsmpi_rsc_rl_'   . substr( $this->hash_ip(), 0, 16 );
-		$lock_key = 'faz_dnsmpi_rsc_lock_' . substr( $this->hash_ip(), 0, 16 );
-
-		if ( false !== get_transient( $rl_key ) || ! add_option( $lock_key, 1, '', 'no' ) ) {
+		// Rate limiting: same per-connection window as the opt-out.
+		$lock_key = $this->claim_window( 'faz_dnsmpi_rsc_' );
+		if ( false === $lock_key ) {
 			wp_send_json_error( __( 'Too many requests. Please wait 1 minute before submitting again.', 'faz-cookie-manager' ) );
 			return;
 		}
-		set_transient( $rl_key, 1, 60 );
+
+		$audit = is_string( $lock_key ) || $this->claim_shared_audit_slot();
 
 		try {
 			$this->clear_optout_cookie();
-			if ( $has_optout_cookie ) {
+			if ( $has_optout_cookie && $audit ) {
 				$ip_hash = $this->hash_ip();
 				$this->log_rescind( $ip_hash );
 			}
 		} finally {
-			delete_option( $lock_key );
+			if ( is_string( $lock_key ) ) {
+				delete_option( $lock_key );
+			}
 		}
 
 		wp_send_json_success(
@@ -435,7 +465,7 @@ class Do_Not_Sell_Shortcode {
 		}
 		$controller_class::get_instance()->log_consent(
 			array(
-				'consent_id' => $consent_prefix . '-' . bin2hex( random_bytes( 8 ) ),
+				'consent_id' => $consent_prefix . '-' . self::random_hex( 8 ),
 				'status'     => $status,
 				// Empty STRING, not array(): log_consent() json-encodes an array
 				// (array() → "[]"), but a DNSMPI opt-out carries no category map,
@@ -512,6 +542,257 @@ class Do_Not_Sell_Shortcode {
 	private function log_rescind( $ip_hash ) {
 		unset( $ip_hash ); // Central logger derives its own hashed IP.
 		$this->log_dnsmpi_event( 'dnsmpi-rsc', self::STATUS_RESCIND );
+	}
+
+	/**
+	 * Whether a request whose address does not identify one visitor may write
+	 * its audit row (and ask for the admin mail).
+	 *
+	 * claim_window() is skipped there so one visitor cannot refuse everyone
+	 * else's opt-out, and the opt-out itself is always applied. The audit row
+	 * is not a right, though, and without a bound a script replaying the
+	 * public nonce wrote one consent-log row per request. A single site-wide
+	 * slot per second caps that write; a real opt-out that loses the race is
+	 * still applied through its cookie.
+	 *
+	 * The slot is taken in one statement. A transient read and written in two
+	 * gave the slot to every request that read it before the first one wrote
+	 * it, so a burst from concurrent workers wrote one row per worker. Without
+	 * a persistent object cache it is a single options row holding the second
+	 * it was last taken in: INSERT IGNORE creates it for one request, and a
+	 * later second takes it over with an UPDATE that only matches an older
+	 * second, which one request alone can win. A query that fails gives no
+	 * slot: the audit row is skipped, the opt-out is not.
+	 *
+	 * @return bool True when this request may write the audit row.
+	 */
+	private function claim_shared_audit_slot() {
+		if ( function_exists( 'wp_using_ext_object_cache' ) && wp_using_ext_object_cache() ) {
+			return (bool) wp_cache_add( 'faz_dnsmpi_shared_audit', 1, 'faz_throttle', 1 );
+		}
+		global $wpdb;
+		if ( ! isset( $wpdb ) ) {
+			return false;
+		}
+		$name = self::SHARED_AUDIT_OPTION;
+		$now  = time();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the slot must be taken in one statement, which the options API cannot express; $wpdb->options is core's own table name.
+		if ( 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, (string) $now ) ) ) {
+			return true;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- compare-and-set on the second the slot was last taken in; $wpdb->options is core's own table name.
+		return 1 === (int) $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND CAST(option_value AS UNSIGNED) < %d", (string) $now, $name, $now ) );
+	}
+
+	/**
+	 * Hex token that survives a host without a usable entropy source.
+	 *
+	 * random_bytes() throws there; the opt-out has already been applied when
+	 * the log and the mail lock ask for a token, so a throw would answer a
+	 * 500 for a request that succeeded.
+	 *
+	 * @param int $bytes Number of random bytes.
+	 * @return string
+	 */
+	private static function random_hex( $bytes ) {
+		try {
+			return bin2hex( random_bytes( $bytes ) );
+		} catch ( \Throwable $e ) {
+			return function_exists( 'wp_generate_password' ) ? wp_generate_password( $bytes * 2, false, false ) : substr( hash( 'sha256', uniqid( '', true ) ), 0, $bytes * 2 );
+		}
+	}
+
+	/**
+	 * Claim the per-connection 60-second window for an opt-out or rescind.
+	 *
+	 * The window is keyed on the client address, so it is skipped when that
+	 * address does not identify one visitor (a proxy's own address, a private
+	 * or loopback peer, no address at all): there every visitor shares one
+	 * bucket, and one request refused everyone else's CCPA opt-out for a
+	 * minute — the IP_Hasher contract the DSAR form already follows. The lock
+	 * row holds its claim time so a request that died between add_option()
+	 * and its finally block cannot hold the address forever.
+	 *
+	 * @param string $prefix Option/transient prefix ('faz_dnsmpi_' or 'faz_dnsmpi_rsc_').
+	 * @return string|bool Lock option name to release, true when no window
+	 *                     applies, false when the window is held (refuse).
+	 */
+	private function claim_window( $prefix ) {
+		if ( ! $this->ip_identifies_visitor() ) {
+			return true;
+		}
+		$hash     = substr( $this->rate_hash(), 0, 16 );
+		$rl_key   = $prefix . 'rl_' . $hash;
+		$lock_key = $prefix . 'lock_' . $hash;
+
+		if ( false !== get_transient( $rl_key ) ) {
+			return false;
+		}
+		if ( ! add_option( $lock_key, time(), '', 'no' ) ) {
+			$held = (int) get_option( $lock_key, 0 );
+			if ( $held > 0 && ( time() - $held ) < 120 ) {
+				return false;
+			}
+			// Stale lock (or a pre-1.39.1 row holding the literal 1): reclaim it.
+			delete_option( $lock_key );
+			if ( ! add_option( $lock_key, time(), '', 'no' ) ) {
+				return false;
+			}
+		}
+		// Lock acquired — write the durability transient for the window.
+		set_transient( $rl_key, 1, 60 );
+		return $lock_key;
+	}
+
+	/**
+	 * Whether this opt-out may still send its own admin notification in the
+	 * current 24-hour window.
+	 *
+	 * The window is fixed: it closes 24 hours after the FIRST mail in it, like
+	 * the DSAR form's site-wide ceiling (DSAR_Shortcode::window_bump()). A
+	 * transient re-set on every mail would push its own expiry forward, so on
+	 * a site with an opt-out a day the counter would never reset and the mail
+	 * would stop for good once it reached the ceiling. It is kept in a
+	 * non-autoloaded option, which an object-cache flush cannot reset either.
+	 *
+	 * The read and the write happen under a short lock. Opt-outs from different
+	 * addresses do not share the per-address lock, so without one N parallel
+	 * requests all read the same count, all pass the ceiling and all send,
+	 * which is the burst from rotating addresses the ceiling exists to stop.
+	 * A request that cannot get the lock sends no mail: under that much
+	 * contention the site is being flooded, and the ceiling is a flood limit.
+	 *
+	 * @return bool
+	 */
+	private function claim_notification() {
+		$max = (int) apply_filters( 'faz_dnsmpi_max_notifications_per_day', self::MAX_NOTIFICATIONS_PER_DAY );
+		if ( $max <= 0 ) {
+			return false;
+		}
+		$lock = self::MAIL_WINDOW_OPTION . '_lock';
+		// The value names this request, so a release or a reclaim removes
+		// only the lock it means and never one another request took since.
+		$mine = time() . ':' . self::random_hex( 6 );
+		$held = false;
+		for ( $try = 0; $try < 10; $try++ ) {
+			if ( $this->insert_mail_lock( $lock, $mine ) ) {
+				$held = true;
+				break;
+			}
+			$seen = $this->read_mail_lock( $lock );
+			if ( null === $seen ) {
+				// Released between the INSERT and the read: try again now.
+				continue;
+			}
+			if ( time() - (int) $seen > 10 ) {
+				// A request died holding it: remove that lock (only that one)
+				// and retry the INSERT.
+				$this->delete_mail_lock( $lock, $seen );
+				continue;
+			}
+			usleep( 20000 );
+		}
+		if ( ! $held ) {
+			return false;
+		}
+		try {
+			return $this->claim_notification_locked( $max );
+		} finally {
+			$this->delete_mail_lock( $lock, $mine );
+		}
+	}
+
+	/**
+	 * Take the mail-window lock: true for exactly one request.
+	 *
+	 * INSERT IGNORE on the unique option_name inserts for one request and
+	 * changes nothing for the others. add_option() is not a mutex: it writes
+	 * with INSERT … ON DUPLICATE KEY UPDATE, which reports success to a second
+	 * request whose value differs, and it answers from a cached copy of a row
+	 * another request has already deleted.
+	 *
+	 * @param string $lock  Option name.
+	 * @param string $value This request's lock value.
+	 * @return bool
+	 */
+	private function insert_mail_lock( $lock, $value ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- a mutex row needs INSERT IGNORE, which the options API does not offer; $wpdb->options is core's own table name.
+		return 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $lock, $value ) );
+	}
+
+	/**
+	 * The lock row's value as stored, never a cached copy, or null.
+	 *
+	 * @param string $lock Option name.
+	 * @return string|null
+	 */
+	private function read_mail_lock( $lock ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the holder releases the row from another request, so a cached read would never see it go; $wpdb->options is core's own table name.
+		$value = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $lock ) );
+		return null === $value ? null : (string) $value;
+	}
+
+	/**
+	 * Delete the lock row only while it still holds `$value`.
+	 *
+	 * @param string $lock  Option name.
+	 * @param string $value The value this request took or found stale.
+	 * @return void
+	 */
+	private function delete_mail_lock( $lock, $value ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-delete in one statement; delete_option() removes the row by name and would drop a lock another request took after this one's expired.
+		$wpdb->delete( $wpdb->options, array( 'option_name' => $lock, 'option_value' => $value ), array( '%s', '%s' ) );
+	}
+
+	/**
+	 * claim_notification()'s read-modify-write; the caller holds the lock.
+	 *
+	 * The write is a compare-and-swap on the row as read, not a plain
+	 * update_option(): the lock is reclaimed after 10 seconds, so a holder
+	 * that stalls between its read and its write can resume after another
+	 * request has counted a mail, and a plain write would then put back a
+	 * count that misses that mail. When the row changed in between, this
+	 * request sends no mail.
+	 *
+	 * @param int $max Mails allowed per window.
+	 * @return bool
+	 */
+	private function claim_notification_locked( $max ) {
+		global $wpdb;
+		$name = self::MAIL_WINDOW_OPTION;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the compare-and-swap below needs the row exactly as stored, never a cached copy; $wpdb->options is core's own table name.
+		$raw   = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) );
+		$data  = null === $raw ? false : maybe_unserialize( $raw );
+		$now   = time();
+		$start = is_array( $data ) && isset( $data['start'] ) ? (int) $data['start'] : 0;
+		$count = is_array( $data ) && isset( $data['n'] ) ? (int) $data['n'] : 0;
+		if ( ! $start || $now - $start >= 86400 ) {
+			$start = $now;
+			$count = 0;
+		}
+		if ( $count >= $max ) {
+			return false;
+		}
+		$next = maybe_serialize(
+			array(
+				'n'     => $count + 1,
+				'start' => $start,
+			)
+		);
+		if ( null === $raw ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the first row of a window is created only if no other request created it first; $wpdb->options is core's own table name.
+			$swapped = 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, $next ) );
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-swap: the row is replaced only while it still holds the value read above.
+			$swapped = 1 === (int) $wpdb->update( $wpdb->options, array( 'option_value' => $next ), array( 'option_name' => $name, 'option_value' => $raw ), array( '%s' ), array( '%s', '%s' ) );
+		}
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( $name, 'options' );
+		}
+		return $swapped;
 	}
 
 	/**

@@ -2504,7 +2504,9 @@ class Controller {
 	 */
 	public static function build_static_resolve_entry( $url, $ip ) {
 		$ip = trim( (string) $ip );
-		if ( ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+		// Re-checked at use time: a value stored by an older release passed
+		// only the private/reserved flags (see faz_ip_is_globally_routable()).
+		if ( ! function_exists( 'faz_ip_is_globally_routable' ) || ! faz_ip_is_globally_routable( $ip ) ) {
 			return '';
 		}
 		$parsed = wp_parse_url( $url );

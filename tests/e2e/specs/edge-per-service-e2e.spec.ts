@@ -1,6 +1,6 @@
 import { expect, test } from '../fixtures/wp-fixture';
 import type { BrowserContext, Page } from '@playwright/test';
-import { wpEval } from '../utils/wp-env';
+import { bustDetectionCache, removeSeededCookie, seedDetectedCookie, wpEval } from '../utils/wp-env';
 
 /**
  * Edge-case coverage for per-service frontend consent (subsystem: per-service-e2e).
@@ -45,29 +45,6 @@ async function postSettings(page: Page, nonce: string, payload: FazSettings): Pr
     data: payload,
   });
   expect(res.status(), `settings update status ${res.status()}`).toBe(200);
-}
-
-/** Insert a detected provider cookie row (discovered=1) if absent; idempotent. */
-function seedDetectedCookie(name: string): void {
-  wpEval(
-    `global $wpdb;$t=$wpdb->prefix.'faz_cookies';` +
-      `$n=${JSON.stringify(name)};` +
-      `$exists=(int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $t WHERE name=%s AND discovered=1",$n));` +
-      `if(!$exists){$wpdb->insert($t,array('name'=>$n,'slug'=>sanitize_title($n),'description'=>'e2e seed','duration'=>'session','domain'=>'example.com','category'=>0,'type'=>'http','discovered'=>1,'date_created'=>current_time('mysql'),'date_modified'=>current_time('mysql')));}`,
-  );
-}
-
-/** Remove the e2e-seeded provider cookie rows. */
-function removeSeededCookie(name: string): void {
-  wpEval(
-    `global $wpdb;$t=$wpdb->prefix.'faz_cookies';` +
-      `$wpdb->query($wpdb->prepare("DELETE FROM $t WHERE name=%s AND description=%s",${JSON.stringify(name)},'e2e seed'));`,
-  );
-}
-
-/** Bust the detected-cookie-name transient + per-service caches so the next load rebuilds. */
-function bustDetectionCache(): void {
-  wpEval(`delete_transient('faz_detected_cookie_names');`);
 }
 
 /** Read the parsed _fazConfig._services array from a frontend page. */
