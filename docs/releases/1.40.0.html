@@ -1,0 +1,37 @@
+<p>FAZ Cookie Manager 1.40.0 è la release più larga degli ultimi mesi, e quasi niente di quello che contiene si vede. Metà del lavoro viene da un audit di sicurezza completo del codice della 1.39.0; l'altra metà da cinque segnalazioni arrivate dal forum di wordpress.org e da GitHub, piccole in apparenza, che hanno tutte una storia da raccontare.</p>
+
+<h2>Un audit fatto per intero</h2>
+
+<p>Un plugin per il consenso ai cookie ha una posizione scomoda: è lui a decidere quali script partono, e lo fa leggendo una pagina che contiene anche testo scritto da altri. Un autore del blog, un plugin di terze parti, un modulo di contatto. Se una di queste fonti riesce a farsi scambiare per il plugin, può far partire quello che il visitatore non ha accettato, o fargli accettare quello che non ha mai visto.</p>
+
+<p>Per questo ho fatto rileggere tutto il codice sorgente, non solo le modifiche recenti. Ne sono usciti venti punti da verificare e settantasei note di irrobustimento. Ogni punto è stato trovato da un revisore e ricontrollato da altri due, in modo indipendente. I venti sono tutti chiusi. Delle settantasei note ne ho applicate cinquanta, dieci erano già coperte dalle correzioni precedenti, e per le sedici che ho lasciato com'erano ho scritto il motivo, una per una.</p>
+
+<p>I punti più seri avevano una forma comune: qualcosa scritto nel contenuto di un articolo veniva preso per qualcosa prodotto dal plugin. Ora il banner si legge solo dal modello del plugin, e i pulsanti «Accetta» dei segnaposto portano una chiave diversa a ogni risposta del server, così un pulsante copiato in un articolo non concede più nessun consenso. Gli stili, gli sfondi e i contenuti incorporati che il plugin mette da parte prima del consenso vengono rimessi al loro posto solo se è stato il server a metterli da parte, e il server li firma. Una pagina caricata più tardi, per esempio con lo scorrimento infinito, porta la firma della risposta che l'ha prodotta: il plugin la verifica con il server prima di rimetterla.</p>
+
+<p>Il resto è meno visibile ma conta lo stesso. Un utente senza il permesso di inserire HTML libero non può più far salvare uno script a un cookie, né con un'importazione costruita apposta né con una chiamata diretta alle API. Sui multisito impostazioni, cache e tabelle restano di ciascun sito. Lo scanner rifiuta indirizzi che non siano pubblici. I limiti sulle richieste di dati personali, sull'opposizione alla vendita e sulle verifiche VPN di ipinfo contano gli indirizzi IPv6 per blocco /64, dove una sola connessione ne ha a disposizione miliardi.</p>
+
+<h2>Una barra di troppo</h2>
+
+<p>La segnalazione più semplice da descrivere è venuta dal forum: nella tabella dei cookie, un apostrofo compariva con una barra davanti. «It\'s» invece di «It's».</p>
+
+<p>La causa era una funzione di WordPress usata nel posto sbagliato. Il plugin puliva le descrizioni con un filtro che WordPress pensa per i dati ancora «con le barre», quelli che arrivano da un modulo inviato: il filtro toglie le barre, pulisce il testo e poi le rimette. Ricevendo testo già pulito, le aggiungeva e basta. Ogni apostrofo finiva nel database preceduto da una barra, e una barra vera, quella di un percorso come C:\temp, spariva al salvataggio. Nel pannello di amministrazione e nel banner non si vedeva, perché chi leggeva quei campi toglieva una barra in lettura. La tabella dei cookie, il blocco dell'editor, la cookie policy e l'esportazione leggevano invece il database direttamente, e mostravano il testo così com'era.</p>
+
+<p>Mi sono chiesto come mai nessun test se ne fosse accorto. La risposta è un po' imbarazzante: nei test quel filtro era sostituito da una funzione che restituiva il testo intatto, cioè proprio il comportamento che il filtro vero non ha. I test nuovi lo riproducono come lo definisce WordPress.</p>
+
+<p>Correggere il salvataggio era la parte facile. Le righe già scritte andavano ripulite, e togliere le barre non è un'operazione che si può ripetere: la seconda volta toglie una barra che l'amministratore aveva scritto davvero. La migrazione deve quindi girare una volta sola, anche con due richieste di amministrazione che partono nello stesso istante, anche se il server si ferma a metà. Usa un blocco nel database, una transazione, e un confronto su ogni campo prima di scriverlo, così un testo che qualcuno ha salvato nel frattempo non viene toccato. Sui server dove la tabella delle opzioni non supporta le transazioni, il segnale di «fatto» si scrive subito dopo, invece che dentro: lì restano scoperti due casi, un server che si ferma esattamente fra la fine della transazione e quella scrittura, oppure una scrittura che fallisce due volte di fila; nel secondo il blocco resta acceso dieci minuti, e allo scadere la migrazione può ripartire. In entrambi i casi un testo con una barra vera può perderla. Mentre la migrazione gira, per pochi secondi, esportazione e importazione rispondono di riprovare tra un minuto, invece di produrre un file che sbaglierebbe una barra.</p>
+
+<h2>Altre segnalazioni e una correzione di accessibilità</h2>
+
+<p>Il logo del banner aveva sempre lo stesso testo alternativo, «Brand logo», e un lettore di schermo annunciava quello invece del nome dell'azienda. Ora il plugin prende il testo alternativo dell'immagine nella Libreria media, e una modifica fatta lì si vede al caricamento successivo della pagina, senza dover risalvare il banner.</p>
+
+<p>Le mappe di WP Maps restavano un riquadro vuoto finché il visitatore non accettava i cookie, perché il plugin le disegna da JavaScript e non c'era nulla da sostituire con un segnaposto. Ora prima del consenso compare il segnaposto di Google Maps, e dopo «Accetta» la mappa viene disegnata senza ricaricare la pagina.</p>
+
+<p>Durante l’audit è emerso anche un problema di accessibilità. Il tasto Esc, su un banner con il pulsante di chiusura accanto a «Rifiuta», registrava un rifiuto che il visitatore non aveva scelto. Ora Esc sul banner non fa nulla, come prevedono le linee guida sull'accessibilità che il plugin segue, e nel centro preferenze chiude il pannello e riporta il cursore sul pulsante che l'aveva aperto.</p>
+
+<p>Infine due casi da sito reale. I cookie che Divi crea mentre si modifica una pagina finivano nell'elenco dei cookie da dichiarare, uno per ogni pagina modificata: ora sono cookie interni di WordPress, che i visitatori non ricevono mai. E un carosello di loghi costruito con Owl Carousel restava vuoto finché non si ridimensionava la finestra, perché il plugin tratteneva le copie delle slide che la libreria prepara in un documento invisibile.</p>
+
+<h2>Cosa ho incontrato lungo la strada</h2>
+
+<p>Le otto correzioni sono nate su rami separati, e due toccavano lo stesso codice da direzioni diverse: l'irrobustimento chiedeva di togliere le barre prima di pulire il testo, la correzione delle barre di toglierle solo finché la migrazione non è passata. Prese una alla volta erano giuste entrambe; unite meccanicamente, l'ordine sarebbe tornato quello sbagliato. Le ho unite a mano, e il test che controlla l'ordine fallisce se lo si inverte.</p>
+
+<p>Il test di aggiornamento dalla versione precedente, poi, controllava ancora una migrazione di sei release fa. L'ho aggiornato: ora semina una descrizione con la barra e due cookie di Divi nel database della 1.39.0, aggiorna, e verifica che la barra sia sparita una volta sola e che il cookie spostato a mano da un amministratore sia rimasto dov'era.</p>

@@ -17,6 +17,21 @@
 
 namespace FazCookie\Includes {
 	abstract class Rest_Controller {}
+
+	/**
+	 * The one-time unslash migration (Store::ensure_text_unslashed()) is taken
+	 * as done, and a pre-fix file's unslash step as a no-op: these texts carry
+	 * no slashes. The unslash itself is pinned by
+	 * test-cookie-text-slashes-php.php; this test pins the sanitising after it.
+	 */
+	class Store {
+		public static function ensure_text_unslashed() {
+			return true;
+		}
+		public static function unslash_text_column( $value ) {
+			return $value;
+		}
+	}
 }
 
 namespace {

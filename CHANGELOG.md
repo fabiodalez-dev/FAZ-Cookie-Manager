@@ -2,6 +2,31 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.40.0] - 2026-11-21
+
+### Security
+- A full source-level security audit of 1.39.0 found 20 leads and 76 hardening notes. All 20 leads are closed (#401) and 50 of the notes are addressed (#403); for every note left as is, the reason is written in the pull request. The main points:
+  - The consent banner is read only from the plugin's own `<template id="fazBannerTemplate">`, so markup in post content can no longer stand in for it, and placeholder "Accept" buttons carry a per-response key, so a button written into a post can no longer grant consent.
+  - The runtime and the bootstrap rewrite only the `<style>` elements the HTML parser really starts, and the `data-faz-style`, `data-faz-background` and `data-faz-data` values are restored after consent only when the server (or the runtime) parked them and signed them. Parks made by another response, such as an infinite-scroll page or a cached fragment, are re-keyed by the server or confirmed through a new `faz/v1/park-proofs` route.
+  - An administrator without `unfiltered_html` can no longer plant a cookie opt-in or opt-out script through a double-encoded import or a single-cookie REST write (403). Saving a cookie no longer strips the scripts an administrator already stored.
+  - The settings import sanitises the category and cookie texts before storing them; the multilingual getters unslash before they filter.
+  - Multisite: the first-install flag and the settings cache are per site, deleting a subsite drops its six plugin tables, and the scanner's static IP must be publicly routable (only a network admin may set it). On multisite the scanner also requires the site host to resolve to public addresses only, pinned on the connection; a single site can opt in with the `faz_scanner_require_public_site_ip` filter.
+  - Do-Not-Sell and DSAR: the per-address limits count IPv6 per /64, the Do-Not-Sell window no longer refuses a whole site behind a shared address, admin mail has a daily ceiling (`faz_dnsmpi_max_notifications_per_day`, default 50), and the DSAR Reply-To name and greeting cannot carry injected text.
+  - ipinfo (geo-routing VPN check): verdicts are cached across requests, an account-level refusal is remembered for 5 minutes, and new lookups have an hourly budget (`faz_ipinfo_lookups_per_hour`, default 120; 20 per IPv6 /64) taken atomically on both cache backends. A key saved before this release is re-encrypted once in the authenticated format.
+  - Downloaded data (GeoLite2, GVL, Open Cookie Database) is bounded in size, and the GeoLite2 archive is streamed.
+  - Upgrades: `install()` runs under a claim, a failing step is retried every 5 minutes instead of on every request, and pending migrations also run from cron, so a site where nobody opens wp-admin still migrates.
+
+### Added
+- WP Maps (wp-google-map-plugin): Google maps show the Google Maps placeholder until consent and are drawn after Accept without a reload (#406). OpenStreetMap maps are left alone. With WP Maps' "Cookies Acceptance" option on, FAZ answers its consent gate wherever it shows a banner, so visitors get the placeholder instead of a permanent "No map" notice.
+
+### Fixed
+- An apostrophe in a cookie or category description was shown as `\'` in `[faz_cookie_table]`, the `faz/cookie-table` block, the generated cookie policy and the settings export (wp.org support, "Extra slashes in cookie tables", #408). The texts are now stored without slashes, and a one-time migration cleans the existing rows exactly once (mutex, transaction, compare-and-set). Exports are marked, so an export from an older version is unslashed once on import. The export and the import answer 503 for the few seconds the migration is running.
+- The brand logo's alt text was always "Brand logo"; it is now the alt text of the image in the Media Library, and an edit in the Media Library shows on the next page load (#404, #407). The `faz_brand_logo_alt` filter can override it.
+- Escape on the banner no longer records a rejection where the close button is shown next to Reject, and Escape that collapses the pushdown panel no longer rejects either (#409). Escape closes the preference centre and returns focus to the control that opened it; the focus trap follows controls added later, such as a service toggle.
+- The Divi Builder editor cookies (`et-saved-post-*` and the others Divi sets while someone edits a post) are filed under WordPress Internal and no longer appear in the banner, the cookie table or the policy (#402). Existing rows still in Uncategorized are moved once.
+- The cookie policy's "Last updated on" shows when the policy text last changed, not the day it is viewed (#402).
+- Owl Carousel loop sliders (for example the Signify Pro logo slider) stayed empty until the window was resized (#405).
+
 ## [1.39.0] - 2026-11-11
 
 ### Added
