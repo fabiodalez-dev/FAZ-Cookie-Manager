@@ -117,7 +117,8 @@ echo 'INSTALL PASSED'
 # 1.40.0 adds two migrations of its own, and every upgrade from 1.39.x runs
 # both, so they are seeded and asserted unconditionally: the cookie text
 # unslash (a description and a duration stored the way the 1.39.0 setters
-# wrote an apostrophe, "It\'s") and the Divi Builder editor cookies moved from
+# wrote an apostrophe, "It\'s", next to a real backslash that a second
+# strip would eat, so a migration that ran twice is caught) and the Divi Builder editor cookies moved from
 # Uncategorized to WordPress Internal (one row left there, one an administrator
 # put in Functional on purpose, which must stay).
 if [ "$PREVIOUS" = "1.32.0" ] || [ "$(printf '%s\n' "$PREVIOUS" "1.32.0" | sort -V | head -1)" = "1.32.0" ]; then
@@ -149,7 +150,7 @@ if (!$analytics) { throw new Exception("No analytics category to seed"); }
 $wpdb->insert($wpdb->prefix."faz_cookies", array("name"=>"sbjs_current","slug"=>"sbjs-current","domain"=>"probe.test","category"=>$analytics,"type"=>"HTTP","discovered"=>1,"date_created"=>"2026-09-01 00:00:00","date_modified"=>"2026-09-01 00:00:00"));
 $wpdb->insert($wpdb->prefix."faz_cookies", array("name"=>"sbjs_udata","slug"=>"sbjs-udata","domain"=>"probe.test","category"=>$analytics,"type"=>"HTTP","discovered"=>1,"date_created"=>"2026-09-01 00:00:00","date_modified"=>"2026-09-02 10:00:00"));
 $q = chr(39);
-$wpdb->insert($wpdb->prefix."faz_cookies", array("name"=>"faz_unslash_probe","slug"=>"faz-unslash-probe","domain"=>"probe.test","category"=>$analytics,"type"=>"HTTP","discovered"=>1,"description"=>wp_json_encode(array("en"=>"It\\".$q."s a probe")),"duration"=>wp_json_encode(array("en"=>"a visitor\\".$q."s session"))));
+$wpdb->insert($wpdb->prefix."faz_cookies", array("name"=>"faz_unslash_probe","slug"=>"faz-unslash-probe","domain"=>"probe.test","category"=>$analytics,"type"=>"HTTP","discovered"=>1,"description"=>wp_json_encode(array("en"=>"It\\".$q."s C:\\\\temp")),"duration"=>wp_json_encode(array("en"=>"a visitor\\".$q."s session"))));
 if (!$wpdb->insert_id) { throw new Exception("Unslash probe insert failed"); }
 $uncategorized = (int)$wpdb->get_var("SELECT category_id FROM {$wpdb->prefix}faz_cookie_categories WHERE slug=\"uncategorized\"");
 $functional = (int)$wpdb->get_var("SELECT category_id FROM {$wpdb->prefix}faz_cookie_categories WHERE slug=\"functional\"");
@@ -193,7 +194,7 @@ $row = $wpdb->get_row("SELECT description, duration FROM {$wpdb->prefix}faz_cook
 $desc = is_array($row) ? json_decode((string)$row["description"], true) : null;
 $dur = is_array($row) ? json_decode((string)$row["duration"], true) : null;
 $q = chr(39);
-if (!get_option("faz_cookie_text_unslashed_done") || !is_array($desc) || ($desc["en"] ?? null) !== "It".$q."s a probe" || !is_array($dur) || ($dur["en"] ?? null) !== "a visitor".$q."s session") { throw new Exception("Cookie text unslash missing: ".wp_json_encode($row)); }
+if (!get_option("faz_cookie_text_unslashed_done") || !is_array($desc) || ($desc["en"] ?? null) !== "It".$q."s C:\\temp" || !is_array($dur) || ($dur["en"] ?? null) !== "a visitor".$q."s session") { throw new Exception("Cookie text unslash missing: ".wp_json_encode($row)); }
 \FazCookie\Includes\Activator::unslash_cookie_text();
 if ((string)$wpdb->get_var("SELECT description FROM {$wpdb->prefix}faz_cookies WHERE slug=\"faz-unslash-probe\"") !== (string)$row["description"]) { throw new Exception("Cookie text unslash ran twice"); }
 $internal = (int)$wpdb->get_var("SELECT category_id FROM {$wpdb->prefix}faz_cookie_categories WHERE slug=\"wordpress-internal\"");
