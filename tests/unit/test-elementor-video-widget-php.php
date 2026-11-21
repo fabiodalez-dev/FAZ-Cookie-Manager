@@ -510,6 +510,17 @@ if ( ! function_exists( 'get_transient' ) ) {
 	faz_set_prop( $fe, 'provider_match_meta_cache', null );
 	$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'marketing' ), array( 'maps.google.com' => 'functional', 'wpgmp-google-api' => 'marketing' ) ) );
 	assert_eq( faz_category( $out ), 'marketing', 'WP Maps: URL allowed, handle denied — the denied match decides, as for the tag' );
+	// Both rules denied: the first in map order decides, whichever of handle
+	// or URL it is written on — the tag filter walks the map once, so a
+	// URL-first pass parked the map under a different category than its tag.
+	foreach ( array(
+		'marketing'  => array( 'wpgmp-google-api' => 'marketing', 'maps.google.com' => 'functional' ),
+		'functional' => array( 'maps.google.com' => 'functional', 'wpgmp-google-api' => 'marketing' ),
+	) as $expected => $rules ) {
+		faz_set_prop( $fe, 'provider_match_meta_cache', null );
+		$out = faz_call( $fe, 'process_wpgmp_map_widgets', array( $wpgmp_map, array( 'marketing', 'functional' ), $rules ) );
+		assert_eq( faz_category( $out ), $expected, "WP Maps: both rules denied — the first in map order ({$expected}) decides, as for the tag" );
+	}
 	faz_set_prop( $fe, 'provider_match_meta_cache', null );
 
 	// Both entry points run the detector while script bodies are stashed: a

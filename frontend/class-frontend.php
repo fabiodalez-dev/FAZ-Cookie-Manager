@@ -15448,9 +15448,10 @@ class Frontend {
 	 * per-service choice for google-maps wins over the category both ways.
 	 *
 	 * Provider rules are read as filter_script_loader_tag() reads them for the
-	 * tag itself — on the script URL and on the handle — with the same
-	 * fail-closed order (a blocked match decides, an allowed one is a
-	 * fallback). Matching only the URL let a rule written on the handle
+	 * tag itself — in map order, each on the script URL and on the handle —
+	 * with the same fail-closed rule (the first blocked match decides, the
+	 * first allowed one is a fallback), so the map and its API tag always land
+	 * in the same category. Matching only the URL let a rule written on the handle
 	 * (`wpgmp-google-api` → marketing) release the API while the map stayed
 	 * behind its placeholder under the catalogue category, or the reverse.
 	 *
@@ -15465,19 +15466,29 @@ class Frontend {
 		if ( $this->is_whitelisted( $attrs, '' ) || $this->is_whitelisted( $src, '' ) ) {
 			return '';
 		}
-		$category = $this->match_script_to_provider( $src, '', $providers, $blocked_categories );
-		if ( ! in_array( $category, $blocked_categories, true ) ) {
-			foreach ( $providers as $pattern => $handle_category ) {
-				if ( '' === (string) $pattern || false === stripos( $handle, (string) $pattern ) ) {
-					continue;
-				}
-				if ( in_array( $handle_category, $blocked_categories, true ) ) {
-					$category = $handle_category;
-					break;
-				}
-				if ( ! $category ) {
-					$category = $handle_category;
-				}
+		// One pass over the map in its order, each rule tried on the handle and
+		// on the URL, exactly as filter_script_loader_tag() walks it for the
+		// tag. Matching the URL first and the handle second picked a different
+		// rule whenever both matched: with `wpgmp-google-api` → marketing ahead
+		// of `maps.google.com` → functional and both blocked, the tag was
+		// parked under marketing and the map under functional, so accepting
+		// one of the two released only half of the map.
+		$url      = preg_match( '/\ssrc\s*=\s*"([^"]*)"/i', ' ' . $src, $src_match ) ? $src_match[1] : '';
+		$category = false;
+		foreach ( $providers as $pattern => $rule_category ) {
+			$pattern = (string) $pattern;
+			if ( '' === $pattern ) {
+				continue;
+			}
+			if ( false === stripos( $handle, $pattern ) && false === stripos( $url, $pattern ) ) {
+				continue;
+			}
+			if ( in_array( $rule_category, $blocked_categories, true ) ) {
+				$category = $rule_category;
+				break;
+			}
+			if ( false === $category ) {
+				$category = $rule_category;
 			}
 		}
 		if ( ! $category ) {
