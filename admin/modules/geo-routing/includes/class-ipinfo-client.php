@@ -316,9 +316,18 @@ class Ipinfo_Client {
 			// requests racing to add it, and a drop there is not detected: the
 			// evidence of it would have to live in the same cache.
 			$base = ( $now - $start >= self::WINDOW_GRACE ) ? $max : 0;
-			wp_cache_add( $counter, $base, self::CACHE_GROUP, $left );
-			$n = wp_cache_incr( $counter, 1, self::CACHE_GROUP );
+			$added = wp_cache_add( $counter, $base, self::CACHE_GROUP, $left );
+			$n     = wp_cache_incr( $counter, 1, self::CACHE_GROUP );
 			if ( false === $n || $n > $max ) {
+				return max( 1, $start + HOUR_IN_SECONDS - $now );
+			}
+			if ( $added && $base === $max ) {
+				// The counter was added at the ceiling, so incr() can only have
+				// answered above it. An answer at or below it means the entry was
+				// dropped between the two calls and incr() recreated it at 1 with
+				// no expiry: refuse, and put the ceiling and the expiry back, or
+				// the rest of the window would count on from 1.
+				wp_cache_set( $counter, $max, self::CACHE_GROUP, $left );
 				return max( 1, $start + HOUR_IN_SECONDS - $now );
 			}
 			return 0;

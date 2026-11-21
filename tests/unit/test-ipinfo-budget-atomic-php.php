@@ -110,6 +110,10 @@ function wp_cache_add( $key, $val, $group = '', $ttl = 0 ) {
 	}
 	$GLOBALS['_faz_test_cache'][ $k ]     = $val;
 	$GLOBALS['_faz_test_cache_exp'][ $k ] = $ttl ? $GLOBALS['faz_test_now'] + (int) $ttl : 0;
+	if ( ! empty( $GLOBALS['faz_test_drop_after_add'] ) && false !== strpos( $key, '_n_' ) ) {
+		// The entry is evicted right after it was created, before incr() runs.
+		unset( $GLOBALS['_faz_test_cache'][ $k ], $GLOBALS['_faz_test_cache_exp'][ $k ] );
+	}
 	return true;
 }
 function wp_cache_incr( $key, $offset = 1, $group = '' ) {
@@ -433,7 +437,42 @@ foreach ( $GLOBALS['_faz_test_cache'] as $k => $v ) {
 }
 tr_check( array() === $nonexpiring, 'every window counter carries an expiry on an incr that creates keys (without: ' . implode( ', ', $nonexpiring ) . ')' );
 $GLOBALS['faz_test_incr_creates'] = false;
-$GLOBALS['faz_test_ext_cache'] = false;
+
+// 12. The counter is evicted between add() and incr() on a backend whose incr
+// creates the key: that request is refused and the counter is put back at the
+// ceiling with an expiry, so the rest of the window is not counted on from 1.
+$GLOBALS['faz_test_incr_creates'] = true;
+$GLOBALS['_faz_test_cache']       = array();
+$GLOBALS['_faz_test_cache_exp']   = array();
+$GLOBALS['_faz_test_http_calls']  = 0;
+$GLOBALS['_faz_test_filters']['faz_ipinfo_lookups_per_hour'] = function () { return 1000; };
+$client = new Ipinfo_Client();
+$client->lookup( '2001:db8:9:9::1' );
+faz_test_advance( 30 );
+foreach ( array_keys( $GLOBALS['_faz_test_cache'] ) as $k ) {
+	if ( false !== strpos( $k, 'budget_v6_' ) && false !== strpos( $k, '_n_' ) ) {
+		unset( $GLOBALS['_faz_test_cache'][ $k ], $GLOBALS['_faz_test_cache_exp'][ $k ] );
+	}
+}
+$GLOBALS['faz_test_drop_after_add'] = true;
+$GLOBALS['_faz_test_http_calls']    = 0;
+$client->lookup( '2001:db8:9:9::2' );
+$GLOBALS['faz_test_drop_after_add'] = false;
+$after_race = $GLOBALS['_faz_test_http_calls'];
+for ( $i = 3; $i <= 40; $i++ ) {
+	$client->lookup( '2001:db8:9:9::' . dechex( $i ) );
+}
+tr_check( 0 === $after_race, 'a counter evicted between add and incr: that request takes no slot (got ' . $after_race . ' lookups)' );
+tr_check( 0 === $GLOBALS['_faz_test_http_calls'], 'a counter evicted between add and incr does not reopen the window: no lookup afterwards (got ' . $GLOBALS['_faz_test_http_calls'] . ')' );
+$restored = array();
+foreach ( $GLOBALS['_faz_test_cache'] as $k => $v ) {
+	if ( false !== strpos( $k, 'budget_v6_' ) && false !== strpos( $k, '_n_' ) ) {
+		$restored[ $k ] = array( $v, $GLOBALS['_faz_test_cache_exp'][ $k ] ?? 0 );
+	}
+}
+tr_check( 1 === count( $restored ) && reset( $restored )[0] >= Ipinfo_Client::IPV6_LOOKUPS_PER_HOUR && ! empty( reset( $restored )[1] ), 'the evicted counter is restored at the ceiling and with an expiry (' . json_encode( $restored ) . ')' );
+$GLOBALS['faz_test_incr_creates'] = false;
+$GLOBALS['faz_test_ext_cache']    = false;
 
 function get_transient_keys_with( $needle ) {
 	return array_values( array_filter( array_keys( $GLOBALS['_faz_test_transients'] ), function ( $k ) use ( $needle ) {
