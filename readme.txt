@@ -358,6 +358,8 @@ Yes. Place `[faz_dsar_form]` on any page to show a GDPR-compliant request form c
 
 They need to be, and since 1.34.1 the plugin resolves the visitor's address on its own for the one case it can verify by itself: a request arriving from Cloudflare's published edge ranges, where `CF-Connecting-IP` is read, and only there, because Cloudflare writes that header itself. Every other topology is resolved once you declare it, one line each.
 
+That trust rests on one precondition: only your own Cloudflare zone can reach the origin from those ranges. Any Cloudflare customer can send requests from the same edge addresses (a Worker, for example) with a `CF-Connecting-IP` or `CF-IPCountry` of their choosing, so if the origin accepts connections from any Cloudflare address it accepts those too. Lock the origin to your zone with Authenticated Origin Pulls using a certificate of your own zone (mTLS between Cloudflare and your server), with Cloudflare Tunnel, or with a secret request header your zone adds through a Transform Rule and your server checks; a firewall that only admits Cloudflare's IP list does not tell your zone apart from someone else's.
+
 For another CDN, add its published edge ranges and every per-visitor key in the plugin follows. A peer matched that way is read through `faz_proxy_forwarded_header`, which defaults to `HTTP_X_FORWARDED_FOR` and is read from the right-hand end of the chain, so for an edge that appends to `X-Forwarded-For` the range is all you need:
 
 `add_filter( 'faz_trusted_proxy_cidrs', function ( $cidrs ) { return array_merge( $cidrs, array( '203.0.113.0/24' ) ); } );`
@@ -375,6 +377,10 @@ There is no default here because guessing would be unsafe, not just imprecise: n
 Anything else keeps using the connection's own address and ignores forwarded headers, because those are forgeable by anyone who can reach the site directly. To trust a load balancer of your own, enable `faz_trust_proxy_headers` and scope it with `faz_trusted_proxies`.
 
 Where no per-visitor address can be resolved, the per-connection limit on `[faz_dsar_form]` is **skipped** rather than applied to everyone at once: five submissions must never close the form for unrelated people for 24 hours, since GDPR Art. 12(2) requires the controller to facilitate requests. The site-wide limits and the one-per-address-per-hour limit still bound a flood, the hourly summary email says the per-connection limit is not in force, and `faz_dsar_max_per_ip_per_day` changes it (`0` switches it off).
+
+= How are FAZ tables removed when a multisite subsite is deleted? =
+
+With network activation, FAZ adds its tables to WordPress's deletion routine automatically. If FAZ is active only on individual subsites, copy `includes/multisite-cleanup.php` from the FAZ plugin directory to `wp-content/mu-plugins/faz-multisite-cleanup.php`, or to your configured must-use plugin directory. WordPress then loads the cleanup hook from Network Admin even when FAZ is inactive on the main site. The helper drops only the FAZ tables belonging to the subsite WordPress is deleting.
 
 = How do I run my own script when a category is consented? =
 

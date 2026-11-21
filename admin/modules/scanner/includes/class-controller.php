@@ -1953,7 +1953,7 @@ class Controller {
 
 		// Try sitemap.xml.
 		$sitemap_url = trailingslashit( $site_url ) . 'sitemap.xml';
-		$response    = $this->remote_get(
+		$response    = $this->remote_get_same_site(
 			$sitemap_url,
 			array(
 				'timeout'   => 15,
@@ -1974,17 +1974,23 @@ class Controller {
 					if ( isset( $xml->sitemap ) ) {
 						foreach ( $xml->sitemap as $sitemap ) {
 							if ( isset( $sitemap->loc ) ) {
-								$sub_url = (string) $sitemap->loc;
-								// Validate sitemap URL belongs to the same host.
-								if ( wp_parse_url( $sub_url, PHP_URL_HOST ) !== wp_parse_url( home_url(), PHP_URL_HOST ) ) {
+								// Same scheme, host AND port as the site, no
+								// userinfo: the check every other scanner fetch
+								// uses. A bare host comparison let a sitemap
+								// index point the scanner at the site host on
+								// any port, and core's wp_http_validate_url()
+								// exempts the site host from its port and
+								// private-address checks.
+								$safe_sub = $this->sanitize_scanned_urls( array( (string) $sitemap->loc ) );
+								if ( empty( $safe_sub ) ) {
 									continue;
 								}
-								$sub_response = $this->remote_get(
+								$sub_url      = $safe_sub[0];
+								$sub_response = $this->remote_get_same_site(
 									$sub_url,
 									array(
-										'timeout'     => 15,
-										'sslverify'   => (bool) apply_filters( 'faz_scanner_sslverify', true, $sub_url ),
-										'redirection' => 0,
+										'timeout'   => 15,
+										'sslverify' => (bool) apply_filters( 'faz_scanner_sslverify', true, $sub_url ),
 									)
 								);
 								if ( ! is_wp_error( $sub_response ) && 200 === wp_remote_retrieve_response_code( $sub_response ) ) {
@@ -2026,7 +2032,7 @@ class Controller {
 
 		// If sitemap didn't yield enough pages, parse homepage links.
 		if ( count( $pages ) < $max ) {
-			$homepage_response = $this->remote_get(
+			$homepage_response = $this->remote_get_same_site(
 				$site_url,
 				array(
 					'timeout'   => 15,
@@ -2067,6 +2073,50 @@ class Controller {
 		}
 
 		return array_unique( array_slice( $pages, 0, $max ) );
+	}
+
+	/**
+	 * GET a URL of this site, following redirects only within the site.
+	 *
+	 * Core's automatic redirect following validates only the first URL, so
+	 * discover_pages() used to follow a sitemap or homepage redirect to any
+	 * public host. Here every hop is fetched with 'redirection' => 0 and the
+	 * next Location goes through sanitize_scanned_urls() first, the same
+	 * manual loop scan_page() and the server-side scan use. A redirect that
+	 * leaves the site ends the walk and its 3xx response is returned, which
+	 * the callers treat as "no sitemap" / "no homepage links".
+	 *
+	 * @param string $url  First URL (the caller builds it from the site URL).
+	 * @param array  $args WordPress HTTP arguments; 'redirection' is forced to 0.
+	 * @return array|\WP_Error
+	 */
+	private function remote_get_same_site( $url, $args = array() ) {
+		$args['redirection'] = 0;
+		$current             = (string) $url;
+		$response            = new \WP_Error( 'faz_scanner_no_request', 'No request was made.' );
+		for ( $hop = 0; $hop < 5; ++$hop ) {
+			$response = $this->remote_get( $current, $args );
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
+			$status = (int) wp_remote_retrieve_response_code( $response );
+			if ( $status < 300 || $status >= 400 ) {
+				return $response;
+			}
+			$location = wp_remote_retrieve_header( $response, 'location' );
+			if ( is_array( $location ) ) {
+				$location = end( $location );
+			}
+			if ( empty( $location ) ) {
+				return $response;
+			}
+			$safe = $this->sanitize_scanned_urls( array( \WP_Http::make_absolute_url( (string) $location, $current ) ) );
+			if ( empty( $safe ) ) {
+				return $response;
+			}
+			$current = $safe[0];
+		}
+		return $response;
 	}
 
 	/**
@@ -2404,7 +2454,8 @@ class Controller {
 	 * @return array|\WP_Error
 	 */
 	public function remote_get( $url, $args = array() ) {
-		$url_host              = self::canonical_scan_host( wp_parse_url( $url, PHP_URL_HOST ) );
+		$request_host          = strtolower( trim( (string) wp_parse_url( $url, PHP_URL_HOST ), '[]' ) );
+		$url_host              = self::canonical_scan_host( $request_host );
 		$site_host             = self::canonical_scan_host( wp_parse_url( home_url(), PHP_URL_HOST ) );
 		$is_validated_loopback = self::is_loopback_scan_host( $url_host )
 			&& self::is_loopback_scan_host( $site_host )
@@ -2428,33 +2479,221 @@ class Controller {
 		$settings  = \FazCookie\Admin\Modules\Settings\Includes\Settings::get_instance();
 		$static_ip = $settings->get( 'scanner', 'static_ip' );
 		$entry     = self::build_static_resolve_entry( $url, $static_ip );
+		$pin_kind  = 'static';
 		if ( '' === $entry ) {
-			return wp_remote_get( $url, $args );
+			if ( $is_validated_loopback || ! $this->site_ip_check_required( $url_host, $site_host ) ) {
+				return wp_remote_get( $url, $args );
+			}
+			// Check every address the host has, then connect to one of the
+			// checked ones: checking and letting cURL resolve again would leave
+			// the DNS free to change in between.
+			$addresses = $this->resolve_scan_host( $request_host );
+			if ( empty( $addresses ) ) {
+				return new \WP_Error( 'faz_scanner_unresolved_host', __( 'The site hostname could not be resolved, so the scanner did not fetch it.', 'faz-cookie-manager' ) );
+			}
+			foreach ( $addresses as $address ) {
+				if ( ! faz_ip_is_globally_routable( $address ) ) {
+					return new \WP_Error( 'faz_scanner_internal_address', __( 'The site hostname resolves to a private or reserved address, so the scanner did not fetch it.', 'faz-cookie-manager' ) );
+				}
+			}
+			$entry    = self::build_static_resolve_entry( $url, self::preferred_pin_address( $addresses ) );
+			$pin_kind = 'resolved';
+			if ( '' === $entry ) {
+				return new \WP_Error( 'faz_scanner_internal_address', __( 'The site hostname resolves to a private or reserved address, so the scanner did not fetch it.', 'faz-cookie-manager' ) );
+			}
 		}
 
 		if ( '' === $url_host || ! self::scan_hosts_match( $url_host, $site_host ) ) {
 			return new \WP_Error( 'faz_scanner_static_ip_host', __( 'Static IP pinning is limited to this site hostname.', 'faz-cookie-manager' ) );
 		}
 
-		$applied  = false;
-		$resolver = static function ( $handle, $parsed_args, $request_url ) use ( $entry, $url_host, &$applied ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
-			$request_host = self::canonical_scan_host( wp_parse_url( $request_url, PHP_URL_HOST ) );
-			if ( ! self::scan_hosts_match( $request_host, $url_host )
-				|| ! defined( 'CURLOPT_RESOLVE' ) || ! function_exists( 'curl_setopt' ) ) {
+		$no_transport = 'static' === $pin_kind
+			? new \WP_Error( 'faz_scanner_static_ip_transport', __( 'Static IP pinning requires the WordPress cURL HTTP transport.', 'faz-cookie-manager' ) )
+			: new \WP_Error( 'faz_scanner_pin_transport', __( 'Checking the site hostname address requires the WordPress cURL HTTP transport.', 'faz-cookie-manager' ) );
+		// Refuse before sending anything when the pin cannot be applied.
+		if ( ! $this->curl_resolve_available() ) {
+			return $no_transport;
+		}
+		if ( $this->pin_would_use_proxy( $url ) ) {
+			return new \WP_Error( 'faz_scanner_pin_proxy', __( 'Scanner IP pinning requires a direct HTTP connection. Check your outgoing proxy settings.', 'faz-cookie-manager' ) );
+		}
+
+		// The caller validates redirect hops. A shared cURL handle must never
+		// follow a redirect that has no pin of its own.
+		$args['redirection'] = 0;
+		$applied             = false;
+		$pin_failed          = new \RuntimeException( 'Scanner HTTP pin unavailable.' );
+		$resolver = function ( $handle, $parsed_args, $request_url ) use ( $entry, $url, $pin_failed, &$applied ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
+			if ( $url !== $request_url ) {
 				return;
 			}
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt -- WordPress exposes this transport-specific hook precisely for cURL options.
-			curl_setopt( $handle, CURLOPT_RESOLVE, array( $entry ) );
-			$applied = true;
+			$applied = $this->apply_curl_resolve( $handle, $entry );
+			if ( ! $applied ) {
+				throw $pin_failed;
+			}
 		};
-		add_action( 'http_api_curl', $resolver, 10, 3 );
-		$response = wp_remote_get( $url, $args );
-		remove_action( 'http_api_curl', $resolver, 10 );
+		$reject_streams = static function () use ( $pin_failed ) {
+			throw $pin_failed;
+		};
+		add_action( 'http_api_curl', $resolver, PHP_INT_MAX, 3 );
+		add_action( 'requests-fsockopen.before_request', $reject_streams, 10, 0 );
+		try {
+			$response = wp_remote_get( $url, $args );
+		} catch ( \RuntimeException $error ) {
+			if ( $pin_failed !== $error ) {
+				throw $error;
+			}
+			return $no_transport;
+		} finally {
+			remove_action( 'http_api_curl', $resolver, PHP_INT_MAX );
+			remove_action( 'requests-fsockopen.before_request', $reject_streams, 10 );
+		}
 
+		// Backstop: another transport answered despite cURL being available.
 		if ( ! $applied ) {
-			return new \WP_Error( 'faz_scanner_static_ip_transport', __( 'Static IP pinning requires the WordPress cURL HTTP transport.', 'faz-cookie-manager' ) );
+			return $no_transport;
 		}
 		return $response;
+	}
+
+	/**
+	 * Whether an outgoing proxy is configured for this pinned request.
+	 *
+	 * A proxy resolves the hostname independently of CURLOPT_RESOLVE. Respect
+	 * WordPress proxy exclusions and decline pinned requests when libcurl has
+	 * an ambient proxy configured, so the scanner cannot bypass egress policy.
+	 *
+	 * @param string $url Requested URL.
+	 * @return bool
+	 */
+	private function pin_would_use_proxy( $url ) {
+		if ( class_exists( '\\WP_HTTP_Proxy' ) ) {
+			$proxy = new \WP_HTTP_Proxy();
+			if ( $proxy->is_enabled() && $proxy->send_through_proxy( $url ) ) {
+				return true;
+			}
+		}
+		$variables = 'https' === strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) )
+			? array( 'https_proxy', 'HTTPS_PROXY', 'all_proxy', 'ALL_PROXY' )
+			: array( 'http_proxy', 'all_proxy', 'ALL_PROXY' );
+		foreach ( $variables as $variable ) {
+			$value = getenv( $variable );
+			if ( false !== $value && '' !== $value ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether this PHP can pin a connection with CURLOPT_RESOLVE.
+	 *
+	 * @return bool
+	 */
+	protected function curl_resolve_available() {
+		return function_exists( 'curl_init' ) && function_exists( 'curl_exec' )
+			&& function_exists( 'curl_setopt' ) && defined( 'CURLOPT_RESOLVE' );
+	}
+
+	/**
+	 * Pin one host:port to an address on a cURL handle.
+	 *
+	 * @param mixed  $handle cURL handle from http_api_curl.
+	 * @param string $entry  CURLOPT_RESOLVE entry (host:port:address).
+	 * @return bool Whether the option was set.
+	 */
+	protected function apply_curl_resolve( $handle, $entry ) {
+		if ( ! defined( 'CURLOPT_RESOLVE' ) || ! function_exists( 'curl_setopt' ) ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt -- WordPress exposes this transport-specific hook precisely for cURL options.
+		return (bool) curl_setopt( $handle, CURLOPT_RESOLVE, array( $entry ) );
+	}
+
+	/**
+	 * The checked address to connect to: IPv4 first, since a server without
+	 * IPv6 connectivity would fail on a v6 pin the system resolver avoided.
+	 *
+	 * @param string[] $addresses Checked addresses.
+	 * @return string
+	 */
+	private static function preferred_pin_address( $addresses ) {
+		foreach ( $addresses as $address ) {
+			if ( false === strpos( $address, ':' ) ) {
+				return $address;
+			}
+		}
+		return (string) reset( $addresses );
+	}
+
+	/**
+	 * Whether the site's own host must resolve only to public addresses, on
+	 * the installs where its DNS is not necessarily the administrator's.
+	 *
+	 * wp_http_validate_url() exempts the home host from its private-address
+	 * check, so reject_unsafe_urls protects every host except the one the
+	 * scanner fetches. On multisite with mapped domains the DNS of a subsite
+	 * host may belong to the subsite owner, who could point it at an internal
+	 * address and have the server fetch it. The check is therefore on by
+	 * default on multisite only; a single-site administrator already controls
+	 * both the DNS and the server, and split-horizon DNS (the site host
+	 * resolving to 10.x inside its own network) is common there. Filter
+	 * `faz_scanner_require_public_site_ip` to change the default either way.
+	 * When the check applies, remote_get() refuses a host that does not
+	 * resolve or has any non-public A/AAAA record, and connects to a checked
+	 * address through CURLOPT_RESOLVE so the DNS cannot change in between.
+	 * Pinning a static IP (Settings > Scanner) bypasses this: that address is
+	 * validated on its own.
+	 *
+	 * @param string $url_host  Canonical host being fetched.
+	 * @param string $site_host Canonical site host.
+	 * @return bool Whether the check applies.
+	 */
+	private function site_ip_check_required( $url_host, $site_host ) {
+		if ( '' === $url_host || ! self::scan_hosts_match( $url_host, $site_host ) ) {
+			// Any other host keeps core's own validation (reject_unsafe_urls).
+			return false;
+		}
+		if ( ! function_exists( 'faz_ip_is_globally_routable' ) ) {
+			return false;
+		}
+		return (bool) apply_filters( 'faz_scanner_require_public_site_ip', function_exists( 'is_multisite' ) && is_multisite(), $url_host );
+	}
+
+	/**
+	 * Addresses a scan host resolves to: A and AAAA records, gethostbynamel()
+	 * as the fallback for A, an IP literal as is.
+	 *
+	 * @param string $host Canonical host.
+	 * @return string[]
+	 */
+	protected function resolve_scan_host( $host ) {
+		if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
+			return array( $host );
+		}
+		$addresses = array();
+		if ( function_exists( 'dns_get_record' ) && defined( 'DNS_A' ) && defined( 'DNS_AAAA' ) ) {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- dns_get_record() warns on a failed lookup; a failure is handled as "no records".
+			$records = @dns_get_record( $host, DNS_A | DNS_AAAA );
+			foreach ( is_array( $records ) ? $records : array() as $record ) {
+				if ( ! empty( $record['ip'] ) ) {
+					$addresses[] = (string) $record['ip'];
+				} elseif ( ! empty( $record['ipv6'] ) ) {
+					$addresses[] = (string) $record['ipv6'];
+				}
+			}
+		}
+		$has_v4 = false;
+		foreach ( $addresses as $address ) {
+			$has_v4 = $has_v4 || false === strpos( $address, ':' );
+		}
+		if ( ! $has_v4 && function_exists( 'gethostbynamel' ) ) {
+			$v4 = gethostbynamel( $host );
+			if ( is_array( $v4 ) ) {
+				$addresses = array_merge( $addresses, $v4 );
+			}
+		}
+		return array_values( array_unique( $addresses ) );
 	}
 
 	/**

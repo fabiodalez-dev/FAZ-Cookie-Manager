@@ -355,10 +355,19 @@ namespace {
 	echo "\n-- privacy hashing of UA + IP --\n";
 	$row = $GLOBALS['wpdb']->get_row( "consent_id = 'cid-round-trip'", ARRAY_A );
 	$expected_ua = hash( 'sha256', 'Mozilla/5.0 (UnitTest) Gecko' . wp_salt( 'auth' ) );
-	$expected_ip = hash( 'sha256', '203.0.113.7' . wp_salt() );
+	// 1.39.1: an HMAC under a key dedicated to this column, not sha256( ip . salt ).
+	$expected_ip = hash_hmac( 'sha256', '203.0.113.7', hash_hmac( 'sha256', 'faz_consent_log_ip_hash', wp_salt( 'auth' ), true ) );
+	$legacy_ip   = hash( 'sha256', '203.0.113.7' . wp_salt() );
 	eq( $row['user_agent'], $expected_ua, 'user_agent stored as sha256(ua + auth-salt), not raw' );
 	ok( false === strpos( $row['user_agent'], 'Mozilla' ), 'raw user-agent string never appears in the row' );
-	eq( $row['ip_hash'], $expected_ip, 'IP stored as sha256(ip + salt)' );
+	eq( $row['ip_hash'], $expected_ip, 'IP stored as HMAC-SHA256 under the dedicated consent-log key' );
+	ok( $row['ip_hash'] !== $legacy_ip, 'IP is no longer stored as sha256(ip + salt)' );
+	// Rows written before the change carry the legacy value: the same-address
+	// check must still recognise them, and must not recognise another address.
+	ok( $ctrl->ip_hash_matches( $row['ip_hash'] ), 'ip_hash_matches() recognises a row written now' );
+	ok( $ctrl->ip_hash_matches( $legacy_ip ), 'ip_hash_matches() recognises a row written with the pre-1.39.1 formula' );
+	ok( ! $ctrl->ip_hash_matches( hash( 'sha256', '198.51.100.1' . wp_salt() ) ), 'ip_hash_matches() refuses a legacy row from another address' );
+	ok( ! $ctrl->ip_hash_matches( '' ), 'ip_hash_matches() refuses an empty hash' );
 
 	// ============================================================
 	// 5. status constrained; unknown → partial
@@ -596,7 +605,20 @@ namespace {
 	$row = end( $GLOBALS['wpdb']->rows );
 	eq( $row['created_at_gmt'] ?? null, '2026-06-19 10:00:00', 'an insert writes created_at_gmt with current_time( mysql, true )' );
 	eq( $row['created_at'] ?? null, '2026-06-19 12:00:00', 'next to the unchanged site-time created_at' );
+	// The previous-row lookup decides on the UTC instant once it exists: site
+	// time repeats an hour at the DST fall-back, and a withdrawal written in
+	// the second pass would sort before an exception row of the first.
+	$prev_m = new ReflectionMethod( $ctrl, 'get_previous_consent_row' );
+	$prev_m->setAccessible( true );
+	$GLOBALS['wpdb']->row_queries = array();
+	$prev_m->invoke( $ctrl, 'cid-gmt' );
+	$prev_q = $GLOBALS['wpdb']->row_queries[0] ?? '';
+	ok( false !== strpos( $prev_q, 'ORDER BY created_at_gmt DESC, created_at DESC, log_id DESC' ), 'with the column, the previous row is the latest by created_at_gmt (DST-safe)' );
 	unset( $GLOBALS['__faz_options']['faz_consent_log_gmt_column_added'] );
+	$GLOBALS['wpdb']->row_queries = array();
+	$prev_m->invoke( $ctrl, 'cid-gmt' );
+	$prev_q = $GLOBALS['wpdb']->row_queries[0] ?? '';
+	ok( false === strpos( $prev_q, 'created_at_gmt' ) && false !== strpos( $prev_q, 'ORDER BY created_at DESC, log_id DESC' ), 'without the column, the lookup does not name it' );
 
 	// ---------- summary ----------
 	echo "\n--\nTests:  $run\nPassed: $pass\nFailed: $fail\n\n";

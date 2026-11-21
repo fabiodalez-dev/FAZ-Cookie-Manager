@@ -331,6 +331,19 @@ class Paid_Memberships_Pro {
 			return;
 		}
 
+		// One row per member and state per day. The state is "new" whenever
+		// the request arrives without the cookie, so a member whose client
+		// never stores it (a script, a feed reader, a browser that drops
+		// cookies) used to add a row on every request. The value is fixed for
+		// a given revision and category set, so a repeat inside the window
+		// records nothing the first row does not; a changed state (new
+		// revision or categories) has a different key and is still logged.
+		$throttle_key = 'faz_pmp_log_' . (int) get_current_user_id() . '_' . substr( md5( (string) $cookie_value ), 0, 12 );
+		if ( false !== get_transient( $throttle_key ) ) {
+			return;
+		}
+		set_transient( $throttle_key, 1, DAY_IN_SECONDS );
+
 		$parsed     = function_exists( 'faz_parse_consent_cookie' ) ? faz_parse_consent_cookie( $cookie_value ) : array();
 		$consent_id = isset( $parsed['consentid'] ) ? preg_replace( '/[^A-Za-z0-9]/', '', (string) $parsed['consentid'] ) : '';
 		// Carry the policy revision baked into the cookie (set by

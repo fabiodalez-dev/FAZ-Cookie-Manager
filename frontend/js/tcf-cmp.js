@@ -13,7 +13,17 @@
 (function () {
 	"use strict";
 
-	var cfg = window._fazTcfConfig || {};
+	// The localized objects count only as plain objects. Deferred past post
+	// content, a missing localize block lets `<a id="_fazTcfConfig">` answer
+	// the name with an element; that is treated as absent.
+	function plain(value) {
+		try { return value && typeof value === "object" && Object.prototype.toString.call(value) === "[object Object]" ? value : null; } catch (e) { return null; }
+	}
+	function fazConfig() {
+		return plain(window._fazConfig) || {};
+	}
+
+	var cfg = plain(window._fazTcfConfig) || {};
 
 	var CMP_ID             = cfg.cmpId || 0;
 	var CMP_VERSION        = 1;
@@ -32,7 +42,7 @@
 	 * Push a value as `length` bits into the bits array (MSB first).
 	 */
 	function cookieName(name) {
-		return ((window._fazConfig || {})._cookieNames || {})[name] || name;
+		return (fazConfig()._cookieNames || {})[name] || name;
 	}
 	function readCookie(name) {
 		var prefix = cookieName(name) + '=';
@@ -167,7 +177,8 @@
 
 	function isConsentCookieStale(pairs) {
 		if (!pairs) return false;
-		var config = window._fazConfig || {};
+		var config = window._fazConfig;
+		config = config && Object.prototype.toString.call(config) === '[object Object]' ? config : {};
 		// Defensive only. The server never activates the cached jurisdiction
 		// shell while IAB TCF is on (Frontend::get_geo_bootstrap_status() returns
 		// reason 'iab', pinned by test-geo-cache-bootstrap-php.php), and this
@@ -706,7 +717,7 @@
 	 * the record is written host-only there instead.
 	 */
 	function cookieDomain() {
-		var configured = (window._fazConfig && window._fazConfig._rootDomain) ? String(window._fazConfig._rootDomain).trim() : "";
+		var configured = fazConfig()._rootDomain ? String(fazConfig()._rootDomain).trim() : "";
 		var root = configured.toLowerCase().replace(/\.$/, "");
 		var host = String(location.hostname || "").toLowerCase().replace(/\.$/, "");
 		var bare = root.charAt(0) === "." ? root.slice(1) : root;
@@ -719,8 +730,8 @@
 	 */
 	function setEuconsentCookie(tcString) {
 		var expiry = 180; // days - matches FAZ consent cookie
-		if (window._fazConfig && window._fazConfig._expiry) {
-			expiry = window._fazConfig._expiry;
+		if (fazConfig()._expiry) {
+			expiry = fazConfig()._expiry;
 		}
 		var date = new Date();
 		date.setTime(date.getTime() + (expiry * 24 * 60 * 60 * 1000));
@@ -740,8 +751,8 @@
 		// Deletion still tries the configured scope unconditionally: on a host
 		// inside it that is where the record lives, and on one outside it the
 		// browser simply ignores an expiry for a domain it cannot set.
-		if (window._fazConfig && window._fazConfig._rootDomain) {
-			document.cookie = expired + ";domain=" + window._fazConfig._rootDomain + ";SameSite=Lax" + secure;
+		if (fazConfig()._rootDomain) {
+			document.cookie = expired + ";domain=" + fazConfig()._rootDomain + ";SameSite=Lax" + secure;
 		}
 	}
 
@@ -857,6 +868,21 @@
 	 * The __tcfapi() - implements required TCF v2.3 commands.
 	 */
 	function tcfapi(command, version, callback, parameter) {
+		return dispatch(command, version, callback, parameter, null);
+	}
+
+	/**
+	 * The router behind __tcfapi. `owner` is who registers or removes a
+	 * listener: null for code on this page (a direct __tcfapi call, the stub
+	 * queue, a message this window posted to itself) and the posting window for
+	 * a call relayed through the __tcfapiLocator protocol. The relay answers any
+	 * origin, as the protocol requires, and listener ids are sequential, so
+	 * without an owner any frame could remove another vendor's listener by
+	 * guessing its id and stop that vendor's consent-change notifications. A
+	 * listener is removed only by the party that registered it; for callers on
+	 * this page nothing changes.
+	 */
+	function dispatch(command, version, callback, parameter, owner) {
 		if (typeof callback !== "function") return;
 
 		var consent, purposes, tcStr, data;
@@ -891,7 +917,7 @@
 
 			case "addEventListener": {
 				listenerId++;
-				listeners[listenerId] = { callback: callback };
+				listeners[listenerId] = { callback: callback, owner: owner || null };
 				consent  = readConsent();
 				purposes = buildPurposeConsent(consent);
 				var sfAdd = buildSpecialFeatureOptins(consent);
@@ -912,7 +938,8 @@
 			}
 
 			case "removeEventListener":
-				if (parameter && listeners[parameter]) {
+				if (parameter && listeners.hasOwnProperty(parameter) && listeners[parameter]
+					&& listeners[parameter].owner === (owner || null)) {
 					delete listeners[parameter];
 					callback(true);
 				} else {
@@ -993,7 +1020,10 @@
 		}
 		if (!json || !json.__tcfapiCall) return;
 		var call = json.__tcfapiCall;
-		tcfapi(call.command, call.version, function (retValue, success) {
+		// A message this window posted to itself is a call from this page. One
+		// with no source window owns nothing anyone else registered.
+		var caller = event.source === window ? null : (event.source || {});
+		dispatch(call.command, call.version, function (retValue, success) {
 			var msg = {
 				__tcfapiReturn: {
 					returnValue: retValue,
@@ -1014,7 +1044,7 @@
 					replyOrigin
 				);
 			}
-		}, call.parameter);
+		}, call.parameter, caller);
 	}, false);
 
 	// Track banner visibility for ping displayStatus.

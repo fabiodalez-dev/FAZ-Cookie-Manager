@@ -5,8 +5,9 @@
  * The "Categories of personal data processed (Art. 5, I)" section of the LGPD
  * policy said "IP (hashed with monthly salt)" in six languages. The one record
  * a data subject or the ANPD can inspect — the consent log — stores
- * hash( 'sha256', $ip . wp_salt() ) (Consentlogs\Controller::hash_ip()): a
- * fixed per-installation salt, so the same IP yields the same hash for the
+ * an HMAC-SHA256 of the IP keyed from wp_salt( 'auth' ) since 1.39.1, and
+ * hash( 'sha256', $ip . wp_salt() ) before (Consentlogs\Controller::hash_ip()):
+ * either way a fixed per-installation salt, so the same IP yields the same hash for the
  * whole retention period. The monthly-rotating salt exists only in the
  * geo-routing module, for ephemeral cache keys. The published promise of
  * cross-month unlinkability was false for the retained record.
@@ -42,8 +43,9 @@ echo "\n== LGPD scaffold: IP hashing disclosure matches the consent log ==\n\n";
 // (1) The retained record's hash is the static-salt form, no month component.
 $controller = (string) file_get_contents( $root . '/admin/modules/consentlogs/includes/class-controller.php' );
 lg_true(
-	false !== strpos( $controller, "return hash( 'sha256', \$ip . \\wp_salt() );" ),
-	'consent log hashes the IP with the static per-install wp_salt() (premise of the disclosure)'
+	false !== strpos( $controller, "return hash_hmac( 'sha256', (string) \$ip, self::ip_hash_key() );" )
+		&& false !== strpos( $controller, "hash_hmac( 'sha256', 'faz_consent_log_ip_hash', (string) \\wp_salt( 'auth' ), true )" ),
+	'consent log hashes the IP with a key derived from the static per-install wp_salt() (premise of the disclosure)'
 );
 lg_true(
 	! preg_match( "/function hash_ip\\(.*?gmdate\\(/s", substr( $controller, (int) strpos( $controller, 'function hash_ip(' ), 600 ) ),

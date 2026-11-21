@@ -1147,6 +1147,78 @@ if ( ! function_exists( 'faz_wp_locale' ) ) {
 	}
 }
 
+if ( ! defined( 'FAZ_TEMPLATE_GENERATION_OPTION' ) ) {
+	// Not under the faz_banner_template prefix on purpose: the clear below
+	// deletes every option with that prefix, and the bulky-option demotion in
+	// the activator turns its autoload off.
+	define( 'FAZ_TEMPLATE_GENERATION_OPTION', 'faz_template_cache_generation' );
+}
+
+if ( ! function_exists( 'faz_new_banner_template_generation' ) ) {
+	/**
+	 * A fresh, unique banner-template cache generation token.
+	 *
+	 * @return string
+	 */
+	function faz_new_banner_template_generation() {
+		try {
+			$random = bin2hex( random_bytes( 6 ) );
+		} catch ( \Exception $e ) {
+			$random = (string) mt_rand(); // phpcs:ignore WordPress.WP.AlternativeFunctions.rand_mt_rand -- fallback only when the CSPRNG is unavailable; uniqueness, not secrecy, is what matters.
+		}
+		return substr( md5( uniqid( '', true ) . $random ), 0, 16 );
+	}
+}
+
+if ( ! function_exists( 'faz_banner_template_generation' ) ) {
+	/**
+	 * The current banner-template cache generation.
+	 *
+	 * Without $fresh this is the value the request has seen since it loaded
+	 * its options (autoloaded, so read once at the start of the request): the
+	 * generation a template built in this request belongs to. With $fresh it
+	 * is read from the database, bypassing the request's option cache, to tell
+	 * whether a clear has happened since.
+	 *
+	 * '' is the generation of an install that has never cleared the cache
+	 * since this token was introduced, and of every slot stored before it, so
+	 * the slots already saved stay valid until the first clear.
+	 *
+	 * @param bool $fresh Read the stored value, not the request's copy.
+	 * @return string
+	 */
+	function faz_banner_template_generation( $fresh = false ) {
+		global $wpdb;
+		if ( $fresh && isset( $wpdb ) && is_object( $wpdb ) && isset( $wpdb->options ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the point is to bypass the request's option cache.
+			$value = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
+					FAZ_TEMPLATE_GENERATION_OPTION
+				)
+			);
+			return is_string( $value ) ? $value : '';
+		}
+		$value = get_option( FAZ_TEMPLATE_GENERATION_OPTION, '' );
+		return is_string( $value ) ? $value : '';
+	}
+}
+
+if ( ! function_exists( 'faz_banner_template_generation_is_current' ) ) {
+	/**
+	 * Whether a template cache write built under $generation may still land.
+	 *
+	 * False once a clear has started a new generation: what the caller is
+	 * about to write was read or built from the state before that clear.
+	 *
+	 * @param string $generation Generation the caller read its data under.
+	 * @return bool
+	 */
+	function faz_banner_template_generation_is_current( $generation ) {
+		return (string) $generation === faz_banner_template_generation( true );
+	}
+}
+
 if ( ! function_exists( 'faz_clear_banner_template_cache' ) ) {
 	/**
 	 * Clear all banner template cache variants.
@@ -1159,6 +1231,17 @@ if ( ! function_exists( 'faz_clear_banner_template_cache' ) ) {
 	 */
 	function faz_clear_banner_template_cache() {
 		global $wpdb;
+
+		// Start a new cache generation BEFORE the rows go. A render that read
+		// the banner (or the stored row) before this clear can still be running,
+		// and its write would put the pre-save template back for every later
+		// visitor: the layout signature does not cover colours, button texts or
+		// category names, so nothing would reject it. Every slot carries the
+		// generation it was built under and is served only while that is the
+		// current one (Template::load()), so such a late write is ignored.
+		// A random token, not a counter: two clears racing on a counter could
+		// both write N+1, which a write built under N+1 elsewhere would match.
+		update_option( FAZ_TEMPLATE_GENERATION_OPTION, faz_new_banner_template_generation(), true );
 
 		// Delete the base option.
 		delete_option( 'faz_banner_template' );

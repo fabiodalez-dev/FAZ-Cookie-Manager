@@ -106,6 +106,97 @@ test.describe('COOKIE-SEC-01 — non-admin user gets 403 when saving script fiel
   });
 });
 
+// ── COOKIE-SEC-02 ─────────────────────────────────────────────────────────────
+//
+// A user with manage_options but without unfiltered_html (a multisite site
+// admin, DISALLOW_UNFILTERED_HTML). The refusal must be a 403 from the
+// permission check: WordPress sanitises before the permission callback and
+// turns a sanitiser's WP_Error into a 400, so a sanitiser-level gate answered
+// 400. Sending back the script the cookie already stores is not a write of
+// new JS and must not block that user from editing the other fields.
+
+test.describe('COOKIE-SEC-02 — manage_options without unfiltered_html', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  let cookieId = 0;
+  let savedMeta = '';
+  const noUnfiltered = `add_filter( 'map_meta_cap', function ( $caps, $cap ) { return 'unfiltered_html' === $cap ? array( 'do_not_allow' ) : $caps; }, 10, 2 );`;
+
+  function put(params: Record<string, string>, asLowPriv: boolean): string {
+    const sets = Object.entries(params)
+      .map(([k, v]) => `$req->set_param( ${JSON.stringify(k)}, ${JSON.stringify(v)} );`)
+      .join('\n');
+    return wpEval(`
+      ${asLowPriv ? noUnfiltered : ''}
+      wp_set_current_user( 1 );
+      $req = new WP_REST_Request( 'PUT', '/faz/v1/cookies/${cookieId}' );
+      $req->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+      ${sets}
+      echo rest_do_request( $req )->get_status();
+    `).trim();
+  }
+
+  function storedScript(): string {
+    return wpEval(`
+      global $wpdb;
+      $m = json_decode( (string) $wpdb->get_var( $wpdb->prepare( "SELECT meta FROM {$wpdb->prefix}faz_cookies WHERE cookie_id = %d", ${cookieId} ) ), true );
+      echo is_array( $m ) && isset( $m['opt_in_script'] ) ? $m['opt_in_script'] : '';
+    `).trim();
+  }
+
+  test.beforeAll(() => {
+    cookieId = getFirstCookieId();
+    savedMeta = wpEval(`
+      global $wpdb;
+      echo base64_encode( (string) $wpdb->get_var( $wpdb->prepare( "SELECT meta FROM {$wpdb->prefix}faz_cookies WHERE cookie_id = %d", ${cookieId} ) ) );
+    `).trim();
+  });
+
+  test.afterAll(() => {
+    if (cookieId) {
+      wpEval(`
+        global $wpdb;
+        $wpdb->update( "{$wpdb->prefix}faz_cookies", array( 'meta' => base64_decode( '${savedMeta}' ) ), array( 'cookie_id' => ${cookieId} ) );
+        $wpdb->delete( "{$wpdb->prefix}faz_cookies", array( 'name' => 'faz_sec02_probe' ) );
+        if ( function_exists( 'faz_clear_banner_template_cache' ) ) { faz_clear_banner_template_cache(); }
+      `);
+    }
+  });
+
+  test('an administrator stores a script', () => {
+    expect(cookieId).toBeGreaterThan(0);
+    const code = parseInt(put({ opt_in_script: 'window.fazSec02 = 1;' }, false), 10);
+    expect(code).toBeGreaterThanOrEqual(200);
+    expect(code).toBeLessThan(300);
+    expect(storedScript()).toBe('window.fazSec02 = 1;');
+  });
+
+  test('a new script from that user is refused with 403, not 400', () => {
+    expect(parseInt(put({ opt_in_script: 'alert(3)' }, true), 10)).toBe(403);
+    expect(storedScript()).toBe('window.fazSec02 = 1;');
+  });
+
+  test('a create with a script from that user is refused with 403', () => {
+    const status = wpEval(`
+      ${noUnfiltered}
+      wp_set_current_user( 1 );
+      $req = new WP_REST_Request( 'POST', '/faz/v1/cookies' );
+      $req->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+      $req->set_param( 'name', 'faz_sec02_probe' );
+      $req->set_param( 'opt_in_script', 'alert(4)' );
+      echo rest_do_request( $req )->get_status();
+    `).trim();
+    expect(parseInt(status, 10)).toBe(403);
+  });
+
+  test('the stored script sent back unchanged does not block the save, and survives it', () => {
+    const code = parseInt(put({ opt_in_script: 'window.fazSec02 = 1;', opt_out_script: '' }, true), 10);
+    expect(code).toBeGreaterThanOrEqual(200);
+    expect(code).toBeLessThan(300);
+    expect(storedScript()).toBe('window.fazSec02 = 1;');
+  });
+});
+
 // ── COOKIE-DATA-01 / 02 / 03 ─────────────────────────────────────────────────
 
 test.describe('COOKIE-DATA — script field isolation in Cookie class', () => {

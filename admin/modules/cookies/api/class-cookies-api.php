@@ -628,16 +628,19 @@ class Cookies_API extends API_Controller {
 					// to unauthenticated callers; only admins with 'edit' context see it.
 					'context'           => array( 'edit' ),
 					// Only users with unfiltered_html (administrators on single-site,
-					// super-admins on multisite) may save arbitrary JS. Everyone else gets
-					// an empty string, which preserves the existing value.
-					'sanitize_callback' => array( __CLASS__, 'sanitize_script_field' ),
+					// super-admins on multisite) may save arbitrary JS. The refusal
+					// lives in create_item_permissions_check() and
+					// update_item_permissions_check(), not in a sanitize_callback:
+					// WordPress sanitises the arguments BEFORE the permission
+					// callback and turns any WP_Error a sanitiser returns into a
+					// 400 rest_invalid_param, so a sanitiser-level gate answered
+					// 400 instead of 403, even to a subscriber.
 					'maxLength'         => 10000,
 				),
 				'opt_out_script' => array(
 					'description'       => __( 'JavaScript executed when this cookie\'s category is rejected or revoked.', 'faz-cookie-manager' ),
 					'type'              => 'string',
 					'context'           => array( 'edit' ),
-					'sanitize_callback' => array( __CLASS__, 'sanitize_script_field' ),
 					'maxLength'         => 10000,
 				),
 			),
@@ -1192,6 +1195,67 @@ class Cookies_API extends API_Controller {
 		}
 
 		return rest_ensure_response( $templates );
+	}
+
+	/**
+	 * Create permission: manage_options, plus unfiltered_html for a non-empty script.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return true|WP_Error
+	 */
+	public function create_item_permissions_check( $request ) {
+		$allowed = parent::create_item_permissions_check( $request );
+		if ( true !== $allowed ) {
+			return $allowed;
+		}
+		return self::script_params_permission( $request, null );
+	}
+
+	/**
+	 * Update permission: manage_options, plus unfiltered_html for a changed script.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return true|WP_Error
+	 */
+	public function update_item_permissions_check( $request ) {
+		$allowed = parent::update_item_permissions_check( $request );
+		if ( true !== $allowed ) {
+			return $allowed;
+		}
+		$id = isset( $request['id'] ) ? absint( $request['id'] ) : 0;
+		return self::script_params_permission( $request, $id > 0 ? new Cookie( $id ) : null );
+	}
+
+	/**
+	 * Refuse with 403 a script parameter that only unfiltered_html may write.
+	 *
+	 * An empty value is always accepted, and so is the value the cookie
+	 * already stores: the admin UI sends both script fields back on every
+	 * save, and a user below the gate (a multisite site admin) must still be
+	 * able to edit the other fields of a cookie an administrator scripted.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @param Cookie|null     $stored  The cookie being updated, null on create.
+	 * @return true|WP_Error
+	 */
+	private static function script_params_permission( $request, $stored ) {
+		if ( current_user_can( 'unfiltered_html' ) ) {
+			return true;
+		}
+		foreach ( array( 'opt_in_script', 'opt_out_script' ) as $param ) {
+			$value = $request->get_param( $param );
+			if ( null === $value || ( is_scalar( $value ) && '' === (string) $value ) ) {
+				continue;
+			}
+			if ( $stored instanceof Cookie && is_scalar( $value ) ) {
+				$getter = "get_{$param}";
+				if ( (string) $value === $stored->$getter() ) {
+					continue;
+				}
+			}
+			return self::sanitize_script_field( $value, $request, $param );
+		}
+		return true;
 	}
 
 	/**

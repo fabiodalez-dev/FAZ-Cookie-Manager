@@ -585,6 +585,24 @@ class Embed_Inventory {
 	}
 
 	/**
+	 * The page URL the consent-log beacon is given (`_fazConsentLog.pageUrl`).
+	 *
+	 * current_url() when this request names the page the way record() would
+	 * store it, '' otherwise. The Host header is the visitor's to choose, so
+	 * baking it into the page unconditionally made it an input of the cached
+	 * HTML and of the URL every consent row carries. A request that
+	 * record() would not write for has no inventory row for the beacon's URL
+	 * to match anyway; with '' the beacon names the page from
+	 * window.location, as it does on a page without this value.
+	 *
+	 * @since 1.39.1
+	 * @return string
+	 */
+	public static function log_page_url() {
+		return self::request_names_canonical_page() ? self::current_url() : '';
+	}
+
+	/**
 	 * Create the table when missing or outdated.
 	 *
 	 * @return void
@@ -633,7 +651,10 @@ class Embed_Inventory {
 		$months = max( 1, (int) $months );
 		global $wpdb;
 		$table  = self::table();
-		$cutoff = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months" ) );
+		// On the clock last_seen is on: record() writes current_time( 'mysql' ),
+		// site time. A UTC cutoff pruned early or late by the site's offset,
+		// the same mismatch cleanup_old_logs() corrects for the consent log.
+		$cutoff = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months", strtotime( current_time( 'mysql' ) ) ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is plugin prefix + literal; cutoff is bound. Portable DELETE (no LIMIT): SQLite rejects DELETE … LIMIT.
 		$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE last_seen < %s", $cutoff ) );
 	}

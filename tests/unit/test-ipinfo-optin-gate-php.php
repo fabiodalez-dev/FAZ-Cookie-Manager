@@ -121,6 +121,9 @@ namespace FazCookie\Admin\Modules\Geo_Routing\Includes {
 		public static function encrypt( $v ) {
 			return (string) $v;
 		}
+		public static function needs_upgrade( $v ) {
+			return false;
+		}
 	}
 }
 

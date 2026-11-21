@@ -1249,7 +1249,10 @@ class Frontend {
 						// (?p=, ?lang=) the inventory keys on. It varies by page,
 						// never by visitor, so a cached copy stays correct.
 						'cookieNames'    => function_exists( 'faz_consent_cookie_names' ) ? faz_consent_cookie_names() : array(),
-						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::current_url() : '',
+						// Only for a request on a host the site is served on (see
+						// Embed_Inventory::log_page_url()): Host is not a cache
+						// key or a row value the visitor should get to choose.
+						'pageUrl'        => class_exists( Embed_Inventory::class ) ? Embed_Inventory::log_page_url() : '',
 						// Where the beacon fetches a current token when the one
 						// above is refused as stale — a page an edge cache kept
 						// past the token window. See
@@ -3291,7 +3294,7 @@ class Frontend {
 							$repaired = true;
 						}
 					}
-					if ( $repaired ) {
+					if ( $repaired && self::template_cache_write_is_current() ) {
 						// autoload=false — keep the multi-KB template blob out of alloptions.
 						update_option( $cache_key, $stored, false );
 					}
@@ -3326,6 +3329,25 @@ class Frontend {
 		echo '<template id="fazBannerTemplate">';
 		echo wp_kses( $html, faz_allowed_html() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_kses() is the escape.
 		echo '</template>';
+	}
+
+	/**
+	 * Whether a repair of the stored banner template may be written back.
+	 *
+	 * Both repairs below rewrite the whole option from the copy this request
+	 * read. If an admin save cleared the cache since, that copy is the state
+	 * before the save, and writing it back would bring the cleared slots back.
+	 * They would be ignored (each slot carries the generation it was built
+	 * under), but the write would still overwrite the slots of the new
+	 * generation built meanwhile. The per-request rewrite is unaffected.
+	 *
+	 * @return bool
+	 */
+	private static function template_cache_write_is_current() {
+		if ( ! function_exists( 'faz_banner_template_generation_is_current' ) ) {
+			return true;
+		}
+		return faz_banner_template_generation_is_current( faz_banner_template_generation() );
 	}
 
 	/**
@@ -3411,7 +3433,7 @@ class Frontend {
 			$server_verified_https = is_ssl()
 				|| 0 === stripos( (string) get_option( 'siteurl' ), 'https://' );
 			$forged_scheme_only = ( 'https' === $current['scheme'] ) && ! $server_verified_https;
-			if ( $repaired && ! $forged_scheme_only ) {
+			if ( $repaired && ! $forged_scheme_only && self::template_cache_write_is_current() ) {
 				// autoload=false — keep the multi-KB template blob out of alloptions.
 				update_option( $cache_key, $stored, false );
 			}
@@ -4892,6 +4914,9 @@ class Frontend {
 		status_header( 200 );
 		nocache_headers();
 		header( 'X-Robots-Tag: noindex, nofollow', true );
+		foreach ( self::banner_preview_frame_headers( home_url( '/' ), admin_url() ) as $faz_preview_header ) {
+			header( $faz_preview_header, true );
+		}
 
 		add_filter( 'show_admin_bar', '__return_false', PHP_INT_MAX );
 		show_admin_bar( false );
@@ -4901,6 +4926,58 @@ class Frontend {
 			require $template;
 		}
 		exit;
+	}
+
+	/**
+	 * Anti-framing headers for the admin banner preview frame.
+	 *
+	 * The frame is an administrator-only view (manage_options, no nonce),
+	 * and only the banner customizer in wp-admin ever embeds it. Restricting
+	 * its ancestors to this site, and to the admin origin when wp-admin is
+	 * served from another host, keeps any other site from framing it inside
+	 * a logged-in administrator's browser. X-Frame-Options cannot name a
+	 * second origin, so it is sent only when wp-admin and the site share one;
+	 * browsers that understand frame-ancestors ignore it in either case.
+	 *
+	 * @param string $home_url  Site front URL.
+	 * @param string $admin_url wp-admin URL (the page that embeds the frame).
+	 * @return string[] Header lines.
+	 */
+	public static function banner_preview_frame_headers( $home_url, $admin_url ) {
+		$home_origin  = self::url_origin( $home_url );
+		$admin_origin = self::url_origin( $admin_url );
+		$ancestors    = "'self'";
+		$same_origin  = '' === $admin_origin || $admin_origin === $home_origin;
+		if ( ! $same_origin ) {
+			$ancestors .= ' ' . $admin_origin;
+		}
+		$headers = array( 'Content-Security-Policy: frame-ancestors ' . $ancestors );
+		if ( $same_origin ) {
+			$headers[] = 'X-Frame-Options: SAMEORIGIN';
+		}
+		return $headers;
+	}
+
+	/**
+	 * Scheme, host and port of a URL, lowercased, or '' when it has none.
+	 *
+	 * @param string $url URL.
+	 * @return string
+	 */
+	private static function url_origin( $url ) {
+		$parts = wp_parse_url( (string) $url );
+		if ( ! is_array( $parts ) || empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+			return '';
+		}
+		$scheme = strtolower( $parts['scheme'] );
+		if ( 'http' !== $scheme && 'https' !== $scheme ) {
+			return '';
+		}
+		$origin = $scheme . '://' . strtolower( $parts['host'] );
+		if ( ! empty( $parts['port'] ) ) {
+			$origin .= ':' . (int) $parts['port'];
+		}
+		return $origin;
 	}
 
 	/**

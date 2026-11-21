@@ -527,6 +527,17 @@ if ( ! function_exists( 'faz_cloudflare_proxy_cidrs' ) ) {
 	 * from that CDN — a header it never writes, so one the visitor still
 	 * controls. Hence a private copy here and a filtered view next door.
 	 *
+	 * Precondition, stated because the code cannot check it: a peer in these
+	 * ranges is Cloudflare, not necessarily the site's own zone. Any
+	 * Cloudflare tenant can reach an origin from the same edge addresses (a
+	 * Worker fetching it) with `CF-Connecting-IP` / `CF-IPCountry` it chose.
+	 * The headers are trustworthy only when the origin admits the site's own
+	 * zone alone: Authenticated Origin Pulls with a per-zone certificate,
+	 * Cloudflare Tunnel, or a secret header the zone adds and the origin
+	 * checks. A firewall allowlist of these ranges is not that.
+	 * The readme FAQ "My site is behind Cloudflare or a reverse proxy" says
+	 * the same to site owners.
+	 *
 	 * @since 1.34.1
 	 * @return string[] CIDR ranges, IPv4 first then IPv6.
 	 */
