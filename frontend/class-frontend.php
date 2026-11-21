@@ -15531,16 +15531,25 @@ class Frontend {
 			return $content;
 		}
 		// The API tag WP Maps 5 enqueues (handle wpgmp-google-api).
-		$src    = 'id="wpgmp-google-api-js" src="https://maps.google.com/maps/api/js?callback=wpgmpInitMap"';
-		$google = true;
+		$src = 'id="wpgmp-google-api-js" src="https://maps.google.com/maps/api/js?callback=wpgmpInitMap"';
+		$container_providers = array();
+		$div_depth = 0;
 		// Led by tag_token_skip(), as the img and iframe passes are: a
 		// `<div class="wpgmp_map">` quoted inside another tag's value (a tooltip
 		// library keeping HTML in an attribute) is not an element. Script and
 		// style bodies are not in the buffer at all when this runs (see the
-		// callers). Only the opening tag is read.
+		// callers). Match closing divs before the skip alternative so each
+		// provider applies only underneath its own container.
 		$result = preg_replace_callback(
-			'#' . self::tag_token_skip( 'div' ) . '<div(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
-			function ( $m ) use ( $src, $blocked_categories, $providers, &$google ) {
+			'#</div(?=[\s/>])' . self::ATTR_WALK . '(?:/\s*+)?>|' . self::tag_token_skip( 'div' )
+				. '<div(?=[\s/>])(' . self::ATTR_WALK . ')(?:/\s*+)?>#is',
+			function ( $m ) use ( $src, $blocked_categories, $providers, &$container_providers, &$div_depth ) {
+				if ( ! isset( $m[1] ) ) {
+					unset( $container_providers[ $div_depth ] );
+					$div_depth = max( 0, $div_depth - 1 );
+					return $m[0];
+				}
+				++$div_depth;
 				$attrs = $m[1];
 				if ( false === stripos( $attrs, 'wpgmp_map' ) ) {
 					return $m[0];
@@ -15556,15 +15565,13 @@ class Frontend {
 				$classes = preg_split( '/\s+/', strtolower( trim( $class ) ) );
 				if ( in_array( 'wpgmp_map_container', $classes, true ) ) {
 					$provider = preg_grep( '/^wpgmp-map-provider-/', $classes );
-					$google   = empty( $provider ) || in_array( 'wpgmp-map-provider-google', $provider, true );
+					$container_providers[ $div_depth ] = empty( $provider ) || in_array( 'wpgmp-map-provider-google', $provider, true );
 					return $m[0];
 				}
 				if ( ! in_array( 'wpgmp_map', $classes, true ) ) {
 					return $m[0];
 				}
-				// The next map is judged by its own container.
-				$is_google = $google;
-				$google    = true;
+				$is_google = empty( $container_providers ) || end( $container_providers );
 				if ( ! $is_google || $this->has_attr_token( $attrs, 'data-faz-category' ) ) {
 					return $m[0];
 				}
