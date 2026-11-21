@@ -142,7 +142,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.11.14.2';
+	const MIGRATIONS_VERSION = '2026.11.20.1';
 
 	/**
 	 * Continuation event of the created_at_gmt backfill on large tables.
@@ -243,6 +243,10 @@ class Activator {
 			self::move_sourcebuster_to_marketing();
 			$all_complete = self::move_divi_editor_cookies_to_internal() && $all_complete;
 			self::reset_stale_per_cookie_consent();
+			// Before refresh_necessary_disclosure_text(): that step compares the
+			// stored wording with the shipped one, and a slashed apostrophe
+			// ("visitor\'s") would never match.
+			$all_complete = self::unslash_cookie_text() && $all_complete;
 			$all_complete = self::refresh_necessary_disclosure_text() && $all_complete;
 			self::demote_bulky_autoloaded_options();
 			self::refresh_cookie_translation_caches();
@@ -2908,6 +2912,262 @@ class Activator {
 			);
 		}
 		update_option( 'faz_move_sourcebuster_marketing_done', 1, false );
+	}
+
+	/**
+	 * Option used as a mutex by unslash_cookie_text().
+	 */
+	const TEXT_UNSLASH_LOCK = 'faz_cookie_text_unslash_lock';
+
+	/**
+	 * Seconds after which a held unslash lock is considered abandoned.
+	 */
+	const TEXT_UNSLASH_LOCK_TTL = 600;
+
+	/**
+	 * Strip the slashes the old setters wrote into the cookie and category text.
+	 *
+	 * Up to 1.39.0 Store::set_description(), Cookie::set_duration() and
+	 * Cookie_Categories::set_name() sanitised with wp_filter_post_kses(), which
+	 * returns addslashes()-ed output, so wp_faz_cookies.description/duration and
+	 * wp_faz_cookie_categories.name/description hold "It\'s" for "It's". The
+	 * getters hid it with a stripslashes() on read; [faz_cookie_table], the
+	 * faz/cookie-table block, the cookie policy generator and the settings export
+	 * read the columns directly and showed the backslash to visitors (wp.org
+	 * support: "Extra slashes in cookie tables").
+	 *
+	 * What this writes is exactly what the getters already returned, so nothing an
+	 * administrator sees in the admin or the banner changes: stripslashes() is the
+	 * exact inverse of the addslashes() that produced the rows. The one row shape
+	 * it cannot tell apart is a value written by a direct database path (an
+	 * import, an older migration) that contains a literal backslash; that value
+	 * loses it here — but the getters were already stripping it on every read, so
+	 * it is the value the admin screen and the banner were showing anyway.
+	 *
+	 * stripslashes() is not idempotent, so the step must run exactly once:
+	 *  - a completion flag (Store::TEXT_UNSLASHED_OPTION) gates it, written in
+	 *    the same transaction as the rows and re-read once the lock is held;
+	 *  - an INSERT IGNORE mutex in wp_options keeps two concurrent admin requests
+	 *    (admin_init also fires on admin-ajax.php, heartbeat included) from both
+	 *    stripping; a request that finds the lock held declines and retries;
+	 *  - the rows are rewritten in one transaction, rolled back on any failure,
+	 *    and each column is its own UPDATE, compare-and-set on the value that was
+	 *    read, so a value an administrator re-saved (clean) in the meantime is
+	 *    left alone and the other column of that row is still converted.
+	 * The tables are InnoDB since update_db_350(), so the rollback is real.
+	 *
+	 * @return bool True when done (now or before); false when it declined (tables
+	 *              missing, another request holds the lock) and must be retried.
+	 * @throws \RuntimeException When the rows cannot be read or written.
+	 */
+	public static function unslash_cookie_text() {
+		if ( ! Store::legacy_slashes_pending() ) {
+			return true;
+		}
+		global $wpdb;
+		$cookies    = $wpdb->prefix . 'faz_cookies';
+		$categories = $wpdb->prefix . 'faz_cookie_categories';
+		foreach ( array( $cookies, $categories ) as $table ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the upgrade path.
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+				return false; // No table yet: retried on the next run, flag not set.
+			}
+		}
+		if ( ! self::claim_text_unslash_lock() ) {
+			return false; // Another request is doing it; the batch retries and finds the flag.
+		}
+		// The flag read above may be stale: another request can have finished,
+		// and released the lock, between that read and this claim.
+		try {
+			$already_done = Store::text_unslashed_in_db();
+		} catch ( \RuntimeException $e ) {
+			self::release_text_unslash_lock();
+			throw $e;
+		}
+		if ( $already_done ) {
+			self::release_text_unslash_lock();
+			self::forget_text_unslashed_option();
+			return true;
+		}
+		// The flag can join the transaction only when the options table is
+		// known to be transactional. On MyISAM a ROLLBACK would leave it set over rows that
+		// went back to their slashed form, and every later run would skip them:
+		// there it is written right after the COMMIT instead, which leaves only
+		// a crash between the two statements uncovered.
+		$flag_in_transaction = self::options_table_is_transactional();
+
+		$targets = array(
+			array(
+				'table'   => $cookies,
+				'id'      => 'cookie_id',
+				'columns' => array( 'description', 'duration' ),
+			),
+			array(
+				'table'   => $categories,
+				'id'      => 'category_id',
+				'columns' => array( 'name', 'description' ),
+			),
+		);
+
+		$changed = false;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration transaction.
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			// Without a transaction a failure half-way could not be rolled back,
+			// and the retry would strip the rows already written a second time.
+			self::release_text_unslash_lock();
+			throw new \RuntimeException( 'FAZ: could not start the cookie text unslash transaction; migration will retry.' );
+		}
+		try {
+			foreach ( $targets as $target ) {
+				$table = esc_sql( $target['table'] );
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table is $wpdb->prefix + literal (escaped); column names are literals from $targets; no user input; one-shot migration read.
+				$rows = $wpdb->get_results( 'SELECT `' . $target['id'] . '`, `' . implode( '`, `', $target['columns'] ) . '` FROM `' . $table . '`', ARRAY_A );
+				// get_results() returns an empty array on a failed query too.
+				if ( ! is_array( $rows ) || '' !== (string) $wpdb->last_error ) {
+					throw new \RuntimeException( 'FAZ: could not read the cookie text to unslash; migration will retry.' );
+				}
+				foreach ( $rows as $row ) {
+					// One UPDATE per column, each compare-and-set on its own value:
+					// a row where another write changed one column meanwhile still
+					// gets the other one converted, instead of keeping its slashes
+					// after the flag says every row is clean.
+					foreach ( $target['columns'] as $column ) {
+						if ( ! isset( $row[ $column ] ) ) {
+							continue;
+						}
+						$stored    = (string) $row[ $column ];
+						$unslashed = Store::unslash_text_column( $stored );
+						if ( $unslashed === $stored ) {
+							continue;
+						}
+						// The comparison is binary: under the case- and accent-insensitive
+						// collation the tables inherit, "= %s" also matches a value saved
+						// meanwhile that differs only in case or accents, and the UPDATE
+						// would overwrite it with the old text.
+						// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table/column names are literals (table escaped); every value bound via prepare(); one-shot migration write, caches busted below.
+						$written = $wpdb->query( $wpdb->prepare( 'UPDATE `' . $table . '` SET `' . $column . '` = %s WHERE `' . $target['id'] . '` = %d AND CAST(`' . $column . '` AS BINARY) = CAST(%s AS BINARY)', $unslashed, (int) $row[ $target['id'] ], $stored ) );
+						if ( false === $written ) {
+							throw new \RuntimeException( 'FAZ: failed to unslash the cookie text; migration will retry.' );
+						}
+						$changed = $changed || $written > 0;
+					}
+				}
+			}
+			// The completion flag is written inside the same transaction as the
+			// rows: written after the COMMIT, a request that died in between would
+			// leave converted rows with no flag, and the next run would strip them
+			// again.
+			if ( $flag_in_transaction && ! self::write_text_unslashed_flag() ) {
+				throw new \RuntimeException( 'FAZ: could not record the cookie text unslash; migration will retry.' );
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration transaction.
+			if ( false === $wpdb->query( 'COMMIT' ) ) {
+				throw new \RuntimeException( 'FAZ: could not commit the unslashed cookie text; migration will retry.' );
+			}
+		} catch ( \Throwable $e ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration transaction.
+			$wpdb->query( 'ROLLBACK' );
+			self::release_text_unslash_lock();
+			throw $e instanceof \RuntimeException ? $e : new \RuntimeException( 'FAZ: unslashing the cookie text failed; migration will retry.', 0, $e );
+		}
+		if ( ! $flag_in_transaction && ! self::write_text_unslashed_flag() && ! self::write_text_unslashed_flag() ) {
+			// The rows are committed and cannot be taken back; the write is tried
+			// twice. The lock is left to expire rather than released, so no run
+			// strips the rows again before then. Past it, this is the same
+			// window as a crash between the COMMIT and the flag.
+			self::forget_text_unslashed_option();
+			throw new \RuntimeException( 'FAZ: the cookie text was unslashed but the flag could not be recorded.' );
+		}
+
+		self::forget_text_unslashed_option();
+		self::release_text_unslash_lock();
+		if ( $changed ) {
+			self::refresh_cookie_translation_caches();
+		}
+		return true;
+	}
+
+	/**
+	 * Take the unslash mutex: an atomic INSERT IGNORE of the lock option.
+	 *
+	 * add_option() is no use here: it writes with ON DUPLICATE KEY UPDATE, so two
+	 * callers both "succeed". INSERT IGNORE inserts one row or none, which is the
+	 * same primitive WP_Upgrader::create_lock() relies on. A lock older than
+	 * TEXT_UNSLASH_LOCK_TTL is taken over with a compare-and-set on its timestamp.
+	 *
+	 * @return bool True when this request holds the lock.
+	 */
+	private static function claim_text_unslash_lock() {
+		global $wpdb;
+		$now = (string) time();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- atomic mutex row; the options API cannot express "insert only if absent".
+		$inserted = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'no')", self::TEXT_UNSLASH_LOCK, $now ) );
+		if ( $inserted ) {
+			return true;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- reads the mutex row written above; must bypass the options cache.
+		$held = $wpdb->get_var( $wpdb->prepare( "SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s", self::TEXT_UNSLASH_LOCK ) );
+		if ( null === $held || (int) $held > (int) $now - self::TEXT_UNSLASH_LOCK_TTL ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-set takeover of an abandoned mutex row.
+		$taken = $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->options}` SET `option_value` = %s WHERE `option_name` = %s AND `option_value` = %s", $now, self::TEXT_UNSLASH_LOCK, $held ) );
+		return 1 === (int) $taken;
+	}
+
+	/**
+	 * Write the completion flag behind the options API, which cannot join a
+	 * transaction; the cached copies are dropped by the caller.
+	 *
+	 * Autoloaded: Store::legacy_slashes_pending() reads it on every request that
+	 * renders a cookie or category, the frontend included.
+	 *
+	 * @return bool False when the write failed.
+	 */
+	private static function write_text_unslashed_flag() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the options API cannot join a transaction; the option cache is cleared after the COMMIT.
+		return false !== $wpdb->query( $wpdb->prepare( "INSERT INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, '1', 'yes') ON DUPLICATE KEY UPDATE `option_value` = '1'", Store::TEXT_UNSLASHED_OPTION ) );
+	}
+
+	/**
+	 * Whether a ROLLBACK undoes a write to the options table.
+	 *
+	 * WordPress does not pick the engine of its own tables, so a legacy host can
+	 * still have wp_options on MyISAM. Only an engine read as InnoDB counts: one
+	 * the probe cannot read is treated as MyISAM, so the flag goes after the
+	 * COMMIT rather than into a transaction that may not take it back.
+	 *
+	 * @return bool
+	 */
+	private static function options_table_is_transactional() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time engine probe in the upgrade path.
+		$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT `ENGINE` FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $wpdb->options ) );
+		return is_string( $engine ) && 0 === strcasecmp( $engine, 'InnoDB' );
+	}
+
+	/**
+	 * Drop the cached copies of the completion flag, written behind the options
+	 * API's back, so get_option() reads the committed value.
+	 *
+	 * @return void
+	 */
+	private static function forget_text_unslashed_option() {
+		wp_cache_delete( Store::TEXT_UNSLASHED_OPTION, 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+	}
+
+	/**
+	 * Release the unslash mutex.
+	 *
+	 * @return void
+	 */
+	private static function release_text_unslash_lock() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- deletes the mutex row; never cached.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM `{$wpdb->options}` WHERE `option_name` = %s", self::TEXT_UNSLASH_LOCK ) );
 	}
 
 	/**

@@ -187,6 +187,8 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				'faz_consent_log_gmt_cursor',
 				'faz_reset_stale_per_cookie_consent_done',
 				'faz_normalize_legacy_functional_optout_done',
+				'faz_cookie_text_unslashed_done',
+				'faz_cookie_text_unslash_lock',
 				'faz_functional_optout_notice',
 				'faz_migrations_version',
 				'faz_cookie_definitions',

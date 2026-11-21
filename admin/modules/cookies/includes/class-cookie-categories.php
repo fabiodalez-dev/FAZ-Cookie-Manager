@@ -164,12 +164,12 @@ class Cookie_Categories extends Store {
 			$translated        = $this->translate_stored_value( $lang, $prop, $content );
 			$content           = '' !== $translated ? $translated : $content;
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
-			$contents[ $lang ] = is_string( $content ) ? wp_kses_post( stripslashes( $content ) ) : '';
+			$contents[ $lang ] = is_string( $content ) ? wp_kses_post( self::unslash_legacy( $content ) ) : '';
 		}
 		if ( is_array( $data ) ) {
 			foreach ( $data as $lang => $content ) {
 				if ( ! isset( $contents[ $lang ] ) && is_string( $content ) ) {
-					$contents[ $lang ] = wp_kses_post( stripslashes( $content ) );
+					$contents[ $lang ] = wp_kses_post( self::unslash_legacy( $content ) );
 				}
 			}
 		}
@@ -259,13 +259,15 @@ class Cookie_Categories extends Store {
 		$data      = $this->normalize_multilingual_data( $data );
 		$name      = array();
 		$languages = faz_selected_languages();
+		// wp_kses_post(), not wp_filter_post_kses(): the latter slashes its output.
+		// See Store::TEXT_UNSLASHED_OPTION.
 		foreach ( $languages as $lang ) {
-			$name[ $lang ] = isset( $data[ $lang ] ) && is_string( $data[ $lang ] ) ? wp_filter_post_kses( $data[ $lang ] ) : '';
+			$name[ $lang ] = isset( $data[ $lang ] ) && is_string( $data[ $lang ] ) ? wp_kses_post( $data[ $lang ] ) : '';
 		}
 		if ( is_array( $data ) ) {
 			foreach ( $data as $lang => $value ) {
 				if ( ! isset( $name[ $lang ] ) && is_string( $value ) ) {
-					$name[ $lang ] = wp_filter_post_kses( $value );
+					$name[ $lang ] = wp_kses_post( $value );
 				}
 			}
 		}

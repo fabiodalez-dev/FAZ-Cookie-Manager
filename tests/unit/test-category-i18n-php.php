@@ -13,6 +13,11 @@ namespace {
 	function sanitize_title( $v ) { return (string) $v; }
 	function sanitize_file_name( $v ) { return basename( $v ); }
 	function wp_strip_all_tags( $v ) { return strip_tags( $v ); }
+	// Store::legacy_slashes_pending() reads the unslash flag. Absent = migration
+	// pending, so the getters keep their pre-fix unslashing.
+	if ( ! function_exists( 'get_option' ) ) {
+		function get_option( $name, $default = false ) { return $default; }
+	}
 	function wp_kses_post( $v ) { return (string) $v; }
 	function wp_filter_post_kses( $v ) { return (string) $v; }
 	function wp_json_encode( $v ) { return json_encode( $v ); }

@@ -267,12 +267,12 @@ class Cookie extends Store {
 				$content    = '' !== $translated ? $translated : $content;
 			}
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
-			$contents[ $lang ] = is_string( $content ) ? wp_kses_post( stripslashes( $content ) ) : '';
+			$contents[ $lang ] = is_string( $content ) ? wp_kses_post( self::unslash_legacy( $content ) ) : '';
 		}
 		// Preserve extra language keys beyond faz_selected_languages().
 		foreach ( $data as $lang => $content ) {
 			if ( ! isset( $contents[ $lang ] ) && is_string( $content ) ) {
-				$contents[ $lang ] = wp_kses_post( stripslashes( $content ) );
+				$contents[ $lang ] = wp_kses_post( self::unslash_legacy( $content ) );
 			}
 		}
 		return $contents;
@@ -928,16 +928,18 @@ class Cookie extends Store {
 		$data      = $this->normalize_multilingual_data( $data );
 		$duration  = array();
 		$languages = faz_selected_languages();
+		// wp_kses_post(), not wp_filter_post_kses(): the latter slashes its output.
+		// See Store::TEXT_UNSLASHED_OPTION.
 		// Ensure selected languages are always present.
 		foreach ( $languages as $lang ) {
-			$duration[ $lang ] = isset( $data[ $lang ] ) && is_string( $data[ $lang ] ) ? wp_filter_post_kses( $data[ $lang ] ) : '';
+			$duration[ $lang ] = isset( $data[ $lang ] ) && is_string( $data[ $lang ] ) ? wp_kses_post( $data[ $lang ] ) : '';
 		}
 		// Preserve extra language keys already in the payload so that
 		// translations are not silently lost when a language is deselected.
 		if ( is_array( $data ) ) {
 			foreach ( $data as $lang => $value ) {
 				if ( ! isset( $duration[ $lang ] ) && is_string( $value ) ) {
-					$duration[ $lang ] = wp_filter_post_kses( $value );
+					$duration[ $lang ] = wp_kses_post( $value );
 				}
 			}
 		}
