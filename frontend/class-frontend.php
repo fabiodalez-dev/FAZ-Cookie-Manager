@@ -11859,6 +11859,7 @@ class Frontend {
 		return '.faz-hidden{display:none!important;visibility:hidden!important}'
 			. '.faz-hide{display:none!important}'
 			. '.faz-consent-bridge{width:0;height:0;border:0}'
+			. '.faz-btn-revisit-wrapper[data-faz-tag="revisit-consent"]:focus-within{outline:2px solid #1863dc;outline-offset:3px;box-shadow:0 0 0 3px #fff}'
 			. '.video-placeholder-normal,.video-placeholder-youtube{min-height:200px;display:flex;align-items:center;justify-content:center;width:100%;max-width:100%;box-sizing:border-box}';
 	}
 

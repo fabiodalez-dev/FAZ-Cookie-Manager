@@ -320,8 +320,6 @@ let _fazRef, fazcookieConsentMap, _fazHasConsentCookie, _fazCreateElementBackup,
 const _FAZ_SCOPE_BANNER_KEY = "__scope.banner";
 const _FAZ_SCOPE_LAW_KEY = "__scope.law";
 const _FAZ_SCOPE_FP_KEY = "__scope.fp";
-// Focus-loop handlers per element; see _fazAttachFocusLoop().
-const _fazFocusLoopHandlers = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
 
 /**
  * The Domain attribute a consent cookie may carry on `hostname`.
@@ -1249,7 +1247,7 @@ var _revisitFazConsent = function () {
         _fazShowBanner();
         openedBanner = true;
     }
-    _fazToggleRevisit();
+    _fazHideRevisit();
     _fazUpdateVendorCheckboxStates();
     // The widget that was just activated is now hidden, and a focused element
     // that disappears drops focus on <body>: a keyboard user was left behind
@@ -2676,9 +2674,7 @@ function _fazDomReady(callback) {
         // a combined bundle (WPSpeed, Autoptimize, WP Rocket), or replayed by a
         // "delay JS" feature. Calling back synchronously would run the whole
         // init in the middle of this file's evaluation, before the `const`/`let`
-        // declarations below this point exist: _fazAttachFocusLoop then threw
-        // "Cannot access '_fazFocusLoopHandlers' before initialization" and the
-        // banner rendered half-decorated. A microtask runs as soon as the file
+        // declarations below this point exist. A microtask runs as soon as the file
         // has finished evaluating — the same order as the DOMContentLoaded path.
         return void Promise.resolve().then(callback);
     } /** DOMContentLoaded has not fired yet, delay callback until then. */
@@ -2888,13 +2884,15 @@ function _fazRegisterListeners() {
     // they had dismissed it permanently while leaving them with no recorded
     // consent. Per EDPB guidance, the banner remains visible until the user
     // makes an explicit accept / reject / save choice.
-    document.addEventListener('keydown', function(e) {
-        if (e.key !== 'Escape') return;
-        var pref = _fazGetPreferenceCenter();
-        if (pref && pref.classList.contains(_fazGetPreferenceClass())) {
-            _fazHidePreferenceCenter();
-        }
-    });
+    document.addEventListener('keydown', _fazHandlePreferenceEscape);
+}
+
+function _fazHandlePreferenceEscape(event) {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    const preference = _fazGetPreferenceCenter();
+    if (!preference || !preference.classList.contains(_fazGetPreferenceClass())) return;
+    event.preventDefault();
+    _fazHidePreferenceCenter();
 }
 
 function _fazAttachCategoryListeners() {
@@ -2984,12 +2982,6 @@ function _fazToggleBanner(force = false) {    const notice = _fazGetElementByTag
 
 }
 
-function _fazToggleRevisit(force = false) {
-    const revisit = _fazGetRevisit();
-    if (revisit) {
-        force === true ? _fazHideRevisit() : revisit.classList.toggle('faz-revisit-hide');
-    }
-}
 // Collapse any applicable-law value to its consent PARADIGM. There are only
 // two paradigms worldwide, and every consent-engine branch keys off this:
 //   - 'ccpa'  → opt-out family: CCPA/CPRA (California) and the US state laws
@@ -3130,15 +3122,6 @@ function _fazShowBanner() {
         // to make the shortcode-opened panel visible (#253).
         _fazStore._pushdownRevealedFromHidden = false;
         notice.classList.remove('faz-hide');
-        // Arm the focus trap now the banner is actually visible. Until #62 this
-        // ran only when the preference centre opened, so a visitor who never
-        // opened it had no trap at all: Tab from the last button left a
-        // role="dialog" and landed on the page behind it. It has to be AFTER
-        // the faz-hide removal — _fazGetFocusableElements() filters out anything
-        // inside .faz-hide, so calling it earlier finds nothing and
-        // _fazAttachFocusLoop() returns on its null guard, silently.
-        // Idempotent: the WeakMap replaces handlers rather than stacking them.
-        _fazLoopFocus();
         if (!_fazBannerLoadedFired) {
             _fazBannerLoadedFired = true;
             // Record the one-shot event before dispatch so late-running
@@ -3322,11 +3305,6 @@ function _fazShowPreferenceCenter() {
     // Target the inner .faz-preference-center so we don't focus a banner button
     // when pushdown mode embeds preferences inside the consent bar wrapper.
     _fazFocusIntoElement(preferenceCenter || element);
-    // Re-bind the focus trap to the panel now open. The initial render bound it
-    // to the law-default panel; on a "Both" banner the visitor may have just
-    // opened the OTHER panel via its trigger. Done AFTER initial focus so it
-    // never interferes with it. Idempotent — the WeakMap handler map replaces.
-    _fazLoopFocus();
     return true;
 }
 function _fazTogglePreferenceCenter() {
@@ -3382,7 +3360,8 @@ function _fazGetRevisit() {
     const revisit = _fazGetElementByTag('revisit-consent');
     return revisit && revisit || false;
 }
-function _fazHideRevisit() {    const revisit = _fazGetRevisit();
+function _fazHideRevisit() {
+    const revisit = _fazGetRevisit();
     if (revisit && !revisit.classList.contains('faz-revisit-hide')) revisit.classList.add('faz-revisit-hide');
 }
 function _fazShowRevisit() {
@@ -3419,7 +3398,7 @@ function _fazIsRendered(element) {
         return element.checkVisibility({ visibilityProperty: true, checkVisibilityCSS: true });
     }
     if (element.getClientRects().length === 0) return false;
-    return window.getComputedStyle(element).visibility !== 'hidden';
+    return window.getComputedStyle(element).visibility === 'visible';
 }
 
 /**
@@ -3478,14 +3457,10 @@ function _fazFocusRevisitIfFocusLost(focusWasInConsentUi, closedSurface) {
  */
 function _fazFocusFirstControl(root) {
     if (!root) return;
-    const candidates = root.querySelectorAll(
-        'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
-    );
-    for (let i = 0; i < candidates.length; i++) {
-        if (candidates[i] !== root && _fazIsRendered(candidates[i])) {
-            candidates[i].focus();
-            return;
-        }
+    const first = _fazTabbableControls(root)[0];
+    if (first) {
+        first.focus();
+        return;
     }
     if (!root.hasAttribute('tabindex')) root.setAttribute('tabindex', '-1');
     root.focus();
@@ -3578,42 +3553,34 @@ function _fazSetPreferenceAction(tagName = false) {
         _fazShowPreferenceCenter();
     }
 }
-function _fazGetFocusableElements(element) {
-    const wrapperElement = document.querySelector(`[data-faz-tag="${element}"]`);
-    if (!wrapperElement) return [];
-    const focussableElements = Array.from(
-        wrapperElement.querySelectorAll(
-            'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([disabled]):not([tabindex="-1"])'
-        )
-    ).filter((element) => !element.closest('.faz-hidden') && !element.closest('.faz-hide') && !element.hasAttribute('hidden'));
-    if (focussableElements.length <= 0) return [];
-    return [
-        focussableElements[0],
-        focussableElements[focussableElements.length - 1],
-    ];
-}
-function _fazLoopFocus() {
-    const [firstElementBanner, lastElementBanner] =
-        _fazGetFocusableElements("notice");
-    _fazAttachFocusLoop(firstElementBanner, lastElementBanner, true);
-    _fazAttachFocusLoop(lastElementBanner, firstElementBanner);
-    // Trap focus in the panel that is actually open (trigger-aware), so a "Both"
-    // banner loops the opt-out popup when reached via Do-Not-Sell.
-    const [firstElementPopup, lastElementPopup] = _fazGetFocusableElements(
-        _fazActivePreferenceTag()
+/**
+ * Read the current sequential tab stops in the surface. Preference controls
+ * can appear or disappear as categories expand or vendor lists load.
+ */
+function _fazTabbableControls(root) {
+    const controls = Array.from(root.querySelectorAll(
+        'a[href], button, input:not([type="hidden"]), select, textarea, summary, [tabindex]'
+    )).filter((element) =>
+        !(element.hasAttribute('tabindex') && element.tabIndex < 0) &&
+        !element.matches(':disabled, input[type="hidden"]') &&
+        !element.closest('[hidden], [inert], .faz-hide, .faz-hidden') &&
+        _fazIsRendered(element)
     );
-    _fazAttachFocusLoop(firstElementPopup, lastElementPopup, true);
-    _fazAttachFocusLoop(lastElementPopup, firstElementPopup);
-    // The edge handlers above are bound to the first/last control in SOURCE
-    // order when the surface opens. When that control is one the layout does
-    // not display, its handler never runs and Tab walks out of the dialog
-    // into the page: that is the expanded pushdown panel, whose last control
-    // in source order is a button the layout hides (covered by
-    // a11y-keyboard-revisit.spec.ts). A surface-level handler re-reads the
-    // controls that are actually rendered at the moment Tab is pressed; it
-    // defers to an edge handler that already handled the key. On the modal
-    // (popup/sidebar) the edge controls are displayed with the default
-    // templates, so there the trap is only a safety net.
+    const ordered = controls.filter((element) => element.tabIndex > 0);
+    ordered.sort((left, right) => left.tabIndex - right.tabIndex);
+    return ordered.concat(controls.filter((element) => element.tabIndex <= 0));
+}
+
+// First and last tab stop of a surface. The runtime trap no longer reads
+// edges (it re-reads _fazTabbableControls() on every Tab); this stays as the
+// seam pr-2026-04-19-audit.spec.ts inspects the trap's tab order through.
+function _fazGetFocusableElements(tag) {
+    const root = _fazGetElementByTag(tag);
+    const controls = root ? _fazTabbableControls(root) : [];
+    return controls.length ? [controls[0], controls[controls.length - 1]] : [];
+}
+
+function _fazLoopFocus() {
     _fazAttachSurfaceTrap(_fazGetBanner());
     _fazAttachSurfaceTrap(document.querySelector('.faz-modal'));
 }
@@ -3643,85 +3610,31 @@ function _fazOpenTrapRoot(surface) {
         return surface.querySelector('[data-faz-tag="' + _fazActivePreferenceTag() + '"]') || surface;
     }
     if (surface.classList.contains('faz-hide')) return null;
-    // Inside an expanded pushdown panel the panel cycles on its own, as its
-    // edge handlers do; from the notice the whole banner is the cycle.
+    // Tab can enter an expanded panel from the notice. Once inside, Tab
+    // and Shift+Tab cycle through the panel's controls.
     const panel = surface.classList.contains('faz-consent-bar-expand') && document.activeElement
-        ? document.activeElement.closest('[data-faz-tag="detail"]')
+        ? document.activeElement.closest('[data-faz-tag="' + _fazActivePreferenceTag() + '"]')
         : null;
     return panel && surface.contains(panel) ? panel : surface;
 }
 
 function _fazTrapSurfaceTab(event) {
-    if (event.key !== 'Tab' || event.defaultPrevented) return;
+    if (event.key !== 'Tab' || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
     const root = _fazOpenTrapRoot(event.currentTarget);
     if (!root) return;
-    const controls = Array.from(root.querySelectorAll(
-        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([disabled]):not([tabindex="-1"])'
-    )).filter(_fazIsRendered);
-    if (!controls.length) return;
-    const first = controls[0];
-    const last = controls[controls.length - 1];
-    const active = document.activeElement;
-    const atEdge = event.shiftKey
-        ? (active === first || active === root || !root.contains(active))
-        : (active === last || !root.contains(active));
-    if (!atEdge) return;
-    event.preventDefault();
-    (event.shiftKey ? last : first).focus();
-}
-// Tracks the currently-attached focus-loop handler per (element, isReverse)
-// pair so repeated _fazLoopFocus() calls (legitimate dynamic re-init OR
-// test fixture injection) REPLACE the previous listener instead of stacking.
-// Without this cleanup, listeners accumulate; addEventListener fires them in
-// registration order, so the most-recently registered (most "polluted")
-// handler wins on Tab, and its closed-over targetElement may point to a
-// stale DOM node — the visible symptom in the focus-trap test under full
-// suite load (issue #124). _fazFocusLoopHandlers is declared at the top of
-// the file (old Safari, see the note there).
-function _fazAttachFocusLoop(element, targetElement, isReverse = false) {
-    if (!element || !targetElement) return;
-    const slot = isReverse ? '__faz_focus_loop_reverse' : '__faz_focus_loop_forward';
-    if (_fazFocusLoopHandlers) {
-        let perElement = _fazFocusLoopHandlers.get(element);
-        if (!perElement) {
-            perElement = {};
-            _fazFocusLoopHandlers.set(element, perElement);
-        }
-        if (perElement[slot]) {
-            element.removeEventListener("keydown", perElement[slot]);
-        }
-        const handler = (event) => {
-            if (
-                event.key !== 'Tab' ||
-                (isReverse && !event.shiftKey) ||
-                (!isReverse && event.shiftKey)
-            )
-                return;
-            // An expanded pushdown panel sits in the banner AFTER the notice,
-            // so the notice's own wrap (last button → first button) would
-            // make the panel unreachable by Tab. While it is expanded, let
-            // Tab leave the notice's last control into the panel; the panel
-            // keeps its own wrap, and _fazTrapSurfaceTab holds the banner.
-            if (element.closest && element.closest('.faz-consent-bar-expand') &&
-                !element.closest('[data-faz-tag="detail"]')) return;
-            event.preventDefault();
-            targetElement.focus();
-        };
-        element.addEventListener("keydown", handler);
-        perElement[slot] = handler;
+    const controls = _fazTabbableControls(root);
+    if (!controls.length) {
+        event.preventDefault();
+        _fazFocusFirstControl(root);
         return;
     }
-    // Fallback path (no WeakMap support — extremely old environments).
-    element.addEventListener("keydown", (event) => {
-        if (
-            event.key !== 'Tab' ||
-            (isReverse && !event.shiftKey) ||
-            (!isReverse && event.shiftKey)
-        )
-            return;
-        event.preventDefault();
-        targetElement.focus();
-    });
+
+    const index = controls.indexOf(document.activeElement);
+    const next = event.shiftKey
+        ? (index <= 0 ? controls.length - 1 : index - 1)
+        : (index + 1) % controls.length;
+    event.preventDefault();
+    controls[next].focus();
 }
 
 /**
@@ -4048,24 +3961,7 @@ function _fazFocusIntoElement(element) {
     var root = element.classList && element.classList.contains('faz-preference-center')
         ? element
         : (element.querySelector('.faz-preference-center') || element);
-    var candidates = root.querySelectorAll(
-        'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
-    );
-    // The first control in source order can be one the layout hides (the
-    // pushdown panel keeps a close button it does not display), and focus()
-    // on it is a silent no-op that leaves focus on the opener. Prefer the
-    // first control that is actually rendered; keep the first match as the
-    // fallback for a panel still mid-transition, which the retries below cover.
-    var focusTarget = null;
-    for (var c = 0; c < candidates.length; c++) {
-        if (_fazIsRendered(candidates[c])) { focusTarget = candidates[c]; break; }
-    }
-    if (!focusTarget) focusTarget = candidates[0] || null;
-    if (!focusTarget) {
-        if (!root.hasAttribute('tabindex')) root.setAttribute('tabindex', '-1');
-        focusTarget = root;
-    }
-    focusTarget.focus();
+    _fazFocusFirstControl(root);
 
     // Cancel any pending retries from a previous open/close cycle — otherwise
     // a late callback from an earlier open can steal focus away from the
@@ -4077,16 +3973,13 @@ function _fazFocusIntoElement(element) {
     // Every retry first checks that the panel is still in the open state
     // (by re-querying the "currently active preference center" via the same
     // selector the hide path toggles). If closed, the callback is a no-op.
-    // Only reclaim focus that has left the consent UI (a theme script or an
-    // animation pulling it to the page or <body>). Since the first-control
-    // pick prefers a RENDERED control, these retries really do move focus,
-    // so they must not pull it off a control the visitor reached inside the
-    // panel's wrapper but outside the inner .faz-preference-center.
+    // Only reclaim focus that has left the consent UI, such as when a theme
+    // script or animation resets it to <body> during the transition.
     var retry = function () {
         if (!_fazIsPreferenceCenterOpen(root)) return;
         if (root.contains(document.activeElement)) return;
         if (_fazConsentUiHasFocus() && !_fazFocusIsLost()) return;
-        focusTarget.focus();
+        _fazFocusFirstControl(root);
     };
 
     tracker.raf = window.requestAnimationFrame(retry);
@@ -10992,15 +10885,6 @@ function _fazInjectServiceToggle(service) {
     // rejecting the category would not deselect this just-injected toggle.
     // Idempotent via data-faz-service-sync-bound. #134/#146.
     _fazBindServiceCategorySync({ slug: service.category });
-
-    // Re-arm the focus trap. _fazLoopFocus() captured the panel's first/last
-    // focusable elements at open time; appending a toggle to an already-open
-    // preference center can shift that boundary, letting a keyboard user Tab
-    // out of the modal. The re-bind is idempotent (it REPLACES the prior
-    // listeners, see _fazAttachFocusLoop) and harmless when the modal is closed.
-    if (typeof _fazLoopFocus === 'function') {
-        _fazLoopFocus();
-    }
 }
 
 /**
