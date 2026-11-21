@@ -113,6 +113,13 @@ echo 'INSTALL PASSED'
 # hold the upgrade to — the migration performing its move, or the one-shot
 # staying done and leaving the rows alone. Asserting nothing in the second case
 # would be worse than either: it is the case every existing 1.32.x install is in.
+#
+# 1.40.0 adds two migrations of its own, and every upgrade from 1.39.x runs
+# both, so they are seeded and asserted unconditionally: the cookie text
+# unslash (a description and a duration stored the way the 1.39.0 setters
+# wrote an apostrophe, "It\'s") and the Divi Builder editor cookies moved from
+# Uncategorized to WordPress Internal (one row left there, one an administrator
+# put in Functional on purpose, which must stay).
 if [ "$PREVIOUS" = "1.32.0" ] || [ "$(printf '%s\n' "$PREVIOUS" "1.32.0" | sort -V | head -1)" = "1.32.0" ]; then
     SOURCEBUSTER_ALREADY_APPLIED=1
 else
@@ -141,7 +148,15 @@ $analytics = (int)$wpdb->get_var("SELECT category_id FROM {$wpdb->prefix}faz_coo
 if (!$analytics) { throw new Exception("No analytics category to seed"); }
 $wpdb->insert($wpdb->prefix."faz_cookies", array("name"=>"sbjs_current","slug"=>"sbjs-current","domain"=>"probe.test","category"=>$analytics,"type"=>"HTTP","discovered"=>1,"date_created"=>"2026-09-01 00:00:00","date_modified"=>"2026-09-01 00:00:00"));
 $wpdb->insert($wpdb->prefix."faz_cookies", array("name"=>"sbjs_udata","slug"=>"sbjs-udata","domain"=>"probe.test","category"=>$analytics,"type"=>"HTTP","discovered"=>1,"date_created"=>"2026-09-01 00:00:00","date_modified"=>"2026-09-02 10:00:00"));
-echo "UPGRADE: previous version ".FAZ_VERSION."; probe, intentional option and two Sourcebuster rows inserted\n";
+$q = chr(39);
+$wpdb->insert($wpdb->prefix."faz_cookies", array("name"=>"faz_unslash_probe","slug"=>"faz-unslash-probe","domain"=>"probe.test","category"=>$analytics,"type"=>"HTTP","discovered"=>1,"description"=>wp_json_encode(array("en"=>"It\\".$q."s a probe")),"duration"=>wp_json_encode(array("en"=>"a visitor\\".$q."s session"))));
+if (!$wpdb->insert_id) { throw new Exception("Unslash probe insert failed"); }
+$uncategorized = (int)$wpdb->get_var("SELECT category_id FROM {$wpdb->prefix}faz_cookie_categories WHERE slug=\"uncategorized\"");
+$functional = (int)$wpdb->get_var("SELECT category_id FROM {$wpdb->prefix}faz_cookie_categories WHERE slug=\"functional\"");
+if (!$uncategorized || !$functional) { throw new Exception("No uncategorized/functional category to seed"); }
+$wpdb->insert($wpdb->prefix."faz_cookies", array("name"=>"et-saved-post-42-bb","slug"=>"et-saved-post-42-bb","domain"=>"probe.test","category"=>$uncategorized,"type"=>"HTTP","discovered"=>1));
+$wpdb->insert($wpdb->prefix."faz_cookies", array("name"=>"et-editing-post-43","slug"=>"et-editing-post-43","domain"=>"probe.test","category"=>$functional,"type"=>"HTTP","discovered"=>1));
+echo "UPGRADE: previous version ".FAZ_VERSION."; probe, intentional option, two Sourcebuster rows, a slashed cookie text and two Divi editor rows inserted\n";
 '
 wp --path="$WP_DIR" option list --search='faz_*' --field=option_name > "$RUN_DIR/options-before.txt"
 : > "$WP_DIR/wp-content/debug.log"
@@ -174,7 +189,19 @@ if ($already) {
 $wpdb->query($wpdb->prepare("UPDATE {$wpdb->prefix}faz_cookies SET category=%d WHERE slug=\"sbjs-current\"", $analytics));
 \FazCookie\Includes\Activator::move_sourcebuster_to_marketing();
 if ((int)$wpdb->get_var("SELECT category FROM {$wpdb->prefix}faz_cookies WHERE slug=\"sbjs-current\"")!==$analytics) { throw new Exception("Migration ran twice"); }
-echo "UPGRADE: ".FAZ_VERSION."; probe, categories, banners and custom option preserved; migration + notice + one-shot passed\n";
+$row = $wpdb->get_row("SELECT description, duration FROM {$wpdb->prefix}faz_cookies WHERE slug=\"faz-unslash-probe\"", ARRAY_A);
+$desc = is_array($row) ? json_decode((string)$row["description"], true) : null;
+$dur = is_array($row) ? json_decode((string)$row["duration"], true) : null;
+$q = chr(39);
+if (!get_option("faz_cookie_text_unslashed_done") || !is_array($desc) || ($desc["en"] ?? null) !== "It".$q."s a probe" || !is_array($dur) || ($dur["en"] ?? null) !== "a visitor".$q."s session") { throw new Exception("Cookie text unslash missing: ".wp_json_encode($row)); }
+\FazCookie\Includes\Activator::unslash_cookie_text();
+if ((string)$wpdb->get_var("SELECT description FROM {$wpdb->prefix}faz_cookies WHERE slug=\"faz-unslash-probe\"") !== (string)$row["description"]) { throw new Exception("Cookie text unslash ran twice"); }
+$internal = (int)$wpdb->get_var("SELECT category_id FROM {$wpdb->prefix}faz_cookie_categories WHERE slug=\"wordpress-internal\"");
+$functional = (int)$wpdb->get_var("SELECT category_id FROM {$wpdb->prefix}faz_cookie_categories WHERE slug=\"functional\"");
+$divi = (int)$wpdb->get_var("SELECT category FROM {$wpdb->prefix}faz_cookies WHERE slug=\"et-saved-post-42-bb\"");
+$kept = (int)$wpdb->get_var("SELECT category FROM {$wpdb->prefix}faz_cookies WHERE slug=\"et-editing-post-43\"");
+if (!$internal || $divi!==$internal || $kept!==$functional || !get_option("faz_move_divi_editor_internal_done")) { throw new Exception("Divi editor cookie move missing (internal=$internal, moved=$divi, kept=$kept)"); }
+echo "UPGRADE: ".FAZ_VERSION."; probe, categories, banners and custom option preserved; Sourcebuster migration + notice + one-shot, cookie text unslash (once) and Divi editor move passed\n";
 '
 [[ "$(wp --path="$WP_DIR" plugin get faz-cookie-manager --field=version)" == "$VERSION" ]]
 wp --path="$WP_DIR" option list --search='faz_*' --field=option_name > "$RUN_DIR/options-after.txt"
