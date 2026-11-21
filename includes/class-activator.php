@@ -2737,8 +2737,9 @@ class Activator {
 	 *    (admin_init also fires on admin-ajax.php, heartbeat included) from both
 	 *    stripping; a request that finds the lock held declines and retries;
 	 *  - the rows are rewritten in one transaction, rolled back on any failure,
-	 *    and each UPDATE is compare-and-set on the value that was read, so a row
-	 *    an administrator re-saved (clean) in the meantime is left alone.
+	 *    and each column is its own UPDATE, compare-and-set on the value that was
+	 *    read, so a value an administrator re-saved (clean) in the meantime is
+	 *    left alone and the other column of that row is still converted.
 	 * The tables are InnoDB since update_db_350(), so the rollback is real.
 	 *
 	 * @return bool True when done (now or before); false when it declined (tables
@@ -2812,10 +2813,10 @@ class Activator {
 					throw new \RuntimeException( 'FAZ: could not read the cookie text to unslash; migration will retry.' );
 				}
 				foreach ( $rows as $row ) {
-					$set        = array();
-					$set_args   = array();
-					$where      = array();
-					$where_args = array();
+					// One UPDATE per column, each compare-and-set on its own value:
+					// a row where another write changed one column meanwhile still
+					// gets the other one converted, instead of keeping its slashes
+					// after the flag says every row is clean.
 					foreach ( $target['columns'] as $column ) {
 						if ( ! isset( $row[ $column ] ) ) {
 							continue;
@@ -2825,21 +2826,13 @@ class Activator {
 						if ( $unslashed === $stored ) {
 							continue;
 						}
-						$set[]        = '`' . $column . '` = %s';
-						$set_args[]   = $unslashed;
-						$where[]      = '`' . $column . '` = %s';
-						$where_args[] = $stored;
+						// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table/column names are literals (table escaped); every value bound via prepare(); one-shot migration write, caches busted below.
+						$written = $wpdb->query( $wpdb->prepare( 'UPDATE `' . $table . '` SET `' . $column . '` = %s WHERE `' . $target['id'] . '` = %d AND `' . $column . '` = %s', $unslashed, (int) $row[ $target['id'] ], $stored ) );
+						if ( false === $written ) {
+							throw new \RuntimeException( 'FAZ: failed to unslash the cookie text; migration will retry.' );
+						}
+						$changed = $changed || $written > 0;
 					}
-					if ( empty( $set ) ) {
-						continue;
-					}
-					$args = array_merge( $set_args, array( (int) $row[ $target['id'] ] ), $where_args );
-					// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table/column names are literals (table escaped); every value bound via prepare(); one-shot migration write, caches busted below.
-					$written = $wpdb->query( $wpdb->prepare( 'UPDATE `' . $table . '` SET ' . implode( ', ', $set ) . ' WHERE `' . $target['id'] . '` = %d AND ' . implode( ' AND ', $where ), $args ) );
-					if ( false === $written ) {
-						throw new \RuntimeException( 'FAZ: failed to unslash the cookie text; migration will retry.' );
-					}
-					$changed = $changed || $written > 0;
 				}
 			}
 			// The completion flag is written inside the same transaction as the

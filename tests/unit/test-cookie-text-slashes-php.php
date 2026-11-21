@@ -126,6 +126,7 @@ class Faz_Sqlite_Wpdb {
 	public $fail_updates = false;
 	public $fail_queries = array(); // Exact statements that return false.
 	public $fail_once    = array(); // Same, for the first matching statement only.
+	public $before_first_update = null; // Runs once before the first UPDATE of wp_faz_cookies: a concurrent write.
 	public $fail_reads   = false;   // Reads of the categories table report an error.
 	public $last_error   = '';
 	public $engine       = 'InnoDB'; // What INFORMATION_SCHEMA reports for wp_options.
@@ -197,6 +198,11 @@ class Faz_Sqlite_Wpdb {
 			if ( 0 === strpos( $query, $prefix ) ) {
 				return false;
 			}
+		}
+		if ( $this->before_first_update && 0 === strpos( $query, 'UPDATE `wp_faz_cookies`' ) ) {
+			$hook                      = $this->before_first_update;
+			$this->before_first_update = null;
+			$hook( $this->pdo );
 		}
 		if ( $this->fail_updates && 0 === strpos( $query, 'UPDATE `wp_faz_cookie_categories`' ) ) {
 			return false;
@@ -537,6 +543,16 @@ try {
 }
 sl_eq( $threw, true, 'MyISAM options: a flag that cannot be written after the COMMIT throws' );
 sl_eq( null !== $db->get_var( "SELECT option_value FROM wp_options WHERE option_name = 'faz_cookie_text_unslash_lock'" ), true, 'MyISAM options: and keeps the mutex, so no run strips the committed rows again before it expires' );
+
+// Another write changes one column of a row between the read and the UPDATE:
+// the other column of that row is still converted.
+$db = sl_site();
+$db->before_first_update = function ( $pdo ) {
+	$pdo->exec( "UPDATE wp_faz_cookies SET description = '{\"en\":\"Re-saved by the admin\"}' WHERE cookie_id = 1" );
+};
+sl_eq( Activator::unslash_cookie_text(), true, 'concurrent write to one column: the run reports done' );
+sl_eq( sl_cookie( $db, 1 ), array( 'en' => 'Re-saved by the admin' ), 'the value written meanwhile is left alone' );
+sl_eq( sl_cookie( $db, 1, 'duration' ), array( 'en' => "browser's session" ), 'and the other column of that row is still unslashed' );
 
 // MyISAM: the first write after the COMMIT fails, the second one records it.
 $db = sl_site();
