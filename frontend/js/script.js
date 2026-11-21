@@ -5498,7 +5498,10 @@ function _fazFlushParkVerify() {
             el.setAttribute("data-faz-park-key", _fazStore._srcdocKey);
             confirmed = true;
         });
-        if (confirmed) _fazUnblockServerSide();
+        // A confirmed park keeps the key it was just given, but nothing is
+        // restored while the pre-choice gate is shut (see _fazRestoreAllowed()):
+        // the proof answers who parked it, not whether the visitor consented.
+        if (confirmed && _fazRestoreAllowed()) _fazUnblockServerSide();
     }).catch(function () { /* stays parked: the safe failure */ }).then(function () {
         _fazParkBusy = false;
         if (_fazParkQueue.length) _fazFlushParkVerify();

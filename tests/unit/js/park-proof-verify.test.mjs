@@ -283,6 +283,25 @@ console.log('\n5. a signed park inserted after the restore pass');
   eq('and stays parked', w.document.getElementById('h').getAttribute('data-faz-style'), CSS);
 }
 
+{
+  // The verification answers after the gate was shut again (GDPR, no choice
+  // yet, a category seeded "yes" from prior consent): a confirmed park is
+  // keyed but not restored. A real choice opens it.
+  const { window: w, calls } = page(styleTag(GOOD));
+  w.fazcookie._fazGetFromStore = (k) => ({ consent: 'yes', marketing: 'yes', necessary: 'yes' }[k]);
+  w.eval('_fazUnblockServerSide()'); // Queues the foreign-key park, which is asked about.
+  w.fazcookie._fazGetFromStore = (k) => ({ consent: 'no', marketing: 'yes', necessary: 'yes' }[k]);
+  await settle(60);
+  const h = w.document.getElementById('h');
+  eq('the park was asked about', calls.length, 1);
+  eq('and a confirmation that lands with the gate shut restores nothing', h.getAttribute('style'), '');
+  eq('the style is still parked', h.getAttribute('data-faz-style'), CSS);
+  w.fazcookie._fazGetFromStore = (k) => ({ consent: 'yes', marketing: 'yes', necessary: 'yes' }[k]);
+  w.eval('_fazUnblockServerSide()');
+  await settle(30);
+  eq('once the visitor has chosen, it is restored', h.getAttribute('style'), CSS);
+}
+
 console.log('\n6. more than one batch');
 {
   const tags = Array.from({ length: 51 }, (_, i) => styleTag(i % 2 === 0 ? GOOD : BAD).replace('id="h"', `id="t${i}"`)).join('');

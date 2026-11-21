@@ -539,6 +539,8 @@ test.describe('Blocking compliance coverage', () => {
     // made the Google Analytics toggle vanish and this test time out waiting
     // for it. Arrange the precondition here rather than inherit it, inside
     // the try: a second seed that fails must not leave the first row behind.
+    let bodyDone = false;
+    const cleanupErrors: string[] = [];
     try {
       seedDetectedCookie('_ga');
       seedDetectedCookie('_clck');
@@ -651,6 +653,7 @@ test.describe('Blocking compliance coverage', () => {
       const cookieNamesAfterReload = await browserCookieNames(page);
       expect(cookieNamesAfterReload).toContain('_ga');
       expect(cookieNamesAfterReload).not.toContain('_clck');
+      bodyDone = true;
     } finally {
       // The test path calls page.context().clearCookies() inside `try`, which
       // wipes the wordpress_logged_in_* cookies along with the consent cookie.
@@ -669,6 +672,7 @@ test.describe('Blocking compliance coverage', () => {
           script_blocking: original.script_blocking ?? {},
         });
       } catch (restoreError) {
+        cleanupErrors.push(`settings restore: ${String(restoreError)}`);
         // eslint-disable-next-line no-console
         console.warn(
           '[blocking-compliance per-service finally] settings restore failed:',
@@ -687,9 +691,15 @@ test.describe('Blocking compliance coverage', () => {
         try {
           step();
         } catch (cleanupError) {
+          cleanupErrors.push(`${label}: ${String(cleanupError)}`);
           // eslint-disable-next-line no-console
           console.warn(`[blocking-compliance per-service finally] ${label} failed:`, cleanupError);
         }
+      }
+      // A test that passed must not pass over shared state it left changed. One
+      // that already failed keeps its own error: a throw here would replace it.
+      if (bodyDone && cleanupErrors.length > 0) {
+        throw new Error(`per-service cleanup left shared state changed: ${cleanupErrors.join('; ')}`);
       }
     }
   });

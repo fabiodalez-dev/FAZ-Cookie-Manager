@@ -34,7 +34,7 @@ const CASES = [
 function serverReadings(values: string[]): string[] {
   const frontend = path.resolve('frontend/class-frontend.php');
   const source = 'define("ABSPATH", sys_get_temp_dir() . "/"); require $argv[1];'
-    + ' $m = new ReflectionMethod("FazCookie\\\\Frontend\\\\Frontend", "attr_value_as_read"); $m->setAccessible(true);'
+    + ' $m = new ReflectionMethod("FazCookie\\\\Frontend\\\\Frontend", "attr_value_as_read"); if (PHP_VERSION_ID < 80100) { $m->setAccessible(true); }'
     + ' echo json_encode(array_map(function ($v) use ($m) { return $m->invoke(null, $v); }, json_decode($argv[2], true)));';
   return JSON.parse(execFileSync(process.env.PHP_BIN || 'php', ['-n', '-r', source, frontend, JSON.stringify(values)], { encoding: 'utf8' }));
 }
