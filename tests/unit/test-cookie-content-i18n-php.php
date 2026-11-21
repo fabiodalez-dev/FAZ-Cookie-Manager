@@ -28,6 +28,11 @@ if ( ! function_exists( 'sanitize_title' ) ) {
 if ( ! function_exists( 'wp_strip_all_tags' ) ) {
 	function wp_strip_all_tags( $value ) { return strip_tags( (string) $value ); }
 }
+// Store::legacy_slashes_pending() reads the unslash flag. Absent = migration
+// pending, so the getters keep their pre-fix unslashing.
+if ( ! function_exists( 'get_option' ) ) {
+	function get_option( $name, $default = false ) { return $default; }
+}
 if ( ! function_exists( 'wp_kses_post' ) ) {
 	function wp_kses_post( $value ) { return (string) $value; }
 }

@@ -833,10 +833,19 @@ class Api extends Rest_Controller {
 	 * Consent logs, pageview data, and sensitive API keys are excluded.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
-	 * @return WP_REST_Response
+	 * @return WP_REST_Response|WP_Error
 	 */
 	public function export_settings( $request ) {
 		global $wpdb;
+
+		// The file says its cookie and category text is in the clean form
+		// (text_unslashed), so the rows read below must be. The migration runs
+		// first; until it has completed the export is refused, as the import is:
+		// rows it converted before failing to record the flag are clean, and a
+		// file marked otherwise would be unslashed a second time on import.
+		if ( ! \FazCookie\Includes\Store::ensure_text_unslashed() ) {
+			return new WP_Error( 'faz_text_migration_pending', __( 'The cookie texts are being upgraded. Please try again in a minute.', 'faz-cookie-manager' ), array( 'status' => 503 ) );
+		}
 
 		$settings     = get_option( 'faz_settings' );
 		$gcm_settings = get_option( 'faz_gcm_settings' );
@@ -917,6 +926,10 @@ class Api extends Rest_Controller {
 			'banners'      => $banners ? $banners : array(),
 			'categories'   => $categories ? $categories : array(),
 			'cookies'      => $cookies ? $cookies : array(),
+			// Whether the cookie and category text above is stored without the legacy
+			// slashes (see Store::TEXT_UNSLASHED_OPTION). The import reads it to
+			// unslash a file written by an older version.
+			'text_unslashed' => true,
 		);
 
 		return rest_ensure_response( $export );
@@ -939,6 +952,23 @@ class Api extends Rest_Controller {
 		}
 
 		$imported = array();
+
+		// Files exported before the slashing fix carry the cookie and category
+		// text as the old setters stored it ("It\'s"); a file marked
+		// text_unslashed is already clean. The site's own rows must be in the
+		// clean form before either is written: the one-time migration strips a
+		// level of slashes from every row, so a clean file imported ahead of it
+		// would lose a real backslash. It is run here if it is still pending,
+		// and the import is refused while it cannot complete.
+		if ( ! \FazCookie\Includes\Store::ensure_text_unslashed() ) {
+			return new WP_Error( 'faz_text_migration_pending', __( 'The cookie texts are being upgraded. Please try again in a minute.', 'faz-cookie-manager' ), array( 'status' => 503 ) );
+		}
+		// A pre-fix file is unslashed on the way in, once; a marked one is not
+		// (that would eat a real backslash).
+		$unslash_text = empty( $data['text_unslashed'] );
+		$text_column  = static function ( $value ) use ( $unslash_text ) {
+			return $unslash_text ? \FazCookie\Includes\Store::unslash_text_column( $value ) : $value;
+		};
 
 		// --- Settings ---
 		if ( ! empty( $data['settings'] ) && is_array( $data['settings'] ) ) {
@@ -1040,9 +1070,9 @@ class Api extends Rest_Controller {
 				$cat_meta = array_key_exists( 'meta', $cat ) ? Cookies_API::sanitize_meta_for_current_user( $cat['meta'] ) : null;
 				$result   = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 					'category_id'        => absint( $cat['category_id'] ?? 0 ),
-					'name'               => $this->encode_json_column( $cat['name'] ?? null, array() ),
+					'name'               => $this->encode_json_column( $text_column( $cat['name'] ?? null ), array() ),
 					'slug'               => sanitize_text_field( $cat['slug'] ?? '' ),
-					'description'        => $this->encode_json_column( $cat['description'] ?? null, array() ),
+					'description'        => $this->encode_json_column( $text_column( $cat['description'] ?? null ), array() ),
 					'prior_consent'      => absint( $cat['prior_consent'] ?? 0 ),
 					'visibility'         => absint( $cat['visibility'] ?? 1 ),
 					'priority'           => absint( $cat['priority'] ?? 0 ),
@@ -1085,8 +1115,8 @@ class Api extends Rest_Controller {
 					'cookie_id'   => absint( $cookie['cookie_id'] ?? 0 ),
 					'name'        => sanitize_text_field( $cookie['name'] ?? '' ),
 					'slug'        => sanitize_text_field( $cookie['slug'] ?? '' ),
-					'description' => $this->encode_json_column( $cookie['description'] ?? null, '' ),
-					'duration'    => sanitize_text_field( $cookie['duration'] ?? '' ),
+					'description' => $this->encode_json_column( $text_column( $cookie['description'] ?? null ), '' ),
+					'duration'    => sanitize_text_field( $text_column( $cookie['duration'] ?? '' ) ),
 					'domain'      => sanitize_text_field( $cookie['domain'] ?? '' ),
 					'category'    => absint( $cookie['category'] ?? 0 ),
 					'type'        => sanitize_text_field( $cookie['type'] ?? '' ),

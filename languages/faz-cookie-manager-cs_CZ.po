@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-11-10T23:19:43+00:00\n"
+"POT-Creation-Date: 2026-11-11T00:18:43+00:00\n"
 "PO-Revision-Date: 2026-08-01 13:45+0200\n"
 "Last-Translator: \n"
 "Language-Team: Czech\n"
@@ -3965,6 +3965,11 @@ msgstr "Bezpečný záložní režim: přísnou sadu pravidel GDPR se nepodařil
 #: admin/modules/settings/api/class-api.php:938
 msgid "Invalid export file."
 msgstr "Neplatný soubor exportu."
+
+#: admin/modules/settings/api/class-api.php:847
+#: admin/modules/settings/api/class-api.php:964
+msgid "The cookie texts are being upgraded. Please try again in a minute."
+msgstr ""
 
 #: admin/modules/settings/api/class-api.php:1011
 msgid "Failed to import banners. Transaction rolled back."

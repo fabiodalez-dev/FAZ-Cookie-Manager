@@ -64,6 +64,11 @@ namespace {
 		if ( 'faz_necessary_disclosure_text_done' === $name && ! array_key_exists( $name, $GLOBALS['faz_geo_options'] ) ) {
 			return 1;
 		}
+		// Likewise the cookie-text unslash migration, driven for real by
+		// test-cookie-text-slashes-php.php.
+		if ( 'faz_cookie_text_unslashed_done' === $name && ! array_key_exists( $name, $GLOBALS['faz_geo_options'] ) ) {
+			return 1;
+		}
 		return array_key_exists( $name, $GLOBALS['faz_geo_options'] )
 			? $GLOBALS['faz_geo_options'][ $name ]
 			: $default;

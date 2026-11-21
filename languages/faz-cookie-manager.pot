@@ -3780,6 +3780,11 @@ msgstr ""
 msgid "Invalid export file."
 msgstr ""
 
+#: admin/modules/settings/api/class-api.php:847
+#: admin/modules/settings/api/class-api.php:964
+msgid "The cookie texts are being upgraded. Please try again in a minute."
+msgstr ""
+
 #: admin/modules/settings/api/class-api.php:1011
 msgid "Failed to import banners. Transaction rolled back."
 msgstr ""

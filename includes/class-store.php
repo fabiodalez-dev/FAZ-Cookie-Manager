@@ -99,6 +99,144 @@ abstract class Store {
 	}
 
 	/**
+	 * Option written once the stored cookie and category text has been unslashed.
+	 *
+	 * Until this fix the multilingual setters (cookie description and duration,
+	 * category name and description) sanitised with wp_filter_post_kses(). That
+	 * function is a `pre_*` filter: it expects SLASHED input and returns SLASHED
+	 * output — addslashes( wp_kses( stripslashes( $data ) ) ). Our callers hand it
+	 * plain values, so every apostrophe reached the table as \' ("It\'s"), and a
+	 * real backslash was eaten on the way in. The getters papered over it with a
+	 * stripslashes() on read, but every reader that goes to the columns directly
+	 * — [faz_cookie_table], the faz/cookie-table block, the cookie policy
+	 * generator, the settings export — printed the backslash to visitors.
+	 *
+	 * The setters now use wp_kses_post(), which does not slash, and
+	 * Activator::unslash_cookie_text() strips the one level of slashes from the
+	 * rows written before. Until that migration has run, the rows on disk are
+	 * still the old shape, so the getters keep unslashing them (see
+	 * unslash_legacy()); after it, they return what is stored.
+	 */
+	const TEXT_UNSLASHED_OPTION = 'faz_cookie_text_unslashed_done';
+
+	/**
+	 * Whether the stored cookie/category text may still carry the legacy slashes.
+	 *
+	 * @return bool
+	 */
+	public static function legacy_slashes_pending() {
+		return ! get_option( self::TEXT_UNSLASHED_OPTION );
+	}
+
+	/**
+	 * Whether the migration has completed, read from the database itself.
+	 *
+	 * get_option() answers from the options cache loaded at the start of the
+	 * request (or from a persistent object cache), so it cannot see a migration
+	 * another request finished meanwhile. The export, the import and the
+	 * migration's own re-check after taking its lock need the committed state.
+	 *
+	 * A failed read throws instead of answering "not done": get_var() returns
+	 * null for a missing row and for a failed query alike, and taking a failure
+	 * for "pending" would let the migration strip rows another request already
+	 * converted.
+	 *
+	 * @return bool
+	 * @throws \RuntimeException When the flag cannot be read.
+	 */
+	public static function text_unslashed_in_db() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- must bypass the options cache to see another request's commit.
+		$value = $wpdb->get_var( $wpdb->prepare( "SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s", self::TEXT_UNSLASHED_OPTION ) );
+		if ( '' !== (string) $wpdb->last_error ) {
+			throw new \RuntimeException( 'FAZ: could not read the cookie text unslash flag.' );
+		}
+		return (bool) $value;
+	}
+
+	/**
+	 * Run the one-time unslash migration now if it is still pending.
+	 *
+	 * The import and the export cannot wait for the next admin page load: a
+	 * clean file written into rows the migration has not converted yet would
+	 * lose a real backslash when it runs.
+	 *
+	 * @return bool True when the stored text is in the clean form; false when it
+	 *              is not, or the state could not be read.
+	 */
+	public static function ensure_text_unslashed() {
+		try {
+			if ( self::text_unslashed_in_db() ) {
+				return true;
+			}
+			Activator::unslash_cookie_text();
+			return self::text_unslashed_in_db();
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * Undo the legacy slashing on a value read from the database, only while the
+	 * one-time migration has not run yet.
+	 *
+	 * Before the migration this is the stripslashes() the getters always applied,
+	 * so nothing a visitor or administrator sees changes in that window. After it
+	 * the stored value is already clean and is returned untouched — stripping it
+	 * again would eat a backslash the administrator actually typed.
+	 *
+	 * @param string $value Value as read from the database.
+	 * @return string
+	 */
+	protected static function unslash_legacy( $value ) {
+		return self::legacy_slashes_pending() ? stripslashes( $value ) : $value;
+	}
+
+	/**
+	 * Strip one level of slashes from a stored multilingual text column.
+	 *
+	 * Accepts the column as stored (a JSON object of language => text, or a
+	 * legacy plain string) or already decoded, and returns it in the same shape.
+	 * stripslashes() is applied to string values only; anything else (null,
+	 * numbers, nested arrays from a malformed row) is passed through.
+	 *
+	 * stripslashes() is the exact inverse of the addslashes() the old setters
+	 * applied, so a row written through them comes back byte-for-byte as the
+	 * administrator typed it. It is NOT idempotent (\\ becomes \, then nothing),
+	 * which is why callers must apply it exactly once per legacy value.
+	 *
+	 * @param mixed $value Column value.
+	 * @return mixed Same shape, unslashed.
+	 */
+	public static function unslash_text_column( $value ) {
+		if ( is_array( $value ) ) {
+			foreach ( $value as $key => $item ) {
+				if ( is_string( $item ) ) {
+					$value[ $key ] = stripslashes( $item );
+				}
+			}
+			return $value;
+		}
+		if ( ! is_string( $value ) || '' === $value ) {
+			return $value;
+		}
+		$decoded = json_decode( $value, true );
+		if ( JSON_ERROR_NONE === json_last_error() && is_array( $decoded ) ) {
+			$unslashed = self::unslash_text_column( $decoded );
+			if ( $unslashed === $decoded ) {
+				return $value; // Nothing to strip: keep the stored bytes as they are.
+			}
+			$encoded = function_exists( 'wp_json_encode' ) ? wp_json_encode( $unslashed ) : json_encode( $unslashed );
+			return false === $encoded ? $value : $encoded;
+		}
+		if ( JSON_ERROR_NONE === json_last_error() ) {
+			// A JSON scalar ("\"text\"", a number): not a shape these columns use.
+			return $value;
+		}
+		return stripslashes( $value );
+	}
+
+	/**
 	 * Read data directly from DB
 	 *
 	 * @return void
@@ -319,12 +457,12 @@ abstract class Store {
 				$content    = '' !== $translated ? $translated : $content;
 			}
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
-			$contents[ $lang ] = is_string( $content ) ? stripslashes( wp_kses_post( $content ) ) : '';
+			$contents[ $lang ] = is_string( $content ) ? self::unslash_legacy( wp_kses_post( $content ) ) : '';
 		}
 		// Preserve extra language keys beyond faz_selected_languages().
 		foreach ( $data as $lang => $content ) {
 			if ( ! isset( $contents[ $lang ] ) && is_string( $content ) ) {
-				$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
+				$contents[ $lang ] = self::unslash_legacy( wp_kses_post( $content ) );
 			}
 		}
 		if ( '' !== $language ) {
@@ -496,16 +634,18 @@ abstract class Store {
 		$data        = $this->normalize_multilingual_data( $data );
 		$description = array();
 		$languages   = faz_selected_languages();
+		// wp_kses_post(), not wp_filter_post_kses(): the latter slashes its output
+		// and wrote \' into the table. See Store::TEXT_UNSLASHED_OPTION.
 		// Ensure selected languages are always present.
 		foreach ( $languages as $lang ) {
-			$description[ $lang ] = isset( $data[ $lang ] ) && is_string( $data[ $lang ] ) ? wp_filter_post_kses( $data[ $lang ] ) : '';
+			$description[ $lang ] = isset( $data[ $lang ] ) && is_string( $data[ $lang ] ) ? wp_kses_post( $data[ $lang ] ) : '';
 		}
 		// Preserve extra language keys already in the payload so that
 		// translations are not silently lost when a language is deselected.
 		if ( is_array( $data ) ) {
 			foreach ( $data as $lang => $value ) {
 				if ( ! isset( $description[ $lang ] ) && is_string( $value ) ) {
-					$description[ $lang ] = wp_filter_post_kses( $value );
+					$description[ $lang ] = wp_kses_post( $value );
 				}
 			}
 		}
