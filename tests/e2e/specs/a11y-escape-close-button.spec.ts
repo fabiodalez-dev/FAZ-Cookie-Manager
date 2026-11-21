@@ -86,11 +86,13 @@ test.describe('Escape with the close button shown (F024, a11y)', () => {
     await settings.click();
     const panel = page.locator('.faz-preference-wrapper');
     await expect(panel).toBeVisible();
+    await expect(banner, 'premise: the pushdown panel is open').toHaveClass(/faz-consent-bar-expand/);
 
     await panel.locator('button, [tabindex="0"]').first().focus();
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
 
+    await expect(banner, 'Escape collapses the pushdown panel').not.toHaveClass(/faz-consent-bar-expand/);
+    await page.waitForTimeout(300);
     await expect(banner, 'the banner stays after Escape').toBeVisible();
     expect(await consentCookie(page), 'collapsing the panel with Escape must not record a rejection').toBeNull();
   });
