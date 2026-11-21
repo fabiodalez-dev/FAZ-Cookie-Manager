@@ -155,6 +155,8 @@ class Faz_Sqlite_Wpdb {
 	private function sqlite( $query ) {
 		$query = str_replace( '`', '"', $query );
 		$query = preg_replace( '/^INSERT IGNORE INTO/', 'INSERT OR IGNORE INTO', $query );
+		// MySQL's binary comparison, as SQLite spells it.
+		$query = preg_replace( '/CAST\(("[a-z_]+"|\'(?:[^\']|\'\')*\') AS BINARY\)/', '$1 COLLATE BINARY', $query );
 		$query = str_replace( 'ON DUPLICATE KEY UPDATE', 'ON CONFLICT("option_name") DO UPDATE SET', $query );
 		return 'START TRANSACTION' === $query ? 'BEGIN' : $query;
 	}
@@ -553,6 +555,23 @@ $db->before_first_update = function ( $pdo ) {
 sl_eq( Activator::unslash_cookie_text(), true, 'concurrent write to one column: the run reports done' );
 sl_eq( sl_cookie( $db, 1 ), array( 'en' => 'Re-saved by the admin' ), 'the value written meanwhile is left alone' );
 sl_eq( sl_cookie( $db, 1, 'duration' ), array( 'en' => "browser's session" ), 'and the other column of that row is still unslashed' );
+
+// Under a case-insensitive collation (WordPress's default) a value saved
+// meanwhile that differs only in case still matches "= %s": the comparison is
+// binary, so it is left alone.
+$db = sl_site();
+$db->pdo->exec( 'DROP TABLE wp_faz_cookies' );
+$db->pdo->exec( 'CREATE TABLE wp_faz_cookies (cookie_id INTEGER PRIMARY KEY, name TEXT, description TEXT COLLATE NOCASE, duration TEXT COLLATE NOCASE)' );
+$c = $db->pdo->prepare( 'INSERT INTO wp_faz_cookies (cookie_id, name, description, duration) VALUES (?,?,?,?)' );
+$legacy = json_encode( array( 'en' => addslashes( "It's the visitor's id" ) ) );
+$c->execute( array( 1, 'legacy', $legacy, json_encode( array( 'en' => '1 year' ) ) ) );
+$resaved = strtoupper( $legacy ); // Same text in capitals, as an administrator re-saved it.
+$db->before_first_update = function ( $pdo ) use ( $resaved ) {
+	$st = $pdo->prepare( 'UPDATE wp_faz_cookies SET description = ? WHERE cookie_id = 1' );
+	$st->execute( array( $resaved ) );
+};
+sl_eq( Activator::unslash_cookie_text(), true, 'case-insensitive collation: the run reports done' );
+sl_eq( sl_col( $db, 'wp_faz_cookies', 'cookie_id', 1, 'description' ), $resaved, 'case-insensitive collation: a value re-saved in another case is not overwritten with the old text' );
 
 // MyISAM: the first write after the COMMIT fails, the second one records it.
 $db = sl_site();
