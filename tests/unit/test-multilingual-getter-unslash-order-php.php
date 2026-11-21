@@ -55,6 +55,9 @@ namespace {
 	function wp_parse_url( $url, $component = -1 ) { return parse_url( $url, $component ); }
 	function esc_url_raw( $v ) { return (string) $v; }
 	function __( $t, $d = '' ) { return $t; }
+	// The one-time unslash migration has not run (no faz_cookie_text_unslashed_done):
+	// the getters still strip the legacy slashes, which is the order under test.
+	function get_option( $name, $default = false ) { return $default; }
 
 	$root = dirname( __DIR__, 2 );
 	require_once $root . '/includes/class-base-controller.php';
