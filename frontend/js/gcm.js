@@ -530,11 +530,22 @@ document.addEventListener("fazcookie_consent_ready", function (event) {
 // Sell request and every banner action write one before they fire the event.
 // With GCM switched on this never runs — the region defaults are the admin's
 // decision and a first visit must not overwrite them.
+//
+// A live change that leaves no readable cookie (the browser refused the write,
+// or dropped it for its size) is followed too, but only downwards. The state
+// pushed from 'init' is a grant under an opt-out banner, and such an event
+// used to be ignored here: the visitor opted out, the runtime blocked the
+// tags from its in-memory store, and ad_storage, ad_user_data and
+// ad_personalization stayed "granted" until the next page load. A category
+// the event does not list as accepted is now denied, and stays denied for the
+// rest of the page view — a later 'init' (the runtime announces it again when
+// it rebuilds the banner) or a later event does not grant it back. Nothing is
+// ever granted from such an event: a grant comes from the banner's own
+// pre-consent state or from a stored record, never from an event alone.
 var lastPreConsentJson = "";
-function applyPreConsentState(detail) {
-    if (!data.signals_only) return false;
-    detail = plain(detail);
-    if (!detail || detail.action !== "init") return false;
+var lastPreConsentState = null;
+var liveDenied = {};
+function preConsentStateFrom(detail) {
     var accepted = Array.isArray(detail.accepted) ? detail.accepted : [];
     var rejected = Array.isArray(detail.rejected) ? detail.rejected : [];
     var state = {};
@@ -548,11 +559,39 @@ function applyPreConsentState(detail) {
     }
     // Same alias parseConsentCookie() applies to a stored record.
     if (!state.marketing && state.advertisement) state.marketing = state.advertisement;
+    return state;
+}
+function applyPreConsentState(detail) {
+    if (!data.signals_only) return false;
+    detail = plain(detail);
+    if (!detail) return false;
+    var state;
+    var slug;
+    if (detail.action === "init") {
+        state = preConsentStateFrom(detail);
+    } else {
+        // Not a pre-consent state. It matters only while the state pushed
+        // from 'init' is the one in force; after a stored record was
+        // restored the caller goes back to the baseline instead.
+        if (!lastPreConsentState || restoredFromCookie) return false;
+        var live = preConsentStateFrom(detail);
+        state = {};
+        for (slug in lastPreConsentState) {
+            if (!Object.prototype.hasOwnProperty.call(lastPreConsentState, slug)) continue;
+            state[slug] = lastPreConsentState[slug];
+            // "necessary" is not a choice the visitor can withdraw.
+            if (slug !== "necessary" && live[slug] !== "granted") liveDenied[slug] = true;
+        }
+    }
+    for (slug in liveDenied) {
+        if (Object.prototype.hasOwnProperty.call(liveDenied, slug) && state[slug] === "granted") state[slug] = "denied";
+    }
     // The runtime announces 'init' again when it rebuilds the banner; the same
     // state is not pushed twice.
     var json = JSON.stringify(state);
     if (json === lastPreConsentJson && !restoredFromCookie) return true;
     lastPreConsentJson = json;
+    lastPreConsentState = state;
     restoredFromCookie = false;
     updateConsentState(buildConsentState(state));
     if (data.gacm_enabled && data.gacm_provider_ids) {
@@ -565,8 +604,9 @@ function applyPreConsentState(detail) {
 document.addEventListener("fazcookie_consent_update", function (event) {
     var updated = parseConsentCookie();
     if (!updated) {
-        // Signals-only mode, first visit: follow the banner's pre-consent
-        // state (see applyPreConsentState()).
+        // Signals-only mode: follow the banner's pre-consent state on a first
+        // visit, and a withdrawal from it that left no cookie behind (see
+        // applyPreConsentState()).
         if (applyPreConsentState(event && event.detail)) return;
         // parseConsentCookie() returns null when there is no cookie, or when it
         // is stale (revision bump), out of scope or malformed.
