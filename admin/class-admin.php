@@ -835,6 +835,8 @@ class Admin {
 						'imageUploaded'            => __( 'Image uploaded successfully.', 'faz-cookie-manager' ),
 						'imageDropLabel'           => __( 'Drag & drop an image or browse', 'faz-cookie-manager' ),
 						'uploadUnavailable'        => __( 'Upload is not available.', 'faz-cookie-manager' ),
+						'logoNotOnSite'            => __( 'This logo is not shown to visitors: it is on another site and is not an image of this site\'s Media Library, so it would be requested from that site before the visitor has made a choice. Select the logo again from the Media Library.', 'faz-cookie-manager' ),
+						'revisitImageNotOnSite'    => __( 'This image is not shown to visitors, who get the default icon: it is on another site and is not an image of this site\'s Media Library, so it would be requested from that site before the visitor has made a choice. Select the image again from the Media Library.', 'faz-cookie-manager' ),
 						/* translators: %s: maximum upload size in megabytes */
 						'uploadTooLarge'           => __( 'File too large (max %s MB).', 'faz-cookie-manager' ),
 						'uploadFailedShort'        => __( 'Upload failed', 'faz-cookie-manager' ),

@@ -1028,8 +1028,14 @@ class Template {
 	 * another host discloses the visit to it. A URL passes when it is a path on
 	 * this site or its host is the site's own: the home and site addresses, as
 	 * WordPress reports them for the request and as they are stored, and the
-	 * host of the uploads folder, which is where an offloaded Media Library
-	 * lives. `www.` is ignored on both sides.
+	 * host of the uploads folder. `www.` is ignored on both sides.
+	 *
+	 * A URL on any other host passes only when it is a Media Library
+	 * attachment that WordPress itself serves from that very address (see
+	 * is_media_library_image()). An offload plugin (WP Offload Media and the
+	 * like) rewrites attachment URLs to its bucket or CDN host and leaves the
+	 * uploads folder alone, so the picker stores such a URL for an image that
+	 * is the site's own media; refusing it dropped the logo silently.
 	 *
 	 * The `faz_banner_image_hosts` filter adds hosts the site owner answers
 	 * for, such as a CDN domain of their own that WordPress does not know.
@@ -1077,7 +1083,155 @@ class Template {
 				return true;
 			}
 		}
+		// A filter that returns no list allows nothing, the lookup included.
+		return is_array( $hosts ) && self::is_media_library_image( $url );
+	}
+
+	/**
+	 * Whether a URL is a Media Library attachment as WordPress serves it.
+	 *
+	 * The proof is not the file name or the path, which any host can copy,
+	 * but that wp_get_attachment_url() (or one of the attachment's generated
+	 * sizes) answers with this very host and path: WordPress, through the
+	 * offload plugin filtering it, is what sends visitors there for the
+	 * site's own media. The query string is ignored, a private bucket signs
+	 * its URLs.
+	 *
+	 * @param string $url Image URL from the banner config.
+	 * @return bool
+	 */
+	private static function is_media_library_image( $url ) {
+		$id = self::brand_logo_attachment_id( $url );
+		return $id > 0 && self::attachment_serves_url( $id, $url );
+	}
+
+	/**
+	 * Host and path of a URL, the part two addresses of one file share.
+	 *
+	 * @param string $url Absolute or protocol-relative URL.
+	 * @return string '' when the URL has no host or no path.
+	 */
+	private static function image_host_path( $url ) {
+		$url  = preg_replace( '/[?#].*$/', '', trim( (string) $url ) );
+		$host = self::image_host( $url );
+		$path = wp_parse_url( $url, PHP_URL_PATH );
+		return ( '' === $host || ! is_string( $path ) || '' === $path ) ? '' : $host . $path;
+	}
+
+	/**
+	 * Whether WordPress serves an attachment, or one of its sizes, from a URL.
+	 *
+	 * @param int    $id  Attachment id.
+	 * @param string $url URL to compare.
+	 * @return bool
+	 */
+	private static function attachment_serves_url( $id, $url ) {
+		$wanted = self::image_host_path( $url );
+		if ( '' === $wanted || ! function_exists( 'wp_get_attachment_url' ) ) {
+			return false;
+		}
+		if ( self::image_host_path( (string) wp_get_attachment_url( $id ) ) === $wanted ) {
+			return true;
+		}
+		$meta = function_exists( 'wp_get_attachment_metadata' ) ? wp_get_attachment_metadata( $id ) : false;
+		if ( ! is_array( $meta ) || empty( $meta['sizes'] ) || ! is_array( $meta['sizes'] ) || ! function_exists( 'wp_get_attachment_image_src' ) ) {
+			return false;
+		}
+		foreach ( array_keys( $meta['sizes'] ) as $size ) {
+			$src = wp_get_attachment_image_src( $id, $size );
+			if ( is_array( $src ) && isset( $src[0] ) && self::image_host_path( (string) $src[0] ) === $wanted ) {
+				return true;
+			}
+		}
 		return false;
+	}
+
+	/**
+	 * Attachment WordPress serves from a URL outside the uploads folder.
+	 *
+	 * attachment_url_to_postid() only knows URLs under the uploads folder, so
+	 * an offloaded attachment is looked up by its file name and kept only
+	 * when WordPress serves it from this URL (attachment_serves_url()).
+	 *
+	 * @param string $url Image URL, without query string.
+	 * @return int Attachment id, 0 when there is none.
+	 */
+	private static function served_attachment_id( $url ) {
+		if ( ! function_exists( 'get_posts' ) || '' === self::image_host( $url ) ) {
+			return 0;
+		}
+		$path = wp_parse_url( (string) $url, PHP_URL_PATH );
+		$name = is_string( $path ) ? wp_basename( $path ) : '';
+		if ( '' === $name ) {
+			return 0;
+		}
+		// The file itself, then the original a generated size was cut from.
+		$names    = array( $name );
+		$original = preg_replace( '/-\d+x\d+(?=\.[a-z0-9]+$)/i', '', $name );
+		if ( is_string( $original ) && '' !== $original && $original !== $name ) {
+			$names[] = $original;
+		}
+		foreach ( $names as $file ) {
+			$ids = get_posts(
+				array(
+					'post_type'      => 'attachment',
+					'post_status'    => 'any',
+					'fields'         => 'ids',
+					'posts_per_page' => 20,
+					'no_found_rows'  => true,
+					'orderby'        => 'ID',
+					'order'          => 'DESC',
+					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- runs only for a banner image on a host that is not the site's, when the template is built or the banner is opened in the editor; the result is then verified against wp_get_attachment_url().
+					'meta_query'     => array(
+						array(
+							'key'     => '_wp_attached_file',
+							'value'   => $file,
+							'compare' => 'LIKE',
+						),
+					),
+				)
+			);
+			foreach ( is_array( $ids ) ? $ids : array() as $candidate ) {
+				$candidate = (int) $candidate;
+				if ( $candidate > 0 && self::attachment_serves_url( $candidate, $url ) ) {
+					return $candidate;
+				}
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * Which of a banner's custom images are stored but not shown to visitors.
+	 *
+	 * Mirrors prepare_html(): a brand logo or a revisit widget image whose
+	 * URL fails is_first_party_image_url() is left out of the template. The
+	 * banner editor shows a warning under each field named here, so an image
+	 * that stops being rendered (a URL saved before the check existed, or one
+	 * set through REST or an import) does not just vanish from the site.
+	 *
+	 * @param mixed $settings Banner settings (Banner::get_settings()).
+	 * @return string[] Any of 'brandLogo', 'revisitConsent'.
+	 */
+	public static function banner_image_warnings( $settings ) {
+		$warnings = array();
+		$config   = ( is_array( $settings ) && isset( $settings['config'] ) && is_array( $settings['config'] ) ) ? $settings['config'] : array();
+		$not_shown = function ( $url ) {
+			$url = is_string( $url ) ? trim( $url ) : '';
+			if ( '' === $url || '#' === $url ) {
+				return false;
+			}
+			return ! self::is_first_party_image_url( esc_url_raw( $url, array( 'http', 'https' ) ) );
+		};
+		$logo = isset( $config['notice']['elements']['brandLogo'] ) ? $config['notice']['elements']['brandLogo'] : null;
+		// A logo that is switched off is not rendered whatever its URL is.
+		if ( is_array( $logo ) && ! empty( $logo['status'] ) && isset( $logo['meta']['url'] ) && $not_shown( $logo['meta']['url'] ) ) {
+			$warnings[] = 'brandLogo';
+		}
+		if ( isset( $config['revisitConsent']['meta']['url'] ) && $not_shown( $config['revisitConsent']['meta']['url'] ) ) {
+			$warnings[] = 'revisitConsent';
+		}
+		return $warnings;
 	}
 
 	/**
@@ -1100,6 +1254,8 @@ class Template {
 	 *
 	 * A URL to one of the image's generated sizes (`logo-300x100.png`) is
 	 * retried as the original, which is what attachment_url_to_postid() knows.
+	 * A URL outside the uploads folder, where an offload plugin serves the
+	 * Media Library from, is looked up by served_attachment_id().
 	 *
 	 * @param string $url Logo URL from the banner config.
 	 * @return int Attachment id, 0 for an external URL or none.
@@ -1115,6 +1271,9 @@ class Template {
 			if ( $original !== $url ) {
 				$id = (int) attachment_url_to_postid( $original );
 			}
+		}
+		if ( $id <= 0 ) {
+			$id = self::served_attachment_id( $url );
 		}
 		return max( 0, $id );
 	}

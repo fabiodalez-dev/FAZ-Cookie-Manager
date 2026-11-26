@@ -38,6 +38,51 @@ namespace {
 	function apply_filters( $hook, $value, ...$args ) {
 		return isset( $GLOBALS['faz_test_filters'][ $hook ] ) ? call_user_func( $GLOBALS['faz_test_filters'][ $hook ], $value, ...$args ) : $value;
 	}
+	// A Media Library whose files an offload plugin (WP Offload Media and the
+	// like) serves from a CDN host. As on a real site: the uploads folder is
+	// left alone, core's attachment_url_to_postid() only knows URLs under it,
+	// and wp_get_attachment_url() is filtered to the CDN address.
+	//   id => array( file under uploads, served base URL, sizes )
+	$GLOBALS['faz_test_attachments'] = array();
+	function attachment_url_to_postid( $url ) {
+		$base = $GLOBALS['faz_test_uploads'] . '/';
+		if ( 0 !== strpos( $url, $base ) ) {
+			return 0;
+		}
+		foreach ( $GLOBALS['faz_test_attachments'] as $id => $a ) {
+			if ( substr( $url, strlen( $base ) ) === $a['file'] ) {
+				return $id;
+			}
+		}
+		return 0;
+	}
+	function get_posts( $args ) {
+		$GLOBALS['faz_test_get_posts'][] = $args;
+		$needle = isset( $args['meta_query'][0]['value'] ) ? (string) $args['meta_query'][0]['value'] : '';
+		$ids    = array();
+		foreach ( $GLOBALS['faz_test_attachments'] as $id => $a ) {
+			if ( '' !== $needle && false !== strpos( $a['file'], $needle ) ) {
+				$ids[] = $id;
+			}
+		}
+		return $ids;
+	}
+	function wp_get_attachment_url( $id ) {
+		$a = isset( $GLOBALS['faz_test_attachments'][ $id ] ) ? $GLOBALS['faz_test_attachments'][ $id ] : null;
+		return $a ? $a['base'] . '/' . $a['file'] : false;
+	}
+	function wp_get_attachment_metadata( $id ) {
+		$a = isset( $GLOBALS['faz_test_attachments'][ $id ] ) ? $GLOBALS['faz_test_attachments'][ $id ] : null;
+		return $a ? array( 'file' => $a['file'], 'sizes' => $a['sizes'] ) : false;
+	}
+	function wp_get_attachment_image_src( $id, $size = 'thumbnail' ) {
+		$a = isset( $GLOBALS['faz_test_attachments'][ $id ] ) ? $GLOBALS['faz_test_attachments'][ $id ] : null;
+		if ( ! $a || ! isset( $a['sizes'][ $size ] ) ) {
+			return false;
+		}
+		return array( $a['base'] . '/' . dirname( $a['file'] ) . '/' . $a['sizes'][ $size ]['file'], 1, 1, true );
+	}
+	function get_post_meta( $id, $key = '', $single = false ) { return ''; }
 	function do_shortcode( $html ) { return $html; }
 	function esc_url( $url ) { return (string) $url; }
 	function esc_attr( $text ) { return htmlspecialchars( (string) $text, ENT_QUOTES ); }
@@ -202,6 +247,73 @@ namespace {
 		t( false === strpos( $html, 'thirdparty.example' ), "$url: the host is not in the template at all" );
 		t( false !== strpos( $html, 'data-faz-tag="title"' ), "$url: the rest of the notice is rendered" );
 	}
+
+	echo "== A Media Library served from an offload CDN ==\n";
+
+	// The upgrade case: the picker stored the URL the offload plugin reports
+	// for the attachment. The host is not the site's and not the uploads
+	// folder's, yet the image is the site's own Media Library file.
+	$cdn = 'https://d1234abcd.cloudfront.example';
+	$GLOBALS['faz_test_attachments'] = array(
+		41 => array( 'file' => '2026/11/logo.png', 'base' => $cdn . '/wp-content/uploads', 'sizes' => array( 'medium' => array( 'file' => 'logo-300x100.png' ) ) ),
+		42 => array( 'file' => '2026/11/widget.png', 'base' => $cdn . '/wp-content/uploads', 'sizes' => array() ),
+		// Same file name, not offloaded: served by the site itself.
+		43 => array( 'file' => '2025/01/logo.png', 'base' => 'https://shop.example/wp-content/uploads', 'sizes' => array() ),
+	);
+	$offloaded_logo = $cdn . '/wp-content/uploads/2026/11/logo.png';
+	t( true === Template::is_first_party_image_url( $offloaded_logo ), 'an attachment WordPress itself serves from the offload host is accepted' );
+	$html = $template->render( '#', $offloaded_logo );
+	t( false !== strpos( $html, 'data-faz-tag="brand-logo"' ) && in_array( $offloaded_logo, image_sources( $html ), true ), 'an offloaded Media Library logo is shown' );
+	t( in_array( $cdn . '/wp-content/uploads/2026/11/logo-300x100.png', image_sources( $template->render( '#', $cdn . '/wp-content/uploads/2026/11/logo-300x100.png' ) ), true ), 'one of its generated sizes too' );
+	t( in_array( $offloaded_logo . '?X-Amz-Signature=abc', image_sources( $template->render( '#', $offloaded_logo . '?X-Amz-Signature=abc' ) ), true ), 'and a signed URL of it' );
+	t( false !== strpos( revisit_image( $template->render( $cdn . '/wp-content/uploads/2026/11/widget.png' ) ), 'faz-revisit-custom-image' ), 'an offloaded revisit widget image is used' );
+	t( 41 === Template::brand_logo_attachment_id( $offloaded_logo ), 'and the attachment is found, so the logo keeps its alt text' );
+
+	// What makes it the site's own is that WordPress reports that very URL
+	// for the attachment. The same file name anywhere else proves nothing.
+	foreach ( array(
+		'https://images.thirdparty.example/wp-content/uploads/2026/11/logo.png' => 'the same path on a host WordPress does not serve the attachment from',
+		$cdn . '/wp-content/uploads/2026/11/other.png'                          => 'a file on the offload host that is no attachment',
+		$cdn . '/tracker/logo.png'                                              => 'another path on the offload host that ends in an attachment file name',
+		$cdn . '/wp-content/uploads/2026/11/logo-1x1.png'                       => 'a size the attachment does not have',
+		'https://images.thirdparty.example/pixel.gif?f=logo.png'                => 'a file name in a query string',
+	) as $url => $what ) {
+		t( false === Template::is_first_party_image_url( $url ), "$what is refused" );
+		$html = $template->render( $url, $url );
+		t( false === strpos( $html, 'data-faz-tag="brand-logo"' ) && false === strpos( revisit_image( $html ), 'faz-revisit-custom-image' ), "$what: neither image is rendered" );
+	}
+	// An image on the site itself never needs the lookup.
+	$GLOBALS['faz_test_get_posts'] = array();
+	Template::is_first_party_image_url( 'https://shop.example/wp-content/uploads/2026/11/logo.png' );
+	t( array() === $GLOBALS['faz_test_get_posts'], 'a URL on the site is accepted without a Media Library query' );
+	$GLOBALS['faz_test_attachments'] = array();
+
+	echo "== The editor is told which stored image is not shown ==\n";
+
+	$settings = function ( $logo, $logo_on, $revisit ) {
+		return array(
+			'config' => array(
+				'revisitConsent' => array( 'meta' => array( 'url' => $revisit ) ),
+				'notice'         => array( 'elements' => array( 'brandLogo' => array( 'status' => $logo_on, 'meta' => array( 'url' => $logo ) ) ) ),
+			),
+		);
+	};
+	$warn = function ( $s ) {
+		return method_exists( Template::class, 'banner_image_warnings' ) ? Template::banner_image_warnings( $s ) : 'missing method';
+	};
+	t( array() === $warn( $settings( '#', false, '#' ) ), 'no custom image: no warning' );
+	t( array() === $warn( $settings( $own, true, '/wp-content/uploads/widget.png' ) ), 'images of the site: no warning' );
+	t( array( 'brandLogo', 'revisitConsent' ) === $warn( $settings( 'https://images.thirdparty.example/logo.png', true, 'https://images.thirdparty.example/widget.png' ) ), 'both images on another host: both are reported' );
+	t( array( 'revisitConsent' ) === $warn( $settings( 'https://images.thirdparty.example/logo.png', false, 'https://images.thirdparty.example/widget.png' ) ), 'a logo that is switched off is not reported' );
+	t( array() === $warn( array() ) && array() === $warn( 'not-an-array' ), 'a banner without the settings reports nothing' );
+
+	$root_dir = dirname( __DIR__, 2 );
+	$api      = (string) file_get_contents( $root_dir . '/admin/modules/banners/api/class-api.php' );
+	t( false !== strpos( $api, "'image_warnings'   => Template::banner_image_warnings( " . '$object->get_settings() )' ) && false !== strpos( $api, 'use FazCookie\\Admin\\Modules\\Banners\\Includes\\Template;' ), 'the banner REST response carries image_warnings' );
+	$js = (string) file_get_contents( $root_dir . '/admin/assets/js/pages/banner.js' );
+	t( false !== strpos( $js, 'image_warnings' ) && false !== strpos( $js, "'banner.logoNotOnSite'" ) && false !== strpos( $js, "'banner.revisitImageNotOnSite'" ), 'the editor shows a warning under each reported field' );
+	$admin = (string) file_get_contents( $root_dir . '/admin/class-admin.php' );
+	t( false !== strpos( $admin, "'logoNotOnSite'" ) && false !== strpos( $admin, "'revisitImageNotOnSite'" ), 'with translatable text' );
 
 	echo "$passed passed: the banner loads its custom images only from the site itself\n";
 }
