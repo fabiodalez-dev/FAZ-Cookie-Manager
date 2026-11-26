@@ -707,6 +707,14 @@ class Template {
 				}
 				// Brand logo: set img src from config meta.url (custom upload).
 				if ( 'brand-logo' === $tag && isset( $config['meta']['url'] ) && '#' !== $config['meta']['url'] ) {
+					// The logo is in the notice itself, so it is requested on every
+					// first visit, before any choice. Only a logo this site serves
+					// is shown (see is_first_party_image_url()); for one on another
+					// host the logo is left out, not rendered as a broken image.
+					if ( ! self::is_first_party_image_url( esc_url_raw( (string) $config['meta']['url'], array( 'http', 'https' ) ) ) ) {
+						$element->parentNode->removeChild( $element ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName
+						continue;
+					}
 					self::apply_brand_logo( $element, (string) $config['meta']['url'] );
 					// Only for a logo that is shown: with the logo off the grid
 					// would keep an empty column and strip the text's padding.
@@ -1057,8 +1065,8 @@ class Template {
 		}
 		$hosts = array_filter( array_map( array( __CLASS__, 'image_host' ), $own ) );
 		/**
-		 * Hosts the banner may load its custom images (revisit widget image)
-		 * from before consent, besides the site's own.
+		 * Hosts the banner may load its custom images (brand logo, revisit
+		 * widget image) from before consent, besides the site's own.
 		 *
 		 * @param string[] $hosts Host names, lower case, without `www.`.
 		 * @param string   $url   The image URL being checked.

@@ -5,7 +5,8 @@
  * The banner template is printed on every page, first visit included, and a
  * browser requests an <img> as soon as it is in the document. A custom image
  * for the revisit widget on another host was therefore fetched from that host
- * before the visitor had chosen anything, and again after a refusal.
+ * before the visitor had chosen anything, and again after a refusal. The brand
+ * logo, in the notice itself, was fetched the same way on every first visit.
  *
  * Drives the real Template::prepare_html() on a cut-down template, so what is
  * asserted is the markup a visitor receives.
@@ -183,6 +184,24 @@ namespace {
 	};
 	t( false === strpos( revisit_image( $template->render( 'https://shop.example/wp-content/uploads/widget.png' ) ), 'faz-revisit-custom-image' ), 'a filter that returns no list allows nothing' );
 	$GLOBALS['faz_test_filters'] = array();
+
+	echo "== Brand logo ==\n";
+
+	// The logo is in the notice, so it is requested on every first visit.
+	$own  = 'https://shop.example/wp-content/uploads/2026/11/logo.png';
+	$html = $template->render( '#', $own );
+	t( false !== strpos( $html, 'data-faz-tag="brand-logo"' ) && in_array( $own, image_sources( $html ), true ), 'a logo from the Media Library is shown' );
+	t( in_array( '/wp-content/uploads/logo.png', image_sources( $template->render( '#', '/wp-content/uploads/logo.png' ) ), true ), 'a path on the site is shown' );
+	foreach ( array(
+		'https://images.thirdparty.example/logo.png',
+		'//images.thirdparty.example/logo.png',
+		'https://shop.example@thirdparty.example/logo.png',
+	) as $url ) {
+		$html = $template->render( '#', $url );
+		t( false === strpos( $html, 'data-faz-tag="brand-logo"' ) && false === strpos( $html, 'faz-custom-brand-logo' ), "$url: the logo is left out, with no empty image in its place" );
+		t( false === strpos( $html, 'thirdparty.example' ), "$url: the host is not in the template at all" );
+		t( false !== strpos( $html, 'data-faz-tag="title"' ), "$url: the rest of the notice is rendered" );
+	}
 
 	echo "$passed passed: the banner loads its custom images only from the site itself\n";
 }
