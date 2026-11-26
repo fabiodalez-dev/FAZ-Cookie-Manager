@@ -140,7 +140,7 @@ Terms of Service / Privacy Policy:
 
 = ipinfo.io (optional live VPN detection and admin preview) =
 
-The live geo-ruleset runtime applies jurisdiction-specific consent defaults and mandatory controls. If an administrator explicitly enables ipinfo.io, the jurisdiction pipeline may use it to classify a visitor as VPN/proxy/Tor and apply the most-protective fallback; the Geo-routing admin preview uses the same detector. Leave this integration disabled to keep visitor geolocation entirely on trusted headers and the local GeoLite2 database.
+The live geo-ruleset runtime applies jurisdiction-specific consent defaults and mandatory controls. If an administrator explicitly enables ipinfo.io, the jurisdiction pipeline may use it to classify a visitor as VPN/proxy/Tor and apply the most-protective fallback; the Geo-routing admin preview uses the same detector. Leave this integration disabled to keep visitor geolocation entirely on trusted headers and the local GeoLite2 database. New lookups are capped at 120 per hour site-wide (the `faz_ipinfo_lookups_per_hour` filter changes the ceiling). When a lookup cannot be made -- the ceiling is reached, or ipinfo.io is unreachable or refuses the key -- a visitor whose location would select an opt-out rule set is served the most-protective fallback instead, and **Geo-routing > Pipeline status** shows the lookups used and when the ceiling was last reached.
 
 Triggered when: an administrator has configured an ipinfo API key, confirmed the transfer terms, and enabled the integration, then either a visitor-facing jurisdiction lookup or an admin preview runs the geo detector. Without that explicit opt-in, ipinfo is never called.
 

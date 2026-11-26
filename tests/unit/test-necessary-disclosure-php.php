@@ -23,7 +23,13 @@
  *     freshly seeded row is still recognised as stock text and translated;
  *  3. the upgrade migration rewrites stored text that is still the old stock
  *     wording (in any language slot) and leaves an administrator's own words
- *     alone, once per site.
+ *     alone, once per site;
+ *  4. every language's Necessary text carries both statements the English one
+ *     makes (not used for advertising or tracking; the consent cookie stores
+ *     a random identifier), and a site that ran the migration before a
+ *     language was corrected still gets the correction, without the earlier
+ *     list being applied to it a second time. Turkish shipped without either
+ *     sentence.
  *
  * Run: php tests/unit/test-necessary-disclosure-php.php
  */
@@ -247,7 +253,7 @@ foreach ( glob( $contents . 'cookies/*.json' ) as $file ) {
 // súbory cookie neukladajú žiadne osobné údaje" and a consent-cookie text that
 // left the identifier out. Each locale that names the identifier must keep
 // naming it; this pins the ones whose word for it is known.
-$identifier_words = array( 'cs' => 'identifikátor', 'sk' => 'identifikátor', 'de' => 'Kennung', 'it' => 'identificativo' );
+$identifier_words = array( 'cs' => 'identifikátor', 'sk' => 'identifikátor', 'de' => 'Kennung', 'it' => 'identificativo', 'tr' => 'onay kimliği' );
 foreach ( $identifier_words as $loc => $word ) {
 	$cat = json_decode( (string) @file_get_contents( $contents . "categories/{$loc}.json" ), true );
 	$ck  = json_decode( (string) @file_get_contents( $contents . "cookies/{$loc}.json" ), true );
@@ -256,6 +262,42 @@ foreach ( $identifier_words as $loc => $word ) {
 }
 $en_ck = json_decode( (string) file_get_contents( $contents . 'cookies/en.json' ), true );
 nd_eq( false !== stripos( (string) $en_ck['fazcookie-consent']['description'], 'identifier' ), true, 'cookies/en.json: consent-cookie text names the identifier' );
+
+// Both statements, in every language: "not used for advertising or to track
+// you" and "the consent cookie stores a random identifier". A test cannot read
+// eighteen languages, but it can hold the word each one uses for advertising
+// and for the identifier. A language file added later has to be listed here,
+// which is the point: Turkish was merged with both sentences missing, and the
+// checks above (written against the OLD claim) had nothing to say about it.
+$statement_words = array(
+	'cs'      => array( 'reklam', 'identifikátor' ),
+	'de'      => array( 'Werbung', 'Kennung' ),
+	'default' => array( 'advertising', 'identifier' ),
+	'en'      => array( 'advertising', 'identifier' ),
+	'es'      => array( 'publicitarios', 'identificador' ),
+	'fi'      => array( 'mainont', 'tunniste' ),
+	'fr'      => array( 'publicitaires', 'identifiant' ),
+	'hr'      => array( 'oglašavanj', 'identifikator' ),
+	'hu'      => array( 'hirdetés', 'azonosító' ),
+	'it'      => array( 'pubblicità', 'identificativo' ),
+	'nl'      => array( 'advertenties', 'identificatiecode' ),
+	'pl'      => array( 'reklam', 'identyfikator' ),
+	'pt-br'   => array( 'publicidade', 'identificador' ),
+	'pt'      => array( 'publicidade', 'identificador' ),
+	'ru'      => array( 'реклам', 'идентификатор' ),
+	'sk'      => array( 'reklam', 'identifikátor' ),
+	'tr'      => array( 'reklam', 'onay kimliği' ),
+	'uk'      => array( 'реклам', 'ідентифікатор' ),
+);
+foreach ( glob( $contents . 'categories/*.json' ) as $file ) {
+	$loc   = basename( $file, '.json' );
+	$data  = json_decode( (string) file_get_contents( $file ), true );
+	$text  = (string) ( $data['necessary']['description'] ?? '' );
+	$words = $statement_words[ $loc ] ?? null;
+	nd_eq( is_array( $words ), true, "categories/{$loc}.json: the language is listed in this test" );
+	nd_eq( is_array( $words ) && nd_contains_ci( $text, $words[0] ), true, "categories/{$loc}.json: Necessary text says the cookies are not used for advertising" );
+	nd_eq( is_array( $words ) && nd_contains_ci( $text, $words[1] ), true, "categories/{$loc}.json: Necessary text says the consent cookie stores an identifier" );
+}
 
 // The seed source and the catalogue must agree, or a freshly seeded row is
 // not recognised as stock wording and never gets translated.
@@ -315,7 +357,7 @@ if ( is_callable( $migrate ) ) {
 	nd_eq( $ck['en'], $en_ck['fazcookie-consent']['description'], 'consent-cookie English stock text becomes the current text' );
 	nd_eq( $ck['it'], $it_ck['fazcookie-consent']['description'], 'English stock text in the Italian slot becomes the current Italian text' );
 	nd_eq( $db->tables['wp_faz_cookies'][11]['description'], 'Our own words about the consent cookie.', 'a plain-string custom consent-cookie description is left alone' );
-	nd_eq( get_option( 'faz_necessary_disclosure_text_done' ), 1, 'the once-per-site marker is written' );
+	nd_eq( get_option( 'faz_necessary_disclosure_text_done' ), Activator::DISCLOSURE_TEXT_REVISION, 'the once-per-site marker is written, with the revision applied' );
 	nd_eq( Category_Controller::$busts > 0 && Cookie_Controller::$busts > 0, true, 'category and cookie caches are busted after the rewrite' );
 	// The bundled catalogues the preference centre merges sit in the object
 	// cache for twelve hours: without these deletes the old Necessary text
@@ -368,6 +410,45 @@ if ( is_callable( $migrate ) ) {
 		$threw = true;
 	}
 	nd_eq( $threw && ! get_option( 'faz_necessary_disclosure_text_done' ), true, 'a failed write throws and leaves the marker unset' );
+
+	// Revision 2: Turkish. A site whose marker is the plain 1 of the first
+	// pass has the shipped Turkish text stored (Turkish arrived after that
+	// pass existed), and gets the corrected one; the first pass's own list is
+	// not applied to it again.
+	$tr_cat    = json_decode( (string) file_get_contents( $contents . 'categories/tr.json' ), true );
+	$legacy_tr = '<p>Web sitesinin güvenli ve düzgün şekilde çalışması için zorunlu olan çerezlerdir. Bu çerezler, oturum yönetimi, güvenlik ve temel işlevlerin sağlanması amacıyla kullanılır. Bu çerezlerin işlevleri olmadan site düzgün çalışmayabilir.</p>';
+	nd_eq( $tr_cat['necessary']['description'] !== $legacy_tr, true, 'categories/tr.json no longer ships the text without the two sentences' );
+	foreach ( array( 1 => 'a site that ran the first pass', 0 => 'a site that never ran it' ) as $marker => $who ) {
+		$db = new Faz_Disclosure_Wpdb();
+		$db->tables = array(
+			'wp_faz_cookie_categories' => array(
+				1 => array( 'slug' => 'necessary', 'description' => wp_json_encode( array( 'tr' => $legacy_tr, 'en' => $legacy_en, 'de' => $custom_de ) ) ),
+			),
+			'wp_faz_cookies'           => array(
+				10 => array( 'name' => 'fazcookie-consent', 'description' => wp_json_encode( array( 'en' => 'Cookie consent preferences set by the visitor.' ) ) ),
+			),
+		);
+		$GLOBALS['wpdb']             = $db;
+		$GLOBALS['faz_test_options'] = $marker ? array( 'faz_necessary_disclosure_text_done' => $marker ) : array();
+		$done = call_user_func( $migrate );
+		$nec  = json_decode( $db->tables['wp_faz_cookie_categories'][1]['description'], true );
+		$ck   = json_decode( $db->tables['wp_faz_cookies'][10]['description'], true );
+		nd_eq( $done, true, "{$who}: the step reports done" );
+		nd_eq( $nec['tr'], $tr_cat['necessary']['description'], "{$who}: the stored Turkish stock text becomes the current Turkish text" );
+		nd_eq( $nec['de'], $custom_de, "{$who}: an administrator's own wording is left alone" );
+		if ( $marker ) {
+			nd_eq( $nec['en'], $legacy_en, "{$who}: an old sentence the administrator put back after it is not replaced a second time" );
+			nd_eq( $ck['en'], 'Cookie consent preferences set by the visitor.', "{$who}: nor is the consent-cookie text" );
+		} else {
+			nd_eq( $nec['en'], $en_cat['necessary']['description'], "{$who}: the first pass's wordings are applied too" );
+			nd_eq( $ck['en'], $en_ck['fazcookie-consent']['description'], "{$who}: and the consent-cookie text" );
+		}
+		nd_eq( get_option( 'faz_necessary_disclosure_text_done' ), Activator::DISCLOSURE_TEXT_REVISION, "{$who}: the marker holds the current revision" );
+		$before = $db->updates;
+		$db->tables['wp_faz_cookie_categories'][1]['description'] = wp_json_encode( array( 'tr' => $legacy_tr ) );
+		call_user_func( $migrate );
+		nd_eq( $db->updates, $before, "{$who}: a later run writes nothing" );
+	}
 
 	// Registered in the batch.
 	$src = (string) file_get_contents( $root . '/includes/class-activator.php' );

@@ -150,6 +150,16 @@ class Geo_Routing {
 	}
 
 	/**
+	 * Whether a rule set lets processing start before the visitor acts.
+	 *
+	 * @param array|null $ruleset Loaded rule set.
+	 * @return bool
+	 */
+	private static function is_opt_out_ruleset( $ruleset ) {
+		return is_array( $ruleset ) && isset( $ruleset['model'] ) && 0 === strpos( (string) $ruleset['model'], 'opt-out' );
+	}
+
+	/**
 	 * Get the complete visitor context: geo + ruleset + signals.
 	 *
 	 * Single entry point for consumers (admin UI preview, banner
@@ -182,8 +192,12 @@ class Geo_Routing {
 	 *                                      e.g. US + CA-QC from resolving law25-quebec.
 	 * @return array|null Shape: ['country' => 'IT', 'region' => '',
 	 *                            'vpn' => false, 'source' => 'cf_header',
+	 *                            'vpn_unverified' => false,
 	 *                            'ruleset_id' => 'gdpr-strict',
 	 *                            'ruleset' => array $loaded_json_decoded].
+	 *                    `vpn_unverified` is true when the ipinfo lookup was
+	 *                    wanted and failed; an opt-out rule set is then
+	 *                    replaced by the most-protective fallback.
 	 */
 	public function get_visitor_context( $ip_override = null, $country_override = null, $region_override = null ) {
 		// Lazy autoload of the resolver chain (only when consumer calls).
@@ -251,6 +265,27 @@ class Geo_Routing {
 				$ruleset_id = $loader->get_fallback_id();
 			}
 
+			// The VPN lookup was wanted and could not be had: ipinfo refused,
+			// was unreachable, or the hourly lookup budget is spent. The
+			// resolver above was told "not a VPN", which nobody established.
+			// Where that leads to an opt-in rule set nothing is lost. Where it
+			// leads to an opt-out one, a visitor from an opt-in jurisdiction
+			// whose VPN exits there would get a notice instead of a choice —
+			// the very case the lookup exists for — so the unknown is resolved
+			// the way every other geo failure is: the most-protective
+			// fallback. The model test is Geo_Runtime::model_to_law()'s prefix
+			// rule (every shipped opt-out rule set is
+			// 'opt-out-with-sensitive-opt-in'); 'hybrid' already maps to the
+			// opt-in side there.
+			$vpn_unverified = ! empty( $geo['vpn_unverified'] );
+			if ( $vpn_unverified && self::is_opt_out_ruleset( $ruleset ) ) {
+				$fallback = $loader->load_ruleset( $loader->get_fallback_id() );
+				if ( null !== $fallback ) {
+					$ruleset    = $fallback;
+					$ruleset_id = $loader->get_fallback_id();
+				}
+			}
+
 			// L2-SP1-S004 fix (1.15.0): apply per-country delta override
 			// at materialization time. Without this, admins setting
 			// `signals.cmv2.ad_storage=denied` in the override editor
@@ -268,6 +303,7 @@ class Geo_Routing {
 				'region'     => isset( $geo['region'] ) ? $geo['region'] : '',
 				'vpn'        => isset( $geo['vpn'] ) ? $geo['vpn'] : null,
 				'source'     => isset( $geo['source'] ) ? $geo['source'] : 'unknown',
+				'vpn_unverified' => $vpn_unverified,
 				'ruleset_id' => $ruleset_id,
 				'ruleset'    => $ruleset,
 			);

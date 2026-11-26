@@ -67,7 +67,7 @@ class Geo_Detector {
 	 * Detect visitor country + region + VPN status.
 	 *
 	 * @param string|null $ip_override Optional explicit IP for unit tests / cron.
-	 * @return array{country:string, region:string, vpn:bool|null, source:string}
+	 * @return array{country:string, region:string, vpn:bool|null, source:string, vpn_unverified?:bool}
 	 */
 	public function detect( $ip_override = null ) {
 		$request_ip = $this->resolve_client_ip();
@@ -160,6 +160,16 @@ class Geo_Detector {
 			'vpn'     => $vpn,
 			'source'  => $source,
 		);
+		// ipinfo was asked and could not answer (refusal, spent hourly budget,
+		// transport): the VPN state is unknown, which is not the same as "not
+		// a VPN" and not the same as a lookup nobody wanted ('skip': opt-in
+		// off, where vpn is null by the administrator's choice). The verdict
+		// stays null; this says why, so Geo_Routing can keep such a visitor
+		// off an opt-out rule set instead of reading null as false. Set only
+		// in this case, and part of the cached entry below.
+		if ( isset( $vpn_result['source'] ) && 'error' === $vpn_result['source'] ) {
+			$result['vpn_unverified'] = true;
+		}
 
 		// Same rule as Geolocation::get_country(): a country that came from a
 		// request header is never cached. The key is the address alone, and an

@@ -1085,6 +1085,15 @@ class Admin {
 						'fallbackRuleset'              => __( 'Fallback ruleset', 'faz-cookie-manager' ),
 						'ipinfoOptin'                  => __( 'ipinfo opt-in', 'faz-cookie-manager' ),
 						'ipinfoApiKey'                 => __( 'ipinfo API key', 'faz-cookie-manager' ),
+						'ipinfoBudget'                 => __( 'ipinfo lookups this hour', 'faz-cookie-manager' ),
+						/* translators: 1: lookups made this hour, 2: hourly ceiling */
+						'ipinfoBudgetUsed'             => __( '%1$s of %2$s', 'faz-cookie-manager' ),
+						'ipinfoBudgetNoCeiling'        => __( 'no ceiling (faz_ipinfo_lookups_per_hour filter)', 'faz-cookie-manager' ),
+						/* translators: %d: minutes until the hourly budget reopens */
+						'ipinfoBudgetSpent'            => __( '⚠️ spent. Until it reopens in about %d min, new visitors get no VPN check and those who would receive an opt-out rule set are served the most-protective fallback. Raise the ceiling with the faz_ipinfo_lookups_per_hour filter if your ipinfo plan allows it.', 'faz-cookie-manager' ),
+						'ipinfoBudgetLastSpent'        => __( 'ipinfo hourly budget last ran out', 'faz-cookie-manager' ),
+						'ipinfoAccount'                => __( 'ipinfo account', 'faz-cookie-manager' ),
+						'ipinfoAccountRefused'         => __( '⚠️ ipinfo.io refused the last lookup (invalid key, exhausted quota or rate limit). No VPN check is made until it accepts again, and visitors who would receive an opt-out rule set are served the most-protective fallback.', 'faz-cookie-manager' ),
 						'schemaMigration'              => __( 'Schema migration v2', 'faz-cookie-manager' ),
 						'pendingColumns'               => __( 'Pending columns', 'faz-cookie-manager' ),
 						'migrationDisabled'            => __( 'Migration disabled', 'faz-cookie-manager' ),

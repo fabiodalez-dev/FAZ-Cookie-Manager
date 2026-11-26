@@ -2179,8 +2179,8 @@
     // _fazRewriteRealStyleTags() in script.js, which this mirrors: a regex over
     // the raw string also matched "<style>" text inside a quoted attribute or a
     // comment, and the rewrite turned sanitised markup into live markup.
-    function rewriteRealStyleTags(html, fn, uncertain, noScripting) {
-        var s = String(html), n = s.length, out = "", last = 0, i = 0;
+    function rewriteRealStyleTags(html, fn, uncertain, noScripting, tailFn) {
+        var s = String(html), n = s.length, out = "", last = 0, i = 0, stop = -1;
         uncertain = !!uncertain;
         var RAW = { style: 1, script: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1, textarea: 1, title: 1 };
         function isAlpha(c) { return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z"); }
@@ -2230,7 +2230,7 @@
                     if (s.charAt(k + 2) === ">") { cend = k + 3; break; }
                     if (s.charAt(k + 2) === "!" && s.charAt(k + 3) === ">") { cend = k + 4; break; }
                 }
-                if (cend === -1) break;
+                if (cend === -1) { stop = lt; break; }
                 i = cend; continue;
             }
             if (c === "!") {
@@ -2239,7 +2239,7 @@
                 // ">" is the one closing "]]>".
                 if (uncertain && s.substr(lt, 9) === "<![CDATA[") {
                     var cd = s.indexOf("]]>", lt + 9);
-                    if (cd === -1 || s.indexOf(">", lt + 2) !== cd + 2) break;
+                    if (cd === -1 || s.indexOf(">", lt + 2) !== cd + 2) { stop = lt; break; }
                     i = cd + 3; continue;
                 }
                 i = toGt(lt + 2); continue;
@@ -2250,12 +2250,12 @@
                 if (c2 === ">") { i = lt + 3; continue; }
                 if (!isAlpha(c2)) { i = toGt(lt + 2); continue; }
                 var etag = scanTag(lt + 2);
-                if (!etag) break;
+                if (!etag) { stop = lt; break; }
                 i = etag.end; continue;
             }
             if (!isAlpha(c)) { i = lt + 1; continue; }
             var tag = scanTag(lt + 1);
-            if (!tag) break;
+            if (!tag) { stop = lt; break; }
             // From an <svg>/<math> start tag on, the parser may be in foreign
             // content, where <style> and the RAWTEXT/RCDATA elements parse their
             // content as markup; and where foreign content ends depends on the
@@ -2268,24 +2268,24 @@
                 if (!tag.selfClosing || tag.name === "select" || tag.name === "frameset") uncertain = true;
                 i = tag.end; continue;
             }
-            if (tag.name === "plaintext") break;
+            if (tag.name === "plaintext") { stop = lt; break; }
             // _fazRewriteRealStyleTags(): without a window <noscript> may be
             // markup or RAWTEXT depending on the browser, so stop there.
-            if (noScripting && tag.name === 'noscript') break;
+            if (noScripting && tag.name === 'noscript') { stop = lt; break; }
             // Own properties only: a "<constructor>" start tag would read a
             // truthy value from Object.prototype and hide a following <style>.
             if (!Object.prototype.hasOwnProperty.call(RAW, tag.name)) { i = tag.end; continue; }
             var re = new RegExp("</" + tag.name + "(?=[\\t\\n\\f\\r />])", "ig");
             re.lastIndex = tag.end;
             var m = re.exec(s);
-            if (!m) break;
+            if (!m) { stop = lt; break; }
             var body = s.slice(tag.end, m.index);
             // "<!--" in script data enters the escaped states. There the first
             // "</script" still ends the script, unless a "<script" start after
             // the "<!--" entered the double-escaped state, where it does not:
             // only then is the real end unknown, and the walk stops.
             var esc = tag.name === "script" ? body.indexOf("<!--") : -1;
-            if (esc !== -1 && /<script[\t\n\f\r \/>]/i.test(body.slice(esc))) break;
+            if (esc !== -1 && /<script[\t\n\f\r \/>]/i.test(body.slice(esc))) { stop = lt; break; }
             // Where the element may be foreign (or an ignored tag), its content is
             // markup. A "<" opens a tag, an end tag, a comment or a bogus comment
             // there only before an ASCII letter, "/", "!" or "?"; any other "<" is
@@ -2293,9 +2293,9 @@
             // "<", markup and RAWTEXT/RCDATA give the same text up to the same end
             // tag; with one they may not, and a self-closing start tag ends a
             // foreign element right there.
-            if (uncertain && (tag.selfClosing || /<[A-Za-z!\/?]/.test(body))) break;
+            if (uncertain && (tag.selfClosing || /<[A-Za-z!\/?]/.test(body))) { stop = lt; break; }
             var endTag = scanTag(m.index + 2);
-            if (!endTag) break;
+            if (!endTag) { stop = lt; break; }
             // "&" is literal in RAWTEXT and a character reference in markup, so
             // where the element may be foreign the text parked as its original
             // can differ from the live one by a decoded reference. The structure
@@ -2311,7 +2311,68 @@
             }
             i = endTag.end;
         }
+        // _fazRewriteRealStyleTags(): the walk gave up at `stop`; the unread
+        // rest is not handed on as it is, `tailFn` decides what it becomes.
+        if (stop !== -1 && typeof tailFn === 'function') {
+            var tail = s.slice(stop);
+            var kept = tailFn(tail);
+            if (kept !== tail) return out + s.slice(last, stop) + kept;
+        }
         return last === 0 ? s : out + s.slice(last);
+    }
+    // The unread rest of a markup string: _fazHoldUnreadStyleTail() and its
+    // two helpers in script.js, which these three mirror with the policy's
+    // verdict in place of the provider rules. From the first "<style" on, a
+    // refused url() or @import "…" is held by writing HELD_CSS_URL in front of
+    // the URL — an insertion only, the one rewrite that cannot move where an
+    // attribute ends in markup nobody tokenized — and when something still
+    // fetches after that, the string is cut short at the latest "<style" that
+    // leaves nothing fetchable in what is kept.
+    var HELD_CSS_URL = 'about:invalid#faz-held:';
+    function tailFetches(policy, text) {
+        function fetches(css) {
+            return refusedUrls(policy, cssUrlsAll(css).filter(function (url) {
+                return String(url).replace(/^\s+/, '').toLowerCase().indexOf(HELD_CSS_URL) !== 0;
+            })).length > 0;
+        }
+        if (fetches(text)) return true;
+        if (text.indexOf('&') === -1) return false;
+        var decoded = decodeOnce(text.replace(/</g, '&lt;'));
+        return decoded !== text && fetches(decoded);
+    }
+    function holdCssUrlsInPlace(policy, text) {
+        function hold(url) { return /^[A-Za-z0-9\/.]/.test(url) && refused(policy, url); }
+        var out = text.replace(/(url\(\s*)("[^"]*"|'[^']*'|[^\)\s]+)(?=\s*\))/gi, function (match, open, body) {
+            var q = body.charAt(0);
+            if (q === '"' || q === "'") {
+                var url = body.slice(1, -1);
+                return hold(url) ? open + q + HELD_CSS_URL + url + q : match;
+            }
+            return hold(body) ? open + HELD_CSS_URL + body : match;
+        });
+        return out.replace(/(@import\s*)(["'])([^"']+)\2/gi, function (match, prefix, q, url) {
+            return hold(url) ? prefix + q + HELD_CSS_URL + url + q : match;
+        });
+    }
+    function holdUnreadStyleTail(policy, tail) {
+        var at = tail.search(/<style(?=[\t\n\f\r \/>])/i);
+        if (at === -1) return tail;
+        var region = tail.slice(at);
+        try {
+            if (!tailFetches(policy, region)) return tail;
+            var held = holdCssUrlsInPlace(policy, region);
+            if (!tailFetches(policy, held)) return tail.slice(0, at) + held;
+            var cuts = [], re = /<style(?=[\t\n\f\r \/>])/gi, m;
+            while ((m = re.exec(held))) cuts.push(m.index);
+            for (var k = cuts.length - 1; k > 0 && k >= cuts.length - 8; k--) {
+                var keep = held.slice(0, cuts[k]);
+                if (!tailFetches(policy, keep)) return tail.slice(0, at) + keep;
+            }
+            return tail.slice(0, at);
+        } catch (e) {
+            // A judgement that could not be made is a refusal.
+            return tail.slice(0, at);
+        }
     }
     // _fazMarkupContextMode() in script.js: "html", "uncertain" (a foreign or
     // <select>/<frameset> context, where <style> may not be RAWTEXT) or "text"
@@ -2354,7 +2415,7 @@
             var category = /\bdata-faz-category\s*=/i.test(attrs) ? '' : ' data-faz-category="' + escapeAttr(parkCategory(policy, verdict.hit)) + '"';
             return '<style' + attrs + ' data-faz-css="' + escapeAttr(encoded) + '"' + category + '>'
                 + parkedForm(policy, css, verdict) + '</style>';
-        }, uncertain, noScripting);
+        }, uncertain, noScripting, function (tail) { return holdUnreadStyleTail(policy, tail); });
     }
     // `host` is where the parsed nodes land: the sheets that are new in it
     // afterwards are the ones this delivery judged, and the backstop — still

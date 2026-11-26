@@ -1,7 +1,7 @@
 {
     "necessary": {
         "name": "Gerekli",
-        "description": "<p>Web sitesinin güvenli ve düzgün şekilde çalışması için zorunlu olan çerezlerdir. Bu çerezler, oturum yönetimi, güvenlik ve temel işlevlerin sağlanması amacıyla kullanılır. Bu çerezlerin işlevleri olmadan site düzgün çalışmayabilir.</p>"
+        "description": "<p>Web sitesinin güvenli ve düzgün şekilde çalışması için zorunlu olan çerezlerdir. Bu çerezler, oturum yönetimi, güvenlik ve temel işlevlerin sağlanması amacıyla kullanılır. Bu çerezlerin işlevleri olmadan site düzgün çalışmayabilir. Bu çerezler reklam amacıyla veya sizi başka sitelerde izlemek için kullanılmaz. Onay çerezi, yaptığınız tercihin kaydını tutabilmemiz için rastgele bir onay kimliği saklar.</p>"
     },
     "functional": {
         "name": "İşlevsel",

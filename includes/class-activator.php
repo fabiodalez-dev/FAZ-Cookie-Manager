@@ -144,7 +144,15 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.11.20.1';
+	const MIGRATIONS_VERSION = '2026.11.26.1';
+
+	/**
+	 * Revision of refresh_necessary_disclosure_text(): the value its
+	 * once-per-site marker holds. Bump it together with a new
+	 * `description_revN` list in contents/legacy-stock-text.json (and with
+	 * MIGRATIONS_VERSION, or the batch never calls the step again).
+	 */
+	const DISCLOSURE_TEXT_REVISION = 2;
 
 	/**
 	 * Continuation event of the created_at_gmt backfill on large tables.
@@ -3284,12 +3292,23 @@ class Activator {
 	 * MIGRATIONS_VERSION. It now reports the decline the way
 	 * seed_own_consent_cookie() does, and the batch withholds the marker.
 	 *
+	 * Revision 2 (DISCLOSURE_TEXT_REVISION): the Turkish Necessary text arrived
+	 * after the first pass, without the two sentences every other language
+	 * carries (not used for advertising or tracking; the consent cookie stores
+	 * a random identifier). The marker therefore holds the revision a site has
+	 * applied instead of a plain 1, and a site that already ran revision 1 is
+	 * offered only the wordings listed for the later revisions
+	 * (`description_rev2` in legacy-stock-text.json): the earlier list was
+	 * applied to it once and is not applied again, which is what "once per
+	 * site" promised the administrator who restored an old sentence.
+	 *
 	 * @return bool True when the step is done (now or on an earlier run); false
 	 *              when it declined and must be retried.
 	 * @throws \RuntimeException When a row cannot be written.
 	 */
 	public static function refresh_necessary_disclosure_text() {
-		if ( get_option( 'faz_necessary_disclosure_text_done' ) ) {
+		$applied = (int) get_option( 'faz_necessary_disclosure_text_done' );
+		if ( $applied >= self::DISCLOSURE_TEXT_REVISION ) {
 			return true;
 		}
 		if ( ! function_exists( 'faz_read_json_file' ) ) {
@@ -3313,7 +3332,7 @@ class Activator {
 				'id'      => 'category_id',
 				'column'  => 'slug',
 				'key'     => 'necessary',
-				'legacy'  => (array) ( $legacy['categories']['necessary']['description'] ?? array() ),
+				'legacy'  => self::legacy_stock_wordings( $legacy['categories']['necessary'] ?? array(), $applied ),
 				'catalog' => 'categories',
 			),
 			array(
@@ -3321,7 +3340,7 @@ class Activator {
 				'id'      => 'cookie_id',
 				'column'  => 'name',
 				'key'     => 'fazcookie-consent',
-				'legacy'  => (array) ( $legacy['cookies']['fazcookie-consent']['description'] ?? array() ),
+				'legacy'  => self::legacy_stock_wordings( $legacy['cookies']['fazcookie-consent'] ?? array(), $applied ),
 				'catalog' => 'cookies',
 			),
 		);
@@ -3395,8 +3414,28 @@ class Activator {
 			wp_cache_delete( 'faz_category_contents_v2_' . basename( $file, '.json' ), 'faz_category_contents' );
 		}
 		wp_cache_delete( 'faz_category_contents_en', 'faz_category_contents' );
-		update_option( 'faz_necessary_disclosure_text_done', 1, false );
+		update_option( 'faz_necessary_disclosure_text_done', self::DISCLOSURE_TEXT_REVISION, false );
 		return true;
+	}
+
+	/**
+	 * The legacy wordings a site has not been offered yet.
+	 *
+	 * `description` is what revision 1 read; `description_revN` is what
+	 * revision N added. A site at revision 0 gets all of them, a site at
+	 * revision 1 only the later lists.
+	 *
+	 * @param mixed $entry   One entry of legacy-stock-text.json.
+	 * @param int   $applied Revision the site has already applied.
+	 * @return array<int,string>
+	 */
+	private static function legacy_stock_wordings( $entry, $applied ) {
+		$entry    = is_array( $entry ) ? $entry : array();
+		$wordings = $applied < 1 ? (array) ( $entry['description'] ?? array() ) : array();
+		for ( $rev = max( 2, $applied + 1 ); $rev <= self::DISCLOSURE_TEXT_REVISION; $rev++ ) {
+			$wordings = array_merge( $wordings, (array) ( $entry[ 'description_rev' . $rev ] ?? array() ) );
+		}
+		return $wordings;
 	}
 
 	/**

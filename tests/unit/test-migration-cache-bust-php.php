@@ -74,9 +74,10 @@ namespace {
 		// The Necessary-disclosure migration needs the cookie tables, which
 		// this harness does not stand up, and since it reports a decline the
 		// batch would withhold its marker. It is driven for real by
-		// test-necessary-disclosure-php.php; here it counts as already done.
+		// test-necessary-disclosure-php.php; here it counts as already done,
+		// which is the revision the step is at, not a plain 1.
 		if ( 'faz_necessary_disclosure_text_done' === $name && ! array_key_exists( $name, $GLOBALS['faz_mig_options'] ) ) {
-			return 1;
+			return \FazCookie\Includes\Activator::DISCLOSURE_TEXT_REVISION;
 		}
 		return array_key_exists( $name, $GLOBALS['faz_mig_options'] )
 			? $GLOBALS['faz_mig_options'][ $name ]
