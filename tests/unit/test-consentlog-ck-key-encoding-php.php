@@ -329,7 +329,37 @@ namespace {
 	$m    = logged_map( $ctrl, 'cid-long', array( 'ck.acme.' . str_repeat( "\xC3\xA9", 200 ) => 'no' ) );
 	$keys = array_keys( $m );
 	ok( 1 === count( $keys ) && strlen( $keys[0] ) <= 190, 'an encoded key is still capped at 190 bytes' );
-	ok( 1 === count( $keys ) && 1 === preg_match( '/^ck\.acme\.(?:%[0-9A-F]{2})+$/', $keys[0] ), 'and the cap never leaves half an escape at the end' );
+	ok( 1 === count( $keys ) && 1 === preg_match( '/^ck\.acme\.(?:%[0-9A-F]{2})+~[0-9a-f]{16}$/', $keys[0] ), 'and the cap never leaves half an escape before the digest that ends a shortened key' );
+
+	// Shortening must not merge two cookies. 31 x "é" + one letter is a 63-byte
+	// name; encoded it is 187 bytes after the 8 of "ck.acme.", so the old cut at
+	// 190 removed the only byte that told the two names apart and the second
+	// decision overwrote the first — here a "yes" over a refusal.
+	echo "\n-- two long names never share a key --\n";
+	$long_a = 'ck.acme.' . str_repeat( "\xC3\xA9", 31 ) . 'A';
+	$long_b = 'ck.acme.' . str_repeat( "\xC3\xA9", 31 ) . 'B';
+	$m      = logged_map( $ctrl, 'cid-collide', array( 'svc.acme' => 'yes', $long_a => 'no', $long_b => 'yes' ) );
+	unset( $m['svc.acme'] );
+	$vals = array_values( $m );
+	sort( $vals );
+	eq( $vals, array( 'no', 'yes' ), 'a refusal and an acceptance of two long names that differ only at the end are both logged' );
+	$keys  = array_keys( $m );
+	$key_a = call_priv( $ctrl, 'encode_cookie_decision_key', array( $long_a ) );
+	$key_b = call_priv( $ctrl, 'encode_cookie_decision_key', array( $long_b ) );
+	ok( $key_a !== $key_b, 'the two names get different stored keys' );
+	eq( $m[ $key_a ] ?? null, 'no', 'the refusal stays on the first name' );
+	eq( $m[ $key_b ] ?? null, 'yes', 'the acceptance stays on the second' );
+	$bounded = true;
+	foreach ( $keys as $k ) {
+		if ( strlen( (string) $k ) > 190 || ! preg_match( '/^[\x21\x23-\x3B\x3D\x3F-\x5B\x5D-\x7E]+$/', (string) $k ) ) { $bounded = false; }
+	}
+	ok( 2 === count( $keys ) && $bounded, 'both shortened keys stay within 190 bytes of the stored alphabet' );
+	eq( call_priv( $ctrl, 'encode_cookie_decision_key', array( $long_a ) ), $key_a, 'the same name always shortens to the same key, so its rows stay comparable' );
+
+	$fits = 'ck.acme.' . str_repeat( 'a', 182 );
+	eq( call_priv( $ctrl, 'encode_cookie_decision_key', array( $fits ) ), $fits, 'a key of exactly 190 bytes is stored unchanged' );
+	$over = call_priv( $ctrl, 'encode_cookie_decision_key', array( $fits . 'b' ) );
+	ok( 190 === strlen( $over ) && 0 === strpos( $over, 'ck.acme.aaaa' ) && $over !== $fits, 'one byte more is shortened to 190, keeps its readable start and does not land on the 190-byte name' );
 
 	$every = '';
 	for ( $b = 0; $b < 256; $b++ ) { $every .= chr( $b ); }
