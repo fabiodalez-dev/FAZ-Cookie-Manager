@@ -393,10 +393,18 @@ class Geo_Api {
 	public function status() {
 		$ipinfo  = new Ipinfo_Client();
 		$migrate = '\\FazCookie\\Includes\\Migration_V2';
+		$ipinfo_optin = $ipinfo->is_optin_active();
+		$ipinfo_key   = '' !== $ipinfo->get_api_key();
 		$status  = array(
 			'ipinfo' => array(
-				'optin'       => $ipinfo->is_optin_active(),
-				'key_present' => '' !== $ipinfo->get_api_key(),
+				'optin'       => $ipinfo_optin,
+				'key_present' => $ipinfo_key,
+				// The hourly lookup budget and the last account refusal. A
+				// visitor whose lookup is refused is served the most-protective
+				// fallback wherever an opt-out rule set would have applied, so
+				// the administrator has to be able to see that it is happening.
+				// Null while the integration is off: nothing is being counted.
+				'budget'      => ( $ipinfo_optin && $ipinfo_key ) ? $ipinfo->budget_status() : null,
 			),
 			'migration' => array(
 				'complete'         => class_exists( $migrate ) ? $migrate::is_complete() : false,

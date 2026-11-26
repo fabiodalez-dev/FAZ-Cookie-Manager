@@ -119,6 +119,16 @@ $rest_url   = esc_url( rest_url( 'faz/v1/geo/' ) );
 			);
 			?>
 		</p>
+		<p>
+			<?php
+			printf(
+				/* translators: 1: default number of lookups per hour, 2: filter name */
+				esc_html__( 'When a lookup cannot be made — ipinfo.io is unreachable or refuses the key, or the site has reached its hourly ceiling of new lookups (%1$d by default; the %2$s filter changes it) — the visitor\'s VPN state is unknown. A visitor whose location would select an opt-out rule set is then served the most-protective fallback instead; opt-in rule sets are unaffected. The Pipeline status tab shows the lookups used this hour and when the ceiling was last reached.', 'faz-cookie-manager' ),
+				(int) \FazCookie\Admin\Modules\Geo_Routing\Includes\Ipinfo_Client::LOOKUPS_PER_HOUR,
+				'faz_ipinfo_lookups_per_hour'
+			);
+			?>
+		</p>
 		<div id="faz-geo-ipinfo-content">
 			<p class="faz-loading"><?php esc_html_e( 'Loading…', 'faz-cookie-manager' ); ?></p>
 		</div>
