@@ -15975,11 +15975,49 @@ class Frontend {
 	 * disabled or excluded on this page, script blocking excluded on this page,
 	 * AMP, a feed) — nothing parks the map, and WP Maps' own answer stands.
 	 *
+	 * It stands in Leaflet mode as well. WP Maps' gate sits in front of both of
+	 * its engines, and "handled" is true only of the Google one: see
+	 * wpgmp_draws_google_maps().
+	 *
 	 * @param bool $accepted WP Maps' answer so far.
 	 * @return bool
 	 */
 	public function wpgmp_consent_handled_by_faz( $accepted ) {
-		return $this->page_content_is_gated() ? true : (bool) $accepted;
+		return ( $this->page_content_is_gated() && $this->wpgmp_draws_google_maps() ) ? true : (bool) $accepted;
+	}
+
+	/**
+	 * Whether WP Maps draws Google maps on this request — the only maps
+	 * process_wpgmp_map_widgets() holds.
+	 *
+	 * WP Maps 5 has two engines behind one site-wide setting
+	 * (wpgmp_settings[wpgmp_map_source]), and its "Cookies Acceptance" gate
+	 * returns before it chooses between them, so the gate holds back Leaflet
+	 * maps too. In Leaflet mode the script under the `wpgmp-google-api` handle
+	 * is a local loader this plugin has no reason to park, and the tiles come
+	 * from whichever host the site picked (OpenFreeMap by default; Carto,
+	 * Stadia, Esri, Mapbox…), most of them outside the provider catalogue.
+	 * Answering "handled" there switched off the one thing holding those maps:
+	 * every tile request left before consent. So the answer is given only for
+	 * the engine whose API is parked.
+	 *
+	 * Mirrors WPGMP_Helper::wpgmp_get_map_provider() (5.0.4), including the
+	 * request override it honours, and like it treats a missing setting as
+	 * Google — before the setting existed every map was a Google map.
+	 *
+	 * @return bool
+	 */
+	private function wpgmp_draws_google_maps() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- read-only comparison of a value WP Maps itself reads to pick its engine; nothing is stored or acted on.
+		$requested = isset( $_POST['wpgmp_map_source'] ) && is_string( $_POST['wpgmp_map_source'] ) ? sanitize_key( wp_unslash( $_POST['wpgmp_map_source'] ) ) : '';
+		if ( 'openstreet' === $requested ) {
+			return false;
+		}
+		if ( 'google' === $requested ) {
+			return true;
+		}
+		$settings = maybe_unserialize( get_option( 'wpgmp_settings' ) );
+		return ! ( is_array( $settings ) && isset( $settings['wpgmp_map_source'] ) && 'google' !== $settings['wpgmp_map_source'] );
 	}
 
 	/**
