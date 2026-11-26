@@ -61,13 +61,14 @@ namespace {
 	// that returned every match hid a lookup that read the first page only.
 	function get_posts( $args ) {
 		$GLOBALS['faz_test_get_posts'][] = $args;
-		$needle = isset( $args['meta_query'][0]['value'] ) ? (string) $args['meta_query'][0]['value'] : '';
+		$needle = isset( $args['meta_query'][0]['value'] ) && ! is_array( $args['meta_query'][0]['value'] ) ? (string) $args['meta_query'][0]['value'] : '';
 		$ids    = array();
 		// LIKE is a substring test (WordPress wraps the value in %); '=' is
 		// the whole stored path.
-		$exact = isset( $args['meta_query'][0]['compare'] ) && '=' === $args['meta_query'][0]['compare'];
+		$compare = isset( $args['meta_query'][0]['compare'] ) ? (string) $args['meta_query'][0]['compare'] : 'LIKE';
+		$values  = isset( $args['meta_query'][0]['value'] ) ? (array) $args['meta_query'][0]['value'] : array();
 		foreach ( $GLOBALS['faz_test_attachments'] as $id => $a ) {
-			if ( '' !== $needle && ( $exact ? $a['file'] === $needle : false !== strpos( $a['file'], $needle ) ) ) {
+			if ( 'IN' === $compare ? in_array( $a['file'], $values, true ) : ( '=' === $compare ? $a['file'] === $needle : ( '' !== $needle && false !== strpos( $a['file'], $needle ) ) ) ) {
 				$ids[] = (int) $id;
 			}
 		}
@@ -85,6 +86,9 @@ namespace {
 		return array_slice( $ids, $offset, $limit );
 	}
 	function wp_get_attachment_url( $id ) {
+		if ( isset( $GLOBALS['faz_test_url_for'][ $id ] ) ) {
+			return $GLOBALS['faz_test_url_for'][ $id ];
+		}
 		$a = isset( $GLOBALS['faz_test_attachments'][ $id ] ) ? $GLOBALS['faz_test_attachments'][ $id ] : null;
 		return $a ? $a['base'] . '/' . $a['file'] : false;
 	}
@@ -316,6 +320,22 @@ namespace {
 	}
 	t( 41 === Template::brand_logo_attachment_id( $offloaded_logo ), 'an offloaded logo behind 600 newer attachments of the same file name is found by its stored path' );
 	t( in_array( $cdn . '/wp-content/uploads/2026/11/logo-300x100.png', image_sources( $template->render( '#', $cdn . '/wp-content/uploads/2026/11/logo-300x100.png' ) ), true ), 'and so is one of its generated sizes' );
+	// WP Offload Media's object versioning puts a timestamp folder before the
+	// file name (`2026/11/26113405/logo.png` in the URL) while the stored
+	// path stays `2026/11/logo.png`.
+	$GLOBALS['faz_test_attachments'][44] = array( 'file' => '2026/10/logo.png', 'base' => $cdn . '/wp-content/uploads', 'sizes' => array() );
+	$versioned = $cdn . '/wp-content/uploads/2026/10/26113405/logo.png';
+	$GLOBALS['faz_test_url_for'][44] = $versioned;
+	t( 44 === Template::brand_logo_attachment_id( $versioned ), 'a versioned offload URL behind 600 newer attachments of the same name is found by its stored path' );
+	unset( $GLOBALS['faz_test_url_for'][44], $GLOBALS['faz_test_attachments'][44] );
+	// A stored path deeper than year and month (a folder plugin's
+	// `clients/acme/2024/01/logo.png`).
+	$GLOBALS['faz_test_attachments'][45] = array( 'file' => 'clients/acme/2024/01/logo.png', 'base' => $cdn . '/wp-content/uploads', 'sizes' => array() );
+	// Served versioned, so the direct URL lookup cannot resolve it either.
+	$deep = $cdn . '/wp-content/uploads/clients/acme/2024/01/26113405/logo.png';
+	$GLOBALS['faz_test_url_for'][45] = $deep;
+	t( 45 === Template::brand_logo_attachment_id( $deep ), 'a stored path of five segments, served versioned, behind 600 newer attachments of the same name is found' );
+	unset( $GLOBALS['faz_test_url_for'][45], $GLOBALS['faz_test_attachments'][45] );
 	foreach ( array_keys( $GLOBALS['faz_test_attachments'] ) as $id ) {
 		if ( $id >= 3000 ) {
 			unset( $GLOBALS['faz_test_attachments'][ $id ] );
@@ -329,7 +349,7 @@ namespace {
 	t( false === Template::is_first_party_image_url( 'https://images.thirdparty.example/pixel.png' ), 'a file name shared by 700 attachments, none served from that URL, is refused' );
 	// Only the substring walk is capped by pages; the exact stored-path
 	// lookups before it are one query each.
-	$walk    = array_filter( $GLOBALS['faz_test_get_posts'], function ( $query ) { return ! isset( $query['meta_query'][0]['compare'] ) || '=' !== $query['meta_query'][0]['compare']; } );
+	$walk    = array_filter( $GLOBALS['faz_test_get_posts'], function ( $query ) { return ! isset( $query['meta_query'][0]['compare'] ) || ! in_array( $query['meta_query'][0]['compare'], array( '=', 'IN' ), true ); } );
 	$queries = count( $walk );
 	$largest = 0;
 	foreach ( $walk as $query ) {
