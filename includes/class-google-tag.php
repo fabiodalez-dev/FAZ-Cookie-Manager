@@ -149,6 +149,12 @@ class Google_Tag {
 	 *                                  parameter), so the Consent Mode default
 	 *                                  and the tags share one array.
 	 *     @type string $hints          Extra attribute string for optimiser opt-outs.
+	 *     @type string $guard_cookie   Consent cookie name. When set, every tag
+	 *                                  that would go out live is printed as a
+	 *                                  client-side guard instead (see
+	 *                                  guard_script()): the caller could not
+	 *                                  read the visitor's svc.* choices.
+	 *     @type string $guard_id       Id prefix for the guard scripts.
 	 * }
 	 * @return string
 	 */
@@ -162,6 +168,15 @@ class Google_Tag {
 			: 'dataLayer';
 		$hints      = isset( $args['hints'] ) && is_string( $args['hints'] ) ? $args['hints'] : '';
 		$dl         = wp_json_encode( $data_layer );
+		// The cookie name is interpolated into a script body, so it is held to
+		// the shape faz_consent_cookie_name() produces; anything else disables
+		// the guard, and the caller's parked/live decision stands alone.
+		$guard      = isset( $args['guard_cookie'] ) && is_string( $args['guard_cookie'] ) && preg_match( '/^[A-Za-z0-9_-]+$/', $args['guard_cookie'] )
+			? $args['guard_cookie']
+			: '';
+		$guard_id   = isset( $args['guard_id'] ) && is_string( $args['guard_id'] ) && preg_match( '/^[A-Za-z0-9_-]+$/', $args['guard_id'] )
+			? $args['guard_id']
+			: '';
 
 		$groups = array();
 		foreach ( self::parse_ids( implode( ',', $ids ) ) as $id ) {
@@ -173,8 +188,9 @@ class Google_Tag {
 			if ( empty( $groups[ $provider ] ) ) {
 				continue;
 			}
-			$gate = $unblocked ? '' : self::gate_attrs( $provider, self::category_for( $provider, $fallback ) );
-			$src  = 'https://www.googletagmanager.com/gtag/js?id=' . rawurlencode( $groups[ $provider ][0] );
+			$category = self::category_for( $provider, $fallback );
+			$gate     = $unblocked ? '' : self::gate_attrs( $provider, $category );
+			$src      = 'https://www.googletagmanager.com/gtag/js?id=' . rawurlencode( $groups[ $provider ][0] );
 			if ( 'dataLayer' !== $data_layer ) {
 				$src .= '&l=' . rawurlencode( $data_layer );
 			}
@@ -182,22 +198,81 @@ class Google_Tag {
 			foreach ( $groups[ $provider ] as $id ) {
 				$js .= 'gtag("config",' . wp_json_encode( $id ) . ');';
 			}
+			if ( $unblocked && '' !== $guard ) {
+				$out .= self::guard_script( $provider, $category, $guard, $guard_id, $hints, $src, $js );
+				continue;
+			}
 			$out .= '<script' . $gate . ' async src="' . esc_url( $src ) . '" data-faz-google-tag="' . esc_attr( $provider ) . '"' . $hints . '></script>' . "\n";
 			$out .= '<script' . $gate . ' data-faz-google-tag="' . esc_attr( $provider ) . '"' . $hints . '>' . $js . "</script>\n";
 		}
 
 		if ( ! empty( $groups['google-tag-manager'] ) ) {
-			$gate = $gtm_live ? '' : self::gate_attrs( 'google-tag-manager', self::category_for( 'google-tag-manager', 'analytics' ) );
-			foreach ( $groups['google-tag-manager'] as $id ) {
+			$category = self::category_for( 'google-tag-manager', 'analytics' );
+			$gate     = $gtm_live ? '' : self::gate_attrs( 'google-tag-manager', $category );
+			foreach ( $groups['google-tag-manager'] as $index => $id ) {
 				$js   = '(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({"gtm.start":new Date().getTime(),event:"gtm.js"});'
 					. 'var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!="dataLayer"?"&l="+l:"";'
 					. 'j.async=true;j.src="https://www.googletagmanager.com/gtm.js?id="+i+dl;f.parentNode.insertBefore(j,f);'
 					. '})(window,document,"script",' . $dl . ',' . wp_json_encode( $id ) . ');';
+				if ( $gtm_live && '' !== $guard ) {
+					$out .= self::guard_script( 'google-tag-manager', $category, $guard, '' !== $guard_id && $index > 0 ? $guard_id . '-' . ( $index + 1 ) : $guard_id, $hints, '', $js );
+					continue;
+				}
 				$out .= '<script' . $gate . ' data-faz-google-tag="google-tag-manager"' . $hints . '>' . $js . "</script>\n";
 			}
 		}
 
 		return $out;
+	}
+
+	/**
+	 * A live tag wrapped in a check of the visitor's own per-service choice.
+	 *
+	 * Under Cache Compatibility Mode and the jurisdiction shell the HTML is the
+	 * same for every visitor, so the server cannot read `svc.<id>:no` from the
+	 * consent cookie and a tag it prints live runs for a visitor who switched
+	 * that very service off: this markup sits at the top of <head>, the runtime
+	 * that enforces per-service choices loads after it, and a script the parser
+	 * has already executed cannot be taken back. The decision therefore moves
+	 * into the tag itself. The guard reads the consent cookie and creates the
+	 * same scripts render() would have printed: live when the service is not
+	 * denied, otherwise parked exactly like the server-side parked markup
+	 * (`type="text/plain"`, data-faz-category, data-faz-service), so the
+	 * runtime releases them the moment the visitor switches the service back
+	 * on. The created scripts keep the data-faz-google-tag marker and the exact
+	 * src / body own_tag_provider() and _fazOwnGoogleTagProvider() recognise.
+	 *
+	 * Only an explicit `svc.<id>:no` parks the tag: the caller already decided
+	 * it may load before consent (Advanced Consent Mode, denied default in
+	 * front of it), which is the same rule the server applies when it can read
+	 * the cookie. A cookie jar that cannot be read parks it too.
+	 *
+	 * @param string $provider Provider id, also the per-service consent key.
+	 * @param string $category Consent category the parked copy waits for.
+	 * @param string $cookie   Consent cookie name (validated by render()).
+	 * @param string $id_base  Id prefix (validated by render()), or ''.
+	 * @param string $hints    Extra attribute string for optimiser opt-outs.
+	 * @param string $src      Loader URL, or '' for an inline-only tag.
+	 * @param string $body     Inline body.
+	 * @return string
+	 */
+	private static function guard_script( $provider, $category, $cookie, $id_base, $hints, $src, $body ) {
+		// JSON_HEX_TAG: the values are inside a <script>, none may close it.
+		$flags = JSON_HEX_TAG | JSON_UNESCAPED_SLASHES;
+		$js    = '(function(d,k,s,c,u,b){var no=true;'
+			. 'try{var v="",p=d.cookie.split(";"),i,t;'
+			. 'for(i=0;i<p.length;i++){t=p[i].replace(/^\\s+/,"");if(t.indexOf(k+"=")===0){v=t.substring(k.length+1);break;}}'
+			. 'try{v=decodeURIComponent(v);}catch(e){}'
+			. 'no=(","+v+",").indexOf(",svc."+s+":no,")!==-1;}catch(e){}'
+			. 'function mk(src,body){var e=d.createElement("script");e.setAttribute("data-faz-google-tag",s);'
+			. 'if(no){e.type="text/plain";e.setAttribute("data-faz-category",c);e.setAttribute("data-faz-service",s);}'
+			. 'if(src){e.async=true;e.setAttribute("src",src);}else{e.text=body;}'
+			. '(d.head||d.documentElement).appendChild(e);}'
+			. 'if(u){mk(u,"");}mk("",b);'
+			. '})(document,' . wp_json_encode( $cookie, $flags ) . ',' . wp_json_encode( $provider, $flags ) . ',' . wp_json_encode( $category, $flags )
+			. ',' . wp_json_encode( $src, $flags ) . ',' . wp_json_encode( $body, $flags ) . ');';
+		$id    = '' !== $id_base ? ' id="' . esc_attr( $id_base . '-' . $provider . '-js-before' ) . '"' : '';
+		return '<script' . $id . ' data-faz-google-tag-guard="' . esc_attr( $provider ) . '"' . $hints . '>' . $js . "</script>\n";
 	}
 
 	/**

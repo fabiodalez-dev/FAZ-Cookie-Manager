@@ -3623,6 +3623,13 @@ class Frontend {
 	 * is not explicitly denied. In every other case the tags are printed
 	 * already parked (see Google_Tag::render()).
 	 *
+	 * Where the server cannot read the visitor's svc.* choices (Cache
+	 * Compatibility Mode, the jurisdiction shell) nothing above can honour a
+	 * per-service denial: the map is empty by design and this markup runs
+	 * before the runtime that enforces it client-side. With per-service
+	 * consent on, the live tags are then printed as guards that read the
+	 * consent cookie themselves (Google_Tag::guard_script()).
+	 *
 	 * @return void
 	 */
 	public function print_google_tag() {
@@ -3652,9 +3659,37 @@ class Frontend {
 				'gtm_unblocked'  => $this->gcm_gtm_exemption_active() && ! $this->is_service_explicitly_denied( 'google-tag-manager' ),
 				'data_layer'     => $this->gcm_datalayer_name(),
 				'hints'          => $hints,
+				// Site-wide values only, so the markup stays identical for
+				// every visitor: the cookie is read in the browser.
+				'guard_cookie'   => $this->service_consent_is_client_only()
+					? ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-consent' ) : 'fazcookie-consent' )
+					: '',
+				// An own-handle id (see is_own_inline_script_id()): the guard
+				// is the plugin's gate, not the tag, and the output buffer
+				// must not re-type it on a provider or custom-rule match.
+				'guard_id'       => ( is_string( $this->plugin_name ) && '' !== $this->plugin_name ? $this->plugin_name : 'faz-cookie-manager' ) . '-google-tag',
 			)
 		);
-		echo $markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Google_Tag::render() builds the markup from IDs validated against fixed patterns, escapes every attribute and encodes every JS value with wp_json_encode; $hints is a literal.
+		echo $markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Google_Tag::render() builds the markup from IDs validated against fixed patterns, escapes every attribute and encodes every JS value with wp_json_encode; $hints is a literal and the guard cookie name and id are checked against a fixed charset.
+	}
+
+	/**
+	 * Whether per-service consent is on but this response cannot depend on it.
+	 *
+	 * get_service_consent() returns an empty map under Cache Compatibility
+	 * Mode and the jurisdiction shell, because the HTML is shared by every
+	 * visitor; the svc.* choices are enforced by the runtime instead. Markup
+	 * the server prints LIVE ahead of the runtime has to carry its own check
+	 * in that state, see print_google_tag().
+	 *
+	 * @return bool
+	 */
+	private function service_consent_is_client_only() {
+		if ( ! $this->is_cache_compatibility_enabled() && ! $this->is_geo_bootstrap_cache_active() ) {
+			return false;
+		}
+		$settings = $this->get_faz_settings();
+		return ! empty( $settings['banner_control']['per_service_consent'] );
 	}
 
 	/**
