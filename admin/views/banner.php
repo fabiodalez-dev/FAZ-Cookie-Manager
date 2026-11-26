@@ -360,7 +360,7 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 					<input type="file" id="faz-b-brandlogo-file" accept="image/*" style="display:none;">
 					<input type="hidden" id="faz-b-brandlogo-url" value="">
 					<div id="faz-b-brandlogo-upload-status" role="status" aria-live="polite" aria-atomic="true" style="display:none;margin-top:6px;font-size:13px;"></div>
-					<div class="faz-help"><?php esc_html_e( 'Select or upload a logo. Uses the media library on WordPress, or file upload on ClassicPress.', 'faz-cookie-manager' ); ?></div>
+					<div class="faz-help"><?php esc_html_e( 'Select or upload a logo. Uses the media library on WordPress, or file upload on ClassicPress. The logo must be on this site: a logo on another site would be requested from it before the visitor has made a choice, and is not shown.', 'faz-cookie-manager' ); ?></div>
 				</div>
 				<div class="faz-form-group">
 					<label for="faz-b-brandlogo-placement"><?php esc_html_e( 'Logo position', 'faz-cookie-manager' ); ?></label>
@@ -885,7 +885,7 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 					<input type="file" id="faz-b-revisit-image-file" accept="image/*" style="display:none;">
 					<input type="hidden" id="faz-b-revisit-image-url" value="">
 					<div id="faz-b-revisit-image-upload-status" role="status" aria-live="polite" aria-atomic="true" style="display:none;margin-top:6px;font-size:13px;"></div>
-					<div class="faz-help"><?php esc_html_e( 'Shown in place of the default icon, at the icon or image size above. The Icon colour applies only to the default icon. Left empty, the default icon is used.', 'faz-cookie-manager' ); ?></div>
+					<div class="faz-help"><?php esc_html_e( 'Shown in place of the default icon, at the icon or image size above. The Icon colour applies only to the default icon. Left empty, the default icon is used. The image must be on this site, as an image from the Media Library is: the widget is part of every page, so an image on another site would be requested from it before the visitor has made a choice, and the default icon is shown instead.', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>

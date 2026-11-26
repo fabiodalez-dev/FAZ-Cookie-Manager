@@ -707,6 +707,14 @@ class Template {
 				}
 				// Brand logo: set img src from config meta.url (custom upload).
 				if ( 'brand-logo' === $tag && isset( $config['meta']['url'] ) && '#' !== $config['meta']['url'] ) {
+					// The logo is in the notice itself, so it is requested on every
+					// first visit, before any choice. Only a logo this site serves
+					// is shown (see is_first_party_image_url()); for one on another
+					// host the logo is left out, not rendered as a broken image.
+					if ( ! self::is_first_party_image_url( esc_url_raw( (string) $config['meta']['url'], array( 'http', 'https' ) ) ) ) {
+						$element->parentNode->removeChild( $element ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName
+						continue;
+					}
 					self::apply_brand_logo( $element, (string) $config['meta']['url'] );
 					// Only for a logo that is shown: with the logo off the grid
 					// would keep an empty column and strip the text's padding.
@@ -717,9 +725,17 @@ class Template {
 				// swaps the default icon for an inline SVG, and skips an image with
 				// this class whatever its URL says. The button already carries the
 				// accessible name, so the image needs no text of its own.
+				//
+				// Only an image this site serves itself. The widget is in the
+				// template of every page, first visit included, and a browser
+				// fetches an <img> as soon as it is in the document, shown or
+				// not: an image on another host would hand that host the
+				// visitor's address before any choice, and after a refusal too.
+				// Such a URL can only arrive past the editor (REST, import), whose
+				// picker offers the Media Library; the default icon stays.
 				if ( 'revisit-consent' === $tag && ! empty( $config['meta']['url'] ) && '#' !== $config['meta']['url'] ) {
 					$revisit_url = esc_url_raw( $config['meta']['url'], array( 'http', 'https' ) );
-					if ( '' !== $revisit_url ) {
+					if ( '' !== $revisit_url && self::is_first_party_image_url( $revisit_url ) ) {
 						foreach ( $element->getElementsByTagName( 'img' ) as $revisit_img ) {
 							$revisit_img->setAttribute( 'src', $revisit_url );
 							// Added to the classes already there: skip-lazy keeps lazy loaders off it.
@@ -890,6 +906,7 @@ class Template {
 			// there. The margin reset has to beat the box rules that push the
 			// first button down, and compact resets the margin to 0 as well.
 			. $c . ':where(.faz-box-pushdown) .faz-notice-btn-wrapper .faz-btn{flex:1 1 auto;}'
+			. self::box_pushdown_pair_rules()
 			. $c . '.faz-box-pushdown .faz-consent-bar .faz-notice-group .faz-notice-btn-wrapper .faz-btn{margin:0;}'
 			// The classic right-to-left rule indents the row by 15px for the
 			// inline categories beside it, which the box does not have.
@@ -907,6 +924,44 @@ class Template {
 			. $c . '.faz-box-bottom-left,' . $c . '.faz-box-top-left{left:0;}' . $c . '.faz-box-bottom-right,' . $c . '.faz-box-top-right{right:0;}'
 			. $open . ' .faz-preference-center{max-height:100vh;}}'
 			. '@media (max-width:440px){' . $box . '{width:100%;max-width:100%;}}';
+	}
+
+	/**
+	 * Rules that keep Accept and Reject the same width in a Box + Pushdown
+	 * above the phone layouts.
+	 *
+	 * The row wraps and `flex:1 1 auto` sizes each button from its label, so
+	 * three labels that do not fit the 390px the box leaves them broke the row
+	 * wherever the text happened to end. With the default order and the Italian
+	 * or German labels, or the English ones with the logo beside, Accept landed
+	 * alone on a second row at full width, twice as wide as Reject: the unequal
+	 * weight EDPB Guidelines 03/2022 rule out, decided by the translation.
+	 *
+	 * Here the layout is fixed instead of left to the labels. Customise, which
+	 * is not one of the compared choices, takes a row of its own, above or below
+	 * the pair as the chosen button order places it in the markup: every order
+	 * in Banner::BUTTON_ORDERS keeps Accept and Reject adjacent, so they always
+	 * share the other row. `flex:1 1 0` with `min-width:0` gives the two the
+	 * same width from one layout pass, whatever the labels are; a label too long
+	 * for half the row wraps instead of widening its button, and the stretched
+	 * row keeps both buttons the height of the taller one. The Do Not Sell
+	 * control, when a banner has it, would otherwise be let onto the pair's row
+	 * by their zero basis and squeeze them, so it takes a full row as well.
+	 *
+	 * From 577px up only: below that markup_order_mobile_css() gives every
+	 * button a full row and the compact layout sizes the row itself, and both
+	 * are left as they are. `:where()` keeps the specificity of the rule these
+	 * follow.
+	 *
+	 * @return string
+	 */
+	private static function box_pushdown_pair_rules() {
+		$row = '.faz-consent-container:where(.faz-box-pushdown) .faz-notice-btn-wrapper';
+		return '@media (min-width:577px){'
+			. $row . '{align-items:stretch;}'
+			. $row . ' .faz-btn-accept,' . $row . ' .faz-btn-reject{flex:1 1 0;min-width:0;display:inline-flex;align-items:center;justify-content:center;white-space:normal;overflow-wrap:break-word;}'
+			. $row . ' .faz-btn-customize,' . $row . ' [data-faz-tag=donotsell-button]{flex:1 1 100%;}'
+			. '}';
 	}
 
 	/**
@@ -962,6 +1017,82 @@ class Template {
 				$logo_img->setAttribute( 'alt', $logo_alt );
 			}
 		}
+	}
+
+	/**
+	 * Whether an image URL configured for the banner is served by this site.
+	 *
+	 * The banner template is printed on every page before the visitor has
+	 * chosen anything, so each image in it is a request the visitor did not
+	 * agree to. One to the site itself tells nobody anything new; one to
+	 * another host discloses the visit to it. A URL passes when it is a path on
+	 * this site or its host is the site's own: the home and site addresses, as
+	 * WordPress reports them for the request and as they are stored, and the
+	 * host of the uploads folder, which is where an offloaded Media Library
+	 * lives. `www.` is ignored on both sides.
+	 *
+	 * The `faz_banner_image_hosts` filter adds hosts the site owner answers
+	 * for, such as a CDN domain of their own that WordPress does not know.
+	 *
+	 * @param string $url Image URL from the banner config.
+	 * @return bool
+	 */
+	public static function is_first_party_image_url( $url ) {
+		$url = trim( (string) $url );
+		// A backslash is a slash to a browser (`/\host` leaves the site) but
+		// not to the parser below, and a control character has no place here.
+		if ( '' === $url || '#' === $url || preg_match( '/[\\\\\x00-\x20\x7f]/', $url ) ) {
+			return false;
+		}
+		if ( '/' === $url[0] && ( ! isset( $url[1] ) || '/' !== $url[1] ) ) {
+			return true;
+		}
+		$host = self::image_host( $url );
+		if ( '' === $host ) {
+			return false;
+		}
+		$own = array();
+		foreach ( array( 'home_url', 'site_url' ) as $address ) {
+			if ( function_exists( $address ) ) {
+				$own[] = (string) $address();
+			}
+		}
+		$own[] = (string) get_option( 'home', '' );
+		$own[] = (string) get_option( 'siteurl', '' );
+		if ( function_exists( 'wp_get_upload_dir' ) ) {
+			$uploads = wp_get_upload_dir();
+			$own[]   = isset( $uploads['baseurl'] ) ? (string) $uploads['baseurl'] : '';
+		}
+		$hosts = array_filter( array_map( array( __CLASS__, 'image_host' ), $own ) );
+		/**
+		 * Hosts the banner may load its custom images (brand logo, revisit
+		 * widget image) from before consent, besides the site's own.
+		 *
+		 * @param string[] $hosts Host names, lower case, without `www.`.
+		 * @param string   $url   The image URL being checked.
+		 */
+		$hosts = apply_filters( 'faz_banner_image_hosts', array_values( array_unique( $hosts ) ), $url );
+		foreach ( is_array( $hosts ) ? $hosts : array() as $allowed ) {
+			if ( is_string( $allowed ) && '' !== $allowed && self::image_host( '//' . $allowed ) === $host ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Host of a URL, lower case and without a leading `www.`; '' when it has none.
+	 *
+	 * @param string $url Absolute or protocol-relative URL.
+	 * @return string
+	 */
+	private static function image_host( $url ) {
+		$host = wp_parse_url( (string) $url, PHP_URL_HOST );
+		if ( ! is_string( $host ) || '' === $host ) {
+			return '';
+		}
+		$host = strtolower( $host );
+		return 0 === strpos( $host, 'www.' ) ? substr( $host, 4 ) : $host;
 	}
 
 	/**
