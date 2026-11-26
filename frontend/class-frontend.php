@@ -6213,7 +6213,10 @@ class Frontend {
 	 * A pattern of that second kind counts as Google's own only when it names
 	 * the Google tag itself (is_consent_mode_google_pattern()), so an admin
 	 * `gtag(` or tag-ID rule, which matches every bootstrap by definition,
-	 * does not cancel the exemption it has never cancelled.
+	 * does not cancel the exemption it has never cancelled. The same goes for
+	 * a pattern the per-service map attributes only to declared cookie rows
+	 * (#360): a row whose script pattern is `googletagmanager.com` describes
+	 * the Google tag, unless the visitor switched that row's service off.
 	 *
 	 * @param string $content Inline script body.
 	 * @return bool
@@ -6228,7 +6231,15 @@ class Frontend {
 		$service_map = $this->get_pattern_service_map();
 		foreach ( $service_map as $pattern => $service_ids ) {
 			$pattern = (string) $pattern;
-			if ( '' === $pattern || ! array_diff( (array) $service_ids, $allowed ) ) {
+			$foreign = array_diff( (array) $service_ids, $allowed );
+			if ( '' === $pattern || ! $foreign ) {
+				continue;
+			}
+			// A declared cookie row (#360) puts its url_pattern in this map
+			// under its own service id. When that pattern names the Google
+			// tag itself, the row describes the tag this exemption is about,
+			// not a second tracker sharing its <script>.
+			if ( $this->is_consent_mode_google_pattern( $pattern ) && $this->are_unrefused_declared_services( $foreign ) ) {
 				continue;
 			}
 			if ( $this->inline_body_matches_pattern( $content, $lower, $pattern ) ) {
@@ -6241,7 +6252,7 @@ class Frontend {
 				continue;
 			}
 			$pattern = (string) $pattern;
-			if ( '' === $pattern || self::is_consent_mode_google_pattern( $pattern ) ) {
+			if ( '' === $pattern || $this->is_consent_mode_google_pattern( $pattern ) ) {
 				continue;
 			}
 			if ( $this->inline_body_matches_pattern( $content, $lower, $pattern ) ) {
@@ -6249,6 +6260,41 @@ class Frontend {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether every one of these service ids is an administrator-declared
+	 * cookie service (#360) the visitor has not switched off.
+	 *
+	 * The refusal half is what keeps the carve-out above honest. A URL
+	 * pattern is matched against a tag's URL only, so
+	 * check_per_service_blocking() does not see a declared `googletagmanager.com`
+	 * row in an inline loader that merely builds that URL: the caller's
+	 * "explicit denial wins" test passes, and the exemption would then run the
+	 * script of a service the visitor refused. With the refusal read here the
+	 * pattern is tested against the body like any other tracker's and the
+	 * script stays parked.
+	 *
+	 * @param string[] $service_ids Owners of one pattern, Google's own removed.
+	 * @return bool
+	 */
+	private function are_unrefused_declared_services( $service_ids ) {
+		$declared = array();
+		foreach ( $this->get_enforceable_services() as $service ) {
+			if ( ! empty( $service['declared'] ) ) {
+				$declared[ $service['id'] ] = true;
+			}
+		}
+		$consent = $this->get_service_consent();
+		foreach ( (array) $service_ids as $service_id ) {
+			if ( ! isset( $declared[ $service_id ] ) ) {
+				return false;
+			}
+			if ( isset( $consent[ $service_id ] ) && 'no' === $consent[ $service_id ] ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -6267,37 +6313,72 @@ class Frontend {
 	}
 
 	/**
-	 * Whether a blocking pattern with no service id names the Google tag stack
-	 * Advanced Consent Mode exempts, rather than some other tracker.
+	 * Whether a blocking pattern names the Google tag stack Advanced Consent
+	 * Mode exempts, rather than some other tracker.
 	 *
-	 * Used only for patterns the per-service map does not attribute (cookie
-	 * database, custom rules, developer filter). The hosts are the ones
-	 * is_gcm_managed_script() and is_gtm_container_script() accept, plus the
-	 * analytics collection host; the code fragments are the gtag / dataLayer /
-	 * container vocabulary; the last test is a tag or container ID. Anything
-	 * else is another tracker, and a body naming it waits for consent.
+	 * Used for patterns the per-service map does not attribute (cookie
+	 * database, custom rules, developer filter) and for those it attributes
+	 * only to declared cookie rows. Answering yes means "a body matching this
+	 * is still only Google", so nothing here is a loose substring: `gtag`
+	 * inside `gtagTracker(`, or a Google domain inside
+	 * `googletagmanager.com.evil.example`, named a different tracker and let
+	 * it run on the bootstrap's exemption.
+	 *
+	 *  - A tag or container ID, as the whole pattern.
+	 *  - The gtag / dataLayer / container vocabulary, as the token the pattern
+	 *    starts with: `gtag(`, `gtag('config'`, `window.dataLayer`,
+	 *    `dataLayer.push({`, `gtm.start`.
+	 *  - The two loader files without a host, `gtm.js` and `gtag/js`.
+	 *  - Otherwise the pattern must be a URL fragment whose HOST is one of the
+	 *    domains is_gcm_managed_script() and is_gtm_container_script() accept,
+	 *    or the analytics collection host, or a subdomain of one. A server-side
+	 *    container on another domain (`sgtm.tracker.example/gtm.js`) is not.
+	 *
+	 * Anything else is another tracker, and a body naming it waits for consent.
 	 *
 	 * @param string $pattern Blocking pattern.
 	 * @return bool
 	 */
-	private static function is_consent_mode_google_pattern( $pattern ) {
+	private function is_consent_mode_google_pattern( $pattern ) {
 		$pattern = strtolower( trim( (string) $pattern ) );
+		if ( '' === $pattern ) {
+			return false;
+		}
+		if ( preg_match( '/^(?:g|gt|aw|dc|gtm)-[a-z0-9]{4,20}$/', $pattern ) ) {
+			return true;
+		}
+		// Code vocabulary. Anchored, and closed by what can follow the name in
+		// a call or an assignment, so neither `gtagtracker(` nor a host such
+		// as `datalayer.tracker.example` gets through.
+		// `function gtag` is the declaration every bootstrap opens with.
+		if ( preg_match( '/^(?:function\s+|window\s*\.\s*)?gtag\s*(?:\(|$)/', $pattern )
+			|| preg_match( '/^(?:window\s*\.\s*)?datalayer\s*(?:$|[=\[|]|\.\s*push(?![a-z0-9_$]))/', $pattern )
+			|| preg_match( '/^["\']?gtm\.(?:start|js)["\']?$/', $pattern )
+			|| preg_match( '#^/?(?:gtm\.js|gtag/js)(?:\?[^/]*)?$#', $pattern ) ) {
+			return true;
+		}
+		if ( ! self::is_url_fragment_pattern( $pattern ) ) {
+			return false;
+		}
+		// The host is what the pattern starts with, once a scheme, a
+		// protocol-relative `//` and the leading dot of a cookie domain are
+		// gone. A Google name further along (a path, a query value, a label
+		// of someone else's domain) is not the host.
+		$faz_host = (string) preg_replace( '#^(?:[a-z][a-z0-9+.-]*:)?//#', '', $pattern );
+		$faz_host = ltrim( $faz_host, '.' );
+		$faz_host = (string) preg_replace( '~[/?#:].*$~s', '', $faz_host );
 		foreach ( array(
 			'googletagmanager.com',
 			'google-analytics.com',
 			'googleadservices.com',
 			'googlesyndication.com',
 			'doubleclick.net',
-			'gtag',
-			'datalayer',
-			'gtm.start',
-			'gtm.js',
-		) as $faz_needle ) {
-			if ( false !== strpos( $pattern, $faz_needle ) ) {
+		) as $faz_domain ) {
+			if ( $this->host_is_or_subdomain_of( $faz_host, $faz_domain ) ) {
 				return true;
 			}
 		}
-		return 1 === preg_match( '/^(?:g|gt|aw|dc|gtm)-[a-z0-9]{4,20}$/', $pattern );
+		return false;
 	}
 
 	/**
