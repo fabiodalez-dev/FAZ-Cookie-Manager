@@ -72,6 +72,22 @@ class Do_Not_Sell_Shortcode {
 	 */
 	const SHARED_AUDIT_OPTION = 'faz_dnsmpi_shared_audit_slot';
 
+	/**
+	 * Prefix of the per-day counters of opt-outs and withdrawals that were
+	 * honoured without a consent-log row of their own (see count_unlogged()).
+	 * One options row per kind per UTC day: faz_dnsmpi_unlogged_optout_20261126.
+	 * Deliberately NOT under faz_dnsmpi_rl_ / faz_dnsmpi_lock_: those are
+	 * throttle state that is swept; this is part of the record.
+	 */
+	const UNLOGGED_OPTION_PREFIX = 'faz_dnsmpi_unlogged_';
+
+	/**
+	 * How long a per-day counter is kept: the 24 months the CCPA Regulations
+	 * (7101) ask a business to keep its record of consumer requests for,
+	 * plus a month of margin.
+	 */
+	const UNLOGGED_RETENTION_DAYS = 760;
+
 	public function __construct() {
 		add_shortcode( 'faz_do_not_sell', array( $this, 'render' ) );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_optout' ) );
@@ -276,7 +292,7 @@ class Do_Not_Sell_Shortcode {
 	}
 
 	/**
-	 * Refuse a submission whose nonce no longer verifies.
+	 * The refusal for a submission whose nonce no longer verifies.
 	 *
 	 * The payload carries `code: stale_nonce` beside the message. The nonce
 	 * is rendered into a cacheable page and an anonymous one lives 12 to 24
@@ -287,15 +303,30 @@ class Do_Not_Sell_Shortcode {
 	 * and resend once; the message is what it shows if that fails too.
 	 *
 	 * @since 1.34.2
-	 * @return void
+	 * @return array{success:bool,data:array}
 	 */
-	private function refuse_stale_nonce() {
-		wp_send_json_error(
-			array(
+	private function stale_nonce_result() {
+		return array(
+			'success' => false,
+			'data'    => array(
 				'message' => __( 'Invalid security token. Please refresh the page and try again.', 'faz-cookie-manager' ),
 				'code'    => 'stale_nonce',
-			)
+			),
 		);
+	}
+
+	/**
+	 * Answer the request with the outcome of process_optout() / process_rescind().
+	 *
+	 * @param array $result array( 'success' => bool, 'data' => mixed ).
+	 * @return void
+	 */
+	private function respond( array $result ) {
+		if ( $result['success'] ) {
+			wp_send_json_success( $result['data'] );
+			return;
+		}
+		wp_send_json_error( $result['data'] );
 	}
 
 	/**
@@ -332,9 +363,29 @@ class Do_Not_Sell_Shortcode {
 	 * AJAX handler for the opt-out submission.
 	 */
 	public function handle_optout() {
+		$this->respond( $this->process_optout() );
+	}
+
+	/**
+	 * Apply an opt-out and say how it went.
+	 *
+	 * Once the nonce and the origin are accepted the opt-out is ALWAYS
+	 * honoured: the cookie is set and the answer is a success. The right to
+	 * opt out (Cal. Civ. Code 1798.120, 1798.135; CCPA Regulations 7026) is
+	 * not something a throttle may refuse. Through 1.40.0 a second opt-out from
+	 * the same address inside 60 seconds was answered "Too many requests" and
+	 * got no cookie: behind a NAT, and since the window is keyed per IPv6 /64
+	 * on a whole LAN, that second request is routinely a second person. The
+	 * windows now bound only what is not a right, the consent-log row and the
+	 * admin mail, and an opt-out that gets no row of its own is counted
+	 * (count_unlogged()) so the record shows the gap instead of hiding it.
+	 *
+	 * @return array{success:bool,data:mixed} What wp_send_json_success() /
+	 *               wp_send_json_error() is to carry.
+	 */
+	private function process_optout() {
 		if ( ! check_ajax_referer( self::AJAX_ACTION, 'nonce', false ) ) {
-			$this->refuse_stale_nonce();
-			return;
+			return $this->stale_nonce_result();
 		}
 
 		// The nopriv nonce is identical for every anonymous visitor and is
@@ -344,38 +395,43 @@ class Do_Not_Sell_Shortcode {
 		// long-lived opt-out cookie in a victim's browser. Require the request to
 		// be same-origin before performing the state change.
 		if ( ! $this->is_same_origin_request() ) {
-			wp_send_json_error( __( 'This request must originate from this website.', 'faz-cookie-manager' ) );
-			return;
+			return array(
+				'success' => false,
+				'data'    => __( 'This request must originate from this website.', 'faz-cookie-manager' ),
+			);
 		}
 
 		// Idempotency: if the browser already carries the opt-out cookie, skip
 		// creating a duplicate log entry and re-sending the admin notification.
 		if ( isset( $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] ) && '1' === $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] ) {
-			wp_send_json_success(
-				array( 'message' => __( 'You have already opted out. We will not sell or share your personal information.', 'faz-cookie-manager' ) )
+			return array(
+				'success' => true,
+				'data'    => array( 'message' => __( 'You have already opted out. We will not sell or share your personal information.', 'faz-cookie-manager' ) ),
 			);
-			return;
 		}
 
-		// Rate limiting: per-connection 60-second window (see claim_window()).
+		// Per-connection 60-second window (see claim_window()). It decides who
+		// writes the audit row and asks for the mail, never whether the
+		// opt-out is applied:
+		// - a lock name: this request holds the address's window and logs;
+		// - true: the address does not identify one visitor, so the row is
+		// bounded site-wide instead (claim_shared_audit_slot());
+		// - false: the address's window is held. No row, no mail.
 		$lock_key = $this->claim_window( 'faz_dnsmpi_' );
-		if ( false === $lock_key ) {
-			wp_send_json_error( __( 'Too many requests. Please wait 1 minute before submitting again.', 'faz-cookie-manager' ) );
-			return;
-		}
-
-		// Without a per-address window (see claim_window()) the opt-out itself
-		// is always honoured, but its audit row and mail are bounded site-wide.
-		$audit = is_string( $lock_key ) || $this->claim_shared_audit_slot();
+		$audit    = is_string( $lock_key ) || ( true === $lock_key && $this->claim_shared_audit_slot() );
 
 		try {
-			$ip_hash = $this->hash_ip();
-			if ( $audit ) {
-				$this->log_optout( $ip_hash );
-			}
+			// The cookie first: it is the opt-out, and nothing after it may
+			// stand between the visitor and it.
 			$this->set_optout_cookie();
-			if ( $audit && $this->claim_notification() ) {
-				$this->notify_admin( $ip_hash );
+			if ( $audit ) {
+				$ip_hash = $this->hash_ip();
+				$this->log_optout( $ip_hash );
+				if ( $this->claim_notification() ) {
+					$this->notify_admin( $ip_hash );
+				}
+			} else {
+				$this->count_unlogged( 'optout' );
 			}
 		} finally {
 			// Release DB lock regardless of success or exception; the transient
@@ -385,10 +441,11 @@ class Do_Not_Sell_Shortcode {
 			}
 		}
 
-		wp_send_json_success(
-			array(
+		return array(
+			'success' => true,
+			'data'    => array(
 				'message' => __( 'Your opt-out request has been received. We will not sell or share your personal information.', 'faz-cookie-manager' ),
-			)
+			),
 		);
 	}
 
@@ -399,35 +456,47 @@ class Do_Not_Sell_Shortcode {
 	 * after exercising their right to opt out of the sale of personal data.
 	 */
 	public function handle_rescind() {
+		$this->respond( $this->process_rescind() );
+	}
+
+	/**
+	 * Withdraw an opt-out and say how it went.
+	 *
+	 * Like the opt-out, the withdrawal is always applied once the nonce and
+	 * the origin are accepted; the windows bound its audit row only.
+	 *
+	 * @return array{success:bool,data:mixed}
+	 */
+	private function process_rescind() {
 		if ( ! check_ajax_referer( self::RESCIND_ACTION, 'nonce', false ) ) {
-			$this->refuse_stale_nonce();
-			return;
+			return $this->stale_nonce_result();
 		}
 
-		// Same CSRF hardening as handle_optout(): the anonymous nonce is shared,
+		// Same CSRF hardening as process_optout(): the anonymous nonce is shared,
 		// so require a same-origin request before forging an opt-back-in record.
 		if ( ! $this->is_same_origin_request() ) {
-			wp_send_json_error( __( 'This request must originate from this website.', 'faz-cookie-manager' ) );
-			return;
+			return array(
+				'success' => false,
+				'data'    => __( 'This request must originate from this website.', 'faz-cookie-manager' ),
+			);
 		}
 
-		// Idempotency: if the opt-out cookie is already absent, nothing to do.
+		// Idempotency: if the opt-out cookie is already absent, nothing to log.
 		$has_optout_cookie = isset( $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ] ) && '1' === $_COOKIE[ ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( self::COOKIE_NAME ) : self::COOKIE_NAME ) ];
 
-		// Rate limiting: same per-connection window as the opt-out.
+		// Same per-connection window as the opt-out, with the same meaning.
 		$lock_key = $this->claim_window( 'faz_dnsmpi_rsc_' );
-		if ( false === $lock_key ) {
-			wp_send_json_error( __( 'Too many requests. Please wait 1 minute before submitting again.', 'faz-cookie-manager' ) );
-			return;
-		}
-
-		$audit = is_string( $lock_key ) || $this->claim_shared_audit_slot();
+		$audit    = is_string( $lock_key ) || ( true === $lock_key && $this->claim_shared_audit_slot() );
 
 		try {
 			$this->clear_optout_cookie();
-			if ( $has_optout_cookie && $audit ) {
-				$ip_hash = $this->hash_ip();
-				$this->log_rescind( $ip_hash );
+			if ( $has_optout_cookie ) {
+				if ( $audit ) {
+					$ip_hash = $this->hash_ip();
+					$this->log_rescind( $ip_hash );
+				} else {
+					$this->count_unlogged( 'rescind' );
+				}
 			}
 		} finally {
 			if ( is_string( $lock_key ) ) {
@@ -435,10 +504,11 @@ class Do_Not_Sell_Shortcode {
 			}
 		}
 
-		wp_send_json_success(
-			array(
+		return array(
+			'success' => true,
+			'data'    => array(
 				'message' => __( 'Your opt-out has been withdrawn. You may submit a new request at any time.', 'faz-cookie-manager' ),
-			)
+			),
 		);
 	}
 
@@ -545,6 +615,94 @@ class Do_Not_Sell_Shortcode {
 	}
 
 	/**
+	 * Count an opt-out or a withdrawal that was honoured without a consent-log
+	 * row of its own.
+	 *
+	 * Two bounds keep a replayed nonce from writing one row per request: the
+	 * per-address 60-second window and, where the address identifies nobody,
+	 * one site-wide slot per second. Both also catch real people: the second
+	 * person behind a NAT, two visitors of a proxied site in the same second.
+	 * Their request is applied, but through 1.40.0 nothing recorded that it had
+	 * happened, so the register of opt-out requests was short by a number
+	 * nobody could name. This is that number, per UTC day and per kind, shown
+	 * in System Status. It is an upper bound on the people concerned: a replay
+	 * and a double submission from one browser are counted too.
+	 *
+	 * One statement, so concurrent requests cannot lose an increment the way
+	 * a get_option() / update_option() pair would, and one small row per day
+	 * however many requests arrive. Consent_Logger::record_refusal() gates its
+	 * own tally per client instead; that gate is no use here, because the
+	 * requests this counts are exactly the ones that share a client address.
+	 * The row is written and read with direct queries on purpose: the options
+	 * cache would hand back a count that misses other requests' increments.
+	 *
+	 * @param string $kind 'optout' or 'rescind'.
+	 * @return void
+	 */
+	private function count_unlogged( $kind ) {
+		global $wpdb;
+		if ( ! isset( $wpdb ) || ! in_array( $kind, array( 'optout', 'rescind' ), true ) ) {
+			return;
+		}
+		$name = self::UNLOGGED_OPTION_PREFIX . $kind . '_' . gmdate( 'Ymd', time() );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- an atomic increment, which the options API cannot express; $wpdb->options is core's own table name.
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, '1', 'no') ON DUPLICATE KEY UPDATE option_value = CAST(option_value AS UNSIGNED) + 1", $name ) );
+	}
+
+	/**
+	 * The opt-outs and withdrawals honoured without a consent-log row.
+	 *
+	 * Read by System Status. Counters older than UNLOGGED_RETENTION_DAYS are
+	 * dropped here, on an administrator's page view, rather than on the
+	 * visitor's request that writes them.
+	 *
+	 * @param int $days Length of the recent window to total, in days.
+	 * @return array{optout:int,rescind:int,recent_optout:int,recent_rescind:int,last:string}
+	 *               Totals over the retained record, totals over the last
+	 *               `$days` days, and the most recent day counted (Ymd, UTC;
+	 *               '' when none).
+	 */
+	public static function unlogged_tally( $days = 30 ) {
+		global $wpdb;
+		$tally = array(
+			'optout'         => 0,
+			'rescind'        => 0,
+			'recent_optout'  => 0,
+			'recent_rescind' => 0,
+			'last'           => '',
+		);
+		if ( ! isset( $wpdb ) ) {
+			return $tally;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the counters are incremented with a direct query (count_unlogged()), so a cached read would be stale; $wpdb->options is core's own table name.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( self::UNLOGGED_OPTION_PREFIX ) . '%' ) );
+		if ( ! is_array( $rows ) ) {
+			return $tally;
+		}
+		$now    = time();
+		$recent = gmdate( 'Ymd', $now - ( max( 1, (int) $days ) - 1 ) * DAY_IN_SECONDS );
+		$floor  = gmdate( 'Ymd', $now - self::UNLOGGED_RETENTION_DAYS * DAY_IN_SECONDS );
+		foreach ( $rows as $row ) {
+			if ( ! preg_match( '/^' . preg_quote( self::UNLOGGED_OPTION_PREFIX, '/' ) . '(optout|rescind)_(\d{8})$/', (string) $row->option_name, $m ) ) {
+				continue;
+			}
+			if ( strcmp( $m[2], $floor ) < 0 ) {
+				delete_option( $row->option_name );
+				continue;
+			}
+			$n = max( 0, (int) $row->option_value );
+			$tally[ $m[1] ] += $n;
+			if ( strcmp( $m[2], $recent ) >= 0 ) {
+				$tally[ 'recent_' . $m[1] ] += $n;
+			}
+			if ( $n > 0 && strcmp( $m[2], $tally['last'] ) > 0 ) {
+				$tally['last'] = $m[2];
+			}
+		}
+		return $tally;
+	}
+
+	/**
 	 * Whether a request whose address does not identify one visitor may write
 	 * its audit row (and ask for the admin mail).
 	 *
@@ -553,7 +711,8 @@ class Do_Not_Sell_Shortcode {
 	 * is not a right, though, and without a bound a script replaying the
 	 * public nonce wrote one consent-log row per request. A single site-wide
 	 * slot per second caps that write; a real opt-out that loses the race is
-	 * still applied through its cookie.
+	 * still applied through its cookie, and the caller counts it
+	 * (count_unlogged()) so the record says a row is missing.
 	 *
 	 * The slot is taken in one statement. A transient read and written in two
 	 * gave the slot to every request that read it before the first one wrote
@@ -613,9 +772,16 @@ class Do_Not_Sell_Shortcode {
 	 * row holds its claim time so a request that died between add_option()
 	 * and its finally block cannot hold the address forever.
 	 *
+	 * A held window refuses nothing either. An address that does identify one
+	 * connection is still routinely several people (a household or an office
+	 * behind one IPv4, a whole LAN inside one IPv6 /64), so the callers apply
+	 * the opt-out or the withdrawal in every case and read `false` as "this
+	 * request writes no audit row and asks for no mail".
+	 *
 	 * @param string $prefix Option/transient prefix ('faz_dnsmpi_' or 'faz_dnsmpi_rsc_').
 	 * @return string|bool Lock option name to release, true when no window
-	 *                     applies, false when the window is held (refuse).
+	 *                     applies, false when the window is held (the request
+	 *                     is honoured without an audit row).
 	 */
 	private function claim_window( $prefix ) {
 		if ( ! $this->ip_identifies_visitor() ) {

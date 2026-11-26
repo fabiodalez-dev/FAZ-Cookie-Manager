@@ -183,9 +183,20 @@ test.describe('CCPA opt-out form — security fixes', () => {
     clearRateLimitTransients();
   });
 
-  test('CCPA-SEC-01: rate limit blocks second opt-out within 60 seconds', async ({
+  test('CCPA-SEC-01: a second opt-out within 60 seconds is honoured, only its audit row is rate-limited', async ({
     page, wpBaseURL,
   }) => {
+    // The opt-out is a right and one address is routinely several people, so
+    // the 60-second window bounds the consent-log row and never the opt-out.
+    // Through 1.40.0 this test pinned a "Too many requests" refusal instead.
+    const optoutRows = () =>
+      parseInt(
+        wpEval(`
+          global $wpdb;
+          echo (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_consent_logs WHERE status = 'dnsmpi_optout'" );
+        `).trim(),
+        10,
+      );
     // The window applies only to an address that identifies one visitor
     // (faz-test's loopback peer does not): present a public one.
     installLoopbackPeer();
@@ -206,8 +217,9 @@ test.describe('CCPA opt-out form — security fixes', () => {
     const res1 = await page.request.post(`${wpBaseURL}${AJAX_URL_PATH}`, { form: formPayload, headers: sameOriginHeaders });
     const body1 = await res1.json() as { success: boolean };
     expect(body1.success, 'first CCPA opt-out should succeed').toBe(true);
+    const rowsAfterFirst = optoutRows();
 
-    // Second opt-out same IP — must be rate-limited.
+    // Second opt-out same IP — honoured, without a second audit row.
     // Navigate again to get a fresh nonce (previous nonce still valid; WordPress nonces
     // are time-window-based, not single-use).
     await page.context().clearCookies();
@@ -227,9 +239,10 @@ test.describe('CCPA opt-out form — security fixes', () => {
       form: { action: 'faz_dnsmpi_optout', nonce: nonce2 },
       headers: sameOriginHeaders,
     });
-    const body2 = await res2.json() as { success: boolean; data?: string };
-    expect(body2.success, 'second CCPA opt-out within 60 s must be blocked').toBe(false);
-    expect(String(body2.data ?? '').toLowerCase()).toContain('too many');
+    const body2 = await res2.json() as { success: boolean; data?: unknown };
+    expect(body2.success, 'second CCPA opt-out within 60 s must be honoured').toBe(true);
+    expect(res2.headers()['set-cookie'] ?? '', 'and must set the opt-out cookie').toContain('fazcookie-dnsmpi=1');
+    expect(optoutRows(), 'the window holds back the second audit row').toBe(rowsAfterFirst);
     } finally {
       removeLoopbackPeer();
     }
