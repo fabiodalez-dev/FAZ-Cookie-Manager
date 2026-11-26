@@ -54,6 +54,13 @@ class Controller {
 	const GEO_BOOTSTRAP_STRICT_RULESET = 'fallback-gdpr-most-protective';
 
 	/**
+	 * One-off cron hook that resumes a retention purge stopped at its cap.
+	 *
+	 * @since 1.40.1
+	 */
+	const RETENTION_CONTINUE_HOOK = 'faz_consent_log_retention_continue';
+
+	/**
 	 * Return the current instance of the class
 	 *
 	 * @return Controller
@@ -1662,6 +1669,51 @@ class Controller {
 			// leave expired rows behind until the next cron run.
 		} while ( count( $ids ) === $batch_size && $deleted < $max_rows );
 
+		// Stopped by the cap, not by running out of expired rows. One run a day
+		// at the default cap removes 200000 rows, so a site that records more
+		// decisions than that a day never emptied its backlog: rows past the
+		// retention period only accumulated, which is the storage-limitation
+		// failure this purge exists to prevent. The rest is resumed by a one-off
+		// event a few minutes later, each run still bounded by the same cap,
+		// until a run ends below it. A run stopped by a database error breaks
+		// out below the cap and is left to the next daily run instead of being
+		// retried every few minutes against a failing table.
+		if ( $deleted >= $max_rows ) {
+			self::schedule_retention_continuation();
+		}
+
 		return (int) $deleted;
+	}
+
+	/**
+	 * Schedule the next slice of a purge that stopped at its cap.
+	 *
+	 * @since 1.40.1
+	 * @return void
+	 */
+	private static function schedule_retention_continuation() {
+		if ( ! function_exists( 'wp_schedule_single_event' ) || wp_next_scheduled( self::RETENTION_CONTINUE_HOOK ) ) {
+			return;
+		}
+		wp_schedule_single_event( time() + 15 * 60, self::RETENTION_CONTINUE_HOOK );
+	}
+
+	/**
+	 * Cron callback: resume the consent-log retention purge.
+	 *
+	 * Reads the retention setting again instead of carrying the one the first
+	 * slice ran with, so an administrator who turned the purge off (0) or
+	 * lengthened the window in the meantime is obeyed by the next slice. Same
+	 * reading as Activator::run_retention_cleanup(), which starts the purge.
+	 *
+	 * @since 1.40.1
+	 * @return void
+	 */
+	public static function continue_retention() {
+		$settings = get_option( 'faz_settings' );
+		$months   = isset( $settings['consent_logs']['retention'] ) ? (int) $settings['consent_logs']['retention'] : 12;
+		if ( $months > 0 ) {
+			self::get_instance()->cleanup_old_logs( $months );
+		}
 	}
 }

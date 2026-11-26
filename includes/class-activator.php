@@ -105,6 +105,8 @@ class Activator {
 		// A pageview purge that stopped at its per-run cap resumes on this
 		// one-off event (Pageviews Controller::cleanup_old_records()).
 		add_action( 'faz_pageview_retention_continue', array( 'FazCookie\Admin\Modules\Pageviews\Includes\Controller', 'continue_retention' ) );
+		// The same for the consent log (ConsentLogs Controller::cleanup_old_logs()).
+		add_action( 'faz_consent_log_retention_continue', array( 'FazCookie\Admin\Modules\Consentlogs\Includes\Controller', 'continue_retention' ) );
 		// A footer withdrawal link lives in a theme or block template, so it can
 		// disappear with an edit the plugin never sees. Re-check it daily on the
 		// existing cleanup event — a new scheduled event would be one more thing

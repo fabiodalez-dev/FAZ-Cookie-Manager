@@ -241,6 +241,10 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 			if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
 				wp_clear_scheduled_hook( 'faz_consent_log_gmt_backfill' );
 				wp_clear_scheduled_hook( 'faz_run_pending_migrations' );
+				// The one-off retention continuations: a purge that stopped at
+				// its cap leaves one pending for up to fifteen minutes.
+				wp_clear_scheduled_hook( 'faz_consent_log_retention_continue' );
+				wp_clear_scheduled_hook( 'faz_pageview_retention_continue' );
 			}
 
 			// Clean up Do Not Sell / DSAR atomic lock options (created by add_option,
