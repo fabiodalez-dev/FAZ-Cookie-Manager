@@ -1,4 +1,4 @@
-# FAZ Cookie Manager
+﻿# FAZ Cookie Manager
 
 **The only cookie consent plugin you need. 100% free, no required cloud account, no subscriptions.**
 
@@ -109,6 +109,7 @@ Global controls: enable/disable banner, exclude pages, consent log retention, sc
 | Google Consent Mode v2 | Supports | Default-denied signals, consent update on interaction |
 | LGPD (Brazil) | Supported | Consent-based model |
 | POPIA (South Africa) | Supported | Conservative consent-based preset (s.11(1)(a)); other s.11(1)(b)-(f) justifications require separate assessment |
+| KVKK (Türkiye) | Supported | Opt-in preset for non-essential cookies per the Kurum's Cookie Applications Guide (Temmuz 2025) and Kurul Principle Decision 2026/347: aydınlatma and explicit consent separate, equal-weight Accept/Reject |
 | WCAG 2.1 AA | Accessibility-focused | Keyboard navigation, focus indicators, ARIA labels |
 | WP Consent API | Supports | Registered via `wp_consent_api_registered_` filter |
 
@@ -255,8 +256,8 @@ Integrates the [Open Cookie Database](https://github.com/fabiodalez-dev/Open-Coo
 
 Generate a jurisdiction-aware Cookie Policy page directly from your admin — no copy-pasting templates from a privacy-lawyer blog, no paying $10/month for "policy creation" as a premium feature.
 
-- **Jurisdiction-aware templates**: GDPR (EU/EEA/UK), CCPA/CPRA (California), LGPD (Brazil), POPIA (South Africa). Each shipped with its own template scaffold, legal references, and required sections for that framework.
-- **Multilingual out of the box**: en, it, fr, de, es, pt-BR, bg, cs. Override per render with `[faz_cookie_policy_complete lang="it"]` or let the visitor's browser language drive the choice. All 32 scaffolds (4 jurisdictions × 8 languages) ship as reviewed per-language templates; the 24 GDPR/CCPA/LGPD scaffolds are additionally exposed section-by-section through the plugin POT/PO catalogues (the POPIA sections join at the next catalogue resync), and a safe bundled translation remains the fallback when an entry is missing or drops a required placeholder.
+- **Jurisdiction-aware templates**: GDPR (EU/EEA/UK), CCPA/CPRA (California), LGPD (Brazil), POPIA (South Africa), KVKK (Türkiye). Each shipped with its own template scaffold, legal references, and required sections for that framework. The KVKK template follows the Kurum's Cookie Applications Guide (Temmuz 2025) and Kurul Principle Decision 2026/347: layered notice, separate explicit consent, and an m.9 cross-border section naming the recipient country and transfer mechanism for every third party.
+- **Multilingual out of the box**: en, it, fr, de, es, pt-BR, bg, cs, nl, hr, tr. Override per render with `[faz_cookie_policy_complete lang="it"]` or let the visitor's browser language drive the choice. The scaffolds ship as reviewed per-language templates (4 legacy jurisdictions × 8 languages in the generator's first release, grown with nl/hr/tr and the 11-section Turkish KVKK scaffold for Türkiye), and the finished templates are additionally exposed section-by-section through the plugin POT/PO catalogues, with a safe bundled translation the fallback when an entry is missing or drops a required placeholder.
 - **Editable section text, per jurisdiction and language**: open **Policy text** in the Cookie Policy admin screen and replace only the sections that need your wording. The shipped text stays in each empty textarea as a placeholder, so plugin updates can still improve anything you did not deliberately replace. Placeholders such as `{{COMPANY_NAME}}` keep working. You can author a policy in any language from the site-wide catalogue — for example Slovak (`sk`) — even when no Markdown template ships for it; the reviewed jurisdiction scaffold remains the visible fallback for untouched sections.
 - **Auto-populated cookie inventory**: pulls live from `wp_faz_cookies`, so anything the scanner adds is reflected at the next render with its category, duration, and description.
 - **Filled with your company data**: name, address, DPO email, third-party services, retention period. Configured once via the admin form, stored in `faz_cookie_policy_data`. Never seeded from `admin_email` or `blogname` (PII protection — operator must explicitly fill the form).
@@ -373,7 +374,7 @@ Detects visitor country for geo-targeted banner display:
 
 ### Multilingual Support
 
-- **11 bundled languages**: English, German, French, Italian, Spanish, Polish, Portuguese (PT + BR), Hungarian, Finnish, Dutch
+- **12 bundled languages**: English, German, French, Italian, Spanish, Polish, Portuguese (PT + BR), Hungarian, Finnish, Dutch, Croatian, Turkish (plus Russian, Slovak and Ukrainian banner and category text)
 - **180+ selectable languages** in the admin configuration
 - **Browser language detection**: resolved client-side from `navigator.languages` so full-page/CDN caches cannot serve the wrong language to visitors (see below)
 - **Plugin integration**: Polylang, WPML, TranslatePress, Weglot and the qTranslate family (original qTranslate, mqTranslate, qTranslate Plus, zTranslate, qTranslate-X, qTranslate-XT) auto-detected (URL-based and cache-safe; WPML parameter mode and qTranslate query mode fall back to the default under Cache Compatibility Mode)
@@ -712,6 +713,13 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 ---
 
 ## Changelog
+
+### Unreleased
+
+- **Türkçe.** The full admin interface is translated into Turkish and ships as a complete locale: Turkish joins the banner language list everywhere it is selectable, with bundled GDPR and CCPA banner catalogues, cookie-category catalogues and Turkish date/month names.
+- **KVKK (Law 6698, Türkiye) jurisdiction.** A "KVKK (Türkiye)" setup-wizard law option with an opt-in preset built on the Kurum's cookie guidance (2025) and Kurul Principle Decision 2026/347, a Türkiye (TR) region in the wizard chips, Settings → Geolocation and the multi-banner Geo Targeting presets, a `turkey-kvkk` geo rule set (v2.0.0), and the same strict-refuse handling POPIA banners already had.
+- **Cookie Policy generator: Türkiye.** A `turkey-kvkk` jurisdiction generates a Turkish çerez aydınlatma metni per the 2025 Cookie Guide and Decision 2026/347 (layered notice, separate explicit consent, an m.9 cross-border section, m.11 rights with the 30-day deadline), requires the company's name, postal address and privacy contact email before publishing, and Turkish templates for the other four jurisdictions are included too. Expanded Turkish/Italian locale catalogues kept in sync with the 28 new or reworded source strings.
+
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 

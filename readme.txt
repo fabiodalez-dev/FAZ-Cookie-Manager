@@ -25,7 +25,7 @@ Most cookie consent plugins follow the same pattern: a free version with cripple
 
 * **Cookie scanner** -- scans your site directly from your browser. No external service, no API limits, no waiting.
 * **Finds the cookies a JavaScript scanner cannot see** -- cookies set by PHP before the page renders, including `HttpOnly` ones your browser hides from scripts, are captured from the server response itself: from pages, AJAX, REST calls and sub-resources, then replayed across the URLs the crawl actually visited. Those are exactly the cookies that get set *before consent*, so a declaration built without them is incomplete.
-* **Cookie Policy generator** -- a jurisdiction-aware policy page (GDPR / CCPA / LGPD / POPIA) built from your own company details and the scanner's live cookie inventory, published with `[faz_cookie_policy_complete]`. Ships in en, it, fr, de, es, pt-BR, bg and cs, and every section can be rewritten per jurisdiction and language.
+* **Cookie Policy generator** -- a jurisdiction-aware policy page (GDPR / CCPA / LGPD / POPIA / KVKK) built from your own company details and the scanner's live cookie inventory, published with `[faz_cookie_policy_complete]`. Ships in en, it, fr, de, es, pt-BR, bg, cs, nl, hr and tr, and every section can be rewritten per jurisdiction and language.
 * **Consent logging with CSV export** -- every consent is recorded locally in your database. Export anytime for audits.
 * **Google Consent Mode v2** -- all 7 consent signals sent to Google tags. No premium required.
 * **IAB TCF v2.3** -- full Transparency and Consent Framework API and UI. Operating as a recognised CMP needs your own registered IAB Europe CMP ID; without one the TCF interface stays inactive and no TC string is produced, so invalid signals are never broadcast to vendors.
@@ -52,6 +52,7 @@ This plugin assists consent and privacy workflows. It does not itself create, pr
 * **EDPB Guidelines** -- No scroll-as-consent, no pre-checked categories, equal button prominence options
 * **LGPD** (Brazil General Data Protection Law) -- Consent-based model
 * **POPIA** (South Africa Protection of Personal Information Act) -- Conservative consent-based preset under s.11(1)(a); other s.11(1)(b)-(f) justifications require separate assessment
+* **KVKK** (Türkiye Personal Data Protection Law No. 6698) -- Opt-in preset for non-essential cookies built on the Kurum's Cookie Applications Guide (Temmuz 2025) and Kurul Principle Decision 2026/347: aydınlatma and explicit consent are handled separately, Accept and Reject carry equal weight
 
 = Try it Live =
 
@@ -71,9 +72,9 @@ Core banner functionality runs on your WordPress site. Optional update/download 
 
 A dedicated **Cookie Policy** admin tab and the `[faz_cookie_policy_complete]` shortcode build a policy page from the cookies your site actually sets.
 
-* **Jurisdiction-aware** -- GDPR (EU/EEA/UK), CCPA/CPRA, LGPD or POPIA, each with the legal references and sections that framework requires.
+* **Jurisdiction-aware** -- GDPR (EU/EEA/UK), CCPA/CPRA, LGPD, POPIA or KVKK (Türkiye), each with the legal references and sections that framework requires.
 * **Auto-populated** -- the inventory renders live from the scanner, so a newly discovered cookie appears with its category, duration and description.
-* **Multilingual** -- en, it, fr, de, es, pt-BR, bg, cs; override per render with `lang="it"` or let the browser decide.
+* **Multilingual** -- en, it, fr, de, es, pt-BR, bg, cs, nl, hr, tr; override per render with `lang="it"` or let the browser decide.
 * **Editable per jurisdiction and language** -- replace any section with your own Markdown, placeholders included; leave one empty and it keeps receiving reviewed updates.
 * **Your company data** -- name, address, DPO email, retention period. Never seeded from `admin_email` or `blogname`.
 * **Email obfuscation** -- enabled by default; turn off "Obfuscate public email addresses" in Cookie Policy settings if needed. Privacy contact and privacy officer addresses are encoded as HTML entities, including the legacy cookie policy contact link. Works without JavaScript in Chrome, Firefox and Safari; readable addresses and existing email links are preserved. Deters simple scrapers, not HTML-decoding bots.
@@ -444,7 +445,7 @@ The plugin moves the provider rules into a small content-hashed file, `wp-conten
 6. **IAB TCF v2.3 Global Vendor List** -- Browse the Global Vendor List (downloaded from IAB Europe when you switch TCF on, and refreshed weekly), filter by purpose, and select which vendors your site works with. Full Transparency and Consent Framework v2.3 API and UI, no cloud required. Note: broadcasting valid TC strings to vendors requires your own registered IAB Europe CMP ID; until one is configured the TCF layer stays inactive by design.
 7. **Consent logs** -- Local, tamper-resistant audit trail of every visitor consent: status, categories, hashed IP, URL and timestamp. Filter, search and export to CSV for DPIA / audits.
 8. **Google Consent Mode v2** -- Default vs. granted state for `ad_storage`, `analytics_storage`, `ad_user_data`, `ad_personalization`, `functionality_storage`, `personalization_storage` and `security_storage`. Works with GTM and gtag.
-9. **Languages** -- Manage active languages and the default banner language. Works alongside WPML / Polylang. The admin interface ships translated into Italian, Dutch, German, French, Czech and Croatian; banner and cookie-category text ships in those plus Spanish, Finnish, Hungarian, Polish, Portuguese, Brazilian Portuguese, Russian and Ukrainian.
+9. **Languages** -- Manage active languages and the default banner language. Works alongside WPML / Polylang. The admin interface ships translated into Turkish as well as Italian, Dutch, German, French, Czech and Croatian; banner and cookie-category text ships in those plus Turkish (GDPR and CCPA), Spanish, Finnish, Hungarian, Polish, Portuguese, Brazilian Portuguese, Russian and Ukrainian.
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Cache Plugin Compatibility ==
