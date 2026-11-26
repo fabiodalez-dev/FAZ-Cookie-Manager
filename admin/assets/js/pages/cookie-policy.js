@@ -180,9 +180,12 @@
 	function syncJurisdictionRequirements() {
 		var jurisdiction = document.getElementById('cp-jurisdiction');
 		var popia = !!jurisdiction && jurisdiction.value === 'popia-southafrica';
+		var kvkk = !!jurisdiction && jurisdiction.value === 'turkey-kvkk';
 		var ccpa = !!jurisdiction && jurisdiction.value === 'ccpa-california';
 		var summary = document.getElementById('cp-ccpa-methods-summary');
 		if (summary) { summary.hidden = !ccpa; }
+		var kvkkSummary = document.getElementById('cp-kvkk-summary');
+		if (kvkkSummary) { kvkkSummary.hidden = !kvkk; }
 		var editorLaw = document.getElementById('cp-override-jurisdiction');
 		var methods = document.getElementById('cp-ccpa-methods-help');
 		if (methods) { methods.hidden = !(ccpa || (editorLaw && editorLaw.value === 'ccpa-california')); }
@@ -195,6 +198,12 @@
 			if (popia) { field.setAttribute('aria-required', 'true'); }
 			else { field.removeAttribute('aria-required'); }
 		});
+		var addressField = document.querySelector('[name="company.address"]');
+		if (addressField) {
+			addressField.required = popia || kvkk;
+			if (popia || kvkk) { addressField.setAttribute('aria-required', 'true'); }
+			else { addressField.removeAttribute('aria-required'); }
+		}
 	}
 
 	// Blocking a submit without saying so reproduces the exact "the button

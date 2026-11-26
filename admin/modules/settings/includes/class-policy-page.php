@@ -9,7 +9,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class Policy_Page {
 	/** Wizard law => Cookie Policy generator jurisdiction. */
-	const JURISDICTIONS = array( 'gdpr' => 'gdpr-strict', 'both' => 'gdpr-strict', 'ccpa' => 'ccpa-california', 'popia' => 'popia-southafrica' );
+	const JURISDICTIONS = array( 'gdpr' => 'gdpr-strict', 'both' => 'gdpr-strict', 'ccpa' => 'ccpa-california', 'popia' => 'popia-southafrica', 'kvkk' => 'turkey-kvkk' );
 
 	/**
 	 * Whether a policy template ships in exactly this language for this law.
@@ -78,12 +78,14 @@ class Policy_Page {
 			if ( 'publish' !== $page['status'] ) {
 				// Parked: the renderer would publish nothing for a visitor anyway
 				// (same gate), so the public banner is not pointed at the draft.
-				// POPIA's gate asks for more than the two-field floor, and naming
-				// only the name and email told an administrator who had saved
-				// them that nothing was left to do.
+				// POPIA's and KVKK's gates ask for more than the two-field floor,
+				// and naming only the name and email told an administrator who
+				// had saved them that nothing was left to do.
 				$warnings[] = 'popia' === $law
 					? __( 'The cookie policy page was saved as a draft because the details POPIA requires are not all set yet: the company name, address and privacy contact email, the Information Officer\'s name and email, and the privacy policy URL. Fill them in on the Cookie Policy page, then publish the page and link it from the Cookie Banner page.', 'faz-cookie-manager' )
-					: __( 'The cookie policy page was saved as a draft because the company name and privacy contact email are not set yet. Fill them in on the Cookie Policy page, then publish the page and link it from the Cookie Banner page.', 'faz-cookie-manager' );
+					: ( 'kvkk' === $law
+						? __( 'The cookie policy page was saved as a draft because the details KVKK requires are not all set yet: the company name, postal address and privacy contact email (Kanun 6698, m.10). Fill them in on the Cookie Policy page, then publish the page and link it from the Cookie Banner page.', 'faz-cookie-manager' )
+						: __( 'The cookie policy page was saved as a draft because the company name and privacy contact email are not set yet. Fill them in on the Cookie Policy page, then publish the page and link it from the Cookie Banner page.', 'faz-cookie-manager' ) );
 			} elseif ( ! self::link_banner( $language, $page['url'] ) ) {
 				$warnings[] = __( 'The cookie policy page was created, but the banner could not be linked to it. Set the privacy link on the Cookie Banner page.', 'faz-cookie-manager' );
 			}

@@ -1343,7 +1343,9 @@
 		BR: ['BR'],
 		AU: ['AU'],
 		JP: ['JP'],
-		CH: ['CH']
+		CH: ['CH'],
+		ZA: ['ZA'],
+		TR: ['TR']
 	};
 
 	function normaliseCountryCodes(input) {

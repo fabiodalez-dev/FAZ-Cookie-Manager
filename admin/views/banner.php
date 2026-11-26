@@ -1361,6 +1361,8 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="AU"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Australia', 'faz-cookie-manager' ); ?></span></label>
 						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="JP"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Japan (APPI)', 'faz-cookie-manager' ); ?></span></label>
 						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="CH"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Switzerland (nFADP)', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="ZA"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'South Africa (POPIA)', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="TR"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Türkiye (KVKK)', 'faz-cookie-manager' ); ?></span></label>
 					</div>
 				</fieldset>
 			</div>

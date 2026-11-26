@@ -10,7 +10,7 @@
 $root          = dirname( __DIR__ );
 $templates     = $root . '/admin/modules/cookie-policy-generator/templates';
 $destination   = $root . '/admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php';
-$jurisdictions = array( 'gdpr-strict', 'ccpa-california', 'lgpd-brazil', 'popia-southafrica' );
+$jurisdictions = array( 'gdpr-strict', 'ccpa-california', 'lgpd-brazil', 'popia-southafrica', 'turkey-kvkk' );
 
 /**
  * Split a policy into its introduction plus H2 sections.

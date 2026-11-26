@@ -34,6 +34,9 @@ $faz_cp_bundled_language_names = array(
 	'pt-BR' => __( 'Portuguese (Brazil)', 'faz-cookie-manager' ),
 	'bg'    => __( 'Bulgarian', 'faz-cookie-manager' ),
 	'cs'    => __( 'Czech', 'faz-cookie-manager' ),
+	'nl'    => __( 'Dutch', 'faz-cookie-manager' ),
+	'hr'    => __( 'Croatian', 'faz-cookie-manager' ),
+	'tr'    => __( 'Turkish', 'faz-cookie-manager' ),
 );
 ?>
 <div id="faz-cookie-policy-app"
@@ -166,9 +169,11 @@ $faz_cp_bundled_language_names = array(
 						<option value="ccpa-california"><?php esc_html_e( 'CCPA / CPRA (California, USA)', 'faz-cookie-manager' ); ?></option>
 						<option value="lgpd-brazil"><?php esc_html_e( 'LGPD (Brazil)', 'faz-cookie-manager' ); ?></option>
 						<option value="popia-southafrica"><?php esc_html_e( 'POPIA (South Africa)', 'faz-cookie-manager' ); ?></option>
+						<option value="turkey-kvkk"><?php esc_html_e( 'KVKK (Türkiye)', 'faz-cookie-manager' ); ?></option>
 					</select>
 					<div class="faz-help"><?php esc_html_e( 'Override per shortcode call with [faz_cookie_policy_complete jurisdiction="..."].', 'faz-cookie-manager' ); ?></div>
 					<p id="cp-ccpa-methods-summary" class="faz-help" hidden><?php esc_html_e( 'For CCPA, review the rights section in Policy text below and configure the request methods your business provides. The default email-only wording does not fit every business.', 'faz-cookie-manager' ); ?></p>
+					<p id="cp-kvkk-summary" class="faz-help" hidden><?php esc_html_e( 'For KVKK (Law 6698, m.10), the aydınlatma must name the data controller, its address and a contact email before any cookie data is processed. Fill in the company name, postal address and privacy contact email above; the policy will not publish until they are set.', 'faz-cookie-manager' ); ?></p>
 				</div>
 			</div>
 		</div>
@@ -232,6 +237,7 @@ $faz_cp_bundled_language_names = array(
 								<option value="ccpa-california"><?php esc_html_e( 'CCPA / CPRA (California, USA)', 'faz-cookie-manager' ); ?></option>
 								<option value="lgpd-brazil"><?php esc_html_e( 'LGPD (Brazil)', 'faz-cookie-manager' ); ?></option>
 								<option value="popia-southafrica"><?php esc_html_e( 'POPIA (South Africa)', 'faz-cookie-manager' ); ?></option>
+								<option value="turkey-kvkk"><?php esc_html_e( 'KVKK (Türkiye)', 'faz-cookie-manager' ); ?></option>
 							</select>
 						</div>
 						<div class="faz-form-group" style="margin:0;">

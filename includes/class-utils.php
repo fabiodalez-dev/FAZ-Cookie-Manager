@@ -2221,6 +2221,7 @@ if ( ! function_exists( 'faz_region_map' ) ) {
 			'jp' => array( 'JP' ),
 			'ch' => array( 'CH' ),
 			'za' => array( 'ZA' ),
+			'tr' => array( 'TR' ),
 		);
 	}
 }
