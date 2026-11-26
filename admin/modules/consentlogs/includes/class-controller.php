@@ -417,12 +417,23 @@ class Controller {
 				if ( $count >= $client_cap ) {
 					break;
 				}
-				$key = substr( sanitize_text_field( (string) $key ), 0, 190 );
+				$key = (string) $key;
+				if ( 0 === strpos( $key, 'ck.' ) ) {
+					// A per-cookie key carries a cookie NAME, and that is whatever
+					// the administrator declared for the service. It is encoded
+					// rather than cleaned or dropped — see the method.
+					$key = $this->encode_cookie_decision_key( $key );
+				} else {
+					$key = substr( sanitize_text_field( $key ), 0, 190 );
+				}
 				// Keys are category slugs, svc.<id>, ck.<cookie name> and meta.*:
 				// printable ASCII. Anything outside it (a quote, a backslash,
 				// non-ASCII that wp_json_encode() turns into six-byte \u escapes)
 				// only lets an anonymous row grow several-fold or break out of
-				// its CSV field, so such a key is dropped.
+				// its CSV field, so such a key is dropped. A ck.* key has just
+				// been encoded into this alphabet and always passes; the slugs
+				// and ids of the other three are sanitize_key()'d where they
+				// are defined, so nothing legitimate is lost by the drop.
 				if ( ! preg_match( '/^[\x21\x23-\x5B\x5D-\x7E]+$/', $key ) ) {
 					continue;
 				}
@@ -1558,6 +1569,56 @@ class Controller {
 		}
 
 		return \FazCookie\Includes\Ab_Test::compute_stats( $rows, $slugs );
+	}
+
+	/**
+	 * Encode a per-cookie decision key (ck.<service>.<cookie name>) for storage.
+	 *
+	 * The browser builds the key with _fazCkKey() in script.js, which escapes
+	 * only `%`, `:` and `,` in the cookie name — the three characters the
+	 * consent cookie's own `key:value,key:value` format reserves. Every other
+	 * character of a name the administrator declared arrives as it is: a
+	 * space, an accented letter, a quote.
+	 *
+	 * Such a key used to be dropped, and a dropped ck.*:no is not a neutral
+	 * loss. The row keeps svc.<id>:yes with nothing overriding it, so the
+	 * record shows more consent than the visitor gave. sanitize_text_field()
+	 * was no better for the keys it let through: it removes percent-encoded
+	 * octets, so the `%3A` the browser wrote for "a:b" was stripped and the
+	 * decision landed on the unrelated cookie "ab".
+	 *
+	 * So the key is percent-encoded here instead: every byte outside the
+	 * stored alphabet becomes %XX (UTF-8 bytes for a non-ASCII name, as
+	 * encodeURIComponent() would write them). `%` itself is left alone, which
+	 * keeps the browser's own escapes intact and makes the result exactly what
+	 * _fazCkKey() would produce if it escaped these bytes too. `<` and `>` are
+	 * encoded as well: the tag stripping this replaces is what kept markup out
+	 * of the column. The output is printable ASCII, at most three bytes per
+	 * input byte and capped like every other key, so the reasons for the drop
+	 * (row growth, a quote or backslash reaching the CSV export) still hold.
+	 *
+	 * It is done on this side on purpose. Escaping more in _fazCkKey() would
+	 * change the key of consent cookies already in visitors' browsers, and
+	 * faz_get_consent_cookie_value() passes the cookie through
+	 * sanitize_text_field(), so new escapes would be stripped before the
+	 * server-side resolver could match them. Encoding the log entry changes
+	 * neither.
+	 *
+	 * @since 1.40.1
+	 * @param string $key Decision key starting with `ck.`.
+	 * @return string Key in printable ASCII, at most 190 bytes.
+	 */
+	private function encode_cookie_decision_key( $key ) {
+		$key = preg_replace_callback(
+			'/[^\x21\x23-\x3B\x3D\x3F-\x5B\x5D-\x7E]+/',
+			static function ( $run ) {
+				return rawurlencode( $run[0] );
+			},
+			(string) $key
+		);
+		$key = substr( (string) $key, 0, 190 );
+		// The cap may fall inside an escape; half of one is not a byte of the name.
+		return (string) preg_replace( '/%[0-9A-Fa-f]?$/', '', $key );
 	}
 
 	/**
