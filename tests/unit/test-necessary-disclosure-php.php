@@ -264,39 +264,43 @@ $en_ck = json_decode( (string) file_get_contents( $contents . 'cookies/en.json' 
 nd_eq( false !== stripos( (string) $en_ck['fazcookie-consent']['description'], 'identifier' ), true, 'cookies/en.json: consent-cookie text names the identifier' );
 
 // Both statements, in every language: "not used for advertising or to track
-// you" and "the consent cookie stores a random identifier". A test cannot read
-// eighteen languages, but it can hold the word each one uses for advertising
-// and for the identifier. A language file added later has to be listed here,
-// which is the point: Turkish was merged with both sentences missing, and the
-// checks above (written against the OLD claim) had nothing to say about it.
-$statement_words = array(
-	'cs'      => array( 'reklam', 'identifikátor' ),
-	'de'      => array( 'Werbung', 'Kennung' ),
-	'default' => array( 'advertising', 'identifier' ),
-	'en'      => array( 'advertising', 'identifier' ),
-	'es'      => array( 'publicitarios', 'identificador' ),
-	'fi'      => array( 'mainont', 'tunniste' ),
-	'fr'      => array( 'publicitaires', 'identifiant' ),
-	'hr'      => array( 'oglašavanj', 'identifikator' ),
-	'hu'      => array( 'hirdetés', 'azonosító' ),
-	'it'      => array( 'pubblicità', 'identificativo' ),
-	'nl'      => array( 'advertenties', 'identificatiecode' ),
-	'pl'      => array( 'reklam', 'identyfikator' ),
-	'pt-br'   => array( 'publicidade', 'identificador' ),
-	'pt'      => array( 'publicidade', 'identificador' ),
-	'ru'      => array( 'реклам', 'идентификатор' ),
-	'sk'      => array( 'reklam', 'identifikátor' ),
-	'tr'      => array( 'reklam', 'onay kimliği' ),
-	'uk'      => array( 'реклам', 'ідентифікатор' ),
+// you" and "the consent cookie stores a random identifier". Each is held here
+// as the whole sentence the language uses, written out by hand and not read
+// from the catalogue. A single word is not the statement: "used for
+// advertising" contains the word, and an identifier that is no longer called
+// random still contains "identifier". A sentence that is reworded has to be
+// reworded here too, by someone who reads what it now says. A language file
+// added later has to be listed here, which is the point: Turkish was merged
+// with both sentences missing, and the checks above (written against the OLD
+// claim) had nothing to say about it.
+$statements = array(
+	'cs'      => array( 'Nepoužívají se k reklamě ani ke sledování napříč jinými weby', 'Cookie souhlasu ukládá náhodný identifikátor' ),
+	'de'      => array( 'Sie werden weder für Werbung noch zur websiteübergreifenden Nachverfolgung verwendet', 'Das Einwilligungs-Cookie speichert eine zufällige Kennung' ),
+	'default' => array( 'They are not used for advertising or to track you across other sites', 'The consent cookie stores a random identifier' ),
+	'en'      => array( 'They are not used for advertising or to track you across other sites', 'The consent cookie stores a random identifier' ),
+	'es'      => array( 'No se utilizan con fines publicitarios ni para rastrearle en otros sitios', 'La cookie de consentimiento almacena un identificador aleatorio' ),
+	'fi'      => array( 'Niitä ei käytetä mainontaan eikä sinun seuraamiseesi muilla sivustoilla', 'Suostumuseväste tallentaa satunnaisen tunnisteen' ),
+	'fr'      => array( "Ils ne sont pas utilisés à des fins publicitaires ni pour vous suivre sur d'autres sites", 'Le cookie de consentement stocke un identifiant aléatoire' ),
+	'hr'      => array( 'Ne koriste se za oglašavanje niti za praćenje na drugim stranicama', 'Kolačić privole pohranjuje nasumični identifikator' ),
+	'hu'      => array( 'Nem használjuk őket hirdetésre, sem arra, hogy más webhelyeken nyomon kövessük Önt', 'A hozzájárulási süti egy véletlenszerű azonosítót tárol' ),
+	'it'      => array( 'Non vengono usati per la pubblicità né per tracciarti su altri siti', 'Il cookie di consenso memorizza un identificativo casuale' ),
+	'nl'      => array( 'Ze worden niet gebruikt voor advertenties of om je over andere sites te volgen', 'De toestemmingscookie slaat een willekeurige identificatiecode op' ),
+	'pl'      => array( 'Nie są wykorzystywane do celów reklamowych ani do śledzenia Cię w innych witrynach', 'Plik cookie zgody przechowuje losowy identyfikator' ),
+	'pt-br'   => array( 'Eles não são usados para publicidade nem para rastrear você em outros sites', 'O cookie de consentimento armazena um identificador aleatório' ),
+	'pt'      => array( 'Não são utilizados para publicidade nem para o seguir noutros sites', 'O cookie de consentimento armazena um identificador aleatório' ),
+	'ru'      => array( 'Они не используются для рекламы или для отслеживания вас на других сайтах', 'Файл cookie согласия хранит случайный идентификатор' ),
+	'sk'      => array( 'Nepoužívajú sa na reklamu ani na sledovanie naprieč inými webovými stránkami', 'Súbor cookie súhlasu ukladá náhodný identifikátor' ),
+	'tr'      => array( 'Bu çerezler reklam amacıyla veya sizi başka sitelerde izlemek için kullanılmaz', 'rastgele bir onay kimliği saklar' ),
+	'uk'      => array( 'Вони не використовуються для реклами чи відстеження вас на інших сайтах', 'Файл cookie згоди зберігає випадковий ідентифікатор' ),
 );
 foreach ( glob( $contents . 'categories/*.json' ) as $file ) {
 	$loc   = basename( $file, '.json' );
 	$data  = json_decode( (string) file_get_contents( $file ), true );
 	$text  = (string) ( $data['necessary']['description'] ?? '' );
-	$words = $statement_words[ $loc ] ?? null;
-	nd_eq( is_array( $words ), true, "categories/{$loc}.json: the language is listed in this test" );
-	nd_eq( is_array( $words ) && nd_contains_ci( $text, $words[0] ), true, "categories/{$loc}.json: Necessary text says the cookies are not used for advertising" );
-	nd_eq( is_array( $words ) && nd_contains_ci( $text, $words[1] ), true, "categories/{$loc}.json: Necessary text says the consent cookie stores an identifier" );
+	$known = $statements[ $loc ] ?? null;
+	nd_eq( is_array( $known ), true, "categories/{$loc}.json: the language is listed in this test" );
+	nd_eq( is_array( $known ) && nd_contains_ci( $text, $known[0] ), true, "categories/{$loc}.json: Necessary text says the cookies are not used for advertising or tracking" );
+	nd_eq( is_array( $known ) && nd_contains_ci( $text, $known[1] ), true, "categories/{$loc}.json: Necessary text says the consent cookie stores a random identifier" );
 }
 
 // The seed source and the catalogue must agree, or a freshly seeded row is

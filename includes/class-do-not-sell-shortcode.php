@@ -454,12 +454,13 @@ class Do_Not_Sell_Shortcode {
 				. $this->plain_form( self::RESCIND_ACTION, __( 'Withdraw opt-out / opt back in', 'faz-cookie-manager' ), $back );
 		}
 
-		// The default handler wraps the whole string in one <p>…</p>. Closing
-		// that paragraph after the message and leaving the last one open
-		// keeps the forms out of it, so the document it prints is valid.
-		$html = esc_html( $message ) . '</p>'
+		// The default handler wraps the string in <div class="wp-die-message">
+		// (a <p> before WordPress 5.2). Every block closes itself, so the
+		// markup does not lean on that wrapper: no stray </p> inside the
+		// <div>, and no form inside a paragraph with either one.
+		$html = '<p>' . esc_html( $message ) . '</p>'
 			. $blocks
-			. '<p><a href="' . esc_url( $back ) . '">' . esc_html__( 'Return to the previous page', 'faz-cookie-manager' ) . '</a>';
+			. '<p><a href="' . esc_url( $back ) . '">' . esc_html__( 'Return to the previous page', 'faz-cookie-manager' ) . '</a></p>';
 
 		// In an AJAX request wp_die() prints its message bare, for a script to
 		// read. This answer is read by a person, so ask for the full page.
