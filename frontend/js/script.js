@@ -6798,8 +6798,9 @@ function _fazDecodeCharRefs(text) {
  * parser may read <style> content as markup: there a sheet is rewritten only
  * when no "<" in its content opens markup, where both readings give the same tokens, and the walk
  * stops at anything else. It also stops at script data that may enter the double-escaped state ("<!--" then "<script") and at
- * anything unterminated. Where it stops, the rest of the string is returned
- * unchanged: an unparked sheet is a missed block, a misread one is live markup.
+ * anything unterminated. Where it stops, no tag of the rest is rewritten (a
+ * misread sheet is live markup) and the rest goes to `tailFn`, which decides
+ * what it becomes; without one it is returned unchanged.
  *
  * `noScripting` is for markup parsed in a document without a window (a
  * DOMParser or createHTMLDocument document, a <template>'s content). The
@@ -6813,10 +6814,11 @@ function _fazDecodeCharRefs(text) {
  * @param {function(string, string, string): string} fn
  * @param {boolean=} uncertain
  * @param {boolean=} noScripting
+ * @param {function(string): string=} tailFn
  * @returns {string}
  */
-function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
-    var s = String(html), n = s.length, out = "", last = 0, i = 0;
+function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting, tailFn) {
+    var s = String(html), n = s.length, out = "", last = 0, i = 0, stop = -1;
     uncertain = !!uncertain;
     var RAW = { style: 1, script: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1, textarea: 1, title: 1 };
 
@@ -6867,7 +6869,7 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
                 if (s.charAt(k + 2) === ">") { cend = k + 3; break; }
                 if (s.charAt(k + 2) === "!" && s.charAt(k + 3) === ">") { cend = k + 4; break; }
             }
-            if (cend === -1) break;
+            if (cend === -1) { stop = lt; break; }
             i = cend; continue;
         }
         if (c === "!") {
@@ -6876,7 +6878,7 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
             // ">" is the one closing "]]>".
             if (uncertain && s.substr(lt, 9) === "<![CDATA[") {
                 var cd = s.indexOf("]]>", lt + 9);
-                if (cd === -1 || s.indexOf(">", lt + 2) !== cd + 2) break;
+                if (cd === -1 || s.indexOf(">", lt + 2) !== cd + 2) { stop = lt; break; }
                 i = cd + 3; continue;
             }
             i = toGt(lt + 2); continue;
@@ -6887,12 +6889,12 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
             if (c2 === ">") { i = lt + 3; continue; }
             if (!isAlpha(c2)) { i = toGt(lt + 2); continue; }
             var etag = scanTag(lt + 2);
-            if (!etag) break;
+            if (!etag) { stop = lt; break; }
             i = etag.end; continue;
         }
         if (!isAlpha(c)) { i = lt + 1; continue; }
         var tag = scanTag(lt + 1);
-        if (!tag) break;
+        if (!tag) { stop = lt; break; }
         // From an <svg>/<math> start tag on, the parser may be in foreign
         // content, where <style> and the RAWTEXT/RCDATA elements parse their
         // content as markup; and where foreign content ends depends on the
@@ -6905,22 +6907,22 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
             if (!tag.selfClosing || tag.name === "select" || tag.name === "frameset") uncertain = true;
             i = tag.end; continue;
         }
-        if (tag.name === "plaintext") break;
-        if (noScripting && tag.name === "noscript") break;
+        if (tag.name === "plaintext") { stop = lt; break; }
+        if (noScripting && tag.name === "noscript") { stop = lt; break; }
         // Own properties only: a "<constructor>" start tag would read a
         // truthy value from Object.prototype and hide a following <style>.
         if (!Object.prototype.hasOwnProperty.call(RAW, tag.name)) { i = tag.end; continue; }
         var re = new RegExp("</" + tag.name + "(?=[\\t\\n\\f\\r />])", "ig");
         re.lastIndex = tag.end;
         var m = re.exec(s);
-        if (!m) break;
+        if (!m) { stop = lt; break; }
         var body = s.slice(tag.end, m.index);
         // "<!--" in script data enters the escaped states. There the first
         // "</script" still ends the script, unless a "<script" start after
         // the "<!--" entered the double-escaped state, where it does not:
         // only then is the real end unknown, and the walk stops.
         var esc = tag.name === "script" ? body.indexOf("<!--") : -1;
-        if (esc !== -1 && /<script[\t\n\f\r \/>]/i.test(body.slice(esc))) break;
+        if (esc !== -1 && /<script[\t\n\f\r \/>]/i.test(body.slice(esc))) { stop = lt; break; }
         // Where the element may be foreign (or an ignored tag), its content is
         // markup. A "<" opens a tag, an end tag, a comment or a bogus comment
         // there only before an ASCII letter, "/", "!" or "?"; any other "<" is
@@ -6928,9 +6930,9 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
         // "<", markup and RAWTEXT/RCDATA give the same text up to the same end
         // tag; with one they may not, and a self-closing start tag ends a
         // foreign element right there.
-        if (uncertain && (tag.selfClosing || /<[A-Za-z!\/?]/.test(body))) break;
+        if (uncertain && (tag.selfClosing || /<[A-Za-z!\/?]/.test(body))) { stop = lt; break; }
         var endTag = scanTag(m.index + 2);
-        if (!endTag) break;
+        if (!endTag) { stop = lt; break; }
         // "&" is literal in RAWTEXT and a character reference in markup, so
         // where the element may be foreign the text parked as its original
         // can differ from the live one by a decoded reference. The structure
@@ -6948,7 +6950,134 @@ function _fazRewriteRealStyleTags(html, fn, uncertain, noScripting) {
         }
         i = endTag.end;
     }
+    // The walk gave up at `stop`, and what follows was not read. It is not
+    // handed on as it is when it may still hold a sheet: `tailFn` decides
+    // what the unread rest becomes (see _fazHoldUnreadStyleTail()).
+    if (stop !== -1 && typeof tailFn === "function") {
+        var tail = s.slice(stop);
+        var kept = tailFn(tail);
+        if (kept !== tail) return out + s.slice(last, stop) + kept;
+    }
     return last === 0 ? s : out + s.slice(last);
+}
+
+// What a URL the markup gate holds in an unread tail starts with. An about:
+// URL is never fetched, and everything after the "#" is its fragment, so the
+// original URL stays in the text, untouched, for the restore pass to give
+// back. Letters, ":", "#" and "-" only: see _fazHoldCssUrlsInPlace().
+var _FAZ_HELD_CSS_URL = "about:invalid#faz-held:";
+
+/**
+ * Whether `text` still names a URL of a blocked provider that the CSS engine
+ * could fetch: the question _fazCssShouldBlock() asks, minus the URLs already
+ * held, and asked a second time on the text with its character references
+ * decoded, because in foreign content the parser decodes them inside a sheet
+ * ("&#47;&#47;tracker" is "//tracker" there).
+ */
+function _fazUnreadTailFetches(text) {
+    function fetches(css) {
+        var urls = _fazCssUrls(css);
+        for (var i = 0; i < urls.length; i++) {
+            var url = _fazCssDecodeEscapes(String(urls[i])).replace(/^\s+/, "").toLowerCase();
+            if (url.indexOf(_FAZ_HELD_CSS_URL) === 0) continue;
+            if (_fazCssUrlShouldBlock(urls[i])) return true;
+        }
+        return false;
+    }
+    if (fetches(text)) return true;
+    if (text.indexOf("&") === -1) return false;
+    // _fazDecodeCharRefs() takes text with no "<" that opens markup.
+    var decoded = _fazDecodeCharRefs(text.replace(/</g, "&lt;"));
+    return decoded !== text && fetches(decoded);
+}
+
+/**
+ * Hold the blocked url() and @import "…" tokens of `text` by writing
+ * _FAZ_HELD_CSS_URL in front of the URL. Nothing is removed and nothing else
+ * is written.
+ *
+ * `text` is markup nobody could tokenize, so a token found here may sit in a
+ * sheet, in an attribute value, in a comment or in a tag. The form
+ * _fazNeutralizeCssUrls() writes (url("data:…") in place of the token) cannot
+ * be used: a quote added, or one removed with the URL it was part of, moves
+ * the place where an attribute value ends, and text a page script had
+ * sanitised becomes an attribute (mutation XSS). An insertion of characters
+ * the HTML tokenizer treats alike in every state it can be in after "(", a
+ * quote or a space does not have that effect, as long as the character that
+ * follows is ordinary too: the tokenizer is in the same state before and
+ * after the inserted run, and reads the rest exactly as it did. Hence the
+ * test on the URL's first character; "=" or a space there (the two that mean
+ * something after a closing attribute quote) is left alone, and so is a URL
+ * that starts with a CSS escape. What is left alone and still fetches is
+ * dealt with by the caller.
+ */
+function _fazHoldCssUrlsInPlace(text) {
+    function hold(url) { return /^[A-Za-z0-9\/.]/.test(url) && _fazCssUrlShouldBlock(url); }
+    var out = text.replace(/(url\(\s*)("[^"]*"|'[^']*'|[^\)\s]+)(?=\s*\))/gi, function (match, open, body) {
+        var q = body.charAt(0);
+        if (q === '"' || q === "'") {
+            var url = body.slice(1, -1);
+            return hold(url) ? open + q + _FAZ_HELD_CSS_URL + url + q : match;
+        }
+        return hold(body) ? open + _FAZ_HELD_CSS_URL + body : match;
+    });
+    return out.replace(/(@import\s*)(["'])([^"']+)\2/gi, function (match, prefix, q, url) {
+        return hold(url) ? prefix + q + _FAZ_HELD_CSS_URL + url + q : match;
+    });
+}
+
+/**
+ * What becomes of the rest of a markup string once _fazRewriteRealStyleTags()
+ * has stopped reading it.
+ *
+ * It used to be handed to the parser as it was: "an unparked sheet is a
+ * missed block, a misread one is live markup". The first half of that is a
+ * tracker loading before consent — `<svg><style><![CDATA[…]]></style></svg>`
+ * followed by `<style>@import url(tracker)</style>` in one innerHTML, or just
+ * a <style> with no end tag, which the parser closes at the end of the
+ * string. Parking those sheets the usual way (data-faz-css on the tag) would
+ * mean rewriting markup that was not read, which is the second half.
+ *
+ * So, from the first "<style" of the rest on, and only when a blocked URL can
+ * be read out of it:
+ *   1. the URLs are held in place (_fazHoldCssUrlsInPlace()), which keeps the
+ *      page content around the sheet and cannot change what the parser builds;
+ *   2. if something still fetches after that — a spelling the in-place pass
+ *      does not reach (an escape, a comment inside the token, image-set(), a
+ *      character reference, a url( left open) — the string is cut short at a
+ *      "<style": the latest one that leaves nothing fetchable in what is
+ *      kept, so the page loses as little as it can. Cutting a string short
+ *      cannot make any of it live, and no sheet of the part that is dropped
+ *      reaches the engine.
+ * A rest with no "<style" in it, or with no blocked URL, is returned as it
+ * was. A held sheet is given back by _fazUnblockServerSide() on consent.
+ *
+ * @param {string} tail
+ * @returns {string}
+ */
+function _fazHoldUnreadStyleTail(tail) {
+    if (!_fazStore._block || typeof tail !== "string") return tail;
+    var at = tail.search(/<style(?=[\t\n\f\r \/>])/i);
+    if (at === -1) return tail;
+    var region = tail.slice(at);
+    try {
+        if (!_fazUnreadTailFetches(region)) return tail;
+        var held = _fazHoldCssUrlsInPlace(region);
+        if (!_fazUnreadTailFetches(held)) return tail.slice(0, at) + held;
+        // Every "<style" is a place to cut; the first one is `at` itself,
+        // which keeps nothing of the region and always answers. Only the
+        // last few are tried: each try reads the text again.
+        var cuts = [], re = /<style(?=[\t\n\f\r \/>])/gi, m;
+        while ((m = re.exec(held))) cuts.push(m.index);
+        for (var k = cuts.length - 1; k > 0 && k >= cuts.length - 8; k--) {
+            var keep = held.slice(0, cuts[k]);
+            if (!_fazUnreadTailFetches(keep)) return tail.slice(0, at) + keep;
+        }
+        return tail.slice(0, at);
+    } catch (e) {
+        // A judgement that could not be made is a refusal.
+        return tail.slice(0, at);
+    }
 }
 
 /**
@@ -6988,7 +7117,7 @@ function _fazPrepareStyleHtmlString(html, context) {
     if (mode === "text") return html;
     return _fazRewriteRealStyleTags(html, function (full, attrs, css, live) {
         try { return _fazPrepareStyleTagHtml(full, attrs || "", css || "", live); } catch (e) { return full; }
-    }, mode !== "html", _fazScriptingDisabledFor(context));
+    }, mode !== "html", _fazScriptingDisabledFor(context), _fazHoldUnreadStyleTail);
 }
 
 function _fazGateHtmlStyleStringSetter(proto, prop) {
@@ -8207,6 +8336,21 @@ function _fazUnblockServerSide() {
             el.removeAttribute("data-faz-category");
             el.textContent = css;
         });
+
+    // 4b-bis. Sheets the markup gate could not read and held in place
+    // (_fazHoldUnreadStyleTail): no marker on the element, the original URL
+    // still in the text behind _FAZ_HELD_CSS_URL. Same rule as 4b, and the
+    // text goes back through the gated setter, which decides again.
+    if (_fazAggressiveCssUrlBlockingEnabled()) {
+        document.querySelectorAll('style')
+            .forEach(function (el) {
+                var live = el.textContent || "";
+                if (live.indexOf(_FAZ_HELD_CSS_URL) === -1) return;
+                var css = live.split(_FAZ_HELD_CSS_URL).join("");
+                if (_fazCssShouldBlock(css)) return;
+                el.textContent = css;
+            });
+    }
 
     // 4c. Inline `style` ATTRIBUTES the server neutralised (process_style_attr_tag
     // in class-frontend.php): the original declarations live in data-faz-style
