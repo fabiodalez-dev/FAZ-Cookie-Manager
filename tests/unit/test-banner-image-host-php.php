@@ -56,16 +56,30 @@ namespace {
 		}
 		return 0;
 	}
+	// Like WP_Query for what the lookup asks: ordering by ID, then the page
+	// (`offset`, or `paged` with `posts_per_page`), then the limit. A mock
+	// that returned every match hid a lookup that read the first page only.
 	function get_posts( $args ) {
 		$GLOBALS['faz_test_get_posts'][] = $args;
 		$needle = isset( $args['meta_query'][0]['value'] ) ? (string) $args['meta_query'][0]['value'] : '';
 		$ids    = array();
 		foreach ( $GLOBALS['faz_test_attachments'] as $id => $a ) {
 			if ( '' !== $needle && false !== strpos( $a['file'], $needle ) ) {
-				$ids[] = $id;
+				$ids[] = (int) $id;
 			}
 		}
-		return $ids;
+		if ( isset( $args['orderby'] ) && 'ID' === $args['orderby'] ) {
+			sort( $ids );
+			if ( ! isset( $args['order'] ) || 'ASC' !== strtoupper( (string) $args['order'] ) ) {
+				$ids = array_reverse( $ids );
+			}
+		}
+		$limit = isset( $args['posts_per_page'] ) ? (int) $args['posts_per_page'] : ( isset( $args['numberposts'] ) ? (int) $args['numberposts'] : 5 );
+		if ( $limit < 0 ) {
+			return $ids;
+		}
+		$offset = isset( $args['offset'] ) ? max( 0, (int) $args['offset'] ) : ( max( 1, isset( $args['paged'] ) ? (int) $args['paged'] : 1 ) - 1 ) * $limit;
+		return array_slice( $ids, $offset, $limit );
 	}
 	function wp_get_attachment_url( $id ) {
 		$a = isset( $GLOBALS['faz_test_attachments'][ $id ] ) ? $GLOBALS['faz_test_attachments'][ $id ] : null;
@@ -282,6 +296,28 @@ namespace {
 		$html = $template->render( $url, $url );
 		t( false === strpos( $html, 'data-faz-tag="brand-logo"' ) && false === strpos( revisit_image( $html ), 'faz-revisit-custom-image' ), "$what: neither image is rendered" );
 	}
+	// A library that reuses a file name: the offloaded logo is older than
+	// more attachments of that name than one page of the lookup holds.
+	$kept = $GLOBALS['faz_test_attachments'];
+	for ( $i = 0; $i < 60; $i++ ) {
+		$GLOBALS['faz_test_attachments'][ 100 + $i ] = array( 'file' => '2027/' . sprintf( '%02d', $i ) . '/logo.png', 'base' => 'https://shop.example/wp-content/uploads', 'sizes' => array() );
+	}
+	t( true === Template::is_first_party_image_url( $offloaded_logo ), 'an offloaded logo older than 60 attachments of the same file name is still accepted' );
+	t( 41 === Template::brand_logo_attachment_id( $offloaded_logo ), 'and its attachment is found behind them' );
+	t( in_array( $offloaded_logo, image_sources( $template->render( '#', $offloaded_logo ) ), true ), 'so the logo is shown' );
+	// The walk ends: a name nothing serves from that URL stops at the cap.
+	for ( $i = 0; $i < 700; $i++ ) {
+		$GLOBALS['faz_test_attachments'][ 1000 + $i ] = array( 'file' => '2028/' . $i . '/pixel.png', 'base' => 'https://shop.example/wp-content/uploads', 'sizes' => array() );
+	}
+	$GLOBALS['faz_test_get_posts'] = array();
+	t( false === Template::is_first_party_image_url( 'https://images.thirdparty.example/pixel.png' ), 'a file name shared by 700 attachments, none served from that URL, is refused' );
+	$queries = count( $GLOBALS['faz_test_get_posts'] );
+	$largest = 0;
+	foreach ( $GLOBALS['faz_test_get_posts'] as $query ) {
+		$largest = max( $largest, isset( $query['posts_per_page'] ) ? (int) $query['posts_per_page'] : PHP_INT_MAX );
+	}
+	t( $queries > 1 && $queries <= 10 && $largest > 0 && $largest <= 50, "and the lookup stops at its cap ($queries queries of at most $largest)" );
+	$GLOBALS['faz_test_attachments'] = $kept;
 	// An image on the site itself never needs the lookup.
 	$GLOBALS['faz_test_get_posts'] = array();
 	Template::is_first_party_image_url( 'https://shop.example/wp-content/uploads/2026/11/logo.png' );

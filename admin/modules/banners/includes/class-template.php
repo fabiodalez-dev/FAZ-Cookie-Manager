@@ -1171,30 +1171,45 @@ class Template {
 		if ( is_string( $original ) && '' !== $original && $original !== $name ) {
 			$names[] = $original;
 		}
+		// The match is decided by attachment_serves_url(), not by the query, so
+		// the right attachment can sit behind any number of newer ones that
+		// share the file name (`logo.png` uploaded every year). Stopping at
+		// the first page dropped a valid logo on such a library. The walk is
+		// bounded: pages of 50, at most 10 pages (500 candidates) per name.
+		$per_page  = 50;
+		$max_pages = 10;
 		foreach ( $names as $file ) {
-			$ids = get_posts(
-				array(
-					'post_type'      => 'attachment',
-					'post_status'    => 'any',
-					'fields'         => 'ids',
-					'posts_per_page' => 20,
-					'no_found_rows'  => true,
-					'orderby'        => 'ID',
-					'order'          => 'DESC',
-					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- runs only for a banner image on a host that is not the site's, when the template is built or the banner is opened in the editor; the result is then verified against wp_get_attachment_url().
-					'meta_query'     => array(
-						array(
-							'key'     => '_wp_attached_file',
-							'value'   => $file,
-							'compare' => 'LIKE',
+			for ( $page = 1; $page <= $max_pages; $page++ ) {
+				$ids = get_posts(
+					array(
+						'post_type'      => 'attachment',
+						'post_status'    => 'any',
+						'fields'         => 'ids',
+						'posts_per_page' => $per_page,
+						'paged'          => $page,
+						'no_found_rows'  => true,
+						'orderby'        => 'ID',
+						'order'          => 'DESC',
+						// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- runs only for a banner image on a host that is not the site's, when the template is built or the banner is opened in the editor; the result is then verified against wp_get_attachment_url().
+						'meta_query'     => array(
+							array(
+								'key'     => '_wp_attached_file',
+								'value'   => $file,
+								'compare' => 'LIKE',
+							),
 						),
-					),
-				)
-			);
-			foreach ( is_array( $ids ) ? $ids : array() as $candidate ) {
-				$candidate = (int) $candidate;
-				if ( $candidate > 0 && self::attachment_serves_url( $candidate, $url ) ) {
-					return $candidate;
+					)
+				);
+				$ids = is_array( $ids ) ? $ids : array();
+				foreach ( $ids as $candidate ) {
+					$candidate = (int) $candidate;
+					if ( $candidate > 0 && self::attachment_serves_url( $candidate, $url ) ) {
+						return $candidate;
+					}
+				}
+				// A short page is the last one.
+				if ( count( $ids ) < $per_page ) {
+					break;
 				}
 			}
 		}
