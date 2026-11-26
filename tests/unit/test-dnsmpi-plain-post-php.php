@@ -98,8 +98,11 @@ namespace {
 	function wp_send_json_error( $data = null ) {
 		throw new \FazCookie\Tests\Unit\Response( 'json', false, $data );
 	}
-	// wp_die() as the default (HTML page) handler leaves it: the message
-	// wrapped in one paragraph.
+	// wp_die() as the default (HTML page) handler leaves it: a string message
+	// wrapped in <div class="wp-die-message">, as _default_wp_die_handler()
+	// has done since WordPress 5.2. Older versions used a <p>, and a stub
+	// that copied them passed a page whose paragraphs only balanced inside
+	// that <p>.
 	function wp_die( $message = '', $title = '', $args = array() ) {
 		$handler = isset( $GLOBALS['faz_test_filters']['wp_die_ajax_handler'] )
 			? call_user_func( $GLOBALS['faz_test_filters']['wp_die_ajax_handler'], '_ajax_wp_die_handler' )
@@ -107,7 +110,7 @@ namespace {
 		// The AJAX handler prints the bare message; only the default one
 		// prints a page. A response that forgot to ask for the page fails.
 		$kind = '_default_wp_die_handler' === $handler ? 'page' : 'bare';
-		throw new \FazCookie\Tests\Unit\Response( $kind, null, $title, '<p>' . $message . '</p>', isset( $args['response'] ) ? (int) $args['response'] : 500 );
+		throw new \FazCookie\Tests\Unit\Response( $kind, null, $title, '<div class="wp-die-message">' . $message . '</div>', isset( $args['response'] ) ? (int) $args['response'] : 500 );
 	}
 	function add_filter( $hook, $cb, $prio = 10, $args = 1 ) {
 		$GLOBALS['faz_test_filters'][ $hook ] = $cb;
@@ -218,6 +221,29 @@ namespace {
 		}
 	}
 
+	// Every </p> closes a <p> that is open, none is opened inside another,
+	// none is left open, and no form sits in one. Counting the two tags is
+	// not enough: a stray </p> and an unclosed <p> cancel out.
+	function paragraphs_are_well_formed( $html ) {
+		$open = 0;
+		if ( ! preg_match_all( '#<(/?)(p|form)\b[^>]*>#i', (string) $html, $tags, PREG_SET_ORDER ) ) {
+			return false;
+		}
+		foreach ( $tags as $tag ) {
+			if ( 'form' === strtolower( $tag[2] ) ) {
+				if ( $open > 0 ) {
+					return false;
+				}
+				continue;
+			}
+			$open += '/' === $tag[1] ? -1 : 1;
+			if ( $open < 0 || $open > 1 ) {
+				return false;
+			}
+		}
+		return 0 === $open;
+	}
+
 	$handler = ( new ReflectionClass( Do_Not_Sell_Shortcode::class ) )->newInstanceWithoutConstructor();
 
 	/**
@@ -268,7 +294,9 @@ namespace {
 	check( false !== strpos( $html, '<a href="https://example.test/do-not-sell/">' ), 'and links back to the page the form was on' );
 	check( false !== strpos( $html, 'name="action" value="faz_dnsmpi_rescind"' ) && false !== strpos( $html, 'name="nonce" value="nonce-faz_dnsmpi_rescind"' ), 'and offers the withdrawal, which the shortcode keeps in a template only a script can reach' );
 	check( false !== strpos( $html, '<form method="post" action="' . htmlspecialchars( $url, ENT_QUOTES ) . '">' ), 'through a form that posts to the same plain-form URL' );
-	check( substr_count( $html, '<p>' ) === substr_count( $html, '</p>' ) && false === strpos( $html, '<p><form' ) && ! preg_match( '#<p>(?:(?!</p>).)*<form#s', $html ), 'no form ends up inside a paragraph' );
+	check( paragraphs_are_well_formed( $html ), 'every paragraph is closed where it was opened, and no form ends up inside one' );
+	check( false !== strpos( $html, '<div class="wp-die-message"><p>Your opt-out request has been received. We will not sell or share your personal information.</p>' ), 'the message is a paragraph of its own' );
+	check( (bool) preg_match( '#<p><a href="https://example\.test/do-not-sell/">[^<]+</a></p></div>$#', $html ), 'and so is the link back' );
 
 	echo "\n== Submitted again by a browser that already opted out ==\n";
 	$rows = count( Controller::$rows );
@@ -291,6 +319,7 @@ namespace {
 	$r                            = faz_post( $handler, 'handle_optout', array( 'action' => 'faz_dnsmpi_optout', 'nonce' => 'expired' ), true );
 	$GLOBALS['faz_test_nonce_ok'] = true;
 	check( 0 === faz_cookie_writes( '1' ) && $rows === count( Controller::$rows ), 'nothing is changed on an expired nonce' );
+	check( $r && paragraphs_are_well_formed( $r->html ), 'the retry page keeps its paragraphs well formed too' );
 	$html = $r ? $r->html : '';
 	check( $r && 'page' === $r->kind && false !== strpos( $html, 'nothing has been changed yet' ), 'the page says nothing was changed' );
 	check( false !== strpos( $html, 'name="action" value="faz_dnsmpi_optout"' ) && false !== strpos( $html, 'name="nonce" value="nonce-faz_dnsmpi_optout"' ), 'and carries the same request again with a fresh nonce' );
