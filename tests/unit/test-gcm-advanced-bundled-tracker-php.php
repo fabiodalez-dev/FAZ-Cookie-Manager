@@ -278,6 +278,7 @@ namespace {
 		'gtag'                                     => true,
 		"gtag('config'"                            => true,
 		'window.gtag('                             => true,
+		'function gtag'                            => true,
 		'dataLayer'                                => true,
 		'window.dataLayer'                         => true,
 		'dataLayer.push({'                         => true,

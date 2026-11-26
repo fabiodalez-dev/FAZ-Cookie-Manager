@@ -6350,7 +6350,8 @@ class Frontend {
 		// Code vocabulary. Anchored, and closed by what can follow the name in
 		// a call or an assignment, so neither `gtagtracker(` nor a host such
 		// as `datalayer.tracker.example` gets through.
-		if ( preg_match( '/^(?:window\s*\.\s*)?gtag\s*(?:\(|$)/', $pattern )
+		// `function gtag` is the declaration every bootstrap opens with.
+		if ( preg_match( '/^(?:function\s+|window\s*\.\s*)?gtag\s*(?:\(|$)/', $pattern )
 			|| preg_match( '/^(?:window\s*\.\s*)?datalayer\s*(?:$|[=\[|]|\.\s*push(?![a-z0-9_$]))/', $pattern )
 			|| preg_match( '/^["\']?gtm\.(?:start|js)["\']?$/', $pattern )
 			|| preg_match( '#^/?(?:gtm\.js|gtag/js)(?:\?[^/]*)?$#', $pattern ) ) {
