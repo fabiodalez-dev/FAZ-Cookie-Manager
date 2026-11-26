@@ -1462,7 +1462,16 @@ class Controller {
 					continue;
 				}
 				foreach ( $cats as $cat => $value ) {
-					$cat = sanitize_text_field( $cat );
+					// The key is counted as stored. log_consent() validated it
+					// against the stored alphabet before writing it, and a
+					// per-cookie key keeps its percent-escapes on purpose (see
+					// encode_cookie_decision_key()). sanitize_text_field() here
+					// removed those octets, so the refusal of "a b" (a%20b) was
+					// added to the unrelated cookie "ab". The only consumers are
+					// the REST response (JSON) and the dashboard, which prints
+					// the key with textContent. The cast is for an all-digit
+					// key, which json_decode() hands back as an integer.
+					$cat = (string) $cat;
 					// Skip reserved audit-only keys (e.g. meta.age_affirmed): they
 					// ride the categories JSON for accountability but are NOT
 					// consent categories, so counting them would draw a phantom

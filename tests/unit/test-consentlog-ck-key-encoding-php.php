@@ -189,6 +189,17 @@ namespace {
 					return $out;
 				}
 			}
+			// Used by get_consent_stats(): the per-category pass reads the raw
+			// JSON column of every row.
+			if ( false !== strpos( $q, 'SELECT categories FROM' ) ) {
+				$out = array();
+				foreach ( $this->rows as $row ) {
+					if ( isset( $row['categories'] ) && '' !== $row['categories'] ) {
+						$out[] = array( 'categories' => $row['categories'] );
+					}
+				}
+				return $out;
+			}
 			// Used by export_csv(): emulate descending keyset pagination.
 			if ( false !== strpos( $q, 'SELECT *' ) && false !== strpos( $q, 'ORDER BY log_id DESC' ) ) {
 				$cursor = null;
@@ -370,6 +381,22 @@ namespace {
 	}
 	ok( 2 === count( $m ) && $all, 'whatever bytes arrive, a stored key is printable ASCII without space, quote, backslash or angle brackets' );
 	ok( false !== json_encode( $m ), 'and the map still encodes as JSON' );
+
+	// The dashboard aggregate reads the stored keys back. It used to pass each
+	// one through sanitize_text_field(), which removes percent-encoded octets:
+	// the refusal of "a b" (stored as a%20b) was counted on the cookie "ab".
+	echo "\n-- the statistics keep encoded keys apart --\n";
+	$GLOBALS['wpdb']->rows = array();
+	$ctrl->log_consent( array( 'consent_id' => 'cid-stat-1', 'status' => 'partial', 'categories' => array( 'svc.acme' => 'yes', 'ck.acme.a b' => 'no' ) ) );
+	$ctrl->log_consent( array( 'consent_id' => 'cid-stat-2', 'status' => 'partial', 'categories' => array( 'svc.acme' => 'yes', 'ck.acme.ab' => 'yes' ) ) );
+	$ctrl->log_consent( array( 'consent_id' => 'cid-stat-3', 'status' => 'partial', 'categories' => array( 'ck.acme.a%3Ab' => 'no', 'meta.age_affirmed' => 'yes' ) ) );
+	$stats = $ctrl->get_consent_stats( 30 );
+	$cats  = $stats['categories'];
+	eq( $cats['ck.acme.a%20b'] ?? null, array( 'yes' => 0, 'no' => 1 ), 'the refusal of "a b" is counted under its own encoded key' );
+	eq( $cats['ck.acme.ab'] ?? null, array( 'yes' => 1, 'no' => 0 ), 'and does not add a refusal to the cookie "ab"' );
+	eq( $cats['ck.acme.a%3Ab'] ?? null, array( 'yes' => 0, 'no' => 1 ), 'a key the browser escaped is counted as stored' );
+	eq( $cats['svc.acme'] ?? null, array( 'yes' => 2, 'no' => 0 ), 'ordinary keys are counted as before' );
+	ok( ! isset( $cats['meta.age_affirmed'] ), 'audit-only meta.* keys are still left out of the aggregate' );
 
 	echo "\n";
 	echo "consent-log ck key encoding: {$pass} passed, {$fail} failed (of {$run})\n";
