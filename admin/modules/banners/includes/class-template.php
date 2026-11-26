@@ -890,6 +890,7 @@ class Template {
 			// there. The margin reset has to beat the box rules that push the
 			// first button down, and compact resets the margin to 0 as well.
 			. $c . ':where(.faz-box-pushdown) .faz-notice-btn-wrapper .faz-btn{flex:1 1 auto;}'
+			. self::box_pushdown_pair_rules()
 			. $c . '.faz-box-pushdown .faz-consent-bar .faz-notice-group .faz-notice-btn-wrapper .faz-btn{margin:0;}'
 			// The classic right-to-left rule indents the row by 15px for the
 			// inline categories beside it, which the box does not have.
@@ -907,6 +908,44 @@ class Template {
 			. $c . '.faz-box-bottom-left,' . $c . '.faz-box-top-left{left:0;}' . $c . '.faz-box-bottom-right,' . $c . '.faz-box-top-right{right:0;}'
 			. $open . ' .faz-preference-center{max-height:100vh;}}'
 			. '@media (max-width:440px){' . $box . '{width:100%;max-width:100%;}}';
+	}
+
+	/**
+	 * Rules that keep Accept and Reject the same width in a Box + Pushdown
+	 * above the phone layouts.
+	 *
+	 * The row wraps and `flex:1 1 auto` sizes each button from its label, so
+	 * three labels that do not fit the 390px the box leaves them broke the row
+	 * wherever the text happened to end. With the default order and the Italian
+	 * or German labels, or the English ones with the logo beside, Accept landed
+	 * alone on a second row at full width, twice as wide as Reject: the unequal
+	 * weight EDPB Guidelines 03/2022 rule out, decided by the translation.
+	 *
+	 * Here the layout is fixed instead of left to the labels. Customise, which
+	 * is not one of the compared choices, takes a row of its own, above or below
+	 * the pair as the chosen button order places it in the markup: every order
+	 * in Banner::BUTTON_ORDERS keeps Accept and Reject adjacent, so they always
+	 * share the other row. `flex:1 1 0` with `min-width:0` gives the two the
+	 * same width from one layout pass, whatever the labels are; a label too long
+	 * for half the row wraps instead of widening its button, and the stretched
+	 * row keeps both buttons the height of the taller one. The Do Not Sell
+	 * control, when a banner has it, would otherwise be let onto the pair's row
+	 * by their zero basis and squeeze them, so it takes a full row as well.
+	 *
+	 * From 577px up only: below that markup_order_mobile_css() gives every
+	 * button a full row and the compact layout sizes the row itself, and both
+	 * are left as they are. `:where()` keeps the specificity of the rule these
+	 * follow.
+	 *
+	 * @return string
+	 */
+	private static function box_pushdown_pair_rules() {
+		$row = '.faz-consent-container:where(.faz-box-pushdown) .faz-notice-btn-wrapper';
+		return '@media (min-width:577px){'
+			. $row . '{align-items:stretch;}'
+			. $row . ' .faz-btn-accept,' . $row . ' .faz-btn-reject{flex:1 1 0;min-width:0;display:inline-flex;align-items:center;justify-content:center;white-space:normal;overflow-wrap:break-word;}'
+			. $row . ' .faz-btn-customize,' . $row . ' [data-faz-tag=donotsell-button]{flex:1 1 100%;}'
+			. '}';
 	}
 
 	/**
