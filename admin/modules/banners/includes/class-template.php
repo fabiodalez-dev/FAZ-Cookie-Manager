@@ -1171,7 +1171,48 @@ class Template {
 		if ( is_string( $original ) && '' !== $original && $original !== $name ) {
 			$names[] = $original;
 		}
-		// The match is decided by attachment_serves_url(), not by the query, so
+		// First the stored path itself. WordPress keeps file names unique within
+		// an uploads folder (wp_unique_filename()), so `_wp_attached_file`
+		// equal to `2026/11/logo.png` names one attachment however many
+		// `logo.png` the library holds. The path is not known from the URL
+		// alone (an offload host may add its own prefix), so each of the last
+		// one to three segments is tried: `logo.png` for a library without
+		// month folders, `2026/11/logo.png` for one with them.
+		$segments = array_values( array_filter( explode( '/', (string) $path ), 'strlen' ) );
+		$dir      = array_slice( $segments, 0, -1 );
+		foreach ( $names as $file ) {
+			for ( $depth = min( 2, count( $dir ) ); $depth >= 0; $depth-- ) {
+				$stored = implode( '/', array_merge( array_slice( $dir, count( $dir ) - $depth ), array( $file ) ) );
+				$ids    = get_posts(
+					array(
+						'post_type'      => 'attachment',
+						'post_status'    => 'any',
+						'fields'         => 'ids',
+						'posts_per_page' => 20,
+						'no_found_rows'  => true,
+						'orderby'        => 'ID',
+						'order'          => 'DESC',
+						// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- same narrow trigger as the walk below; an exact value, verified against wp_get_attachment_url().
+						'meta_query'     => array(
+							array(
+								'key'     => '_wp_attached_file',
+								'value'   => $stored,
+								'compare' => '=',
+							),
+						),
+					)
+				);
+				foreach ( is_array( $ids ) ? $ids : array() as $candidate ) {
+					$candidate = (int) $candidate;
+					if ( $candidate > 0 && self::attachment_serves_url( $candidate, $url ) ) {
+						return $candidate;
+					}
+				}
+			}
+		}
+		// Then the file name anywhere in the stored path, for a layout the
+		// segments above do not reproduce. The match is decided by
+		// attachment_serves_url(), not by the query, so
 		// the right attachment can sit behind any number of newer ones that
 		// share the file name (`logo.png` uploaded every year). Stopping at
 		// the first page dropped a valid logo on such a library. The walk is

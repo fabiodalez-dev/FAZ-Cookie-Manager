@@ -63,8 +63,11 @@ namespace {
 		$GLOBALS['faz_test_get_posts'][] = $args;
 		$needle = isset( $args['meta_query'][0]['value'] ) ? (string) $args['meta_query'][0]['value'] : '';
 		$ids    = array();
+		// LIKE is a substring test (WordPress wraps the value in %); '=' is
+		// the whole stored path.
+		$exact = isset( $args['meta_query'][0]['compare'] ) && '=' === $args['meta_query'][0]['compare'];
 		foreach ( $GLOBALS['faz_test_attachments'] as $id => $a ) {
-			if ( '' !== $needle && false !== strpos( $a['file'], $needle ) ) {
+			if ( '' !== $needle && ( $exact ? $a['file'] === $needle : false !== strpos( $a['file'], $needle ) ) ) {
 				$ids[] = (int) $id;
 			}
 		}
@@ -305,15 +308,31 @@ namespace {
 	t( true === Template::is_first_party_image_url( $offloaded_logo ), 'an offloaded logo older than 60 attachments of the same file name is still accepted' );
 	t( 41 === Template::brand_logo_attachment_id( $offloaded_logo ), 'and its attachment is found behind them' );
 	t( in_array( $offloaded_logo, image_sources( $template->render( '#', $offloaded_logo ) ), true ), 'so the logo is shown' );
+	// Past the walk's cap the stored path still finds it: WordPress keeps file
+	// names unique within an uploads folder, so `2026/11/logo.png` names one
+	// attachment however many `logo.png` the library holds.
+	for ( $i = 0; $i < 600; $i++ ) {
+		$GLOBALS['faz_test_attachments'][ 3000 + $i ] = array( 'file' => '2029/' . $i . '/logo.png', 'base' => 'https://shop.example/wp-content/uploads', 'sizes' => array() );
+	}
+	t( 41 === Template::brand_logo_attachment_id( $offloaded_logo ), 'an offloaded logo behind 600 newer attachments of the same file name is found by its stored path' );
+	t( in_array( $cdn . '/wp-content/uploads/2026/11/logo-300x100.png', image_sources( $template->render( '#', $cdn . '/wp-content/uploads/2026/11/logo-300x100.png' ) ), true ), 'and so is one of its generated sizes' );
+	foreach ( array_keys( $GLOBALS['faz_test_attachments'] ) as $id ) {
+		if ( $id >= 3000 ) {
+			unset( $GLOBALS['faz_test_attachments'][ $id ] );
+		}
+	}
 	// The walk ends: a name nothing serves from that URL stops at the cap.
 	for ( $i = 0; $i < 700; $i++ ) {
 		$GLOBALS['faz_test_attachments'][ 1000 + $i ] = array( 'file' => '2028/' . $i . '/pixel.png', 'base' => 'https://shop.example/wp-content/uploads', 'sizes' => array() );
 	}
 	$GLOBALS['faz_test_get_posts'] = array();
 	t( false === Template::is_first_party_image_url( 'https://images.thirdparty.example/pixel.png' ), 'a file name shared by 700 attachments, none served from that URL, is refused' );
-	$queries = count( $GLOBALS['faz_test_get_posts'] );
+	// Only the substring walk is capped by pages; the exact stored-path
+	// lookups before it are one query each.
+	$walk    = array_filter( $GLOBALS['faz_test_get_posts'], function ( $query ) { return ! isset( $query['meta_query'][0]['compare'] ) || '=' !== $query['meta_query'][0]['compare']; } );
+	$queries = count( $walk );
 	$largest = 0;
-	foreach ( $GLOBALS['faz_test_get_posts'] as $query ) {
+	foreach ( $walk as $query ) {
 		$largest = max( $largest, isset( $query['posts_per_page'] ) ? (int) $query['posts_per_page'] : PHP_INT_MAX );
 	}
 	t( $queries > 1 && $queries <= 10 && $largest > 0 && $largest <= 50, "and the lookup stops at its cap ($queries queries of at most $largest)" );
