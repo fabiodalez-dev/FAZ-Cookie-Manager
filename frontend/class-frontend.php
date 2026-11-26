@@ -825,7 +825,7 @@ class Frontend {
 			 */
 			$in_footer = (bool) apply_filters( 'faz_main_script_in_footer', false );
 			if ( $in_footer && ! $alt_asset ) {
-				$gcm_active = is_object( $this->gcm_settings ) && true === $this->gcm_settings->is_gcm_enabled();
+				$gcm_active = is_object( $this->gcm_settings ) && true === $this->gcm_settings->sends_consent_signals();
 				$tcf_active = (bool) $this->settings->get( 'iab', 'enabled' )
 					&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2;
 				if ( $gcm_active || $tcf_active ) {
@@ -1019,8 +1019,12 @@ class Frontend {
 			// wp_localize_script for _fazStyles removed: CSS is now injected via
 			// wp_add_inline_style above; the JS variable was no longer consumed.
 
-			// GCM (Google Consent Mode) in local mode.
-			if ( true === $this->gcm_settings->is_gcm_enabled() ) {
+			// GCM (Google Consent Mode) in local mode. Also loaded with GCM off
+			// when the plugin prints a Google tag of its own (#366): that tag
+			// must never run without a consent default and the update that
+			// follows the visitor's choice, see
+			// Gcm_Settings::sends_consent_signals().
+			if ( true === $this->gcm_settings->sends_consent_signals() ) {
 				$gcm = $this->get_gcm_data();
 				// Advanced Consent Mode (#165): tell gcm.js to skip its own
 				// `consent default` emission — print_gcm_default_inline() has
@@ -3607,7 +3611,10 @@ class Frontend {
 	 *
 	 * Printed only where the consent banner runs, so the visitor can always
 	 * release it: with the banner off there is no way to consent and nothing
-	 * is loaded. The gtag.js groups go out live only while the Advanced-mode
+	 * is loaded. Configured IDs also make enqueue_scripts() load gcm.js with
+	 * Google Consent Mode switched off (Gcm_Settings::sends_consent_signals()),
+	 * so a tag released here always finds a consent default and gets the
+	 * update for the visitor's choice. The gtag.js groups go out live only while the Advanced-mode
 	 * gtag exemption is active (the denied default is already in front of
 	 * them in this response), and then still pass through the output buffer
 	 * like any pasted tag, so an explicit per-service rejection keeps them

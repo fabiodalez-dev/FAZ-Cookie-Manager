@@ -300,6 +300,25 @@ class Gcm_Settings extends Store {
 	}
 
 	/**
+	 * Whether the frontend must emit Consent Mode signals (gcm.js: the denied
+	 * `consent default` and the `consent update` on the visitor's choice).
+	 *
+	 * True with GCM on, and also with GCM off as soon as the plugin loads a
+	 * Google tag of its own (#366). Google treats a tag that runs without a
+	 * consent default as fully granted, so a visitor who accepted Analytics
+	 * alone would have every ad signal read as granted by the GT-/G- tag the
+	 * plugin itself printed (Ads destinations linked to it, Google Signals).
+	 * A tag the plugin loads therefore always comes with the signals; the GCM
+	 * switch keeps deciding everything else, Advanced mode included, so with
+	 * GCM off the built-in tags still wait for consent.
+	 *
+	 * @return boolean
+	 */
+	public function sends_consent_signals() {
+		return (bool) $this->get( 'status' ) || ! empty( $this->get_google_tag_ids() );
+	}
+
+	/**
 	 * The built-in Google tag IDs (#366), validated.
 	 *
 	 * @return string[]
