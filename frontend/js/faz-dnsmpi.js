@@ -163,9 +163,10 @@
 		// Per-form sentinel guards against double-fire: if the script is
 		// enqueued twice (e.g. an AJAX-loaded widget brings a second copy of
 		// the asset) the document-level submit listener also fires twice for
-		// the same submit, and the second fetch() trips the per-IP add_option
-		// lock — the user sees "Too many requests" after having successfully
-		// opted out on the first request. Mirrors faz-dsar.js:_fazDsarAttached.
+		// the same submit. The server honours both requests (an opt-out is
+		// never refused for throttling) but the second one only bumps the
+		// "without a log row" counter, so it is a wasted round trip and an
+		// inflated count. Mirrors faz-dsar.js:_fazDsarAttached.
 		if (form._fazDnsmpiAttached) {
 			e.preventDefault();
 			return;
