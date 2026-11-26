@@ -118,6 +118,19 @@ namespace {
 	sig_ok( true === sig_signals( sig_settings( array( 'status' => false, 'google_tag_ids' => 'GTM-ABC123' ) ) ), 'GCM off + a container: signals (the Google tags inside it read them)' );
 	sig_ok( false === sig_signals( sig_settings( array( 'status' => false, 'google_tag_ids' => 'UA-12345-1, nonsense' ) ) ), 'GCM off + only invalid IDs (nothing is printed): no signals' );
 
+	// The mode gcm.js is told about: signals sent for the built-in tag alone.
+	// There the Consent Mode state follows the banner's pre-consent state
+	// (tests/unit/js/gcm-signals-only-preconsent.test.mjs).
+	echo "\nGcm_Settings::sends_signals_only()\n";
+	$only = function ( array $option ) {
+		$settings = sig_settings( $option );
+		return method_exists( $settings, 'sends_signals_only' ) ? $settings->sends_signals_only() : 'missing method';
+	};
+	sig_ok( true === $only( array( 'status' => false, 'google_tag_ids' => 'GT-ABCD1234' ) ), 'GCM off + a built-in tag: signals-only' );
+	sig_ok( false === $only( array( 'status' => true, 'google_tag_ids' => 'GT-ABCD1234' ) ), 'GCM on + a built-in tag: the configured Consent Mode decides' );
+	sig_ok( false === $only( array( 'status' => true ) ), 'GCM on: not signals-only' );
+	sig_ok( false === $only( array( 'status' => false ) ), 'GCM off, no tag: nothing is sent at all' );
+
 	echo "\nconfigured IDs never switch Advanced mode on\n";
 	$off = sig_settings( array( 'status' => false, 'advanced_mode' => true, 'advanced_mode_gtm' => true, 'google_tag_ids' => 'GT-ABCD1234, GTM-ABC123' ) );
 	sig_ok( false === $off->is_advanced_mode(), 'GCM off: Advanced mode stays off whatever the stored flag says' );

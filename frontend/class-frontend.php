@@ -1031,6 +1031,13 @@ class Frontend {
 				// already set the denied baseline synchronously in <head> — and
 				// keep only the `consent update` wiring.
 				$gcm['advanced_mode'] = $this->gcm_settings->is_advanced_mode();
+				// GCM switched off, gcm.js loaded only for the built-in Google
+				// tag: there are no admin-chosen Consent Mode defaults to
+				// honour, so gcm.js follows the banner's own pre-consent state.
+				// Without it an opt-out (CCPA) banner released the tag for a
+				// visitor who never touched the notice while the denied default
+				// stayed in force for the whole visit.
+				$gcm['signals_only'] = $this->gcm_settings->sends_signals_only();
 				// Single source of truth for the dataLayer array name so gcm.js
 				// and print_gcm_default_inline() push to the same array (#165 F4).
 				$gcm['data_layer_name'] = $this->gcm_datalayer_name();

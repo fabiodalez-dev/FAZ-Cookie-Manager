@@ -508,10 +508,66 @@ document.addEventListener("fazcookie_consent_ready", function (event) {
     }
 });
 
+// Signals-only mode: Google Consent Mode is switched OFF and this bundle is
+// loaded only because the plugin prints a Google tag of its own, which must
+// never run without consent signals (Gcm_Settings::sends_consent_signals()).
+// There is no admin-configured Consent Mode behaviour to honour in that mode,
+// so the state has to say what the banner itself decided for this visitor.
+//
+// The cookie cannot tell: before the visitor acts the runtime keeps the state
+// in memory only (no identifier before an action, ePrivacy Art. 5(3)). Under
+// an opt-out banner (CCPA) that in-memory state is "yes" for every category
+// not opted out of, and the runtime releases the parked tag on it — while the
+// denied default above stayed in force, so a visitor who never touched the
+// notice had GA4/Ads denied for the whole visit. The runtime announces that
+// state with action 'init' (accepted/rejected slugs); it is mapped through
+// buildConsentState() exactly like a stored record, so a category opted out
+// of (pre-ticked box, runtime geo ruleset) keeps ad_storage, ad_user_data and
+// ad_personalization denied. Under an opt-in banner everything non-necessary
+// is in `rejected` and the update repeats the denial.
+//
+// A readable cookie always wins and is handled by the callers: GPC, a Do Not
+// Sell request and every banner action write one before they fire the event.
+// With GCM switched on this never runs — the region defaults are the admin's
+// decision and a first visit must not overwrite them.
+var lastPreConsentJson = "";
+function applyPreConsentState(detail) {
+    if (!data.signals_only) return false;
+    detail = plain(detail);
+    if (!detail || detail.action !== "init") return false;
+    var accepted = Array.isArray(detail.accepted) ? detail.accepted : [];
+    var rejected = Array.isArray(detail.rejected) ? detail.rejected : [];
+    var state = {};
+    var i;
+    for (i = 0; i < accepted.length; i++) {
+        if (typeof accepted[i] === "string") state[accepted[i]] = "granted";
+    }
+    // Rejected last: a slug listed in both is denied.
+    for (i = 0; i < rejected.length; i++) {
+        if (typeof rejected[i] === "string") state[rejected[i]] = "denied";
+    }
+    // Same alias parseConsentCookie() applies to a stored record.
+    if (!state.marketing && state.advertisement) state.marketing = state.advertisement;
+    // The runtime announces 'init' again when it rebuilds the banner; the same
+    // state is not pushed twice.
+    var json = JSON.stringify(state);
+    if (json === lastPreConsentJson && !restoredFromCookie) return true;
+    lastPreConsentJson = json;
+    restoredFromCookie = false;
+    updateConsentState(buildConsentState(state));
+    if (data.gacm_enabled && data.gacm_provider_ids) {
+        setAdditionalConsent(state);
+    }
+    return true;
+}
+
 // Re-apply on consent changes (banner interaction).
-document.addEventListener("fazcookie_consent_update", function () {
+document.addEventListener("fazcookie_consent_update", function (event) {
     var updated = parseConsentCookie();
     if (!updated) {
+        // Signals-only mode, first visit: follow the banner's pre-consent
+        // state (see applyPreConsentState()).
+        if (applyPreConsentState(event && event.detail)) return;
         // parseConsentCookie() returns null when there is no cookie, or when it
         // is stale (revision bump), out of scope or malformed.
         //
@@ -566,6 +622,13 @@ function setAdditionalConsent(consentObj) {
 // Apply GACM on page load if enabled.
 if (data.gacm_enabled && data.gacm_provider_ids) {
     setAdditionalConsent(initialCookieObj);
+}
+
+// Signals-only mode, loaded AFTER the runtime started (a page optimiser moved
+// or delayed this bundle): the 'init' event is gone, but the runtime records
+// the state it announced in window._fazConsentReady for exactly this case.
+if (!initialCookieObj) {
+    applyPreConsentState(window._fazConsentReady);
 }
 
 })();

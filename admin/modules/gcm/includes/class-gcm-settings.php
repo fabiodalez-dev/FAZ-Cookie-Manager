@@ -319,6 +319,22 @@ class Gcm_Settings extends Store {
 	}
 
 	/**
+	 * Whether the signals are sent for the built-in Google tag alone, with
+	 * Google Consent Mode itself switched off.
+	 *
+	 * In that mode there are no admin-chosen Consent Mode defaults to honour,
+	 * so gcm.js makes the state follow the banner's own pre-consent state.
+	 * The denied default alone left an opt-out (CCPA) visitor who never
+	 * touched the notice denied for the whole visit, while the banner had
+	 * released the tag for them.
+	 *
+	 * @return boolean
+	 */
+	public function sends_signals_only() {
+		return ! (bool) $this->get( 'status' ) && $this->sends_consent_signals();
+	}
+
+	/**
 	 * The built-in Google tag IDs (#366), validated.
 	 *
 	 * @return string[]
