@@ -108,8 +108,10 @@ class Cookie_Controller extends Base_Controller {
 	 */
 	public function forget_declared_service_map() {
 		$this->declared_service_map = null;
+		delete_transient( 'faz_declared_services_v3' );
+		// Earlier shapes (v2 had no script patterns); a leftover would only
+		// expire, never be read.
 		delete_transient( 'faz_declared_services_v2' );
-		// The pre-review shape; a leftover would only expire, never be read.
 		delete_transient( 'faz_declared_services_v1' );
 	}
 
@@ -130,6 +132,13 @@ class Cookie_Controller extends Base_Controller {
 	 * toggle), and its key is not taken by a row in another category. Rows
 	 * sharing a key in the same category fold into one service.
 	 *
+	 * Each service also carries `patterns`: the url_pattern of its rows, the
+	 * same string the category blocker already keys on. Without it a visitor
+	 * who kept the category and switched this one cookie off still got the
+	 * script that sets it — the toggle deleted the cookie and nothing else.
+	 * With it the output buffer and the client blocker hold that script on a
+	 * per-service "no", exactly as they do for a catalogue provider.
+	 *
 	 * Pure function of the inventory and the category slugs, never of the
 	 * visitor, so it is safe under Cache Compatibility Mode. One pass over the
 	 * cookies and a plain id→slug query for the categories: no Category_Controller
@@ -141,7 +150,9 @@ class Cookie_Controller extends Base_Controller {
 		if ( null !== $this->declared_service_map ) {
 			return $this->declared_service_map;
 		}
-		$cached = get_transient( 'faz_declared_services_v2' );
+		// v3: services gained `patterns`. A v2 map cached before the upgrade
+		// would answer without them for up to an hour, so it is not read.
+		$cached = get_transient( 'faz_declared_services_v3' );
 		if ( is_array( $cached ) && isset( $cached['services'], $cached['by_cookie'] ) ) {
 			$this->declared_service_map = $cached;
 			return $cached;
@@ -173,6 +184,9 @@ class Cookie_Controller extends Base_Controller {
 				continue;
 			}
 			$clean_name = sanitize_text_field( $name );
+			// Same normalisation as Frontend::prepare_frontend_cookies(), so the
+			// string here is the very key the category map blocks under.
+			$pattern = sanitize_text_field( (string) $cookie->get_url_pattern() );
 			if ( isset( $services[ $service_id ] ) ) {
 				if ( $services[ $service_id ]['category'] !== $cat_slug ) {
 					// A clash survives only on rows that have not been saved since it
@@ -186,12 +200,16 @@ class Cookie_Controller extends Base_Controller {
 				if ( ! in_array( $clean_name, $services[ $service_id ]['cookies'], true ) ) {
 					$services[ $service_id ]['cookies'][] = $clean_name;
 				}
+				if ( '' !== $pattern && ! in_array( $pattern, $services[ $service_id ]['patterns'], true ) ) {
+					$services[ $service_id ]['patterns'][] = $pattern;
+				}
 			} else {
 				$services[ $service_id ] = array(
 					'id'       => $service_id,
 					'label'    => $clean_name,
 					'category' => $cat_slug,
 					'cookies'  => array( $clean_name ),
+					'patterns' => '' !== $pattern ? array( $pattern ) : array(),
 				);
 			}
 			$by_cookie[ (int) $cookie->get_id() ] = $service_id;
@@ -201,7 +219,7 @@ class Cookie_Controller extends Base_Controller {
 			'services'  => $services,
 			'by_cookie' => $by_cookie,
 		);
-		set_transient( 'faz_declared_services_v2', $this->declared_service_map, HOUR_IN_SECONDS );
+		set_transient( 'faz_declared_services_v3', $this->declared_service_map, HOUR_IN_SECONDS );
 		return $this->declared_service_map;
 	}
 

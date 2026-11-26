@@ -197,6 +197,7 @@ class CLI {
 			if ( \class_exists( '\\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Cookie_Controller' ) ) {
 				\FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::get_instance()->forget_declared_service_map();
 			} else {
+				\delete_transient( 'faz_declared_services_v3' );
 				\delete_transient( 'faz_declared_services_v2' );
 				\delete_transient( 'faz_declared_services_v1' );
 			}

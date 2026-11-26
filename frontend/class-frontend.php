@@ -3981,8 +3981,10 @@ class Frontend {
 		}
 		// Admin-declared cookies as services (#360): keeps their svc.<id> token
 		// alive in get_service_consent() and lets the shredder honour a per-
-		// service denial by name. Their pattern list is empty, so the output
-		// buffer never blocks a script on their account.
+		// service denial by name. A row that names the script setting its cookie
+		// (url_pattern) brings that pattern along, so get_pattern_service_map()
+		// and the client's _providersToBlock hold the script on a per-service
+		// "no" as well; a row without one is enforced by name only.
 		$known_ids = array_flip( array_column( $services, 'id' ) );
 		foreach ( $this->get_declared_cookie_services( $valid_categories ) as $declared ) {
 			if ( isset( $known_ids[ $declared['id'] ] ) ) {
@@ -4012,8 +4014,16 @@ class Frontend {
 	 * operator who declared a booking widget's cookie could not ask the runtime
 	 * whether that specific widget was accepted. Each such row becomes a
 	 * synthetic service keyed by Cookie::get_service_id(), carrying the cookie
-	 * name for the shredder and NO URL patterns, so the output buffer keeps
-	 * judging scripts by category exactly as before.
+	 * name for the shredder and the row's url_pattern as its script pattern.
+	 *
+	 * The pattern is what makes the toggle a refusal the plugin honours: the
+	 * category map already blocks that script while the category is denied
+	 * (get_provider_category_map(), source 1), so a visitor who keeps the
+	 * category and switches this cookie off must get the same block. Shipped
+	 * without patterns, as it first was, the "no" deleted the cookie and left
+	 * the script that sets it running. A row with no url_pattern names no
+	 * script — the plugin blocks none for it at category level either — and is
+	 * enforced by name (shredder) and through its own opt-in script.
 	 *
 	 * Which rows qualify, and under which key, is decided once in
 	 * Cookie_Controller::get_declared_service_map() — pure function of the
@@ -4054,7 +4064,9 @@ class Frontend {
 				'id'          => $service['id'],
 				'label'       => $service['label'],
 				'category'    => $service['category'],
-				'patterns'    => array(),
+				'patterns'    => isset( $service['patterns'] ) && is_array( $service['patterns'] )
+					? array_values( array_filter( array_map( 'sanitize_text_field', $service['patterns'] ) ) )
+					: array(),
 				'cookies'     => $service['cookies'],
 				'third_party' => false,
 				'declared'    => true,
@@ -16088,11 +16100,49 @@ class Frontend {
 	 * disabled or excluded on this page, script blocking excluded on this page,
 	 * AMP, a feed) — nothing parks the map, and WP Maps' own answer stands.
 	 *
+	 * It stands in Leaflet mode as well. WP Maps' gate sits in front of both of
+	 * its engines, and "handled" is true only of the Google one: see
+	 * wpgmp_draws_google_maps().
+	 *
 	 * @param bool $accepted WP Maps' answer so far.
 	 * @return bool
 	 */
 	public function wpgmp_consent_handled_by_faz( $accepted ) {
-		return $this->page_content_is_gated() ? true : (bool) $accepted;
+		return ( $this->page_content_is_gated() && $this->wpgmp_draws_google_maps() ) ? true : (bool) $accepted;
+	}
+
+	/**
+	 * Whether WP Maps draws Google maps on this request — the only maps
+	 * process_wpgmp_map_widgets() holds.
+	 *
+	 * WP Maps 5 has two engines behind one site-wide setting
+	 * (wpgmp_settings[wpgmp_map_source]), and its "Cookies Acceptance" gate
+	 * returns before it chooses between them, so the gate holds back Leaflet
+	 * maps too. In Leaflet mode the script under the `wpgmp-google-api` handle
+	 * is a local loader this plugin has no reason to park, and the tiles come
+	 * from whichever host the site picked (OpenFreeMap by default; Carto,
+	 * Stadia, Esri, Mapbox…), most of them outside the provider catalogue.
+	 * Answering "handled" there switched off the one thing holding those maps:
+	 * every tile request left before consent. So the answer is given only for
+	 * the engine whose API is parked.
+	 *
+	 * Mirrors WPGMP_Helper::wpgmp_get_map_provider() (5.0.4), including the
+	 * request override it honours, and like it treats a missing setting as
+	 * Google — before the setting existed every map was a Google map.
+	 *
+	 * @return bool
+	 */
+	private function wpgmp_draws_google_maps() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- read-only comparison of a value WP Maps itself reads to pick its engine; nothing is stored or acted on.
+		$requested = isset( $_POST['wpgmp_map_source'] ) && is_string( $_POST['wpgmp_map_source'] ) ? sanitize_key( wp_unslash( $_POST['wpgmp_map_source'] ) ) : '';
+		if ( 'openstreet' === $requested ) {
+			return false;
+		}
+		if ( 'google' === $requested ) {
+			return true;
+		}
+		$settings = maybe_unserialize( get_option( 'wpgmp_settings' ) );
+		return ! ( is_array( $settings ) && isset( $settings['wpgmp_map_source'] ) && 'google' !== $settings['wpgmp_map_source'] );
 	}
 
 	/**
