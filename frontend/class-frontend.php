@@ -6213,7 +6213,10 @@ class Frontend {
 	 * A pattern of that second kind counts as Google's own only when it names
 	 * the Google tag itself (is_consent_mode_google_pattern()), so an admin
 	 * `gtag(` or tag-ID rule, which matches every bootstrap by definition,
-	 * does not cancel the exemption it has never cancelled.
+	 * does not cancel the exemption it has never cancelled. The same goes for
+	 * a pattern the per-service map attributes only to declared cookie rows
+	 * (#360): a row whose script pattern is `googletagmanager.com` describes
+	 * the Google tag, unless the visitor switched that row's service off.
 	 *
 	 * @param string $content Inline script body.
 	 * @return bool
@@ -6228,7 +6231,15 @@ class Frontend {
 		$service_map = $this->get_pattern_service_map();
 		foreach ( $service_map as $pattern => $service_ids ) {
 			$pattern = (string) $pattern;
-			if ( '' === $pattern || ! array_diff( (array) $service_ids, $allowed ) ) {
+			$foreign = array_diff( (array) $service_ids, $allowed );
+			if ( '' === $pattern || ! $foreign ) {
+				continue;
+			}
+			// A declared cookie row (#360) puts its url_pattern in this map
+			// under its own service id. When that pattern names the Google
+			// tag itself, the row describes the tag this exemption is about,
+			// not a second tracker sharing its <script>.
+			if ( $this->is_consent_mode_google_pattern( $pattern ) && $this->are_unrefused_declared_services( $foreign ) ) {
 				continue;
 			}
 			if ( $this->inline_body_matches_pattern( $content, $lower, $pattern ) ) {
@@ -6252,6 +6263,41 @@ class Frontend {
 	}
 
 	/**
+	 * Whether every one of these service ids is an administrator-declared
+	 * cookie service (#360) the visitor has not switched off.
+	 *
+	 * The refusal half is what keeps the carve-out above honest. A URL
+	 * pattern is matched against a tag's URL only, so
+	 * check_per_service_blocking() does not see a declared `googletagmanager.com`
+	 * row in an inline loader that merely builds that URL: the caller's
+	 * "explicit denial wins" test passes, and the exemption would then run the
+	 * script of a service the visitor refused. With the refusal read here the
+	 * pattern is tested against the body like any other tracker's and the
+	 * script stays parked.
+	 *
+	 * @param string[] $service_ids Owners of one pattern, Google's own removed.
+	 * @return bool
+	 */
+	private function are_unrefused_declared_services( $service_ids ) {
+		$declared = array();
+		foreach ( $this->get_enforceable_services() as $service ) {
+			if ( ! empty( $service['declared'] ) ) {
+				$declared[ $service['id'] ] = true;
+			}
+		}
+		$consent = $this->get_service_consent();
+		foreach ( (array) $service_ids as $service_id ) {
+			if ( ! isset( $declared[ $service_id ] ) ) {
+				return false;
+			}
+			if ( isset( $consent[ $service_id ] ) && 'no' === $consent[ $service_id ] ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
 	 * One blocking pattern against an inline body, URL fragments with the
 	 * boundary rule and code fragments as signatures.
 	 *
@@ -6270,10 +6316,10 @@ class Frontend {
 	 * Whether a blocking pattern names the Google tag stack Advanced Consent
 	 * Mode exempts, rather than some other tracker.
 	 *
-	 * Used only for patterns the per-service map does not attribute (cookie
-	 * database, custom rules, developer filter). Answering yes means "a body
-	 * matching this is still only Google", so nothing here is a loose
-	 * substring: `gtag`
+	 * Used for patterns the per-service map does not attribute (cookie
+	 * database, custom rules, developer filter) and for those it attributes
+	 * only to declared cookie rows. Answering yes means "a body matching this
+	 * is still only Google", so nothing here is a loose substring: `gtag`
 	 * inside `gtagTracker(`, or a Google domain inside
 	 * `googletagmanager.com.evil.example`, named a different tracker and let
 	 * it run on the bootstrap's exemption.
