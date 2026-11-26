@@ -6241,7 +6241,7 @@ class Frontend {
 				continue;
 			}
 			$pattern = (string) $pattern;
-			if ( '' === $pattern || self::is_consent_mode_google_pattern( $pattern ) ) {
+			if ( '' === $pattern || $this->is_consent_mode_google_pattern( $pattern ) ) {
 				continue;
 			}
 			if ( $this->inline_body_matches_pattern( $content, $lower, $pattern ) ) {
@@ -6267,37 +6267,71 @@ class Frontend {
 	}
 
 	/**
-	 * Whether a blocking pattern with no service id names the Google tag stack
-	 * Advanced Consent Mode exempts, rather than some other tracker.
+	 * Whether a blocking pattern names the Google tag stack Advanced Consent
+	 * Mode exempts, rather than some other tracker.
 	 *
 	 * Used only for patterns the per-service map does not attribute (cookie
-	 * database, custom rules, developer filter). The hosts are the ones
-	 * is_gcm_managed_script() and is_gtm_container_script() accept, plus the
-	 * analytics collection host; the code fragments are the gtag / dataLayer /
-	 * container vocabulary; the last test is a tag or container ID. Anything
-	 * else is another tracker, and a body naming it waits for consent.
+	 * database, custom rules, developer filter). Answering yes means "a body
+	 * matching this is still only Google", so nothing here is a loose
+	 * substring: `gtag`
+	 * inside `gtagTracker(`, or a Google domain inside
+	 * `googletagmanager.com.evil.example`, named a different tracker and let
+	 * it run on the bootstrap's exemption.
+	 *
+	 *  - A tag or container ID, as the whole pattern.
+	 *  - The gtag / dataLayer / container vocabulary, as the token the pattern
+	 *    starts with: `gtag(`, `gtag('config'`, `window.dataLayer`,
+	 *    `dataLayer.push({`, `gtm.start`.
+	 *  - The two loader files without a host, `gtm.js` and `gtag/js`.
+	 *  - Otherwise the pattern must be a URL fragment whose HOST is one of the
+	 *    domains is_gcm_managed_script() and is_gtm_container_script() accept,
+	 *    or the analytics collection host, or a subdomain of one. A server-side
+	 *    container on another domain (`sgtm.tracker.example/gtm.js`) is not.
+	 *
+	 * Anything else is another tracker, and a body naming it waits for consent.
 	 *
 	 * @param string $pattern Blocking pattern.
 	 * @return bool
 	 */
-	private static function is_consent_mode_google_pattern( $pattern ) {
+	private function is_consent_mode_google_pattern( $pattern ) {
 		$pattern = strtolower( trim( (string) $pattern ) );
+		if ( '' === $pattern ) {
+			return false;
+		}
+		if ( preg_match( '/^(?:g|gt|aw|dc|gtm)-[a-z0-9]{4,20}$/', $pattern ) ) {
+			return true;
+		}
+		// Code vocabulary. Anchored, and closed by what can follow the name in
+		// a call or an assignment, so neither `gtagtracker(` nor a host such
+		// as `datalayer.tracker.example` gets through.
+		if ( preg_match( '/^(?:window\s*\.\s*)?gtag\s*(?:\(|$)/', $pattern )
+			|| preg_match( '/^(?:window\s*\.\s*)?datalayer\s*(?:$|[=\[|]|\.\s*push(?![a-z0-9_$]))/', $pattern )
+			|| preg_match( '/^["\']?gtm\.(?:start|js)["\']?$/', $pattern )
+			|| preg_match( '#^/?(?:gtm\.js|gtag/js)(?:\?[^/]*)?$#', $pattern ) ) {
+			return true;
+		}
+		if ( ! self::is_url_fragment_pattern( $pattern ) ) {
+			return false;
+		}
+		// The host is what the pattern starts with, once a scheme, a
+		// protocol-relative `//` and the leading dot of a cookie domain are
+		// gone. A Google name further along (a path, a query value, a label
+		// of someone else's domain) is not the host.
+		$faz_host = (string) preg_replace( '#^(?:[a-z][a-z0-9+.-]*:)?//#', '', $pattern );
+		$faz_host = ltrim( $faz_host, '.' );
+		$faz_host = (string) preg_replace( '~[/?#:].*$~s', '', $faz_host );
 		foreach ( array(
 			'googletagmanager.com',
 			'google-analytics.com',
 			'googleadservices.com',
 			'googlesyndication.com',
 			'doubleclick.net',
-			'gtag',
-			'datalayer',
-			'gtm.start',
-			'gtm.js',
-		) as $faz_needle ) {
-			if ( false !== strpos( $pattern, $faz_needle ) ) {
+		) as $faz_domain ) {
+			if ( $this->host_is_or_subdomain_of( $faz_host, $faz_domain ) ) {
 				return true;
 			}
 		}
-		return 1 === preg_match( '/^(?:g|gt|aw|dc|gtm)-[a-z0-9]{4,20}$/', $pattern );
+		return false;
 	}
 
 	/**

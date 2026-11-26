@@ -24,7 +24,10 @@
  *   4. a gtag.js loaded by src is judged by its URL, not by a body it never
  *      runs;
  *   5. both layers agree: the output buffer and the inline-script filter;
- *   6. the Tag Manager container (#385) gets the same, wider test.
+ *   6. the Tag Manager container (#385) gets the same, wider test;
+ *   7. "names the Google tag" is a delimited test, not a substring one: a
+ *      custom `gtagTracker(` rule, a server-side container on another domain
+ *      and a look-alike host are other trackers.
  *
  * Run: php tests/unit/test-gcm-advanced-bundled-tracker-php.php
  *  or: bash scripts/run-unit-tests.sh
@@ -193,6 +196,14 @@ namespace {
 			'provider_match_meta_cache' => null,
 			'service_match_meta_cache'  => null,
 		);
+		// Per-case additions: extra rules, declared rows, a stored svc.* choice.
+		$over = isset( $GLOBALS['b_over'] ) ? $GLOBALS['b_over'] : array();
+		foreach ( array( 'provider_map_cache', 'pattern_service_cache', 'service_consent_cache' ) as $prop ) {
+			if ( isset( $over[ $prop ] ) ) {
+				$set[ $prop ] = array_merge( $set[ $prop ], $over[ $prop ] );
+			}
+		}
+		$set['enforceable_cache'] = isset( $over['enforceable_cache'] ) ? $over['enforceable_cache'] : array();
 		foreach ( $set as $prop => $value ) {
 			$p = $rc->getProperty( $prop );
 			$p->setAccessible( true );
@@ -257,6 +268,69 @@ namespace {
 	b_ok( ! b_buffer_live( '<script>' . $gtm_body . "fbq('init','1');</script>", true ), 'container + catalogue tracker waits (as before)' );
 	b_ok( ! b_buffer_live( '<script>' . $gtm_body . 'acmeTrack("pageview");</script>', true ), 'container + a tracker known only from a custom rule waits' );
 	b_ok( ! b_buffer_live( '<script>' . $gtm_body . '_paq.push(["trackPageView"]);</script>', true ), 'container + a tracker known only from the filter waits' );
+
+	echo "\n`names the Google tag` is a delimited test\n";
+	$google_patterns = array(
+		'gtag('                                    => true,
+		'gtag'                                     => true,
+		"gtag('config'"                            => true,
+		'window.gtag('                             => true,
+		'dataLayer'                                => true,
+		'window.dataLayer'                         => true,
+		'dataLayer.push({'                         => true,
+		'dataLayer.push('                          => true,
+		'gtm.start'                                => true,
+		'gtm.js'                                   => true,
+		'gtag/js'                                  => true,
+		'G-TEST1234'                               => true,
+		'GTM-ABC123'                               => true,
+		'AW-123456789'                             => true,
+		'googletagmanager.com'                     => true,
+		'googletagmanager.com/gtm.js'              => true,
+		'https://www.googletagmanager.com/gtag/js' => true,
+		'//www.google-analytics.com/analytics.js'  => true,
+		'.doubleclick.net'                         => true,
+		'stats.g.doubleclick.net'                  => true,
+		'gtagTracker('                             => false,
+		'mygtag('                                  => false,
+		'gtag_report('                             => false,
+		'dataLayerX.push('                         => false,
+		'datalayer.tracker.example'                => false,
+		'gtag.tracker.example/t.js'                => false,
+		'sgtm.tracker.example/gtm.js'              => false,
+		'sgtm.tracker.example/gtag/js'             => false,
+		'googletagmanager.com.evil.example'        => false,
+		'notgoogletagmanager.com'                  => false,
+		'notdoubleclick.net/x.js'                  => false,
+		'tracker.example/p?u=googletagmanager.com' => false,
+		'tracker.example/doubleclick.net/x.js'     => false,
+		'acmeTrack('                               => false,
+	);
+	foreach ( $google_patterns as $pattern => $expected ) {
+		b_ok( $expected === b_call( b_frontend(), 'is_consent_mode_google_pattern', $pattern ), '`' . $pattern . '` ' . ( $expected ? 'names the Google tag' : 'is another tracker' ) );
+	}
+	$GLOBALS['b_over'] = array(
+		'provider_map_cache' => array(
+			'gtagTracker('                      => 'marketing',
+			'sgtm.tracker.example/gtm.js'       => 'marketing',
+			'googletagmanager.com.evil.example' => 'marketing',
+		),
+	);
+	b_ok( b_buffer_live( '<script>' . $gtag . '</script>' ), 'with those three rules in place the bootstrap on its own still runs' );
+	b_ok( b_filter_live( $gtag ), 'inline-script filter: and so it does there' );
+	$lookalikes = array(
+		'a custom `gtagTracker(` rule'                 => "gtagTracker('pageview');",
+		'a server-side container on another domain'    => 'var s=document.createElement("script");s.src="https://sgtm.tracker.example/gtm.js?id=X";document.head.appendChild(s);',
+		'a host that only starts with a Google domain' => 'new Image().src="https://googletagmanager.com.evil.example/p.gif";',
+	);
+	foreach ( $lookalikes as $what => $other ) {
+		b_ok( ! b_buffer_live( '<script>' . $gtag . $other . '</script>' ), 'output buffer: bootstrap + ' . $what . ' waits' );
+		b_ok( ! b_filter_live( $gtag . $other ), 'inline-script filter: bootstrap + ' . $what . ' waits' );
+	}
+	b_ok( ! b_buffer_live( "<script>gtag('config','G-TEST1234');gtagTracker('pageview');</script>" ), 'the reported body, gtag config + gtagTracker, waits' );
+	b_ok( ! b_buffer_live( '<script>' . $gtm_body . "gtagTracker('pageview');</script>", true ), 'container + `gtagTracker(` waits' );
+
+	$GLOBALS['b_over'] = array();
 
 	echo "\nadmin help\n";
 	$view = (string) file_get_contents( $root . '/admin/views/gcm.php' );
