@@ -25,6 +25,11 @@
  *   6. A late-loaded gcm.js reads the state the runtime already announced
  *      (window._fazConsentReady).
  *   7. The frontend tells gcm.js which mode it is in.
+ *   8. A withdrawal after 'init' that leaves no readable cookie (the browser
+ *      refused the write, or dropped it for its size) denies the withdrawn
+ *      signals in the same page view, and they stay denied: a later 'init' or
+ *      a later event without a cookie grants nothing back. Such an event never
+ *      grants anything on its own.
  *
  * Run: node tests/unit/js/gcm-signals-only-preconsent.test.mjs
  */
@@ -53,7 +58,7 @@ function eq(label, actual, expected) {
 
 const ALL = ['necessary', 'functional', 'analytics', 'performance', 'marketing'];
 
-function run({ signalsOnly = true, cookie = '', detail = null, readyBeforeLoad = null, events = ['update'] } = {}) {
+function run({ signalsOnly = true, cookie = '', detail = null, readyBeforeLoad = null, events = ['update'], steps = [] } = {}) {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { runScripts: 'outside-only', url: 'http://localhost/' });
   const { window } = dom;
   if (cookie) window.document.cookie = `fazcookie-consent=${encodeURIComponent(cookie)}`;
@@ -79,6 +84,11 @@ function run({ signalsOnly = true, cookie = '', detail = null, readyBeforeLoad =
     for (const name of events) {
       window.document.dispatchEvent(new window.CustomEvent(`fazcookie_consent_${name}`, { detail }));
     }
+  }
+  // A sequence of live events, each optionally preceded by a cookie write.
+  for (const step of steps) {
+    if (step.cookie) window.document.cookie = `fazcookie-consent=${encodeURIComponent(step.cookie)}`;
+    window.document.dispatchEvent(new window.CustomEvent(`fazcookie_consent_${step.event || 'update'}`, { detail: step.detail }));
   }
   const calls = window.dataLayer.map((a) => Array.prototype.slice.call(a));
   const updates = calls.filter((c) => c[0] === 'consent' && c[1] === 'update').map((c) => c[2]);
@@ -150,7 +160,81 @@ console.log('gcm.js: signals-only mode follows the banner pre-consent state');
   eq('late load: a restore without a readable cookie grants nothing', stored.updates.length, 0);
 }
 
-// 8. The frontend tells gcm.js it is in signals-only mode.
+// 8. A withdrawal whose cookie write did not stick. The runtime has already
+//    updated its in-memory store and blocked the tags when it fires the
+//    event; the signals have to follow in the same page view.
+const SIGNALS = ['ad_storage', 'analytics_storage', 'ad_user_data', 'ad_personalization', 'functionality_storage', 'personalization_storage'];
+const granted = (u) => SIGNALS.filter((k) => u && u[k] === 'granted');
+const OPT_OUT_INIT = { accepted: ALL, rejected: [], action: 'init' };
+{
+  const r = run({ steps: [
+    { detail: OPT_OUT_INIT },
+    { detail: { accepted: ['necessary'], rejected: ALL.slice(1), action: 'reject' } },
+  ] });
+  eq('precondition: the opt-out init granted the ad signals', r.updates[0] && r.updates[0].ad_storage, 'granted');
+  eq('withdrawal without a cookie: a second consent update is sent', r.updates.length, 2);
+  eq('withdrawal without a cookie: no signal stays granted', granted(r.last).join(','), '');
+  eq('withdrawal without a cookie: security_storage (necessary) is untouched', r.last && r.last.security_storage, 'granted');
+}
+{
+  const r = run({ steps: [
+    { detail: OPT_OUT_INIT },
+    { detail: { accepted: ['necessary', 'functional', 'analytics', 'performance'], rejected: ['marketing'], action: 'custom' } },
+  ] });
+  eq('partial withdrawal without a cookie: ad_storage denied', r.last && r.last.ad_storage, 'denied');
+  eq('partial withdrawal without a cookie: ad_user_data denied', r.last && r.last.ad_user_data, 'denied');
+  eq('partial withdrawal without a cookie: ad_personalization denied', r.last && r.last.ad_personalization, 'denied');
+  eq('partial withdrawal without a cookie: analytics_storage still granted', r.last && r.last.analytics_storage, 'granted');
+}
+{
+  // An event that lists a category nowhere is not an acceptance of it.
+  const r = run({ steps: [
+    { detail: OPT_OUT_INIT },
+    { detail: { action: 'custom' } },
+  ] });
+  eq('an event without lists after init: no signal stays granted', granted(r.last).join(','), '');
+}
+{
+  // The runtime announces 'init' again when it rebuilds the banner.
+  const r = run({ steps: [
+    { detail: OPT_OUT_INIT },
+    { detail: { accepted: ['necessary', 'functional', 'analytics', 'performance'], rejected: ['marketing'], action: 'custom' } },
+    { detail: OPT_OUT_INIT },
+    { detail: { accepted: ALL, rejected: [], action: 'all' } },
+  ] });
+  const regranted = r.updates.slice(2).some((u) => u.ad_storage === 'granted' || u.ad_user_data === 'granted' || u.ad_personalization === 'granted');
+  eq('after a withdrawal neither a new init nor a cookieless accept grants the ad signals back', regranted, false);
+  eq('after a withdrawal the last state still denies ad_storage', r.last && r.last.ad_storage, 'denied');
+  eq('after a withdrawal the last state still grants analytics_storage', r.last && r.last.analytics_storage, 'granted');
+}
+{
+  // Opt-in banner: the init denies, and an acceptance that left no cookie is
+  // not a record of consent.
+  const r = run({ steps: [
+    { detail: { accepted: ['necessary'], rejected: ALL.slice(1), action: 'init' } },
+    { detail: { accepted: ALL, rejected: [], action: 'all' } },
+  ] });
+  eq('a cookieless accept after an opt-in init grants nothing', r.updates.some((u) => granted(u).length > 0), false);
+}
+{
+  // A record that IS stored after the withdrawal decides again, as before.
+  const r = run({ steps: [
+    { detail: OPT_OUT_INIT },
+    { detail: { accepted: ['necessary'], rejected: ALL.slice(1), action: 'reject' } },
+    { cookie: 'consentid:x,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,marketing:yes', detail: { accepted: ALL, rejected: [], action: 'all' } },
+  ] });
+  eq('a stored record after the withdrawal grants what it records', r.last && r.last.ad_storage, 'granted');
+}
+{
+  // GCM switched on is untouched: nothing was restored, nothing is pushed.
+  const r = run({ signalsOnly: false, steps: [
+    { detail: OPT_OUT_INIT },
+    { detail: { accepted: ['necessary'], rejected: ALL.slice(1), action: 'reject' } },
+  ] });
+  eq('GCM on: a cookieless withdrawal on a first visit sends no consent update', r.updates.length, 0);
+}
+
+// 9. The frontend tells gcm.js it is in signals-only mode.
 eq(
   'class-frontend.php: the payload carries signals_only from Gcm_Settings::sends_signals_only()',
   /\$gcm\['signals_only'\]\s*=\s*\$this->gcm_settings->sends_signals_only\(\);/.test(FRONTEND),
