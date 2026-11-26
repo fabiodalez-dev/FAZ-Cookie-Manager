@@ -63,6 +63,9 @@ namespace {
 	function esc_url_raw( $url ) {
 		return $url;
 	}
+	function esc_url( $url ) {
+		return htmlspecialchars( (string) $url, ENT_QUOTES );
+	}
 	function add_shortcode( $tag, $cb ) {}
 	function add_action( $hook, $cb = null, $prio = 10, $args = 1 ) {
 		$GLOBALS['__faz_actions'][] = $hook;
@@ -188,6 +191,19 @@ namespace {
 	check( false !== strpos( $without, 'name="nonce"  value="nonce-faz_dnsmpi_rescind"' ), 'with its own nonce' );
 	check( false !== strpos( $without, 'You have already submitted an opt-out request' ), 'and the standing notice' );
 	check( 1 === substr_count( $without, '<template ' ) && 1 === substr_count( $without, '</template>' ), 'exactly one template, closed' );
+
+	// Both are real forms: with no script to intercept the submit the browser
+	// posts them itself, to the URL that asks the handlers for a page. Without
+	// method and action a submit was a GET of the same page: nothing recorded,
+	// no cookie. The URL is the same for every visitor, so it costs the render
+	// nothing in cacheability, and the render must not read the marker back.
+	$plain = 'method="post" action="https://example.test/wp-admin/admin-ajax.php?' . 'faz_dnsmpi_plain' . '=1"';
+	check( false !== strpos( $without, '<form class="faz-dnsmpi-form" ' . $plain . '>' ), 'the opt-out form posts to the plain-form URL without a script' );
+	check( false !== strpos( $without, '<form class="faz-dnsmpi-rescind-form" ' . $plain . '>' ), 'and so does the rescind form' );
+	$_GET[ 'faz_dnsmpi_plain' ] = '1';
+	$marked = $dns->render( array() );
+	unset( $_GET[ 'faz_dnsmpi_plain' ] );
+	check( $marked === $without, 'the render does not depend on the marker either' );
 
 	// The two states are distinguishable to the client by one attribute each.
 	check( false !== strpos( $without, 'data-faz-dnsmpi-state="optout"' ), 'the live state is labelled optout' );

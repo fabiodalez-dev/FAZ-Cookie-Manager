@@ -5,6 +5,7 @@
  *   DNSMPI-UI-02  Form visibility: form stays visible on server error; hides only on success
  *   DNSMPI-UI-03  Accessibility: aria-busy set on button during submit; cleared on error/catch
  *   DNSMPI-UI-04  Accessibility: focus moves to success notice after successful opt-out
+ *   DNSMPI-NOJS-01  The form works with JavaScript disabled (plain POST, confirmation page)
  */
 
 import { expect } from '@playwright/test';
@@ -250,5 +251,57 @@ test.describe('DNSMPI-UI-04 — focus moves to notice after successful opt-out',
     expect(isNoticeFocused, 'keyboard focus must land on the success notice after opt-out').toBe(true);
 
     await page.unrouteAll();
+  });
+});
+
+// ── DNSMPI-NOJS-01: the form works with JavaScript off ───────────────────────
+//
+// Through 1.40.0 the form had no method and no action and its handlers only
+// answered the script, so without JavaScript the button was a GET of the same
+// page: no cookie, no audit row. It now posts to admin-ajax.php by itself and
+// is answered with a confirmation page.
+
+test.describe('DNSMPI-NOJS-01 — opt-out with JavaScript disabled', () => {
+  test('the browser posts the form itself, gets the cookie and a confirmation page', async ({ browser, wpBaseURL }) => {
+    clearRateLimit();
+    clearOptoutLogs();
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    try {
+      const page = await context.newPage();
+      await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
+
+      await Promise.all([
+        page.waitForURL(/admin-ajax\.php\?faz_dnsmpi_plain=1/),
+        page.locator('form.faz-dnsmpi-form button[type="submit"]').click(),
+      ]);
+
+      // A page a person can read, not a JSON body.
+      await expect(page.locator('body')).toContainText('Your opt-out request has been received');
+      await expect(page.locator(`a[href="${pageUrl}"]`)).toBeVisible();
+
+      const optout = (await context.cookies(wpBaseURL)).find((c) => c.name === 'fazcookie-dnsmpi');
+      expect(optout?.value, 'the opt-out cookie must be set without JavaScript').toBe('1');
+
+      const rows = parseInt(
+        wpEval(`
+          global $wpdb;
+          echo (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_consent_logs WHERE status = 'dnsmpi_optout'" );
+        `).trim(),
+        10,
+      );
+      expect(rows, 'and the opt-out must be in the consent log').toBe(1);
+
+      // The confirmation page offers the withdrawal the shortcode keeps in a
+      // <template> that only the script can swap in.
+      await Promise.all([
+        page.waitForLoadState('domcontentloaded'),
+        page.locator('form:has(input[name="action"][value="faz_dnsmpi_rescind"]) button[type="submit"]').click(),
+      ]);
+      await expect(page.locator('body')).toContainText('Your opt-out has been withdrawn');
+      const after = (await context.cookies(wpBaseURL)).find((c) => c.name === 'fazcookie-dnsmpi');
+      expect(after, 'the withdrawal must clear the opt-out cookie').toBeUndefined();
+    } finally {
+      await context.close();
+    }
   });
 });

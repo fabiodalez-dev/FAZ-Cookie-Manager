@@ -22,6 +22,10 @@
  * refused with a code the script recognises, and it fetches fresh nonces from
  * the no-store `faz_dnsmpi_nonce` action and resends once.
  *
+ * The form also works with no script at all: it posts to admin-ajax.php with
+ * the PLAIN_POST_ARG marker in its action URL, and the same handlers answer
+ * that request with a confirmation page instead of JSON (respond()).
+ *
  * @package FazCookie\Includes
  */
 
@@ -47,6 +51,15 @@ class Do_Not_Sell_Shortcode {
 	const COOKIE_DAYS    = 365;
 	const STATUS_FIELD   = 'dnsmpi_optout';
 	const STATUS_RESCIND = 'dns_rescinded';
+
+	/**
+	 * Query argument on the forms' own action URL. A request that carries it
+	 * is the browser submitting the form by itself (no script, or the script
+	 * blocked or broken), so the answer must be a page a person can read.
+	 * frontend/js/faz-dnsmpi.js posts to the bare admin-ajax.php URL and never
+	 * sends it.
+	 */
+	const PLAIN_POST_ARG = 'faz_dnsmpi_plain';
 
 	/**
 	 * Site-wide ceiling on per-request admin notification mail, per 24 hours.
@@ -166,7 +179,10 @@ class Do_Not_Sell_Shortcode {
 	 *
 	 *   - the opt-out form is LIVE. It is the mechanism the law requires the
 	 *     page to offer, so it is what a visitor with no cookie — and a visitor
-	 *     with JavaScript off — must find without help;
+	 *     with JavaScript off — must find without help. It is a real form
+	 *     (method and action), so for that visitor it also WORKS: through
+	 *     1.40.0 it had neither, and without the script a submit was a GET of
+	 *     the same page that recorded nothing and set no cookie;
 	 *   - the "already opted out / withdraw" state sits inert in a <template>.
 	 *     Template content is not rendered, not focusable, not matched by
 	 *     querySelector(), and the script swaps it in only for a visitor who
@@ -206,6 +222,9 @@ class Do_Not_Sell_Shortcode {
 
 		$nonce         = wp_create_nonce( self::AJAX_ACTION );
 		$rescind_nonce = wp_create_nonce( self::RESCIND_ACTION );
+		// Where the browser sends the form when no script intercepts the
+		// submit. The same for every visitor, so the render stays cacheable.
+		$plain_url = $this->plain_post_url();
 
 		$this->enqueue_dnsmpi_assets();
 
@@ -216,7 +235,7 @@ class Do_Not_Sell_Shortcode {
 
 			<div class="faz-dnsmpi-state" data-faz-dnsmpi-state="optout">
 				<p><?php esc_html_e( 'As a US resident in a state with applicable privacy laws, you have the right to opt out of the sale of your personal information. Submit the form below to exercise this right.', 'faz-cookie-manager' ); ?></p>
-				<form class="faz-dnsmpi-form">
+				<form class="faz-dnsmpi-form" method="post" action="<?php echo esc_url( $plain_url ); ?>">
 					<input type="hidden" name="action" value="<?php echo esc_attr( self::AJAX_ACTION ); ?>">
 					<input type="hidden" name="nonce"  value="<?php echo esc_attr( $nonce ); ?>">
 					<button type="submit" class="faz-dnsmpi-btn"><?php echo esc_html( $atts['button'] ); ?></button>
@@ -235,7 +254,7 @@ class Do_Not_Sell_Shortcode {
 						<?php esc_html_e( 'You have already submitted an opt-out request. We will not sell or share your personal information.', 'faz-cookie-manager' ); ?>
 					</div>
 					<p><?php esc_html_e( 'Changed your mind? You can withdraw your opt-out at any time.', 'faz-cookie-manager' ); ?></p>
-					<form class="faz-dnsmpi-rescind-form">
+					<form class="faz-dnsmpi-rescind-form" method="post" action="<?php echo esc_url( $plain_url ); ?>">
 						<input type="hidden" name="action" value="<?php echo esc_attr( self::RESCIND_ACTION ); ?>">
 						<input type="hidden" name="nonce"  value="<?php echo esc_attr( $rescind_nonce ); ?>">
 						<button type="submit" class="faz-dnsmpi-btn faz-dnsmpi-rescind-btn"><?php esc_html_e( 'Withdraw opt-out / opt back in', 'faz-cookie-manager' ); ?></button>
@@ -318,15 +337,142 @@ class Do_Not_Sell_Shortcode {
 	/**
 	 * Answer the request with the outcome of process_optout() / process_rescind().
 	 *
-	 * @param array $result array( 'success' => bool, 'data' => mixed ).
+	 * JSON for the script, a page for a browser that submitted the form by
+	 * itself. Which one is asked for only chooses the shape of the answer:
+	 * the nonce and the origin were checked, and the state changed or not,
+	 * before this runs.
+	 *
+	 * @param array  $result array( 'success' => bool, 'data' => mixed ).
+	 * @param string $action AJAX_ACTION or RESCIND_ACTION.
 	 * @return void
 	 */
-	private function respond( array $result ) {
+	private function respond( array $result, $action ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- selects the response format only; reads nothing as data.
+		if ( isset( $_GET[ self::PLAIN_POST_ARG ] ) ) {
+			$this->respond_with_page( $result, $action );
+			return;
+		}
 		if ( $result['success'] ) {
 			wp_send_json_success( $result['data'] );
 			return;
 		}
 		wp_send_json_error( $result['data'] );
+	}
+
+	/**
+	 * The forms' own action URL (see PLAIN_POST_ARG).
+	 *
+	 * admin-ajax.php and not admin-post.php: the class is only constructed on
+	 * front-end, REST and AJAX requests (CLI::define_public_hooks() skips the
+	 * front end on every other admin request), so an admin_post_nopriv_* hook
+	 * would never be registered.
+	 *
+	 * @return string
+	 */
+	private function plain_post_url() {
+		return admin_url( 'admin-ajax.php?' . self::PLAIN_POST_ARG . '=1' );
+	}
+
+	/**
+	 * A form that submits `$action` with a nonce minted for this response.
+	 *
+	 * Used on the confirmation page only, which admin-ajax.php serves with
+	 * no-cache headers, so unlike the nonce in the shortcode's (cacheable)
+	 * markup this one is never older than the page it is on. It is the same
+	 * anonymous nonce handle_nonce_refresh() hands to the script, and it is
+	 * no more of a CSRF control here than there: is_same_origin_request() is.
+	 *
+	 * @param string $action AJAX_ACTION or RESCIND_ACTION.
+	 * @param string $label  Button label.
+	 * @param string $back   Page the visitor came from, carried along so the
+	 *                       next confirmation page can still link back to it.
+	 * @return string HTML.
+	 */
+	private function plain_form( $action, $label, $back ) {
+		return '<form method="post" action="' . esc_url( $this->plain_post_url() ) . '">'
+			. '<input type="hidden" name="action" value="' . esc_attr( $action ) . '">'
+			. '<input type="hidden" name="nonce" value="' . esc_attr( wp_create_nonce( $action ) ) . '">'
+			. '<input type="hidden" name="_wp_http_referer" value="' . esc_attr( $back ) . '">'
+			. '<button type="submit" class="button button-large">' . esc_html( $label ) . '</button>'
+			. '</form>';
+	}
+
+	/**
+	 * Answer a form the browser submitted by itself with a page.
+	 *
+	 * The confirmation is served from here and not by redirecting back to the
+	 * shortcode's page with a result in the URL: render() must not read the
+	 * request (the page is cached), and a cache that ignores query strings
+	 * would send the visitor back to the bare form with no word on whether
+	 * the opt-out had been applied.
+	 *
+	 * A stale nonce is the case the script recovers from by fetching a fresh
+	 * one. Without the script the visitor cannot, and reloading a cached page
+	 * returns the same expired nonce, so the page carries the same request
+	 * again with a fresh nonce: one more press of a button, and it lands.
+	 *
+	 * After an opt-out the page also offers the withdrawal (1798.135(c)): the
+	 * shortcode keeps that state in a <template> only the script can swap in.
+	 *
+	 * @param array  $result array( 'success' => bool, 'data' => mixed ).
+	 * @param string $action AJAX_ACTION or RESCIND_ACTION.
+	 * @return void
+	 */
+	private function respond_with_page( array $result, $action ) {
+		$data    = $result['data'];
+		$message = is_array( $data ) ? ( isset( $data['message'] ) ? (string) $data['message'] : '' ) : (string) $data;
+		$stale   = is_array( $data ) && isset( $data['code'] ) && 'stale_nonce' === $data['code'];
+
+		// wp_get_referer() only returns a URL on this site (or one of its
+		// allowed redirect hosts), and prefers the _wp_http_referer field
+		// plain_form() carries over the Referer header.
+		$back = wp_get_referer();
+		if ( ! $back ) {
+			$back = home_url( '/' );
+		}
+
+		$blocks = '';
+		$status = 200;
+		if ( $stale ) {
+			$message = __( 'The security token of the form had expired, so nothing has been changed yet. Use the button below to send your request again.', 'faz-cookie-manager' );
+			$blocks  = $this->plain_form(
+				$action,
+				self::RESCIND_ACTION === $action
+					? __( 'Withdraw opt-out / opt back in', 'faz-cookie-manager' )
+					: __( 'Submit Opt-Out Request', 'faz-cookie-manager' ),
+				$back
+			);
+		} elseif ( ! $result['success'] ) {
+			$status = 403;
+		} elseif ( self::AJAX_ACTION === $action ) {
+			$blocks = '<p>' . esc_html__( 'Changed your mind? You can withdraw your opt-out at any time.', 'faz-cookie-manager' ) . '</p>'
+				. $this->plain_form( self::RESCIND_ACTION, __( 'Withdraw opt-out / opt back in', 'faz-cookie-manager' ), $back );
+		}
+
+		// The default handler wraps the whole string in one <p>…</p>. Closing
+		// that paragraph after the message and leaving the last one open
+		// keeps the forms out of it, so the document it prints is valid.
+		$html = esc_html( $message ) . '</p>'
+			. $blocks
+			. '<p><a href="' . esc_url( $back ) . '">' . esc_html__( 'Return to the previous page', 'faz-cookie-manager' ) . '</a>';
+
+		// In an AJAX request wp_die() prints its message bare, for a script to
+		// read. This answer is read by a person, so ask for the full page.
+		add_filter( 'wp_die_ajax_handler', array( $this, 'page_die_handler' ) );
+		wp_die(
+			$html, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built above from escaped parts.
+			esc_html__( 'Do Not Sell or Share My Personal Information', 'faz-cookie-manager' ),
+			array( 'response' => (int) $status )
+		);
+	}
+
+	/**
+	 * The wp_die() handler for respond_with_page(): core's HTML page.
+	 *
+	 * @return string
+	 */
+	public function page_die_handler() {
+		return '_default_wp_die_handler';
 	}
 
 	/**
@@ -363,7 +509,7 @@ class Do_Not_Sell_Shortcode {
 	 * AJAX handler for the opt-out submission.
 	 */
 	public function handle_optout() {
-		$this->respond( $this->process_optout() );
+		$this->respond( $this->process_optout(), self::AJAX_ACTION );
 	}
 
 	/**
@@ -456,7 +602,7 @@ class Do_Not_Sell_Shortcode {
 	 * after exercising their right to opt out of the sale of personal data.
 	 */
 	public function handle_rescind() {
-		$this->respond( $this->process_rescind() );
+		$this->respond( $this->process_rescind(), self::RESCIND_ACTION );
 	}
 
 	/**
