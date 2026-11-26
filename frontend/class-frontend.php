@@ -825,7 +825,7 @@ class Frontend {
 			 */
 			$in_footer = (bool) apply_filters( 'faz_main_script_in_footer', false );
 			if ( $in_footer && ! $alt_asset ) {
-				$gcm_active = is_object( $this->gcm_settings ) && true === $this->gcm_settings->is_gcm_enabled();
+				$gcm_active = is_object( $this->gcm_settings ) && true === $this->gcm_settings->sends_consent_signals();
 				$tcf_active = (bool) $this->settings->get( 'iab', 'enabled' )
 					&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2;
 				if ( $gcm_active || $tcf_active ) {
@@ -1019,8 +1019,12 @@ class Frontend {
 			// wp_localize_script for _fazStyles removed: CSS is now injected via
 			// wp_add_inline_style above; the JS variable was no longer consumed.
 
-			// GCM (Google Consent Mode) in local mode.
-			if ( true === $this->gcm_settings->is_gcm_enabled() ) {
+			// GCM (Google Consent Mode) in local mode. Also loaded with GCM off
+			// when the plugin prints a Google tag of its own (#366): that tag
+			// must never run without a consent default and the update that
+			// follows the visitor's choice, see
+			// Gcm_Settings::sends_consent_signals().
+			if ( true === $this->gcm_settings->sends_consent_signals() ) {
 				$gcm = $this->get_gcm_data();
 				// Advanced Consent Mode (#165): tell gcm.js to skip its own
 				// `consent default` emission — print_gcm_default_inline() has
@@ -3607,7 +3611,10 @@ class Frontend {
 	 *
 	 * Printed only where the consent banner runs, so the visitor can always
 	 * release it: with the banner off there is no way to consent and nothing
-	 * is loaded. The gtag.js groups go out live only while the Advanced-mode
+	 * is loaded. Configured IDs also make enqueue_scripts() load gcm.js with
+	 * Google Consent Mode switched off (Gcm_Settings::sends_consent_signals()),
+	 * so a tag released here always finds a consent default and gets the
+	 * update for the visitor's choice. The gtag.js groups go out live only while the Advanced-mode
 	 * gtag exemption is active (the denied default is already in front of
 	 * them in this response), and then still pass through the output buffer
 	 * like any pasted tag, so an explicit per-service rejection keeps them
@@ -3615,6 +3622,13 @@ class Frontend {
 	 * owner also opted it in (`advanced_mode_gtm`, #385) and its own service
 	 * is not explicitly denied. In every other case the tags are printed
 	 * already parked (see Google_Tag::render()).
+	 *
+	 * Where the server cannot read the visitor's svc.* choices (Cache
+	 * Compatibility Mode, the jurisdiction shell) nothing above can honour a
+	 * per-service denial: the map is empty by design and this markup runs
+	 * before the runtime that enforces it client-side. With per-service
+	 * consent on, the live tags are then printed as guards that read the
+	 * consent cookie themselves (Google_Tag::guard_script()).
 	 *
 	 * @return void
 	 */
@@ -3645,9 +3659,37 @@ class Frontend {
 				'gtm_unblocked'  => $this->gcm_gtm_exemption_active() && ! $this->is_service_explicitly_denied( 'google-tag-manager' ),
 				'data_layer'     => $this->gcm_datalayer_name(),
 				'hints'          => $hints,
+				// Site-wide values only, so the markup stays identical for
+				// every visitor: the cookie is read in the browser.
+				'guard_cookie'   => $this->service_consent_is_client_only()
+					? ( function_exists( 'faz_consent_cookie_name' ) ? faz_consent_cookie_name( 'fazcookie-consent' ) : 'fazcookie-consent' )
+					: '',
+				// An own-handle id (see is_own_inline_script_id()): the guard
+				// is the plugin's gate, not the tag, and the output buffer
+				// must not re-type it on a provider or custom-rule match.
+				'guard_id'       => ( is_string( $this->plugin_name ) && '' !== $this->plugin_name ? $this->plugin_name : 'faz-cookie-manager' ) . '-google-tag',
 			)
 		);
-		echo $markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Google_Tag::render() builds the markup from IDs validated against fixed patterns, escapes every attribute and encodes every JS value with wp_json_encode; $hints is a literal.
+		echo $markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Google_Tag::render() builds the markup from IDs validated against fixed patterns, escapes every attribute and encodes every JS value with wp_json_encode; $hints is a literal and the guard cookie name and id are checked against a fixed charset.
+	}
+
+	/**
+	 * Whether per-service consent is on but this response cannot depend on it.
+	 *
+	 * get_service_consent() returns an empty map under Cache Compatibility
+	 * Mode and the jurisdiction shell, because the HTML is shared by every
+	 * visitor; the svc.* choices are enforced by the runtime instead. Markup
+	 * the server prints LIVE ahead of the runtime has to carry its own check
+	 * in that state, see print_google_tag().
+	 *
+	 * @return bool
+	 */
+	private function service_consent_is_client_only() {
+		if ( ! $this->is_cache_compatibility_enabled() && ! $this->is_geo_bootstrap_cache_active() ) {
+			return false;
+		}
+		$settings = $this->get_faz_settings();
+		return ! empty( $settings['banner_control']['per_service_consent'] );
 	}
 
 	/**
@@ -5969,6 +6011,10 @@ class Frontend {
 	 * timestamp) — rather than a bare `gtag(` substring, so a non-Google inline
 	 * script that merely references the string `gtag(` is NOT exempted.
 	 *
+	 * This only answers "is there a gtag bootstrap in here". Whether the same
+	 * inline body also runs another tracker is asked by the one caller that
+	 * turns the answer into an exemption, is_advanced_consent_exempt().
+	 *
 	 * @param string $attrs   Script tag attributes.
 	 * @param string $content Inline script body.
 	 * @return bool
@@ -6045,7 +6091,16 @@ class Frontend {
 			return false;
 		}
 		if ( $this->is_gcm_managed_script( $attrs, $content ) ) {
-			return true;
+			// The exemption covers the whole <script>. A tag with a URL runs
+			// that URL and is_gcm_managed_script() has judged it; an inline
+			// body (or a decoded data: payload) runs everything written in
+			// it, so a gtag bootstrap that shares its <script> with another
+			// tracker's code — a header-script box holding the gtag snippet
+			// next to a Meta Pixel init — is not "a Google tag": the pixel's
+			// code would run before consent on the bootstrap's exemption.
+			// Same test the container branch below has applied since #385.
+			$ctx = $this->get_provider_match_context( $attrs, $content );
+			return '' !== (string) $ctx['url'] || ! $this->inline_body_names_non_google_service( (string) $ctx['content'] );
 		}
 		return $this->gcm_gtm_exemption_active() && $this->is_gtm_container_script( $attrs, $content );
 	}
@@ -6067,9 +6122,9 @@ class Frontend {
 	 * `dataLayer.push({` on its own is data for the container, not the
 	 * container. The literal has to open a string, so a gtm.js URL inside
 	 * another URL's query string does not count, and a body that also matches
-	 * a non-Google catalogue service (a GTM snippet bundled with a Meta Pixel
-	 * one) is not the container either: the exemption would cover the whole
-	 * <script>. Server-side containers on a first-party domain are not
+	 * a non-Google tracker the site blocks (a GTM snippet bundled with a Meta
+	 * Pixel one) is not the container either: the exemption would cover the
+	 * whole <script>. Server-side containers on a first-party domain are not
 	 * matched and keep waiting for consent.
 	 *
 	 * The URL needle is kept in sync with _fazIsGtmContainer() in
@@ -6119,16 +6174,27 @@ class Frontend {
 	}
 
 	/**
-	 * Whether an inline script body matches a catalogue service other than the
+	 * Whether an inline script body matches a blockable tracker other than the
 	 * Consent-Mode-aware Google ones (#385 review).
 	 *
-	 * Every pattern of the per-service map is tested against the body: plain
+	 * Every pattern the site can block on is tested against the body: plain
 	 * code fragments (`fbq(`) as substrings, URL fragments
 	 * (`connect.facebook.net`) with the same boundary rule the URL matcher
 	 * uses. Google Tag Manager, Google Analytics, Google Ads and Site Kit's
 	 * gtag handle are the services Advanced Consent Mode already lets run
 	 * behind the denied default; any other match means the body runs code the
 	 * consent default does not govern.
+	 *
+	 * Two maps are read. The per-service map covers the catalogue and knows
+	 * which service a pattern belongs to. The provider map is the full set the
+	 * blocker matches against and also holds what has no service id: cookie
+	 * database patterns, admin custom rules and `faz_blocking_rules` entries.
+	 * Reading the catalogue alone let a tracker the site owner had declared by
+	 * hand ride on the exemption of the Google snippet it was pasted next to.
+	 * A pattern of that second kind counts as Google's own only when it names
+	 * the Google tag itself (is_consent_mode_google_pattern()), so an admin
+	 * `gtag(` or tag-ID rule, which matches every bootstrap by definition,
+	 * does not cancel the exemption it has never cancelled.
 	 *
 	 * @param string $content Inline script body.
 	 * @return bool
@@ -6138,22 +6204,81 @@ class Frontend {
 		if ( '' === $content ) {
 			return false;
 		}
-		$allowed = array( 'google-tag-manager', 'google-analytics', 'google-ads', 'google-sitekit' );
-		$lower   = strtolower( $content );
-		foreach ( $this->get_pattern_service_map() as $pattern => $service_ids ) {
+		$allowed     = array( 'google-tag-manager', 'google-analytics', 'google-ads', 'google-sitekit' );
+		$lower       = strtolower( $content );
+		$service_map = $this->get_pattern_service_map();
+		foreach ( $service_map as $pattern => $service_ids ) {
 			$pattern = (string) $pattern;
 			if ( '' === $pattern || ! array_diff( (array) $service_ids, $allowed ) ) {
 				continue;
 			}
-			$is_url  = self::is_url_fragment_pattern( $pattern );
-			$matched = $is_url
-				? $this->provider_pattern_matches_lc( $lower, strtolower( $pattern ) )
-				: self::code_signature_in( $content, $pattern );
-			if ( $matched ) {
+			if ( $this->inline_body_matches_pattern( $content, $lower, $pattern ) ) {
+				return true;
+			}
+		}
+		foreach ( array_keys( $this->get_provider_category_map() ) as $pattern ) {
+			// Catalogue patterns were judged above, with their service.
+			if ( isset( $service_map[ $pattern ] ) ) {
+				continue;
+			}
+			$pattern = (string) $pattern;
+			if ( '' === $pattern || self::is_consent_mode_google_pattern( $pattern ) ) {
+				continue;
+			}
+			if ( $this->inline_body_matches_pattern( $content, $lower, $pattern ) ) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * One blocking pattern against an inline body, URL fragments with the
+	 * boundary rule and code fragments as signatures.
+	 *
+	 * @param string $content Inline script body.
+	 * @param string $lower   The same body, lowercased once by the caller.
+	 * @param string $pattern Blocking pattern.
+	 * @return bool
+	 */
+	private function inline_body_matches_pattern( $content, $lower, $pattern ) {
+		return self::is_url_fragment_pattern( $pattern )
+			? $this->provider_pattern_matches_lc( $lower, strtolower( $pattern ) )
+			: self::code_signature_in( $content, $pattern );
+	}
+
+	/**
+	 * Whether a blocking pattern with no service id names the Google tag stack
+	 * Advanced Consent Mode exempts, rather than some other tracker.
+	 *
+	 * Used only for patterns the per-service map does not attribute (cookie
+	 * database, custom rules, developer filter). The hosts are the ones
+	 * is_gcm_managed_script() and is_gtm_container_script() accept, plus the
+	 * analytics collection host; the code fragments are the gtag / dataLayer /
+	 * container vocabulary; the last test is a tag or container ID. Anything
+	 * else is another tracker, and a body naming it waits for consent.
+	 *
+	 * @param string $pattern Blocking pattern.
+	 * @return bool
+	 */
+	private static function is_consent_mode_google_pattern( $pattern ) {
+		$pattern = strtolower( trim( (string) $pattern ) );
+		foreach ( array(
+			'googletagmanager.com',
+			'google-analytics.com',
+			'googleadservices.com',
+			'googlesyndication.com',
+			'doubleclick.net',
+			'gtag',
+			'datalayer',
+			'gtm.start',
+			'gtm.js',
+		) as $faz_needle ) {
+			if ( false !== strpos( $pattern, $faz_needle ) ) {
+				return true;
+			}
+		}
+		return 1 === preg_match( '/^(?:g|gt|aw|dc|gtm)-[a-z0-9]{4,20}$/', $pattern );
 	}
 
 	/**
