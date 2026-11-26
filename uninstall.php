@@ -254,10 +254,13 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 			$faz_lock_keys = $wpdb->get_col(
 				$wpdb->prepare(
-					"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s",
+					"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s",
 					$wpdb->esc_like( 'faz_dnsmpi_lock_' ) . '%',
 					$wpdb->esc_like( 'faz_dnsmpi_rsc_lock_' ) . '%',
-					$wpdb->esc_like( 'faz_dsar_lock_' ) . '%'
+					$wpdb->esc_like( 'faz_dsar_lock_' ) . '%',
+					// The per-day counters of Do Not Sell requests honoured
+					// without a log row (Do_Not_Sell_Shortcode::count_unlogged()).
+					$wpdb->esc_like( 'faz_dnsmpi_unlogged_' ) . '%'
 				)
 			);
 			foreach ( $faz_lock_keys as $faz_lock_key ) {

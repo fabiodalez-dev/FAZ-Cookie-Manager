@@ -8,6 +8,11 @@
  * replaying the public nonce from behind an undeclared proxy used to write one
  * row per request, without limit.
  *
+ * Neither bound may cost anybody the opt-out or leave a hole in the record:
+ * a request from an identifying address whose 60-second window is held is
+ * honoured too (it used to be refused with "Too many requests"), and every
+ * request honoured without a row of its own is counted per day.
+ *
  * The handlers run for real; WordPress is stubbed and the consent logger is a
  * counter.
  *
@@ -115,7 +120,31 @@ namespace {
 				$this->rows[ $m[2] ] = $m[1];
 				return 1;
 			}
+			// The atomic increment of the unlogged-request counter.
+			if ( preg_match( "/^INSERT INTO wp_options \\(option_name, option_value, autoload\\) VALUES \\('([^']*)', '1', 'no'\\) ON DUPLICATE KEY UPDATE option_value = CAST\\(option_value AS UNSIGNED\\) \\+ 1$/", $query, $m ) ) {
+				$this->rows[ $m[1] ] = (string) ( (int) ( $this->rows[ $m[1] ] ?? 0 ) + 1 );
+				return 1;
+			}
 			return false;
+		}
+		public function esc_like( $text ) {
+			return addcslashes( $text, '_%\\' );
+		}
+		public function get_results( $query ) {
+			if ( ! preg_match( "/^SELECT option_name, option_value FROM wp_options WHERE option_name LIKE '(.*)%'$/", $query, $m ) ) {
+				return null;
+			}
+			$prefix = stripslashes( stripslashes( $m[1] ) );
+			$out    = array();
+			foreach ( $this->rows as $name => $value ) {
+				if ( 0 === strpos( $name, $prefix ) ) {
+					$out[] = (object) array(
+						'option_name'  => $name,
+						'option_value' => $value,
+					);
+				}
+			}
+			return $out;
 		}
 	}
 	$GLOBALS['wpdb'] = new Faz_Test_Wpdb();
@@ -147,6 +176,10 @@ namespace {
 	}
 	function delete_option( $name ) {
 		unset( $GLOBALS['faz_test_options'][ $name ] );
+		// The unlogged-request counters live in the table the wpdb stub holds.
+		if ( isset( $GLOBALS['wpdb']->rows ) ) {
+			unset( $GLOBALS['wpdb']->rows[ $name ] );
+		}
 		return true;
 	}
 	function apply_filters( $hook, $value, ...$args ) {
@@ -216,6 +249,16 @@ namespace {
 		return null;
 	}
 
+	/**
+	 * The requests counted as honoured without a log row, or an empty tally
+	 * on a build that does not count them.
+	 */
+	function faz_unlogged() {
+		return method_exists( Do_Not_Sell_Shortcode::class, 'unlogged_tally' )
+			? Do_Not_Sell_Shortcode::unlogged_tally( 30 )
+			: array( 'optout' => 0, 'rescind' => 0, 'recent_optout' => 0, 'recent_rescind' => 0, 'last' => '' );
+	}
+
 	echo "== Shared address (loopback): opt-out always applied, audit row bounded ==\n";
 	$ok = 0;
 	for ( $i = 0; $i < 50; $i++ ) {
@@ -224,14 +267,28 @@ namespace {
 	check( 50 === $ok, '50 opt-outs in the same second are all answered with success (got ' . $ok . ')' );
 	check( 1 === count( Controller::$rows ), 'but only one consent-log row is written in that second (got ' . count( Controller::$rows ) . ')' );
 
+	// L5: the 49 that lost the slot are in the record as a count, not gone.
+	$tally = faz_unlogged();
+	check( 49 === $tally['optout'], 'and the 49 opt-outs without a row are counted, so rows + count = requests (got ' . $tally['optout'] . ')' );
+	check( 0 === $tally['rescind'], 'none of them counted as a withdrawal' );
+	check( gmdate( 'Ymd', 1000 ) === $tally['last'], 'under the day they happened on' );
+
 	faz_optout( $handler, '127.0.0.1', 1001 );
 	check( 2 === count( Controller::$rows ), 'the next second writes the next row' );
+	check( 49 === faz_unlogged()['optout'], 'and an opt-out that got its row is not counted as unlogged' );
 
 	$before = count( Controller::$rows );
 	for ( $i = 0; $i < 20; $i++ ) {
 		faz_optout( $handler, '127.0.0.1', 1002, 'handle_rescind', true );
 	}
 	check( $before + 1 === count( Controller::$rows ), 'rescinds from a shared address are bounded the same way' );
+	check( 19 === faz_unlogged()['rescind'], 'and the 19 withdrawals without a row are counted (got ' . faz_unlogged()['rescind'] . ')' );
+	$had = faz_unlogged()['rescind'];
+	faz_optout( $handler, '127.0.0.1', 1002, 'handle_rescind', false );
+	check( $had === faz_unlogged()['rescind'], 'a withdrawal from a browser with no opt-out cookie is not counted: there was nothing to record' );
+	$had = faz_unlogged()['optout'];
+	faz_optout( $handler, '127.0.0.1', 1002, 'handle_optout', true );
+	check( $had === faz_unlogged()['optout'], 'nor is an opt-out from a browser that already carries the cookie' );
 
 	echo "\n== The opt-out cookie is applied whether or not the audit row is written ==\n";
 	$GLOBALS['faz_test_cookies'] = array();
@@ -271,13 +328,59 @@ namespace {
 	check( 0 === count( Controller::$rows ), 'and writes no audit row' );
 	$GLOBALS['wpdb'] = new Faz_Test_Wpdb();
 
-	echo "\n== Identifying address: the per-address window still applies ==\n";
-	Controller::$rows = array();
+	echo "\n== The counters: per day, recent window, retention ==\n";
+	$day = 86400;
+	$GLOBALS['wpdb']->rows = array(
+		'faz_dnsmpi_unlogged_optout_' . gmdate( 'Ymd', 1000 * $day )  => '4',
+		'faz_dnsmpi_unlogged_rescind_' . gmdate( 'Ymd', 1000 * $day ) => '1',
+		'faz_dnsmpi_unlogged_optout_' . gmdate( 'Ymd', 900 * $day )   => '7',
+		'faz_dnsmpi_unlogged_optout_' . gmdate( 'Ymd', 100 * $day )   => '9', // older than the retention.
+		'faz_dnsmpi_unlogged_optout_notaday'                          => '5',
+		'faz_dnsmpi_shared_audit_slot'                                => '123',
+	);
+	$GLOBALS['faz_test_now'] = 1000 * $day + 60;
+	$tally                   = faz_unlogged();
+	check( 11 === $tally['optout'] && 1 === $tally['rescind'], 'the retained record totals every day inside the retention (got ' . $tally['optout'] . ' / ' . $tally['rescind'] . ')' );
+	check( 4 === $tally['recent_optout'] && 1 === $tally['recent_rescind'], 'the recent window counts the last 30 days only (got ' . $tally['recent_optout'] . ' / ' . $tally['recent_rescind'] . ')' );
+	check( gmdate( 'Ymd', 1000 * $day ) === $tally['last'], 'and names the most recent day counted' );
+	check( ! array_key_exists( 'faz_dnsmpi_unlogged_optout_' . gmdate( 'Ymd', 100 * $day ), $GLOBALS['wpdb']->rows ), 'a counter older than the retention is dropped' );
+	check( array_key_exists( 'faz_dnsmpi_shared_audit_slot', $GLOBALS['wpdb']->rows ), 'and nothing that is not a counter is touched' );
+	$GLOBALS['wpdb'] = new Faz_Test_Wpdb();
+
+	echo "\n== Identifying address: the 60 s window bounds the audit row, never the opt-out ==\n";
+	// L4: one public address is routinely several people (a NAT, a whole
+	// IPv6 /64). The second of them inside 60 s used to be answered "Too many
+	// requests" and got no cookie.
+	Controller::$rows            = array();
+	$GLOBALS['faz_test_cookies'] = array();
 	check( true === faz_optout( $handler, '203.0.113.7', 2000 ), 'a public address opts out' );
 	check( 1 === count( Controller::$rows ), 'and its row is written' );
-	check( false === faz_optout( $handler, '203.0.113.7', 2010 ), 'a second opt-out from it inside 60 s is refused' );
+	check( true === faz_optout( $handler, '203.0.113.7', 2010 ), 'a second opt-out from it inside 60 s is honoured, not refused' );
+	$set = array_filter( $GLOBALS['faz_test_cookies'], function ( $c ) {
+		return Do_Not_Sell_Shortcode::COOKIE_NAME === $c[0] && '1' === $c[1];
+	} );
+	check( 2 === count( $set ), 'and gets the opt-out cookie like the first (got ' . count( $set ) . ')' );
+	check( 1 === count( Controller::$rows ), 'the window still holds back its audit row' );
+	check( 1 === faz_unlogged()['optout'], 'which is counted instead (got ' . faz_unlogged()['optout'] . ')' );
+	check( array() === array_filter( array_keys( $GLOBALS['faz_test_options'] ), function ( $k ) {
+		return 0 === strpos( $k, 'faz_dnsmpi_lock_' );
+	} ), 'and no lock row is left behind' );
 	check( true === faz_optout( $handler, '198.51.100.9', 2010 ), 'another public address in the same second is not held back by the shared slot' );
 	check( 2 === count( Controller::$rows ), 'and its row is written too' );
+	check( true === faz_optout( $handler, '203.0.113.7', 2061 ), 'once the window has passed the first address opts out again' );
+	check( 3 === count( Controller::$rows ), 'and is logged again: a window, not a wall' );
+
+	// The same for the withdrawal (1798.135(c)).
+	$GLOBALS['faz_test_cookies'] = array();
+	$before                      = count( Controller::$rows );
+	check( true === faz_optout( $handler, '203.0.113.50', 3000, 'handle_rescind', true ), 'a public address withdraws its opt-out' );
+	check( true === faz_optout( $handler, '203.0.113.50', 3005, 'handle_rescind', true ), 'a second withdrawal from it inside 60 s is honoured, not refused' );
+	$cleared = array_filter( $GLOBALS['faz_test_cookies'], function ( $c ) {
+		return Do_Not_Sell_Shortcode::COOKIE_NAME === $c[0] && '' === $c[1];
+	} );
+	check( 2 === count( $cleared ), 'and its cookie is cleared like the first (got ' . count( $cleared ) . ')' );
+	check( $before + 1 === count( Controller::$rows ), 'with one audit row between them' );
+	check( 1 === faz_unlogged()['rescind'], 'and the other counted (got ' . faz_unlogged()['rescind'] . ')' );
 
 	ob_end_flush();
 	echo "\nPassed: $passed\nFailed: $failed\n";

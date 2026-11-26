@@ -8,7 +8,7 @@
  *   REST-CTX-01/02 — opt_in/out_script visible only with context=edit + auth
  *   ACC-CAT-01     — _fazAcceptCategory() fires opt_in_script (snapshot fix)
  *   DNSMPI-COOKIE  — opt-out cookie written with path=/
- *   DNSMPI-RL      — second submission within 60 s is rate-limited
+ *   DNSMPI-RL      — second submission within 60 s is honoured; only its audit row is rate-limited
  *   DNSMPI-LOCK    — DB lock option released after processing
  *   DSAR-A11Y-01   — notice div carries ARIA live region attributes
  *   DSAR-A11Y-02   — focus moves to notice after async form response
@@ -382,11 +382,33 @@ test.describe('[faz_do_not_sell] — cookie path, rate limit, DB lock', () => {
     expect(optout!.path, 'cookie path must be /').toBe('/');
   });
 
-  test('DNSMPI-RL-01: second submission within 60 s is rejected with rate-limit error', async ({
+  test('DNSMPI-RL-01: second submission within 60 s is honoured, only its audit row is rate-limited', async ({
     page,
+    context,
   }) => {
+    // One address is routinely several people (a NAT, a whole IPv6 /64), and
+    // the opt-out is a right: the 60-second window may hold back the second
+    // consent-log row, never the opt-out itself. Through 1.40.0 this test pinned
+    // the opposite, a "Too many requests" refusal with no cookie.
+    //
     // The window applies only to an address that identifies one visitor;
     // faz-test's loopback peer does not, so present a public one.
+    const optoutRows = () =>
+      parseInt(
+        wpEval(`
+          global $wpdb;
+          echo (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_consent_logs WHERE status = 'dnsmpi_optout'" );
+        `).trim(),
+        10,
+      );
+    const unlogged = () =>
+      parseInt(
+        wpEval(`
+          $t = \\FazCookie\\Includes\\Do_Not_Sell_Shortcode::unlogged_tally( 30 );
+          echo (int) $t['optout'];
+        `).trim(),
+        10,
+      );
     installLoopbackPeer();
     await page.setExtraHTTPHeaders(PUBLIC_PEER_HEADERS);
     try {
@@ -408,6 +430,8 @@ test.describe('[faz_do_not_sell] — cookie path, rate limit, DB lock', () => {
     ]);
     const json1 = (await r1.json()) as { success: boolean };
     expect(json1.success, 'first submission should succeed').toBe(true);
+    const rowsAfterFirst = optoutRows();
+    const unloggedAfterFirst = unlogged();
 
     // Clear opt-out cookie so the "already opted out" guard doesn't trigger.
     await page.context().clearCookies({ name: 'fazcookie-dnsmpi' });
@@ -420,9 +444,12 @@ test.describe('[faz_do_not_sell] — cookie path, rate limit, DB lock', () => {
       page.waitForResponse(isOptoutResponse),
       page.locator('.faz-dnsmpi-btn').click(),
     ]);
-    const json2 = (await r2.json()) as { success: boolean; data?: string };
-    expect(json2.success, 'second submission should be blocked').toBe(false);
-    expect(String(json2.data ?? '')).toMatch(/too many requests/i);
+    const json2 = (await r2.json()) as { success: boolean; data?: unknown };
+    expect(json2.success, 'second submission inside the window must be honoured').toBe(true);
+    const optout = (await context.cookies(WP_BASE)).find((c) => c.name === 'fazcookie-dnsmpi');
+    expect(optout?.value, 'and must set the opt-out cookie').toBe('1');
+    expect(optoutRows(), 'the window holds back the second audit row').toBe(rowsAfterFirst);
+    expect(unlogged(), 'which is counted instead of vanishing').toBe(unloggedAfterFirst + 1);
     } finally {
       removeLoopbackPeer();
     }
