@@ -469,7 +469,7 @@ class Banner extends Store {
 		// keeps the X whenever this is on. It is a setting, not one of the
 		// config switches apply_law_switches() carries, so it is reset here.
 		$properties['settings']['allowCloseButtonWithReject'] = false;
-		$gdpr_expiry =isset( $gdpr['settings']['consentExpiry']['value'] ) ? (int) $gdpr['settings']['consentExpiry']['value'] : 0;
+		$gdpr_expiry = isset($gdpr['settings']['consentExpiry']['value'] ) ? (int) $gdpr['settings']['consentExpiry']['value'] : 0;
 		$expiry      = isset( $properties['settings']['consentExpiry']['value'] ) ? (int) $properties['settings']['consentExpiry']['value'] : 0;
 		if ( $gdpr_expiry > 0 && ( $expiry <= 0 || $expiry > $gdpr_expiry ) ) {
 			$properties['settings']['consentExpiry']['value'] = $gdpr_expiry;
