@@ -620,9 +620,10 @@ namespace {
 	// ── AMP and the classic page must agree on the scope fingerprint ────────
 	// resolve_context() folded any non-ccpa law to "gdpr" while class-frontend
 	// hashes $banner->get_law() verbatim. The banner UI offers "gdpr_ccpa" and
-	// the setup wizard writes "both"/"popia", so on those the two fingerprints
-	// diverged and each surface permanently rejected the other's cookie.
-	foreach ( array( 'gdpr', 'ccpa', 'gdpr_ccpa', 'both', 'popia' ) as $raw_law ) {
+	// the setup wizard writes "both"/"popia"/"kvkk", so on those the two
+	// fingerprints diverged and each surface permanently rejected the other's
+	// cookie.
+	foreach ( array( 'gdpr', 'ccpa', 'gdpr_ccpa', 'both', 'popia', 'kvkk' ) as $raw_law ) {
 		$classic_fp = substr( wp_hash( 'main-banner|' . $raw_law, 'auth' ), 0, 32 );
 		$amp_context = array(
 			'slug'              => 'main-banner',

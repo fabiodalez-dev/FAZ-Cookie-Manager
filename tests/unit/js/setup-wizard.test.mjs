@@ -1,5 +1,5 @@
 /**
- * Guided setup wizard (jsdom) — 62 behavioural regression checks.
+ * Guided setup wizard (jsdom) — 63 behavioural regression checks.
  *
  * Loads the real admin/assets/js/pages/setup.js and exercises navigation,
  * review rendering, the exact onboarding payload, duplicate-submit protection,
@@ -54,6 +54,11 @@ function markup() {
           <span class="faz-setup-law-effect">Opt-in</span>
         </label>
         <label class="faz-setup-law-card">
+          <input type="radio" name="faz-setup-law" value="kvkk" data-expiry="180 days" data-buttons="Equal Accept and Reject">
+          <span class="faz-setup-law-title">KVKK</span>
+          <span class="faz-setup-law-effect">Opt-in</span>
+        </label>
+        <label class="faz-setup-law-card">
           <input type="radio" name="faz-setup-law" value="both" data-expiry="180 days" data-buttons="Equal buttons plus US opt-out">
           <span class="faz-setup-law-title">Both</span>
           <span class="faz-setup-law-effect">Opt-in plus Do Not Sell</span>
@@ -86,6 +91,7 @@ function markup() {
         <label class="faz-setup-region-chip"><input type="checkbox" name="faz-setup-geo-region" value="uk" checked>UK</label>
         <label class="faz-setup-region-chip"><input type="checkbox" name="faz-setup-geo-region" value="us">US</label>
         <label class="faz-setup-region-chip"><input type="checkbox" name="faz-setup-geo-region" value="za">South Africa</label>
+        <label class="faz-setup-region-chip"><input type="checkbox" name="faz-setup-geo-region" value="tr">Türkiye</label>
         <select id="faz-setup-geo-behavior"><option value="show_banner" selected>Show</option><option value="no_banner">Hide</option></select>
       </section>
       <section class="faz-wizard-step" data-step="7" hidden>
@@ -184,7 +190,7 @@ async function flush() {
   await Promise.resolve();
 }
 
-console.log('guided setup wizard (62 checks)');
+console.log('guided setup wizard (63 checks)');
 
 // Navigation, selection, and review rendering (14 checks).
 {
@@ -379,6 +385,9 @@ console.log('guided setup wizard (62 checks)');
   check('31 CCPA selection defaults geo targeting to the US', JSON.stringify(selectedRegions()) === JSON.stringify(['us']));
   chooseLaw('popia');
   check('32 POPIA selection defaults geo targeting to South Africa', JSON.stringify(selectedRegions()) === JSON.stringify(['za']));
+  chooseLaw('kvkk');
+  check('32b KVKK selection defaults geo targeting to Türkiye', JSON.stringify(selectedRegions()) === JSON.stringify(['tr']));
+  chooseLaw('popia');
 
   const uk = document.querySelector('input[name="faz-setup-geo-region"][value="uk"]');
   uk.checked = true;
@@ -545,4 +554,4 @@ console.log('guided setup wizard (62 checks)');
 }
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
-process.exit(failed === 0 && passed === 62 ? 0 : 1);
+process.exit(failed === 0 && passed === 63 ? 0 : 1);

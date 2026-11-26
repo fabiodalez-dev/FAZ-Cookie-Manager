@@ -254,7 +254,7 @@ function faz_rm_php_sources( $root ) {
 // country codes: "'uk' => array( 'GB'" or "'eu' => array(\n 'AT'". A plain
 // list of codes (Geolocation::$eu_countries, which is a separate concern and
 // intentionally still includes GB) is not keyed this way and does not match.
-$faz_literal_pattern = "/'(eu|uk|us|ca|br|au|jp|ch|za)'\s*=>\s*array\s*\(\s*'[A-Z]{2}'/";
+$faz_literal_pattern = "/'(eu|uk|us|ca|br|au|jp|ch|za|tr)'\s*=>\s*array\s*\(\s*'[A-Z]{2}'/";
 
 $faz_literal_files = array();
 foreach ( faz_rm_php_sources( $faz_root ) as $faz_file ) {

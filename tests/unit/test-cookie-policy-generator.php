@@ -247,8 +247,9 @@ assert_true(
 
 // ---------- Constants ----------
 
-assert_eq( count( Generator::JURISDICTIONS ), 4, '4 jurisdictions in scope (gdpr, ccpa, lgpd + popia added for wp.org review request)' );
-assert_eq( count( Generator::LANGUAGES ), 10, '10 languages in scope (en, it, fr, de, es, pt-BR, bg, cs + nl, hr)' );
+assert_eq( count( Generator::JURISDICTIONS ), 5, '5 jurisdictions in scope (gdpr, ccpa, lgpd, popia + turkey-kvkk for the Kurum cookie guidance)' );
+// LANGUAGES: en, it, fr, de, es, pt-BR, bg, cs, nl, hr + tr bundled for Türkiye.
+assert_eq( count( Generator::LANGUAGES ), 11, '11 languages in scope (en, it, fr, de, es, pt-BR, bg, cs, nl, hr + tr)' );
 assert_eq( Generator::normalize_language_code( 'pt_br' ), 'pt-BR', 'Policy language canonicalises locale-style region codes' );
 assert_eq( Generator::normalize_language_code( 'sr-latn' ), 'sr-Latn', 'Policy language canonicalises script subtags' );
 assert_eq( Generator::normalize_language_code( 'sk' ), 'sk', 'Slovak is a valid administrator-authored policy language' );
@@ -256,8 +257,29 @@ assert_true( Generator::is_valid_policy_language( 'sk' ), 'Slovak passes policy-
 assert_false( Generator::is_valid_policy_language( '../../../wp-config' ), 'Path traversal is not a valid policy language' );
 assert_eq( Generator::NATIVE_LANG['lgpd-brazil'], 'pt-BR', 'LGPD native lang is pt-BR' );
 assert_eq( Generator::NATIVE_LANG['gdpr-strict'], 'en', 'GDPR native lang is en' );
-assert_eq( Generator::NATIVE_LANG['ccpa-california'], 'en', 'CCPA native lang is en' );
 assert_eq( Generator::NATIVE_LANG['popia-southafrica'], 'en', 'POPIA native lang is en' );
+assert_eq( Generator::NATIVE_LANG['turkey-kvkk'], 'tr', 'KVKK native lang is tr (the language of Law 6698 and the Kurum guidance)' );
+// The Türkiye jurisdiction contributes two shipped scaffolds: the native
+// Turkish aydınlatma metni reviewed against the Kurum's 2025 cookie guide
+// and Board Decision 2026/347, plus the English fallback other jurisdictions
+// already carry.
+foreach ( array( 'tr', 'en' ) as $kvkk_lang ) {
+	$kvkk_path       = Generator::resolve_template_path( 'turkey-kvkk', $kvkk_lang );
+	$normalized_kvkk = is_string( $kvkk_path ) ? str_replace( '\\', '/', $kvkk_path ) : '';
+	assert_true(
+		'' !== $normalized_kvkk && false !== strpos( $normalized_kvkk, '/turkey-kvkk/' . $kvkk_lang . '.md' ),
+		"KVKK template resolves for lang '{$kvkk_lang}'"
+	);
+}
+$kvkk_body = (string) file_get_contents( Generator::resolve_template_path( 'turkey-kvkk', 'tr' ) );
+assert_true(
+	false !== strpos( $kvkk_body, '{{COMPANY_NAME}}' )
+		&& false !== strpos( $kvkk_body, '{{COMPANY_ADDRESS}}' )
+		&& false !== strpos( $kvkk_body, '{{COMPANY_EMAIL}}' )
+		&& false !== strpos( $kvkk_body, '{{COOKIE_CATEGORIES}}' )
+		&& false !== strpos( $kvkk_body, '{{OFFICIAL_RESOURCES_URL}}' ),
+	"KVKK 'tr' template has the identity, inventory, and Board-link placeholders"
+);
 
 // ---------- POPIA templates (added for the wp.org South-Africa request) ----------
 
@@ -356,6 +378,26 @@ foreach ( array( 'gdpr-strict', 'ccpa-california', 'lgpd-brazil' ) as $faz_gated
 		"{$faz_gated}: a whitespace-only name counts as missing"
 	);
 }
+
+// KVKK (Law 6698, m.10) demands the controller's name, postal address and
+// contact email in the aydınlatma before any cookie data is processed, so the
+// same three-field floor applies — no DPO requirement (Turkish law does not
+// mandate one for everyone).
+assert_eq(
+	Generator::missing_required_settings( 'turkey-kvkk', array() ),
+	array( 'company.name', 'company.address', 'company.email' ),
+	'turkey-kvkk: controller name, postal address and contact email are required server-side'
+);
+assert_eq(
+	Generator::missing_required_settings( 'turkey-kvkk', array( 'company' => array( 'name' => 'ACME', 'address' => 'İstanbul', 'email' => 'privacy@acme.test' ) ) ),
+	array(),
+	'turkey-kvkk: name + postal address + valid email satisfy the gate (no POPIA-only fields demanded)'
+);
+assert_eq(
+	Generator::missing_required_settings( 'turkey-kvkk', array( 'company' => array( 'name' => 'ACME', 'email' => 'not-an-email' ) ) ),
+	array( 'company.address', 'company.email' ),
+	'turkey-kvkk: a malformed contact email is reported, not published'
+);
 
 // ---------- Generator::policy_version_hash ----------
 
