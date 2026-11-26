@@ -2327,7 +2327,10 @@
     // the URL — an insertion only, the one rewrite that cannot move where an
     // attribute ends in markup nobody tokenized — and when something still
     // fetches after that, the string is cut short at the latest "<style" that
-    // leaves nothing fetchable in what is kept.
+    // leaves nothing fetchable in what is kept. The hold is the same in both
+    // files and reaches a style="…" attribute of the unread rest as well as a
+    // sheet; giving either back is the runtime's job (_fazUnblockServerSide(),
+    // step 4b-bis); this file has no restore pass for them.
     var HELD_CSS_URL = 'about:invalid#faz-held:';
     function tailFetches(policy, text) {
         function fetches(css) {

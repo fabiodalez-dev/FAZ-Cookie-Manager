@@ -249,6 +249,33 @@ console.log('\nruntime: consent hands a held sheet back');
   ok('with consent the original text is back', st.textContent === '@import url(https://tracker.test/b.css);.x{color:red}');
 }
 
+// The hold reads markup nobody tokenized, so it also writes the marker into a
+// style="…" attribute of the unread rest. The restore pass used to look at
+// <style> elements only: such an element kept "about:invalid#faz-held:" in
+// its inline style after consent, until the next page load.
+console.log('\nruntime: consent hands a held style attribute back');
+{
+  const w = runtime();
+  const el = write(w, SVG_CDATA + '<style>.a{color:red}</style>'
+    + '<div id="bare" style="background:url(https://tracker.test/x.png)">t</div>'
+    + '<div id="quoted" style=\'color:red;background-image:url("https://tracker.test/y.png")\'>t</div>'
+    + '<div id="own" style="background:url(/local.png)">t</div>', { attach: true });
+  const bare = el.querySelector('#bare');
+  const quoted = el.querySelector('#quoted');
+  const own = el.querySelector('#own');
+  ok('precondition: the unread style attributes are held', !!bare && !!quoted
+    && bare.getAttribute('style').indexOf(HELD) !== -1 && quoted.getAttribute('style').indexOf(HELD) !== -1);
+  ok('precondition: an attribute naming only the site is left as written', !!own && own.getAttribute('style') === 'background:url(/local.png)');
+  safe(() => w.eval('_fazUnblockServerSide()'));
+  ok('without consent the restore pass leaves them held', bare.getAttribute('style').indexOf(HELD) !== -1 && quoted.getAttribute('style').indexOf(HELD) !== -1);
+  w.fazcookie = w.fazcookie || {};
+  w.fazcookie._fazGetFromStore = (k) => ({ marketing: 'yes', necessary: 'yes' }[k]);
+  safe(() => w.eval('_fazUnblockServerSide()'));
+  ok('with consent the unquoted url() is back as written', bare.getAttribute('style') === 'background:url(https://tracker.test/x.png)');
+  ok('with consent the quoted url() is back as written', quoted.getAttribute('style') === 'color:red;background-image:url("https://tracker.test/y.png")');
+  ok('nothing in the document still carries the marker', w.document.documentElement.outerHTML.indexOf(HELD) === -1);
+}
+
 console.log('\nruntime: the option off leaves markup alone');
 {
   const html = SVG_CDATA + '<style>@import url(https://tracker.test/b.css);</style>';

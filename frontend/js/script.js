@@ -7050,7 +7050,8 @@ function _fazHoldCssUrlsInPlace(text) {
  *      cannot make any of it live, and no sheet of the part that is dropped
  *      reaches the engine.
  * A rest with no "<style" in it, or with no blocked URL, is returned as it
- * was. A held sheet is given back by _fazUnblockServerSide() on consent.
+ * was. A held sheet, and a style="…" attribute the hold reached in the same
+ * rest, are given back by _fazUnblockServerSide() on consent.
  *
  * @param {string} tail
  * @returns {string}
@@ -8349,6 +8350,25 @@ function _fazUnblockServerSide() {
                 var css = live.split(_FAZ_HELD_CSS_URL).join("");
                 if (_fazCssShouldBlock(css)) return;
                 el.textContent = css;
+            });
+        // The same hold in a style="…" attribute. The rest it was applied to
+        // was never tokenized, so _fazHoldCssUrlsInPlace() cannot tell a sheet
+        // from an attribute value and holds a blocked url() in both. That is
+        // kept: limiting the hold to the text between "<style" and "</style"
+        // would need the very reading the walk gave up on (in foreign content
+        // a CDATA section carries "</style" as text and the sheet goes on
+        // after it), and a URL left unheld only because of where it seemed to
+        // be is the leak the hold exists to close. What was missing is this
+        // half: an element kept "about:invalid#faz-held:" in its inline style
+        // after consent, until the next page load. Same rule as above, the
+        // declarations go back only when no URL in them is still blocked.
+        document.querySelectorAll('[style*="faz-held:"]')
+            .forEach(function (el) {
+                var live = el.getAttribute("style") || "";
+                if (live.indexOf(_FAZ_HELD_CSS_URL) === -1) return;
+                var css = live.split(_FAZ_HELD_CSS_URL).join("");
+                if (_fazCssShouldBlock(css)) return;
+                el.setAttribute("style", css);
             });
     }
 
