@@ -556,3 +556,98 @@ test('real FlyingPress HIT serves the same strict shell, then California bootstr
     if (flyingPressAvailable) repairLegacyFlyingPressDropinAsAdmin();
   }
 });
+
+test('a CCPA-only site still gets the cacheable strict shell, built from its banner rendered opt-in (#377)', async ({ browser, request }) => {
+  // Only the CCPA row stays active. Until #377 the readiness gate required an
+  // active global GDPR banner, so this site bypassed the page cache on every
+  // request. load_banner() now renders the CCPA banner as its opt-in version
+  // under the strict ruleset, so the shell can be built and shared.
+  wpEval(`
+    global $wpdb;
+    $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'status' => 0 ), array( 'slug' => 'faz-strict-gdpr-shell' ) );
+  `);
+  clearCaches();
+  try {
+    expect(privateCall('is_geo_bootstrap_cache_active'), 'the readiness gate accepts a global CCPA banner').toBe('true');
+    // FlyingPress may need several requests before it stores the page (the
+    // first render after a purge is sent no-store), so wait for the
+    // Californian copy to be cached. Before #377 every request bypassed the
+    // cache and this never turned into a HIT.
+    if (flyingPressAvailable) await primeCache(request);
+
+    const californiaShell = await request.get(pageUrl, { headers: requestHeaders('US', 'CA') });
+    const italyShell = await request.get(pageUrl, { headers: requestHeaders('IT') });
+    for (const shell of [californiaShell, italyShell]) {
+      const html = await shell.text();
+      expect(html).toMatch(/"_geoBootstrap":(?:true|"1")/);
+      expect(html, 'the shell is the opt-in rendering').toContain('"applicableLaw":"gdpr"');
+      expect(html).not.toContain('"applicableLaw":"ccpa"');
+      expect(html, 'the opt-out text is not in the shell').not.toContain(LIVE_MARKER);
+    }
+    if (flyingPressAvailable) {
+      // The page cache is the proof: the copy stored for the Californian is
+      // the one the Italian visitor is served. Before #377 the readiness gate
+      // failed here and every request bypassed the cache.
+      expect((italyShell.headers()['x-flying-press-cache'] ?? '').toUpperCase(), 'the Italian visitor is served the copy cached for the Californian').toBe('HIT');
+    }
+
+    const endpoint = `${BASE_URL}/wp-json/faz/v1/banner/en`;
+    const caPayload = await (await request.get(endpoint, { headers: requestHeaders('US', 'CA') })).json();
+    const itPayload = await (await request.get(endpoint, { headers: requestHeaders('IT') })).json();
+    expect(caPayload.activeLaw, 'California gets the CCPA banner live').toBe('ccpa');
+    expect(caPayload.html).toContain(LIVE_MARKER);
+    expect(itPayload.activeLaw, 'Italy gets the opt-in rendering live').toBe('gdpr');
+    expect(itPayload.bannerSlug).toBe('faz-live-ccpa');
+    expect(itPayload.html).not.toContain(LIVE_MARKER);
+
+    const context = await browser.newContext({ baseURL: BASE_URL, extraHTTPHeaders: requestHeaders('IT') });
+    const page = await context.newPage();
+    try {
+      await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => (window as any).fazcookie?._diag?.().geoBootstrapResolved === 'live');
+      await expect(page.locator('[data-faz-tag="accept-button"]').first(), 'the Italian visitor can accept').toBeVisible();
+      await expect(page.locator('[data-faz-tag="reject-button"]').first(), 'and reject').toBeVisible();
+      expect(await page.evaluate(() => (window as any).__fazBootstrapOptionalRan === true), 'nothing optional ran before a choice').toBe(false);
+    } finally {
+      await context.close();
+    }
+
+    // The same shell when the live endpoint fails: the opt-in rendering stays
+    // authoritative, a stale CCPA grant is dropped, nothing optional runs.
+    const staleConsent = [
+      'consentid:stale-california',
+      'consent:yes',
+      'action:yes',
+      `__scope.banner:${caPayload.bannerSlug}`,
+      '__scope.law:ccpa',
+      `__scope.fp:${caPayload.scopeFingerprint}`,
+      'necessary:yes',
+      'marketing:yes',
+      `rev:${consentRevision}`,
+    ].join(',');
+    const failing = await browser.newContext({ baseURL: BASE_URL, extraHTTPHeaders: requestHeaders('US', 'CA') });
+    await failing.addCookies([{ name: 'fazcookie-consent', value: encodeURIComponent(staleConsent), url: BASE_URL }]);
+    const failingPage = await failing.newPage();
+    await failingPage.route('**/wp-json/faz/v1/banner/**', (route) => route.abort('failed'));
+    try {
+      await failingPage.goto(pageUrl, { waitUntil: 'domcontentloaded' });
+      await failingPage.waitForFunction(() => (window as any).fazcookie?._diag?.().geoBootstrapResolved === 'strict-fallback');
+      const state = await failingPage.evaluate(() => ({
+        law: (window as any).getFazConsent?.().activeLaw,
+        action: (window as any).fazcookie?._fazGetFromStore?.('action'),
+        optionalRan: (window as any).__fazBootstrapOptionalRan === true,
+      }));
+      expect(state, 'the opt-in shell stays authoritative and nothing optional runs').toEqual({ law: 'gdpr', action: '', optionalRan: false });
+      expect((await failing.cookies(BASE_URL)).some((cookie) => cookie.name === 'fazcookie-consent'), 'the stale CCPA consent is removed').toBe(false);
+      await expect(failingPage.locator('[data-faz-tag="reject-button"]').first(), 'the visitor can still reject').toBeVisible();
+    } finally {
+      await failing.close();
+    }
+  } finally {
+    wpEval(`
+      global $wpdb;
+      $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'status' => 1 ), array( 'slug' => 'faz-strict-gdpr-shell' ) );
+    `);
+    clearCaches();
+  }
+});

@@ -179,6 +179,11 @@ class Api extends Rest_Controller {
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
+				'advanced_mode_gtm' => array(
+					'description' => __( 'Advanced Consent Mode: also load the Google Tag Manager container before consent.', 'faz-cookie-manager' ),
+					'type'        => 'boolean',
+					'context'     => array( 'view', 'edit' ),
+				),
 				'google_tag_ids' => array(
 					'description' => __( 'Google tag IDs the plugin loads itself (G-, GT-, AW-, DC-, GTM-), comma-separated.', 'faz-cookie-manager' ),
 					'type'        => 'string',

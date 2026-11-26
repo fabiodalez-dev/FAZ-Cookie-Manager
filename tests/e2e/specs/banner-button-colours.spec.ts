@@ -1,0 +1,592 @@
+/**
+ * Preference centre Save colours, per-button hover colours and borders, custom
+ * revisit image, revisit widget size and border.
+ *
+ * Asked for on the wp.org forum ("More Control than Colours"). Driven the way an
+ * administrator does it (Colours tab, save, template regeneration) and read from
+ * the banner a visitor receives. Every field is empty by default, and an empty
+ * field has to leave the banner as it was.
+ */
+import type { Browser, Page } from '@playwright/test';
+import { test, expect } from '../fixtures/wp-fixture';
+import { resetBaseline } from '../utils/seed-defaults';
+import { wpEval } from '../utils/wp-env';
+
+const EDITOR = '/wp-admin/admin.php?page=faz-cookie-manager-banner';
+const SAVE = '[data-faz-tag="detail-save-button"]';
+
+/** Converts #rrggbb to the rgb() form getComputedStyle returns. */
+const rgb = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+};
+
+/** Opens the banner editor on the Colours tab once the banner has loaded. */
+async function openColours(page: Page) {
+  await page.goto(EDITOR, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#faz-b-name')).not.toHaveValue('', { timeout: 30_000 });
+  await page.click('button.faz-tab[data-tab="colours"]');
+  await expect(page.locator('#faz-b-detail-save-bg-hex')).toBeVisible();
+}
+
+/** Pins the backgrounds a contrast test depends on, so the default theme cannot change what it measures. */
+async function pinBackgrounds(page: Page) {
+  for (const [id, value] of [['faz-b-notice-bg', '#ffffff'], ['faz-b-settings-bg', 'transparent']]) {
+    await page.locator(`#${id}-hex`).fill(value);
+    await page.locator(`#${id}-hex`).dispatchEvent('change');
+  }
+}
+
+/** Writes the preference centre background, which has no field, into the stored banner. */
+function setPreferenceCentreBg(color: string) {
+  wpEval(`
+    global $wpdb;
+    $t = $wpdb->prefix . 'faz_banners';
+    $s = json_decode( $wpdb->get_var( "SELECT settings FROM {$t} WHERE banner_default = 1" ), true );
+    $s['config']['preferenceCenter']['styles']['background-color'] = '${color}';
+    $wpdb->update( $t, array( 'settings' => wp_json_encode( $s ) ), array( 'banner_default' => 1 ) );
+    \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+  `);
+}
+
+/** Clicks Save and fails the test unless the banner request answers 200. */
+async function saveBanner(page: Page) {
+  const response = page.waitForResponse(
+    (r) => r.url().includes('banners') && !r.url().includes('preview')
+      && (r.request().method() === 'PUT' || r.request().method() === 'POST'),
+    { timeout: 30_000 },
+  );
+  await page.click('#faz-b-save');
+  const saved = await response;
+  if (saved.status() !== 200) throw new Error(`Banner save failed (${saved.status()}): ${await saved.text()}`);
+}
+
+/** Fills colour fields by id (through their text inputs) and saves the banner. */
+async function setFields(page: Page, fields: Record<string, string>) {
+  await openColours(page);
+  for (const [id, value] of Object.entries(fields)) {
+    await page.locator(`#${id}-hex`).fill(value);
+    await page.locator(`#${id}-hex`).dispatchEvent('change');
+  }
+  await saveBanner(page);
+}
+
+/** Opens the home page in a fresh context, with no consent cookie, and waits for the banner. */
+async function visitor(browser: Browser, setup?: (front: Page) => Promise<void>) {
+  const context = await browser.newContext();
+  const front = await context.newPage();
+  await setup?.(front);
+  await front.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(front.locator('.faz-consent-container [data-faz-tag="accept-button"]').first()).toBeVisible();
+  return { context, front };
+}
+
+/** Opens the preference centre from the banner's Settings button. */
+async function openPreferences(front: Page) {
+  await front.locator('[data-faz-tag="settings-button"]').first().click();
+  await expect(front.locator(SAVE).first()).toBeVisible();
+}
+
+/** Reads the computed colours, opacity and transition of the first match. */
+const colours = (front: Page, selector: string) => front.locator(selector).first().evaluate((el) => {
+  const s = getComputedStyle(el);
+  return { color: s.color, background: s.backgroundColor, border: s.borderTopColor, opacity: s.opacity, transition: s.transitionDuration };
+});
+
+/** Moves the pointer onto the button and reads it once the opacity has settled. */
+async function hovered(front: Page, selector: string) {
+  await front.locator(selector).first().hover();
+  await front.waitForTimeout(400);
+  return colours(front, selector);
+}
+
+// resetBaseline() does not touch the colours, so the row is kept and put back:
+// otherwise a colour set here would still be on the banner of the next spec.
+const restoreBanner = `
+  global $wpdb;
+  $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => get_option( 'faz_e2e_colours_snapshot' ) ), array( 'banner_default' => 1 ) );
+  // The controller keeps the rows in a cache of its own: left stale, the next
+  // reader saves the old colours straight back.
+  \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+  delete_option( 'faz_banner_template' );
+  if ( function_exists( 'faz_clear_banner_template_cache' ) ) { faz_clear_banner_template_cache(); }
+`;
+
+test.beforeAll(() => {
+  resetBaseline();
+  wpEval(`
+    global $wpdb;
+    update_option( 'faz_e2e_colours_snapshot', $wpdb->get_var( "SELECT settings FROM {$wpdb->prefix}faz_banners WHERE banner_default = 1" ), false );
+  `);
+});
+
+test.beforeEach(() => {
+  wpEval(restoreBanner);
+});
+
+test.afterAll(() => {
+  wpEval(`${restoreBanner} delete_option( 'faz_e2e_colours_snapshot' );`);
+});
+
+test('with every field empty, Save follows Settings and hover is the 80% opacity', async ({ page, browser, loginAsAdmin }) => {
+  await loginAsAdmin(page);
+  await setFields(page, { 'faz-b-settings-bg': '#112233', 'faz-b-settings-text': '#ffffff', 'faz-b-settings-border': '#445566' });
+  const { context, front } = await visitor(browser);
+  try {
+    const css = await front.locator('style').evaluateAll((all) => all.map((s) => s.textContent || '').join(''));
+    expect(css).not.toContain('detail-save-button-custom');
+    expect(css).not.toContain('-hover-background-color');
+    expect(css).not.toContain('-hover-border-color');
+    expect(css).not.toContain('revisit-consent-border-color');
+    const accept = await hovered(front, '[data-faz-tag="accept-button"]');
+    expect(accept.opacity).toBe('0.8');
+    expect(accept.transition).toBe('0s');
+    await openPreferences(front);
+    const save = await colours(front, SAVE);
+    expect(save.background).toBe(rgb('#112233'));
+    expect(save.color).toBe(rgb('#ffffff'));
+    expect(save.border).toBe(rgb('#445566'));
+  } finally {
+    await context.close();
+  }
+});
+
+test('Save takes its own colours, and Accept and Reject in the preference centre keep theirs', async ({ page, browser, loginAsAdmin }) => {
+  await loginAsAdmin(page);
+  await setFields(page, {
+    'faz-b-accept-bg': '#0a5c36',
+    'faz-b-settings-bg': '#112233',
+    'faz-b-detail-save-bg': '#7a1f5c',
+    'faz-b-detail-save-text': '#fefefe',
+    'faz-b-detail-save-border': '#330022',
+  });
+  const { context, front } = await visitor(browser);
+  try {
+    expect((await colours(front, '[data-faz-tag="settings-button"]')).background).toBe(rgb('#112233'));
+    await openPreferences(front);
+    const save = await colours(front, SAVE);
+    expect(save.background).toBe(rgb('#7a1f5c'));
+    expect(save.color).toBe(rgb('#fefefe'));
+    expect(save.border).toBe(rgb('#330022'));
+    expect((await colours(front, '[data-faz-tag="detail-accept-button"]')).background).toBe(rgb('#0a5c36'));
+  } finally {
+    await context.close();
+  }
+});
+
+test('a hover colour applies to its button only, at full opacity', async ({ page, browser, loginAsAdmin }) => {
+  await loginAsAdmin(page);
+  await setFields(page, { 'faz-b-accept-bg': '#0a5c36', 'faz-b-accept-hover-bg': '#222222', 'faz-b-accept-hover-text': '#eeeeee' });
+  const { context, front } = await visitor(browser);
+  try {
+    // Jurisdiction routing gives Reject the style of Accept for equal prominence,
+    // and hover has to follow it: a Reject that alone fades is not equal.
+    const equalProminence = (await colours(front, '[data-faz-tag="reject-button"]')).background === rgb('#0a5c36');
+    const accept = await hovered(front, '[data-faz-tag="accept-button"]');
+    expect(accept.background).toBe(rgb('#222222'));
+    expect(accept.color).toBe(rgb('#eeeeee'));
+    expect(accept.opacity).toBe('1');
+    const reject = await hovered(front, '[data-faz-tag="reject-button"]');
+    if (equalProminence) {
+      expect(reject.background).toBe(rgb('#222222'));
+      expect(reject.opacity).toBe('1');
+    } else {
+      expect(reject.background).not.toBe(rgb('#222222'));
+      expect(reject.opacity).toBe('0.8');
+    }
+    const settings = await hovered(front, '[data-faz-tag="settings-button"]');
+    expect(settings.background).not.toBe(rgb('#222222'));
+    expect(settings.opacity).toBe('0.8');
+  } finally {
+    await context.close();
+  }
+});
+
+test('a hover border colour applies on hover, and the colours change over 0.2 seconds', async ({ page, browser, loginAsAdmin }) => {
+  await loginAsAdmin(page);
+  await setFields(page, {
+    'faz-b-settings-border': '#0a5c36',
+    'faz-b-settings-hover-bg': '#222222',
+    'faz-b-settings-hover-border': '#ff0000',
+  });
+  const settings = '[data-faz-tag="settings-button"]';
+  const { context, front } = await visitor(browser, async (front) => {
+    await front.addInitScript((selector) => {
+      document.addEventListener('transitionrun', (event) => {
+        const target = event.target;
+        if (target instanceof Element && target.matches(selector) && event.propertyName === 'border-top-color') {
+          const count = Number(target.getAttribute('data-test-border-transitions'));
+          target.setAttribute('data-test-border-transitions', String(count + 1));
+        }
+      });
+    }, settings);
+    // Hold the banner stylesheet past the fail-open timeout, as a slow CDN
+    // does: the banner is shown first and its colours arrive later. That
+    // arrival must not play as a transition.
+    await front.route(/\/faz-cookie-manager\/assets\/banner-[^/]+\.css/, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await route.continue();
+    });
+  });
+  try {
+    const button = front.locator(settings).first();
+    await expect(button).toHaveCSS('border-top-color', rgb('#0a5c36'), { timeout: 10_000 });
+    await expect(button).toHaveCSS('transition-duration', '0.2s, 0.2s, 0.2s');
+    expect(await button.getAttribute('data-test-border-transitions')).toBeNull();
+    const hover = await hovered(front, settings);
+    expect(hover.border).toBe(rgb('#ff0000'));
+    expect(hover.background).toBe(rgb('#222222'));
+    await expect(button).toHaveAttribute('data-test-border-transitions', '1');
+    await front.mouse.move(1, 1);
+    await expect(button).toHaveAttribute('data-test-border-transitions', '2');
+    await expect(button).toHaveCSS('border-top-color', rgb('#0a5c36'));
+    // A button without hover colours keeps the opacity fade and no transition.
+    expect((await colours(front, '[data-faz-tag="accept-button"]')).transition).toBe('0s');
+  } finally {
+    await context.close();
+  }
+
+  // A visitor whose system asks for reduced motion gets the colours at once.
+  const reduced = await browser.newContext({ reducedMotion: 'reduce' });
+  try {
+    const front2 = await reduced.newPage();
+    await front2.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(front2.locator('[data-faz-tag="settings-button"]').first()).toBeVisible();
+    expect((await colours(front2, '[data-faz-tag="settings-button"]')).transition).toBe('0s');
+    expect((await hovered(front2, '[data-faz-tag="settings-button"]')).border).toBe(rgb('#ff0000'));
+  } finally {
+    await reduced.close();
+  }
+});
+
+test('the preview endpoint discards arrays in scalar colour and size fields without warnings', () => {
+  const result = JSON.parse(wpEval(`
+    wp_set_current_user( (int) get_users( array( 'role' => 'administrator', 'fields' => 'ID', 'number' => 1 ) )[0] );
+    $request = new WP_REST_Request( 'POST', '/faz/v1/banners/preview' );
+    $request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+    $request->set_header( 'Content-Type', 'application/json' );
+    $request->set_body( wp_json_encode( array(
+      'name' => 'Invalid scalar settings',
+      'status' => true,
+      'default' => false,
+      'contents' => array(),
+      'properties' => array( 'config' => array(
+        'revisitConsent' => array( 'widgetSize' => array( 80 ), 'imageSize' => array( 50 ), 'styles' => array( 'border-color' => array( '#123456' ) ) ),
+        'notice' => array( 'elements' => array( 'buttons' => array( 'elements' => array(
+          'accept' => array( 'styles' => array( 'hover-border-color' => array( '#123456' ) ) ),
+        ) ) ) ),
+      ) ),
+    ) ) );
+    $warnings = array();
+    set_error_handler( static function ( $severity, $message ) use ( &$warnings ) {
+      $warnings[] = $message;
+      return true;
+    }, E_WARNING );
+    try {
+      $response = rest_do_request( $request );
+    } finally {
+      restore_error_handler();
+    }
+    echo wp_json_encode( array( 'status' => $response->get_status(), 'styles' => $response->get_data()['styles'] ?? '', 'warnings' => $warnings ) );
+  `));
+  expect(result.status).toBe(200);
+  expect(result.warnings).toEqual([]);
+  expect(result.styles).not.toContain('-hover-border-color');
+  expect(result.styles).not.toContain('--faz-revisit-consent-border-color');
+  expect(result.styles).not.toMatch(/width:(80|50)px;height:\1px/);
+});
+
+test('Save hovers like Settings unless it has colours of its own', async ({ page, browser, loginAsAdmin }) => {
+  await loginAsAdmin(page);
+  await setFields(page, { 'faz-b-settings-hover-bg': '#333333' });
+  let session = await visitor(browser);
+  try {
+    await openPreferences(session.front);
+    expect((await hovered(session.front, SAVE)).background).toBe(rgb('#333333'));
+  } finally {
+    await session.context.close();
+  }
+
+  await setFields(page, { 'faz-b-detail-save-bg': '#7a1f5c' });
+  session = await visitor(browser);
+  try {
+    await openPreferences(session.front);
+    const save = await hovered(session.front, SAVE);
+    expect(save.background).toBe(rgb('#7a1f5c'));
+    expect(save.opacity).toBe('0.8');
+  } finally {
+    await session.context.close();
+  }
+
+  await setFields(page, { 'faz-b-detail-save-hover-bg': '#444444' });
+  session = await visitor(browser);
+  try {
+    await openPreferences(session.front);
+    expect((await hovered(session.front, SAVE)).background).toBe(rgb('#444444'));
+  } finally {
+    await session.context.close();
+  }
+});
+
+test('a value that is not a colour never reaches the stylesheet', async ({ page, browser, loginAsAdmin }) => {
+  await loginAsAdmin(page);
+  await setFields(page, { 'faz-b-accept-hover-bg': 'red;}body{display:none}', 'faz-b-detail-save-bg': 'red;}body{display:none}' });
+  const { context, front } = await visitor(browser);
+  try {
+    const css = await front.locator('style').evaluateAll((all) => all.map((s) => s.textContent || '').join(''));
+    expect(css).not.toContain('display:none}body');
+    expect(css).not.toContain('body{display:none}');
+    await expect(front.locator('body')).toBeVisible();
+    expect((await hovered(front, '[data-faz-tag="accept-button"]')).opacity).toBe('0.8');
+  } finally {
+    await context.close();
+  }
+});
+
+test('a theme switch empties the Save and hover colours, which presets do not carry', async ({ page, loginAsAdmin }) => {
+  await loginAsAdmin(page);
+  await openColours(page);
+  for (const id of ['faz-b-detail-save-bg', 'faz-b-accept-hover-bg']) {
+    await page.locator(`#${id}-hex`).fill('#7a1f5c');
+    await page.locator(`#${id}-hex`).dispatchEvent('change');
+  }
+  await page.click('button.faz-tab[data-tab="general"]');
+  const theme = page.locator('#faz-b-theme');
+  const current = await theme.inputValue();
+  await theme.selectOption(current === 'dark' ? 'light' : 'dark');
+  await page.click('button.faz-tab[data-tab="colours"]');
+  await expect(page.locator('#faz-b-detail-save-bg-hex')).toHaveValue('');
+  await expect(page.locator('#faz-b-accept-hover-bg-hex')).toHaveValue('');
+});
+
+test('the contrast check judges a Save text colour against the background it is shown on', async ({ page, loginAsAdmin }) => {
+  setPreferenceCentreBg('#ffffff');
+  await loginAsAdmin(page);
+  await openColours(page);
+  await pinBackgrounds(page);
+  // Only the text is set: the button keeps the Settings background, which by
+  // default is transparent over a white banner.
+  await page.locator('#faz-b-detail-save-text-hex').fill('#ffffff');
+  await page.locator('#faz-b-detail-save-text-hex').dispatchEvent('change');
+  await expect(page.locator('#faz-contrast-warnings')).toContainText('Preference center Save button text vs its background');
+  await page.locator('#faz-b-detail-save-text-hex').fill('#111111');
+  await page.locator('#faz-b-detail-save-text-hex').dispatchEvent('change');
+  await page.locator('#faz-b-title-color-hex').fill('#ffffff');
+  await page.locator('#faz-b-title-color-hex').dispatchEvent('change');
+  await expect(page.locator('#faz-contrast-warnings')).toContainText('Title vs banner background');
+  await expect(page.locator('#faz-contrast-warnings')).not.toContainText('Preference center Save button');
+});
+
+test('a transparent Save is judged against the preference centre, not the banner', async ({ page, loginAsAdmin }) => {
+  // The preference centre background comes from the theme preset and has no
+  // field, so it is set in the stored banner. White text on it is readable,
+  // while on the white banner it would not be.
+  setPreferenceCentreBg('#111111');
+  await loginAsAdmin(page);
+  await openColours(page);
+  await pinBackgrounds(page);
+  await page.locator('#faz-b-detail-save-text-hex').fill('#ffffff');
+  await page.locator('#faz-b-detail-save-text-hex').dispatchEvent('change');
+  // A white title on the white banner always warns: once it is listed the
+  // check has run, so the absence of the Save pair below means something.
+  await page.locator('#faz-b-title-color-hex').fill('#ffffff');
+  await page.locator('#faz-b-title-color-hex').dispatchEvent('change');
+  const warnings = page.locator('#faz-contrast-warnings');
+  await expect(warnings).toContainText('Title vs banner background');
+  await expect(warnings).not.toContainText('Preference center Save button');
+});
+
+test('after a theme switch, Save is judged against the preference centre of the new preset', async ({ page, loginAsAdmin }) => {
+  await loginAsAdmin(page);
+  await openColours(page);
+  await page.click('button.faz-tab[data-tab="general"]');
+  await page.locator('#faz-b-theme').selectOption('dark');
+  await page.click('button.faz-tab[data-tab="colours"]');
+  // The switch strips the stored styles; the dark preset's preference centre
+  // is #121212, so white Save text is readable even on a white banner.
+  await pinBackgrounds(page);
+  await page.locator('#faz-b-detail-save-text-hex').fill('#ffffff');
+  await page.locator('#faz-b-detail-save-text-hex').dispatchEvent('change');
+  await page.locator('#faz-b-title-color-hex').fill('#ffffff');
+  await page.locator('#faz-b-title-color-hex').dispatchEvent('change');
+  const warnings = page.locator('#faz-contrast-warnings');
+  await expect(warnings).toContainText('Title vs banner background');
+  await expect(warnings).not.toContainText('Preference center Save button');
+});
+
+test.describe('revisit widget image', () => {
+  /** Writes the image URL into the hidden field, lets a change event sync the form, and saves. */
+  const setImage = async (page: Page, url: string) => {
+    await openColours(page);
+    await page.evaluate((value) => {
+      (document.getElementById('faz-b-revisit-image-url') as HTMLInputElement).value = value;
+    }, url);
+    await page.locator('#faz-b-title-color-hex').dispatchEvent('change');
+    await saveBanner(page);
+  };
+
+  /** Rejects as a new visitor so the revisit widget shows, and returns that session. */
+  async function revisit(browser: Browser, setup?: (front: Page) => Promise<void>) {
+    const session = await visitor(browser, setup);
+    await session.front.locator('[data-faz-tag="reject-button"]').first().click();
+    await expect(session.front.locator('[data-faz-tag="revisit-consent"]')).toBeVisible();
+    return session;
+  }
+
+  test('a custom image is shown, even with "revisit" in its URL, and the default icon comes back when removed', async ({ page, browser, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    // The URL deliberately contains "revisit": script.js swaps the default icon
+    // by looking for that word in the src.
+    const image = `${new URL(page.url()).origin}/wp-content/plugins/faz-cookie-manager/frontend/images/revisit.svg?custom=1`;
+    await setImage(page, image);
+    let session = await revisit(browser);
+    try {
+      const img = session.front.locator('[data-faz-tag="revisit-consent"] .faz-btn-revisit img');
+      await expect(img).toHaveCount(1);
+      await expect(img).toHaveAttribute('src', /custom=1/);
+      await expect(img).toHaveAttribute('alt', '');
+      await expect(session.front.locator('[data-faz-tag="revisit-consent"] svg')).toHaveCount(0);
+      await expect(session.front.locator('[data-faz-tag="revisit-consent"] .faz-btn-revisit')).toHaveAttribute('aria-label', /.+/);
+    } finally {
+      await session.context.close();
+    }
+
+    await openColours(page);
+    await expect(page.locator('#faz-b-revisit-image-url')).toHaveValue(image);
+    await expect(page.locator('#faz-b-revisit-image-remove')).toBeVisible();
+
+    await setImage(page, '');
+    session = await revisit(browser);
+    try {
+      await expect(session.front.locator('[data-faz-tag="revisit-consent"] .faz-btn-revisit img')).toHaveCount(0);
+      await expect(session.front.locator('[data-faz-tag="revisit-consent"] svg')).toHaveCount(1);
+    } finally {
+      await session.context.close();
+    }
+  });
+
+  /** Fills plain fields of the Colours tab by id and saves the banner. */
+  const setRevisit = async (page: Page, fields: Record<string, string>) => {
+    await openColours(page);
+    for (const [id, value] of Object.entries(fields)) {
+      await page.locator(`#${id}`).fill(value);
+      await page.locator(`#${id}`).dispatchEvent('change');
+    }
+    await saveBanner(page);
+  };
+
+  /** Reads the widget's box and the size of the icon or image inside it. */
+  const widgetBox = (front: Page) => front.locator('[data-faz-tag="revisit-consent"]').evaluate((el) => {
+    const s = getComputedStyle(el);
+    const icon = el.querySelector('.faz-btn-revisit svg, .faz-btn-revisit img') as Element;
+    const r = icon.getBoundingClientRect();
+    return { width: s.width, height: s.height, border: `${s.borderTopWidth} ${s.borderTopStyle} ${s.borderTopColor}`, icon: `${r.width}x${r.height}` };
+  });
+
+  test('left empty, the widget is the 45px circle with a 30px icon and no border', async ({ page, browser, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await setRevisit(page, { 'faz-b-revisit-widget-size': '', 'faz-b-revisit-image-size': '', 'faz-b-revisit-border-hex': '' });
+    const session = await revisit(browser);
+    try {
+      const box = await widgetBox(session.front);
+      expect(box.width).toBe('45px');
+      expect(box.height).toBe('45px');
+      expect(box.icon).toBe('30x30');
+      expect(box.border).toMatch(/^0px none/);
+    } finally {
+      await session.context.close();
+    }
+  });
+
+  test('the widget size, the icon size and the border colour reach the widget', async ({ page, browser, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await setRevisit(page, { 'faz-b-revisit-widget-size': '60', 'faz-b-revisit-image-size': '40', 'faz-b-revisit-border-hex': '#ff0000' });
+    let session = await revisit(browser);
+    try {
+      const box = await widgetBox(session.front);
+      expect(box.width).toBe('60px');
+      expect(box.height).toBe('60px');
+      expect(box.icon).toBe('40x40');
+      expect(box.border).toBe(`1px solid ${rgb('#ff0000')}`);
+    } finally {
+      await session.context.close();
+    }
+
+    // The same sizes apply to a custom image.
+    await setImage(page, `${new URL(page.url()).origin}/wp-content/plugins/faz-cookie-manager/frontend/images/revisit.svg?custom=1`);
+    session = await revisit(browser);
+    try {
+      expect((await widgetBox(session.front)).icon).toBe('40x40');
+    } finally {
+      await session.context.close();
+    }
+  });
+
+  test('an opaque image at the default size stays inside a small widget border', async ({ page, browser, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    const imageUrl = new URL('/faz-e2e-revisit-opaque.png', page.url()).href;
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQI12N4J8gAAALwAQAR6IPOAAAAAElFTkSuQmCC', 'base64');
+    await setRevisit(page, { 'faz-b-revisit-widget-size': '30', 'faz-b-revisit-image-size': '', 'faz-b-revisit-border-hex': '#123456' });
+    await setImage(page, imageUrl);
+    const session = await revisit(browser, (front) => front.route(imageUrl, (route) => route.fulfill({ contentType: 'image/png', body: png })));
+    try {
+      const widget = session.front.locator('[data-faz-tag="revisit-consent"]');
+      await expect.poll(() => widget.locator('img').evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
+      const box = await widgetBox(session.front);
+      expect(box).toEqual({ width: '30px', height: '30px', icon: '28x28', border: `1px solid ${rgb('#123456')}` });
+      const clipping = await widget.evaluate((el) => {
+        const button = el.querySelector('button')!;
+        const img = button.querySelector('img')!;
+        const buttonStyle = getComputedStyle(button);
+        return {
+          topInset: img.getBoundingClientRect().top - el.getBoundingClientRect().top,
+          radius: buttonStyle.borderTopLeftRadius,
+          buttonOverflow: buttonStyle.overflow,
+          widgetOverflow: getComputedStyle(el).overflow,
+        };
+      });
+      expect(clipping).toEqual({ topInset: 1, radius: '50%', buttonOverflow: 'hidden', widgetOverflow: 'visible' });
+    } finally {
+      await session.context.close();
+    }
+  });
+
+  test('an icon larger than the widget is shown at the widget size, and an out-of-range size is brought into range', async ({ page, browser, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await setRevisit(page, { 'faz-b-revisit-widget-size': '', 'faz-b-revisit-image-size': '80' });
+    // The field shows the size that is rendered, not the one typed.
+    await openColours(page);
+    await expect(page.locator('#faz-b-revisit-image-size')).toHaveValue('45');
+    const session = await revisit(browser);
+    try {
+      const box = await widgetBox(session.front);
+      expect(box.width).toBe('45px');
+      expect(box.icon).toBe('45x45');
+    } finally {
+      await session.context.close();
+    }
+
+    await setRevisit(page, { 'faz-b-revisit-widget-size': '500', 'faz-b-revisit-image-size': '3' });
+    await openColours(page);
+    await expect(page.locator('#faz-b-revisit-widget-size')).toHaveValue('100');
+    await expect(page.locator('#faz-b-revisit-image-size')).toHaveValue('12');
+
+    // With a 1px border the image fits inside it: 30px widget, 28px image.
+    await setRevisit(page, { 'faz-b-revisit-widget-size': '30', 'faz-b-revisit-image-size': '100', 'faz-b-revisit-border-hex': '#123456' });
+    await openColours(page);
+    await expect(page.locator('#faz-b-revisit-image-size')).toHaveValue('28');
+  });
+
+  test('a non-http image URL is ignored', async ({ page, browser, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await setImage(page, 'javascript:alert(1)');
+    const session = await revisit(browser);
+    try {
+      await expect(session.front.locator('[data-faz-tag="revisit-consent"] svg')).toHaveCount(1);
+      const html = await session.front.content();
+      expect(html).not.toContain('javascript:alert(1)');
+    } finally {
+      await session.context.close();
+    }
+  });
+});

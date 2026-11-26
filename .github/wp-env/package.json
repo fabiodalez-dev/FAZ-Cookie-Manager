@@ -1,0 +1,9 @@
+{
+  "name": "faz-plugin-check-wp-env",
+  "private": true,
+  "description": "Pins @wordpress/env and its whole dependency tree for the Plugin Check workflow (.github/workflows/plugin-check.yml).",
+  "license": "GPL-3.0-or-later",
+  "dependencies": {
+    "@wordpress/env": "11.7.0"
+  }
+}

@@ -43,7 +43,6 @@
         addRoleSwitchToCheckboxes();
         addDescriptionWrapperId();
         // ARIA attribute and behavior fixes.
-		initEscHandlers();
         fixBannerRole();
         fixModalLabelledby();
         initCheckboxAriaLabels();
@@ -164,7 +163,10 @@
         if ( ! banner ) return;
         banner.setAttribute( 'role', 'dialog' );
         banner.setAttribute( 'aria-modal', 'true' );
-        banner.setAttribute( 'aria-labelledby', 'faz-banner-title' );
+        // An empty title is not rendered; the aria-label set by script.js names the dialog then.
+        if ( document.getElementById( 'faz-banner-title' ) ) {
+            banner.setAttribute( 'aria-labelledby', 'faz-banner-title' );
+        }
     }
 
     /**
@@ -176,24 +178,6 @@
         var prefCenter = document.querySelector( '.faz-preference-center' );
         if ( ! prefCenter ) return;
         prefCenter.setAttribute( 'aria-labelledby', 'faz-modal-title' );
-    }
-
-	 /**
-     * Attach ESC key handlers to the banner.
-     * ESC clicks the plugin's own close button so all internal state cleanup runs.
-     */
-    function initEscHandlers() {
-        // Close the banner when Escape is pressed while focus is inside it.
-        var banner = document.querySelector( '.faz-consent-container' );
-        if ( banner ) {
-            banner.addEventListener( 'keydown', function ( event ) {
-                if ( event.key !== 'Escape' ) return;
-                var closeBtn = document.querySelector( '[data-faz-tag="close-button"]' );
-                if ( closeBtn && ! banner.classList.contains( 'faz-hide' ) ) {
-                    closeBtn.click();
-                }
-            } );
-        }
     }
 
     /**

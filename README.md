@@ -185,6 +185,8 @@ An eight-step first run that configures the plugin for your jurisdiction instead
 - **Theme presets**: Light and dark themes
 - **Brand logo**: Upload custom logo via WordPress Media Library
 - **Live preview**: Real-time banner preview in admin as you edit
+- **Automatic opt-in fallback**: With Geo-Targeting on, a missing GDPR banner is covered by an opt-in rendition of the existing CCPA banner, preserving its look and policy links. Unknown countries use the protective fallback too.
+- **On-site banner check**: When fallback coverage is needed, the WordPress Dashboard and FAZ screens explain it and offer an administrator-only check. It reopens the real banner after a saved choice without clearing consent, ignoring privacy signals, or recording test interactions as visitor metrics.
 - **Responsive**: Adapts to mobile viewports, tested on 375px width
 - **RTL support**: Arabic, Hebrew, Persian, Urdu, and other RTL languages
 - **Consent expiry**: Capped at 180 days per Garante Privacy requirements
@@ -259,6 +261,7 @@ Generate a jurisdiction-aware Cookie Policy page directly from your admin — no
 - **Auto-populated cookie inventory**: pulls live from `wp_faz_cookies`, so anything the scanner adds is reflected at the next render with its category, duration, and description.
 - **Filled with your company data**: name, address, DPO email, third-party services, retention period. Configured once via the admin form, stored in `faz_cookie_policy_data`. Never seeded from `admin_email` or `blogname` (PII protection — operator must explicitly fill the form).
 - **Legal disclaimer**: generated policies show a localized warning by default that the templates are starting points, not legal advice. The administrator can hide it or replace it with reviewed custom text from the Cookie Policy settings.
+- **Email obfuscation**: Cookie Policy settings include a default-enabled **Obfuscate public email addresses** checkbox. Privacy contact and DPO / Encarregado / Information Officer addresses are written as a mix of decimal and hexadecimal HTML entities, including in the legacy `[faz_cookie_policy]` contact link. Addresses remain readable, copyable and usable in existing email links in Chrome, Firefox and Safari, without JavaScript. This deters simple source scrapers, not bots that decode HTML; the encoding is the same on every render, so cached pages and render comparisons are unaffected. Stored addresses and policy-version hashes are unchanged.
 - **Versioning hash** for material-change detection: `data-faz-policy-version` tracks drift across the effective template, gettext policy overrides, and saved data. Display-only fields (`LAST_UPDATED_DATE`) are excluded so the hash doesn't drift on the calendar.
 - **REST API** under `faz/v1/cookie-policy/*` (settings GET/POST, preview POST) — `manage_options` + nonce.
 - **Live preview** from the admin form via a sandboxed iframe modal — iterate without persisting.
@@ -275,6 +278,8 @@ Full GCM v2 integration with all required consent signals:
 - **Wait for update** -- configurable delay (ms) for slow-loading CMPs
 - **URL passthrough** -- pass ad click info even when consent denied
 - **Ads data redaction** -- redact ad data when consent denied
+- **Advanced Consent Mode** (opt-in, default off) -- gtag.js / GA4 / Google Ads load before consent behind a synchronous `consent default` with every signal denied, so they send cookieless pings for modelling; non-Google trackers stay blocked
+- **Google Tag Manager container before consent** (opt-in on top of Advanced, default off, #385) -- the container (gtm.js) loads before consent too, so GA4 and Ads conversion tags configured inside it send cookieless pings. The container can run non-Google tags that ignore Consent Mode, so the site owner must set Consent Settings ("Require additional consent for tag to fire") on each of them in Tag Manager. The container loads for every visitor, including those who reject all categories (their Google tags stay on denied); only with per-service consent turned on can a visitor keep it blocked by switching off the Google Tag Manager service. The noscript iframe stays blocked, and a script that bundles the snippet with another tracker's code keeps waiting for consent
 
 ### Google Additional Consent Mode (GACM)
 
@@ -371,13 +376,13 @@ Detects visitor country for geo-targeted banner display:
 - **11 bundled languages**: English, German, French, Italian, Spanish, Polish, Portuguese (PT + BR), Hungarian, Finnish, Dutch
 - **180+ selectable languages** in the admin configuration
 - **Browser language detection**: resolved client-side from `navigator.languages` so full-page/CDN caches cannot serve the wrong language to visitors (see below)
-- **Plugin integration**: Polylang, WPML, TranslatePress, Weglot auto-detected (URL-based, always cache-safe)
+- **Plugin integration**: Polylang, WPML, TranslatePress, Weglot and the qTranslate family (original qTranslate, mqTranslate, qTranslate Plus, zTranslate, qTranslate-X, qTranslate-XT) auto-detected (URL-based and cache-safe; WPML parameter mode and qTranslate query mode fall back to the default under Cache Compatibility Mode)
 - **Per-language banner content**: Separate title, description, button text per language
 - **RTL auto-detection**: Arabic, Hebrew, Persian, Kurdish, Urdu
 
 #### Full-page cache and CDN compatibility
 
-When **no URL-based multilingual plugin** (WPML/Polylang/TranslatePress/Weglot)
+When **no URL-based multilingual plugin** (WPML/Polylang/TranslatePress/Weglot/qTranslate)
 is installed and **two or more languages** are selected in the admin, the
 banner HTML is rendered server-side in the **site default language**, the
 same document for every visitor, so it is safe to cache under one key per URL.
@@ -709,6 +714,46 @@ add_filter( 'faz_load_shortcode_assets_everywhere', function ( $everywhere, $ass
 ## Changelog
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
+
+### 1.40.0 — 2026-11-21
+
+- Security: closes the 20 leads and 50 of the hardening notes of a full security audit of 1.39.0 (#401, #403): the banner and placeholder Accept buttons can no longer be forged from post content, restored style/background/object values must be signed by the server, scripts cannot be planted by users without `unfiltered_html`, multisite settings and tables stay per site, and the ipinfo, Do-Not-Sell and DSAR limits are tighter (IPv6 counted per /64). On multisite the scanner requires the site host to resolve to public addresses; single sites can opt in with the `faz_scanner_require_public_site_ip` filter.
+- WP Maps Google maps show the Google Maps placeholder until consent and are drawn after Accept without a reload (#406).
+- Fixed: an apostrophe in a cookie or category description was shown as `\'` in the cookie table, the block, the cookie policy and the export (#408). Existing texts are cleaned once on upgrade.
+- Fixed: the brand logo takes its alt text from the Media Library instead of "Brand logo" (#404).
+- Fixed: Escape no longer records a rejection when the close button is shown next to Reject, or when it collapses the pushdown panel (#409).
+- Fixed: Divi Builder editor cookies are filed as WordPress Internal and hidden from visitors; the cookie policy's "Last updated on" moves only when the policy changes (#402).
+- Fixed: Owl Carousel loop sliders (for example Signify Pro's logo slider) stayed empty until a resize (#405).
+
+### 1.39.0 — 2026-11-11
+
+- Box banners can now use the Pushdown preference centre: the categories open inside the corner box, with Accept, Reject and Save one click away and equal button widths on phones (#392). CCPA / Do Not Sell banners keep the popup.
+- Brand Logo: a new "Logo position" setting puts the logo beside the title and text instead of above them (#393).
+- Banner buttons: a hover border colour, and a 0.2-second colour transition for buttons with hover colours (skipped for reduced motion). Revisit widget: size, icon or image size, and a border colour. All empty by default, so existing banners look the same.
+- Fixed: HubSpot forms embedded with the legacy hbspt.forms.create() code only appeared after a reload (#396). The inline call is now held with its library and runs after consent; the same applies to the inline calls of Mixpanel, Segment, Heap, PostHog, TikTok, Sentry, Klaviyo, AdSense and Google Maps.
+- Fixed: an array posted into a banner colour or size field raised PHP warnings in the preview and save.
+
+### 1.38.0 — 2026-11-08
+
+- Google Consent Mode → Advanced Settings: a new opt-in, off by default, loads the Google Tag Manager container before consent when Advanced Consent Mode is on (#385), so Google tags configured inside Tag Manager send cookieless pings for visitors who have not consented. The container loads for every visitor, unless per-service consent is on and the visitor switches off the Google Tag Manager service, and it never loads early on AMP or on a page without wp_head(). The settings page warns that the site owner becomes responsible for the consent settings of every non-Google tag inside it.
+- qTranslate support (qTranslate-XT, qTranslate-X, qTranslate, mqTranslate, qTranslate Plus and zTranslate): the banner follows the language chosen in qTranslate instead of the browser language. With Cache Compatibility Mode on and qTranslate's query mode (?lang=), cached pages show the default language; the URL modes (/en/ or per domain) are followed.
+- Keyboard access: after a choice, focus moves to the cookie icon, which has a visible focus ring; the icon moves focus into the banner it reopens, Customise into the preferences, Tab stays inside the open dialog, and Escape returns focus to the button that opened the preferences. All banner layouts.
+- Banner → Colours: background opacity and text alignment; Save button colours, hover colours for the banner buttons, and a custom image for the revisit widget. All empty by default, so existing banners look the same.
+- Cookie Policy: privacy contact and DPO addresses are obfuscated as HTML character references by default, so scrapers that read the page source do not get them (#383, by roboes). Visitors see and use them as before.
+- Turkish banner, preference centre and category texts (#381, by gven09), and Turkish cookie duration units.
+- Fixed: the opt-out popup no longer says a Global Privacy Control signal was detected when the browser sends none, and with the signal the Do Not Sell checkbox is ticked and locked.
+- Fixed: FullCalendar calendars (for example PowerPack Event Calendar) did not render with FAZ active (#391).
+- Fixed: Divi's mobile menu could be empty with Polylang (#376), the output buffer broke Breakdance's builder JSON responses (#356), and a WordPress notice appeared on every page because of a closing script tag in a comment (#361).
+
+### 1.37.0 — 2026-11-02
+
+- With Geo-Targeting on and only a CCPA banner active, visitors who need opt-in consent saw no banner at all (#377): visitors from the EU and the UK, and every visitor on a site that cannot detect the country. They now see your banner as an opt-in banner, with its look and policy links, the default GDPR text and Accept and Reject buttons, and nothing optional runs until they choose. AMP and language swaps show the same banner.
+- The cache-safe jurisdiction bootstrap now works on CCPA-only sites, so those pages can be cached again.
+- The notice that explains this also appears on the WordPress Dashboard, and offers an administrator-only check that reopens the banner on your site without clearing consent.
+
+### 1.36.1 — 2026-11-01
+
+- On a site set to Croatian the banner was shown in English, because the banner and category texts come from bundled catalogues and Croatian had none. Both are now included. Banner texts that a site had already saved while they were still the English defaults are shown in the language of the banner; any text you changed stays as you wrote it.
 
 ### 1.36.0 — 2026-10-31
 

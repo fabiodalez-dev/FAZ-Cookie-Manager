@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.36.0
+Stable tag: 1.40.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -38,7 +38,7 @@ Most cookie consent plugins follow the same pattern: a free version with cripple
 * **Ad-blocker resilience** -- keeps the legally required notice visible when a cosmetic filter list hides elements whose class contains "cookie" or "consent". A single deferred re-assert: no loop, no cookie wall. It protects a mandatory notice; it does not circumvent a privacy tool. Off by default.
 * **Editable "Do Not Sell" opt-out text** -- customise the title, description and toggle label of the CCPA / US State Laws opt-out popup, per language.
 * **E-commerce & payment friendly** -- a per-gateway opt-in (PayPal, Stripe, Square, Braintree, Klarna, Mollie, Amazon Pay) lets payment SDKs load before consent when you enable that gateway, so pre-consent blocking never breaks a payment button. Off by default; a real WooCommerce checkout/cart is exempt automatically.
-* **Cache & object-cache compatible** -- purges and bypasses FlyingPress, LiteSpeed, WP Rocket, W3 Total Cache and more on save, epoch-invalidates Redis / Memcached object caches, and keeps WPML, Polylang, TranslatePress and Weglot banners in the right language behind a full-page cache. Details in the FAQ.
+* **Cache & object-cache compatible** -- purges and bypasses FlyingPress, LiteSpeed, WP Rocket, W3 Total Cache and more on save, epoch-invalidates Redis / Memcached object caches, and keeps WPML, Polylang, TranslatePress, Weglot and qTranslate (original, X, XT and forks) banners in the right language behind a full-page cache. Details in the FAQ.
 * **Microsoft UET/Clarity, revisit widget, accessibility** -- consent integration for Microsoft tags, a floating button so visitors can change their mind, and keyboard/screen-reader support throughout.
 
 = Helps with these frameworks =
@@ -76,6 +76,7 @@ A dedicated **Cookie Policy** admin tab and the `[faz_cookie_policy_complete]` s
 * **Multilingual** -- en, it, fr, de, es, pt-BR, bg, cs; override per render with `lang="it"` or let the browser decide.
 * **Editable per jurisdiction and language** -- replace any section with your own Markdown, placeholders included; leave one empty and it keeps receiving reviewed updates.
 * **Your company data** -- name, address, DPO email, retention period. Never seeded from `admin_email` or `blogname`.
+* **Email obfuscation** -- enabled by default; turn off "Obfuscate public email addresses" in Cookie Policy settings if needed. Privacy contact and privacy officer addresses are encoded as HTML entities, including the legacy cookie policy contact link. Works without JavaScript in Chrome, Firefox and Safari; readable addresses and existing email links are preserved. Deters simple scrapers, not HTML-decoding bots.
 * **Honest by default** -- a localised disclaimer states the templates are a starting point, not legal advice.
 
 The older `[faz_cookie_policy]` and `[faz_cookie_table]` shortcodes and the `faz/cookie-table` block are unchanged.
@@ -195,7 +196,7 @@ Documentation / Privacy:
 
 Used only when you enter one or more Google tag IDs under Google Consent Mode → Google Tag, to load Google's tag in the visitor's browser on your behalf. The plugin loads nothing from Google while that field is empty.
 
-Triggered when: a visitor accepts the consent category the tag belongs to (Analytics for G-/GT- IDs, Marketing for AW-/DC- IDs, the catalogue category of Google Tag Manager for GTM- IDs). With Advanced Consent Mode enabled, the gtag.js tags for G-/GT-/AW-/DC- IDs load on page view before consent in Google's cookieless mode; Tag Manager containers always wait for consent. Nothing is loaded on pages where the consent banner is turned off.
+Triggered when: a visitor accepts the consent category the tag belongs to (Analytics for G-/GT- IDs, Marketing for AW-/DC- IDs, the catalogue category of Google Tag Manager for GTM- IDs). With Advanced Consent Mode enabled, the gtag.js tags for G-/GT-/AW-/DC- IDs load on page view before consent in Google's cookieless mode; Tag Manager containers wait for consent unless you also turn on "Also load the Google Tag Manager container before consent", in which case they load on page view as well, behind the same denied consent default. Nothing is loaded on pages where the consent banner is turned off.
 
 Data sent: by the visitor's browser, directly to Google: the visitor IP address, standard browser request data, the configured tag IDs, and whatever the tag itself collects under the consent state the plugin signals. Your server sends nothing to Google.
 
@@ -244,6 +245,12 @@ To replace the floating widget, put the link on every page and disable **Banner 
 
 No. A hosting cron that calls WordPress’s `wp-cron.php` runs the plugin’s scheduled events too. If your host already provides that job, do not add a duplicate. **System Status → Cron Jobs** includes a cPanel example and explains how to check the next scheduled times.
 
+= Why can I not see the banner after changing its privacy law? =
+
+A saved choice normally keeps the banner closed. Use the revisit control to reopen preferences. With Geo-Targeting on, visitors who need opt-in consent receive an opt-in version of your CCPA banner when no GDPR banner applies; an unknown country receives the protective fallback too. Its look and policy links are preserved.
+
+The WordPress Dashboard and FAZ screens explain fallback coverage and offer **Check the banner on your site**. This reopens the real banner for your administrator account without clearing consent or changing other visitors' choices. The global banner switch and configured page/region exclusions still apply. If a cache continues serving a banner-less page from an older version, purge that page cache and any external CDN cache after updating.
+
 = Why does the dashboard show -- for pageviews? =
 
 Pageview and banner interaction metrics show `--` when pageview tracking is disabled. This means unavailable, rather than zero visits. Consent logging is a separate setting and can remain enabled.
@@ -260,6 +267,12 @@ It's free and open source (GPL-3.0). There are no premium upgrades, no feature g
 = Is it compatible with Google Consent Mode v2? =
 
 Yes. The plugin sends all 7 consent signals (`ad_storage`, `analytics_storage`, `ad_user_data`, `ad_personalization`, `functionality_storage`, `personalization_storage`, `security_storage`) and supports Google Additional Consent Mode (GACM) for ad technology providers.
+
+In Basic mode (the default) Google's tags are blocked until the visitor consents. Advanced Consent Mode, off by default, lets gtag.js, GA4 and Google Ads load before consent with every signal denied, so they send cookieless pings Google can use for modelling; other trackers stay blocked.
+
+= My Google Ads conversions are set up in Google Tag Manager. Can they send cookieless pings before consent? =
+
+Turn on Advanced Consent Mode and then **Also load the Google Tag Manager container before consent** under Google Consent Mode → Advanced Settings. The container then loads behind the same denied consent default as gtag.js, and the Google tags inside it can send cookieless pings. A container can also run tags that ignore Consent Mode (Meta Pixel, LinkedIn, custom HTML…): the plugin still blocks the trackers it recognises when the container injects them, but it cannot see every tag, so before turning this on set "Require additional consent for tag to fire" in each non-Google tag's Consent Settings in Tag Manager. The container loads for every visitor, including those who reject all categories: that is what the option is for, and their Google tags stay on denied. Only with per-service consent turned on can a visitor keep it blocked, by switching off the Google Tag Manager service. Keep the Tag Manager snippet in a script of its own, because a script that also holds another tracker's code keeps waiting for consent. The noscript iframe is never loaded before consent.
 
 = Does the banner block cookies before consent? =
 
@@ -345,6 +358,8 @@ Yes. Place `[faz_dsar_form]` on any page to show a GDPR-compliant request form c
 
 They need to be, and since 1.34.1 the plugin resolves the visitor's address on its own for the one case it can verify by itself: a request arriving from Cloudflare's published edge ranges, where `CF-Connecting-IP` is read, and only there, because Cloudflare writes that header itself. Every other topology is resolved once you declare it, one line each.
 
+That trust rests on one precondition: only your own Cloudflare zone can reach the origin from those ranges. Any Cloudflare customer can send requests from the same edge addresses (a Worker, for example) with a `CF-Connecting-IP` or `CF-IPCountry` of their choosing, so if the origin accepts connections from any Cloudflare address it accepts those too. Lock the origin to your zone with Authenticated Origin Pulls using a certificate of your own zone (mTLS between Cloudflare and your server), with Cloudflare Tunnel, or with a secret request header your zone adds through a Transform Rule and your server checks; a firewall that only admits Cloudflare's IP list does not tell your zone apart from someone else's.
+
 For another CDN, add its published edge ranges and every per-visitor key in the plugin follows. A peer matched that way is read through `faz_proxy_forwarded_header`, which defaults to `HTTP_X_FORWARDED_FOR` and is read from the right-hand end of the chain, so for an edge that appends to `X-Forwarded-For` the range is all you need:
 
 `add_filter( 'faz_trusted_proxy_cidrs', function ( $cidrs ) { return array_merge( $cidrs, array( '203.0.113.0/24' ) ); } );`
@@ -362,6 +377,10 @@ There is no default here because guessing would be unsafe, not just imprecise: n
 Anything else keeps using the connection's own address and ignores forwarded headers, because those are forgeable by anyone who can reach the site directly. To trust a load balancer of your own, enable `faz_trust_proxy_headers` and scope it with `faz_trusted_proxies`.
 
 Where no per-visitor address can be resolved, the per-connection limit on `[faz_dsar_form]` is **skipped** rather than applied to everyone at once: five submissions must never close the form for unrelated people for 24 hours, since GDPR Art. 12(2) requires the controller to facilitate requests. The site-wide limits and the one-per-address-per-hour limit still bound a flood, the hourly summary email says the per-connection limit is not in force, and `faz_dsar_max_per_ip_per_day` changes it (`0` switches it off).
+
+= How are FAZ tables removed when a multisite subsite is deleted? =
+
+With network activation, FAZ adds its tables to WordPress's deletion routine automatically. If FAZ is active only on individual subsites, copy `includes/multisite-cleanup.php` from the FAZ plugin directory to `wp-content/mu-plugins/faz-multisite-cleanup.php`, or to your configured must-use plugin directory. WordPress then loads the cleanup hook from Network Admin even when FAZ is inactive on the main site. The helper drops only the FAZ tables belonging to the subsite WordPress is deleting.
 
 = How do I run my own script when a category is consented? =
 
@@ -472,7 +491,7 @@ When jurisdiction enforcement is off, Cache Compatibility Mode can still keep no
 * **FlyingPress** — the plugin purges FlyingPress's cached HTML pages automatically whenever a banner, cookie, category or setting is saved, so a change never keeps serving stale banner markup. Only the rendered HTML is purged (that is all a consent change alters); FlyingPress's site-wide preload crawl is not triggered, matching the purge-only behaviour of the other supported caches. FlyingPress does not honor `DONOTCACHEPAGE`, so the plugin also hooks its documented `flying_press_is_cacheable` filter to skip caching on country-dependent pages, matching the bypass every other supported cache gets. The consent scripts are excluded automatically from minification, "Delay all JavaScript" and "Delay third-party scripts", and the banner selectors are kept by "Remove unused CSS": FlyingPress 4.x receives them through its delay/defer filters, FlyingPress 5 through its in-memory configuration, without changing your saved FlyingPress settings. If any FlyingPress pass still rewrites a FAZ script or the banner stylesheet (for example a "Delay selected scripts" keyword such as gtag or recaptcha that also matches the banner configuration), the plugin restores it before FlyingPress caches the page and writes one note a day to the PHP error log. If you see that note, or the banner appears only after the first click, add `faz-cookie-manager` to the exclusions of both "Delay JavaScript" and "Delay third-party scripts", and remove any "Delay selected scripts" keyword that matches the plugin.
 * **Redis Object Cache / Memcached (persistent object caches)** — the plugin's internal banner/cookie caches are epoch-invalidated on save, which works on external object-cache backends too (fixed: previously a stale copy could survive in Redis and a banner save appeared not to stick).
 * **Cloudflare APO** — honors the `Cache-Control: no-store` header, and the banner REST endpoint backs it with `CDN-Cache-Control: no-store` / `Cloudflare-CDN-Cache-Control: no-store` so country-dependent output is not stored at the edge even where the edge is configured to override browser cache directives. With CF in front, also enable the trust filter: it adds `Vary: CF-IPCountry` to the banner REST endpoint's *non*-country-dependent responses (`public, max-age=300`), so CF keys those short-lived entries per country instead of sharing one entry across countries.
-* **Multilingual plugins under a full-page cache (WPML, Polylang, TranslatePress, Weglot)** — with Cache Compatibility Mode on, the banner still renders in the visitor's language. WPML directory/domain modes, Polylang, TranslatePress and Weglot all encode the language in the URL, so a URL-keyed page cache already stores one entry per language; the plugin resolves the per-URL language for each and stays cache-friendly. Only WPML's "language as a URL parameter" mode falls back to the site default (a query string is not a reliable cache key).
+* **Multilingual plugins under a full-page cache (WPML, Polylang, TranslatePress, Weglot, qTranslate)** — with Cache Compatibility Mode on, the banner still renders in the visitor's language. WPML directory/domain modes, Polylang, TranslatePress, Weglot and the qTranslate pre-path/pre-domain/per-domain modes all encode the language in the URL, so a URL-keyed page cache already stores one entry per language; the plugin resolves the per-URL language for each and stays cache-friendly. Only WPML's "language as a URL parameter" mode and qTranslate's query mode (?lang=) fall back to the site default (a query string is not a reliable cache key). The qTranslate family is detected by its API, so the original qTranslate, mqTranslate, qTranslate Plus, zTranslate, qTranslate-X and qTranslate-XT are all covered.
 
 = Known limitations =
 
@@ -487,6 +506,41 @@ The full changelog (every release back to 1.0.0) lives at:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
+
+= 1.40.0 =
+* Security: closes the 20 leads and 50 of the hardening notes of a full security audit of 1.39.0 (#401, #403): the banner and placeholder Accept buttons can no longer be forged from post content, restored style/background/object values must be signed by the server, scripts cannot be planted by users without unfiltered_html, multisite settings and tables stay per site, and the ipinfo, Do-Not-Sell and DSAR limits are tighter (IPv6 counted per /64). On multisite the scanner requires the site host to resolve to public addresses; single sites can opt in with the faz_scanner_require_public_site_ip filter.
+* Added: WP Maps Google maps show the Google Maps placeholder until consent and are drawn after Accept without a reload (#406).
+* Fixed: an apostrophe in a cookie or category description was shown as \' in the cookie table, the block, the cookie policy and the export (#408). Existing texts are cleaned once on upgrade.
+* Fixed: the brand logo takes its alt text from the Media Library instead of "Brand logo" (#404).
+* Fixed: Escape no longer records a rejection when the close button is shown next to Reject, or when it collapses the pushdown panel (#409).
+* Fixed: Divi Builder editor cookies are filed as WordPress Internal and hidden from visitors; the cookie policy's "Last updated on" moves only when the policy changes (#402).
+* Fixed: Owl Carousel loop sliders (for example Signify Pro's logo slider) stayed empty until a resize (#405).
+
+= 1.39.0 =
+* Added: Box banners can now use the Pushdown preference centre: the categories open inside the corner box, with Accept, Reject and Save one click away and equal button widths on phones (#392). CCPA / Do Not Sell banners keep the popup.
+* Added: Brand Logo: a new "Logo position" setting puts the logo beside the title and text instead of above them (#393).
+* Added: Banner buttons: a hover border colour, and a 0.2-second colour transition for buttons with hover colours (skipped for reduced motion). Revisit widget: size, icon or image size, and a border colour. All empty by default, so existing banners look the same.
+* Fixed: HubSpot forms embedded with the legacy hbspt.forms.create() code only appeared after a reload (#396). The inline call is now held with its library and runs after consent; the same applies to the inline calls of Mixpanel, Segment, Heap, PostHog, TikTok, Sentry, Klaviyo, AdSense and Google Maps.
+* Fixed: an array posted into a banner colour or size field raised PHP warnings in the preview and save.
+
+= 1.38.0 =
+* Added: Google Consent Mode → Advanced Settings: a new opt-in, off by default, loads the Google Tag Manager container before consent when Advanced Consent Mode is on (#385), so Google tags configured inside Tag Manager send cookieless pings for visitors who have not consented. The container loads for every visitor, unless per-service consent is on and the visitor switches off the Google Tag Manager service, and it never loads early on AMP or on a page without wp_head(). The settings page warns that the site owner becomes responsible for the consent settings of every non-Google tag inside it.
+* Added: qTranslate support (qTranslate-XT, qTranslate-X, qTranslate, mqTranslate, qTranslate Plus and zTranslate): the banner follows the language chosen in qTranslate instead of the browser language. With Cache Compatibility Mode on and qTranslate's query mode (?lang=), cached pages show the default language; the URL modes (/en/ or per domain) are followed.
+* Fixed: Keyboard access: after a choice, focus moves to the cookie icon, which has a visible focus ring; the icon moves focus into the banner it reopens, Customise into the preferences, Tab stays inside the open dialog, and Escape returns focus to the button that opened the preferences. All banner layouts.
+* Added: Banner → Colours: background opacity and text alignment; Save button colours, hover colours for the banner buttons, and a custom image for the revisit widget. All empty by default, so existing banners look the same.
+* Added: Cookie Policy: privacy contact and DPO addresses are obfuscated as HTML character references by default, so scrapers that read the page source do not get them (#383, by roboes). Visitors see and use them as before.
+* Added: Turkish banner, preference centre and category texts (#381, by gven09), and Turkish cookie duration units.
+* Fixed: the opt-out popup no longer says a Global Privacy Control signal was detected when the browser sends none, and with the signal the Do Not Sell checkbox is ticked and locked.
+* Fixed: FullCalendar calendars (for example PowerPack Event Calendar) did not render with FAZ active (#391).
+* Fixed: Divi's mobile menu could be empty with Polylang (#376), the output buffer broke Breakdance's builder JSON responses (#356), and a WordPress notice appeared on every page because of a closing script tag in a comment (#361).
+
+= 1.37.0 =
+* Fixed: With Geo-Targeting on and only a CCPA banner active, visitors who need opt-in consent saw no banner at all (#377): visitors from the EU and the UK, and every visitor on a site that cannot detect the country. They now see your banner as an opt-in banner, with its look and policy links, the default GDPR text and Accept and Reject buttons, and nothing optional runs until they choose. AMP and language swaps show the same banner.
+* Fixed: The cache-safe jurisdiction bootstrap now works on CCPA-only sites, so those pages can be cached again.
+* Added: The notice that explains this also appears on the WordPress Dashboard, and offers an administrator-only check that reopens the banner on your site without clearing consent.
+
+= 1.36.1 =
+* Fixed: On a site set to Croatian the banner was shown in English, because the banner and category texts come from bundled catalogues and Croatian had none. Both are now included. Banner texts that a site had already saved while they were still the English defaults are shown in the language of the banner; any text you changed stays as you wrote it.
 
 = 1.36.0 =
 * Added: Banner → Buttons → Button Order chooses the order of the notice buttons (#367). The four orders offered all keep Accept All and Reject All next to each other, because position is part of the equal weight the EDPB and the Garante ask for between accepting and refusing. The order is written into the markup, so keyboard focus follows what is on screen.
@@ -522,48 +576,6 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Added: Slovak banner, preference centre, cookie category and cookie descriptions, contributed by Tomáš Jenej (#332). Cookie durations in Slovak now use the correct plural forms (2 dni, 5 rokov, 1,5 roka).
 * Fixed: The CAPTCHA endpoints were added to the script-blocking whitelist in code, ahead of every rule, so neither removing them from the exceptions nor a custom blocking rule could hold reCAPTCHA until consent (#343).
 
-= 1.34.2 =
-* Added: Your consent ID is now shown in the cookie preferences, the data request form has an optional Consent ID field filled in automatically, and administrators can open the matching consent history from the request. The request also records whether the ID matches the consent cookie of the browser that sent it, and warns the administrator when it does not (#327). WordPress export and erasure tools include that history once the administrator confirms the ID belongs to the requester (filter: faz_consent_log_erasure_retain).
-* Added: The suggested privacy policy text is now built from the features actually enabled on the site, including consent IDs, hashed IP and browser data, retention periods, geolocation, the optional ipinfo.io lookup and privacy requests.
-* Added: Each consent record now also stores its time in UTC. Existing records are converted in the background after the update, using the site's current time zone.
-* Fixed: On WordPress multisite, a cookie choice made on one site could be applied on another site of the same network, including subdirectory networks and shared cookie domains. Each site now keeps its own choice, also in the Do Not Sell form; visitors of multisite networks are asked once more after updating.
-* Fixed: The geo rule sets declared IAB GPP support that the plugin does not provide. The declaration is removed, and custom rule sets that still contain it keep working; a GPP string supplied by another consent platform is still recorded in the consent log, also when the visitor leaves the page right after choosing, and only when it has the shape of a GPP string.
-* Fixed: Embedded documents held back by server-side blocking could be released by copied or forged markup. They are now restored only when they belong to the page that was served, and a forged hold marker in the page no longer keeps a provider address loading in the browser.
-* Fixed: The "How to Manage Cookies" section of the cookie policy always pointed to the floating cookie icon; it now describes the withdrawal route configured on the site. Where the controller's name is still missing, the opening sentence of a generated policy now names "the operator of this website", in the policy's language, so it keeps stating the law the policy follows; a sentence that only gives a missing contact is left out, so visitors see no asterisks and no sentence ending on a colon over an empty list. The CCPA and LGPD texts present the retention figure as a fallback instead of the retention of all personal data, and the transfer note in the preferences follows the rules applied to the visitor.
-* Fixed: A few spellings still let a provider load before consent: a <source> address set by a script, a CSS @import written with a comment, character references without a semicolon, named references and line breaks inside embedded documents, and an inline data script followed by code after a line break. They are now held back, and a "lite" video embed added by a script keeps its preview instead of being replaced by the placeholder.
-* Fixed: While the consent runtime was still loading, a script that inserted an element next to one that was being held (insertBefore, replaceChild, before, replaceWith) lost the new element, and with replaceChild and replaceWith both.
-* Fixed: An acceptance given on an AMP page by a visitor in an opt-in region, over the kept US banner, was stored for a year; it now gets the opt-in lifetime of at most six months.
-* Fixed: Before the visitor had made a choice, the TCF API reported legitimate interest as established for every vendor while the preference centre showed it switched off. Both now say off until a choice.
-* Fixed: An expired form and an invalid consent ID on the data request form now trigger faz_dsar_rejected like every other refusal, and the consent ID error says the field can be left empty. After an erasure, the administrator is no longer told that an unverified consent ID can still be verified.
-* Fixed: On AMP pages, a site whose geo rules required opt-in consent but which had no GDPR-family banner (for example one set up as "US only" by the wizard) lost both the consent prompt and the blocking, so analytics, ads and pixels on AMP ran without consent and were cached that way by the AMP caches. The prompt and the blocking now stay, as they already did on regular pages.
-* Fixed: A consent given under one law or banner (for example the US notice) was honoured by the server and by Google Consent Mode on a page served under another (for example the GDPR banner after travelling or a VPN), until the banner script noticed and withdrew it. Every layer now rejects a consent cookie from a different scope before anything runs. Sites without geographic routing ask again only when the law changes, not when a banner is renamed or the WordPress salts are rotated, and on cached pages Google Consent Mode waits for the visitor's region and then restores the stored choice.
-* Fixed: Vendors that queued a request on the TCF API before the consent framework finished loading never got an answer: the queue was discarded. Queued commands are now replayed.
-* Fixed: The consent log stored the TC string of the previous decision, so a Reject row carried the Accept All string. Each row now records the string of its own decision.
-* Added: Right to Object in the IAB TCF section of the preference centre, per purpose and per vendor. Legitimate-interest signals are no longer sent for vendors the visitor switched off or after Reject All, the switches are never shown pre-ticked, and vendor consent is only signalled for vendors that were actually shown to the visitor. Vendors the Global Vendor List marks as deleted are no longer listed or signalled, the list is downloaded as soon as TCF is switched on, and the TCF dates follow the IAB day-level rule.
-* Fixed: A withdrawal made within ten seconds of an acceptance, from the same browser, was dropped by the flood limit, so the log kept saying "accepted". A correction by the same visitor now goes through; new visitors from one address are still limited.
-* Fixed: With Advanced Consent Mode, a custom blocking rule that happened to match the inline Consent Mode default could neutralise it while the Google tags still ran. The default is now protected from the blocker.
-* Fixed: Server-side blocking missed video and audio sources and posters, legacy object and embed players, inline style attributes, compact CSS imports and stylesheets inside noscript, all of which load before any script runs. They are now held back until consent like images and frames, and the consent runtime gates the same elements when scripts create them.
-* Fixed: A theme or edge service that supplies the visitor's country through the faz_visitor_country filter was not counted as a country source when deciding whether a page may be cached, so a page rendered for one jurisdiction could be served from cache to another. Tor exits flagged by Cloudflare now go to the most protective rules, a country looked up for an explicit IP address no longer comes from the current visitor's Cloudflare or mod_geoip header, and geolocation caches no longer store a plain hash of the visitor's IP.
-* Fixed: The data request form refused every submission when its page was served from a full-page cache for longer than the security token lives, and the Do Not Sell form could cache one visitor's state for everyone. Both pages are now kept out of page caches, the Do Not Sell form recovers an expired token on its own, and every refusal names the email fallback.
-* Fixed: The consent log now records the jurisdiction that was actually enforced, includes the TC string, GPP string, GPC and DNT signals, country and ruleset in the CSV export, adds the time in UTC, and single Do Not Sell records can be fetched by id.
-* Fixed: Generated cookie policies could be published with no controller name or contact for GDPR, CCPA and LGPD; publishing now requires them, while a page already live keeps showing for visitors. International transfers are described under the document's own law (LGPD, POPIA or neutral) instead of always citing the GDPR, the legacy cookie table shows transfer disclosures too, Dutch and Croatian policies are fully translated, and the consent-record period comes from the consent-log setting.
-* Fixed: The WP Consent API was told the banner's law instead of the regime actually applied; the IAB labels are now translatable; GPC no longer rewrites the consent cookie on every page view; explicit blocking rules are kept on the client under the payment-gateway exemption; restored embeds keep the site's sandbox and referrer settings; uninstall with data removal also removes the plugin's user meta; and wp faz status reports per-service consent correctly.
-* Fixed: The inline bootstrap that protects the page while the consent runtime downloads now stands down when an optimiser runs it after the runtime, and hands over to a runtime that arrives late, instead of staying in its fallback mode for the whole visit.
-* Fixed: Query Monitor's admin bar stopped working on any page that loaded a tracker, because its inline data block names the page's scripts and FAZ read a tracker signature inside it (#322). An inline script that only assigns JSON data is no longer searched for tracker signatures, in both places FAZ judges inline scripts; the script is still judged by its own id, and any call or statement next to the data is checked as before.
-* Fixed: The "Site Kit by Google" entry of the provider list and its blocking template matched every file of the Site Kit plugin, so its admin bar, dashboard scripts and consent-mode bridge were blocked until analytics was accepted, for the administrator too (#322). The entry now matches only the gtag.js tag Site Kit prints for Google Analytics.
-* Fixed: With LiteSpeed, or any script that moves elements one by one, pages could freeze and run the browser out of memory: "Remove Query Strings" served the previous consent runtime under the new page, and the inline protection never let such a loop advance. Held elements now move at once, the hold has a hard limit, an older runtime is handed the page, and FAZ asset URLs keep their version under "Remove Query Strings".
-* Fixed: A page rendered for a returning visitor whose consent, Global Privacy Control signal or Do Not Sell choice changed the server-side blocking could be cached and served to everyone. Such responses now stay out of shared caches (filter: faz_veto_cache_for_visitor_state). Under CCPA, sale and sharing scripts are held in the cached page and released in the browser only when the visitor has not opted out (filter: faz_ccpa_park_sell_share_by_default).
-* Fixed: Sites that cannot resolve a country no longer disable the page cache because TCF, country banners or AMP are configured. Cache bypasses now also reach CDN caches, Vary: Accept-Language is gone, a server-side A/B test no longer freezes one variant in cache, and the Pinterest app is no longer treated as a crawler.
-* Fixed: FlyingPress delayed the banner until the first click when FAZ was served from a CDN or the page used reCAPTCHA. FAZ is now excluded from "Delay third-party scripts" and "Remove unused CSS", and rewritten FAZ tags are restored before caching. Page caches are also purged after scheduled scans, vendor-list updates and Cookie Policy saves, with new support for Nginx Helper, Proxy Cache Purge, WP-Optimize and Super Page Cache.
-* Fixed: With more than about 420 IAB vendors, Accept All granted no vendor consent. The vendor record is now compact, the banner asks again when vendors are added, and the vendor list downloads in the background.
-* Fixed: An inline script containing video, image or source markup could be broken by the server-side blocker, and unusual comment or SVG markup could hide a tracker from it. When the blocker cannot finish a page, it now blocks instead of letting the page through.
-* Fixed: Tooltips and popovers that keep HTML in an attribute (data-html, title) were broken by the server-side blocker when that HTML held an image or an embedded frame. Tags written inside an attribute value are now left alone; the images and frames on the page are blocked as before.
-* Fixed: Consent records and data requests from pages cached for days were refused; both now fetch a fresh token before sending.
-* Fixed: The browser-language switch gave up after 500 ms, so visitors on slower hosts kept the default-language banner.
-* Fixed: System Status "Copy" included help text and the full provider catalogue, which forums rejected as spam; it now copies the readings only.
-* Fixed: The Czech cookie policy said consent was asked before strictly necessary cookies were set; it now says before optional ones, in the templates and in the translated policy strings (thanks to vvvamik, #331).
-* Fixed: Generated cookie policies no longer leave the "Cookies used" heading empty when no cookie is declared: it now says so, and that note and the "None declared." note under third-party services are written in the policy's language, Brazilian Portuguese, Spanish and Bulgarian included, instead of English. The Brazilian LGPD policy now gives the Art. 19 deadlines for confirmation and access (immediately in simplified form, or a full statement within 15 days) instead of promising a "reasonable period".
-
 
 = Older versions =
-Older releases (1.34.1 and earlier) are listed in the full changelog on GitHub, linked at the top of this section.
+Older releases (1.34.2 and earlier) are listed in the full changelog on GitHub, linked at the top of this section.

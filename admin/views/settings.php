@@ -666,6 +666,9 @@ defined( 'ABSPATH' ) || exit;
 				<?php endif; ?>
 			</div>
 			<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
+				<div id="faz-missing-law-banner-info" class="faz-help"><?php esc_html_e( 'When a visitor needs opt-in consent and no active GDPR banner applies, your opt-out banner is shown with its look and policy links but with the default GDPR text and buttons. The visitor can accept or reject before optional cookies are set. To use your own wording, add a banner with the GDPR law.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="geolocation.cache_geo_bootstrap">
 					<span class="faz-toggle-track"></span>

@@ -25,11 +25,32 @@
 		if (!form) return;
 		loadGcm();
 		document.getElementById('faz-gcm-save').addEventListener('click', saveGcm);
+		var advanced = form.querySelector('[data-path="advanced_mode"]');
+		if (advanced) advanced.addEventListener('change', syncAdvancedGtm);
+		syncAdvancedGtm();
 	});
+
+	/**
+	 * The Tag Manager container option (#385) only means something with
+	 * Advanced Consent Mode on, so it is shown and enabled only then. Hidden,
+	 * it is left out of the save (FAZ.serializeForm skips disabled and hidden
+	 * fields) and its stored value is kept, but the server ignores it while
+	 * Advanced mode is off (Gcm_Settings::is_advanced_gtm_mode()).
+	 */
+	function syncAdvancedGtm() {
+		var group = document.getElementById('faz-gcm-advanced-gtm-group');
+		var input = document.getElementById('faz-gcm-advanced-gtm');
+		var advanced = form && form.querySelector('[data-path="advanced_mode"]');
+		if (!group || !input) return;
+		var on = !!(advanced && advanced.checked);
+		group.style.display = on ? '' : 'none';
+		input.disabled = !on;
+	}
 
 	function loadGcm() {
 		FAZ.get('gcm').then(function (data) {
 			FAZ.populateForm(form, data);
+			syncAdvancedGtm();
 			checkGoogleTag(data && data.google_tag_ids, []);
 		}).catch(function () {
 			FAZ.notify(fazI18n('gcm.loadFailed', 'Failed to load GCM settings.'), 'error');

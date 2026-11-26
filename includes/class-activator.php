@@ -94,8 +94,17 @@ class Activator {
 		add_action( 'init', array( '\FazCookie\Frontend\Includes\Embed_Inventory', 'maybe_create_table' ), 6 );
 		// Consolidate one-time migrations into a single admin_init callback
 		// to avoid 7 separate get_option() calls on every admin page load.
-		add_action( 'admin_init', array( __CLASS__, 'run_pending_migrations' ) );
+		add_action( 'admin_init', array( __CLASS__, 'run_pending_migrations_on_admin_init' ) );
+		// The triggers that do not need anyone in wp-admin: a one-off event
+		// scheduled by every upgrade (install()), and the daily event, which
+		// retries a step that declined. wp-cron runs on visitor traffic, so a
+		// site whose admin nobody opens still migrates.
+		add_action( self::MIGRATIONS_HOOK, array( __CLASS__, 'run_pending_migrations' ) );
+		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_pending_migrations' ) );
 		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
+		// A pageview purge that stopped at its per-run cap resumes on this
+		// one-off event (Pageviews Controller::cleanup_old_records()).
+		add_action( 'faz_pageview_retention_continue', array( 'FazCookie\Admin\Modules\Pageviews\Includes\Controller', 'continue_retention' ) );
 		// A footer withdrawal link lives in a theme or block template, so it can
 		// disappear with an edit the plugin never sees. Re-check it daily on the
 		// existing cleanup event — a new scheduled event would be one more thing
@@ -133,7 +142,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.10.18.1';
+	const MIGRATIONS_VERSION = '2026.11.20.1';
 
 	/**
 	 * Continuation event of the created_at_gmt backfill on large tables.
@@ -144,6 +153,45 @@ class Activator {
 	 * Rows converted per backfill batch.
 	 */
 	const GMT_BACKFILL_BATCH = 500;
+
+	/**
+	 * One-off cron event that runs the migration batch after an upgrade.
+	 */
+	const MIGRATIONS_HOOK = 'faz_run_pending_migrations';
+
+	/**
+	 * admin_init entry point of the migration batch.
+	 *
+	 * admin_init also fires for anonymous admin-ajax.php and admin-post.php
+	 * requests. While a step declined (the seed claim held by another request,
+	 * a backfill event that could not be scheduled), each of them re-ran the
+	 * batch's guard reads and the faz_clear_cache action in its `finally`,
+	 * which purges caches site-wide. Visitors no longer drive the batch: a
+	 * logged-in request does, and for sites nobody administers the cron
+	 * events registered in init() do.
+	 *
+	 * @return void
+	 */
+	public static function run_pending_migrations_on_admin_init() {
+		if ( ! is_user_logged_in() ) {
+			return;
+		}
+		self::run_pending_migrations();
+	}
+
+	/**
+	 * Schedule the migration batch to run on the next cron pass.
+	 *
+	 * @return void
+	 */
+	private static function schedule_pending_migrations() {
+		if ( get_option( 'faz_migrations_version' ) === self::MIGRATIONS_VERSION ) {
+			return;
+		}
+		if ( ! wp_next_scheduled( self::MIGRATIONS_HOOK ) ) {
+			wp_schedule_single_event( time(), self::MIGRATIONS_HOOK );
+		}
+	}
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -193,7 +241,12 @@ class Activator {
 			self::clear_necessary_optout_flags();
 			self::normalize_legacy_functional_optout_flags();
 			self::move_sourcebuster_to_marketing();
+			$all_complete = self::move_divi_editor_cookies_to_internal() && $all_complete;
 			self::reset_stale_per_cookie_consent();
+			// Before refresh_necessary_disclosure_text(): that step compares the
+			// stored wording with the shipped one, and a slashed apostrophe
+			// ("visitor\'s") would never match.
+			$all_complete = self::unslash_cookie_text() && $all_complete;
 			$all_complete = self::refresh_necessary_disclosure_text() && $all_complete;
 			self::demote_bulky_autoloaded_options();
 			self::refresh_cookie_translation_caches();
@@ -962,26 +1015,45 @@ class Activator {
 		}
 		$cutoff  = gmdate( 'Y-m-d H:i:s', time() - ( $retention * MONTH_IN_SECONDS ) );
 		$deleted = 0;
-		$old_ids = get_posts(
-			array(
-				'post_type'        => 'faz_dsar',
-				'post_status'      => 'any',
-				'posts_per_page'   => 200,
-				'fields'           => 'ids',
-				'no_found_rows'    => true,
-				// phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.SuppressFilters_suppress_filters -- intentional: this DSAR retention cleanup must find and delete EVERY expired faz_dsar record regardless of third-party query filters (e.g. multilingual language scoping), so filters are suppressed on this internal housekeeping query. Not a wp.org plugin_repo error (WordPressVIPMinimum only).
-				'suppress_filters' => true,
-				'date_query'       => array(
-					array(
-						'column' => 'post_date_gmt',
-						'before' => $cutoff,
+		// Oldest first, batch after batch, until the expired set is empty. One
+		// newest-first batch of 200 a day fell behind a form that accepts 500
+		// records a day, and what it left behind were the OLDEST records, the
+		// ones furthest past the retention. 'any' also skips the trash, so a
+		// record an administrator binned (name, email, message intact) was
+		// never purged at all. The batch cap bounds one cron run; whatever is
+		// left is picked up the next day, oldest first again.
+		for ( $batch = 0; $batch < 25; $batch++ ) {
+			$old_ids = get_posts(
+				array(
+					'post_type'        => 'faz_dsar',
+					'post_status'      => array( 'any', 'trash' ),
+					'posts_per_page'   => 200,
+					'fields'           => 'ids',
+					'no_found_rows'    => true,
+					'orderby'          => 'date',
+					'order'            => 'ASC',
+					// phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.SuppressFilters_suppress_filters -- intentional: this DSAR retention cleanup must find and delete EVERY expired faz_dsar record regardless of third-party query filters (e.g. multilingual language scoping), so filters are suppressed on this internal housekeeping query. Not a wp.org plugin_repo error (WordPressVIPMinimum only).
+					'suppress_filters' => true,
+					'date_query'       => array(
+						array(
+							'column' => 'post_date_gmt',
+							'before' => $cutoff,
+						),
 					),
-				),
-			)
-		);
-		foreach ( (array) $old_ids as $post_id ) {
-			if ( wp_delete_post( (int) $post_id, true ) ) {
-				$deleted++;
+				)
+			);
+			$old_ids = (array) $old_ids;
+			$removed = 0;
+			foreach ( $old_ids as $post_id ) {
+				if ( wp_delete_post( (int) $post_id, true ) ) {
+					$removed++;
+				}
+			}
+			$deleted += $removed;
+			// A short batch is the last one. A batch where nothing could be
+			// deleted would come back identical, so it ends the run too.
+			if ( count( $old_ids ) < 200 || 0 === $removed ) {
+				break;
 			}
 		}
 		return $deleted;
@@ -1056,8 +1128,140 @@ class Activator {
 	public static function check_version() {
 		self::repair_db_version_namespace();
 		if ( ! defined( 'IFRAME_REQUEST' ) && version_compare( get_option( 'faz_version', '0.0.0' ), FAZ_VERSION, '<' ) ) {
-			self::install();
+			self::install_under_claim( array( __CLASS__, 'install' ) );
 		}
+	}
+
+	/**
+	 * Option holding the single-runner claim of the lazy upgrade.
+	 */
+	const INSTALL_CLAIM = 'faz_install_claim';
+
+	/**
+	 * Seconds after which an install claim is taken over.
+	 *
+	 * Also the back-off of an upgrade that keeps failing: the claim of a failed
+	 * attempt is left in place, so the next attempt waits this long.
+	 */
+	const INSTALL_CLAIM_TTL = 300;
+
+	/**
+	 * Run the lazy upgrade in one request at a time.
+	 *
+	 * check_version() runs on `init` for every request, anonymous ones
+	 * included, and until faz_version is bumped on the last line of install()
+	 * every one of them saw an upgrade to do: after a release each concurrent
+	 * request re-ran the whole install() (dbDelta probes, the migration chain,
+	 * the cache rotations and the page-cache purge across every supported cache
+	 * plugin). If a step kept throwing, faz_version was never bumped and every
+	 * request repeated the full-site purge.
+	 *
+	 * The claim is inserted atomically on the unique option name, then
+	 * taken over by age with a compare-and-delete. It is
+	 * released on success only: after a throw or a fatal it stays until it is
+	 * INSTALL_CLAIM_TTL old, so a failing step is retried once per window
+	 * instead of on every request. A claim written for another plugin version
+	 * is stale at once, so a fix released for a failing upgrade is not held
+	 * back by the previous release's claim.
+	 *
+	 * Activation and wp_initialize_site call install() directly and are not
+	 * gated: they are one-off, admin-driven, and must not be skipped.
+	 *
+	 * @param callable $installer The upgrade to run (install()).
+	 * @return bool Whether this request ran it.
+	 */
+	private static function install_under_claim( $installer ) {
+		global $wpdb;
+		$claim = self::read_install_option( self::INSTALL_CLAIM );
+		if ( null !== $claim && ! self::install_claim_is_stale( $claim ) ) {
+			return false;
+		}
+		if ( null !== $claim ) {
+			// Conditional on the value read, for the reason spelled out in
+			// seed_own_consent_cookie(): two requests that read the same stale
+			// claim must not both end up holding a new one.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-delete; delete_option() has no conditional form.
+			$won_takeover = $wpdb->delete(
+				$wpdb->options,
+				array(
+					'option_name'  => self::INSTALL_CLAIM,
+					'option_value' => (string) $claim,
+				),
+				array( '%s', '%s' )
+			);
+			if ( ! $won_takeover ) {
+				return false;
+			}
+		}
+		$value = time() . ':' . FAZ_VERSION . ':' . wp_generate_uuid4();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the unique option name makes this insert atomic; add_option() uses an upsert.
+		$inserted = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::INSTALL_CLAIM, $value ) );
+		if ( 1 !== $inserted ) {
+			return false;
+		}
+		// faz_version is autoloaded, so this request's copy is the one it loaded
+		// at the start. A request that finished the upgrade and released its
+		// claim in between would otherwise be followed by a second full run.
+		$version = self::read_install_option( 'faz_version' );
+		if ( ! version_compare( $version ?: '0.0.0', FAZ_VERSION, '<' ) ) {
+			self::release_install_claim( $value );
+			return false;
+		}
+		// No finally: a throw keeps the claim, which is the back-off.
+		call_user_func( $installer );
+		self::release_install_claim( $value );
+		return true;
+	}
+
+	/**
+	 * Whether an install claim may be taken over.
+	 *
+	 * @param string $claim Stored claim, "<unix time>:<plugin version>[:<owner>]".
+	 * @return bool
+	 */
+	private static function install_claim_is_stale( $claim ) {
+		$parts = explode( ':', $claim, 3 );
+		if ( ! isset( $parts[1] ) || FAZ_VERSION !== $parts[1] ) {
+			return true;
+		}
+		return ( time() - (int) $parts[0] ) >= self::INSTALL_CLAIM_TTL;
+	}
+
+	/**
+	 * Release the install claim, only if it is still the one this request wrote.
+	 *
+	 * @param string $value Claim value written by this request.
+	 * @return void
+	 */
+	private static function release_install_claim( $value ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-delete: a claim taken over meanwhile belongs to another request.
+		$wpdb->delete(
+			$wpdb->options,
+			array(
+				'option_name'  => self::INSTALL_CLAIM,
+				'option_value' => (string) $value,
+			),
+			array( '%s', '%s' )
+		);
+	}
+
+	/**
+	 * Read upgrade coordination state directly from the options table.
+	 *
+	 * @param string $name Option name.
+	 * @return string|null
+	 */
+	private static function read_install_option( $name ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the request's autoloaded copy is exactly what may be stale here.
+		$value = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
+				$name
+			)
+		);
+		return is_string( $value ) ? $value : null;
 	}
 
 	/**
@@ -1124,7 +1328,14 @@ class Activator {
 			// front-end request. The admin_init migration retries it anyway.
 			unset( $e );
 		}
-		if ( true === faz_first_time_install() ) {
+		// The fresh-install branch writes the FULL default settings over
+		// faz_settings, so it must only ever run for a site that has none. The
+		// first-install flag used to be a network-wide site transient: on
+		// multisite, any other subsite whose install() ran inside its 30-minute
+		// window (network activation, a new subsite, the lazy upgrade on init)
+		// had its whole configuration reset to defaults. The per-site option
+		// check is the invariant; the per-site flag below is the cause fix.
+		if ( true === faz_first_time_install() && false === get_option( 'faz_settings', false ) ) {
 			add_option( 'faz_first_time_activated_plugin', 'true', '', false );
 			// Arm the guided setup wizard for genuine fresh installs ONLY. The
 			// onboarding.completed flag defaults to true in Settings::get_defaults(),
@@ -1199,6 +1410,10 @@ class Activator {
 		// expires (or until they manually purge). See `purge_page_caches()`
 		// for the matrix of supported cache plugins.
 		self::purge_page_caches();
+		// The migration batch is not run by visitors (see
+		// run_pending_migrations_on_admin_init()): hand it to cron so an
+		// upgrade migrates even where nobody opens wp-admin.
+		self::schedule_pending_migrations();
 		do_action( 'faz_after_activate', FAZ_VERSION );
 		// Bump `faz_version` LAST so a fatal in any of the steps above
 		// (table create, migration, purge) leaves the version flag at the
@@ -1634,9 +1849,12 @@ class Activator {
 			delete_site_transient( '_faz_first_time_install' );
 		}
 
+		// Per SITE (set_transient), not per network: whether this is a first
+		// install is a fact about this site's faz_settings. The site transient
+		// above is only read for back-compat and expires on its own.
 		if ( false === get_option( 'faz_settings', false ) ) {
-			if ( false === get_site_transient( 'faz_first_time_install' ) ) {
-				set_site_transient( 'faz_first_time_install', true, $ttl );
+			if ( false === get_transient( 'faz_first_time_install' ) ) {
+				set_transient( 'faz_first_time_install', true, $ttl );
 			}
 		}
 	}
@@ -2694,6 +2912,343 @@ class Activator {
 			);
 		}
 		update_option( 'faz_move_sourcebuster_marketing_done', 1, false );
+	}
+
+	/**
+	 * Option used as a mutex by unslash_cookie_text().
+	 */
+	const TEXT_UNSLASH_LOCK = 'faz_cookie_text_unslash_lock';
+
+	/**
+	 * Seconds after which a held unslash lock is considered abandoned.
+	 */
+	const TEXT_UNSLASH_LOCK_TTL = 600;
+
+	/**
+	 * Strip the slashes the old setters wrote into the cookie and category text.
+	 *
+	 * Up to 1.39.0 Store::set_description(), Cookie::set_duration() and
+	 * Cookie_Categories::set_name() sanitised with wp_filter_post_kses(), which
+	 * returns addslashes()-ed output, so wp_faz_cookies.description/duration and
+	 * wp_faz_cookie_categories.name/description hold "It\'s" for "It's". The
+	 * getters hid it with a stripslashes() on read; [faz_cookie_table], the
+	 * faz/cookie-table block, the cookie policy generator and the settings export
+	 * read the columns directly and showed the backslash to visitors (wp.org
+	 * support: "Extra slashes in cookie tables").
+	 *
+	 * What this writes is exactly what the getters already returned, so nothing an
+	 * administrator sees in the admin or the banner changes: stripslashes() is the
+	 * exact inverse of the addslashes() that produced the rows. The one row shape
+	 * it cannot tell apart is a value written by a direct database path (an
+	 * import, an older migration) that contains a literal backslash; that value
+	 * loses it here — but the getters were already stripping it on every read, so
+	 * it is the value the admin screen and the banner were showing anyway.
+	 *
+	 * stripslashes() is not idempotent, so the step must run exactly once:
+	 *  - a completion flag (Store::TEXT_UNSLASHED_OPTION) gates it, written in
+	 *    the same transaction as the rows and re-read once the lock is held;
+	 *  - an INSERT IGNORE mutex in wp_options keeps two concurrent admin requests
+	 *    (admin_init also fires on admin-ajax.php, heartbeat included) from both
+	 *    stripping; a request that finds the lock held declines and retries;
+	 *  - the rows are rewritten in one transaction, rolled back on any failure,
+	 *    and each column is its own UPDATE, compare-and-set on the value that was
+	 *    read, so a value an administrator re-saved (clean) in the meantime is
+	 *    left alone and the other column of that row is still converted.
+	 * The tables are InnoDB since update_db_350(), so the rollback is real.
+	 *
+	 * @return bool True when done (now or before); false when it declined (tables
+	 *              missing, another request holds the lock) and must be retried.
+	 * @throws \RuntimeException When the rows cannot be read or written.
+	 */
+	public static function unslash_cookie_text() {
+		if ( ! Store::legacy_slashes_pending() ) {
+			return true;
+		}
+		global $wpdb;
+		$cookies    = $wpdb->prefix . 'faz_cookies';
+		$categories = $wpdb->prefix . 'faz_cookie_categories';
+		foreach ( array( $cookies, $categories ) as $table ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the upgrade path.
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+				return false; // No table yet: retried on the next run, flag not set.
+			}
+		}
+		if ( ! self::claim_text_unslash_lock() ) {
+			return false; // Another request is doing it; the batch retries and finds the flag.
+		}
+		// The flag read above may be stale: another request can have finished,
+		// and released the lock, between that read and this claim.
+		try {
+			$already_done = Store::text_unslashed_in_db();
+		} catch ( \RuntimeException $e ) {
+			self::release_text_unslash_lock();
+			throw $e;
+		}
+		if ( $already_done ) {
+			self::release_text_unslash_lock();
+			self::forget_text_unslashed_option();
+			return true;
+		}
+		// The flag can join the transaction only when the options table is
+		// known to be transactional. On MyISAM a ROLLBACK would leave it set over rows that
+		// went back to their slashed form, and every later run would skip them:
+		// there it is written right after the COMMIT instead, which leaves only
+		// a crash between the two statements uncovered.
+		$flag_in_transaction = self::options_table_is_transactional();
+
+		$targets = array(
+			array(
+				'table'   => $cookies,
+				'id'      => 'cookie_id',
+				'columns' => array( 'description', 'duration' ),
+			),
+			array(
+				'table'   => $categories,
+				'id'      => 'category_id',
+				'columns' => array( 'name', 'description' ),
+			),
+		);
+
+		$changed = false;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration transaction.
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			// Without a transaction a failure half-way could not be rolled back,
+			// and the retry would strip the rows already written a second time.
+			self::release_text_unslash_lock();
+			throw new \RuntimeException( 'FAZ: could not start the cookie text unslash transaction; migration will retry.' );
+		}
+		try {
+			foreach ( $targets as $target ) {
+				$table = esc_sql( $target['table'] );
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table is $wpdb->prefix + literal (escaped); column names are literals from $targets; no user input; one-shot migration read.
+				$rows = $wpdb->get_results( 'SELECT `' . $target['id'] . '`, `' . implode( '`, `', $target['columns'] ) . '` FROM `' . $table . '`', ARRAY_A );
+				// get_results() returns an empty array on a failed query too.
+				if ( ! is_array( $rows ) || '' !== (string) $wpdb->last_error ) {
+					throw new \RuntimeException( 'FAZ: could not read the cookie text to unslash; migration will retry.' );
+				}
+				foreach ( $rows as $row ) {
+					// One UPDATE per column, each compare-and-set on its own value:
+					// a row where another write changed one column meanwhile still
+					// gets the other one converted, instead of keeping its slashes
+					// after the flag says every row is clean.
+					foreach ( $target['columns'] as $column ) {
+						if ( ! isset( $row[ $column ] ) ) {
+							continue;
+						}
+						$stored    = (string) $row[ $column ];
+						$unslashed = Store::unslash_text_column( $stored );
+						if ( $unslashed === $stored ) {
+							continue;
+						}
+						// The comparison is binary: under the case- and accent-insensitive
+						// collation the tables inherit, "= %s" also matches a value saved
+						// meanwhile that differs only in case or accents, and the UPDATE
+						// would overwrite it with the old text.
+						// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table/column names are literals (table escaped); every value bound via prepare(); one-shot migration write, caches busted below.
+						$written = $wpdb->query( $wpdb->prepare( 'UPDATE `' . $table . '` SET `' . $column . '` = %s WHERE `' . $target['id'] . '` = %d AND CAST(`' . $column . '` AS BINARY) = CAST(%s AS BINARY)', $unslashed, (int) $row[ $target['id'] ], $stored ) );
+						if ( false === $written ) {
+							throw new \RuntimeException( 'FAZ: failed to unslash the cookie text; migration will retry.' );
+						}
+						$changed = $changed || $written > 0;
+					}
+				}
+			}
+			// The completion flag is written inside the same transaction as the
+			// rows: written after the COMMIT, a request that died in between would
+			// leave converted rows with no flag, and the next run would strip them
+			// again.
+			if ( $flag_in_transaction && ! self::write_text_unslashed_flag() ) {
+				throw new \RuntimeException( 'FAZ: could not record the cookie text unslash; migration will retry.' );
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration transaction.
+			if ( false === $wpdb->query( 'COMMIT' ) ) {
+				throw new \RuntimeException( 'FAZ: could not commit the unslashed cookie text; migration will retry.' );
+			}
+		} catch ( \Throwable $e ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration transaction.
+			$wpdb->query( 'ROLLBACK' );
+			self::release_text_unslash_lock();
+			throw $e instanceof \RuntimeException ? $e : new \RuntimeException( 'FAZ: unslashing the cookie text failed; migration will retry.', 0, $e );
+		}
+		if ( ! $flag_in_transaction && ! self::write_text_unslashed_flag() && ! self::write_text_unslashed_flag() ) {
+			// The rows are committed and cannot be taken back; the write is tried
+			// twice. The lock is left to expire rather than released, so no run
+			// strips the rows again before then. Past it, this is the same
+			// window as a crash between the COMMIT and the flag.
+			self::forget_text_unslashed_option();
+			throw new \RuntimeException( 'FAZ: the cookie text was unslashed but the flag could not be recorded.' );
+		}
+
+		self::forget_text_unslashed_option();
+		self::release_text_unslash_lock();
+		if ( $changed ) {
+			self::refresh_cookie_translation_caches();
+		}
+		return true;
+	}
+
+	/**
+	 * Take the unslash mutex: an atomic INSERT IGNORE of the lock option.
+	 *
+	 * add_option() is no use here: it writes with ON DUPLICATE KEY UPDATE, so two
+	 * callers both "succeed". INSERT IGNORE inserts one row or none, which is the
+	 * same primitive WP_Upgrader::create_lock() relies on. A lock older than
+	 * TEXT_UNSLASH_LOCK_TTL is taken over with a compare-and-set on its timestamp.
+	 *
+	 * @return bool True when this request holds the lock.
+	 */
+	private static function claim_text_unslash_lock() {
+		global $wpdb;
+		$now = (string) time();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- atomic mutex row; the options API cannot express "insert only if absent".
+		$inserted = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'no')", self::TEXT_UNSLASH_LOCK, $now ) );
+		if ( $inserted ) {
+			return true;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- reads the mutex row written above; must bypass the options cache.
+		$held = $wpdb->get_var( $wpdb->prepare( "SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s", self::TEXT_UNSLASH_LOCK ) );
+		if ( null === $held || (int) $held > (int) $now - self::TEXT_UNSLASH_LOCK_TTL ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-set takeover of an abandoned mutex row.
+		$taken = $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->options}` SET `option_value` = %s WHERE `option_name` = %s AND `option_value` = %s", $now, self::TEXT_UNSLASH_LOCK, $held ) );
+		return 1 === (int) $taken;
+	}
+
+	/**
+	 * Write the completion flag behind the options API, which cannot join a
+	 * transaction; the cached copies are dropped by the caller.
+	 *
+	 * Autoloaded: Store::legacy_slashes_pending() reads it on every request that
+	 * renders a cookie or category, the frontend included.
+	 *
+	 * @return bool False when the write failed.
+	 */
+	private static function write_text_unslashed_flag() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the options API cannot join a transaction; the option cache is cleared after the COMMIT.
+		return false !== $wpdb->query( $wpdb->prepare( "INSERT INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, '1', 'yes') ON DUPLICATE KEY UPDATE `option_value` = '1'", Store::TEXT_UNSLASHED_OPTION ) );
+	}
+
+	/**
+	 * Whether a ROLLBACK undoes a write to the options table.
+	 *
+	 * WordPress does not pick the engine of its own tables, so a legacy host can
+	 * still have wp_options on MyISAM. Only an engine read as InnoDB counts: one
+	 * the probe cannot read is treated as MyISAM, so the flag goes after the
+	 * COMMIT rather than into a transaction that may not take it back.
+	 *
+	 * @return bool
+	 */
+	private static function options_table_is_transactional() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time engine probe in the upgrade path.
+		$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT `ENGINE` FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $wpdb->options ) );
+		return is_string( $engine ) && 0 === strcasecmp( $engine, 'InnoDB' );
+	}
+
+	/**
+	 * Drop the cached copies of the completion flag, written behind the options
+	 * API's back, so get_option() reads the committed value.
+	 *
+	 * @return void
+	 */
+	private static function forget_text_unslashed_option() {
+		wp_cache_delete( Store::TEXT_UNSLASHED_OPTION, 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+	}
+
+	/**
+	 * Release the unslash mutex.
+	 *
+	 * @return void
+	 */
+	private static function release_text_unslash_lock() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- deletes the mutex row; never cached.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM `{$wpdb->options}` WHERE `option_name` = %s", self::TEXT_UNSLASH_LOCK ) );
+	}
+
+	/**
+	 * File the Divi Builder editor cookies already in the list as internal.
+	 *
+	 * Until 1.39.0 a scan run from an editor's browser stored each
+	 * `et-saved-post-{ID}-bb` (and the other editor cookies, see
+	 * Frontend::DIVI_EDITOR_COOKIE_PREFIXES) under Uncategorized, one row per
+	 * edited post. Visitors stopped seeing them as soon as the frontend
+	 * learned the prefixes; this moves the stored rows too, so the admin list
+	 * and the uncategorized warnings agree with what visitors see. Only rows
+	 * still in Uncategorized are moved: a row someone put in a category on
+	 * purpose stays where it is.
+	 *
+	 * @return bool Whether the migration is complete.
+	 */
+	public static function move_divi_editor_cookies_to_internal() {
+		if ( get_option( 'faz_move_divi_editor_internal_done' ) ) {
+			return true;
+		}
+		global $wpdb;
+		$cookies    = $wpdb->prefix . 'faz_cookies';
+		$categories = $wpdb->prefix . 'faz_cookie_categories';
+		foreach ( array( $cookies, $categories ) as $table ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the activation/upgrade path.
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+				return false;
+			}
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $categories is $wpdb->prefix + literal (escaped via esc_sql); slug bound via %s; one-shot migration read.
+		$internal = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT category_id FROM `' . esc_sql( $categories ) . '` WHERE slug = %s', 'wordpress-internal' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- same table and justification as above.
+		$uncategorized = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT category_id FROM `' . esc_sql( $categories ) . '` WHERE slug = %s', 'uncategorized' ) );
+		if ( $internal <= 0 || $uncategorized <= 0 ) {
+			// The prerequisite category creation or lookup can fail temporarily.
+			// With no editor cookie stored there is nothing to wait for: new
+			// scans already file them as internal, so finish instead of holding
+			// the whole migration batch back on every admin request.
+			$pending = 0;
+			foreach ( \FazCookie\Frontend\Frontend::DIVI_EDITOR_COOKIE_PREFIXES as $prefix ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $cookies is $wpdb->prefix + literal (escaped via esc_sql); value bound via prepare(); one-shot migration read.
+				$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM `' . esc_sql( $cookies ) . '` WHERE name LIKE %s', $wpdb->esc_like( $prefix ) . '%' ) );
+				if ( null === $count ) {
+					// A failed COUNT is not zero rows: finishing here would set the
+					// marker and strand an editor cookie in Uncategorized for good.
+					return false;
+				}
+				$pending += (int) $count;
+			}
+			if ( 0 === $pending ) {
+				return update_option( 'faz_move_divi_editor_internal_done', 1, false )
+					|| (bool) get_option( 'faz_move_divi_editor_internal_done' );
+			}
+			return false;
+		}
+		$moved = 0;
+		foreach ( \FazCookie\Frontend\Frontend::DIVI_EDITOR_COOKIE_PREFIXES as $prefix ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $cookies is $wpdb->prefix + literal (escaped via esc_sql); every value bound via prepare(); one-shot idempotent migration write.
+			$n = $wpdb->query(
+				$wpdb->prepare(
+					'UPDATE `' . esc_sql( $cookies ) . '` SET category = %d WHERE name LIKE %s AND category = %d',
+					$internal,
+					$wpdb->esc_like( $prefix ) . '%',
+					$uncategorized
+				)
+			);
+			if ( false === $n ) {
+				if ( $moved > 0 ) {
+					Cookie_Controller::get_instance()->delete_cache();
+				}
+				// Throw so run_pending_migrations() withholds the version marker
+				// and the move is retried on the next admin load.
+				throw new \RuntimeException( 'FAZ: failed to move the Divi editor cookies to WordPress Internal; migration will retry.' );
+			}
+			$moved += (int) $n;
+		}
+		if ( $moved > 0 ) {
+			Cookie_Controller::get_instance()->delete_cache();
+		}
+		return update_option( 'faz_move_divi_editor_internal_done', 1, false )
+			|| (bool) get_option( 'faz_move_divi_editor_internal_done' );
 	}
 
 	/**

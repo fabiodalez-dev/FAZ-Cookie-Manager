@@ -260,7 +260,7 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 						<option value="classic"><?php esc_html_e( 'Classic', 'faz-cookie-manager' ); ?></option>
 					</select>
 					<div class="faz-help" id="faz-b-type-ccpa-hint" style="display:none;color:#92400e;" role="status" aria-live="polite" aria-atomic="true">
-						<?php esc_html_e( 'Classic and Full-width with a Pushdown preference center have no opt-out popup, so they are not available for a CCPA / US State Laws banner — the "Do Not Sell" link needs a working opt-out to be compliant. Use Box, or Full-width with Popup/Sidebar.', 'faz-cookie-manager' ); ?>
+						<?php esc_html_e( 'Classic, and Full-width or Box with a Pushdown preference center, have no opt-out popup, so they are not available for a CCPA / US State Laws banner — the "Do Not Sell" link needs a working opt-out to be compliant. Use Box or Full-width with Popup/Sidebar.', 'faz-cookie-manager' ); ?>
 					</div>
 				</div>
 
@@ -361,6 +361,14 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 					<input type="hidden" id="faz-b-brandlogo-url" value="">
 					<div id="faz-b-brandlogo-upload-status" role="status" aria-live="polite" aria-atomic="true" style="display:none;margin-top:6px;font-size:13px;"></div>
 					<div class="faz-help"><?php esc_html_e( 'Select or upload a logo. Uses the media library on WordPress, or file upload on ClassicPress.', 'faz-cookie-manager' ); ?></div>
+				</div>
+				<div class="faz-form-group">
+					<label for="faz-b-brandlogo-placement"><?php esc_html_e( 'Logo position', 'faz-cookie-manager' ); ?></label>
+					<select class="faz-select" id="faz-b-brandlogo-placement" style="width:auto;max-width:240px;" aria-describedby="faz-b-brandlogo-placement-help">
+						<option value=""><?php esc_html_e( 'Above the title', 'faz-cookie-manager' ); ?></option>
+						<option value="beside"><?php esc_html_e( 'Beside the title and text', 'faz-cookie-manager' ); ?></option>
+					</select>
+					<div id="faz-b-brandlogo-placement-help" class="faz-help"><?php esc_html_e( 'Beside puts the logo in its own column, to the left of the title, the description and the buttons.', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>
@@ -487,6 +495,23 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 							<input type="color" id="faz-b-link-color" aria-label="<?php esc_attr_e( 'Link text colour picker', 'faz-cookie-manager' ); ?>">
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-link-color-hex" aria-label="<?php esc_attr_e( 'Link text colour hex value', 'faz-cookie-manager' ); ?>" style="width:90px;">
 						</div>
+					</div>
+				</div>
+				<div class="faz-grid faz-grid-3" style="border-top:1px solid var(--faz-border);padding-top:16px;margin-top:4px;">
+					<div class="faz-form-group">
+						<label for="faz-b-notice-opacity"><?php esc_html_e( 'Background opacity (%)', 'faz-cookie-manager' ); ?></label>
+						<input type="number" class="faz-input faz-input-sm" id="faz-b-notice-opacity" min="50" max="100" step="5" placeholder="100" style="width:110px;" aria-describedby="faz-b-notice-opacity-help">
+						<div id="faz-b-notice-opacity-help" class="faz-help"><?php esc_html_e( 'Makes the banner background see-through, from 50 to 100. Text and buttons stay fully opaque. Leave empty for a solid background.', 'faz-cookie-manager' ); ?></div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-text-align"><?php esc_html_e( 'Text alignment', 'faz-cookie-manager' ); ?></label>
+						<select class="faz-select" id="faz-b-text-align" style="width:auto;max-width:200px;" aria-describedby="faz-b-text-align-help">
+							<option value=""><?php esc_html_e( 'Default', 'faz-cookie-manager' ); ?></option>
+							<option value="left"><?php esc_html_e( 'Left', 'faz-cookie-manager' ); ?></option>
+							<option value="center"><?php esc_html_e( 'Centre', 'faz-cookie-manager' ); ?></option>
+							<option value="right"><?php esc_html_e( 'Right', 'faz-cookie-manager' ); ?></option>
+						</select>
+						<div id="faz-b-text-align-help" class="faz-help"><?php esc_html_e( 'Aligns the banner title and description.', 'faz-cookie-manager' ); ?></div>
 					</div>
 				</div>
 			</div>
@@ -690,6 +715,132 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 		</div>
 
 		<div class="faz-card">
+			<div class="faz-card-header"><h3><?php esc_html_e( 'Preference Center Save Button', 'faz-cookie-manager' ); ?></h3></div>
+			<div class="faz-card-body">
+				<p class="faz-help" style="margin-bottom:.75rem;"><?php esc_html_e( 'Left empty, the Save button uses the colours of the Settings button. Accept and Reject use the same colours as on the banner.', 'faz-cookie-manager' ); ?></p>
+				<div class="faz-grid faz-grid-3">
+					<div class="faz-form-group">
+						<label for="faz-b-detail-save-bg-hex"><?php esc_html_e( 'Save — Background', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-detail-save-bg" aria-label="<?php esc_attr_e( 'Save — Background', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-detail-save-bg-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-detail-save-text-hex"><?php esc_html_e( 'Save — Text', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-detail-save-text" aria-label="<?php esc_attr_e( 'Save — Text', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-detail-save-text-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-detail-save-border-hex"><?php esc_html_e( 'Save — Border', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-detail-save-border" aria-label="<?php esc_attr_e( 'Save — Border', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-detail-save-border-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="faz-card">
+			<div class="faz-card-header"><h3><?php esc_html_e( 'Button Hover Colours', 'faz-cookie-manager' ); ?></h3></div>
+			<div class="faz-card-body">
+				<p class="faz-help" style="margin-bottom:.75rem;"><?php esc_html_e( 'Left empty, a button keeps its colours and fades to 80% opacity on hover.', 'faz-cookie-manager' ); ?> <?php esc_html_e( 'A button with hover colours changes to them in 0.2 seconds, unless the visitor\'s system asks for reduced motion.', 'faz-cookie-manager' ); ?></p>
+<?php if ( $faz_equal_weight['all'] ) : ?>
+				<p class="faz-help" style="margin-bottom:.75rem;"><?php esc_html_e( 'While jurisdiction routing is active the Reject hover colours are overridden by the Accept ones, like its other colours.', 'faz-cookie-manager' ); ?></p>
+<?php endif; ?>
+				<div class="faz-grid faz-grid-3">
+					<div class="faz-form-group">
+						<label for="faz-b-accept-hover-bg-hex"><?php esc_html_e( 'Accept hover — Background', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-accept-hover-bg" aria-label="<?php esc_attr_e( 'Accept hover — Background', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-accept-hover-bg-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-accept-hover-text-hex"><?php esc_html_e( 'Accept hover — Text', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-accept-hover-text" aria-label="<?php esc_attr_e( 'Accept hover — Text', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-accept-hover-text-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-accept-hover-border-hex"><?php esc_html_e( 'Accept hover — Border', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-accept-hover-border" aria-label="<?php esc_attr_e( 'Accept hover — Border', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-accept-hover-border-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-reject-hover-bg-hex"><?php esc_html_e( 'Reject hover — Background', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-reject-hover-bg" aria-label="<?php esc_attr_e( 'Reject hover — Background', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-reject-hover-bg-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-reject-hover-text-hex"><?php esc_html_e( 'Reject hover — Text', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-reject-hover-text" aria-label="<?php esc_attr_e( 'Reject hover — Text', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-reject-hover-text-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-reject-hover-border-hex"><?php esc_html_e( 'Reject hover — Border', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-reject-hover-border" aria-label="<?php esc_attr_e( 'Reject hover — Border', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-reject-hover-border-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-settings-hover-bg-hex"><?php esc_html_e( 'Settings hover — Background', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-settings-hover-bg" aria-label="<?php esc_attr_e( 'Settings hover — Background', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-settings-hover-bg-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-settings-hover-text-hex"><?php esc_html_e( 'Settings hover — Text', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-settings-hover-text" aria-label="<?php esc_attr_e( 'Settings hover — Text', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-settings-hover-text-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-settings-hover-border-hex"><?php esc_html_e( 'Settings hover — Border', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-settings-hover-border" aria-label="<?php esc_attr_e( 'Settings hover — Border', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-settings-hover-border-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-detail-save-hover-bg-hex"><?php esc_html_e( 'Save hover — Background', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-detail-save-hover-bg" aria-label="<?php esc_attr_e( 'Save hover — Background', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-detail-save-hover-bg-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-detail-save-hover-text-hex"><?php esc_html_e( 'Save hover — Text', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-detail-save-hover-text" aria-label="<?php esc_attr_e( 'Save hover — Text', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-detail-save-hover-text-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-detail-save-hover-border-hex"><?php esc_html_e( 'Save hover — Border', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-detail-save-hover-border" aria-label="<?php esc_attr_e( 'Save hover — Border', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-detail-save-hover-border-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'Default', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="faz-card">
 			<div class="faz-card-header"><h3><?php esc_html_e( 'Revisit Widget', 'faz-cookie-manager' ); ?></h3></div>
 			<div class="faz-card-body">
 				<div class="faz-grid faz-grid-3">
@@ -707,6 +858,34 @@ $faz_revisit_locked       = ( $faz_revisit_req['all'] && ! $faz_withdrawal_elsew
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-revisit-icon-hex" style="width:90px;">
 						</div>
 					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-revisit-border-hex"><?php esc_html_e( 'Border', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-revisit-border" aria-label="<?php esc_attr_e( 'Revisit widget border', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-revisit-border-hex" style="width:90px;" placeholder="<?php esc_attr_e( 'None', 'faz-cookie-manager' ); ?>">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-revisit-widget-size"><?php esc_html_e( 'Widget size (px)', 'faz-cookie-manager' ); ?></label>
+						<input type="number" class="faz-input faz-input-sm" id="faz-b-revisit-widget-size" min="30" max="100" step="1" placeholder="45" style="width:90px;">
+					</div>
+					<div class="faz-form-group">
+						<label for="faz-b-revisit-image-size"><?php esc_html_e( 'Icon or image size (px)', 'faz-cookie-manager' ); ?></label>
+						<input type="number" class="faz-input faz-input-sm" id="faz-b-revisit-image-size" min="12" max="100" step="1" placeholder="30" style="width:90px;">
+					</div>
+				</div>
+				<div class="faz-form-group" style="margin-top:16px;">
+					<label><?php esc_html_e( 'Custom Image', 'faz-cookie-manager' ); ?></label>
+					<div style="display:flex;align-items:center;gap:12px;">
+						<img id="faz-b-revisit-image-preview" src="" alt="<?php esc_attr_e( 'Revisit Widget Image Preview', 'faz-cookie-manager' ); ?>"
+							style="max-width:60px;max-height:60px;border:1px solid var(--faz-border);border-radius:4px;padding:4px;background:#fff;display:none;">
+						<button type="button" class="faz-btn faz-btn-outline faz-btn-sm" id="faz-b-revisit-image-upload"><?php esc_html_e( 'Select Image', 'faz-cookie-manager' ); ?></button>
+						<button type="button" class="faz-btn faz-btn-outline faz-btn-sm" id="faz-b-revisit-image-remove" style="display:none;color:var(--faz-danger);"><?php esc_html_e( 'Remove', 'faz-cookie-manager' ); ?></button>
+					</div>
+					<input type="file" id="faz-b-revisit-image-file" accept="image/*" style="display:none;">
+					<input type="hidden" id="faz-b-revisit-image-url" value="">
+					<div id="faz-b-revisit-image-upload-status" role="status" aria-live="polite" aria-atomic="true" style="display:none;margin-top:6px;font-size:13px;"></div>
+					<div class="faz-help"><?php esc_html_e( 'Shown in place of the default icon, at the icon or image size above. The Icon colour applies only to the default icon. Left empty, the default icon is used.', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>

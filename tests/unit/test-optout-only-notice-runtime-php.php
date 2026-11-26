@@ -15,8 +15,12 @@ namespace {
 	}
 
 	function get_current_screen() {
-		return (object) array( 'id' => 'faz-cookie-manager-banner' );
+		return (object) array( 'id' => $GLOBALS['faz_notice_screen'] ?? 'faz-cookie-manager-banner' );
 	}
+	function get_option( $key, $default = false ) { return 'faz_settings' === $key ? ( $GLOBALS['faz_notice_settings'] ?? array() ) : $default; }
+	function home_url( $path ) { return 'https://example.test' . $path; }
+	function add_query_arg( $key, $value, $url ) { return $url . '?' . $key . '=' . $value; }
+	function wp_nonce_url( $url, $action, $key ) { return $url . '&' . $key . '=test-token'; }
 
 	function esc_html__( $text, $domain = '' ) {
 		unset( $domain );
@@ -27,6 +31,19 @@ namespace {
 		return $url;
 	}
 
+	function __( $text, $domain = '' ) {
+		unset( $domain );
+		return $text;
+	}
+
+	function esc_html( $text ) {
+		return $text;
+	}
+
+	function esc_attr( $text ) {
+		return $text;
+	}
+
 	function admin_url( $path = '' ) {
 		return 'https://example.test/wp-admin/' . ltrim( $path, '/' );
 	}
@@ -35,10 +52,17 @@ namespace {
 namespace FazCookie\Frontend\Includes {
 	class Geo_Runtime {
 		public static $enabled = false;
+		public static $mode    = 'gdpr_version';
+		public static $state   = 'routing';
 
 		public static function is_enabled() {
 			return self::$enabled;
 		}
+
+		public static function missing_law_banner_mode() {
+			return self::$mode;
+		}
+		public static function current_state() { return array( 'mode' => self::$state ); }
 	}
 }
 
@@ -106,17 +130,51 @@ namespace {
 	ob_start();
 	$admin->optout_only_banner_notice();
 	$output = ob_get_clean();
-	optout_notice_assert( false !== strpos( $output, 'Visitors under an opt-in privacy law are seeing no banner.' ), 'an active CCPA-only configuration emits the warning headline' );
-	optout_notice_assert( false !== strpos( $output, 'Every active banner uses the opt-out (Do Not Sell) model.' ), 'the CCPA-only warning explains the configuration gap' );
+	optout_notice_assert( false !== strpos( $output, 'are seeing an opt-in version of your banner.' ), 'by default the CCPA-only notice says opt-in visitors see an opt-in version' );
+	optout_notice_assert( false !== strpos( $output, 'notice-info' ), 'that default is information, not a warning' );
+	optout_notice_assert( false === strpos( $output, 'seeing no banner' ), 'nothing says these visitors see no banner any more' );
+
+	Geo_Runtime::$mode = 'main_banner';
+	ob_start();
+	$admin->optout_only_banner_notice();
+	$output = ob_get_clean();
+	optout_notice_assert( false !== strpos( $output, 'are seeing an opt-in version of your banner.' ), 'a legacy main_banner preference cannot change the protective notice' );
+	optout_notice_assert( false === strpos( $output, 'are seeing your opt-out banner.' ), 'the notice no longer advertises the retired waiver' );
+	Geo_Runtime::$mode = 'gdpr_version';
+
+	$GLOBALS['faz_notice_screen'] = 'dashboard';
+	Geo_Runtime::$state = 'baseline';
+	ob_start();
+	$admin->optout_only_banner_notice();
+	$output = ob_get_clean();
+	optout_notice_assert( false !== strpos( $output, 'every visitor receives the protective opt-in fallback' ), 'the WordPress dashboard explains that no country source affects everyone' );
+	optout_notice_assert( false !== strpos( $output, 'faz_banner_test=1' ) && false !== strpos( $output, '_faz_test_nonce=test-token' ), 'the on-site check link is nonce-bound' );
+	optout_notice_assert( false !== strpos( $output, 'without clearing consent' ), 'the check explains why a returning administrator may otherwise see no banner' );
+
+	$GLOBALS['faz_notice_screen'] = 'plugins';
+	ob_start();
+	$admin->optout_only_banner_notice();
+	optout_notice_assert( '' === ob_get_clean(), 'unrelated WordPress screens are not filled with notices' );
+	$GLOBALS['faz_notice_screen'] = 'faz-cookie-manager-banner';
 
 	Controller::$items[] = (object) array(
 		'status'   => 1,
 		'settings' => array( 'settings' => array( 'applicableLaw' => 'gdpr' ) ),
+		'target_countries' => array( 'DE' ),
 	);
 	ob_start();
 	$admin->optout_only_banner_notice();
+	optout_notice_assert( false !== strpos( ob_get_clean(), 'No active GDPR banner covers every country' ), 'a country-restricted GDPR banner does not hide the fallback notice' );
+	Controller::$items[1]->target_countries = array();
+	ob_start();
+	$admin->optout_only_banner_notice();
 	$output = ob_get_clean();
-	optout_notice_assert( '' === $output, 'an active opt-in banner suppresses the warning' );
+	optout_notice_assert( '' === $output, 'an active opt-in banner suppresses the notice' );
+	Controller::$items = array( Controller::$items[0] );
+	$GLOBALS['faz_notice_settings'] = array( 'banner_control' => array( 'status' => false ) );
+	ob_start();
+	$admin->optout_only_banner_notice();
+	optout_notice_assert( '' === ob_get_clean(), 'a deliberately disabled global banner is not advertised as visible' );
 
 	echo "\n--\nChecks: {$run}\nFailed: {$failed}\n\n";
 	if ( $failed > 0 ) {

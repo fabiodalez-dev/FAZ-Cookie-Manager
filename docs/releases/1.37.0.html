@@ -1,0 +1,35 @@
+<p>FAZ Cookie Manager 1.37.0 nasce, come la release di ieri, da una domanda arrivata sul forum di wordpress.org. Un utente aveva installato il plugin, lo vedeva lavorare, eppure il banner non compariva. La dashboard gli dava la prova più chiara possibile: tre pagine viste, zero banner mostrati. Aveva WP Super Cache e Autoptimize, e il primo sospetto era quello. Non c'entravano.</p>
+
+<h2>Un banner nascosto apposta</h2>
+
+<p>Aprendo la sua pagina gli script del plugin c'erano tutti, la configurazione anche, e nel codice mancava una cosa sola: il modello HTML del banner. Il plugin lo stava togliendo di proposito. Il sito aveva un unico banner, impostato sulla legge californiana (CCPA), che funziona per opt-out: i cookie possono partire e il visitatore può chiedere di fermarli. E aveva acceso il Geo-Targeting, che applica a ogni visitatore le regole del suo paese. Acceso, tra l'altro, di default.</p>
+
+<p>Per un visitatore europeo le regole sono opposte: serve il consenso prima che parta qualsiasi cookie facoltativo. Il plugin si trovava quindi a dover bloccare gli script come vuole il GDPR, ma con in mano solo un banner che dice il contrario. Aveva scelto di non mentire: blocco attivo, banner nascosto. Corretto sulla carta, inutile nella pratica, perché il visitatore restava senza nessun modo di accettare o rifiutare.</p>
+
+<p>E il caso era molto più largo di quanto sembri. Le regole opt-in valgono per chi arriva dall'Unione europea, dal Regno Unito o dal Brasile. Valgono per un visitatore americano di cui non si riesce a capire lo stato. E valgono per chiunque, quando il sito non ha modo di capire il paese: niente Cloudflare, niente database GeoIP. Era la situazione di quel sito, e di molti altri. Bastava portare il proprio banner su CCPA per non mostrarlo più a nessuno.</p>
+
+<h2>La versione opt-in dello stesso banner</h2>
+
+<p>Ora quei visitatori vedono lo stesso banner, trasformato in un banner opt-in solo per la loro visita. Restano il tipo, la posizione, il tema, i colori e i link alla cookie policy di ogni lingua. Cambiano i testi e i pulsanti, che diventano quelli predefiniti del GDPR: Accetta, Rifiuta, Preferenze, senza il link «Do Not Sell». La durata del consenso scende al massimo previsto per il GDPR, e nessun cookie facoltativo parte finché il visitatore non sceglie. Non viene salvato nulla: il banner dell'amministratore resta com'è.</p>
+
+<p>La stessa trasformazione vale ovunque il banner viene costruito: nella pagina, quando il banner cambia lingua dopo il caricamento, e nelle pagine AMP. Così un consenso dato su una pagina viene riconosciuto sulle altre.</p>
+
+<h2>Un'opzione che ho tolto</h2>
+
+<p>La prima versione della correzione offriva una scelta nelle impostazioni: mostrare la versione opt-in, oppure il banner CCPA così com'è, con le sue regole. Prima di pubblicarla ho verificato se la seconda strada fosse percorribile, e non lo è. La direttiva ePrivacy, all'articolo 5, chiede il consenso preventivo per i cookie non necessari su qualunque dispositivo che si trovi nell'Unione, ovunque abbia sede il sito. Un banner opt-out non può soddisfarla, per un visitatore europeo, in nessuna configurazione. Un'opzione che porta a un risultato non conforme non è una scelta da offrire, così l'ho tolta. Chi è sicuro che le regole europee non riguardino il suo pubblico può ancora spegnere il Geo-Targeting, e allora vale per tutti la legge del suo banner.</p>
+
+<h2>Un avviso che si veda, e un modo di controllare</h2>
+
+<p>Il plugin aveva già un avviso che spiegava questa situazione, ma compariva solo nelle sue pagine. L'utente del forum non l'aveva mai visto. Ora compare anche nella Dashboard di WordPress, copre i siti con un banner GDPR limitato ad alcuni paesi, e dice esplicitamente quando la mancanza di una fonte geografica riguarda tutti i visitatori.</p>
+
+<p>L'avviso porta anche un pulsante, «Check the banner on your site». C'è un motivo pratico: chi ha già fatto una scelta sul proprio sito non vede più il banner, ed è facile scambiarlo per un guasto. Il pulsante riapre il banner vero solo per l'amministratore, senza cancellare il consenso, senza ignorare i segnali di privacy del browser e senza contare la prova nelle statistiche o nel registro dei consensi. La pagina aperta così non finisce mai nella cache.</p>
+
+<h2>La cache, di nuovo</h2>
+
+<p>Lungo la strada è venuto fuori un secondo limite. Il plugin ha un modo per far convivere le regole per paese con la cache delle pagine: mette in cache una versione rigorosa, uguale per tutti, e poi chiede al server il banner giusto per ogni visitatore. Per costruire quella versione rigorosa, però, pretendeva un banner GDPR. Un sito con il solo banner CCPA non poteva usarla, e le sue pagine saltavano la cache a ogni richiesta. Ora la versione opt-in del banner CCPA basta a costruirla.</p>
+
+<p>Quanto all'utente del forum: dopo la mia risposta ha spento il Geo-Targeting e il banner è tornato. Lui però continuava a non vederlo. Davanti a WP Super Cache il suo hosting ha una seconda cache, che serviva ancora la pagina salvata prima della modifica: svuotare WP Super Cache non bastava.</p>
+
+<h2>Come ho verificato</h2>
+
+<p>I test nuovi riproducono il caso del forum su un sito di prova: un solo banner CCPA, il Geo-Targeting acceso, un visitatore tedesco e uno californiano. Il tedesco vede la versione opt-in e può accettare; il californiano continua a vedere il banner CCPA. Altri test controllano che i link alla policy e le varianti A/B sopravvivano, che AMP e la pagina normale riconoscano lo stesso consenso, che un'impostazione salvata con la vecchia opzione non possa più togliere le regole a un visitatore europeo, e che il controllo dalla Dashboard riapra il banner senza toccare il consenso. Li ho eseguiti anche sul codice precedente, dove falliscono. Prima della pubblicazione sono passati i test unitari, la suite end-to-end completa sul commit definitivo, i test di conformità con TCF e Consent Mode attivi, l'installazione da zero, l'aggiornamento dalla 1.36.1, Plugin Check e la matrice dei plugin di cache.</p>

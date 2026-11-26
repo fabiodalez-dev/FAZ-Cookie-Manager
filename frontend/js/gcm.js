@@ -1,7 +1,16 @@
 (function () {
 "use strict";
 
-var data = window._fazGcm;
+// The localized objects count only as plain objects. Deferred past post
+// content, a missing localize block lets `<a id="_fazGcm">` answer the name
+// with an element, and this file would run on it with no default settings.
+function plain(value) {
+    try { return value && typeof value === 'object' && Object.prototype.toString.call(value) === '[object Object]' ? value : null; } catch (e) { return null; }
+}
+function fazConfig() {
+    return plain(window._fazConfig) || {};
+}
+var data = plain(window._fazGcm);
 if (!data) {
     return;
 }
@@ -10,7 +19,7 @@ var regionSettings = Array.isArray(data.default_settings) ? data.default_setting
 var waitForTime = data.wait_for_update || 0;
 
 function getCookieValues(cookieName) {
-    cookieName = ((window._fazConfig || {})._cookieNames || {})[cookieName] || cookieName;
+    cookieName = (fazConfig()._cookieNames || {})[cookieName] || cookieName;
     var values = [];
     var name = cookieName + "=";
     var parts = document.cookie.split(';');
@@ -268,7 +277,8 @@ function parseConsentCookieParts() {
 
 function isConsentCookieStale(parsed) {
     if (!parsed) return false;
-    var config = window._fazConfig || {};
+    var config = window._fazConfig;
+    config = config && Object.prototype.toString.call(config) === '[object Object]' ? config : {};
     // The shell's fingerprint is provisional on every topology. Restore
     // nothing until the no-store payload has installed the visitor's scope.
     if (config._geoBootstrap && !config._geoBootstrapResolved) return true;
@@ -489,7 +499,7 @@ document.addEventListener("fazcookie_consent_ready", function (event) {
         if (!current) restoreBaseline();
         return;
     }
-    var config = window._fazConfig || {};
+    var config = fazConfig();
     if (!current || !config._geoBootstrap) return;
     updateConsentState(buildConsentState(current));
     restoredFromCookie = true;

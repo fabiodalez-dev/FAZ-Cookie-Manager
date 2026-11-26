@@ -63,6 +63,14 @@ class Template {
 	protected $banner_pushdown = false;
 
 	/**
+	 * Whether this is a box+pushdown combo (GitHub #392): the classic template,
+	 * for its embedded preference wrapper, laid out as a corner box.
+	 *
+	 * @var boolean
+	 */
+	protected $box_pushdown = false;
+
+	/**
 	 * Theme presets to be applied on the template
 	 *
 	 * @var array
@@ -103,6 +111,21 @@ class Template {
 	 * @var string
 	 */
 	protected $cache_group = 'banner_template';
+
+	/**
+	 * Config fingerprint the slot was fixed with by load(), or null.
+	 *
+	 * @var string|null
+	 */
+	private $slot_config = null;
+
+	/**
+	 * Cache generation this render read the banner under (see
+	 * faz_banner_template_generation()). null = not yet captured.
+	 *
+	 * @var string|null
+	 */
+	private $generation = null;
 
 	/**
 	 * Language of the template
@@ -191,11 +214,17 @@ class Template {
 	 * @return void
 	 */
 	public function load() {
-		$stored = $this->get_stored();
+		// generate() normalises the config (categoryPreview) before update()
+		// stores the result, so the slot is fixed from the config as read here:
+		// otherwise the write could land in a slot the next read never looks in.
+		$this->slot_config = $this->config_fingerprint();
+		$this->generation  = $this->current_generation();
+		$stored            = $this->get_stored();
 		if ( true === $this->is_preview()
 			|| empty( $stored )
 			|| ! isset( $stored['layout_signature'] )
-			|| $this->get_layout_signature() !== $stored['layout_signature'] ) {
+			|| $this->get_layout_signature() !== $stored['layout_signature']
+			|| $this->generation !== ( isset( $stored['generation'] ) ? (string) $stored['generation'] : '' ) ) {
 			$this->generate();
 		} else {
 			$this->set_template();
@@ -228,7 +257,8 @@ class Template {
 		// Banner + pushdown uses the classic template (which has preference-wrapper for
 		// pushdown expansion) but without inline category toggles.
 		$this->banner_pushdown = ( $this->type === 'banner' && $this->ptype === 'pushdown' );
-		if ( $this->banner_pushdown ) {
+		$this->box_pushdown    = ( $this->type === 'box' && $this->ptype === 'pushdown' );
+		if ( $this->banner_pushdown || $this->box_pushdown ) {
 			$this->type = 'classic';
 			if ( isset( $this->properties['config']['categoryPreview'] ) ) {
 				$this->properties['config']['categoryPreview']['status'] = false;
@@ -387,6 +417,96 @@ class Template {
 		return $this->styles;
 	}
 	/**
+	 * Rules for the Save button colours and the hover colours.
+	 *
+	 * Only what is set gets a rule: with these fields empty a banner keeps the
+	 * CSS it has today, where Save follows the Settings button and hover is the
+	 * template's 80% opacity. Save follows Settings on hover too, unless it has
+	 * colours of its own, because the Settings hover colours were not chosen
+	 * for them.
+	 *
+	 * The runtime enables the transition after the initial styles have painted.
+	 * It applies in both directions and respects the reduced-motion preference.
+	 *
+	 * @param array $css_vars Custom properties emitted for this banner.
+	 * @return string
+	 */
+	private static function custom_button_rules( $css_vars ) {
+		$is_set = static function ( $name ) use ( $css_vars ) {
+			return ! empty( $css_vars[ $name ] );
+		};
+		$hover  = static function ( $selector, $tag ) use ( $is_set ) {
+			$rule = '';
+			foreach ( array( 'background' => 'background-color', 'color' => 'color', 'border-color' => 'border-color' ) as $property => $key ) {
+				if ( $is_set( '--faz-' . $tag . '-hover-' . $key ) ) {
+					$rule .= $property . ':var(--faz-' . $tag . '-hover-' . $key . ');';
+				}
+			}
+			if ( '' === $rule ) {
+				return '';
+			}
+			return $selector . ':hover{' . $rule . 'opacity:1;}'
+				. '@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){'
+				. $selector . ':where(.faz-hover-ready *){transition:background-color .2s,color .2s,border-color .2s;}}';
+		};
+
+		$save  = '.faz-btn-preferences[data-faz-tag="detail-save-button"]';
+		$rules = $hover( '.faz-btn-accept', 'accept-button' )
+			. $hover( '.faz-btn-reject', 'reject-button' )
+			. $hover( '.faz-btn-customize', 'settings-button' );
+
+		$save_rule = '';
+		foreach ( array( 'color' => 'color', 'background' => 'background-color', 'border-color' => 'border-color' ) as $property => $key ) {
+			if ( $is_set( '--faz-detail-save-button-custom-' . $key ) ) {
+				$save_rule .= $property . ':var(--faz-detail-save-button-custom-' . $key . ');';
+			}
+		}
+		if ( '' !== $save_rule ) {
+			$rules .= $save . '{' . $save_rule . '}';
+		}
+		$save_hover = $hover( $save, 'detail-save-button' );
+		if ( '' === $save_hover && '' === $save_rule ) {
+			$save_hover = $hover( $save, 'settings-button' );
+		}
+		return $rules . $save_hover;
+	}
+
+	/**
+	 * Rules for the revisit widget size, image size and border.
+	 *
+	 * Empty settings add nothing, so the widget keeps the template's 45px
+	 * circle with a 30px icon. A configured widget keeps the image inside its
+	 * border and clips it to the rounded button without clipping the tooltip.
+	 *
+	 * @param array $revisit  The banner's revisitConsent config.
+	 * @param array $css_vars Custom properties emitted for this banner.
+	 * @return string
+	 */
+	private static function revisit_widget_rules( $revisit, $css_vars ) {
+		$widget = faz_sanitize_pixel_size( isset( $revisit['widgetSize'] ) ? $revisit['widgetSize'] : '', 30, 100 );
+		$image  = faz_sanitize_pixel_size( isset( $revisit['imageSize'] ) ? $revisit['imageSize'] : '', 12, 100 );
+		$border = ! empty( $css_vars['--faz-revisit-consent-border-color'] );
+		$inner  = ( '' !== $widget ? (int) $widget : 45 ) - ( $border ? 2 : 0 );
+
+		$wrapper = '';
+		if ( '' !== $widget ) {
+			$wrapper .= 'width:' . $widget . 'px;height:' . $widget . 'px;';
+		}
+		if ( $border ) {
+			$wrapper .= 'border:1px solid var(--faz-revisit-consent-border-color);box-sizing:border-box;';
+		}
+		if ( '' === $wrapper && '' === $image ) {
+			return '';
+		}
+
+		$size  = min( '' !== $image ? (int) $image : 30, $inner );
+		$rules = '' === $wrapper ? '' : '.faz-btn-revisit-wrapper{' . $wrapper . '}';
+		return $rules
+			. '.faz-btn-revisit-wrapper .faz-btn-revisit{width:100%;height:100%;border-radius:inherit;overflow:hidden;}'
+			. '.faz-btn-revisit-wrapper .faz-btn-revisit img,.faz-btn-revisit-wrapper .faz-btn-revisit svg{width:' . $size . 'px;height:' . $size . 'px;max-width:none;}';
+	}
+
+	/**
 	 * Get template HTML
 	 *
 	 * @return string
@@ -471,10 +591,15 @@ class Template {
 			$container = $finder->query( '//div[contains(@class,"faz-consent-container")]' )->item( 0 );
 			if ( $container instanceof \DOMElement ) {
 				$container->setAttribute( 'id', 'faz-consent' );
+				// Box + Pushdown keeps the faz-box-* position classes on classic
+				// markup; this class lets rules written for that markup find it.
+				if ( $this->box_pushdown ) {
+					$container->setAttribute( 'class', trim( $container->getAttribute( 'class' ) . ' faz-box-pushdown' ) );
+				}
 			}
 
-			// Banner + pushdown: strip inline category preview (only classic shows it).
-			if ( $this->banner_pushdown ) {
+			// Banner or box + pushdown: strip inline category preview (only classic shows it).
+			if ( $this->banner_pushdown || $this->box_pushdown ) {
 				$preview_nodes = $finder->query( '//*[contains(@class, "faz-category-direct-preview-wrapper")]' );
 				foreach ( $preview_nodes as $node ) {
 					$node->parentNode->removeChild( $node ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName
@@ -523,6 +648,8 @@ class Template {
 			}
 
 			$css_vars = array();
+			$revisit_custom = false;
+			$logo_beside    = false;
 
 			foreach ( $elements as $element ) {
 				if ( ! $element instanceof \DOMElement ) {
@@ -571,17 +698,48 @@ class Template {
 						continue;
 					}
 				}
+				// An empty notice title is not rendered: the element keeps its
+				// bottom margin and a11y.js turns it into an <h2> with no text.
+				if ( 'title' === $tag && 0 === $element->getElementsByTagName( 'img' )->length
+					&& '' === trim( str_replace( "\xC2\xA0", ' ', $element->textContent ) ) ) {
+					$element->parentNode->removeChild( $element ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName
+					continue;
+				}
 				// Brand logo: set img src from config meta.url (custom upload).
 				if ( 'brand-logo' === $tag && isset( $config['meta']['url'] ) && '#' !== $config['meta']['url'] ) {
-					$logo_imgs = $element->getElementsByTagName( 'img' );
-					foreach ( $logo_imgs as $logo_img ) {
-						$logo_img->setAttribute( 'src', esc_url( $config['meta']['url'] ) );
+					self::apply_brand_logo( $element, (string) $config['meta']['url'] );
+					// Only for a logo that is shown: with the logo off the grid
+					// would keep an empty column and strip the text's padding.
+					$logo_beside = ! empty( $config['status'] )
+						&& isset( $config['meta']['placement'] ) && 'beside' === faz_sanitize_logo_placement( $config['meta']['placement'] );
+				}
+				// Revisit widget: a custom image replaces the default icon. script.js
+				// swaps the default icon for an inline SVG, and skips an image with
+				// this class whatever its URL says. The button already carries the
+				// accessible name, so the image needs no text of its own.
+				if ( 'revisit-consent' === $tag && ! empty( $config['meta']['url'] ) && '#' !== $config['meta']['url'] ) {
+					$revisit_url = esc_url_raw( $config['meta']['url'], array( 'http', 'https' ) );
+					if ( '' !== $revisit_url ) {
+						foreach ( $element->getElementsByTagName( 'img' ) as $revisit_img ) {
+							$revisit_img->setAttribute( 'src', $revisit_url );
+							// Added to the classes already there: skip-lazy keeps lazy loaders off it.
+							$revisit_img->setAttribute( 'class', trim( $revisit_img->getAttribute( 'class' ) . ' faz-revisit-custom-image' ) );
+							$revisit_img->setAttribute( 'alt', '' );
+						}
+						$revisit_custom = true;
 					}
 				}
 				$preview = $this->is_preview();
 				$enabled = isset( $config['status'] ) && false === $preview ? $config['status'] : true;
 				if ( 'revisit-consent' === $tag && ! empty( $properties['config']['revisitConsent']['verifiedAlternative'] ) ) {
 					$enabled = true; // Hidden fallback; script.js checks the live footer.
+				}
+				// The GPC note explains why the opt-out is locked, and the lock
+				// follows the browser's signal wherever the visitor is. Only the
+				// browser knows whether the signal is there, so the note is always
+				// rendered and _fazSetCCPAOptions() drops it when it is not.
+				if ( 'optout-gpc-option' === $tag ) {
+					$enabled = true;
 				}
 
 				// Category toggles are required for GDPR granular consent — never remove.
@@ -630,6 +788,30 @@ class Template {
 				$css_vars['--faz-btn-border-radius'] = $radius;
 			}
 
+			// Notice background opacity. Only the background colour gets an
+			// alpha: CSS opacity on the notice would fade the text and the
+			// buttons with it. Both values are shape-checked on save, and the
+			// colour is re-checked here because the result is emitted the same
+			// way as every other colour above.
+			$opacity = isset( $properties['settings']['noticeOpacity'] )
+				? faz_sanitize_opacity_percent( $properties['settings']['noticeOpacity'] )
+				: '';
+			if ( '' !== $opacity && isset( $css_vars['--faz-notice-background-color'] ) ) {
+				$css_vars['--faz-notice-background-color'] = faz_sanitize_color(
+					faz_color_with_opacity( $css_vars['--faz-notice-background-color'], $opacity )
+				);
+			}
+
+			// Notice text alignment, an allow-listed keyword. The template CSS
+			// has no rule for it, so one is added below only when it is set:
+			// an empty setting leaves every existing banner as it was.
+			$text_align = isset( $properties['settings']['textAlign'] )
+				? faz_sanitize_text_align( $properties['settings']['textAlign'] )
+				: '';
+			if ( '' !== $text_align ) {
+				$css_vars['--faz-notice-text-align'] = $text_align;
+			}
+
 			if ( ! empty( $css_vars ) ) {
 				$vars_string = '';
 				foreach ( $css_vars as $var => $val ) {
@@ -646,6 +828,23 @@ class Template {
 					. '.faz-modal{' . $vars_string . '}'
 					. '.faz-btn-revisit-wrapper{' . $vars_string . '}'
 					. $this->styles;
+				if ( '' !== $text_align ) {
+					$this->styles .= '.faz-consent-container .faz-title,.faz-consent-container .faz-notice-des{text-align:var(--faz-notice-text-align);}';
+				}
+				$this->styles .= self::custom_button_rules( $css_vars );
+				if ( $revisit_custom ) {
+					$this->styles .= '.faz-btn-revisit-wrapper .faz-btn-revisit img.faz-revisit-custom-image{object-fit:contain;}';
+				}
+				$this->styles .= self::revisit_widget_rules(
+					isset( $properties['config']['revisitConsent'] ) ? $properties['config']['revisitConsent'] : array(),
+					$css_vars
+				);
+			}
+			if ( $logo_beside ) {
+				$this->styles .= self::logo_beside_rules();
+			}
+			if ( $this->box_pushdown ) {
+				$this->styles .= self::box_pushdown_rules();
 			}
 
 			$this->html = $dom->saveHTML( $dom->documentElement ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName
@@ -657,6 +856,87 @@ class Template {
 	}
 
 	/**
+	 * Rules that lay the classic template out as a corner box (GitHub #392).
+	 *
+	 * Box + pushdown loads the classic HTML, whose preference wrapper sits in
+	 * the banner itself, so Customise opens the categories in the same box
+	 * instead of a separate window. The classic CSS is written for a bar across
+	 * the page: these rules give it the box's width, corners and offsets, stack
+	 * the text over the buttons as the box does, and open the wrapper for the
+	 * box position classes, which the classic rules do not know. Open, the
+	 * preferences replace the notice, as the classic bar does on a phone, and
+	 * the header's close button, hidden in the bar, takes the visitor back to
+	 * it. With the notice gone, the panel's own Accept and Reject buttons are
+	 * shown next to Save, stacked as on a phone, so the three choices stay
+	 * one click away. The categories scroll inside the box, not past the screen.
+	 * Below 440px the box takes the full width, as the box template does.
+	 *
+	 * @return string
+	 */
+	private static function box_pushdown_rules() {
+		$c   = '.faz-consent-container';
+		$box = $c . '.faz-box-bottom-left,' . $c . '.faz-box-bottom-right,' . $c . '.faz-box-top-left,' . $c . '.faz-box-top-right';
+		$open = $c . '[class*="faz-box-"].faz-consent-bar-expand';
+		return $c . '{width:440px;max-width:calc(100% - 80px);border-radius:6px;}'
+			. $c . ' .faz-consent-bar,' . $c . ' .faz-preference-center{border-radius:6px;}'
+			. $c . '.faz-box-bottom-left{bottom:40px;left:40px;}'
+			. $c . '.faz-box-bottom-right{bottom:40px;right:40px;}'
+			. $c . '.faz-box-top-left{top:40px;left:40px;}'
+			. $c . '.faz-box-top-right{top:40px;right:40px;}'
+			. $c . ' .faz-notice-group{display:block;}'
+			. $c . ' .faz-notice-btn-wrapper{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:8px;margin:16px 0 0;}'
+			// The flex basis stays at the specificity of the compact phone layout,
+			// which comes later and wins, so Accept and Reject keep equal widths
+			// there. The margin reset has to beat the box rules that push the
+			// first button down, and compact resets the margin to 0 as well.
+			. $c . ':where(.faz-box-pushdown) .faz-notice-btn-wrapper .faz-btn{flex:1 1 auto;}'
+			. $c . '.faz-box-pushdown .faz-consent-bar .faz-notice-group .faz-notice-btn-wrapper .faz-btn{margin:0;}'
+			// The classic right-to-left rule indents the row by 15px for the
+			// inline categories beside it, which the box does not have.
+			. $c . '.faz-box-pushdown .faz-notice-btn-wrapper{margin-left:0;margin-right:0;}'
+			. $open . ' .faz-consent-bar{display:none;}'
+			. $open . ' .faz-preference-wrapper{display:block;}'
+			. $open . ' .faz-preference-header .faz-btn-close{display:inline-block;}'
+			. $open . ' .faz-preference-center{display:flex;flex-direction:column;max-height:calc(100vh - 80px);overflow:hidden;border:1px solid var(--faz-detail-border-color,#f4f4f4);box-shadow:0 -1px 10px 0 #acabab4d;}'
+			. $open . ' .faz-preference-body-wrapper{overflow-y:auto;flex:1 1 auto;}'
+			. $open . ' .faz-prefrence-btn-wrapper{display:block;}'
+			. $open . ' .faz-prefrence-btn-wrapper .faz-btn{width:100%;margin:10px 0 0;}'
+			. $open . ' .faz-prefrence-btn-wrapper .faz-btn:first-child{margin-top:0;}'
+			. $open . ' .faz-prefrence-btn-wrapper .faz-btn-accept,' . $open . ' .faz-prefrence-btn-wrapper .faz-btn-reject{display:block;}'
+			. '@media (max-width:576px){' . $c . '.faz-box-bottom-left,' . $c . '.faz-box-bottom-right{bottom:0;}' . $c . '.faz-box-top-left,' . $c . '.faz-box-top-right{top:0;}'
+			. $c . '.faz-box-bottom-left,' . $c . '.faz-box-top-left{left:0;}' . $c . '.faz-box-bottom-right,' . $c . '.faz-box-top-right{right:0;}'
+			. $open . ' .faz-preference-center{max-height:100vh;}}'
+			. '@media (max-width:440px){' . $box . '{width:100%;max-width:100%;}}';
+	}
+
+	/**
+	 * Rules that put the brand logo beside the title and text (GitHub #393).
+	 *
+	 * The notice becomes a two-column grid: the logo on the start side, the
+	 * title, description and buttons on the other. The classic banner's inline
+	 * categories span both columns, and the close button stays out of the grid
+	 * because it is positioned absolutely.
+	 *
+	 * On small screens the templates pad each text element on both sides. The
+	 * text keeps its padding on the far side only, and the logo keeps it on the
+	 * near side, so the gap between them is the same 16px at every width.
+	 * Logical properties keep the layout mirrored in right-to-left languages.
+	 *
+	 * @return string
+	 */
+	private static function logo_beside_rules() {
+		// No child combinator: the stylesheet is stored HTML-escaped, and `>`
+		// would reach the browser as `&gt;` and void the rule.
+		$bar = '.faz-consent-container .faz-consent-bar';
+		return $bar . '{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:start;}'
+			. $bar . ' .faz-custom-brand-logo-wrapper{grid-column:1;grid-row:1;padding-inline-end:0;}'
+			. $bar . ' .faz-custom-brand-logo-wrapper .faz-custom-brand-logo{margin:0;margin-inline-end:16px;padding-inline-end:0;}'
+			. $bar . ' .faz-notice{grid-column:2;grid-row:1;}'
+			. $bar . ' .faz-category-direct-preview-wrapper{grid-column:1/-1;}'
+			. $bar . ' .faz-notice .faz-title,' . $bar . ' .faz-notice .faz-notice-des,' . $bar . ' .faz-notice .faz-notice-btn-wrapper{padding-inline-start:0;}';
+	}
+
+	/**
 	 * Check if banner is in preview mode.
 	 *
 	 * @return boolean
@@ -664,6 +944,79 @@ class Template {
 	public function is_preview() {
 		return defined( 'FAZ_PREVIEW_REQUEST' ) && FAZ_PREVIEW_REQUEST;
 	}
+	/**
+	 * Point the brand-logo images at the configured URL and name them.
+	 *
+	 * The image's own alt text names whose logo it is (WCAG 1.1.1); the
+	 * template's generic "Brand logo" stays when it has none.
+	 *
+	 * @param \DOMElement $element The brand-logo element.
+	 * @param string      $url     Logo URL from the banner config.
+	 * @return void
+	 */
+	public static function apply_brand_logo( $element, $url ) {
+		$logo_alt = self::brand_logo_alt( $url );
+		foreach ( $element->getElementsByTagName( 'img' ) as $logo_img ) {
+			$logo_img->setAttribute( 'src', esc_url( $url ) );
+			if ( '' !== $logo_alt ) {
+				$logo_img->setAttribute( 'alt', $logo_alt );
+			}
+		}
+	}
+
+	/**
+	 * Media Library attachment a brand logo URL points to.
+	 *
+	 * A URL to one of the image's generated sizes (`logo-300x100.png`) is
+	 * retried as the original, which is what attachment_url_to_postid() knows.
+	 *
+	 * @param string $url Logo URL from the banner config.
+	 * @return int Attachment id, 0 for an external URL or none.
+	 */
+	public static function brand_logo_attachment_id( $url ) {
+		$url = preg_replace( '/[?#].*$/', '', trim( (string) $url ) );
+		if ( '' === $url || '#' === $url || ! function_exists( 'attachment_url_to_postid' ) ) {
+			return 0;
+		}
+		$id = (int) attachment_url_to_postid( $url );
+		if ( $id <= 0 ) {
+			$original = preg_replace( '/-\d+x\d+(?=\.[a-z0-9]+$)/i', '', $url );
+			if ( $original !== $url ) {
+				$id = (int) attachment_url_to_postid( $original );
+			}
+		}
+		return max( 0, $id );
+	}
+
+	/**
+	 * Alt text of the Media Library image a brand logo URL points to.
+	 *
+	 * The logo setting stores only the URL, so the attachment is looked up
+	 * from it. A URL to one of the image's generated sizes
+	 * (`logo-300x100.png`) is retried as the original, which is what
+	 * attachment_url_to_postid() knows. An external URL, or an image without
+	 * alt text, returns '' and the template keeps its generic text.
+	 *
+	 * @param string $url Logo URL from the banner config.
+	 * @return string Plain text, '' when there is none.
+	 */
+	public static function brand_logo_alt( $url ) {
+		$alt = '';
+		$id  = self::brand_logo_attachment_id( $url );
+		if ( $id > 0 ) {
+			$alt = trim( wp_strip_all_tags( (string) get_post_meta( $id, '_wp_attachment_image_alt', true ) ) );
+		}
+		/**
+		 * Filter the alt text of the banner's brand logo.
+		 *
+		 * Return '' to keep the template's generic "Brand logo".
+		 *
+		 * @param string $alt Alt text found in the Media Library, or ''.
+		 * @param string $url Logo URL.
+		 */
+		return trim( (string) apply_filters( 'faz_brand_logo_alt', $alt, $url ) );
+	}
+
 	/**
 	 * Return the language-aware cache key for the banner template option.
 	 *
@@ -693,10 +1046,42 @@ class Template {
 			? \FazCookie\Frontend\Modules\Shortcodes\Shortcodes::transfer_regime()
 			: '';
 		$suffix = '' !== $regime ? ':' . $regime : '';
+		// An opt-out banner rendered as opt-in for this visitor (see
+		// Banner::apply_runtime_law_rendition()) is a different template from
+		// the same banner's own: separate slots, or each render would evict
+		// the other's.
+		$rendition = ( $this->banner && is_callable( array( $this->banner, 'get_runtime_rendition' ) ) ) ? (string) $this->banner->get_runtime_rendition() : '';
+		if ( '' !== $rendition ) {
+			$suffix .= ':as-' . sanitize_key( $rendition );
+		}
+		// A geo ruleset rewrites the config in memory before the template is
+		// built (Geo_Runtime::apply_ui_requirements(): equal prominence copies
+		// Accept's styles, hover colours included, onto Reject; other rules
+		// switch buttons and the preference centre on). Two rulesets that share
+		// banner, language and regime can therefore need different markup and
+		// CSS, so under a ruleset the slot carries a fingerprint of the
+		// effective config. Without one the config is the stored row, which a
+		// save clears the whole option for, so the historical key stays. The
+		// same clear on save keeps the fingerprinted slots from piling up.
+		if ( '' !== $regime ) {
+			$suffix .= ':cfg-' . ( null !== $this->slot_config ? $this->slot_config : $this->config_fingerprint() );
+		}
 		if ( $banner_id > 0 ) {
 			return 'banner_' . $banner_id . ':' . $this->language . $suffix;
 		}
 		return $this->language . $suffix;
+	}
+
+	/**
+	 * Short fingerprint of the banner config as it stands now.
+	 *
+	 * @return string
+	 */
+	private function config_fingerprint() {
+		$config = isset( $this->properties['config'] ) && is_array( $this->properties['config'] )
+			? $this->properties['config']
+			: array();
+		return substr( md5( (string) wp_json_encode( $config ) ), 0, 12 );
 	}
 
 	/**
@@ -784,6 +1169,19 @@ class Template {
 	 * @return void
 	 */
 	public function update() {
+		if ( null === $this->generation ) {
+			$this->generation = $this->current_generation();
+		}
+		// A clear since this render read the banner means the template below
+		// was built from the state before an admin save. Writing it would put
+		// that state back, and nothing in the layout signature would reject
+		// it. The slot's generation tag already keeps readers off it; skipping
+		// the write also keeps the slots of the new generation from being
+		// overwritten with this request's stale copy of the whole row.
+		if ( function_exists( 'faz_banner_template_generation_is_current' )
+			&& ! faz_banner_template_generation_is_current( $this->generation ) ) {
+			return;
+		}
 		$cache_key = $this->get_cache_key();
 		$stored    = get_option( $cache_key, array() );
 		$stored    = is_array( $stored ) && ! empty( $stored ) ? $stored : array();
@@ -795,6 +1193,7 @@ class Template {
 				faz_allowed_html()
 			),
 			'layout_signature' => $this->get_layout_signature(),
+			'generation'       => $this->generation,
 		);
 		// autoload=false: each entry carries the full rendered banner HTML+CSS
 		// (~30-45 KB) per banner per language — loading it on every request via
@@ -804,6 +1203,15 @@ class Template {
 			$stored,
 			false
 		);
+	}
+
+	/**
+	 * The cache generation as this request sees it.
+	 *
+	 * @return string
+	 */
+	private function current_generation() {
+		return function_exists( 'faz_banner_template_generation' ) ? faz_banner_template_generation() : '';
 	}
 
 	/**
@@ -838,6 +1246,19 @@ class Template {
 	public function get_assets_path( $path ) {
 		$base_name  = wp_basename( $path );
 		$assets_url = defined( 'FAZ_APP_ASSETS_URL' ) ? FAZ_APP_ASSETS_URL : '';
+		// This URL is written into the shared template cache (update()), which
+		// anonymous requests regenerate — the public banner REST route among
+		// them — and which every later visitor is served. FAZ_APP_ASSETS_URL
+		// takes its scheme from faz_request_is_https(), which also trusts a
+		// client-sent X-Forwarded-Proto, so one anonymous request could persist
+		// https:// icon URLs on an http-only site (or the reverse) for everyone.
+		// Persist only a server-verified scheme; Frontend::banner_html() still
+		// upgrades the per-request render behind a TLS-terminating proxy.
+		if ( '' !== $assets_url && function_exists( 'set_url_scheme' ) ) {
+			$verified_https = ( function_exists( 'is_ssl' ) && is_ssl() )
+				|| 0 === stripos( (string) get_option( 'siteurl' ), 'https://' );
+			$assets_url     = set_url_scheme( $assets_url, $verified_https ? 'https' : 'http' );
+		}
 		return $assets_url . $base_name;
 	}
 	/**

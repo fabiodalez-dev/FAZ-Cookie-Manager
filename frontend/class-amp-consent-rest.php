@@ -164,6 +164,24 @@ class AMP_Consent_Rest {
 	}
 
 	/**
+	 * The request's route as WordPress matches it: lower case.
+	 *
+	 * WP_REST_Server matches route patterns with the `i` flag, so
+	 * /faz/v1/AMP-Consent/check dispatches to the same handler as the
+	 * lower-case path. Compared case-sensitively, that spelling reached the
+	 * handlers while skipping the preflight state reset and the replacement of
+	 * core's reflected credentialed CORS headers.
+	 *
+	 * @since 1.39.1
+	 * @param mixed $request REST request.
+	 * @return string
+	 */
+	private static function normalized_route( $request ) {
+		$route = is_object( $request ) && method_exists( $request, 'get_route' ) ? (string) $request->get_route() : '';
+		return strtolower( $route );
+	}
+
+	/**
 	 * Establish the CORS origin for a preflight against the AMP routes.
 	 *
 	 * Returns $result untouched — this is an authorisation side effect, not a
@@ -185,12 +203,14 @@ class AMP_Consent_Rest {
 	 * @return mixed
 	 */
 	public function authorize_preflight( $result, $server, $request ) {
+		// See normalized_route(): every spelling WordPress dispatches to these
+		// routes must reach both of the guards below.
 		if ( ! is_object( $request ) || ! method_exists( $request, 'get_method' ) ) {
 			return $result;
 		}
-		$route = method_exists( $request, 'get_route' ) ? (string) $request->get_route() : '';
-		if ( '/' . self::REST_NAMESPACE . self::CHECK_ROUTE !== $route
-			&& '/' . self::REST_NAMESPACE . self::UPDATE_ROUTE !== $route ) {
+		$route = self::normalized_route( $request );
+		if ( strtolower( '/' . self::REST_NAMESPACE . self::CHECK_ROUTE ) !== $route
+			&& strtolower( '/' . self::REST_NAMESPACE . self::UPDATE_ROUTE ) !== $route ) {
 			return $result;
 		}
 		$this->cors_origin        = '';
@@ -745,6 +765,20 @@ class AMP_Consent_Rest {
 			return new \WP_Error( 'faz_amp_inactive_banner', __( 'The AMP consent banner is no longer active.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
 		}
 
+		// A cached AMP document pins the banner slug, but its effective law
+		// must follow the same jurisdiction rendition as the classic page.
+		// Keep an explicitly different law-matching banner as a separate scope;
+		// only a CCPA-only fallback is converted in place.
+		if ( 'ccpa' === $banner->get_law() && self::resolved_ruleset_is_opt_in() ) {
+			$country = class_exists( Geolocation::class ) ? Geolocation::get_visitor_country() : '';
+			if ( ! Banner_Controller::get_instance()->get_active_banner_for_law( 'gdpr', $country ) ) {
+				$banner = clone $banner;
+				if ( ! $banner->apply_runtime_law_rendition( 'gdpr' ) ) {
+					return new \WP_Error( 'faz_no_law_banner', __( 'No banner available for the resolved jurisdiction.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+				}
+			}
+		}
+
 		// The RAW law, not a gdpr/ccpa fold. class-frontend.php hashes
 		// $banner->get_law() verbatim into _scopeFingerprint, and the banner UI
 		// offers a third value ("gdpr_ccpa"), with the setup wizard writing
@@ -765,13 +799,8 @@ class AMP_Consent_Rest {
 		// fold — a "gdpr_ccpa" banner is a GDPR-family banner for lifetime
 		// purposes and must not inherit the 365-day CCPA floor.
 		$expiry_law        = ( 'ccpa' === $law ) ? 'ccpa' : 'gdpr';
-		// A CCPA banner kept for a visitor whose resolved ruleset is opt-in (the
-		// "US only" install seen from the EEA, or any visitor the fallback
-		// ruleset covers) collects an opt-in consent through the AMP prompt, and
-		// an opt-in consent may not outlive the GDPR-family cap. Deciding the
-		// lifetime from the banner alone wrote a 365-day __scope.law:ccpa record
-		// for an EEA Accept. The scope keeps the banner's law (it names the
-		// banner); only the lifetime follows the regime actually applied.
+		// A cached older AMP document can still name a CCPA scope while a
+		// separate GDPR banner now exists. Keep its opt-in lifetime cap too.
 		if ( 'ccpa' === $expiry_law && self::resolved_ruleset_is_opt_in() ) {
 			$expiry_law = 'gdpr';
 		}
@@ -811,7 +840,7 @@ class AMP_Consent_Rest {
 	 * @return bool
 	 */
 	private static function resolved_ruleset_is_opt_in() {
-		if ( ! class_exists( Geo_Runtime::class ) ) {
+		if ( ! class_exists( Geo_Runtime::class ) || \FazCookie\Includes\Cache_Compatibility::is_active() ) {
 			return false;
 		}
 		$country = class_exists( Geolocation::class ) ? Geolocation::get_visitor_country() : '';
@@ -917,6 +946,25 @@ class AMP_Consent_Rest {
 		// other caches have different domains. Publishers may add only the exact
 		// verified origins they use; the default never trusts every AMP-cache
 		// subdomain, because onUpdateHref carries a static source-origin query.
+		/**
+		 * Filters whether an origin is a trusted AMP cache for this site.
+		 *
+		 * Returning true adds the origin to the CREDENTIALED CORS allowlist of
+		 * faz/v1/amp-consent/check and /update: a page on that origin can read
+		 * each visitor's consent state and write consent on the visitor's
+		 * behalf. Return true only for an exact origin
+		 * (`https://<host>` compared with ===) that the official AMP cache
+		 * registry (https://cdn.ampproject.org/caches.json) lists for this
+		 * site, such as the hashed `<sha256-base32>.cdn.ampproject.org`
+		 * hostname a long or IDN domain is served from. Never match by suffix
+		 * or pattern (`*.cdn.ampproject.org`, `str_ends_with()`): every
+		 * subdomain of a cache is a different publisher's content.
+		 *
+		 * @since 1.27.0
+		 * @param bool   $allowed     Whether the default rule accepted it.
+		 * @param string $origin      Normalized request origin (scheme://host[:port]).
+		 * @param string $site_origin Normalized publisher origin.
+		 */
 		return (bool) apply_filters( 'faz_amp_consent_allowed_cache_origin', $allowed, $origin, $site_origin );
 	}
 
@@ -1474,6 +1522,14 @@ class AMP_Consent_Rest {
 		) {
 			return false;
 		}
+		// The same ceiling state_from_cookie() applies: a record minted before
+		// the admin shortened the consent expiry, or under a 365-day CCPA
+		// context now resolved as opt-in, has more life left than the regime
+		// applied now permits, and the two readers must agree on it.
+		if ( isset( $context['expiry_days'] )
+			&& absint( $data['exp'] ) > time() + ( absint( $context['expiry_days'] ) + 1 ) * DAY_IN_SECONDS ) {
+			return false;
+		}
 		$state = self::sanitize_state( isset( $data['state'] ) ? $data['state'] : '' );
 		if ( ! in_array( $state, array( 'accepted', 'rejected' ), true ) ) {
 			return false;
@@ -1643,8 +1699,8 @@ class AMP_Consent_Rest {
 	 */
 	public function serve_cors_headers( $served, $result, $request, $server ) {
 		unset( $result, $server );
-		$route = method_exists( $request, 'get_route' ) ? (string) $request->get_route() : '';
-		if ( 0 !== strpos( $route, '/' . self::REST_NAMESPACE . '/amp-consent/' ) ) {
+		$route = self::normalized_route( $request );
+		if ( 0 !== strpos( $route, strtolower( '/' . self::REST_NAMESPACE . '/amp-consent/' ) ) ) {
 			return $served;
 		}
 		if ( ! headers_sent() ) {

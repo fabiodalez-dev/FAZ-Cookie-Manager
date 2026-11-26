@@ -82,6 +82,13 @@ class Admin {
 		self::$modules = $this->get_default_modules();
 		$this->load();
 		$this->maybe_load_modules();
+		// The banner's brand logo takes its alt text from the Media Library
+		// (#404) and the built template is cached, so an alt edit has to
+		// rebuild it. Hooked here, on every request, because the attachment
+		// edit screen saves through post.php, where the modules are not loaded.
+		foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $alt_hook ) {
+			add_action( $alt_hook, array( $this, 'on_attachment_alt_change' ), 10, 3 );
+		}
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
 		if ( is_multisite() ) {
 			add_action( 'network_admin_menu', array( $this, 'register_network_menu' ) );
@@ -214,6 +221,27 @@ class Admin {
 	}
 
 	/**
+	 * Rebuild the banner, and purge cached pages when the edited image is a
+	 * banner's logo, after an attachment's alt text changes (#404).
+	 *
+	 * @param int|int[] $meta_id   Meta id(s).
+	 * @param int       $object_id Post id.
+	 * @param string    $meta_key  Meta key.
+	 * @return void
+	 */
+	public function on_attachment_alt_change( $meta_id, $object_id, $meta_key ) {
+		if ( ! \FazCookie\Admin\Modules\Banners\Banners::maybe_flush_on_alt_change( $meta_id, $object_id, $meta_key ) ) {
+			return;
+		}
+		// post.php does not load the modules, so no adapter would hear the
+		// purge. Asked unconditionally: a listener another plugin hooks on the
+		// same action does not mean the adapters are there, and the call is a
+		// no-op once the cache module is loaded, by either path.
+		$this->load_cache_module();
+		do_action( 'faz_purge_page_cache' );
+	}
+
+	/**
 	 * Instantiate only the cache module (purge listeners), exactly once.
 	 *
 	 * @return void
@@ -254,6 +282,9 @@ class Admin {
 			$class      = implode( '_', $parts );
 			$class_name = 'FazCookie\\Admin\\Modules\\' . ucfirst( $module ) . '\\' . ucfirst( $class );
 
+			if ( 'cache' === $module ) {
+				self::$cache_module_loaded = true; // load_cache_module() must not add a second copy.
+			}
 			if ( class_exists( $class_name ) ) {
 				$module_obj = new $class_name( $module );
 				if ( $module_obj instanceof $class_name ) {
@@ -779,6 +810,7 @@ class Admin {
 						// Colour-contrast checker (Colours tab, WCAG SC 1.4.3).
 						'contrastTitle'            => __( 'Accessibility: low colour contrast', 'faz-cookie-manager' ),
 						'contrastIntro'            => __( 'These colour pairs fall below the WCAG AA 4.5:1 minimum and may be hard to read:', 'faz-cookie-manager' ),
+						'contrastOpacity'          => __( 'The notice background is translucent: the contrast of the title, description and buttons also depends on the page behind the banner, so check it on your site.', 'faz-cookie-manager' ),
 						'cTitle'                   => __( 'Title vs banner background', 'faz-cookie-manager' ),
 						'cDesc'                    => __( 'Description vs banner background', 'faz-cookie-manager' ),
 						'cLink'                    => __( 'Link vs banner background', 'faz-cookie-manager' ),
@@ -786,6 +818,28 @@ class Admin {
 						'cReject'                  => __( 'Reject button text vs its background', 'faz-cookie-manager' ),
 						'cSettings'                => __( 'Settings button text vs its background', 'faz-cookie-manager' ),
 						'cSave'                    => __( 'Save button text vs its background', 'faz-cookie-manager' ),
+						'cDetailSave'              => __( 'Preference center Save button text vs its background', 'faz-cookie-manager' ),
+						'cAcceptHover'             => __( 'Accept button text vs its hover background', 'faz-cookie-manager' ),
+						'cRejectHover'             => __( 'Reject button text vs its hover background', 'faz-cookie-manager' ),
+						'cSettingsHover'           => __( 'Settings button text vs its hover background', 'faz-cookie-manager' ),
+						'cSaveHover'               => __( 'Save button text vs its hover background', 'faz-cookie-manager' ),
+						'logoMediaTitle'           => __( 'Select Brand Logo', 'faz-cookie-manager' ),
+						'logoUploading'            => __( 'Uploading logo…', 'faz-cookie-manager' ),
+						'logoUploaded'             => __( 'Logo uploaded successfully.', 'faz-cookie-manager' ),
+						'logoDropLabel'            => __( 'Drag & drop a logo image or browse', 'faz-cookie-manager' ),
+						'revisitMediaTitle'        => __( 'Select Revisit Widget Image', 'faz-cookie-manager' ),
+						'imageUploading'           => __( 'Uploading image…', 'faz-cookie-manager' ),
+						'imageUploaded'            => __( 'Image uploaded successfully.', 'faz-cookie-manager' ),
+						'imageDropLabel'           => __( 'Drag & drop an image or browse', 'faz-cookie-manager' ),
+						'uploadUnavailable'        => __( 'Upload is not available.', 'faz-cookie-manager' ),
+						/* translators: %s: maximum upload size in megabytes */
+						'uploadTooLarge'           => __( 'File too large (max %s MB).', 'faz-cookie-manager' ),
+						'uploadFailedShort'        => __( 'Upload failed', 'faz-cookie-manager' ),
+						'uploadNoUrl'              => __( 'Upload succeeded but no media URL was returned.', 'faz-cookie-manager' ),
+						/* translators: %s: error message */
+						'uploadFailed'             => __( 'Upload failed: %s', 'faz-cookie-manager' ),
+						'useImage'                 => __( 'Use this image', 'faz-cookie-manager' ),
+						'mediaUnavailable'         => __( 'Media library unavailable.', 'faz-cookie-manager' ),
 						'cCatLabel'                => __( 'Category label vs banner background', 'faz-cookie-manager' ),
 						'cDoNotSell'               => __( 'Do Not Sell text vs banner background', 'faz-cookie-manager' ),
 					),
@@ -2162,20 +2216,15 @@ class Admin {
 	}
 
 	/**
-	 * Warn when every active banner is opt-out (CCPA) and none is opt-in.
+	 * Tell the administrator what opt-in visitors see when every active banner
+	 * is opt-out (CCPA) and none is opt-in.
 	 *
 	 * The frontend resolves a ruleset from the visitor's country on every
-	 * request. When that ruleset is opt-in (any GDPR-style regime) and the only
-	 * banner available is an opt-out one, Frontend::load_banner() fails closed:
-	 * scripts stay blocked but the banner UI is suppressed, because showing
-	 * "we use cookies, opt out here" while blocking opt-in style would
-	 * misrepresent the visitor's actual position.
-	 *
-	 * That is the correct outcome, and it is silent. Without this notice an
-	 * administrator sees no banner for European visitors, no error and no log
-	 * line, and nothing anywhere says why. The source comment for that branch
-	 * says "a correctly-configured install never reaches this branch" — this is
-	 * where the install gets told it is not one.
+	 * request, and an unresolved country gets the opt-in fallback. When that
+	 * ruleset is opt-in and the only banners are opt-out, the visitor sees
+	 * the banner rebuilt as an opt-in one, without waiving their jurisdiction.
+	 * Until 1.36.1 they saw nothing: the banner was hidden and only the
+	 * blocking stayed, and this notice was the only place that said so.
 	 *
 	 * @return void
 	 */
@@ -2193,7 +2242,11 @@ class Admin {
 			return;
 		}
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		if ( ! $screen || false === strpos( (string) $screen->id, 'faz-cookie-manager' ) ) {
+		if ( ! $screen || ( 'dashboard' !== $screen->id && false === strpos( (string) $screen->id, 'faz-cookie-manager' ) ) ) {
+			return;
+		}
+		$settings = get_option( 'faz_settings', array() );
+		if ( isset( $settings['banner_control']['status'] ) && false === $settings['banner_control']['status'] ) {
 			return;
 		}
 		if ( ! class_exists( '\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller' ) ) {
@@ -2210,13 +2263,12 @@ class Admin {
 		// status, …), NOT Banner objects — an earlier draft of this method
 		// probed for get_settings()/get_status(), found neither, and could
 		// therefore never fire. Read the columns.
-		$has_active = false;
-		$has_opt_in = false;
+		$has_opt_out       = false;
+		$has_global_opt_in = false;
 		foreach ( $items as $item ) {
 			if ( ! is_object( $item ) || empty( $item->status ) ) {
 				continue;
 			}
-			$has_active = true;
 			$settings   = isset( $item->settings ) ? $item->settings : '';
 			if ( is_string( $settings ) ) {
 				$settings = json_decode( $settings, true );
@@ -2224,21 +2276,38 @@ class Admin {
 			$law = isset( $settings['settings']['applicableLaw'] )
 				? (string) $settings['settings']['applicableLaw']
 				: 'gdpr';
-			if ( 'ccpa' !== $law ) {
-				$has_opt_in = true;
+			if ( 'ccpa' === $law ) {
+				$has_opt_out = true;
+			} elseif ( empty( $item->target_countries ) ) {
+				$has_global_opt_in = true;
 			}
 		}
 
-		if ( ! $has_active || $has_opt_in ) {
+		if ( ! $has_opt_out || $has_global_opt_in ) {
 			return;
 		}
 
+		$class   = 'notice-info';
+		$title   = __( 'Visitors under an opt-in privacy law are seeing an opt-in version of your banner.', 'faz-cookie-manager' );
+		$message = __( 'No active GDPR banner covers every country. Visitors who need opt-in consent and have no matching GDPR banner see an opt-in version of your banner, with Accept and Reject buttons and your policy links. Optional cookies stay blocked until they choose. Add a global GDPR banner to use your own wording for them.', 'faz-cookie-manager' );
+		$state = \FazCookie\Frontend\Includes\Geo_Runtime::current_state();
+		if ( in_array( $state['mode'], array( 'baseline', 'degraded' ), true ) ) {
+			$message .= ' ' . __( 'No working country source is available, so every visitor receives the protective opt-in fallback.', 'faz-cookie-manager' );
+		}
+		$check_url = wp_nonce_url( add_query_arg( 'faz_banner_test', '1', home_url( '/' ) ), 'faz_banner_test', '_faz_test_nonce' );
+
 		printf(
-			'<div class="notice notice-warning"><p><strong>%s</strong></p><p>%s</p><p><a href="%s" class="button button-secondary">%s</a></p></div>',
-			esc_html__( 'Visitors under an opt-in privacy law are seeing no banner.', 'faz-cookie-manager' ),
-			esc_html__( 'Every active banner uses the opt-out (Do Not Sell) model. For a visitor in the EU, UK, Brazil or any other opt-in jurisdiction, showing an opt-out notice while their cookies are blocked would misstate their position, so the banner is hidden for them and only the blocking stays on. Add a second active banner set to the opt-in model to cover those visitors.', 'faz-cookie-manager' ),
+			'<div id="faz-optin-fallback-notice" class="notice %s"><p><strong>%s</strong></p><p>%s</p><p>%s</p><p><a href="%s" class="button button-primary" target="_blank" rel="noopener noreferrer">%s</a> <a href="%s" class="button button-secondary">%s</a> <a href="%s" class="button button-secondary">%s</a></p></div>',
+			esc_attr( $class ),
+			esc_html( $title ),
+			esc_html( $message ),
+			esc_html__( 'Already made a choice? The banner normally stays closed. Check it here to reopen it for your administrator account without clearing consent or changing other visitors\' choices.', 'faz-cookie-manager' ),
+			esc_url( $check_url ),
+			esc_html__( 'Check the banner on your site', 'faz-cookie-manager' ),
 			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-banner' ) ),
-			esc_html__( 'Open banner settings', 'faz-cookie-manager' )
+			esc_html__( 'Open banner settings', 'faz-cookie-manager' ),
+			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-settings' ) ),
+			esc_html__( 'Open geolocation settings', 'faz-cookie-manager' )
 		);
 	}
 
@@ -2253,7 +2322,11 @@ class Admin {
 			return;
 		}
 
-		if ( ! faz_is_admin_page() ) {
+		// The capability is checked here, not only through the screen gate:
+		// rendering this notice also consumes the transient, so a user who
+		// cannot manage the plugin must neither see the count nor clear it
+		// for the administrator, whichever screen the hook ends up on.
+		if ( ! faz_is_admin_page() || ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
 
@@ -2331,7 +2404,10 @@ class Admin {
 		if ( empty( $unmatched ) || ! is_array( $unmatched ) ) {
 			return;
 		}
-		if ( ! faz_is_admin_page() ) {
+		// Explicit capability, like the sibling notices: the screen gate alone
+		// follows WordPress page access, and this notice mints the nonce of
+		// the dismiss action below.
+		if ( ! faz_is_admin_page() || ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
 
@@ -2367,6 +2443,10 @@ class Admin {
 	 * @return void
 	 */
 	public function ajax_dismiss_unmatched_vendors() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => 'forbidden' ), 403 );
+			return;
+		}
 		check_ajax_referer( 'faz_dismiss_unmatched', '_wpnonce' );
 		delete_transient( 'faz_unmatched_vendors' );
 		wp_die();

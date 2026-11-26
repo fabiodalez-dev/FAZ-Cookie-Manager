@@ -3,6 +3,7 @@ import { expect, test } from '../fixtures/wp-fixture';
 import { clickFirstVisible } from '../utils/ui';
 import { fazApiGet, fazApiPost, openSettingsPage, type FazApiResponse } from '../utils/faz-api';
 import {
+  bustDetectionCache,
   deactivatePluginsExcept,
   enableProviderMatrixCustomScenario,
   ensureFixturePlugin,
@@ -11,8 +12,10 @@ import {
   listActivePluginFiles,
   readProviderMatrixHits,
   readProviderMatrixUrl,
+  removeSeededCookie,
   restoreActivePluginFiles,
   resetProviderMatrixState,
+  seedDetectedCookie,
   wpEval,
 } from '../utils/wp-env';
 
@@ -287,7 +290,7 @@ test.describe('Blocking compliance coverage', () => {
   // Snapshot of every active plugin file at the moment the suite starts.
   // The afterAll restores the exact option value without firing third-party
   // activation hooks, which avoids plugin redirects during WP-CLI cleanup.
-  let initialActivePluginFiles: string[] = [];
+  let initialActivePluginFiles: string[] | null = null;
 
   test.beforeAll(async () => {
     initialActivePluginFiles = listActivePluginFiles();
@@ -315,7 +318,11 @@ test.describe('Blocking compliance coverage', () => {
   });
 
   test.afterAll(async () => {
-    restoreActivePluginFiles(initialActivePluginFiles);
+    // Null means beforeAll never read the list (a WP-CLI timeout under load):
+    // there is nothing to restore, and an empty list would deactivate every plugin.
+    if (initialActivePluginFiles !== null) {
+      restoreActivePluginFiles(initialActivePluginFiles);
+    }
   });
 
   test.beforeEach(async () => {
@@ -526,7 +533,19 @@ test.describe('Blocking compliance coverage', () => {
     const nonce = await openSettingsPage(page, loginAsAdmin);
     const original = await getSettings(page, nonce);
 
+    // The per-service list is built from DETECTED cookies (discovered=1), so
+    // the toggles this scenario clicks exist only if a scan once saw _ga and
+    // _clck. A later run that left those rows as manual ones (discovered=0)
+    // made the Google Analytics toggle vanish and this test time out waiting
+    // for it. Arrange the precondition here rather than inherit it, inside
+    // the try: a second seed that fails must not leave the first row behind.
+    let bodyDone = false;
+    const cleanupErrors: string[] = [];
     try {
+      seedDetectedCookie('_ga');
+      seedDetectedCookie('_clck');
+      bustDetectionCache();
+
       await postSettings(page, nonce, {
         banner_control: {
           ...(original.banner_control ?? {}),
@@ -634,6 +653,7 @@ test.describe('Blocking compliance coverage', () => {
       const cookieNamesAfterReload = await browserCookieNames(page);
       expect(cookieNamesAfterReload).toContain('_ga');
       expect(cookieNamesAfterReload).not.toContain('_clck');
+      bodyDone = true;
     } finally {
       // The test path calls page.context().clearCookies() inside `try`, which
       // wipes the wordpress_logged_in_* cookies along with the consent cookie.
@@ -652,13 +672,35 @@ test.describe('Blocking compliance coverage', () => {
           script_blocking: original.script_blocking ?? {},
         });
       } catch (restoreError) {
+        cleanupErrors.push(`settings restore: ${String(restoreError)}`);
         // eslint-disable-next-line no-console
         console.warn(
           '[blocking-compliance per-service finally] settings restore failed:',
           restoreError,
         );
       }
-      resetProviderMatrixState();
+      // Each step on its own: a WP-CLI error in one must neither skip the
+      // others nor replace the test's own failure.
+      const cleanup: Array<[string, () => void]> = [
+        ['remove _ga', () => removeSeededCookie('_ga')],
+        ['remove _clck', () => removeSeededCookie('_clck')],
+        ['bust detection cache', () => bustDetectionCache()],
+        ['reset provider matrix', () => resetProviderMatrixState()],
+      ];
+      for (const [label, step] of cleanup) {
+        try {
+          step();
+        } catch (cleanupError) {
+          cleanupErrors.push(`${label}: ${String(cleanupError)}`);
+          // eslint-disable-next-line no-console
+          console.warn(`[blocking-compliance per-service finally] ${label} failed:`, cleanupError);
+        }
+      }
+      // A test that passed must not pass over shared state it left changed. One
+      // that already failed keeps its own error: a throw here would replace it.
+      if (bodyDone && cleanupErrors.length > 0) {
+        throw new Error(`per-service cleanup left shared state changed: ${cleanupErrors.join('; ')}`);
+      }
     }
   });
 

@@ -68,8 +68,23 @@
     // A consent store on window.fazcookie is the same fact for a runtime that
     // predates this file: it never sets _fazRuntimeStarted, but it creates
     // that Map as its first act, so finding one means it has already run.
-    if (w._fazBootstrap || w._fazRuntimeStarted || !w._fazConfig || !w._fazConfig._block) return;
-    if (w.fazcookie && w.fazcookie._fazConsentStore) return;
+    // The configuration counts only as a plain object: deferred past post
+    // content, `<form id="_fazConfig"><input name="_block">` would otherwise
+    // answer both reads with elements and arm the bootstrap on them.
+    function config() {
+        var c = w._fazConfig;
+        try { return c && typeof c === 'object' && Object.prototype.toString.call(c) === '[object Object]' ? c : null; } catch (e) { return null; }
+    }
+    if (w._fazBootstrap || w._fazRuntimeStarted || !config() || !config()._block) return;
+    // Only a store on a real object counts. An optimiser that defers this
+    // script runs it after post content is parsed, and there
+    // `<a id="fazcookie"></a><a id="fazcookie" name="_fazConsentStore">`
+    // answers window.fazcookie with an HTMLCollection whose named item is
+    // truthy: the bootstrap would stand down with no runtime behind it.
+    // (Past the accessor installed further down, the document can no longer
+    // answer for window.fazcookie at all.)
+    if (w.fazcookie && Object.prototype.toString.call(w.fazcookie) === '[object Object]'
+        && Object.prototype.toString.call(w.fazcookie._fazConsentStore) === '[object Map]') return;
     var queue = [], undo = [], scripts = [], pending = true, handoffs = [], staged = new WeakMap();
     // The fuse. Every held operation is a closure kept alive until the
     // handoff, and nothing about a page bounds how many it makes: a loop that
@@ -319,6 +334,16 @@
             return desc && typeof desc.get === 'function' ? desc.get : null;
         } catch (e) { return null; }
     }());
+    // One pass, as the parser decodes markup text once: for a sheet the
+    // markup walk may hand to a foreign parser (rewriteRealStyleTags()).
+    function decodeOnce(text) {
+        if (!markupParse) return text;
+        try {
+            var doc = markupParse.call(new MarkupParser(), '<textarea>\n' + text.replace(/<\/(textarea)/gi, '&lt;/$1') + '</textarea>', 'text/html');
+            var area = doc && doc.getElementsByTagName('textarea')[0];
+            return area ? String(textareaValue ? textareaValue.call(area) : area.value) : text;
+        } catch (e) { return text; }
+    }
     function decodeReferences(text) {
         if (!markupParse || text.indexOf('&') === -1) return text;
         try {
@@ -518,7 +543,8 @@
     // images vanished on every Divi product page. `served` is filled by the
     // DOM backstop, which sees each parser insertion before the next parser-
     // run script, so the record is in place before any script can move it.
-    // Scripts are never recorded — see observed().
+    // Unchanged clones inherit the same record — see cloneNode below. Scripts
+    // are never recorded — see observed().
     //
     // The exemption is for the URL the server judged, not for the element:
     // the record keeps the element's URL attributes as the parser left them,
@@ -570,7 +596,7 @@
         // fetching resource without changing its URL. The server leaves a
         // canonical link alone; changing its rel to stylesheet while detached
         // must therefore require a new verdict before it can be reinserted.
-        var mode = tagKey(el) === 'LINK' ? 'rel' : tagKey(el) === 'INPUT' ? 'type' : '';
+        var mode = tagKey(el) === 'LINK' ? 'rel' : tagKey(el) === 'INPUT' || tagKey(el) === 'SCRIPT' ? 'type' : '';
         if (mode) out.push(['mode', mode, attr(el, mode)]);
         // Attribute values can contain newlines. Joining with that delimiter
         // made one background="/empty\nsrc=https://tracker/..." compare equal
@@ -578,10 +604,56 @@
         // element could then fetch the new URL without an insertion verdict.
         return JSON.stringify(out.sort());
     }
-    function unjudged(node) {
+    // A document with no browsing context — createHTMLDocument(), DOMParser,
+    // a <template>'s content — loads nothing: no image fetches, no script
+    // runs, no frame navigates. An insertion there has nothing to hold, and
+    // holding it broke every string parse made in the download window:
+    // jQuery.parseHTML() builds the markup in exactly such a document, moves
+    // it into a fragment and returns the fragment's children on the next
+    // line, so `$('<div><img …></div>')` came back EMPTY. Owl Carousel 2.3.4
+    // builds its loop clones that way, and the Signify Pro logo slider showed
+    // positions with no slides in them until a resize rebuilt it. The verdict
+    // is still asked where it matters: adopting those nodes into this page.
+    function inert(container) {
+        var doc = container && (container.nodeType === 9 ? container : container.ownerDocument);
+        return !!doc && doc !== d && !doc.defaultView;
+    }
+    // The key a parser verdict is filed under in servedKeys: the same element
+    // type, in the same namespace, with the same URLs.
+    function servedKey(el, signature) {
+        return tagKey(el) + '\n' + (el.namespaceURI || '') + '\n' + signature;
+    }
+    function unjudged(node, container) {
+        if (container && inert(container)) return [];
         var found = resources(node);
         if (!served) return found;
-        return found.filter(function (el) { return !served.has(el) || served.get(el) !== urls(el); });
+        // A copy the page serialized and parsed back — Owl's clones, a
+        // `$(el.outerHTML)` — has no provenance left for carryVerdicts() to
+        // follow, but its URLs are the ones the server judged and the parser
+        // already fetched on this page: it asks for nothing the server did not
+        // let through. The match is on the whole signature, resolved against
+        // this page's base, and never for a script (servedKeys holds none).
+        return found.filter(function (el) {
+            var signature = urls(el);
+            if (served.has(el) && served.get(el) === signature) return false;
+            if (!servedCopy(el, signature)) return true;
+            // Let through on its URLs alone, not because the parser made it:
+            // the observer must not take it for the parser's (see observed()).
+            if (admitted) admitted.add(el);
+            return false;
+        });
+    }
+    // Whether `el`, as it is NOW, asks for exactly what a parser-served element
+    // of the same type and namespace asked for. Never true for a script.
+    // Shared by the insertion wrappers (unjudged) and the DOM backstop (guard):
+    // a copy the wrappers let through was still tagged by the innerHTML sink
+    // that built it, so the backstop judged it again and parked every URL that
+    // is not same-origin — the clones of a slide served from a CDN (Photon,
+    // Cloudflare, BunnyCDN) lost their image although the server had served
+    // that very URL.
+    function servedCopy(el, signature) {
+        if (!servedKeys || tagKey(el) === 'SCRIPT') return false;
+        return servedKeys.has(servedKey(el, signature === undefined ? urls(el) : signature));
     }
     // Every <style> in a subtree, the node itself included, in any namespace —
     // querySelectorAll('style') matches both, since a CSS type selector with no
@@ -702,6 +774,63 @@
     // Resource elements the parser inserted, each with its URLs as inserted —
     // see unjudged().
     var served = sunk && typeof w.WeakMap === 'function' ? new w.WeakMap() : null;
+    // The same for parser scripts, read only by the copy routes below. A script
+    // itself never gets a verdict in `served`: see the MutationObserver.
+    var servedScripts = served ? new w.WeakMap() : null;
+    // Every verdict `served` records, by element type, namespace and URL
+    // signature rather than by element — see unjudged(). Scripts never enter.
+    var servedKeys = served && typeof w.Set === 'function' ? new w.Set() : null;
+    // Elements a wrapper let through because servedCopy() matched, not because
+    // the parser inserted them. While the document parses, an untagged
+    // insertion is taken for the parser's and its URLs as they are when the
+    // observer looks are recorded as served — so a script that inserted an
+    // image on a served URL and rewrote it through its Attr node before that
+    // look had the NEW URL recorded, kept by guard() and admitted for every
+    // later copy. These go to guard() instead, which judges them as they are.
+    var admitted = served ? new w.WeakSet() : null;
+    // Divi's et_duplicate_menu clones the server menu (including Polylang's
+    // flag images), appends it, then queries the destination synchronously.
+    // A clone has no WeakMap entry of its own, so holding it left that query
+    // empty. Carry over only an existing parser verdict for the same resource
+    // and URL signature. Never grant a new verdict from the current URLs:
+    // detached Attr edits or a changed <base> may have redirected them since
+    // the parser's verdict. unjudged() checks the signature again on insertion.
+    // A copied script (server-parked, or one the server let through) is the same
+    // judged script while its type and URL stay the same. Flipping a parked copy
+    // changes the signature and the insertion is held.
+    function carryVerdicts(source, copies) {
+        if (source.length !== copies.length) return;
+        source.forEach(function (el, i) {
+            var copy = copies[i], signature = tagKey(el) === 'SCRIPT' ? servedScripts.get(el) : served.get(el);
+            if (signature !== undefined && tagKey(el) === tagKey(copy) && el.namespaceURI === copy.namespaceURI
+                && signature === urls(copy)) served.set(copy, signature);
+        });
+    }
+    function copyRoute(deepAt, sourceAt) {
+        return function (original) {
+            return function () {
+                var clone = original.apply(this, arguments);
+                if (!served) return clone;
+                var from = sourceAt === undefined ? this : arguments[sourceAt], deep = !!arguments[deepAt];
+                // A shallow copy omits descendants, so compare only its root.
+                carryVerdicts(resources(from).filter(function (el) { return deep || el === from; }), resources(clone));
+                return clone;
+            };
+        };
+    }
+    replace(Node.prototype, 'cloneNode', copyRoute(0));
+    if (d.importNode) replace(Document.prototype, 'importNode', copyRoute(1, 0));
+    if (w.Range && w.Range.prototype.cloneContents) {
+        replace(w.Range.prototype, 'cloneContents', function (original) {
+            return function () {
+                var copy = original.apply(this, arguments);
+                if (!served) return copy;
+                var range = this;
+                carryVerdicts(resources(range.commonAncestorContainer).filter(function (el) { return range.intersectsNode(el); }), resources(copy));
+                return copy;
+            };
+        });
+    }
     // Sheets a wrapper has already delivered, judged, on the safety release.
     // The backstop stays armed on that path and must not judge them again —
     // which is only sound because the delivery question (judgeCss) reads the
@@ -989,8 +1118,8 @@
         // Swallowed — with one acceptable exception, asked of the parser the
         // same way. An open <script> element swallows the page's bytes as
         // script TEXT, which fetches nothing, and a later write is judged on
-        // its own; write('<script src=x>') + write('</script>') is an ordinary
-        // pair and must not cost the exemption.
+        // its own; writing an opening script tag and then its closing tag is
+        // an ordinary pair and must not cost the exemption.
         var scripts = probe.querySelectorAll('script');
         var tail = scripts.length ? scripts[scripts.length - 1] : null;
         if (tail && String(tail.textContent).indexOf('faz-probe-open') !== -1) return;
@@ -1187,7 +1316,7 @@
                 // stops counting — the same bookkeeping replaceWith needs.
                 var dropped = name === 'replaceChild' ? ref : null;
                 var pendingRef = !!ref && pendingChild(self, ref);
-                var carries = unjudged(node).length
+                var carries = unjudged(node, self).length
                     || styleRisk(node)
                     || waitingFragment(node)
                     || pendingRef
@@ -1273,7 +1402,7 @@
                     // One joined string, in call order, judged against the text
                     // the owner will actually hold. Per-argument tests missed a
                     // URL split across two arguments of one call.
-                    var carries = args.some(function (n) { return unjudged(n).length || styleRisk(n) || waitingFragment(n); })
+                    var carries = args.some(function (n) { return unjudged(n, container).length || styleRisk(n) || waitingFragment(n); })
                         || !!(styleOwner && cssRisk(containerText(styleOwner, self, name), args));
                     // Queued behind an earlier held insertion into the same
                     // container, as appendChild always was: otherwise a plain
@@ -1510,7 +1639,7 @@
                     // queued INTO it, as in the Node and ParentNode wrappers.
                     // Inserted natively it lands empty, and the held child
                     // later replays into the orphaned fragment and is lost.
-                    var carries = unjudged(node).length
+                    var carries = unjudged(node, range.startContainer).length
                         || styleRisk(node)
                         || waitingFragment(node)
                         || cssURL(surrounded())
@@ -1604,7 +1733,7 @@
             var el = this, where = String(position).toLowerCase();
             var outside = where === 'beforebegin' || where === 'afterend';
             var container = outside ? el.parentNode : el;
-            if (!unjudged(node).length && !styleRisk(node) && !(container && waiting.has(container))) return original.call(el, position, node);
+            if (!unjudged(node, container).length && !styleRisk(node) && !(container && waiting.has(container))) return original.call(el, position, node);
             // An unknown position, a non-element, a parentless element asked
             // for a sibling, an element placed inside itself: the engine
             // throws or does nothing, and so does this.
@@ -2046,18 +2175,186 @@
     function escapeAttr(value) {
         return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     }
-    function parkMarkup(policy, markup) {
-        return String(markup == null ? '' : markup).replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, function (full, attrs, css) {
+    // Only <style> elements the tokenizer really starts are rewritten — see
+    // _fazRewriteRealStyleTags() in script.js, which this mirrors: a regex over
+    // the raw string also matched "<style>" text inside a quoted attribute or a
+    // comment, and the rewrite turned sanitised markup into live markup.
+    function rewriteRealStyleTags(html, fn, uncertain, noScripting) {
+        var s = String(html), n = s.length, out = "", last = 0, i = 0;
+        uncertain = !!uncertain;
+        var RAW = { style: 1, script: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1, textarea: 1, title: 1 };
+        function isAlpha(c) { return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z"); }
+        function isSpace(c) { return c === " " || c === "\t" || c === "\n" || c === "\f" || c === "\r"; }
+        function toGt(p) { var g = s.indexOf(">", p); return g === -1 ? n : g + 1; }
+        // p is the first character of the tag name; returns null when unterminated.
+        function scanTag(p) {
+            var start = p;
+            while (p < n && !isSpace(s.charAt(p)) && s.charAt(p) !== "/" && s.charAt(p) !== ">") p++;
+            var tag = { name: s.slice(start, p).toLowerCase(), attrsStart: p, gt: -1, end: -1, selfClosing: false };
+            while (p < n) {
+                var ch = s.charAt(p);
+                if (ch === ">") { tag.gt = p; tag.end = p + 1; return tag; }
+                if (ch === "/") {
+                    if (s.charAt(p + 1) === ">") { tag.selfClosing = true; tag.gt = p + 1; tag.end = p + 2; return tag; }
+                    p++; continue;
+                }
+                if (isSpace(ch)) { p++; continue; }
+                p++; // first name character, even "=" or a quote
+                while (p < n) { var cq = s.charAt(p); if (isSpace(cq) || cq === "/" || cq === ">" || cq === "=") break; p++; }
+                while (p < n && isSpace(s.charAt(p))) p++;
+                if (s.charAt(p) !== "=") continue;
+                p++;
+                while (p < n && isSpace(s.charAt(p))) p++;
+                var qc = s.charAt(p);
+                if (qc === '"' || qc === "'") {
+                    var close = s.indexOf(qc, p + 1);
+                    if (close === -1) return null;
+                    p = close + 1;
+                } else {
+                    while (p < n && !isSpace(s.charAt(p)) && s.charAt(p) !== ">") p++;
+                }
+            }
+            return null;
+        }
+        while (i < n) {
+            var lt = s.indexOf("<", i);
+            if (lt === -1) break;
+            var c = s.charAt(lt + 1);
+            if (s.substr(lt, 4) === "<!--") {
+                var j = lt + 4;
+                if (s.charAt(j) === ">") { i = j + 1; continue; }
+                if (s.substr(j, 2) === "->") { i = j + 2; continue; }
+                var cend = -1;
+                for (var k = j; k < n - 2; k++) {
+                    if (s.charAt(k) !== "-" || s.charAt(k + 1) !== "-") continue;
+                    if (s.charAt(k + 2) === ">") { cend = k + 3; break; }
+                    if (s.charAt(k + 2) === "!" && s.charAt(k + 3) === ">") { cend = k + 4; break; }
+                }
+                if (cend === -1) break;
+                i = cend; continue;
+            }
+            if (c === "!") {
+                // CDATA is text up to "]]>" in foreign content and a bogus comment
+                // up to the first ">" in HTML: the two agree only when that first
+                // ">" is the one closing "]]>".
+                if (uncertain && s.substr(lt, 9) === "<![CDATA[") {
+                    var cd = s.indexOf("]]>", lt + 9);
+                    if (cd === -1 || s.indexOf(">", lt + 2) !== cd + 2) break;
+                    i = cd + 3; continue;
+                }
+                i = toGt(lt + 2); continue;
+            }
+            if (c === "?") { i = toGt(lt + 2); continue; }
+            if (c === "/") {
+                var c2 = s.charAt(lt + 2);
+                if (c2 === ">") { i = lt + 3; continue; }
+                if (!isAlpha(c2)) { i = toGt(lt + 2); continue; }
+                var etag = scanTag(lt + 2);
+                if (!etag) break;
+                i = etag.end; continue;
+            }
+            if (!isAlpha(c)) { i = lt + 1; continue; }
+            var tag = scanTag(lt + 1);
+            if (!tag) break;
+            // From an <svg>/<math> start tag on, the parser may be in foreign
+            // content, where <style> and the RAWTEXT/RCDATA elements parse their
+            // content as markup; and where foreign content ends depends on the
+            // open-element stack (breakout tags, integration points, stray end
+            // tags), which a scan cannot follow. A legacy <select> or a <frameset>
+            // ignores the <style> start tag and leaves its content in the data
+            // state too. Past any of these the walk only acts where both readings
+            // give the same tokens (see below) and stops everywhere else.
+            if (tag.name === "svg" || tag.name === "math" || tag.name === "select" || tag.name === "frameset") {
+                if (!tag.selfClosing || tag.name === "select" || tag.name === "frameset") uncertain = true;
+                i = tag.end; continue;
+            }
+            if (tag.name === "plaintext") break;
+            // _fazRewriteRealStyleTags(): without a window <noscript> may be
+            // markup or RAWTEXT depending on the browser, so stop there.
+            if (noScripting && tag.name === 'noscript') break;
+            // Own properties only: a "<constructor>" start tag would read a
+            // truthy value from Object.prototype and hide a following <style>.
+            if (!Object.prototype.hasOwnProperty.call(RAW, tag.name)) { i = tag.end; continue; }
+            var re = new RegExp("</" + tag.name + "(?=[\\t\\n\\f\\r />])", "ig");
+            re.lastIndex = tag.end;
+            var m = re.exec(s);
+            if (!m) break;
+            var body = s.slice(tag.end, m.index);
+            // "<!--" in script data enters the escaped states. There the first
+            // "</script" still ends the script, unless a "<script" start after
+            // the "<!--" entered the double-escaped state, where it does not:
+            // only then is the real end unknown, and the walk stops.
+            var esc = tag.name === "script" ? body.indexOf("<!--") : -1;
+            if (esc !== -1 && /<script[\t\n\f\r \/>]/i.test(body.slice(esc))) break;
+            // Where the element may be foreign (or an ignored tag), its content is
+            // markup. A "<" opens a tag, an end tag, a comment or a bogus comment
+            // there only before an ASCII letter, "/", "!" or "?"; any other "<" is
+            // text in both readings (a CSS comment's "/* < */"). Without such a
+            // "<", markup and RAWTEXT/RCDATA give the same text up to the same end
+            // tag; with one they may not, and a self-closing start tag ends a
+            // foreign element right there.
+            if (uncertain && (tag.selfClosing || /<[A-Za-z!\/?]/.test(body))) break;
+            var endTag = scanTag(m.index + 2);
+            if (!endTag) break;
+            // "&" is literal in RAWTEXT and a character reference in markup, so
+            // where the element may be foreign the text parked as its original
+            // can differ from the live one by a decoded reference. The structure
+            // cannot (no "<" in it opens markup), and a query-string "&" is routine in font
+            // and tracker URLs: the sheet is parked (fail closed).
+            if (tag.name === "style") {
+                var full = s.slice(lt, endTag.end);
+                // _fazRewriteRealStyleTags(): where the element may be foreign the
+                // callback also gets the text with references decoded.
+                var live = uncertain && body.indexOf("&") !== -1 ? decodeOnce(body) : null;
+                var rep = fn(full, s.slice(tag.attrsStart, tag.gt), body, live);
+                if (rep !== full) { out += s.slice(last, lt) + rep; last = endTag.end; }
+            }
+            i = endTag.end;
+        }
+        return last === 0 ? s : out + s.slice(last);
+    }
+    // _fazMarkupContextMode() in script.js: "html", "uncertain" (a foreign or
+    // <select>/<frameset> context, where <style> may not be RAWTEXT) or "text"
+    // (a context whose content is text from the first byte).
+    // _fazScriptingDisabledFor() in script.js.
+    function scriptingDisabledFor(context) {
+        var el = context;
+        if (el && el.nodeType === 11) el = el.host || el;
+        var doc = el ? (el.nodeType === 9 ? el : el.ownerDocument) : null;
+        return !!doc && !doc.defaultView;
+    }
+    function markupContextMode(context) {
+        var el = context;
+        if (el && el.nodeType === 11) el = el.host || null;
+        if (!el || el.nodeType !== 1) return 'html';
+        var ns = el.namespaceURI;
+        if (ns && ns !== 'http://www.w3.org/1999/xhtml') return 'uncertain';
+        var name = String(el.localName || '').toLowerCase();
+        if (/^(style|script|textarea|title|xmp|iframe|noembed|noframes|noscript|plaintext)$/.test(name)) return 'text';
+        if (name === 'select' || name === 'frameset') return 'uncertain';
+        return 'html';
+    }
+    function parkMarkup(policy, markup, uncertain, noScripting) {
+        return rewriteRealStyleTags(String(markup == null ? '' : markup), function (full, attrs, css, live) {
             attrs = attrs || '';
             if (/\bdata-faz-css\s*=/i.test(attrs)) return full;
-            var verdict = css ? judgeCss(policy, css) : null;
+            // _fazPrepareStyleTagHtml(): when the decoded reading differs and is
+            // refused, it decides, and the sheet is parked whole with the
+            // decoded text as original; neutralising the raw text would leave
+            // a reference-spelled URL for the parser to decode.
+            var verdict = null;
+            if (typeof live === 'string' && live !== css) {
+                var decoded = judgeCss(policy, live);
+                if (decoded) { verdict = { hit: decoded.hit, whole: true }; css = live; }
+            }
+            if (!verdict) verdict = css ? judgeCss(policy, css) : null;
             if (!verdict) return full;
             var encoded = base64(css);
             if (!encoded) return full;
             var category = /\bdata-faz-category\s*=/i.test(attrs) ? '' : ' data-faz-category="' + escapeAttr(parkCategory(policy, verdict.hit)) + '"';
             return '<style' + attrs + ' data-faz-css="' + escapeAttr(encoded) + '"' + category + '>'
                 + parkedForm(policy, css, verdict) + '</style>';
-        });
+        }, uncertain, noScripting);
     }
     // `host` is where the parsed nodes land: the sheets that are new in it
     // afterwards are the ones this delivery judged, and the backstop — still
@@ -2066,8 +2363,11 @@
     // theme for a comment.
     function deliverMarkup(policy, markup, apply, host) {
         if (!policy || !policy.sameOriginOnly) return apply(markup);
+        // `host` is also the fragment-parsing context: see markupContextMode().
+        var mode = markupContextMode(host);
+        if (mode === 'text') return apply(markup);
         var before = sheets(host);
-        apply(parkMarkup(policy, markup));
+        apply(parkMarkup(policy, markup, mode !== 'html', scriptingDisabledFor(host)));
         sheets(host).forEach(function (el) {
             if (before.indexOf(el) !== -1) return;
             // The parser builds no text node for an empty element, so a
@@ -2355,22 +2655,63 @@
                         sheet.replace.apply(sheet, args).then(resolve, reject);
                     });
                 });
-                defer(function (policy) { if (allowedCss(policy, css)) sheet[name].apply(sheet, args); });
+                if (name !== 'insertRule') {
+                    defer(function (policy) { if (allowedCss(policy, css)) sheet[name].apply(sheet, args); });
+                    // addRule answers -1 by specification, whatever happened.
+                    return name === 'addRule' ? -1 : undefined;
+                }
                 // insertRule must answer synchronously with an index, and the
-                // rule it would describe does not exist yet. Report the index the
-                // caller asked for, clamped into the sheet as the spec requires,
-                // which is also the index the rule lands on if it is replayed.
-                // A caller that immediately deleteRule()s that index operates on
-                // a sheet one rule short; there is no synchronous answer that
-                // avoids it, and the alternative — fetching before consent to
-                // keep an index honest — is not a trade worth making. addRule
-                // answers -1 by specification, whatever happened.
-                if (name === 'addRule') return -1;
-                if (name !== 'insertRule') return undefined;
+                // caller's next insertRule usually names the index after it:
+                // libraries that build a sheet rule by rule (FullCalendar, #391)
+                // insert rule i at index i. Holding the rule without filling its
+                // slot left the sheet one rule short, so the next native
+                // insertRule was handed an index past the end and threw
+                // IndexSizeError, aborting the library. The slot is held by an
+                // @media query that can never match — valid CSS that fetches
+                // nothing, the same placeholder the runtime's own gate uses —
+                // and a replay swaps the real rule into the placeholder's
+                // CURRENT position, wherever later inserts and deletes moved
+                // it. A caller that deleted the placeholder deleted the rule.
+                // An @import may only follow other @imports, so it is held by
+                // an @import of its own: an empty data: sheet for a media query
+                // that never matches, which loads nothing from the network.
+                var holder = /^\s*@import\b/i.test(String(css))
+                    ? '@import url("data:text/css,") not all;'
+                    : '@media not all{}';
                 var at = Number(args[1]);
                 if (!isFinite(at) || at < 0) at = 0;
                 var length = (sheet.cssRules && sheet.cssRules.length) || 0;
-                return at > length ? length : at;
+                if (at > length) at = length;
+                var slot = null;
+                try {
+                    original.call(sheet, holder, at);
+                    slot = sheet.cssRules[at] || null;
+                } catch (error) { slot = null; }
+                defer(function (policy) {
+                    if (!allowedCss(policy, css)) return;
+                    var rules = sheet.cssRules || [];
+                    if (!slot) {
+                        // No placeholder could be placed (a hierarchy constraint
+                        // of the sheet): the rule goes where the caller asked,
+                        // brought inside the sheet as it stands now, because the
+                        // sheet is one rule shorter than the caller believed and
+                        // an index past the end would lose the rule to an
+                        // IndexSizeError.
+                        var to = at > rules.length ? rules.length : at;
+                        return sheet[name].call(sheet, args[0], to);
+                    }
+                    for (var i = 0; i < rules.length; i++) {
+                        if (rules[i] !== slot) continue;
+                        sheet.deleteRule(i);
+                        try { return sheet[name].call(sheet, args[0], i); }
+                        catch (error) {
+                            // Keep every later index where the caller expects it.
+                            try { original.call(sheet, holder, i); } catch (_e) { /* nothing left to hold */ }
+                            throw error;
+                        }
+                    }
+                });
+                return at;
             };
         });
     }); });
@@ -2758,7 +3099,17 @@
         if (policy === safety) noteSafetyPark(el, key, value, false);
         var target = parkTarget(tagKey(el), key);
         setAttr(el, target.value, value);
-        if (key === 'srcdoc') setAttr(el, 'data-faz-srcdoc-key', (window._fazConfig || {})._srcdocKey || '');
+        if (key === 'srcdoc') setAttr(el, 'data-faz-srcdoc-key', (config() || {})._srcdocKey || '');
+        // Provenance for the parks the runtime restores only when proven
+        // (_fazProveParked() in script.js): the response key plus the name.
+        var provenName = { 'data-faz-data': 'data', 'data-faz-background': 'background' }[target.value];
+        var proofKey = (config() || {})._srcdocKey || '';
+        if (provenName && proofKey) {
+            var provenList = attr(el, 'data-faz-park-key') === proofKey ? String(attr(el, 'data-faz-park') || '') : '';
+            if ((' ' + provenList + ' ').indexOf(' ' + provenName + ' ') === -1) provenList = (provenList ? provenList + ' ' : '') + provenName;
+            setAttr(el, 'data-faz-park', provenList);
+            setAttr(el, 'data-faz-park-key', proofKey);
+        }
         // A list restores by re-reading every candidate, so it carries no
         // category of its own; writing one there would collide with a src/href
         // park on the same element.
@@ -2874,6 +3225,10 @@
         // and the handoff list that policy.script judges with the real rules.
         if (tagKey(el) === 'SCRIPT') return;
         if (tagKey(el) === 'INPUT' && String(attr(el, 'type') || '').toLowerCase() !== 'image') return;
+        // A copy of parser-served markup, URLs unchanged: the server already
+        // judged that request and the parser already made it (see servedCopy).
+        // A URL changed since is a different signature and is parked below.
+        if (servedCopy(el)) return;
         var values = staged.get(el);
         heldAttrs(el).forEach(function (prop) {
             var key = prop.toLowerCase();
@@ -3023,7 +3378,14 @@
                         // back and moves it would run it with no verdict. A
                         // moved image, frame or media element fetches nothing
                         // its current attributes did not already fetch.
-                        if (served) resources(node).forEach(function (el) { if (tagKey(el) !== 'SCRIPT' && !served.has(el)) served.set(el, urls(el)); });
+                        if (served) resources(node).forEach(function (el) {
+                            var script = tagKey(el) === 'SCRIPT', judged = script ? servedScripts : served;
+                            if (judged.has(el)) return;
+                            if (admitted && admitted.has(el)) return guard(el);
+                            var signature = urls(el);
+                            judged.set(el, signature);
+                            if (!script && servedKeys) servedKeys.add(servedKey(el, signature));
+                        });
                         continue;
                     }
                     resources(node).forEach(guard);

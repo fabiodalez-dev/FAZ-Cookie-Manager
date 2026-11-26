@@ -81,7 +81,11 @@ class Version_Ledger {
 
 		try {
 			$_SERVER['REQUEST_URI'] = '/';
-			$html                   = Renderer::render( is_array( $atts ) ? $atts : array() );
+			// render_preview(): the ledger renders from wp-admin, where the
+			// locale and the variants differ from what visitors are served, so
+			// it must never record a "Last updated" date. The version hash it
+			// reads back is the same either way.
+			$html = Renderer::render_preview( is_array( $atts ) ? $atts : array() );
 		} finally {
 			// Unconditional restore: a throw inside render() must not leave the
 			// rest of the request believing it is on a different URL.

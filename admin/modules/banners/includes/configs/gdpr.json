@@ -18,6 +18,8 @@
     },
     "theme": "light",
     "borderRadius": "",
+    "noticeOpacity": "",
+    "textAlign": "",
     "consentExpiry": {
       "status": true,
       "value": 180
@@ -97,7 +99,8 @@
           "status": false,
           "tag": "brand-logo",
           "meta": {
-            "url": "#"
+            "url": "#",
+            "placement": ""
           }
         },
         "buttons": {
@@ -112,7 +115,10 @@
               "styles": {
                 "color": "#FFFFFF",
                 "background-color": "#1863DC",
-                "border-color": "#1863DC"
+                "border-color": "#1863DC",
+                "hover-color": "",
+                "hover-background-color": "",
+                "hover-border-color": ""
               }
             },
             "reject": {
@@ -122,7 +128,10 @@
               "styles": {
                 "color": "#FFFFFF",
                 "background-color": "#1863DC",
-                "border-color": "#1863DC"
+                "border-color": "#1863DC",
+                "hover-color": "",
+                "hover-background-color": "",
+                "hover-border-color": ""
               }
             },
             "settings": {
@@ -132,7 +141,10 @@
               "styles": {
                 "color": "#1863DC",
                 "background-color": "transparent",
-                "border-color": "#1863DC"
+                "border-color": "#1863DC",
+                "hover-color": "",
+                "hover-background-color": "",
+                "hover-border-color": ""
               }
             },
             "readMore": {
@@ -328,7 +340,13 @@
               "styles": {
                 "color": "#1863DC",
                 "background-color": "transparent",
-                "border-color": "#1863DC"
+                "border-color": "#1863DC",
+                "custom-color": "",
+                "custom-background-color": "",
+                "custom-border-color": "",
+                "hover-color": "",
+                "hover-background-color": "",
+                "hover-border-color": ""
               }
             }
           }
@@ -516,12 +534,15 @@
       "status": true,
       "tag": "revisit-consent",
       "position": "bottom-left",
+      "widgetSize": "",
+      "imageSize": "",
       "meta": {
         "url": "#"
       },
       "styles": {
         "background-color": "#0056A7",
-        "color": "#FFFFFF"
+        "color": "#FFFFFF",
+        "border-color": ""
       },
       "elements": {
         "title": {

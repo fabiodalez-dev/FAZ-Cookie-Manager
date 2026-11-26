@@ -90,7 +90,8 @@ namespace {
 	$GLOBALS['faz_fake_now']   = 0;
 	$GLOBALS['faz_client_ip']  = '203.0.113.7';
 	$GLOBALS['faz_throttles']  = array();
-	$GLOBALS['faz_options']    = array();
+	// Consent logging on: the endpoint records nothing while it is off.
+	$GLOBALS['faz_options']    = array( 'faz_settings' => array( 'consent_logs' => array( 'status' => true ) ) );
 	$GLOBALS['faz_transients'] = array();
 
 	/**
@@ -417,6 +418,45 @@ namespace {
 	$post( $id, 'accepted' );
 	$row = Controller::get_instance()->get_log_by_consent_id( $id );
 	ipw_check( is_array( $row ) && '' === $row['geo_bootstrap'], 'a beacon that sent no verdict still hands the controller the key, as an empty string' );
+
+	echo "\n== Per-consent_id keys, server-only statuses and keys, logging off ==\n";
+
+	// Two ids whose md5 shares its first eight hex digits (found by a birthday
+	// search in well under a second). With an eight-digit key the second id
+	// inherited the first's change caps: its own first change was charged to
+	// chgn, and the visitor's withdrawal two seconds later was dropped.
+	$collide_a = 'collide-117836';
+	$collide_b = 'collide-144426';
+	ipw_check( substr( md5( $collide_a ), 0, 8 ) === substr( md5( $collide_b ), 0, 8 ), 'premise: the two ids collide on a 32-bit digest prefix' );
+	faz_reset();
+	$post( $collide_a, 'accepted' );           // t=0
+	faz_advance( 11 );
+	ipw_check( 'logged' === $post( $collide_b, 'accepted' ), 'the second id\'s first decision lands (t=11)' );
+	faz_advance( 2 );
+	ipw_check( 'logged' === $post( $collide_b, 'rejected' ), 'and its withdrawal at t=13 is not refused by the other id\'s change caps' );
+	ipw_check( 'rejected' === $newest_status( $collide_b ), 'so its register says "rejected"' );
+
+	// The statuses the server writes for itself are refused on this route.
+	foreach ( array( 'dnsmpi_optout', 'dns_rescinded', 'pmp_grant' ) as $faz_internal ) {
+		faz_reset();
+		ipw_check( 'invalid_status' === $post( 'internal-status-id-0123456789abcdef', $faz_internal ), "status {$faz_internal} posted by the browser is refused" );
+		ipw_check( '' === $newest_status( 'internal-status-id-0123456789abcdef' ), "and no {$faz_internal} row is written" );
+	}
+
+	// The server's attestation keys never come from the client.
+	faz_reset();
+	$post( $id, 'rejected', array( 'analytics' => 'no', 'meta.pmp_privacy' => 'yes', 'META.PMP_PRIVACY ' => 'yes', 'meta.age_affirmed' => 'yes' ) );
+	$row  = Controller::get_instance()->get_log_by_consent_id( $id );
+	$keys = is_array( $row ) ? array_map( 'strtolower', array_map( 'trim', array_keys( $row['categories'] ) ) ) : array();
+	ipw_check( is_array( $row ) && ! in_array( 'meta.pmp_privacy', $keys, true ), 'a posted meta.pmp_privacy (any case or padding) is dropped' );
+	ipw_check( is_array( $row ) && isset( $row['categories']['analytics'], $row['categories']['meta.age_affirmed'] ), 'and the client keys around it are kept' );
+
+	// With consent logging off nothing is recorded, even with a valid token.
+	faz_reset();
+	$GLOBALS['faz_options']['faz_settings'] = array( 'consent_logs' => array( 'status' => false ) );
+	ipw_check( 'logged' === $post( 'logs-off-id-0123456789abcdef', 'accepted' ) && '' === $newest_status( 'logs-off-id-0123456789abcdef' ), 'with consent logging off a post writes no row' );
+	ipw_check( array() === $GLOBALS['faz_throttles'], 'and arms no throttle window' );
+	$GLOBALS['faz_options']['faz_settings'] = array( 'consent_logs' => array( 'status' => true ) );
 
 	echo "\nconsent-log IP window: {$passed} passed, {$failed} failed\n";
 	exit( $failed > 0 ? 1 : 0 );

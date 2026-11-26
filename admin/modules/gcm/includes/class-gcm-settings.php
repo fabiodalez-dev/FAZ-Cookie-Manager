@@ -54,6 +54,15 @@ class Gcm_Settings extends Store {
 			// container stay hard-blocked. Default off — existing installs
 			// keep doing Basic mode (tags only after consent).
 			'advanced_mode' => false,
+			// Advanced Consent Mode for the Google Tag Manager container (#385).
+			// Only read while advanced_mode is on: the container (gtm.js) is then
+			// loaded before consent like gtag.js, behind the same denied
+			// default, so Google tags configured in it can send cookieless
+			// pings (Ads conversion modelling). Off by default because the
+			// container can run non-Google tags that do not read Consent Mode;
+			// turning it on makes the site owner responsible for the consent
+			// settings of every tag inside it. See is_advanced_gtm_mode().
+			'advanced_mode_gtm' => false,
 			// When true and marketing consent is denied, request non-personalized
 			// ads WITHOUT granting anything:
 			// ad_storage / ad_user_data / ad_personalization all stay denied
@@ -265,6 +274,7 @@ class Gcm_Settings extends Store {
 			case 'gacm_enabled':
 			case 'non_personalized_ads_fallback':
 			case 'advanced_mode':
+			case 'advanced_mode_gtm':
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'wait_for_update':
@@ -309,5 +319,19 @@ class Gcm_Settings extends Store {
 	 */
 	public function is_advanced_mode() {
 		return $this->get( 'status' ) && faz_sanitize_bool( $this->get( 'advanced_mode' ) );
+	}
+
+	/**
+	 * Whether the Google Tag Manager container may also load before consent
+	 * (#385).
+	 *
+	 * An extension of Advanced Consent Mode, never a mode of its own: false
+	 * whenever is_advanced_mode() is false, whatever advanced_mode_gtm holds.
+	 * Default off.
+	 *
+	 * @return boolean
+	 */
+	public function is_advanced_gtm_mode() {
+		return $this->is_advanced_mode() && faz_sanitize_bool( $this->get( 'advanced_mode_gtm' ) );
 	}
 }

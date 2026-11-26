@@ -124,9 +124,10 @@ class Google_Tag {
 	 * gtag.js IDs are grouped by provider and each group gets its own loader,
 	 * so a visitor who accepts only Marketing still gets Google Ads and one who
 	 * accepts only Analytics still gets GA4. A Tag Manager container is the
-	 * standard loader and always waits for consent: it can host tags that do
-	 * not read Consent Mode, which is also why Advanced Consent Mode never
-	 * exempts it.
+	 * standard loader and waits for consent: it can host tags that do not read
+	 * Consent Mode, which is why Advanced Consent Mode does not exempt it
+	 * unless the site owner explicitly opts the container in (#385,
+	 * `gtm_unblocked`).
 	 *
 	 * Blocked markup is written in the shape the runtime already restores —
 	 * `type="text/plain"` with `data-faz-category` and `data-faz-service` — so
@@ -138,6 +139,10 @@ class Google_Tag {
 	 *     @type bool   $gtag_unblocked Print the gtag.js groups as live scripts
 	 *                                  (Advanced Consent Mode, default already
 	 *                                  emitted in front of them).
+	 *     @type bool   $gtm_unblocked  Print the Tag Manager container live as
+	 *                                  well (#385: Advanced Consent Mode with
+	 *                                  the container opt-in, default emitted,
+	 *                                  its service not explicitly denied).
 	 *     @type string $data_layer     dataLayer array name, same charset as
 	 *                                  Frontend::gcm_datalayer_name() (it is
 	 *                                  only used as a window[] key and a URL
@@ -149,6 +154,9 @@ class Google_Tag {
 	 */
 	public static function render( array $ids, array $args = array() ) {
 		$unblocked  = ! empty( $args['gtag_unblocked'] );
+		// The container never goes out live without the gtag exemption: that
+		// is what guarantees the denied default is already in front of it.
+		$gtm_live   = $unblocked && ! empty( $args['gtm_unblocked'] );
 		$data_layer = isset( $args['data_layer'] ) && is_string( $args['data_layer'] ) && preg_match( '/^[A-Za-z0-9_$]+$/', $args['data_layer'] )
 			? $args['data_layer']
 			: 'dataLayer';
@@ -179,7 +187,7 @@ class Google_Tag {
 		}
 
 		if ( ! empty( $groups['google-tag-manager'] ) ) {
-			$gate = self::gate_attrs( 'google-tag-manager', self::category_for( 'google-tag-manager', 'analytics' ) );
+			$gate = $gtm_live ? '' : self::gate_attrs( 'google-tag-manager', self::category_for( 'google-tag-manager', 'analytics' ) );
 			foreach ( $groups['google-tag-manager'] as $id ) {
 				$js   = '(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({"gtm.start":new Date().getTime(),event:"gtm.js"});'
 					. 'var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!="dataLayer"?"&l="+l:"";'

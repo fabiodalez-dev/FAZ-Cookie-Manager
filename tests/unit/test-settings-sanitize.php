@@ -50,6 +50,13 @@ namespace {
 	}
 
 	echo "\n== Settings sanitize guards ==\n\n";
+	foreach ( array( 'gdpr_version', 'main_banner', 'invalid', array(), array( 'main_banner' ), null, false, 42 ) as $mode ) {
+		$clean = Settings::sanitize(
+			array( 'geolocation' => array( 'missing_law_banner' => $mode ) ),
+			array( 'geolocation' => array( 'missing_law_banner' => 'gdpr_version' ) )
+		);
+		faz_assert_same( $clean['geolocation']['missing_law_banner'], 'gdpr_version', 'missing-law mode is normalized through the real recursive sanitizer: ' . json_encode( $mode ) );
+	}
 	foreach ( array( 'false', '0', false ) as $legacy_status ) {
 		$logs = Settings::sanitize(
 			array( 'consent_logs' => array( 'status' => $legacy_status ) ),

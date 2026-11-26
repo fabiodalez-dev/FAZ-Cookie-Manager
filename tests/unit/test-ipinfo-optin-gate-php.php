@@ -35,6 +35,7 @@ namespace {
 		define( 'ABSPATH', __DIR__ . '/' );
 	}
 	define( 'DAY_IN_SECONDS', 86400 );
+	define( 'HOUR_IN_SECONDS', 3600 );
 
 	$GLOBALS['faz_options']   = array();
 	$GLOBALS['faz_cache']     = array();
@@ -54,6 +55,20 @@ namespace {
 	function wp_cache_set( $key, $value, $group = '', $ttl = 0 ) {
 		$GLOBALS['faz_cache'][ $group ][ $key ] = $value;
 		return true;
+	}
+	function wp_cache_add( $key, $val, $group = '', $ttl = 0 ) {
+		if ( isset( $GLOBALS['faz_cache'][ $group ][ $key ] ) ) {
+			return false;
+		}
+		$GLOBALS['faz_cache'][ $group ][ $key ] = $val;
+		return true;
+	}
+	function wp_cache_incr( $key, $offset = 1, $group = '' ) {
+		if ( ! isset( $GLOBALS['faz_cache'][ $group ][ $key ] ) ) {
+			return false;
+		}
+		$GLOBALS['faz_cache'][ $group ][ $key ] = (int) $GLOBALS['faz_cache'][ $group ][ $key ] + $offset;
+		return $GLOBALS['faz_cache'][ $group ][ $key ];
 	}
 	function wp_salt( $scheme = 'auth' ) {
 		return 'test-salt';
@@ -105,6 +120,9 @@ namespace FazCookie\Admin\Modules\Geo_Routing\Includes {
 		}
 		public static function encrypt( $v ) {
 			return (string) $v;
+		}
+		public static function needs_upgrade( $v ) {
+			return false;
 		}
 	}
 }

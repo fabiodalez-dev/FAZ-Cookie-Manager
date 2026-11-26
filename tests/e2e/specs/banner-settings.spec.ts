@@ -628,7 +628,8 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await expect.poll(async () => getInputValue(page, 'faz-b-settings-bg-hex')).toBe('#1e40af');
   });
 
-  test('General: switching from pushdown to box keeps a box preview', async ({ page, loginAsAdmin }) => {
+  // A Box keeps Pushdown since #392 (the preferences open inside the box).
+  test('General: switching from pushdown to box keeps pushdown and a box preview', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
     await goToBannerPage(page);
 
@@ -636,7 +637,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await setSelect(page, 'faz-b-pref-type', 'pushdown');
     await setSelect(page, 'faz-b-type', 'box');
 
-    await expect.poll(async () => getSelectValue(page, 'faz-b-pref-type')).toBe('popup');
+    await expect.poll(async () => getSelectValue(page, 'faz-b-pref-type')).toBe('pushdown');
     await expect.poll(async () => (await getPreviewMetrics(page)).rootType).toBe('box');
     await expect.poll(async () => {
         const m = await getPreviewMetrics(page);
@@ -653,6 +654,8 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
       { type: 'box', position: 'bottom-right', prefType: 'popup', rootType: 'box' as const, compact: true },
       { type: 'box', position: 'bottom-left', prefType: 'sidebar', rootType: 'box' as const, compact: true },
       { type: 'box', position: 'bottom-right', prefType: 'sidebar', rootType: 'box' as const, compact: true },
+      { type: 'box', position: 'bottom-left', prefType: 'pushdown', rootType: 'box' as const, compact: true },
+      { type: 'box', position: 'bottom-right', prefType: 'pushdown', rootType: 'box' as const, compact: true },
       { type: 'banner', position: 'top', prefType: 'popup', rootType: 'banner' as const, compact: false },
       { type: 'banner', position: 'bottom', prefType: 'popup', rootType: 'banner' as const, compact: false },
       { type: 'banner', position: 'top', prefType: 'sidebar', rootType: 'banner' as const, compact: false },
@@ -675,11 +678,10 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
         compact: c.compact,
         position: c.position,
       });
-      if (c.type === 'box' && c.prefType === 'pushdown') {
-        throw new Error('Invalid test case: box should never use pushdown');
-      }
-      if (c.type === 'box') {
-        await expect.poll(async () => getSelectValue(page, 'faz-b-pref-type')).not.toBe('pushdown');
+      // Every type but Classic keeps the preference centre it was given;
+      // Box + Pushdown is valid since #392.
+      if (c.type !== 'classic') {
+        await expect.poll(async () => getSelectValue(page, 'faz-b-pref-type')).toBe(c.prefType);
       }
     }
   });

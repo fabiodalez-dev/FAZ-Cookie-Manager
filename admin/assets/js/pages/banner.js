@@ -57,6 +57,13 @@
 	// loadBanner()'s on-load check (outside FAZ.ready) can reach it; the
 	// in-FAZ.ready colour-change handlers call it too. Self-contained:
 	// only dependency is the module-level fazI18n() i18n helper.
+	// Colour fields whose empty value means "no setting", not a colour.
+	var FAZ_OPTIONAL_COLORS = {
+		hover: ['accept', 'reject', 'settings'],
+		ids: ['faz-b-detail-save-bg', 'faz-b-detail-save-text', 'faz-b-detail-save-border', 'faz-b-detail-save-hover-bg', 'faz-b-detail-save-hover-text',
+			'faz-b-accept-hover-bg', 'faz-b-accept-hover-text', 'faz-b-reject-hover-bg', 'faz-b-reject-hover-text', 'faz-b-settings-hover-bg', 'faz-b-settings-hover-text',
+			'faz-b-accept-hover-border', 'faz-b-reject-hover-border', 'faz-b-settings-hover-border', 'faz-b-detail-save-hover-border']
+	};
 	var FAZ_CONTRAST_PAIRS = [
 		{ fg: 'faz-b-title-color',       bg: 'faz-b-notice-bg',       min: 4.5, label: fazI18n('banner.cTitle', 'Title vs banner background') },
 		{ fg: 'faz-b-desc-color',        bg: 'faz-b-notice-bg',       min: 4.5, label: fazI18n('banner.cDesc', 'Description vs banner background') },
@@ -65,6 +72,11 @@
 		{ fg: 'faz-b-reject-text',       bg: 'faz-b-reject-bg',       min: 4.5, label: fazI18n('banner.cReject', 'Reject button text vs its background') },
 		{ fg: 'faz-b-settings-text',     bg: 'faz-b-settings-bg',      min: 4.5, label: fazI18n('banner.cSettings', 'Settings button text vs its background'), fallbackBg: 'faz-b-notice-bg' },
 		{ fg: 'faz-b-catprev-save-text', bg: 'faz-b-catprev-save-bg',  min: 4.5, label: fazI18n('banner.cSave', 'Save button text vs its background') },
+		{ fg: 'faz-b-detail-save-text',  bg: 'faz-b-detail-save-bg',   min: 4.5, label: fazI18n('banner.cDetailSave', 'Preference center Save button text vs its background'), optional: true, inModal: true, fallbackFg: 'faz-b-settings-text', baseBg: 'faz-b-settings-bg' },
+		{ fg: 'faz-b-accept-hover-text', bg: 'faz-b-accept-hover-bg',  min: 4.5, label: fazI18n('banner.cAcceptHover', 'Accept button text vs its hover background'), optional: true, fallbackFg: 'faz-b-accept-text', baseBg: 'faz-b-accept-bg' },
+		{ fg: 'faz-b-reject-hover-text', bg: 'faz-b-reject-hover-bg',  min: 4.5, label: fazI18n('banner.cRejectHover', 'Reject button text vs its hover background'), optional: true, fallbackFg: 'faz-b-reject-text', baseBg: 'faz-b-reject-bg' },
+		{ fg: 'faz-b-settings-hover-text', bg: 'faz-b-settings-hover-bg', min: 4.5, label: fazI18n('banner.cSettingsHover', 'Settings button text vs its hover background'), optional: true, fallbackFg: 'faz-b-settings-text', baseBg: 'faz-b-settings-bg' },
+		{ fg: 'faz-b-detail-save-hover-text', bg: 'faz-b-detail-save-hover-bg', min: 4.5, label: fazI18n('banner.cSaveHover', 'Save button text vs its hover background'), optional: true, inModal: true, fallbackFg: 'faz-b-detail-save-text', fallbackFg2: 'faz-b-settings-text', baseBg: 'faz-b-detail-save-bg', baseBg2: 'faz-b-settings-bg' },
 		{ fg: 'faz-b-catprev-label',     bg: 'faz-b-notice-bg',        min: 4.5, label: fazI18n('banner.cCatLabel', 'Category label vs banner background') },
 		{ fg: 'faz-b-donotsell-text',    bg: 'faz-b-notice-bg',        min: 4.5, label: fazI18n('banner.cDoNotSell', 'Do Not Sell text vs banner background') }
 	];
@@ -88,6 +100,25 @@
 		});
 		return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
 	}
+	/**
+	 * Background the preference centre is shown on: the stored one, else the
+	 * one of the preset selected in the form, else the banner background.
+	 *
+	 * @return {string} A colour as stored, or as read from a colour field.
+	 */
+	function fazPreferenceCentreBg() {
+		var pc = bannerData && bannerData.properties && bannerData.properties.config && bannerData.properties.config.preferenceCenter;
+		if (pc && pc.styles && pc.styles['background-color']) return pc.styles['background-color'];
+		// A theme switch strips the stored styles and the template then takes
+		// the preset's, so read the preset selected in the form.
+		var presets = (typeof fazConfig !== 'undefined' && fazConfig.themePresets) || [];
+		var theme = getVal('faz-b-theme');
+		for (var i = 0; i < presets.length; i++) {
+			var ppc = presets[i].name === theme && presets[i].settings && presets[i].settings.preferenceCenter;
+			if (ppc && ppc.styles && ppc.styles['background-color']) return ppc.styles['background-color'];
+		}
+		return fazReadColor('faz-b-notice-bg');
+	}
 	function fazContrastRatio(fg, bg) {
 		var l1 = fazRelLuminance(fg), l2 = fazRelLuminance(bg);
 		return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
@@ -95,6 +126,7 @@
 	function fazResolveBg(pair) {
 		var v = fazReadColor(pair.bg);
 		if ((v === 'transparent' || v === '') && pair.fallbackBg) v = fazReadColor(pair.fallbackBg);
+		if ((v === 'transparent' || v === '') && pair.fallbackValue) v = String(pair.fallbackValue).trim().toLowerCase();
 		// A transparent banner sits on the page, which we can't read here —
 		// assume white, the overwhelmingly common page background.
 		if (v === 'transparent' || v === '') v = '#ffffff';
@@ -114,14 +146,29 @@
 		}
 		var issues = [];
 		FAZ_CONTRAST_PAIRS.forEach(function (pair) {
-			var fg = fazHexToRgb(fazReadColor(pair.fg));
-			var bg = fazResolveBg(pair);
+			// An optional pair with both fields empty adds nothing to judge. With
+			// one of them set, the other is the colour the visitor sees in its
+			// place: the button's own, then the Settings one. The swatch of an
+			// empty field still holds a value, so the text field is the one read.
+			if (pair.optional && !getColor(pair.fg) && !getColor(pair.bg)) return;
+			var fgId = [pair.fg, pair.fallbackFg, pair.fallbackFg2].filter(function (id) { return id && (!pair.optional || getColor(id)); })[0] || pair.fallbackFg;
+			var bgId = [pair.bg, pair.baseBg, pair.baseBg2].filter(function (id) { return id && (!pair.optional || getColor(id)); })[0] || pair.baseBg;
+			var fg = fazHexToRgb(fazReadColor(fgId));
+			var bg = fazResolveBg({ bg: bgId, fallbackBg: pair.optional && !pair.inModal ? 'faz-b-notice-bg' : pair.fallbackBg,
+				// A transparent Save button shows the preference centre, whose
+				// background comes from the theme preset and has no field here.
+				fallbackValue: pair.inModal ? fazPreferenceCentreBg() : '' });
 			if (!fg || !bg) return; // transparent/unknown foreground — can't judge
 			var ratio = fazContrastRatio(fg, bg);
 			if (ratio < pair.min) issues.push({ label: pair.label, ratio: ratio, min: pair.min });
 		});
 		box.textContent = '';
-		if (!issues.length) { box.style.display = 'none'; return; }
+		// A translucent notice background lets the page show through, so the
+		// ratios above, measured on the solid colour, are not the ones a
+		// visitor sees. Say so instead of reporting a pass that may not hold.
+		var opacity = parseInt(getVal('faz-b-notice-opacity'), 10);
+		var translucent = opacity >= 50 && opacity < 100;
+		if (!issues.length && !translucent) { box.style.display = 'none'; return; }
 		box.style.display = 'block';
 		// Built with DOM nodes (no innerHTML) — labels are localized/static
 		// and ratios are numbers, but textContent keeps it injection-proof.
@@ -139,9 +186,17 @@
 			li.textContent = i.label + ' — ' + i.ratio.toFixed(2) + ':1 (min ' + i.min + ':1)';
 			ul.appendChild(li);
 		});
-		card.appendChild(h);
-		card.appendChild(p);
-		card.appendChild(ul);
+		if (issues.length) {
+			card.appendChild(h);
+			card.appendChild(p);
+			card.appendChild(ul);
+		}
+		if (translucent) {
+			var note = document.createElement('p');
+			note.style.margin = issues.length ? '6px 0 0' : '0';
+			note.textContent = fazI18n('banner.contrastOpacity', 'The notice background is translucent: the contrast of the title, description and buttons also depends on the page behind the banner, so check it on your site.');
+			card.appendChild(note);
+		}
 		box.appendChild(card);
 	}
 
@@ -473,7 +528,7 @@
 				if (prefEl.options[j].value === 'pushdown') { pushdownOpt = prefEl.options[j]; break; }
 			}
 			if (pushdownOpt) {
-				var pushdownDisabled = lawShowsDoNotSell && typeEl.value === 'banner';
+				var pushdownDisabled = lawShowsDoNotSell && (typeEl.value === 'banner' || typeEl.value === 'box');
 				pushdownOpt.disabled = pushdownDisabled;
 				fazSetOptionUnavailable(pushdownOpt, pushdownDisabled);
 			}
@@ -492,7 +547,7 @@
 			if (prefEl) prefEl.value = 'popup';
 			updatePositionOptions();
 			migrated = true;
-		} else if (lawShowsDoNotSell && typeEl.value === 'banner' && prefEl && prefEl.value === 'pushdown') {
+		} else if (lawShowsDoNotSell && (typeEl.value === 'banner' || typeEl.value === 'box') && prefEl && prefEl.value === 'pushdown') {
 			prefEl.value = 'popup';
 			migrated = true;
 		}
@@ -738,7 +793,9 @@
 				prefEl.disabled = true;
 			} else {
 				prefEl.disabled = false;
-				if ((type === 'box' || type === 'popup') && prefEl.value === 'pushdown') {
+				// Box + pushdown opens the preferences inside the box (#392);
+				// only the centred popup has no pushdown layout.
+				if (type === 'popup' && prefEl.value === 'pushdown') {
 					prefEl.value = 'popup';
 				}
 				// Popup has no sidebar template — disable the option and fall back
@@ -1468,6 +1525,10 @@
 		// --faz-btn-border-radius when this is set, so a blank field leaves every
 		// existing banner byte-identical.
 		setVal('faz-b-border-radius', s.borderRadius || '');
+		// Same contract for the notice opacity and text alignment: empty emits
+		// nothing, so an untouched banner renders exactly as before.
+		setVal('faz-b-notice-opacity', s.noticeOpacity || '');
+		setVal('faz-b-text-align', s.textAlign || '');
 		setVal('faz-b-pref-type', s.preferenceCenterType || 'popup');
 		var wallEl = document.getElementById('faz-b-soft-cookie-wall');
 		if (wallEl) wallEl.checked = !!s.softCookieWall;
@@ -1616,6 +1677,29 @@
 		var revisitStyles = revisit.styles || {};
 		setColor('faz-b-revisit-bg', revisitStyles['background-color'] || '#0056A7');
 		setColor('faz-b-revisit-icon', revisitStyles['color'] || '#FFFFFF');
+		var revisitImage = (revisit.meta && revisit.meta.url) || '';
+		if (revisitImage === '#') revisitImage = '';
+		setVal('faz-b-revisit-image-url', revisitImage);
+		updateImagePreview('faz-b-revisit-image', revisitImage);
+		setOptionalColor('faz-b-revisit-border', revisitStyles['border-color']);
+		setVal('faz-b-revisit-widget-size', revisit.widgetSize || '');
+		setVal('faz-b-revisit-image-size', revisit.imageSize || '');
+		var hoverButtons = (config.notice && config.notice.elements && config.notice.elements.buttons && config.notice.elements.buttons.elements) || {};
+		var detailSave = (config.preferenceCenter && config.preferenceCenter.elements && config.preferenceCenter.elements.buttons
+			&& config.preferenceCenter.elements.buttons.elements && config.preferenceCenter.elements.buttons.elements.save) || {};
+		FAZ_OPTIONAL_COLORS.hover.forEach(function (name) {
+			var styles = (hoverButtons[name] && hoverButtons[name].styles) || {};
+			setOptionalColor('faz-b-' + name + '-hover-bg', styles['hover-background-color']);
+			setOptionalColor('faz-b-' + name + '-hover-text', styles['hover-color']);
+			setOptionalColor('faz-b-' + name + '-hover-border', styles['hover-border-color']);
+		});
+		var detailSaveStyles = detailSave.styles || {};
+		setOptionalColor('faz-b-detail-save-bg', detailSaveStyles['custom-background-color']);
+		setOptionalColor('faz-b-detail-save-text', detailSaveStyles['custom-color']);
+		setOptionalColor('faz-b-detail-save-border', detailSaveStyles['custom-border-color']);
+		setOptionalColor('faz-b-detail-save-hover-bg', detailSaveStyles['hover-background-color']);
+		setOptionalColor('faz-b-detail-save-hover-text', detailSaveStyles['hover-color']);
+		setOptionalColor('faz-b-detail-save-hover-border', detailSaveStyles['hover-border-color']);
 
 		// Behaviours
 		setChecked('faz-b-reload-toggle', b.reloadBannerOnAccept && b.reloadBannerOnAccept.status);
@@ -1636,6 +1720,7 @@
 		}
 		setVal('faz-b-brandlogo-url', logoUrl);
 		updateBrandLogoPreview(logoUrl);
+		setVal('faz-b-brandlogo-placement', (brandLogo.meta && brandLogo.meta.placement === 'beside') ? 'beside' : '');
 	}
 
 	function toggleDoNotSellColorRow(law) {
@@ -1830,6 +1915,9 @@
 		populateButtonColors('accept', btns.accept);
 		populateButtonColors('reject', btns.reject);
 		populateButtonColors('settings', btns.settings);
+		// Presets carry no Save or hover colours: empty them, or the sync below
+		// writes the previous ones back onto the new theme.
+		FAZ_OPTIONAL_COLORS.ids.forEach(function (id) { setOptionalColor(id, ''); });
 		var presetDns = (btns.donotSell && btns.donotSell.styles) || {};
 		setColor('faz-b-donotsell-text', presetDns.color || '#1863DC');
 
@@ -2165,6 +2253,18 @@
 		props.settings.position = getVal('faz-b-position');
 		props.settings.theme = getVal('faz-b-theme');
 		props.settings.borderRadius = getVal('faz-b-border-radius');
+		// The server keeps only a whole number from 50 to 100 and stores
+		// anything else as empty; bring the field to what will be stored, so
+		// it does not keep showing a value that was dropped on save.
+		var opacityRaw = String(getVal('faz-b-notice-opacity') || '').trim();
+		var opacityNum = Number(opacityRaw);
+		var opacity = '';
+		if (opacityRaw !== '' && isFinite(opacityNum)) {
+			opacity = String(Math.min(100, Math.max(50, Math.round(opacityNum))));
+		}
+		if (opacity !== opacityRaw) setVal('faz-b-notice-opacity', opacity);
+		props.settings.noticeOpacity = opacity;
+		props.settings.textAlign = getVal('faz-b-text-align');
 		var wallEl = document.getElementById('faz-b-soft-cookie-wall');
 		props.settings.softCookieWall = wallEl ? wallEl.checked : false;
 		var law = getVal('faz-b-law') || 'gdpr';
@@ -2256,6 +2356,7 @@
 		if (!props.config.notice.elements.brandLogo.meta) props.config.notice.elements.brandLogo.meta = {};
 		var logoUrl = getVal('faz-b-brandlogo-url');
 		props.config.notice.elements.brandLogo.meta.url = logoUrl || '#';
+		props.config.notice.elements.brandLogo.meta.placement = getVal('faz-b-brandlogo-placement') === 'beside' ? 'beside' : '';
 
 		// Category preview colours
 		ensureObj(props, 'config.categoryPreview.elements.title.styles');
@@ -2284,6 +2385,29 @@
 		if (!props.config.revisitConsent.styles) props.config.revisitConsent.styles = {};
 		props.config.revisitConsent.styles['background-color'] = getColor('faz-b-revisit-bg');
 		props.config.revisitConsent.styles['color'] = getColor('faz-b-revisit-icon');
+		if (!props.config.revisitConsent.meta) props.config.revisitConsent.meta = {};
+		props.config.revisitConsent.meta.url = getVal('faz-b-revisit-image-url') || '#';
+		props.config.revisitConsent.styles['border-color'] = getColor('faz-b-revisit-border');
+		props.config.revisitConsent.widgetSize = readPixelSize('faz-b-revisit-widget-size', 30, 100);
+		// The image is drawn inside the widget and its 1px border, so the field
+		// shows the size that is actually rendered (class-template.php).
+		var revisitInner = (Number(props.config.revisitConsent.widgetSize) || 45)
+			- (props.config.revisitConsent.styles['border-color'] ? 2 : 0);
+		props.config.revisitConsent.imageSize = readPixelSize('faz-b-revisit-image-size', 12, revisitInner);
+		FAZ_OPTIONAL_COLORS.hover.forEach(function (name) {
+			ensureObj(btns, name + '.styles');
+			btns[name].styles['hover-background-color'] = getColor('faz-b-' + name + '-hover-bg');
+			btns[name].styles['hover-color'] = getColor('faz-b-' + name + '-hover-text');
+			btns[name].styles['hover-border-color'] = getColor('faz-b-' + name + '-hover-border');
+		});
+		ensureObj(props, 'config.preferenceCenter.elements.buttons.elements.save.styles');
+		var detailSaveOut = props.config.preferenceCenter.elements.buttons.elements.save.styles;
+		detailSaveOut['custom-background-color'] = getColor('faz-b-detail-save-bg');
+		detailSaveOut['custom-color'] = getColor('faz-b-detail-save-text');
+		detailSaveOut['custom-border-color'] = getColor('faz-b-detail-save-border');
+		detailSaveOut['hover-background-color'] = getColor('faz-b-detail-save-hover-bg');
+		detailSaveOut['hover-color'] = getColor('faz-b-detail-save-hover-text');
+		detailSaveOut['hover-border-color'] = getColor('faz-b-detail-save-hover-border');
 
 		// Behaviours
 		if (!props.behaviours) props.behaviours = {};
@@ -2863,15 +2987,43 @@
 	// Cascade: wp.media (WordPress) → FilePond (ClassicPress) → native file input.
 
 	function initBrandLogoUploader() {
-		var uploadBtn = document.getElementById('faz-b-brandlogo-upload');
-		var removeBtn = document.getElementById('faz-b-brandlogo-remove');
-		var fileInput = document.getElementById('faz-b-brandlogo-file');
+		initImagePicker('faz-b-brandlogo', {
+			mediaTitle: fazI18n('banner.logoMediaTitle', 'Select Brand Logo'),
+			uploading: fazI18n('banner.logoUploading', 'Uploading logo\u2026'),
+			uploaded: fazI18n('banner.logoUploaded', 'Logo uploaded successfully.'),
+			dropLabel: fazI18n('banner.logoDropLabel', 'Drag & drop a logo image or browse'),
+			fileName: 'logo'
+		});
+		initImagePicker('faz-b-revisit-image', {
+			mediaTitle: fazI18n('banner.revisitMediaTitle', 'Select Revisit Widget Image'),
+			uploading: fazI18n('banner.imageUploading', 'Uploading image\u2026'),
+			uploaded: fazI18n('banner.imageUploaded', 'Image uploaded successfully.'),
+			dropLabel: fazI18n('banner.imageDropLabel', 'Drag & drop an image or browse'),
+			fileName: 'revisit-image'
+		});
+	}
+
+	/**
+	 * Wire an image field: media library or upload, preview and Remove.
+	 * Shared by the brand logo and the revisit widget image.
+	 *
+	 * @param {string} prefix Id prefix of the field's elements (`<prefix>-url`, `-upload`, `-remove`, `-file`, `-preview`).
+	 * @param {Object} text   Translated strings for the status line and the media frame.
+	 * @return {void}
+	 */
+	function initImagePicker(prefix, text) {
+		var uploadBtn = document.getElementById(prefix + '-upload');
+		var removeBtn = document.getElementById(prefix + '-remove');
+		var fileInput = document.getElementById(prefix + '-file');
 		var uploadInFlight = false;
+		// Bumped by every choice; an upload that finishes after a newer choice
+		// (Remove, or a pick from the media library) is dropped.
+		var choice = 0;
 
 		function applyLogoUrl(url) {
-			setVal('faz-b-brandlogo-url', url || '');
-			updateBrandLogoPreview(url || '');
-			showBrandLogoStatus('', 'clear');
+			setVal(prefix + '-url', url || '');
+			updateImagePreview(prefix, url || '');
+			showImageStatus(prefix, '', 'clear');
 			syncFormToBannerData();
 			refreshPreview();
 		}
@@ -2882,7 +3034,7 @@
 				return;
 			}
 			if (!file || !window.fetch || !window.fazConfig || !fazConfig.api || !fazConfig.upload || !fazConfig.upload.mediaEndpoint) {
-				showBrandLogoStatus('Upload is not available.', 'error');
+				showImageStatus(prefix, fazI18n('banner.uploadUnavailable', 'Upload is not available.'), 'error');
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
 				return;
@@ -2890,39 +3042,51 @@
 			var maxBytes = fazConfig.upload.maxSize || (2 * 1024 * 1024);
 			if (file.size > maxBytes) {
 				var maxMB = Math.floor(maxBytes / (1024 * 1024));
-				showBrandLogoStatus('File too large (max ' + maxMB + ' MB).', 'error');
+				showImageStatus(prefix, fazI18n('banner.uploadTooLarge', 'File too large (max %s MB).').replace('%s', maxMB), 'error');
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
 				return;
 			}
 			uploadInFlight = true;
-			showBrandLogoStatus('Uploading logo\u2026');
+			var mine = ++choice;
+			showImageStatus(prefix, text.uploading);
 			window.fetch(fazConfig.upload.mediaEndpoint, {
 				method: 'POST',
 				credentials: 'same-origin',
 				headers: {
 					'X-WP-Nonce': (fazConfig.api.nonce || ''),
-					'Content-Disposition': 'attachment; filename="' + encodeURIComponent(file.name || 'logo') + '"',
+					'Content-Disposition': 'attachment; filename="' + encodeURIComponent(file.name || text.fileName) + '"',
 					'Content-Type': file.type || 'application/octet-stream',
 				},
 				body: file,
 			}).then(function (response) {
 				return response.json().catch(function () { return {}; }).then(function (payload) {
 					if (!response.ok) {
-						throw new Error((payload && payload.message) || 'Upload failed');
+						throw new Error((payload && payload.message) || fazI18n('banner.uploadFailedShort', 'Upload failed'));
 					}
 					return payload;
 				});
 			}).then(function (payload) {
 				var url = payload && (payload.source_url || (payload.guid && payload.guid.rendered)) || '';
-				if (!url) throw new Error('Upload succeeded but no media URL was returned.');
+				if (!url) throw new Error(fazI18n('banner.uploadNoUrl', 'Upload succeeded but no media URL was returned.'));
+				if (mine !== choice) {
+					if (pond && typeof pond.removeFiles === 'function') pond.removeFiles();
+					if (fileInput) fileInput.value = '';
+					if (typeof done === 'function') done(false);
+					return;
+				}
 				applyLogoUrl(url);
-				showBrandLogoStatus('Logo uploaded successfully.', 'success');
+				showImageStatus(prefix, text.uploaded, 'success');
 				if (pond && typeof pond.removeFiles === 'function') pond.removeFiles();
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(true);
 			}).catch(function (err) {
-				showBrandLogoStatus('Upload failed: ' + (err.message || err), 'error');
+				if (fileInput) fileInput.value = '';
+				if (mine !== choice) {
+					if (typeof done === 'function') done(false);
+					return;
+				}
+				showImageStatus(prefix, fazI18n('banner.uploadFailed', 'Upload failed: %s').replace('%s', err.message || err), 'error');
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
 			}).then(function () {
@@ -2936,13 +3100,14 @@
 				// 1. WordPress media library (standard WP).
 				if (window.wp && window.wp.media && typeof window.wp.media === 'function') {
 					var frame = wp.media({
-						title: 'Select Brand Logo',
-						button: { text: 'Use this image' },
+						title: text.mediaTitle,
+						button: { text: fazI18n('banner.useImage', 'Use this image') },
 						multiple: false,
 						library: { type: 'image' },
 					});
 					frame.on('select', function () {
 						var attachment = frame.state().get('selection').first().toJSON();
+						choice++;
 						applyLogoUrl(attachment.url || '');
 					});
 					frame.open();
@@ -2952,7 +3117,7 @@
 				if (fileInput) {
 					fileInput.click();
 				} else {
-					showBrandLogoStatus('Media library unavailable.', 'error');
+					showImageStatus(prefix, fazI18n('banner.mediaUnavailable', 'Media library unavailable.'), 'error');
 				}
 			});
 		}
@@ -2965,7 +3130,7 @@
 						allowMultiple: false,
 						credits: false,
 						acceptedFileTypes: ['image/*'],
-						labelIdle: 'Drag & drop a logo image or browse',
+						labelIdle: text.dropLabel,
 					});
 					if (pond && typeof pond.on === 'function') {
 						pond.on('addfile', function (error, item) {
@@ -2988,14 +3153,23 @@
 		if (removeBtn) {
 			removeBtn.addEventListener('click', function (e) {
 				e.preventDefault();
+				choice++;
 				applyLogoUrl('');
-				showBrandLogoStatus('', 'clear');
+				showImageStatus(prefix, '', 'clear');
 			});
 		}
 	}
 
-	function showBrandLogoStatus(message, type) {
-		var status = document.getElementById('faz-b-brandlogo-upload-status');
+	/**
+	 * Show or clear the status line under an image field.
+	 *
+	 * @param {string} prefix  Id prefix of the field.
+	 * @param {string} message Text to show; empty clears the line.
+	 * @param {string} type    'error', 'success', 'info' or 'clear'.
+	 * @return {void}
+	 */
+	function showImageStatus(prefix, message, type) {
+		var status = document.getElementById(prefix + '-upload-status');
 		if (!status) return;
 		if (!message || type === 'clear') {
 			status.textContent = '';
@@ -3008,8 +3182,19 @@
 	}
 
 	function updateBrandLogoPreview(url) {
-		var preview = document.getElementById('faz-b-brandlogo-preview');
-		var removeBtn = document.getElementById('faz-b-brandlogo-remove');
+		updateImagePreview('faz-b-brandlogo', url);
+	}
+
+	/**
+	 * Show the preview and the Remove button for an http(s) URL, hide both otherwise.
+	 *
+	 * @param {string} prefix Id prefix of the field.
+	 * @param {string} url    Image URL, or empty.
+	 * @return {void}
+	 */
+	function updateImagePreview(prefix, url) {
+		var preview = document.getElementById(prefix + '-preview');
+		var removeBtn = document.getElementById(prefix + '-remove');
 		var safeUrl = sanitizeHttpUrl(url, false);
 		if (preview) {
 			if (safeUrl) {
@@ -3083,6 +3268,41 @@
 		if (picker) {
 			picker.value = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#FFFFFF';
 		}
+	}
+	/**
+	 * Fill a colour field where empty means unset: the text field keeps the
+	 * empty value, and the picker only moves for a valid #rrggbb colour.
+	 *
+	 * @param {string} baseId Id of the picker; the text field is `<baseId>-hex`.
+	 * @param {string} hex    Stored value, possibly empty.
+	 * @return {void}
+	 */
+	function setOptionalColor(baseId, hex) {
+		var picker = document.getElementById(baseId);
+		var text = document.getElementById(baseId + '-hex');
+		if (text) text.value = hex || '';
+		if (picker && /^#[0-9a-fA-F]{6}$/.test(hex || '')) picker.value = hex;
+	}
+	/**
+	 * Read a size in whole pixels, '' when the field is empty.
+	 *
+	 * A number outside the range is brought into it and written back, like the
+	 * notice opacity, so the field shows the size the banner will use.
+	 *
+	 * @param {string} id  Field id.
+	 * @param {number} min Smallest size.
+	 * @param {number} max Largest size.
+	 * @return {string}
+	 */
+	function readPixelSize(id, min, max) {
+		var raw = String(getVal(id) || '').trim();
+		var num = Number(raw);
+		var size = '';
+		if (raw !== '' && isFinite(num)) {
+			size = String(Math.min(max, Math.max(min, Math.round(num))));
+		}
+		if (size !== raw) setVal(id, size);
+		return size;
 	}
 	function getColor(baseId) {
 		var text = document.getElementById(baseId + '-hex');

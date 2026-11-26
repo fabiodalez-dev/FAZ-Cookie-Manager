@@ -234,6 +234,10 @@ class Settings extends Store {
 				'cache_geo_bootstrap' => false,
 				'target_regions'      => array( 'eu', 'uk' ),
 				'default_behavior'    => 'show_banner',
+				// Retained to normalize earlier imports/saved settings. Missing
+				// opt-in banners always use the GDPR rendition; an opt-out
+				// banner must not waive a visitor's jurisdiction requirements.
+				'missing_law_banner'  => 'gdpr_version',
 				// Which GeoLite2 edition the downloader fetches and the lookup
 				// reads: 'country' (small, country-level only — the default and
 				// the historical behaviour) or 'city' (larger, adds region /
@@ -346,7 +350,22 @@ class Settings extends Store {
 	 * @param string $key Name of the key.
 	 * @return array
 	 */
-	private static $cached_settings = null;
+	private static $cached_settings = array();
+
+	/**
+	 * Key of the request-local settings cache: the current blog.
+	 *
+	 * The cache was one process-wide value. Inside a switch_to_blog() loop
+	 * (network activation) a read on one site was served another site's
+	 * settings, and preserve_geo_enforcement_on_upgrade() wrote that foreign
+	 * tree — MaxMind key included — into the switched subsite. Gcm_Settings
+	 * keys its cache by blog for the same reason.
+	 *
+	 * @return int
+	 */
+	private static function cache_blog() {
+		return function_exists( 'get_current_blog_id' ) ? (int) get_current_blog_id() : 0;
+	}
 
 	/**
 	 * Drop the request-local settings cache after an external transaction is
@@ -356,15 +375,16 @@ class Settings extends Store {
 	 * @return void
 	 */
 	public static function clear_cache() {
-		self::$cached_settings = null;
+		self::$cached_settings = array();
 	}
 
 	public function get( $group = '', $key = '' ) {
-		if ( null === self::$cached_settings ) {
-			$settings = get_option( 'faz_settings', $this->data );
-			self::$cached_settings = self::sanitize( $settings, $this->data );
+		$blog = self::cache_blog();
+		if ( ! isset( self::$cached_settings[ $blog ] ) ) {
+			$settings                       = get_option( 'faz_settings', $this->data );
+			self::$cached_settings[ $blog ] = self::sanitize( $settings, $this->data );
 		}
-		$settings = self::$cached_settings;
+		$settings = self::$cached_settings[ $blog ];
 		if ( empty( $key ) && empty( $group ) ) {
 			return $settings;
 		} elseif ( ! empty( $key ) && ! empty( $group ) ) {
@@ -396,6 +416,7 @@ class Settings extends Store {
 			// 'comfortable' for the layout and 'widget' for the withdrawal path.
 			'mobile_layout',
 			'withdrawal_path',
+			'missing_law_banner',
 			'sites',
 			'custom_rules',
 			'target_regions',
@@ -448,7 +469,7 @@ class Settings extends Store {
 		$defaults = $this->get_defaults();
 		$settings = self::sanitize( $data, $defaults );
 		update_option( 'faz_settings', $settings );
-		self::$cached_settings = null;
+		self::$cached_settings = array();
 		self::maybe_bootstrap_gvl( $settings );
 		do_action( 'faz_after_update_settings', $clear );
 	}
@@ -731,8 +752,21 @@ class Settings extends Store {
 				$value   = in_array( $value, $allowed, true ) ? $value : 'country';
 				break;
 			case 'static_ip':
+				// The scanner pins its server-side fetches to this address, past
+				// core's reject_unsafe_urls (see faz_ip_is_globally_routable()).
+				// On multisite it decides where the web server connects, which is
+				// network authority: a subsite admin keeps whatever is stored.
+				// WP-CLI runs with shell access to the server, which is more than
+				// network authority, so `wp faz settings` may set it without
+				// --user. Any other context without the capability (cron, a
+				// background save) keeps the stored value rather than clearing it.
+				$is_cli = defined( 'WP_CLI' ) && WP_CLI;
+				if ( ! $is_cli && function_exists( 'is_multisite' ) && is_multisite() && ! current_user_can( 'manage_network_options' ) ) {
+					$stored = get_option( 'faz_settings', array() );
+					$value  = isset( $stored['scanner']['static_ip'] ) ? (string) $stored['scanner']['static_ip'] : '';
+				}
 				$value = trim( (string) $value );
-				$value = filter_var( $value, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ? $value : '';
+				$value = function_exists( 'faz_ip_is_globally_routable' ) && faz_ip_is_globally_routable( $value ) ? $value : '';
 				break;
 			case 'step':
 				$value = absint( $value );
@@ -754,8 +788,8 @@ class Settings extends Store {
 				// DevTools could downgrade the counter and re-validate
 				// already-revoked consents.
 				$incoming  = max( 1, min( 999999, absint( $value ) ) );
-				$persisted = isset( self::$cached_settings['general']['consent_revision'] )
-					? absint( self::$cached_settings['general']['consent_revision'] )
+				$persisted = isset( self::$cached_settings[ self::cache_blog() ]['general']['consent_revision'] )
+					? absint( self::$cached_settings[ self::cache_blog() ]['general']['consent_revision'] )
 					: 0;
 				if ( 0 === $persisted ) {
 					// First read — pull from DB to avoid bootstrapping issues.
@@ -995,6 +1029,9 @@ class Settings extends Store {
 			case 'default_behavior':
 				$allowed = array( 'show_banner', 'no_banner' );
 				$value   = in_array( $value, $allowed, true ) ? $value : 'show_banner';
+				break;
+			case 'missing_law_banner':
+				$value = 'gdpr_version';
 				break;
 			case 'target_regions':
 				if ( ! is_array( $value ) ) {

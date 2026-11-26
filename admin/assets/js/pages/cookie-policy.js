@@ -264,6 +264,10 @@
 			var showVal = getDeep(settings, 'disclaimer.show', true);
 			showCb.checked = !!showVal;
 		}
+		var emailCb = document.querySelector('[name="obfuscate_emails"]');
+		if (emailCb) {
+			emailCb.checked = !!getDeep(settings, 'obfuscate_emails', true);
+		}
 		// Service checkboxes.
 		var services = settings.third_party_services || [];
 		document.querySelectorAll('#cp-services-list input[type=checkbox]').forEach(function (cb) {

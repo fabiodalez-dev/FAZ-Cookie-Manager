@@ -135,6 +135,7 @@ namespace FazCookie\Admin\Modules\Geo_Routing\Includes {
 namespace FazCookie\Admin\Modules\Banners\Includes {
 	class Controller {
 		public static $strict_banner     = true;
+		public static $global_ccpa       = false;
 		public static $country_dependent = false;
 
 		public static function get_instance() {
@@ -142,7 +143,10 @@ namespace FazCookie\Admin\Modules\Banners\Includes {
 		}
 
 		public function has_active_banner_for_law( $law, $country = '' ) {
-			return self::$strict_banner && 'gdpr' === $law && '' === $country;
+			if ( '' !== $country ) {
+				return false;
+			}
+			return 'gdpr' === $law ? self::$strict_banner : self::$global_ccpa;
 		}
 
 		public function has_country_dependent_banners() {
@@ -267,6 +271,7 @@ namespace {
 	function faz_geo_bootstrap_reset() {
 		$GLOBALS['faz_geo_bootstrap_filters'] = array();
 		Controller::$strict_banner            = true;
+		Controller::$global_ccpa              = false;
 		Controller::$country_dependent        = false;
 		Ruleset_Loader::$ruleset              = array( 'id' => 'fallback-gdpr-most-protective', 'model' => 'opt-in' );
 		Ruleset_Loader::$loaded_ids           = array();
@@ -415,6 +420,19 @@ namespace {
 	$no_banner = faz_geo_bootstrap_frontend();
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $no_banner, 'is_geo_bootstrap_cache_active' ), false, 'no active global GDPR banner fails the gate closed' );
 	faz_geo_bootstrap_same( Frontend::get_geo_bootstrap_status( array() )['reason'], 'missing_gdpr_banner', 'admin readiness reports the missing strict banner' );
+
+	// #377: a CCPA-only site. load_banner() renders the global CCPA banner as
+	// its opt-in version under the strict ruleset, so the shell can be built
+	// and cached; the live payload then gives each visitor their own banner.
+	faz_geo_bootstrap_reset();
+	add_filter( 'faz_cache_geo_bootstrap', '__return_true' );
+	Controller::$strict_banner = false;
+	Controller::$global_ccpa   = true;
+	$ccpa_only = faz_geo_bootstrap_frontend();
+	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $ccpa_only, 'is_geo_bootstrap_cache_active' ), true, 'a global CCPA banner is enough for the strict shell' );
+	faz_geo_bootstrap_same( Frontend::get_geo_bootstrap_status( array() )['reason'], 'ready', 'admin readiness reports a CCPA-only site as ready' );
+	$strict = faz_geo_bootstrap_private( $ccpa_only, 'get_runtime_ruleset' );
+	faz_geo_bootstrap_same( $strict['id'], 'fallback-gdpr-most-protective', 'its shell still runs under the strict GDPR fallback' );
 
 	faz_geo_bootstrap_reset();
 	add_filter( 'faz_cache_geo_bootstrap', '__return_true' );

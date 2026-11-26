@@ -1258,7 +1258,28 @@ class Geolocation {
 	}
 
 	/**
+	 * Largest number of bytes extract_mmdb() will decompress from an archive.
+	 *
+	 * GeoLite2-City is ~70 MB uncompressed today and the Country edition ~8 MB.
+	 * The cap is what keeps a response that decompresses without end (a gzip
+	 * bomb) from filling the temp directory and the disk.
+	 */
+	const MAX_ARCHIVE_BYTES = 536870912;
+
+	/**
+	 * Largest .mmdb entry extract_mmdb() will write.
+	 */
+	const MAX_MMDB_BYTES = 268435456;
+
+	/**
 	 * Extract a .mmdb file from a MaxMind .tar.gz archive.
+	 *
+	 * The archive is read as a stream with gzopen() and a minimal tar walker
+	 * (read_tar_entry()), not with PharData: PharData::decompress() wrote the
+	 * whole decompressed tar to disk with no size limit, and on PHP < 8.0
+	 * opening an archive through Phar unserializes its metadata. Only the
+	 * first regular *.mmdb entry is written, and every byte decompressed counts
+	 * against MAX_ARCHIVE_BYTES.
 	 *
 	 * @param string $tar_gz_path Path to the downloaded .tar.gz file.
 	 * @param string $edition     Edition downloaded ('GeoLite2-City' or
@@ -1266,79 +1287,73 @@ class Geolocation {
 	 * @return true|\WP_Error
 	 */
 	private static function extract_mmdb( $tar_gz_path, $edition = 'GeoLite2-City' ) {
-		if ( ! class_exists( 'PharData' ) ) {
-			return new \WP_Error( 'faz_geo_no_phar', __( 'PharData extension is required to extract the database.', 'faz-cookie-manager' ) );
+		if ( ! function_exists( 'gzopen' ) ) {
+			return new \WP_Error(
+				'faz_geo_no_zlib',
+				sprintf(
+					/* translators: %s: error message */
+					__( 'Extraction failed: %s', 'faz-cookie-manager' ),
+					'the zlib PHP extension is not available.'
+				)
+			);
 		}
 
 		$edition  = in_array( $edition, array( 'GeoLite2-City', 'GeoLite2-Country' ), true ) ? $edition : 'GeoLite2-City';
 		$data_dir = self::get_data_dir();
 		wp_mkdir_p( $data_dir );
-		$tar_path = '';
 		$staged   = '';
 
 		try {
-			$phar     = new \PharData( $tar_gz_path );
-			$tar      = $phar->decompress();
-			$tar_path = $tar->getPath();
-
-			// Find the .mmdb file inside the archive.
-			$found = false;
-			foreach ( new \RecursiveIteratorIterator( $tar ) as $entry ) {
-				if ( '.mmdb' === substr( $entry->getFilename(), -5 ) ) {
-					$dest   = $data_dir . $edition . '.mmdb';
-					$staged = $data_dir . '.' . $edition . '.' . wp_generate_uuid4() . '.tmp';
-					if ( ! copy( $entry->getPathname(), $staged ) ) {
-						return new \WP_Error( 'faz_geo_copy_failed', __( 'Failed to copy database file.', 'faz-cookie-manager' ) );
-					}
-
-					// Validate before replacing the active database. A valid tar
-					// can still contain a corrupt or wrong-edition .mmdb; without
-					// this check the endpoint reported success and broke lookups.
-					$reader        = new Mmdb_Reader( $staged );
-					$database_type = $reader->database_type();
-					$expected_type = ( 'GeoLite2-City' === $edition ) ? 'City' : 'Country';
-					unset( $reader );
-					if (
-						'' === $database_type
-						|| 1 !== preg_match( '/(?:^|-)' . preg_quote( $expected_type, '/' ) . '$/i', $database_type )
-					) {
-						throw new \RuntimeException(
-							'Downloaded MMDB edition mismatch: expected '
-							. $expected_type
-							. ', received '
-							. ( '' !== $database_type ? $database_type : 'unknown' )
-							. '.'
-						);
-					}
-
-					// The staging file is in the same directory, so rename is an
-					// atomic replacement on the filesystems used by WordPress.
-					// If activation fails, the previous database remains intact.
-					// WP_Filesystem is intentionally NOT used here: it offers no
-					// atomic move primitive, and a non-atomic copy+unlink would
-					// expose a window where the active .mmdb is truncated/half
-					// written. The staging file is a sibling of $dest, so a raw
-					// rename() is atomic on POSIX and NTFS — the property we need.
-					if ( ! @rename( $staged, $dest ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.rename_rename -- intentional atomic same-dir swap; WP_Filesystem has no atomic move.
-						return new \WP_Error( 'faz_geo_activate_failed', __( 'Failed to copy database file.', 'faz-cookie-manager' ) );
-					}
-					$staged = '';
-					$found = true;
-					// Remove the OTHER edition's DB so a Country↔City switch
-					// doesn't leave a stale file that get_database_path() (which
-					// now prefers the configured edition) can fall back to stale
-					// data. Only the just-written edition should survive.
-					$superseded = array(
-						$data_dir . 'GeoLite2-City.mmdb',
-						$data_dir . 'GeoLite2-Country.mmdb',
-						$data_dir . 'dbip-country-lite.mmdb',
+			$found  = false;
+			$dest   = $data_dir . $edition . '.mmdb';
+			$staged = $data_dir . '.' . $edition . '.' . wp_generate_uuid4() . '.tmp';
+			if ( self::read_tar_entry( $tar_gz_path, '.mmdb', $staged, self::MAX_ARCHIVE_BYTES, self::MAX_MMDB_BYTES ) ) {
+				// Validate before replacing the active database. A valid tar
+				// can still contain a corrupt or wrong-edition .mmdb; without
+				// this check the endpoint reported success and broke lookups.
+				$reader        = new Mmdb_Reader( $staged );
+				$database_type = $reader->database_type();
+				$expected_type = ( 'GeoLite2-City' === $edition ) ? 'City' : 'Country';
+				unset( $reader );
+				if (
+					'' === $database_type
+					|| 1 !== preg_match( '/(?:^|-)' . preg_quote( $expected_type, '/' ) . '$/i', $database_type )
+				) {
+					throw new \RuntimeException(
+						'Downloaded MMDB edition mismatch: expected '
+						. $expected_type
+						. ', received '
+						. ( '' !== $database_type ? $database_type : 'unknown' )
+						. '.'
 					);
-					foreach ( $superseded as $old ) {
-						if ( $old !== $dest && file_exists( $old ) ) {
-							@unlink( $old ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions.unlink_unlink
-						}
+				}
+
+				// The staging file is in the same directory, so rename is an
+				// atomic replacement on the filesystems used by WordPress.
+				// If activation fails, the previous database remains intact.
+				// WP_Filesystem is intentionally NOT used here: it offers no
+				// atomic move primitive, and a non-atomic copy+unlink would
+				// expose a window where the active .mmdb is truncated/half
+				// written. The staging file is a sibling of $dest, so a raw
+				// rename() is atomic on POSIX and NTFS — the property we need.
+				if ( ! @rename( $staged, $dest ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.rename_rename -- intentional atomic same-dir swap; WP_Filesystem has no atomic move.
+					return new \WP_Error( 'faz_geo_activate_failed', __( 'Failed to copy database file.', 'faz-cookie-manager' ) );
+				}
+				$staged = '';
+				$found = true;
+				// Remove the OTHER edition's DB so a Country↔City switch
+				// doesn't leave a stale file that get_database_path() (which
+				// now prefers the configured edition) can fall back to stale
+				// data. Only the just-written edition should survive.
+				$superseded = array(
+					$data_dir . 'GeoLite2-City.mmdb',
+					$data_dir . 'GeoLite2-Country.mmdb',
+					$data_dir . 'dbip-country-lite.mmdb',
+				);
+				foreach ( $superseded as $old ) {
+					if ( $old !== $dest && file_exists( $old ) ) {
+						@unlink( $old ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions.unlink_unlink
 					}
-					break;
 				}
 			}
 
@@ -1370,9 +1385,151 @@ class Geolocation {
 			if ( '' !== $staged && file_exists( $staged ) ) {
 				@unlink( $staged ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions.unlink_unlink
 			}
-			if ( '' !== $tar_path && file_exists( $tar_path ) ) {
-				@unlink( $tar_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions.unlink_unlink
-			}
 		}
+	}
+
+	/**
+	 * Stream the first regular tar entry whose name ends in $suffix to $dest.
+	 *
+	 * Reads a .tar.gz (or plain .tar) with gzopen()/gzread(), so nothing but
+	 * the wanted entry reaches the disk, and nothing goes through Phar. Every
+	 * byte decompressed, including the entries skipped over, counts against
+	 * $max_total; the wanted entry may not exceed $max_entry. Understands
+	 * ustar prefixes, GNU long names ('L') and pax 'path' records ('x').
+	 *
+	 * @param string $archive   Path of the archive (a local file, no stream wrapper).
+	 * @param string $suffix    File-name suffix of the wanted entry, e.g. '.mmdb'.
+	 * @param string $dest      Path the entry is written to.
+	 * @param int    $max_total Decompressed-byte budget for the whole walk.
+	 * @param int    $max_entry Largest entry accepted.
+	 * @return bool True when the entry was written, false when the archive has none.
+	 * @throws \RuntimeException On a malformed archive or an exceeded limit.
+	 */
+	private static function read_tar_entry( $archive, $suffix, $dest, $max_total, $max_entry ) {
+		$archive = (string) $archive;
+		if ( '' === $archive || false !== strpos( $archive, '://' ) || ! is_file( $archive ) ) {
+			throw new \RuntimeException( 'Archive is not a local file.' );
+		}
+		$gz = gzopen( $archive, 'rb' );
+		if ( false === $gz ) {
+			throw new \RuntimeException( 'Cannot open the archive.' );
+		}
+		$budget    = (int) $max_total;
+		$long_name = null;
+		try {
+			while ( true ) {
+				$header = self::tar_read( $gz, 512, $budget );
+				if ( '' === $header || str_repeat( "\0", 512 ) === $header ) {
+					return false; // End of archive.
+				}
+				if ( 512 !== strlen( $header ) ) {
+					throw new \RuntimeException( 'Truncated tar header.' );
+				}
+				$size_field = substr( $header, 124, 12 );
+				if ( ord( $size_field[0] ) & 0x80 ) {
+					throw new \RuntimeException( 'Tar entry too large.' ); // GNU base-256 size.
+				}
+				$size_digits = trim( $size_field, "\0 " );
+				if ( '' !== $size_digits && 1 !== preg_match( '/^[0-7]+$/', $size_digits ) ) {
+					throw new \RuntimeException( 'Malformed tar header.' );
+				}
+				$size   = '' === $size_digits ? 0 : (int) octdec( $size_digits );
+				$padded = (int) ( ceil( $size / 512 ) * 512 );
+				$type   = $header[156];
+				$name   = rtrim( substr( $header, 0, 100 ), "\0" );
+				if ( 0 === strpos( substr( $header, 257, 6 ), 'ustar' ) ) {
+					$prefix = rtrim( substr( $header, 345, 155 ), "\0" );
+					if ( '' !== $prefix ) {
+						$name = $prefix . '/' . $name;
+					}
+				}
+
+				if ( 'L' === $type || 'x' === $type || 'g' === $type ) {
+					// Metadata entries: small by nature, read whole.
+					if ( $size > 65536 ) {
+						throw new \RuntimeException( 'Tar metadata entry too large.' );
+					}
+					$meta = substr( self::tar_read( $gz, $padded, $budget ), 0, $size );
+					if ( 'L' === $type ) {
+						$long_name = rtrim( $meta, "\0" );
+					} elseif ( 'x' === $type && 1 === preg_match( '/(?:^|\n)\d+ path=([^\n]*)\n/', $meta, $m ) ) {
+						$long_name = $m[1];
+					}
+					continue;
+				}
+				if ( null !== $long_name ) {
+					$name      = $long_name;
+					$long_name = null;
+				}
+
+				$base = basename( str_replace( '\\', '/', $name ) );
+				if ( ( '0' === $type || "\0" === $type )
+					&& strlen( $base ) > strlen( $suffix )
+					&& substr( $base, -strlen( $suffix ) ) === $suffix ) {
+					if ( $size > (int) $max_entry ) {
+						throw new \RuntimeException( 'Archive entry exceeds the size limit.' );
+					}
+					$out = fopen( $dest, 'wb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- streamed write of a multi-MB entry; WP_Filesystem has no streaming API.
+					if ( false === $out ) {
+						throw new \RuntimeException( 'Cannot write the extracted file.' );
+					}
+					try {
+						$left = $size;
+						while ( $left > 0 ) {
+							$chunk = self::tar_read( $gz, min( 1048576, $left ), $budget );
+							if ( '' === $chunk ) {
+								throw new \RuntimeException( 'Truncated tar entry.' );
+							}
+							$length = strlen( $chunk );
+							if ( $length !== fwrite( $out, $chunk ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+								throw new \RuntimeException( 'Cannot write the extracted file.' );
+							}
+							$left -= $length;
+						}
+					} finally {
+						fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+					}
+					return true;
+				}
+
+				// Not the wanted entry: decompress past it, against the budget.
+				$left = $padded;
+				while ( $left > 0 ) {
+					$chunk = self::tar_read( $gz, min( 1048576, $left ), $budget );
+					if ( '' === $chunk ) {
+						throw new \RuntimeException( 'Truncated tar entry.' );
+					}
+					$left -= strlen( $chunk );
+				}
+			}
+		} finally {
+			gzclose( $gz );
+		}
+	}
+
+	/**
+	 * Read up to $length decompressed bytes, charging them to $budget.
+	 *
+	 * @param resource $gz     gzopen() handle.
+	 * @param int      $length Bytes wanted.
+	 * @param int      $budget Remaining budget, decremented in place.
+	 * @return string Bytes read ('' at end of stream).
+	 * @throws \RuntimeException When the budget is exhausted.
+	 */
+	private static function tar_read( $gz, $length, &$budget ) {
+		$data = '';
+		while ( strlen( $data ) < $length ) {
+			$want = $length - strlen( $data );
+			if ( $want > $budget ) {
+				throw new \RuntimeException( 'Archive exceeds the decompressed size limit.' );
+			}
+			$part = gzread( $gz, $want );
+			if ( false === $part || '' === $part ) {
+				break;
+			}
+			$budget -= strlen( $part );
+			$data   .= $part;
+		}
+		return $data;
 	}
 }

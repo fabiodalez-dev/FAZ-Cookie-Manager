@@ -403,7 +403,7 @@ class Cookie_Policy_Api {
 				'lang'         => isset( $body['lang'] ) ? sanitize_text_field( (string) $body['lang'] ) : '',
 				'jurisdiction' => isset( $body['jurisdiction'] ) ? sanitize_text_field( (string) $body['jurisdiction'] ) : '',
 			);
-			$html = Renderer::render( $atts );
+			$html = Renderer::render_preview( $atts );
 		} finally {
 			if ( null !== $filter ) {
 				remove_filter( 'pre_option_' . self::OPTION, $filter );
@@ -469,6 +469,7 @@ class Cookie_Policy_Api {
 			'privacy_policy_url'   => '',
 			'language_priority'    => array( 'en', 'it', 'fr', 'de', 'es', 'pt-BR' ),
 			'section_overrides'    => array(), // jurisdiction → language → section index → anchor/text
+			'obfuscate_emails'     => true,
 			// Admin-editable disclaimer (1.16.2). `show=true` + empty `text`
 			// reproduces the pre-1.16.2 behaviour: standard FAZ disclaimer in
 			// the active language. Set `show=false` to hide entirely.
@@ -488,6 +489,10 @@ class Cookie_Policy_Api {
 	 */
 	private function sanitize_settings( array $in ) {
 		$out = $this->default_settings();
+
+		if ( isset( $in['obfuscate_emails'] ) ) {
+			$out['obfuscate_emails'] = rest_sanitize_boolean( $in['obfuscate_emails'] );
+		}
 
 		if ( isset( $in['jurisdiction'] ) && in_array( $in['jurisdiction'], Generator::JURISDICTIONS, true ) ) {
 			$out['jurisdiction'] = (string) $in['jurisdiction'];

@@ -527,5 +527,37 @@
       "many": "roka",
       "other": "rokov"
     }
+  },
+  "tr": {
+    "session": "oturum",
+    "persistent": "kalıcı",
+    "second": {
+      "one": "saniye",
+      "other": "saniye"
+    },
+    "minute": {
+      "one": "dakika",
+      "other": "dakika"
+    },
+    "hour": {
+      "one": "saat",
+      "other": "saat"
+    },
+    "day": {
+      "one": "gün",
+      "other": "gün"
+    },
+    "week": {
+      "one": "hafta",
+      "other": "hafta"
+    },
+    "month": {
+      "one": "ay",
+      "other": "ay"
+    },
+    "year": {
+      "one": "yıl",
+      "other": "yıl"
+    }
   }
 }

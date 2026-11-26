@@ -60,6 +60,14 @@ class Banner extends Store {
 	private $verified_withdrawal_alternative = false;
 
 	/**
+	 * Law this banner is rendered as for the current request, when it is not
+	 * its own: see apply_runtime_law_rendition(). Never saved.
+	 *
+	 * @var string
+	 */
+	private $runtime_rendition = '';
+
+	/**
 	 * Data array, with defaults.
 	 *
 	 * @var array
@@ -309,7 +317,7 @@ class Banner extends Store {
 	/**
 	 * Apply non-persistent runtime fixes required for a working opt-out UI.
 	 *
-	 * Classic (including the legacy banner+pushdown combination) has no
+	 * Classic (including the banner+pushdown and box+pushdown combinations) has no
 	 * opt-out popup. A CCPA banner, or a GDPR+CCPA banner with Do Not Sell
 	 * enabled, must therefore render with a popup-capable layout. This changes
 	 * only the in-memory Banner object used for frontend output; the editor
@@ -396,7 +404,7 @@ class Banner extends Store {
 				$properties['config']['categoryPreview']['status'] = false;
 			}
 			$changed = true;
-		} elseif ( $shows_do_not_sell && 'banner' === $type && 'pushdown' === $ptype ) {
+		} elseif ( $shows_do_not_sell && ( 'banner' === $type || 'box' === $type ) && 'pushdown' === $ptype ) {
 			$properties['settings']['preferenceCenterType'] = 'popup';
 			if ( isset( $properties['config']['categoryPreview'] ) && is_array( $properties['config']['categoryPreview'] ) ) {
 				$properties['config']['categoryPreview']['status'] = false;
@@ -409,6 +417,116 @@ class Banner extends Store {
 		}
 
 		return $changed;
+	}
+
+	/**
+	 * Render an opt-out (CCPA) banner as an opt-in (GDPR) one, for this request.
+	 *
+	 * A visitor whose jurisdiction needs an opt-in banner, on a site whose
+	 * active banners are all opt-out, used to get no banner at all: the
+	 * opt-out notice would misstate their rules, so it was hidden and only the
+	 * blocking stayed. Most such sites never meant it. Geo-Targeting is on by
+	 * default, and switching the one banner to CCPA was enough to leave every
+	 * European visitor, and on a site with no country source every visitor,
+	 * with no way to consent.
+	 *
+	 * The banner keeps its look: type, position, theme, colours and every other
+	 * style. What depends on the law takes the GDPR defaults: the buttons and
+	 * panels the two default configurations switch differently (accept,
+	 * reject, settings, preference centre, Do Not Sell, the opt-out popup...),
+	 * a consent lifetime no longer than the GDPR default, and the default GDPR
+	 * text of each language, since the banner's own text was written for an
+	 * opt-out notice. Nothing is saved.
+	 *
+	 * @param string $law Law to render as. Only 'gdpr' is supported.
+	 * @return bool Whether the banner was changed.
+	 */
+	public function apply_runtime_law_rendition( $law ) {
+		if ( 'gdpr' !== $law || 'ccpa' !== $this->get_law() ) {
+			return false;
+		}
+		$properties = $this->get_settings();
+		if ( ! is_array( $properties ) ) {
+			return false;
+		}
+		$gdpr = Controller::get_default_configs( 'gdpr' );
+		$ccpa = Controller::get_default_configs( 'ccpa' );
+		if ( ! is_array( $gdpr ) || ! is_array( $ccpa ) ) {
+			return false;
+		}
+
+		$config               = isset( $properties['config'] ) && is_array( $properties['config'] ) ? $properties['config'] : array();
+		$properties['config'] = self::apply_law_switches(
+			$config,
+			isset( $gdpr['config'] ) && is_array( $gdpr['config'] ) ? $gdpr['config'] : array(),
+			isset( $ccpa['config'] ) && is_array( $ccpa['config'] ) ? $ccpa['config'] : array()
+		);
+		$properties['settings']['applicableLaw'] = 'gdpr';
+		$gdpr_expiry = isset( $gdpr['settings']['consentExpiry']['value'] ) ? (int) $gdpr['settings']['consentExpiry']['value'] : 0;
+		$expiry      = isset( $properties['settings']['consentExpiry']['value'] ) ? (int) $properties['settings']['consentExpiry']['value'] : 0;
+		if ( $gdpr_expiry > 0 && ( $expiry <= 0 || $expiry > $gdpr_expiry ) ) {
+			$properties['settings']['consentExpiry']['value'] = $gdpr_expiry;
+		}
+
+		$contents = $this->normalize_multilingual_data( $this->data['contents'] );
+		$this->data['settings'] = $properties;
+		$this->data['contents'] = array();
+		// Policy URLs are site configuration, not law-specific notice copy.
+		// Build a COMPLETE GDPR language slot before restoring its link: a
+		// link-only slot would bypass get_contents()'s catalogue fallback and
+		// leave the title, description and button labels empty.
+		foreach ( $contents as $lang => $content ) {
+			$content = is_string( $content ) ? json_decode( $content, true ) : $content;
+			$link = isset( $content['notice']['elements']['privacyLink'] ) ? $content['notice']['elements']['privacyLink'] : '';
+			if ( ! is_string( $link ) || '' === trim( $link ) ) {
+				continue;
+			}
+			$translated = $this->get_translations( $lang );
+			$translated['notice']['elements']['privacyLink'] = $link;
+			$this->data['contents'][ $lang ] = $translated;
+		}
+		$this->runtime_rendition = 'gdpr';
+		return true;
+	}
+
+	/**
+	 * Law the banner is rendered as for this request, or '' for its own.
+	 *
+	 * The template cache keys on it, so the opt-in rendition and the banner's
+	 * own opt-out markup never overwrite each other's stored copy.
+	 *
+	 * @return string
+	 */
+	public function get_runtime_rendition() {
+		return $this->runtime_rendition;
+	}
+
+	/**
+	 * Set every non-style value on which the two law defaults disagree to the
+	 * target law's default, and leave the rest of the banner as it is.
+	 *
+	 * Derived from the two default files rather than listed here, so a switch
+	 * added to them later is carried without touching this method.
+	 *
+	 * @param array $config Banner config.
+	 * @param array $target Default config of the law to render as.
+	 * @param array $source Default config of the banner's own law.
+	 * @return array
+	 */
+	private static function apply_law_switches( $config, $target, $source ) {
+		foreach ( $target as $key => $value ) {
+			if ( 'styles' === $key ) {
+				continue;
+			}
+			$from = array_key_exists( $key, $source ) ? $source[ $key ] : null;
+			if ( is_array( $value ) ) {
+				$current        = isset( $config[ $key ] ) && is_array( $config[ $key ] ) ? $config[ $key ] : array();
+				$config[ $key ] = self::apply_law_switches( $current, $value, is_array( $from ) ? $from : array() );
+			} elseif ( $value !== $from ) {
+				$config[ $key ] = $value;
+			}
+		}
+		return $config;
 	}
 
 	/**
@@ -695,18 +813,13 @@ class Banner extends Store {
 		$result  = array();
 		$excludes = self::get_excludes();
 		foreach ( $defaults as $key => $data ) {
-			$value    = isset( $settings[ $key ] ) ? $settings[ $key ] : $data;
-			$defaults = $data;
+			$value = isset( $settings[ $key ] ) ? $settings[ $key ] : $data;
 			if ( in_array( $key, $excludes, true ) ) {
 				$result[ $key ] = $function( $key, $value );
-				continue;
-			}
-			if ( is_array( $value ) ) {
-				$result[ $key ] = self::sanitize_settings( $function, $value, $defaults );
-			} else {
-				if ( is_string( $key ) ) {
-					$result[ $key ] = $function( $key, $value );
-				}
+			} elseif ( is_array( $data ) ) {
+				$result[ $key ] = self::sanitize_settings( $function, is_array( $value ) ? $value : array(), $data );
+			} elseif ( is_string( $key ) ) {
+				$result[ $key ] = $function( $key, is_scalar( $value ) ? $value : $data );
 			}
 		}
 		return $result;
@@ -805,6 +918,12 @@ class Banner extends Store {
 			case 'color':
 			case 'border-color':
 			case 'background-color':
+			case 'hover-color':
+			case 'hover-background-color':
+			case 'hover-border-color':
+			case 'custom-color':
+			case 'custom-background-color':
+			case 'custom-border-color':
 				// Admin-set colour values are later emitted as CSS custom-property
 				// values (class-template.php). esc_attr() at output does NOT strip
 				// CSS metacharacters ({ } ;), so sanitise to a strict colour here
@@ -819,6 +938,30 @@ class Banner extends Store {
 				// shape check here — esc_attr() at output does not stop a value
 				// from closing the declaration and injecting free-form CSS.
 				$value = faz_sanitize_css_length( $value );
+				break;
+			case 'noticeOpacity':
+				// Becomes the alpha of the notice background colour, emitted
+				// as a custom-property value like borderRadius above.
+				$value = faz_sanitize_opacity_percent( $value );
+				break;
+			case 'textAlign':
+				$value = faz_sanitize_text_align( $value );
+				break;
+			case 'widgetSize':
+				// Revisit widget side, written into a CSS rule by class-template.php.
+				$value = faz_sanitize_pixel_size( $value, 30, 100 );
+				break;
+			case 'imageSize':
+				// Revisit icon or image side, written into a CSS rule like widgetSize.
+				$value = faz_sanitize_pixel_size( $value, 12, 100 );
+				break;
+			case 'placement':
+				$value = faz_sanitize_logo_placement( $value );
+				break;
+			case 'url':
+				// A link or image address, '#' when unset. It reaches the visitor's
+				// page in the banner config, so a dangerous scheme is dropped here.
+				$value = is_string( $value ) ? esc_url_raw( $value ) : '';
 				break;
 			case 'customCSS':
 				// customCSS field removed from the admin UI in 1.13.11 for

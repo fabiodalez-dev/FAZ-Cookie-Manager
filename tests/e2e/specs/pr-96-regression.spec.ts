@@ -20,6 +20,7 @@
 import { expect, test } from '../fixtures/wp-fixture';
 import type { Page } from '@playwright/test';
 import { clearAllFazCookieCaches, upsertPage, wpEval } from '../utils/wp-env';
+import { installLoopbackPeer, removeLoopbackPeer, PUBLIC_PEER_HEADERS } from '../utils/loopback-peer';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
@@ -384,6 +385,11 @@ test.describe('[faz_do_not_sell] — cookie path, rate limit, DB lock', () => {
   test('DNSMPI-RL-01: second submission within 60 s is rejected with rate-limit error', async ({
     page,
   }) => {
+    // The window applies only to an address that identifies one visitor;
+    // faz-test's loopback peer does not, so present a public one.
+    installLoopbackPeer();
+    await page.setExtraHTTPHeaders(PUBLIC_PEER_HEADERS);
+    try {
     await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
 
     // Match the SPECIFIC opt-out admin-ajax response, not just any
@@ -417,6 +423,9 @@ test.describe('[faz_do_not_sell] — cookie path, rate limit, DB lock', () => {
     const json2 = (await r2.json()) as { success: boolean; data?: string };
     expect(json2.success, 'second submission should be blocked').toBe(false);
     expect(String(json2.data ?? '')).toMatch(/too many requests/i);
+    } finally {
+      removeLoopbackPeer();
+    }
   });
 
   test('DNSMPI-LOCK-01: faz_dnsmpi_lock_* DB option is removed after successful processing', async ({

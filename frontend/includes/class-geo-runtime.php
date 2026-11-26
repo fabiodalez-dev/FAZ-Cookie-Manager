@@ -329,6 +329,18 @@ class Geo_Runtime {
 	}
 
 	/**
+	 * Compatibility reader for the retired missing-law-banner setting.
+	 *
+	 * A saved 'main_banner' must not waive an opt-in jurisdiction's rules.
+	 * Keep the reader for integrations, but always use the opt-in rendition.
+	 *
+	 * @return string 'gdpr_version'.
+	 */
+	public static function missing_law_banner_mode() {
+		return 'gdpr_version';
+	}
+
+	/**
 	 * Map a ruleset `ui.default_categories` state for a slug to a boolean.
 	 *
 	 * @param array  $ruleset Ruleset array.

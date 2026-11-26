@@ -149,8 +149,9 @@ namespace {
 			faz_mcss_assert( strpos( $compact, '.faz-notice-btn-wrapper .faz-btn{order:0' ) > $template_order, "{$type}: the order reset comes after the template rule it overrides" );
 		}
 
-		// P2-2: the classic chevron keeps the end padding it is drawn inside.
-		faz_mcss_assert( 1 === preg_match( '/#faz-consent\.faz-classic-top \.faz-notice-btn-wrapper \.faz-btn-customize,#faz-consent\.faz-classic-bottom \.faz-notice-btn-wrapper \.faz-btn-customize\{padding-right:28px;\}/', $m440 ), "{$type}: classic customise keeps 28px end padding for its chevron" );
+		// P2-2: the classic chevron keeps the end padding it is drawn inside,
+		// also in a Box + Pushdown, which renders the classic markup (#392).
+		faz_mcss_assert( 1 === preg_match( '/#faz-consent\.faz-classic-top \.faz-notice-btn-wrapper \.faz-btn-customize,#faz-consent\.faz-classic-bottom \.faz-notice-btn-wrapper \.faz-btn-customize,#faz-consent\.faz-box-pushdown \.faz-notice-btn-wrapper \.faz-btn-customize\{padding-right:28px;\}/', $m440 ), "{$type}: classic customise keeps 28px end padding for its chevron" );
 
 		// 360px: accept/reject paired, customise on a row of its own.
 		faz_mcss_assert( false !== strpos( $m360, '.faz-btn-reject{flex:1 1 40%;}' ) && false !== strpos( $m360, '.faz-btn-customize{flex:1 1 100%;}' ), "{$type}: at 360px and below customise takes its own row and the pair stays together" );
