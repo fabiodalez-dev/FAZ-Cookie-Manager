@@ -61,17 +61,29 @@ test('the markup gate stops at noscript in a document without a window', async (
       out[name] = {
         nativeHasImg: !!nativeEl.querySelector('img'),
         gatedHasImg: !!gated.querySelector('img'),
-        same: nativeEl.innerHTML === gated.innerHTML,
+        // The walk stops at <noscript>, and the tail it did not read has its
+        // blocked CSS URLs held in place (about:invalid#faz-held:<url>): the
+        // gate cannot tell whether that text is markup or attribute text, so
+        // it never lets a tracker URL through. Taking the marker out must
+        // give back exactly the native tree.
+        same: nativeEl.innerHTML === gated.innerHTML.split('about:invalid#faz-held:').join(''),
+        nativeNamesTracker: nativeEl.innerHTML.indexOf('url(//tracker.example.test') !== -1,
+        gatedNamesTracker: gated.innerHTML.indexOf('url(//tracker.example.test') !== -1,
       };
     }
     return out;
   }, PAYLOAD);
 
   for (const name of ['createHTMLDocument', 'DOMParser', 'template']) {
-    const r = result[name] as { nativeHasImg: boolean; gatedHasImg: boolean; same: boolean };
+    const r = result[name] as { nativeHasImg: boolean; gatedHasImg: boolean; same: boolean; nativeNamesTracker: boolean; gatedNamesTracker: boolean };
     // Whatever this browser's parser does, the gate must not change it: no
     // live <img> the native parse does not also produce.
     expect(r.gatedHasImg, `${name}: gated parse has a live <img> only where the native one does`).toBe(r.nativeHasImg);
-    expect(r.same, `${name}: gated parse equals the native one`).toBe(true);
+    expect(r.same, `${name}: gated parse equals the native one, held URLs aside`).toBe(true);
+    // Where the gate could not read the markup, the tracker URL is held, never
+    // handed on as written.
+    if (r.nativeNamesTracker) {
+      expect(r.gatedNamesTracker, `${name}: the tracker URL is held in the gated parse`).toBe(false);
+    }
   }
 });
